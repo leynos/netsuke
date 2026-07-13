@@ -11,17 +11,9 @@ from pathlib import Path
 
 import pytest
 
+from typos_rollout_test_support import dictionary_text as _dictionary_text
+
 SCRIPT_DIRECTORY = Path(__file__).resolve().parents[1]
-
-
-def _dictionary_text(stem: str = "organ") -> str:
-    """Return a minimal valid shared-dictionary document."""
-    return (
-        'schema = 1\n\n[oxford]\nstems = ["'
-        + stem
-        + '"]\n\n[words]\naccepted = []\n\n[words.corrections]\n\n'
-        + "[patterns]\nignore = []\n\n[files]\nexclude = []\n"
-    )
 
 
 class ValidResponse:
@@ -120,10 +112,12 @@ def test_changed_etag_overrides_unchanged_date(
     result = rollout.refresh_base(
         source,
         cache,
-        metadata=metadata,
-        opener=lambda *_args, **_kwargs: ValidResponse(
-            stem="replacement",
-            headers={"ETag": '"estate-v2"', "Last-Modified": modified},
+        rollout.RefreshOptions(
+            metadata=metadata,
+            opener=lambda *_args, **_kwargs: ValidResponse(
+                stem="replacement",
+                headers={"ETag": '"estate-v2"', "Last-Modified": modified},
+            ),
         ),
     )
 
@@ -190,7 +184,9 @@ def test_default_refresh_uses_guarded_https_opener(
     result = rollout.refresh_base(
         "https://example.test/base.toml",
         tmp_path / "cache.toml",
-        metadata=tmp_path / "cache.json",
+        rollout.RefreshOptions(
+            metadata=tmp_path / "cache.json",
+        ),
     )
 
     assert result.status == "refreshed"
@@ -228,8 +224,10 @@ def test_http_status_and_persistence_errors_propagate(
         rollout.refresh_base(
             "https://example.test/missing",
             cache,
-            metadata=metadata,
-            opener=missing,
+            rollout.RefreshOptions(
+                metadata=metadata,
+                opener=missing,
+            ),
         )
     assert raised.value is not_found
 
@@ -242,8 +240,10 @@ def test_http_status_and_persistence_errors_propagate(
         rollout.refresh_base(
             "https://example.test/base",
             cache,
-            metadata=metadata,
-            opener=lambda *_args, **_kwargs: ValidResponse(stem="replacement"),
+            rollout.RefreshOptions(
+                metadata=metadata,
+                opener=lambda *_args, **_kwargs: ValidResponse(stem="replacement"),
+            ),
         )
 
 

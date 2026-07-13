@@ -7,6 +7,7 @@ the spelling helper should not reuse these infrastructure internals.
 
 from __future__ import annotations
 
+import dataclasses as dc
 import email.utils
 import json
 import pathlib
@@ -20,6 +21,56 @@ import typos_rollout_cache
 ContentValidator = cabc.Callable[[bytes], None]
 Opener = cabc.Callable[..., typos_rollout_cache.RemoteResponse]
 HTTP_NOT_MODIFIED = 304
+
+
+@dc.dataclass(frozen=True, slots=True, kw_only=True)
+class RefreshOptions:
+    """Configure one shared-dictionary refresh operation.
+
+    Attributes
+    ----------
+    metadata
+        Sidecar path containing source identity and freshness validators.
+    offline
+        Whether to reuse a valid cache without contacting the authority.
+    opener
+        Optional injectable HTTPS opener for deterministic tests.
+
+    Examples
+    --------
+    >>> RefreshOptions(metadata=pathlib.Path(".typos-base.json")).offline
+    False
+    """
+
+    metadata: pathlib.Path
+    offline: bool = False
+    opener: Opener | None = None
+
+
+@dc.dataclass(frozen=True, slots=True)
+class _LocalSourceState:
+    """Group local authority identity and freshness state."""
+
+    name: str
+    mtime_ns: int
+    validate: ContentValidator
+
+
+@dc.dataclass(frozen=True, slots=True)
+class _RefreshContext:
+    """Bind caller options to dictionary validation policy."""
+
+    options: RefreshOptions
+    validate: ContentValidator
+
+
+@dc.dataclass(frozen=True, slots=True)
+class _RemoteRequestState:
+    """Group one remote authority with its cache and saved validators."""
+
+    source: str
+    targets: typos_rollout_cache.CacheTargets
+    saved: cabc.Mapping[str, object]
 
 
 class NetworkUnavailableError(OSError):
@@ -86,18 +137,18 @@ def _remote_is_not_newer(
 def _local_cache_is_current(
     cache: pathlib.Path,
     saved: cabc.Mapping[str, object],
-    source_name: str,
-    source_mtime_ns: int,
-    validate: ContentValidator,
+    source: _LocalSourceState,
 ) -> bool:
     """Return whether metadata proves a valid local-source cache is current."""
     saved_mtime = saved.get("mtime_ns")
-    has_matching_source = saved.get("source") == source_name
+    has_matching_source = saved.get("source") == source.name
     has_new_enough_mtime = (
-        isinstance(saved_mtime, int) and source_mtime_ns <= saved_mtime
+        isinstance(saved_mtime, int) and source.mtime_ns <= saved_mtime
     )
     return (
-        _valid_cache(cache, validate) and has_matching_source and has_new_enough_mtime
+        _valid_cache(cache, source.validate)
+        and has_matching_source
+        and has_new_enough_mtime
     )
 
 
@@ -109,14 +160,14 @@ def _refresh_local(
 ) -> typos_rollout_cache.RefreshResult:
     """Refresh from a local authoritative copy when it is newer."""
     source_stat = source.stat()
-    source_name = str(source.resolve())
+    source_state = _LocalSourceState(
+        str(source.resolve()), source_stat.st_mtime_ns, validate
+    )
     saved = _read_metadata(metadata)
     if _local_cache_is_current(
         cache,
         saved,
-        source_name,
-        source_stat.st_mtime_ns,
-        validate,
+        source_state,
     ):
         return typos_rollout_cache.RefreshResult("current", cache)
     content = source.read_bytes()
@@ -124,7 +175,7 @@ def _refresh_local(
     typos_rollout_cache.atomic_write(cache, content)
     _write_metadata(
         metadata,
-        {"source": source_name, "mtime_ns": source_stat.st_mtime_ns},
+        {"source": source_state.name, "mtime_ns": source_state.mtime_ns},
     )
     return typos_rollout_cache.RefreshResult("refreshed", cache)
 
@@ -147,13 +198,15 @@ class _HttpsRedirectHandler(urllib.request.HTTPRedirectHandler):
     def redirect_request(
         self,
         request: urllib.request.Request,
-        file_pointer: object,
-        code: int,
-        message: str,
-        headers: object,
-        new_url: str,
+        *redirect: object,
     ) -> urllib.request.Request | None:
-        """Follow only redirects whose resolved target remains HTTPS."""
+        """Follow only redirects whose resolved target remains HTTPS.
+
+        The variadic tail preserves the standard library's positional override
+        contract without making transport-library parameters part of this
+        helper's domain-facing interface.
+        """
+        file_pointer, code, message, headers, new_url = redirect
         if urllib.parse.urlsplit(new_url).scheme != "https":
             error_message = f"shared dictionary redirect must use HTTPS: {new_url}"
             raise InsecureSourceError(error_message)
@@ -182,48 +235,46 @@ def _https_request(
 
 
 def _write_remote_cache(
-    source: str,
-    targets: typos_rollout_cache.CacheTargets,
+    state: _RemoteRequestState,
     content: bytes,
     headers: cabc.Mapping[str, str],
     validate: ContentValidator,
 ) -> typos_rollout_cache.RefreshResult:
     """Validate and atomically persist an HTTP dictionary response."""
     validate(content)
-    typos_rollout_cache.atomic_write(targets.cache, content)
+    typos_rollout_cache.atomic_write(state.targets.cache, content)
     _write_metadata(
-        targets.metadata,
+        state.targets.metadata,
         {
-            "source": source,
+            "source": state.source,
             "etag": headers.get("ETag"),
             "last_modified": headers.get("Last-Modified"),
         },
     )
-    return typos_rollout_cache.RefreshResult("refreshed", targets.cache)
+    return typos_rollout_cache.RefreshResult("refreshed", state.targets.cache)
 
 
 def _remote_response_result(
-    source: str,
-    targets: typos_rollout_cache.CacheTargets,
-    saved: cabc.Mapping[str, object],
+    state: _RemoteRequestState,
     response: typos_rollout_cache.RemoteResponse,
     validate: ContentValidator,
 ) -> typos_rollout_cache.RefreshResult:
     """Return the cache result for a successful HTTP response."""
-    if response.status == HTTP_NOT_MODIFIED and _valid_cache(targets.cache, validate):
-        return typos_rollout_cache.RefreshResult("current", targets.cache)
-    if _valid_cache(targets.cache, validate) and _remote_is_not_newer(
-        saved, response.headers
+    if response.status == HTTP_NOT_MODIFIED and _valid_cache(
+        state.targets.cache, validate
     ):
-        return typos_rollout_cache.RefreshResult("current", targets.cache)
+        return typos_rollout_cache.RefreshResult("current", state.targets.cache)
+    if _valid_cache(state.targets.cache, validate) and _remote_is_not_newer(
+        state.saved, response.headers
+    ):
+        return typos_rollout_cache.RefreshResult("current", state.targets.cache)
     try:
         content = response.read()
     except urllib.error.URLError as error:
-        message = f"shared dictionary authority is unavailable: {source}"
+        message = f"shared dictionary authority is unavailable: {state.source}"
         raise NetworkUnavailableError(message) from error
     return _write_remote_cache(
-        source,
-        targets,
+        state,
         content,
         response.headers,
         validate,
@@ -255,45 +306,46 @@ def _http_error_result(
 def _refresh_http(
     source: str,
     cache: pathlib.Path,
-    metadata: pathlib.Path,
-    validate: ContentValidator,
-    opener: Opener | None,
+    context: _RefreshContext,
 ) -> typos_rollout_cache.RefreshResult:
     """Refresh a cache from a validated HTTPS source with stale fallback."""
-    saved = _read_metadata(metadata)
+    saved = _read_metadata(context.options.metadata)
     if saved.get("source") != source:
         saved = {}
     request = _https_request(source, _conditional_headers(saved))
-    open_remote = _HTTPS_OPENER.open if opener is None else opener
+    open_remote = (
+        _HTTPS_OPENER.open if context.options.opener is None else context.options.opener
+    )
     try:
         response_context = open_remote(request, timeout=30.0)
     except urllib.error.HTTPError as error:
-        return _http_error_result(cache, error, validate)
+        return _http_error_result(cache, error, context.validate)
     except urllib.error.URLError:
         message = f"shared dictionary authority is unavailable: {source}"
         unavailable = NetworkUnavailableError(message)
-        return _stale_cache_or_raise(cache, unavailable, validate)
+        return _stale_cache_or_raise(cache, unavailable, context.validate)
     with response_context as response:
         try:
             return _remote_response_result(
-                source,
-                typos_rollout_cache.CacheTargets(cache, metadata),
-                saved,
+                _RemoteRequestState(
+                    source,
+                    typos_rollout_cache.CacheTargets(
+                        cache,
+                        context.options.metadata,
+                    ),
+                    saved,
+                ),
                 response,
-                validate,
+                context.validate,
             )
         except NetworkUnavailableError as error:
-            return _stale_cache_or_raise(cache, error, validate)
+            return _stale_cache_or_raise(cache, error, context.validate)
 
 
 def refresh_base(
     source: str | pathlib.Path,
     cache: pathlib.Path,
-    *,
-    metadata: pathlib.Path,
-    validate: ContentValidator,
-    offline: bool = False,
-    opener: Opener | None = None,
+    context: _RefreshContext,
 ) -> typos_rollout_cache.RefreshResult:
     """Refresh an untracked cache when its authoritative copy is newer.
 
@@ -303,14 +355,8 @@ def refresh_base(
         Local path or HTTPS URL for the authoritative shared dictionary.
     cache
         Untracked local cache destination.
-    metadata
-        Sidecar path containing source identity and freshness validators.
-    validate
-        Callback that rejects invalid dictionary bytes.
-    offline
-        Reuse a valid cache without contacting the authority.
-    opener
-        Injectable HTTPS opener. The guarded production opener is the default.
+    context
+        Refresh options bound to the dictionary validation callback.
 
     Returns
     -------
@@ -330,11 +376,14 @@ def refresh_base(
     TypeError, ValueError
         If dictionary validation fails.
     """
-    if offline:
-        if not _valid_cache(cache, validate):
+    options = context.options
+    if options.offline:
+        if not _valid_cache(cache, context.validate):
             message = f"no cached shared dictionary at {cache}"
             raise FileNotFoundError(message)
         return typos_rollout_cache.RefreshResult("offline-cache", cache)
     if isinstance(source, pathlib.Path) or "://" not in str(source):
-        return _refresh_local(pathlib.Path(source), cache, metadata, validate)
-    return _refresh_http(str(source), cache, metadata, validate, opener)
+        return _refresh_local(
+            pathlib.Path(source), cache, options.metadata, context.validate
+        )
+    return _refresh_http(str(source), cache, context)

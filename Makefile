@@ -21,8 +21,11 @@ SPELLING_HELPER_COVERAGE = --cov=generate_typos_config --cov=typos_rollout \
 	--cov=typos_rollout_cache --cov=typos_rollout_http
 SPELLING_HELPER_FILES = scripts/generate_typos_config.py \
 	scripts/typos_rollout.py scripts/typos_rollout_cache.py \
-	scripts/typos_rollout_http.py scripts/tests/test_typos_rollout.py \
-	scripts/tests/test_typos_rollout_hardening.py
+	scripts/typos_rollout_http.py scripts/tests/conftest.py \
+	scripts/tests/test_typos_rollout.py \
+	scripts/tests/test_typos_rollout_hardening.py \
+	scripts/tests/test_typos_rollout_refresh.py \
+	scripts/tests/typos_rollout_test_support.py
 # Markdown files, excluding build output and tool caches. CRUSH.md is a symlink
 # to AGENTS.md, so `-type f` skips it and avoids double-checking the same prose.
 MD_FILES_FIND = find . -type f -name '*.md' \

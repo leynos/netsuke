@@ -18,6 +18,7 @@ if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
 RefreshResult = typos_rollout_cache.RefreshResult
+RefreshOptions = typos_rollout_http.RefreshOptions
 _CacheTargets = typos_rollout_cache.CacheTargets
 _RemoteResponse = typos_rollout_cache.RemoteResponse
 NetworkUnavailableError = typos_rollout_http.NetworkUnavailableError
@@ -216,22 +217,19 @@ def _http_error_result(
 def refresh_base(
     source: str | pathlib.Path,
     cache: pathlib.Path,
-    *,
-    metadata: pathlib.Path,
-    offline: bool = False,
-    opener: typ.Callable[..., _RemoteResponse] | None = None,
+    options: RefreshOptions,
 ) -> RefreshResult:
     """Refresh an untracked base cache when the authoritative copy is newer."""
-    selected_opener = opener
-    if selected_opener is None and urllib.request.urlopen is not _DEFAULT_URLOPEN:
+    selected_options = options
+    if options.opener is None and urllib.request.urlopen is not _DEFAULT_URLOPEN:
         # Existing focused tests patch this legacy boundary; production retains
         # the HTTPS-only opener when the standard function is unchanged.
-        selected_opener = urllib.request.urlopen
+        selected_options = dc.replace(options, opener=urllib.request.urlopen)
     return typos_rollout_http.refresh_base(
         source,
         cache,
-        metadata=metadata,
-        validate=_validate_dictionary_bytes,
-        offline=offline,
-        opener=selected_opener,
+        typos_rollout_http._RefreshContext(
+            selected_options,
+            _validate_dictionary_bytes,
+        ),
     )

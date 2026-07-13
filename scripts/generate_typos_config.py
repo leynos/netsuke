@@ -68,8 +68,10 @@ def main(
         result = rollout.refresh_base(
             source,
             repository / ".typos-oxendict-base.toml",
-            metadata=repository / ".typos-oxendict-base.json",
-            offline=offline,
+            rollout.RefreshOptions(
+                metadata=repository / ".typos-oxendict-base.json",
+                offline=offline,
+            ),
         )
     except rollout.NetworkUnavailableError:
         fallback = _tracked_remote_fallback(source, destination)
