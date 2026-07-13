@@ -114,37 +114,37 @@ For documentation changes, also run:
 `make markdownlint` enforces en-GB-oxendict (Oxford) spelling over the
 repository's Markdown prose with [`typos`](https://github.com/crate-ci/typos),
 as required by the [documentation style guide](documentation-style-guide.md).
-The configuration lives in the repository-root `typos.toml` and works in two
-layers:
+The repository-root `typos.toml` is deterministic generated output assembled
+from two policy layers:
 
-1. The `en-gb` locale corrects American spellings (`color` to `colour`,
-   `behavior` to `behaviour`, `analyzed` to `analysed`).
-2. Generated `extend-words` entries restore Oxford spelling, which the locale
-   alone would not enforce: identity entries accept `-ize` inflections that the
-   locale would otherwise "correct" to `-ise`, and `-ise` entries are corrected
-   to `-ize`. Stems taking `-yse` (`analyse`, `paralyse`) are left to the
-   locale, which already enforces them.
+1. The shared estate dictionary in `leynos/agent-helper-scripts` supplies
+   generally valid Oxford forms, accepted technical terms, corrections and
+   exclusions. The generator conditionally refreshes this authority into an
+   untracked local cache and reuses a valid cache when working offline.
+2. `typos.local.toml` contains only Netsuke-specific names, identifiers,
+   fixtures and exclusions. It cannot replace a conflicting shared correction.
 
-`typos.toml` is a generated file. Never edit its entries by hand; change
-`scripts/generate_typos_config.py` and regenerate:
+`scripts/typos_rollout_http.py` owns shared-cache freshness, HTTPS transport
+security and persistence coordination. Only `scripts/typos_rollout.py` may
+compose it with dictionary validation; application and release code must not
+reuse these spelling-policy internals.
+
+The generated policy sets the `en-gb` locale to correct American spellings
+(`color` to `colour`, `behavior` to `behaviour`, `analyzed` to `analysed`). It
+also restores Oxford spelling through generated entries that accept `-ize`
+inflections and correct their plain-British `-ise` equivalents. Stems taking
+`-yse` (`analyse`, `paralyse`) remain governed by the locale.
+
+Never edit `typos.toml` by hand. Change `typos.local.toml` and regenerate:
 
 ```bash
 uv run scripts/generate_typos_config.py
 ```
 
-The generator owns three maintainer-facing lists:
-
-- `STEMS` — word stems that take Oxford `-ize`. When the gate flags a
-  legitimate `-ize` word (or silently accepts its `-ise` variant) because the
-  stem is missing, add the stem here and regenerate. Do not add genuinely
-  `-ise`-only words (`advise`, `revise`, `exercise`, `supervise`).
-- `EXTRA_ACCEPTED_WORDS` — words accepted verbatim, such as suffix fragments
-  quoted in prose (`yse`, `mis`) and non-English example text (`inventario`).
-- `extend-ignore-re` patterns in `HEADER` — regions exempt from spelling
-  checks: inline code spans, fenced code blocks, tool and target names that
-  keep their upstream spelling (`rust-analyzer`, `release-artifact`), and the
-  ExecPlan template heading. Quoted APIs keep US spelling per the documentation
-  style guide, so put them in backticks rather than adding accepted words.
+If a legitimate Oxford form is missing estate-wide, update the shared
+dictionary rather than duplicating it locally. Keep proper names and deliberate
+fixtures in `typos.local.toml`. Quoted APIs keep upstream spelling, so put them
+in backticks rather than adding accepted words.
 
 `make markdownlint` runs the gate with `--force-exclude`, so the `typos.toml`
 excludes also apply to explicitly passed paths. To fix findings mechanically,
@@ -161,8 +161,9 @@ touch code samples, API names, or quoted material.
 
 The `typos` version is pinned once in the Makefile `TYPOS_VERSION` variable and
 run through `uv tool run typos@$(TYPOS_VERSION)`, so the local gate and CI
-cannot drift. `make test-typos-config` (also run in CI) asserts that the
-committed `typos.toml` matches the generator output, so the two never diverge.
+cannot drift. `make spelling` validates the helper implementation, regenerates
+the policy, rejects tracked drift, and scans every tracked Markdown file.
+`make test-typos-config` remains an alias for the focused helper tests.
 
 ## Release help tooling
 

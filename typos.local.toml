@@ -1,0 +1,18 @@
+# Repository-specific identifiers, quotations and deliberate fixtures.
+
+schema = 1
+
+[oxford]
+stems = []
+
+[words]
+accepted = []
+
+[words.corrections]
+
+[patterns]
+# The tokenizer splits the valid hyphenated prefix in `mis-grouping`.
+ignore = ["mis-grouping"]
+
+[files]
+exclude = []

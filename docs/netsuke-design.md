@@ -1550,8 +1550,8 @@ Implementation details:
   via capability-restricted handles from `StdlibConfig`. Templates can no
   longer override the cache path, ensuring caches remain bounded by the
   workspace. Remote fetches and cache writes mark the stdlib state as impure so
-  callers can discard memoised renders, while cache hits remain pure and
-  preserve memoised renders.
+  callers can discard memoized renders, while cache hits remain pure and
+  preserve memoized renders.
 - `fetch` enforces a configurable response limit (default 8 MiB) and streams
   cached downloads directly to disk. Exceeding the budget aborts the request
   with an error that quotes the configured byte cap so template authors can
@@ -2973,7 +2973,7 @@ projects.
   object files and linking them into a small application.
 - [`photo_edit.yml`](../examples/photo_edit.yml): converts RAW photographs and
   generates a simple HTML gallery for previewing the results.
-- [`visual_design.yml`](../examples/visual_design.yml): rasterises a set of SVG
+- [`visual_design.yml`](../examples/visual_design.yml): rasterizes a set of SVG
   design assets into PNG images using Inkscape.
 - [`website.yml`](../examples/website.yml): builds a static web site from
   Markdown pages with Pandoc and assembles an index page.
