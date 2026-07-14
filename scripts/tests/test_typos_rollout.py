@@ -35,12 +35,14 @@ def test_rollout_generates_oxford_corrections(
 
     mappings = rollout.generate_word_mappings(rollout.Dictionary(stems=("organ",)))
 
-    assert mappings["organize"] == "organize"
-    assert mappings["organise"] == "organize"
+    assert mappings["organize"] == "organize", "Oxford form was not accepted"
+    assert mappings["organise"] == "organize", "plain-British form was not fixed"
     italic_mappings = rollout.generate_word_mappings(
         rollout.Dictionary(stems=("italic",))
     )
-    assert italic_mappings["italicised"] == "italicized"
+    assert italic_mappings["italicised"] == "italicized", (
+        "plain-British italic form was not fixed"
+    )
 
 
 def test_https_failure_reuses_valid_tracked_config(
@@ -61,42 +63,78 @@ def test_https_failure_reuses_valid_tracked_config(
 
     result = generator.main(repository=tmp_path, source="https://example.invalid/base")
 
-    assert result.status == "tracked-config"
-    assert result.cache == tracked_config
+    assert result.status == "tracked-config", "tracked fallback was not selected"
+    assert result.cache == tracked_config, "fallback did not return tracked config"
 
 
+@pytest.mark.parametrize(
+    "document",
+    [
+        pytest.param(
+            _dictionary_text().replace("schema = 1", "schema = 2"),
+            id="unsupported-schema",
+        ),
+        pytest.param(
+            _dictionary_text().replace(
+                '[oxford]\nstems = ["organ"]',
+                'oxford = "bad"',
+            ),
+            id="invalid-table",
+        ),
+        pytest.param(
+            _dictionary_text().replace('stems = ["organ"]', "stems = [1]"),
+            id="invalid-string-list",
+        ),
+        pytest.param(
+            _dictionary_text().replace(
+                "[words.corrections]",
+                "[words.corrections]\nteh = 1",
+            ),
+            id="invalid-correction",
+        ),
+    ],
+)
 def test_dictionary_validation_rejects_invalid_documents(
     rollout_modules: tuple[types.ModuleType, types.ModuleType, types.ModuleType],
     tmp_path: Path,
+    document: str,
 ) -> None:
     """Schema, table, string-list and correction types remain validated."""
     _, rollout, _ = rollout_modules
     source = tmp_path / "base.toml"
-    invalid_documents = (
-        _dictionary_text().replace("schema = 1", "schema = 2"),
-        _dictionary_text().replace('[oxford]\nstems = ["organ"]', 'oxford = "bad"'),
-        _dictionary_text().replace('stems = ["organ"]', "stems = [1]"),
-        _dictionary_text().replace(
-            "[words.corrections]", "[words.corrections]\nteh = 1"
-        ),
-    )
+    source.write_text(document, encoding="utf-8")
 
-    for document in invalid_documents:
-        source.write_text(document, encoding="utf-8")
-        with pytest.raises((TypeError, ValueError)):
-            rollout.load_dictionary(source)
+    with pytest.raises((TypeError, ValueError)):
+        rollout.load_dictionary(source)
 
 
 def test_merge_rejects_conflicting_corrections(
     rollout_modules: tuple[types.ModuleType, types.ModuleType, types.ModuleType],
 ) -> None:
-    """A local overlay cannot silently weaken a shared correction."""
+    """A local overlay cannot silently weaken shared word or phrase policy."""
     _, rollout, _ = rollout_modules
-    base = rollout.Dictionary(corrections=(("teh", "the"),))
-    local = rollout.Dictionary(corrections=(("teh", "ten"),))
+    prohibited_phrase = "hand" + "-written"
+    base = rollout.Dictionary(
+        corrections=(("teh", "the"),),
+        phrase_corrections=((prohibited_phrase, "handwritten"),),
+    )
+
+    merged = rollout.merge_dictionaries(base, rollout.Dictionary())
+
+    assert merged.phrase_corrections == base.phrase_corrections, (
+        "an empty local policy discarded the shared phrase correction"
+    )
 
     with pytest.raises(ValueError, match="conflicting correction"):
-        rollout.merge_dictionaries(base, local)
+        rollout.merge_dictionaries(
+            base,
+            rollout.Dictionary(corrections=(("teh", "ten"),)),
+        )
+    with pytest.raises(ValueError, match="conflicting phrase correction"):
+        rollout.merge_dictionaries(
+            base,
+            rollout.Dictionary(phrase_corrections=((prohibited_phrase, "other"),)),
+        )
 
 
 def test_render_and_write_are_deterministic_valid_toml(
@@ -116,7 +154,11 @@ def test_render_and_write_are_deterministic_valid_toml(
     first = rollout.render_typos_config(dictionary)
     rollout.write_config(output, dictionary)
 
-    assert first == rollout.render_typos_config(dictionary)
-    assert output.read_text(encoding="utf-8") == first
-    assert tomllib.loads(first)["default"]["locale"] == "en-gb"
-    assert list(output.parent.glob(".typos.toml.*")) == []
+    assert first == rollout.render_typos_config(dictionary), "rendering was unstable"
+    assert output.read_text(encoding="utf-8") == first, "written config changed"
+    assert tomllib.loads(first)["default"]["locale"] == "en-gb", (
+        "rendered locale was not en-gb"
+    )
+    assert list(output.parent.glob(".typos.toml.*")) == [], (
+        "atomic write left a temporary file"
+    )

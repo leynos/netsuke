@@ -53,6 +53,7 @@ class Dictionary:
     stems: tuple[str, ...] = ()
     accepted: tuple[str, ...] = ()
     corrections: tuple[tuple[str, str], ...] = ()
+    phrase_corrections: tuple[tuple[str, str], ...] = ()
     ignore_patterns: tuple[str, ...] = ()
     excluded_files: tuple[str, ...] = ()
 
@@ -84,6 +85,7 @@ def _dictionary_from_text(text: str) -> Dictionary:
         raise ValueError(message)
     oxford = _table(document, "oxford")
     words = _table(document, "words")
+    phrases = _table(document, "phrases")
     patterns = _table(document, "patterns")
     files = _table(document, "files")
     corrections_table = _table(words, "corrections")
@@ -94,22 +96,66 @@ def _dictionary_from_text(text: str) -> Dictionary:
         message = "word corrections must map strings to strings"
         raise TypeError(message)
     corrections = typ.cast("cabc.Mapping[str, str]", corrections_table)
+    phrase_table = _table(phrases, "corrections")
+    if not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in phrase_table.items()
+    ):
+        message = "phrase corrections must map strings to strings"
+        raise TypeError(message)
+    phrase_corrections = typ.cast("cabc.Mapping[str, str]", phrase_table)
     return Dictionary(
         stems=_string_list(oxford, "stems"),
         accepted=_string_list(words, "accepted"),
         corrections=tuple(sorted(corrections.items())),
+        phrase_corrections=tuple(sorted(phrase_corrections.items())),
         ignore_patterns=_string_list(patterns, "ignore"),
         excluded_files=_string_list(files, "exclude"),
     )
 
 
 def load_dictionary(path: pathlib.Path) -> Dictionary:
-    """Load a validated shared dictionary from *path*."""
+    """Load a validated shared dictionary from a path.
+
+    Parameters
+    ----------
+    path
+        UTF-8 TOML dictionary to load.
+
+    Returns
+    -------
+    Dictionary
+        Validated spelling policy.
+
+    Raises
+    ------
+    OSError
+        If the dictionary cannot be read.
+    TypeError, ValueError
+        If the document does not satisfy the shared dictionary schema.
+    """
     return _dictionary_from_text(path.read_text(encoding="utf-8"))
 
 
 def merge_dictionaries(base: Dictionary, local: Dictionary) -> Dictionary:
-    """Merge a shared dictionary with a non-conflicting local overlay."""
+    """Merge a shared dictionary with a non-conflicting local overlay.
+
+    Parameters
+    ----------
+    base
+        Estate-wide spelling policy.
+    local
+        Repository-specific policy to add.
+
+    Returns
+    -------
+    Dictionary
+        Deterministically merged policy.
+
+    Raises
+    ------
+    ValueError
+        If the local policy conflicts with a shared correction.
+    """
     corrections = dict(base.corrections)
     for word, correction in local.corrections:
         existing = corrections.get(word)
@@ -119,10 +165,18 @@ def merge_dictionaries(base: Dictionary, local: Dictionary) -> Dictionary:
             )
             raise ValueError(message)
         corrections[word] = correction
+    phrase_corrections = dict(base.phrase_corrections)
+    for phrase, correction in local.phrase_corrections:
+        existing = phrase_corrections.get(phrase)
+        if existing is not None and existing != correction:
+            message = f"conflicting phrase correction for {phrase!r}: {existing!r} != {correction!r}"
+            raise ValueError(message)
+        phrase_corrections[phrase] = correction
     return Dictionary(
         stems=tuple(sorted(set(base.stems) | set(local.stems))),
         accepted=tuple(sorted(set(base.accepted) | set(local.accepted))),
         corrections=tuple(sorted(corrections.items())),
+        phrase_corrections=tuple(sorted(phrase_corrections.items())),
         ignore_patterns=tuple(
             sorted(set(base.ignore_patterns) | set(local.ignore_patterns))
         ),
@@ -133,7 +187,23 @@ def merge_dictionaries(base: Dictionary, local: Dictionary) -> Dictionary:
 
 
 def generate_word_mappings(dictionary: Dictionary) -> dict[str, str]:
-    """Expand Oxford stems and explicit words into deterministic mappings."""
+    """Expand Oxford stems and explicit words into deterministic mappings.
+
+    Parameters
+    ----------
+    dictionary
+        Validated spelling policy to expand.
+
+    Returns
+    -------
+    dict[str, str]
+        Sorted accepted-word identities and spelling corrections.
+
+    Raises
+    ------
+    ValueError
+        If generated and explicit corrections conflict.
+    """
     mappings = {word: word for word in dictionary.accepted}
 
     def add(word: str, correction: str) -> None:
@@ -169,7 +239,23 @@ def _render_array(name: str, values: tuple[str, ...]) -> list[str]:
 
 
 def render_typos_config(dictionary: Dictionary) -> str:
-    """Render a deterministic, parse-checked ``typos.toml`` document."""
+    """Render a deterministic, parse-checked ``typos.toml`` document.
+
+    Parameters
+    ----------
+    dictionary
+        Validated spelling policy to render.
+
+    Returns
+    -------
+    str
+        Parse-checked TOML configuration ending with a newline.
+
+    Raises
+    ------
+    ValueError
+        If generated and explicit corrections conflict.
+    """
     lines = [
         "# Generated from the shared en-GB-oxendict dictionary.",
         "# Regenerate with scripts/generate_typos_config.py; do not edit by hand.",
@@ -193,7 +279,22 @@ def render_typos_config(dictionary: Dictionary) -> str:
 
 
 def write_config(path: pathlib.Path, dictionary: Dictionary) -> None:
-    """Atomically write validated generated configuration to *path*."""
+    """Atomically write validated generated configuration to a path.
+
+    Parameters
+    ----------
+    path
+        Destination ``typos.toml`` path.
+    dictionary
+        Validated spelling policy to render and write.
+
+    Raises
+    ------
+    OSError
+        If the temporary file cannot be written or installed.
+    ValueError
+        If generated and explicit corrections conflict.
+    """
     _atomic_write(path, render_typos_config(dictionary).encode())
 
 
@@ -219,7 +320,35 @@ def refresh_base(
     cache: pathlib.Path,
     options: RefreshOptions,
 ) -> RefreshResult:
-    """Refresh an untracked base cache when the authoritative copy is newer."""
+    """Refresh an untracked base cache when the authoritative copy is newer.
+
+    Parameters
+    ----------
+    source
+        Local path or HTTPS URL for the authoritative shared dictionary.
+    cache
+        Untracked local cache destination.
+    options
+        Metadata, offline policy, and optional test transport.
+
+    Returns
+    -------
+    RefreshResult
+        Refresh status and validated cache path.
+
+    Raises
+    ------
+    FileNotFoundError
+        If offline mode has no valid cache.
+    NetworkUnavailableError
+        If the authority is unavailable and no valid stale cache exists.
+    InsecureSourceError
+        If an authority or redirect does not use HTTPS.
+    OSError, urllib.error.HTTPError
+        If persistence fails or the authority returns an HTTP error.
+    TypeError, ValueError
+        If dictionary validation fails.
+    """
     selected_options = options
     if options.opener is None and urllib.request.urlopen is not _DEFAULT_URLOPEN:
         # Existing focused tests patch this legacy boundary; production retains

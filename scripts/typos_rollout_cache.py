@@ -39,7 +39,20 @@ class RemoteResponse(typ.Protocol):
 
 
 def atomic_write(path: pathlib.Path, content: bytes) -> None:
-    """Write content beside a path and atomically replace the destination."""
+    """Write content beside a path and atomically replace the destination.
+
+    Parameters
+    ----------
+    path
+        Destination path to replace.
+    content
+        Complete bytes to install.
+
+    Notes
+    -----
+    The temporary file is created beside the destination, then replaced on the
+    same filesystem. Cleanup removes the temporary path after every outcome.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     stream = tempfile.NamedTemporaryFile(
         delete=False, dir=path.parent, prefix=f".{path.name}."

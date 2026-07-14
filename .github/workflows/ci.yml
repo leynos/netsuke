@@ -80,6 +80,15 @@ jobs:
         with:
           python-version: '3.13'
           enable-cache: true
+      - name: Cache shared spelling dictionary
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: |
+            .typos-oxendict-base.json
+            .typos-oxendict-base.toml
+          key: oxendict-${{ runner.os }}-${{ matrix.rust }}-${{ hashFiles('typos.local.toml') }}-${{ github.run_id }}
+          restore-keys: |
+            oxendict-${{ runner.os }}-${{ matrix.rust }}-${{ hashFiles('typos.local.toml') }}-
       - name: Spelling
         run: make spelling
       - name: Workflow contract tests

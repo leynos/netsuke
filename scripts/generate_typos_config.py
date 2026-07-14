@@ -25,7 +25,18 @@ REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 
 
 def dictionary_from_cache(repository: Path = REPOSITORY_ROOT) -> rollout.Dictionary:
-    """Load the cached shared base merged with local repository policy."""
+    """Load the cached shared base merged with local repository policy.
+
+    Parameters
+    ----------
+    repository
+        Repository root containing the shared cache and local overlay.
+
+    Returns
+    -------
+    rollout.Dictionary
+        Shared policy merged with ``typos.local.toml`` when it exists.
+    """
     dictionary = rollout.load_dictionary(repository / ".typos-oxendict-base.toml")
     local_overlay = repository / "typos.local.toml"
     if local_overlay.exists():
@@ -37,7 +48,18 @@ def dictionary_from_cache(repository: Path = REPOSITORY_ROOT) -> rollout.Diction
 
 
 def render_config(repository: Path = REPOSITORY_ROOT) -> str:
-    """Render deterministic configuration from the populated local cache."""
+    """Render deterministic configuration from the populated local cache.
+
+    Parameters
+    ----------
+    repository
+        Repository root containing the shared cache and local overlay.
+
+    Returns
+    -------
+    str
+        Rendered ``typos.toml`` content.
+    """
     return rollout.render_typos_config(dictionary_from_cache(repository))
 
 
@@ -62,7 +84,30 @@ def main(
     source: str | Path = DEFAULT_BASE_URL,
     offline: bool = False,
 ) -> rollout.RefreshResult:
-    """Refresh the shared base cache and write the merged configuration."""
+    """Refresh the shared base cache and write the merged configuration.
+
+    Parameters
+    ----------
+    output
+        Destination for generated configuration. By default, write
+        ``repository / "typos.toml"``.
+    repository
+        Repository root containing caches, local policy, and output.
+    source
+        Local path or HTTPS URL for the authoritative shared dictionary.
+    offline
+        Whether to reuse a valid cache without contacting the authority.
+
+    Returns
+    -------
+    rollout.RefreshResult
+        Refresh status and cache path, including tracked-config fallback.
+
+    Raises
+    ------
+    rollout.NetworkUnavailableError
+        If the authority is unavailable and no tracked fallback is valid.
+    """
     destination = output if output is not None else repository / "typos.toml"
     try:
         result = rollout.refresh_base(

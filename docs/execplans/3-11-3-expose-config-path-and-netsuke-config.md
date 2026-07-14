@@ -764,7 +764,7 @@ If a stage fails partway through, fix the issue and re-run from the start of
 that stage. No rollback is needed because no destructive operations are
 performed.
 
-## Artifacts and notes
+## Artefacts and notes
 
 ### File change summary (expected)
 

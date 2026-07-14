@@ -741,7 +741,7 @@ pub(super) fn is_command_available(
 
 No public Rust API outside `src/stdlib/which/` changes.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Reference artefacts from the 3.14.2 work, all of which can be inspected with
 `leta show`:

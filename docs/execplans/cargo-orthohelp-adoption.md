@@ -329,7 +329,7 @@ The relevant release and documentation files are:
 - `.github/release-staging.toml`: declares staged artefact sources. It
   currently finds the manual page under `target/generated-man` or Cargo's
   `OUT_DIR`.
-- `scripts/package-artifact.sh`: legacy local packaging helper that still
+- `scripts/package-artefact.sh`: legacy local packaging helper that still
   expects `target/generated-man/<target>/release/<bin>.1`.
 - `tests/workflow_build_and_package.rs`,
   `tests/workflow_release.rs`, and `tests/workflow_shared_actions_pins.rs`:
@@ -435,7 +435,7 @@ fallback, and add Windows PowerShell artefact entries for:
 If the staging helper cannot mark those files as Windows-only, keep them
 `required = false` so Linux and macOS staging do not fail.
 
-Update `scripts/package-artifact.sh` to read the man page from
+Update `scripts/package-artefact.sh` to read the man page from
 `target/orthohelp/<target>/release/man/man1/<bin>.1`, or remove it only if a
 separate approved decision confirms the script is obsolete.
 
@@ -575,7 +575,7 @@ transient network issue, rerun it once. If it fails because of a compiler or
 dependency incompatibility, stop and record the error in `Decision Log` before
 choosing a different installation strategy.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Reconnaissance evidence gathered before drafting:
 

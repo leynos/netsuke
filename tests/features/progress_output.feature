@@ -180,7 +180,7 @@ Feature: Progress output
     And stdout should not contain "Task 1/2"
     And stderr should not contain "NINJA_STDOUT_MARKER_LINE"
 
-  Scenario: Build artifacts can be captured via stdout redirection
+  Scenario: Build artefacts can be captured via stdout redirection
     Given a minimal Netsuke workspace
     When netsuke is run with arguments "--progress true manifest -"
     Then the command should succeed

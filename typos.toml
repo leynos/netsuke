@@ -20,6 +20,7 @@ extend-exclude = [
     "node_modules",
     "package-lock.json",
     "pnpm-lock.yaml",
+    "scripts/tests/test_typos_rollout_hardening.py",
     "target",
     "typos.local.toml",
     "typos.toml",
@@ -30,7 +31,27 @@ extend-exclude = [
 [default]
 locale = "en-gb"
 extend-ignore-re = [
+    "(?m)^            dist/\\$\\{\\{ inputs\\['bin-name'\\] \\}\\}-\\$\\{\\{ inputs\\.version \\}\\}-\\$\\{\\{ inputs\\['artifact-suffix'\\] \\}\\}\\.pkg$",
+    "(?m)^          ARCHIVE_SUFFIX: \\$\\{\\{ inputs\\['artifact-suffix'\\] \\}\\}$",
+    "(?m)^          name: \\$\\{\\{ inputs\\['artifact-name'\\] \\}\\}$",
+    "(?m)^          upload-artefact: \\$\\{\\{ inputs\\['should-upload-workflow-artifacts'\\] \\}\\}$",
+    "(?m)^        contents\\.contains\\(\"should_upload_workflow_artifacts: \\$\\{\\{ steps\\.release_modes\\.outputs\\['should-upload-workflow-artifacts'\\] \\}\\}\"\\),$",
+    "(?m)^        contents\\.contains\\(\"upload-artefact: \\$\\{\\{ inputs\\['should-upload-workflow-artifacts'\\] \\}\\}\"\\),$",
+    "(?m)^        if: inputs\\.platform == 'linux' && inputs\\['should-upload-workflow-artifacts'\\]$",
+    "(?m)^        if: inputs\\.platform == 'macos' && inputs\\['should-upload-workflow-artifacts'\\]$",
+    "(?m)^        if: inputs\\.platform == 'windows' && inputs\\['should-upload-workflow-artifacts'\\]$",
+    "(?m)^        value: \\$\\{\\{ jobs\\.metadata\\.outputs\\.should_upload_workflow_artifacts \\}\\}$",
+    "(?m)^      artifact-name: \\$\\{\\{ needs\\.metadata\\.outputs\\.repo_name \\}\\}-windows-\\$\\{\\{ matrix\\.package_arch \\}\\}$",
+    "(?m)^      artifact-name:$",
+    "(?m)^      artifact-suffix:$",
+    "(?m)^      should-upload-workflow-artifacts: \\$\\{\\{ fromJSON\\(needs\\.metadata\\.outputs\\.should_upload_workflow_artifacts\\) \\}\\}$",
+    "(?m)^      should-upload-workflow-artifacts:$",
+    "(?m)^      should_upload_workflow_artifacts: \\$\\{\\{ steps\\.release_modes\\.outputs\\['should-upload-workflow-artifacts'\\] \\}\\}$",
+    "(?m)^      should_upload_workflow_artifacts:$",
     "(?s)```.*?```",
+    "\\bartifact-dir\\b",
+    "\\bartifact-name\\b",
+    "\\bartifact-suffix\\b",
     "\\brust-analyzer\\b",
     "`[^`\\n]+`",
     "mis-grouping",
@@ -158,8 +179,6 @@ extend-ignore-re = [
 "apologizers" = "apologizers"
 "apologizes" = "apologizes"
 "apologizing" = "apologizing"
-"artifact" = "artifact"
-"artifacts" = "artifacts"
 "atomisable" = "atomizable"
 "atomisably" = "atomizably"
 "atomisation" = "atomization"
@@ -922,6 +941,7 @@ extend-ignore-re = [
 "globalizers" = "globalizers"
 "globalizes" = "globalizes"
 "globalizing" = "globalizing"
+"handwritten" = "handwritten"
 "harmonisable" = "harmonizable"
 "harmonisably" = "harmonizably"
 "harmonisation" = "harmonization"

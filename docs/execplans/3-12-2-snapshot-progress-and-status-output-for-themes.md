@@ -679,7 +679,7 @@ The planned edits are safe to repeat.
 - If `make fmt` rewrites unrelated Markdown files, inspect `git diff` and
   restore only formatter-introduced changes outside the 3.12.2 scope.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Useful evidence to keep while implementing:
 

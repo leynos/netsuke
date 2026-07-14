@@ -1085,7 +1085,7 @@ for transforming data within templates.
 
 - `| compact`: A planned collection filter that removes empty strings and null
   values while preserving order. It supports patterns such as constructing
-  `RUSTFLAGS` from an optional user override without hand-written shell tests.
+  `RUSTFLAGS` from an optional user override without `hand-written` shell tests.
 
 - `| to_path`: A filter that converts a string into a platform-native path
   representation, handling `/` and `\` separators correctly.

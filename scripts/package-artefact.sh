@@ -18,7 +18,7 @@ require_file() {
   fi
 }
 
-# package-artifact.sh <os> <arch> <target> <ext> <bin_name>
+# package-artefact.sh <os> <arch> <target> <ext> <bin_name>
 # Copies the built binary and generated man page into an OS/arch-specific
 # directory and writes SHA256 checksums for each file.
 

@@ -1252,7 +1252,7 @@ subtasks remain independent. If `make kani-full` regresses, narrow with
 `cargo kani --harness ...` to identify the offending harness, and either reduce
 its bound or add a `#[kani::unwind(N)]` override.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Captured `/tmp` logs from Stage B onward must be referenced in the PR
 description when summarizing validation evidence. Each command's log lives at

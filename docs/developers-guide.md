@@ -114,20 +114,25 @@ For documentation changes, also run:
 `make markdownlint` enforces en-GB-oxendict (Oxford) spelling over the
 repository's Markdown prose with [`typos`](https://github.com/crate-ci/typos),
 as required by the [documentation style guide](documentation-style-guide.md).
-The repository-root `typos.toml` is deterministic generated output assembled
+The repository-root `typos.toml` is deterministically generated output assembled
 from two policy layers:
 
 1. The shared estate dictionary in `leynos/agent-helper-scripts` supplies
-   generally valid Oxford forms, accepted technical terms, corrections and
+   generally valid Oxford forms, accepted technical terms, corrections, and
    exclusions. The generator conditionally refreshes this authority into an
    untracked local cache and reuses a valid cache when working offline.
 2. `typos.local.toml` contains only Netsuke-specific names, identifiers,
-   fixtures and exclusions. It cannot replace a conflicting shared correction.
+   fixtures, and exclusions. It cannot replace a conflicting shared correction.
 
 `scripts/typos_rollout_http.py` owns shared-cache freshness, HTTPS transport
 security and persistence coordination. Only `scripts/typos_rollout.py` may
 compose it with dictionary validation; application and release code must not
 reuse these spelling-policy internals.
+
+Pull-request CI restores the untracked dictionary and metadata before the
+spelling gate. The helper still performs a conditional freshness check, then
+saves refreshed state for later runs; a transient outage can therefore reuse a
+validated stale cache.
 
 The generated policy sets the `en-gb` locale to correct American spellings
 (`color` to `colour`, `behavior` to `behaviour`, `analyzed` to `analysed`). It

@@ -1020,7 +1020,7 @@ Quality criteria for the final commit:
   if a stage produces partial work, push the work-in-progress to the remote and
   reopen the draft PR for review before continuing.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Sample HTML structure (illustrative; final wording is localized):
 

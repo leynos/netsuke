@@ -133,8 +133,8 @@ fn behavioural_build_and_package_wiring_matches_shared_actions() {
         "macos-package should consume staged man_path output"
     );
     assert!(
-        contents.contains("${{ steps.stage_paths.outputs.artifact_dir }}"),
-        "workflow should use the staged artifact_dir output for uploads"
+        contents.contains("${{ steps.stage_paths.outputs.artefact_dir }}"),
+        "workflow should use the staged artefact_dir output for uploads"
     );
 }
 
@@ -236,13 +236,13 @@ fn goreleaser_fallback_uses_rust_target_triple_orthohelp_paths() -> Result<()> {
 }
 
 #[test]
-fn windows_upload_includes_staged_artifact_dir() {
+fn windows_upload_includes_staged_artefact_dir() {
     let contents = workflow_contents("build-and-package.yml")
         .expect("build-and-package workflow should be readable");
     let step_body = workflow_step_body(&contents, "Upload Windows artefacts").join("\n");
 
     assert!(
-        step_body.contains("${{ steps.stage_paths.outputs.artifact_dir }}"),
+        step_body.contains("${{ steps.stage_paths.outputs.artefact_dir }}"),
         "Windows upload should include staged sidecar artefacts"
     );
 }

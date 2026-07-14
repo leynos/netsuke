@@ -604,7 +604,7 @@ adds animated output.
 If a step fails partway through, fix the issue and re-run the validation
 command. No rollback is needed beyond `git checkout` of the affected files.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Key files created:
 

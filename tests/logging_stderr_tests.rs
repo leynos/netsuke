@@ -83,7 +83,7 @@ fn diag_json_failures_emit_single_json_document_on_stderr() -> Result<()> {
 }
 
 #[rstest]
-fn diag_json_success_keeps_stdout_artifact_and_stderr_empty(
+fn diag_json_success_keeps_stdout_artefact_and_stderr_empty(
     temp_with_minimal_manifest: Result<TempDir>,
 ) -> Result<()> {
     let temp = temp_with_minimal_manifest?;

@@ -330,7 +330,7 @@ All commands are run from the repository root (`/root/repo`). Use `tee` with
 - If localization keys conflict with existing entries, rename them with a unique
   prefix.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Keep the following transcripts for evidence:
 
