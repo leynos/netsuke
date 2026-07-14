@@ -719,7 +719,7 @@ If a stage fails halfway:
 - If BDD tests are not picked up after feature-file edits, run
   `touch tests/bdd_tests.rs` before `make test`.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Expected new files:
 

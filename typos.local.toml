@@ -1,0 +1,39 @@
+# Repository-specific identifiers, quotations and deliberate fixtures.
+
+schema = 1
+
+[oxford]
+stems = []
+
+[words]
+accepted = []
+
+[words.corrections]
+
+[patterns]
+# The tokenizer splits the valid hyphenated prefix in `mis-grouping`.
+ignore = ["mis-grouping",
+  "(?m)^            dist/\\$\\{\\{ inputs\\['bin-name'\\] \\}\\}-\\$\\{\\{ inputs\\.version \\}\\}-\\$\\{\\{ inputs\\['artifact-suffix'\\] \\}\\}\\.pkg$",
+  "(?m)^          ARCHIVE_SUFFIX: \\$\\{\\{ inputs\\['artifact-suffix'\\] \\}\\}$",
+  "(?m)^          name: \\$\\{\\{ inputs\\['artifact-name'\\] \\}\\}$",
+  "(?m)^          upload-artefact: \\$\\{\\{ inputs\\['should-upload-workflow-artifacts'\\] \\}\\}$",
+  "(?m)^        contents\\.contains\\(\"should_upload_workflow_artifacts: \\$\\{\\{ steps\\.release_modes\\.outputs\\['should-upload-workflow-artifacts'\\] \\}\\}\"\\),$",
+  "(?m)^        contents\\.contains\\(\"upload-artefact: \\$\\{\\{ inputs\\['should-upload-workflow-artifacts'\\] \\}\\}\"\\),$",
+  "(?m)^        if: inputs\\.platform == 'linux' && inputs\\['should-upload-workflow-artifacts'\\]$",
+  "(?m)^        if: inputs\\.platform == 'macos' && inputs\\['should-upload-workflow-artifacts'\\]$",
+  "(?m)^        if: inputs\\.platform == 'windows' && inputs\\['should-upload-workflow-artifacts'\\]$",
+  "(?m)^        value: \\$\\{\\{ jobs\\.metadata\\.outputs\\.should_upload_workflow_artifacts \\}\\}$",
+  "(?m)^      artifact-name: \\$\\{\\{ needs\\.metadata\\.outputs\\.repo_name \\}\\}-windows-\\$\\{\\{ matrix\\.package_arch \\}\\}$",
+  "(?m)^      artifact-name:$",
+  "(?m)^      artifact-suffix:$",
+  "(?m)^      should-upload-workflow-artifacts: \\$\\{\\{ fromJSON\\(needs\\.metadata\\.outputs\\.should_upload_workflow_artifacts\\) \\}\\}$",
+  "(?m)^      should-upload-workflow-artifacts:$",
+  "(?m)^      should_upload_workflow_artifacts: \\$\\{\\{ steps\\.release_modes\\.outputs\\['should-upload-workflow-artifacts'\\] \\}\\}$",
+  "(?m)^      should_upload_workflow_artifacts:$",
+  "\\bartifact-dir\\b",
+  "\\bartifact-name\\b",
+  "\\bartifact-suffix\\b",
+]
+
+[files]
+exclude = ["scripts/tests/test_typos_rollout_hardening.py"]

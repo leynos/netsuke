@@ -577,7 +577,7 @@ The planned edits are safe to repeat.
 - If the implementation breaches a tolerance, stop, update `Decision Log`, and
   wait for explicit direction rather than improvising a broader redesign.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Useful evidence to keep while implementing:
 

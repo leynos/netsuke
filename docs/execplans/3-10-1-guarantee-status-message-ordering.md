@@ -410,7 +410,7 @@ If a stage fails:
 3. If within tolerances, fix and retry.
 4. If tolerances exceeded, escalate with documented context.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Key code locations:
 

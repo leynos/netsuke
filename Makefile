@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-workflow-contracts test-typos-config build release lint lint-clippy lint-whitaker fmt check-fmt typecheck markdownlint nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr
+.PHONY: help all clean test test-workflow-contracts test-typos-config build release lint lint-clippy lint-whitaker fmt check-fmt typecheck markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr
 
 APP ?= netsuke
 CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$$HOME/.cargo/bin/cargo")
@@ -14,7 +14,20 @@ NIXIE ?= nixie
 # Single source of truth for the typos version; the markdownlint target and CI
 # both consume it, so the Makefile and CI cannot drift apart.
 TYPOS_VERSION ?= 1.48.0
-TYPOS ?= uv tool run typos@$(TYPOS_VERSION)
+UV ?= uv
+UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
+RUFF_VERSION ?= 0.15.12
+SPELLING_HELPER_COVERAGE = --cov=generate_typos_config --cov=typos_rollout_check --cov=typos_rollout \
+	--cov=typos_rollout_cache --cov=typos_rollout_http
+SPELLING_HELPER_FILES = scripts/generate_typos_config.py \
+	scripts/typos_rollout_check.py \
+	scripts/typos_rollout.py scripts/typos_rollout_cache.py \
+	scripts/typos_rollout_http.py scripts/tests/conftest.py \
+	scripts/tests/test_typos_rollout.py \
+	scripts/tests/test_typos_rollout_check.py \
+	scripts/tests/test_typos_rollout_hardening.py \
+	scripts/tests/test_typos_rollout_refresh.py \
+	scripts/tests/typos_rollout_test_support.py
 # Markdown files, excluding build output and tool caches. CRUSH.md is a symlink
 # to AGENTS.md, so `-type f` skips it and avoids double-checking the same prose.
 MD_FILES_FIND = find . -type f -name '*.md' \
@@ -44,8 +57,7 @@ test: ## Run tests with warnings treated as errors
 test-workflow-contracts: ## Validate the mutation-testing caller contract
 	uv run --with 'pytest>=8' --with 'pyyaml>=6' pytest tests/workflow_contracts -q
 
-test-typos-config: ## Verify typos.toml matches its generator
-	uv run --with 'pytest>=8' --with 'hypothesis>=6' pytest scripts/tests -q
+test-typos-config: spelling-helper-test ## Verify the shared spelling-policy integration
 
 target/%/$(APP): ## Build binary in debug or release mode
 	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP)
@@ -69,10 +81,23 @@ check-fmt: ## Verify formatting
 typecheck: ## Typecheck all targets and features
 	RUSTFLAGS="-D warnings" $(CARGO) check --all-targets --all-features $(BUILD_JOBS)
 
-markdownlint: ## Lint Markdown and enforce en-GB-oxendict spelling
+markdownlint: spelling ## Lint Markdown and enforce en-GB-oxendict spelling
 	$(MDLINT) "**/*.md"
-	@printf 'typos: version=%s config=typos.toml\n' '$(TYPOS_VERSION)' >&2
-	$(MD_FILES_FIND) | xargs -0 $(TYPOS) --config typos.toml --force-exclude
+
+spelling: spelling-config ## Enforce en-GB-oxendict spelling in Markdown prose
+	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python 3.13 scripts/typos_rollout_check.py --repository .
+	@$(MD_FILES_FIND) | xargs -0 -r env $(UV_ENV) \
+		$(UV) tool run typos@$(TYPOS_VERSION) --config typos.toml --force-exclude
+
+spelling-config: spelling-helper-test ## Generate and validate the spelling configuration
+	@$(UV_ENV) $(UV) run scripts/generate_typos_config.py
+	@git ls-files --error-unmatch typos.toml >/dev/null
+	@git diff --exit-code -- typos.toml
+
+spelling-helper-test: ## Validate the shared spelling-policy integration
+	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) format --isolated --target-version py313 --check $(SPELLING_HELPER_FILES)
+	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) check --isolated --target-version py313 $(SPELLING_HELPER_FILES)
+	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python 3.13 --with pytest==9.0.2 --with pytest-cov==7.0.0 python -m pytest scripts/tests/test_typos_rollout*.py -c /dev/null --rootdir=. -p no:cacheprovider $(SPELLING_HELPER_COVERAGE) --cov-fail-under=90
 
 nixie: ## Validate Mermaid diagrams
 	nixie --no-sandbox

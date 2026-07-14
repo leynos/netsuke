@@ -593,7 +593,7 @@ rm -rf tools/kani scripts/install-kani.sh scripts/check-kani-version.sh
 Do not use destructive rollback commands after user or other-agent edits appear
 in the same files; inspect `git diff` first and preserve unrelated changes.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Firecrawl research confirmed these external facts:
 

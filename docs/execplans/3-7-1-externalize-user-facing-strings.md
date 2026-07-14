@@ -237,7 +237,7 @@ Quality criteria (done means all of these are true):
 - If a gate fails, fix the underlying issue and re-run the same command,
   overwriting the log file to keep evidence current.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Keep these logs as evidence of success:
 

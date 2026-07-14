@@ -124,7 +124,7 @@ jobs:
             echo "binary_path=${{ steps.stage.outputs['binary-path'] }}"
             echo "man_path=${{ steps.stage.outputs['man-path'] }}"
             echo "license_path=${{ steps.stage.outputs['license-path'] }}"
-            echo "artifact_dir=${{ steps.stage.outputs['artifact-dir'] }}"
+            echo "artefact_dir=${{ steps.stage.outputs['artifact-dir'] }}"
             echo "powershell_help_dir=${{ steps.stage.outputs.powershell_help_dir }}"
           } >>"$GITHUB_OUTPUT"
 
@@ -206,7 +206,7 @@ jobs:
         with:
           name: ${{ inputs['artifact-name'] }}
           path: |
-            ${{ steps.stage_paths.outputs.artifact_dir }}
+            ${{ steps.stage_paths.outputs.artefact_dir }}
             ${{ steps.package_windows.outputs['msi-path'] }}
 
       - name: Upload macOS artefacts
@@ -216,5 +216,5 @@ jobs:
         with:
           name: ${{ inputs['artifact-name'] }}
           path: |
-            ${{ steps.stage_paths.outputs.artifact_dir }}
+            ${{ steps.stage_paths.outputs.artefact_dir }}
             dist/${{ inputs['bin-name'] }}-${{ inputs.version }}-${{ inputs['artifact-suffix'] }}.pkg

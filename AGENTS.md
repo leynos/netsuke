@@ -316,12 +316,12 @@ project:
   en-GB-oxendict (Oxford) spelling over Markdown prose with
   [`typos`](https://github.com/crate-ci/typos), pinned by the Makefile
   `TYPOS_VERSION` variable and run through `uv tool run`.
-- `typos.toml` is generated; never edit its entries by hand. Change
-  `scripts/generate_typos_config.py` and regenerate with
-  `uv run scripts/generate_typos_config.py`. When the gate flags a legitimate
-  Oxford `-ize` word, add its stem to the generator's `STEMS`; for identifiers
-  or API names that must keep upstream spelling, prefer backticks (which the
-  gate ignores) over widening the accepted-word list. See the
+- `typos.toml` is generated from the shared estate dictionary and the narrow
+  repository policy in `typos.local.toml`; never edit generated entries by
+  hand. Change the local overlay and regenerate with
+  `uv run scripts/generate_typos_config.py`. For identifiers or API names that
+  must keep upstream spelling, prefer backticks (which the gate ignores) over
+  widening the accepted-word list. See the
   [developers' guide](docs/developers-guide.md) for the full workflow.
 - Run `make fmt` after any documentation changes to format all Markdown
   files and fix table markup.
