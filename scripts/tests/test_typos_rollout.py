@@ -70,12 +70,11 @@ def test_https_failure_reuses_valid_tracked_config(
 
 
 @pytest.mark.parametrize(
-    ("document", "expected_error", "expected_message"),
+    ("document", "expected"),
     [
         pytest.param(
             _dictionary_text().replace("schema = 1", "schema = 2"),
-            ValueError,
-            "unsupported dictionary schema 2",
+            (ValueError, "unsupported dictionary schema 2"),
             id="unsupported-schema",
         ),
         pytest.param(
@@ -83,14 +82,12 @@ def test_https_failure_reuses_valid_tracked_config(
                 '[oxford]\nstems = ["organ"]',
                 'oxford = "bad"',
             ),
-            TypeError,
-            "'oxford' must be a table",
+            (TypeError, "'oxford' must be a table"),
             id="invalid-table",
         ),
         pytest.param(
             _dictionary_text().replace('stems = ["organ"]', "stems = [1]"),
-            TypeError,
-            "'stems' must be a list of strings",
+            (TypeError, "'stems' must be a list of strings"),
             id="invalid-string-list",
         ),
         pytest.param(
@@ -98,15 +95,13 @@ def test_https_failure_reuses_valid_tracked_config(
                 "[words.corrections]",
                 "[words.corrections]\nteh = 1",
             ),
-            TypeError,
-            "word corrections must map strings to strings",
+            (TypeError, "word corrections must map strings to strings"),
             id="invalid-word-correction",
         ),
         pytest.param(
             _dictionary_text()
             + f"\n[phrases.corrections]\n'{PROHIBITED_PHRASE}' = 1\n",
-            TypeError,
-            "phrase corrections must map strings to strings",
+            (TypeError, "phrase corrections must map strings to strings"),
             id="invalid-phrase-correction",
         ),
     ],
@@ -115,11 +110,11 @@ def test_dictionary_validation_rejects_invalid_documents(
     rollout_modules: tuple[types.ModuleType, types.ModuleType, types.ModuleType],
     tmp_path: Path,
     document: str,
-    expected_error: type[Exception],
-    expected_message: str,
+    expected: tuple[type[Exception], str],
 ) -> None:
     """Schema, table, string-list and correction types remain validated."""
     _, rollout, _ = rollout_modules
+    expected_error, expected_message = expected
     source = tmp_path / "base.toml"
     source.write_text(document, encoding="utf-8")
 
