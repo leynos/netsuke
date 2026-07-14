@@ -5,6 +5,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use serde::Deserialize;
 use std::collections::BTreeSet;
+#[path = "dependabot_test_support/manifest_discovery.rs"]
+mod manifest_discovery;
 /// Parsed Dependabot configuration root.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -63,7 +65,6 @@ fn update_for<'a>(config: &'a DependabotConfig, ecosystem: &str) -> Result<&'a D
         .next()
         .with_context(|| format!("{ecosystem} update block should exist"))
 }
-
 /// Return a normalized set of configured directories for one update block.
 fn update_directories(update: &DependabotUpdate) -> Result<BTreeSet<&str>> {
     match (&update.directory, &update.directories) {
@@ -199,8 +200,7 @@ enum TrackedManifests {
 /// Use `git ls-files` rather than a file-system walk so untracked content cannot
 /// perturb the comparison. Exact pathspecs cover root and nested manifests
 /// without matching files whose basenames merely end in `Cargo.toml`.
-fn tracked_cargo_manifest_dirs() -> Result<TrackedManifests> {
-    let root = repo_root_path();
+fn tracked_cargo_manifest_dirs(root: &Utf8Path) -> Result<TrackedManifests> {
     let work_tree_probe = std::process::Command::new("git")
         .args(["-C", root.as_str(), "rev-parse", "--is-inside-work-tree"])
         .output()
@@ -337,7 +337,7 @@ fn cargo_update_directories_match_manifests() -> Result<()> {
     let config = dependabot_config()?;
     let cargo_update = update_for(&config, "cargo")?;
     let configured_directory_refs = update_directories(cargo_update)?;
-    let expected_directories = match tracked_cargo_manifest_dirs()? {
+    let expected_directories = match tracked_cargo_manifest_dirs(&repo_root_path())? {
         TrackedManifests::Dirs(dirs) => dirs,
         TrackedManifests::NotAGitCheckout => {
             // cargo-mutants builds without `.git`; tracked-manifest hygiene is meaningless.

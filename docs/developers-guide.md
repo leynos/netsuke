@@ -377,8 +377,9 @@ Netsuke uses a mixed strategy:
 The Dependabot integration tests parse the checked-in configuration and verify
 that repository dependency manifests remain covered as the tree changes. They
 assert the Cargo and GitHub Actions update policies, the configured schedules,
-open pull request limits, and labels. They also compare the Cargo directories
-against tracked `Cargo.toml` manifests. The comparison skips source trees that
+open pull request limits, and labels. They use `git ls-files` to compare the
+Cargo directories against tracked `Cargo.toml` manifests, so the test runner
+requires the Git command-line client. The comparison skips source trees that
 are not Git checkouts, because tracked-manifest hygiene cannot be determined
 there. The tests require workflow YAML files under `.github/workflows` and
 ensure local composite action manifests under `.github/actions` are covered by
