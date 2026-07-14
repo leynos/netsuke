@@ -208,12 +208,21 @@ enum TrackedManifests {
 /// Manifests are enumerated with `git ls-files` rather than a file-system
 /// walk so untracked content (mutation-workflow checkouts such as
 /// `workflow-src/`, build artefacts, and scratch directories) cannot
-/// perturb the comparison. The git pathspec `*Cargo.toml` matches at any
-/// depth.
+/// perturb the comparison. Exact pathspecs cover the root manifest and
+/// manifests at any directory depth without matching files whose basenames
+/// merely end in `Cargo.toml`.
 fn tracked_cargo_manifest_dirs() -> Result<TrackedManifests> {
     let root = repo_root_path();
     let output = std::process::Command::new("git")
-        .args(["-C", root.as_str(), "ls-files", "-z", "--", "*Cargo.toml"])
+        .args([
+            "-C",
+            root.as_str(),
+            "ls-files",
+            "-z",
+            "--",
+            "Cargo.toml",
+            "**/Cargo.toml",
+        ])
         .output()
         .context("run git ls-files to enumerate tracked Cargo manifests")?;
     if !output.status.success() {
