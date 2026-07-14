@@ -123,6 +123,58 @@ def _masked(text: str, patterns: tuple[str, ...]) -> str:
     return text
 
 
+def _phrase_findings(
+    path: Path,
+    text: str,
+    masked: str,
+    policy: tuple[str, str],
+) -> tuple[PhraseFinding, ...]:
+    """Find one prohibited phrase in position-preserving masked text."""
+    phrase, correction = policy
+    found = []
+    for match in re.finditer(
+        rf"(?<![\w-]){re.escape(phrase)}(?![\w-])",
+        masked,
+        re.IGNORECASE,
+    ):
+        previous = masked.rfind("\n", 0, match.start())
+        found.append(
+            PhraseFinding(
+                path,
+                masked.count("\n", 0, match.start()) + 1,
+                match.start() - previous,
+                text[match.start() : match.end()],
+                correction,
+            )
+        )
+    return tuple(found)
+
+
+def _file_findings(
+    repository: Path,
+    relative: Path,
+    dictionary: rollout.Dictionary,
+) -> tuple[PhraseFinding, ...]:
+    """Find all prohibited phrases in one eligible tracked UTF-8 file."""
+    if relative in POLICY_PATHS or _excluded(relative, dictionary):
+        return ()
+    try:
+        text = (repository / relative).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return ()
+    masked = _masked(text, dictionary.ignore_patterns)
+    return tuple(
+        finding
+        for policy in dictionary.phrase_corrections
+        for finding in _phrase_findings(
+            relative,
+            text,
+            masked,
+            policy,
+        )
+    )
+
+
 def check_phrase_corrections(
     repository: Path,
     dictionary: rollout.Dictionary,
@@ -149,32 +201,11 @@ def check_phrase_corrections(
     >>> check_phrase_corrections(Path.cwd(), rollout.Dictionary())
     ()
     """
-    found = []
-    for relative in _tracked(repository):
-        if relative in POLICY_PATHS or _excluded(relative, dictionary):
-            continue
-        try:
-            text = (repository / relative).read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            continue
-        masked = _masked(text, dictionary.ignore_patterns)
-        for phrase, correction in dictionary.phrase_corrections:
-            for match in re.finditer(
-                rf"(?<![\w-]){re.escape(phrase)}(?![\w-])",
-                masked,
-                re.IGNORECASE,
-            ):
-                previous = masked.rfind("\n", 0, match.start())
-                found.append(
-                    PhraseFinding(
-                        relative,
-                        masked.count("\n", 0, match.start()) + 1,
-                        match.start() - previous,
-                        text[match.start() : match.end()],
-                        correction,
-                    )
-                )
-    return tuple(found)
+    return tuple(
+        finding
+        for relative in _tracked(repository)
+        for finding in _file_findings(repository, relative, dictionary)
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:

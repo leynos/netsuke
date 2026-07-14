@@ -76,6 +76,23 @@ def _table(document: cabc.Mapping[str, object], key: str) -> cabc.Mapping[str, o
     return typ.cast("cabc.Mapping[str, object]", value)
 
 
+def _string_mapping(
+    table: cabc.Mapping[str, object],
+    key: str,
+    *,
+    description: str,
+) -> cabc.Mapping[str, str]:
+    """Read and validate a string-to-string mapping from a TOML table."""
+    value = _table(table, key)
+    if not all(
+        isinstance(item_key, str) and isinstance(item_value, str)
+        for item_key, item_value in value.items()
+    ):
+        message = f"{description} must map strings to strings"
+        raise TypeError(message)
+    return typ.cast("cabc.Mapping[str, str]", value)
+
+
 def _dictionary_from_text(text: str) -> Dictionary:
     """Parse and validate shared dictionary text."""
     document = tomllib.loads(text)
@@ -88,21 +105,16 @@ def _dictionary_from_text(text: str) -> Dictionary:
     phrases = _table(document, "phrases")
     patterns = _table(document, "patterns")
     files = _table(document, "files")
-    corrections_table = _table(words, "corrections")
-    if not all(
-        isinstance(key, str) and isinstance(value, str)
-        for key, value in corrections_table.items()
-    ):
-        message = "word corrections must map strings to strings"
-        raise TypeError(message)
-    corrections = typ.cast("cabc.Mapping[str, str]", corrections_table)
-    phrase_table = _table(phrases, "corrections")
-    if not all(
-        isinstance(k, str) and isinstance(v, str) for k, v in phrase_table.items()
-    ):
-        message = "phrase corrections must map strings to strings"
-        raise TypeError(message)
-    phrase_corrections = typ.cast("cabc.Mapping[str, str]", phrase_table)
+    corrections = _string_mapping(
+        words,
+        "corrections",
+        description="word corrections",
+    )
+    phrase_corrections = _string_mapping(
+        phrases,
+        "corrections",
+        description="phrase corrections",
+    )
     return Dictionary(
         stems=_string_list(oxford, "stems"),
         accepted=_string_list(words, "accepted"),
@@ -136,6 +148,25 @@ def load_dictionary(path: pathlib.Path) -> Dictionary:
     return _dictionary_from_text(path.read_text(encoding="utf-8"))
 
 
+def _merge_correction_items(
+    base: tuple[tuple[str, str], ...],
+    local: tuple[tuple[str, str], ...],
+    *,
+    label: str,
+) -> tuple[tuple[str, str], ...]:
+    """Merge correction items while rejecting conflicting replacements."""
+    merged = dict(base)
+    for source, correction in local:
+        existing = merged.get(source)
+        if existing is not None and existing != correction:
+            message = (
+                f"conflicting {label} for {source!r}: {existing!r} != {correction!r}"
+            )
+            raise ValueError(message)
+        merged[source] = correction
+    return tuple(sorted(merged.items()))
+
+
 def merge_dictionaries(base: Dictionary, local: Dictionary) -> Dictionary:
     """Merge a shared dictionary with a non-conflicting local overlay.
 
@@ -156,27 +187,19 @@ def merge_dictionaries(base: Dictionary, local: Dictionary) -> Dictionary:
     ValueError
         If the local policy conflicts with a shared correction.
     """
-    corrections = dict(base.corrections)
-    for word, correction in local.corrections:
-        existing = corrections.get(word)
-        if existing is not None and existing != correction:
-            message = (
-                f"conflicting correction for {word!r}: {existing!r} != {correction!r}"
-            )
-            raise ValueError(message)
-        corrections[word] = correction
-    phrase_corrections = dict(base.phrase_corrections)
-    for phrase, correction in local.phrase_corrections:
-        existing = phrase_corrections.get(phrase)
-        if existing is not None and existing != correction:
-            message = f"conflicting phrase correction for {phrase!r}: {existing!r} != {correction!r}"
-            raise ValueError(message)
-        phrase_corrections[phrase] = correction
     return Dictionary(
         stems=tuple(sorted(set(base.stems) | set(local.stems))),
         accepted=tuple(sorted(set(base.accepted) | set(local.accepted))),
-        corrections=tuple(sorted(corrections.items())),
-        phrase_corrections=tuple(sorted(phrase_corrections.items())),
+        corrections=_merge_correction_items(
+            base.corrections,
+            local.corrections,
+            label="correction",
+        ),
+        phrase_corrections=_merge_correction_items(
+            base.phrase_corrections,
+            local.phrase_corrections,
+            label="phrase correction",
+        ),
         ignore_patterns=tuple(
             sorted(set(base.ignore_patterns) | set(local.ignore_patterns))
         ),
