@@ -9,6 +9,7 @@ build.ninja
 /graph.dot
 /graph.html
 __pycache__/
+.coverage
 .uv-cache/
 .uv-tools/
 .typos-oxendict-base.json
