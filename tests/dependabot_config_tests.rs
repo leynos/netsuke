@@ -4,7 +4,7 @@ use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use serde::Deserialize;
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, io::Write};
 #[path = "dependabot_test_support/manifest_discovery.rs"]
 mod manifest_discovery;
 /// Parsed Dependabot configuration root.
@@ -80,7 +80,6 @@ fn update_directories(update: &DependabotUpdate) -> Result<BTreeSet<&str>> {
         )),
     }
 }
-
 /// Assert the shared Dependabot policy fields for one update block.
 fn assert_update_policy(
     update: &DependabotUpdate,
@@ -108,7 +107,6 @@ fn assert_update_policy(
         update.package_ecosystem
     );
 }
-
 /// Convert a relative repository path to the POSIX directory form Dependabot uses.
 fn dependabot_dir_from_relative(relative: &Utf8Path) -> String {
     let components = relative
@@ -123,12 +121,10 @@ fn dependabot_dir_from_relative(relative: &Utf8Path) -> String {
     }
     format!("/{}", components.join("/"))
 }
-
 /// Return whether a repository traversal should skip a directory name.
 fn should_skip_dir(name: &str) -> bool {
     matches!(name, ".git" | "target")
 }
-
 /// Collect Dependabot directory names containing a file with the given name.
 fn collect_dirs_containing_file(
     root: &Dir,
@@ -149,14 +145,12 @@ fn collect_dirs_containing_file(
     }
     Ok(())
 }
-
 /// Shared traversal state for a manifest-discovery pass.
 struct DirectorySearch<'a> {
     root: &'a Dir,
     file_name: &'a str,
     dirs: &'a mut BTreeSet<String>,
 }
-
 /// Handle one directory entry during manifest discovery.
 fn handle_dir_entry(
     search: &mut DirectorySearch<'_>,
@@ -186,7 +180,6 @@ fn handle_dir_entry(
     }
     Ok(())
 }
-
 /// Result of enumerating tracked Cargo manifests via git.
 enum TrackedManifests {
     /// Dependabot directory names for every tracked `Cargo.toml`.
@@ -194,7 +187,6 @@ enum TrackedManifests {
     /// The source tree is not a git checkout, so tracked files cannot be enumerated.
     NotAGitCheckout,
 }
-
 /// Return tracked Cargo manifest directories that Dependabot can update.
 ///
 /// Use `git ls-files` rather than a file-system walk so untracked content cannot
@@ -337,11 +329,19 @@ fn cargo_update_directories_match_manifests() -> Result<()> {
     let config = dependabot_config()?;
     let cargo_update = update_for(&config, "cargo")?;
     let configured_directory_refs = update_directories(cargo_update)?;
-    let expected_directories = match tracked_cargo_manifest_dirs(&repo_root_path())? {
+    let repo_root = repo_root_path();
+    let expected_directories = match tracked_cargo_manifest_dirs(&repo_root)? {
         TrackedManifests::Dirs(dirs) => dirs,
         TrackedManifests::NotAGitCheckout => {
             // cargo-mutants builds without `.git`; tracked-manifest hygiene is meaningless.
-            tracing::warn!("skipping: source tree is not a git checkout");
+            writeln!(
+                std::io::stderr().lock(),
+                concat!(
+                    "skipping: source tree is not a git checkout; ",
+                    "operation=enumerate tracked Cargo manifests; repository={}"
+                ),
+                repo_root
+            )?;
             return Ok(());
         }
     };
