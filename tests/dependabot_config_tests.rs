@@ -4,8 +4,9 @@ use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use serde::Deserialize;
-use std::collections::BTreeSet;
-
+use std::{collections::BTreeSet, io::Write};
+#[path = "dependabot_test_support/manifest_discovery.rs"]
+mod manifest_discovery;
 /// Parsed Dependabot configuration root.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -13,7 +14,6 @@ struct DependabotConfig {
     version: u64,
     updates: Vec<DependabotUpdate>,
 }
-
 /// Parsed Dependabot update entry for one package ecosystem.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -25,25 +25,21 @@ struct DependabotUpdate {
     labels: Vec<String>,
     schedule: DependabotSchedule,
 }
-
 /// Parsed Dependabot schedule block.
 #[derive(Debug, Deserialize)]
 struct DependabotSchedule {
     interval: String,
 }
-
 /// Return the repository root as a UTF-8 Camino path.
 fn repo_root_path() -> Utf8PathBuf {
     Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
-
 /// Open the repository root as a capability-scoped UTF-8 directory.
 fn repo_dir() -> Result<Dir> {
     let root = repo_root_path();
     Dir::open_ambient_dir(&root, ambient_authority())
         .with_context(|| format!("open repository root {root}"))
 }
-
 /// Load and parse the repository Dependabot configuration.
 fn dependabot_config() -> Result<DependabotConfig> {
     let path = Utf8Path::new(".github").join("dependabot.yml");
@@ -52,7 +48,6 @@ fn dependabot_config() -> Result<DependabotConfig> {
         .with_context(|| format!("read Dependabot config from {path}"))?;
     serde_yaml::from_str(&contents).context("parse Dependabot config")
 }
-
 /// Find the single update entry for a package ecosystem.
 fn update_for<'a>(config: &'a DependabotConfig, ecosystem: &str) -> Result<&'a DependabotUpdate> {
     let matches = config
@@ -70,7 +65,6 @@ fn update_for<'a>(config: &'a DependabotConfig, ecosystem: &str) -> Result<&'a D
         .next()
         .with_context(|| format!("{ecosystem} update block should exist"))
 }
-
 /// Return a normalized set of configured directories for one update block.
 fn update_directories(update: &DependabotUpdate) -> Result<BTreeSet<&str>> {
     match (&update.directory, &update.directories) {
@@ -86,7 +80,6 @@ fn update_directories(update: &DependabotUpdate) -> Result<BTreeSet<&str>> {
         )),
     }
 }
-
 /// Assert the shared Dependabot policy fields for one update block.
 fn assert_update_policy(
     update: &DependabotUpdate,
@@ -114,7 +107,6 @@ fn assert_update_policy(
         update.package_ecosystem
     );
 }
-
 /// Convert a relative repository path to the POSIX directory form Dependabot uses.
 fn dependabot_dir_from_relative(relative: &Utf8Path) -> String {
     let components = relative
@@ -129,12 +121,10 @@ fn dependabot_dir_from_relative(relative: &Utf8Path) -> String {
     }
     format!("/{}", components.join("/"))
 }
-
 /// Return whether a repository traversal should skip a directory name.
 fn should_skip_dir(name: &str) -> bool {
     matches!(name, ".git" | "target")
 }
-
 /// Collect Dependabot directory names containing a file with the given name.
 fn collect_dirs_containing_file(
     root: &Dir,
@@ -155,14 +145,12 @@ fn collect_dirs_containing_file(
     }
     Ok(())
 }
-
 /// Shared traversal state for a manifest-discovery pass.
 struct DirectorySearch<'a> {
     root: &'a Dir,
     file_name: &'a str,
     dirs: &'a mut BTreeSet<String>,
 }
-
 /// Handle one directory entry during manifest discovery.
 fn handle_dir_entry(
     search: &mut DirectorySearch<'_>,
@@ -192,12 +180,73 @@ fn handle_dir_entry(
     }
     Ok(())
 }
+/// Result of enumerating tracked Cargo manifests via git.
+enum TrackedManifests {
+    /// Dependabot directory names for every tracked `Cargo.toml`.
+    Dirs(BTreeSet<String>),
+    /// The source tree is not a git checkout, so tracked files cannot be enumerated.
+    NotAGitCheckout,
+}
+/// Return tracked Cargo manifest directories that Dependabot can update.
+///
+/// Use `git ls-files` rather than a file-system walk so untracked content cannot
+/// perturb the comparison. Exact pathspecs cover root and nested manifests
+/// without matching files whose basenames merely end in `Cargo.toml`.
+fn tracked_cargo_manifest_dirs(root: &Utf8Path) -> Result<TrackedManifests> {
+    let work_tree_probe = std::process::Command::new("git")
+        .args(["-C", root.as_str(), "rev-parse", "--is-inside-work-tree"])
+        .output()
+        .context("probe whether the source tree is a Git work tree")?;
+    if !work_tree_probe.status.success() {
+        if work_tree_probe.status.code() == Some(128) {
+            // cargo-mutants copies omit `.git`, for which Git returns 128.
+            return Ok(TrackedManifests::NotAGitCheckout);
+        }
+        anyhow::bail!(
+            "git rev-parse --is-inside-work-tree failed ({})",
+            work_tree_probe.status
+        );
+    }
+    match String::from_utf8(work_tree_probe.stdout)
+        .context("decode git work-tree probe output")?
+        .trim()
+    {
+        "true" => {}
+        "false" => return Ok(TrackedManifests::NotAGitCheckout),
+        output => anyhow::bail!("unexpected git work-tree probe output: {output:?}"),
+    }
 
-/// Return Cargo manifest directories that Dependabot can update directly.
-fn cargo_manifest_dirs(root: &Dir) -> Result<BTreeSet<String>> {
-    let mut manifest_dirs = BTreeSet::new();
-    collect_dirs_containing_file(root, Utf8Path::new("."), "Cargo.toml", &mut manifest_dirs)?;
-    Ok(manifest_dirs)
+    let output = std::process::Command::new("git")
+        .args([
+            "-C",
+            root.as_str(),
+            "ls-files",
+            "-z",
+            "--",
+            "Cargo.toml",
+            "**/Cargo.toml",
+        ])
+        .output()
+        .context("run git ls-files to enumerate tracked Cargo manifests")?;
+    if !output.status.success() {
+        anyhow::bail!("git ls-files failed ({})", output.status);
+    }
+    let stdout = String::from_utf8(output.stdout).context("decode git ls-files output")?;
+    let manifest_dirs = stdout
+        .split('\0')
+        .filter(|path| !path.is_empty())
+        .map(|path| {
+            let parent = Utf8Path::new(path)
+                .parent()
+                .with_context(|| format!("tracked manifest {path} should have a parent"))?;
+            Ok(dependabot_dir_from_relative(parent))
+        })
+        .collect::<Result<BTreeSet<String>>>()?;
+    ensure!(
+        !manifest_dirs.is_empty(),
+        "git ls-files should report at least the workspace root Cargo.toml"
+    );
+    Ok(TrackedManifests::Dirs(manifest_dirs))
 }
 
 /// Return whether the repository has at least one workflow YAML file.
@@ -280,7 +329,22 @@ fn cargo_update_directories_match_manifests() -> Result<()> {
     let config = dependabot_config()?;
     let cargo_update = update_for(&config, "cargo")?;
     let configured_directory_refs = update_directories(cargo_update)?;
-    let expected_directories = cargo_manifest_dirs(&repo_dir()?)?;
+    let repo_root = repo_root_path();
+    let expected_directories = match tracked_cargo_manifest_dirs(&repo_root)? {
+        TrackedManifests::Dirs(dirs) => dirs,
+        TrackedManifests::NotAGitCheckout => {
+            // cargo-mutants builds without `.git`; tracked-manifest hygiene is meaningless.
+            writeln!(
+                std::io::stderr().lock(),
+                concat!(
+                    "skipping: source tree is not a git checkout; ",
+                    "operation=enumerate tracked Cargo manifests; repository={}"
+                ),
+                repo_root
+            )?;
+            return Ok(());
+        }
+    };
     let configured_directories = configured_directory_refs
         .into_iter()
         .map(String::from)
