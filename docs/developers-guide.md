@@ -144,6 +144,71 @@ If a workflow's behaviour genuinely depends on a feature only present from a
 particular commit onwards, express that as a comment or a changelog note, not
 as a test assertion on the SHA string.
 
+## Mutation-testing workflow contract tests
+
+This repository runs scheduled, informational mutation testing through a thin
+caller workflow,
+[`.github/workflows/mutation-testing.yml`](../.github/workflows/mutation-testing.yml),
+which delegates to the shared reusable workflow
+`leynos/shared-actions/.github/workflows/mutation-cargo.yml`. The heavy
+lifting — running `cargo-mutants` and summarizing survivors — lives in
+`shared-actions`; this repository carries only declarative configuration. The
+run is **informational only**: it never gates a pull request. Survivors are
+reported through the job summary and downloadable artefacts so they can be
+triaged into tests, not enforced as a blocking check.
+
+The workflow runs in two modes. A **daily schedule** (03:05 UTC) fires a
+change-scoped run that mutates only the source files touched within the
+detection window, so quiet days are cheap no-ops. A **manual dispatch** (the
+Actions "Run workflow" control) mutates every target, fanned out across
+shards; select a branch in that control to exercise a feature branch.
+
+The caller passes two configuration inputs, each carrying intent:
+
+- `exclude-globs` — `src/ir/cycle_verification.rs`,
+  `src/ir/from_manifest_verification.rs`, and `src/ir/graph_kani_map.rs`:
+  modules gated behind `#[cfg(kani)]` mod declarations. `cargo-mutants` does
+  not evaluate that cfg, so mutants inserted there would compile to nothing
+  and survive as noise rather than genuine test gaps.
+- `extra-args` — `--all-features`, so the mutation run matches the `make
+  test` CI baseline; a mismatch would report feature-gated code (the
+  `legacy-digests` feature) as untested.
+
+The caller does not set `extra-crate-dirs`, the input reserved for crate
+directories outside the Cargo workspace. `ambient_fs`, the repository's
+sanctioned ambient-filesystem escape hatch, is a genuine workspace member
+(`[workspace] members = ["ambient_fs"]`, with `default-members = [".",
+"ambient_fs"]`), not a non-workspace companion crate, so it needs no separate
+mutation invocation here. `test_support` is deliberately excluded from the
+workspace (`exclude = ["test_support"]`) and this workflow does not mutate
+it.
+
+The `uses:` reference pins the shared workflow to a full 40-character commit
+SHA rather than a branch or tag, so a force-push upstream cannot silently
+change what runs here. The contract test asserts only that the pin is a full
+lowercase-hex commit SHA, not a particular value — the shape-only pinning
+policy described above in "Workflow pins and Dependabot" — so Dependabot
+bumps it automatically without any accompanying test edit.
+
+Because the caller is configuration rather than code, a contract test,
+[`tests/workflow_contracts/mutation_testing_test.py`](../tests/workflow_contracts/mutation_testing_test.py),
+pins the shape it must uphold, failing the pull request when the caller
+drifts — repointing the pin at a branch, widening the token scope, or
+dropping a configuration input — rather than letting the breakage surface
+only in a scheduled run. Run it locally with `make test-workflow-contracts`.
+The test validates:
+
+- the `uses:` reference targets `mutation-cargo.yml` pinned to a full,
+  lowercase-hex commit SHA;
+- the `with:` block carries exactly the expected configuration (the
+  `#[cfg(kani)]` module excludes and `--all-features`);
+- job permissions are least-privilege (`contents: read`, `id-token: write`)
+  and the workflow-level default token scope is empty;
+- `concurrency` serializes runs per ref without cancelling one in progress;
+  and
+- the triggers keep the daily schedule and a plain `workflow_dispatch` with
+  no legacy branch input.
+
 ## Spelling enforcement
 
 `make markdownlint` enforces en-GB-oxendict (Oxford) spelling over the
