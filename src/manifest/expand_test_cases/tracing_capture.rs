@@ -86,7 +86,7 @@ fn with_test_subscriber<T>(test: impl FnOnce(CapturedEvents) -> T) -> T {
 }
 
 #[test]
-fn expand_foreach_emits_debug_event_for_filtered_entry() -> Result<()> {
+fn trace_expansion_report_emits_debug_event_for_filtered_entry() -> Result<()> {
     with_test_subscriber(|captured| {
         let env = Environment::new();
         let when_expr = "secret_token == 'literal-secret'";
@@ -98,12 +98,20 @@ fn expand_foreach_emits_debug_event_for_filtered_entry() -> Result<()> {
         );
         let mut doc: ManifestValue = serde_saphyr::from_str(&yaml)?;
 
-        let stats = expand_foreach(&mut doc, &env)?;
+        // Expansion itself is telemetry-free; the orchestrator-side helper
+        // owns the tracing policy.
+        let report = expand_foreach(&mut doc, &env)?;
+        let pre_trace_events = captured.snapshot();
+        anyhow::ensure!(
+            pre_trace_events.is_empty(),
+            "expansion must not emit telemetry itself: {pre_trace_events:?}"
+        );
+        crate::manifest::trace_expansion_report(&report);
         let events = captured.snapshot();
 
         anyhow::ensure!(
-            stats.filtered_targets == 1,
-            "expected one filtered target: {stats:?}"
+            report.stats.filtered_targets == 1,
+            "expected one filtered target: {report:?}"
         );
         let expected_hash = entry_name_hash("skipped-target-secret");
         let event = events
