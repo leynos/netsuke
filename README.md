@@ -1,5 +1,8 @@
 # 🧵 Netsuke
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](
+https://deepwiki.com/leynos/netsuke)
+
 A modern, declarative build system compiler. YAML + Jinja in, Ninja out.
 Nothing more. Nothing less.
 
