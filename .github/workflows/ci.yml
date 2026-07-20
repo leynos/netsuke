@@ -34,7 +34,7 @@ jobs:
           # the pull request's merge base once the gate is wired in.
           fetch-depth: 0
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@927edd45ae77be4251a8a18ca9eb5613a2e32cbd
+        uses: leynos/shared-actions/.github/actions/setup-rust@18bed1ca49a6de3d8882bd72635a32ae3f023d57
         with:
           toolchain: ${{ matrix.rust }}
           components: rustfmt, clippy
@@ -97,7 +97,7 @@ jobs:
         run: make test
       - name: Test and Measure Coverage
         if: matrix.rust == 'stable'
-        uses: leynos/shared-actions/.github/actions/generate-coverage@927edd45ae77be4251a8a18ca9eb5613a2e32cbd
+        uses: leynos/shared-actions/.github/actions/generate-coverage@18bed1ca49a6de3d8882bd72635a32ae3f023d57
         with:
           output-path: lcov.info
           format: lcov
@@ -108,7 +108,7 @@ jobs:
         if: matrix.rust == 'stable' && env.CS_ACCESS_TOKEN != '' && github.event_name == 'pull_request'
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@927edd45ae77be4251a8a18ca9eb5613a2e32cbd
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@18bed1ca49a6de3d8882bd72635a32ae3f023d57
         with:
           format: lcov
           mode: check
@@ -131,7 +131,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@927edd45ae77be4251a8a18ca9eb5613a2e32cbd
+        uses: leynos/shared-actions/.github/actions/setup-rust@18bed1ca49a6de3d8882bd72635a32ae3f023d57
         with:
           toolchain: stable
       - name: Install uv
