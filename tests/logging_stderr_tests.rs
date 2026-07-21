@@ -4,7 +4,7 @@
 //! binary and asserting log messages appear on stderr rather than stdout.
 
 use anyhow::{Context, Result, ensure};
-use ninja_env::NINJA_ENV;
+use netsuke::runner::NINJA_ENV;
 use predicates::prelude::*;
 use proptest::prelude::*;
 use rstest::{fixture, rstest};
@@ -14,6 +14,24 @@ use std::path::Path;
 use tempfile::{TempDir, tempdir};
 
 #[cfg(unix)]
+fn make_script_executable(path: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut permissions = fs::metadata(path)
+        .with_context(|| format!("read metadata for {}", path.display()))?
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(path, permissions)
+        .with_context(|| format!("set executable bit for {}", path.display()))?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn make_script_executable(_path: &Path) -> Result<()> {
+    Ok(())
+}
+
+#[fixture]
 fn temp_with_minimal_manifest() -> Result<TempDir> {
     let temp = tempdir().context("create temp dir")?;
     let manifest_path = temp.path().join("Netsukefile");
@@ -95,6 +113,8 @@ fn run_verbose_build_with_ninja_env(
     ensure!(output.status.success(), "expected verbose build to succeed");
     String::from_utf8(output.stderr).context("stderr should be valid UTF-8")
 }
+
+#[test]
 fn main_logs_errors_to_stderr() {
     let temp = tempdir().expect("create temp dir");
     // ManifestNotFound errors are rendered via miette with diagnostic output.
@@ -149,116 +169,6 @@ fn diag_json_failures_emit_single_json_document_on_stderr() -> Result<()> {
     ensure!(
         !stderr.contains("ERROR"),
         "stderr should not contain tracing or text-mode prefixes: {stderr}",
-    );
-    Ok(())
-}
-
-fn diag_json_success_keeps_stdout_artefact_and_stderr_empty(
-    temp_with_minimal_manifest: Result<TempDir>,
-) -> Result<()> {
-    let temp = temp_with_minimal_manifest?;
-
-    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
-        .current_dir(temp.path())
-        .arg("--diag-json")
-        .arg("manifest")
-        .arg("-")
-        .output()
-        .context("run netsuke manifest with --diag-json")?;
-
-    ensure!(output.status.success(), "expected command success");
-    ensure!(
-        output.stderr.is_empty(),
-        "stderr should remain empty on success"
-    );
-
-    let stdout = String::from_utf8(output.stdout).context("stdout should be valid UTF-8")?;
-    ensure!(
-        stdout.contains("build hello: "),
-        "stdout should contain the generated Ninja manifest, got:\n{stdout}",
-    );
-    Ok(())
-}
-
-fn diag_json_success_keeps_stdout_artefact_and_stderr_empty(
-    temp_with_minimal_manifest: Result<TempDir>,
-) -> Result<()> {
-    let temp = temp_with_minimal_manifest?;
-
-    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
-        .current_dir(temp.path())
-        .arg("--diag-json")
-        .arg("manifest")
-        .arg("-")
-        .output()
-        .context("run netsuke manifest with --diag-json")?;
-
-    ensure!(output.status.success(), "expected command success");
-    ensure!(
-        output.stderr.is_empty(),
-        "stderr should remain empty on success"
-    );
-
-    let stdout = String::from_utf8(output.stdout).context("stdout should be valid UTF-8")?;
-    ensure!(
-        stdout.contains("build hello: "),
-        "stdout should contain the generated Ninja manifest, got:\n{stdout}",
-    );
-    Ok(())
-}
-
-#[rstest]
-fn diag_json_success_keeps_stdout_artefact_and_stderr_empty(
-    temp_with_minimal_manifest: Result<TempDir>,
-) -> Result<()> {
-    let temp = temp_with_minimal_manifest?;
-
-    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
-        .current_dir(temp.path())
-        .arg("--diag-json")
-        .arg("manifest")
-        .arg("-")
-        .output()
-        .context("run netsuke manifest with --diag-json")?;
-
-    ensure!(output.status.success(), "expected command success");
-    ensure!(
-        output.stderr.is_empty(),
-        "stderr should remain empty on success"
-    );
-
-    let stdout = String::from_utf8(output.stdout).context("stdout should be valid UTF-8")?;
-    ensure!(
-        stdout.contains("build hello: "),
-        "stdout should contain the generated Ninja manifest, got:\n{stdout}",
-    );
-    Ok(())
-}
-
-#[rstest]
-fn diag_json_success_keeps_stdout_artefact_and_stderr_empty(
-    temp_with_minimal_manifest: Result<TempDir>,
-) -> Result<()> {
-    let temp = temp_with_minimal_manifest?;
-
-    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
-        .current_dir(temp.path())
-        .arg("--diag-json")
-        .arg("manifest")
-        .arg("-")
-        .output()
-        .context("run netsuke manifest with --diag-json")?;
-
-    ensure!(output.status.success(), "expected command success");
-    ensure!(
-        output.stderr.is_empty(),
-        "stderr should remain empty on success"
-    );
-
-    let stdout = String::from_utf8(output.stdout).context("stdout should be valid UTF-8")?;
-    ensure!(
-        stdout.contains("build hello: "),
-        "stdout should contain the generated Ninja manifest, got:\n{stdout}",
     );
     Ok(())
 }
@@ -383,6 +293,19 @@ fn assert_verbose_build_logs_ninja_override(stem: &str) -> Result<()> {
         &format!("verbose log must contain the resolved ninja path for override stem {stem:?}"),
     )
 }
+
+proptest! {
+    #![proptest_config(ProptestConfig { cases: 16, ..ProptestConfig::default() })]
+    #[test]
+    fn verbose_build_logs_resolved_ninja_program_for_any_valid_override(
+        stem in "[a-z][a-z0-9_-]{0,15}",
+    ) {
+        assert_verbose_build_logs_ninja_override(&stem)
+            .map_err(|e| TestCaseError::fail(e.to_string()))?;
+    }
+}
+
+#[rstest]
 fn verbose_build_logs_default_ninja_command(
     temp_with_minimal_manifest: Result<TempDir>,
 ) -> Result<()> {
@@ -395,6 +318,8 @@ fn verbose_build_logs_ninja_env_override(
 ) -> Result<()> {
     run_verbose_build_and_assert_ninja_log(temp_with_minimal_manifest, "custom-ninja", true)
 }
+
+#[test]
 fn config_driven_diag_json_formats_merge_failures_as_json() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
     let config_path = temp.path().join("netsuke.toml");
@@ -486,9 +411,5 @@ fn diag_json_success_graph_keeps_clean_stderr(
         stdout.contains("digraph netsuke"),
         "stdout should carry the DOT graph; got: {stdout}"
     );
-    Ok(())
-}
-
-fn make_script_executable(_path: &Path) -> Result<()> {
     Ok(())
 }

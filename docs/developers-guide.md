@@ -1127,6 +1127,15 @@ whitespace-only `when` values, or type mismatches in the iterable.
 
 ## Runner process execution
 
+
+### Module: `runner::process::ninja_program`
+
+`src/runner/process/ninja_program.rs` owns the executable-resolution boundary.
+It is the only runner adapter that reads `NETSUKE_NINJA`, validates empty and
+non-UTF-8 values, selects the default `ninja` fallback, and records the selected
+source at debug level. Process construction uses the resolved path exported by
+this module and must not interpret the environment override independently.
+
 ### Module: `runner::process::command_logging`
 
 `src/runner/process/command_logging.rs` owns the structured logging contract

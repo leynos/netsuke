@@ -21,7 +21,7 @@ selected.
 Ninja subprocess execution now uses the shared private helper
 `run_ninja_internal` in `src/runner/process/mod.rs`. The helper owns the common
 sequence of command creation, caller-specific configuration, and streaming
-execution. Command execution telemetry is centralised in
+execution. Command execution telemetry is centralized in
 `src/runner/process/command_logging.rs`, where arguments are redacted and the
 program path is preserved for traceability.
 

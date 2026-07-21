@@ -1,23 +1,40 @@
 //! Process helpers for Ninja file lifecycle, argument redaction, and subprocess I/O.
 //! Internal to `runner`; public API is defined in `runner.rs`.
 
-use super::{BuildTargets, NINJA_ENV, NINJA_PROGRAM};
+use super::BuildTargets;
 use crate::cli::Cli;
 use camino::Utf8PathBuf;
 use std::{
-    env,
-    ffi::OsString,
     io::{self, BufReader, ErrorKind},
-    path::{Path, PathBuf},
+    path::Path,
     process::{Child, Command, ExitStatus, Stdio},
     thread,
 };
+use tracing::{debug, warn};
 
+mod command_logging;
 mod file_io;
+mod ninja_program;
 mod ninja_status;
 mod paths;
 mod redaction;
 mod streaming;
+#[cfg(test)]
+mod tests;
+
+use command_logging::{
+    CommandLogContext, command_span, log_command_execution, log_command_exit_failure,
+    log_command_spawn_failure,
+};
+pub use file_io::*;
+pub use ninja_program::resolve_ninja_program;
+#[cfg(doctest)]
+pub use ninja_program::resolve_ninja_program_utf8;
+#[cfg(test)]
+use ninja_program::resolve_ninja_program_utf8_with;
+pub use paths::*;
+use streaming::{ForwardStats, forward_child_output, forward_child_output_with_ninja_status};
+
 /// Callback contract for task-progress updates from parsed Ninja status lines.
 ///
 /// Accepts `(current, total, description)` where `current` and `total` are
@@ -38,63 +55,6 @@ pub mod doc {
         create_temp_ninja_file, resolve_ninja_program, resolve_ninja_program_utf8,
         write_ninja_file, write_text_file_utf8,
     };
-}
-
-fn resolve_ninja_program_utf8_with<F>(mut read_env: F) -> Utf8PathBuf
-where
-    F: FnMut(&str) -> Option<OsString>,
-{
-    read_env(NINJA_ENV).map_or_else(
-        || {
-            debug!(
-                ninja_program = NINJA_PROGRAM,
-                source = "fallback",
-                "Resolved Ninja executable from default program",
-            );
-            Utf8PathBuf::from(NINJA_PROGRAM)
-        },
-        |value| {
-            let path = PathBuf::from(value);
-            if path.as_os_str().is_empty() {
-                debug!(
-                    fallback_program = NINJA_PROGRAM,
-                    source = "fallback",
-                    "Ignoring empty Ninja executable override",
-                );
-                Utf8PathBuf::from(NINJA_PROGRAM)
-            } else {
-                match Utf8PathBuf::from_path_buf(path) {
-                    Ok(program) => {
-                        debug!(
-                            ninja_program = %program,
-                            source = NINJA_ENV,
-                            "Resolved Ninja executable from environment override",
-                        );
-                        program
-                    }
-                    Err(non_utf8_path) => {
-                        debug!(
-                            configured_ninja = %non_utf8_path.to_string_lossy(),
-                            fallback_program = NINJA_PROGRAM,
-                            source = "fallback",
-                            "Ignoring non-UTF-8 Ninja executable override",
-                        );
-                        Utf8PathBuf::from(NINJA_PROGRAM)
-                    }
-                }
-            }
-        },
-    )
-}
-
-#[must_use]
-pub fn resolve_ninja_program_utf8() -> Utf8PathBuf {
-    resolve_ninja_program_utf8_with(|key| env::var_os(key))
-}
-
-#[must_use]
-pub fn resolve_ninja_program() -> PathBuf {
-    resolve_ninja_program_utf8().into()
 }
 
 /// Configure the base Ninja command with working directory, job count, and build file.
@@ -181,6 +141,8 @@ fn run_command_and_stream_with_context(
     let status = spawn_and_stream_output(child, status_observer, suppress_stderr)?;
     check_exit_status_with_context(status, &context, operation, suppress_stderr)
 }
+/// Borrowed parameter bundle for `ninja` build execution helpers.
+#[derive(Clone, Copy)]
 pub(crate) struct NinjaBuildRequest<'a> {
     pub(crate) program: &'a Path,
     pub(crate) cli: &'a Cli,
@@ -400,7 +362,3 @@ fn ninja_exit_error(status: ExitStatus) -> io::Result<()> {
         format!("ninja exited with {status}"),
     ))
 }
-mod tests {
-}
-
-mod command_logging;

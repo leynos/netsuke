@@ -1,9 +1,11 @@
 //! Unit and property tests for Ninja process helpers.
 
+use super::super::NINJA_PROGRAM;
 use super::*;
 use camino::Utf8PathBuf;
 use proptest::prelude::*;
 use std::ffi::OsString;
+use std::path::PathBuf;
 
 #[test]
 fn resolve_ninja_program_utf8_prefers_env_override() {
