@@ -64,14 +64,12 @@ fn format_edge(edge: &BuildEdge) -> String {
     .to_string()
 }
 
-fn build_line(formatted: &str) -> &str {
-    formatted.lines().next().expect("build line")
+fn build_line(formatted: &str) -> Option<&str> {
+    formatted.lines().next()
 }
 
-fn dependency_side(line: &str) -> &str {
-    line.split_once(": ")
-        .map(|(_, deps)| deps)
-        .expect("build line should contain rule separator")
+fn dependency_side(line: &str) -> Option<&str> {
+    line.split_once(": ").map(|(_, deps)| deps)
 }
 
 fn bare_pipe_position(line: &str) -> Option<usize> {
@@ -82,8 +80,8 @@ proptest! {
     #[test]
     fn implicit_deps_separator_precedes_order_only_separator(edge in edge_strategy_with_ranges(1..5, 1..5, 1..5)) {
         let formatted = format_edge(&edge);
-        let line = build_line(&formatted);
-        let deps = dependency_side(line);
+        let line = build_line(&formatted).expect("build line should be emitted");
+        let deps = dependency_side(line).expect("build line should contain rule separator");
         let implicit_pos = bare_pipe_position(deps).expect("implicit separator should be emitted");
         let order_pos = deps.find(" || ").expect("order-only separator should be emitted");
         let (before_implicit, _) = deps.split_at(implicit_pos);
@@ -98,8 +96,8 @@ proptest! {
         edge.implicit_deps.clear();
 
         let formatted = format_edge(&edge);
-        let line = build_line(&formatted);
-        let deps = dependency_side(line);
+        let line = build_line(&formatted).expect("build line should be emitted");
+        let deps = dependency_side(line).expect("build line should contain rule separator");
 
         prop_assert!(bare_pipe_position(deps).is_none());
     }

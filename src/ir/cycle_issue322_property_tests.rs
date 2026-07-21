@@ -72,8 +72,9 @@ fn cyclic_graph_strategy()
         let mut graph = dag_from_edges(node_count, &chain_edges);
         let from = node(0);
         let to = node(node_count - 1);
-        let edge = graph.get_mut(&from).expect("generated node must exist");
-        push_dependency(edge, to.clone(), back_edge_is_implicit);
+        let mut edge = build_edge(from.clone());
+        push_dependency(&mut edge, to.clone(), back_edge_is_implicit);
+        graph.insert(from.clone(), edge);
         (graph, from, to)
     })
 }
@@ -84,11 +85,10 @@ fn order_only_back_edge_strategy() -> impl Strategy<Value = HashMap<Utf8PathBuf,
             .map(|index| (index, index - 1, false))
             .collect();
         let mut graph = dag_from_edges(node_count, &chain_edges);
-        graph
-            .get_mut(&node(0))
-            .expect("generated node must exist")
-            .order_only_deps
-            .push(node(node_count - 1));
+        let root = node(0);
+        let mut edge = build_edge(root.clone());
+        edge.order_only_deps.push(node(node_count - 1));
+        graph.insert(root, edge);
         graph
     })
 }

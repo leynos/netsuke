@@ -206,7 +206,15 @@ fn substitute(template: &str, ins: &[String], outs: &[String]) -> String {
     }
     out
 }
+
+pub(crate) const INS_TOKEN: &str = "__NETSUKE_INS_PLACEHOLDER__";
+
+pub(crate) const OUTS_TOKEN: &str = "__NETSUKE_OUTS_PLACEHOLDER__";
+
+#[cfg(test)]
+#[path = "cmd_interpolate_property_tests.rs"]
 mod property_tests;
+#[cfg(test)]
 mod tests {
     //! Unit tests for command interpolation and backtick validation.
     use super::*;
@@ -266,7 +274,3 @@ mod tests {
         assert_eq!(command, "in out out");
     }
 }
-
-pub(crate) const INS_TOKEN: &str = "__NETSUKE_INS_PLACEHOLDER__";
-
-pub(crate) const OUTS_TOKEN: &str = "__NETSUKE_OUTS_PLACEHOLDER__";
