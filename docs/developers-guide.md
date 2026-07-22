@@ -475,6 +475,23 @@ when detecting cycles. It intentionally does not traverse `order_only_deps`,
 because order-only dependencies express scheduling order rather than rebuild
 freshness.
 
+
+### Recipe placeholder ownership
+
+`src/ir/cmd_interpolate.rs` owns the private `INS_TOKEN` and `OUTS_TOKEN`
+constants used between manifest rendering and IR command interpolation.
+`src/manifest/render.rs` may emit these tokens while rendering `{{ ins }}` and
+`{{ outs }}`, and the interpolation module must consume them alongside `$in` and
+`$out`. Keep the constants private to the crate and use them only for this
+two-stage recipe pipeline; they are implementation markers, not manifest or
+Ninja syntax and not a general token registry.
+
+Generated strategies that are reusable across crate boundaries belong in
+`test_support`. Because `test_support` is compiled as a library, dependencies
+used in those strategy signatures, including `proptest`, must be regular
+`test_support` dependencies. Property tests local to the main crate continue to
+use the root crate's development dependency.
+
 ## Behavioural testing strategy
 
 Behavioural tests run through `cargo test` using `rstest-bdd`, not a bespoke
