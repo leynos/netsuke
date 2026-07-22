@@ -44,6 +44,21 @@ proptest! {
     }
 
     #[test]
+    fn short_placeholders_outside_backticks_are_replaced(inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
+        let command = interpolate_command("echo $in then $out", &inputs, &outputs)
+            .expect("command should interpolate");
+
+        prop_assert!(!command.contains("$in"));
+        prop_assert!(!command.contains("$out"));
+        for input in inputs {
+            prop_assert!(command.contains(input.as_str()));
+        }
+        for output in outputs {
+            prop_assert!(command.contains(output.as_str()));
+        }
+    }
+
+    #[test]
     fn tokens_inside_backticks_are_preserved_verbatim(token in prop::sample::select(vec!["$in", "$out", INS_TOKEN, OUTS_TOKEN]), inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
         let template = format!("echo `{token}`");
         let command = interpolate_command(&template, &inputs, &outputs).expect("balanced command should interpolate");

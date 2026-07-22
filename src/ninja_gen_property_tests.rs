@@ -84,11 +84,20 @@ proptest! {
         let deps = dependency_side(line).expect("build line should contain rule separator");
         let implicit_pos = bare_pipe_position(deps).expect("implicit separator should be emitted");
         let order_pos = deps.find(" || ").expect("order-only separator should be emitted");
-        let (before_implicit, _) = deps.split_at(implicit_pos);
-        let first_input = edge.inputs.first().expect("input should exist");
+        let (_, dependency_groups) = deps
+            .split_once(' ')
+            .expect("action identifier should precede dependencies");
+        let (before_order_only, order_only) = dependency_groups
+            .split_once(" || ")
+            .expect("order-only separator should be emitted");
+        let (inputs, implicit) = before_order_only
+            .split_once(" | ")
+            .expect("implicit separator should be emitted");
 
-        prop_assert!(before_implicit.contains(first_input.as_str()));
         prop_assert!(implicit_pos < order_pos);
+        prop_assert_eq!(inputs.split_whitespace().collect::<Vec<_>>(), edge.inputs.iter().map(|path| path.as_str()).collect::<Vec<_>>());
+        prop_assert_eq!(implicit.split_whitespace().collect::<Vec<_>>(), edge.implicit_deps.iter().map(|path| path.as_str()).collect::<Vec<_>>());
+        prop_assert_eq!(order_only.split_whitespace().collect::<Vec<_>>(), edge.order_only_deps.iter().map(|path| path.as_str()).collect::<Vec<_>>());
     }
 
     #[test]

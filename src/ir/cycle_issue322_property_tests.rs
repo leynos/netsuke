@@ -205,4 +205,14 @@ proptest! {
         prop_assert_eq!(&baseline.cycle, &reordered_report.cycle);
         prop_assert_eq!(sorted_missing(&baseline), sorted_missing(&reordered_report));
     }
+
+    #[test]
+    fn generated_cycle_results_are_stable_across_insertion_orders((graph, _, _) in cyclic_graph_strategy(), order in proptest::collection::vec(0usize..50, 0..100)) {
+        let baseline = analyse(&graph);
+        let reordered = rebuild_in_order(&graph, &order);
+        let reordered_report = analyse(&reordered);
+
+        prop_assert_eq!(&baseline.cycle, &reordered_report.cycle);
+        prop_assert_eq!(sorted_missing(&baseline), sorted_missing(&reordered_report));
+    }
 }
