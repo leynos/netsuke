@@ -189,9 +189,7 @@ proptest! {
             .map(|(_, dep)| dep.clone())
             .collect();
 
-        for dep in injected_missing {
-            prop_assert!(reported_missing.contains(&dep));
-        }
+        prop_assert_eq!(&reported_missing, &injected_missing);
         for (_, dep) in report.missing_dependencies {
             prop_assert!(!graph.contains_key(&dep));
         }

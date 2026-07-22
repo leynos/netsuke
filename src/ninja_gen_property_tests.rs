@@ -5,20 +5,11 @@
 //! `implicit_deps_separator_is_absent_when_empty` verifies the dependency-side
 //! implicit separator is omitted when `implicit_deps` is empty.
 
-use camino::Utf8PathBuf;
 use proptest::prelude::*;
 use test_support::ninja_gen::paths_strategy;
 
 use super::DisplayEdge;
 use crate::ir::BuildEdge;
-
-fn path_strategy(prefix: &'static str) -> impl Strategy<Value = Utf8PathBuf> {
-    (0usize..100).prop_map(move |index| Utf8PathBuf::from(format!("{prefix}{index}")))
-}
-
-fn edge_strategy() -> impl Strategy<Value = BuildEdge> {
-    edge_strategy_with_ranges(0..5, 0..5, 0..5)
-}
 
 fn edge_strategy_with_ranges(
     input_range: std::ops::Range<usize>,
@@ -28,7 +19,7 @@ fn edge_strategy_with_ranges(
     (
         "[a-z][a-z0-9_]{0,8}",
         paths_strategy("in", input_range),
-        prop::collection::vec(path_strategy("out"), 1..5),
+        paths_strategy("out", 1..5),
         paths_strategy("iout", 0..5),
         paths_strategy("imp", implicit_range),
         paths_strategy("order", order_only_range),
@@ -101,13 +92,12 @@ proptest! {
     }
 
     #[test]
-    fn implicit_deps_separator_is_absent_when_empty(mut edge in edge_strategy()) {
-        edge.implicit_deps.clear();
-
+    fn implicit_deps_separator_is_absent_when_empty(edge in edge_strategy_with_ranges(0..5, 0..1, 1..5)) {
         let formatted = format_edge(&edge);
         let line = build_line(&formatted).expect("build line should be emitted");
         let deps = dependency_side(line).expect("build line should contain rule separator");
 
         prop_assert!(bare_pipe_position(deps).is_none());
+        prop_assert!(deps.contains(" || "));
     }
 }
