@@ -85,7 +85,7 @@ fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
         steps.iter().any(|step| step_has(
             step,
             StepField::Uses,
-            "astral-sh/setup-uv@4cda7d73322c50eac316ad623a716f09a2db2ac7"
+            "astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990"
         )),
         "Kani smoke job should install uv with the pinned setup-uv action"
     );
