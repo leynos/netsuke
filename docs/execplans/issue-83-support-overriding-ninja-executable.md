@@ -76,6 +76,7 @@ Both focused commands passed. The completed project gates also passed:
 ```sh
 make check-fmt
 make lint
+make typecheck
 make test
 make markdownlint
 make nixie

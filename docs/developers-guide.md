@@ -1127,7 +1127,6 @@ whitespace-only `when` values, or type mismatches in the iterable.
 
 ## Runner process execution
 
-
 ### Module: `runner::process::ninja_program`
 
 `src/runner/process/ninja_program.rs` owns the executable-resolution boundary.
@@ -1148,15 +1147,17 @@ informational execution event. Open
 [issue #384](https://github.com/leynos/netsuke/issues/384) tracks moving this
 high-cardinality payload to a debug companion event.
 
-All command events use the same structured fields:
+All command events share these structured fields:
 
 - `operation`: caller-provided operation label such as `"build"` or tool name.
 - `ninja_program`: command program after UTF-8 normalization.
-- `redacted_arg_count`: redacted argument count.
 - `suppress_stderr`: derived from `cli.resolved_diag_json()`, true when JSON
   diagnostics suppress direct stderr logging.
-- `failure_category`: set to an empty span field at start and then set to
-  `"spawn"` or `"exit_status"` at failure points for alert bucketing.
+
+Phase-specific fields supplement that shared set. The informational execution
+event includes `redacted_arg_count`. Spawn- and exit-failure events instead set
+`failure_category` to `"spawn"` or `"exit_status"` for alert bucketing; the
+argument count remains available on the enclosing `ninja_subprocess` span.
 
 Use the logging helpers according to failure phase:
 
