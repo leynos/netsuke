@@ -22,6 +22,15 @@ use crate::{
 /// Alias for the real process environment.
 pub type SystemEnv = DefaultEnv;
 
+/// Construct the real process environment.
+///
+/// `mockable` 3.0 makes [`DefaultEnv`] a unit struct without a `new`
+/// constructor, so tests build it through this helper instead.
+#[must_use]
+pub fn system_env() -> SystemEnv {
+    DefaultEnv
+}
+
 /// Environment trait with mutation capabilities.
 pub trait EnvMut: Env {
     /// Set `key` to `value` within the environment.
@@ -263,9 +272,9 @@ impl std::fmt::Debug for NinjaEnvGuard {
 ///
 /// ```
 /// use netsuke::runner::NINJA_ENV;
-/// use test_support::env::{SystemEnv, override_ninja_env};
+/// use test_support::env::{override_ninja_env, system_env};
 ///
-/// let env = SystemEnv::new();
+/// let env = system_env();
 /// let path = std::env::temp_dir().join("ninja");
 /// let guard = override_ninja_env(&env, path.as_path());
 /// assert_eq!(

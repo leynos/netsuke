@@ -13,7 +13,7 @@ use rstest::{fixture, rstest};
 use std::path::PathBuf;
 use test_support::{
     check_ninja::{self, ToolName},
-    env::{NinjaEnvGuard, SystemEnv, override_ninja_env},
+    env::{NinjaEnvGuard, override_ninja_env, system_env},
     localizer_test_lock, set_en_localizer,
 };
 
@@ -145,7 +145,7 @@ type NinjaToolFixture = fn() -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuar
 #[fixture]
 fn ninja_expecting_clean() -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
     let (ninja_dir, ninja_path) = check_ninja::fake_ninja_expect_tool(ToolName::new("clean"))?;
-    let env = SystemEnv::new();
+    let env = system_env();
     let guard = override_ninja_env(&env, ninja_path.as_path());
     Ok((ninja_dir, ninja_path, guard))
 }

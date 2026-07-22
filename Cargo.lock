@@ -1385,16 +1385,6 @@ dependencies = [
 
 [[package]]
 name = "mockable"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce05993e13a317aef6ba5be77bb84b7e5b6bf67a7ba9a5168754c6a7aa3921da"
-dependencies = [
- "mockall",
- "tracing",
-]
-
-[[package]]
-name = "mockable"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "696033a748f67c97f2169b29b428fbab0d12317707cede1ca62fcb786e80b7fe"
@@ -1453,7 +1443,7 @@ dependencies = [
  "metrics",
  "miette",
  "minijinja",
- "mockable 3.0.0",
+ "mockable",
  "mockall",
  "ortho_config",
  "predicates 3.1.3",
@@ -2650,7 +2640,7 @@ dependencies = [
  "assert_cmd",
  "camino",
  "cap-std",
- "mockable 0.3.0",
+ "mockable",
  "netsuke",
  "rstest",
  "sha2",

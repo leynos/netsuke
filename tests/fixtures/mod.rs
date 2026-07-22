@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use rstest::fixture;
 use std::path::PathBuf;
 use test_support::{
-    env::{NinjaEnvGuard, SystemEnv, override_ninja_env},
+    env::{NinjaEnvGuard, override_ninja_env, system_env},
     fake_ninja,
 };
 
@@ -25,7 +25,7 @@ pub fn ninja_with_exit_code(
     #[default(0u8)] exit_code: u8,
 ) -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
     let (ninja_dir, ninja_path) = fake_ninja(exit_code)?;
-    let env = SystemEnv::new();
+    let env = system_env();
     let guard = override_ninja_env(&env, ninja_path.as_path());
     Ok((ninja_dir, ninja_path, guard))
 }

@@ -5,7 +5,7 @@ use crate::bdd::helpers::assertions::normalize_fluent_isolates;
 use anyhow::{Context, Result, ensure};
 use std::fs;
 use std::path::{Path, PathBuf};
-use test_support::env::{SystemEnv, override_ninja_env};
+use test_support::env::{override_ninja_env, system_env};
 
 fn workspace_root(world: &TestWorld) -> Result<PathBuf> {
     let temp = world.temp_dir.borrow();
@@ -88,7 +88,7 @@ fn install_fake_ninja_with_config(world: &TestWorld, config: &FakeNinjaConfig<'_
         .with_context(|| format!("write fake ninja script {}", script_path.display()))?;
     make_script_executable(&script_path)?;
 
-    let env = SystemEnv::new();
+    let env = system_env();
     // Drop any existing guard first so its environment override is restored
     // before installing a replacement for this scenario.
     world.ninja_env_guard.borrow_mut().take();
