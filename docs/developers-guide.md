@@ -210,6 +210,17 @@ validates:
 - the triggers keep the daily schedule and a plain `workflow_dispatch` with
   no legacy branch input.
 
+Before merging this mutation-testing workflow documentation change, follow the
+authoritative [Quality gates](#quality-gates) guidance and record the output of
+every command in this completion checklist:
+
+- `make fmt`
+- `make markdownlint`
+- `make nixie`
+- `make check-fmt`
+- `make lint`
+- `make test`
+
 ## Spelling enforcement
 
 `make markdownlint` enforces en-GB-oxendict (Oxford) spelling over the
