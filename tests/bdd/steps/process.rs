@@ -35,7 +35,7 @@ fn install_test_ninja(
         .to_owned();
     world.ninja_content.set(ninja_str);
     world.ninja_env_guard.borrow_mut().take();
-    let system_env = env::SystemEnv::new();
+    let system_env = env::system_env();
     let ninja_path_os = ninja_path.as_os_str().to_owned();
     let ninja_guard = env::override_ninja_env(&system_env, ninja_path);
     let previous = ninja_guard.original_ref().cloned();

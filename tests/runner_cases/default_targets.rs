@@ -6,7 +6,7 @@ use netsuke::output_prefs;
 use netsuke::runner::run;
 use rstest::{fixture, rstest};
 use std::path::PathBuf;
-use test_support::env::{NinjaEnvGuard, SystemEnv, override_ninja_env};
+use test_support::env::{NinjaEnvGuard, override_ninja_env, system_env};
 
 use crate::fixtures::create_test_manifest;
 
@@ -49,7 +49,7 @@ fn fake_ninja_fixture() -> Result<FakeNinjaFixture> {
     fs::set_permissions(&ninja_path, permissions)
         .with_context(|| format!("chmod fake ninja {}", ninja_path.display()))?;
 
-    let env = SystemEnv::new();
+    let env = system_env();
     let guard = override_ninja_env(&env, ninja_path.as_path());
     Ok(FakeNinjaFixture {
         _ninja_dir: ninja_dir,

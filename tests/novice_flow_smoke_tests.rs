@@ -5,7 +5,7 @@ use rstest::rstest;
 use std::path::Path;
 use tempfile::{TempDir, tempdir};
 use test_support::check_ninja;
-use test_support::env::{SystemEnv, override_ninja_env};
+use test_support::env::{override_ninja_env, system_env};
 use test_support::fluent::normalize_fluent_isolates;
 use test_support::netsuke::run_netsuke_in;
 
@@ -24,7 +24,7 @@ fn run_netsuke(
     args: &[&str],
     ninja_env: Option<&Path>,
 ) -> Result<CommandOutput> {
-    let _guard = ninja_env.map(|path| override_ninja_env(&SystemEnv::new(), path));
+    let _guard = ninja_env.map(|path| override_ninja_env(&system_env(), path));
     let run = run_netsuke_in(current_dir, args)?;
     Ok(CommandOutput {
         stdout: normalize_fluent_isolates(&run.stdout),

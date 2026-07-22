@@ -6,7 +6,7 @@ use mockable::Env;
 use rstest::rstest;
 use serial_test::serial;
 use std::ffi::OsStr;
-use test_support::env::{SystemEnv, VarGuard, mocked_path_env, prepend_dir_to_path};
+use test_support::env::{VarGuard, mocked_path_env, prepend_dir_to_path, system_env};
 
 #[rstest]
 #[serial]
@@ -39,7 +39,7 @@ fn prepend_dir_to_path_sets_and_restores() -> Result<()> {
 #[serial]
 fn prepend_dir_to_path_handles_empty_path() -> Result<()> {
     let _path_guard = VarGuard::set("PATH", OsStr::new(""));
-    let env = SystemEnv::new();
+    let env = system_env();
     let dir = tempfile::tempdir().context("create temp dir")?;
     let guard = prepend_dir_to_path(&env, dir.path())?;
     let after = std::env::var_os("PATH").context("read PATH after prepend")?;
@@ -63,7 +63,7 @@ fn prepend_dir_to_path_handles_empty_path() -> Result<()> {
 #[serial]
 fn prepend_dir_to_path_handles_missing_path() -> Result<()> {
     let _path_guard = VarGuard::unset("PATH");
-    let env = SystemEnv::new();
+    let env = system_env();
     let dir = tempfile::tempdir().context("create temp dir")?;
     let guard = prepend_dir_to_path(&env, dir.path())?;
     let after = std::env::var_os("PATH")

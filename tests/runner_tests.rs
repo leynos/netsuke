@@ -9,7 +9,7 @@ use rstest::{fixture, rstest};
 use std::path::{Path, PathBuf};
 use test_support::{
     check_ninja,
-    env::{NinjaEnvGuard, SystemEnv, override_ninja_env, prepend_dir_to_path},
+    env::{NinjaEnvGuard, override_ninja_env, prepend_dir_to_path, system_env},
     fake_ninja,
 };
 
@@ -41,7 +41,7 @@ fn ninja_with_exit_code(
 #[fixture]
 fn ninja_in_env() -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
     let (ninja_dir, ninja_path) = check_ninja::fake_ninja_check_build_file()?;
-    let env = SystemEnv::new();
+    let env = system_env();
     let guard = override_ninja_env(&env, ninja_path.as_path());
     Ok((ninja_dir, ninja_path, guard))
 }
@@ -294,7 +294,7 @@ fn run_manifest_subcommand_accepts_relative_manifest_path() -> Result<()> {
 fn run_respects_env_override_for_ninja() -> Result<()> {
     let (_temp_dir_env, ninja_env_path) = fake_ninja(0u8)?;
     let (temp_dir_path, _ninja_path_on_path) = fake_ninja(1u8)?;
-    let env = SystemEnv::new();
+    let env = system_env();
     let _path_guard =
         prepend_dir_to_path(&env, temp_dir_path.path()).context("prepend failing ninja to PATH")?;
     let _env_guard = override_ninja_env(&env, &ninja_env_path);
