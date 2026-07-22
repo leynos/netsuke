@@ -94,14 +94,14 @@ state to fixture-based scenario isolation.
 
 ```mermaid
 flowchart TD
-    A["Start migration"] --> B{"Does the suite rely on<br/>shared mutable state<br/>across scenarios?"}
+    A[Start migration] --> B{"Does the suite rely on<br/>shared mutable state<br/>across scenarios?"}
 
     B -- Yes --> C["Identify global World like structures<br/>and cross-scenario mutation"]
-    C --> D["Move shared mutable data into<br/>scenario-local fixtures<br/>using mutable fixtures or Slot"]
+    C --> D["Move shared mutable data into<br/>scenario-local fixtures<br/>using &mut FixtureType or Slot"]
     D --> E{"Is any expensive, mostly<br/>read-only infrastructure used?"}
 
-    E -- Yes --> F["Wrap expensive, read-only infra<br/>in once fixtures<br/>for reuse across scenarios"]
-    E -- No --> G["Keep all fixtures per-scenario<br/>without once fixtures"]
+    E -- Yes --> F["Wrap expensive, read-only infra<br/>in #once fixtures<br/>for reuse across scenarios"]
+    E -- No --> G["Keep all fixtures per-scenario<br/>without #once"]
 
     F --> H["Ensure scenario data is recreated<br/>per scenario and does not<br/>depend on execution order"]
     G --> H
@@ -112,7 +112,7 @@ flowchart TD
     I --> J
 
     J --> K["Update docs and templates<br/>around state sharing and fixtures"]
-    K --> L["End migration"]
+    K --> L[End migration]
 ```
 
 *Figure: Decision flow for migrating from shared mutable state to scenario-

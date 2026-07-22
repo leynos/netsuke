@@ -56,11 +56,13 @@ where
     )
 }
 
+/// Resolve the configured Ninja executable as a UTF-8 path.
 #[must_use]
 pub fn resolve_ninja_program_utf8() -> Utf8PathBuf {
     resolve_ninja_program_utf8_with(|key| env::var_os(key))
 }
 
+/// Resolve the configured Ninja executable as a general platform path.
 #[must_use]
 pub fn resolve_ninja_program() -> PathBuf {
     resolve_ninja_program_utf8().into()

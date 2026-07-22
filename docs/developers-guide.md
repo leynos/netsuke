@@ -1143,7 +1143,10 @@ for all internal Ninja process invocations. `CommandLogContext` is the shared
 log payload builder for a prepared `Command`; it records `program_display` for
 the `ninja_program` field and `redacted_arg_count` for stable argument
 cardinality. `from_command` redacts sensitive arguments and stores the redacted
-command string only for the human-readable `"Executing command: {}"` message.
+command string for the human-readable `"Executing command: {}"` message in the
+informational execution event. Open
+[issue #384](https://github.com/leynos/netsuke/issues/384) tracks moving this
+high-cardinality payload to a debug companion event.
 
 All command events use the same structured fields:
 

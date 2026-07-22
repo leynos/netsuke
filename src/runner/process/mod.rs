@@ -353,12 +353,5 @@ fn terminate_child(child: &mut Child, context: &str) {
 }
 
 fn ninja_exit_error(status: ExitStatus) -> io::Result<()> {
-    #[expect(
-        clippy::io_other_error,
-        reason = "use explicit error kind for compatibility with older Rust"
-    )]
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        format!("ninja exited with {status}"),
-    ))
+    Err(io::Error::other(format!("ninja exited with {status}")))
 }

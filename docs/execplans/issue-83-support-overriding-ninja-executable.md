@@ -4,19 +4,19 @@
 
 This plan records the implementation status for issue #83, which lets users
 select the Ninja executable with the `NETSUKE_NINJA` environment variable.
-Success is observable when `netsuke build` uses `NETSUKE_NINJA` when it is set
-to a valid non-empty executable name or path, falls back to `ninja` when the
-variable is unset or invalid, and logs the resolved program in verbose command
-execution output.
+Success is observable when `netsuke build` selects every non-empty UTF-8
+`NETSUKE_NINJA` value, even if spawning that executable later fails, falls back
+to `ninja` only when the variable is unset, empty, or non-UTF-8, and logs the
+resolved program in verbose command execution output.
 
 ## Current implementation
 
 The production resolver is `resolve_ninja_program_utf8_with` in
-`src/runner/process/mod.rs`. It checks `NETSUKE_NINJA`, returns a UTF-8
-override when the value is non-empty, and falls back to `ninja` when the value
-is unset, empty, or non-UTF-8. Each branch emits a debug-level tracing event so
-subscribers can see whether the environment override or default fallback was
-selected.
+`src/runner/process/ninja_program.rs`. It checks `NETSUKE_NINJA`, returns a
+UTF-8 override when the value is non-empty, and falls back to `ninja` when the
+value is unset, empty, or non-UTF-8. Each branch emits a debug-level tracing
+event so subscribers can see whether the environment override or default
+fallback was selected.
 
 Ninja subprocess execution now uses the shared private helper
 `run_ninja_internal` in `src/runner/process/mod.rs`. The helper owns the common
@@ -60,6 +60,7 @@ remains visible in verbose logs and structured tracing events.
 - Completed shared helper extraction for Ninja process execution.
 - Completed shared helper extraction for verbose logging integration tests.
 - Completed user-facing and internal documentation for the feature.
+- Completed all focused validation and project gates for the branch.
 
 ## Validation
 
@@ -70,11 +71,12 @@ cargo test --lib runner::process::tests::resolve_ninja_program_utf8 -- --nocaptu
 cargo test --test logging_stderr_tests verbose_build_logs -- --nocapture
 ```
 
-Both focused commands passed. Before this branch is considered complete, run
-the project gates:
+Both focused commands passed. The completed project gates also passed:
 
 ```sh
 make check-fmt
 make lint
 make test
+make markdownlint
+make nixie
 ```

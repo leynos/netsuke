@@ -5,6 +5,7 @@ use super::*;
 use camino::Utf8PathBuf;
 use proptest::prelude::*;
 use std::ffi::OsString;
+#[cfg(unix)]
 use std::path::PathBuf;
 
 #[test]

@@ -4,6 +4,10 @@
 //! binary and asserting log messages appear on stderr rather than stdout.
 
 use anyhow::{Context, Result, ensure};
+use camino::Utf8Path;
+#[cfg(unix)]
+use cap_std::fs::PermissionsExt;
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use netsuke::runner::NINJA_ENV;
 use predicates::prelude::*;
 use proptest::prelude::*;
@@ -14,34 +18,39 @@ use std::path::Path;
 use tempfile::{TempDir, tempdir};
 
 #[cfg(unix)]
-fn make_script_executable(path: &Path) -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-
-    let mut permissions = fs::metadata(path)
-        .with_context(|| format!("read metadata for {}", path.display()))?
+fn make_script_executable(dir: &Dir, path: &Utf8Path) -> Result<()> {
+    let mut permissions = dir
+        .metadata(path)
+        .with_context(|| format!("read metadata for {path}"))?
         .permissions();
     permissions.set_mode(0o755);
-    fs::set_permissions(path, permissions)
-        .with_context(|| format!("set executable bit for {}", path.display()))?;
+    dir.set_permissions(path, permissions)
+        .with_context(|| format!("set executable bit for {path}"))?;
     Ok(())
 }
 
 #[cfg(not(unix))]
-fn make_script_executable(_path: &Path) -> Result<()> {
+fn make_script_executable(_dir: &Dir, _path: &Utf8Path) -> Result<()> {
     Ok(())
 }
 
 #[fixture]
 fn temp_with_minimal_manifest() -> Result<TempDir> {
     let temp = tempdir().context("create temp dir")?;
-    let manifest_path = temp.path().join("Netsukefile");
-    fs::copy("tests/data/minimal.yml", &manifest_path)
-        .with_context(|| format!("copy manifest to {}", manifest_path.display()))?;
+    let workspace_path = Utf8Path::from_path(temp.path()).context("temp dir path is not UTF-8")?;
+    let workspace = Dir::open_ambient_dir(workspace_path, ambient_authority())
+        .context("open temporary workspace")?;
+    let repository = Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
+        .context("open repository root")?;
+    repository
+        .copy("tests/data/minimal.yml", &workspace, "Netsukefile")
+        .context("copy minimal manifest to temporary workspace")?;
     Ok(temp)
 }
 
 fn write_fake_ninja_script(
-    path: &Path,
+    dir: &Dir,
+    path: &Utf8Path,
     stdout_lines: &[&str],
     stderr_marker: Option<&str>,
 ) -> Result<()> {
@@ -77,9 +86,9 @@ fn write_fake_ninja_script(
         script
     };
 
-    fs::write(path, script)
-        .with_context(|| format!("write fake ninja script {}", path.display()))?;
-    make_script_executable(path)
+    dir.write(path, script)
+        .with_context(|| format!("write fake ninja script {path}"))?;
+    make_script_executable(dir, path)
 }
 fn fake_ninja_name(stem: &str) -> String {
     if cfg!(windows) {
@@ -260,8 +269,13 @@ fn run_verbose_build_with_fake_ninja_and_assert_log(
     description: &str,
 ) -> Result<()> {
     let ninja_temp = tempdir().context("create fake ninja dir")?;
-    let ninja_path = ninja_temp.path().join(fake_ninja_name(ninja_stem));
-    write_fake_ninja_script(&ninja_path, &[], None)?;
+    let ninja_dir_path =
+        Utf8Path::from_path(ninja_temp.path()).context("fake ninja directory path is not UTF-8")?;
+    let ninja_dir = Dir::open_ambient_dir(ninja_dir_path, ambient_authority())
+        .context("open fake ninja directory")?;
+    let ninja_name = fake_ninja_name(ninja_stem);
+    write_fake_ninja_script(&ninja_dir, Utf8Path::new(&ninja_name), &[], None)?;
+    let ninja_path = ninja_temp.path().join(&ninja_name);
 
     let ninja_env = use_env_override.then_some(ninja_path.as_path());
     let stderr = run_verbose_build_with_ninja_env(
@@ -282,9 +296,7 @@ fn run_verbose_build_with_fake_ninja_and_assert_log(
 /// stem is `stem` and asserts that the resulting log contains
 /// `Executing command: <full_path> `.
 fn assert_verbose_build_logs_ninja_override(stem: &str) -> Result<()> {
-    let temp = tempdir().context("create temp dir")?;
-    fs::copy("tests/data/minimal.yml", temp.path().join("Netsukefile"))
-        .context("copy minimal manifest")?;
+    let temp = temp_with_minimal_manifest()?;
 
     run_verbose_build_with_fake_ninja_and_assert_log(
         temp.path(),
