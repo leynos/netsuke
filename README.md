@@ -40,6 +40,8 @@ Netsuke currently requires:
 Until the v0.1.0 release is published, install the current source checkout with
 Cargo:
 
+<!-- tested-example: readme-source-install -->
+
 ```sh
 git clone https://github.com/leynos/netsuke.git
 cd netsuke
@@ -49,6 +51,8 @@ cargo install --path .
 ### Your first build
 
 Create a new directory and add a file named `Netsukefile`:
+
+<!-- tested-example: readme-first-build-manifest -->
 
 ```yaml
 netsuke_version: "1.0.0"
@@ -62,6 +66,8 @@ defaults:
 ```
 
 Run Netsuke, then inspect the result:
+
+<!-- tested-example: readme-first-build-commands -->
 
 ```sh
 netsuke

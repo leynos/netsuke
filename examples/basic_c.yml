@@ -1,16 +1,16 @@
-netsuke_version: "1.0"
+netsuke_version: "1.0.0"
 
 vars:
-  cc: "{{ env('CC') | default('gcc') }}"
+  cc: gcc
   cflags: "-Wall -O2"
 
 rules:
   - name: compile
-    command: "{{ cc }} {{ cflags }} -c {ins} -o {outs}"
-    description: "Compiling {outs}"
+    command: "{{ cc }} {{ cflags }} -c {{ ins }} -o {{ outs }}"
+    description: "Compiling an object file"
 
   - name: link
-    command: "{{ cc }} {{ ldflags | default(cflags) }} {ins} -o {outs}"
+    command: "{{ cc }} {{ cflags }} {{ ins }} -o {{ outs }}"
 
 targets:
   - name: main.o

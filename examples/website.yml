@@ -1,27 +1,32 @@
-netsuke_version: "1.0"
+netsuke_version: "1.0.0"
 
 vars:
   pages_dir: pages
   site_dir: site
-
+  pages:
+    - about
+    - contact
 
 rules:
   - name: page
-    command: "pandoc {ins} -o {outs}"
+    command: "pandoc {{ ins }} -o {{ outs }}"
 
   - name: index
-    script: |
-      cat {{ ins }} > {{ site_dir }}/index.html
+    command: "pandoc --standalone {{ ins }} -o {{ outs }}"
 
 targets:
-  - foreach: glob(pages_dir ~ '/*.md')
-    name: "{{ site_dir }}/{{ item | basename | replace('.md', '.html') }}"
+  - foreach: pages
+    name: "{{ site_dir }}/{{ item }}.html"
     rule: page
-    sources: "{{ item }}"
+    sources: "{{ pages_dir }}/{{ item }}.md"
 
   - name: "{{ site_dir }}/index.html"
     rule: index
-    sources: "{{ glob(site_dir ~ '/*.html') | exclude(site_dir ~ '/index.html') | sorted }}"
+    sources:
+      - "{{ pages_dir }}/about.md"
+      - "{{ pages_dir }}/contact.md"
 
 defaults:
-  - "{{ site_dir }}/index.html"
+  - site/index.html
+  - site/about.html
+  - site/contact.html

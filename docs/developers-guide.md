@@ -468,6 +468,23 @@ there. The tests require workflow YAML files under `.github/workflows` and
 ensure local composite action manifests under `.github/actions` are covered by
 the configured Dependabot directory patterns.
 
+
+### User-facing documentation examples
+
+Every fenced example in `README.md` and `docs/users-guide.md` has a stable
+`tested-example` marker immediately before its opening fence. The shared
+`tests/documentation_examples/mod.rs` loader owns this marker format and may be
+called only by documentation-focused integration or behavioural tests. It
+rejects unmarked fences, duplicate identifiers and unterminated examples.
+
+`tests/documentation_examples_tests.rs` compiles every manifest fence,
+exercises the command and output examples against the current binary, and
+compiles each complete manifest linked from the user's guide. The first-run
+README and user's guide examples also run through
+`tests/features/documentation_examples.feature`, reusing the same fake-Ninja
+behavioural flow as the novice smoke tests. Tests must load the fenced text
+through the shared helper instead of maintaining copied fixtures.
+
 ### Property-based testing with proptest
 
 `proptest` generates randomized inputs to verify invariants that must hold for
