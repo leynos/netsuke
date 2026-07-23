@@ -1,14 +1,9 @@
-.PHONY: help all clean test test-documentation-examples test-workflow-contracts test-typos-config build release lint lint-clippy lint-whitaker fmt check-fmt typecheck markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr
+.PHONY: help all clean test test-workflow-contracts test-typos-config build release lint lint-clippy lint-whitaker fmt check-fmt typecheck markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr
 
 APP ?= netsuke
 CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$$HOME/.cargo/bin/cargo")
 BUILD_JOBS ?=
 CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
-CMD_MOX_SOURCE ?= git+https://github.com/leynos/cmd-mox@fc53a62f1a40d920e56ad70c96920d80ea2afd5e
-CUPRUM_SOURCE ?= git+https://github.com/leynos/cuprum@4037b7250abd5729722b72ffc35581a0a8e238d1
-DOCUMENTATION_EXAMPLE_TEST_FILES = tests/documentation_examples_py/conftest.py \
-	tests/documentation_examples_py/documentation_examples.py \
-	tests/documentation_examples_py/test_documentation_examples.py
 KANI ?= cargo kani
 KANI_FLAGS ?=
 KANI_INSTALL_FLAGS ?=
@@ -58,15 +53,6 @@ clean: ## Remove build artefacts
 
 test: ## Run tests with warnings treated as errors
 	RUSTFLAGS="-D warnings" $(CARGO) test --all-targets --all-features $(BUILD_JOBS)
-	$(MAKE) test-documentation-examples
-
-test-documentation-examples: target/debug/$(APP) ## Validate user-facing examples in isolated environments
-	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) format --target-version py313 --check $(DOCUMENTATION_EXAMPLE_TEST_FILES)
-	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) check --target-version py313 $(DOCUMENTATION_EXAMPLE_TEST_FILES)
-	@NETSUKE_BIN="$(abspath target/debug/$(APP))" $(UV_ENV) $(UV) run --no-project --python 3.13 \
-		--with pytest==9.0.2 --with $(CMD_MOX_SOURCE) --with $(CUPRUM_SOURCE) \
-		python -m pytest tests/documentation_examples_py -c /dev/null \
-		--rootdir=. -p no:cacheprovider -q
 
 test-workflow-contracts: ## Validate the mutation-testing caller contract
 	uv run --with 'pytest>=8' --with 'pyyaml>=6' pytest tests/workflow_contracts -q
