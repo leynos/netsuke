@@ -3,202 +3,171 @@
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](
 https://deepwiki.com/leynos/netsuke)
 
-A modern, declarative build system compiler. YAML + Jinja in, Ninja out.
-Nothing more. Nothing less.
+*A friendly build-system compiler: YAML and Jinja in, Ninja out.*
 
-## What is Netsuke?
+Netsuke turns a readable `Netsukefile` into a validated, static Ninja build
+graph. It keeps the dynamic work in a higher-level manifest and leaves fast,
+incremental execution to [Ninja](https://ninja-build.org/).
 
-**Netsuke** is a friendly build system that compiles structured manifests into
-a Ninja build graph. It’s not a shell-script runner, a meta-task framework, or
-a domain-specific CI layer. It’s `make`, if `make` hadn’t been invented in 1977.
+______________________________________________________________________
 
-### Key properties
+## Why Netsuke?
 
-- **Declarative**: Targets, rules, and dependencies described explicitly.
-- **Dynamic when needed**: Jinja templating for loops, macros, conditionals,
-  file globbing.
-- **Static where required**: Always compiles to a reproducible, fully static
-  dependency graph.
-- **Unopinionated**: No magic for C, Rust, Python, JavaScript, or any other
-  blessed language.
-- **Safe**: All variable interpolation is securely shell-escaped by default.
-- **Fast**: Builds executed by [Ninja](https://ninja-build.org/), the fastest
-  graph executor we know of.
+- **Readable manifests**: Describe rules, targets, dependencies, and defaults
+  in YAML instead of a tab-sensitive language.
+- **Dynamic planning**: Use Jinja variables, macros, `foreach`, `when`, and
+  globbing before Netsuke creates the build graph.
+- **Static execution**: Inspect the generated Ninja file or render the graph
+  before running any build command.
+- **Useful diagnostics**: Get source-aware errors, localized output, progress
+  reporting, and an opt-in JSON diagnostic format.
+- **No blessed toolchain**: Use the same manifest model for Rust, C, Python,
+  web projects, or anything else a command can build.
 
-## Quick Example
+______________________________________________________________________
+
+## Quick start
+
+### Prerequisites
+
+Netsuke currently requires:
+
+- [Ninja](https://ninja-build.org/) on `PATH`;
+- Rust 1.89 or later when installing from source.
+
+### Installation
+
+Until the v0.1.0 release is published, install the current source checkout with
+Cargo:
+
+```sh
+git clone https://github.com/leynos/netsuke.git
+cd netsuke
+cargo install --path .
+```
+
+### Your first build
+
+Create a new directory and add a file named `Netsukefile`:
 
 ```yaml
-netsuke_version: "1.0"
-
-vars:
-  cc: clang
-  cflags: -Wall -Werror
-
-rules:
-  - name: compile
-    command: "{{ cc }} {{ cflags }} -c {{ ins }} -o {{ outs }}"
-
-  - name: link
-    command: "{{ cc }} {{ cflags }} {{ ins }} -o {{ outs }}"
+netsuke_version: "1.0.0"
 
 targets:
-  - foreach: glob('src/*.c')
-    name: "build/{{ item | basename | with_suffix('.o') }}"
-    rule: compile
-    sources: "{{ item }}"
+  - name: hello.txt
+    command: "echo 'Hello from Netsuke!' > hello.txt"
 
-  - name: app
-    rule: link
-    sources: "{{ glob('src/*.c') | map('basename') | map('with_suffix', '.o') }}"
+defaults:
+  - hello.txt
 ```
 
-Yes, it’s just YAML. Yes, that’s a Jinja `foreach`. No, you don’t need to define
-`.PHONY` or remember what `$@` means. This is the present day. You deserve
-better.
+Run Netsuke, then inspect the result:
 
-## Key Concepts
-
-### 🔨 Rules
-
-Rules are reusable command templates. Each one has exactly one of:
-
-- `command:` - a single shell string
-- `script:` - a multi-line block
-- (or) can be declared inline on a target
-
-```yaml
-rules:
-  - name: rasterise
-    script: |
-      inkscape --export-png={{ ins }} {{ outs }}
+```sh
+netsuke
+cat hello.txt
 ```
 
-### 🎯 Targets
+The second command prints `Hello from Netsuke!`. See the
+[quick-start guide](docs/quickstart.md) for variables, templates, and `foreach`.
 
-Targets are things you want to build.
+______________________________________________________________________
 
-```yaml
-- name: build/logo.png
-  rule: rasterise
-  sources: assets/logo.svg
-```
+## What works today
 
-Targets can also define:
+The core build-system compiler is implemented:
 
-- `deps`: implicit dependencies — trigger rebuilds but are not passed to
-  `$in`/`{{ ins }}`; map to Ninja `|`
-- `order_only_deps`: e.g. `mkdir -p build`
-- `vars`: per-target variables
+- YAML 1.2 manifest parsing with duplicate-key and schema validation;
+- Jinja variables, macros, `foreach`, `when`, globbing, environment helpers,
+  executable discovery, and opt-in network helpers;
+- reusable rules, targets, actions, defaults, and explicit, implicit, and
+  order-only dependencies;
+- a deterministic intermediate build graph with duplicate-output, missing-rule,
+  and cycle checks;
+- Ninja generation and execution, plus `clean` and standalone manifest
+  generation;
+- reproducible dependency graphs as Graphviz DOT or self-contained,
+  accessible HTML;
+- layered configuration, localized output, accessibility preferences,
+  progress reporting, stage timings, and JSON diagnostics;
+- unit, behavioural, integration, property, snapshot, and initial Kani
+  verification coverage.
 
-You may also use `command:` or `script:` instead of referencing a `rule`.
+Release automation is configured to build packages for Linux, macOS, and
+Windows, including platform help artefacts. v0.1.0 will be the first public
+release of this work.
 
-## 🧪 Phony Targets and Actions
+______________________________________________________________________
 
-Phony targets behave like Make’s `.PHONY`:
+## v0.1.0 status
 
-```yaml
-- name: clean
-  phony: true
-  always: true
-  command: rm -rf build
-```
+v0.1.0 is a useful preview for early adopters, not a declaration that Netsuke
+is finished or that every interface is stable. The compiler pipeline and
+ordinary local-build workflow are substantial; the command-line interface,
+configuration vocabulary, and advanced recipe model are still evolving.
 
-For cleaner structure, you may also define phony targets under an `actions:`
-block:
+Pin the Netsuke version in automation and expect some command names, flags,
+diagnostic schemas, and manifest details to change before 1.0.
 
-```yaml
-actions:
-  - name: test
-    command: pytest
-```
+Known limitations include:
 
-All `actions` are treated as `{ phony: true, always: false }` by default.
+- recipes are shell strings; structured executable arguments and recipe
+  environment mappings are not implemented yet;
+- literal shell dollar expressions still need Ninja-aware escaping in
+  manifests;
+- compiler-generated dependency imports such as GCC depfiles are planned but
+  not yet part of the manifest model;
+- the current JSON mode covers diagnostics rather than a stable structured
+  result for every command;
+- accessibility, terminal rendering, configuration precedence, and
+  cross-platform compiler invariants need broader verification.
 
-## 🧠 Templating
+A `Netsukefile` can execute commands and use impure template helpers. Treat it
+with the same care as a `Makefile`: review untrusted manifests before running
+them. Netsuke quotes supported path substitutions, but it is not a sandbox.
 
-Netsuke uses [MiniJinja](https://docs.rs/minijinja) to render your manifest
-before parsing.
+______________________________________________________________________
 
-You can:
+## The road ahead
 
-- Glob files: `{{ glob('src/**/*.c') }}`
-- Read environment vars: `{{ env('CC') }}`
-- Use filters: `{{ path | basename | with_suffix('.o') }}`
-- Define reusable macros:
+Work after the first release is organized around three priorities:
 
-  ```yaml
-  macros:
-    - signature: "shout(msg)"
-      body: |
-        echo "{{ msg | upper }}"
-  ```
+1. **Stabilize the command-line contract**: adopt canonical command and flag
+   names, non-interactive safeguards, stable exit codes, bounded output, and
+   one structured JSON result per command.
+2. **Make recipes safer and clearer**: add structured executable arguments,
+   environment mappings, compiler dependency imports, backend dollar escaping,
+   and better conditional-action feedback.
+3. **Strengthen confidence**: expand Kani and property-test coverage, verify
+   accessibility with assistive technology, and add regression coverage for
+   configuration precedence and terminal rendering.
 
-Templating happens **before** parsing, so any valid output must be valid YAML.
+Longer-term work explores machine-readable context, profiles, run history,
+artefact delivery, and local-first feedback for human and agent workflows. The
+[roadmap](docs/roadmap.md) tracks the detailed sequence and current progress.
 
-## 🔐 Safety
+______________________________________________________________________
 
-Shell commands are automatically escaped. Interpolation into `command:` or
-`script:` will never yield a command injection vulnerability unless you
-explicitly ask for `| raw`.
+## Learn more
 
-```yaml
-command: "echo {{ dangerous_value }}"      # Safe
-command: "echo {{ dangerous_value | raw }}" # Unsafe (your problem now)
-```
+- [Quick-start guide](docs/quickstart.md) — build something in five minutes.
+- [Users' guide](docs/users-guide.md) — manifest and command reference.
+- [Design document](docs/netsuke-design.md) — architecture and design
+  rationale.
+- [Developers' guide](docs/developers-guide.md) — development workflow and
+  quality gates.
+- [Roadmap](docs/roadmap.md) — completed foundations and planned work.
 
-## 🔧 CLI
-
-```shell
-netsuke [build] [target1 target2 ...]
-netsuke clean
-netsuke graph
- netsuke manifest FILE
-```
-
-- `netsuke` alone builds the `defaults:` targets from your manifest
-- `netsuke graph` emits a Graphviz `.dot` of the build DAG
-- `netsuke clean` runs `ninja -t clean`
-- `netsuke manifest FILE` writes the Ninja manifest to `FILE` without invoking
-  Ninja
-
-You can also pass:
-
-- `--file` to use an alternate manifest
-- `--directory` to run in a different working dir
-- `-j N` to control parallelism (passed through to Ninja)
-- `-v`, `--verbose` to enable verbose logging
-
-Release builds include a `netsuke.1` manual page generated by `cargo-orthohelp`
-from the CLI documentation metadata, providing the same flags and subcommands
-documented via `--help`. Windows release artefacts also include PowerShell
-external help for `Get-Help Netsuke -Full`. Manual page generation honours
-`SOURCE_DATE_EPOCH` for reproducible dates. If the value is invalid, a warning
-is emitted and the date falls back to `1970-01-01`. If `SOURCE_DATE_EPOCH` is
-unset, the date deterministically falls back to `1970-01-01` without a warning.
-The published crate does not include these files; packagers can source them
-from release artefacts under `target/orthohelp/<target>/release/`.
-
-## 🚧 Status
-
-Netsuke is **under active development**. It’s not finished, but it’s buildable,
-usable, and increasingly delightful.
-
-Coming soon:
-
-- `graph --html` for interactive DAGs
-- Extensible plugin system for filters/functions
-- Toolchain presets (`cargo`, `node`, etc.)
-
-## Why “Netsuke”?
-
-A **netsuke** is a small carved object used to fasten things securely to a
-belt. It’s not the sword. It’s not the pouch. It’s the thing that connects them.
-
-That’s what this is: a tidy connector between your intent and the tool that
-gets it done.
+______________________________________________________________________
 
 ## Licence
 
-Netsuke is distributed under the
-[ISC licence](https://opensource.org/licenses/ISC). You don't need a legal
-thesis to use a build tool.
+ISC — see [LICENSE](LICENSE) for details.
+
+______________________________________________________________________
+
+## Contributing
+
+Contributions are welcome. Start with the
+[developers' guide](docs/developers-guide.md); automated contributors should
+also follow [AGENTS.md](AGENTS.md).
