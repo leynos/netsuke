@@ -85,13 +85,20 @@ fn load_document(path: &'static str) -> Result<Vec<DocumentedExample>> {
     parse_document(path, &contents)
 }
 
-fn parse_document(source: &'static str, contents: &str) -> Result<Vec<DocumentedExample>> {
+pub(crate) fn parse_document(
+    source: &'static str,
+    contents: &str,
+) -> Result<Vec<DocumentedExample>> {
     let mut lines = contents.lines().enumerate().peekable();
     let mut examples = Vec::new();
+    let mut ids = HashSet::new();
 
     while let Some((line_index, line)) = lines.next() {
         match parse_marker(line) {
-            Some(id) => examples.push(read_marked_example(source, line_index, id, &mut lines)?),
+            Some(id) => {
+                ensure!(ids.insert(id), "duplicate tested-example identifier '{id}'");
+                examples.push(read_marked_example(source, line_index, id, &mut lines)?);
+            }
             None => reject_unmarked_fence(source, line_index, line)?,
         }
     }
