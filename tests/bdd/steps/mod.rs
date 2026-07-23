@@ -22,7 +22,6 @@ mod cli_parsing;
 mod conditional_manifest;
 mod configuration_discovery;
 mod configuration_preferences;
-mod documentation_examples;
 #[cfg(unix)]
 mod fs;
 mod ir;

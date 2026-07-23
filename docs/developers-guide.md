@@ -172,8 +172,8 @@ The caller passes two configuration inputs, each carrying intent:
   not evaluate that cfg, so mutants inserted there would compile to nothing and
   survive as noise rather than genuine test gaps.
 - `extra-args` — `--all-features`, so the mutation run matches the `make test`
-  CI baseline; a mismatch would report feature-gated code (the
-  `legacy-digests` feature) as untested.
+  CI baseline; a mismatch would report feature-gated code (the `legacy-digests`
+  feature) as untested.
 
 The caller does not set `extra-crate-dirs`, the input reserved for crate
 directories outside the Cargo workspace. `ambient_fs`, the repository's
@@ -473,17 +473,24 @@ the configured Dependabot directory patterns.
 
 Every fenced example in `README.md` and `docs/users-guide.md` has a stable
 `tested-example` marker immediately before its opening fence. The shared
-`tests/documentation_examples/mod.rs` loader owns this marker format and may be
-called only by documentation-focused integration or behavioural tests. It
-rejects unmarked fences, duplicate identifiers and unterminated examples.
+`tests/documentation_examples_py/documentation_examples.py` loader owns this
+marker format and may be called only by documentation-focused tests. It rejects
+unmarked fences, duplicate identifiers and unterminated examples.
 
-`tests/documentation_examples_tests.rs` compiles every manifest fence,
-exercises the command and output examples against the current binary, and
-compiles each complete manifest linked from the user's guide. The first-run
-README and user's guide examples also run through
-`tests/features/documentation_examples.feature`, reusing the same fake-Ninja
-behavioural flow as the novice smoke tests. Tests must load the fenced text
-through the shared helper instead of maintaining copied fixtures.
+`make test-documentation-examples` builds Netsuke, creates an isolated
+`uv --no-project` Python environment, and runs the `pytest` suite under
+`tests/documentation_examples_py/`. Dependencies are pinned to exact
+`leynos/cmd-mox` and `leynos/cuprum` revisions in the Makefile. Cuprum invokes
+only explicitly allowlisted programs, while CmdMox supplies per-test command
+shims for Git, Cargo and Ninja. Each case uses a `tmp_path` workspace and an
+isolated configuration home.
+
+The suite compiles every manifest fence, exercises the command and output
+examples against the current binary, and compiles each complete manifest linked
+from the user's guide. The first-run README and user's guide cases use a
+CmdMox-backed Ninja handler, matching the novice smoke-test boundary without
+depending on host tools. Tests must load fenced text through the shared helper
+instead of maintaining copied fixtures.
 
 ### Property-based testing with proptest
 
