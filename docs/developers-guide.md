@@ -1024,7 +1024,7 @@ sequenceDiagram
     BddRunner->>AdvancedUsageSteps: execute When netsuke is run with args "manifest -"
     AdvancedUsageSteps->>TestWorld: set_env_from_world()
     TestWorld->>AssertCmdCommand: build_command_with_explicit_path()
-    AssertCmdCommand->>AssertCmdCommand: inherit_NINJA_ENV()
+    AssertCmdCommand->>AssertCmdCommand: NETSUKE_NINJA
     AssertCmdCommand->>AssertCmdCommand: apply_world_environment_overrides()
     AssertCmdCommand->>NetsukeBinary: spawn_with_env_and_path()
     NetsukeBinary->>NinjaTool: optional_ninja_invocation()
@@ -1140,9 +1140,9 @@ this module and must not interpret the environment override independently.
 `src/runner/process/command_logging.rs` owns the structured logging contract
 for all internal Ninja process invocations. `CommandLogContext` is the shared
 log payload builder for a prepared `Command`; it records `program_display` for
-the `ninja_program` field and `redacted_arg_count` for stable argument
-cardinality. `from_command` redacts sensitive arguments and stores the redacted
-command string for the human-readable `"Executing command: {}"` message in the
+the `ninja_program` field and `arg_count` for stable argument cardinality.
+`from_command` redacts sensitive arguments and stores the redacted command
+string for the human-readable `"Executing command: {}"` message in the
 informational execution event. Open
 [issue #384](https://github.com/leynos/netsuke/issues/384) tracks moving this
 high-cardinality payload to a debug companion event.
@@ -1155,7 +1155,7 @@ All command events share these structured fields:
   diagnostics suppress direct stderr logging.
 
 Phase-specific fields supplement that shared set. The informational execution
-event includes `redacted_arg_count`. Spawn- and exit-failure events instead set
+event includes `arg_count`. Spawn- and exit-failure events instead set
 `failure_category` to `"spawn"` or `"exit_status"` for alert bucketing; the
 argument count remains available on the enclosing `ninja_subprocess` span.
 

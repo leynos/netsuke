@@ -15,13 +15,13 @@ use tracing::{field, info, info_span, warn};
 
 /// Prepared, redacted logging representation of a Ninja [`Command`].
 ///
-/// Retains the displayable program, redacted command text, and redacted
-/// argument count so individual logging paths do not reconstruct command
-/// metadata inconsistently.
+/// Retains the displayable program, redacted command text, and argument count
+/// so individual logging paths do not reconstruct command metadata
+/// inconsistently.
 pub(super) struct CommandLogContext {
     pub(super) program_display: String,
     redacted_command: String,
-    redacted_arg_count: usize,
+    arg_count: usize,
 }
 
 impl CommandLogContext {
@@ -41,22 +41,22 @@ impl CommandLogContext {
             .map(|a| CommandArg::new(a.to_string_lossy().into_owned()))
             .collect();
         let redacted_args = redact_sensitive_args(&args);
-        let redacted_arg_count = redacted_args.len();
+        let arg_count = redacted_args.len();
         let arg_strings: Vec<&str> = redacted_args.iter().map(CommandArg::as_str).collect();
         let redacted_command = format!("{} {}", program_display, arg_strings.join(" "));
 
         Self {
             program_display,
             redacted_command,
-            redacted_arg_count,
+            arg_count,
         }
     }
 }
 
 /// Records the structured event emitted immediately before spawning Ninja.
 ///
-/// Includes the operation, executable, redacted argument count, and stderr
-/// suppression metadata.
+/// Includes the operation, executable, argument count, and stderr suppression
+/// metadata.
 pub(super) fn log_command_execution(
     context: &CommandLogContext,
     operation: &str,
@@ -65,7 +65,7 @@ pub(super) fn log_command_execution(
     info!(
         operation,
         ninja_program = %context.program_display,
-        redacted_arg_count = context.redacted_arg_count,
+        arg_count = context.arg_count,
         suppress_stderr,
         "Executing command: {}",
         context.redacted_command,
@@ -125,8 +125,27 @@ pub(super) fn command_span(
         "ninja_subprocess",
         operation,
         ninja_program = %context.program_display,
-        redacted_arg_count = context.redacted_arg_count,
+        arg_count = context.arg_count,
         suppress_stderr,
         failure_category = field::Empty,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    //! Unit tests for command-log context construction.
+
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn from_command_uses_lossy_display_for_non_utf8_program() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let cmd = Command::new(std::ffi::OsString::from_vec(b"ninja-\xff".to_vec()));
+
+        let context = CommandLogContext::from_command(&cmd);
+
+        assert_eq!(context.program_display, "ninja-\u{fffd}");
+    }
 }
