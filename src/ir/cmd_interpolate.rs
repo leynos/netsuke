@@ -148,8 +148,8 @@ fn find_substitution<'a>(
                 })
         }))
     .or_else(|| {
-        try_match_token(chars, pos, "__NETSUKE_INS_PLACEHOLDER__", ins)
-            .or_else(|| try_match_token(chars, pos, "__NETSUKE_OUTS_PLACEHOLDER__", outs))
+        try_match_token(chars, pos, INS_TOKEN, ins)
+            .or_else(|| try_match_token(chars, pos, OUTS_TOKEN, outs))
     })
 }
 
@@ -207,6 +207,17 @@ fn substitute(template: &str, ins: &[String], outs: &[String]) -> String {
     out
 }
 
+/// Internal marker emitted for `{{ ins }}` during manifest rendering and
+/// consumed during command interpolation; it is not general template syntax.
+pub(crate) const INS_TOKEN: &str = "__NETSUKE_INS_PLACEHOLDER__";
+
+/// Internal marker emitted for `{{ outs }}` during manifest rendering and
+/// consumed during command interpolation; it is not general template syntax.
+pub(crate) const OUTS_TOKEN: &str = "__NETSUKE_OUTS_PLACEHOLDER__";
+
+#[cfg(test)]
+#[path = "cmd_interpolate_property_tests.rs"]
+mod property_tests;
 #[cfg(test)]
 mod tests {
     //! Unit tests for command interpolation and backtick validation.
@@ -259,7 +270,7 @@ mod tests {
     #[test]
     fn interpolate_command_replaces_template_placeholders() {
         let command = interpolate_command(
-            "__NETSUKE_INS_PLACEHOLDER__ $out __NETSUKE_OUTS_PLACEHOLDER__",
+            &format!("{INS_TOKEN} $out {OUTS_TOKEN}"),
             &[Utf8PathBuf::from("in")],
             &[Utf8PathBuf::from("out")],
         )

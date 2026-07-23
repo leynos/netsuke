@@ -7,6 +7,7 @@
 //! so that [`crate::ir::cmd_interpolate`] can substitute them later.
 use super::ManifestValue;
 use crate::ast::{NetsukeManifest, Recipe, StringOrList, Target, Vars};
+use crate::ir::{INS_TOKEN, OUTS_TOKEN};
 use anyhow::{Context, Result};
 use minijinja::Environment;
 
@@ -121,10 +122,10 @@ fn render_recipe_str_with(
     let mut recipe_ctx = ctx.clone();
     recipe_ctx
         .entry("ins".into())
-        .or_insert_with(|| ManifestValue::String("__NETSUKE_INS_PLACEHOLDER__".into()));
+        .or_insert_with(|| ManifestValue::String(INS_TOKEN.into()));
     recipe_ctx
         .entry("outs".into())
-        .or_insert_with(|| ManifestValue::String("__NETSUKE_OUTS_PLACEHOLDER__".into()));
+        .or_insert_with(|| ManifestValue::String(OUTS_TOKEN.into()));
     render_str_with(env, tpl, &recipe_ctx, what)
 }
 

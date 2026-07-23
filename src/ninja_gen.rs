@@ -303,16 +303,16 @@ impl Display for DisplayEdge<'_> {
         writeln!(f)
     }
 }
-
+#[cfg(test)]
+#[path = "ninja_gen_property_tests.rs"]
+mod property_tests;
 #[cfg(test)]
 mod tests {
     //! Unit tests for Ninja file generation and rule synthesis.
-
     use super::*;
     use crate::ir::{Action, BuildEdge, BuildGraph};
     use anyhow::{Result, ensure};
     use rstest::rstest;
-
     #[rstest]
     fn generate_simple_ninja() -> Result<()> {
         let action = Action {
