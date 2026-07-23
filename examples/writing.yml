@@ -13,7 +13,9 @@ rules:
     command: "pandoc {{ pandoc_flags }} {{ ins }} -o {{ outs }}"
 
   - name: combine
-    command: "latexmk -pdf -outdir={{ build_dir }} {{ ins }}"
+    command: >-
+      pandoc --standalone {{ ins }} -o {{ build_dir }}/book.tex &&
+      latexmk -pdf -outdir={{ build_dir }} {{ build_dir }}/book.tex
 
   - name: mkdir
     command: "mkdir -p {{ outs }}"

@@ -2,10 +2,10 @@
 
 This guide is for people evaluating or using Netsuke v0.1.0. It covers the
 first build, the manifest format, templating, command-line usage,
-configuration, diagnostics, accessibility and the current safety boundary.
+configuration, diagnostics, accessibility, and the current safety boundary.
 
 Netsuke v0.1.0 is an early-adopter release. The compiler pipeline is useful,
-but command names, flags, diagnostic schemas and some manifest details may
+but command names, flags, diagnostic schemas, and some manifest details may
 change before 1.0. Pin the Netsuke version in automated workflows.
 
 ## Install Netsuke
@@ -84,7 +84,7 @@ All manifest-time decisions finish before Ninja starts. The generated graph is
 therefore static and inspectable.
 
 A `Netsukefile` is executable build configuration, not passive data. Commands,
-scripts and impure template helpers can access the host. Review an untrusted
+scripts, and impure template helpers can access the host. Review an untrusted
 manifest with the same care as an untrusted `Makefile`.
 
 ## Author a manifest
@@ -128,7 +128,7 @@ defaults:
 The top-level fields are:
 
 - `netsuke_version`: required semantic version for the manifest schema.
-- `vars`: global strings, numbers, booleans or lists available to Jinja.
+- `vars`: global strings, numbers, booleans, or lists available to Jinja.
 - `macros`: named Jinja macro definitions registered before other fields
   render.
 - `rules`: reusable recipes referenced by targets or actions.
@@ -149,31 +149,29 @@ A rule or target must provide exactly one recipe:
 - `script`: a multi-line POSIX shell script.
 - `rule`: the name of another rule to use.
 
-Rules may also provide:
-
-- `description`: text used for Ninja's progress display.
-- `deps`: dependencies inherited by targets that use the rule.
+Rules may also provide `description`, text used for Ninja's progress display.
 
 The v0.1.0 `script` implementation invokes `/bin/sh -e`; it is not currently a
 portable PowerShell abstraction. Prefer `command` or platform-selected actions
 when a manifest must work on Windows.
 
-### Targets, inputs and dependencies
+### Targets, inputs, and dependencies
 
 A target supports these fields:
 
 - `name`: one output path or a list of output paths.
-- `rule`, `command` or `script`: exactly one recipe.
+- `rule`, `command`, or `script`: exactly one recipe.
 - `sources`: explicit inputs. They affect freshness and become `{{ ins }}`.
 - `deps`: implicit dependencies. They affect freshness but do not become
-  recipe arguments.
+  recipe arguments. Dependencies declared on reusable rules are not inherited
+  in v0.1.0; specify them on each target.
 - `order_only_deps`: ordering dependencies. Their changes do not rebuild the
   dependant target.
 - `vars`: values that override global variables for this target.
 - `phony`: marks a logical target that does not represent a file.
 - `always`: forces the recipe to run whenever the target is requested.
 
-`name`, `sources`, `deps` and `order_only_deps` accept either one string or a
+`name`, `sources`, `deps`, and `order_only_deps` accept either one string or a
 list of strings.
 
 Netsuke quotes paths inserted through `{{ ins }}` and `{{ outs }}`. Other Jinja
@@ -187,8 +185,8 @@ ordering but do not participate in cycle detection.
 ## Use Jinja safely
 
 Jinja expressions are allowed in renderable string fields, including variables,
-target fields and rule recipes. Structural Jinja blocks cannot reshape the YAML
-document. Use the dedicated `foreach` and `when` keys for manifest-time
+target fields, and rule recipes. Structural Jinja blocks cannot reshape the
+YAML document. Use the dedicated `foreach` and `when` keys for manifest-time
 expansion.
 
 ### Generate targets with `foreach` and `when`
@@ -293,7 +291,7 @@ not accept a default argument; an absent or non-Unicode value is an error.
 
 ## Use the template standard library
 
-Netsuke registers focused path, collection, command, network and time helpers
+Netsuke registers focused path, collection, command, network, and time helpers
 alongside MiniJinja's built-ins.
 
 ### Path filters
@@ -319,8 +317,8 @@ SHA-512. MD5 and SHA-1 require the `legacy-digests` Cargo feature.
 
 ### Collection filters
 
-Netsuke adds `uniq`, `flatten` and `group_by(attribute)`. MiniJinja also
-provides general filters such as `join`, `map`, `select` and `sort`.
+Netsuke adds `uniq`, `flatten`, and `group_by(attribute)`. MiniJinja also
+provides general filters such as `join`, `map`, `select`, and `sort`.
 
 This complete manifest exercises string-only helpers without depending on
 external files:
@@ -347,14 +345,14 @@ defaults:
 ### File tests
 
 Jinja `is` expressions can test `file`, `dir`, `symlink`, `pipe`,
-`block_device`, `char_device` and `device`. Filesystem tests inspect the host,
+`block_device`, `char_device`, and `device`. Filesystem tests inspect the host,
 so results depend on the current workspace and platform.
 
 ### Time helpers
 
 `now(offset=...)` returns the current timestamp, optionally at an offset such as
 `"+01:00"`. `timedelta(...)` constructs a duration from keyword components:
-weeks, days, hours, minutes, seconds, milliseconds, microseconds and
+weeks, days, hours, minutes, seconds, milliseconds, microseconds, and
 nanoseconds. These helpers read the clock or perform duration arithmetic; they
 do not schedule work.
 
@@ -369,7 +367,7 @@ The following helpers can observe or modify the outside world:
 - `now(offset=...)` reads the clock.
 - File-reading and path-canonicalization filters inspect the filesystem.
 
-`fetch`, `shell` and `grep` enforce bounded output. These internal limits are
+`fetch`, `shell`, and `grep` enforce bounded output. These internal limits are
 not currently user-configurable from `Netsukefile`.
 
 Use impure helpers only in trusted manifests. Netsuke does not sandbox them.
@@ -493,7 +491,7 @@ theme = "ascii"
 colour_policy = "never"
 spinner_mode = "disabled"
 output_format = "human"
-default_targets = ["hello"]
+default_targets = ["hello.txt"]
 ```
 
 Common environment equivalents include:
@@ -502,7 +500,7 @@ Common environment equivalents include:
 - `NETSUKE_VERBOSE=true`
 - `NETSUKE_THEME=ascii`
 - `NETSUKE_COLOUR_POLICY=never`
-- `NETSUKE_DEFAULT_TARGETS__0=hello`
+- `NETSUKE_DEFAULT_TARGETS__0=hello.txt`
 - `NETSUKE_NINJA=/opt/ninja/bin/ninja`
 
 `NETSUKE_NINJA` overrides the Ninja executable used by `build` and `clean`.
@@ -524,7 +522,7 @@ CLI flag `--diag-json` for JSON diagnostics.
 Netsuke separates machine-consumable output from status information:
 
 - stdout contains generated artefacts and subprocess stdout.
-- stderr contains status, progress, timing and diagnostics.
+- stderr contains status, progress, timing, and diagnostics.
 
 This makes redirection predictable:
 
@@ -620,9 +618,9 @@ The schema fields are:
 - `schema_version`: diagnostic envelope version.
 - `generator`: Netsuke name and version.
 - `diagnostics`: ordered diagnostic objects.
-- `message`, `code`, `severity`, `help` and `url`: primary details.
+- `message`, `code`, `severity`, `help`, and `url`: primary details.
 - `causes`: ordered error-cause chain.
-- `source`, `primary_span` and `labels`: optional source locations.
+- `source`, `primary_span`, and `labels`: optional source locations.
 - `related`: nested diagnostics using the same shape.
 
 Treat schema version `1` as pre-stable for v0.1.0 and check `schema_version`
@@ -653,7 +651,7 @@ Netsuke reports failures at the earliest stage that can identify them:
 - YAML failures include locations when the parser provides them.
 - Schema failures identify unknown or malformed fields.
 - Jinja failures identify missing variables or invalid helpers.
-- IR failures report missing rules, duplicate outputs and cycles before Ninja
+- IR failures report missing rules, duplicate outputs, and cycles before Ninja
   starts.
 - Ninja failures retain the subprocess exit status and output.
 
@@ -671,7 +669,7 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
 - Arbitrary Jinja values in `command` and `script` are not automatically
   shell-quoted.
 - `script` uses `/bin/sh -e` in v0.1.0.
-- `shell`, `grep`, `fetch`, filesystem helpers and ordinary recipes interact
+- `shell`, `grep`, `fetch`, filesystem helpers, and ordinary recipes interact
   with the host.
 - `raw` template output and handwritten shell fragments remain the manifest
   author's responsibility.
@@ -697,8 +695,8 @@ The repository contains complete manifests for several domains:
   project.
 
 These manifests are compiled by the documentation-example test suite. External
-programs such as C compilers, Pandoc, Darktable and Inkscape are still required
-to execute their recipes.
+programs such as C compilers, Pandoc, Darktable, and Inkscape are still
+required to execute their recipes.
 
 ## Find more information
 
