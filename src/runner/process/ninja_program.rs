@@ -9,6 +9,12 @@ use camino::Utf8PathBuf;
 use std::{env, ffi::OsString, path::PathBuf};
 use tracing::debug;
 
+/// Resolves Ninja with an injectable environment reader for testability.
+///
+/// This variant avoids mutating the process environment when testing
+/// resolution behaviour. It selects a non-empty UTF-8 `NETSUKE_NINJA`
+/// override, falls back to [`NINJA_PROGRAM`] when the override is unset,
+/// empty, or non-UTF-8, and emits resolution diagnostics at this boundary.
 pub(super) fn resolve_ninja_program_utf8_with<F>(mut read_env: F) -> Utf8PathBuf
 where
     F: FnMut(&str) -> Option<OsString>,

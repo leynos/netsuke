@@ -13,6 +13,11 @@ use std::{
 };
 use tracing::{field, info, info_span, warn};
 
+/// Prepared, redacted logging representation of a Ninja [`Command`].
+///
+/// Retains the displayable program, redacted command text, and redacted
+/// argument count so individual logging paths do not reconstruct command
+/// metadata inconsistently.
 pub(super) struct CommandLogContext {
     pub(super) program_display: String,
     redacted_command: String,
@@ -20,6 +25,11 @@ pub(super) struct CommandLogContext {
 }
 
 impl CommandLogContext {
+    /// Derives the shared logging context from a prepared [`Command`].
+    ///
+    /// Converts UTF-8 program paths directly, falls back to a lossy display
+    /// representation for non-UTF-8 paths, and redacts sensitive arguments
+    /// before they are logged.
     pub(super) fn from_command(cmd: &Command) -> Self {
         let program_path = PathBuf::from(cmd.get_program());
         let program_display = Utf8PathBuf::from_path_buf(program_path).map_or_else(
@@ -43,6 +53,10 @@ impl CommandLogContext {
     }
 }
 
+/// Records the structured event emitted immediately before spawning Ninja.
+///
+/// Includes the operation, executable, redacted argument count, and stderr
+/// suppression metadata.
 pub(super) fn log_command_execution(
     context: &CommandLogContext,
     operation: &str,
@@ -58,6 +72,9 @@ pub(super) fn log_command_execution(
     );
 }
 
+/// Records a structured warning when spawning the Ninja subprocess fails.
+///
+/// The associated subprocess span records the `"spawn"` failure category.
 pub(super) fn log_command_spawn_failure(
     context: &CommandLogContext,
     operation: &str,
@@ -75,6 +92,10 @@ pub(super) fn log_command_spawn_failure(
     );
 }
 
+/// Records a structured warning for a non-successful Ninja child exit.
+///
+/// The associated subprocess span records the `"exit_status"` failure
+/// category.
 pub(super) fn log_command_exit_failure(
     context: &CommandLogContext,
     operation: &str,
@@ -91,6 +112,10 @@ pub(super) fn log_command_exit_failure(
     );
 }
 
+/// Creates the `ninja_subprocess` tracing span with stable invocation fields.
+///
+/// The initially empty `failure_category` field is populated only when the
+/// subprocess fails.
 pub(super) fn command_span(
     context: &CommandLogContext,
     operation: &str,
