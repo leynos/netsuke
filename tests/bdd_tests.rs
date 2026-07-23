@@ -5,6 +5,7 @@
 //! functions for each scenario found in the feature directories.
 
 mod bdd;
+mod documentation_examples;
 
 // Re-export fixtures for scenario functions
 pub use bdd::fixtures::*;
