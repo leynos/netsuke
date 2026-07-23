@@ -475,7 +475,6 @@ when detecting cycles. It intentionally does not traverse `order_only_deps`,
 because order-only dependencies express scheduling order rather than rebuild
 freshness.
 
-
 ### Recipe placeholder ownership
 
 `src/ir/cmd_interpolate.rs` owns the private `INS_TOKEN` and `OUTS_TOKEN`
