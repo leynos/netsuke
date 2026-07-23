@@ -19,11 +19,11 @@ use rstest::rstest;
 use std::path::PathBuf;
 use test_support::{EnvVarGuard, env_lock::EnvLock};
 
-fn precedence_winner(
-    cli_config: Option<PathBuf>,
-    env_config: Option<PathBuf>,
-    legacy_config: Option<PathBuf>,
-) -> Option<PathBuf> {
+fn precedence_winner<'a>(
+    cli_config: Option<&'a PathBuf>,
+    env_config: Option<&'a PathBuf>,
+    legacy_config: Option<&'a PathBuf>,
+) -> Option<&'a PathBuf> {
     cli_config.or(env_config).or(legacy_config)
 }
 
@@ -115,10 +115,10 @@ proptest! {
         legacy_config in path_selector(),
     ) {
         let expected = precedence_winner(
-            cli_config.clone(),
-            env_config.clone(),
-            legacy_config.clone(),
-        );
+            cli_config.as_ref(),
+            env_config.as_ref(),
+            legacy_config.as_ref(),
+        ).cloned();
         let actual = resolve_config_path_with_selectors(
             cli_config,
             env_config.as_ref(),
