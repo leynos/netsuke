@@ -308,7 +308,10 @@ invalid.
 Keep `[package.metadata.ortho_config]` in `Cargo.toml` aligned with the CLI
 when adding, renaming, or removing user-facing options. Changes to CLI
 documentation metadata should be covered by `rstest` workflow/script contract
-tests and by `rstest-bdd` release-help scenarios.
+tests, plain `#[rstest]` parametrized cases for exhaustive state-enumeration
+unit tests, and `rstest-bdd` release-help scenarios.
+`src/cli/config_path_precedence_tests.rs` is the canonical exhaustive
+state-enumeration example.
 
 ## Formal-verification tooling
 
@@ -450,6 +453,9 @@ Netsuke uses a mixed strategy:
 - Behavioural test discovery is defined in `tests/bdd_tests.rs`.
 - Dependabot configuration lives in `.github/dependabot.yml`, with coverage
   tests in `tests/dependabot_config_tests.rs`.
+- **Property-based tests** use `proptest` and live in `*_tests.rs` modules
+  adjacent to the code under test, included via
+  `#[cfg(test)] #[path = "..."] mod ...;` declarations.
 
 The Dependabot integration tests parse the checked-in configuration and verify
 that repository dependency manifests remain covered as the tree changes. They
@@ -461,6 +467,32 @@ are not Git checkouts, because tracked-manifest hygiene cannot be determined
 there. The tests require workflow YAML files under `.github/workflows` and
 ensure local composite action manifests under `.github/actions` are covered by
 the configured Dependabot directory patterns.
+
+### Property-based testing with proptest
+
+`proptest` generates randomized inputs to verify invariants that must hold for
+all valid inputs.
+
+- Use the `proptest!` macro; write assertions with `prop_assert_eq!` /
+  `prop_assert!` rather than `assert_eq!` / `assert!` inside proptest bodies.
+- Property tests that mutate the process environment must acquire `EnvLock`
+  inside the strategy helper - never hold `EnvLock` across a `proptest!` loop
+  iteration boundary.
+- Canonical example: `src/cli/config_path_precedence_tests.rs` -
+  `resolve_config_path_obeys_precedence_invariant` asserts the
+  `explicit_config_path` selector-precedence invariant for generated optional
+  paths.
+
+### Parametrized unit tests with rstest
+
+Plain `#[rstest]` (not rstest-bdd) is used for exhaustive state-enumeration
+unit tests where a small fixed set of cases must all be verified.
+
+- Annotate the test function with `#[rstest]` and supply cases via
+  `#[case(...)]` parameters.
+- Canonical example: `src/cli/config_path_precedence_tests.rs` -
+  `resolve_config_path_precedence` enumerates all 2^3 = 8 combinations of
+  `--config`, `NETSUKE_CONFIG`, and `NETSUKE_CONFIG_PATH` presence.
 
 ## IR dependency classes
 

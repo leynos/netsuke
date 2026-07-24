@@ -2593,7 +2593,7 @@ config discovery and then proceed with the merged configuration.
 
 ```mermaid
 flowchart TD
-  Start([Start netsuke invocation])
+  Start(["Start netsuke invocation"])
   HasCliConfig{"CLI flag<br/>--config set?"}
   HasEnvConfig{"Env NETSUKE_CONFIG<br/>set?"}
   HasEnvConfigPath{"Env NETSUKE_CONFIG_PATH<br/>set?"}
@@ -2627,7 +2627,7 @@ flowchart TD
   CheckEnvPathFile -- No --> ErrorMissing
 
   RunDiscovery --> LoadConfig
-  LoadConfig --> End([Proceed with merged config])
+  LoadConfig --> End(["Proceed with merged config"])
   ErrorMissing --> End
 ```
 
