@@ -202,66 +202,30 @@ mod tests {
     }
 
     #[test]
-    fn resolve_merged_diag_json_honours_cli_diag_json_before_malformed_env() -> anyhow::Result<()> {
+    fn resolve_merged_diag_json_honours_cli_overrides_before_malformed_env() -> anyhow::Result<()> {
         let dir = tempdir()?;
         let config_path = dir.path().join("netsuke.toml");
         std::fs::write(&config_path, "diag_json = false\n")?;
-        let cli = Cli::parse_from([
-            "netsuke",
-            "--config",
-            config_path
-                .to_str()
-                .expect("temp config path should be UTF-8"),
-            "--diag-json",
-        ]);
-        let matches = Cli::command().get_matches_from([
-            "netsuke",
-            "--config",
-            config_path
-                .to_str()
-                .expect("temp config path should be UTF-8"),
-            "--diag-json",
-        ]);
+        let config_path = config_path
+            .to_str()
+            .expect("temp config path should be UTF-8");
         let env = TestEnv::default().with_var("NETSUKE_DIAG_JSON", "yes");
 
-        ensure!(
-            resolve_merged_diag_json_with_env(&cli, &matches, &env)?,
-            "CLI --diag-json should override malformed diagnostic JSON env"
-        );
+        for (description, override_args) in [
+            ("--diag-json", &["--diag-json"][..]),
+            ("--output-format json", &["--output-format", "json"][..]),
+        ] {
+            let mut args = vec!["netsuke", "--config", config_path];
+            args.extend_from_slice(override_args);
 
-        Ok(())
-    }
+            let cli = Cli::parse_from(&args);
+            let matches = Cli::command().get_matches_from(&args);
 
-    #[test]
-    fn resolve_merged_diag_json_honours_cli_output_format_before_malformed_env()
-    -> anyhow::Result<()> {
-        let dir = tempdir()?;
-        let config_path = dir.path().join("netsuke.toml");
-        std::fs::write(&config_path, "diag_json = false\n")?;
-        let cli = Cli::parse_from([
-            "netsuke",
-            "--config",
-            config_path
-                .to_str()
-                .expect("temp config path should be UTF-8"),
-            "--output-format",
-            "json",
-        ]);
-        let matches = Cli::command().get_matches_from([
-            "netsuke",
-            "--config",
-            config_path
-                .to_str()
-                .expect("temp config path should be UTF-8"),
-            "--output-format",
-            "json",
-        ]);
-        let env = TestEnv::default().with_var("NETSUKE_DIAG_JSON", "yes");
-
-        ensure!(
-            resolve_merged_diag_json_with_env(&cli, &matches, &env)?,
-            "CLI --output-format json should override malformed diagnostic JSON env"
-        );
+            ensure!(
+                resolve_merged_diag_json_with_env(&cli, &matches, &env)?,
+                "CLI {description} should override malformed diagnostic JSON env"
+            );
+        }
 
         Ok(())
     }
