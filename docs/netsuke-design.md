@@ -2704,7 +2704,7 @@ manual flag repetition.
   variables via Figment, and finally applies CLI overrides extracted from
   `ArgMatches`.
 - The `config_discovery()` function uses OrthoConfig's builder API without
-  further customisation beyond the application name and environment variable
+  further customization beyond the application name and environment variable
   override, relying on OrthoConfig's platform-specific defaults for standard
   directory resolution.
 - Netsuke-owned environment reads for explicit config selection and early

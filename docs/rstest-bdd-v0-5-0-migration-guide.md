@@ -47,6 +47,7 @@ fn scenario_returns_value() -> Result<u32, &'static str> {
 
 Values needed by later steps should be returned from step functions and
 injected via fixtures or slots.
+
 ### 2) Use explicit `Result`/`StepResult` in scenario signatures
 
 Scenario return classification does not resolve type aliases. When using an
