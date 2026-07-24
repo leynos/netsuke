@@ -308,7 +308,7 @@ invalid.
 Keep `[package.metadata.ortho_config]` in `Cargo.toml` aligned with the CLI
 when adding, renaming, or removing user-facing options. Changes to CLI
 documentation metadata should be covered by `rstest` workflow/script contract
-tests, plain `#[rstest]` parametrised cases for exhaustive state-enumeration
+tests, plain `#[rstest]` parametrized cases for exhaustive state-enumeration
 unit tests, and `rstest-bdd` release-help scenarios.
 `src/cli/config_path_precedence_tests.rs` is the canonical exhaustive
 state-enumeration example.
@@ -470,7 +470,7 @@ the configured Dependabot directory patterns.
 
 ### Property-based testing with proptest
 
-`proptest` generates randomised inputs to verify invariants that must hold for
+`proptest` generates randomized inputs to verify invariants that must hold for
 all valid inputs.
 
 - Use the `proptest!` macro; write assertions with `prop_assert_eq!` /
@@ -483,14 +483,13 @@ all valid inputs.
   `explicit_config_path` selector-precedence invariant for generated optional
   paths.
 
-### Parametrised unit tests with rstest
+### Parametrized unit tests with rstest
 
 Plain `#[rstest]` (not rstest-bdd) is used for exhaustive state-enumeration
 unit tests where a small fixed set of cases must all be verified.
 
 - Annotate the test function with `#[rstest]` and supply cases via
-  `#[case(...)]`
-  parameters.
+  `#[case(...)]` parameters.
 - Canonical example: `src/cli/config_path_precedence_tests.rs` -
   `resolve_config_path_precedence` enumerates all 2^3 = 8 combinations of
   `--config`, `NETSUKE_CONFIG`, and `NETSUKE_CONFIG_PATH` presence.
