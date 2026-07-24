@@ -170,8 +170,11 @@ pub(crate) fn collect_diag_file_layers_with_env(
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for config discovery through injected environment access.
+
     use super::*;
     use anyhow::ensure;
+    use cap_std::{ambient_authority, fs::Dir};
     use rstest::rstest;
     use std::collections::HashMap;
     use tempfile::tempdir;
@@ -265,7 +268,8 @@ mod tests {
     ) -> anyhow::Result<()> {
         let dir = tempdir()?;
         let config_path = dir.path().join("netsuke.toml");
-        std::fs::write(&config_path, "diag_json = true\n")?;
+        let config_dir = Dir::open_ambient_dir(dir.path(), ambient_authority())?;
+        config_dir.write("netsuke.toml", b"diag_json = true\n")?;
 
         let env = TestEnv::default().with_var(config_var, config_path.as_os_str());
         let layers = collect_diag_file_layers_with_env(&Cli::default(), &env)?;

@@ -117,8 +117,11 @@ fn diag_json_from_env(env: &impl EnvProvider) -> OrthoResult<Option<bool>> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for early diagnostic JSON preference resolution.
+
     use super::*;
     use anyhow::ensure;
+    use cap_std::{ambient_authority, fs::Dir};
     use clap::CommandFactory;
     use clap::Parser;
     use serde_json::json;
@@ -165,7 +168,8 @@ mod tests {
     fn resolve_merged_diag_json_reads_injected_env() -> anyhow::Result<()> {
         let dir = tempdir()?;
         let config_path = dir.path().join("netsuke.toml");
-        std::fs::write(&config_path, "diag_json = false\n")?;
+        let config_dir = Dir::open_ambient_dir(dir.path(), ambient_authority())?;
+        config_dir.write("netsuke.toml", b"diag_json = false\n")?;
         let matches = Cli::command().get_matches_from(["netsuke"]);
         let cli = Cli {
             config: Some(config_path),
@@ -185,7 +189,9 @@ mod tests {
     fn resolve_merged_diag_json_rejects_malformed_injected_env() {
         let dir = tempdir().expect("tempdir");
         let config_path = dir.path().join("netsuke.toml");
-        std::fs::write(&config_path, "").expect("write config");
+        let config_dir = Dir::open_ambient_dir(dir.path(), ambient_authority())
+            .expect("open temp config directory");
+        config_dir.write("netsuke.toml", b"").expect("write config");
         let matches = Cli::command().get_matches_from(["netsuke"]);
         let cli = Cli {
             config: Some(config_path),
@@ -205,8 +211,9 @@ mod tests {
     fn resolve_merged_diag_json_honours_cli_overrides_before_malformed_env() -> anyhow::Result<()> {
         let dir = tempdir()?;
         let config_path = dir.path().join("netsuke.toml");
-        std::fs::write(&config_path, "diag_json = false\n")?;
-        let config_path = config_path
+        let config_dir = Dir::open_ambient_dir(dir.path(), ambient_authority())?;
+        config_dir.write("netsuke.toml", b"diag_json = false\n")?;
+        let config_path_string = config_path
             .to_str()
             .expect("temp config path should be UTF-8");
         let env = TestEnv::default().with_var("NETSUKE_DIAG_JSON", "yes");
@@ -215,7 +222,7 @@ mod tests {
             ("--diag-json", &["--diag-json"][..]),
             ("--output-format json", &["--output-format", "json"][..]),
         ] {
-            let mut args = vec!["netsuke", "--config", config_path];
+            let mut args = vec!["netsuke", "--config", config_path_string];
             args.extend_from_slice(override_args);
 
             let cli = Cli::parse_from(&args);

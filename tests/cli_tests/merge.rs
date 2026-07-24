@@ -9,8 +9,7 @@ use netsuke::cli_localization;
 use ortho_config::{MergeComposer, sanitize_value};
 use rstest::{fixture, rstest};
 use serde_json::json;
-use std::collections::HashMap;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsStr;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
@@ -278,27 +277,6 @@ fn cli_merge_layers_prefers_cli_then_env_then_file_for_locale(
 }
 
 #[rstest]
-fn resolve_merged_diag_json_honours_injected_env() -> Result<()> {
-    let temp_dir = tempdir().context("create temporary config directory")?;
-    let config_path = temp_dir.path().join("netsuke.toml");
-    fs::write(&config_path, "diag_json = false\n").context("write netsuke.toml")?;
-
-    let localizer = Arc::from(cli_localization::build_localizer(None));
-    let config_arg = config_path.to_string_lossy().into_owned();
-    let (cli, matches) =
-        netsuke::cli::parse_with_localizer_from(["netsuke", "--config", &config_arg], &localizer)
-            .context("parse CLI args for injected diag_json env")?;
-    let env = TestEnv::default().with_var("NETSUKE_DIAG_JSON", "1");
-
-    ensure!(
-        netsuke::cli::resolve_merged_diag_json_with_env(&cli, &matches, &env)?,
-        "injected NETSUKE_DIAG_JSON should override file config",
-    );
-
-    Ok(())
-}
-
-#[rstest]
 fn cli_config_build_defaults_apply_when_cli_targets_are_absent() -> Result<()> {
     assert_build_targets(
         r#"
@@ -397,22 +375,4 @@ fn cli_runtime_canonicalizes_ascii_theme_from_no_emoji_alias() -> Result<()> {
         );
         Ok(())
     })
-}
-
-#[derive(Default)]
-struct TestEnv {
-    values: HashMap<&'static str, OsString>,
-}
-
-impl TestEnv {
-    fn with_var(mut self, name: &'static str, value: impl Into<OsString>) -> Self {
-        self.values.insert(name, value.into());
-        self
-    }
-}
-
-impl netsuke::cli::ConfigEnvProvider for TestEnv {
-    fn get(&self, key: &str) -> Option<OsString> {
-        self.values.get(key).cloned()
-    }
 }
