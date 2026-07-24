@@ -18,6 +18,7 @@ use crate::graph_view::render_dot::DotRenderer;
 use crate::graph_view::render_html::HtmlRenderer;
 use crate::ir::BuildGraph;
 use crate::localization::{self, keys};
+use crate::result_json;
 use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipeline_stage};
 
 use super::path_helpers::{
@@ -73,6 +74,9 @@ pub(super) fn handle_graph(
 }
 
 fn write_graph_artefact(cli: &Cli, output: Option<&Path>, content: &str) -> Result<()> {
+    if cli.json {
+        return write_json_graph_artefact(cli, output, content);
+    }
     match output {
         None => process::write_text_stdout(content),
         Some(path) if process::is_stdout_path(path) => process::write_text_stdout(content),
@@ -81,4 +85,21 @@ fn write_graph_artefact(cli: &Cli, output: Option<&Path>, content: &str) -> Resu
             process::write_text_file(resolved.as_ref(), content)
         }
     }
+}
+
+fn write_json_graph_artefact(cli: &Cli, output: Option<&Path>, content: &str) -> Result<()> {
+    match output.filter(|path| !process::is_stdout_path(path)) {
+        Some(path) => {
+            let resolved = resolve_output_path(cli, path);
+            process::write_text_file(resolved.as_ref(), content)?;
+            write_json_result(None)
+        }
+        None => write_json_result(Some(content)),
+    }
+}
+
+fn write_json_result(content: Option<&str>) -> Result<()> {
+    let rendered = result_json::render_result_json("graph", content)
+        .context(localization::message(keys::RUNNER_CONTEXT_RENDER_GRAPH))?;
+    process::write_text_stdout(&rendered)
 }

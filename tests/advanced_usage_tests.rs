@@ -2,14 +2,18 @@
 //!
 //! These tests cover edge cases and unhappy paths not reached by the BDD
 //! scenarios in `tests/features/advanced_usage.feature`. They validate
-//! the documented behaviour of `clean`, `graph`, `manifest`, configuration
+//! the documented behaviour of `clean`, `graph`, `generate`, configuration
 //! layering, and JSON diagnostics.
 
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
+use serde_json::Value;
 use std::path::Path;
 use tempfile::{TempDir, tempdir};
 use test_support::check_ninja::fake_ninja_check_build_file;
+#[cfg(unix)]
+use test_support::check_ninja::{ToolName, fake_ninja_expect_tool};
+use test_support::fs as test_fs;
 use test_support::netsuke::run_netsuke_in_with_env;
 
 /// Captured output from a netsuke invocation.
@@ -74,6 +78,32 @@ fn setup_minimal_workspace(context: &str) -> Result<TempDir> {
     Ok(temp)
 }
 
+fn assert_json_success(output: &CommandOutput, expected_command: &str) -> Result<()> {
+    ensure!(output.success, "{expected_command} should succeed");
+    ensure!(
+        output.stderr.is_empty(),
+        "{expected_command} should keep stderr empty: {}",
+        output.stderr
+    );
+    let document: Value =
+        serde_json::from_str(&output.stdout).context("stdout should be valid JSON")?;
+    ensure!(
+        document.get("schema_version").and_then(Value::as_u64) == Some(1),
+        "JSON result should use schema version 1: {document}"
+    );
+    ensure!(
+        document.pointer("/result/command").and_then(Value::as_str) == Some(expected_command),
+        "JSON result should identify the {expected_command} command: {document}"
+    );
+    ensure!(
+        document
+            .pointer("/result/content")
+            .is_some_and(Value::is_null),
+        "JSON result content should be null: {document}"
+    );
+    Ok(())
+}
+
 /// Shared workspace setup for configuration-layering tests.
 ///
 /// Creates a minimal workspace, writes `config_content` to `.netsuke.toml`,
@@ -101,25 +131,45 @@ fn run_config_layer_build(
 // Clean subcommand edge cases
 // -------------------------------------------------------------------------
 
-#[test]
+#[cfg(unix)]
+#[rstest]
 fn clean_without_prior_build_handles_gracefully() -> Result<()> {
     let workspace = setup_minimal_workspace("clean without prior build")?;
-    let (_ninja_dir, ninja_path) = fake_ninja_check_build_file()?;
+    let (_ninja_dir, ninja_path) = fake_ninja_expect_tool(ToolName::new("clean"))?;
 
     let output = run_netsuke(workspace.path(), &["clean"], Some(ninja_path.as_path()))?;
 
-    // Clean in a workspace that has never been built should either succeed
-    // as a no-op or fail with a clear message about missing build state.
-    // The actual behaviour depends on ninja; either outcome is acceptable.
     ensure!(
-        output.success
-            || output.stderr.contains("missing build file")
-            || output.stderr.contains(".ninja_log"),
-        "expected clean to succeed or fail with a build-state-related \
-         diagnostic, got stderr:\n{}",
+        output.success,
+        "clean without a prior build should dispatch the clean tool successfully: {}",
         output.stderr
     );
     Ok(())
+}
+
+#[rstest]
+fn build_json_emits_success_result() -> Result<()> {
+    let workspace = setup_minimal_workspace("JSON build success")?;
+    let (_ninja_dir, ninja_path) = fake_ninja_check_build_file()?;
+    let output = run_netsuke(
+        workspace.path(),
+        &["--json", "build"],
+        Some(ninja_path.as_path()),
+    )?;
+    assert_json_success(&output, "build")
+}
+
+#[cfg(unix)]
+#[rstest]
+fn clean_json_dispatches_tool_and_emits_success_result() -> Result<()> {
+    let workspace = setup_minimal_workspace("JSON clean success")?;
+    let (_ninja_dir, ninja_path) = fake_ninja_expect_tool(ToolName::new("clean"))?;
+    let output = run_netsuke(
+        workspace.path(),
+        &["--json", "clean"],
+        Some(ninja_path.as_path()),
+    )?;
+    assert_json_success(&output, "clean")
 }
 
 // -------------------------------------------------------------------------
@@ -146,26 +196,30 @@ fn graph_with_invalid_manifest_fails_with_actionable_error() -> Result<()> {
 }
 
 // -------------------------------------------------------------------------
-// Manifest subcommand edge cases
+// Generate subcommand edge cases
 // -------------------------------------------------------------------------
 
 #[test]
-fn manifest_to_unwritable_path_fails_with_path_error() -> Result<()> {
-    let workspace = setup_minimal_workspace("manifest to unwritable path")?;
+fn generate_to_unwritable_path_fails_with_path_error() -> Result<()> {
+    let workspace = setup_minimal_workspace("generate to unwritable path")?;
     // Create a regular file that blocks the parent directory creation.
     let blocker = workspace.path().join("blocker");
-    std::fs::write(&blocker, "").context("create blocker file")?;
+    test_fs::write(&blocker, "").context("create blocker file")?;
     let bad_path = blocker.join("out.ninja");
 
     let output = run_netsuke(
         workspace.path(),
-        &["manifest", bad_path.to_str().expect("path is UTF-8")],
+        &[
+            "generate",
+            "--output",
+            bad_path.to_str().expect("path is UTF-8"),
+        ],
         None,
     )?;
 
     ensure!(
         !output.success,
-        "expected manifest to unwritable path to fail"
+        "expected generate to unwritable path to fail"
     );
     ensure!(
         output.stderr.contains("blocker"),
@@ -176,20 +230,24 @@ fn manifest_to_unwritable_path_fails_with_path_error() -> Result<()> {
 }
 
 #[test]
-fn manifest_to_missing_parent_directory_succeeds_by_creating_parents() -> Result<()> {
-    let workspace = setup_minimal_workspace("manifest to missing parent")?;
+fn generate_to_missing_parent_directory_succeeds_by_creating_parents() -> Result<()> {
+    let workspace = setup_minimal_workspace("generate to missing parent")?;
     // Netsuke automatically creates missing parent directories.
     let nested_path = workspace.path().join("missing_parent").join("out.ninja");
 
     let output = run_netsuke(
         workspace.path(),
-        &["manifest", nested_path.to_str().expect("path is UTF-8")],
+        &[
+            "generate",
+            "--output",
+            nested_path.to_str().expect("path is UTF-8"),
+        ],
         None,
     )?;
 
     ensure!(
         output.success,
-        "expected manifest to succeed and create parent directories"
+        "expected generate to succeed and create parent directories"
     );
     ensure!(
         nested_path.exists(),
@@ -241,11 +299,7 @@ fn json_diagnostics_with_verbose_produces_valid_json() -> Result<()> {
     let manifest = workspace.path().join("Netsukefile");
     std::fs::write(&manifest, "not_valid_yaml: [[[").context("write invalid manifest")?;
 
-    let output = run_netsuke(
-        workspace.path(),
-        &["--diag-json", "--verbose", "build"],
-        None,
-    )?;
+    let output = run_netsuke(workspace.path(), &["--json", "--verbose", "build"], None)?;
 
     ensure!(
         !output.success,
@@ -264,26 +318,25 @@ fn json_diagnostics_with_verbose_produces_valid_json() -> Result<()> {
     // stdout should be empty when diagnostics go to stderr
     ensure!(
         output.stdout.trim().is_empty(),
-        "expected stdout to be empty with --diag-json, got:\n{}",
+        "expected stdout to be empty with --json, got:\n{}",
         output.stdout
     );
     Ok(())
 }
 
 #[test]
-fn manifest_to_stdout_contains_ninja_rules() -> Result<()> {
-    let workspace = setup_minimal_workspace("manifest to stdout")?;
+fn generate_to_stdout_contains_ninja_rules() -> Result<()> {
+    let workspace = setup_minimal_workspace("generate to stdout")?;
 
-    let output = run_netsuke(workspace.path(), &["manifest", "-"], None)?;
+    let output = run_netsuke(workspace.path(), &["generate"], None)?;
 
-    ensure!(output.success, "expected manifest to stdout to succeed");
+    ensure!(output.success, "expected generate to stdout to succeed");
     ensure!(
         output.stdout.contains("rule "),
         "expected stdout to contain Ninja rule statements, got:\n{}",
         output.stdout
     );
-    // Progress output goes to stderr; the manifest content goes to stdout.
-    // This separation allows manifest output to be cleanly piped.
+    // Progress output goes to stderr; the generated content goes to stdout.
     ensure!(
         !output.stderr.contains("rule "),
         "expected progress messages on stderr, not manifest content, got:\n{}",
@@ -298,13 +351,13 @@ fn manifest_to_stdout_contains_ninja_rules() -> Result<()> {
 fn invalid_config_value_reports_validation_error() -> Result<()> {
     let workspace = setup_minimal_workspace("invalid config value")?;
     let config = workspace.path().join(".netsuke.toml");
-    std::fs::write(&config, "colour_policy = \"loud\"\n").context("write invalid config file")?;
+    std::fs::write(&config, "color = \"loud\"\n").context("write invalid config file")?;
 
-    let output = run_netsuke_with_env(workspace.path(), &["manifest", "-"], None, &[])?;
+    let output = run_netsuke_with_env(workspace.path(), &["generate"], None, &[])?;
 
     ensure!(
         !output.success,
-        "expected manifest with invalid config to fail"
+        "expected generate with invalid config to fail"
     );
     // The error message should mention the invalid value and valid options.
     ensure!(

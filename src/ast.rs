@@ -121,8 +121,7 @@ pub struct NetsukeManifest {
 ///
 /// A rule encapsulates a snippet of work that can be referenced by multiple
 /// targets. It may define a command line, a script block, or delegate to another
-/// named rule. Dependencies may be specified as either a single string or a
-/// list of strings.
+/// named rule.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Rule {
@@ -133,9 +132,6 @@ pub struct Rule {
     pub recipe: Recipe,
     /// Optional human-friendly summary.
     pub description: Option<String>,
-    /// Prerequisites for the rule. Empty by default.
-    #[serde(default)]
-    pub deps: StringOrList,
 }
 
 /// Execution style for rules and targets.

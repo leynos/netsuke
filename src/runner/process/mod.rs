@@ -219,7 +219,7 @@ where
     run_command_and_stream_with_context(
         cmd,
         request.status_observer,
-        request.cli.resolved_diag_json(),
+        request.cli.json,
         request.operation,
     )
 }
@@ -294,6 +294,21 @@ fn handle_forwarding_thread_result(result: thread::Result<ForwardStats>, stream_
     }
 }
 
+fn forward_stdout(
+    stdout: impl io::Read,
+    output: &mut impl io::Write,
+    status_observer: Option<StatusObserver<'_>>,
+) -> ForwardStats {
+    match status_observer {
+        Some(observer) => forward_child_output_with_ninja_status(
+            BufReader::new(stdout),
+            output,
+            observer,
+            "stdout",
+        ),
+        None => forward_child_output(BufReader::new(stdout), output, "stdout"),
+    }
+}
 fn spawn_and_stream_output(
     mut child: Child,
     status_observer: Option<StatusObserver<'_>>,
@@ -323,17 +338,12 @@ fn spawn_and_stream_output(
     // Intentionally drain stdout on the main thread when `status_observer` is
     // present so forwarding and callback-driven status updates keep a stable
     // ordering; moving this elsewhere can regress output timing/interleaving.
-    let stdout_stats = {
-        let mut lock = io::stdout().lock();
-        match status_observer {
-            Some(observer) => forward_child_output_with_ninja_status(
-                BufReader::new(stdout),
-                &mut lock,
-                observer,
-                "stdout",
-            ),
-            None => forward_child_output(BufReader::new(stdout), &mut lock, "stdout"),
-        }
+    let stdout_stats = if suppress_stderr {
+        let mut output = io::sink();
+        forward_stdout(stdout, &mut output, status_observer)
+    } else {
+        let mut output = io::stdout().lock();
+        forward_stdout(stdout, &mut output, status_observer)
     };
 
     let status = child.wait()?;

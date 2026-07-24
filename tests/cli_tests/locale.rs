@@ -1,10 +1,10 @@
-//! Locale and diagnostic JSON hint CLI tests.
+//! Locale and JSON hint CLI tests.
 
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
 
 use crate::cli_tests::helpers::os_args;
-use netsuke::cli::{diag_json_hint_from_args, locale_hint_from_args};
+use netsuke::cli::{json_hint_from_args, locale_hint_from_args};
 use netsuke::cli_localization;
 use std::sync::Arc;
 
@@ -64,53 +64,37 @@ fn locale_hint_from_args_uses_last_locale_flag() -> Result<()> {
 }
 
 #[rstest]
-fn diag_json_hint_from_args_accepts_bare_flag() -> Result<()> {
-    let args = os_args(&["netsuke", "--diag-json"]);
-    let hint = diag_json_hint_from_args(&args);
+fn json_hint_from_args_accepts_bare_flag() -> Result<()> {
+    let args = os_args(&["netsuke", "--json"]);
+    let hint = json_hint_from_args(&args);
     ensure!(hint == Some(true), "expected Some(true), got: {hint:?}");
     Ok(())
 }
 
 #[rstest]
-fn diag_json_hint_from_args_ignores_equals_form() -> Result<()> {
-    let args = os_args(&["netsuke", "--diag-json=false"]);
-    let hint = diag_json_hint_from_args(&args);
+fn json_hint_from_args_ignores_equals_form() -> Result<()> {
+    let args = os_args(&["netsuke", "--json=false"]);
+    let hint = json_hint_from_args(&args);
     ensure!(hint.is_none(), "expected None, got: {hint:?}");
     Ok(())
 }
 
 #[rstest]
-fn diag_json_hint_from_args_ignores_args_after_double_dash() -> Result<()> {
-    let args = os_args(&["netsuke", "--", "--diag-json"]);
-    let hint = diag_json_hint_from_args(&args);
+fn json_hint_from_args_ignores_args_after_double_dash() -> Result<()> {
+    let args = os_args(&["netsuke", "--", "--json"]);
+    let hint = json_hint_from_args(&args);
     ensure!(
         hint.is_none(),
-        "expected None when --diag-json appears after \"--\", got: {hint:?}"
+        "expected None when --json appears after \"--\", got: {hint:?}"
     );
     Ok(())
 }
 
 #[rstest]
-fn diag_json_hint_from_args_detects_bare_flag_after_ignored_equals_form() -> Result<()> {
-    let args = os_args(&["netsuke", "--diag-json=false", "--diag-json"]);
-    let hint = diag_json_hint_from_args(&args);
+fn json_hint_from_args_detects_bare_flag_after_ignored_equals_form() -> Result<()> {
+    let args = os_args(&["netsuke", "--json=false", "--json"]);
+    let hint = json_hint_from_args(&args);
     ensure!(hint == Some(true), "expected Some(true), got: {hint:?}");
-    Ok(())
-}
-
-#[rstest]
-#[case::space_json(vec!["netsuke", "--output-format", "json"], Some(true))]
-#[case::equals_json(vec!["netsuke", "--output-format=json"], Some(true))]
-#[case::space_human(vec!["netsuke", "--diag-json", "--output-format", "human"], Some(false))]
-#[case::equals_human(vec!["netsuke", "--diag-json", "--output-format=human"], Some(false))]
-#[case::invalid(vec!["netsuke", "--output-format", "tap"], None)]
-fn diag_json_hint_from_args_honours_output_format(
-    #[case] raw_args: Vec<&str>,
-    #[case] expected: Option<bool>,
-) -> Result<()> {
-    let args = os_args(&raw_args);
-    let hint = diag_json_hint_from_args(&args);
-    ensure!(hint == expected, "expected {expected:?}, got: {hint:?}");
     Ok(())
 }
 

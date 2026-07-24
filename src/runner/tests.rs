@@ -2,6 +2,7 @@
 
 use super::*;
 use rstest::rstest;
+use std::path::Path;
 use std::path::PathBuf;
 
 #[rstest]

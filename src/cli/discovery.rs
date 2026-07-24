@@ -15,7 +15,6 @@ use std::sync::Arc;
 use super::parser::Cli;
 
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG";
-const CONFIG_ENV_VAR_LEGACY: &str = "NETSUKE_CONFIG_PATH";
 
 pub(crate) fn push_file_layers(
     cli: &Cli,
@@ -37,7 +36,7 @@ pub(crate) fn push_file_layers(
 }
 
 fn config_discovery(directory: Option<&PathBuf>) -> ConfigDiscovery {
-    let mut builder = ConfigDiscovery::builder("netsuke").env_var(CONFIG_ENV_VAR_LEGACY);
+    let mut builder = ConfigDiscovery::builder("netsuke").env_var(CONFIG_ENV_VAR);
     if let Some(dir) = directory {
         builder = builder.clear_project_roots().add_project_root(dir);
     }
@@ -104,7 +103,6 @@ pub(crate) fn explicit_config_path(cli: &Cli) -> Option<PathBuf> {
     cli.config
         .clone()
         .or_else(|| env_config_path(CONFIG_ENV_VAR))
-        .or_else(|| env_config_path(CONFIG_ENV_VAR_LEGACY))
 }
 
 fn env_config_path(var_name: &str) -> Option<PathBuf> {
@@ -141,9 +139,9 @@ pub(crate) fn collect_diag_file_layers(cli: &Cli) -> OrthoResult<Vec<MergeLayer<
 }
 
 /// Tests for the explicit config-path selector precedence implemented by
-/// [`explicit_config_path`]. Enumerated cases cover all 2^3 combinations of
-/// `--config`, `NETSUKE_CONFIG`, and `NETSUKE_CONFIG_PATH` presence; a proptest
-/// property test asserts the invariant for generated path values.
+/// [`explicit_config_path`]. Enumerated cases cover every combination of
+/// `--config` and `NETSUKE_CONFIG` presence; a proptest property test asserts
+/// the invariant for generated path values.
 #[cfg(test)]
 #[path = "config_path_precedence_tests.rs"]
 mod config_path_precedence_tests;

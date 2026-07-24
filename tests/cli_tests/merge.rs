@@ -4,7 +4,7 @@
 //! CLI) and list-value appending.
 
 use anyhow::{Context, Result, ensure};
-use netsuke::cli::{CliConfig, Theme};
+use netsuke::cli::{CliConfig, ProgressPolicy};
 use netsuke::cli_localization;
 use ortho_config::{MergeComposer, sanitize_value};
 use rstest::{fixture, rstest};
@@ -29,8 +29,7 @@ where
     let temp_dir = tempfile::tempdir().context("create temporary config directory")?;
     let config_path = temp_dir.path().join("netsuke.toml");
     std::fs::write(&config_path, toml_content).context("write netsuke.toml")?;
-    let _config_guard =
-        test_support::EnvVarGuard::set("NETSUKE_CONFIG_PATH", config_path.as_os_str());
+    let _config_guard = test_support::EnvVarGuard::set("NETSUKE_CONFIG", config_path.as_os_str());
     let localizer = std::sync::Arc::from(netsuke::cli_localization::build_localizer(None));
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(cli_args, &localizer)
         .context("parse CLI args for merge")?;
@@ -60,28 +59,14 @@ fn assert_build_targets(
 
 #[derive(Debug, Copy, Clone)]
 enum ExpectedValidationError {
-    ThemeUnicodeWithNoEmoji,
-    ThemeAsciiWithNoEmojiDisabled,
-    SpinnerDisabledWithProgress,
-    SpinnerEnabledWithProgressDisabled,
-    UnsupportedOutputFormat,
+    InteractiveInput,
     JobsOutOfRange,
 }
 
 impl ExpectedValidationError {
     const fn expected_fragment(self) -> &'static str {
         match self {
-            Self::ThemeUnicodeWithNoEmoji => "theme = \"unicode\" conflicts with no_emoji = true",
-            Self::ThemeAsciiWithNoEmojiDisabled => {
-                "theme = \"ascii\" conflicts with no_emoji = false"
-            }
-            Self::SpinnerDisabledWithProgress => {
-                "spinner_mode = \"disabled\" conflicts with progress = true"
-            }
-            Self::SpinnerEnabledWithProgressDisabled => {
-                "spinner_mode = \"enabled\" conflicts with progress = false"
-            }
-            Self::UnsupportedOutputFormat => "output_format = \"json\" is not supported yet",
+            Self::InteractiveInput => "no_input = false is unsupported",
             Self::JobsOutOfRange => "jobs = 65 is out of range",
         }
     }
@@ -102,19 +87,9 @@ fn assert_merge_rejects(
     file_layer: serde_json::Value,
     expected_error: ExpectedValidationError,
 ) -> anyhow::Result<()> {
-    let err = if matches!(
-        expected_error,
-        ExpectedValidationError::UnsupportedOutputFormat
-    ) {
-        match with_config_file("output_format = \"json\"\n", &["netsuke"], |_| Ok(())) {
-            Ok(()) => anyhow::bail!("merge should have returned an error"),
-            Err(err) => err,
-        }
-    } else {
-        match merge_defaults_with_file_layer(defaults, file_layer) {
-            Ok(value) => anyhow::bail!("merge should have returned an error; got {value:#?}"),
-            Err(err) => err,
-        }
+    let err = match merge_defaults_with_file_layer(defaults, file_layer) {
+        Ok(value) => anyhow::bail!("merge should have returned an error; got {value:#?}"),
+        Err(err) => err,
     };
     ensure!(
         err.chain().any(|cause| cause
@@ -136,8 +111,8 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
         .context("defaults should be an object")?;
     defaults_object.insert("jobs".to_owned(), json!(1));
     defaults_object.insert("fetch_allow_scheme".to_owned(), json!(["https"]));
-    defaults_object.insert("progress".to_owned(), json!(true));
-    defaults_object.insert("diag_json".to_owned(), json!(false));
+    defaults_object.insert("progress".to_owned(), json!("auto"));
+    defaults_object.insert("json".to_owned(), json!(false));
     composer.push_defaults(defaults);
     composer.push_file(
         json!({
@@ -145,22 +120,22 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
             "jobs": 2,
             "fetch_allow_scheme": ["http"],
             "locale": "en-US",
-            "progress": false,
-            "diag_json": true
+            "progress": "never",
+            "json": true
         }),
         None,
     );
     composer.push_environment(json!({
         "jobs": 3,
         "fetch_allow_scheme": ["ftp"],
-        "progress": true,
-        "diag_json": false
+        "progress": "always",
+        "json": false
     }));
     composer.push_cli(json!({
         "jobs": 4,
         "fetch_allow_scheme": ["git"],
-        "progress": false,
-        "diag_json": true,
+        "progress": "never",
+        "json": true,
         "verbose": true
     }));
     let merged = CliConfig::merge_from_layers(composer.layers())?;
@@ -174,13 +149,10 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
         "list values should append in layer order",
     );
     ensure!(
-        merged.progress == Some(false),
+        merged.progress == ProgressPolicy::Never,
         "CLI layer should override progress setting",
     );
-    ensure!(
-        merged.diag_json,
-        "CLI layer should override diag_json setting",
-    );
+    ensure!(merged.json, "CLI layer should override json setting",);
     ensure!(
         merged.locale.as_deref() == Some("en-US"),
         "file layer should populate locale when CLI does not override",
@@ -201,12 +173,12 @@ fetch_allow_scheme = ["https"]
 verbose = true
 fetch_default_deny = true
 locale = "es-ES"
-progress = false
-diag_json = true
+progress = "never"
+json = true
 "#;
     fs::write(&config_path, config).context("write netsuke.toml")?;
 
-    let _config_guard = EnvVarGuard::set("NETSUKE_CONFIG_PATH", config_path.as_os_str());
+    let _config_guard = EnvVarGuard::set("NETSUKE_CONFIG", config_path.as_os_str());
     let _jobs_guard = EnvVarGuard::set("NETSUKE_JOBS", OsStr::new("4"));
     let _scheme_guard = EnvVarGuard::remove("NETSUKE_FETCH_ALLOW_SCHEME");
 
@@ -214,8 +186,8 @@ diag_json = true
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
         .context("parse CLI args for merge")?;
     ensure!(
-        netsuke::cli::resolve_merged_diag_json(&cli, &matches),
-        "pre-merge diagnostic mode should honour config diag_json",
+        netsuke::cli::resolve_merged_json(&cli, &matches),
+        "pre-merge JSON mode should honour config json",
     );
     let merged = netsuke::cli::merge_with_config(&cli, &matches)
         .context("merge CLI and configuration layers")?
@@ -246,12 +218,12 @@ diag_json = true
         "config locale should be retained when CLI does not override",
     );
     ensure!(
-        merged.progress == Some(false),
+        merged.progress == ProgressPolicy::Never,
         "config progress should apply when CLI and env do not override",
     );
     ensure!(
-        merged.diag_json,
-        "config diag_json should apply when CLI and env do not override",
+        merged.json,
+        "config json should apply when CLI and env do not override",
     );
 
     Ok(())
@@ -301,28 +273,17 @@ targets = ["all"]
 }
 
 #[rstest]
-fn cli_default_target_and_build_emit_are_merged_not_overwritten() -> Result<()> {
+fn cli_default_target_is_preserved_for_build() -> Result<()> {
     with_config_file(
         "",
-        &[
-            "netsuke",
-            "--default-target",
-            "all",
-            "build",
-            "--emit",
-            "out.ninja",
-        ],
+        &["netsuke", "--default-target", "all", "build"],
         |merged| {
             let Some(netsuke::cli::Commands::Build(args)) = merged.command else {
                 anyhow::bail!("expected merged command to be build");
             };
             ensure!(
                 !args.targets.is_empty(),
-                "--default-target should survive when build --emit is also supplied; got empty targets",
-            );
-            ensure!(
-                args.emit.as_deref() == Some(std::path::Path::new("out.ninja")),
-                "--emit should be present alongside --default-target",
+                "--default-target should be retained for build",
             );
             Ok(())
         },
@@ -330,26 +291,7 @@ fn cli_default_target_and_build_emit_are_merged_not_overwritten() -> Result<()> 
 }
 
 #[rstest]
-#[case(
-    json!({ "theme": "unicode", "no_emoji": true }),
-    ExpectedValidationError::ThemeUnicodeWithNoEmoji,
-)]
-#[case(
-    json!({ "theme": "ascii", "no_emoji": false }),
-    ExpectedValidationError::ThemeAsciiWithNoEmojiDisabled,
-)]
-#[case(
-    json!({ "spinner_mode": "disabled", "progress": true }),
-    ExpectedValidationError::SpinnerDisabledWithProgress,
-)]
-#[case(
-    json!({ "spinner_mode": "enabled", "progress": false }),
-    ExpectedValidationError::SpinnerEnabledWithProgressDisabled,
-)]
-#[case(
-    json!({ "output_format": "json" }),
-    ExpectedValidationError::UnsupportedOutputFormat,
-)]
+#[case(json!({ "no_input": false }), ExpectedValidationError::InteractiveInput)]
 #[case(
     json!({ "jobs": 65 }),
     ExpectedValidationError::JobsOutOfRange,
@@ -360,19 +302,4 @@ fn cli_config_rejects_conflicting_or_unsupported_settings(
     #[case] expected_error: ExpectedValidationError,
 ) -> Result<()> {
     assert_merge_rejects(default_cli_json?, file_layer, expected_error)
-}
-
-#[rstest]
-fn cli_runtime_canonicalizes_ascii_theme_from_no_emoji_alias() -> Result<()> {
-    with_config_file("no_emoji = true\n", &["netsuke"], |merged| {
-        ensure!(
-            merged.theme == Some(Theme::Ascii.into()),
-            "no_emoji compatibility alias should canonicalize to the ASCII theme",
-        );
-        ensure!(
-            merged.no_emoji == Some(true),
-            "no_emoji alias should remain available in the runtime CLI",
-        );
-        Ok(())
-    })
 }

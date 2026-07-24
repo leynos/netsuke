@@ -14,12 +14,14 @@ pub mod graph_view;
 pub mod hasher;
 pub mod host_pattern;
 pub mod ir;
+mod json_envelope;
 pub mod locale_resolution;
 pub mod localization;
 pub mod manifest;
 pub mod ninja_gen;
 pub mod output_mode;
 pub mod output_prefs;
+mod result_json;
 pub mod runner;
 #[cfg(test)]
 mod snapshot_test_support;

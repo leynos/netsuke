@@ -20,7 +20,6 @@ use rstest_bdd_macros::{given, then, when};
 fn simulated_env(world: &TestWorld) -> impl Fn(&str) -> Option<String> + '_ {
     move |key| match key {
         "NO_COLOR" => world.simulated_no_color.get(),
-        "NETSUKE_NO_EMOJI" => world.simulated_no_emoji.get(),
         _ => None,
     }
 }
@@ -28,16 +27,6 @@ fn simulated_env(world: &TestWorld) -> impl Fn(&str) -> Option<String> + '_ {
 // ---------------------------------------------------------------------------
 // Given steps: configure simulated environment
 // ---------------------------------------------------------------------------
-
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd macro generates Result wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
-)]
-#[given("the simulated NETSUKE_NO_EMOJI is {value:string}")]
-fn set_simulated_netsuke_no_emoji(world: &TestWorld, value: EnvVarValue) -> Result<()> {
-    world.simulated_no_emoji.set(value.into_string());
-    Ok(())
-}
 
 #[expect(
     clippy::unnecessary_wraps,
@@ -170,57 +159,57 @@ fn prefix_contains(world: &TestWorld, expected: EnvVarValue) -> Result<()> {
     Ok(())
 }
 
-#[then("the prefix contains no non-ASCII characters")]
-fn prefix_is_ascii(world: &TestWorld) -> Result<()> {
+fn verify_prefix_ascii_state(world: &TestWorld, expected_ascii: bool) -> Result<()> {
     let rendered = world
         .rendered_prefix
         .get()
         .ok_or_else(|| anyhow::anyhow!("prefix has not been rendered"))?;
     let normalized_rendered = normalize_fluent_isolates(&rendered);
+    let expected_output = if expected_ascii {
+        "ASCII-only output"
+    } else {
+        "non-ASCII/emoji output"
+    };
     ensure!(
-        normalized_rendered.is_ascii(),
-        "expected ASCII-only prefix, got '{rendered}'"
+        normalized_rendered.is_ascii() == expected_ascii,
+        "expected {expected_output}, got '{rendered}'"
     );
     Ok(())
 }
 
+#[then("the prefix contains no non-ASCII characters")]
+fn prefix_is_ascii(world: &TestWorld) -> Result<()> {
+    verify_prefix_ascii_state(world, true)
+}
+
 #[then("the prefix contains non-ASCII characters")]
 fn prefix_has_non_ascii(world: &TestWorld) -> Result<()> {
-    let rendered = world
-        .rendered_prefix
-        .get()
-        .ok_or_else(|| anyhow::anyhow!("prefix has not been rendered"))?;
-    let normalized_rendered = normalize_fluent_isolates(&rendered);
-    ensure!(
-        !normalized_rendered.is_ascii(),
-        "expected non-ASCII (emoji) characters in prefix, got '{rendered}'"
-    );
-    Ok(())
+    verify_prefix_ascii_state(world, false)
 }
 
 // ---------------------------------------------------------------------------
 // Then steps: verify CLI no_emoji field
 // ---------------------------------------------------------------------------
 
-fn verify_no_emoji_mode(world: &TestWorld, expected: Option<bool>) -> Result<()> {
+fn verify_emoji_policy(world: &TestWorld, expected: netsuke::cli::EmojiPolicy) -> Result<()> {
     use crate::bdd::fixtures::RefCellOptionExt;
-    let no_emoji = world
+    let emoji = world
         .cli
-        .with_ref(|cli| cli.no_emoji)
+        .with_ref(|cli| cli.emoji)
         .ok_or_else(|| anyhow::anyhow!("CLI has not been parsed"))?;
     ensure!(
-        no_emoji == expected,
-        "expected no_emoji to be {expected:?}, got {no_emoji:?}"
+        emoji == expected,
+        "expected emoji to be {expected:?}, got {emoji:?}"
     );
     Ok(())
 }
 
 #[then]
 fn no_emoji_mode_is_enabled(world: &TestWorld) -> Result<()> {
-    verify_no_emoji_mode(world, Some(true))
+    verify_emoji_policy(world, netsuke::cli::EmojiPolicy::Never)
 }
 
 #[then]
 fn no_emoji_mode_is_disabled(world: &TestWorld) -> Result<()> {
-    verify_no_emoji_mode(world, Some(false))
+    verify_emoji_policy(world, netsuke::cli::EmojiPolicy::Always)
 }

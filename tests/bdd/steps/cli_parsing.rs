@@ -47,7 +47,6 @@ fn isolated_cli_environment(world: &TestWorld) -> Result<()> {
     // Clear all NETSUKE_* environment variables to prevent interference
     let netsuke_vars = [
         "NETSUKE_CONFIG",
-        "NETSUKE_CONFIG_PATH",
         "NETSUKE_THEME",
         "NETSUKE_LOCALE",
         "NETSUKE_JOBS",

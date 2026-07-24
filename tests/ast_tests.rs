@@ -5,6 +5,7 @@ use netsuke::localization::keys;
 use netsuke::{ast::*, localization, manifest};
 use rstest::rstest;
 use semver::Version;
+use test_support::display_error_chain;
 
 /// Convenience wrapper around the library manifest parser for tests.
 fn parse_manifest(yaml: &str) -> Result<NetsukeManifest> {
@@ -275,7 +276,6 @@ fn optional_fields() -> Result<()> {
               - name: compile
                 command: cc
                 description: "Compile"
-                deps: hello
             targets:
               - name: hello
                 rule: compile
@@ -290,12 +290,6 @@ fn optional_fields() -> Result<()> {
             "unexpected rule description: {:?}",
             rule.description
         );
-        match &rule.deps {
-            StringOrList::String(dep) => {
-                ensure!(dep == "hello", "unexpected dep: {dep}");
-            }
-            other => bail!("deps should be String, got: {other:?}"),
-        }
     }
 
     {
@@ -314,11 +308,29 @@ fn optional_fields() -> Result<()> {
             .first()
             .context("expected at least one rule")?;
         ensure!(rule.description.is_none(), "description should be absent");
-        ensure!(
-            matches!(rule.deps, StringOrList::Empty),
-            "deps should be empty"
-        );
     }
+    Ok(())
+}
+
+#[test]
+fn rule_level_deps_are_rejected() -> Result<()> {
+    let yaml = r#"
+        netsuke_version: "1.0.0"
+        rules:
+          - name: compile
+            command: cc
+            deps: generated/header.h
+        targets:
+          - name: hello
+            rule: compile
+    "#;
+    let error = parse_manifest(yaml).expect_err("rule-level deps should be rejected");
+    let message = display_error_chain(error.as_ref());
+    let localized_summary = localization::message(keys::MANIFEST_PARSE).to_string();
+    ensure!(
+        message.starts_with(&localized_summary) && message.contains("unknown field `deps`"),
+        "rule-level deps should produce a clear validation error: {message}"
+    );
     Ok(())
 }
 

@@ -127,8 +127,8 @@ and agents.
 
 - [ ] 3.11.4. Add OrthoConfig precedence-ladder regression tests.
   - [x] Explicit config-path selector precedence (`--config` >
-    `NETSUKE_CONFIG` > `NETSUKE_CONFIG_PATH`) verified by exhaustive rstest
-    cases and a proptest property test (PR `#327`, closes `#291`).
+    `NETSUKE_CONFIG`) verified by exhaustive rstest cases and a proptest
+    property test (PR `#327`, closes `#291`).
   - [ ] Depend on OrthoConfig `5.2.3` for consumer boundary guidance.
   - [ ] Preserve Netsuke-specific precedence expectations for manifest path,
     display policies, locale, and profile selection.
@@ -251,8 +251,8 @@ and agents.
 ### 3.15. Canonical CLI redesign
 
 - [ ] 3.15.1. Replace the pre-0.1.0 command surface with canonical names.
-  - [ ] Rename `manifest` to `generate`.
-  - [ ] Remove `build --emit`; use `generate --output`.
+  - [x] Rename `manifest` to `generate`.
+  - [x] Remove `build --emit`; use `generate --output`.
   - [ ] Add `check`, `context`, `skill-path`, `runs`, `profile`, and
     `feedback`.
   - [ ] Rename `--file` to `--manifest`, keeping `-f` as an intentional
@@ -261,8 +261,8 @@ and agents.
     and global option glossary.
 
 - [ ] 3.15.2. Add non-interactive and mutation-safety guarantees.
-  - [ ] Add root `--no-input`.
-  - [ ] Make prompts impossible unless a future explicit interactive mode is
+  - [x] Add root `--no-input`.
+  - [x] Make prompts impossible unless a future explicit interactive mode is
     added.
   - [ ] Require `--force` for destructive operations.
   - [ ] Require or support `--dry-run` for consequential operations.
@@ -271,11 +271,11 @@ and agents.
     non-interactive and mutation metadata.
 
 - [ ] 3.15.3. Replace diagnostics-only JSON with canonical structured output.
-  - [ ] Remove `--diag-json` and `--output-format`.
-  - [ ] Add root `--json`.
-  - [ ] Emit exactly one JSON result document on successful JSON-mode commands.
-  - [ ] Emit exactly one JSON diagnostic document on failing JSON-mode commands.
-  - [ ] Suppress progress, colour, emoji, tracing, and timing text in JSON mode.
+  - [x] Remove `--diag-json` and `--output-format`.
+  - [x] Add root `--json`.
+  - [x] Emit exactly one JSON result document on successful JSON-mode commands.
+  - [x] Emit exactly one JSON diagnostic document on failing JSON-mode commands.
+  - [x] Suppress progress, colour, emoji, tracing, and timing text in JSON mode.
   - [ ] Snapshot every v1 JSON schema.
   - [ ] Depend on OrthoConfig `7.2.3` to `7.2.5`, `7.3.1`, `8.1.1`, and
     `8.1.2` for shared result, stream, exit-code, and enumerable-error

@@ -1,26 +1,29 @@
-netsuke_version: "1.0"
+netsuke_version: "1.0.0"
 
 vars:
   src_dir: design/svg
   out_dir: build/raster
-  inkscape: "{{ env('INKSCAPE_BIN') | default('inkscape') }}"
+  inkscape: inkscape
+  designs:
+    - hero
+    - logo
 
 rules:
   - name: rasterise
-    command: "{{ inkscape }} --export-type=png --export-filename={outs} {ins}"
-    description: "Rasterising {ins}"
+    command: "{{ inkscape }} --export-type=png --export-filename={{ outs }} {{ ins }}"
+    description: "Rasterising an SVG file"
   - name: clean
     command: "rm -rf {{ out_dir }}"
 
 targets:
-  - foreach: glob(src_dir ~ '/*.svg')
-    name: "{{ out_dir }}/{{ item | basename | replace('.svg', '.png') }}"
+  - foreach: designs
+    name: "{{ out_dir }}/{{ item }}.png"
     rule: rasterise
-    sources: "{{ item }}"
+    sources: "{{ src_dir }}/{{ item }}.svg"
 
 actions:
   - name: clean
     rule: clean
 
 defaults:
-  - "{{ out_dir }}/hero.png"
+  - build/raster/hero.png
