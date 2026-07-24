@@ -75,12 +75,7 @@ pub(super) fn handle_graph(
 
 fn write_graph_artefact(cli: &Cli, output: Option<&Path>, content: &str) -> Result<()> {
     if cli.json {
-        if let Some(path) = output.filter(|path| !process::is_stdout_path(path)) {
-            let resolved = resolve_output_path(cli, path);
-            process::write_text_file(resolved.as_ref(), content)?;
-            return write_json_result(None);
-        }
-        return write_json_result(Some(content));
+        return write_json_graph_artefact(cli, output, content);
     }
     match output {
         None => process::write_text_stdout(content),
@@ -89,6 +84,17 @@ fn write_graph_artefact(cli: &Cli, output: Option<&Path>, content: &str) -> Resu
             let resolved = resolve_output_path(cli, path);
             process::write_text_file(resolved.as_ref(), content)
         }
+    }
+}
+
+fn write_json_graph_artefact(cli: &Cli, output: Option<&Path>, content: &str) -> Result<()> {
+    match output.filter(|path| !process::is_stdout_path(path)) {
+        Some(path) => {
+            let resolved = resolve_output_path(cli, path);
+            process::write_text_file(resolved.as_ref(), content)?;
+            write_json_result(None)
+        }
+        None => write_json_result(Some(content)),
     }
 }
 
