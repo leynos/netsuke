@@ -32,10 +32,10 @@ impl CommandLogContext {
     /// before they are logged.
     pub(super) fn from_command(cmd: &Command) -> Self {
         let program_path = PathBuf::from(cmd.get_program());
-        let program_display = Utf8PathBuf::from_path_buf(program_path).map_or_else(
-            |path| path.to_string_lossy().into_owned(),
-            Utf8PathBuf::into_string,
-        );
+        let program_display = match Utf8PathBuf::from_path_buf(program_path) {
+            Ok(path) => path.into_string(),
+            Err(path) => path.to_string_lossy().into_owned(),
+        };
         let args: Vec<CommandArg> = cmd
             .get_args()
             .map(|a| CommandArg::new(a.to_string_lossy().into_owned()))
