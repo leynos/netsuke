@@ -114,19 +114,20 @@ const fn verify_public_api_symbols() {
     const _: usize = std::mem::size_of::<cli::CliConfig>();
     const _: usize = std::mem::size_of::<cli::Commands>();
     const _: usize = std::mem::size_of::<cli::GraphArgs>();
-    const _: usize = std::mem::size_of::<cli::Theme>();
+    const _: usize = std::mem::size_of::<cli::AccessibilityPolicy>();
+    const _: usize = std::mem::size_of::<cli::EmojiPolicy>();
+    const _: usize = std::mem::size_of::<cli::ProgressPolicy>();
     const _: usize = std::mem::size_of::<HostPattern>();
     const _: fn(&[OsString]) -> Option<String> = cli::locale_hint_from_args;
-    const _: fn(&[OsString]) -> Option<bool> = cli::diag_json_hint_from_args;
+    const _: fn(&[OsString]) -> Option<bool> = cli::json_hint_from_args;
     const _: fn(&str) -> Option<bool> = cli_l10n::parse_bool_hint;
-    const _: fn(&cli::Cli, &ArgMatches) -> bool = cli::resolve_merged_diag_json;
+    const _: fn(&cli::Cli, &ArgMatches) -> bool = cli::resolve_merged_json;
     const _: fn(&cli::Cli, &ArgMatches) -> ortho_config::OrthoResult<cli::Cli> =
         cli::merge_with_config;
     const _: LocalizedParseFn = cli::parse_with_localizer_from;
-    const _: fn(&cli::Cli) -> Option<bool> = cli::Cli::no_emoji_override;
+    const _: fn(&cli::Cli) -> Option<theme::ThemePreference> = cli::Cli::theme_preference;
+    const _: fn(&cli::Cli) -> Option<bool> = cli::Cli::accessibility_override;
     const _: fn(&cli::Cli) -> bool = cli::Cli::progress_enabled;
-    const _: fn(&cli::Cli) -> bool = cli::Cli::resolved_progress;
-    const _: fn(&cli::Cli) -> bool = cli::Cli::resolved_diag_json;
     const _: fn(&str) -> Result<HostPattern, HostPatternError> = HostPattern::parse;
     const _: fn(&HostPattern, host_pattern::HostCandidate<'_>) -> bool = HostPattern::matches;
     const _: fn(Option<bool>, Option<cli::ColourPolicy>) -> output_mode::OutputMode =

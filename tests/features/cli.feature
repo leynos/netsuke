@@ -51,29 +51,16 @@ Feature: CLI parsing
     And the manifest path is "alt.yml"
     And the first target is "target"
 
-  Scenario: Build command writes Ninja file
-    When the CLI is parsed with "build --emit out.ninja target"
+  Scenario: Generate command writes Ninja file
+    When the CLI is parsed with "generate --output out.ninja"
     Then parsing succeeds
-    And the command is build
-    And the emit path is "out.ninja"
-    And the first target is "target"
+    And the command is generate
+    And the generate output path is "out.ninja"
 
-  Scenario: Manifest subcommand writes Ninja file
-    When the CLI is parsed with "manifest out.ninja"
+  Scenario: Generate subcommand streams to stdout by default
+    When the CLI is parsed with "generate"
     Then parsing succeeds
-    And the command is manifest
-    And the manifest command path is "out.ninja"
-
-  Scenario: Manifest subcommand can stream to stdout
-    When the CLI is parsed with "manifest -"
-    Then parsing succeeds
-    And the command is manifest
-    And the manifest command path is "-"
-
-  Scenario: Manifest subcommand requires a path
-    When the CLI is parsed with invalid arguments "manifest"
-    Then an error should be returned
-    And the error message should contain "<FILE>"
+    And the command is generate
 
   Scenario: Unknown command fails
     When the CLI is parsed with invalid arguments "unknown"
@@ -115,15 +102,15 @@ Feature: CLI parsing
     Then an error should be returned
     And the error message should contain "notanumber"
 
-  Scenario: Invalid theme value fails validation
-    When the CLI is parsed with invalid arguments "--theme neon"
+  Scenario: Invalid emoji value fails validation
+    When the CLI is parsed with invalid arguments "--emoji neon"
     Then an error should be returned
-    And the error message should contain "Invalid theme 'neon'"
+    And the error message should contain "Invalid emoji policy 'neon'"
 
-  Scenario: Invalid theme value is localised in Spanish
-    When the CLI is parsed with invalid arguments "--locale es-ES --theme neon"
+  Scenario: Invalid emoji value is localised in Spanish
+    When the CLI is parsed with invalid arguments "--locale es-ES --emoji neon"
     Then an error should be returned
-    And the error message should contain "Tema no válido 'neon'"
+    And the error message should contain "Política de emoji no válida 'neon'"
 
   Scenario: Blocklist overrides allowlist for network policy flags
     When the CLI is parsed with "--fetch-allow-host example.com --fetch-block-host example.com"
@@ -131,21 +118,21 @@ Feature: CLI parsing
     And the CLI network policy rejects "https://example.com" with "blocked by policy"
 
   Scenario: CLI parses single-quoted argument with space
-    When the CLI is parsed with "--file 'my manifest.yml' manifest out.ninja"
+    When the CLI is parsed with "--file 'my manifest.yml' generate"
     Then parsing succeeds
-    And the command is manifest
+    And the command is generate
     And the manifest path is "my manifest.yml"
 
   Scenario: CLI parses double-quoted argument with space
-    When the CLI is parsed with '--file "my manifest.yml" manifest out.ninja'
+    When the CLI is parsed with '--file "my manifest.yml" generate'
     Then parsing succeeds
-    And the command is manifest
+    And the command is generate
     And the manifest path is "my manifest.yml"
 
   Scenario: CLI parses argument with escaped space
-    When the CLI is parsed with "--file my\ manifest.yml manifest out.ninja"
+    When the CLI is parsed with "--file my\ manifest.yml generate"
     Then parsing succeeds
-    And the command is manifest
+    And the command is generate
     And the manifest path is "my manifest.yml"
 
   Scenario: CLI parses multiple single-quoted arguments

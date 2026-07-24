@@ -135,8 +135,6 @@ pub struct TestWorld {
     // Output preferences state (Clone)
     /// Resolved output preferences for accessibility preference scenarios.
     pub output_prefs: Slot<OutputPrefs>,
-    /// Simulated `NETSUKE_NO_EMOJI` value for preference resolution scenarios.
-    pub simulated_no_emoji: Slot<String>,
     /// Rendered semantic prefix for assertion scenarios.
     pub rendered_prefix: Slot<String>,
 

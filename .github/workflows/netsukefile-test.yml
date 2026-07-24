@@ -74,7 +74,9 @@ jobs:
               command: "touch unused.txt"
           MANIFEST
       - name: Build dependent, inline, and foreach targets
-        run: ./target/debug/netsuke --verbose build --emit build.ninja dependent.txt inline-command.txt inline-script.txt a-foreach.txt b-foreach.txt
+        run: |
+          ./target/debug/netsuke --verbose generate --output build.ninja
+          ./target/debug/netsuke --verbose build dependent.txt inline-command.txt inline-script.txt a-foreach.txt b-foreach.txt
       - name: Assert dependent artefacts exist
         env:
           NINJA_MANIFEST: build.ninja
@@ -100,7 +102,9 @@ jobs:
           NINJA_MANIFEST: build.ninja
         run: scripts/assert-file-absent.sh skip-foreach.txt
       - name: Run action target
-        run: ./target/debug/netsuke --verbose build --emit action.ninja say-hello
+        run: |
+          ./target/debug/netsuke --verbose generate --output action.ninja
+          ./target/debug/netsuke --verbose build say-hello
       - name: Assert action artefact exists
         env:
           NINJA_MANIFEST: action.ninja

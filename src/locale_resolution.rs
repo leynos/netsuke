@@ -12,8 +12,8 @@ use std::str::FromStr;
 
 /// Environment variable name used to override the locale.
 pub const NETSUKE_LOCALE_ENV: &str = "NETSUKE_LOCALE";
-/// Environment variable name used to request JSON diagnostics.
-pub const NETSUKE_DIAG_JSON_ENV: &str = "NETSUKE_DIAG_JSON";
+/// Environment variable name used to request JSON output.
+pub const NETSUKE_JSON_ENV: &str = "NETSUKE_JSON";
 
 /// Read-only environment access used for locale resolution.
 pub trait EnvProvider {
@@ -141,16 +141,15 @@ pub fn resolve_startup_locale(
     ])
 }
 
-/// Resolve whether JSON diagnostics were requested before full CLI parsing.
+/// Resolve whether JSON output was requested before full CLI parsing.
 ///
-/// Precedence is CLI diagnostic format hints (`--output-format` and
-/// `--diag-json`) followed by `NETSUKE_DIAG_JSON`. Unlike the merged runtime
-/// configuration, configuration files are not considered here because this
-/// helper is used before config discovery and loading succeed.
+/// Precedence is the CLI `--json` flag followed by `NETSUKE_JSON`. Unlike the
+/// merged runtime configuration, configuration files are not considered here
+/// because this helper is used before config discovery and loading succeed.
 #[must_use]
-pub fn resolve_startup_diag_json(args: &[OsString], env: &impl EnvProvider) -> bool {
-    cli::diag_json_hint_from_args(args).unwrap_or_else(|| {
-        env.var(NETSUKE_DIAG_JSON_ENV)
+pub fn resolve_startup_json(args: &[OsString], env: &impl EnvProvider) -> bool {
+    cli::json_hint_from_args(args).unwrap_or_else(|| {
+        env.var(NETSUKE_JSON_ENV)
             .as_deref()
             .and_then(parse_bool_hint)
             .unwrap_or(false)

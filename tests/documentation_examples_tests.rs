@@ -96,7 +96,7 @@ fn every_documented_fence_has_a_known_unique_identifier() -> Result<()> {
 #[case("guide-stdlib-manifest")]
 fn documented_manifest_generates_ninja(#[case] example_id: &str) -> Result<()> {
     let workspace = manifest_workspace(example_id)?;
-    let run = run_netsuke_in(workspace.path(), &["--progress", "false", "manifest", "-"])?;
+    let run = run_netsuke_in(workspace.path(), &["--progress", "never", "generate"])?;
 
     assert_success(&run, example_id)?;
     ensure!(
@@ -175,9 +175,7 @@ fn documented_cli_shape_matches_live_help() -> Result<()> {
     let build = run_netsuke_in(Path::new("."), &["--locale", "en-US", "build", "--help"])?;
     assert_success(&build, "build help")?;
     ensure!(
-        build
-            .stdout
-            .contains("Usage: netsuke build [OPTIONS] [TARGETS]..."),
+        build.stdout.contains("Usage: netsuke build [TARGETS]..."),
         "build help should expose the documented target shape"
     );
     Ok(())
@@ -197,8 +195,8 @@ fn directory_and_utility_command_examples_run() -> Result<()> {
                 "netsuke clean\n",
                 "netsuke graph --output build.dot\n",
                 "netsuke graph --html --output graph.html\n",
-                "netsuke manifest -\n",
-                "netsuke build --emit build.ninja\n"
+                "netsuke generate\n",
+                "netsuke generate --output build.ninja\n"
             ),
         "utility command example drifted"
     );
@@ -227,12 +225,12 @@ fn directory_and_utility_command_examples_run() -> Result<()> {
         "HTML graph example",
     )?;
     assert_success(
-        &run_netsuke_in(workspace.path(), &["manifest", "-"])?,
-        "manifest example",
+        &run_netsuke_in(workspace.path(), &["generate"])?,
+        "generate stdout example",
     )?;
     assert_success(
-        &run_with_fake_ninja(workspace.path(), &["build", "--emit", "build.ninja"])?,
-        "retained manifest example",
+        &run_netsuke_in(workspace.path(), &["generate", "--output", "build.ninja"])?,
+        "generate file example",
     )?;
     for output in ["build.dot", "graph.html", "build.ninja"] {
         ensure!(
@@ -254,7 +252,7 @@ fn project_configuration_example_is_accepted() -> Result<()> {
         .context("temporary config path should be UTF-8")?;
     let run = run_netsuke_in(
         workspace.path(),
-        &["--config", config, "--progress", "false", "manifest", "-"],
+        &["--config", config, "--progress", "never", "generate"],
     )?;
     assert_success(&run, "project configuration example")
 }
@@ -266,8 +264,8 @@ fn output_stream_and_accessibility_examples_match_live_output() -> Result<()> {
         streams.body
             == concat!(
                 "netsuke graph > build.dot\n",
-                "netsuke --progress false build\n",
-                "netsuke manifest - > build.ninja\n"
+                "netsuke --progress never build\n",
+                "netsuke generate > build.ninja\n"
             ),
         "output stream example drifted"
     );
@@ -275,17 +273,17 @@ fn output_stream_and_accessibility_examples_match_live_output() -> Result<()> {
     let graph = run_netsuke_in(workspace.path(), &["graph"])?;
     assert_success(&graph, "graph stdout example")?;
     ensure!(graph.stdout.contains("digraph"), "graph should use stdout");
-    let manifest = run_netsuke_in(workspace.path(), &["manifest", "-"])?;
-    assert_success(&manifest, "manifest stdout example")?;
+    let manifest = run_netsuke_in(workspace.path(), &["generate"])?;
+    assert_success(&manifest, "generate stdout example")?;
     ensure!(
         manifest.stdout.contains("rule ") && manifest.stdout.contains("build "),
-        "manifest should use stdout"
+        "generate should use stdout"
     );
-    let quiet = run_with_fake_ninja(workspace.path(), &["--progress", "false", "build"])?;
+    let quiet = run_with_fake_ninja(workspace.path(), &["--progress", "never", "build"])?;
     assert_success(&quiet, "progress-disabled build")?;
 
     let expected = documented_example("guide-accessible-output")?;
-    let accessible = run_with_fake_ninja(workspace.path(), &["--accessible", "true", "build"])?;
+    let accessible = run_with_fake_ninja(workspace.path(), &["--accessibility", "on", "build"])?;
     assert_success(&accessible, "accessible build")?;
     let stderr = normalize_fluent_isolates(&accessible.stderr);
     for line in expected.body.lines() {
@@ -301,7 +299,7 @@ fn output_stream_and_accessibility_examples_match_live_output() -> Result<()> {
 fn json_diagnostic_example_matches_live_schema() -> Result<()> {
     let command = documented_example("guide-json-command")?;
     ensure!(
-        command.body == "netsuke --diag-json --file missing.yml build\n",
+        command.body == "netsuke --json --no-input --file missing.yml build\n",
         "JSON command example drifted"
     );
     let expected: Value = serde_json::from_str(&documented_example("guide-json-output")?.body)
@@ -309,9 +307,9 @@ fn json_diagnostic_example_matches_live_schema() -> Result<()> {
     let workspace = tempfile::tempdir().context("create JSON diagnostic workspace")?;
     let run = run_netsuke_in(
         workspace.path(),
-        &["--diag-json", "--file", "missing.yml", "build"],
+        &["--json", "--no-input", "--file", "missing.yml", "build"],
     )?;
-    ensure!(!run.success, "missing manifest command should fail");
+    ensure!(!run.success, "missing manifest invocation should fail");
     ensure!(
         run.stdout.is_empty(),
         "JSON failure should leave stdout empty"
@@ -335,7 +333,7 @@ fn json_diagnostic_example_matches_live_schema() -> Result<()> {
 fn linked_repository_example_generates_ninja(#[case] path: &str) -> Result<()> {
     let run = run_netsuke_in(
         Path::new("."),
-        &["--progress", "false", "--file", path, "manifest", "-"],
+        &["--progress", "never", "--file", path, "generate"],
     )?;
     assert_success(&run, path)?;
     ensure!(

@@ -115,24 +115,27 @@ fn output_mode_is_standard(world: &TestWorld) -> Result<()> {
 // Then steps: verify CLI accessible field
 // ---------------------------------------------------------------------------
 
-fn verify_accessible_mode(world: &TestWorld, expected: Option<bool>) -> Result<()> {
-    let accessible = world
+fn verify_accessibility_policy(
+    world: &TestWorld,
+    expected: netsuke::cli::AccessibilityPolicy,
+) -> Result<()> {
+    let accessibility = world
         .cli
-        .with_ref(|cli| cli.accessible)
+        .with_ref(|cli| cli.accessibility)
         .ok_or_else(|| anyhow::anyhow!("CLI has not been parsed"))?;
     ensure!(
-        accessible == expected,
-        "expected accessible to be {expected:?}, got {accessible:?}"
+        accessibility == expected,
+        "expected accessibility to be {expected:?}, got {accessibility:?}"
     );
     Ok(())
 }
 
 #[then]
 fn accessible_mode_is_enabled(world: &TestWorld) -> Result<()> {
-    verify_accessible_mode(world, Some(true))
+    verify_accessibility_policy(world, netsuke::cli::AccessibilityPolicy::On)
 }
 
 #[then]
 fn accessible_mode_is_disabled(world: &TestWorld) -> Result<()> {
-    verify_accessible_mode(world, Some(false))
+    verify_accessibility_policy(world, netsuke::cli::AccessibilityPolicy::Off)
 }

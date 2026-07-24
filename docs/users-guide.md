@@ -384,8 +384,7 @@ netsuke [OPTIONS] build [TARGETS]...
 ```
 
 Global options must appear before the subcommand. For example,
-`netsuke --colour-policy always build` is valid;
-`netsuke build --colour-policy always` is not.
+`netsuke --color always build` is valid; `netsuke build --color always` is not.
 
 The commands are:
 
@@ -394,7 +393,9 @@ The commands are:
 - `clean`: generate a temporary Ninja file and run `ninja -t clean`.
 - `graph`: render the build graph as DOT or self-contained HTML without
   invoking Ninja.
-- `manifest <FILE>`: write Ninja without invoking it. Use `-` for stdout.
+- `generate`: write Ninja without invoking it. By default, the generated Ninja
+  manifest is the only content written to stdout; use `--output <FILE>` to
+  write it to a file instead.
 
 Running `netsuke` without a subcommand is the same as `netsuke build` with no
 explicit targets. A bare target such as `netsuke hello` is not accepted; use
@@ -408,12 +409,12 @@ Important global options include:
 - `-j, --jobs <1..64>`
 - `-v, --verbose`
 - `--locale <LOCALE>`
-- `--accessible <true|false>`
-- `--progress <true|false>`
-- `--theme <auto|unicode|ascii>`
-- `--colour-policy <auto|always|never>`
-- `--spinner-mode <auto|enabled|disabled>`
-- `--diag-json`
+- `--no-input`
+- `--json`
+- `--color <auto|always|never>`
+- `--emoji <auto|always|never>`
+- `--progress <auto|always|never>`
+- `--accessibility <auto|on|off>`
 - `--default-target <TARGET>`
 
 Run `netsuke --help` or `netsuke <command> --help` for the complete current
@@ -443,16 +444,17 @@ These commands cover the non-default utility workflows:
 netsuke clean
 netsuke graph --output build.dot
 netsuke graph --html --output graph.html
-netsuke manifest -
-netsuke build --emit build.ninja
+netsuke generate
+netsuke generate --output build.ninja
 ```
 
 `graph` is rendered in-process and does not require Ninja. DOT goes to stdout
 unless `--output` is supplied. HTML output contains a server-rendered SVG, a
 textual outline and a `<noscript>` DOT representation.
 
-`manifest` writes Ninja without running it. `build --emit` retains the Ninja
-file and then runs the build.
+`generate` writes Ninja without running it. With no `--output`, stdout contains
+only the generated Ninja manifest. With `--output <FILE>`, Netsuke writes the
+manifest to that file and leaves stdout empty.
 
 `clean` removes file outputs tracked by Ninja. Phony targets and actions do not
 represent files and are not removed.
@@ -473,7 +475,6 @@ this order:
 
 1. `--config <PATH>`
 2. `NETSUKE_CONFIG=<PATH>`
-3. `NETSUKE_CONFIG_PATH=<PATH>` (legacy alias)
 
 An explicit file that is missing or invalid causes an error; Netsuke does not
 fall back to discovery.
@@ -487,10 +488,12 @@ small project configuration looks like this:
 jobs = 4
 verbose = true
 locale = "en-US"
-theme = "ascii"
-colour_policy = "never"
-spinner_mode = "disabled"
-output_format = "human"
+json = false
+no_input = true
+color = "never"
+emoji = "never"
+progress = "never"
+accessibility = "on"
 default_targets = ["hello.txt"]
 ```
 
@@ -498,8 +501,12 @@ Common environment equivalents include:
 
 - `NETSUKE_JOBS=4`
 - `NETSUKE_VERBOSE=true`
-- `NETSUKE_THEME=ascii`
-- `NETSUKE_COLOUR_POLICY=never`
+- `NETSUKE_JSON=false`
+- `NETSUKE_NO_INPUT=true`
+- `NETSUKE_COLOR=never`
+- `NETSUKE_EMOJI=never`
+- `NETSUKE_PROGRESS=never`
+- `NETSUKE_ACCESSIBILITY=on`
 - `NETSUKE_DEFAULT_TARGETS__0=hello.txt`
 - `NETSUKE_NINJA=/opt/ninja/bin/ninja`
 
@@ -507,15 +514,13 @@ Common environment equivalents include:
 Leave it unset to use `ninja` from `PATH`, or set another executable name or an
 absolute path. Empty and non-UTF-8 values fall back to the default.
 
-`theme` is the canonical glyph preference. `no_emoji` remains a compatibility
-alias. Conflicting settings, such as `theme = "unicode"` with
-`no_emoji = true`, are rejected.
+The CLI and configuration use the same policy values. `auto` follows terminal
+and environment detection. `always` or `never` makes colour, emoji, or progress
+behaviour explicit. Accessibility uses `on` and `off` for its explicit values.
 
-`spinner_mode = "disabled"` conflicts with `progress = true`;
-`spinner_mode = "enabled"` conflicts with `progress = false`.
-
-Configuration files currently accept `output_format = "human"` only. Use the
-CLI flag `--diag-json` for JSON diagnostics.
+Netsuke has no interactive mode. It never prompts, and `no_input = false` is
+rejected. Pass root `--no-input` in automation to state that requirement
+explicitly and make the invocation self-documenting.
 
 ## Control output and accessibility
 
@@ -530,15 +535,16 @@ This makes redirection predictable:
 
 ```sh
 netsuke graph > build.dot
-netsuke --progress false build
-netsuke manifest - > build.ninja
+netsuke --progress never build
+netsuke generate > build.ninja
 ```
 
 ### Accessible output
 
 Accessible mode uses static, labelled status lines instead of animated
 progress. It is enabled automatically when `TERM=dumb` or `NO_COLOR` is
-present, and can be selected explicitly with `--accessible true`.
+present. Select it explicitly with `--accessibility on`, or force standard
+output with `--accessibility off`.
 
 A typical accessible build reports:
 
@@ -558,23 +564,23 @@ When stdout is redirected or connected to Continuous Integration (CI), task
 progress falls back to text so logs remain readable.
 
 Netsuke uses semantic text labels as well as glyphs; meaning is not conveyed by
-colour alone. The themes are:
+colour alone. Emoji policy values are:
 
-- `unicode`: Unicode status symbols.
-- `ascii`: ASCII-safe prefixes.
+- `always`: Unicode status symbols.
+- `never`: ASCII-safe prefixes.
 - `auto`: Unicode in standard output and ASCII in accessible output.
 
 The colour policy is separate. Colour rendering is not implemented in v0.1.0, so
-`colour_policy` currently affects mode selection but does not add coloured
-terminal text.
+`color` currently affects mode selection but does not add coloured terminal
+text.
 
 Verbose mode adds per-stage timing after a successful command. Failed commands
 do not print a timing summary.
 
 ### JSON diagnostics
 
-Use `--diag-json` when a caller needs one machine-readable diagnostic document
-on stderr. Successful commands leave stderr empty in this mode; generated
+Use `--json` when a caller needs one machine-readable diagnostic document on
+stderr. Successful commands leave stderr empty in this mode; generated
 artefacts still use stdout.
 
 The following command deliberately selects a missing manifest:
@@ -582,7 +588,7 @@ The following command deliberately selects a missing manifest:
 <!-- tested-example: guide-json-command -->
 
 ```sh
-netsuke --diag-json --file missing.yml build
+netsuke --json --no-input --file missing.yml build
 ```
 
 The exact localized message can vary, but the envelope has this shape:

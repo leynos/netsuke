@@ -26,12 +26,12 @@ use std::sync::Arc;
 
 use super::config::CliConfig;
 use super::parsing::{
-    parse_colour_policy, parse_host_pattern, parse_jobs, parse_locale, parse_output_format,
-    parse_scheme, parse_spinner_mode, parse_theme,
+    parse_accessibility_policy, parse_color_policy, parse_emoji_policy, parse_host_pattern,
+    parse_jobs, parse_locale, parse_progress_policy, parse_scheme,
 };
-use super::{ColourPolicy, OutputFormat, SpinnerMode};
+use super::{AccessibilityPolicy, ColourPolicy, EmojiPolicy, ProgressPolicy};
 use crate::cli_l10n::localize_command;
-pub use crate::cli_l10n::{diag_json_hint_from_args, locale_hint_from_args};
+pub use crate::cli_l10n::{json_hint_from_args, locale_hint_from_args};
 use crate::host_pattern::HostPattern;
 use crate::theme::ThemePreference;
 
@@ -136,39 +136,29 @@ pub struct Cli {
     #[arg(long = "fetch-default-deny")]
     pub fetch_default_deny: bool,
 
-    /// Force accessible output mode on or off (overrides auto-detection).
+    /// Emit machine-readable JSON output.
     #[arg(long)]
-    pub accessible: Option<bool>,
+    pub json: bool,
 
-    /// Suppress emoji glyphs in output (overrides auto-detection).
-    #[arg(long)]
-    pub no_emoji: Option<bool>,
+    /// Interaction policy flags.
+    #[command(flatten)]
+    pub interaction: InteractionArgs,
 
-    /// Emit machine-readable diagnostics in JSON on stderr.
-    #[arg(long)]
-    pub diag_json: bool,
+    /// Select the colour policy for terminal output.
+    #[arg(long, value_name = "POLICY", default_value_t)]
+    pub color: ColourPolicy,
 
-    /// Force standard progress summaries on or off.
-    ///
-    /// When omitted, Netsuke enables progress summaries in standard mode.
-    #[arg(long)]
-    pub progress: Option<bool>,
+    /// Select the emoji policy for terminal output.
+    #[arg(long, value_name = "POLICY", default_value_t)]
+    pub emoji: EmojiPolicy,
 
-    /// Override colour policy for terminal output.
-    #[arg(long, value_name = "POLICY")]
-    pub colour_policy: Option<ColourPolicy>,
+    /// Select the progress-rendering policy.
+    #[arg(long, value_name = "POLICY", default_value_t)]
+    pub progress: ProgressPolicy,
 
-    /// Override spinner animation mode.
-    #[arg(long, value_name = "MODE")]
-    pub spinner_mode: Option<SpinnerMode>,
-
-    /// Override output format style.
-    #[arg(long, value_name = "FORMAT")]
-    pub output_format: Option<OutputFormat>,
-
-    /// Override presentation theme.
-    #[arg(long, value_name = "THEME")]
-    pub theme: Option<ThemePreference>,
+    /// Select the accessible-output policy.
+    #[arg(long, value_name = "POLICY", default_value_t)]
+    pub accessibility: AccessibilityPolicy,
 
     /// Default build targets used when none are specified on the CLI.
     #[arg(long = "default-target", value_name = "TARGET")]
@@ -190,45 +180,36 @@ impl Cli {
         self
     }
 
-    /// Return the effective emoji override for output preference resolution.
+    /// Return the effective theme preference for emoji policy resolution.
     #[must_use]
-    pub const fn no_emoji_override(&self) -> Option<bool> {
-        match self.theme {
-            Some(ThemePreference::Ascii) => Some(true),
-            Some(ThemePreference::Unicode) => Some(false),
-            _ => {
-                if matches!(self.no_emoji, Some(true)) {
-                    Some(true)
-                } else {
-                    None
-                }
-            }
+    pub const fn theme_preference(&self) -> Option<ThemePreference> {
+        match self.emoji {
+            EmojiPolicy::Auto => None,
+            EmojiPolicy::Always => Some(ThemePreference::Unicode),
+            EmojiPolicy::Never => Some(ThemePreference::Ascii),
         }
+    }
+
+    /// Return an explicit accessible-output override, if configured.
+    #[must_use]
+    pub const fn accessibility_override(&self) -> Option<bool> {
+        match self.accessibility {
+            AccessibilityPolicy::Auto => None,
+            AccessibilityPolicy::On => Some(true),
+            AccessibilityPolicy::Off => Some(false),
+        }
+    }
+
+    /// Return whether interactive input is disabled.
+    #[must_use]
+    pub const fn no_input(&self) -> bool {
+        self.interaction.no_input
     }
 
     /// Return whether progress summaries should be enabled.
     #[must_use]
     pub const fn progress_enabled(&self) -> bool {
-        match (self.progress, self.spinner_mode) {
-            (Some(value), _) => value,
-            (None, Some(SpinnerMode::Disabled)) => false,
-            _ => true,
-        }
-    }
-
-    /// Compatibility alias for callers that predate `progress_enabled`.
-    #[must_use]
-    pub const fn resolved_progress(&self) -> bool {
-        self.progress_enabled()
-    }
-
-    /// Return whether JSON diagnostics should be enabled.
-    #[must_use]
-    pub const fn resolved_diag_json(&self) -> bool {
-        match self.output_format {
-            Some(OutputFormat::Json) => true,
-            _ => self.diag_json,
-        }
+        !matches!(self.progress, ProgressPolicy::Never)
     }
 }
 
@@ -245,14 +226,12 @@ impl Default for Cli {
             fetch_allow_host: Vec::new(),
             fetch_block_host: Vec::new(),
             fetch_default_deny: false,
-            accessible: None,
-            progress: None,
-            no_emoji: None,
-            diag_json: false,
-            colour_policy: None,
-            spinner_mode: None,
-            output_format: None,
-            theme: None,
+            json: false,
+            interaction: InteractionArgs::default(),
+            color: ColourPolicy::Auto,
+            emoji: EmojiPolicy::Auto,
+            progress: ProgressPolicy::Auto,
+            accessibility: AccessibilityPolicy::Auto,
             default_targets: Vec::new(),
             command: None,
         }
@@ -260,13 +239,23 @@ impl Default for Cli {
     }
 }
 
+/// Arguments controlling whether Netsuke may read interactive input.
+#[derive(Debug, Args, PartialEq, Eq, Clone, Serialize, Deserialize)]
+pub struct InteractionArgs {
+    /// Never read interactive input.
+    #[arg(long, default_value_t = true)]
+    pub no_input: bool,
+}
+
+impl Default for InteractionArgs {
+    fn default() -> Self {
+        Self { no_input: true }
+    }
+}
+
 /// Arguments accepted by the `build` command.
 #[derive(Debug, Args, PartialEq, Eq, Clone, Serialize, Deserialize, Default)]
 pub struct BuildArgs {
-    /// Write the generated Ninja manifest to this path and retain it.
-    #[arg(long, value_name = "FILE")]
-    pub emit: Option<PathBuf>,
-
     /// A list of specific targets to build.
     #[serde(default)]
     pub targets: Vec<String>,
@@ -303,13 +292,11 @@ pub enum Commands {
     /// Display the build dependency graph in DOT format for visualisation.
     Graph(GraphArgs),
 
-    /// Write the Ninja manifest to the specified file without invoking Ninja.
-    Manifest {
-        /// Output path for the generated Ninja file.
-        ///
-        /// Use `-` to write to stdout.
-        #[arg(value_name = "FILE")]
-        file: PathBuf,
+    /// Generate the Ninja manifest without invoking Ninja.
+    Generate {
+        /// Write the generated Ninja manifest to FILE instead of stdout.
+        #[arg(long, value_name = "FILE")]
+        output: Option<PathBuf>,
     },
 }
 
@@ -351,12 +338,12 @@ fn configure_validation_parsers(
     let locale_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_locale);
     let scheme_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_scheme);
     let host_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_host_pattern);
-    let colour_policy_parser =
-        LocalizedValueParser::new(Arc::clone(localizer), parse_colour_policy);
-    let spinner_mode_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_spinner_mode);
-    let output_format_parser =
-        LocalizedValueParser::new(Arc::clone(localizer), parse_output_format);
-    let theme_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_theme);
+    let color_policy_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_color_policy);
+    let emoji_policy_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_emoji_policy);
+    let progress_policy_parser =
+        LocalizedValueParser::new(Arc::clone(localizer), parse_progress_policy);
+    let accessibility_policy_parser =
+        LocalizedValueParser::new(Arc::clone(localizer), parse_accessibility_policy);
 
     command = command.mut_arg("jobs", |arg| {
         arg.value_parser(ValueParser::new(jobs_parser))
@@ -373,17 +360,17 @@ fn configure_validation_parsers(
     command = command.mut_arg("fetch_block_host", |arg| {
         arg.value_parser(ValueParser::new(host_parser))
     });
-    command = command.mut_arg("colour_policy", |arg| {
-        arg.value_parser(ValueParser::new(colour_policy_parser))
+    command = command.mut_arg("color", |arg| {
+        arg.value_parser(ValueParser::new(color_policy_parser))
     });
-    command = command.mut_arg("spinner_mode", |arg| {
-        arg.value_parser(ValueParser::new(spinner_mode_parser))
+    command = command.mut_arg("emoji", |arg| {
+        arg.value_parser(ValueParser::new(emoji_policy_parser))
     });
-    command = command.mut_arg("output_format", |arg| {
-        arg.value_parser(ValueParser::new(output_format_parser))
+    command = command.mut_arg("progress", |arg| {
+        arg.value_parser(ValueParser::new(progress_policy_parser))
     });
-    command = command.mut_arg("theme", |arg| {
-        arg.value_parser(ValueParser::new(theme_parser))
+    command = command.mut_arg("accessibility", |arg| {
+        arg.value_parser(ValueParser::new(accessibility_policy_parser))
     });
     command
 }

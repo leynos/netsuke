@@ -172,8 +172,8 @@ The caller passes two configuration inputs, each carrying intent:
   not evaluate that cfg, so mutants inserted there would compile to nothing and
   survive as noise rather than genuine test gaps.
 - `extra-args` — `--all-features`, so the mutation run matches the `make test`
-  CI baseline; a mismatch would report feature-gated code (the
-  `legacy-digests` feature) as untested.
+  CI baseline; a mismatch would report feature-gated code (the `legacy-digests`
+  feature) as untested.
 
 The caller does not set `extra-crate-dirs`, the input reserved for crate
 directories outside the Cargo workspace. `ambient_fs`, the repository's
@@ -860,8 +860,8 @@ a two-pass approach when no explicit config path is provided:
 Because `MergeComposer` uses last-wins semantics, pushing the project layers
 after user layers gives them higher precedence.
 
-The same logic is mirrored in `collect_diag_file_layers` for early `diag_json`
-resolution (before full merging).
+The same logic is mirrored in `collect_diag_file_layers` for early `json`
+resolution before full merging.
 
 ### Layer precedence
 
@@ -875,7 +875,7 @@ The final merge order is:
 
 ### Configuration merge helper functions
 
-Private helper functions for config discovery and diagnostic-JSON resolution.
+Private helper functions for config discovery and JSON-output resolution.
 
 Configuration merge helpers:
 
@@ -901,14 +901,14 @@ Configuration merge helpers:
   applies the project-layer second pass, and returns
   `OrthoResult<Vec<MergeLayer<'static>>>`.
 - `collect_diag_file_layers(cli: &Cli) -> OrthoResult<Vec<MergeLayer<'static>>>`
-  mirrors the file-load path used by `resolve_merged_diag_json` so early
-  `diag_json` resolution sees the same explicit or discovered file layers.
+  mirrors the file-load path used by `resolve_merged_json` so early `json`
+  resolution sees the same explicit or discovered file layers.
 - `is_empty_value(value: &serde_json::Value) -> bool` detects an empty CLI
   override object.
-- `diag_json_from_layer(layer: &MergeLayer) -> Option<bool>` extracts
-  `diag_json` from a config layer, preferring `output_format`.
-- `diag_json_from_matches(cli, matches) -> OrthoResult<bool>` resolves final
-  `diag_json` from CLI matches with fallback.
+- `json_from_layer(layer: &MergeLayer) -> Option<bool>` extracts `json` from a
+  configuration layer.
+- `json_from_matches(cli, matches, discovered) -> bool` applies an explicit
+  root `--json` override to the discovered value.
 - `cli_overrides_from_matches(matches: &ArgMatches) -> OrthoValue` extracts
   CLI-supplied fields, stripping defaults and non-CLI sources.
 - `env_provider() -> Figment` returns the `NETSUKE_` prefixed Figment
@@ -925,16 +925,15 @@ selection. It evaluates the precedence chain in this order:
 
 `env_config_path(var_name)` is the helper that reads `std::env::var_os`,
 discarding empty values and converting the value into `PathBuf`. For `merge` and
-`resolve_merged_diag_json`, both `collect_diag_file_layers` and
-`push_file_layers` therefore follow the same precedence by calling
-`explicit_config_path`, so they return either the same explicit path layers or
-the same fallback discovery path.
+`resolve_merged_json`, both `collect_diag_file_layers` and `push_file_layers`
+therefore follow the same precedence by calling `explicit_config_path`, so they
+return either the same explicit path layers or the same fallback discovery path.
 
 The public API remains two arguments:
 
 ```rust
 pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli>;
-pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> OrthoResult<bool>;
+pub fn resolve_merged_json(cli: &Cli, matches: &ArgMatches) -> bool;
 ```
 
 Unit tests that need to verify explicit config path precedence should exercise
@@ -942,53 +941,15 @@ the public merge or diagnostic APIs with guarded environment variables. The
 explicit selector helper reads the process environment directly and remains
 private to `src/cli/discovery.rs`.
 
-#### `diag_json` contract
 
-Tooling that wants a stable contract for early diagnostic-JSON resolution
-should treat the input consumed by `collect_diag_file_layers`,
-`diag_json_from_layer`, and `diag_json_from_matches` as versioned schema
-`netsuke.diag-json-resolution.v1`:
+#### `json` contract
 
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:netsuke:diag-json-resolution:v1",
-  "title": "Netsuke diag_json resolution layer",
-  "type": "object",
-  "description": "Subset of merged configuration consulted before full CLI merging.",
-  "properties": {
-    "output_format": {
-      "type": "string",
-      "enum": ["human", "json"],
-      "description": "Preferred field. When present and valid, this decides diag_json."
-    },
-    "diag_json": {
-      "type": "boolean",
-      "description": "Legacy fallback field used only when output_format is absent or invalid."
-    }
-  },
-  "additionalProperties": true
-}
-```
-
-Versioning and compatibility rules:
-
-- Version `v1` has no required fields. Both `output_format` and `diag_json`
-  are optional.
-- `output_format` is the preferred field. Valid `"json"` resolves to
-  `diag_json = true`; valid `"human"` resolves to `diag_json = false`.
-- If `output_format` is present but invalid, resolution falls back to
-  `diag_json` when it is a boolean value.
-- Non-object values, or objects that contain neither recognized field, produce
-  no `diag_json` decision.
-- `cli_overrides_from_matches` must continue to emit a JSON object, even when
-  no CLI override is present.
-- `is_empty_value` treats only the empty object `{}` as "no CLI overrides".
-  Downstream tooling must not replace an empty object with `null`, `[]`, or any
-  other sentinel.
-- Additional properties are ignored by `diag_json` resolution and may be
-  present because the same layer object also participates in full config
-  merging.
+Early JSON resolution reads only the boolean `json` field from each
+configuration layer. File layers are applied in merge order, followed by
+`NETSUKE_JSON`; an explicit root `--json` flag has the highest precedence.
+Invalid or unavailable early layers fall back to the built-in `false` default,
+allowing startup and merge failures to use the same output policy as normal
+runtime diagnostics.
 
 ## BDD command helpers and environment handling
 

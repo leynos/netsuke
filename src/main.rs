@@ -46,25 +46,26 @@ fn run_with_args(
     env: &impl locale_resolution::EnvProvider,
     system_locale: &impl locale_resolution::SystemLocale,
 ) -> ExitCode {
-    let diag_json_hint = locale_resolution::resolve_startup_diag_json(&args, env);
+    let json_hint = locale_resolution::resolve_startup_json(&args, env);
     let localizer = startup_localizer(&args, env, system_locale);
-    let startup_mode = DiagMode::from_json_enabled(diag_json_hint);
+    let startup_mode = DiagMode::from_json_enabled(json_hint);
     let (parsed_cli, matches) = match parse_cli_or_exit(args, &localizer, startup_mode) {
         Ok(parsed) => parsed,
         Err(code) => return code,
     };
-    let mode = DiagMode::from_json_enabled(cli::resolve_merged_diag_json(&parsed_cli, &matches));
+    let mode = DiagMode::from_json_enabled(cli::resolve_merged_json(&parsed_cli, &matches));
 
     let merged_cli = match merge_cli_or_exit(&parsed_cli, &matches, mode) {
         Ok(merged) => merged,
         Err(code) => return code,
     };
-    let runtime_mode = DiagMode::from_json_enabled(merged_cli.diag_json);
+    let runtime_mode = DiagMode::from_json_enabled(merged_cli.json);
     configure_runtime(&merged_cli, system_locale, runtime_mode);
-    let output_mode = output_mode::resolve(merged_cli.accessible, merged_cli.colour_policy);
+    let output_mode =
+        output_mode::resolve(merged_cli.accessibility_override(), Some(merged_cli.color));
     let prefs = output_prefs::resolve_from_theme(
-        merged_cli.theme,
-        ThemeContext::new(merged_cli.no_emoji, merged_cli.colour_policy, output_mode),
+        merged_cli.theme_preference(),
+        ThemeContext::new(None, Some(merged_cli.color), output_mode),
     );
     match runner::run(&merged_cli, prefs) {
         Ok(()) => ExitCode::SUCCESS,

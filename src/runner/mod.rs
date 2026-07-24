@@ -21,10 +21,7 @@ use crate::status::{
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
-use std::borrow::Cow;
 use std::io::IsTerminal;
-use std::path::Path;
-use tempfile::NamedTempFile;
 use tracing::{debug, info};
 
 /// Default Ninja executable to invoke.
@@ -148,32 +145,31 @@ const fn should_force_text_task_updates(mode: OutputMode, stdout_is_tty: bool) -
 ///
 /// Returns an error if manifest generation or the Ninja process fails.
 pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
-    let mode = output_mode::resolve(cli.accessible, cli.colour_policy);
-    let progress_enabled = cli.progress_enabled() && !cli.diag_json;
+    let mode = output_mode::resolve(cli.accessibility_override(), Some(cli.color));
+    let progress_enabled = cli.progress_enabled() && !cli.json;
     let stdout_is_tty = std::io::stdout().is_terminal();
     let reporter = make_reporter(ReporterOptions {
         mode,
         progress_enabled,
-        verbose: cli.verbose && !cli.diag_json,
+        verbose: cli.verbose && !cli.json,
         prefs,
         stdout_is_tty,
     });
 
     let command = cli.command.clone().unwrap_or(Commands::Build(BuildArgs {
-        emit: None,
         targets: Vec::new(),
     }));
     match command {
         Commands::Build(args) => handle_build(cli, &args, reporter.as_ref(), progress_enabled),
-        Commands::Manifest { file } => {
+        Commands::Generate { output } => {
             let ninja = generate_ninja(cli, reporter.as_ref(), None)?;
-            if process::is_stdout_path(file.as_path()) {
-                process::write_ninja_stdout(&ninja)?;
-            } else {
+            if let Some(file) = output {
                 let output_path = resolve_output_path(cli, file.as_path());
                 process::write_ninja_file(output_path.as_ref(), &ninja)?;
+            } else {
+                process::write_ninja_stdout(&ninja)?;
             }
-            reporter.report_complete(keys::STATUS_TOOL_MANIFEST.into());
+            reporter.report_complete(keys::STATUS_TOOL_GENERATE.into());
             Ok(())
         }
         Commands::Clean => handle_ninja_tool(
@@ -213,21 +209,8 @@ fn handle_build(
         BuildTargets::new(&args.targets)
     };
 
-    // Normalize the build file path and keep the temporary file alive for the
-    // duration of the Ninja invocation. Borrow the emitted path when provided
-    // to avoid unnecessary allocation.
-    let build_path: Cow<Path>;
-    let _tmp_file_guard: Option<NamedTempFile>;
-    if let Some(path) = &args.emit {
-        let emit_path = resolve_output_path(cli, path.as_path());
-        process::write_ninja_file(emit_path.as_ref(), &ninja)?;
-        build_path = emit_path;
-        _tmp_file_guard = None;
-    } else {
-        let tmp = process::create_temp_ninja_file(&ninja)?;
-        build_path = Cow::Owned(tmp.path().to_path_buf());
-        _tmp_file_guard = Some(tmp);
-    }
+    let build_file = process::create_temp_ninja_file(&ninja)?;
+    let build_path = build_file.path();
 
     let program = process::resolve_ninja_program();
     let ctx = || {
@@ -243,14 +226,14 @@ fn handle_build(
             process::NinjaBuildRequest {
                 program: program.as_path(),
                 cli,
-                build_file: build_path.as_ref(),
+                build_file: build_path,
                 targets: &targets,
             },
             &mut on_task_progress,
         )
         .with_context(ctx)?;
     } else {
-        run_ninja(program.as_path(), cli, build_path.as_ref(), &targets).with_context(ctx)?;
+        run_ninja(program.as_path(), cli, build_path, &targets).with_context(ctx)?;
     }
     reporter.report_complete(keys::STATUS_TOOL_BUILD.into());
     Ok(())

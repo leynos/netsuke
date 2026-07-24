@@ -4,7 +4,7 @@
 //! improving type safety and self-documentation in step definitions.
 
 use std::fmt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Generates a newtype wrapper for string parameters.
 ///
@@ -105,11 +105,6 @@ impl PathString {
     /// Return the path as a `Path` reference.
     pub fn as_path(&self) -> &Path {
         Path::new(&self.0)
-    }
-
-    /// Convert to an owned `PathBuf`.
-    pub fn to_path_buf(&self) -> PathBuf {
-        PathBuf::from(&self.0)
     }
 }
 

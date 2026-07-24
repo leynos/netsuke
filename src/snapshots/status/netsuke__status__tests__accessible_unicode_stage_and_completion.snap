@@ -8,4 +8,4 @@ expression: rendered
 ℹ Info: Stage 4/6: Deserializing and rendering manifest values
 ℹ Info: Stage 5/6: Building and validating dependency graph
 ℹ Info: Stage 6/6: Synthesizing Ninja build plan
-✔ Success: Manifest complete.
+✔ Success: Generate complete.

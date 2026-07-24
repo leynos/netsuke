@@ -15,13 +15,12 @@ cli.flag.fetch_allow_scheme.help = Additional URL schemes allowed for the fetch 
 cli.flag.fetch_allow_host.help = Hostnames that are permitted when default deny is enabled.
 cli.flag.fetch_block_host.help = Hostnames that are always blocked, even when allowed elsewhere.
 cli.flag.fetch_default_deny.help = Deny all hosts by default; only allow the declared allowlist.
-cli.flag.accessible.help = Force accessible output mode on or off.
-cli.flag.progress.help = Force standard stage and task progress summaries on or off.
-cli.flag.diag_json.help = Emit machine-readable diagnostics as JSON on stderr.
-cli.flag.theme.help = CLI theme preset (auto, unicode, ascii).
-cli.flag.colour_policy.help = Colour output policy (auto, always, never).
-cli.flag.spinner_mode.help = Progress spinner display mode (enabled, disabled).
-cli.flag.output_format.help = Diagnostic output format (human, json).
+cli.flag.json.help = Emit machine-readable JSON output.
+cli.flag.no_input.help = Never read interactive input.
+cli.flag.color.help = Colour output policy (auto, always, never).
+cli.flag.emoji.help = Emoji policy (auto, always, never).
+cli.flag.progress.help = Progress rendering policy (auto, always, never).
+cli.flag.accessibility.help = Accessible output policy (auto, on, off).
 cli.flag.default_targets.help = Default build targets when none are specified.
 
 # Subcommand descriptions.
@@ -31,19 +30,18 @@ cli.subcommand.clean.about = Remove build artefacts via Ninja.
 cli.subcommand.clean.long_about = Generate a temporary Ninja file, then run `ninja -t clean`.
 cli.subcommand.graph.about = Emit the build dependency graph. Default format is DOT.
 cli.subcommand.graph.long_about = Project the parsed Netsuke manifest into a canonical build graph and write it as Graphviz DOT, or as a self-contained HTML page with `--html`. Use `--output <FILE>` to write to a file; `-` writes to stdout.
-cli.subcommand.manifest.about = Write the generated Ninja manifest without running Ninja.
-cli.subcommand.manifest.long_about = Generate the Ninja file and write it to the specified path or '-' for stdout.
+cli.subcommand.generate.about = Generate the Ninja manifest without running Ninja.
+cli.subcommand.generate.long_about = Write the generated Ninja manifest to stdout, or to a file selected with `--output`.
 
 # Build subcommand flag help text.
-cli.subcommand.build.flag.emit.help = Write the generated Ninja file to this path and keep it.
 cli.subcommand.build.flag.targets.help = Targets to build (uses manifest defaults if omitted).
 
 # Graph subcommand flag help text.
 cli.subcommand.graph.flag.html.help = Render the graph as a self-contained HTML page instead of DOT.
 cli.subcommand.graph.flag.output.help = Write the graph artefact to FILE; use `-` for stdout.
 
-# Manifest subcommand argument help text.
-cli.subcommand.manifest.flag.file.help = Output path for the Ninja file (use '-' for stdout).
+# Generate subcommand flag help text.
+cli.subcommand.generate.flag.output.help = Write the generated Ninja manifest to FILE instead of stdout.
 
 # CLI validation errors.
 cli.validation.jobs.invalid_number = { $value } is not a valid number.
@@ -53,10 +51,10 @@ cli.validation.scheme.invalid_start = Scheme '{ $scheme }' must start with an AS
 cli.validation.scheme.invalid = Invalid scheme '{ $scheme }'.
 cli.validation.locale.empty = Locale must not be empty.
 cli.validation.locale.invalid = Invalid locale '{ $locale }'.
-cli.validation.theme.invalid = Invalid theme '{ $theme }'. Valid options: auto, unicode, ascii.
-cli.validation.colour_policy.invalid = Invalid colour policy '{ $value }'. Valid options: auto, always, never.
-cli.validation.spinner_mode.invalid = Invalid spinner mode '{ $value }'. Valid options: enabled, disabled.
-cli.validation.output_format.invalid = Invalid output format '{ $value }'. Valid options: human, json.
+cli.validation.color.invalid = Invalid color policy '{ $value }'. Valid options: auto, always, never.
+cli.validation.emoji.invalid = Invalid emoji policy '{ $value }'. Valid options: auto, always, never.
+cli.validation.progress.invalid = Invalid progress policy '{ $value }'. Valid options: auto, always, never.
+cli.validation.accessibility.invalid = Invalid accessibility policy '{ $value }'. Valid options: auto, on, off.
 cli.validation.config.expected_object = Expected parsed CLI values to serialize to an object, got { $value }.
 
 # Clap error messages.
@@ -367,7 +365,7 @@ status.tool.build = Build
 status.tool.clean = Clean
 status.tool.graph = Graph
 status.tool.graph_html = Graph (HTML)
-status.tool.manifest = Manifest
+status.tool.generate = Generate
 
 # Graph HTML renderer strings.
 graph.html.title = Netsuke build graph
@@ -378,7 +376,6 @@ graph.html.outline.no_inputs = No inputs
 graph.html.noscript.notice = JavaScript is disabled. The text outline above is the full graph; the DOT source follows.
 
 # Accessibility preferences.
-cli.flag.no_emoji.help = Suppress emoji glyphs in output.
 
 # Semantic prefixes for accessible output.
 semantic.prefix.error = Error:

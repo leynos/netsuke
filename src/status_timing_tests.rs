@@ -167,7 +167,7 @@ fn verbose_timing_reporter_finalizes_current_stage_on_complete(test_prefs: Outpu
         StageNumber::new_unchecked(6),
         "Reading manifest file",
     );
-    reporter.report_complete(LocalizationKey::new(keys::STATUS_TOOL_MANIFEST));
+    reporter.report_complete(LocalizationKey::new(keys::STATUS_TOOL_GENERATE));
 
     let observed = observed_clock_calls
         .lock()
@@ -244,7 +244,7 @@ fn verbose_timing_reporter_suppresses_progress_updates_after_complete(test_prefs
         "Reading manifest file",
     );
     reporter.report_task_progress(1, 2, "cc -c src/main.c");
-    reporter.report_complete(LocalizationKey::new(keys::STATUS_TOOL_MANIFEST));
+    reporter.report_complete(LocalizationKey::new(keys::STATUS_TOOL_GENERATE));
     reporter.report_stage(
         StageNumber::new_unchecked(2),
         StageNumber::new_unchecked(6),

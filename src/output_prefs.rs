@@ -3,8 +3,8 @@
 //! This module resolves a full CLI theme, including `NETSUKE_THEME`, and
 //! exposes localized semantic prefix helpers plus spacing-token helpers such
 //! as [`OutputPrefs::task_indent`] and [`OutputPrefs::timing_indent`].
-//! Preferences are auto-detected from `NO_COLOR`, `NETSUKE_NO_EMOJI`, and
-//! `NETSUKE_THEME`, or forced through explicit CLI/configuration values.
+//! Preferences are auto-detected from `NO_COLOR` and `NETSUKE_THEME`, or
+//! forced through explicit CLI/configuration values.
 
 use std::env;
 
@@ -158,20 +158,18 @@ impl OutputPrefs {
     }
 }
 
-/// Resolve output preferences from theme, output mode, and legacy settings.
+/// Resolve output preferences from theme and output mode.
 ///
 /// This is the primary resolution function introduced in roadmap 3.12.1.
 /// It delegates to [`resolve_from_theme_with`] and ultimately to
-/// [`theme::resolve_theme`] while preserving backward compatibility with the
-/// legacy `no_emoji` preference. That shared resolution path also honours the
+/// [`theme::resolve_theme`]. That shared resolution path also honours the
 /// `NO_COLOR` environment variable.
 ///
 /// Precedence (highest to lowest):
 /// 1. Explicit theme preference (if not `Auto`)
-/// 2. Legacy `no_emoji = true`
-/// 3. `NETSUKE_NO_EMOJI` environment variable
-/// 4. `NO_COLOR` environment variable
-/// 5. Output mode (Accessible uses ASCII, Standard uses Unicode)
+/// 2. An explicit internal ASCII-symbol preference
+/// 3. `NO_COLOR` environment variable
+/// 4. Output mode (Accessible uses ASCII, Standard uses Unicode)
 ///
 /// # Examples
 ///
@@ -212,15 +210,11 @@ where
 /// 1. Explicit `Some(true)` forces emoji off unconditionally.
 /// 2. `NO_COLOR` environment variable (any value, including empty):
 ///    emoji off.
-/// 3. `NETSUKE_NO_EMOJI` environment variable (any value, including empty):
-///    emoji off.
-/// 4. Default: emoji allowed.
+/// 3. Default: emoji allowed.
 ///
 /// `Some(false)` does **not** override environment checks — it is treated
 /// the same as `None`. Only `Some(true)` acts as a hard override. This
-/// ensures that `NETSUKE_NO_EMOJI` (with any value, including `"false"`)
-/// always suppresses emoji unless the CLI explicitly passes
-/// `--no-emoji true`, which sets `Some(true)` at the CLI merge layer.
+/// keeps `NO_COLOR` effective when no explicit opt-out is present.
 ///
 /// # Examples
 ///
@@ -243,14 +237,9 @@ pub fn resolve(no_emoji: Option<bool>) -> OutputPrefs {
 /// `Some(value)` when the variable is set.
 ///
 /// Override semantics:
-/// - `Some(true)` — explicit CLI `--no-emoji true`: forces emoji off,
-///   bypassing all environment checks.
-/// - `Some(false)` — explicit CLI `--no-emoji false`: **does not** re-enable
-///   emoji unconditionally. Falls through to environment checks so that
-///   presence-based variables (`NETSUKE_NO_EMOJI`) are still honoured.
-///   This prevents `NETSUKE_NO_EMOJI=false` (which is still *set*) from
-///   being silently overridden when the value originates from environment
-///   parsing rather than a deliberate CLI flag.
+/// - `Some(true)` — an explicit internal preference forces emoji off.
+/// - `Some(false)` — does not re-enable emoji unconditionally. It falls
+///   through to the `NO_COLOR` environment check.
 /// - `None` — no explicit setting: environment checks apply.
 ///
 /// # Examples

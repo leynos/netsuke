@@ -18,29 +18,24 @@
 # Locale for CLI messages, for example `en-US` or `es-ES`.
 # locale = "en-US"
 
-# Force accessible output mode on or off.
-# accessible = true
+# Emit machine-readable JSON diagnostics.
+# json = false
 
-# Suppress emoji glyphs in output.
-# no_emoji = false
-
-# Theme preset: `auto`, `unicode`, or `ascii`.
-# theme = "auto"
+# Never read interactive input. This must remain true until an explicit
+# interactive mode exists.
+# no_input = true
 
 # Colour output policy: `auto`, `always`, or `never`.
-# colour_policy = "auto"
+# color = "auto"
 
-# Force standard stage and task progress summaries on or off.
-# progress = true
+# Emoji policy: `auto`, `always`, or `never`.
+# emoji = "auto"
 
-# Spinner mode: `enabled` or `disabled`.
-# spinner_mode = "enabled"
+# Progress policy: `auto`, `always`, or `never`.
+# progress = "auto"
 
-# Emit machine-readable diagnostics on stderr.
-# diag_json = false
-
-# Diagnostic output format: `human` or `json`.
-# output_format = "human"
+# Accessibility policy: `auto`, `on`, or `off`.
+# accessibility = "auto"
 
 # Default build targets when the CLI does not name any targets.
 # default_targets = ["fmt", "lint", "test"]

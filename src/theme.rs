@@ -220,7 +220,6 @@ const COLOURS: ColourTokens = ColourTokens {
 /// Environment signals that may force ASCII symbols.
 #[derive(Debug, Clone, Copy)]
 struct EnvSignals {
-    no_emoji: bool,
     no_color: bool,
 }
 
@@ -228,10 +227,9 @@ struct EnvSignals {
 ///
 /// This helper encapsulates the precedence logic for symbol selection:
 /// 1. Explicit `theme` preference (if not `Auto`) takes highest precedence
-/// 2. Legacy `no_emoji = true` forces ASCII
-/// 3. `NETSUKE_NO_EMOJI` environment variable forces ASCII
-/// 4. `NO_COLOR` environment variable forces ASCII
-/// 5. Output mode: `Accessible` uses ASCII, `Standard` uses Unicode
+/// 2. An explicit internal ASCII-symbol preference forces ASCII
+/// 3. `NO_COLOR` environment variable forces ASCII
+/// 4. Output mode: `Accessible` uses ASCII, `Standard` uses Unicode
 const fn should_use_unicode(
     theme: Option<ThemePreference>,
     no_emoji: Option<bool>,
@@ -242,11 +240,7 @@ const fn should_use_unicode(
         Some(ThemePreference::Unicode) => true,
         Some(ThemePreference::Ascii) => false,
         Some(ThemePreference::Auto) | None => {
-            // Legacy no_emoji=true forces ASCII
             if let Some(true) = no_emoji {
-                return false;
-            }
-            if env.no_emoji {
                 return false;
             }
             if env.no_color {
@@ -262,10 +256,9 @@ const fn should_use_unicode(
 ///
 /// Precedence order:
 /// 1. Explicit `theme` preference (if not `Auto`)
-/// 2. Legacy `no_emoji = true` forces ASCII
-/// 3. `NETSUKE_NO_EMOJI` environment variable forces ASCII
-/// 4. `NO_COLOR` environment variable forces ASCII
-/// 5. Output mode: `Accessible` uses ASCII, `Standard` uses Unicode
+/// 2. An explicit internal ASCII-symbol preference forces ASCII
+/// 3. `NO_COLOR` environment variable forces ASCII
+/// 4. Output mode: `Accessible` uses ASCII, `Standard` uses Unicode
 ///
 /// # Examples
 ///
@@ -290,7 +283,6 @@ where
     F: Fn(&str) -> Option<String>,
 {
     let env = EnvSignals {
-        no_emoji: read_env("NETSUKE_NO_EMOJI").is_some(),
         no_color: no_color_active_with(context.colour_policy, &read_env),
     };
     let use_unicode = should_use_unicode(theme, context.no_emoji, env, context.mode);

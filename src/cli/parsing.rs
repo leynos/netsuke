@@ -16,10 +16,9 @@ use clap::ValueEnum;
 use ortho_config::{LanguageIdentifier, LocalizationArgs, Localizer};
 use std::str::FromStr;
 
-use super::{ColourPolicy, OutputFormat, SpinnerMode};
+use super::{AccessibilityPolicy, ColourPolicy, EmojiPolicy, ProgressPolicy};
 use crate::host_pattern::HostPattern;
 use crate::localization::keys;
-use crate::theme::ThemePreference;
 
 pub(super) fn parse_jobs(localizer: &dyn Localizer, s: &str) -> Result<usize, String> {
     let value: usize = s.parse().map_err(|_| {
@@ -109,7 +108,7 @@ pub(super) fn parse_locale(localizer: &dyn Localizer, s: &str) -> Result<String,
         })
 }
 
-pub(super) fn parse_colour_policy(
+pub(super) fn parse_color_policy(
     localizer: &dyn Localizer,
     s: &str,
 ) -> Result<ColourPolicy, String> {
@@ -117,51 +116,52 @@ pub(super) fn parse_colour_policy(
         localizer,
         s,
         ParseEnumSpec {
-            key: keys::CLI_COLOUR_POLICY_INVALID,
+            key: keys::CLI_COLOR_POLICY_INVALID,
             arg_name: "value",
         },
     )
 }
 
-pub(super) fn parse_spinner_mode(
+pub(super) fn parse_emoji_policy(
     localizer: &dyn Localizer,
     s: &str,
-) -> Result<SpinnerMode, String> {
+) -> Result<EmojiPolicy, String> {
     parse_value_enum(
         localizer,
         s,
         ParseEnumSpec {
-            key: keys::CLI_SPINNER_MODE_INVALID,
+            key: keys::CLI_EMOJI_POLICY_INVALID,
             arg_name: "value",
         },
     )
 }
 
-pub(super) fn parse_output_format(
+pub(super) fn parse_progress_policy(
     localizer: &dyn Localizer,
     s: &str,
-) -> Result<OutputFormat, String> {
+) -> Result<ProgressPolicy, String> {
     parse_value_enum(
         localizer,
         s,
         ParseEnumSpec {
-            key: keys::CLI_OUTPUT_FORMAT_INVALID,
+            key: keys::CLI_PROGRESS_POLICY_INVALID,
             arg_name: "value",
         },
     )
 }
 
-pub(super) fn parse_theme(localizer: &dyn Localizer, s: &str) -> Result<ThemePreference, String> {
-    ThemePreference::parse_raw(s).map_err(|_| {
-        let mut args = LocalizationArgs::default();
-        args.insert("theme", s.to_owned().into());
-        super::parser::validation_message(
-            localizer,
-            keys::CLI_THEME_INVALID,
-            Some(&args),
-            &format!("Invalid theme '{s}'"),
-        )
-    })
+pub(super) fn parse_accessibility_policy(
+    localizer: &dyn Localizer,
+    s: &str,
+) -> Result<AccessibilityPolicy, String> {
+    parse_value_enum(
+        localizer,
+        s,
+        ParseEnumSpec {
+            key: keys::CLI_ACCESSIBILITY_POLICY_INVALID,
+            arg_name: "value",
+        },
+    )
 }
 
 /// Bundles the static localisation metadata needed by [`parse_value_enum`].

@@ -211,7 +211,7 @@ fn completion_line_includes_success_prefix(en_localizer: EnLocalizer) -> Result<
     let prefs = test_prefs();
     let line = normalize_fluent_isolates(&format_completion_line(
         prefs,
-        LocalizationKey::new(keys::STATUS_TOOL_MANIFEST),
+        LocalizationKey::new(keys::STATUS_TOOL_GENERATE),
     ));
     let success_prefix = normalize_fluent_isolates(&prefs.success_prefix());
     ensure!(
@@ -246,7 +246,7 @@ fn accessible_reporter_stage_and_completion_snapshot(
             &stage.description(None),
         );
     }
-    reporter.report_complete(LocalizationKey::new(keys::STATUS_TOOL_MANIFEST));
+    reporter.report_complete(LocalizationKey::new(keys::STATUS_TOOL_GENERATE));
 
     let output = reporter
         .writer
