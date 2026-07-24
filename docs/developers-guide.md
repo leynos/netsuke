@@ -1024,7 +1024,7 @@ sequenceDiagram
     BddRunner->>AdvancedUsageSteps: execute When netsuke is run with args "manifest -"
     AdvancedUsageSteps->>TestWorld: set_env_from_world()
     TestWorld->>AssertCmdCommand: build_command_with_explicit_path()
-    AssertCmdCommand->>AssertCmdCommand: inherit_NINJA_ENV()
+    AssertCmdCommand->>AssertCmdCommand: forward NETSUKE_NINJA override
     AssertCmdCommand->>AssertCmdCommand: apply_world_environment_overrides()
     AssertCmdCommand->>NetsukeBinary: spawn_with_env_and_path()
     NetsukeBinary->>NinjaTool: optional_ninja_invocation()
@@ -1124,6 +1124,62 @@ mirror the conversion boundary and absence-coercion helper.
 whitespace-only `when` values, or type mismatches in the iterable.
 
 **Cross-references:** `docs/netsuke-design.md` §2.5 and roadmap task 3.14.2.
+
+## Runner process execution
+
+### Module: `runner::process::ninja_program`
+
+`src/runner/process/ninja_program.rs` owns the executable-resolution boundary.
+It is the only runner adapter that reads `NETSUKE_NINJA`, validates empty and
+non-UTF-8 values, selects the default `ninja` fallback, and records the selected
+source at debug level. Process construction uses the resolved path exported by
+this module and must not interpret the environment override independently.
+
+### Module: `runner::process::command_logging`
+
+`src/runner/process/command_logging.rs` owns the structured logging contract
+for all internal Ninja process invocations. `CommandLogContext` is the shared
+log payload builder for a prepared `Command`; it records `program_display` for
+the `ninja_program` field and `arg_count` for stable argument cardinality.
+`from_command` normalizes non-UTF-8 program paths through lossy UTF-8
+conversion, replacing invalid byte sequences with Unicode replacement
+characters in `program_display`. It redacts sensitive arguments and stores the
+redacted command string for the human-readable `"Executing command: {}"`
+message in the informational execution event. Open
+[issue #384](https://github.com/leynos/netsuke/issues/384) tracks moving this
+high-cardinality payload to a debug companion event.
+
+All command events share these structured fields:
+
+- `operation`: caller-provided operation label such as `"build"` or tool name.
+- `ninja_program`: command program after UTF-8 normalization.
+- `suppress_stderr`: derived from `cli.resolved_diag_json()`, true when JSON
+  diagnostics suppress direct stderr logging.
+
+Phase-specific fields supplement that shared set. The informational execution
+event includes `arg_count`. Spawn- and exit-failure events instead set
+`failure_category` to `"spawn"` or `"exit_status"` for alert bucketing; the
+argument count remains available on the enclosing `ninja_subprocess` span.
+
+Use the logging helpers according to failure phase:
+
+- `log_command_execution` for the spawn attempt.
+- `log_command_spawn_failure` for `io::Error` during process creation.
+- `log_command_exit_failure` for non-zero child exit status.
+
+`check_exit_status_with_context` records `failure_category` before logging
+exits, which lets downstream filtering distinguish spawn failures from
+exit-status failures.
+
+`run_ninja_internal` is the shared execution pattern used by build and tool
+paths:
+
+1. Create `Command` with `Command::new(request.program)`.
+2. Pass it into a closure that applies operation-specific configuration.
+3. Call `run_command_and_stream_with_context` with optional status observer,
+   `cli.resolved_diag_json()` as `suppress_stderr`, and the chosen `operation`.
+4. Let `run_command_and_stream_with_context` handle span creation, execution
+   logging, failure logging, and exit-status enforcement via context helpers.
 
 ## IR cycle detection
 

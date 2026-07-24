@@ -764,6 +764,13 @@ mode, but configuration files intentionally reject `output_format = "json"`. Use
 preferred setting, but Netsuke does not yet emit coloured terminal output, so
 this value currently has no visible effect.
 
+`NETSUKE_NINJA` overrides the Ninja executable used for `build`, `clean`, and
+`graph` commands. Leave it unset to use the default `ninja` command on `PATH`,
+or set it to another executable name such as `ninja-build` or to an absolute
+path such as `/opt/ninja/bin/ninja` when the binary is installed outside the
+default search path. Empty or non-UTF-8 values are ignored and fall back to the
+default `ninja` command.
+
 Use `--locale <LOCALE>`, `NETSUKE_LOCALE`, or a `locale = "..."` entry in a
 configuration file to select localized CLI copy and error messages. Locale
 precedence is: command-line flag, environment variable, configuration file,
@@ -1328,6 +1335,7 @@ names to screaming snake case:
 - `--verbose` → `NETSUKE_VERBOSE=true`
 - `--colour-policy` → `NETSUKE_COLOUR_POLICY=always`
 - `--spinner-mode` → `NETSUKE_SPINNER_MODE=disabled`
+- Ninja executable override → `NETSUKE_NINJA=/opt/ninja/bin/ninja`
 
 For nested fields or indexed lists, use double underscore separators:
 

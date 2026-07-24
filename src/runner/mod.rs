@@ -2,7 +2,9 @@
 //!
 //! This module keeps `main` minimal by providing a single entry point that
 //! handles command execution. It now delegates build requests to the Ninja
-//! subprocess, streaming its output back to the user.
+//! subprocess, streaming its output back to the user. The executable defaults
+//! to `ninja` and may be overridden with `NETSUKE_NINJA` for systems that use a
+//! different binary name or require a full path.
 
 mod error;
 
