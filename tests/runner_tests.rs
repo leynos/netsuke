@@ -1,7 +1,7 @@
 //! Behavioural tests for the Netsuke runner and CLI integration.
 
 use anyhow::{Context, Result, bail, ensure};
-use netsuke::cli::{BuildArgs, Cli, Commands};
+use netsuke::cli::{Cli, Commands};
 use netsuke::localization::{self, keys};
 use netsuke::output_prefs;
 use netsuke::runner::{BuildTargets, run, run_ninja, run_ninja_tool};
@@ -169,37 +169,38 @@ fn run_ninja_not_found() -> Result<()> {
 fn run_executes_ninja_without_persisting_file() -> Result<()> {
     let (_ninja_dir, _ninja_path, temp, cli, _guard) = setup_ninja_env_test()?;
 
-    run(&cli, output_prefs::resolve(None)).context("expected run to succeed without emit path")?;
+    run(&cli, output_prefs::resolve(None)).context("expected build to succeed")?;
 
     // Ensure no ninja file remains in project directory
     ensure!(
         !temp.path().join("build.ninja").exists(),
-        "build.ninja should not persist when emit path unset"
+        "build.ninja should not persist after a build"
     );
     Ok(())
 }
 
 #[cfg(unix)]
 #[rstest]
-fn run_build_with_emit_keeps_file() -> Result<()> {
-    let (_ninja_dir, _ninja_path, _guard) = ninja_in_env()?;
+fn run_generate_with_output_keeps_file() -> Result<()> {
     let (temp, manifest_path) = create_test_manifest()?;
-    let emit_path = temp.path().join("emitted.ninja");
+    let output_path = temp.path().join("generated.ninja");
     let cli = Cli {
         file: manifest_path.clone(),
         directory: Some(temp.path().to_path_buf()),
-        command: Some(Commands::Build(BuildArgs {
-            emit: Some(emit_path.clone()),
-            targets: Vec::new(),
-        })),
+        command: Some(Commands::Generate {
+            output: Some(output_path.clone()),
+        }),
         ..Cli::default()
     };
 
-    run(&cli, output_prefs::resolve(None)).context("expected run to succeed with emit path")?;
+    run(&cli, output_prefs::resolve(None)).context("expected generate to succeed")?;
 
-    ensure!(emit_path.exists(), "emit path should exist after build");
-    let emitted = std::fs::read_to_string(&emit_path)
-        .with_context(|| format!("read emitted ninja at {}", emit_path.display()))?;
+    ensure!(
+        output_path.exists(),
+        "output path should exist after generate"
+    );
+    let emitted = std::fs::read_to_string(&output_path)
+        .with_context(|| format!("read generated Ninja file at {}", output_path.display()))?;
     ensure!(
         emitted.contains("rule "),
         "emitted manifest should include rule section"
@@ -210,82 +211,80 @@ fn run_build_with_emit_keeps_file() -> Result<()> {
     );
     ensure!(
         !temp.path().join("build.ninja").exists(),
-        "build.ninja should not remain when emit path provided"
+        "generate should not leave build.ninja"
     );
     Ok(())
 }
 
 #[cfg(unix)]
 #[rstest]
-fn run_build_with_emit_creates_parent_dirs() -> Result<()> {
-    let (_ninja_dir, _ninja_path, _guard) = ninja_with_exit_code(0)?;
+fn run_generate_with_output_creates_parent_dirs() -> Result<()> {
     let (temp, manifest_path) = create_test_manifest()?;
     let nested_dir = temp.path().join("nested").join("dir");
-    let emit_path = nested_dir.join("emitted.ninja");
+    let output_path = nested_dir.join("generated.ninja");
     ensure!(
         !nested_dir.exists(),
-        "nested directory should not exist prior to build"
+        "nested directory should not exist prior to generate"
     );
     let cli = Cli {
         file: manifest_path.clone(),
         directory: Some(temp.path().to_path_buf()),
-        command: Some(Commands::Build(BuildArgs {
-            emit: Some(emit_path.clone()),
-            targets: Vec::new(),
-        })),
+        command: Some(Commands::Generate {
+            output: Some(output_path.clone()),
+        }),
         ..Cli::default()
     };
 
     run(&cli, output_prefs::resolve(None))
-        .context("expected run to succeed with nested emit path")?;
-    ensure!(emit_path.exists(), "emit path should be created");
+        .context("expected generate to succeed with nested output path")?;
+    ensure!(output_path.exists(), "output path should be created");
     ensure!(nested_dir.exists(), "nested directory should be created");
     Ok(())
 }
 
 #[test]
-fn run_manifest_subcommand_writes_file() -> Result<()> {
+fn run_generate_subcommand_writes_file() -> Result<()> {
     let (temp, manifest_path) = create_test_manifest()?;
     let output_path = temp.path().join("standalone.ninja");
     let cli = Cli {
         file: manifest_path.clone(),
         directory: Some(temp.path().to_path_buf()),
-        command: Some(Commands::Manifest {
-            file: output_path.clone(),
+        command: Some(Commands::Generate {
+            output: Some(output_path.clone()),
         }),
         ..Cli::default()
     };
 
-    run(&cli, output_prefs::resolve(None)).context("expected manifest subcommand to succeed")?;
+    run(&cli, output_prefs::resolve(None)).context("expected generate subcommand to succeed")?;
     ensure!(
         output_path.exists(),
-        "manifest command should create output file"
+        "generate command should create output file"
     );
     ensure!(
         !temp.path().join("build.ninja").exists(),
-        "manifest command should not leave build.ninja"
+        "generate command should not leave build.ninja"
     );
     Ok(())
 }
 
 #[test]
-fn run_manifest_subcommand_accepts_relative_manifest_path() -> Result<()> {
+fn run_generate_subcommand_accepts_relative_manifest_path() -> Result<()> {
     let (temp, _manifest_path) = create_test_manifest()?;
     let output_path = temp.path().join("relative.ninja");
     let cli = Cli {
         file: PathBuf::from("Netsukefile"),
         directory: Some(temp.path().to_path_buf()),
-        command: Some(Commands::Manifest {
-            file: output_path.clone(),
+        command: Some(Commands::Generate {
+            output: Some(output_path.clone()),
         }),
         ..Cli::default()
     };
 
     run(&cli, output_prefs::resolve(None))
-        .context("expected manifest subcommand to accept relative manifest path")?;
+        .context("expected generate subcommand to accept relative manifest path")?;
     ensure!(
         output_path.exists(),
-        "manifest command should create output file for relative manifest path"
+        "generate command should create output file for relative manifest path"
     );
     Ok(())
 }

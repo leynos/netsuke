@@ -2,7 +2,7 @@
 //!
 //! These tests cover edge cases and unhappy paths not reached by the BDD
 //! scenarios in `tests/features/advanced_usage.feature`. They validate
-//! the documented behaviour of `clean`, `graph`, `manifest`, configuration
+//! the documented behaviour of `clean`, `graph`, `generate`, configuration
 //! layering, and JSON diagnostics.
 
 use anyhow::{Context, Result, ensure};
@@ -146,12 +146,12 @@ fn graph_with_invalid_manifest_fails_with_actionable_error() -> Result<()> {
 }
 
 // -------------------------------------------------------------------------
-// Manifest subcommand edge cases
+// Generate subcommand edge cases
 // -------------------------------------------------------------------------
 
 #[test]
-fn manifest_to_unwritable_path_fails_with_path_error() -> Result<()> {
-    let workspace = setup_minimal_workspace("manifest to unwritable path")?;
+fn generate_to_unwritable_path_fails_with_path_error() -> Result<()> {
+    let workspace = setup_minimal_workspace("generate to unwritable path")?;
     // Create a regular file that blocks the parent directory creation.
     let blocker = workspace.path().join("blocker");
     std::fs::write(&blocker, "").context("create blocker file")?;
@@ -159,13 +159,17 @@ fn manifest_to_unwritable_path_fails_with_path_error() -> Result<()> {
 
     let output = run_netsuke(
         workspace.path(),
-        &["manifest", bad_path.to_str().expect("path is UTF-8")],
+        &[
+            "generate",
+            "--output",
+            bad_path.to_str().expect("path is UTF-8"),
+        ],
         None,
     )?;
 
     ensure!(
         !output.success,
-        "expected manifest to unwritable path to fail"
+        "expected generate to unwritable path to fail"
     );
     ensure!(
         output.stderr.contains("blocker"),
@@ -176,20 +180,24 @@ fn manifest_to_unwritable_path_fails_with_path_error() -> Result<()> {
 }
 
 #[test]
-fn manifest_to_missing_parent_directory_succeeds_by_creating_parents() -> Result<()> {
-    let workspace = setup_minimal_workspace("manifest to missing parent")?;
+fn generate_to_missing_parent_directory_succeeds_by_creating_parents() -> Result<()> {
+    let workspace = setup_minimal_workspace("generate to missing parent")?;
     // Netsuke automatically creates missing parent directories.
     let nested_path = workspace.path().join("missing_parent").join("out.ninja");
 
     let output = run_netsuke(
         workspace.path(),
-        &["manifest", nested_path.to_str().expect("path is UTF-8")],
+        &[
+            "generate",
+            "--output",
+            nested_path.to_str().expect("path is UTF-8"),
+        ],
         None,
     )?;
 
     ensure!(
         output.success,
-        "expected manifest to succeed and create parent directories"
+        "expected generate to succeed and create parent directories"
     );
     ensure!(
         nested_path.exists(),
@@ -241,11 +249,7 @@ fn json_diagnostics_with_verbose_produces_valid_json() -> Result<()> {
     let manifest = workspace.path().join("Netsukefile");
     std::fs::write(&manifest, "not_valid_yaml: [[[").context("write invalid manifest")?;
 
-    let output = run_netsuke(
-        workspace.path(),
-        &["--diag-json", "--verbose", "build"],
-        None,
-    )?;
+    let output = run_netsuke(workspace.path(), &["--json", "--verbose", "build"], None)?;
 
     ensure!(
         !output.success,
@@ -264,26 +268,25 @@ fn json_diagnostics_with_verbose_produces_valid_json() -> Result<()> {
     // stdout should be empty when diagnostics go to stderr
     ensure!(
         output.stdout.trim().is_empty(),
-        "expected stdout to be empty with --diag-json, got:\n{}",
+        "expected stdout to be empty with --json, got:\n{}",
         output.stdout
     );
     Ok(())
 }
 
 #[test]
-fn manifest_to_stdout_contains_ninja_rules() -> Result<()> {
-    let workspace = setup_minimal_workspace("manifest to stdout")?;
+fn generate_to_stdout_contains_ninja_rules() -> Result<()> {
+    let workspace = setup_minimal_workspace("generate to stdout")?;
 
-    let output = run_netsuke(workspace.path(), &["manifest", "-"], None)?;
+    let output = run_netsuke(workspace.path(), &["generate"], None)?;
 
-    ensure!(output.success, "expected manifest to stdout to succeed");
+    ensure!(output.success, "expected generate to stdout to succeed");
     ensure!(
         output.stdout.contains("rule "),
         "expected stdout to contain Ninja rule statements, got:\n{}",
         output.stdout
     );
-    // Progress output goes to stderr; the manifest content goes to stdout.
-    // This separation allows manifest output to be cleanly piped.
+    // Progress output goes to stderr; the generated content goes to stdout.
     ensure!(
         !output.stderr.contains("rule "),
         "expected progress messages on stderr, not manifest content, got:\n{}",
@@ -298,13 +301,13 @@ fn manifest_to_stdout_contains_ninja_rules() -> Result<()> {
 fn invalid_config_value_reports_validation_error() -> Result<()> {
     let workspace = setup_minimal_workspace("invalid config value")?;
     let config = workspace.path().join(".netsuke.toml");
-    std::fs::write(&config, "colour_policy = \"loud\"\n").context("write invalid config file")?;
+    std::fs::write(&config, "color = \"loud\"\n").context("write invalid config file")?;
 
-    let output = run_netsuke_with_env(workspace.path(), &["manifest", "-"], None, &[])?;
+    let output = run_netsuke_with_env(workspace.path(), &["generate"], None, &[])?;
 
     ensure!(
         !output.success,
-        "expected manifest with invalid config to fail"
+        "expected generate with invalid config to fail"
     );
     // The error message should mention the invalid value and valid options.
     ensure!(

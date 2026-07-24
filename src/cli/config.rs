@@ -13,7 +13,25 @@ use std::str::FromStr;
 
 use super::validation_error;
 use crate::host_pattern::HostPattern;
-use crate::theme::ThemePreference;
+
+/// Required non-interactive execution setting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct NoInput(bool);
+
+impl NoInput {
+    /// Return whether interactive input is disabled.
+    #[must_use]
+    pub const fn is_enabled(self) -> bool {
+        self.0
+    }
+}
+
+impl Default for NoInput {
+    fn default() -> Self {
+        Self(true)
+    }
+}
 
 /// Colour-output policy accepted by layered configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
@@ -42,109 +60,107 @@ impl FromStr for ColourPolicy {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        <Self as ValueEnum>::from_str(s, true).map_err(|_| format!("invalid colour policy '{s}'"))
+        <Self as ValueEnum>::from_str(s, true).map_err(|_| format!("invalid color policy '{s}'"))
     }
 }
 
-/// Spinner and progress rendering policy.
+/// Progress rendering policy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
 #[serde(rename_all = "kebab-case")]
-pub enum SpinnerMode {
+pub enum ProgressPolicy {
     /// Follow Netsuke's default progress behaviour.
     #[default]
     Auto,
-    /// Force progress summaries on.
-    Enabled,
-    /// Disable progress summaries.
-    Disabled,
+    /// Force progress rendering on.
+    Always,
+    /// Disable progress rendering.
+    Never,
 }
 
-impl fmt::Display for SpinnerMode {
+impl fmt::Display for ProgressPolicy {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Auto => write!(f, "auto"),
-            Self::Enabled => write!(f, "enabled"),
-            Self::Disabled => write!(f, "disabled"),
+            Self::Always => write!(f, "always"),
+            Self::Never => write!(f, "never"),
         }
     }
 }
 
-impl FromStr for SpinnerMode {
+impl FromStr for ProgressPolicy {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        <Self as ValueEnum>::from_str(s, true).map_err(|_| format!("invalid spinner mode '{s}'"))
+        <Self as ValueEnum>::from_str(s, true).map_err(|_| format!("invalid progress policy '{s}'"))
     }
 }
 
-/// Top-level diagnostics and output format.
+/// Emoji rendering policy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
 #[serde(rename_all = "kebab-case")]
-pub enum OutputFormat {
-    /// Human-readable terminal output.
-    #[default]
-    Human,
-    /// Machine-readable JSON diagnostics.
-    Json,
-}
-
-impl fmt::Display for OutputFormat {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Human => write!(f, "human"),
-            Self::Json => write!(f, "json"),
-        }
-    }
-}
-
-impl FromStr for OutputFormat {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        <Self as ValueEnum>::from_str(s, true).map_err(|_| format!("invalid output format '{s}'"))
-    }
-}
-
-/// Presentation theme for semantic prefixes and glyph choices.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
-#[serde(rename_all = "kebab-case")]
-pub enum Theme {
-    /// Follow the host environment.
+pub enum EmojiPolicy {
+    /// Follow the host environment and accessibility mode.
     #[default]
     Auto,
-    /// Prefer the Unicode/emoji presentation.
-    Unicode,
-    /// Prefer ASCII-only output.
-    Ascii,
+    /// Force emoji glyphs on.
+    Always,
+    /// Disable emoji glyphs.
+    Never,
 }
 
-impl From<Theme> for ThemePreference {
-    fn from(value: Theme) -> Self {
-        match value {
-            Theme::Auto => Self::Auto,
-            Theme::Unicode => Self::Unicode,
-            Theme::Ascii => Self::Ascii,
+impl fmt::Display for EmojiPolicy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Auto => write!(f, "auto"),
+            Self::Always => write!(f, "always"),
+            Self::Never => write!(f, "never"),
         }
     }
 }
 
-impl PartialEq<ThemePreference> for Theme {
-    fn eq(&self, other: &ThemePreference) -> bool {
-        ThemePreference::from(*self) == *other
+impl FromStr for EmojiPolicy {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        <Self as ValueEnum>::from_str(s, true).map_err(|_| format!("invalid emoji policy '{s}'"))
     }
 }
 
-impl PartialEq<Theme> for ThemePreference {
-    fn eq(&self, other: &Theme) -> bool {
-        *self == Self::from(*other)
+/// Accessible-output policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum AccessibilityPolicy {
+    /// Follow terminal and environment detection.
+    #[default]
+    Auto,
+    /// Force accessible output on.
+    On,
+    /// Force accessible output off.
+    Off,
+}
+
+impl fmt::Display for AccessibilityPolicy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Auto => write!(f, "auto"),
+            Self::On => write!(f, "on"),
+            Self::Off => write!(f, "off"),
+        }
+    }
+}
+
+impl FromStr for AccessibilityPolicy {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        <Self as ValueEnum>::from_str(s, true)
+            .map_err(|_| format!("invalid accessibility policy '{s}'"))
     }
 }
 
 /// Layered defaults for the `build` subcommand.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct BuildConfig {
-    /// Optional default path for the emitted Ninja manifest.
-    pub emit: Option<PathBuf>,
     /// Default targets used when the user does not pass any targets.
     #[serde(default)]
     pub targets: Vec<String>,
@@ -195,34 +211,29 @@ pub struct CliConfig {
     #[ortho_config(default = false)]
     pub fetch_default_deny: bool,
 
-    /// Force accessible output mode on or off.
-    pub accessible: Option<bool>,
-
-    /// Compatibility alias for requesting the ASCII theme.
-    pub no_emoji: Option<bool>,
-
-    /// Emit machine-readable diagnostics in JSON on stderr.
+    /// Emit machine-readable JSON output.
     #[ortho_config(default = false)]
-    pub diag_json: bool,
+    pub json: bool,
 
-    /// Force progress summaries on or off.
-    pub progress: Option<bool>,
+    /// Never read interactive input.
+    #[ortho_config(skip_cli)]
+    pub no_input: NoInput,
 
     /// Preferred colour policy.
     #[ortho_config(skip_cli)]
-    pub colour_policy: Option<ColourPolicy>,
+    pub color: ColourPolicy,
 
-    /// Preferred spinner or progress mode.
+    /// Preferred emoji policy.
     #[ortho_config(skip_cli)]
-    pub spinner_mode: Option<SpinnerMode>,
+    pub emoji: EmojiPolicy,
 
-    /// Preferred diagnostics/output format.
+    /// Preferred progress policy.
     #[ortho_config(skip_cli)]
-    pub output_format: Option<OutputFormat>,
+    pub progress: ProgressPolicy,
 
-    /// Preferred terminal theme.
+    /// Preferred accessibility policy.
     #[ortho_config(skip_cli)]
-    pub theme: Option<Theme>,
+    pub accessibility: AccessibilityPolicy,
 
     /// Compatibility alias for default build targets at the config root.
     #[ortho_config(merge_strategy = "append")]
@@ -246,14 +257,12 @@ impl Default for CliConfig {
             fetch_allow_host: Vec::new(),
             fetch_block_host: Vec::new(),
             fetch_default_deny: false,
-            accessible: None,
-            no_emoji: None,
-            diag_json: false,
-            progress: None,
-            colour_policy: None,
-            spinner_mode: None,
-            output_format: None,
-            theme: None,
+            json: false,
+            no_input: NoInput::default(),
+            color: ColourPolicy::Auto,
+            emoji: EmojiPolicy::Auto,
+            progress: ProgressPolicy::Auto,
+            accessibility: AccessibilityPolicy::Auto,
             default_targets: Vec::new(),
             cmds: CommandConfigs::default(),
         }
@@ -274,8 +283,7 @@ const fn jobs_out_of_bounds(jobs: usize) -> bool {
 
 impl PostMergeHook for CliConfig {
     fn post_merge(&mut self, _ctx: &PostMergeContext) -> OrthoResult<()> {
-        validate_theme_compatibility(self)?;
-        validate_spinner_mode_compatibility(self)?;
+        validate_non_interactive(self)?;
         validate_jobs(self)?;
         Ok(())
     }
@@ -285,31 +293,14 @@ fn default_manifest_path() -> PathBuf {
     PathBuf::from("Netsukefile")
 }
 
-fn validate_theme_compatibility(config: &CliConfig) -> OrthoResult<()> {
-    match (config.theme, config.no_emoji) {
-        (Some(Theme::Unicode), Some(true)) => Err(validation_error(
-            "theme",
-            "theme = \"unicode\" conflicts with no_emoji = true; use theme = \"ascii\" instead",
-        )),
-        (Some(Theme::Ascii), Some(false)) => Err(validation_error(
-            "no_emoji",
-            "theme = \"ascii\" conflicts with no_emoji = false; remove the alias or choose theme = \"unicode\"",
-        )),
-        _ => Ok(()),
-    }
-}
-
-fn validate_spinner_mode_compatibility(config: &CliConfig) -> OrthoResult<()> {
-    match (config.spinner_mode, config.progress) {
-        (Some(SpinnerMode::Disabled), Some(true)) => Err(validation_error(
-            "spinner_mode",
-            "spinner_mode = \"disabled\" conflicts with progress = true",
-        )),
-        (Some(SpinnerMode::Enabled), Some(false)) => Err(validation_error(
-            "progress",
-            "spinner_mode = \"enabled\" conflicts with progress = false",
-        )),
-        _ => Ok(()),
+fn validate_non_interactive(config: &CliConfig) -> OrthoResult<()> {
+    if config.no_input.is_enabled() {
+        Ok(())
+    } else {
+        Err(validation_error(
+            "no_input",
+            "no_input = false is unsupported because Netsuke has no interactive mode",
+        ))
     }
 }
 

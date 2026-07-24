@@ -27,7 +27,7 @@ Feature: Novice CLI flows
     And stdout should contain "graph"
     And stdout should contain "dependency graph"
     And stdout should contain "manifest"
-    And stdout should contain "generated Ninja manifest"
+    And stdout should contain "Generate the Ninja manifest"
 
   Scenario: Help subcommand output matches the flag form
     Given an empty workspace
@@ -40,4 +40,4 @@ Feature: Novice CLI flows
     And stdout should contain "graph"
     And stdout should contain "dependency graph"
     And stdout should contain "manifest"
-    And stdout should contain "generated Ninja manifest"
+    And stdout should contain "Generate the Ninja manifest"

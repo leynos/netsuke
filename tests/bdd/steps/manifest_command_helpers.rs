@@ -1,4 +1,4 @@
-//! Shared helpers for the `netsuke manifest` BDD step definitions.
+//! Shared helpers for the `netsuke generate` BDD step definitions.
 //!
 //! Split from `manifest_command.rs` so both files stay within the module size
 //! budget; the step definitions in the parent module call these helpers.
@@ -66,7 +66,7 @@ pub(super) fn create_directory_in_workspace(temp_path: &Path, name: &DirectoryNa
     Ok(())
 }
 
-/// Result from running the netsuke manifest command.
+/// Result from running the netsuke generate command.
 pub(super) struct RunResult {
     stdout: String,
     stderr: String,
@@ -90,13 +90,17 @@ impl RunResult {
     }
 }
 
-pub(super) fn run_manifest_command(
+pub(super) fn run_generate_command(
     world: &TestWorld,
     output: &ManifestOutputPath,
 ) -> Result<RunResult> {
-    let args = ["manifest", output.as_str()];
+    let args = if output.as_str() == "-" {
+        vec!["generate"]
+    } else {
+        vec!["generate", "--output", output.as_str()]
+    };
     let mut cmd = build_netsuke_command(world, &args)?;
-    let result = cmd.output().context("run netsuke manifest command")?;
+    let result = cmd.output().context("run netsuke generate command")?;
     Ok(RunResult::from_output(result))
 }
 

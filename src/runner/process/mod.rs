@@ -219,7 +219,7 @@ where
     run_command_and_stream_with_context(
         cmd,
         request.status_observer,
-        request.cli.resolved_diag_json(),
+        request.cli.json,
         request.operation,
     )
 }

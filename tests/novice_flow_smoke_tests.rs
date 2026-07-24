@@ -102,8 +102,8 @@ fn help_entry_points_are_novice_friendly(#[case] args: &[&str]) -> Result<()> {
             "Remove build artefacts",
             "graph",
             "dependency graph",
-            "manifest",
-            "generated Ninja manifest",
+            "generate",
+            "Generate the Ninja manifest",
         ],
         "stdout",
     )?;

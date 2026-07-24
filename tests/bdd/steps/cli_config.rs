@@ -3,18 +3,18 @@
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use crate::bdd::helpers::assertions::normalize_fluent_isolates;
 use anyhow::{Context, Result, ensure};
-use netsuke::cli::config::{ColourPolicy, OutputFormat, SpinnerMode};
+use netsuke::cli::config::{AccessibilityPolicy, ColourPolicy, EmojiPolicy, ProgressPolicy};
 use rstest_bdd_macros::then;
 
 fn normalised_csv(items: &[String]) -> String {
     items.join(", ")
 }
 
-fn assert_optional_cli_field<T>(
+fn assert_cli_field<T>(
     world: &TestWorld,
     field_name: &str,
     expected: T,
-    extract: impl FnOnce(&netsuke::cli::Cli) -> Option<T>,
+    extract: impl FnOnce(&netsuke::cli::Cli) -> T,
 ) -> Result<()>
 where
     T: std::fmt::Display + PartialEq + Copy,
@@ -22,7 +22,6 @@ where
     let actual = world
         .cli
         .with_ref(extract)
-        .flatten()
         .context(format!("CLI {field_name} should be present"))?;
     ensure!(
         actual == expected,
@@ -31,19 +30,26 @@ where
     Ok(())
 }
 
-#[then("the colour policy is {expected:string}")]
-fn colour_policy_is(world: &TestWorld, expected: ColourPolicy) -> Result<()> {
-    assert_optional_cli_field(world, "colour policy", expected, |cli| cli.colour_policy)
+#[then("the color policy is {expected:string}")]
+fn color_policy_is(world: &TestWorld, expected: ColourPolicy) -> Result<()> {
+    assert_cli_field(world, "color policy", expected, |cli| cli.color)
 }
 
-#[then("the spinner mode is {expected:string}")]
-fn spinner_mode_is(world: &TestWorld, expected: SpinnerMode) -> Result<()> {
-    assert_optional_cli_field(world, "spinner mode", expected, |cli| cli.spinner_mode)
+#[then("the emoji policy is {expected:string}")]
+fn emoji_policy_is(world: &TestWorld, expected: EmojiPolicy) -> Result<()> {
+    assert_cli_field(world, "emoji policy", expected, |cli| cli.emoji)
 }
 
-#[then("the output format is {expected:string}")]
-fn output_format_is(world: &TestWorld, expected: OutputFormat) -> Result<()> {
-    assert_optional_cli_field(world, "output format", expected, |cli| cli.output_format)
+#[then("the progress policy is {expected:string}")]
+fn progress_policy_is(world: &TestWorld, expected: ProgressPolicy) -> Result<()> {
+    assert_cli_field(world, "progress policy", expected, |cli| cli.progress)
+}
+
+#[then("the accessibility policy is {expected:string}")]
+fn accessibility_policy_is(world: &TestWorld, expected: AccessibilityPolicy) -> Result<()> {
+    assert_cli_field(world, "accessibility policy", expected, |cli| {
+        cli.accessibility
+    })
 }
 
 #[then("the default targets are {expected:string}")]
@@ -64,19 +70,19 @@ fn default_targets_are(world: &TestWorld, expected: String) -> Result<()> {
 fn progress_resolution_is_disabled(world: &TestWorld) -> Result<()> {
     let resolved = world
         .cli
-        .with_ref(netsuke::cli::Cli::resolved_progress)
+        .with_ref(netsuke::cli::Cli::progress_enabled)
         .context("CLI should be present")?;
     ensure!(!resolved, "expected resolved progress to be disabled");
     Ok(())
 }
 
-#[then("diagnostic JSON resolution is enabled")]
-fn diagnostic_json_resolution_is_enabled(world: &TestWorld) -> Result<()> {
+#[then("JSON output is enabled")]
+fn json_output_is_enabled(world: &TestWorld) -> Result<()> {
     let resolved = world
         .cli
-        .with_ref(netsuke::cli::Cli::resolved_diag_json)
+        .with_ref(|cli| cli.json)
         .context("CLI should be present")?;
-    ensure!(resolved, "expected resolved diagnostic JSON to be enabled");
+    ensure!(resolved, "expected JSON output to be enabled");
     Ok(())
 }
 

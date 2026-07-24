@@ -2,13 +2,14 @@
 
 use anyhow::{Context, Result, ensure};
 use clap::error::ErrorKind;
-use netsuke::cli::config::{ColourPolicy, OutputFormat, SpinnerMode};
-use netsuke::cli::{BuildArgs, Cli, Commands, Theme};
+use netsuke::cli::{
+    AccessibilityPolicy, BuildArgs, Cli, ColourPolicy, Commands, EmojiPolicy, ProgressPolicy,
+};
 use netsuke::cli_localization;
 use netsuke::host_pattern::HostPattern;
 use netsuke::output_mode::OutputMode;
 use netsuke::output_prefs;
-use netsuke::theme::{ThemeContext, ThemePreference};
+use netsuke::theme::ThemeContext;
 use rstest::rstest;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -20,16 +21,15 @@ struct CliCase {
     jobs: Option<usize>,
     verbose: bool,
     locale: Option<&'static str>,
-    diag_json: bool,
+    json: bool,
     allow_scheme: Vec<String>,
     allow_host: Vec<&'static str>,
     block_host: Vec<&'static str>,
     default_deny: bool,
-    progress: Option<bool>,
-    theme: Option<ThemePreference>,
-    colour_policy: Option<ColourPolicy>,
-    spinner_mode: Option<SpinnerMode>,
-    output_format: Option<OutputFormat>,
+    color: ColourPolicy,
+    emoji: EmojiPolicy,
+    progress: ProgressPolicy,
+    accessibility: AccessibilityPolicy,
     default_targets: Vec<String>,
     expected_cmd: Commands,
 }
@@ -43,19 +43,17 @@ impl Default for CliCase {
             jobs: None,
             verbose: false,
             locale: None,
-            diag_json: false,
+            json: false,
             allow_scheme: Vec::new(),
             allow_host: Vec::new(),
             block_host: Vec::new(),
             default_deny: false,
-            progress: None,
-            theme: None,
-            colour_policy: None,
-            spinner_mode: None,
-            output_format: None,
+            color: ColourPolicy::Auto,
+            emoji: EmojiPolicy::Auto,
+            progress: ProgressPolicy::Auto,
+            accessibility: AccessibilityPolicy::Auto,
             default_targets: Vec::new(),
             expected_cmd: Commands::Build(BuildArgs {
-                emit: None,
                 targets: Vec::new(),
             }),
         }
@@ -70,7 +68,6 @@ impl Default for CliCase {
     directory: Some(PathBuf::from("work")),
     jobs: Some(4),
     expected_cmd: Commands::Build(BuildArgs {
-        emit: None,
         targets: vec!["a".into(), "b".into()],
     }),
     ..CliCase::default()
@@ -81,38 +78,38 @@ impl Default for CliCase {
     ..CliCase::default()
 })]
 #[case(CliCase {
-    argv: vec!["netsuke", "--progress", "false"],
-    progress: Some(false),
+    argv: vec!["netsuke", "--progress", "never"],
+    progress: ProgressPolicy::Never,
     ..CliCase::default()
 })]
 #[case(CliCase {
-    argv: vec!["netsuke", "--theme", "auto"],
-    theme: Some(ThemePreference::Auto),
+    argv: vec!["netsuke", "--emoji", "auto"],
+    emoji: EmojiPolicy::Auto,
     ..CliCase::default()
 })]
 #[case(CliCase {
-    argv: vec!["netsuke", "--theme", "ascii"],
-    theme: Some(ThemePreference::Ascii),
+    argv: vec!["netsuke", "--emoji", "never"],
+    emoji: EmojiPolicy::Never,
     ..CliCase::default()
 })]
 #[case(CliCase {
-    argv: vec!["netsuke", "--theme", "unicode"],
-    theme: Some(ThemePreference::Unicode),
+    argv: vec!["netsuke", "--emoji", "always"],
+    emoji: EmojiPolicy::Always,
     ..CliCase::default()
 })]
 #[case(CliCase {
-    argv: vec!["netsuke", "--colour-policy", "always"],
-    colour_policy: Some(ColourPolicy::Always),
+    argv: vec!["netsuke", "--color", "always"],
+    color: ColourPolicy::Always,
     ..CliCase::default()
 })]
 #[case(CliCase {
-    argv: vec!["netsuke", "--spinner-mode", "disabled"],
-    spinner_mode: Some(SpinnerMode::Disabled),
+    argv: vec!["netsuke", "--accessibility", "on"],
+    accessibility: AccessibilityPolicy::On,
     ..CliCase::default()
 })]
 #[case(CliCase {
-    argv: vec!["netsuke", "--output-format", "json"],
-    output_format: Some(OutputFormat::Json),
+    argv: vec!["netsuke", "--json"],
+    json: true,
     ..CliCase::default()
 })]
 #[case(CliCase {
@@ -126,29 +123,16 @@ impl Default for CliCase {
     ..CliCase::default()
 })]
 #[case(CliCase {
-    argv: vec!["netsuke", "--diag-json"],
-    diag_json: true,
-    ..CliCase::default()
-})]
-#[case(CliCase {
-    argv: vec!["netsuke", "build", "--emit", "out.ninja", "a"],
-    expected_cmd: Commands::Build(BuildArgs {
-        emit: Some(PathBuf::from("out.ninja")),
-        targets: vec!["a".into()],
-    }),
-    ..CliCase::default()
-})]
-#[case(CliCase {
-    argv: vec!["netsuke", "manifest", "out.ninja"],
-    expected_cmd: Commands::Manifest {
-        file: PathBuf::from("out.ninja"),
+    argv: vec!["netsuke", "generate", "--output", "out.ninja"],
+    expected_cmd: Commands::Generate {
+        output: Some(PathBuf::from("out.ninja")),
     },
     ..CliCase::default()
 })]
 #[case(CliCase {
-    argv: vec!["netsuke", "manifest", "-"],
-    expected_cmd: Commands::Manifest {
-        file: PathBuf::from("-"),
+    argv: vec!["netsuke", "generate"],
+    expected_cmd: Commands::Generate {
+        output: None,
     },
     ..CliCase::default()
 })]
@@ -188,10 +172,8 @@ fn parse_cli(#[case] case: CliCase) -> Result<()> {
         cli.locale.as_deref() == case.locale,
         "locale should match input",
     );
-    ensure!(
-        cli.diag_json == case.diag_json,
-        "diag_json flag should match input",
-    );
+    ensure!(cli.json == case.json, "json flag should match input",);
+    ensure!(cli.no_input(), "no-input should remain enabled");
     ensure!(
         cli.fetch_allow_scheme == case.allow_scheme,
         "allow-scheme flags should match input",
@@ -224,22 +206,15 @@ fn parse_cli(#[case] case: CliCase) -> Result<()> {
         cli.fetch_default_deny == case.default_deny,
         "default-deny flag should match input",
     );
+    ensure!(cli.color == case.color, "color policy should match input",);
+    ensure!(cli.emoji == case.emoji, "emoji policy should match input",);
     ensure!(
         cli.progress == case.progress,
-        "progress flag should match input",
-    );
-    ensure!(cli.theme == case.theme, "theme flag should match input");
-    ensure!(
-        cli.colour_policy == case.colour_policy,
-        "colour_policy flag should match input",
+        "progress policy should match input",
     );
     ensure!(
-        cli.spinner_mode == case.spinner_mode,
-        "spinner_mode flag should match input",
-    );
-    ensure!(
-        cli.output_format == case.output_format,
-        "output_format flag should match input",
+        cli.accessibility == case.accessibility,
+        "accessibility policy should match input",
     );
     ensure!(
         cli.default_targets == case.default_targets,
@@ -263,12 +238,21 @@ fn parse_cli(#[case] case: CliCase) -> Result<()> {
 )]
 #[case(vec!["netsuke", "-j", "notanumber"], ErrorKind::ValueValidation)]
 #[case(vec!["netsuke", "--file", "alt.yml", "-C"], ErrorKind::InvalidValue)]
-#[case(vec!["netsuke", "manifest"], ErrorKind::MissingRequiredArgument)]
 #[case(vec!["netsuke", "--locale", "nope"], ErrorKind::ValueValidation)]
-#[case(vec!["netsuke", "--theme", "neon"], ErrorKind::ValueValidation)]
-#[case(vec!["netsuke", "--colour-policy", "loud"], ErrorKind::ValueValidation)]
-#[case(vec!["netsuke", "--spinner-mode", "paused"], ErrorKind::ValueValidation)]
-#[case(vec!["netsuke", "--output-format", "tap"], ErrorKind::ValueValidation)]
+#[case(vec!["netsuke", "--color", "loud"], ErrorKind::ValueValidation)]
+#[case(vec!["netsuke", "--emoji", "sometimes"], ErrorKind::ValueValidation)]
+#[case(vec!["netsuke", "--progress", "paused"], ErrorKind::ValueValidation)]
+#[case(vec!["netsuke", "--accessibility", "yes"], ErrorKind::ValueValidation)]
+#[case(vec!["netsuke", "--diag-json"], ErrorKind::UnknownArgument)]
+#[case(vec!["netsuke", "--colour-policy", "always"], ErrorKind::UnknownArgument)]
+#[case(vec!["netsuke", "--spinner-mode", "enabled"], ErrorKind::UnknownArgument)]
+#[case(vec!["netsuke", "--accessible", "true"], ErrorKind::UnknownArgument)]
+#[case(vec!["netsuke", "--no-emoji"], ErrorKind::UnknownArgument)]
+#[case(vec!["netsuke", "--output-format", "json"], ErrorKind::UnknownArgument)]
+#[case(vec!["netsuke", "--theme", "ascii"], ErrorKind::UnknownArgument)]
+#[case(vec!["netsuke", "--progress"], ErrorKind::InvalidValue)]
+#[case(vec!["netsuke", "build", "--emit", "out.ninja"], ErrorKind::UnknownArgument)]
+#[case(vec!["netsuke", "manifest", "-"], ErrorKind::InvalidSubcommand)]
 fn parse_cli_errors(#[case] argv: Vec<&str>, #[case] expected_error: ErrorKind) -> Result<()> {
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let err = netsuke::cli::parse_with_localizer_from(argv, &localizer)
@@ -284,47 +268,41 @@ fn parse_cli_errors(#[case] argv: Vec<&str>, #[case] expected_error: ErrorKind) 
 }
 
 #[test]
-fn no_emoji_override_false_defers_to_environment_suppression() -> Result<()> {
+fn emoji_never_forces_ascii_output() -> Result<()> {
     let cli = Cli {
-        no_emoji: Some(false),
+        emoji: EmojiPolicy::Never,
         ..Cli::default()
     };
 
     let prefs = output_prefs::resolve_from_theme_with(
-        cli.theme,
-        ThemeContext::new(cli.no_emoji, cli.colour_policy, OutputMode::Standard),
-        |key| match key {
-            "NETSUKE_NO_EMOJI" => Some(String::from("1")),
-            _ => None,
-        },
+        cli.theme_preference(),
+        ThemeContext::new(None, Some(cli.color), OutputMode::Standard),
+        |_| None,
     );
 
     ensure!(
         !prefs.emoji_allowed(),
-        "no_emoji = false should defer to environment suppression",
+        "emoji = never should force ASCII output",
     );
     Ok(())
 }
 
 #[test]
-fn no_emoji_override_honours_unicode_theme_over_environment_suppression() -> Result<()> {
+fn emoji_always_forces_unicode_output() -> Result<()> {
     let cli = Cli {
-        theme: Some(Theme::Unicode.into()),
+        emoji: EmojiPolicy::Always,
         ..Cli::default()
     };
 
     let prefs = output_prefs::resolve_from_theme_with(
-        cli.theme,
-        ThemeContext::new(cli.no_emoji, cli.colour_policy, OutputMode::Standard),
-        |key| match key {
-            "NETSUKE_NO_EMOJI" => Some(String::from("1")),
-            _ => None,
-        },
+        cli.theme_preference(),
+        ThemeContext::new(None, Some(cli.color), OutputMode::Standard),
+        |_| None,
     );
 
     ensure!(
         prefs.emoji_allowed(),
-        "theme = unicode should remain authoritative over environment suppression",
+        "emoji = always should force Unicode output",
     );
     Ok(())
 }

@@ -5,8 +5,7 @@ use crate::bdd::helpers::env_mutation::mutate_env_var;
 use crate::bdd::types::{EnvVarKey, EnvVarValue, FileName, NamesList};
 use anyhow::{Context, Result, ensure};
 use netsuke::cli::Cli;
-use netsuke::cli::config::OutputFormat;
-use netsuke::theme::ThemePreference;
+use netsuke::cli::config::EmojiPolicy;
 use rstest_bdd_macros::{given, then};
 use std::fs;
 use tempfile::tempdir;
@@ -42,54 +41,52 @@ fn write_config_file(world: &TestWorld, file_name: &str, content: &str, chdir: b
     Ok(())
 }
 
-#[given("a project config file {file_name:string} with theme {theme:string} and jobs {jobs}")]
-fn project_config_with_theme_and_jobs(
+#[given("a project config file {file_name:string} with emoji {emoji:string} and jobs {jobs}")]
+fn project_config_with_emoji_and_jobs(
     world: &TestWorld,
     file_name: FileName,
-    theme: ThemePreference,
+    emoji: EmojiPolicy,
     jobs: u32,
 ) -> Result<()> {
     let content = format!(
         r#"
-theme = "{theme}"
+emoji = "{emoji}"
 jobs = {jobs}
 "#
     );
     write_config_file(world, file_name.as_str(), &content, true)
 }
 
-/// Returns the TOML snippet for a config file that sets only `theme`.
-fn theme_config_content(theme: ThemePreference) -> String {
-    format!("\ntheme = \"{theme}\"\n")
+/// Returns the TOML snippet for a config file that sets only `emoji`.
+fn emoji_config_content(emoji: EmojiPolicy) -> String {
+    format!("\nemoji = \"{emoji}\"\n")
 }
 
-#[given("a project config file {file_name:string} with theme {theme:string}")]
-fn project_config_with_theme(
+#[given("a project config file {file_name:string} with emoji {emoji:string}")]
+fn project_config_with_emoji(
     world: &TestWorld,
     file_name: FileName,
-    theme: ThemePreference,
+    emoji: EmojiPolicy,
 ) -> Result<()> {
     write_config_file(
         world,
         file_name.as_str(),
-        &theme_config_content(theme),
+        &emoji_config_content(emoji),
         true,
     )
 }
 
-#[given(
-    "a project config file {file_name:string} with theme {theme:string} and output format {format:string}"
-)]
-fn project_config_with_theme_and_format(
+#[given("a project config file {file_name:string} with emoji {emoji:string} and JSON {json}")]
+fn project_config_with_emoji_and_json(
     world: &TestWorld,
     file_name: FileName,
-    theme: ThemePreference,
-    format: OutputFormat,
+    emoji: EmojiPolicy,
+    json: bool,
 ) -> Result<()> {
     let content = format!(
         r#"
-theme = "{theme}"
-output_format = "{format}"
+emoji = "{emoji}"
+json = {json}
 "#
     );
     write_config_file(world, file_name.as_str(), &content, true)
@@ -119,16 +116,16 @@ default_targets = {targets_toml}
     write_config_file(world, file_name.as_str(), &content, true)
 }
 
-#[given("a custom config file {file_name:string} with theme {theme:string}")]
-fn custom_config_with_theme(
+#[given("a custom config file {file_name:string} with emoji {emoji:string}")]
+fn custom_config_with_emoji(
     world: &TestWorld,
     file_name: FileName,
-    theme: ThemePreference,
+    emoji: EmojiPolicy,
 ) -> Result<()> {
     write_config_file(
         world,
         file_name.as_str(),
-        &theme_config_content(theme),
+        &emoji_config_content(emoji),
         false,
     )
 }
@@ -172,16 +169,6 @@ where
         .with_ref(|cli| extract(cli))
         .flatten()
         .with_context(|| format!("CLI {field_name} should be present"))
-}
-
-#[then("the theme preference is {expected:string}")]
-fn theme_preference_is(world: &TestWorld, expected: ThemePreference) -> Result<()> {
-    let actual = read_cli_option(world, "theme", |cli| cli.theme)?;
-    ensure!(
-        actual == expected,
-        "expected theme {expected:?}, got {actual:?}"
-    );
-    Ok(())
 }
 
 #[then("the jobs setting is {expected}")]

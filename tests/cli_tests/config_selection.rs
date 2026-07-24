@@ -7,7 +7,6 @@
 //!
 //! - `--config <PATH>` CLI flag (highest precedence)
 //! - `NETSUKE_CONFIG` environment variable
-//! - `NETSUKE_CONFIG_PATH` legacy alias (lowest explicit precedence)
 //! - Automatic project-scope discovery (when no explicit selector is active)
 //!
 //! # Relationship to other test modules
@@ -45,8 +44,8 @@
 //! parametric test [`config_selection_precedence_cases`].
 
 use anyhow::{Context, Result, ensure};
+use netsuke::cli::EmojiPolicy;
 use netsuke::cli_localization;
-use netsuke::theme::ThemePreference;
 use rstest::{fixture, rstest};
 use std::ffi::OsStr;
 use std::fs;
@@ -156,23 +155,21 @@ struct ConfigSelectionCase {
     project_config: Option<ConfigFile>,
     cli_config: Option<ConfigFile>,
     env_config: Option<ConfigFile>,
-    legacy_config: Option<ConfigFile>,
-    env_theme: Option<&'static str>,
-    cli_theme: Option<&'static str>,
-    expected_theme: ThemePreference,
+    env_emoji: Option<&'static str>,
+    cli_emoji: Option<&'static str>,
+    expected_emoji: EmojiPolicy,
     message: &'static str,
 }
 
 impl ConfigSelectionCase {
-    const fn new(expected_theme: ThemePreference, message: &'static str) -> Self {
+    const fn new(expected_emoji: EmojiPolicy, message: &'static str) -> Self {
         Self {
             project_config: None,
             cli_config: None,
             env_config: None,
-            legacy_config: None,
-            env_theme: None,
-            cli_theme: None,
-            expected_theme,
+            env_emoji: None,
+            cli_emoji: None,
+            expected_emoji,
             message,
         }
     }
@@ -192,18 +189,13 @@ impl ConfigSelectionCase {
         self
     }
 
-    const fn with_legacy_config(mut self, config: ConfigFile) -> Self {
-        self.legacy_config = Some(config);
+    const fn with_env_emoji(mut self, emoji: &'static str) -> Self {
+        self.env_emoji = Some(emoji);
         self
     }
 
-    const fn with_env_theme(mut self, theme: &'static str) -> Self {
-        self.env_theme = Some(theme);
-        self
-    }
-
-    const fn with_cli_theme(mut self, theme: &'static str) -> Self {
-        self.cli_theme = Some(theme);
+    const fn with_cli_emoji(mut self, emoji: &'static str) -> Self {
+        self.cli_emoji = Some(emoji);
         self
     }
 }
@@ -224,41 +216,33 @@ fn write_optional_config(
 #[rstest]
 #[case::config_flag_loads_specified_file(
     ConfigSelectionCase::new(
-        ThemePreference::Unicode,
+        EmojiPolicy::Always,
         "explicit --config file should be loaded",
     )
-    .with_cli_config(ConfigFile::new("custom.toml", "theme = \"unicode\"\n")),
+    .with_cli_config(ConfigFile::new("custom.toml", "emoji = \"always\"\n")),
 )]
 #[case::config_flag_skips_project_discovery(
     ConfigSelectionCase::new(
-        ThemePreference::Unicode,
+        EmojiPolicy::Always,
         "explicit --config should bypass discovered project config",
     )
-    .with_project_config(ConfigFile::new(".netsuke.toml", "theme = \"ascii\"\n"))
-    .with_cli_config(ConfigFile::new("custom.toml", "theme = \"unicode\"\n")),
+    .with_project_config(ConfigFile::new(".netsuke.toml", "emoji = \"never\"\n"))
+    .with_cli_config(ConfigFile::new("custom.toml", "emoji = \"always\"\n")),
 )]
 #[case::netsuke_config_env_loads_specified_file(
     ConfigSelectionCase::new(
-        ThemePreference::Unicode,
+        EmojiPolicy::Always,
         "NETSUKE_CONFIG should load the selected config file",
     )
-    .with_env_config(ConfigFile::new("env.toml", "theme = \"unicode\"\n")),
-)]
-#[case::netsuke_config_env_takes_precedence_over_legacy(
-    ConfigSelectionCase::new(
-        ThemePreference::Unicode,
-        "NETSUKE_CONFIG should win over NETSUKE_CONFIG_PATH",
-    )
-    .with_env_config(ConfigFile::new("new.toml", "theme = \"unicode\"\n"))
-    .with_legacy_config(ConfigFile::new("legacy.toml", "theme = \"ascii\"\n")),
+    .with_env_config(ConfigFile::new("env.toml", "emoji = \"always\"\n")),
 )]
 #[case::config_flag_takes_precedence_over_netsuke_config_env(
     ConfigSelectionCase::new(
-        ThemePreference::Unicode,
+        EmojiPolicy::Always,
         "--config should win over NETSUKE_CONFIG",
     )
-    .with_cli_config(ConfigFile::new("cli.toml", "theme = \"unicode\"\n"))
-    .with_env_config(ConfigFile::new("env.toml", "theme = \"ascii\"\n")),
+    .with_cli_config(ConfigFile::new("cli.toml", "emoji = \"always\"\n"))
+    .with_env_config(ConfigFile::new("env.toml", "emoji = \"never\"\n")),
 )]
 #[case::config_flag_takes_precedence_over_legacy_env(
     ConfigSelectionCase::new(
@@ -279,20 +263,20 @@ fn write_optional_config(
 )]
 #[case::config_flag_values_still_overridden_by_cli_preferences(
     ConfigSelectionCase::new(
-        ThemePreference::Ascii,
+        EmojiPolicy::Never,
         "CLI preference values should still override environment and selected config",
     )
-    .with_cli_config(ConfigFile::new("custom.toml", "theme = \"ascii\"\n"))
-    .with_env_theme("unicode")
-    .with_cli_theme("ascii"),
+    .with_cli_config(ConfigFile::new("custom.toml", "emoji = \"never\"\n"))
+    .with_env_emoji("always")
+    .with_cli_emoji("never"),
 )]
 #[case::config_flag_values_still_overridden_by_env_preferences(
     ConfigSelectionCase::new(
-        ThemePreference::Unicode,
+        EmojiPolicy::Always,
         "environment preference values should still override the selected config",
     )
-    .with_cli_config(ConfigFile::new("custom.toml", "theme = \"ascii\"\n"))
-    .with_env_theme("unicode"),
+    .with_cli_config(ConfigFile::new("custom.toml", "emoji = \"never\"\n"))
+    .with_env_emoji("always"),
 )]
 fn config_selection_precedence_cases(
     config_harness: Result<ConfigTestHarness>,
@@ -300,23 +284,18 @@ fn config_selection_precedence_cases(
 ) -> Result<()> {
     let h = config_harness?;
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _legacy_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
-    let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
+    let _emoji_guard = EnvVarGuard::remove("NETSUKE_EMOJI");
 
     let _project_config = write_optional_config(&h, case.project_config)?;
     let cli_config = write_optional_config(&h, case.cli_config)?;
     let env_config = write_optional_config(&h, case.env_config)?;
-    let legacy_config = write_optional_config(&h, case.legacy_config)?;
 
     let mut env_guards = Vec::new();
     if let Some(path) = env_config.as_deref() {
         env_guards.push(EnvVarGuard::set("NETSUKE_CONFIG", path));
     }
-    if let Some(path) = legacy_config.as_deref() {
-        env_guards.push(EnvVarGuard::set("NETSUKE_CONFIG_PATH", path));
-    }
-    if let Some(theme) = case.env_theme {
-        env_guards.push(EnvVarGuard::set("NETSUKE_THEME", theme));
+    if let Some(emoji) = case.env_emoji {
+        env_guards.push(EnvVarGuard::set("NETSUKE_EMOJI", emoji));
     }
 
     let mut args = vec![String::from("netsuke")];
@@ -324,18 +303,14 @@ fn config_selection_precedence_cases(
         args.push(String::from("--config"));
         args.push(path);
     }
-    if let Some(theme) = case.cli_theme {
-        args.push(String::from("--theme"));
-        args.push(String::from(theme));
+    if let Some(emoji) = case.cli_emoji {
+        args.push(String::from("--emoji"));
+        args.push(String::from(emoji));
     }
 
     let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
     let merged = parse_and_merge(&arg_refs)?;
-    ensure!(
-        merged.theme == Some(case.expected_theme),
-        "{}",
-        case.message
-    );
+    ensure!(merged.emoji == case.expected_emoji, "{}", case.message);
     let _project_root = h.project.path();
     drop(env_guards);
     Ok(())
@@ -346,9 +321,8 @@ fn config_flag_with_nonexistent_file_produces_error(
     config_harness: Result<ConfigTestHarness>,
 ) -> Result<()> {
     let h = config_harness?;
-    h.write_config(".netsuke.toml", "theme = \"unicode\"\n")?;
+    h.write_config(".netsuke.toml", "emoji = \"always\"\n")?;
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _legacy_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
 
     let error = parse_and_merge(&["netsuke", "--config", "missing.toml"])
         .expect_err("missing explicit config file should fail");

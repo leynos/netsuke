@@ -137,14 +137,14 @@ fn main_logs_errors_to_stderr() {
 }
 
 #[test]
-fn diag_json_failures_emit_single_json_document_on_stderr() -> Result<()> {
+fn json_failures_emit_single_json_document_on_stderr() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
     let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
         .current_dir(temp.path())
-        .arg("--diag-json")
+        .arg("--json")
         .arg("graph")
         .output()
-        .context("run netsuke with --diag-json")?;
+        .context("run netsuke with --json")?;
 
     ensure!(!output.status.success(), "expected command failure");
     ensure!(
@@ -183,18 +183,17 @@ fn diag_json_failures_emit_single_json_document_on_stderr() -> Result<()> {
 }
 
 #[rstest]
-fn diag_json_success_keeps_stdout_artefact_and_stderr_empty(
+fn json_success_keeps_stdout_artefact_and_stderr_empty(
     temp_with_minimal_manifest: Result<TempDir>,
 ) -> Result<()> {
     let temp = temp_with_minimal_manifest?;
 
     let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
         .current_dir(temp.path())
-        .arg("--diag-json")
-        .arg("manifest")
-        .arg("-")
+        .arg("--json")
+        .arg("generate")
         .output()
-        .context("run netsuke manifest with --diag-json")?;
+        .context("run netsuke generate with --json")?;
 
     ensure!(output.status.success(), "expected command success");
     ensure!(
@@ -210,14 +209,14 @@ fn diag_json_success_keeps_stdout_artefact_and_stderr_empty(
     Ok(())
 }
 
-/// Asserts that `--diag-json <flag>` produces human-readable stdout and an
+/// Asserts that `--json <flag>` produces human-readable stdout and an
 /// empty stderr (i.e. Clap's built-in handlers are not affected by JSON mode).
-fn assert_diag_json_passthrough(flag: &str, ctx: &str, stdout_marker: &str) -> Result<()> {
+fn assert_json_passthrough(flag: &str, ctx: &str, stdout_marker: &str) -> Result<()> {
     let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
-        .arg("--diag-json")
+        .arg("--json")
         .arg(flag)
         .output()
-        .with_context(|| format!("run netsuke --diag-json {flag}"))?;
+        .with_context(|| format!("run netsuke --json {flag}"))?;
 
     ensure!(output.status.success(), "{ctx} should exit successfully");
     let stdout = String::from_utf8(output.stdout).context("stdout should be valid UTF-8")?;
@@ -235,12 +234,12 @@ fn assert_diag_json_passthrough(flag: &str, ctx: &str, stdout_marker: &str) -> R
 #[rstest]
 #[case("--help", "help", "Usage:")]
 #[case("--version", "version", "netsuke")]
-fn diag_json_passthrough_uses_normal_clap_output(
+fn json_passthrough_uses_normal_clap_output(
     #[case] flag: &str,
     #[case] ctx: &str,
     #[case] stdout_marker: &str,
 ) -> Result<()> {
-    assert_diag_json_passthrough(flag, ctx, stdout_marker)
+    assert_json_passthrough(flag, ctx, stdout_marker)
 }
 
 fn run_verbose_build_and_assert_ninja_log(
@@ -355,15 +354,15 @@ fn verbose_build_logs_ninja_env_override(
 }
 
 #[test]
-fn config_driven_diag_json_formats_merge_failures_as_json() -> Result<()> {
+fn config_driven_json_formats_merge_failures_as_json() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
     let config_path = temp.path().join("netsuke.toml");
-    fs::write(&config_path, "diag_json = true\njobs = \"many\"\n")
+    fs::write(&config_path, "json = true\njobs = \"many\"\n")
         .with_context(|| format!("write config {}", config_path.display()))?;
 
     let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
         .current_dir(temp.path())
-        .env("NETSUKE_CONFIG_PATH", &config_path)
+        .env("NETSUKE_CONFIG", &config_path)
         .output()
         .context("run netsuke with invalid config")?;
 
@@ -389,20 +388,15 @@ fn config_driven_diag_json_formats_merge_failures_as_json() -> Result<()> {
 }
 
 #[test]
-fn output_format_json_formats_config_load_failures_as_json() -> Result<()> {
+fn json_flag_formats_config_load_failures_as_json() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
     let config_path = temp.path().join("broken.toml");
-    fs::write(&config_path, "theme = \"ascii\n")
+    fs::write(&config_path, "emoji = \"never\n")
         .with_context(|| format!("write malformed config {}", config_path.display()))?;
 
     let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
         .current_dir(temp.path())
-        .args([
-            "--config",
-            &config_path.to_string_lossy(),
-            "--output-format",
-            "json",
-        ])
+        .args(["--config", &config_path.to_string_lossy(), "--json"])
         .output()
         .context("run netsuke with malformed config and JSON output format")?;
 
@@ -421,17 +415,17 @@ fn output_format_json_formats_config_load_failures_as_json() -> Result<()> {
 }
 
 #[rstest]
-fn diag_json_success_graph_keeps_clean_stderr(
+fn json_success_graph_keeps_clean_stderr(
     temp_with_minimal_manifest: Result<TempDir>,
 ) -> Result<()> {
     let temp = temp_with_minimal_manifest?;
 
     // `graph` renders in-process and never spawns Ninja, so no child stderr
-    // is produced. Verify `--diag-json graph` still emits the DOT graph on
+    // is produced. Verify `--json graph` still emits the DOT graph on
     // stdout and keeps stderr empty.
     let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
         .current_dir(temp.path())
-        .arg("--diag-json")
+        .arg("--json")
         .arg("graph")
         .output()
         .context("run netsuke graph")?;
