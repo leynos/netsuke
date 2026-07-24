@@ -35,7 +35,6 @@ jobs = 8
 
     // Clear env vars that could interfere
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _emoji_guard = EnvVarGuard::remove("NETSUKE_EMOJI");
     let _locale_guard = EnvVarGuard::remove("NETSUKE_LOCALE");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
@@ -121,7 +120,6 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     let _xdg_config_dirs_guard = EnvVarGuard::set("XDG_CONFIG_DIRS", OsStr::new(""));
     // Clear other env vars
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _emoji_guard = EnvVarGuard::remove("NETSUKE_EMOJI");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
     let _color_policy_guard = EnvVarGuard::remove("NETSUKE_COLOR");
@@ -152,7 +150,6 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     let _appdata_guard = EnvVarGuard::set("APPDATA", temp_appdata.path().as_os_str());
     // Clear other env vars
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _emoji_guard = EnvVarGuard::remove("NETSUKE_EMOJI");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
     let _color_policy_guard = EnvVarGuard::remove("NETSUKE_COLOR");
@@ -231,10 +228,9 @@ fn project_config_takes_precedence_over_user_config() -> Result<()> {
     let _xdg_home_guard = EnvVarGuard::set("XDG_CONFIG_HOME", temp_xdg_home.path().as_os_str());
     let _xdg_dirs_guard = EnvVarGuard::set("XDG_CONFIG_DIRS", OsStr::new(""));
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
-    let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
+    let _emoji_guard = EnvVarGuard::remove("NETSUKE_EMOJI");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
-    let _colour_guard = EnvVarGuard::remove("NETSUKE_COLOUR_POLICY");
+    let _color_guard = EnvVarGuard::remove("NETSUKE_COLOR");
 
     let merged = run_precedence_scenario(&temp_project)?;
     let result = assert_project_precedence_applied(&merged);
@@ -270,10 +266,9 @@ fn project_config_takes_precedence_over_user_config() -> Result<()> {
     let _appdata_guard = EnvVarGuard::set("APPDATA", temp_appdata.path().as_os_str());
     let _localappdata_guard = EnvVarGuard::remove("LOCALAPPDATA");
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
-    let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
+    let _emoji_guard = EnvVarGuard::remove("NETSUKE_EMOJI");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
-    let _colour_guard = EnvVarGuard::remove("NETSUKE_COLOUR_POLICY");
+    let _color_guard = EnvVarGuard::remove("NETSUKE_COLOR");
 
     let merged = run_precedence_scenario(&temp_project)?;
     let result = assert_project_precedence_applied(&merged);

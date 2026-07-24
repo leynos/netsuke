@@ -577,11 +577,13 @@ text.
 Verbose mode adds per-stage timing after a successful command. Failed commands
 do not print a timing summary.
 
-### JSON diagnostics
+### JSON output
 
-Use `--json` when a caller needs one machine-readable diagnostic document on
-stderr. Successful commands leave stderr empty in this mode; generated
-artefacts still use stdout.
+Use `--json` when a caller needs machine-readable command output. Every
+invocation emits exactly one versioned JSON document: a result document on
+success or a diagnostic document on failure. Generated stdout artefacts, such
+as the Ninja text from `generate`, are carried inside the successful result
+document rather than written as unstructured text.
 
 The following command deliberately selects a missing manifest:
 

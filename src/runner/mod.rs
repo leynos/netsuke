@@ -6,6 +6,7 @@
 //! to `ninja` and may be overridden with `NETSUKE_NINJA` for systems that use a
 //! different binary name or require a full path.
 
+mod dispatch;
 mod error;
 
 pub use error::RunnerError;
@@ -159,30 +160,7 @@ pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
     let command = cli.command.clone().unwrap_or(Commands::Build(BuildArgs {
         targets: Vec::new(),
     }));
-    match command {
-        Commands::Build(args) => handle_build(cli, &args, reporter.as_ref(), progress_enabled),
-        Commands::Generate { output } => {
-            let ninja = generate_ninja(cli, reporter.as_ref(), None)?;
-            if let Some(file) = output {
-                let output_path = resolve_output_path(cli, file.as_path());
-                process::write_ninja_file(output_path.as_ref(), &ninja)?;
-            } else {
-                process::write_ninja_stdout(&ninja)?;
-            }
-            reporter.report_complete(keys::STATUS_TOOL_GENERATE.into());
-            Ok(())
-        }
-        Commands::Clean => handle_ninja_tool(
-            cli,
-            NinjaToolSpec {
-                name: "clean",
-                key: keys::STATUS_TOOL_CLEAN.into(),
-            },
-            reporter.as_ref(),
-            progress_enabled,
-        ),
-        Commands::Graph(args) => graph::handle_graph(cli, &args, reporter.as_ref()),
-    }
+    dispatch::execute(cli, command, reporter.as_ref(), progress_enabled)
 }
 
 fn on_task_progress_callback(reporter: &dyn StatusReporter) -> impl FnMut(u32, u32, &str) + '_ {

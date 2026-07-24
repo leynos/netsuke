@@ -34,7 +34,6 @@ json = false
 
     // Set environment variables that should override the file
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _emoji_guard = EnvVarGuard::set("NETSUKE_EMOJI", OsStr::new("always"));
     let _jobs_guard = EnvVarGuard::set("NETSUKE_JOBS", OsStr::new("12"));
     let _json_guard = EnvVarGuard::remove("NETSUKE_JSON");
@@ -89,7 +88,6 @@ json = false
 
     // Set environment variables
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _emoji_guard = EnvVarGuard::set("NETSUKE_EMOJI", OsStr::new("always"));
     let _jobs_guard = EnvVarGuard::set("NETSUKE_JOBS", OsStr::new("8"));
     let _color_guard = EnvVarGuard::set("NETSUKE_COLOR", OsStr::new("always"));
@@ -149,7 +147,6 @@ jobs = 6
     std::env::set_current_dir(&temp_outer).context("change to outer directory")?;
 
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _emoji_guard = EnvVarGuard::remove("NETSUKE_EMOJI");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
     let _json_guard = EnvVarGuard::remove("NETSUKE_JSON");
@@ -304,7 +301,6 @@ fetch_allow_scheme = ["https"]
     .context("write project .netsuke.toml with lists")?;
 
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     // Set single-value environment variables for list fields
     let _targets_guard = EnvVarGuard::set("NETSUKE_DEFAULT_TARGETS", OsStr::new("test"));
     let _scheme_guard = EnvVarGuard::set("NETSUKE_FETCH_ALLOW_SCHEME", OsStr::new("http"));

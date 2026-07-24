@@ -56,6 +56,16 @@ fn parse_value<T: clap::ValueEnum>(value: &str, label: &str) -> Result<T> {
     T::from_str(value, true).map_err(|err| anyhow::anyhow!("invalid {label} '{value}': {err}"))
 }
 
+fn config_sets_policy<T: clap::ValueEnum>(
+    world: &TestWorld,
+    policy: &str,
+    field: &str,
+    label: &str,
+) -> Result<()> {
+    parse_value::<T>(policy, label)?;
+    write_config(world, &format!("{field} = \"{policy}\"\n"))
+}
+
 fn assert_merged_field<T>(
     world: &TestWorld,
     expected: T,
@@ -93,26 +103,27 @@ fn set_environment_locale_override(world: &TestWorld, locale: &str) -> Result<()
 
 #[given("the Netsuke config file sets color to {policy:string}")]
 fn config_sets_color(world: &TestWorld, policy: &str) -> Result<()> {
-    let _: ColourPolicy = parse_value(policy, "color policy")?;
-    write_config(world, &format!("color = \"{policy}\"\n"))
+    config_sets_policy::<ColourPolicy>(world, policy, "color", "color policy")
 }
 
 #[given("the Netsuke config file sets emoji to {policy:string}")]
 fn config_sets_emoji(world: &TestWorld, policy: &str) -> Result<()> {
-    let _: EmojiPolicy = parse_value(policy, "emoji policy")?;
-    write_config(world, &format!("emoji = \"{policy}\"\n"))
+    config_sets_policy::<EmojiPolicy>(world, policy, "emoji", "emoji policy")
 }
 
 #[given("the Netsuke config file sets progress to {policy:string}")]
 fn config_sets_progress(world: &TestWorld, policy: &str) -> Result<()> {
-    let _: ProgressPolicy = parse_value(policy, "progress policy")?;
-    write_config(world, &format!("progress = \"{policy}\"\n"))
+    config_sets_policy::<ProgressPolicy>(world, policy, "progress", "progress policy")
 }
 
 #[given("the Netsuke config file sets accessibility to {policy:string}")]
 fn config_sets_accessibility(world: &TestWorld, policy: &str) -> Result<()> {
-    let _: AccessibilityPolicy = parse_value(policy, "accessibility policy")?;
-    write_config(world, &format!("accessibility = \"{policy}\"\n"))
+    config_sets_policy::<AccessibilityPolicy>(
+        world,
+        policy,
+        "accessibility",
+        "accessibility policy",
+    )
 }
 
 #[given("the Netsuke config file disables no-input")]

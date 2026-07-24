@@ -8,12 +8,12 @@ Feature: JSON diagnostics mode
     And stderr should be valid diagnostics json
     And stderr diagnostics code should be "netsuke::runner::manifest_not_found"
 
-  Scenario: JSON diagnostics keep successful generate output on stdout
+  Scenario: JSON mode wraps successful generate output
     Given a minimal Netsuke workspace
     When netsuke is run with arguments "--json generate"
     Then the command should succeed
     And stderr should be empty
-    And stdout should contain "build hello: "
+    And stdout should be one generate result json document
 
   Scenario: JSON diagnostics suppress verbose tracing noise
     Given an empty workspace

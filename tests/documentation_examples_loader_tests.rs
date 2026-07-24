@@ -12,6 +12,10 @@ use rstest::rstest;
     "<!-- tested-example: -->\n",
     "tested-example identifier must not be empty"
 )]
+#[case(
+    "<!-- tested-example:  -->\n",
+    "tested-example identifier must not be empty"
+)]
 #[case("```yaml\ntargets: []\n```\n", "missing a tested-example marker")]
 #[case(
     "<!-- tested-example: sample -->\n```yaml\ntargets: []\n",

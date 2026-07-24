@@ -16,7 +16,7 @@ rules:
 
 targets:
   - foreach: photos
-    name: "{{ out_dir }}/{{ item | basename | replace('.CR2', '.jpg') }}.jpg"
+    name: "{{ out_dir }}/{{ item }}.jpg"
     rule: convert_raw
     sources: "raw_photos/{{ item }}.CR2"
 

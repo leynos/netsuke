@@ -26,7 +26,7 @@ Feature: Novice CLI flows
     And stdout should contain "Remove build artefacts"
     And stdout should contain "graph"
     And stdout should contain "dependency graph"
-    And stdout should contain "manifest"
+    And stdout should contain "generate"
     And stdout should contain "Generate the Ninja manifest"
 
   Scenario: Help subcommand output matches the flag form
@@ -39,5 +39,5 @@ Feature: Novice CLI flows
     And stdout should contain "Remove build artefacts"
     And stdout should contain "graph"
     And stdout should contain "dependency graph"
-    And stdout should contain "manifest"
+    And stdout should contain "generate"
     And stdout should contain "Generate the Ninja manifest"

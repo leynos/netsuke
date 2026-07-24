@@ -27,9 +27,7 @@ use test_support::locale_stubs::{StubEnv, StubSystemLocale};
 /// configuration discovery and environment variable merging. To ensure tests
 /// remain hermetic and isolated from the host environment, callers should:
 ///
-/// 1. Set `NETSUKE_CONFIG_PATH` to an empty/nonexistent path to disable config
-///    file discovery, or ensure a `temp_dir` is set to anchor discovery to a
-///    controlled location.
+/// 1. Ensure a `temp_dir` is set to anchor discovery to a controlled location.
 /// 2. Clear or set all `NETSUKE_*` environment variables to known values.
 ///
 /// Tests that do not explicitly set up configuration or environment variables

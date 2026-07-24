@@ -20,7 +20,7 @@ ______________________________________________________________________
 - **Static execution**: Inspect the generated Ninja file or render the graph
   before running any build command.
 - **Useful diagnostics**: Get source-aware errors, localized output, progress
-  reporting, and an opt-in JSON diagnostic format.
+  reporting, and canonical `--json` machine-readable command output.
 - **No blessed toolchain**: Use the same manifest model for Rust, C, Python,
   web projects, or anything else a command can build.
 
@@ -95,7 +95,7 @@ The core build-system compiler is implemented:
 - reproducible dependency graphs as Graphviz DOT or self-contained,
   accessible HTML;
 - layered configuration, localized output, accessibility preferences,
-  progress reporting, stage timings, and JSON diagnostics;
+  progress reporting, stage timings, and versioned JSON results or diagnostics;
 - unit, behavioural, integration, property, snapshot, and initial Kani
   verification coverage.
 
@@ -123,8 +123,8 @@ Known limitations include:
   manifests;
 - compiler-generated dependency imports such as GCC depfiles are planned but
   not yet part of the manifest model;
-- the current JSON mode covers diagnostics rather than a stable structured
-  result for every command;
+- `--json` emits exactly one versioned result or diagnostic document for each
+  command, but the schema may still change before 1.0;
 - accessibility, terminal rendering, configuration precedence, and
   cross-platform compiler invariants need broader verification.
 
@@ -138,9 +138,9 @@ ______________________________________________________________________
 
 Work after the first release is organized around three priorities:
 
-1. **Stabilize the command-line contract**: adopt canonical command and flag
-   names, non-interactive safeguards, stable exit codes, bounded output, and
-   one structured JSON result per command.
+1. **Stabilize the command-line contract**: harden the canonical command and
+   flag names, non-interactive safeguards, stable exit codes, bounded output,
+   and versioned `--json` documents.
 2. **Make recipes safer and clearer**: add structured executable arguments,
    environment mappings, compiler dependency imports, backend dollar escaping,
    and better conditional-action feedback.

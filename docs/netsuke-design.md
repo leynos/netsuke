@@ -2435,18 +2435,17 @@ files or `NETSUKE_CMDS__BUILD__*` environment variables. Explicit CLI targets or
 `--emit` values still override those defaults.
 
 Configuration is layered in the order defaults -> configuration files ->
-environment variables -> CLI overrides. Discovery honours `NETSUKE_CONFIG_PATH`
-and the standard OrthoConfig search order; environment variables use the
-`NETSUKE_` prefix with `__` as a nesting separator. The schema now explicitly
-covers verbosity, locale, accessible mode, progress, colour policy, spinner
-mode, output format, theme selection, fetch policy, and build defaults. `theme`
-is the canonical presentation setting; the older `no_emoji` field remains as a
-compatibility alias that canonicalizes to the ASCII theme. Conflicting
-combinations such as `theme = "unicode"` together with `no_emoji = true` fail
-during merge. `spinner_mode` likewise validates against the legacy `progress`
-boolean so contradictory inputs are rejected early. `output_format` is typed
-now, but only `human` is accepted until the future JSON diagnostics milestone
-lands.
+environment variables -> CLI overrides. Explicit discovery honours
+`NETSUKE_CONFIG`; environment variables use the `NETSUKE_` prefix with `__` as
+a nesting separator. The schema now explicitly covers verbosity, locale,
+accessible mode, progress, colour policy, spinner mode, output format, theme
+selection, fetch policy, and build defaults. `theme` is the canonical
+presentation setting; the older `no_emoji` field remains as a compatibility
+alias that canonicalizes to the ASCII theme. Conflicting combinations such as
+`theme = "unicode"` together with `no_emoji = true` fail during merge.
+`spinner_mode` likewise validates against the legacy `progress` boolean so
+contradictory inputs are rejected early. `output_format` is typed now, but only
+`human` is accepted until the future JSON diagnostics milestone lands.
 
 CLI help and clap errors are localized via Fluent resources; locale resolution
 is handled in `src/locale_resolution.rs` with the precedence `--locale` ->
@@ -2579,27 +2578,25 @@ flowchart LR
 
 Netsuke configuration discovery is implemented in `src/cli/discovery.rs`.
 Explicit file selection is handled by `explicit_config_path(...)`, which
-applies the precedence `--config` > `NETSUKE_CONFIG` > `NETSUKE_CONFIG_PATH`.
-Layer loading and automatic discovery are handled by `push_file_layers(...)`,
-which also applies the `-C/--directory` flag as the project-discovery root.
+applies the precedence `--config` > `NETSUKE_CONFIG`. Layer loading and
+automatic discovery are handled by `push_file_layers(...)`, which also applies
+the `-C/--directory` flag as the project-discovery root.
 
 **Figure: Explicit Config Selector Resolution** — This diagram shows how
 Netsuke chooses the configuration file before automatic discovery. Netsuke
-first checks `--config`, then `NETSUKE_CONFIG`, then `NETSUKE_CONFIG_PATH`. The
-first explicit selector found is loaded directly; if that file is missing or
-invalid, Netsuke reports the explicit-file error instead of falling back to
-discovery. Only when no explicit selector is present does Netsuke run two-pass
-config discovery and then proceed with the merged configuration.
+first checks `--config`, then `NETSUKE_CONFIG`. The first explicit selector
+found is loaded directly; if that file is missing or invalid, Netsuke reports
+the explicit-file error instead of falling back to discovery. Only when no
+explicit selector is present does Netsuke run two-pass config discovery and
+then proceed with the merged configuration.
 
 ```mermaid
 flowchart TD
   Start(["Start netsuke invocation"])
   HasCliConfig{"CLI flag<br/>--config set?"}
   HasEnvConfig{"Env NETSUKE_CONFIG<br/>set?"}
-  HasEnvConfigPath{"Env NETSUKE_CONFIG_PATH<br/>set?"}
   UseCliConfig[["Use CLI --config path<br/>as config file"]]
   UseEnvConfig[["Use NETSUKE_CONFIG path<br/>as config file"]]
-  UseEnvConfigPath[["Use NETSUKE_CONFIG_PATH path<br/>as config file"]]
   RunDiscovery[["Run two-pass<br/>config discovery"]]
   LoadConfig[["Load selected config<br/>into merge pipeline"]]
   ErrorMissing[["Error: explicit config<br/>file missing or invalid"]]
@@ -2609,10 +2606,7 @@ flowchart TD
   HasCliConfig -- No --> HasEnvConfig
 
   HasEnvConfig -- Yes --> UseEnvConfig
-  HasEnvConfig -- No --> HasEnvConfigPath
-
-  HasEnvConfigPath -- Yes --> UseEnvConfigPath
-  HasEnvConfigPath -- No --> RunDiscovery
+  HasEnvConfig -- No --> RunDiscovery
 
   UseCliConfig --> CheckCliFile{"File exists<br/>and parses?"}
   CheckCliFile -- Yes --> LoadConfig
@@ -2621,10 +2615,6 @@ flowchart TD
   UseEnvConfig --> CheckEnvFile{"File exists<br/>and parses?"}
   CheckEnvFile -- Yes --> LoadConfig
   CheckEnvFile -- No --> ErrorMissing
-
-  UseEnvConfigPath --> CheckEnvPathFile{"File exists<br/>and parses?"}
-  CheckEnvPathFile -- Yes --> LoadConfig
-  CheckEnvPathFile -- No --> ErrorMissing
 
   RunDiscovery --> LoadConfig
   LoadConfig --> End(["Proceed with merged config"])
@@ -2642,11 +2632,10 @@ override earlier ones—meaning project-scope has highest precedence among file
 layers. After file layers are merged, environment variables and CLI arguments
 override the merged result, ensuring explicit user intent always wins.
 
-1. **Explicit override**: `--config <PATH>`, `NETSUKE_CONFIG`, and
-   `NETSUKE_CONFIG_PATH` are evaluated in that precedence order before
-   discovery. These explicit selectors bypass automatic discovery and ignore
-   the project-root anchor supplied by `-C/--directory`. `NETSUKE_CONFIG_PATH`
-   remains a backward-compatible alias of `NETSUKE_CONFIG`.
+1. **Explicit override**: `--config <PATH>` and `NETSUKE_CONFIG` are evaluated
+   in that precedence order before discovery. These explicit selectors bypass
+   automatic discovery and ignore the project-root anchor supplied by
+   `-C/--directory`.
 
 2. **Project scope**: Configuration files in the current working directory (or
    the directory specified via `-C/--directory`):
