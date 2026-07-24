@@ -900,7 +900,9 @@ selection. `resolve_config_selector` applies the precedence order:
 3. `NETSUKE_CONFIG_PATH` from `env_config_path`.
 
 `env_config_path` reads `std::env::var_os` and drops empty values, returning
-`Option<PathBuf>`.
+`Option<PathBuf>`. Selection remains a pure query: the two file-layer
+orchestration boundaries emit its structured tracing diagnostics after
+resolution.
 
 `collect_diag_file_layers` and `push_file_layers` both call
 `explicit_config_path`, so both early diagnostic resolution and the full merge

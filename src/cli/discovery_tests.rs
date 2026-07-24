@@ -114,8 +114,13 @@ fn explicit_config_path_logs_selected_selector(
         ..Cli::default()
     };
 
-    let (resolved, events) = capture_events(|| Ok::<_, anyhow::Error>(explicit_config_path(&cli)))?;
+    let (resolution, events) = capture_events(|| {
+        let resolution = explicit_config_path(&cli);
+        trace_config_path_resolution(&resolution);
+        Ok::<_, anyhow::Error>(resolution)
+    })?;
     let selector_event = find_event(&events, "resolved config path")?;
+    let resolved = resolution.path;
 
     ensure!(
         resolved == scenario.expected_path.map(PathBuf::from),
@@ -254,7 +259,7 @@ fn scenario_cli(scenario: LayerScenario, temp: &TempDir) -> Result<Cli> {
     match scenario {
         LayerScenario::ExplicitConfig => {
             let config_path = temp.path().join("config.toml");
-            std::fs::write(&config_path, "theme = \"ascii\"\n")
+            test_support::fs::write(&config_path, "theme = \"ascii\"\n")
                 .with_context(|| format!("write {}", config_path.display()))?;
             Ok(Cli {
                 config: Some(config_path),

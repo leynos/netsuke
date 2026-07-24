@@ -30,7 +30,9 @@ pub(crate) fn push_file_layers(
     composer: &mut MergeComposer,
     errors: &mut Vec<Arc<ortho_config::OrthoError>>,
 ) {
-    let layers_result = explicit_config_path(cli).map_or_else(
+    let resolution = explicit_config_path(cli);
+    trace_config_path_resolution(&resolution);
+    let layers_result = resolution.path.map_or_else(
         || {
             debug!("using config discovery");
             collect_file_layers(cli.directory.as_deref())
@@ -119,53 +121,78 @@ fn project_scope_layers(directory: Option<&Path>) -> OrthoResult<Vec<MergeLayer<
     }
 }
 
-pub(crate) fn explicit_config_path(cli: &Cli) -> Option<PathBuf> {
-    let (selector, resolved_path) = resolve_config_selector(cli.config.clone());
+#[derive(Debug, PartialEq, Eq)]
+struct ConfigPathResolution {
+    selector: &'static str,
+    path: Option<PathBuf>,
+    environment_lookups: Vec<(&'static str, Option<PathBuf>)>,
+}
+fn explicit_config_path(cli: &Cli) -> ConfigPathResolution {
+    resolve_config_selector(cli.config.clone())
+}
 
+fn trace_config_path_resolution(resolution: &ConfigPathResolution) {
+    for (var_name, path) in &resolution.environment_lookups {
+        trace_config_path_variable(var_name, path.as_deref());
+    }
     debug!(
-        selector,
-        path_hash = resolved_path
+        selector = resolution.selector,
+        path_hash = resolution
+            .path
             .as_deref()
             .map(|path| short_hash(path.to_string_lossy().as_bytes()))
             .as_deref(),
-        path_file_name = ?resolved_path.as_deref().and_then(Path::file_name),
-        path_present = resolved_path.is_some(),
+        path_file_name = ?resolution.path.as_deref().and_then(Path::file_name),
+        path_present = resolution.path.is_some(),
         "resolved config path"
     );
-    resolved_path
 }
+fn resolve_config_selector(cli_config: Option<PathBuf>) -> ConfigPathResolution {
+    if let Some(path) = cli_config {
+        return ConfigPathResolution {
+            selector: "cli_flag",
+            path: Some(path),
+            environment_lookups: Vec::new(),
+        };
+    }
 
-fn resolve_config_selector(cli_config: Option<PathBuf>) -> (&'static str, Option<PathBuf>) {
-    cli_config.map_or_else(
-        || {
-            env_config_path(CONFIG_ENV_VAR).map_or_else(
-                || {
-                    env_config_path(CONFIG_ENV_VAR_LEGACY)
-                        .map_or(("none", None), |path| (CONFIG_ENV_VAR_LEGACY, Some(path)))
-                },
-                |path| (CONFIG_ENV_VAR, Some(path)),
-            )
-        },
-        |path| ("cli_flag", Some(path)),
-    )
+    let primary_path = env_config_path(CONFIG_ENV_VAR);
+    let mut environment_lookups = vec![(CONFIG_ENV_VAR, primary_path.clone())];
+    if primary_path.is_some() {
+        return ConfigPathResolution {
+            selector: CONFIG_ENV_VAR,
+            path: primary_path,
+            environment_lookups,
+        };
+    }
+
+    let legacy_path = env_config_path(CONFIG_ENV_VAR_LEGACY);
+    environment_lookups.push((CONFIG_ENV_VAR_LEGACY, legacy_path.clone()));
+    ConfigPathResolution {
+        selector: legacy_path
+            .as_ref()
+            .map_or("none", |_| CONFIG_ENV_VAR_LEGACY),
+        path: legacy_path,
+        environment_lookups,
+    }
 }
 fn env_config_path(var_name: &str) -> Option<PathBuf> {
-    let path = std::env::var_os(var_name)
+    std::env::var_os(var_name)
         .filter(|value| !value.is_empty())
-        .map(PathBuf::from);
+        .map(PathBuf::from)
+}
+
+fn trace_config_path_variable(var_name: &str, path: Option<&Path>) {
     trace!(
         var_name,
         found = path.is_some(),
         path_hash = path
-            .as_deref()
             .map(|value| short_hash(value.to_string_lossy().as_bytes()))
             .as_deref(),
-        path_file_name = ?path.as_deref().and_then(Path::file_name),
+        path_file_name = ?path.and_then(Path::file_name),
         "read config path variable"
     );
-    path
 }
-
 pub(crate) fn load_layers_from_path(path: &Path) -> OrthoResult<Vec<MergeLayer<'static>>> {
     match load_config_file_as_chain(path) {
         Ok(Some(chain)) => Ok(chain
@@ -224,7 +251,9 @@ fn short_hash(value: &[u8]) -> String {
 pub(crate) fn collect_diag_file_layers(cli: &Cli) -> OrthoResult<Vec<MergeLayer<'static>>> {
     let _span = debug_span!("collect_diag_file_layers").entered();
 
-    explicit_config_path(cli).map_or_else(
+    let resolution = explicit_config_path(cli);
+    trace_config_path_resolution(&resolution);
+    resolution.path.map_or_else(
         || {
             debug!("using config discovery");
             collect_file_layers(cli.directory.as_deref())
