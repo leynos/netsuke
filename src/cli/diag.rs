@@ -112,6 +112,7 @@ mod tests {
 
     use super::*;
     use anyhow::ensure;
+    use cap_std::{ambient_authority, fs::Dir};
     use clap::CommandFactory;
     use clap::Parser;
     use serde_json::json;
@@ -152,7 +153,8 @@ mod tests {
     fn resolve_merged_json_reads_injected_env() -> anyhow::Result<()> {
         let dir = tempdir()?;
         let config_path = dir.path().join("netsuke.toml");
-        std::fs::write(&config_path, "json = false\n")?;
+        let config_dir = Dir::open_ambient_dir(dir.path(), ambient_authority())?;
+        config_dir.write("netsuke.toml", b"json = false\n")?;
         let matches = Cli::command().get_matches_from(["netsuke"]);
         let cli = Cli {
             config: Some(config_path),
@@ -172,7 +174,9 @@ mod tests {
     fn resolve_merged_json_rejects_malformed_injected_env() {
         let dir = tempdir().expect("tempdir");
         let config_path = dir.path().join("netsuke.toml");
-        std::fs::write(&config_path, "").expect("write config");
+        let config_dir = Dir::open_ambient_dir(dir.path(), ambient_authority())
+            .expect("open temp config directory");
+        config_dir.write("netsuke.toml", b"").expect("write config");
         let matches = Cli::command().get_matches_from(["netsuke"]);
         let cli = Cli {
             config: Some(config_path),
@@ -192,7 +196,8 @@ mod tests {
     fn resolve_merged_json_honours_cli_before_malformed_env() -> anyhow::Result<()> {
         let dir = tempdir()?;
         let config_path = dir.path().join("netsuke.toml");
-        std::fs::write(&config_path, "json = false\n")?;
+        let config_dir = Dir::open_ambient_dir(dir.path(), ambient_authority())?;
+        config_dir.write("netsuke.toml", b"json = false\n")?;
         let config_path = config_path
             .to_str()
             .expect("temp config path should be UTF-8");

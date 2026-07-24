@@ -183,6 +183,7 @@ mod tests {
 
     use super::*;
     use anyhow::ensure;
+    use cap_std::{ambient_authority, fs::Dir};
     use rstest::rstest;
     use std::collections::HashMap;
     use tempfile::tempdir;
@@ -256,7 +257,8 @@ mod tests {
     fn collect_diag_file_layers_uses_injected_explicit_config() -> anyhow::Result<()> {
         let dir = tempdir()?;
         let config_path = dir.path().join("netsuke.toml");
-        std::fs::write(&config_path, "json = true\n")?;
+        let config_dir = Dir::open_ambient_dir(dir.path(), ambient_authority())?;
+        config_dir.write("netsuke.toml", b"json = true\n")?;
 
         let env = TestEnv::default().with_var(CONFIG_ENV_VAR, config_path.as_os_str());
         let layers = collect_diag_file_layers_with_env(&Cli::default(), &env)?;
