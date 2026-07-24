@@ -45,17 +45,6 @@ fn scenario_returns_value() -> Result<u32, &'static str> {
 }
 ```
 
-**After (supported):**
-
-```rust
-# use rstest_bdd_macros::scenario;
-#[scenario(path = "tests/features/example.feature")]
-fn scenario_returns_unit() -> Result<(), &'static str> {
-    do_setup()?;
-    Ok(())
-}
-```
-
 Values needed by later steps should be returned from step functions and
 injected via fixtures or slots.
 

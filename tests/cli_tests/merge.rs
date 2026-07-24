@@ -214,7 +214,7 @@ diag_json = true
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
         .context("parse CLI args for merge")?;
     ensure!(
-        netsuke::cli::resolve_merged_diag_json(&cli, &matches),
+        netsuke::cli::resolve_merged_diag_json(&cli, &matches)?,
         "pre-merge diagnostic mode should honour config diag_json",
     );
     let merged = netsuke::cli::merge_with_config(&cli, &matches)

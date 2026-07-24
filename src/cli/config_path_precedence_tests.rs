@@ -16,8 +16,25 @@
 use super::*;
 use proptest::prelude::*;
 use rstest::rstest;
-use std::path::PathBuf;
-use test_support::{EnvVarGuard, env_lock::EnvLock};
+use std::{collections::HashMap, ffi::OsString, path::PathBuf};
+
+#[derive(Default)]
+struct TestEnv {
+    values: HashMap<&'static str, OsString>,
+}
+
+impl TestEnv {
+    fn with_var(mut self, name: &'static str, value: impl Into<OsString>) -> Self {
+        self.values.insert(name, value.into());
+        self
+    }
+}
+
+impl EnvProvider for TestEnv {
+    fn get(&self, key: &str) -> Option<OsString> {
+        self.values.get(key).cloned()
+    }
+}
 
 fn precedence_winner<'a>(
     cli_config: Option<&'a PathBuf>,
@@ -32,24 +49,17 @@ fn resolve_config_path_with_selectors(
     env_config: Option<&PathBuf>,
     legacy_config: Option<&PathBuf>,
 ) -> Option<PathBuf> {
-    let _lock = EnvLock::acquire();
-    let mut env_guards = vec![
-        EnvVarGuard::remove(CONFIG_ENV_VAR),
-        EnvVarGuard::remove(CONFIG_ENV_VAR_LEGACY),
-    ];
-    if let Some(value) = env_config {
-        env_guards.push(EnvVarGuard::set(CONFIG_ENV_VAR, value.as_os_str()));
-    }
+    let mut env = env_config.map_or_else(TestEnv::default, |value| {
+        TestEnv::default().with_var(CONFIG_ENV_VAR, value.as_os_str())
+    });
     if let Some(value) = legacy_config {
-        env_guards.push(EnvVarGuard::set(CONFIG_ENV_VAR_LEGACY, value.as_os_str()));
+        env = env.with_var(CONFIG_ENV_VAR_LEGACY, value.as_os_str());
     }
     let cli = Cli {
         config: cli_config,
         ..Cli::default()
     };
-    let result = explicit_config_path(&cli);
-    drop(env_guards);
-    result
+    explicit_config_path_with_env(&cli, &env)
 }
 
 /// For selectors S1 (`cli.config`), S2 (`NETSUKE_CONFIG`), and S3
