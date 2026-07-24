@@ -390,3 +390,14 @@ fn configure_validation_parsers(
 
 /// Maximum number of jobs accepted by the CLI.
 pub(super) const MAX_JOBS: usize = 64;
+
+/// Tests for the CLI parser's localisation rendering.
+///
+/// Exercises locale-specific long-help output for the en-US and es-ES
+/// locales, asserts that `--config <FILE>` and its Fluent-resolved
+/// description are present, and pins the complete rendered help via Insta
+/// snapshots to detect regressions in flag naming, ordering, or
+/// localisation drift.
+#[cfg(test)]
+#[path = "parser_tests.rs"]
+mod tests;
