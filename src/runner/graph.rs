@@ -12,6 +12,7 @@ use std::path::Path;
 use tracing::info;
 
 use crate::cli::{Cli, GraphArgs};
+use crate::diagnostic_json;
 use crate::graph_view::GraphView;
 use crate::graph_view::render::GraphRenderer;
 use crate::graph_view::render_dot::DotRenderer;
@@ -73,6 +74,14 @@ pub(super) fn handle_graph(
 }
 
 fn write_graph_artefact(cli: &Cli, output: Option<&Path>, content: &str) -> Result<()> {
+    if cli.json {
+        if let Some(path) = output.filter(|path| !process::is_stdout_path(path)) {
+            let resolved = resolve_output_path(cli, path);
+            process::write_text_file(resolved.as_ref(), content)?;
+            return write_json_result(None);
+        }
+        return write_json_result(Some(content));
+    }
     match output {
         None => process::write_text_stdout(content),
         Some(path) if process::is_stdout_path(path) => process::write_text_stdout(content),
@@ -81,4 +90,10 @@ fn write_graph_artefact(cli: &Cli, output: Option<&Path>, content: &str) -> Resu
             process::write_text_file(resolved.as_ref(), content)
         }
     }
+}
+
+fn write_json_result(content: Option<&str>) -> Result<()> {
+    let rendered = diagnostic_json::render_result_json("graph", content)
+        .context(localization::message(keys::RUNNER_CONTEXT_RENDER_GRAPH))?;
+    process::write_text_stdout(&rendered)
 }

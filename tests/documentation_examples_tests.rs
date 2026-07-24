@@ -62,6 +62,15 @@ fn assert_default_edges_exist(ninja: &str, context: &str) -> Result<()> {
     Ok(())
 }
 
+fn assert_generates_valid_ninja(run: &NetsukeRun, context: &str) -> Result<()> {
+    assert_success(run, context)?;
+    ensure!(
+        run.stdout.contains("rule ") && run.stdout.contains("build "),
+        "{context} should generate a Ninja manifest"
+    );
+    assert_default_edges_exist(&run.stdout, context)
+}
+
 fn run_with_fake_ninja(workspace: &Path, args: &[&str]) -> Result<NetsukeRun> {
     let (_ninja_dir, ninja_path) = check_ninja::fake_ninja_check_build_file()?;
     let _guard = override_ninja_env(&system_env(), &ninja_path);
@@ -98,13 +107,7 @@ fn documented_manifest_generates_ninja(#[case] example_id: &str) -> Result<()> {
     let workspace = manifest_workspace(example_id)?;
     let run = run_netsuke_in(workspace.path(), &["--progress", "never", "generate"])?;
 
-    assert_success(&run, example_id)?;
-    ensure!(
-        run.stdout.contains("rule ") && run.stdout.contains("build "),
-        "{example_id} should generate a Ninja manifest"
-    );
-    assert_default_edges_exist(&run.stdout, example_id)?;
-    Ok(())
+    assert_generates_valid_ninja(&run, example_id)
 }
 
 #[rstest]
@@ -335,11 +338,5 @@ fn linked_repository_example_generates_ninja(#[case] path: &str) -> Result<()> {
         Path::new("."),
         &["--progress", "never", "--file", path, "generate"],
     )?;
-    assert_success(&run, path)?;
-    ensure!(
-        run.stdout.contains("rule ") && run.stdout.contains("build "),
-        "{path} should generate Ninja"
-    );
-    assert_default_edges_exist(&run.stdout, path)?;
-    Ok(())
+    assert_generates_valid_ninja(&run, path)
 }

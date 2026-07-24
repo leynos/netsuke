@@ -14,6 +14,18 @@ const DOCUMENT_PATHS: &[&str] = &["README.md", "docs/users-guide.md"];
 const MARKER_PREFIX: &str = "<!-- tested-example: ";
 const MARKER_SUFFIX: &str = " -->";
 
+#[derive(Clone, Copy)]
+struct Cursor {
+    source: &'static str,
+    line_index: usize,
+}
+
+impl Cursor {
+    fn error(self, message: &str) -> String {
+        format!("{}:{} {message}", self.source, self.line_index + 1)
+    }
+}
+
 /// One marked fenced example loaded from a user-facing document.
 #[derive(Debug, Eq, PartialEq)]
 pub struct DocumentedExample {
@@ -94,46 +106,52 @@ pub(crate) fn parse_document(
     let mut ids = HashSet::new();
 
     while let Some((line_index, line)) = lines.next() {
+        let cursor = Cursor { source, line_index };
         if let Some(id) = parse_marker(line) {
+            ensure!(
+                !id.trim().is_empty(),
+                "{}",
+                cursor.error("tested-example identifier must not be empty")
+            );
             ensure!(ids.insert(id), "duplicate tested-example identifier '{id}'");
-            examples.push(read_marked_example(source, line_index, id, &mut lines)?);
+            examples.push(read_marked_example(&cursor, id, &mut lines)?);
         } else {
-            reject_invalid_example_line(source, line_index, line)?;
+            reject_invalid_example_line(&cursor, line)?;
         }
     }
 
     Ok(examples)
 }
 
-fn reject_invalid_example_line(source: &str, line_index: usize, line: &str) -> Result<()> {
+fn reject_invalid_example_line(cursor: &Cursor, line: &str) -> Result<()> {
     ensure!(
         line != "<!-- tested-example: -->",
-        "{source}:{} tested-example identifier must not be empty",
-        line_index + 1
+        "{}",
+        cursor.error("tested-example identifier must not be empty")
     );
-    reject_unmarked_fence(source, line_index, line)
+    reject_unmarked_fence(cursor, line)
 }
 
 fn read_marked_example<'a>(
-    source: &'static str,
-    marker_index: usize,
+    cursor: &Cursor,
     id: &str,
     lines: &mut impl Iterator<Item = (usize, &'a str)>,
 ) -> Result<DocumentedExample> {
-    let (fence_index, fence) = next_non_empty_line(lines)
-        .with_context(|| format!("{source}:{} marker has no fence", marker_index + 1))?;
-    let language = fence.strip_prefix("```").with_context(|| {
-        format!(
-            "{source}:{} expected an opening fence after marker",
-            fence_index + 1
-        )
-    })?;
+    let (fence_index, fence) =
+        next_non_empty_line(lines).with_context(|| cursor.error("marker has no fence"))?;
+    let fence_cursor = Cursor {
+        source: cursor.source,
+        line_index: fence_index,
+    };
+    let language = fence
+        .strip_prefix("```")
+        .with_context(|| fence_cursor.error("expected an opening fence after marker"))?;
     ensure!(
         !language.is_empty(),
-        "{source}:{} fence should declare a language",
-        fence_index + 1
+        "{}",
+        fence_cursor.error("fence should declare a language")
     );
-    let body = read_fence_body(source, fence_index, lines)?;
+    let body = read_fence_body(cursor.source, fence_index, lines)?;
     Ok(DocumentedExample {
         id: id.to_owned(),
         language: language.to_owned(),
@@ -141,11 +159,11 @@ fn read_marked_example<'a>(
     })
 }
 
-fn reject_unmarked_fence(source: &str, line_index: usize, line: &str) -> Result<()> {
+fn reject_unmarked_fence(cursor: &Cursor, line: &str) -> Result<()> {
     ensure!(
         !line.starts_with("```"),
-        "{source}:{} fence is missing a tested-example marker",
-        line_index + 1
+        "{}",
+        cursor.error("fence is missing a tested-example marker")
     );
     Ok(())
 }

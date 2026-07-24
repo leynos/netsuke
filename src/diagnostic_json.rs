@@ -12,7 +12,9 @@ use std::iter::Peekable;
 use std::process::ExitCode;
 use std::str::Chars;
 
-const SCHEMA_VERSION: u32 = 1;
+pub use crate::result_json::render_result_json;
+
+pub(crate) const SCHEMA_VERSION: u32 = 1;
 
 /// Render a [`miette::Report`] as Netsuke's JSON diagnostic document.
 ///
@@ -79,13 +81,13 @@ impl DiagnosticDocument {
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
-struct GeneratorInfo {
+pub(crate) struct GeneratorInfo {
     name: &'static str,
     version: &'static str,
 }
 
 impl GeneratorInfo {
-    const fn current() -> Self {
+    pub(crate) const fn current() -> Self {
         Self {
             name: "netsuke",
             version: env!("CARGO_PKG_VERSION"),

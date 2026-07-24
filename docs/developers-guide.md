@@ -468,7 +468,6 @@ there. The tests require workflow YAML files under `.github/workflows` and
 ensure local composite action manifests under `.github/actions` are covered by
 the configured Dependabot directory patterns.
 
-
 ### User-facing documentation examples
 
 Every fenced example in `README.md` and `docs/users-guide.md` has a stable
@@ -515,8 +514,8 @@ unit tests where a small fixed set of cases must all be verified.
 - Annotate the test function with `#[rstest]` and supply cases via
   `#[case(...)]` parameters.
 - Canonical example: `src/cli/config_path_precedence_tests.rs` -
-  `resolve_config_path_precedence` enumerates all 2^3 = 8 combinations of
-  `--config`, `NETSUKE_CONFIG`, and `NETSUKE_CONFIG_PATH` presence.
+  `resolve_config_path_precedence` enumerates all four combinations of
+  `--config` and `NETSUKE_CONFIG` presence.
 
 ## IR dependency classes
 
@@ -687,7 +686,7 @@ use test_support::EnvVarGuard;
 
 let _env_lock = EnvLock::acquire();
 let _guard = EnvVarGuard::set("HOME", temp.path().as_os_str());
-let _guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
+let _guard = EnvVarGuard::remove("NETSUKE_CONFIG");
 ```
 
 For BDD steps that need to track mutations through `TestWorld`, use
@@ -783,7 +782,7 @@ use crate::bdd::types::EnvVarKey;
 mutate_env_var(world, EnvVarKey::from("NETSUKE_THEME"), Some("ascii"))?;
 
 // Remove a variable
-mutate_env_var(world, EnvVarKey::from("NETSUKE_CONFIG_PATH"), None)?;
+mutate_env_var(world, EnvVarKey::from("NETSUKE_EMOJI"), None)?;
 ```
 
 Do **not** call `std::env::set_var` directly in BDD steps — use
@@ -853,15 +852,12 @@ a two-pass approach when no explicit config path is provided:
 1. **First pass** — run `config_discovery()` to find whatever file exists
    first (typically user-scope).
 2. **Second pass** — if the first pass did not find the project-scope file
-   and there is no explicit config path (`--config`, `NETSUKE_CONFIG`,
-   `NETSUKE_CONFIG_PATH`), load `.netsuke.toml` from the project root directly
-   via `load_config_file_as_chain` and push its layers last.
+   and there is no explicit config path (`--config` or `NETSUKE_CONFIG`), load
+   `.netsuke.toml` from the project root directly via
+   `load_config_file_as_chain` and push its layers last.
 
 Because `MergeComposer` uses last-wins semantics, pushing the project layers
 after user layers gives them higher precedence.
-
-The same logic is mirrored in `collect_diag_file_layers` for early `json`
-resolution before full merging.
 
 ### Layer precedence
 
@@ -892,7 +888,7 @@ Configuration merge helpers:
   environment variable, ignores empty values, and converts the value into a
   `PathBuf`.
 - `explicit_config_path(cli: &Cli) -> Option<PathBuf>` resolves explicit config
-  selection from `--config`, `NETSUKE_CONFIG`, and `NETSUKE_CONFIG_PATH`.
+  selection from `--config` and `NETSUKE_CONFIG`.
 - `push_file_layers(cli, composer, errors) -> ()` pushes explicit or discovered
   file layers onto a `MergeComposer`. Explicit load errors are pushed into
   `errors`, and automatic discovery is not attempted after an explicit selector
@@ -900,9 +896,6 @@ Configuration merge helpers:
 - `collect_file_layers(directory)` builds the fallback discovery layer chain,
   applies the project-layer second pass, and returns
   `OrthoResult<Vec<MergeLayer<'static>>>`.
-- `collect_diag_file_layers(cli: &Cli) -> OrthoResult<Vec<MergeLayer<'static>>>`
-  mirrors the file-load path used by `resolve_merged_json` so early `json`
-  resolution sees the same explicit or discovered file layers.
 - `is_empty_value(value: &serde_json::Value) -> bool` detects an empty CLI
   override object.
 - `json_from_layer(layer: &MergeLayer) -> Option<bool>` extracts `json` from a
@@ -921,13 +914,11 @@ selection. It evaluates the precedence chain in this order:
 
 1. `cli.config`
 2. `NETSUKE_CONFIG`
-3. `NETSUKE_CONFIG_PATH`
 
 `env_config_path(var_name)` is the helper that reads `std::env::var_os`,
 discarding empty values and converting the value into `PathBuf`. For `merge` and
-`resolve_merged_json`, both `collect_diag_file_layers` and `push_file_layers`
-therefore follow the same precedence by calling `explicit_config_path`, so they
-return either the same explicit path layers or the same fallback discovery path.
+`resolve_merged_json`, `src/cli/discovery.rs` resolves only `NETSUKE_CONFIG`;
+no other environment variable can select a configuration file.
 
 The public API remains two arguments:
 
@@ -940,7 +931,6 @@ Unit tests that need to verify explicit config path precedence should exercise
 the public merge or diagnostic APIs with guarded environment variables. The
 explicit selector helper reads the process environment directly and remains
 private to `src/cli/discovery.rs`.
-
 
 #### `json` contract
 
@@ -1144,13 +1134,21 @@ whitespace-only `when` values, or type mismatches in the iterable.
 
 ## Runner process execution
 
+`src/runner/dispatch.rs` is private to `runner::run` and owns command routing
+plus successful JSON-result emission. `src/result_json.rs` owns only the
+success envelope; diagnostic serialization remains in `src/diagnostic_json.rs`.
+Within process execution, `forward_stdout` is the single composition point for
+choosing status-aware or plain child-output draining, and its callers select
+either the terminal or a JSON-mode sink.
+
 ### Module: `runner::process::ninja_program`
 
 `src/runner/process/ninja_program.rs` owns the executable-resolution boundary.
 It is the only runner adapter that reads `NETSUKE_NINJA`, validates empty and
-non-UTF-8 values, selects the default `ninja` fallback, and records the selected
-source at debug level. Process construction uses the resolved path exported by
-this module and must not interpret the environment override independently.
+non-UTF-8 values, selects the default `ninja` fallback, and records the
+selected source at debug level. Process construction uses the resolved path
+exported by this module and must not interpret the environment override
+independently.
 
 ### Module: `runner::process::command_logging`
 
@@ -1170,8 +1168,8 @@ All command events share these structured fields:
 
 - `operation`: caller-provided operation label such as `"build"` or tool name.
 - `ninja_program`: command program after UTF-8 normalization.
-- `suppress_stderr`: derived from `cli.resolved_diag_json()`, true when JSON
-  diagnostics suppress direct stderr logging.
+- `suppress_stderr`: derived from `cli.json`, true when JSON output suppresses
+  direct child-process streams.
 
 Phase-specific fields supplement that shared set. The informational execution
 event includes `arg_count`. Spawn- and exit-failure events instead set

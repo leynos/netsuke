@@ -60,5 +60,5 @@ Feature: Advanced usage workflows
     Given a minimal Netsuke workspace
     When netsuke is run with arguments "--json generate"
     Then the command should succeed
-    And stdout should contain "rule "
+    And stdout should be one generate result json document
     And stderr should be empty

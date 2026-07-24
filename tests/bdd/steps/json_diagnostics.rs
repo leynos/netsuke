@@ -57,6 +57,36 @@ fn stderr_should_be_valid_diagnostics_json(world: &TestWorld) -> Result<()> {
     Ok(())
 }
 
+#[then("stdout should be one generate result json document")]
+fn stdout_should_be_one_generate_result_json_document(world: &TestWorld) -> Result<()> {
+    let stdout = world
+        .command_stdout
+        .get()
+        .context("stdout should be captured")?;
+    let value: Value =
+        serde_json::from_str(&stdout).context("stdout should be exactly one JSON document")?;
+    ensure!(
+        value.get("schema_version").and_then(Value::as_i64) == Some(1),
+        "result JSON should include schema version 1"
+    );
+    let result = value
+        .get("result")
+        .context("result JSON should include a result object")?;
+    ensure!(
+        result.get("command").and_then(Value::as_str) == Some("generate"),
+        "result JSON should identify the generate command"
+    );
+    let content = result
+        .get("content")
+        .and_then(Value::as_str)
+        .context("generate result JSON should include generated content")?;
+    ensure!(
+        content.contains("rule ") && content.contains("build hello: "),
+        "generate result should contain the Ninja manifest"
+    );
+    Ok(())
+}
+
 #[then("stderr diagnostics code should be {code:string}")]
 fn stderr_diagnostics_code_should_be(world: &TestWorld, code: &str) -> Result<()> {
     let stderr = world
