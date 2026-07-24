@@ -1,7 +1,9 @@
 //! Tests for configuration discovery tracing.
 
 use super::*;
+use crate::snapshot_test_support::snapshot_settings;
 use anyhow::{Context, Result, ensure};
+use insta::assert_snapshot;
 use rstest::{fixture, rstest};
 use tempfile::{TempDir, tempdir};
 use test_support::{EnvVarGuard, env_lock::EnvLock, tracing_capture::with_test_subscriber};
@@ -161,6 +163,41 @@ fn explicit_config_path_logs_selected_selector(
 }
 
 #[rstest]
+fn selector_resolution_event_schema_snapshot(
+    clean_config_env: (EnvLock, EnvVarGuard, EnvVarGuard),
+) -> Result<()> {
+    let _clean_config_env = clean_config_env;
+    let temp = tempdir().context("create temp dir")?;
+    let config_path = temp.path().join("selector.toml");
+    let _config_guard = EnvVarGuard::set(CONFIG_ENV_VAR, config_path.as_os_str());
+
+    let (resolution, events) = capture_events(|| {
+        let resolution = explicit_config_path(&Cli::default());
+        trace_config_path_resolution(&resolution);
+        Ok::<_, anyhow::Error>(resolution)
+    })?;
+    ensure!(
+        resolution.path.as_deref() == Some(config_path.as_path()),
+        "primary environment path should be selected"
+    );
+
+    let env_event = find_event(&events, "read config path variable")?;
+    let selector_event = find_event(&events, "resolved config path")?;
+    ensure_raw_path_absent(env_event, &config_path)?;
+    ensure_raw_path_absent(selector_event, &config_path)?;
+    let normalized = [env_event, selector_event]
+        .map(|event| normalize_path_hash(event, &config_path))
+        .into_iter()
+        .collect::<Result<Vec<_>>>()?
+        .join("\n");
+
+    snapshot_settings("discovery").bind(|| {
+        assert_snapshot!("selector_resolution_event_schema", normalized);
+    });
+    Ok(())
+}
+
+#[rstest]
 #[case::explicit_config_path(LayerScenario::ExplicitConfig, false, "using explicit config path")]
 #[case::isolated_directory_discovery(LayerScenario::Discovery, true, "using config discovery")]
 fn collect_diag_file_layers_logs_selected_branch(
@@ -201,7 +238,8 @@ fn collect_diag_file_layers_logs_selected_branch(
 
 #[test]
 fn load_layers_from_path_logs_bounded_failure_fields() -> Result<()> {
-    let missing_path = PathBuf::from("missing-secret-name.toml");
+    let temp = tempdir().context("create temp dir")?;
+    let missing_path = temp.path().join("missing-secret-name.toml");
 
     let (error, events) = capture_events(|| {
         Ok::<_, anyhow::Error>(
@@ -231,6 +269,75 @@ fn load_layers_from_path_logs_bounded_failure_fields() -> Result<()> {
     ensure!(
         !warn_event.contains("error="),
         "warn event should not include full formatted error text: {warn_event}"
+    );
+    ensure_private_event_fields(warn_event, &missing_path, &error.to_string())?;
+    snapshot_failure_event(
+        "explicit_load_missing_event_schema",
+        warn_event,
+        &missing_path,
+    )?;
+    Ok(())
+}
+
+#[test]
+fn load_layers_from_path_logs_invalid_toml_failure() -> Result<()> {
+    let temp = tempdir().context("create temp dir")?;
+    let config_path = temp.path().join("invalid-secret-config.toml");
+    let invalid_toml = "theme = [invalid parser secret\n";
+    test_support::fs::write(&config_path, invalid_toml)
+        .with_context(|| format!("write {}", config_path.display()))?;
+
+    let (error, events) = capture_events(|| {
+        Ok::<_, anyhow::Error>(
+            load_layers_from_path(&config_path)
+                .expect_err("invalid explicit config file should fail"),
+        )
+    })?;
+    let warn_event = find_event(&events, "explicit config load failed")?;
+    let formatted_error = error.to_string();
+
+    ensure!(
+        warn_event.contains("failure_kind=LoadError"),
+        "warn event should classify parser failures: {warn_event}"
+    );
+    ensure_bounded_path_fields(warn_event, &config_path)?;
+    ensure_private_event_fields(warn_event, &config_path, &formatted_error)?;
+    ensure!(
+        !warn_event.contains("invalid parser secret"),
+        "warn event should not contain parser input: {warn_event}"
+    );
+    snapshot_failure_event("explicit_load_error_event_schema", warn_event, &config_path)?;
+    Ok(())
+}
+
+fn snapshot_failure_event(snapshot_name: &str, event: &str, path: &Path) -> Result<()> {
+    let normalized = normalize_path_hash(event, path)?;
+    snapshot_settings("discovery").bind(|| {
+        assert_snapshot!(snapshot_name, normalized);
+    });
+    Ok(())
+}
+
+fn normalize_path_hash(event: &str, path: &Path) -> Result<String> {
+    ensure_bounded_path_fields(event, path)?;
+    let path_hash = short_hash(path.to_string_lossy().as_bytes());
+    Ok(event.replace(&path_hash, "[path_hash]"))
+}
+
+fn ensure_private_event_fields(event: &str, path: &Path, formatted_error: &str) -> Result<()> {
+    ensure_raw_path_absent(event, path)?;
+    ensure!(
+        !event.contains(formatted_error),
+        "event should not include formatted error text: {event}"
+    );
+    Ok(())
+}
+
+fn ensure_raw_path_absent(event: &str, path: &Path) -> Result<()> {
+    ensure!(
+        !event.contains(path.to_string_lossy().as_ref()),
+        "event should not include raw path {}: {event}",
+        path.display()
     );
     Ok(())
 }

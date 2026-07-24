@@ -20,9 +20,15 @@ use super::parser::Cli;
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG";
 const CONFIG_ENV_VAR_LEGACY: &str = "NETSUKE_CONFIG_PATH";
 
+/// Classifies an explicit configuration load failure without retaining error text.
+///
+/// For example, an absent file is [`Self::Missing`], while invalid TOML is
+/// [`Self::LoadError`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ConfigLoadFailureKind {
+    /// The selected configuration file does not exist.
     Missing,
+    /// The selected file exists but could not be loaded or parsed.
     LoadError,
 }
 pub(crate) fn push_file_layers(
@@ -121,16 +127,31 @@ fn project_scope_layers(directory: Option<&Path>) -> OrthoResult<Vec<MergeLayer<
     }
 }
 
+/// Describes the result of the pure explicit-path selection query.
+///
+/// The value records the winning selector, its optional path, and each
+/// environment lookup needed to make the decision. For example, a present
+/// `NETSUKE_CONFIG` wins before `NETSUKE_CONFIG_PATH`. Consumers may emit
+/// diagnostics later without giving the query tracing side effects.
 #[derive(Debug, PartialEq, Eq)]
 struct ConfigPathResolution {
     selector: &'static str,
     path: Option<PathBuf>,
     environment_lookups: Vec<(&'static str, Option<PathBuf>)>,
 }
+/// Resolve the explicit configuration path requested by `cli`.
+///
+/// Returns the selector decision and its environment lookup context without
+/// emitting events. For example, `cli.config` produces the `cli_flag` selector.
 fn explicit_config_path(cli: &Cli) -> ConfigPathResolution {
     resolve_config_selector(cli.config.clone())
 }
 
+/// Emit bounded diagnostics for a completed path `resolution`.
+///
+/// Environment lookups are emitted before the selector event. For example, a
+/// selected path contributes a correlation hash and file name, never its full
+/// value.
 fn trace_config_path_resolution(resolution: &ConfigPathResolution) {
     for (var_name, path) in &resolution.environment_lookups {
         trace_config_path_variable(var_name, path.as_deref());
@@ -147,6 +168,11 @@ fn trace_config_path_resolution(resolution: &ConfigPathResolution) {
         "resolved config path"
     );
 }
+/// Select a config path using CLI, primary environment, then legacy environment.
+///
+/// `cli_config` wins when present; otherwise `NETSUKE_CONFIG` precedes
+/// `NETSUKE_CONFIG_PATH`. The returned value includes only the environment
+/// lookups actually evaluated, so a CLI selection records none.
 fn resolve_config_selector(cli_config: Option<PathBuf>) -> ConfigPathResolution {
     if let Some(path) = cli_config {
         return ConfigPathResolution {
@@ -176,12 +202,21 @@ fn resolve_config_selector(cli_config: Option<PathBuf>) -> ConfigPathResolution 
         environment_lookups,
     }
 }
+/// Read a non-empty path from environment variable `var_name`.
+///
+/// Returns `None` when the variable is missing or empty. For example, an empty
+/// `NETSUKE_CONFIG` does not prevent the legacy variable from being queried.
+/// This query does not emit tracing events.
 fn env_config_path(var_name: &str) -> Option<PathBuf> {
     std::env::var_os(var_name)
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
 }
 
+/// Trace one environment lookup using bounded path fields.
+///
+/// `var_name` and presence are recorded directly. A present `path` contributes
+/// only its file name and correlation hash; the full path is never logged.
 fn trace_config_path_variable(var_name: &str, path: Option<&Path>) {
     trace!(
         var_name,
@@ -218,6 +253,10 @@ pub(crate) fn load_layers_from_path(path: &Path) -> OrthoResult<Vec<MergeLayer<'
     }
 }
 
+/// Warn that an explicit `path` failed with `failure_kind`.
+///
+/// The event exposes the failure class, file name, and correlation hash, but
+/// neither the full path nor the formatted parser or I/O error.
 fn warn_explicit_config_load_failed(path: &Path, failure_kind: ConfigLoadFailureKind) {
     warn!(
         path_hash = %short_hash(path.to_string_lossy().as_bytes()),
@@ -227,6 +266,10 @@ fn warn_explicit_config_load_failed(path: &Path, failure_kind: ConfigLoadFailure
     );
 }
 
+/// Emit `message` with bounded fields identifying `path`.
+///
+/// For example, an explicit config branch records a file name and correlation
+/// hash rather than the full path.
 fn debug_config_path(message: &'static str, path: &Path) {
     debug!(
         path_hash = %short_hash(path.to_string_lossy().as_bytes()),
@@ -235,6 +278,10 @@ fn debug_config_path(message: &'static str, path: &Path) {
     );
 }
 
+/// Emit `message` with presence and bounded fields for an optional path string.
+///
+/// `None` records only absence. A present value records its file name and a
+/// correlation hash, never the complete path.
 fn debug_optional_config_path(message: &'static str, path: Option<&str>) {
     debug!(
         path_hash = path.map(|value| short_hash(value.as_bytes())).as_deref(),
@@ -243,6 +290,11 @@ fn debug_optional_config_path(message: &'static str, path: Option<&str>) {
         message
     );
 }
+/// Return a stable-width correlation identifier for `value`.
+///
+/// For example, the same path bytes produce the same 16-character identifier
+/// within the supported runtime. This hash bounds log cardinality; it is not a
+/// cryptographic digest and must not be used as a security boundary.
 fn short_hash(value: &[u8]) -> String {
     let mut hasher = DefaultHasher::new();
     value.hash(&mut hasher);

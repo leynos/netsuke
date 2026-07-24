@@ -902,7 +902,9 @@ selection. `resolve_config_selector` applies the precedence order:
 `env_config_path` reads `std::env::var_os` and drops empty values, returning
 `Option<PathBuf>`. Selection remains a pure query: the two file-layer
 orchestration boundaries emit its structured tracing diagnostics after
-resolution.
+resolution. Path hashes are bounded correlation identifiers, not cryptographic
+security guarantees; tracing tests assert the runtime value before replacing it
+with a stable snapshot placeholder.
 
 `collect_diag_file_layers` and `push_file_layers` both call
 `explicit_config_path`, so both early diagnostic resolution and the full merge
