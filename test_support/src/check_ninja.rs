@@ -1,10 +1,10 @@
 //! Helpers for validating build file paths and tool invocations via fake Ninja binaries.
 
 use anyhow::{Context, Result};
-use std::fs::{self, File};
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
+
+use crate::exec::write_exec_with_content;
 
 /// Represents a Ninja tool name (e.g., "clean", "compdb").
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,22 +57,16 @@ impl ShellFlag {
     }
 }
 
-/// Make a script file executable on Unix platforms.
-#[cfg(unix)]
-fn make_script_executable(path: &Path, context: &str) -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-    let mut perms = fs::metadata(path)
-        .with_context(|| format!("{context}: read metadata {}", path.display()))?
-        .permissions();
-    perms.set_mode(0o755);
-    fs::set_permissions(path, perms)
-        .with_context(|| format!("{context}: set permissions {}", path.display()))?;
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn make_script_executable(_path: &Path, _context: &str) -> Result<()> {
-    Ok(())
+/// Write a fake `ninja` script into a fresh temporary directory.
+///
+/// Shared plumbing for the fake-Ninja factories below: creates the temp
+/// directory, writes `script` via [`write_exec_with_content`], and returns
+/// both so callers keep the directory alive for the script's lifetime.
+fn write_fake_ninja_script(script: &str, context: &str) -> Result<(TempDir, PathBuf)> {
+    let dir = TempDir::new().with_context(|| format!("{context}: create temp dir"))?;
+    let path = write_exec_with_content(dir.path(), "ninja", script)
+        .with_context(|| format!("{context}: write script"))?;
+    Ok((dir, path))
 }
 
 /// Create a fake Ninja that validates the build file path provided via `-f`.
@@ -80,33 +74,17 @@ fn make_script_executable(_path: &Path, _context: &str) -> Result<()> {
 /// The script exits with status `1` if the file is missing or not a regular
 /// file, otherwise `0`.
 pub fn fake_ninja_check_build_file() -> Result<(TempDir, PathBuf)> {
-    let dir = TempDir::new().context("fake_ninja_check_build_file: create temp dir")?;
-    let path = dir.path().join("ninja");
-    let mut file = File::create(&path).with_context(|| {
-        format!(
-            "fake_ninja_check_build_file: create script {}",
-            path.display()
-        )
-    })?;
-    writeln!(
-        file,
+    write_fake_ninja_script(
         concat!(
             "#!/bin/sh\n",
             "if [ \"$1\" = \"-f\" ] && [ ! -f \"$2\" ]; then\n",
             "  echo \"missing build file: $2\" >&2\n",
             "  exit 1\n",
             "fi\n",
-            "exit 0"
+            "exit 0\n"
         ),
+        "fake_ninja_check_build_file",
     )
-    .with_context(|| {
-        format!(
-            "fake_ninja_check_build_file: write script {}",
-            path.display()
-        )
-    })?;
-    make_script_executable(&path, "fake_ninja_check_build_file")?;
-    Ok((dir, path))
 }
 
 /// Create a fake Ninja that validates `-t <tool>` was invoked with the expected tool name.
@@ -267,24 +245,9 @@ pub fn fake_ninja_expect_tool_with_jobs(
     expected_jobs: Option<u32>,
     expected_directory: Option<&Path>,
 ) -> Result<(TempDir, PathBuf)> {
-    let dir = TempDir::new().context("fake_ninja_expect_tool_with_jobs: create temp dir")?;
-    let path = dir.path().join("ninja");
-    let mut file = File::create(&path).with_context(|| {
-        format!(
-            "fake_ninja_expect_tool_with_jobs: create script {}",
-            path.display()
-        )
-    })?;
     let script_content =
         build_tool_validation_script(expected_tool, expected_jobs, expected_directory)?;
-    write!(file, "{}", script_content).with_context(|| {
-        format!(
-            "fake_ninja_expect_tool_with_jobs: write script {}",
-            path.display()
-        )
-    })?;
-    make_script_executable(&path, "fake_ninja_expect_tool_with_jobs")?;
-    Ok((dir, path))
+    write_fake_ninja_script(&script_content, "fake_ninja_expect_tool_with_jobs")
 }
 
 /// Stub for non-Unix platforms that returns an error.
