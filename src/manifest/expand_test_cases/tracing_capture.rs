@@ -3,91 +3,12 @@
 use super::*;
 use anyhow::{Context, Result};
 use minijinja::Environment;
-use std::sync::{Arc, Mutex, PoisonError};
-use tracing::{
-    Event, Subscriber,
-    field::{Field, Visit},
-};
-use tracing_subscriber::{
-    Layer, filter::LevelFilter, layer::Context as LayerContext, prelude::*, registry::LookupSpan,
-};
-
-#[derive(Debug, Clone, Default)]
-struct CapturedEvents {
-    fields: Arc<Mutex<Vec<String>>>,
-}
-
-impl CapturedEvents {
-    fn snapshot(&self) -> Vec<String> {
-        // Recover the captured events even if a panicking test poisoned the
-        // lock; the data remains usable for assertions.
-        self.fields
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clone()
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-struct CapturedEventsLayer {
-    events: Arc<Mutex<Vec<String>>>,
-}
-
-impl<S> Layer<S> for CapturedEventsLayer
-where
-    S: Subscriber + for<'span> LookupSpan<'span>,
-{
-    fn on_event(&self, event: &Event<'_>, _ctx: LayerContext<'_, S>) {
-        let mut visitor = FieldVisitor::default();
-        event.record(&mut visitor);
-        // Recover from a poisoned lock so event capture keeps working even if
-        // a panicking test poisoned it.
-        self.events
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .push(visitor.fields.join(" "));
-    }
-}
-
-#[derive(Debug, Default)]
-struct FieldVisitor {
-    fields: Vec<String>,
-}
-
-impl Visit for FieldVisitor {
-    fn record_bool(&mut self, field: &Field, value: bool) {
-        self.fields.push(format!("{}={value}", field.name()));
-    }
-
-    fn record_i64(&mut self, field: &Field, value: i64) {
-        self.fields.push(format!("{}={value}", field.name()));
-    }
-
-    fn record_u64(&mut self, field: &Field, value: u64) {
-        self.fields.push(format!("{}={value}", field.name()));
-    }
-
-    fn record_str(&mut self, field: &Field, value: &str) {
-        self.fields.push(format!("{}={value:?}", field.name()));
-    }
-
-    fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
-        self.fields.push(format!("{}={value:?}", field.name()));
-    }
-}
-
-fn with_test_subscriber<T>(test: impl FnOnce(CapturedEvents) -> T) -> T {
-    let layer = CapturedEventsLayer::default();
-    let captured = CapturedEvents {
-        fields: Arc::clone(&layer.events),
-    };
-    let subscriber = tracing_subscriber::registry().with(layer.with_filter(LevelFilter::DEBUG));
-    tracing::subscriber::with_default(subscriber, || test(captured))
-}
+use test_support::tracing_capture::with_test_subscriber;
+use tracing_subscriber::filter::LevelFilter;
 
 #[test]
 fn expand_foreach_emits_debug_event_for_filtered_entry() -> Result<()> {
-    with_test_subscriber(|captured| {
+    with_test_subscriber(LevelFilter::DEBUG, |captured| {
         let env = Environment::new();
         let when_expr = "secret_token == 'literal-secret'";
         let yaml = format!(

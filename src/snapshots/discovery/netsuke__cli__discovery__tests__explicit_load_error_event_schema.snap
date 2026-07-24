@@ -1,0 +1,5 @@
+---
+source: src/cli/discovery_tests.rs
+expression: normalized
+---
+message=explicit config load failed path_hash=[path_hash] path_file_name=Some("invalid-secret-config.toml") failure_kind=LoadError

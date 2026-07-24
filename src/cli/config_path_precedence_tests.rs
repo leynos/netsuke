@@ -47,7 +47,7 @@ fn resolve_config_path_with_selectors(
         config: cli_config,
         ..Cli::default()
     };
-    let result = explicit_config_path(&cli);
+    let result = explicit_config_path(&cli).path;
     drop(env_guards);
     result
 }
