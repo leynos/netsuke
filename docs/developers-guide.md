@@ -468,6 +468,22 @@ there. The tests require workflow YAML files under `.github/workflows` and
 ensure local composite action manifests under `.github/actions` are covered by
 the configured Dependabot directory patterns.
 
+
+### Temporary executable test helpers
+
+The low-level executable-stub primitive is owned by
+[`test_support::exec`](../test_support/src/exec.rs). Use
+`write_exec_with_content` only from test-support or test code that needs a
+temporary executable with controlled script content; production code must not
+call it. Prefer higher-level domain helpers, such as the fake-Ninja factories,
+when they fit. The caller composes the primitive with a temporary directory and
+retains that directory for as long as the executable is needed.
+
+Callers supply a platform-appropriate filename and script body. The helper
+writes that content and applies executable permissions only on Unix.
+`write_exec` is the minimal-script convenience wrapper;
+`write_exec_with_content` is the shared primitive for custom behaviour.
+
 ### Property-based testing with proptest
 
 `proptest` generates randomized inputs to verify invariants that must hold for

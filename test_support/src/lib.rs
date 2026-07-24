@@ -109,24 +109,56 @@ impl std::error::Error for ProbesError {}
 /// ```
 pub fn fake_ninja(exit_code: u8) -> Result<(TempDir, PathBuf)> {
     let dir = TempDir::new().context("fake_ninja: create temporary directory")?;
-    let root = camino::Utf8Path::from_path(dir.path())
-        .context("fake_ninja: temporary directory path is not valid UTF-8")?;
 
     #[cfg(unix)]
-    let path =
-        exec::write_exec_with_content(root, "ninja", &format!("#!/bin/sh\nexit {exit_code}\n"))
-            .context("fake_ninja: write script")?;
+    let path = exec::write_exec_with_content(
+        dir.path(),
+        "ninja",
+        &format!("#!/bin/sh\nexit {exit_code}\n"),
+    )
+    .context("fake_ninja: write script")?;
     #[cfg(windows)]
     let path = exec::write_exec_with_content(
-        root,
+        dir.path(),
         "ninja.cmd",
         &format!("@echo off\r\nexit /B {exit_code}\r\n"),
     )
     .context("fake_ninja: write batch file")?;
 
-    Ok((dir, path.into_std_path_buf()))
+    Ok((dir, path))
 }
 
+#[cfg(all(test, unix))]
+mod tests {
+    use super::{
+        EnvVarGuard, TempDir, check_ninja::fake_ninja_check_build_file, env_lock::EnvLock,
+        fake_ninja,
+    };
+    use anyhow::{Context, Result};
+    use std::{ffi::OsString, fs, os::unix::ffi::OsStringExt};
+
+    #[test]
+    fn fake_ninja_helpers_support_non_utf8_temp_directories() -> Result<()> {
+        let parent = TempDir::new().context("create parent temporary directory")?;
+        let non_utf8_root = parent.path().join(OsString::from_vec(b"tmp-\xff".to_vec()));
+        fs::create_dir(&non_utf8_root).context("create non-UTF-8 temporary directory")?;
+
+        let _env_lock = EnvLock::acquire();
+        let _tmpdir = EnvVarGuard::set("TMPDIR", non_utf8_root.as_os_str());
+
+        let (_exit_dir, exit_script) = fake_ninja(0)?;
+        let (_check_dir, check_script) = fake_ninja_check_build_file()?;
+
+        assert!(exit_script.starts_with(&non_utf8_root));
+        assert!(check_script.starts_with(&non_utf8_root));
+        assert!(exit_script.exists(), "fake_ninja should create its script");
+        assert!(
+            check_script.exists(),
+            "fake_ninja_check_build_file should create its script"
+        );
+        Ok(())
+    }
+}
 /// Probe that required binaries are available in `PATH`.
 ///
 /// Each entry provides the programme name and the arguments used to probe it,

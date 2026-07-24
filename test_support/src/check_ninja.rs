@@ -64,11 +64,9 @@ impl ShellFlag {
 /// both so callers keep the directory alive for the script's lifetime.
 fn write_fake_ninja_script(script: &str, context: &str) -> Result<(TempDir, PathBuf)> {
     let dir = TempDir::new().with_context(|| format!("{context}: create temp dir"))?;
-    let root = camino::Utf8Path::from_path(dir.path())
-        .with_context(|| format!("{context}: temp dir path is not valid UTF-8"))?;
-    let path = write_exec_with_content(root, "ninja", script)
+    let path = write_exec_with_content(dir.path(), "ninja", script)
         .with_context(|| format!("{context}: write script"))?;
-    Ok((dir, path.into_std_path_buf()))
+    Ok((dir, path))
 }
 
 /// Create a fake Ninja that validates the build file path provided via `-f`.
