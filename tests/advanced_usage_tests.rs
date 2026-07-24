@@ -10,6 +10,7 @@ use rstest::rstest;
 use std::path::Path;
 use tempfile::{TempDir, tempdir};
 use test_support::check_ninja::fake_ninja_check_build_file;
+use test_support::fs as test_fs;
 use test_support::netsuke::run_netsuke_in_with_env;
 
 /// Captured output from a netsuke invocation.
@@ -154,7 +155,7 @@ fn generate_to_unwritable_path_fails_with_path_error() -> Result<()> {
     let workspace = setup_minimal_workspace("generate to unwritable path")?;
     // Create a regular file that blocks the parent directory creation.
     let blocker = workspace.path().join("blocker");
-    std::fs::write(&blocker, "").context("create blocker file")?;
+    test_fs::write(&blocker, "").context("create blocker file")?;
     let bad_path = blocker.join("out.ninja");
 
     let output = run_netsuke(

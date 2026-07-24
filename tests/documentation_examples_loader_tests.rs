@@ -1,6 +1,6 @@
 //! Failure contracts for the documented-example fence loader.
 
-mod documentation_examples;
+pub mod documentation_examples;
 
 use anyhow::{Result, ensure};
 use documentation_examples::{manifest_workspace, parse_document};

@@ -2444,8 +2444,9 @@ presentation setting; the older `no_emoji` field remains as a compatibility
 alias that canonicalizes to the ASCII theme. Conflicting combinations such as
 `theme = "unicode"` together with `no_emoji = true` fail during merge.
 `spinner_mode` likewise validates against the legacy `progress` boolean so
-contradictory inputs are rejected early. `output_format` is typed now, but only
-`human` is accepted until the future JSON diagnostics milestone lands.
+contradictory inputs are rejected early. The `json` setting selects
+machine-readable output: each invocation emits one versioned result document on
+success or one versioned diagnostic document on failure.
 
 CLI help and clap errors are localized via Fluent resources; locale resolution
 is handled in `src/locale_resolution.rs` with the precedence `--locale` ->

@@ -1,14 +1,8 @@
 //! Tests for theme resolution and token selection.
 
 use super::*;
+use crate::snapshot_test_support::{NoColorEnv, no_color_env};
 use rstest::rstest;
-
-fn fake_env(no_color: Option<&str>) -> impl Fn(&str) -> Option<String> + '_ {
-    move |key| match key {
-        "NO_COLOR" => no_color.map(String::from),
-        _ => None,
-    }
-}
 
 #[rstest]
 #[case::explicit_unicode_overrides_all(
@@ -45,17 +39,16 @@ fn fake_env(no_color: Option<&str>) -> impl Fn(&str) -> Option<String> + '_ {
 #[case::standard_mode_uses_unicode(None, None, None, OutputMode::Standard, true)]
 #[case::no_emoji_false_defers_to_mode(None, Some(false), None, OutputMode::Standard, true)]
 fn theme_resolution_precedence(
+    no_color_env: NoColorEnv,
     #[case] theme: Option<ThemePreference>,
     #[case] no_emoji: Option<bool>,
     #[case] env_no_color: Option<&str>,
     #[case] mode: OutputMode,
     #[case] expect_unicode: bool,
 ) {
-    let resolved = resolve_theme(
-        theme,
-        ThemeContext::new(no_emoji, None, mode),
-        fake_env(env_no_color),
-    );
+    let resolved = resolve_theme(theme, ThemeContext::new(no_emoji, None, mode), move |key| {
+        no_color_env(env_no_color.map(String::from), key)
+    });
     assert_eq!(resolved.tokens.emoji_allowed, expect_unicode);
     if expect_unicode {
         assert_eq!(resolved.tokens.symbols.success, UNICODE_SYMBOLS.success);
@@ -84,24 +77,24 @@ fn spacing_tokens_are_identical_across_themes() {
     );
 }
 
-#[test]
-fn colour_policy_always_ignores_no_color_for_theme_resolution() {
+#[rstest]
+fn colour_policy_always_ignores_no_color_for_theme_resolution(no_color_env: NoColorEnv) {
     let resolved = resolve_theme(
         None,
         ThemeContext::new(None, Some(ColourPolicy::Always), OutputMode::Standard),
-        fake_env(Some("1")),
+        move |key| no_color_env(Some(String::from("1")), key),
     );
 
     assert!(resolved.tokens.emoji_allowed);
     assert_eq!(resolved.tokens.symbols.success, UNICODE_SYMBOLS.success);
 }
 
-#[test]
-fn colour_policy_never_forces_ascii_for_theme_resolution() {
+#[rstest]
+fn colour_policy_never_forces_ascii_for_theme_resolution(no_color_env: NoColorEnv) {
     let resolved = resolve_theme(
         None,
         ThemeContext::new(None, Some(ColourPolicy::Never), OutputMode::Standard),
-        fake_env(None),
+        move |key| no_color_env(None, key),
     );
 
     assert!(!resolved.tokens.emoji_allowed);

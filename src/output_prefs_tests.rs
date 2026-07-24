@@ -1,7 +1,7 @@
 //! Tests for output preference resolution and token-backed prefix rendering.
 
 use super::*;
-use crate::snapshot_test_support::{snapshot_settings, theme_prefs};
+use crate::snapshot_test_support::{NoColorEnv, no_color_env, snapshot_settings, theme_prefs};
 use anyhow::{Result, ensure};
 use insta::assert_snapshot;
 use rstest::rstest;
@@ -17,14 +17,6 @@ struct ThemeResolutionCase<'a> {
     expected_emoji: bool,
 }
 
-/// Build an environment lookup from an optional `NO_COLOR` value.
-fn fake_env(no_color: Option<&str>) -> impl Fn(&str) -> Option<String> + '_ {
-    move |key| match key {
-        "NO_COLOR" => no_color.map(String::from),
-        _ => None,
-    }
-}
-
 #[rstest]
 #[case::explicit_no_emoji_forces_ascii(Some(true), None, false)]
 #[case::false_defers_to_no_color(Some(false), Some("1"), false)]
@@ -33,12 +25,18 @@ fn fake_env(no_color: Option<&str>) -> impl Fn(&str) -> Option<String> + '_ {
 #[case::no_color_empty_disables_emoji(None, Some(""), false)]
 #[case::default_allows_unicode(None, None, true)]
 fn resolve_output_prefs(
+    no_color_env: NoColorEnv,
     #[case] no_emoji: Option<bool>,
     #[case] no_color: Option<&str>,
     #[case] expected_emoji: bool,
 ) {
-    let env = fake_env(no_color);
-    assert_eq!(resolve_with(no_emoji, env).emoji_allowed(), expected_emoji);
+    assert_eq!(
+        resolve_with(no_emoji, move |key| {
+            no_color_env(no_color.map(String::from), key)
+        })
+        .emoji_allowed(),
+        expected_emoji
+    );
 }
 
 #[rstest]
@@ -77,12 +75,14 @@ fn resolve_output_prefs(
     no_color: None,
     expected_emoji: false,
 })]
-fn resolve_from_theme_with_uses_theme_resolution(#[case] case: ThemeResolutionCase<'_>) {
-    let env = fake_env(case.no_color);
+fn resolve_from_theme_with_uses_theme_resolution(
+    no_color_env: NoColorEnv,
+    #[case] case: ThemeResolutionCase<'_>,
+) {
     let prefs = resolve_from_theme_with(
         case.theme,
         ThemeContext::new(case.no_emoji, None, case.mode),
-        env,
+        move |key| no_color_env(case.no_color.map(String::from), key),
     );
     assert_eq!(prefs.emoji_allowed(), case.expected_emoji);
 }
