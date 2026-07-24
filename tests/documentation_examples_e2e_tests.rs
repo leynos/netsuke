@@ -6,23 +6,13 @@ mod documentation_examples;
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
-use documentation_examples::{documented_example, manifest_workspace};
+use documentation_examples::{assert_success, documented_example, manifest_workspace};
 use rstest::rstest;
 use std::path::Path;
 use std::process::Command;
 use test_support::fs as test_fs;
 use test_support::netsuke::{NetsukeRun, run_netsuke_in_with_env};
 use test_support::{ninja::ninja_integration_workspace, write_exec};
-
-fn assert_success(run: &NetsukeRun, context: &str) -> Result<()> {
-    ensure!(
-        run.success,
-        "{context} should succeed; stdout:\n{}\nstderr:\n{}",
-        run.stdout,
-        run.stderr
-    );
-    Ok(())
-}
 
 fn executable_path(stub_directory: &Path) -> Result<String> {
     let host_path = std::env::var("PATH").context("read host PATH")?;

@@ -3,7 +3,9 @@
 mod documentation_examples;
 
 use anyhow::{Context, Result, ensure};
-use documentation_examples::{documented_example, load_documented_examples, manifest_workspace};
+use documentation_examples::{
+    assert_success, documented_example, load_documented_examples, manifest_workspace,
+};
 use rstest::rstest;
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -36,16 +38,6 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "readme-first-build-manifest",
     "readme-source-install",
 ];
-
-fn assert_success(run: &NetsukeRun, context: &str) -> Result<()> {
-    ensure!(
-        run.success,
-        "{context} should succeed; stdout:\n{}\nstderr:\n{}",
-        run.stdout,
-        run.stderr
-    );
-    Ok(())
-}
 
 fn assert_default_edges_exist(ninja: &str, context: &str) -> Result<()> {
     for default in ninja

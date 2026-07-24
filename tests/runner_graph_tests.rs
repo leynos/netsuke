@@ -11,6 +11,7 @@ use netsuke::output_prefs;
 use netsuke::runner::run;
 use rstest::rstest;
 use serde_json::Value;
+use test_support::fs as test_fs;
 use test_support::{localizer_test_lock, set_en_localizer};
 
 mod fixtures;
@@ -73,7 +74,7 @@ fn json_graph_with_output_writes_file_and_result_document() -> Result<()> {
         output.stderr.is_empty(),
         "JSON graph file output should keep stderr empty"
     );
-    let dot = std::fs::read_to_string(&dot_path)
+    let dot = test_fs::read_to_string(&dot_path)
         .with_context(|| format!("read graph output at {}", dot_path.display()))?;
     ensure!(
         dot.contains("digraph netsuke"),
@@ -149,8 +150,8 @@ fn graph_html_writes_self_contained_document() -> Result<()> {
 fn graph_with_output_dash_writes_to_stdout_and_not_file() -> Result<()> {
     // Subprocess-driven test: the `-` sentinel must route DOT to stdout and
     // not create any artefact on disk. Existing project precedent is
-    // `manifest_subcommand_streams_to_stdout_when_dash` in assert_cmd_tests,
-    // which uses `assert_cmd::Command` for stdout capture.
+    // `generate_streams_to_stdout_by_default` in assert_cmd_tests uses
+    // `assert_cmd::Command` for stdout capture.
     let (temp, manifest_path) = create_test_manifest()?;
     let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
         .current_dir(temp.path())

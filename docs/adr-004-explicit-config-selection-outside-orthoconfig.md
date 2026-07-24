@@ -57,13 +57,14 @@ semantics without broadening its API around one consumer's policy.
 
 ### Option B: add Netsuke-specific explicit selection to OrthoConfig
 
-This would extend OrthoConfig, so Netsuke could delegate the selector order and
-legacy alias handling to the library.
+This would extend OrthoConfig, so Netsuke could delegate its selector policy to
+the library.
 
 It was rejected because the policy is part of Netsuke's CLI contract rather
-than OrthoConfig's domain. Baking `NETSUKE_CONFIG` or Netsuke's project-scope
-fallback into OrthoConfig would invert the dependency: the generic merge
-library would know too much about one adapter.
+than OrthoConfig's domain. The Netsuke CLI adapter owns selector precedence, the
+`--config` spelling, and `NETSUKE_CONFIG` handling. Baking those details or
+Netsuke's project-scope fallback into OrthoConfig would invert the dependency:
+the generic merge library would know too much about one adapter.
 
 ### Option C: resolve explicit selection in `discovery.rs`
 
@@ -73,7 +74,7 @@ push the same layers into the full merge composer.
 
 It is accepted because it keeps the boundary clear. OrthoConfig remains the
 layer-composition engine, while Netsuke's CLI adapter owns how user input,
-environment aliases, diagnostics, and automatic discovery are combined.
+environment selection, diagnostics, and automatic discovery are combined.
 
 ## Decision outcome
 

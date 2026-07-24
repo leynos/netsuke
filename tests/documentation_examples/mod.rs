@@ -9,10 +9,13 @@ use std::collections::HashSet;
 use std::path::Path;
 use tempfile::{TempDir, tempdir};
 use test_support::fs as test_fs;
+use test_support::netsuke::NetsukeRun;
 
 const DOCUMENT_PATHS: &[&str] = &["README.md", "docs/users-guide.md"];
 const MARKER_PREFIX: &str = "<!-- tested-example: ";
 const MARKER_SUFFIX: &str = " -->";
+static EMPTY_MARKER: std::sync::LazyLock<String> =
+    std::sync::LazyLock::new(|| format!("{MARKER_PREFIX}{}", MARKER_SUFFIX.trim_start()));
 
 #[derive(Clone, Copy)]
 struct Cursor {
@@ -90,6 +93,21 @@ pub fn manifest_workspace(id: &str) -> Result<TempDir> {
     Ok(workspace)
 }
 
+/// Assert that a documented Netsuke invocation completed successfully.
+///
+/// # Errors
+///
+/// Returns an error containing the captured output when the invocation fails.
+pub fn assert_success(run: &NetsukeRun, context: &str) -> Result<()> {
+    ensure!(
+        run.success,
+        "{context} should succeed; stdout:\n{}\nstderr:\n{}",
+        run.stdout,
+        run.stderr
+    );
+    Ok(())
+}
+
 fn load_document(path: &'static str) -> Result<Vec<DocumentedExample>> {
     let repository_root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let contents = test_fs::read_to_string(repository_root.join(path))
@@ -125,7 +143,7 @@ pub(crate) fn parse_document(
 
 fn reject_invalid_example_line(cursor: &Cursor, line: &str) -> Result<()> {
     ensure!(
-        line != "<!-- tested-example: -->",
+        line != EMPTY_MARKER.as_str(),
         "{}",
         cursor.error("tested-example identifier must not be empty")
     );

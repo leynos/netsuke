@@ -658,6 +658,10 @@ mutations. For locale-sensitive snapshot tests, use the `EnLocalizer` RAII
 pattern documented in the
 [snapshot testing guide](snapshot-testing-in-netsuke-using-insta.md#locale-pinned-snapshot-tests).
 
+`src/snapshot_test_support.rs` owns output-oriented unit-test fixtures;
+`no_color_env` is shared across output-preference and theme tests that exercise
+optional `NO_COLOR` lookup behaviour.
+
 ### `EnvLock`
 
 `test_support::env_lock::EnvLock` is a global mutex that serializes all
@@ -1192,7 +1196,7 @@ paths:
 1. Create `Command` with `Command::new(request.program)`.
 2. Pass it into a closure that applies operation-specific configuration.
 3. Call `run_command_and_stream_with_context` with optional status observer,
-   `cli.resolved_diag_json()` as `suppress_stderr`, and the chosen `operation`.
+   `cli.json` as `suppress_stderr`, and the chosen `operation`.
 4. Let `run_command_and_stream_with_context` handle span creation, execution
    logging, failure logging, and exit-status enforcement via context helpers.
 
