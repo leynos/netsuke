@@ -1024,7 +1024,7 @@ sequenceDiagram
     BddRunner->>AdvancedUsageSteps: execute When netsuke is run with args "manifest -"
     AdvancedUsageSteps->>TestWorld: set_env_from_world()
     TestWorld->>AssertCmdCommand: build_command_with_explicit_path()
-    AssertCmdCommand->>AssertCmdCommand: NETSUKE_NINJA
+    AssertCmdCommand->>AssertCmdCommand: forward NETSUKE_NINJA override
     AssertCmdCommand->>AssertCmdCommand: apply_world_environment_overrides()
     AssertCmdCommand->>NetsukeBinary: spawn_with_env_and_path()
     NetsukeBinary->>NinjaTool: optional_ninja_invocation()
@@ -1141,9 +1141,11 @@ this module and must not interpret the environment override independently.
 for all internal Ninja process invocations. `CommandLogContext` is the shared
 log payload builder for a prepared `Command`; it records `program_display` for
 the `ninja_program` field and `arg_count` for stable argument cardinality.
-`from_command` redacts sensitive arguments and stores the redacted command
-string for the human-readable `"Executing command: {}"` message in the
-informational execution event. Open
+`from_command` normalizes non-UTF-8 program paths through lossy UTF-8
+conversion, replacing invalid byte sequences with Unicode replacement
+characters in `program_display`. It redacts sensitive arguments and stores the
+redacted command string for the human-readable `"Executing command: {}"`
+message in the informational execution event. Open
 [issue #384](https://github.com/leynos/netsuke/issues/384) tracks moving this
 high-cardinality payload to a debug companion event.
 
