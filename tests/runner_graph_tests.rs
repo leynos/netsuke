@@ -10,6 +10,7 @@ use netsuke::cli::{Cli, Commands, GraphArgs};
 use netsuke::output_prefs;
 use netsuke::runner::run;
 use rstest::rstest;
+use serde_json::Value;
 use test_support::{localizer_test_lock, set_en_localizer};
 
 mod fixtures;
@@ -46,6 +47,55 @@ fn graph_with_output_writes_dot_file() -> Result<()> {
     ensure!(
         written.contains("\"hello\""),
         "DOT artefact should mention the `hello` target; got: {written}"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn json_graph_with_output_writes_file_and_result_document() -> Result<()> {
+    let (temp, manifest_path) = create_test_manifest()?;
+    let dot_path = temp.path().join("graph-json.dot");
+    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
+        .current_dir(temp.path())
+        .arg("--json")
+        .arg("--file")
+        .arg(&manifest_path)
+        .args(["graph", "--output", "graph-json.dot"])
+        .output()
+        .context("run netsuke --json graph --output graph-json.dot")?;
+
+    ensure!(
+        output.status.success(),
+        "JSON graph file output should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    ensure!(
+        output.stderr.is_empty(),
+        "JSON graph file output should keep stderr empty"
+    );
+    let dot = std::fs::read_to_string(&dot_path)
+        .with_context(|| format!("read graph output at {}", dot_path.display()))?;
+    ensure!(
+        dot.contains("digraph netsuke"),
+        "graph file should contain DOT output"
+    );
+
+    let stdout = String::from_utf8(output.stdout).context("stdout should be valid UTF-8")?;
+    let result: Value =
+        serde_json::from_str(&stdout).context("stdout should be one JSON result document")?;
+    ensure!(
+        result.pointer("/result/command").and_then(Value::as_str) == Some("graph"),
+        "JSON result should identify the graph command: {result}"
+    );
+    ensure!(
+        result
+            .pointer("/result/content")
+            .is_some_and(Value::is_null),
+        "JSON result should omit inline graph content: {result}"
+    );
+    ensure!(
+        !stdout.contains("digraph netsuke"),
+        "JSON result should not duplicate the DOT graph"
     );
     Ok(())
 }
