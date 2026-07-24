@@ -229,7 +229,7 @@ Observable success means:
 - [ ] Stage B: update the core design document.
 - [ ] Stage C: rewrite the CLI design document around the contract.
 - [x] Stage D: rewrite the roadmap.
-- [ ] Stage E: update user-facing documentation.
+- [x] Stage E: update user-facing documentation.
 - [ ] Stage F: add follow-on ExecPlans for implementation slices.
 
 ## Surprises & discoveries
