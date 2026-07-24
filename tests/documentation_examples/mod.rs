@@ -89,7 +89,7 @@ pub(crate) fn parse_document(
     source: &'static str,
     contents: &str,
 ) -> Result<Vec<DocumentedExample>> {
-    let mut lines = contents.lines().enumerate().peekable();
+    let mut lines = contents.lines().enumerate();
     let mut examples = Vec::new();
     let mut ids = HashSet::new();
 

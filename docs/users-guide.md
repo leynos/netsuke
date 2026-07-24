@@ -163,10 +163,10 @@ A target supports these fields:
 - `rule`, `command`, or `script`: exactly one recipe.
 - `sources`: explicit inputs. They affect freshness and become `{{ ins }}`.
 - `deps`: implicit dependencies. They affect freshness but do not become
-  recipe arguments. Dependencies declared on reusable rules are not inherited
-  in v0.1.0; specify them on each target.
+  recipe arguments. Declare them on each target; reusable rules reject `deps`.
+  The planned rule-level `deps_from` contract is not implemented in v0.1.0.
 - `order_only_deps`: ordering dependencies. Their changes do not rebuild the
-  dependant target.
+  dependent target.
 - `vars`: values that override global variables for this target.
 - `phony`: marks a logical target that does not represent a file.
 - `always`: forces the recipe to run whenever the target is requested.
