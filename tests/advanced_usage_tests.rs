@@ -7,9 +7,12 @@
 
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
+use serde_json::Value;
 use std::path::Path;
 use tempfile::{TempDir, tempdir};
 use test_support::check_ninja::fake_ninja_check_build_file;
+#[cfg(unix)]
+use test_support::check_ninja::{ToolName, fake_ninja_expect_tool};
 use test_support::fs as test_fs;
 use test_support::netsuke::run_netsuke_in_with_env;
 
@@ -75,6 +78,32 @@ fn setup_minimal_workspace(context: &str) -> Result<TempDir> {
     Ok(temp)
 }
 
+fn assert_json_success(output: &CommandOutput, expected_command: &str) -> Result<()> {
+    ensure!(output.success, "{expected_command} should succeed");
+    ensure!(
+        output.stderr.is_empty(),
+        "{expected_command} should keep stderr empty: {}",
+        output.stderr
+    );
+    let document: Value =
+        serde_json::from_str(&output.stdout).context("stdout should be valid JSON")?;
+    ensure!(
+        document.get("schema_version").and_then(Value::as_u64) == Some(1),
+        "JSON result should use schema version 1: {document}"
+    );
+    ensure!(
+        document.pointer("/result/command").and_then(Value::as_str) == Some(expected_command),
+        "JSON result should identify the {expected_command} command: {document}"
+    );
+    ensure!(
+        document
+            .pointer("/result/content")
+            .is_some_and(Value::is_null),
+        "JSON result content should be null: {document}"
+    );
+    Ok(())
+}
+
 /// Shared workspace setup for configuration-layering tests.
 ///
 /// Creates a minimal workspace, writes `config_content` to `.netsuke.toml`,
@@ -102,25 +131,45 @@ fn run_config_layer_build(
 // Clean subcommand edge cases
 // -------------------------------------------------------------------------
 
-#[test]
+#[cfg(unix)]
+#[rstest]
 fn clean_without_prior_build_handles_gracefully() -> Result<()> {
     let workspace = setup_minimal_workspace("clean without prior build")?;
-    let (_ninja_dir, ninja_path) = fake_ninja_check_build_file()?;
+    let (_ninja_dir, ninja_path) = fake_ninja_expect_tool(ToolName::new("clean"))?;
 
     let output = run_netsuke(workspace.path(), &["clean"], Some(ninja_path.as_path()))?;
 
-    // Clean in a workspace that has never been built should either succeed
-    // as a no-op or fail with a clear message about missing build state.
-    // The actual behaviour depends on ninja; either outcome is acceptable.
     ensure!(
-        output.success
-            || output.stderr.contains("missing build file")
-            || output.stderr.contains(".ninja_log"),
-        "expected clean to succeed or fail with a build-state-related \
-         diagnostic, got stderr:\n{}",
+        output.success,
+        "clean without a prior build should dispatch the clean tool successfully: {}",
         output.stderr
     );
     Ok(())
+}
+
+#[rstest]
+fn build_json_emits_success_result() -> Result<()> {
+    let workspace = setup_minimal_workspace("JSON build success")?;
+    let (_ninja_dir, ninja_path) = fake_ninja_check_build_file()?;
+    let output = run_netsuke(
+        workspace.path(),
+        &["--json", "build"],
+        Some(ninja_path.as_path()),
+    )?;
+    assert_json_success(&output, "build")
+}
+
+#[cfg(unix)]
+#[rstest]
+fn clean_json_dispatches_tool_and_emits_success_result() -> Result<()> {
+    let workspace = setup_minimal_workspace("JSON clean success")?;
+    let (_ninja_dir, ninja_path) = fake_ninja_expect_tool(ToolName::new("clean"))?;
+    let output = run_netsuke(
+        workspace.path(),
+        &["--json", "clean"],
+        Some(ninja_path.as_path()),
+    )?;
+    assert_json_success(&output, "clean")
 }
 
 // -------------------------------------------------------------------------

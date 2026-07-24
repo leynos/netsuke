@@ -5,8 +5,8 @@ use super::{
     resolve_output_path,
 };
 use crate::cli::{BuildArgs, Cli, Commands};
-use crate::diagnostic_json;
 use crate::localization::keys;
+use crate::result_json;
 use crate::status::StatusReporter;
 use anyhow::{Context, Result};
 
@@ -73,7 +73,7 @@ fn write_json_result(cli: &Cli, command: &str, content: Option<&str>) -> Result<
     if !cli.json {
         return Ok(());
     }
-    let rendered = diagnostic_json::render_result_json(command, content)
+    let rendered = result_json::render_result_json(command, content)
         .context("serialize successful command result")?;
     process::write_text_stdout(&rendered)
 }

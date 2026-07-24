@@ -12,13 +12,13 @@ use std::path::Path;
 use tracing::info;
 
 use crate::cli::{Cli, GraphArgs};
-use crate::diagnostic_json;
 use crate::graph_view::GraphView;
 use crate::graph_view::render::GraphRenderer;
 use crate::graph_view::render_dot::DotRenderer;
 use crate::graph_view::render_html::HtmlRenderer;
 use crate::ir::BuildGraph;
 use crate::localization::{self, keys};
+use crate::result_json;
 use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipeline_stage};
 
 use super::path_helpers::{
@@ -99,7 +99,7 @@ fn write_json_graph_artefact(cli: &Cli, output: Option<&Path>, content: &str) ->
 }
 
 fn write_json_result(content: Option<&str>) -> Result<()> {
-    let rendered = diagnostic_json::render_result_json("graph", content)
+    let rendered = result_json::render_result_json("graph", content)
         .context(localization::message(keys::RUNNER_CONTEXT_RENDER_GRAPH))?;
     process::write_text_stdout(&rendered)
 }

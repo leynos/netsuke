@@ -14,6 +14,7 @@ pub mod graph_view;
 pub mod hasher;
 pub mod host_pattern;
 pub mod ir;
+mod json_envelope;
 pub mod locale_resolution;
 pub mod localization;
 pub mod manifest;
