@@ -159,32 +159,32 @@ fn prefix_contains(world: &TestWorld, expected: EnvVarValue) -> Result<()> {
     Ok(())
 }
 
-#[then("the prefix contains no non-ASCII characters")]
-fn prefix_is_ascii(world: &TestWorld) -> Result<()> {
+fn verify_prefix_ascii_state(world: &TestWorld, expected_ascii: bool) -> Result<()> {
     let rendered = world
         .rendered_prefix
         .get()
         .ok_or_else(|| anyhow::anyhow!("prefix has not been rendered"))?;
     let normalized_rendered = normalize_fluent_isolates(&rendered);
+    let expected_output = if expected_ascii {
+        "ASCII-only output"
+    } else {
+        "non-ASCII/emoji output"
+    };
     ensure!(
-        normalized_rendered.is_ascii(),
-        "expected ASCII-only prefix, got '{rendered}'"
+        normalized_rendered.is_ascii() == expected_ascii,
+        "expected {expected_output}, got '{rendered}'"
     );
     Ok(())
 }
 
+#[then("the prefix contains no non-ASCII characters")]
+fn prefix_is_ascii(world: &TestWorld) -> Result<()> {
+    verify_prefix_ascii_state(world, true)
+}
+
 #[then("the prefix contains non-ASCII characters")]
 fn prefix_has_non_ascii(world: &TestWorld) -> Result<()> {
-    let rendered = world
-        .rendered_prefix
-        .get()
-        .ok_or_else(|| anyhow::anyhow!("prefix has not been rendered"))?;
-    let normalized_rendered = normalize_fluent_isolates(&rendered);
-    ensure!(
-        !normalized_rendered.is_ascii(),
-        "expected non-ASCII (emoji) characters in prefix, got '{rendered}'"
-    );
-    Ok(())
+    verify_prefix_ascii_state(world, false)
 }
 
 // ---------------------------------------------------------------------------

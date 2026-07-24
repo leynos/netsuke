@@ -94,16 +94,24 @@ pub(crate) fn parse_document(
     let mut ids = HashSet::new();
 
     while let Some((line_index, line)) = lines.next() {
-        match parse_marker(line) {
-            Some(id) => {
-                ensure!(ids.insert(id), "duplicate tested-example identifier '{id}'");
-                examples.push(read_marked_example(source, line_index, id, &mut lines)?);
-            }
-            None => reject_unmarked_fence(source, line_index, line)?,
+        if let Some(id) = parse_marker(line) {
+            ensure!(ids.insert(id), "duplicate tested-example identifier '{id}'");
+            examples.push(read_marked_example(source, line_index, id, &mut lines)?);
+        } else {
+            reject_invalid_example_line(source, line_index, line)?;
         }
     }
 
     Ok(examples)
+}
+
+fn reject_invalid_example_line(source: &str, line_index: usize, line: &str) -> Result<()> {
+    ensure!(
+        line != "<!-- tested-example: -->",
+        "{source}:{} tested-example identifier must not be empty",
+        line_index + 1
+    );
+    reject_unmarked_fence(source, line_index, line)
 }
 
 fn read_marked_example<'a>(
