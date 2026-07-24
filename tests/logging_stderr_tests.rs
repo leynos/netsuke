@@ -246,26 +246,33 @@ fn diag_json_passthrough_uses_normal_clap_output(
 fn run_verbose_build_and_assert_ninja_log(
     temp_with_minimal_manifest: Result<TempDir>,
     ninja_stem: &str,
-    use_env_override: bool,
+    override_mode: NinjaOverride,
 ) -> Result<()> {
     let temp = temp_with_minimal_manifest?;
-    let description = if use_env_override {
-        "override build should log the resolved ninja program"
-    } else {
-        "default build should log the fallback ninja program"
+    let description = match override_mode {
+        NinjaOverride::Unset => "default build should log the fallback ninja program",
+        NinjaOverride::FullPath => "full-path override should log the resolved ninja program",
+        NinjaOverride::Name => "named override should resolve the ninja program through PATH",
     };
     run_verbose_build_with_fake_ninja_and_assert_log(
         temp.path(),
         ninja_stem,
-        use_env_override,
+        override_mode,
         description,
     )
+}
+
+#[derive(Clone, Copy)]
+enum NinjaOverride {
+    Unset,
+    FullPath,
+    Name,
 }
 
 fn run_verbose_build_with_fake_ninja_and_assert_log(
     workspace: &Path,
     ninja_stem: &str,
-    use_env_override: bool,
+    override_mode: NinjaOverride,
     description: &str,
 ) -> Result<()> {
     let ninja_temp = tempdir().context("create fake ninja dir")?;
@@ -277,17 +284,22 @@ fn run_verbose_build_with_fake_ninja_and_assert_log(
     write_fake_ninja_script(&ninja_dir, Utf8Path::new(&ninja_name), &[], None)?;
     let ninja_path = ninja_temp.path().join(&ninja_name);
 
-    let ninja_env = use_env_override.then_some(ninja_path.as_path());
+    let ninja_env = match override_mode {
+        NinjaOverride::Unset => None,
+        NinjaOverride::FullPath => Some(ninja_path.as_path()),
+        NinjaOverride::Name => Some(Path::new(&ninja_name)),
+    };
     let stderr = run_verbose_build_with_ninja_env(
         workspace,
         path_containing(ninja_temp.path())?,
         ninja_env,
     )?;
 
-    let expected = if use_env_override {
-        format!("Executing command: {} ", ninja_path.display())
-    } else {
-        format!("Executing command: {ninja_stem} ")
+    let expected = match override_mode {
+        NinjaOverride::Unset | NinjaOverride::Name => {
+            format!("Executing command: {ninja_stem} ")
+        }
+        NinjaOverride::FullPath => format!("Executing command: {} ", ninja_path.display()),
     };
     ensure!(stderr.contains(&expected), "{description}, got:\n{stderr}");
     Ok(())
@@ -301,7 +313,7 @@ fn assert_verbose_build_logs_ninja_override(stem: &str) -> Result<()> {
     run_verbose_build_with_fake_ninja_and_assert_log(
         temp.path(),
         stem,
-        true,
+        NinjaOverride::FullPath,
         &format!("verbose log must contain the resolved ninja path for override stem {stem:?}"),
     )
 }
@@ -321,14 +333,25 @@ proptest! {
 fn verbose_build_logs_default_ninja_command(
     temp_with_minimal_manifest: Result<TempDir>,
 ) -> Result<()> {
-    run_verbose_build_and_assert_ninja_log(temp_with_minimal_manifest, "ninja", false)
+    run_verbose_build_and_assert_ninja_log(
+        temp_with_minimal_manifest,
+        "ninja",
+        NinjaOverride::Unset,
+    )
 }
 
 #[rstest]
+#[case::full_path(NinjaOverride::FullPath)]
+#[case::path_lookup(NinjaOverride::Name)]
 fn verbose_build_logs_ninja_env_override(
     temp_with_minimal_manifest: Result<TempDir>,
+    #[case] override_mode: NinjaOverride,
 ) -> Result<()> {
-    run_verbose_build_and_assert_ninja_log(temp_with_minimal_manifest, "custom-ninja", true)
+    run_verbose_build_and_assert_ninja_log(
+        temp_with_minimal_manifest,
+        "custom-ninja",
+        override_mode,
+    )
 }
 
 #[test]
