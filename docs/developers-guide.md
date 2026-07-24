@@ -468,7 +468,6 @@ there. The tests require workflow YAML files under `.github/workflows` and
 ensure local composite action manifests under `.github/actions` are covered by
 the configured Dependabot directory patterns.
 
-
 ### Temporary executable test helpers
 
 The low-level executable-stub primitive is owned by

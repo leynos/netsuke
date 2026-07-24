@@ -272,7 +272,7 @@ mod tests {
 
         let target = cwd.join("target");
         test_support::fs::create_dir_all(target.as_std_path())?;
-        test_support::write_exec(target.as_path(), "tool")?;
+        test_support::write_exec(target.as_std_path(), "tool")?;
 
         let capacity = NonZeroUsize::new(64).expect("non-zero cache capacity");
         // Use path_override to set empty PATH instead of mutating global env

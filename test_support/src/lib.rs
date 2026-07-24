@@ -60,10 +60,10 @@ pub use manifest::ensure_manifest_exists;
 pub use exec::{make_executable, write_exec, write_exec_with_content};
 
 mod error;
+use anyhow::{Context, Result};
 /// Format an error and its sources (outermost → root) using `Display`, joined
 /// with ": ", to produce deterministic text for test assertions.
 pub use error::display_error_chain;
-use anyhow::{Context, Result};
 use std::path::PathBuf;
 use std::process::Command;
 use tempfile::TempDir;
@@ -159,6 +159,7 @@ mod tests {
         Ok(())
     }
 }
+
 /// Probe that required binaries are available in `PATH`.
 ///
 /// Each entry provides the programme name and the arguments used to probe it,
