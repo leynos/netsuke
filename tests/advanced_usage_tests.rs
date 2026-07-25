@@ -104,6 +104,21 @@ fn assert_json_success(output: &CommandOutput, expected_command: &str) -> Result
     Ok(())
 }
 
+fn assert_json_subcommand_success(
+    context: &str,
+    command: &str,
+    make_ninja: impl FnOnce() -> Result<(TempDir, std::path::PathBuf)>,
+) -> Result<()> {
+    let workspace = setup_minimal_workspace(context)?;
+    let (_ninja_dir, ninja_path) = make_ninja()?;
+    let output = run_netsuke(
+        workspace.path(),
+        &["--json", command],
+        Some(ninja_path.as_path()),
+    )?;
+    assert_json_success(&output, command)
+}
+
 /// Shared workspace setup for configuration-layering tests.
 ///
 /// Creates a minimal workspace, writes `config_content` to `.netsuke.toml`,
@@ -149,27 +164,15 @@ fn clean_without_prior_build_handles_gracefully() -> Result<()> {
 
 #[rstest]
 fn build_json_emits_success_result() -> Result<()> {
-    let workspace = setup_minimal_workspace("JSON build success")?;
-    let (_ninja_dir, ninja_path) = fake_ninja_check_build_file()?;
-    let output = run_netsuke(
-        workspace.path(),
-        &["--json", "build"],
-        Some(ninja_path.as_path()),
-    )?;
-    assert_json_success(&output, "build")
+    assert_json_subcommand_success("JSON build success", "build", fake_ninja_check_build_file)
 }
 
 #[cfg(unix)]
 #[rstest]
 fn clean_json_dispatches_tool_and_emits_success_result() -> Result<()> {
-    let workspace = setup_minimal_workspace("JSON clean success")?;
-    let (_ninja_dir, ninja_path) = fake_ninja_expect_tool(ToolName::new("clean"))?;
-    let output = run_netsuke(
-        workspace.path(),
-        &["--json", "clean"],
-        Some(ninja_path.as_path()),
-    )?;
-    assert_json_success(&output, "clean")
+    assert_json_subcommand_success("JSON clean success", "clean", || {
+        fake_ninja_expect_tool(ToolName::new("clean"))
+    })
 }
 
 // -------------------------------------------------------------------------
