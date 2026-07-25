@@ -623,7 +623,7 @@ The exact localized message can vary, but the envelope has this shape:
 
 The schema fields are:
 
-- `schema_version`: diagnostic envelope version.
+- `schema_version`: JSON envelope version.
 - `generator`: Netsuke name and version.
 - `diagnostics`: ordered diagnostic objects.
 - `message`, `code`, `severity`, `help`, and `url`: primary details.
@@ -631,8 +631,8 @@ The schema fields are:
 - `source`, `primary_span`, and `labels`: optional source locations.
 - `related`: nested diagnostics using the same shape.
 
-Treat schema version `1` as pre-stable for v0.1.0 and check `schema_version`
-before parsing other fields.
+**Triage:** Treat schema version `1` as pre-stable for v0.1.0 and check
+`schema_version` before parsing other fields.
 
 ## Configure network access
 

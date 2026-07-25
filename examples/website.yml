@@ -15,16 +15,21 @@ rules:
     command: "pandoc --standalone {{ ins }} -o {{ outs }}"
 
 targets:
+  - name: "{{ site_dir }}"
+    command: "mkdir -p {{ outs }}"
+
   - foreach: pages
     name: "{{ site_dir }}/{{ item }}.html"
     rule: page
     sources: "{{ pages_dir }}/{{ item }}.md"
+    order_only_deps: "{{ site_dir }}"
 
   - name: "{{ site_dir }}/index.html"
     rule: index
     sources:
       - "{{ pages_dir }}/about.md"
       - "{{ pages_dir }}/contact.md"
+    order_only_deps: "{{ site_dir }}"
 
 defaults:
   - site/index.html

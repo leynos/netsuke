@@ -15,16 +15,21 @@ rules:
     command: "make-gallery {{ out_dir }} > {{ outs }}"
 
 targets:
+  - name: "{{ out_dir }}"
+    command: "mkdir -p {{ outs }}"
+
   - foreach: photos
     name: "{{ out_dir }}/{{ item }}.jpg"
     rule: convert_raw
     sources: "raw_photos/{{ item }}.CR2"
+    order_only_deps: "{{ out_dir }}"
 
   - name: "{{ out_dir }}/gallery.html"
     rule: make_gallery
     sources:
       - "{{ out_dir }}/portrait.jpg"
       - "{{ out_dir }}/landscape.jpg"
+    order_only_deps: "{{ out_dir }}"
     always: true
 
 actions:

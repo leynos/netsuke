@@ -16,10 +16,14 @@ rules:
     command: "rm -rf {{ out_dir }}"
 
 targets:
+  - name: "{{ out_dir }}"
+    command: "mkdir -p {{ outs }}"
+
   - foreach: designs
     name: "{{ out_dir }}/{{ item }}.png"
     rule: rasterise
     sources: "{{ src_dir }}/{{ item }}.svg"
+    order_only_deps: "{{ out_dir }}"
 
 actions:
   - name: clean

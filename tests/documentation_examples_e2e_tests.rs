@@ -5,7 +5,7 @@
 mod documentation_examples;
 
 use anyhow::{Context, Result, ensure};
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use documentation_examples::{assert_success, documented_example, manifest_workspace};
 use rstest::rstest;
 use std::path::Path;
@@ -14,15 +14,13 @@ use test_support::fs as test_fs;
 use test_support::netsuke::{NetsukeRun, run_netsuke_in_with_env};
 use test_support::{ninja::ninja_integration_workspace, write_exec};
 
-fn executable_path(stub_directory: &Path) -> Result<String> {
+fn executable_path(stub_directory: &Utf8Path) -> Result<String> {
     let host_path = std::env::var("PATH").context("read host PATH")?;
-    Ok(format!("{}:{host_path}", stub_directory.display()))
+    Ok(format!("{stub_directory}:{host_path}"))
 }
 
-fn write_stub(directory: &Path, name: &str, script: &str) -> Result<()> {
-    let utf8_directory =
-        Utf8Path::from_path(directory).context("stub directory should be UTF-8")?;
-    let path = write_exec(utf8_directory, name)?;
+fn write_stub(directory: &Utf8Path, name: &str, script: &str) -> Result<()> {
+    let path = write_exec(directory, name)?;
     test_fs::write(path.as_std_path(), script).with_context(|| format!("write {name} stub"))?;
     Ok(())
 }
@@ -108,8 +106,9 @@ fn photo_edit_example_produces_declared_jpegs_and_gallery() -> Result<()> {
             format!("{photo} pixels\n"),
         )?;
     }
-    let stub_directory = workspace.path().join("bin");
-    test_fs::create_dir(&stub_directory)?;
+    let stub_directory = Utf8PathBuf::from_path_buf(workspace.path().join("bin"))
+        .map_err(|_| anyhow::anyhow!("stub directory should be UTF-8"))?;
+    test_fs::create_dir(stub_directory.as_std_path())?;
     write_stub(
         &stub_directory,
         "darktable-cli",
@@ -155,8 +154,9 @@ fn writing_example_combines_chapters_into_the_declared_pdf() -> Result<()> {
         workspace.path().join("chapters/architecture.md"),
         "Architecture marker\n",
     )?;
-    let stub_directory = workspace.path().join("bin");
-    test_fs::create_dir(&stub_directory)?;
+    let stub_directory = Utf8PathBuf::from_path_buf(workspace.path().join("bin"))
+        .map_err(|_| anyhow::anyhow!("stub directory should be UTF-8"))?;
+    test_fs::create_dir(stub_directory.as_std_path())?;
     write_stub(
         &stub_directory,
         "pandoc",

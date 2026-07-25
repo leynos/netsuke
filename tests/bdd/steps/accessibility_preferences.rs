@@ -187,10 +187,6 @@ fn prefix_has_non_ascii(world: &TestWorld) -> Result<()> {
     verify_prefix_ascii_state(world, false)
 }
 
-// ---------------------------------------------------------------------------
-// Then steps: verify CLI no_emoji field
-// ---------------------------------------------------------------------------
-
 fn verify_emoji_policy(world: &TestWorld, expected: netsuke::cli::EmojiPolicy) -> Result<()> {
     use crate::bdd::fixtures::RefCellOptionExt;
     let emoji = world

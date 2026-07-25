@@ -354,7 +354,7 @@ fn generate_to_stdout_contains_ninja_rules() -> Result<()> {
 fn invalid_config_value_reports_validation_error() -> Result<()> {
     let workspace = setup_minimal_workspace("invalid config value")?;
     let config = workspace.path().join(".netsuke.toml");
-    std::fs::write(&config, "color = \"loud\"\n").context("write invalid config file")?;
+    test_fs::write(&config, "color = \"loud\"\n").context("write invalid config file")?;
 
     let output = run_netsuke_with_env(workspace.path(), &["generate"], None, &[])?;
 

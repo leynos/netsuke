@@ -902,8 +902,8 @@ Configuration merge helpers:
   `OrthoResult<Vec<MergeLayer<'static>>>`.
 - `is_empty_value(value: &serde_json::Value) -> bool` detects an empty CLI
   override object.
-- `json_from_layer(layer: &MergeLayer) -> Option<bool>` extracts `json` from a
-  configuration layer.
+- `json_from_layer(value: &serde_json::Value) -> Option<bool>` extracts `json`
+  from a configuration value.
 - `json_from_matches(cli, matches, discovered) -> bool` applies an explicit
   root `--json` override to the discovered value.
 - `cli_overrides_from_matches(matches: &ArgMatches) -> OrthoValue` extracts
@@ -932,7 +932,7 @@ pub fn resolve_merged_json(cli: &Cli, matches: &ArgMatches) -> bool;
 ```
 
 Unit tests that need to verify explicit config path precedence should exercise
-the public merge or diagnostic APIs with guarded environment variables. The
+the public merge or JSON-output APIs with guarded environment variables. The
 explicit selector helper reads the process environment directly and remains
 private to `src/cli/discovery.rs`.
 
@@ -1023,7 +1023,6 @@ sequenceDiagram
     participant ManifestCommandSteps
     participant AssertCmdCommand
     participant NetsukeBinary
-    participant NinjaTool
 
     Developer->>BddRunner: run bdd_tests advanced_usage
     BddRunner->>TestWorld: create TestWorld fixture
@@ -1032,19 +1031,18 @@ sequenceDiagram
     AdvancedUsageSteps->>ManifestCommandSteps: reuse workspace_setup_steps
     ManifestCommandSteps->>TestWorld: create_workspace_with_manifest()
 
-    BddRunner->>AdvancedUsageSteps: execute When netsuke is run with args "manifest -"
+    BddRunner->>AdvancedUsageSteps: execute When netsuke is run with args "generate"
     AdvancedUsageSteps->>TestWorld: set_env_from_world()
     TestWorld->>AssertCmdCommand: build_command_with_explicit_path()
     AssertCmdCommand->>AssertCmdCommand: forward NETSUKE_NINJA override
     AssertCmdCommand->>AssertCmdCommand: apply_world_environment_overrides()
     AssertCmdCommand->>NetsukeBinary: spawn_with_env_and_path()
-    NetsukeBinary->>NinjaTool: optional_ninja_invocation()
-    NinjaTool-->>NetsukeBinary: build_status
-    NetsukeBinary-->>AssertCmdCommand: exit_code_stdout_stderr
+    NetsukeBinary->>NetsukeBinary: render_generated_ninja()
+    NetsukeBinary-->>AssertCmdCommand: exit_code_generated_stdout_stderr
     AssertCmdCommand-->>TestWorld: store_process_output()
 
     BddRunner->>AdvancedUsageSteps: execute Then stdout should contain Ninja_manifest
-    AdvancedUsageSteps->>TestWorld: assert_stdout_contains_manifest_markers()
+    AdvancedUsageSteps->>TestWorld: assert_stdout_contains_generated_ninja()
 
     BddRunner->>AdvancedUsageSteps: execute And stderr should be empty
     AdvancedUsageSteps->>TestWorld: assert_stderr_empty()

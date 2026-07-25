@@ -37,6 +37,8 @@ struct FakeNinjaConfig<'a> {
     stdout_lines: &'a [&'a str],
     /// Optional marker to emit to stderr for stream separation tests.
     stderr_marker: Option<&'a str>,
+    /// Optional build artefact to create in the active workspace.
+    artefact: Option<(&'a str, &'a str)>,
 }
 
 fn build_fake_ninja_script(config: &FakeNinjaConfig<'_>) -> String {
@@ -51,6 +53,13 @@ fn build_fake_ninja_script(config: &FakeNinjaConfig<'_>) -> String {
             script.push_str("echo ");
             script.push_str(marker);
             script.push_str(" 1>&2\r\n");
+        }
+        if let Some((path, contents)) = config.artefact {
+            script.push_str("echo ");
+            script.push_str(contents);
+            script.push_str(" > ");
+            script.push_str(path);
+            script.push_str("\r\n");
         }
         script.push_str("exit /B 0\r\n");
         script
@@ -67,6 +76,13 @@ fn build_fake_ninja_script(config: &FakeNinjaConfig<'_>) -> String {
             script.push_str("printf '%s\\n' '");
             script.push_str(marker);
             script.push_str("' >&2\n");
+        }
+        if let Some((path, contents)) = config.artefact {
+            script.push_str("printf '%s\\n' '");
+            script.push_str(contents);
+            script.push_str("' > '");
+            script.push_str(path);
+            script.push_str("'\n");
         }
         script.push_str("exit 0\n");
         script
@@ -110,6 +126,7 @@ fn install_fake_ninja(world: &TestWorld, lines: &[&str]) -> Result<()> {
         &FakeNinjaConfig {
             stdout_lines: lines,
             stderr_marker: None,
+            artefact: None,
         },
     )
 }
@@ -117,6 +134,20 @@ fn install_fake_ninja(world: &TestWorld, lines: &[&str]) -> Result<()> {
 #[rstest_bdd_macros::given("a fake ninja executable that emits task status lines")]
 fn fake_ninja_emits_task_status_lines(world: &TestWorld) -> Result<()> {
     install_fake_ninja(world, &["[1/2] cc -c src/a.c", "[2/2] cc -c src/b.c"])
+}
+
+#[rstest_bdd_macros::given(
+    "a fake ninja executable that emits task status lines and builds hello.txt"
+)]
+fn fake_ninja_builds_documented_hello(world: &TestWorld) -> Result<()> {
+    install_fake_ninja_with_config(
+        world,
+        &FakeNinjaConfig {
+            stdout_lines: &["[1/1] echo Hello from Netsuke!"],
+            stderr_marker: None,
+            artefact: Some(("hello.txt", "Hello from Netsuke!")),
+        },
+    )
 }
 
 #[rstest_bdd_macros::given("a fake ninja executable that emits malformed task status lines")]
@@ -136,6 +167,7 @@ fn fake_ninja_emits_stdout_output(world: &TestWorld) -> Result<()> {
                 "NINJA_STDOUT_MARKER_LINE_2",
             ],
             stderr_marker: Some("NINJA_STDERR_MARKER"),
+            artefact: None,
         },
     )
 }

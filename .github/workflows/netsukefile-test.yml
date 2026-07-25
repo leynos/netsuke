@@ -76,7 +76,7 @@ jobs:
       - name: Build dependent, inline, and foreach targets
         run: |
           ./target/debug/netsuke --verbose generate --output build.ninja
-          ./target/debug/netsuke --verbose build dependent.txt inline-command.txt inline-script.txt a-foreach.txt b-foreach.txt
+          ninja -f build.ninja dependent.txt inline-command.txt inline-script.txt a-foreach.txt b-foreach.txt
       - name: Assert dependent artefacts exist
         env:
           NINJA_MANIFEST: build.ninja
@@ -104,7 +104,7 @@ jobs:
       - name: Run action target
         run: |
           ./target/debug/netsuke --verbose generate --output action.ninja
-          ./target/debug/netsuke --verbose build say-hello
+          ninja -f action.ninja say-hello
       - name: Assert action artefact exists
         env:
           NINJA_MANIFEST: action.ninja

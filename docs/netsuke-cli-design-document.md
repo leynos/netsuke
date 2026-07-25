@@ -765,11 +765,11 @@ not present, default settings apply.
 
 **Environment Variables:** Each config option will also map to an environment
 variable. For instance, to force colour off globally, a user could set
-`NETSUKE_NO_COLOR=1` in their shell profile. Or to always get JSON diagnostic
-output in a CI environment, one can set `NETSUKE_JSON=true`. Environment vars
-are convenient for CI and also for users who prefer them over config files.
-They override the config file but are themselves overridden by explicit CLI
-flags[^3].
+`NETSUKE_NO_COLOR=1` in their shell profile. Or to emit exactly one versioned
+JSON document – a result on success or a diagnostic on failure – in a CI
+environment, one can set `NETSUKE_JSON=true`. Environment vars are convenient
+for CI and also for users who prefer them over config files. They override the
+config file but are themselves overridden by explicit CLI flags[^3].
 
 **Command-Line Flags:** OrthoConfig integrates with Clap such that flags parsed
 by Clap feed into the config struct. Since Clap is already being used for

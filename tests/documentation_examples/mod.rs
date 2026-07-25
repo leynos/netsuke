@@ -5,8 +5,8 @@
 //! module so they exercise the published text rather than copied fixtures.
 
 use anyhow::{Context, Result, ensure};
+use camino::Utf8PathBuf;
 use std::collections::HashSet;
-use std::path::Path;
 use tempfile::{TempDir, tempdir};
 use test_support::fs as test_fs;
 use test_support::netsuke::NetsukeRun;
@@ -109,7 +109,7 @@ pub fn assert_success(run: &NetsukeRun, context: &str) -> Result<()> {
 }
 
 fn load_document(path: &'static str) -> Result<Vec<DocumentedExample>> {
-    let repository_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let repository_root = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let contents = test_fs::read_to_string(repository_root.join(path))
         .with_context(|| format!("read {path}"))?;
     parse_document(path, &contents)
