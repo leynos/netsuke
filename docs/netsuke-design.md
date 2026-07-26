@@ -2423,9 +2423,9 @@ the targets listed in the `defaults` section of the manifest are built.
   guaranteed because the projection sorts every collection at the IR boundary.
   Ninja is not invoked.
 
-- `Netsuke manifest FILE`: This command performs the pipeline up to Ninja
-  synthesis and writes the resulting Ninja file to `FILE` without invoking
-  Ninja. Supplying `-` for `FILE` streams the generated Ninja file to stdout.
+- `netsuke generate`: This command performs the pipeline up to Ninja synthesis
+  and writes the resulting Ninja file to stdout without invoking Ninja.
+  Supplying `--output FILE` writes the generated Ninja file to `FILE` instead.
 
 ### 8.4 Design Decisions
 
