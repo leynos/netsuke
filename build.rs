@@ -6,60 +6,67 @@
 //! - Audit localization keys declared in `src/localization/keys.rs` against the Fluent bundles
 //!   in `locales/*/messages.ftl`, failing the build if any declared key is missing from a
 //!   locale.
-use clap::{ArgMatches, CommandFactory};
+use clap::CommandFactory;
 use clap_mangen::Man;
 use std::{
-    env,
-    ffi::OsString,
-    fs,
+    env, fs,
     path::{Path, PathBuf},
-    sync::Arc,
 };
 use time::{OffsetDateTime, format_description::well_known::Iso8601};
 
 const FALLBACK_DATE: &str = "1970-01-01";
 
-type OutputModeResolveWith = fn(
-    Option<bool>,
-    Option<cli::ColourPolicy>,
-    fn(&str) -> Option<String>,
-) -> output_mode::OutputMode;
-
+// The build script recompiles these library modules as its own crate so that
+// `cli::Cli::command()` (used for man-page generation) can be constructed. Only
+// a small slice of each module's public API is reachable from this binary, so
+// the compiler reports the remainder as unused. Those items are not dead: their
+// real call sites live in the library crate and are covered by its tests, where
+// dead-code and unused-import analysis applies normally. Each shared module
+// therefore carries an `#[expect]` for exactly the lints it triggers here, in
+// preference to anchoring the symbols with artificial references.
+#[expect(
+    dead_code,
+    unused_imports,
+    reason = "shared library source; the unreached API is exercised by the library crate"
+)]
 #[path = "src/cli/mod.rs"]
 mod cli;
 
 #[path = "src/cli_localization.rs"]
 mod cli_localization;
 
+#[expect(
+    dead_code,
+    reason = "shared library source; the unreached API is exercised by the library crate"
+)]
 #[path = "src/cli_l10n.rs"]
 mod cli_l10n;
 
+#[expect(
+    dead_code,
+    reason = "shared library source; the unreached API is exercised by the library crate"
+)]
 #[path = "src/host_pattern.rs"]
 mod host_pattern;
 
 #[path = "src/localization/mod.rs"]
 mod localization;
 
+#[expect(
+    dead_code,
+    reason = "shared library source; the unreached API is exercised by the library crate"
+)]
 #[path = "src/output_mode.rs"]
 mod output_mode;
 
+#[expect(
+    dead_code,
+    reason = "shared library source; the unreached API is exercised by the library crate"
+)]
 #[path = "src/theme.rs"]
 mod theme;
 
 mod build_l10n_audit;
-
-use host_pattern::{HostPattern, HostPatternError};
-
-type LocalizedParseFn = fn(
-    Vec<OsString>,
-    &Arc<dyn ortho_config::Localizer>,
-) -> Result<(cli::Cli, ArgMatches), clap::Error>;
-
-type ResolveThemeFn = fn(
-    Option<theme::ThemePreference>,
-    theme::ThemeContext,
-    fn(&str) -> Option<String>,
-) -> theme::ResolvedTheme;
 
 fn manual_date() -> String {
     let Ok(raw) = env::var("SOURCE_DATE_EPOCH") else {
@@ -104,41 +111,6 @@ fn write_man_page(data: &[u8], dir: &Path, page_name: &str) -> std::io::Result<P
     }
     fs::rename(&tmp, &destination)?;
     Ok(destination)
-}
-
-const fn verify_public_api_symbols() {
-    // Exercise CLI localization, config merge, and host pattern symbols so the
-    // shared modules remain linked when the build script is compiled without
-    // tests.
-    const _: usize = std::mem::size_of::<cli::BuildArgs>();
-    const _: usize = std::mem::size_of::<cli::CliConfig>();
-    const _: usize = std::mem::size_of::<cli::Commands>();
-    const _: usize = std::mem::size_of::<cli::GraphArgs>();
-    const _: usize = std::mem::size_of::<cli::AccessibilityPolicy>();
-    const _: usize = std::mem::size_of::<cli::EmojiPolicy>();
-    const _: usize = std::mem::size_of::<cli::ProgressPolicy>();
-    const _: usize = std::mem::size_of::<HostPattern>();
-    const _: fn(&[OsString]) -> Option<String> = cli::locale_hint_from_args;
-    const _: fn(&[OsString]) -> Option<bool> = cli::json_hint_from_args;
-    const _: fn(&str) -> Option<bool> = cli_l10n::parse_bool_hint;
-    const _: fn(&cli::Cli, &ArgMatches) -> bool = cli::resolve_merged_json;
-    const _: fn(&cli::Cli, &ArgMatches) -> ortho_config::OrthoResult<cli::Cli> =
-        cli::merge_with_config;
-    const _: LocalizedParseFn = cli::parse_with_localizer_from;
-    const _: fn(&cli::Cli) -> Option<theme::ThemePreference> = cli::Cli::theme_preference;
-    const _: fn(&cli::Cli) -> Option<bool> = cli::Cli::accessibility_override;
-    const _: fn(&cli::Cli) -> bool = cli::Cli::progress_enabled;
-    const _: fn(&str) -> Result<HostPattern, HostPatternError> = HostPattern::parse;
-    const _: fn(&HostPattern, host_pattern::HostCandidate<'_>) -> bool = HostPattern::matches;
-    const _: fn(Option<bool>, Option<cli::ColourPolicy>) -> output_mode::OutputMode =
-        output_mode::resolve;
-    const _: OutputModeResolveWith = output_mode::resolve_with;
-    const _: fn(
-        Option<bool>,
-        Option<cli::ColourPolicy>,
-        output_mode::OutputMode,
-    ) -> theme::ThemeContext = theme::ThemeContext::new;
-    const _: ResolveThemeFn = theme::resolve_theme;
 }
 
 fn emit_rerun_directives() {
@@ -199,7 +171,6 @@ fn generate_man_page(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    verify_public_api_symbols();
     emit_rerun_directives();
     build_l10n_audit::audit_localization_keys()?;
     let out_dir = out_dir_for_target_profile();

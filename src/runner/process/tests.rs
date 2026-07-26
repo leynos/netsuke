@@ -54,6 +54,38 @@ proptest! {
     }
 }
 
+#[test]
+fn finalize_streaming_joins_stderr_thread_when_wait_fails() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+    use std::time::Duration;
+
+    // The thread signals completion only after a short delay, so if
+    // `finalize_streaming` failed to join it, the flag would still be unset
+    // when the buggy path returned early on the wait error.
+    let joined = Arc::new(AtomicBool::new(false));
+    let worker_flag = Arc::clone(&joined);
+    let err_handle = thread::spawn(move || {
+        thread::sleep(Duration::from_millis(100));
+        worker_flag.store(true, Ordering::SeqCst);
+        ForwardStats::default()
+    });
+
+    let wait_result = Err(io::Error::other("simulated wait failure"));
+    let result = finalize_streaming(wait_result, ForwardStats::default(), err_handle);
+
+    assert!(
+        result.is_err(),
+        "a wait() failure must propagate after cleanup"
+    );
+    assert!(
+        joined.load(Ordering::SeqCst),
+        "the stderr forwarding thread must be joined even when wait() fails"
+    );
+}
+
 #[cfg(unix)]
 proptest! {
     #[test]

@@ -41,6 +41,16 @@ pub(super) fn temp_with_minimal_manifest() -> Result<TempDir> {
     Ok(temp)
 }
 
+/// Open `temp` as a capability-scoped UTF-8 directory handle.
+///
+/// Mirrors the ambient-authority pattern used by [`temp_with_minimal_manifest`]
+/// so tests can write workspace files through `cap_std` rather than `std::fs`.
+pub(super) fn open_workspace(temp: &TempDir) -> Result<Dir> {
+    let workspace_path = Utf8Path::from_path(temp.path()).context("temp dir path is not UTF-8")?;
+    Dir::open_ambient_dir(workspace_path, ambient_authority())
+        .with_context(|| format!("open temporary workspace {workspace_path}"))
+}
+
 pub(super) fn write_fake_ninja_script(
     dir: &Dir,
     path: &Utf8Path,

@@ -98,7 +98,7 @@ fn stdout_should_be_one_generate_result_json_document(world: &TestWorld) -> Resu
 fn stdout_should_be_one_clean_result_json_document(world: &TestWorld) -> Result<()> {
     let result = parse_single_result_document(world, "clean")?;
     ensure!(
-        matches!(result.get("content"), None | Some(Value::Null)),
+        matches!(result.get("content"), Some(Value::Null)),
         "clean result JSON should not carry generated content: {result}"
     );
     Ok(())

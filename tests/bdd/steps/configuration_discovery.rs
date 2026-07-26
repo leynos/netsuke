@@ -4,10 +4,10 @@ use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use crate::bdd::helpers::env_mutation::mutate_env_var;
 use crate::bdd::types::{EnvVarKey, EnvVarValue, FileName, NamesList};
 use anyhow::{Context, Result, ensure};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use netsuke::cli::Cli;
 use netsuke::cli::config::EmojiPolicy;
 use rstest_bdd_macros::{given, then};
-use std::fs;
 use tempfile::tempdir;
 
 #[given("a temporary workspace")]
@@ -29,8 +29,13 @@ fn write_config_file(world: &TestWorld, file_name: &str, content: &str, chdir: b
         .path()
         .to_path_buf();
 
-    let config_path = temp_dir.join(file_name);
-    fs::write(&config_path, content).with_context(|| format!("failed to write {file_name}"))?;
+    let temp_dir_utf8 = temp_dir
+        .to_str()
+        .context("temp dir path must be valid UTF-8")?;
+    let dir = Dir::open_ambient_dir(temp_dir_utf8, ambient_authority())
+        .with_context(|| format!("open workspace {temp_dir_utf8} to write {file_name}"))?;
+    dir.write(file_name, content.as_bytes())
+        .with_context(|| format!("failed to write {file_name} in {temp_dir_utf8}"))?;
 
     if chdir {
         // Acquire scenario-scoped lock before process-global CWD mutation

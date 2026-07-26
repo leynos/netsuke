@@ -6,10 +6,10 @@ use crate::bdd::helpers::parse_store::store_parse_outcome;
 use crate::bdd::helpers::tokens::build_tokens;
 use crate::bdd::types::EnvVarKey;
 use anyhow::{Context, Result, bail, ensure};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use netsuke::cli::{AccessibilityPolicy, Cli, ColourPolicy, Commands, EmojiPolicy, ProgressPolicy};
 use netsuke::cli_localization;
 use rstest_bdd_macros::{given, then, when};
-use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use test_support::display_error_chain;
@@ -27,8 +27,15 @@ fn workspace_path(world: &TestWorld) -> Result<PathBuf> {
 }
 
 fn write_config(world: &TestWorld, contents: &str) -> Result<()> {
-    let path = workspace_path(world)?.join("netsuke.toml");
-    fs::write(&path, contents).with_context(|| format!("write {}", path.display()))?;
+    let workspace = workspace_path(world)?;
+    let path = workspace.join("netsuke.toml");
+    let workspace_utf8 = workspace
+        .to_str()
+        .context("workspace path must be valid UTF-8")?;
+    let dir = Dir::open_ambient_dir(workspace_utf8, ambient_authority())
+        .with_context(|| format!("open workspace {workspace_utf8}"))?;
+    dir.write("netsuke.toml", contents.as_bytes())
+        .with_context(|| format!("write {}", path.display()))?;
     let config_path = path
         .to_str()
         .context("configuration path must be valid UTF-8")?;

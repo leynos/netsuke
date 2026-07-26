@@ -2469,7 +2469,7 @@ redaction, and the temporary file helpers reside in `src/runner/process.rs`,
 allowing the runner entry point to delegate low-level concerns. The working
 directory flag mirrors Ninja's `-C` option but is resolved internally: Netsuke
 runs Ninja with a configured working directory and resolves relative output
-paths (for example `build --emit` and `manifest`) under the same directory so
+paths (for example `generate --output`) under the same directory so
 behaviour matches a real directory change. Error scenarios are validated using
 clap's `ErrorKind` enumeration in unit tests and via rstest-bdd behavioural
 steps/scenarios.
@@ -2486,8 +2486,9 @@ to textual output when stdout is not a teletype terminal (TTY), ensuring
 deterministic continuous integration (CI) logs; accessible mode always uses
 textual output. Accessible output remains text-first and static; it does not
 animate. The standard reporter is configurable through OrthoConfig layering via
-`progress: Option<bool>` (`--progress`, `NETSUKE_PROGRESS`, or config file),
-with accessible mode taking precedence when enabled. Verbose mode (`--verbose`
+`progress: ProgressPolicy` (auto, always, or never), resolved from `--progress`,
+`NETSUKE_PROGRESS`, or a config file, with accessible mode taking precedence when
+enabled. Verbose mode (`--verbose`
 through OrthoConfig layers) wraps the resolved reporter with a timing recorder
 that emits a localized completion summary on successful runs:
 
@@ -2519,7 +2520,7 @@ regressions fail with reviewable diffs instead of drifting silently.
 
 The Advanced Usage chapter in `docs/users-guide.md` is validated by behavioural
 tests in `tests/features/advanced_usage.feature`. Netsuke treats those
-scenarios as executable documentation for the `clean`, `graph`, and `manifest`
+scenarios as executable documentation for the `clean`, `graph`, and `generate`
 subcommands, configuration layering, and JSON diagnostics so the guide stays
 synchronized with runtime behaviour rather than drifting behind it.
 

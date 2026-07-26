@@ -346,10 +346,24 @@ fn spawn_and_stream_output(
         forward_stdout(stdout, &mut output, status_observer)
     };
 
-    let status = child.wait()?;
+    // Capture the wait result without `?` so the stderr forwarding thread is
+    // joined on every exit path. Returning early on a `wait()` error would
+    // otherwise detach the thread, leaking it and discarding its result.
+    let wait_result = child.wait();
+    finalize_streaming(wait_result, stdout_stats, err_handle)
+}
+
+/// Drain forwarding bookkeeping and join the stderr thread, then surface the
+/// child's wait result. The stderr thread is always joined first so a failed
+/// `wait()` cannot detach background work.
+fn finalize_streaming(
+    wait_result: io::Result<ExitStatus>,
+    stdout_stats: ForwardStats,
+    err_handle: thread::JoinHandle<ForwardStats>,
+) -> io::Result<ExitStatus> {
     handle_forwarding_stats(stdout_stats, "stdout");
     handle_forwarding_thread_result(err_handle.join(), "stderr");
-    Ok(status)
+    wait_result
 }
 
 fn terminate_child(child: &mut Child, context: &str) {

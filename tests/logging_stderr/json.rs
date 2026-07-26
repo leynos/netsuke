@@ -1,13 +1,12 @@
 //! JSON diagnostic, result-envelope, and standard stderr integration tests.
 
-use super::support::temp_with_minimal_manifest;
+use super::support::{open_workspace, temp_with_minimal_manifest};
 use anyhow::{Context, Result, ensure};
 #[cfg(unix)]
 use netsuke::runner::NINJA_ENV;
 use predicates::prelude::*;
 use rstest::rstest;
 use serde_json::Value;
-use std::fs;
 use tempfile::{TempDir, tempdir};
 #[cfg(unix)]
 use test_support::check_ninja::{ToolName, fake_ninja_check_build_file, fake_ninja_expect_tool};
@@ -205,7 +204,8 @@ fn json_passthrough_uses_normal_clap_output(
 fn config_driven_json_formats_merge_failures_as_json() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
     let config_path = temp.path().join("netsuke.toml");
-    fs::write(&config_path, "json = true\njobs = \"many\"\n")
+    open_workspace(&temp)?
+        .write("netsuke.toml", "json = true\njobs = \"many\"\n")
         .with_context(|| format!("write config {}", config_path.display()))?;
     let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
         .current_dir(temp.path())
@@ -238,7 +238,8 @@ fn config_driven_json_formats_merge_failures_as_json() -> Result<()> {
 fn json_flag_formats_config_load_failures_as_json() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
     let config_path = temp.path().join("broken.toml");
-    fs::write(&config_path, "emoji = \"never\n")
+    open_workspace(&temp)?
+        .write("broken.toml", "emoji = \"never\n")
         .with_context(|| format!("write malformed config {}", config_path.display()))?;
     let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
         .current_dir(temp.path())
