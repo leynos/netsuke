@@ -11,6 +11,8 @@ use insta::assert_snapshot;
 use rstest::rstest;
 use test_support::fluent::normalize_fluent_isolates;
 
+/// Verifies localized long-help includes `--config <FILE>` and its
+/// Fluent-resolved description, then matches the complete output snapshot.
 #[rstest]
 #[case::en_us(
     "en-US",

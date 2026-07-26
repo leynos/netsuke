@@ -374,13 +374,13 @@ fn configure_validation_parsers(
     });
     command
 }
-/// Tests for the CLI parser's localisation rendering.
+/// Tests for the CLI parser's localization rendering.
 ///
 /// Exercises locale-specific long-help output for the en-US and es-ES
 /// locales, asserts that `--config <FILE>` and its Fluent-resolved
 /// description are present, and pins the complete rendered help via Insta
 /// snapshots to detect regressions in flag naming, ordering, or
-/// localisation drift.
+/// localization drift.
 #[cfg(test)]
 #[path = "parser_tests.rs"]
 mod tests;
