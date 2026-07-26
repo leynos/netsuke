@@ -650,6 +650,13 @@ stderr while stdout stays empty. Generated stdout artefacts, such as the Ninja
 text from `generate`, are carried inside the successful result document rather
 than written as unstructured text.
 
+JSON selection follows the normal configuration precedence: `--json`, then
+`NETSUKE_JSON`, then `json = true|false` in a configuration file.
+`NETSUKE_JSON` accepts only `true`, `false`, `1`, or `0`; any other value
+produces a configuration validation error before the command runs. An explicit
+`--json` flag takes precedence and bypasses parsing a lower-priority environment
+value.
+
 The following command deliberately selects a missing manifest:
 
 <!-- tested-example: guide-json-command -->

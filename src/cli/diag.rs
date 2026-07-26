@@ -174,6 +174,23 @@ mod tests {
     }
 
     #[test]
+    fn resolve_merged_json_rejects_missing_injected_explicit_config() -> anyhow::Result<()> {
+        let dir = tempdir()?;
+        let missing_config_path = dir.path().join("missing-netsuke.toml");
+        let matches = Cli::command().get_matches_from(["netsuke"]);
+        let env = TestEnv::default().with_var("NETSUKE_CONFIG", &missing_config_path);
+
+        let error = resolve_merged_json_with_env(&Cli::default(), &matches, &env)
+            .expect_err("missing injected explicit config should fail");
+        ensure!(
+            matches!(error.as_ref(), OrthoError::File { path, .. } if path == &missing_config_path),
+            "expected missing explicit config error for {missing_config_path:?}, got {error:?}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn resolve_merged_json_honours_cli_before_malformed_env() -> anyhow::Result<()> {
         let dir = tempdir()?;
         let config_path = dir.path().join("netsuke.toml");
