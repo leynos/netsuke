@@ -5,30 +5,25 @@ use anyhow::{Context, Result, ensure};
 use rstest_bdd_macros::then;
 use serde_json::Value;
 
-#[then("stdout should be empty")]
-fn stdout_should_be_empty(world: &TestWorld) -> Result<()> {
-    let stdout = world
-        .command_stdout
-        .get()
-        .context("stdout should be captured")?;
+/// Assert that a captured output stream was recorded and is empty, sharing the
+/// retrieval, capture, and emptiness checks between the stdout and stderr steps.
+fn assert_captured_stream_is_empty(stream_name: &str, output: Option<&String>) -> Result<()> {
+    let captured = output.with_context(|| format!("{stream_name} should be captured"))?;
     ensure!(
-        stdout.is_empty(),
-        "expected stdout to be empty, got:\n{stdout}"
+        captured.is_empty(),
+        "expected {stream_name} to be empty, got:\n{captured}"
     );
     Ok(())
 }
 
+#[then("stdout should be empty")]
+fn stdout_should_be_empty(world: &TestWorld) -> Result<()> {
+    assert_captured_stream_is_empty("stdout", world.command_stdout.get().as_ref())
+}
+
 #[then("stderr should be empty")]
 fn stderr_should_be_empty(world: &TestWorld) -> Result<()> {
-    let stderr = world
-        .command_stderr
-        .get()
-        .context("stderr should be captured")?;
-    ensure!(
-        stderr.is_empty(),
-        "expected stderr to be empty, got:\n{stderr}"
-    );
-    Ok(())
+    assert_captured_stream_is_empty("stderr", world.command_stderr.get().as_ref())
 }
 
 #[then("stderr should be valid diagnostics json")]
