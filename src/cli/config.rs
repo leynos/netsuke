@@ -275,7 +275,7 @@ impl CliConfig {
     }
 }
 
-const MAX_JOBS: usize = super::parser::MAX_JOBS;
+const MAX_JOBS: usize = super::MAX_JOBS;
 
 const fn jobs_out_of_bounds(jobs: usize) -> bool {
     jobs == 0 || jobs > MAX_JOBS
