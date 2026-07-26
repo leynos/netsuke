@@ -24,12 +24,12 @@ Feature: Accessible output mode
     When the output mode is resolved with no explicit setting
     Then the output mode is standard
 
-  Scenario: CLI parses accessible true
-    When the CLI is parsed with "--accessible true"
+  Scenario: CLI parses accessibility on
+    When the CLI is parsed with "--accessibility on"
     Then parsing succeeds
     And accessible mode is enabled
 
-  Scenario: CLI parses accessible false
-    When the CLI is parsed with "--accessible false"
+  Scenario: CLI parses accessibility off
+    When the CLI is parsed with "--accessibility off"
     Then parsing succeeds
     And accessible mode is disabled

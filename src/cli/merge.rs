@@ -30,11 +30,10 @@ use serde::Serialize;
 
 use serde_json::{Map, Value, json};
 
-use super::config::{BuildConfig, CliConfig, Theme};
+use super::config::{BuildConfig, CliConfig};
 use super::discovery::push_file_layers;
 use super::parser::{BuildArgs, Cli, Commands};
 use super::validation_error;
-use crate::theme::ThemePreference;
 
 const ENV_PREFIX: &str = "NETSUKE_";
 
@@ -74,7 +73,6 @@ pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli> {
 
     let composition = LayerComposition::new(composer.layers(), errors);
     let merged = composition.into_merge_result(CliConfig::merge_from_layers)?;
-    validate_output_format_source(&merged, matches)?;
     Ok(apply_config(cli, merged))
 }
 
@@ -84,18 +82,6 @@ pub(crate) fn env_provider() -> Env {
 
 fn is_empty_value(value: &Value) -> bool {
     matches!(value, Value::Object(map) if map.is_empty())
-}
-
-fn validate_output_format_source(config: &CliConfig, matches: &ArgMatches) -> OrthoResult<()> {
-    if matches!(config.output_format, Some(super::OutputFormat::Json))
-        && matches.value_source("output_format") != Some(ValueSource::CommandLine)
-    {
-        return Err(validation_error(
-            "output_format",
-            "output_format = \"json\" is not supported yet; pass --output-format json explicitly",
-        ));
-    }
-    Ok(())
 }
 
 fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Value> {
@@ -129,14 +115,12 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Va
         &cli.fetch_default_deny,
         &mut root,
     )?;
-    maybe_insert_explicit(matches, "accessible", &cli.accessible, &mut root)?;
+    maybe_insert_explicit(matches, "json", &cli.json, &mut root)?;
+    maybe_insert_explicit(matches, "no_input", &cli.no_input(), &mut root)?;
+    maybe_insert_explicit(matches, "color", &cli.color, &mut root)?;
+    maybe_insert_explicit(matches, "emoji", &cli.emoji, &mut root)?;
     maybe_insert_explicit(matches, "progress", &cli.progress, &mut root)?;
-    maybe_insert_explicit(matches, "no_emoji", &cli.no_emoji, &mut root)?;
-    maybe_insert_explicit(matches, "diag_json", &cli.diag_json, &mut root)?;
-    maybe_insert_explicit(matches, "colour_policy", &cli.colour_policy, &mut root)?;
-    maybe_insert_explicit(matches, "spinner_mode", &cli.spinner_mode, &mut root)?;
-    maybe_insert_explicit(matches, "output_format", &cli.output_format, &mut root)?;
-    maybe_insert_explicit(matches, "theme", &cli.theme, &mut root)?;
+    maybe_insert_explicit(matches, "accessibility", &cli.accessibility, &mut root)?;
 
     let mut cmds_build: Map<String, Value> = Map::new();
 
@@ -167,7 +151,6 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Va
 
 fn build_cli_overrides(args: &BuildArgs, matches: &ArgMatches) -> OrthoResult<Map<String, Value>> {
     let mut build = Map::new();
-    maybe_insert_explicit(matches, "emit", &args.emit, &mut build)?;
     maybe_insert_explicit(matches, "targets", &args.targets, &mut build)?;
     Ok(build)
 }
@@ -207,14 +190,14 @@ fn apply_config(parsed: &Cli, config: CliConfig) -> Cli {
         fetch_allow_host: config.fetch_allow_host,
         fetch_block_host: config.fetch_block_host,
         fetch_default_deny: config.fetch_default_deny,
-        accessible: config.accessible,
-        no_emoji: config.no_emoji,
-        diag_json: config.diag_json,
+        json: config.json,
+        interaction: super::parser::InteractionArgs {
+            no_input: config.no_input.is_enabled(),
+        },
+        color: config.color,
+        emoji: config.emoji,
         progress: config.progress,
-        colour_policy: config.colour_policy,
-        spinner_mode: config.spinner_mode,
-        output_format: config.output_format,
-        theme: canonical_theme(config.theme, config.no_emoji),
+        accessibility: config.accessibility,
         default_targets: build_defaults.targets.clone(),
         command: Some(resolve_command(parsed.command.as_ref(), &build_defaults)),
     }
@@ -235,7 +218,6 @@ fn resolved_build_config(config: &CliConfig) -> BuildConfig {
 fn resolve_command(parsed: Option<&Commands>, build_defaults: &BuildConfig) -> Commands {
     match parsed {
         Some(Commands::Build(args)) => Commands::Build(BuildArgs {
-            emit: args.emit.clone().or_else(|| build_defaults.emit.clone()),
             targets: if args.targets.is_empty() {
                 build_defaults.targets.clone()
             } else {
@@ -244,16 +226,7 @@ fn resolve_command(parsed: Option<&Commands>, build_defaults: &BuildConfig) -> C
         }),
         Some(other) => other.clone(),
         None => Commands::Build(BuildArgs {
-            emit: build_defaults.emit.clone(),
             targets: build_defaults.targets.clone(),
         }),
-    }
-}
-
-fn canonical_theme(theme: Option<Theme>, no_emoji: Option<bool>) -> Option<ThemePreference> {
-    match (theme, no_emoji) {
-        (Some(value), _) => Some(value.into()),
-        (None, Some(true)) => Some(ThemePreference::Ascii),
-        _ => None,
     }
 }

@@ -3,9 +3,8 @@
 //! explicit config path bypass, and list-field appending across layers.
 
 use anyhow::{Context, Result, ensure};
-use netsuke::cli::config::{ColourPolicy, OutputFormat};
+use netsuke::cli::config::{ColourPolicy, EmojiPolicy};
 use netsuke::cli_localization;
-use netsuke::theme::ThemePreference;
 use rstest::rstest;
 use std::ffi::OsStr;
 use std::fs;
@@ -26,20 +25,19 @@ fn environment_variables_override_discovered_config() -> Result<()> {
     fs::write(
         &project_config,
         r#"
-theme = "ascii"
+emoji = "never"
 jobs = 4
-output_format = "human"
+json = false
 "#,
     )
     .context("write project .netsuke.toml")?;
 
     // Set environment variables that should override the file
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
-    let _theme_guard = EnvVarGuard::set("NETSUKE_THEME", OsStr::new("unicode"));
+    let _emoji_guard = EnvVarGuard::set("NETSUKE_EMOJI", OsStr::new("always"));
     let _jobs_guard = EnvVarGuard::set("NETSUKE_JOBS", OsStr::new("12"));
-    let _output_format_guard = EnvVarGuard::remove("NETSUKE_OUTPUT_FORMAT");
-    let _colour_guard = EnvVarGuard::remove("NETSUKE_COLOUR_POLICY");
+    let _json_guard = EnvVarGuard::remove("NETSUKE_JSON");
+    let _color_guard = EnvVarGuard::remove("NETSUKE_COLOR");
 
     std::env::set_current_dir(&temp_project).context("change to project directory")?;
 
@@ -51,16 +49,16 @@ output_format = "human"
         .with_default_command();
 
     ensure!(
-        merged.theme == Some(ThemePreference::Unicode),
-        "environment variable should override project config theme"
+        merged.emoji == EmojiPolicy::Always,
+        "environment variable should override project config emoji policy"
     );
     ensure!(
         merged.jobs == Some(12),
         "environment variable should override project config jobs"
     );
     ensure!(
-        merged.output_format == Some(OutputFormat::Human),
-        "project config value should apply when no env override exists"
+        !merged.json,
+        "project config JSON value should apply when no env override exists"
     );
     // Restore the cwd before `temp_project` (declared later) drops: implicit
     // reverse-declaration drop order would remove the temp dir while it is still
@@ -80,35 +78,26 @@ fn cli_flags_override_environment_and_config() -> Result<()> {
     fs::write(
         &project_config,
         r#"
-theme = "ascii"
+emoji = "never"
 jobs = 4
-colour_policy = "never"
-output_format = "human"
+color = "never"
+json = false
 "#,
     )
     .context("write project .netsuke.toml")?;
 
     // Set environment variables
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
-    let _theme_guard = EnvVarGuard::set("NETSUKE_THEME", OsStr::new("unicode"));
+    let _emoji_guard = EnvVarGuard::set("NETSUKE_EMOJI", OsStr::new("always"));
     let _jobs_guard = EnvVarGuard::set("NETSUKE_JOBS", OsStr::new("8"));
-    let _colour_guard = EnvVarGuard::set("NETSUKE_COLOUR_POLICY", OsStr::new("always"));
+    let _color_guard = EnvVarGuard::set("NETSUKE_COLOR", OsStr::new("always"));
 
     std::env::set_current_dir(&temp_project).context("change to project directory")?;
 
     let localizer = Arc::from(cli_localization::build_localizer(None));
     // CLI flags should win
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(
-        [
-            "netsuke",
-            "--theme",
-            "ascii",
-            "--jobs",
-            "16",
-            "--output-format",
-            "json",
-        ],
+        ["netsuke", "--emoji", "never", "--jobs", "16", "--json"],
         &localizer,
     )
     .context("parse CLI with flag overrides")?;
@@ -117,20 +106,17 @@ output_format = "human"
         .with_default_command();
 
     ensure!(
-        merged.theme == Some(ThemePreference::Ascii),
-        "CLI theme flag should override environment and config"
+        merged.emoji == EmojiPolicy::Never,
+        "CLI emoji flag should override environment and config"
     );
     ensure!(
         merged.jobs == Some(16),
         "CLI jobs flag should override environment and config"
     );
+    ensure!(merged.json, "CLI JSON flag should override config");
     ensure!(
-        merged.output_format == Some(OutputFormat::Json),
-        "CLI output_format flag should override config"
-    );
-    ensure!(
-        merged.colour_policy == Some(ColourPolicy::Always),
-        "environment colour_policy should apply when CLI does not override"
+        merged.color == ColourPolicy::Always,
+        "environment color policy should apply when CLI does not override"
     );
     drop(cwd_guard);
     Ok(())
@@ -151,7 +137,7 @@ fn directory_flag_anchors_project_discovery_to_specified_dir(#[case] flag: &str)
     fs::write(
         &project_config,
         r#"
-theme = "unicode"
+emoji = "always"
 jobs = 6
 "#,
     )
@@ -161,11 +147,10 @@ jobs = 6
     std::env::set_current_dir(&temp_outer).context("change to outer directory")?;
 
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
-    let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
+    let _emoji_guard = EnvVarGuard::remove("NETSUKE_EMOJI");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
-    let _output_format_guard = EnvVarGuard::remove("NETSUKE_OUTPUT_FORMAT");
-    let _colour_guard = EnvVarGuard::remove("NETSUKE_COLOUR_POLICY");
+    let _json_guard = EnvVarGuard::remove("NETSUKE_JSON");
+    let _color_guard = EnvVarGuard::remove("NETSUKE_COLOR");
 
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let (cli, matches) =
@@ -176,7 +161,7 @@ jobs = 6
         .with_default_command();
 
     ensure!(
-        merged.theme == Some(ThemePreference::Unicode),
+        merged.emoji == EmojiPolicy::Always,
         "directory flag should anchor project config discovery to specified directory"
     );
     ensure!(
@@ -199,51 +184,51 @@ fn config_path_env_var_bypasses_automatic_discovery() -> Result<()> {
     fs::write(
         &project_config,
         r#"
-theme = "ascii"
+emoji = "never"
 jobs = 2
 "#,
     )
     .context("write project .netsuke.toml")?;
 
-    // Write custom config that should be used via NETSUKE_CONFIG_PATH
+    // Write custom config that should be used via NETSUKE_CONFIG.
     let custom_config = temp_custom.path().join("custom.toml");
     fs::write(
         &custom_config,
         r#"
-theme = "unicode"
+emoji = "always"
 jobs = 16
-colour_policy = "always"
+color = "always"
 "#,
     )
     .context("write custom config")?;
 
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _config_path_guard = EnvVarGuard::set("NETSUKE_CONFIG_PATH", custom_config.as_os_str());
-    let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
+    let _config_path_guard = EnvVarGuard::set("NETSUKE_CONFIG", custom_config.as_os_str());
+    let _emoji_guard = EnvVarGuard::remove("NETSUKE_EMOJI");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
-    let _output_format_guard = EnvVarGuard::remove("NETSUKE_OUTPUT_FORMAT");
-    let _colour_guard = EnvVarGuard::remove("NETSUKE_COLOUR_POLICY");
+    let _json_guard = EnvVarGuard::remove("NETSUKE_JSON");
+    let _color_guard = EnvVarGuard::remove("NETSUKE_COLOR");
 
     std::env::set_current_dir(&temp_project).context("change to project directory")?;
 
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
-        .context("parse CLI with NETSUKE_CONFIG_PATH")?;
+        .context("parse CLI with NETSUKE_CONFIG")?;
     let merged = netsuke::cli::merge_with_config(&cli, &matches)
         .context("merge with explicit config path")?
         .with_default_command();
 
     ensure!(
-        merged.theme == Some(ThemePreference::Unicode),
-        "NETSUKE_CONFIG_PATH should bypass automatic discovery"
+        merged.emoji == EmojiPolicy::Always,
+        "NETSUKE_CONFIG should bypass automatic discovery"
     );
     ensure!(
         merged.jobs == Some(16),
         "custom config jobs should be used instead of project config"
     );
     ensure!(
-        merged.colour_policy == Some(ColourPolicy::Always),
-        "custom config colour_policy should be applied"
+        merged.color == ColourPolicy::Always,
+        "custom config color policy should be applied"
     );
     drop(cwd_guard);
     Ok(())
@@ -316,7 +301,6 @@ fetch_allow_scheme = ["https"]
     .context("write project .netsuke.toml with lists")?;
 
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     // Set single-value environment variables for list fields
     let _targets_guard = EnvVarGuard::set("NETSUKE_DEFAULT_TARGETS", OsStr::new("test"));
     let _scheme_guard = EnvVarGuard::set("NETSUKE_FETCH_ALLOW_SCHEME", OsStr::new("http"));

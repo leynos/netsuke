@@ -1,4 +1,4 @@
-//! Step definitions for `netsuke manifest` behavioural tests.
+//! Step definitions for `netsuke generate` behavioural tests.
 
 use crate::bdd::fixtures::TestWorld;
 use crate::bdd::helpers::assertions::normalize_fluent_isolates;
@@ -33,7 +33,7 @@ mod manifest_command_helpers;
 use manifest_command_helpers::{
     assert_file_existence, assert_output_contains, assert_output_not_contains,
     build_netsuke_command, create_directory_in_workspace, get_temp_path, netsuke_executable,
-    run_manifest_command, run_netsuke_and_store, store_run_result,
+    run_generate_command, run_netsuke_and_store, store_run_result,
 };
 
 // ---------------------------------------------------------------------------
@@ -67,9 +67,9 @@ fn directory_named_exists(world: &TestWorld, name: DirectoryName) -> Result<()> 
 // When steps
 // ---------------------------------------------------------------------------
 
-#[when("the netsuke manifest subcommand is run with {output:string}")]
-fn run_manifest_subcommand(world: &TestWorld, output: ManifestOutputPath) -> Result<()> {
-    let result = run_manifest_command(world, &output)?;
+#[when("the netsuke generate subcommand is run with {output:string}")]
+fn run_generate_subcommand(world: &TestWorld, output: ManifestOutputPath) -> Result<()> {
+    let result = run_generate_command(world, &output)?;
     store_run_result(world, result);
     Ok(())
 }

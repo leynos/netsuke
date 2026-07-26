@@ -38,7 +38,6 @@ fn render_rule(rule: &mut crate::ast::Rule, env: &Environment, vars: &Vars) -> R
     if let Some(desc) = &mut rule.description {
         *desc = render_str_with(env, desc, vars, || "render rule description".into())?;
     }
-    render_string_or_list(&mut rule.deps, env, vars)?;
     match &mut rule.recipe {
         Recipe::Command { command } => {
             *command = render_recipe_str_with(env, command, vars, || "render rule command".into())?;
@@ -165,7 +164,6 @@ mod tests {
                 command: "{{ 2 + 2 }}".into(),
             },
             description: Some("{{ 1 + 1 }}".into()),
-            deps: StringOrList::List(vec!["{{ message }}".into()]),
         };
 
         let mut manifest_vars = Vars::new();
@@ -237,10 +235,6 @@ mod tests {
         match &rule.recipe {
             Recipe::Command { command } => assert_eq!(command, "4"),
             other => panic!("expected command recipe, got {other:?}"),
-        }
-        match &rule.deps {
-            StringOrList::List(items) => assert_eq!(items, &["hello world".to_owned()]),
-            other => panic!("expected deps list, got {other:?}"),
         }
     }
 

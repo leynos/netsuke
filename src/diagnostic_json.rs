@@ -12,7 +12,7 @@ use std::iter::Peekable;
 use std::process::ExitCode;
 use std::str::Chars;
 
-const SCHEMA_VERSION: u32 = 1;
+use crate::json_envelope::{GeneratorInfo, SCHEMA_VERSION};
 
 /// Render a [`miette::Report`] as Netsuke's JSON diagnostic document.
 ///
@@ -74,21 +74,6 @@ impl DiagnosticDocument {
             schema_version: SCHEMA_VERSION,
             generator: GeneratorInfo::current(),
             diagnostics: vec![DiagnosticEntry::from_error(error)],
-        }
-    }
-}
-
-#[derive(Debug, Serialize, PartialEq, Eq)]
-struct GeneratorInfo {
-    name: &'static str,
-    version: &'static str,
-}
-
-impl GeneratorInfo {
-    const fn current() -> Self {
-        Self {
-            name: "netsuke",
-            version: env!("CARGO_PKG_VERSION"),
         }
     }
 }

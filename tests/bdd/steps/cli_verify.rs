@@ -4,8 +4,7 @@
 //! step definitions in the parent module import and call these helpers.
 
 use super::{
-    cli_network_policy, extract_build, extract_graph_args, extract_manifest_command_file,
-    get_command,
+    cli_network_policy, extract_build, extract_generate_output, extract_graph_args, get_command,
 };
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use crate::bdd::helpers::assertions::normalize_fluent_isolates;
@@ -20,7 +19,7 @@ pub(super) enum ExpectedCommand {
     Build,
     Clean,
     Graph,
-    Manifest,
+    Generate,
 }
 
 impl ExpectedCommand {
@@ -35,7 +34,7 @@ impl ExpectedCommand {
             (Self::Build, Commands::Build(_))
                 | (Self::Clean, Commands::Clean)
                 | (Self::Graph, Commands::Graph(_))
-                | (Self::Manifest, Commands::Manifest { .. })
+                | (Self::Generate, Commands::Generate { .. })
         )
     }
 
@@ -45,7 +44,7 @@ impl ExpectedCommand {
             Self::Build => "build",
             Self::Clean => "clean",
             Self::Graph => "graph",
-            Self::Manifest => "manifest",
+            Self::Generate => "generate",
         }
     }
 }
@@ -102,7 +101,7 @@ pub(super) fn verify_manifest_path(world: &TestWorld, path: &PathString) -> Resu
 }
 
 pub(super) fn verify_first_target(world: &TestWorld, target: &TargetName) -> Result<()> {
-    let (targets, _) = extract_build(world)?;
+    let targets = extract_build(world)?;
     ensure!(
         targets.first().map(String::as_str) == Some(target.as_str()),
         "expected first target {}, got {:?}",
@@ -128,11 +127,6 @@ pub(super) fn verify_working_directory(world: &TestWorld, directory: &PathString
         .with_ref(|cli| cli.directory.clone())
         .context("CLI has not been parsed")?;
     ensure_optional_path(actual, directory, "working directory")
-}
-
-pub(super) fn verify_emit_path(world: &TestWorld, path: &PathString) -> Result<()> {
-    let (_, emit) = extract_build(world)?;
-    ensure_optional_path(emit, path, "emit path")
 }
 
 pub(super) fn verify_cli_policy_allows(world: &TestWorld, url: &UrlString) -> Result<()> {
@@ -177,15 +171,9 @@ pub(super) fn verify_graph_html_set(world: &TestWorld) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn verify_manifest_command_path(world: &TestWorld, path: &PathString) -> Result<()> {
-    let file = extract_manifest_command_file(world)?;
-    ensure!(
-        file == path.to_path_buf(),
-        "expected manifest output {}, got {}",
-        path,
-        file.display()
-    );
-    Ok(())
+pub(super) fn verify_generate_output_path(world: &TestWorld, path: &PathString) -> Result<()> {
+    let output = extract_generate_output(world)?;
+    ensure_optional_path(output, path, "generate output path")
 }
 
 pub(super) fn verify_error_contains(world: &TestWorld, fragment: &ErrorFragment) -> Result<()> {

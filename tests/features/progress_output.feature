@@ -3,7 +3,7 @@ Feature: Progress output
   Scenario: Standard mode reports task updates from Ninja status lines
     Given a minimal Netsuke workspace
     And a fake ninja executable that emits task status lines
-    When netsuke is run with arguments "--accessible false --progress true build"
+    When netsuke is run with arguments "--accessibility off --progress always build"
     Then the command should succeed
     And stderr should contain "Task 1/2"
     And stderr should contain "Task 2/2"
@@ -11,7 +11,7 @@ Feature: Progress output
   Scenario: Accessible mode emits textual task updates
     Given a minimal Netsuke workspace
     And a fake ninja executable that emits task status lines
-    When netsuke is run with arguments "--accessible true --progress true build"
+    When netsuke is run with arguments "--accessibility on --progress always build"
     Then the command should succeed
     And stderr should contain "Task 1/2"
     And stderr should contain "Task 2/2"
@@ -19,22 +19,22 @@ Feature: Progress output
   Scenario: Malformed Ninja status lines are ignored safely
     Given a minimal Netsuke workspace
     And a fake ninja executable that emits malformed task status lines
-    When netsuke is run with arguments "--accessible false --progress true build"
+    When netsuke is run with arguments "--accessibility off --progress always build"
     Then the command should succeed
     And stderr should not contain "Task 1/"
 
   Scenario: Standard mode shows six stage summaries with success prefix
     Given a minimal Netsuke workspace
-    When netsuke is run with arguments "--accessible false --progress true manifest -"
+    When netsuke is run with arguments "--accessibility off --progress always generate"
     Then the command should succeed
     And stderr should contain "Stage 1/6"
     And stderr should contain "Stage 6/6"
     And stderr should contain "Success:"
-    And stderr should contain "Manifest complete."
+    And stderr should contain "Generate complete."
 
   Scenario: Verbose mode includes a prefixed completion timing summary
     Given a minimal Netsuke workspace
-    When netsuke is run with arguments "--accessible false --progress true --verbose manifest -"
+    When netsuke is run with arguments "--accessibility off --progress always --verbose generate"
     Then the command should succeed
     And stderr should contain "Timing:"
     And stderr should contain "Stage timing summary:"
@@ -43,28 +43,28 @@ Feature: Progress output
 
   Scenario: Standard mode honours explicit ASCII theme prefixes
     Given a minimal Netsuke workspace
-    When netsuke is run with arguments "--theme ascii --accessible false --progress true manifest -"
+    When netsuke is run with arguments "--emoji never --accessibility off --progress always generate"
     Then the command should succeed
     And stderr should contain "+ Success:"
     And stderr should not contain "✔ Success:"
 
   Scenario: Accessible mode honours explicit Unicode theme prefixes
     Given a minimal Netsuke workspace
-    When netsuke is run with arguments "--theme unicode --accessible true --progress true manifest -"
+    When netsuke is run with arguments "--emoji always --accessibility on --progress always generate"
     Then the command should succeed
     And stderr should contain "ℹ Info:"
     And stderr should contain "✔ Success:"
 
   Scenario: Verbose mode honours explicit ASCII timing prefixes
     Given a minimal Netsuke workspace
-    When netsuke is run with arguments "--theme ascii --accessible false --progress true --verbose manifest -"
+    When netsuke is run with arguments "--emoji never --accessibility off --progress always --verbose generate"
     Then the command should succeed
     And stderr should contain "T Timing:"
     And stderr should not contain "⏱ Timing:"
 
   Scenario: ASCII theme progress output is stable
     Given a minimal Netsuke workspace
-    When netsuke is run with arguments "--theme ascii --accessible true --progress true manifest -"
+    When netsuke is run with arguments "--emoji never --accessibility on --progress always generate"
     Then the command should succeed
     And stderr should contain "+ Success:"
     And stderr should contain "i Info:"
@@ -75,7 +75,7 @@ Feature: Progress output
 
   Scenario: Unicode theme progress output is stable
     Given a minimal Netsuke workspace
-    When netsuke is run with arguments "--theme unicode --accessible true --progress true manifest -"
+    When netsuke is run with arguments "--emoji always --accessibility on --progress always generate"
     Then the command should succeed
     And stderr should contain "✔ Success:"
     And stderr should contain "ℹ Info:"
@@ -86,16 +86,16 @@ Feature: Progress output
 
   Scenario: Stage summaries localize to Spanish with success prefix
     Given a minimal Netsuke workspace
-    When netsuke is run with arguments "--accessible false --locale es-ES --progress true manifest -"
+    When netsuke is run with arguments "--accessibility off --locale es-ES --progress always generate"
     Then the command should succeed
     And stderr should contain "Etapa 1/6"
     And stderr should contain "Etapa 6/6"
     And stderr should contain "Éxito:"
-    And stderr should contain "Manifiesto completo."
+    And stderr should contain "Generar completo."
 
   Scenario: Accessible mode prefixes stage labels with info marker
     Given a minimal Netsuke workspace
-    When netsuke is run with arguments "--accessible true --progress true manifest -"
+    When netsuke is run with arguments "--accessibility on --progress always generate"
     Then the command should succeed
     And stderr should contain "Info:"
     And stderr should contain "Stage 1/6"
@@ -105,7 +105,7 @@ Feature: Progress output
   Scenario: Progress output can be disabled in standard mode
     Given a minimal Netsuke workspace
     And a fake ninja executable that emits task status lines
-    When netsuke is run with arguments "--accessible false --progress false build"
+    When netsuke is run with arguments "--accessibility off --progress never build"
     Then the command should succeed
     And stderr should not contain "Stage 1/6"
     And stderr should not contain "Task 1/2"
@@ -113,28 +113,28 @@ Feature: Progress output
   Scenario: Progress output can be disabled in accessible mode
     Given a minimal Netsuke workspace
     And a fake ninja executable that emits task status lines
-    When netsuke is run with arguments "--accessible true --progress false build"
+    When netsuke is run with arguments "--accessibility on --progress never build"
     Then the command should succeed
     And stderr should not contain "Stage 1/6"
     And stderr should not contain "Task 1/2"
 
   Scenario: Failed runs mark the active stage as failed
     Given an empty workspace
-    When netsuke is run with arguments "--accessible false --progress true"
+    When netsuke is run with arguments "--accessibility off --progress always"
     Then the command should fail
     And stderr should contain "Stage 1/6"
     And stderr should contain "failed"
 
   Scenario: Failed verbose runs suppress timing summary lines
     Given an empty workspace
-    When netsuke is run with arguments "--accessible false --progress true --verbose"
+    When netsuke is run with arguments "--accessibility off --progress always --verbose"
     Then the command should fail
     And stderr should not contain "Stage timing summary:"
     And stderr should not contain "Total pipeline time:"
 
   Scenario: Non-verbose runs omit completion timing summaries
     Given a minimal Netsuke workspace
-    When netsuke is run with arguments "--accessible false --progress true manifest -"
+    When netsuke is run with arguments "--accessibility off --progress always generate"
     Then the command should succeed
     And stderr should not contain "Stage timing summary:"
     And stderr should not contain "Total pipeline time:"
@@ -146,7 +146,7 @@ Feature: Progress output
   Scenario: Subprocess stdout is separate from status messages
     Given a minimal Netsuke workspace
     And a fake ninja executable that emits stdout output
-    When netsuke is run with arguments "--accessible true --progress true build"
+    When netsuke is run with arguments "--accessibility on --progress always build"
     Then the command should succeed
     # Verify stdout contains only subprocess output markers
     And stdout should contain "NINJA_STDOUT_MARKER_LINE_1"
@@ -165,7 +165,7 @@ Feature: Progress output
   Scenario: Status messages do not contaminate stdout in standard mode
     Given a minimal Netsuke workspace
     And a fake ninja executable that emits stdout output
-    When netsuke is run with arguments "--accessible false --progress true build"
+    When netsuke is run with arguments "--accessibility off --progress always build"
     Then the command should succeed
     # Verify subprocess stdout reaches stdout with preserved ordering
     And stdout should contain "NINJA_STDOUT_MARKER_LINE_1"
@@ -182,7 +182,7 @@ Feature: Progress output
 
   Scenario: Build artefacts can be captured via stdout redirection
     Given a minimal Netsuke workspace
-    When netsuke is run with arguments "--progress true manifest -"
+    When netsuke is run with arguments "--progress always generate"
     Then the command should succeed
     # Verify manifest output goes to stdout
     And stdout should contain "rule "

@@ -3,9 +3,8 @@
 //! precedence on Unix and Windows.
 
 use anyhow::{Context, Result, ensure};
-use netsuke::cli::config::ColourPolicy;
+use netsuke::cli::config::{ColourPolicy, EmojiPolicy};
 use netsuke::cli_localization;
-use netsuke::theme::ThemePreference;
 use rstest::rstest;
 #[cfg(unix)]
 use std::ffi::OsStr;
@@ -27,7 +26,7 @@ fn project_scope_config_discovered_automatically() -> Result<()> {
     fs::write(
         &project_config,
         r#"
-theme = "unicode"
+emoji = "always"
 locale = "es-ES"
 jobs = 8
 "#,
@@ -36,8 +35,7 @@ jobs = 8
 
     // Clear env vars that could interfere
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
-    let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
+    let _emoji_guard = EnvVarGuard::remove("NETSUKE_EMOJI");
     let _locale_guard = EnvVarGuard::remove("NETSUKE_LOCALE");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
 
@@ -52,8 +50,8 @@ jobs = 8
         .with_default_command();
 
     ensure!(
-        merged.theme == Some(ThemePreference::Unicode),
-        "project config theme should be discovered and applied"
+        merged.emoji == EmojiPolicy::Always,
+        "project config emoji policy should be discovered and applied"
     );
     ensure!(
         merged.locale.as_deref() == Some("es-ES"),
@@ -69,19 +67,19 @@ jobs = 8
 
 /// User-scope config content shared by the Unix and Windows test variants.
 const USER_CONFIG_CONTENT: &str = r#"
-theme = "ascii"
-colour_policy = "never"
+emoji = "never"
+color = "never"
 jobs = 4
 "#;
 
 fn assert_user_config_applied(merged: &netsuke::cli::Cli) -> Result<()> {
     ensure!(
-        merged.theme == Some(ThemePreference::Ascii),
-        "user config theme should be discovered when no project config exists"
+        merged.emoji == EmojiPolicy::Never,
+        "user config emoji policy should be discovered when no project config exists"
     );
     ensure!(
-        merged.colour_policy == Some(ColourPolicy::Never),
-        "user config colour_policy should be discovered"
+        merged.color == ColourPolicy::Never,
+        "user config color policy should be discovered"
     );
     ensure!(
         merged.jobs == Some(4),
@@ -122,10 +120,9 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     let _xdg_config_dirs_guard = EnvVarGuard::set("XDG_CONFIG_DIRS", OsStr::new(""));
     // Clear other env vars
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
-    let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
+    let _emoji_guard = EnvVarGuard::remove("NETSUKE_EMOJI");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
-    let _colour_policy_guard = EnvVarGuard::remove("NETSUKE_COLOUR_POLICY");
+    let _color_policy_guard = EnvVarGuard::remove("NETSUKE_COLOR");
 
     let merged = run_user_scope_scenario(&temp_project)?;
     let result = assert_user_config_applied(&merged);
@@ -153,10 +150,9 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     let _appdata_guard = EnvVarGuard::set("APPDATA", temp_appdata.path().as_os_str());
     // Clear other env vars
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
-    let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
+    let _emoji_guard = EnvVarGuard::remove("NETSUKE_EMOJI");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
-    let _colour_policy_guard = EnvVarGuard::remove("NETSUKE_COLOUR_POLICY");
+    let _color_policy_guard = EnvVarGuard::remove("NETSUKE_COLOR");
     let _localappdata_guard = EnvVarGuard::remove("LOCALAPPDATA");
 
     let merged = run_user_scope_scenario(&temp_project)?;
@@ -167,27 +163,27 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
 
 /// Project config TOML used by both Unix and Windows precedence test variants.
 const PRECEDENCE_PROJECT_CONFIG_CONTENT: &str = r#"
-theme = "unicode"
+emoji = "always"
 jobs = 8
 "#;
 
 /// User config TOML used by both Unix and Windows precedence test variants.
 const PRECEDENCE_USER_CONFIG_CONTENT: &str = r#"
-theme = "ascii"
-colour_policy = "never"
+emoji = "never"
+color = "never"
 "#;
 
 fn assert_project_precedence_applied(merged: &netsuke::cli::Cli) -> Result<()> {
     ensure!(
-        merged.theme == Some(ThemePreference::Unicode),
-        "project config theme should override user config theme"
+        merged.emoji == EmojiPolicy::Always,
+        "project config emoji policy should override user config"
     );
     ensure!(
         merged.jobs == Some(8),
         "project config jobs should be applied"
     );
     ensure!(
-        merged.colour_policy == Some(ColourPolicy::Never),
+        merged.color == ColourPolicy::Never,
         "user-only field should still be merged when project config does not override it"
     );
     Ok(())
@@ -232,10 +228,9 @@ fn project_config_takes_precedence_over_user_config() -> Result<()> {
     let _xdg_home_guard = EnvVarGuard::set("XDG_CONFIG_HOME", temp_xdg_home.path().as_os_str());
     let _xdg_dirs_guard = EnvVarGuard::set("XDG_CONFIG_DIRS", OsStr::new(""));
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
-    let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
+    let _emoji_guard = EnvVarGuard::remove("NETSUKE_EMOJI");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
-    let _colour_guard = EnvVarGuard::remove("NETSUKE_COLOUR_POLICY");
+    let _color_guard = EnvVarGuard::remove("NETSUKE_COLOR");
 
     let merged = run_precedence_scenario(&temp_project)?;
     let result = assert_project_precedence_applied(&merged);
@@ -271,10 +266,9 @@ fn project_config_takes_precedence_over_user_config() -> Result<()> {
     let _appdata_guard = EnvVarGuard::set("APPDATA", temp_appdata.path().as_os_str());
     let _localappdata_guard = EnvVarGuard::remove("LOCALAPPDATA");
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
-    let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
+    let _emoji_guard = EnvVarGuard::remove("NETSUKE_EMOJI");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
-    let _colour_guard = EnvVarGuard::remove("NETSUKE_COLOUR_POLICY");
+    let _color_guard = EnvVarGuard::remove("NETSUKE_COLOR");
 
     let merged = run_precedence_scenario(&temp_project)?;
     let result = assert_project_precedence_applied(&merged);

@@ -16,8 +16,7 @@ OrthoConfig's built-in discovery attributes.
 
 Netsuke needs an explicit configuration selector for operators who want one
 known configuration file to control a run. The public selector order is
-`--config` > `NETSUKE_CONFIG` > `NETSUKE_CONFIG_PATH` > automatic discovery,
-where `NETSUKE_CONFIG_PATH` remains a backward-compatible alias only.
+`--config` > `NETSUKE_CONFIG` > automatic discovery.
 
 The existing merge pipeline is deliberately two-pass. It first resolves early
 diagnostic JSON preferences from file layers, so startup errors can be emitted
@@ -27,11 +26,10 @@ requirements: project configuration must outrank user configuration, and a
 missed project `.netsuke.toml` requires a direct second-pass project load.
 
 OrthoConfig can discover configuration files, but its built-in discovery
-attribute does not own Netsuke's `--config` spelling, legacy-environment
-compatibility, early diagnostic merge, or project-over-user second pass.
-Putting explicit selection into OrthoConfig would either expose
-Netsuke-specific policy through a generic library API or force Netsuke to work
-around library-owned behaviour in the CLI adapter.
+attribute does not own Netsuke's `--config` spelling, early diagnostic merge,
+or project-over-user second pass. Putting explicit selection into OrthoConfig
+would either expose Netsuke-specific policy through a generic library API or
+force Netsuke to work around library-owned behaviour in the CLI adapter.
 
 ## Decision drivers
 
@@ -41,8 +39,7 @@ around library-owned behaviour in the CLI adapter.
   resolution and final configuration merging.
 - Keep `OrthoConfig` responsible for generic layer composition, not
   Netsuke-specific selector precedence.
-- Support `NETSUKE_CONFIG_PATH` only as a compatibility alias behind
-  `NETSUKE_CONFIG`.
+- Keep `NETSUKE_CONFIG` as the only environment selector.
 - Make explicit selection fail closed: an invalid selected file must not fall
   through to automatic discovery.
 
@@ -54,18 +51,18 @@ This would let OrthoConfig own the config-path selector and merge discovered
 files as part of its normal derived merge behaviour.
 
 It was rejected because Netsuke needs the public spelling `--config`, the
-environment precedence `NETSUKE_CONFIG` before `NETSUKE_CONFIG_PATH`, and the
-two-pass diagnostic path. OrthoConfig's generic discovery machinery cannot
-express those Netsuke-specific semantics without broadening its API around one
-consumer's policy.
+`NETSUKE_CONFIG` environment selector, and the two-pass diagnostic path.
+OrthoConfig's generic discovery machinery cannot express those Netsuke-specific
+semantics without broadening its API around one consumer's policy.
 
 ### Option B: add Netsuke-specific explicit selection to OrthoConfig
 
-This would extend OrthoConfig, so Netsuke could delegate the selector order and
-legacy alias handling to the library.
+This would extend OrthoConfig, so Netsuke could delegate its selector policy to
+the library.
 
 It was rejected because the policy is part of Netsuke's CLI contract rather
-than OrthoConfig's domain. Baking `NETSUKE_CONFIG`, `NETSUKE_CONFIG_PATH`, or
+than OrthoConfig's domain. The Netsuke CLI adapter owns selector precedence, the
+`--config` spelling, and `NETSUKE_CONFIG` handling. Baking those details or
 Netsuke's project-scope fallback into OrthoConfig would invert the dependency:
 the generic merge library would know too much about one adapter.
 
@@ -77,18 +74,16 @@ push the same layers into the full merge composer.
 
 It is accepted because it keeps the boundary clear. OrthoConfig remains the
 layer-composition engine, while Netsuke's CLI adapter owns how user input,
-environment aliases, diagnostics, and automatic discovery are combined.
+environment selection, diagnostics, and automatic discovery are combined.
 
 ## Decision outcome
 
 Netsuke resolves explicit configuration paths in `src/cli/discovery.rs`.
 
-- `explicit_config_path` applies `--config` > `NETSUKE_CONFIG` >
-  `NETSUKE_CONFIG_PATH`, ignoring empty environment values.
+- `explicit_config_path` applies `--config` > `NETSUKE_CONFIG`, ignoring empty
+  environment values.
 - `env_config_path(var_name)` reads one environment variable with
   `std::env::var_os`, so precedence tests use current-process values.
-- `collect_diag_file_layers` mirrors the file-loading path for early diagnostic
-  JSON resolution and propagates explicit-load failures.
 - `push_file_layers` drains successful layer loads into the merge composer, or
   records the load error for final diagnostics.
 - Automatic discovery remains the fallback only when no explicit selector is

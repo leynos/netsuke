@@ -72,7 +72,6 @@ fn run_build_uses_cli_default_targets_when_no_targets_are_requested(
         directory: Some(temp.path().to_path_buf()),
         default_targets: vec![String::from("hello")],
         command: Some(Commands::Build(BuildArgs {
-            emit: None,
             targets: Vec::new(),
         })),
         ..Cli::default()

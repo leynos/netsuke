@@ -15,13 +15,12 @@ cli.flag.fetch_allow_scheme.help = Esquemas de URL adicionales permitidos para e
 cli.flag.fetch_allow_host.help = Nombres de host permitidos cuando la denegación predeterminada está habilitada.
 cli.flag.fetch_block_host.help = Nombres de host siempre bloqueados, incluso cuando están permitidos.
 cli.flag.fetch_default_deny.help = Denegar todos los hosts por defecto; solo permitir la lista de permitidos.
-cli.flag.accessible.help = Forzar el modo de salida accesible (activado o desactivado).
-cli.flag.progress.help = Forzar los resúmenes de progreso estándar de etapas y tareas (activados o desactivados).
-cli.flag.diag_json.help = Emitir diagnósticos legibles por máquinas como JSON en stderr.
-cli.flag.theme.help = Tema predefinido de CLI (auto, unicode, ascii).
-cli.flag.colour_policy.help = Política de color de salida (auto, always, never).
-cli.flag.spinner_mode.help = Modo de visualización del spinner de progreso (enabled, disabled).
-cli.flag.output_format.help = Formato de salida de diagnósticos (human, json).
+cli.flag.json.help = Emitir salida JSON legible por máquinas.
+cli.flag.no_input.help = No leer nunca entrada interactiva.
+cli.flag.color.help = Política de color de salida (auto, always, never).
+cli.flag.emoji.help = Política de emoji (auto, always, never).
+cli.flag.progress.help = Política de progreso (auto, always, never).
+cli.flag.accessibility.help = Política de accesibilidad (auto, on, off).
 cli.flag.default_targets.help = Objetivos de compilación predeterminados cuando no se especifica ninguno.
 
 # Descripciones de subcomandos.
@@ -31,19 +30,18 @@ cli.subcommand.clean.about = Elimina artefactos de compilación mediante Ninja.
 cli.subcommand.clean.long_about = Genera un archivo Ninja temporal y ejecuta `ninja -t clean`.
 cli.subcommand.graph.about = Emite el grafo de dependencias de compilación. El formato predeterminado es DOT.
 cli.subcommand.graph.long_about = Proyecta el manifiesto Netsuke en un grafo canónico y lo escribe en formato Graphviz DOT, o como página HTML autocontenida con `--html`. Use `--output <ARCHIVO>` para escribir a un archivo; `-` escribe en stdout.
-cli.subcommand.manifest.about = Escribe el manifiesto Ninja sin ejecutar Ninja.
-cli.subcommand.manifest.long_about = Genera el archivo Ninja y lo escribe en la ruta indicada o '-' para stdout.
+cli.subcommand.generate.about = Genera el manifiesto Ninja sin ejecutar Ninja.
+cli.subcommand.generate.long_about = Escribe el manifiesto Ninja generado en stdout o en el archivo seleccionado con `--output`.
 
 # Texto de ayuda para opciones del subcomando build.
-cli.subcommand.build.flag.emit.help = Escribir el archivo Ninja generado en esta ruta y conservarlo.
 cli.subcommand.build.flag.targets.help = Objetivos a compilar (usa los predeterminados del manifiesto si se omite).
 
 # Texto de ayuda para opciones del subcomando graph.
 cli.subcommand.graph.flag.html.help = Renderizar el grafo como una página HTML autocontenida en lugar de DOT.
 cli.subcommand.graph.flag.output.help = Escribir el artefacto del grafo en ARCHIVO; use `-` para stdout.
 
-# Texto de ayuda para argumentos del subcomando manifest.
-cli.subcommand.manifest.flag.file.help = Ruta de salida para el archivo Ninja (use '-' para stdout).
+# Texto de ayuda para opciones del subcomando generate.
+cli.subcommand.generate.flag.output.help = Escribir el manifiesto Ninja generado en ARCHIVO en lugar de stdout.
 
 # Errores de validación de la CLI.
 cli.validation.jobs.invalid_number = { $value } no es un número válido.
@@ -53,10 +51,10 @@ cli.validation.scheme.invalid_start = El esquema '{ $scheme }' debe comenzar con
 cli.validation.scheme.invalid = Esquema no válido '{ $scheme }'.
 cli.validation.locale.empty = La configuración regional no debe estar vacía.
 cli.validation.locale.invalid = Configuración regional no válida '{ $locale }'.
-cli.validation.theme.invalid = Tema no válido '{ $theme }'. Opciones válidas: auto, unicode, ascii.
-cli.validation.colour_policy.invalid = Política de color no válida '{ $value }'. Opciones válidas: auto, always, never.
-cli.validation.spinner_mode.invalid = Modo de spinner no válido '{ $value }'. Opciones válidas: enabled, disabled.
-cli.validation.output_format.invalid = Formato de salida no válido '{ $value }'. Opciones válidas: human, json.
+cli.validation.color.invalid = Política de color no válida '{ $value }'. Opciones válidas: auto, always, never.
+cli.validation.emoji.invalid = Política de emoji no válida '{ $value }'. Opciones válidas: auto, always, never.
+cli.validation.progress.invalid = Política de progreso no válida '{ $value }'. Opciones válidas: auto, always, never.
+cli.validation.accessibility.invalid = Política de accesibilidad no válida '{ $value }'. Opciones válidas: auto, on, off.
 cli.validation.config.expected_object = Se esperaba que los valores de la CLI se serializaran como un objeto, se obtuvo { $value }.
 
 # Mensajes de error de Clap.
@@ -367,7 +365,7 @@ status.tool.build = Compilación
 status.tool.clean = Limpieza
 status.tool.graph = Grafo
 status.tool.graph_html = Grafo (HTML)
-status.tool.manifest = Manifiesto
+status.tool.generate = Generar
 
 # Cadenas del renderizador HTML del grafo.
 graph.html.title = Grafo de compilación de Netsuke
@@ -376,9 +374,6 @@ graph.html.description = Grafo de compilación renderizado por Netsuke
 graph.html.outline.summary = Objetivos y dependencias (esquema textual)
 graph.html.outline.no_inputs = Sin entradas
 graph.html.noscript.notice = JavaScript está desactivado. El esquema textual anterior contiene el grafo completo; el código DOT figura a continuación.
-
-# Preferencias de accesibilidad.
-cli.flag.no_emoji.help = Suprimir glifos emoji en la salida.
 
 # Prefijos semánticos para salida accesible.
 semantic.prefix.error = Error:

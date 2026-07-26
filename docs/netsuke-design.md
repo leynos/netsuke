@@ -2274,25 +2274,31 @@ enrichment:
    the user with a rich, layered explanation of the failure, from the general
    to the specific.
 
-For automation use cases, Netsuke supports a `--diag-json` flag layered through
-OrthoConfig as `--diag-json`, `NETSUKE_DIAG_JSON`, and `diag_json = true`. When
-enabled, Netsuke emits a Netsuke-owned JSON document on `stderr` instead of
-relying on upstream formatter output directly. The current schema is versioned
-with `schema_version = 1` and an envelope of:
+For automation use cases, Netsuke supports a root `--json` flag layered through
+OrthoConfig as `--json`, `NETSUKE_JSON`, and `json = true`. When enabled, every
+invocation emits exactly one versioned JSON document: on success, a result
+document on `stdout`; on failure, a diagnostic document on `stderr`. Both
+documents share `schema_version = 1` and a `generator` object of `name` and
+`version`:
 
-- `generator`: `name` and `version`
-- `diagnostics`: an array of entries containing `message`, `code`, `severity`,
-  `help`, `url`, `causes`, `source`, `primary_span`, `labels`, and `related`
+- The success result document carries a `result` object of `command` and
+  (optionally) `content`--the generated artefact, such as the Ninja text from
+  `generate`, when the command would otherwise write it to stdout.
+- The failure diagnostic document carries a `diagnostics` array of entries
+  containing `message`, `code`, `severity`, `help`, `url`, `causes`, `source`,
+  `primary_span`, `labels`, and `related`.
 
 Design decisions for this mode:
 
 - Netsuke owns the schema rather than exposing `miette`'s raw JSON formatter,
   so compatibility can be documented and guarded by snapshot tests.
-- JSON mode reserves `stderr` for one machine-readable document only. Progress
-  updates, verbose timing summaries, emoji prefixes, and tracing logs are
-  suppressed while the mode is active.
-- `stdout` semantics do not change. Commands such as `manifest -` and `graph`
-  keep streaming their normal artefacts to `stdout`.
+- JSON mode reserves its output stream for one machine-readable document only.
+  Progress updates, verbose timing summaries, emoji prefixes, and tracing logs
+  are suppressed while the mode is active.
+- Outside JSON mode, `stdout` semantics do not change. Commands such as
+  `generate` keep streaming their normal artefacts to `stdout`; in JSON mode
+  that generated content is carried in the success result document's `content`
+  field instead.
 - Early startup failures honour only the CLI flag and environment variable.
   Configuration files cannot request JSON for errors raised while those same
   files are still being located or parsed.
@@ -2417,9 +2423,9 @@ the targets listed in the `defaults` section of the manifest are built.
   guaranteed because the projection sorts every collection at the IR boundary.
   Ninja is not invoked.
 
-- `Netsuke manifest FILE`: This command performs the pipeline up to Ninja
-  synthesis and writes the resulting Ninja file to `FILE` without invoking
-  Ninja. Supplying `-` for `FILE` streams the generated Ninja file to stdout.
+- `netsuke generate`: This command performs the pipeline up to Ninja synthesis
+  and writes the resulting Ninja file to stdout without invoking Ninja.
+  Supplying `--output FILE` writes the generated Ninja file to `FILE` instead.
 
 ### 8.4 Design Decisions
 
@@ -2435,18 +2441,16 @@ files or `NETSUKE_CMDS__BUILD__*` environment variables. Explicit CLI targets or
 `--emit` values still override those defaults.
 
 Configuration is layered in the order defaults -> configuration files ->
-environment variables -> CLI overrides. Discovery honours `NETSUKE_CONFIG_PATH`
-and the standard OrthoConfig search order; environment variables use the
-`NETSUKE_` prefix with `__` as a nesting separator. The schema now explicitly
-covers verbosity, locale, accessible mode, progress, colour policy, spinner
-mode, output format, theme selection, fetch policy, and build defaults. `theme`
-is the canonical presentation setting; the older `no_emoji` field remains as a
-compatibility alias that canonicalizes to the ASCII theme. Conflicting
-combinations such as `theme = "unicode"` together with `no_emoji = true` fail
-during merge. `spinner_mode` likewise validates against the legacy `progress`
-boolean so contradictory inputs are rejected early. `output_format` is typed
-now, but only `human` is accepted until the future JSON diagnostics milestone
-lands.
+environment variables -> CLI overrides. Explicit discovery honours
+`NETSUKE_CONFIG`; environment variables use the `NETSUKE_` prefix with `__` as
+a nesting separator. The schema now explicitly covers verbosity, locale,
+fetch policy, and build defaults alongside four typed output policies:
+`color` (auto | always | never), `emoji` (auto | always | never), `progress`
+(auto | always | never), and `accessibility` (auto | on | off). Each policy is
+validated during configuration merge, so an unrecognized enum value from any
+layer is rejected early rather than silently ignored. The `json` setting
+selects machine-readable output: each invocation emits one versioned result
+document on success or one versioned diagnostic document on failure.
 
 CLI help and clap errors are localized via Fluent resources; locale resolution
 is handled in `src/locale_resolution.rs` with the precedence `--locale` ->
@@ -2465,7 +2469,7 @@ redaction, and the temporary file helpers reside in `src/runner/process.rs`,
 allowing the runner entry point to delegate low-level concerns. The working
 directory flag mirrors Ninja's `-C` option but is resolved internally: Netsuke
 runs Ninja with a configured working directory and resolves relative output
-paths (for example `build --emit` and `manifest`) under the same directory so
+paths (for example `generate --output`) under the same directory so
 behaviour matches a real directory change. Error scenarios are validated using
 clap's `ErrorKind` enumeration in unit tests and via rstest-bdd behavioural
 steps/scenarios.
@@ -2482,8 +2486,9 @@ to textual output when stdout is not a teletype terminal (TTY), ensuring
 deterministic continuous integration (CI) logs; accessible mode always uses
 textual output. Accessible output remains text-first and static; it does not
 animate. The standard reporter is configurable through OrthoConfig layering via
-`progress: Option<bool>` (`--progress`, `NETSUKE_PROGRESS`, or config file),
-with accessible mode taking precedence when enabled. Verbose mode (`--verbose`
+`progress: ProgressPolicy` (auto, always, or never), resolved from `--progress`,
+`NETSUKE_PROGRESS`, or a config file, with accessible mode taking precedence when
+enabled. Verbose mode (`--verbose`
 through OrthoConfig layers) wraps the resolved reporter with a timing recorder
 that emits a localized completion summary on successful runs:
 
@@ -2496,15 +2501,16 @@ mode is off and also suppressed on failed runs so failures do not imply a
 successful pipeline completion.
 
 Theme resolution for CLI output is centralized in `src/theme.rs`. Netsuke
-resolves one theme through OrthoConfig layers (`--theme`, `NETSUKE_THEME`,
-config file, then mode defaults) and hands the resulting symbol and spacing
-tokens to reporters through the `OutputPrefs` compatibility façade. This keeps
-reporter code focused on status semantics rather than glyph choice, preserves
-`no_emoji` as a legacy ASCII-forcing alias when no explicit theme is supplied,
-and gives later roadmap items a stable snapshot surface for validating ASCII
-and Unicode renderings without duplicating formatting rules. Colour policy is
-resolved alongside theme and output-mode detection so `--colour-policy never`
-behaves like an internal `NO_COLOR`, while `always` bypasses `NO_COLOR`
+derives an internal theme preference from the `--emoji` policy (`emoji =
+always` selects Unicode, `never` selects ASCII, and `auto` falls back to the
+mode default) and hands the resulting symbol and spacing tokens to reporters
+through the `OutputPrefs` compatibility façade. This keeps reporter code
+focused on status semantics rather than glyph choice, preserves `no_emoji` as
+a legacy ASCII-forcing alias when no explicit emoji policy is supplied, and
+gives later roadmap items a stable snapshot surface for validating ASCII and
+Unicode renderings without duplicating formatting rules. Colour policy is
+resolved alongside theme and output-mode detection so `--color never` behaves
+like an internal `NO_COLOR`, while `always` bypasses `NO_COLOR`
 auto-detection. Build dispatch also consults OrthoConfig `[cmds.build]`
 defaults before falling back to manifest `defaults`, letting operators set
 user- or workspace-level build defaults without editing the manifest itself.
@@ -2514,7 +2520,7 @@ regressions fail with reviewable diffs instead of drifting silently.
 
 The Advanced Usage chapter in `docs/users-guide.md` is validated by behavioural
 tests in `tests/features/advanced_usage.feature`. Netsuke treats those
-scenarios as executable documentation for the `clean`, `graph`, and `manifest`
+scenarios as executable documentation for the `clean`, `graph`, and `generate`
 subcommands, configuration layering, and JSON diagnostics so the guide stays
 synchronized with runtime behaviour rather than drifting behind it.
 
@@ -2579,27 +2585,25 @@ flowchart LR
 
 Netsuke configuration discovery is implemented in `src/cli/discovery.rs`.
 Explicit file selection is handled by `explicit_config_path(...)`, which
-applies the precedence `--config` > `NETSUKE_CONFIG` > `NETSUKE_CONFIG_PATH`.
-Layer loading and automatic discovery are handled by `push_file_layers(...)`,
-which also applies the `-C/--directory` flag as the project-discovery root.
+applies the precedence `--config` > `NETSUKE_CONFIG`. Layer loading and
+automatic discovery are handled by `push_file_layers(...)`, which also applies
+the `-C/--directory` flag as the project-discovery root.
 
 **Figure: Explicit Config Selector Resolution** — This diagram shows how
 Netsuke chooses the configuration file before automatic discovery. Netsuke
-first checks `--config`, then `NETSUKE_CONFIG`, then `NETSUKE_CONFIG_PATH`. The
-first explicit selector found is loaded directly; if that file is missing or
-invalid, Netsuke reports the explicit-file error instead of falling back to
-discovery. Only when no explicit selector is present does Netsuke run two-pass
-config discovery and then proceed with the merged configuration.
+first checks `--config`, then `NETSUKE_CONFIG`. The first explicit selector
+found is loaded directly; if that file is missing or invalid, Netsuke reports
+the explicit-file error instead of falling back to discovery. Only when no
+explicit selector is present does Netsuke run two-pass config discovery and
+then proceed with the merged configuration.
 
 ```mermaid
 flowchart TD
   Start(["Start netsuke invocation"])
   HasCliConfig{"CLI flag<br/>--config set?"}
   HasEnvConfig{"Env NETSUKE_CONFIG<br/>set?"}
-  HasEnvConfigPath{"Env NETSUKE_CONFIG_PATH<br/>set?"}
   UseCliConfig[["Use CLI --config path<br/>as config file"]]
   UseEnvConfig[["Use NETSUKE_CONFIG path<br/>as config file"]]
-  UseEnvConfigPath[["Use NETSUKE_CONFIG_PATH path<br/>as config file"]]
   RunDiscovery[["Run two-pass<br/>config discovery"]]
   LoadConfig[["Load selected config<br/>into merge pipeline"]]
   ErrorMissing[["Error: explicit config<br/>file missing or invalid"]]
@@ -2609,10 +2613,7 @@ flowchart TD
   HasCliConfig -- No --> HasEnvConfig
 
   HasEnvConfig -- Yes --> UseEnvConfig
-  HasEnvConfig -- No --> HasEnvConfigPath
-
-  HasEnvConfigPath -- Yes --> UseEnvConfigPath
-  HasEnvConfigPath -- No --> RunDiscovery
+  HasEnvConfig -- No --> RunDiscovery
 
   UseCliConfig --> CheckCliFile{"File exists<br/>and parses?"}
   CheckCliFile -- Yes --> LoadConfig
@@ -2621,10 +2622,6 @@ flowchart TD
   UseEnvConfig --> CheckEnvFile{"File exists<br/>and parses?"}
   CheckEnvFile -- Yes --> LoadConfig
   CheckEnvFile -- No --> ErrorMissing
-
-  UseEnvConfigPath --> CheckEnvPathFile{"File exists<br/>and parses?"}
-  CheckEnvPathFile -- Yes --> LoadConfig
-  CheckEnvPathFile -- No --> ErrorMissing
 
   RunDiscovery --> LoadConfig
   LoadConfig --> End(["Proceed with merged config"])
@@ -2642,11 +2639,10 @@ override earlier ones—meaning project-scope has highest precedence among file
 layers. After file layers are merged, environment variables and CLI arguments
 override the merged result, ensuring explicit user intent always wins.
 
-1. **Explicit override**: `--config <PATH>`, `NETSUKE_CONFIG`, and
-   `NETSUKE_CONFIG_PATH` are evaluated in that precedence order before
-   discovery. These explicit selectors bypass automatic discovery and ignore
-   the project-root anchor supplied by `-C/--directory`. `NETSUKE_CONFIG_PATH`
-   remains a backward-compatible alias of `NETSUKE_CONFIG`.
+1. **Explicit override**: `--config <PATH>` and `NETSUKE_CONFIG` are evaluated
+   in that precedence order before discovery. These explicit selectors bypass
+   automatic discovery and ignore the project-root anchor supplied by
+   `-C/--directory`.
 
 2. **Project scope**: Configuration files in the current working directory (or
    the directory specified via `-C/--directory`):

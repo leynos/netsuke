@@ -27,9 +27,7 @@ use test_support::locale_stubs::{StubEnv, StubSystemLocale};
 /// configuration discovery and environment variable merging. To ensure tests
 /// remain hermetic and isolated from the host environment, callers should:
 ///
-/// 1. Set `NETSUKE_CONFIG_PATH` to an empty/nonexistent path to disable config
-///    file discovery, or ensure a `temp_dir` is set to anchor discovery to a
-///    controlled location.
+/// 1. Ensure a `temp_dir` is set to anchor discovery to a controlled location.
 /// 2. Clear or set all `NETSUKE_*` environment variables to known values.
 ///
 /// Tests that do not explicitly set up configuration or environment variables
@@ -84,14 +82,14 @@ fn cli_network_policy(world: &TestWorld) -> Result<netsuke::stdlib::NetworkPolic
         .context("construct CLI network policy")
 }
 
-/// Extract build command args (targets and emit path).
-fn extract_build(world: &TestWorld) -> Result<(Vec<String>, Option<PathBuf>)> {
+/// Extract build command targets.
+fn extract_build(world: &TestWorld) -> Result<Vec<String>> {
     world
         .cli
         .with_ref(|cli| {
             let command = cli.command.as_ref()?;
             match command {
-                Commands::Build(args) => Some((args.targets.clone(), args.emit.clone())),
+                Commands::Build(args) => Some(args.targets.clone()),
                 _ => None,
             }
         })
@@ -107,11 +105,11 @@ fn extract_graph_args(world: &TestWorld) -> Result<netsuke::cli::GraphArgs> {
     }
 }
 
-/// Extract manifest command file path.
-fn extract_manifest_command_file(world: &TestWorld) -> Result<PathBuf> {
+/// Extract the optional generate output path.
+fn extract_generate_output(world: &TestWorld) -> Result<Option<PathBuf>> {
     match get_command(world)? {
-        Commands::Manifest { file } => Ok(file),
-        other => bail!("expected manifest command, got {other:?}"),
+        Commands::Generate { output } => Ok(output),
+        other => bail!("expected generate command, got {other:?}"),
     }
 }
 
@@ -137,10 +135,9 @@ fn normalize_cli(cli: Cli) -> Cli {
 mod cli_verify;
 use cli_verify::{
     ExpectedCommand, verify_cli_policy_allows, verify_cli_policy_rejects, verify_command,
-    verify_emit_path, verify_error_contains, verify_error_returned, verify_first_target,
-    verify_graph_html_set, verify_graph_output_path, verify_job_count,
-    verify_manifest_command_path, verify_manifest_path, verify_parsing_succeeded,
-    verify_working_directory,
+    verify_error_contains, verify_error_returned, verify_first_target, verify_generate_output_path,
+    verify_graph_html_set, verify_graph_output_path, verify_job_count, verify_manifest_path,
+    verify_parsing_succeeded, verify_working_directory,
 };
 
 // ---------------------------------------------------------------------------
@@ -172,8 +169,8 @@ fn the_command_is_graph(world: &TestWorld) -> Result<()> {
 }
 
 #[then]
-fn the_command_is_manifest(world: &TestWorld) -> Result<()> {
-    verify_command(world, ExpectedCommand::Manifest)
+fn the_command_is_generate(world: &TestWorld) -> Result<()> {
+    verify_command(world, ExpectedCommand::Generate)
 }
 
 #[then("the manifest path is {path:string}")]
@@ -196,11 +193,6 @@ fn job_count(world: &TestWorld, count: usize) -> Result<()> {
     verify_job_count(world, JobCount::new(count))
 }
 
-#[then("the emit path is {path:string}")]
-fn emit_path(world: &TestWorld, path: PathString) -> Result<()> {
-    verify_emit_path(world, &path)
-}
-
 #[then("the CLI network policy allows {url:string}")]
 fn cli_policy_allows(world: &TestWorld, url: UrlString) -> Result<()> {
     verify_cli_policy_allows(world, &url)
@@ -211,9 +203,9 @@ fn cli_policy_rejects(world: &TestWorld, url: UrlString, message: ErrorFragment)
     verify_cli_policy_rejects(world, &url, &message)
 }
 
-#[then("the manifest command path is {path:string}")]
-fn manifest_command_path(world: &TestWorld, path: PathString) -> Result<()> {
-    verify_manifest_command_path(world, &path)
+#[then("the generate output path is {path:string}")]
+fn generate_output_path(world: &TestWorld, path: PathString) -> Result<()> {
+    verify_generate_output_path(world, &path)
 }
 
 #[then("the graph output path is {path:string}")]

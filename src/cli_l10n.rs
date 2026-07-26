@@ -129,7 +129,7 @@ enum Subcommand {
     Build,
     Clean,
     Graph,
-    Manifest,
+    Generate,
 }
 
 impl Subcommand {
@@ -138,7 +138,7 @@ impl Subcommand {
             "build" => Some(Self::Build),
             "clean" => Some(Self::Clean),
             "graph" => Some(Self::Graph),
-            "manifest" => Some(Self::Manifest),
+            "generate" => Some(Self::Generate),
             _ => None,
         }
     }
@@ -149,7 +149,7 @@ fn flag_help_key(arg_id: &str, subcommand: Option<Subcommand>) -> Option<&'stati
         None => top_level_flag_help_key(arg_id),
         Some(Subcommand::Build) => build_flag_help_key(arg_id),
         Some(Subcommand::Graph) => graph_flag_help_key(arg_id),
-        Some(Subcommand::Manifest) => manifest_flag_help_key(arg_id),
+        Some(Subcommand::Generate) => generate_flag_help_key(arg_id),
         Some(Subcommand::Clean) => None,
     }
 }
@@ -166,14 +166,12 @@ fn top_level_flag_help_key(arg_id: &str) -> Option<&'static str> {
         "fetch_allow_host" => Some(keys::CLI_FLAG_FETCH_ALLOW_HOST_HELP),
         "fetch_block_host" => Some(keys::CLI_FLAG_FETCH_BLOCK_HOST_HELP),
         "fetch_default_deny" => Some(keys::CLI_FLAG_FETCH_DEFAULT_DENY_HELP),
-        "accessible" => Some(keys::CLI_FLAG_ACCESSIBLE_HELP),
+        "json" => Some(keys::CLI_FLAG_JSON_HELP),
+        "no_input" => Some(keys::CLI_FLAG_NO_INPUT_HELP),
+        "color" => Some(keys::CLI_FLAG_COLOR_HELP),
+        "emoji" => Some(keys::CLI_FLAG_EMOJI_HELP),
         "progress" => Some(keys::CLI_FLAG_PROGRESS_HELP),
-        "no_emoji" => Some(keys::CLI_FLAG_NO_EMOJI_HELP),
-        "theme" => Some(keys::CLI_FLAG_THEME_HELP),
-        "colour_policy" => Some(keys::CLI_FLAG_COLOUR_POLICY_HELP),
-        "spinner_mode" => Some(keys::CLI_FLAG_SPINNER_MODE_HELP),
-        "diag_json" => Some(keys::CLI_FLAG_DIAG_JSON_HELP),
-        "output_format" => Some(keys::CLI_FLAG_OUTPUT_FORMAT_HELP),
+        "accessibility" => Some(keys::CLI_FLAG_ACCESSIBILITY_HELP),
         "default_targets" => Some(keys::CLI_FLAG_DEFAULT_TARGETS_HELP),
         _ => None,
     }
@@ -181,7 +179,6 @@ fn top_level_flag_help_key(arg_id: &str) -> Option<&'static str> {
 
 fn build_flag_help_key(arg_id: &str) -> Option<&'static str> {
     match arg_id {
-        "emit" => Some(keys::CLI_SUBCOMMAND_BUILD_FLAG_EMIT_HELP),
         "targets" => Some(keys::CLI_SUBCOMMAND_BUILD_FLAG_TARGETS_HELP),
         _ => None,
     }
@@ -195,9 +192,9 @@ fn graph_flag_help_key(arg_id: &str) -> Option<&'static str> {
     }
 }
 
-fn manifest_flag_help_key(arg_id: &str) -> Option<&'static str> {
+fn generate_flag_help_key(arg_id: &str) -> Option<&'static str> {
     match arg_id {
-        "file" => Some(keys::CLI_SUBCOMMAND_MANIFEST_FLAG_FILE_HELP),
+        "output" => Some(keys::CLI_SUBCOMMAND_GENERATE_FLAG_OUTPUT_HELP),
         _ => None,
     }
 }
@@ -207,7 +204,7 @@ const fn subcommand_about_key(subcommand: Subcommand) -> &'static str {
         Subcommand::Build => keys::CLI_SUBCOMMAND_BUILD_ABOUT,
         Subcommand::Clean => keys::CLI_SUBCOMMAND_CLEAN_ABOUT,
         Subcommand::Graph => keys::CLI_SUBCOMMAND_GRAPH_ABOUT,
-        Subcommand::Manifest => keys::CLI_SUBCOMMAND_MANIFEST_ABOUT,
+        Subcommand::Generate => keys::CLI_SUBCOMMAND_GENERATE_ABOUT,
     }
 }
 
@@ -216,7 +213,7 @@ const fn subcommand_long_about_key(subcommand: Subcommand) -> &'static str {
         Subcommand::Build => keys::CLI_SUBCOMMAND_BUILD_LONG_ABOUT,
         Subcommand::Clean => keys::CLI_SUBCOMMAND_CLEAN_LONG_ABOUT,
         Subcommand::Graph => keys::CLI_SUBCOMMAND_GRAPH_LONG_ABOUT,
-        Subcommand::Manifest => keys::CLI_SUBCOMMAND_MANIFEST_LONG_ABOUT,
+        Subcommand::Generate => keys::CLI_SUBCOMMAND_GENERATE_LONG_ABOUT,
     }
 }
 
@@ -259,50 +256,20 @@ pub(crate) fn parse_bool_hint(value: &str) -> Option<bool> {
     }
 }
 
-/// Inspect raw arguments and detect whether JSON diagnostics were requested.
+/// Inspect raw arguments and detect whether JSON output was requested.
 ///
-/// A bare `--diag-json` enables JSON diagnostics. `--output-format json` is a
-/// diagnostic-format alias and `--output-format human` disables JSON
-/// diagnostics. The helper mirrors clap's flag semantics, so
-/// `--diag-json=value` is ignored rather than interpreted as a boolean
-/// assignment.
+/// The helper mirrors clap's flag semantics, so `--json=value` is ignored
+/// rather than interpreted as a boolean assignment.
 #[must_use]
-pub fn diag_json_hint_from_args(args: &[OsString]) -> Option<bool> {
-    let mut diag_json_hint = None;
-    let mut output_format_hint = None;
-    let mut iter = args.iter().peekable();
-    while let Some(arg) = iter.next() {
+pub fn json_hint_from_args(args: &[OsString]) -> Option<bool> {
+    for arg in args {
         let text = arg.to_string_lossy();
         if text == "--" {
             break;
         }
-        if text == "--diag-json" {
-            diag_json_hint = Some(true);
-            continue;
-        }
-        if text == "--output-format" {
-            let Some(next) = iter.peek() else {
-                break;
-            };
-            let next_text = next.to_string_lossy();
-            if next_text == "--" {
-                break;
-            }
-            output_format_hint = diag_json_hint_from_output_format(&next_text);
-            iter.next();
-            continue;
-        }
-        if let Some(value) = text.strip_prefix("--output-format=") {
-            output_format_hint = diag_json_hint_from_output_format(value);
+        if text == "--json" {
+            return Some(true);
         }
     }
-    output_format_hint.or(diag_json_hint)
-}
-
-fn diag_json_hint_from_output_format(value: &str) -> Option<bool> {
-    match value {
-        "json" => Some(true),
-        "human" => Some(false),
-        _ => None,
-    }
+    None
 }

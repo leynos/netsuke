@@ -5,6 +5,7 @@
 //! functions for each scenario found in the feature directories.
 
 mod bdd;
+pub mod documentation_examples;
 
 // Re-export fixtures for scenario functions
 pub use bdd::fixtures::*;
@@ -14,7 +15,7 @@ pub use bdd::fixtures::*;
 
 use rstest_bdd_macros::scenarios;
 
-// Autodiscover all cross-platform scenarios from feature files.
+// Autodiscover all cross-platform scenarios from the canonical CLI feature files.
 // The fixtures parameter ensures TestWorld is injected into each generated test
 scenarios!("tests/features", fixtures = [world: TestWorld]);
 

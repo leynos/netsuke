@@ -225,11 +225,11 @@ Observable success means:
       recorded above.
 - [x] Commit the roadmap-fidelity revision.
 - [x] Push the roadmap-fidelity revision.
-- [ ] Stage A: create the governing design record.
-- [ ] Stage B: update the core design document.
-- [ ] Stage C: rewrite the CLI design document around the contract.
+- [x] Stage A: create the governing design record.
+- [x] Stage B: update the core design document.
+- [x] Stage C: rewrite the CLI design document around the contract.
 - [x] Stage D: rewrite the roadmap.
-- [ ] Stage E: update user-facing documentation.
+- [x] Stage E: update user-facing documentation.
 - [ ] Stage F: add follow-on ExecPlans for implementation slices.
 
 ## Surprises & discoveries
