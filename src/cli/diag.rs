@@ -111,32 +111,13 @@ mod tests {
     //! Unit tests for early JSON preference resolution.
 
     use super::*;
+    use crate::cli::test_support::TestEnv;
     use anyhow::ensure;
     use cap_std::{ambient_authority, fs::Dir};
     use clap::CommandFactory;
     use clap::Parser;
     use serde_json::json;
-    use std::collections::HashMap;
-    use std::ffi::OsString;
     use tempfile::tempdir;
-
-    #[derive(Default)]
-    struct TestEnv {
-        values: HashMap<&'static str, OsString>,
-    }
-
-    impl TestEnv {
-        fn with_var(mut self, name: &'static str, value: impl Into<OsString>) -> Self {
-            self.values.insert(name, value.into());
-            self
-        }
-    }
-
-    impl EnvProvider for TestEnv {
-        fn get(&self, key: &str) -> Option<OsString> {
-            self.values.get(key).cloned()
-        }
-    }
 
     #[test]
     fn json_from_layer_reads_json_bool() {

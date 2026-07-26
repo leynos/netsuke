@@ -182,29 +182,11 @@ mod tests {
     //! Unit tests for config discovery through injected environment access.
 
     use super::*;
+    use crate::cli::test_support::TestEnv;
     use anyhow::ensure;
     use cap_std::{ambient_authority, fs::Dir};
     use rstest::rstest;
-    use std::collections::HashMap;
     use tempfile::tempdir;
-
-    #[derive(Default)]
-    struct TestEnv {
-        values: HashMap<&'static str, OsString>,
-    }
-
-    impl TestEnv {
-        fn with_var(mut self, name: &'static str, value: impl Into<OsString>) -> Self {
-            self.values.insert(name, value.into());
-            self
-        }
-    }
-
-    impl EnvProvider for TestEnv {
-        fn get(&self, key: &str) -> Option<OsString> {
-            self.values.get(key).cloned()
-        }
-    }
 
     #[test]
     fn env_config_path_returns_none_when_var_unset() {

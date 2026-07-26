@@ -6,29 +6,10 @@
 //! same invariant over generated path values.
 
 use super::*;
+use crate::cli::test_support::TestEnv;
 use proptest::prelude::*;
 use rstest::rstest;
-use std::collections::HashMap;
-use std::ffi::OsString;
 use std::path::PathBuf;
-
-#[derive(Default)]
-struct TestEnv {
-    values: HashMap<&'static str, OsString>,
-}
-
-impl TestEnv {
-    fn with_var(mut self, name: &'static str, value: impl Into<OsString>) -> Self {
-        self.values.insert(name, value.into());
-        self
-    }
-}
-
-impl EnvProvider for TestEnv {
-    fn get(&self, key: &str) -> Option<OsString> {
-        self.values.get(key).cloned()
-    }
-}
 
 fn precedence_winner<'a>(
     cli_config: Option<&'a PathBuf>,

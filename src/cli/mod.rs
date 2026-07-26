@@ -15,6 +15,9 @@ mod merge;
 mod parser;
 mod parsing;
 
+#[cfg(test)]
+pub(crate) mod test_support;
+
 pub use config::{AccessibilityPolicy, CliConfig, ColourPolicy, EmojiPolicy, ProgressPolicy};
 pub use diag::{resolve_merged_json, resolve_merged_json_with_env};
 pub use discovery::{EnvProvider as ConfigEnvProvider, StdEnvProvider as ConfigStdEnvProvider};
