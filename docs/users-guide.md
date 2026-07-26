@@ -621,15 +621,26 @@ The exact localized message can vary, but the envelope has this shape:
 }
 ```
 
-The schema fields are:
+The common envelope fields are:
 
 - `schema_version`: JSON envelope version.
 - `generator`: Netsuke name and version.
-- `diagnostics`: ordered diagnostic objects.
-- `message`, `code`, `severity`, `help`, and `url`: primary details.
-- `causes`: ordered error-cause chain.
-- `source`, `primary_span`, and `labels`: optional source locations.
-- `related`: nested diagnostics using the same shape.
+
+Exactly one outcome branch is present:
+
+- `result`: present only on success.
+  - `command`: the command that completed, such as `build`, `clean`, `generate`,
+    or `graph`.
+  - `content`: the generated text artefact when the command would otherwise
+    write it to standard output. In particular, `generate` embeds its Ninja
+    manifest here when `--output` is not supplied. This field is `null` when
+    the command produces no text artefact or writes it to a file.
+- `diagnostics`: present only on failure and contains ordered diagnostic
+  objects.
+  - `message`, `code`, `severity`, `help`, and `url`: primary details.
+  - `causes`: ordered error-cause chain.
+  - `source`, `primary_span`, and `labels`: optional source locations.
+  - `related`: nested diagnostics using the same shape.
 
 **Triage:** Treat schema version `1` as pre-stable for v0.1.0 and check
 `schema_version` before parsing other fields.

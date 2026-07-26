@@ -765,8 +765,8 @@ not present, default settings apply.
 
 **Environment Variables:** Each config option will also map to an environment
 variable. For instance, to force colour off globally, a user could set
-`NETSUKE_NO_COLOR=1` in their shell profile. Or to emit exactly one versioned
-JSON document – a result on success or a diagnostic on failure – in a CI
+`NO_COLOR=1` in their shell profile. Or to emit exactly one versioned JSON
+document – a result on success or a diagnostic on failure – in a CI
 environment, one can set `NETSUKE_JSON=true`. Environment vars are convenient
 for CI and also for users who prefer them over config files. They override the
 config file but are themselves overridden by explicit CLI flags[^3].
@@ -1191,7 +1191,7 @@ OPTIONS:
 
 SUBCOMMANDS:
     build        Build specified targets (or default targets if none given) [default]
-    clean        Remove build artifacts and intermediate files
+    clean        Remove build artefacts and intermediate files
     graph        Display the build dependency graph (DOT format or visual)
     generate     Write the generated Ninja manifest without running Ninja
     help         Print this help information
