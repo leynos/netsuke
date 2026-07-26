@@ -456,8 +456,9 @@ A screen reader will likely read `✔` as “check mark”, which along with the
 “succeeded” remains clear. If certain symbols are read poorly (e.g., the
 spinner might be read as “vertical bar, slash, dash…” each frame), accessible
 mode falls back to simpler characters. The CLI also respects user preferences:
-for instance, if the environment variable `NETSUKE_NO_EMOJI` is set (an example
-feature that can be supported), plain text “OK”/“FAIL” replaces check/cross.
+for instance, if emoji output is disabled (via `--emoji never`, env
+`NETSUKE_EMOJI=never`, or the legacy `NETSUKE_NO_EMOJI` alias), plain text
+“OK”/“FAIL” replaces check/cross.
 Similarly, if `NO_COLOR` is set, coloured bars or coloured symbols are omitted
 [^2].
 
@@ -726,18 +727,20 @@ fields such as:
 
 - `quiet: bool` – for noise-free mode
 
-- `color: Option<String>` – colour mode (“always”, “never”, or “auto”)
-
-- `output_format: Option<String>` – format for output/diagnostics (“text” or
-  “json”)
+- `color: ColourPolicy` – colour policy (“auto”, “always”, or “never”)
 
 - `default_target: Option<String>` – default target(s) to build if none
   specified
 
-- `spinner: bool` – whether to show spinner/progress (default true for
-  interactive)
+- `progress: ProgressPolicy` – progress-display policy (“auto”, “always”, or
+  “never”)
 
-- `theme: Option<String>` – theme for output (e.g., “unicode” vs “ascii”)
+- `emoji: EmojiPolicy` – emoji policy (“auto”, “always”, or “never”)
+
+- `accessibility: AccessibilityPolicy` – accessibility policy (“auto”, “on”, or
+  “off”)
+
+- `json: bool` – whether to emit machine-readable output
 
 This is an illustrative set – actual fields will be determined by what is
 needed. Using OrthoConfig’s derive macros, each field can automatically map to
@@ -745,8 +748,8 @@ a CLI flag, an env var, and a config file entry. For example, `verbose: bool`
 can map to a `--verbose` flag (already in Clap), an env var like
 `NETSUKE_VERBOSE=true`, and a config file entry `verbose = true`. OrthoConfig’s
 **orthographic naming** feature will handle the naming conventions (so
-`--no-color` flag might correspond to env `NETSUKE_NO_COLOR` and config file key
-`color = "never"` etc.) without a lot of manual wiring[^3][^3]. A prefix like
+the `--color never` flag corresponds to env `NETSUKE_COLOR=never` and config
+file key `color = "never"`) without a lot of manual wiring[^3][^3]. A prefix like
 `NETSUKE_` is used for environment variables to avoid conflicts (the
 OrthoConfig derive allows specifying a prefix for env vars and file sections
 [^3] [^3]).
@@ -798,10 +801,10 @@ unified `config` object with all settings resolved in the right precedence.
   (default), “always”, “never”.)
 
 - **Spinner/Progress Display:** Some users might find spinners distracting or
-  might want more compact output. Configuration allows `spinner = false` (or
-  `progress = "none"`) in config to disable live progress indicators globally,
-  equivalent to always using a quiet mode. This could be useful for screen
-  reader users who want to opt-out entirely.
+  might want more compact output. Configuration allows `progress = "never"` in
+  config to disable live progress indicators globally, equivalent to always
+  using a quiet mode. This could be useful for screen reader users who want to
+  opt-out entirely.
 
 - **Default Targets or Profiles:** If a user frequently wants to build a
   specific target or use certain options, config can help. For example,
@@ -842,12 +845,13 @@ like:
 verbose = false
 quiet = true
 color = "never"
-output_format = "text"
-spinner = false
+emoji = "never"
+progress = "never"
+accessibility = "on"
 ```
 
 This ensures that by default, Netsuke will not use colour, will suppress
-non-essential output, and will not show spinners or progress bars (quiet mode).
+non-essential output, and will not show progress indicators (quiet mode).
 When they do need to see more details, they can still run `netsuke -v` to
 temporarily override quiet mode. OrthoConfig will merge that flag appropriately.
 

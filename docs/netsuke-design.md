@@ -2274,25 +2274,31 @@ enrichment:
    the user with a rich, layered explanation of the failure, from the general
    to the specific.
 
-For automation use cases, Netsuke supports a `--diag-json` flag layered through
-OrthoConfig as `--diag-json`, `NETSUKE_DIAG_JSON`, and `diag_json = true`. When
-enabled, Netsuke emits a Netsuke-owned JSON document on `stderr` instead of
-relying on upstream formatter output directly. The current schema is versioned
-with `schema_version = 1` and an envelope of:
+For automation use cases, Netsuke supports a root `--json` flag layered through
+OrthoConfig as `--json`, `NETSUKE_JSON`, and `json = true`. When enabled, every
+invocation emits exactly one versioned JSON document: on success, a result
+document on `stdout`; on failure, a diagnostic document on `stderr`. Both
+documents share `schema_version = 1` and a `generator` object of `name` and
+`version`:
 
-- `generator`: `name` and `version`
-- `diagnostics`: an array of entries containing `message`, `code`, `severity`,
-  `help`, `url`, `causes`, `source`, `primary_span`, `labels`, and `related`
+- The success result document carries a `result` object of `command` and
+  (optionally) `content`--the generated artefact, such as the Ninja text from
+  `generate`, when the command would otherwise write it to stdout.
+- The failure diagnostic document carries a `diagnostics` array of entries
+  containing `message`, `code`, `severity`, `help`, `url`, `causes`, `source`,
+  `primary_span`, `labels`, and `related`.
 
 Design decisions for this mode:
 
 - Netsuke owns the schema rather than exposing `miette`'s raw JSON formatter,
   so compatibility can be documented and guarded by snapshot tests.
-- JSON mode reserves `stderr` for one machine-readable document only. Progress
-  updates, verbose timing summaries, emoji prefixes, and tracing logs are
-  suppressed while the mode is active.
-- `stdout` semantics do not change. Commands such as `manifest -` and `graph`
-  keep streaming their normal artefacts to `stdout`.
+- JSON mode reserves its output stream for one machine-readable document only.
+  Progress updates, verbose timing summaries, emoji prefixes, and tracing logs
+  are suppressed while the mode is active.
+- Outside JSON mode, `stdout` semantics do not change. Commands such as
+  `generate` keep streaming their normal artefacts to `stdout`; in JSON mode
+  that generated content is carried in the success result document's `content`
+  field instead.
 - Early startup failures honour only the CLI flag and environment variable.
   Configuration files cannot request JSON for errors raised while those same
   files are still being located or parsed.
@@ -2494,15 +2500,16 @@ mode is off and also suppressed on failed runs so failures do not imply a
 successful pipeline completion.
 
 Theme resolution for CLI output is centralized in `src/theme.rs`. Netsuke
-resolves one theme through OrthoConfig layers (`--theme`, `NETSUKE_THEME`,
-config file, then mode defaults) and hands the resulting symbol and spacing
-tokens to reporters through the `OutputPrefs` compatibility façade. This keeps
-reporter code focused on status semantics rather than glyph choice, preserves
-`no_emoji` as a legacy ASCII-forcing alias when no explicit theme is supplied,
-and gives later roadmap items a stable snapshot surface for validating ASCII
-and Unicode renderings without duplicating formatting rules. Colour policy is
-resolved alongside theme and output-mode detection so `--colour-policy never`
-behaves like an internal `NO_COLOR`, while `always` bypasses `NO_COLOR`
+derives an internal theme preference from the `--emoji` policy (`emoji =
+always` selects Unicode, `never` selects ASCII, and `auto` falls back to the
+mode default) and hands the resulting symbol and spacing tokens to reporters
+through the `OutputPrefs` compatibility façade. This keeps reporter code
+focused on status semantics rather than glyph choice, preserves `no_emoji` as
+a legacy ASCII-forcing alias when no explicit emoji policy is supplied, and
+gives later roadmap items a stable snapshot surface for validating ASCII and
+Unicode renderings without duplicating formatting rules. Colour policy is
+resolved alongside theme and output-mode detection so `--color never` behaves
+like an internal `NO_COLOR`, while `always` bypasses `NO_COLOR`
 auto-detection. Build dispatch also consults OrthoConfig `[cmds.build]`
 defaults before falling back to manifest `defaults`, letting operators set
 user- or workspace-level build defaults without editing the manifest itself.

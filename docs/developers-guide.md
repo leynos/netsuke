@@ -783,7 +783,7 @@ use crate::bdd::helpers::env_mutation::mutate_env_var;
 use crate::bdd::types::EnvVarKey;
 
 // Set a variable
-mutate_env_var(world, EnvVarKey::from("NETSUKE_THEME"), Some("ascii"))?;
+mutate_env_var(world, EnvVarKey::from("NETSUKE_COLOR"), Some("never"))?;
 
 // Remove a variable
 mutate_env_var(world, EnvVarKey::from("NETSUKE_EMOJI"), None)?;
