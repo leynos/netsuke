@@ -393,9 +393,10 @@ The commands are:
 - `clean`: generate a temporary Ninja file and run `ninja -t clean`.
 - `graph`: render the build graph as DOT or self-contained HTML without
   invoking Ninja.
-- `generate`: write Ninja without invoking it. By default, the generated Ninja
-  manifest is the only content written to stdout; use `--output <FILE>` to
-  write it to a file instead.
+- `generate`: write Ninja without invoking it. Outside JSON mode, the generated
+  Ninja manifest is the only content written to stdout; use `--output <FILE>` to
+  write it to a file instead. In JSON mode (`--json`) the manifest is carried in
+  the result document's `result.content` field instead.
 
 Running `netsuke` without a subcommand is the same as `netsuke build` with no
 explicit targets. A bare target such as `netsuke hello` is not accepted; use
@@ -529,6 +530,10 @@ Netsuke separates machine-consumable output from status information:
 - stdout contains generated artefacts and subprocess stdout.
 - stderr contains status, progress, timing, and diagnostics.
 
+In JSON mode (`--json`), stdout instead carries exactly one versioned JSON
+document — a result document on success or a diagnostic document on failure —
+with generated content embedded in `result.content`.
+
 This makes redirection predictable:
 
 <!-- tested-example: guide-output-streams -->
@@ -561,7 +566,7 @@ Build complete.
 ```
 
 When stdout is redirected or connected to Continuous Integration (CI), task
-progress falls back to text so logs remain readable.
+progress falls back to text, so logs remain readable.
 
 Netsuke uses semantic text labels as well as glyphs; meaning is not conveyed by
 colour alone. Emoji policy values are:

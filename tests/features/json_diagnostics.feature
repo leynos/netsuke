@@ -15,6 +15,14 @@ Feature: JSON diagnostics mode
     And stderr should be empty
     And stdout should be one generate result json document
 
+  Scenario: JSON mode wraps successful clean output
+    Given a minimal Netsuke workspace
+    And a fake ninja executable that succeeds without output
+    When netsuke is run with arguments "--json clean"
+    Then the command should succeed
+    And stderr should be empty
+    And stdout should be one clean result json document
+
   Scenario: JSON diagnostics suppress verbose tracing noise
     Given an empty workspace
     When netsuke is run with arguments "--json --verbose graph"

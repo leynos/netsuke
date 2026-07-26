@@ -57,8 +57,9 @@ fn stderr_should_be_valid_diagnostics_json(world: &TestWorld) -> Result<()> {
     Ok(())
 }
 
-#[then("stdout should be one generate result json document")]
-fn stdout_should_be_one_generate_result_json_document(world: &TestWorld) -> Result<()> {
+/// Parse captured stdout as exactly one result JSON document, asserting its
+/// schema version and command name, and return the `result` object.
+fn parse_single_result_document(world: &TestWorld, command: &str) -> Result<Value> {
     let stdout = world
         .command_stdout
         .get()
@@ -73,9 +74,15 @@ fn stdout_should_be_one_generate_result_json_document(world: &TestWorld) -> Resu
         .get("result")
         .context("result JSON should include a result object")?;
     ensure!(
-        result.get("command").and_then(Value::as_str) == Some("generate"),
-        "result JSON should identify the generate command"
+        result.get("command").and_then(Value::as_str) == Some(command),
+        "result JSON should identify the {command} command"
     );
+    Ok(result.clone())
+}
+
+#[then("stdout should be one generate result json document")]
+fn stdout_should_be_one_generate_result_json_document(world: &TestWorld) -> Result<()> {
+    let result = parse_single_result_document(world, "generate")?;
     let content = result
         .get("content")
         .and_then(Value::as_str)
@@ -83,6 +90,16 @@ fn stdout_should_be_one_generate_result_json_document(world: &TestWorld) -> Resu
     ensure!(
         content.contains("rule ") && content.contains("build hello: "),
         "generate result should contain the Ninja manifest"
+    );
+    Ok(())
+}
+
+#[then("stdout should be one clean result json document")]
+fn stdout_should_be_one_clean_result_json_document(world: &TestWorld) -> Result<()> {
+    let result = parse_single_result_document(world, "clean")?;
+    ensure!(
+        matches!(result.get("content"), None | Some(Value::Null)),
+        "clean result JSON should not carry generated content: {result}"
     );
     Ok(())
 }

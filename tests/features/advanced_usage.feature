@@ -55,10 +55,3 @@ Feature: Advanced usage workflows
     Then the command should fail
     And stderr should be valid diagnostics json
     And stdout should be empty
-
-  Scenario: JSON diagnostics with generate subcommand
-    Given a minimal Netsuke workspace
-    When netsuke is run with arguments "--json generate"
-    Then the command should succeed
-    And stdout should be one generate result json document
-    And stderr should be empty

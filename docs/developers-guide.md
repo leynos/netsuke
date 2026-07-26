@@ -1033,7 +1033,7 @@ sequenceDiagram
 
     BddRunner->>AdvancedUsageSteps: execute When netsuke is run with args "generate"
     AdvancedUsageSteps->>TestWorld: set_env_from_world()
-    TestWorld->>AssertCmdCommand: build_command_with_explicit_path()
+    TestWorld->>AssertCmdCommand: build_netsuke_command(world, args)
     AssertCmdCommand->>AssertCmdCommand: forward NETSUKE_NINJA override
     AssertCmdCommand->>AssertCmdCommand: apply_world_environment_overrides()
     AssertCmdCommand->>NetsukeBinary: spawn_with_env_and_path()

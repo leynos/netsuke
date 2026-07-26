@@ -136,6 +136,11 @@ fn fake_ninja_emits_task_status_lines(world: &TestWorld) -> Result<()> {
     install_fake_ninja(world, &["[1/2] cc -c src/a.c", "[2/2] cc -c src/b.c"])
 }
 
+#[rstest_bdd_macros::given("a fake ninja executable that succeeds without output")]
+fn fake_ninja_succeeds_without_output(world: &TestWorld) -> Result<()> {
+    install_fake_ninja(world, &[])
+}
+
 #[rstest_bdd_macros::given(
     "a fake ninja executable that emits task status lines and builds hello.txt"
 )]

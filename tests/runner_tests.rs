@@ -19,6 +19,20 @@ mod fixtures;
 
 use fixtures::create_test_manifest;
 
+/// Build a `Cli` that runs `generate --output <output>` for `manifest` within
+/// `directory`. Shared by the generate-output tests, which differ only in their
+/// workspace setup and post-run assertions.
+fn generate_cli(manifest: &Path, directory: &Path, output: &Path) -> Cli {
+    Cli {
+        file: manifest.to_path_buf(),
+        directory: Some(directory.to_path_buf()),
+        command: Some(Commands::Generate {
+            output: Some(output.to_path_buf()),
+        }),
+        ..Cli::default()
+    }
+}
+
 /// Fixture: provide a fake `ninja` binary with a configurable exit code.
 ///
 /// This is a re-export of `common::ninja_with_exit_code` so `rstest` can
@@ -184,14 +198,7 @@ fn run_executes_ninja_without_persisting_file() -> Result<()> {
 fn run_generate_with_output_keeps_file() -> Result<()> {
     let (temp, manifest_path) = create_test_manifest()?;
     let output_path = temp.path().join("generated.ninja");
-    let cli = Cli {
-        file: manifest_path.clone(),
-        directory: Some(temp.path().to_path_buf()),
-        command: Some(Commands::Generate {
-            output: Some(output_path.clone()),
-        }),
-        ..Cli::default()
-    };
+    let cli = generate_cli(&manifest_path, temp.path(), &output_path);
 
     run(&cli, output_prefs::resolve(None)).context("expected generate to succeed")?;
 
@@ -226,14 +233,7 @@ fn run_generate_with_output_creates_parent_dirs() -> Result<()> {
         !nested_dir.exists(),
         "nested directory should not exist prior to generate"
     );
-    let cli = Cli {
-        file: manifest_path.clone(),
-        directory: Some(temp.path().to_path_buf()),
-        command: Some(Commands::Generate {
-            output: Some(output_path.clone()),
-        }),
-        ..Cli::default()
-    };
+    let cli = generate_cli(&manifest_path, temp.path(), &output_path);
 
     run(&cli, output_prefs::resolve(None))
         .context("expected generate to succeed with nested output path")?;
@@ -246,14 +246,7 @@ fn run_generate_with_output_creates_parent_dirs() -> Result<()> {
 fn run_generate_subcommand_writes_file() -> Result<()> {
     let (temp, manifest_path) = create_test_manifest()?;
     let output_path = temp.path().join("standalone.ninja");
-    let cli = Cli {
-        file: manifest_path.clone(),
-        directory: Some(temp.path().to_path_buf()),
-        command: Some(Commands::Generate {
-            output: Some(output_path.clone()),
-        }),
-        ..Cli::default()
-    };
+    let cli = generate_cli(&manifest_path, temp.path(), &output_path);
 
     run(&cli, output_prefs::resolve(None)).context("expected generate subcommand to succeed")?;
     ensure!(

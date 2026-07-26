@@ -282,12 +282,12 @@ and agents.
     metadata.
 
 - [ ] 3.15.4. Replace legacy output preferences with canonical policy flags.
-  - [ ] Replace `--colour-policy` with `--color auto|always|never`.
-  - [ ] Replace `--spinner-mode` and boolean `--progress` with
+  - [x] Replace `--colour-policy` with `--color auto|always|never`.
+  - [x] Replace `--spinner-mode` and boolean `--progress` with
     `--progress auto|always|never`.
-  - [ ] Replace `--no-emoji` with `--emoji auto|always|never`.
-  - [ ] Add `--accessibility auto|on|off`.
-  - [ ] Update OrthoConfig field integration, environment names, config
+  - [x] Replace `--no-emoji` with `--emoji auto|always|never`.
+  - [x] Add `--accessibility auto|on|off`.
+  - [x] Update OrthoConfig field integration, environment names, config
     examples, localization keys, and tests.
   - [ ] Depend on OrthoConfig `7.1.2`, `7.1.3`, and `7.2.3` for shared flag
     vocabulary and dual-renderer metadata.

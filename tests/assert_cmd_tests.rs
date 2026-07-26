@@ -64,6 +64,12 @@ fn generate_writes_file() -> Result<()> {
         .success();
 
     ensure!(output.exists(), "generate should create the output file");
+    let contents = fs::read_to_string(&output)
+        .with_context(|| format!("read generated file {}", output.display()))?;
+    ensure!(
+        contents.contains("rule ") && contents.contains("build "),
+        "generated file should contain Ninja content, got: {contents}"
+    );
     Ok(())
 }
 

@@ -82,11 +82,26 @@ fn assert_verbose_build_logs_ninja_override(stem: &str) -> Result<()> {
     )
 }
 
+/// Windows forbids files named after legacy DOS devices, so a stem matching
+/// one would make the fake `ninja` script unwriteable on that platform. The
+/// stems are already lowercase, so a plain equality check suffices.
+fn is_windows_reserved_stem(stem: &str) -> bool {
+    const RESERVED: [&str; 4] = ["con", "prn", "aux", "nul"];
+    if RESERVED.contains(&stem) {
+        return true;
+    }
+    // `com1`..=`com9` and `lpt1`..=`lpt9` are reserved; `com0`/`lpt0` are not.
+    matches!(stem.as_bytes(), [b'c', b'o', b'm', d] | [b'l', b'p', b't', d] if d.is_ascii_digit() && *d != b'0')
+}
+
 proptest! {
     #![proptest_config(ProptestConfig { cases: 16, ..ProptestConfig::default() })]
     #[test]
     fn verbose_build_logs_resolved_ninja_program_for_any_valid_override(
-        stem in "[a-z][a-z0-9_-]{0,15}",
+        stem in "[a-z][a-z0-9_-]{0,15}"
+            .prop_filter("stem must not be a Windows-reserved device name", |stem| {
+                !is_windows_reserved_stem(stem)
+            }),
     ) {
         assert_verbose_build_logs_ninja_override(&stem)
             .map_err(|error| TestCaseError::fail(error.to_string()))?;

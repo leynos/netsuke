@@ -970,8 +970,8 @@ like introspection commands and diagnostic modes come into play.
   an editor that reads JSON output to highlight errors in code (some editors
   could invoke netsuke on save to get live error feedback). They also might set
   up a global config to turn off colour if the CI logs were getting escape
-  codes (they recall from documentation that `NO_COLOR` is respected or use
-  `NETSUKE_NO_COLOR`). In a team, one developer might prefer very quiet output
+  codes (they recall from documentation that `NO_COLOR` is respected). In a team,
+  one developer might prefer very quiet output
   while another wants to see the full commands; each can use their config to
   set that without affecting others, since it can be in their home directory.
 

@@ -2,11 +2,15 @@
 
 use super::support::temp_with_minimal_manifest;
 use anyhow::{Context, Result, ensure};
+#[cfg(unix)]
+use netsuke::runner::NINJA_ENV;
 use predicates::prelude::*;
 use rstest::rstest;
 use serde_json::Value;
 use std::fs;
 use tempfile::{TempDir, tempdir};
+#[cfg(unix)]
+use test_support::check_ninja::{ToolName, fake_ninja_check_build_file, fake_ninja_expect_tool};
 
 fn parse_success_result(output: std::process::Output, command: &str) -> Result<Value> {
     ensure!(
@@ -106,6 +110,59 @@ fn json_success_keeps_stdout_artefact_and_stderr_empty(
     ensure!(
         ninja.contains("build hello: "),
         "generate result should contain the hello build edge: {ninja}"
+    );
+    Ok(())
+}
+
+/// A successful `--json build` emits exactly one build result document on
+/// stdout with empty stderr. A fake Ninja that exits cleanly stands in for the
+/// real build so the test stays deterministic.
+#[cfg(unix)]
+#[rstest]
+fn json_success_build_keeps_stdout_result_and_stderr_empty(
+    temp_with_minimal_manifest: Result<TempDir>,
+) -> Result<()> {
+    let temp = temp_with_minimal_manifest?;
+    let (_ninja_dir, ninja) =
+        fake_ninja_check_build_file().context("create fake ninja for build")?;
+    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
+        .current_dir(temp.path())
+        .env(NINJA_ENV, &ninja)
+        .arg("--json")
+        .arg("build")
+        .output()
+        .context("run netsuke build with --json")?;
+    let document = parse_success_result(output, "build")?;
+    ensure!(
+        document.pointer("/result/content") == Some(&Value::Null),
+        "build result should not carry generated content: {document}"
+    );
+    Ok(())
+}
+
+/// A successful `--json clean` emits exactly one clean result document on stdout
+/// with empty stderr, and drives the real Ninja clean tool. The fake Ninja
+/// exits `0` only when invoked with `-t clean` and `-f <file>`, so a successful
+/// result proves Netsuke ran the clean tool rather than merely printing JSON.
+#[cfg(unix)]
+#[rstest]
+fn json_success_clean_invokes_clean_tool_with_empty_stderr(
+    temp_with_minimal_manifest: Result<TempDir>,
+) -> Result<()> {
+    let temp = temp_with_minimal_manifest?;
+    let (_ninja_dir, ninja) = fake_ninja_expect_tool(ToolName::new("clean"))
+        .context("create fake ninja expecting -t clean")?;
+    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
+        .current_dir(temp.path())
+        .env(NINJA_ENV, &ninja)
+        .arg("--json")
+        .arg("clean")
+        .output()
+        .context("run netsuke clean with --json")?;
+    let document = parse_success_result(output, "clean")?;
+    ensure!(
+        document.pointer("/result/content") == Some(&Value::Null),
+        "clean result should not carry generated content: {document}"
     );
     Ok(())
 }

@@ -2438,15 +2438,13 @@ Configuration is layered in the order defaults -> configuration files ->
 environment variables -> CLI overrides. Explicit discovery honours
 `NETSUKE_CONFIG`; environment variables use the `NETSUKE_` prefix with `__` as
 a nesting separator. The schema now explicitly covers verbosity, locale,
-accessible mode, progress, colour policy, spinner mode, output format, theme
-selection, fetch policy, and build defaults. `theme` is the canonical
-presentation setting; the older `no_emoji` field remains as a compatibility
-alias that canonicalizes to the ASCII theme. Conflicting combinations such as
-`theme = "unicode"` together with `no_emoji = true` fail during merge.
-`spinner_mode` likewise validates against the legacy `progress` boolean so
-contradictory inputs are rejected early. The `json` setting selects
-machine-readable output: each invocation emits one versioned result document on
-success or one versioned diagnostic document on failure.
+fetch policy, and build defaults alongside four typed output policies:
+`color` (auto | always | never), `emoji` (auto | always | never), `progress`
+(auto | always | never), and `accessibility` (auto | on | off). Each policy is
+validated during configuration merge, so an unrecognized enum value from any
+layer is rejected early rather than silently ignored. The `json` setting
+selects machine-readable output: each invocation emits one versioned result
+document on success or one versioned diagnostic document on failure.
 
 CLI help and clap errors are localized via Fluent resources; locale resolution
 is handled in `src/locale_resolution.rs` with the precedence `--locale` ->
