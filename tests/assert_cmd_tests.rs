@@ -2,6 +2,7 @@
 
 use anyhow::{Context, Result, ensure};
 use assert_cmd::Command;
+use predicates::prelude::*;
 use rstest::rstest;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -61,7 +62,8 @@ fn generate_writes_file() -> Result<()> {
         .args(["generate", "--output"])
         .arg(&output)
         .assert()
-        .success();
+        .success()
+        .stdout(predicate::str::is_empty());
 
     ensure!(output.exists(), "generate should create the output file");
     let contents = fs::read_to_string(&output)

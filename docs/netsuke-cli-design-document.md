@@ -268,9 +268,10 @@ detail how Netsuke’s CLI will meet key accessibility criteria:
   Netsuke offers **alternate output formats** for certain information, such as
   JSON or HTML. Large volumes of text in a terminal can be hard to navigate
   with a screen reader (users often resort to copying output to a text editor
-  or browser for easier navigation). The root `--json` flag emits exactly one
-  structured result or diagnostic document, which external tools can parse or
-  present in a more accessible way. For example, an IDE integration could catch
+  or browser for easier navigation). For commands that produce Netsuke result
+  or diagnostic envelopes, the root `--json` flag emits exactly one structured
+  result or diagnostic document, which external tools can parse or present in
+  a more accessible way. For example, an IDE integration could catch
   the JSON and display errors in an interface with headings and links.
   Similarly, for potentially lengthy outputs like dependency graphs or build
   plan data, output can be redirected to a file or formatted in HTML/CSV. The
@@ -677,10 +678,14 @@ there are codes like `netsuke::yaml::parse`. These can be displayed to the user
 as well (perhaps in verbose mode or in machine-readable output) to help with
 documentation and support.
 
-**JSON and Machine Readable Output:** The root `--json` flag makes every
-command emit exactly one versioned document: a result document on success or a
-diagnostic document on failure. Generated artefacts that would normally use
-stdout are embedded in the successful result. Diagnostic documents include
+**JSON and Machine Readable Output:** For commands that reach Netsuke's result
+and diagnostic rendering, the root `--json` flag makes each command emit
+exactly one versioned document: a result document on success or a diagnostic
+document on failure. Clap's informational early-exit paths, `netsuke --json
+--help` and `netsuke --json --version`, are the exception: they retain
+ordinary human-readable Clap output rather than a Netsuke JSON envelope.
+Generated artefacts that would normally use stdout are embedded in the
+successful result. Diagnostic documents include
 paths, locations, codes, messages, source snippets, and suggestions where
 available. This single-document boundary supports editor integrations, CI, and
 other machine callers without mixing structured and human output.
@@ -769,8 +774,10 @@ not present, default settings apply.
 **Environment Variables:** Each config option will also map to an environment
 variable. For instance, to force colour off globally, a user could set
 `NO_COLOR=1` in their shell profile. Or to emit exactly one versioned JSON
-document – a result on success or a diagnostic on failure – in a CI
-environment, one can set `NETSUKE_JSON=true`. Environment vars are convenient
+document – a result on success or a diagnostic on failure – from
+envelope-producing commands in a CI environment, one can set
+`NETSUKE_JSON=true` (`--help` and `--version` still print ordinary Clap
+output). Environment vars are convenient
 for CI and also for users who prefer them over config files. They override the
 config file but are themselves overridden by explicit CLI flags[^3].
 
@@ -815,8 +822,9 @@ unified `config` object with all settings resolved in the right precedence.
   here).
 
 - **Output Format:** A user can set `json = true` in configuration so every
-  Netsuke command emits one JSON result or diagnostic document. An explicit root
-  `--json` flag selects the same mode for one invocation.
+  envelope-producing Netsuke command emits one JSON result or diagnostic
+  document. An explicit root `--json` flag selects the same mode for one
+  invocation.
 
 - **Themes and Symbols:** Some users might prefer ASCII-only output (no Unicode
   symbols) due to font or locale issues. Support can include `theme = "ascii"`
@@ -1206,7 +1214,10 @@ interface. The layout uses columns where possible (Clap does that
 automatically, wrapping descriptions nicely). Double-checking ensures that
 these help messages are themselves localizable (Clap supports localization, but
 manual overrides may be applied to route text through Fluent, depending on how
-Clap’s derive macro interacts with internationalization).
+Clap’s derive macro interacts with internationalization). The `--json` line
+summarizes the flag; in practice it applies to commands that render result or
+diagnostic envelopes, while `netsuke --json --help` and `netsuke --json
+--version` keep Clap's ordinary informational output.
 
 **Ephemeral vs Persistent Output:** When using `indicatif` progress bars, by
 default once a progress bar finishes, it can either persist (leave the bar on

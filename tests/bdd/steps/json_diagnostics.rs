@@ -70,9 +70,17 @@ fn parse_single_result_document(world: &TestWorld, command: &str) -> Result<Valu
         value.get("schema_version").and_then(Value::as_i64) == Some(1),
         "result JSON should include schema version 1"
     );
+    ensure!(
+        value.get("result").is_some() && value.get("diagnostics").is_none(),
+        "result JSON should contain only the result branch",
+    );
     let result = value
         .get("result")
         .context("result JSON should include a result object")?;
+    ensure!(
+        result.is_object(),
+        "result JSON should include an object-valued result",
+    );
     ensure!(
         result.get("command").and_then(Value::as_str) == Some(command),
         "result JSON should identify the {command} command"
