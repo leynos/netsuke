@@ -168,11 +168,10 @@ defaults:
   With no offset it uses UTC; `offset` accepts `Z` or a signed offset such as
   `+02:00`. The value exposes `iso8601`, `unix_timestamp`, and `offset`.
   Example: `{{ now(offset='+02:00').iso8601 }}`.
-- `timedelta([weeks=VALUE], [days=VALUE], [hours=VALUE], [minutes=VALUE],
-  [seconds=VALUE], [milliseconds=VALUE], [microseconds=VALUE],
-  [nanoseconds=VALUE])`
-  is pure. All components default to zero and may be negative. The result
-  exposes `iso8601`, whole `seconds`, and subsecond `nanoseconds`. Example:
+- `timedelta(**components)` is pure. It accepts `weeks`, `days`, `hours`,
+  `minutes`, `seconds`, `milliseconds`, `microseconds`, and `nanoseconds`.
+  Every component defaults to zero and may be negative. The result exposes
+  `iso8601`, whole `seconds`, and subsecond `nanoseconds`. Example:
   `{{ timedelta(days=1, minutes=30).iso8601 }}`.
 
 These helpers represent values during template expansion; they do not delay or
