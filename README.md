@@ -39,6 +39,8 @@ Netsuke currently requires:
 
 To install from crates.io:
 
+<!-- tested-example: readme-crates-io-install -->
+
 ```sh
 cargo install netsuke
 ```

@@ -94,8 +94,11 @@ Whitaker is configured by `dylint.toml` at the repository root. The
 `no_std_fs_operations` lint currently ignores in-source `allow`/`expect`
 attributes, so `dylint.toml` excludes each sanctioned ambient-filesystem scope
 with a documented rationale: the `build_script_build` Cargo build-script crate,
-the `ambient_fs` application leaf crate, the `test_support` test-fixture crate,
-and the enumerated integration-test and workflow-contract crates.
+the `netsuke` application crate, the `test_support` test-fixture crate, and the
+enumerated integration-test and workflow-contract crates. Netsuke itself needs
+ambient access for executable discovery through `PATH`, cross-directory symlink
+canonicalization, and temporary-file synchronization; other filesystem access
+should remain capability-scoped.
 
 When command output is long, preserve exit codes and logs:
 
@@ -176,13 +179,10 @@ The caller passes two configuration inputs, each carrying intent:
   feature) as untested.
 
 The caller does not set `extra-crate-dirs`, the input reserved for crate
-directories outside the Cargo workspace. `ambient_fs`, the repository's
-sanctioned ambient-filesystem escape hatch, is a genuine workspace member
-(`[workspace] members = ["ambient_fs"]`, with
-`default-members = [".", "ambient_fs"]`), not a non-workspace companion crate,
-so it needs no separate mutation invocation here. `test_support` is
-deliberately excluded from the workspace (`exclude = ["test_support"]`) and
-this workflow does not mutate it.
+directories outside the Cargo workspace. Netsuke is a single publishable crate;
+its sanctioned ambient-filesystem operations live at their application call
+sites. `test_support` is deliberately excluded from the workspace
+(`exclude = ["test_support"]`) and this workflow does not mutate it.
 
 The `uses:` reference pins the shared workflow to a full 40-character commit
 SHA rather than a branch or tag, so a force-push upstream cannot silently

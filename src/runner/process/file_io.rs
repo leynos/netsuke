@@ -35,10 +35,10 @@ pub fn create_temp_ninja_file(content: &NinjaContent) -> AnyResult<NamedTempFile
 
 /// Sync a temporary Ninja file to disk before handing its path to Ninja.
 ///
-/// The tempfile lives in the ambient system temp directory, so the sync goes
-/// through `ambient_fs` rather than a capability-scoped handle.
+/// The tempfile lives in the ambient system temp directory, so its already-open
+/// file handle is the narrowest available authority for the sync.
 fn sync_temp_ninja_file(tmp: &NamedTempFile) -> io::Result<()> {
-    ambient_fs::sync_file(tmp.as_file())
+    tmp.as_file().sync_all()
 }
 
 pub fn write_text_file_utf8(dir: &cap_fs::Dir, path: &Utf8Path, content: &str) -> AnyResult<()> {

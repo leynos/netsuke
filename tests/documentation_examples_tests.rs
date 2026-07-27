@@ -33,6 +33,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-source-install",
     "guide-utility-commands",
     "guide-windows-help",
+    "readme-crates-io-install",
     "readme-first-build-commands",
     "readme-first-build-manifest",
     "readme-source-install",

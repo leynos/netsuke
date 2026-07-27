@@ -1,10 +1,10 @@
 //! Filesystem search utilities for resolving commands for the `which` feature.
 //!
-//! Executable probes and canonicalisation go through the `ambient_fs` crate:
-//! PATH lookup is deliberately ambient, so it cannot use the capability-based
-//! handles mandated elsewhere in Netsuke.
+//! PATH lookup is deliberately ambient, so executable probes and
+//! canonicalisation cannot use the capability-based handles mandated elsewhere
+//! in Netsuke.
 
-use std::io;
+use std::{fs, io};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use indexmap::IndexSet;
@@ -208,14 +208,25 @@ fn candidates_for_dir(env: &EnvSnapshot, dir: &Utf8Path, command: &str) -> Vec<U
 /// Returns a resolver error when metadata cannot be read for a reason other
 /// than the path not existing.
 pub(super) fn is_executable(path: &Utf8Path) -> Result<bool, ResolveError> {
-    match ambient_fs::is_executable_file(path) {
-        Ok(executable) => Ok(executable),
+    match fs::metadata(path.as_std_path()) {
+        Ok(metadata) => Ok(is_executable_metadata(&metadata)),
         Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(false),
         Err(source) => Err(ResolveError::IsExecutable {
             path: path.to_owned(),
             source,
         }),
     }
+}
+
+#[cfg(unix)]
+fn is_executable_metadata(metadata: &fs::Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    metadata.is_file() && metadata.permissions().mode() & 0o111 != 0
+}
+
+#[cfg(not(unix))]
+fn is_executable_metadata(metadata: &fs::Metadata) -> bool {
+    metadata.is_file()
 }
 
 #[derive(Clone, Copy)]
@@ -254,7 +265,7 @@ pub(super) fn canonicalise(paths: Vec<Utf8PathBuf>) -> Result<Vec<Utf8PathBuf>, 
     let mut resolved = Vec::new();
     for path in paths {
         let canonical =
-            ambient_fs::canonicalize(&path).map_err(|source| ResolveError::Canonicalise {
+            fs::canonicalize(path.as_std_path()).map_err(|source| ResolveError::Canonicalise {
                 path: path.clone(),
                 source,
             })?;
