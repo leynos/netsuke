@@ -374,6 +374,7 @@ fn configure_validation_parsers(
     });
     command
 }
+
 /// Tests for the CLI parser's localization rendering.
 ///
 /// Exercises locale-specific long-help output for the en-US and es-ES

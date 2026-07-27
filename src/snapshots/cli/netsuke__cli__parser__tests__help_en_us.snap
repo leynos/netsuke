@@ -10,7 +10,7 @@ Commands:
   build     Build targets defined in the manifest (default).
   clean     Remove build artefacts via Ninja.
   graph     Emit the build dependency graph. Default format is DOT.
-  manifest  Write the generated Ninja manifest without running Ninja.
+  generate  Generate the Ninja manifest without running Ninja.
   help      Print this message or the help of the given subcommand(s)
 
 Options:
@@ -54,51 +54,51 @@ Options:
       --fetch-default-deny
           Deny all hosts by default; only allow the declared allowlist.
 
-      --accessible <ACCESSIBLE>
-          Force accessible output mode on or off.
-          
-          [possible values: true, false]
+      --json
+          Emit machine-readable JSON output.
 
-      --no-emoji <NO_EMOJI>
-          Suppress emoji glyphs in output.
-          
-          [possible values: true, false]
+      --no-input
+          Never read interactive input.
 
-      --diag-json
-          Emit machine-readable diagnostics as JSON on stderr.
-
-      --progress <PROGRESS>
-          Force standard progress summaries on or off.
-          
-          When omitted, Netsuke enables progress summaries in standard mode.
-          
-          [possible values: true, false]
-
-      --colour-policy <POLICY>
+      --color <POLICY>
           Colour output policy (auto, always, never).
 
           Possible values:
           - auto:   Follow the host environment
           - always: Force colour output on when available
           - never:  Force colour output off
+          
+          [default: auto]
 
-      --spinner-mode <MODE>
-          Progress spinner display mode (enabled, disabled).
-
-          Possible values:
-          - auto:     Follow Netsuke's default progress behaviour
-          - enabled:  Force progress summaries on
-          - disabled: Disable progress summaries
-
-      --output-format <FORMAT>
-          Diagnostic output format (human, json).
+      --emoji <POLICY>
+          Emoji policy (auto, always, never).
 
           Possible values:
-          - human: Human-readable terminal output
-          - json:  Machine-readable JSON diagnostics
+          - auto:   Follow the host environment and accessibility mode
+          - always: Force emoji glyphs on
+          - never:  Disable emoji glyphs
+          
+          [default: auto]
 
-      --theme <THEME>
-          CLI theme preset (auto, unicode, ascii).
+      --progress <POLICY>
+          Progress rendering policy (auto, always, never).
+
+          Possible values:
+          - auto:   Follow Netsuke's default progress behaviour
+          - always: Force progress rendering on
+          - never:  Disable progress rendering
+          
+          [default: auto]
+
+      --accessibility <POLICY>
+          Accessible output policy (auto, on, off).
+
+          Possible values:
+          - auto: Follow terminal and environment detection
+          - on:   Force accessible output on
+          - off:  Force accessible output off
+          
+          [default: auto]
 
       --default-target <TARGET>
           Default build targets when none are specified.
