@@ -45,6 +45,10 @@ pub(crate) fn push_file_layers(
     push_file_layers_with_env(cli, composer, errors, &StdEnvProvider);
 }
 
+/// Load configuration layers with environment access supplied by `env`.
+///
+/// Loading errors are appended to `errors`, matching the normal merge path
+/// without requiring callers to mutate the process environment.
 pub(crate) fn push_file_layers_with_env(
     cli: &Cli,
     composer: &mut MergeComposer,
@@ -138,18 +142,24 @@ fn project_scope_layers(directory: Option<&Path>) -> OrthoResult<Vec<MergeLayer<
         Err(err) => Err(err),
     }
 }
+/// Select an explicit config path, giving `--config` precedence over `env`.
 pub(crate) fn explicit_config_path_with_env(cli: &Cli, env: &impl EnvProvider) -> Option<PathBuf> {
     cli.config
         .clone()
         .or_else(|| env_config_path(env, CONFIG_ENV_VAR))
 }
 
+/// Read a non-empty config path from `var_name` through `env`.
 fn env_config_path(env: &impl EnvProvider, var_name: &str) -> Option<PathBuf> {
     env.get(var_name)
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
 }
 
+/// Load the configuration chain rooted at an explicit file path.
+///
+/// Unlike discovery, a missing explicit file is an error because the caller
+/// selected it deliberately.
 pub(crate) fn load_layers_from_path(
     path: &std::path::Path,
 ) -> OrthoResult<Vec<MergeLayer<'static>>> {
@@ -170,6 +180,9 @@ pub(crate) fn load_layers_from_path(
     }
 }
 
+/// Load file layers for early JSON resolution using injected environment access.
+///
+/// This delegates to the same precedence boundary as the normal merge path.
 pub(crate) fn collect_diag_file_layers_with_env(
     cli: &Cli,
     env: &impl EnvProvider,

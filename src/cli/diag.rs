@@ -59,6 +59,7 @@ fn json_from_layer(value: &Value) -> Option<bool> {
         .and_then(Value::as_bool)
 }
 
+/// Apply the command-line JSON override to a discovered preference.
 fn json_from_matches(cli: &Cli, matches: &ArgMatches, discovered: bool) -> bool {
     if has_cli_json_override(matches) {
         cli.json
@@ -67,10 +68,12 @@ fn json_from_matches(cli: &Cli, matches: &ArgMatches, discovered: bool) -> bool 
     }
 }
 
+/// Determine whether `--json` was supplied on the command line.
 fn has_cli_json_override(matches: &ArgMatches) -> bool {
     matches.value_source("json") == Some(ValueSource::CommandLine)
 }
 
+/// Resolve the last valid JSON preference from the selected config layers.
 fn json_from_file_layers(cli: &Cli, env: &impl EnvProvider) -> OrthoResult<bool> {
     let default = Cli::default().json;
     let layers = collect_diag_file_layers_with_env(cli, env)?;
@@ -83,6 +86,10 @@ fn json_from_file_layers(cli: &Cli, env: &impl EnvProvider) -> OrthoResult<bool>
     Ok(json)
 }
 
+/// Parse the optional `NETSUKE_JSON` value supplied by `env`.
+///
+/// Invalid or non-Unicode values are validation errors rather than silently
+/// falling back, so users receive actionable configuration feedback.
 fn json_from_env(env: &impl EnvProvider) -> OrthoResult<Option<bool>> {
     let Some(value) = env.get(JSON_ENV_VAR) else {
         return Ok(None);
