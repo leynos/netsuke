@@ -268,6 +268,9 @@ pub fn fake_ninja_expect_tool_with_jobs(
 
 #[cfg(test)]
 mod tests {
+    //! Unit coverage for the fake-Ninja factories in this module: verifies the
+    //! generated shell scripts validate `-t`, `-f`, `-j`, and `-C` invocations
+    //! as expected by [`super::fake_ninja_expect_tool_with_jobs`].
     use super::*;
 
     /// Verify that the fake ninja script validates `-C <directory>` correctly.

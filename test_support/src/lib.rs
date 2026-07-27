@@ -130,6 +130,11 @@ pub fn fake_ninja(exit_code: u8) -> Result<(TempDir, PathBuf)> {
 
 #[cfg(all(test, unix))]
 mod tests {
+    //! Regression coverage for the fake-executable helpers on non-UTF-8
+    //! temporary directories: exercises [`super::fake_ninja`] and
+    //! [`super::check_ninja::fake_ninja_check_build_file`] with a temp
+    //! directory rooted under a path containing invalid UTF-8 bytes,
+    //! confirming both stubs are created on OS-native paths.
     use super::{
         EnvVarGuard, TempDir, check_ninja::fake_ninja_check_build_file, env_lock::EnvLock,
         fake_ninja,
