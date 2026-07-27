@@ -22,8 +22,8 @@ fn executable_path(stub_directory: &Utf8Path) -> Result<String> {
 }
 
 fn write_stub(directory: &Utf8Path, name: &str, script: &str) -> Result<()> {
-    let path = write_exec(directory, name)?;
-    test_fs::write(path.as_std_path(), script).with_context(|| format!("write {name} stub"))?;
+    let path = write_exec(directory.as_std_path(), name)?;
+    test_fs::write(&path, script).with_context(|| format!("write {name} stub"))?;
     Ok(())
 }
 
