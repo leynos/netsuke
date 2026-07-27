@@ -6,8 +6,10 @@ mod documentation_examples;
 
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use documentation_examples::{assert_success, documented_example, manifest_workspace};
 use rstest::rstest;
+use rustix::fs::{Dev, FileType, Mode, mknodat};
 use std::path::Path;
 use std::process::Command;
 use test_support::fs as test_fs;
@@ -196,6 +198,148 @@ fn writing_example_combines_chapters_into_the_declared_pdf() -> Result<()> {
     ensure!(
         test_fs::exists(workspace.path().join("build/book.pdf")),
         "writing example should produce build/book.pdf"
+    );
+    Ok(())
+}
+
+#[test]
+fn stdlib_path_and_collection_example_reports_fixture_values() -> Result<()> {
+    let Ok(_ninja_probe) = ninja_integration_workspace() else {
+        return Ok(());
+    };
+    let workspace = manifest_workspace("stdlib-path-and-collection-manifest")?;
+    test_fs::create_dir(workspace.path().join("fixtures"))?;
+    test_fs::write(workspace.path().join("fixtures/message.txt"), "alpha")?;
+    let root_path = Utf8PathBuf::from_path_buf(workspace.path().to_path_buf())
+        .map_err(|_| anyhow::anyhow!("path example workspace should be UTF-8"))?;
+    let root = Dir::open_ambient_dir(&root_path, ambient_authority())?;
+    root.symlink("message.txt", "fixtures/message-link")?;
+    let home = workspace.path().to_string_lossy().into_owned();
+    let run = run_netsuke_in_with_env(
+        workspace.path(),
+        &[],
+        &[("NETSUKE_NINJA", "ninja"), ("HOME", home.as_str())],
+    )?;
+    assert_success(&run, "stdlib path and collection example")?;
+
+    let expected = format!(
+        concat!(
+            "report.tmp\nfixtures\nfixtures/report.txt\nreport.tmp\nfixtures/message.txt\n",
+            "{}/notes.txt\nalpha\n5\n1\n",
+            "8ed3f6ad685b959ead7022518e1af76cd816f8e8ec7ccdda1ed4018e8f2223f8\n",
+            "8ed3f6ad\nalpha,beta\n1,2,3\n2\n"
+        ),
+        workspace.path().display(),
+    );
+    let output = test_fs::read_to_string(workspace.path().join("stdlib-paths.txt"))?;
+    ensure!(
+        output == expected,
+        "stdlib path output mismatch; expected {expected:?}, got {output:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn stdlib_file_test_example_identifies_unix_fixture_types() -> Result<()> {
+    let Ok(_ninja_probe) = ninja_integration_workspace() else {
+        return Ok(());
+    };
+    let workspace = manifest_workspace("stdlib-file-tests-manifest")?;
+    test_fs::create_dir(workspace.path().join("fixtures"))?;
+    test_fs::write(workspace.path().join("fixtures/message.txt"), "alpha")?;
+    let root_path = Utf8PathBuf::from_path_buf(workspace.path().to_path_buf())
+        .map_err(|_| anyhow::anyhow!("file-test workspace should be UTF-8"))?;
+    let root = Dir::open_ambient_dir(&root_path, ambient_authority())?;
+    root.symlink("message.txt", "fixtures/message-link")?;
+    let fixtures = root.open_dir("fixtures")?;
+    mknodat(
+        &fixtures,
+        "events.pipe",
+        FileType::Fifo,
+        Mode::RUSR | Mode::WUSR,
+        Dev::default(),
+    )?;
+
+    let run = run_build(workspace.path(), &[], None)?;
+    assert_success(&run, "stdlib file-test example")?;
+    ensure!(
+        test_fs::read_to_string(workspace.path().join("stdlib-file-tests.txt"))?
+            == "true\ntrue\ntrue\ntrue\nfalse\ntrue\ntrue\n",
+        "stdlib file tests should report the documented Unix fixture types"
+    );
+    Ok(())
+}
+
+#[test]
+fn stdlib_time_example_emits_timestamp_and_duration() -> Result<()> {
+    let Ok(_ninja_probe) = ninja_integration_workspace() else {
+        return Ok(());
+    };
+    let workspace = manifest_workspace("stdlib-time-manifest")?;
+    let run = run_build(workspace.path(), &[], None)?;
+    assert_success(&run, "stdlib time example")?;
+    let output = test_fs::read_to_string(workspace.path().join("stdlib-time.txt"))?;
+    let mut lines = output.lines();
+    let timestamp = lines
+        .next()
+        .context("time example should emit a timestamp")?;
+    ensure!(
+        timestamp.contains('T') && timestamp.ends_with("+02:00"),
+        "time example should preserve the documented +02:00 offset: {timestamp}"
+    );
+    ensure!(
+        lines.next() == Some("P1DT2H30M") && lines.next().is_none(),
+        "time example should emit the documented duration: {output}"
+    );
+    Ok(())
+}
+
+#[test]
+fn stdlib_host_context_example_uses_controlled_process_state() -> Result<()> {
+    let Ok(_ninja_probe) = ninja_integration_workspace() else {
+        return Ok(());
+    };
+    let workspace = manifest_workspace("stdlib-host-context-manifest")?;
+    test_fs::create_dir(workspace.path().join("fixtures"))?;
+    test_fs::write(workspace.path().join("fixtures/a.txt"), "a")?;
+    test_fs::write(workspace.path().join("fixtures/b.txt"), "b")?;
+    let stub_directory = Utf8PathBuf::from_path_buf(workspace.path().join("bin"))
+        .map_err(|_| anyhow::anyhow!("stub directory should be UTF-8"))?;
+    test_fs::create_dir(stub_directory.as_std_path())?;
+    write_stub(
+        &stub_directory,
+        "uppercase",
+        "#!/bin/sh\nset -eu\ntr '[:lower:]' '[:upper:]'\n",
+    )?;
+    write_stub(
+        &stub_directory,
+        "grep",
+        concat!(
+            "#!/bin/sh\nset -eu\npattern=$1\n",
+            "while IFS= read -r line; do\n",
+            "  [ \"$line\" = \"$pattern\" ] && printf '%s\\n' \"$line\" || :\n",
+            "done\n"
+        ),
+    )?;
+    write_exec(&stub_directory, "guide-tool")?;
+    let path = executable_path(&stub_directory)?;
+    let run = run_netsuke_in_with_env(
+        workspace.path(),
+        &[],
+        &[
+            ("NETSUKE_NINJA", "ninja"),
+            ("PATH", path.as_str()),
+            ("NETSUKE_STDLIB_TOKEN", "from-env"),
+        ],
+    )?;
+    assert_success(&run, "stdlib host-context example")?;
+    let output = test_fs::read_to_string(workspace.path().join("stdlib-host-context.txt"))?;
+    ensure!(
+        output
+            == format!(
+                "HELLO\nbeta\n{stub_directory}/guide-tool\ntrue\nfrom-env\nfixtures/a.txt,fixtures/b.txt\n"
+            ),
+        "stdlib host-context output should use only controlled fixtures: {output}"
     );
     Ok(())
 }

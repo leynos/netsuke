@@ -75,7 +75,11 @@ cat hello.txt
 ```
 
 The second command prints `Hello from Netsuke!`. See the
-[quick-start guide](docs/quickstart.md) for variables, templates, and `foreach`.
+[quick-start guide](docs/quickstart.md) for variables, templates, and
+`foreach`, then use the
+[template standard-library guide]( docs/stdlib-yaml-and-jinja-guide.md) for
+every path, collection, filesystem, time, command, environment, glob, and
+network helper.
 
 ______________________________________________________________________
 

@@ -292,85 +292,14 @@ not accept a default argument; an absent or non-Unicode value is an error.
 ## Use the template standard library
 
 Netsuke registers focused path, collection, command, network, and time helpers
-alongside MiniJinja's built-ins.
+alongside MiniJinja's built-ins. The library covers path and collection
+filters, file tests, clocks and durations, host commands, executable discovery,
+environment variables, globbing, and policy-controlled network retrieval.
 
-### Path filters
-
-The path filters are:
-
-- `basename`
-- `dirname`
-- `with_suffix(suffix[, count[, separator]])`
-- `relative_to(root)`
-- `realpath`
-- `expanduser`
-- `contents([encoding])`
-- `size`
-- `linecount`
-- `hash([algorithm])`
-- `digest([length[, algorithm]])`
-
-`with_suffix` defaults to replacing one dot-separated suffix. `contents`
-defaults to UTF-8, `hash` defaults to SHA-256, and `digest` defaults to the
-first eight characters of a SHA-256 digest. Hashing supports SHA-256 and
-SHA-512. MD5 and SHA-1 require the `legacy-digests` Cargo feature.
-
-### Collection filters
-
-Netsuke adds `uniq`, `flatten`, and `group_by(attribute)`. MiniJinja also
-provides general filters such as `join`, `map`, `select`, and `sort`.
-
-This complete manifest exercises string-only helpers without depending on
-external files:
-
-<!-- tested-example: guide-stdlib-manifest -->
-
-```yaml
-netsuke_version: "1.0.0"
-
-vars:
-  names:
-    - alpha
-    - alpha
-    - beta
-
-targets:
-  - name: "{{ 'report.tmp' | with_suffix('.txt') }}"
-    command: "echo {{ names | uniq | join(',') }} > {{ outs }}"
-
-defaults:
-  - report.txt
-```
-
-### File tests
-
-Jinja `is` expressions can test `file`, `dir`, `symlink`, `pipe`,
-`block_device`, `char_device`, and `device`. Filesystem tests inspect the host,
-so results depend on the current workspace and platform.
-
-### Time helpers
-
-`now(offset=...)` returns the current timestamp, optionally at an offset such as
-`"+01:00"`. `timedelta(...)` constructs a duration from keyword components:
-weeks, days, hours, minutes, seconds, milliseconds, microseconds, and
-nanoseconds. These helpers read the clock or perform duration arithmetic; they
-do not schedule work.
-
-### Impure helpers
-
-The following helpers can observe or modify the outside world:
-
-- `fetch(url, cache=false)` retrieves a URL. HTTPS is the only allowed scheme
-  by default.
-- `value | shell(command, options)` sends a value to a host shell command.
-- `value | grep(pattern, flags, options)` filters lines through `grep`.
-- `now(offset=...)` reads the clock.
-- File-reading and path-canonicalization filters inspect the filesystem.
-
-`fetch`, `shell`, and `grep` enforce bounded output. These internal limits are
-not currently user-configurable from `Netsukefile`.
-
-Use impure helpers only in trusted manifests. Netsuke does not sandbox them.
+See the [template standard-library guide](stdlib-yaml-and-jinja-guide.md) for
+every helper's signature, defaults, purity, platform caveats, and executable
+examples. Host-observing helpers belong only in trusted manifests: Netsuke
+bounds command and network output, but does not sandbox template evaluation.
 
 ## Use the command-line interface
 
@@ -394,9 +323,9 @@ The commands are:
 - `graph`: render the build graph as DOT or self-contained HTML without
   invoking Ninja.
 - `generate`: write Ninja without invoking it. Outside JSON mode, the generated
-  Ninja manifest is the only content written to stdout; use `--output <FILE>` to
-  write it to a file instead. In JSON mode (`--json`) the manifest is carried in
-  the result document's `result.content` field instead.
+  Ninja manifest is the only content written to stdout; use `--output <FILE>`
+  to write it to a file instead. In JSON mode (`--json`) the manifest is
+  carried in the result document's `result.content` field instead.
 
 Running `netsuke` without a subcommand is the same as `netsuke build` with no
 explicit targets. A bare target such as `netsuke hello` is not accepted; use

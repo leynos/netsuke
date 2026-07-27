@@ -470,8 +470,9 @@ the configured Dependabot directory patterns.
 
 ### User-facing documentation examples
 
-Every fenced example in `README.md` and `docs/users-guide.md` has a stable
-`tested-example` marker immediately before its opening fence. The shared
+Every fenced example in `README.md`, `docs/users-guide.md`, and
+`docs/stdlib-yaml-and-jinja-guide.md` has a stable `tested-example` marker
+immediately before its opening fence. The shared
 `tests/documentation_examples/mod.rs` loader owns this marker format and may be
 called only by documentation-focused integration or behavioural tests. It
 rejects unmarked fences, duplicate identifiers and unterminated examples.
@@ -481,9 +482,12 @@ Ninja for every manifest fence and each complete manifest linked from the
 user's guide, and checks selected command and output contracts against the
 current binary. On Unix, `tests/documentation_examples_e2e_tests.rs` uses real
 Ninja to execute the documented first-run build and `cat hello.txt`, exercise
-the configured default target, and verify the photo-edit and writing outputs.
-`tests/documentation_examples_loader_tests.rs` covers concrete malformed-fence
-and non-YAML failure cases.
+the configured default target, verify the photo-edit and writing outputs, and
+run the standard-library manifests in isolated workspaces with controlled
+fixtures, environment variables, and stub executables. The registered `fetch`
+expression is intentionally checked without execution so this suite never makes
+a network request. `tests/documentation_examples_loader_tests.rs` covers
+concrete malformed-fence and non-YAML failure cases.
 
 The first-run README and user's guide examples also run through the
 `rstest-bdd` scenarios in `tests/features/documentation_examples.feature`.
