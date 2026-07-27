@@ -52,9 +52,12 @@ Undefined values are errors. Apart from `{{ ins }}` and `{{ outs }}`, rendered
 values are not automatically quoted for the host shell.
 
 The manifest control keys are deliberately different: `foreach` and `when` take
-direct Jinja expressions without `{{ ... }}`. Structural Jinja statements such
-as `{% for ... %}` cannot reshape the YAML document; use those control keys or
-Netsuke's declared macros instead.
+direct Jinja expressions without `{{ ... }}`. Netsuke evaluates them before
+typed AST deserialization, IR generation, and Ninja execution. They select
+manifest entries rather than branch at build time; put build-time branching in
+recipe commands or scripts unless a separate feature explicitly models runtime
+conditions. Structural Jinja statements such as `{% for ... %}` cannot reshape
+the YAML document; use those control keys or Netsuke's declared macros instead.
 
 <!-- tested-example: stdlib-jinja-syntax-manifest -->
 
