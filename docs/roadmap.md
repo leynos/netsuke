@@ -189,6 +189,12 @@ and agents.
     action.
   - [ ] Test absent-command fallback without invoking `shell()`.
   - [ ] Test `deps` lowering in the IR and emitted Ninja build statements.
+  - Note: the manifest-expansion building blocks already exist in
+    `src/manifest/expand_test_cases/action_condition_cases.rs` and the BDD
+    scenarios in `tests/bdd/steps/conditional_manifest.rs`. The outstanding gap
+    is end-to-end coverage that traces a conditionally selected action through
+    `deps` lowering into emitted Ninja, plus the named nextest-versus-legacy
+    scenario (existing tests use a generic `preferred-tool`).
 - [ ] 3.14.6. Add rule-level `deps_from` for compiler dependency imports.
   Requires 3.14.3. See
   [netsuke-design.md §2.3](netsuke-design.md#planned-compiler-dependency-import).
@@ -199,6 +205,10 @@ and agents.
     attributes.
   - [ ] Add parser, IR, Ninja output, and user-guide coverage once the feature
     is implemented.
+  - Note: the IR sink already exists but is unwired. `Action.depfile` and
+    `Action.deps_format` are defined in `src/ir/graph.rs` and emitted by
+    `src/ninja_gen.rs`; only manifest parsing and population from `deps_from`
+    remain.
 - [ ] 3.14.7. Escape backend dollar syntax after Netsuke placeholder lowering.
   Depends on archived task `1.3.2`. See
   [netsuke-design.md §§2.6 and 5.4](netsuke-design.md).
@@ -217,6 +227,10 @@ and agents.
   - [ ] Add `shell_join` and `compact` helpers for deliberate shell recipes.
   - [ ] Add documentation and tests showing optional `RUSTFLAGS` construction
     without shell parameter expansion.
+  - Note: `env(name)` already exists in `src/manifest/mod.rs` but without the
+    `default=` kwarg (it raises on missing and non-UTF-8 values). The
+    `shell_escape`, `shell_join`, and `compact` helpers are not yet
+    implemented.
 - [ ] 3.14.9. Add structured recipe environment mappings.
   Requires 3.14.7 and 3.14.8. See
   [netsuke-design.md §2.6](netsuke-design.md#26-planned-recipe-ergonomics-and-execution-feedback).
@@ -247,6 +261,11 @@ and agents.
     or skipped.
   - [ ] Do not add generic `debug`, `info`, or `warn` manifest keys unless a
     later diagnostics design defines severity semantics.
+  - Note: `description` currently exists only on `Rule` and IR `Action`
+    (populated from the rule). `Target` in `src/ast.rs` uses
+    `#[serde(deny_unknown_fields)]`, so a target/action `description` is
+    rejected today; the struct must gain the field before the override
+    behaviour can be implemented.
 
 ### 3.15. Canonical CLI redesign
 
@@ -336,7 +355,12 @@ and test workflow intact. See
   Requires 4.1.1. See
   [formal-verification-methods-in-netsuke.md §Continuous integration (CI)](formal-verification-methods-in-netsuke.md#continuous-integration-ci).
   - [x] Keep the existing `build-test` job unchanged.
-  - [x] Run only the bounded smoke harness set on pull requests.
+  - [x] Run the bounded smoke path on pull requests. As scoped for this item,
+    the `kani-smoke` job in `.github/workflows/ci.yml` runs `make install-kani`
+    and `make kani-check` (a Kani version check); the harness set was empty when
+    this lane shipped. Wiring the bounded harnesses since landed by `4.2.*` into
+    the pull-request job is tracked separately as
+    [issue #445](https://github.com/leynos/netsuke/issues/445).
   - [x] Cache Kani tool downloads separately from ordinary Cargo artefacts.
 - [x] 4.1.3. Record the phase-1 scope boundary for Verus and Stateright. See
   [formal-verification-methods-in-netsuke.md §Optional Verus proof kernel](formal-verification-methods-in-netsuke.md#optional-verus-proof-kernel)
