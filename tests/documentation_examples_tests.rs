@@ -39,8 +39,10 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "stdlib-fetch-expression",
     "stdlib-file-tests-manifest",
     "stdlib-host-context-manifest",
+    "stdlib-jinja-syntax-manifest",
     "stdlib-path-and-collection-manifest",
     "stdlib-time-manifest",
+    "stdlib-yaml-syntax-manifest",
 ];
 
 fn assert_default_edges_exist(ninja: &str, context: &str) -> Result<()> {
@@ -98,6 +100,8 @@ fn every_documented_fence_has_a_known_unique_identifier() -> Result<()> {
 #[case("guide-foreach-manifest")]
 #[case("guide-macro-manifest")]
 #[case("guide-command-available-manifest")]
+#[case("stdlib-yaml-syntax-manifest")]
+#[case("stdlib-jinja-syntax-manifest")]
 fn documented_manifest_generates_ninja(#[case] example_id: &str) -> Result<()> {
     let workspace = manifest_workspace(example_id)?;
     let run = run_netsuke_in(workspace.path(), &["--progress", "never", "generate"])?;

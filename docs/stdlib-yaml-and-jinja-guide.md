@@ -5,6 +5,84 @@ time, commands, executable discovery, environment variables, and globbing.
 These helpers run while Netsuke expands a `Netsukefile`, before Ninja runs the
 generated build graph.
 
+## Read YAML in a `Netsukefile`
+
+A `Netsukefile` is a YAML mapping. Write `key: value` for a field, indent
+nested content with spaces rather than tabs, and introduce each list item with
+`-`. Netsuke rejects duplicate keys, unknown fields, and missing required
+fields. The top-level `netsuke_version` and `targets` fields are required.
+
+Quote version numbers and strings containing Jinja. In particular, quote a
+value beginning with `{{` because an unquoted `{` has meaning in YAML. Use `|`
+for a multi-line string that preserves line breaks, or `>-` to fold lines into
+one string and remove the final newline. This example shows mappings, a list,
+quoted template text, and a folded command:
+
+<!-- tested-example: stdlib-yaml-syntax-manifest -->
+
+```yaml
+netsuke_version: "1.0.0"
+
+vars:
+  greeting: Hello
+  recipients:
+    - Netsuke
+    - Ninja
+
+targets:
+  - name: greeting.txt
+    command: >-
+      printf '%s\n'
+      "{{ greeting }}, {{ recipients | first }}!"
+      > {{ outs }}
+
+defaults:
+  - greeting.txt
+```
+
+See the [yaml.info YAML tutorial](https://www.yaml.info/learn/index.html) for a
+deeper introduction to mappings, sequences, scalars, quoting, and block style.
+
+## Read Jinja inside YAML
+
+Netsuke uses MiniJinja to render string fields. Put an expression inside
+`{{ ... }}`, read values declared under `vars` by name, pass a value through a
+filter with `|`, call a function with parentheses, and apply a test with `is`.
+Undefined values are errors. Apart from `{{ ins }}` and `{{ outs }}`, rendered
+values are not automatically quoted for the host shell.
+
+The manifest control keys are deliberately different: `foreach` and `when` take
+direct Jinja expressions without `{{ ... }}`. Structural Jinja statements such
+as `{% for ... %}` cannot reshape the YAML document; use those control keys or
+Netsuke's declared macros instead.
+
+<!-- tested-example: stdlib-jinja-syntax-manifest -->
+
+```yaml
+netsuke_version: "1.0.0"
+
+vars:
+  artifact: report.tmp
+  labels:
+    - alpha
+    - alpha
+    - beta
+
+targets:
+  - name: "{{ artifact | with_suffix('.txt') }}"
+    when: labels | length > 0
+    command: "printf '%s\n' '{{ labels | uniq | join(',') }}' > {{ outs }}"
+
+defaults:
+  - report.txt
+```
+
+The [Jinja introduction and variable-substitution tutorial][jinja-tutorial]
+provides a more detailed introduction. It describes Jinja2, so remember that
+Netsuke exposes MiniJinja plus Netsuke-specific manifest control keys.
+
+[jinja-tutorial]: https://ttl255.com/jinja2-tutorial-part-1-introduction-and-variable-substitution/
+
 Use host-observing helpers only in trusted manifests. Netsuke bounds output
 from network and command helpers, but it does not sandbox template evaluation.
 
