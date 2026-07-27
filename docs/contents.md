@@ -49,6 +49,8 @@ operator, user, and contributor references are easier to find.
 - [users-guide.md](users-guide.md): End-user reference for authoring and
   running Netsuke manifests, including executable discovery and
   `command_available` branch selection.
+- [stdlib-yaml-and-jinja-guide.md](stdlib-yaml-and-jinja-guide.md): Complete
+  template standard-library reference with executable YAML and Jinja examples.
 - [ortho-config-users-guide.md](ortho-config-users-guide.md): Configuration
   system guide and precedence reference.
 - [translators-guide.md](translators-guide.md): Localization workflow and

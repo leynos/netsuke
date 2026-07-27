@@ -1,4 +1,4 @@
-//! Executable contracts for examples in the README and user's guide.
+//! Executable contracts for examples in the public user documentation.
 
 mod documentation_examples;
 
@@ -31,12 +31,18 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-project-anchor",
     "guide-project-config",
     "guide-source-install",
-    "guide-stdlib-manifest",
     "guide-utility-commands",
     "guide-windows-help",
     "readme-first-build-commands",
     "readme-first-build-manifest",
     "readme-source-install",
+    "stdlib-fetch-expression",
+    "stdlib-file-tests-manifest",
+    "stdlib-host-context-manifest",
+    "stdlib-jinja-syntax-manifest",
+    "stdlib-path-and-collection-manifest",
+    "stdlib-time-manifest",
+    "stdlib-yaml-syntax-manifest",
 ];
 
 fn assert_default_edges_exist(ninja: &str, context: &str) -> Result<()> {
@@ -94,12 +100,27 @@ fn every_documented_fence_has_a_known_unique_identifier() -> Result<()> {
 #[case("guide-foreach-manifest")]
 #[case("guide-macro-manifest")]
 #[case("guide-command-available-manifest")]
-#[case("guide-stdlib-manifest")]
+#[case("stdlib-yaml-syntax-manifest")]
+#[case("stdlib-jinja-syntax-manifest")]
 fn documented_manifest_generates_ninja(#[case] example_id: &str) -> Result<()> {
     let workspace = manifest_workspace(example_id)?;
     let run = run_netsuke_in(workspace.path(), &["--progress", "never", "generate"])?;
 
     assert_generates_valid_ninja(&run, example_id)
+}
+
+#[test]
+fn documented_fetch_expression_is_registered_but_not_executed() -> Result<()> {
+    let example = documented_example("stdlib-fetch-expression")?;
+    ensure!(
+        example.language == "jinja",
+        "fetch example should remain an expression, not an executable manifest"
+    );
+    ensure!(
+        example.body == "{{ fetch('https://example.com/toolchain.json', cache=true) }}\n",
+        "fetch expression drifted"
+    );
+    Ok(())
 }
 
 #[rstest]

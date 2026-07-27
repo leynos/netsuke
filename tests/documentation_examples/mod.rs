@@ -1,8 +1,9 @@
 //! Loads fenced examples from user-facing Markdown for executable tests.
 //!
-//! Each fence in `README.md` and `docs/users-guide.md` must be preceded by a
-//! `tested-example` marker. Integration and behavioural tests share this
-//! module so they exercise the published text rather than copied fixtures.
+//! Each fence in `README.md`, `docs/users-guide.md`, and the template
+//! standard-library guide must be preceded by a `tested-example` marker.
+//! Integration and behavioural tests share this module so they exercise the
+//! published text rather than copied fixtures.
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
@@ -11,7 +12,11 @@ use tempfile::{TempDir, tempdir};
 use test_support::fs as test_fs;
 use test_support::netsuke::NetsukeRun;
 
-const DOCUMENT_PATHS: &[&str] = &["README.md", "docs/users-guide.md"];
+const DOCUMENT_PATHS: &[&str] = &[
+    "README.md",
+    "docs/users-guide.md",
+    "docs/stdlib-yaml-and-jinja-guide.md",
+];
 const MARKER_PREFIX: &str = "<!-- tested-example: ";
 const MARKER_SUFFIX: &str = " -->";
 static EMPTY_MARKER: std::sync::LazyLock<String> =
