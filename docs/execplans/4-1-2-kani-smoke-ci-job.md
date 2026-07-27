@@ -268,10 +268,10 @@ draft pull request #308 now describes the implemented CI job rather than only
 the pre-implementation plan.
 
 Follow-up: as designed, the `kani-smoke` job runs the bounded smoke path
-(`make kani-check`, a version check) because the harness set was empty when this
-lane shipped. The bounded harnesses have since landed under `4.2.*`; wiring them
-into the pull-request job is out of scope for this item and is tracked as
-[issue #445](https://github.com/leynos/netsuke/issues/445).
+(`make kani-check`, a version check) because the harness set was empty when
+this lane shipped. The bounded harnesses have since landed under `4.2.*`;
+wiring them into the pull-request job is out of scope for this item and is
+tracked as [issue #445](https://github.com/leynos/netsuke/issues/445).
 
 ## Context and orientation
 

@@ -2443,14 +2443,14 @@ files or `NETSUKE_CMDS__BUILD__*` environment variables. Explicit CLI targets or
 Configuration is layered in the order defaults -> configuration files ->
 environment variables -> CLI overrides. Explicit discovery honours
 `NETSUKE_CONFIG`; environment variables use the `NETSUKE_` prefix with `__` as
-a nesting separator. The schema now explicitly covers verbosity, locale,
-fetch policy, and build defaults alongside four typed output policies:
-`color` (auto | always | never), `emoji` (auto | always | never), `progress`
-(auto | always | never), and `accessibility` (auto | on | off). Each policy is
-validated during configuration merge, so an unrecognized enum value from any
-layer is rejected early rather than silently ignored. The `json` setting
-selects machine-readable output: each invocation emits one versioned result
-document on success or one versioned diagnostic document on failure.
+a nesting separator. The schema now explicitly covers verbosity, locale, fetch
+policy, and build defaults alongside four typed output policies: `color` (auto
+| always | never), `emoji` (auto | always | never), `progress` (auto | always |
+never), and `accessibility` (auto | on | off). Each policy is validated during
+configuration merge, so an unrecognized enum value from any layer is rejected
+early rather than silently ignored. The `json` setting selects machine-readable
+output: each invocation emits one versioned result document on success or one
+versioned diagnostic document on failure.
 
 CLI help and clap errors are localized via Fluent resources; locale resolution
 is handled in `src/locale_resolution.rs` with the precedence `--locale` ->
@@ -2469,9 +2469,9 @@ redaction, and the temporary file helpers reside in `src/runner/process.rs`,
 allowing the runner entry point to delegate low-level concerns. The working
 directory flag mirrors Ninja's `-C` option but is resolved internally: Netsuke
 runs Ninja with a configured working directory and resolves relative output
-paths (for example `generate --output`) under the same directory so
-behaviour matches a real directory change. Error scenarios are validated using
-clap's `ErrorKind` enumeration in unit tests and via rstest-bdd behavioural
+paths (for example `generate --output`) under the same directory so behaviour
+matches a real directory change. Error scenarios are validated using clap's
+`ErrorKind` enumeration in unit tests and via rstest-bdd behavioural
 steps/scenarios.
 
 Real-time stage reporting now uses a six-stage model in `src/status.rs` backed
@@ -2487,10 +2487,10 @@ deterministic continuous integration (CI) logs; accessible mode always uses
 textual output. Accessible output remains text-first and static; it does not
 animate. The standard reporter is configurable through OrthoConfig layering via
 `progress: ProgressPolicy` (auto, always, or never), resolved from `--progress`,
-`NETSUKE_PROGRESS`, or a config file, with accessible mode taking precedence when
-enabled. Verbose mode (`--verbose`
-through OrthoConfig layers) wraps the resolved reporter with a timing recorder
-that emits a localized completion summary on successful runs:
+`NETSUKE_PROGRESS`, or a config file, with accessible mode taking precedence
+when enabled. Verbose mode (`--verbose` through OrthoConfig layers) wraps the
+resolved reporter with a timing recorder that emits a localized completion
+summary on successful runs:
 
 - `Stage timing summary:`
 - one line per completed stage (`- Stage N/6: ...: 12ms`)
@@ -2501,22 +2501,22 @@ mode is off and also suppressed on failed runs so failures do not imply a
 successful pipeline completion.
 
 Theme resolution for CLI output is centralized in `src/theme.rs`. Netsuke
-derives an internal theme preference from the `--emoji` policy (`emoji =
-always` selects Unicode, `never` selects ASCII, and `auto` falls back to the
-mode default) and hands the resulting symbol and spacing tokens to reporters
-through the `OutputPrefs` compatibility façade. This keeps reporter code
-focused on status semantics rather than glyph choice, preserves `no_emoji` as
-a legacy ASCII-forcing alias when no explicit emoji policy is supplied, and
+derives an internal theme preference from the `--emoji` policy
+(`emoji = always` selects Unicode, `never` selects ASCII, and `auto` falls back
+to the mode default) and hands the resulting symbol and spacing tokens to
+reporters through the `OutputPrefs` compatibility façade. This keeps reporter
+code focused on status semantics rather than glyph choice, preserves `no_emoji`
+as a legacy ASCII-forcing alias when no explicit emoji policy is supplied, and
 gives later roadmap items a stable snapshot surface for validating ASCII and
 Unicode renderings without duplicating formatting rules. Colour policy is
 resolved alongside theme and output-mode detection so `--color never` behaves
-like an internal `NO_COLOR`, while `always` bypasses `NO_COLOR`
-auto-detection. Build dispatch also consults OrthoConfig `[cmds.build]`
-defaults before falling back to manifest `defaults`, letting operators set
-user- or workspace-level build defaults without editing the manifest itself.
-Accessible reporter output, timing summaries, and the semantic prefix surface
-are guarded by `insta` snapshots so spacing, prefix alignment, and wrapping
-regressions fail with reviewable diffs instead of drifting silently.
+like an internal `NO_COLOR`, while `always` bypasses `NO_COLOR` auto-detection.
+Build dispatch also consults OrthoConfig `[cmds.build]` defaults before falling
+back to manifest `defaults`, letting operators set user- or workspace-level
+build defaults without editing the manifest itself. Accessible reporter output,
+timing summaries, and the semantic prefix surface are guarded by `insta`
+snapshots so spacing, prefix alignment, and wrapping regressions fail with
+reviewable diffs instead of drifting silently.
 
 The Advanced Usage chapter in `docs/users-guide.md` is validated by behavioural
 tests in `tests/features/advanced_usage.feature`. Netsuke treats those

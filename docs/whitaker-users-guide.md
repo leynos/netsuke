@@ -565,8 +565,8 @@ deny repeated non-provider helper invocations across `#[rstest]` tests when
 they meet or exceed both `min_calls` and `min_distinct_tests`. The
 `require_identical_fixture_arg_names` setting controls whether candidate
 fixture arguments must use the same names, and `use_source_callee_fallback`
-controls whether source-callsite recovery may be used for macro-expanded
-callee locations.
+controls whether source-callsite recovery may be used for macro-expanded callee
+locations.
 
 <!-- markdownlint-disable-next-line MD024 -->
 #### How to fix

@@ -270,25 +270,24 @@ detail how Netsuke’s CLI will meet key accessibility criteria:
   with a screen reader (users often resort to copying output to a text editor
   or browser for easier navigation). For commands that produce Netsuke result
   or diagnostic envelopes, the root `--json` flag emits exactly one structured
-  result or diagnostic document, which external tools can parse or present in
-  a more accessible way. For example, an IDE integration could catch
-  the JSON and display errors in an interface with headings and links.
-  Similarly, for potentially lengthy outputs like dependency graphs or build
-  plan data, output can be redirected to a file or formatted in HTML/CSV. The
-  research strongly recommends providing ways to translate CLI output
-  (especially tables or complex structures) into accessible formats like CSV or
-  HTML. In line with this, the `netsuke graph` command outputs the dependency
-  graph in DOT format by default, but `netsuke graph --html` (shipped in
-  milestone 3.4.5) produces a self-contained HTML visualization for sighted
-  users; the HTML page also embeds a `<details>` textual outline so
-  screen-reader users get a structured fallback. A `--json` view of the same
-  graph data is the open follow-up (roadmap item `3.15.6`); when it ships,
-  screen-reader users will be able to take that JSON and navigate the structure
-  with a JSON viewer, or script custom queries, rather than parsing the
-  visually-structured DOT text dump. Documentation describes the structure of
-  such outputs clearly so users know what to expect (e.g., which fields appear
-  in the JSON), per Recommendation 3 about documenting output structure in
-  advance.
+  result or diagnostic document, which external tools can parse or present in a
+  more accessible way. For example, an IDE integration could catch the JSON and
+  display errors in an interface with headings and links. Similarly, for
+  potentially lengthy outputs like dependency graphs or build plan data, output
+  can be redirected to a file or formatted in HTML/CSV. The research strongly
+  recommends providing ways to translate CLI output (especially tables or
+  complex structures) into accessible formats like CSV or HTML. In line with
+  this, the `netsuke graph` command outputs the dependency graph in DOT format
+  by default, but `netsuke graph --html` (shipped in milestone 3.4.5) produces
+  a self-contained HTML visualization for sighted users; the HTML page also
+  embeds a `<details>` textual outline so screen-reader users get a structured
+  fallback. A `--json` view of the same graph data is the open follow-up
+  (roadmap item `3.15.6`); when it ships, screen-reader users will be able to
+  take that JSON and navigate the structure with a JSON viewer, or script
+  custom queries, rather than parsing the visually-structured DOT text dump.
+  Documentation describes the structure of such outputs clearly so users know
+  what to expect (e.g., which fields appear in the JSON), per Recommendation 3
+  about documenting output structure in advance.
 
 - **Accessible Documentation:** Netsuke ensures that all documentation is
   available in an accessible format, not solely within the CLI. Unix release
@@ -459,9 +458,8 @@ spinner might be read as “vertical bar, slash, dash…” each frame), accessi
 mode falls back to simpler characters. The CLI also respects user preferences:
 for instance, if emoji output is disabled (via `--emoji never`, env
 `NETSUKE_EMOJI=never`, or the legacy `NETSUKE_NO_EMOJI` alias), plain text
-“OK”/“FAIL” replaces check/cross.
-Similarly, if `NO_COLOR` is set, coloured bars or coloured symbols are omitted
-[^2].
+“OK”/“FAIL” replaces check/cross. Similarly, if `NO_COLOR` is set, coloured
+bars or coloured symbols are omitted [^2].
 
 Animations are disabled or simplified in **non-interactive contexts**. If
 output is being piped to a file or a continuous integration (CI) system
@@ -681,14 +679,14 @@ documentation and support.
 **JSON and Machine Readable Output:** For commands that reach Netsuke's result
 and diagnostic rendering, the root `--json` flag makes each command emit
 exactly one versioned document: a result document on success or a diagnostic
-document on failure. Clap's informational early-exit paths, `netsuke --json
---help` and `netsuke --json --version`, are the exception: they retain
-ordinary human-readable Clap output rather than a Netsuke JSON envelope.
+document on failure. Clap's informational early-exit paths,
+`netsuke --json --help` and `netsuke --json --version`, are the exception: they
+retain ordinary human-readable Clap output rather than a Netsuke JSON envelope.
 Generated artefacts that would normally use stdout are embedded in the
-successful result. Diagnostic documents include
-paths, locations, codes, messages, source snippets, and suggestions where
-available. This single-document boundary supports editor integrations, CI, and
-other machine callers without mixing structured and human output.
+successful result. Diagnostic documents include paths, locations, codes,
+messages, source snippets, and suggestions where available. This
+single-document boundary supports editor integrations, CI, and other machine
+callers without mixing structured and human output.
 
 **No Hidden Meaning in Symbols/Colors:** Caution is exercised so that any
 symbols used (checkmarks, crosses, arrows, etc.) are simply decorative or
@@ -752,9 +750,9 @@ needed. Using OrthoConfig’s derive macros, each field can automatically map to
 a CLI flag, an env var, and a config file entry. For example, `verbose: bool`
 can map to a `--verbose` flag (already in Clap), an env var like
 `NETSUKE_VERBOSE=true`, and a config file entry `verbose = true`. OrthoConfig’s
-**orthographic naming** feature will handle the naming conventions (so
-the `--color never` flag corresponds to env `NETSUKE_COLOR=never` and config
-file key `color = "never"`) without a lot of manual wiring[^3][^3]. A prefix like
+**orthographic naming** feature will handle the naming conventions (so the
+`--color never` flag corresponds to env `NETSUKE_COLOR=never` and config file
+key `color = "never"`) without a lot of manual wiring[^3][^3]. A prefix like
 `NETSUKE_` is used for environment variables to avoid conflicts (the
 OrthoConfig derive allows specifying a prefix for env vars and file sections
 [^3] [^3]).
@@ -775,11 +773,11 @@ not present, default settings apply.
 variable. For instance, to force colour off globally, a user could set
 `NO_COLOR=1` in their shell profile. Or to emit exactly one versioned JSON
 document – a result on success or a diagnostic on failure – from
-envelope-producing commands in a CI environment, one can set
-`NETSUKE_JSON=true` (`--help` and `--version` still print ordinary Clap
-output). Environment vars are convenient
-for CI and also for users who prefer them over config files. They override the
-config file but are themselves overridden by explicit CLI flags[^3].
+envelope-producing commands in a CI environment, one can set `NETSUKE_JSON=true`
+(`--help` and `--version` still print ordinary Clap output). Environment vars
+are convenient for CI and also for users who prefer them over config files.
+They override the config file but are themselves overridden by explicit CLI
+flags[^3].
 
 **Command-Line Flags:** OrthoConfig integrates with Clap such that flags parsed
 by Clap feed into the config struct. Since Clap is already being used for
@@ -859,8 +857,8 @@ accessibility = "on"
 ```
 
 This ensures that by default, Netsuke will not use colour, will suppress
-non-essential output, and will not show progress indicators (quiet mode).
-When they do need to see more details, they can still run `netsuke -v` to
+non-essential output, and will not show progress indicators (quiet mode). When
+they do need to see more details, they can still run `netsuke -v` to
 temporarily override quiet mode. OrthoConfig will merge that flag appropriately.
 
 Another example: a developer who loves fancy output might put in their config:
@@ -982,10 +980,10 @@ like introspection commands and diagnostic modes come into play.
   an editor that reads JSON output to highlight errors in code (some editors
   could invoke netsuke on save to get live error feedback). They also might set
   up a global config to turn off colour if the CI logs were getting escape
-  codes (they recall from documentation that `NO_COLOR` is respected). In a team,
-  one developer might prefer very quiet output
-  while another wants to see the full commands; each can use their config to
-  set that without affecting others, since it can be in their home directory.
+  codes (they recall from documentation that `NO_COLOR` is respected). In a
+  team, one developer might prefer very quiet output while another wants to see
+  the full commands; each can use their config to set that without affecting
+  others, since it can be in their home directory.
 
 - **Advanced Debugging and Introspection:** A power user will find ways to
   debug complex build scenarios. For instance, if a build is not producing
@@ -1216,8 +1214,8 @@ these help messages are themselves localizable (Clap supports localization, but
 manual overrides may be applied to route text through Fluent, depending on how
 Clap’s derive macro interacts with internationalization). The `--json` line
 summarizes the flag; in practice it applies to commands that render result or
-diagnostic envelopes, while `netsuke --json --help` and `netsuke --json
---version` keep Clap's ordinary informational output.
+diagnostic envelopes, while `netsuke --json --help` and
+`netsuke --json --version` keep Clap's ordinary informational output.
 
 **Ephemeral vs Persistent Output:** When using `indicatif` progress bars, by
 default once a progress bar finishes, it can either persist (leave the bar on
