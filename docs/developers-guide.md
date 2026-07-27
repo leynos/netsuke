@@ -985,6 +985,7 @@ should avoid `EnvLock`.
 Unit tests that only need to verify explicit config path precedence should test
 `explicit_config_path_with_env` with an injected provider instead of mutating
 the process environment.
+
 #### `json` contract
 
 Early JSON resolution reads only the boolean `json` field from each

@@ -196,10 +196,10 @@ mod tests {
         let config_path = dir.path().join("netsuke.toml");
         let config_dir = Dir::open_ambient_dir(dir.path(), ambient_authority())?;
         config_dir.write("netsuke.toml", b"json = false\n")?;
-        let config_path = config_path
+        let config_path_string = config_path
             .to_str()
             .expect("temp config path should be UTF-8");
-        let args = ["netsuke", "--config", config_path, "--json"];
+        let args = ["netsuke", "--config", config_path_string, "--json"];
         let cli = Cli::parse_from(args);
         let matches = Cli::command().get_matches_from(args);
         let env = TestEnv::default().with_var(JSON_ENV_VAR, "yes");
