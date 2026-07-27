@@ -224,6 +224,19 @@ runtime branch. Runtime decisions belong in a command or script.
 
 Top-level actions support the same `foreach` and `when` keys.
 
+### Discover files with `glob`
+
+`glob(pattern)` expands a shell-style pattern to the sorted list of matching
+files while Netsuke loads the manifest, so the results become part of the
+static build graph. It pairs naturally with `foreach` to generate one target
+per matched file; a target list such as `foreach: glob('src/*.c')` produces one
+expansion per matching source.
+
+Matching is case-sensitive. `*` and `?` do not cross directory separators; use
+`**` to descend into subdirectories. Directories are excluded, so only files
+are returned. The [quick-start guide](quickstart.md) shows a complete runnable
+example.
+
 ### Define reusable macros
 
 Macros return rendered text and can accept default arguments:
@@ -407,7 +420,7 @@ Important global options include:
 - `-f, --file <FILE>`
 - `-C, --directory <DIR>`
 - `--config <FILE>`
-- `-j, --jobs <1..64>`
+- `-j, --jobs <N>` (accepts 1 to 64)
 - `-v, --verbose`
 - `--locale <LOCALE>`
 - `--no-input`
@@ -471,6 +484,12 @@ Configuration precedence, from lowest to highest, is:
 5. `NETSUKE_` environment variables.
 6. Explicit command-line options.
 
+System and user configuration are discovered from platform conventions rather
+than two separately named Netsuke layers. On Unix this means the XDG base
+directories and the home directory; on Windows it means the application-data
+directories, such as `%APPDATA%\netsuke\config.toml`. Their relative order
+follows those platform conventions.
+
 An explicit selector bypasses automatic discovery. Selectors are checked in
 this order:
 
@@ -530,9 +549,11 @@ Netsuke separates machine-consumable output from status information:
 - stdout contains generated artefacts and subprocess stdout.
 - stderr contains status, progress, timing, and diagnostics.
 
-In JSON mode (`--json`), stdout instead carries exactly one versioned JSON
-document — a result document on success or a diagnostic document on failure —
-with generated content embedded in `result.content`.
+In JSON mode (`--json`), a successful command writes exactly one versioned
+result document to stdout, with generated content embedded in `result.content`.
+On failure, stdout is left empty and the single versioned diagnostic document
+is written to stderr instead. Diagnostics therefore stay on stderr in both
+modes, so a caller parsing errors reads stderr regardless of `--json`.
 
 This makes redirection predictable:
 
@@ -586,9 +607,10 @@ do not print a timing summary.
 
 Use `--json` when a caller needs machine-readable command output. Every
 invocation emits exactly one versioned JSON document: a result document on
-success or a diagnostic document on failure. Generated stdout artefacts, such
-as the Ninja text from `generate`, are carried inside the successful result
-document rather than written as unstructured text.
+success, written to stdout, or a diagnostic document on failure, written to
+stderr while stdout stays empty. Generated stdout artefacts, such as the Ninja
+text from `generate`, are carried inside the successful result document rather
+than written as unstructured text.
 
 The following command deliberately selects a missing manifest:
 
@@ -598,7 +620,8 @@ The following command deliberately selects a missing manifest:
 netsuke --json --no-input --file missing.yml build
 ```
 
-The exact localized message can vary, but the envelope has this shape:
+The exact localized message can vary, but the diagnostic document written to
+stderr has this shape:
 
 <!-- tested-example: guide-json-output -->
 

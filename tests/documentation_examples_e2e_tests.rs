@@ -90,6 +90,43 @@ fn configured_default_builds_the_first_run_target() -> Result<()> {
     Ok(())
 }
 
+/// Generate Ninja for `guide-command-available-manifest` with `PATH` pointed at
+/// `bin_dir` only, isolating `command_available` from the host environment.
+fn generate_command_available_manifest(bin_dir_name: &str, stub: Option<&str>) -> Result<String> {
+    let workspace = manifest_workspace("guide-command-available-manifest")?;
+    let bin_dir = Utf8PathBuf::from_path_buf(workspace.path().join(bin_dir_name))
+        .map_err(|_| anyhow::anyhow!("bin directory should be UTF-8"))?;
+    test_fs::create_dir(bin_dir.as_std_path())?;
+    if let Some(name) = stub {
+        write_stub(&bin_dir, name, "#!/bin/sh\nexit 0\n")?;
+    }
+    let run = run_netsuke_in_with_env(
+        workspace.path(),
+        &["--progress", "never", "generate"],
+        &[("PATH", bin_dir.as_str())],
+    )?;
+    assert_success(&run, "guide-command-available-manifest generate")?;
+    Ok(run.stdout)
+}
+
+#[test]
+fn command_available_selects_the_documented_action_branch() -> Result<()> {
+    // With `cargo-nextest` resolvable, the first action's `when` wins.
+    let present = generate_command_available_manifest("bin", Some("cargo-nextest"))?;
+    ensure!(
+        present.contains("cargo nextest run") && !present.contains("command = cargo test"),
+        "cargo-nextest available should select the nextest branch; got:\n{present}"
+    );
+
+    // With `cargo-nextest` absent, the complementary fallback action wins.
+    let absent = generate_command_available_manifest("empty-bin", None)?;
+    ensure!(
+        absent.contains("cargo test") && !absent.contains("cargo nextest run"),
+        "cargo-nextest absent should select the fallback branch; got:\n{absent}"
+    );
+    Ok(())
+}
+
 #[test]
 fn photo_edit_example_produces_declared_jpegs_and_gallery() -> Result<()> {
     let Ok(workspace) = ninja_integration_workspace() else {
