@@ -113,8 +113,10 @@ split the same input identically.
   For example, `{{ 'reports/daily.csv' | relative_to('reports') }}` produces
   `daily.csv`.
 - `path | realpath` is host-observing. It canonicalizes an existing path,
-  resolving links, and fails when the path cannot be resolved. Relative input
-  remains workspace-relative; absolute input stays absolute. For example,
+  resolving links, and fails when the path cannot be resolved. The result may
+  be relative or absolute: `.` produces the canonical absolute workspace path,
+  and a relative link may resolve to an absolute target. Do not rely on the
+  input's relativity being preserved. For example,
   `{{ 'input-link' | realpath }}`.
 - `path | expanduser` is host-observing because it reads the home-directory
   environment. It expands `~` and `~/...`; named-user forms such as `~alice`
@@ -277,13 +279,17 @@ defaults:
 These helpers observe the host and should appear only in trusted manifests.
 
 - `value | shell(command[, options])` sends `value` to a host shell command's
-  standard input and returns standard output. Capture mode is the default. Pass
-  `{'mode': 'tempfile'}` (also spelled `stream` or `streaming`) for bounded
-  tempfile-backed output. Example: `{{ 'hello' | shell('uppercase') | trim }}`.
+  standard input. Capture mode is the default and returns the command's
+  standard output. Pass `{'mode': 'tempfile'}` (also spelled `stream` or
+  `streaming`) to write bounded output to a persisted temporary file; these
+  modes return the temporary file's path, not its contents. Example:
+  `{{ 'hello' | shell('uppercase') | trim }}`.
 - `value | grep(pattern[, flags[, options]])` runs the host `grep` executable
   over `value`. `flags` is a sequence such as `['-i']`; options have the same
-  modes as `shell`. Availability and flag spelling are platform-dependent.
-  Example: `{{ 'alpha\nbeta\n' | grep('beta') | trim }}`.
+  modes and return values as `shell`, including a persisted temporary-file path
+  in `tempfile`, `stream`, or `streaming` mode. Availability and flag spelling
+  are platform-dependent. Example:
+  `{{ 'alpha\nbeta\n' | grep('beta') | trim }}`.
 - `which(name, **options)` and `name | which(**options)` search for an
   executable and fail when none is found. Boolean options `all`, `canonical`,
   and `fresh` default to `false`; `cwd_mode` defaults to `auto` and also accepts
