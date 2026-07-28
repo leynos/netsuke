@@ -1,7 +1,7 @@
 target/
 **/*.rs.bk
 **/*~
-.*.swp
+*.swp
 .crush
 .claude/
 .memdb/
