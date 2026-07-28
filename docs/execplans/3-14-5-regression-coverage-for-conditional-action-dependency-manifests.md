@@ -165,8 +165,8 @@ escalation, not workarounds.
 - [x] (2026-07-28 22:03Z) Stage A: confirmed interfaces, dependency ordering,
       and googletest/rstest interoperability; retained only the approved dev
       dependencies after reverting the throwaway spike.
-- [ ] Stage B: add new tests/fixtures in the failing-then-passing discipline
-      with per-test sabotage evidence (completed: B.1–B.4; remaining: B.5).
+- [x] (2026-07-28 23:14Z) Stage B: added B.1–B.5 tests and fixtures with a
+      passing focused run and assertion-level sabotage evidence for each.
 - [ ] Stage C: documentation updates (users-guide, developers-guide,
       component architecture, ADR if warranted).
 - [ ] Stage D: full gate run, CodeRabbit review, roadmap tick.
@@ -365,6 +365,11 @@ B.4 now pins the generated Ninja text for the shared fixture. Assertions and
 the reviewed snapshot preserve `|` implicit and `||` order-only syntax for both
 foreach actions and the selected target; real Ninja accepts and queries the
 selected edges and reaches a no-op second pass. Filtered paths remain absent.
+
+B.5 completes the behavioural layer with one combined scenario assembled
+entirely from existing steps. It observes the selected action's explicit and
+implicit IR inputs and the emitted `|`/`||` Ninja segment without adding step
+matcher maintenance.
 
 ## Context and orientation
 
@@ -840,6 +845,27 @@ Transcripts:
 and
 `/tmp/b4-sabotage-netsuke-3-14-5-regression-coverage-for-conditional-action-dependency-manifests.out`.
 
+Stage B.5 combined-BDD and sabotage evidence:
+
+```plaintext
+passing baseline:
+features_scenarios::ninja_selected_conditional_action_deps_become_implicit_ninja_dependencies
+1 passed; 0 failed; 241 filtered out
+
+temporary sabotage:
+write implicit deps as " {}" instead of " | {}"
+failing step 5:
+Then the ninja file contains
+" src/alpha.in | build/alpha.o shared/action.cfg || order/alpha.stamp"
+0 passed; 1 failed; 241 filtered out
+```
+
+The production line was restored immediately with an explicit inverse patch.
+Transcripts:
+`/tmp/b5-focused-netsuke-3-14-5-regression-coverage-for-conditional-action-dependency-manifests.out`
+and
+`/tmp/b5-sabotage-netsuke-3-14-5-regression-coverage-for-conditional-action-dependency-manifests.out`.
+
 ## Interfaces and dependencies
 
 New `[dev-dependencies]` in `Cargo.toml` (pre-authorized by the brief):
@@ -993,3 +1019,7 @@ Skills to load while implementing:
   assertions, and real-Ninja query/build/no-op validation. Recorded the
   `.ninja_log` finding and missing-separator sabotage failure. Remaining work
   starts at Stage B.5.
+
+- 2026-07-28 — Completed Stage B.5 and Stage B overall. Added one combined BDD
+  scenario using only existing steps, then recorded the public Gherkin
+  missing-separator failure. Remaining work starts at Stage C documentation.
