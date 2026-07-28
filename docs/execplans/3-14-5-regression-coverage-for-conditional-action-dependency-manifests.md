@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -84,12 +84,12 @@ escalation, not workarounds.
 - Dependencies: adding `googletest` and `pretty_assertions` as
   `[dev-dependencies]` is pre-authorized by the task brief (see Decision Log).
   Use of `googletest` is **confined to the two in-crate white-box test files**
-  and is **gated on a Stage A interop spike** (`#[gtest]`+`#[rstest]` under the
-  pinned `rstest` 0.26.1); if the spike fails, fall back to bare
-  `verify_that!(...)?` returning `googletest::Result<()>` without `#[gtest]`,
-  or to `anyhow::ensure!`. `tests/` integration and snapshot files stay on the
-  existing `ensure!`+`insta` idiom. Any *other* new dependency triggers
-  escalation.
+  and is **gated on a Stage A interop spike** (`#[googletest::test]`+
+  `#[rstest]` under the pinned `rstest` 0.26.1); if the spike fails, fall back
+  to bare `verify_that!(...)?` returning `googletest::Result<()>` without the
+  googletest test attribute, or to `anyhow::ensure!`. `tests/` integration and
+  snapshot files stay on the existing `ensure!`+`insta` idiom. Any *other* new
+  dependency triggers escalation.
 - Iterations: if a new test cannot be made to pass after 3 focused attempts
   and the production behaviour appears correct, stop and escalate with the
   evidence (the test may be encoding a wrong expectation).
@@ -158,7 +158,9 @@ escalation, not workarounds.
 
 ## Progress
 
-- [ ] Stage A: confirm interfaces and finalize the gap analysis (no code).
+- [x] (2026-07-28 22:03Z) Stage A: confirmed interfaces, dependency ordering,
+      and googletest/rstest interoperability; retained only the approved dev
+      dependencies after reverting the throwaway spike.
 - [ ] Stage B: add new tests/fixtures in the failing-then-passing discipline
       with per-test sabotage evidence (completed: none; remaining: all).
 - [ ] Stage C: documentation updates (users-guide, developers-guide,
@@ -203,6 +205,18 @@ escalation, not workarounds.
   Evidence and inventory are in "Context and orientation". Impact: 3.14.5 is a
   *gap-fill*, not a green-field test suite.
 
+- Observation: `#[googletest::test]` and `#[rstest]` interoperate under the
+  current dependency set when the googletest attribute comes first. Evidence:
+  the throwaway Stage A spike ran exactly one generated case and reported
+  `1 passed; 0 failed; 436 filtered out`. Impact: use both attributes in the
+  two planned white-box test modules; do not use the shorter speculative
+  `#[gtest]` spelling from the draft plan.
+
+- Observation: `DisplayEdge::fmt` preserves the stored vector order while
+  emitting explicit inputs, implicit dependencies, then order-only
+  dependencies. Evidence: `src/ninja_gen.rs:286-304`. Impact: keep fixture
+  dependency lists deliberately ordered so the new snapshot is deterministic.
+
 ## Decision log
 
 - Decision: Treat 3.14.5 as test-and-docs only; the implementation
@@ -218,25 +232,25 @@ escalation, not workarounds.
   **only** in the two in-crate white-box files
   (`command_available_selection_cases.rs`,
   `command_available_no_shell_cases.rs`), and only after a Stage A spike
-  confirms `#[gtest]`+`#[rstest]` compile and run under the pinned `rstest`
-  0.26.1. `tests/` integration and snapshot files keep the established
+  confirms `#[googletest::test]`+`#[rstest]` compile and run under the pinned
+  `rstest` 0.26.1. `tests/` integration and snapshot files keep the established
   `anyhow::ensure!`+`insta` idiom. `pretty_assertions` 1.4.x (drop-in
   `assert_eq!`/`assert_ne!` shadow; human-facing diffs only, never used for
   snapshot comparison) may be used wherever a value-equality diff improves
   readability. Rationale: the brief requests these crates for "clear test
   semantics", but the community-of-experts review unanimously flagged that (a)
   googletest has zero prior use in this repo (which is uniformly
-  `ensure!`-based), (b) its `#[gtest]`/`#[rstest]` interop is unverified against
-  `rstest` 0.26.1 and is a real compatibility risk, and (c) the 3.14.5
-  assertions are trivial. Confining googletest to the two files that most
-  benefit (real-world matcher ergonomics for the selection/no-shell cases)
-  honours the brief while containing the inconsistency and interop risk; the
-  Stage A spike with a defined fallback removes the "assume it works" hazard.
-  Date/Author: 2026-06-15, planning agent. **OPEN QUESTION FOR THE APPROVER
-  (see "Open questions"):** the crew's recommendation was stronger — drop
-  `googletest` entirely and keep only `pretty_assertions`. This plan keeps
-  googletest (confined) to respect the brief; the approver may instead elect
-  the crew's recommendation at the approval gate.
+  `ensure!`-based), (b) its googletest/rstest interop was unverified against
+  `rstest` 0.26.1 before Stage A, and (c) the 3.14.5 assertions are trivial.
+  Confining googletest to the two files that most benefit (real-world matcher
+  ergonomics for the selection/no-shell cases) honours the brief while
+  containing the inconsistency and interop risk; the Stage A spike with a
+  defined fallback removes the "assume it works" hazard. Date/Author:
+  2026-06-15, planning agent. **OPEN QUESTION FOR THE APPROVER (see "Open
+  questions"):** the crew's recommendation was stronger — drop `googletest`
+  entirely and keep only `pretty_assertions`. This plan keeps googletest
+  (confined) to respect the brief; the approver may instead elect the crew's
+  recommendation at the approval gate.
 
 - Decision: Inject `path_override` via the public
   `StdlibConfig::with_path_override`; do not use `WhichConfig`. Rationale:
@@ -274,9 +288,18 @@ escalation, not workarounds.
   deterministically regardless of host, so a `tests/`-level snapshot can select
   the fallback branch reproducibly. Date/Author: 2026-06-15, planning agent.
 
+- Decision: Use `#[googletest::test]` immediately before `#[rstest]` in the
+  confined white-box tests. Rationale: the Stage A spike proved the ordering
+  registers each rstest case exactly once with googletest 0.14.3 and rstest
+  0.26.1, matching the documented interoperability contract supplied by the
+  approver. Date/Author: 2026-07-28, implementation agent.
+
 ## Outcomes & retrospective
 
-To be completed at milestone boundaries and at completion.
+Stage A completed without requiring a new seam or changing production code. The
+approved dev dependencies resolve to googletest 0.14.3 and pretty_assertions
+1.4.1. The real resolver injection, expansion entry point, and deterministic
+Ninja dependency ordering all remain available as planned.
 
 ## Context and orientation
 
@@ -407,17 +430,17 @@ changes no code.
    // scratch, never committed
    use googletest::prelude::*;
    use rstest::rstest;
-   #[gtest]
+   #[googletest::test]
    #[rstest]
    #[case(1)]
    fn spike(#[case] n: i32) -> googletest::Result<()> { verify_that!(n, eq(1)) }
    ```
 
-   Run it. If it compiles and passes under `rstest` 0.18.0, proceed with the
+   Run it. If it compiles and passes under `rstest` 0.26.1, proceed with the
    confined googletest approach. If it fails, adopt the fallback (bare
-   `verify_that!(...)?` in a plain `#[rstest] -> googletest::Result<()>` without
-   `#[gtest]`, or `ensure!`), and record the outcome in the Decision Log.
-   Revert the spike before any milestone commit.
+   `verify_that!(...)?` in a plain `#[rstest] -> googletest::Result<()>`
+   without the googletest test attribute, or `ensure!`), and record the outcome
+   in the Decision Log. Revert the spike before any milestone commit.
 
 2. **Confirm the injection seam (public, no new seam).** Verify
    `crate::stdlib::register_with_config(&mut Environment, StdlibConfig)
@@ -659,6 +682,18 @@ generated Ninja snapshot for the conditional-deps fixture, and the sabotage
 transcripts (broken-line diff + failing test name + restored pass) that prove
 each new test is non-vacuous.
 
+Stage A interoperability evidence:
+
+```plaintext
+running 1 test
+...googletest_runs_each_rstest_case_once::case_1 ... ok
+test result: ok. 1 passed; 0 failed; 436 filtered out
+```
+
+The throwaway module and its wiring were removed immediately after this run.
+The complete transcript is in
+`/tmp/stage-a-googletest-rstest-netsuke-3-14-5-regression-coverage-for-conditional-action-dependency-manifests.out`.
+
 ## Interfaces and dependencies
 
 New `[dev-dependencies]` in `Cargo.toml` (pre-authorized by the brief):
@@ -710,12 +745,12 @@ New/changed test files and fixtures (final names to be confirmed in Stage A):
 
 1. **googletest.** The brief mandates googletest; the community-of-experts
    review unanimously recommended dropping it (keeping only
-   `pretty_assertions`) because it has no prior use here, its `#[gtest]`+
-   `#[rstest]` interop is unverified under `rstest` 0.26.1, and the assertions
-   are trivial. This plan keeps googletest in a confined, spike-gated form to
-   respect the brief. The approver may instead choose: (a) confined +
-   spike-gated (as planned), (b) `pretty_assertions` only, no googletest, or
-   (c) googletest throughout.
+   `pretty_assertions`) because it had no prior use here and the assertions are
+   trivial. Stage A has now verified `#[googletest::test]`+`#[rstest]`
+   interoperability under `rstest` 0.26.1. This plan keeps googletest in a
+   confined form to respect the brief. The approver may instead choose: (a)
+   confined + spike-gated (as planned), (b) `pretty_assertions` only, no
+   googletest, or (c) googletest throughout.
 2. **BDD scope.** Reviewers judged a full BDD layer largely redundant; the plan
    reduces B.5 to the single combined scenario. Confirm this is the desired
    depth, or request fuller BDD coverage.
@@ -760,7 +795,8 @@ Skills to load while implementing:
     `expand_foreach` being `pub(crate)`.
   - Restated the `is_impure()` boundary proxy honestly: it flips for `shell()`,
     `grep()`, *and* `fetch()`; downgraded the hexagonal claim accordingly.
-  - Added a Stage A `#[gtest]`+`#[rstest]` interop spike (rstest 0.26.1 risk)
+  - Added a Stage A `#[googletest::test]`+`#[rstest]` interop spike (rstest
+    0.26.1 risk)
     with a defined fallback; confined googletest to the two white-box files and
     surfaced the crew's "drop googletest" recommendation as an approver choice.
   - Hardened determinism: the absent case now requires empty `path_override` +
@@ -783,3 +819,9 @@ Skills to load while implementing:
   `rstest` 0.26.1 upgrade and removed the resolved `mod_backup.rs` cleanup
   question because that file was deleted upstream. No implementation scope or
   architectural boundary changed.
+
+- 2026-07-28 — Marked the approved plan in progress and recorded Stage A.
+  Confirmed the existing seams, deterministic dependency emission order, and
+  googletest/rstest interoperability with the approver-specified attribute
+  order. Remaining work starts at Stage B.1; no production change or new seam
+  is required.
