@@ -162,7 +162,7 @@ escalation, not workarounds.
       and googletest/rstest interoperability; retained only the approved dev
       dependencies after reverting the throwaway spike.
 - [ ] Stage B: add new tests/fixtures in the failing-then-passing discipline
-      with per-test sabotage evidence (completed: B.1; remaining: B.2–B.5).
+      with per-test sabotage evidence (completed: B.1–B.2; remaining: B.3–B.5).
 - [ ] Stage C: documentation updates (users-guide, developers-guide,
       component architecture, ADR if warranted).
 - [ ] Stage D: full gate run, CodeRabbit review, roadmap tick.
@@ -224,6 +224,13 @@ escalation, not workarounds.
   `.or_fail()?` to setup operations preserved native matcher failures and
   passed both parameterized cases. Impact: use the same error boundary in B.2
   instead of flattening matcher diagnostics into `anyhow`.
+
+- Observation: a successful shell control can avoid external-program
+  discovery while remaining cross-platform by invoking the platform shell's
+  no-op built-in (`:` on Unix, `exit /b 0` on Windows). Evidence: B.2 evaluates
+  the built-in from a `when` expression and the expansion succeeds while
+  `StdlibState::is_impure()` flips to `true`. Impact: the control verifies the
+  same expansion boundary without an `ensure_binaries_available` skip.
 
 ## Decision log
 
@@ -313,6 +320,12 @@ B.1 now pins complementary action selection through the real resolver in both
 deterministic worlds. The present case also combines action `foreach` with
 `when`; both cases assert exactly one action survives and that expansion
 removes control fields. No production seam or semantic change was required.
+
+B.2 now proves the absent-tool fallback runs without invoking any impure stdlib
+helper. Its paired shell-in-`when` control proves the shared impurity
+observable is live during the same expansion boundary. The claim remains
+deliberately broader than shell alone, as recorded under Risks and Hexagonal
+framing.
 
 ## Context and orientation
 
@@ -727,6 +740,27 @@ The production line was restored immediately with an explicit inverse patch;
 and
 `/tmp/b1-sabotage-netsuke-3-14-5-regression-coverage-for-conditional-action-dependency-manifests.out`.
 
+Stage B.2 impurity-boundary and sabotage evidence:
+
+```plaintext
+passing baseline:
+2 passed; 0 failed; 438 filtered out
+
+temporary sabotage:
+StdlibState::is_impure(): load(...) -> !load(...)
+command_available_fallback_does_not_invoke_impure_helpers:
+  expected false, actual true
+shell_in_when_marks_selection_impure:
+  expected true, actual false
+0 passed; 2 failed; 438 filtered out
+```
+
+The production line was restored immediately with an explicit inverse patch.
+Transcripts:
+`/tmp/b2-focused-netsuke-3-14-5-regression-coverage-for-conditional-action-dependency-manifests.out`
+and
+`/tmp/b2-sabotage-netsuke-3-14-5-regression-coverage-for-conditional-action-dependency-manifests.out`.
+
 ## Interfaces and dependencies
 
 New `[dev-dependencies]` in `Cargo.toml` (pre-authorized by the brief):
@@ -863,3 +897,8 @@ Skills to load while implementing:
   Added deterministic present/absent real-resolver cases, including the
   action-level `foreach` interaction, and recorded the assertion-level sabotage
   failure. Remaining work starts at Stage B.2.
+
+- 2026-07-28 — Completed Stage B.2 implementation and its non-vacuity check.
+  Added a pure absent-command selection case and a cross-platform shell
+  control, then recorded both assertion-level failures under an inverted
+  impurity observable. Remaining work starts at Stage B.3.
