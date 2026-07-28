@@ -1,9 +1,8 @@
 # Regression coverage for conditional action dependency manifests (3.14.5)
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: DRAFT
 
@@ -25,8 +24,8 @@ the selection happens without running any shell command, and the selected
 action's declared dependencies survive lowering into the IR and the generated
 Ninja file." Roadmap item 3.14.5 asks for precisely this coverage.
 
-After this change a contributor can run `make test` and see new tests that
-fail if any of the following regress:
+After this change a contributor can run `make test` and see new tests that fail
+if any of the following regress:
 
 1. Action-level `when` filtering or action-level `foreach` fan-out.
 2. Complementary `command_available(...)` / `not command_available(...)`
@@ -68,12 +67,12 @@ escalation, not workarounds.
   executable via the public `StdlibConfig::with_path_override(...)` seam.
   "Absent" cases must combine **all three** guards together: an empty
   `path_override`, a guaranteed-absent command name (for example a
-  UUID-suffixed name), *and* `cwd_mode="never"`. An empty `path_override`
-  alone is **not** sufficient: `parse_path_entries` maps an empty PATH
-  component to the current directory and the default `CwdMode::Auto` scans the
-  cwd (`src/stdlib/which/env.rs:91`, `src/stdlib/which/options.rs:11`), so
-  without `cwd_mode="never"` the temporary workspace's own contents could
-  shadow the lookup.
+  UUID-suffixed name), *and* `cwd_mode="never"`. An empty `path_override` alone
+  is **not** sufficient: `parse_path_entries` maps an empty PATH component to
+  the current directory and the default `CwdMode::Auto` scans the cwd
+  (`src/stdlib/which/env.rs:91`, `src/stdlib/which/options.rs:11`), so without
+  `cwd_mode="never"` the temporary workspace's own contents could shadow the
+  lookup.
 
 ## Tolerances (exception triggers)
 
@@ -83,10 +82,10 @@ escalation, not workarounds.
 - Interface: if any existing public API signature must change to make a
   scenario testable, stop and escalate.
 - Dependencies: adding `googletest` and `pretty_assertions` as
-  `[dev-dependencies]` is pre-authorised by the task brief (see Decision Log).
+  `[dev-dependencies]` is pre-authorized by the task brief (see Decision Log).
   Use of `googletest` is **confined to the two in-crate white-box test files**
   and is **gated on a Stage A interop spike** (`#[gtest]`+`#[rstest]` under the
-  pinned `rstest` 0.18.0); if the spike fails, fall back to bare
+  pinned `rstest` 0.26.1); if the spike fails, fall back to bare
   `verify_that!(...)?` returning `googletest::Result<()>` without `#[gtest]`,
   or to `anyhow::ensure!`. `tests/` integration and snapshot files stay on the
   existing `ensure!`+`insta` idiom. Any *other* new dependency triggers
@@ -104,70 +103,62 @@ escalation, not workarounds.
 ## Risks
 
 - Risk: Tests of `command_available` accidentally depend on the host PATH and
-  become flaky in CI.
-  Severity: high. Likelihood: medium.
-  Mitigation: drive the real `which` resolver through the **public**
+  become flaky in CI. Severity: high. Likelihood: medium. Mitigation: drive the
+  real `which` resolver through the **public**
   `StdlibConfig::with_path_override(...)` seam (threaded into the resolver by
   `register_with_config`, `src/stdlib/register.rs:104`) for present cases, and
   the three-guard absent recipe (empty `path_override`, a guaranteed-absent
   name, and `cwd_mode="never"`) for absent cases. Precedent:
   `tests/which_diagnostic_snapshot_tests.rs:30` already uses
-  `StdlibConfig::new(..).with_path_override(OsString::new())`. Note: the
-  private `mod which` makes `WhichConfig` unreachable from tests; do **not**
-  attempt to use it.
+  `StdlibConfig::new(..).with_path_override(OsString::new())`. Note: the private
+  `mod which` makes `WhichConfig` unreachable from tests; do **not** attempt
+  to use it.
 
 - Risk: The `which` resolver cache is mistaken for process-global state and
   someone "fixes" non-existent cross-test contamination with `fresh=true` or
-  serialisation.
-  Severity: low. Likelihood: medium.
-  Mitigation: the `WhichResolver` (with its `Arc<Mutex<LruCache>>`) is
-  constructed fresh per `minijinja::Environment` (per `register`/`register_with_config`
-  call); there is no static/`OnceLock`/`thread_local` resolver. Each test
-  builds its own environment, so the cache is env-scoped and cannot leak across
-  tests. The cache key is also partitioned by `path_override`/`cwd`. The new
-  tests therefore need no `#[serial]` and may run in parallel.
+  serialization. Severity: low. Likelihood: medium. Mitigation: the
+  `WhichResolver` (with its `Arc<Mutex<LruCache>>`) is constructed fresh per
+  `minijinja::Environment` (per `register`/`register_with_config` call); there
+  is no static/`OnceLock`/`thread_local` resolver. Each test builds its own
+  environment, so the cache is env-scoped and cannot leak across tests. The
+  cache key is also partitioned by `path_override`/`cwd`. The new tests
+  therefore need no `#[serial]` and may run in parallel.
 
 - Risk: `googletest`/`pretty_assertions` clash with the codebase's existing
-  uniform `anyhow::ensure!` style and create inconsistency.
-  Severity: low. Likelihood: high.
-  Mitigation: confine the new assertion crates to the new 3.14.5 test files;
-  keep using `ensure!` where it already reads well; document the convention in
-  `docs/developers-guide.md` so future tests are consistent.
+  uniform `anyhow::ensure!` style and create inconsistency. Severity: low.
+  Likelihood: high. Mitigation: confine the new assertion crates to the new
+  3.14.5 test files; keep using `ensure!` where it already reads well; document
+  the convention in `docs/developers-guide.md` so future tests are consistent.
 
 - Risk: New Ninja snapshots are environment-sensitive (path separators,
-  ordering) and churn.
-  Severity: medium. Likelihood: low.
-  Mitigation: reuse the established `insta` settings and
-  `tests/snapshots/ninja/` location; keep fixtures POSIX-path only; rely on the
-  IR's deterministic ordering (outputs sorted) already exercised by existing
-  snapshots.
+  ordering) and churn. Severity: medium. Likelihood: low. Mitigation: reuse the
+  established `insta` settings and `tests/snapshots/ninja/` location; keep
+  fixtures POSIX-path only; rely on the IR's deterministic ordering (outputs
+  sorted) already exercised by existing snapshots.
 
 - Risk: Overlap with property/bounded-verification roadmap items (4.2.x Kani,
   4.3.2 Proptest for expansion invariants) leads to scope creep or duplicated
-  intent.
-  Severity: medium. Likelihood: medium.
-  Mitigation: 3.14.5 delivers *example-based* regression coverage only.
-  Property and bounded-model coverage of the same invariants is explicitly
-  deferred to 4.2.x/4.3.x and noted in the Decision Log.
+  intent. Severity: medium. Likelihood: medium. Mitigation: 3.14.5 delivers
+  *example-based* regression coverage only. Property and bounded-model coverage
+  of the same invariants is explicitly deferred to 4.2.x/4.3.x and noted in the
+  Decision Log.
 
 - Risk: The "without invoking `shell()`" assertion is driven through the
   `StdlibState::is_impure()` flag, which flips for **any** impure helper —
   `shell()`, `grep()`, *and* `fetch()` (network)
   (`src/stdlib/command/mod.rs:81-102`, `src/stdlib/network/mod.rs:94,177`). It
-  is therefore a proxy for "no impure stdlib helper ran during selection", which
-  is strictly weaker than "the command-execution port specifically was not
-  driven".
-  Severity: low. Likelihood: low.
-  Mitigation: keep the no-shell fixtures minimal (only `command_available` and
-  plain `command:` recipes, no `grep`/`fetch`) so the flag cleanly means "no
-  impure helper ran during selection", and state this scoping honestly in both
-  the test module and the Hexagonal framing. If a finer-grained,
-  shell-specific observable is ever required, escalate rather than overloading
-  `is_impure()`.
+  is therefore a proxy for "no impure stdlib helper ran during selection",
+  which is strictly weaker than "the command-execution port specifically was
+  not driven". Severity: low. Likelihood: low. Mitigation: keep the no-shell
+  fixtures minimal (only `command_available` and plain `command:` recipes, no
+  `grep`/`fetch`) so the flag cleanly means "no impure helper ran during
+  selection", and state this scoping honestly in both the test module and the
+  Hexagonal framing. If a finer-grained, shell-specific observable is ever
+  required, escalate rather than overloading `is_impure()`.
 
 ## Progress
 
-- [ ] Stage A: confirm interfaces and finalise the gap analysis (no code).
+- [ ] Stage A: confirm interfaces and finalize the gap analysis (no code).
 - [ ] Stage B: add new tests/fixtures in the failing-then-passing discipline
       with per-test sabotage evidence (completed: none; remaining: all).
 - [ ] Stage C: documentation updates (users-guide, developers-guide,
@@ -179,19 +170,19 @@ escalation, not workarounds.
 ## Surprises & discoveries
 
 - Observation: the `path_override` seam is **publicly reachable**, but
-  `expand_foreach` is `pub(crate)`.
-  Evidence: `StdlibConfig::with_path_override(...)` is `pub`
-  (`src/stdlib/config.rs:240`) and `register_with_config` is `pub` and returns
-  the `StdlibState`; by contrast `mod which` is private
-  (`src/stdlib/mod.rs:18`), so `WhichConfig` is unreachable, and
-  `src/manifest/expand.rs:38` shows `pub(crate) fn expand_foreach`.
-  Impact: path injection needs **no new seam** — use the public
-  `with_path_override`/`register_with_config` pairing. The deterministic
-  real-resolver scenarios (nextest-vs-legacy and no-shell) must still be
-  **in-crate white-box tests** under `src/manifest/expand_test_cases/`, but the
-  reason is solely that they call the `pub(crate)` `expand_foreach`, *not* the
-  path override. The earlier speculative "test-only `WhichConfig` constructor
-  seam" is dropped as unnecessary.
+  `expand_foreach` is `pub(crate)`. Evidence:
+  `StdlibConfig::with_path_override(...)` is `pub` (`src/stdlib/config.rs:240`)
+  and `register_with_config` is `pub` and returns the `StdlibState`; by contrast
+  `mod which` is private (`src/stdlib/mod.rs:18`), so `WhichConfig` is
+  unreachable, and `src/manifest/expand.rs:38` shows
+  `pub(crate) fn expand_foreach`. Impact: path injection needs **no new seam**
+  — use the public `with_path_override`/`register_with_config` pairing. The
+  deterministic real-resolver scenarios (nextest-vs-legacy and no-shell) must
+  still be **in-crate white-box tests** under
+  `src/manifest/expand_test_cases/`, but the reason is solely that they call the
+  `pub(crate)` `expand_foreach`, *not* the path override. The earlier
+  speculative "test-only `WhichConfig` constructor seam" is dropped as
+  unnecessary.
 
 - Observation: a clean observability seam already exists for "no impure helper
   ran": `StdlibState::is_impure()` is `pub`, and `shell()`, `grep()`, and
@@ -209,83 +200,79 @@ escalation, not workarounds.
   whole-pipeline purity.
 
 - Observation: meaningful coverage already exists and must not be duplicated.
-  Evidence and inventory are in "Context and orientation".
-  Impact: 3.14.5 is a *gap-fill*, not a green-field test suite.
+  Evidence and inventory are in "Context and orientation". Impact: 3.14.5 is a
+  *gap-fill*, not a green-field test suite.
 
 ## Decision log
 
 - Decision: Treat 3.14.5 as test-and-docs only; the implementation
-  (3.14.2–3.14.4) is already complete.
-  Rationale: the roadmap marks 3.14.2/3.14.3/3.14.4 done; recon confirms the
-  behaviour is present. The roadmap bullet text is literally "Test ...".
-  Date/Author: 2026-06-15, planning agent.
+  (3.14.2–3.14.4) is already complete. Rationale: the roadmap marks
+  3.14.2/3.14.3/3.14.4 done; recon confirms the behaviour is present. The
+  roadmap bullet text is literally "Test …". Date/Author: 2026-06-15, planning
+  agent.
 
 - Decision: Adopt `googletest` in a **confined, spike-gated** form, plus
   `pretty_assertions` broadly, rather than using googletest throughout.
   Specifics: `googletest` (`verify_that!`/`assert_that!` with matchers such as
   `eq`, `len`, `contains`, `unordered_elements_are!`, `not`, `none`) is used
   **only** in the two in-crate white-box files
-  (`command_available_selection_cases.rs`, `command_available_no_shell_cases.rs`),
-  and only after a Stage A spike confirms `#[gtest]`+`#[rstest]` compile and run
-  under the pinned `rstest` 0.18.0. `tests/` integration and snapshot files keep
-  the established `anyhow::ensure!`+`insta` idiom. `pretty_assertions` 1.4.x
-  (drop-in `assert_eq!`/`assert_ne!` shadow; human-facing diffs only, never
-  used for snapshot comparison) may be used wherever a value-equality diff
-  improves readability.
-  Rationale: the brief requests these crates for "clear test semantics", but the
-  community-of-experts review unanimously flagged that (a) googletest has zero
-  prior use in this repo (which is uniformly `ensure!`-based), (b) its
-  `#[gtest]`/`#[rstest]` interop is unverified against the old `rstest` 0.18.0
-  pin and is a real compatibility risk, and (c) the 3.14.5 assertions are
-  trivial. Confining googletest to the two files that most benefit (real-world
-  matcher ergonomics for the selection/no-shell cases) honours the brief while
-  containing the inconsistency and interop risk; the Stage A spike with a
-  defined fallback removes the "assume it works" hazard.
-  Date/Author: 2026-06-15, planning agent.
-  **OPEN QUESTION FOR THE APPROVER (see "Open questions"):** the crew's
-  recommendation was stronger — drop `googletest` entirely and keep only
-  `pretty_assertions`. This plan keeps googletest (confined) to respect the
-  brief; the approver may instead elect the crew's recommendation at the
-  approval gate.
+  (`command_available_selection_cases.rs`,
+  `command_available_no_shell_cases.rs`), and only after a Stage A spike
+  confirms `#[gtest]`+`#[rstest]` compile and run under the pinned `rstest`
+  0.26.1. `tests/` integration and snapshot files keep the established
+  `anyhow::ensure!`+`insta` idiom. `pretty_assertions` 1.4.x (drop-in
+  `assert_eq!`/`assert_ne!` shadow; human-facing diffs only, never used for
+  snapshot comparison) may be used wherever a value-equality diff improves
+  readability. Rationale: the brief requests these crates for "clear test
+  semantics", but the community-of-experts review unanimously flagged that (a)
+  googletest has zero prior use in this repo (which is uniformly
+  `ensure!`-based), (b) its `#[gtest]`/`#[rstest]` interop is unverified against
+  `rstest` 0.26.1 and is a real compatibility risk, and (c) the 3.14.5
+  assertions are trivial. Confining googletest to the two files that most
+  benefit (real-world matcher ergonomics for the selection/no-shell cases)
+  honours the brief while containing the inconsistency and interop risk; the
+  Stage A spike with a defined fallback removes the "assume it works" hazard.
+  Date/Author: 2026-06-15, planning agent. **OPEN QUESTION FOR THE APPROVER
+  (see "Open questions"):** the crew's recommendation was stronger — drop
+  `googletest` entirely and keep only `pretty_assertions`. This plan keeps
+  googletest (confined) to respect the brief; the approver may instead elect
+  the crew's recommendation at the approval gate.
 
 - Decision: Inject `path_override` via the public
-  `StdlibConfig::with_path_override`; do not use `WhichConfig`.
-  Rationale: `mod which` is private, so `WhichConfig` is unreachable from tests;
-  the public `with_path_override`+`register_with_config` pairing already drives
-  the real resolver (precedent: `tests/which_diagnostic_snapshot_tests.rs:30`),
-  needing no new seam. In-crate placement is forced only by `expand_foreach`
-  being `pub(crate)`.
-  Date/Author: 2026-06-15, planning agent.
+  `StdlibConfig::with_path_override`; do not use `WhichConfig`. Rationale:
+  `mod which` is private, so `WhichConfig` is unreachable from tests; the public
+  `with_path_override`+`register_with_config` pairing already drives the real
+  resolver (precedent: `tests/which_diagnostic_snapshot_tests.rs:30`), needing
+  no new seam. In-crate placement is forced only by `expand_foreach` being
+  `pub(crate)`. Date/Author: 2026-06-15, planning agent.
 
 - Decision: Document, but do not work around, the env-scoped `which` cache.
   Rationale: the resolver cache is per-`Environment`, not process-global; the
   new tests build their own environments and need no `#[serial]` and no
-  `fresh=true`. Recording this prevents future cargo-culted serialisation.
+  `fresh=true`. Recording this prevents future cargo-culted serialization.
   Date/Author: 2026-06-15, planning agent.
 
 - Decision: Defer property-based and bounded-model coverage of the same
-  invariants to roadmap 4.2.x (Kani) and 4.3.2 (Proptest for manifest
-  expansion invariants).
-  Rationale: 3.14.5 is scoped to example/behavioural/snapshot regression
-  coverage; 4.3.2 already owns "foreach preserves non-control fields", "when is
-  removed after evaluation", and "item/index injected". Duplicating that here
-  would create two owners for one invariant.
-  Date/Author: 2026-06-15, planning agent.
+  invariants to roadmap 4.2.x (Kani) and 4.3.2 (Proptest for manifest expansion
+  invariants). Rationale: 3.14.5 is scoped to example/behavioural/snapshot
+  regression coverage; 4.3.2 already owns "foreach preserves non-control
+  fields", "when is removed after evaluation", and "item/index injected".
+  Duplicating that here would create two owners for one invariant. Date/Author:
+  2026-06-15, planning agent.
 
 - Decision: `ortho_config` is out of scope for this item.
   Rationale: `ortho_config` governs layered CLI/configuration precedence
   (roadmap 3.11.x) and localized help; 3.14.5 concerns manifest-time expansion
   and lowering, which do not read layered configuration. The brief's mention is
-  acknowledged and explicitly scoped out to prevent creep.
-  Date/Author: 2026-06-15, planning agent.
+  acknowledged and explicitly scoped out to prevent creep. Date/Author:
+  2026-06-15, planning agent.
 
 - Decision: Place deterministic real-resolver tests in-crate; place the
   end-to-end deps+Ninja snapshot test in `tests/` using a guaranteed-absent
-  command for determinism.
-  Rationale: `WhichConfig`/`expand_foreach` are `pub(crate)` (white-box only);
-  an absent command resolves to `false` deterministically regardless of host,
-  so a `tests/`-level snapshot can select the fallback branch reproducibly.
-  Date/Author: 2026-06-15, planning agent.
+  command for determinism. Rationale: `WhichConfig`/`expand_foreach` are
+  `pub(crate)` (white-box only); an absent command resolves to `false`
+  deterministically regardless of host, so a `tests/`-level snapshot can select
+  the fallback branch reproducibly. Date/Author: 2026-06-15, planning agent.
 
 ## Outcomes & retrospective
 
@@ -299,8 +286,7 @@ This section assumes no prior knowledge of the repository.
 
 - **Manifest**: the user's YAML build description (`Netsukefile` / `*.yml`).
 - **Typed AST**: the deserialized Rust representation of a manifest
-  (`src/ast.rs`: `NetsukeManifest`, `Target`, `Rule`, `Recipe`,
-  `StringOrList`).
+  (`src/ast.rs`: `NetsukeManifest`, `Target`, `Rule`, `Recipe`, `StringOrList`).
 - **Manifest-time expansion**: evaluation of `foreach`/`when` on the *raw*
   manifest value before the typed AST exists (`src/manifest/expand.rs`).
 - **IR (intermediate representation)**: the build graph
@@ -308,34 +294,31 @@ This section assumes no prior knowledge of the repository.
 - **Implicit dependency**: a `deps` entry that affects rebuild/ordering but is
   not passed to the recipe as `$in`; emitted in Ninja after a `|` separator.
 - **`command_available(name, **kwargs)`**: a non-throwing Jinja function that
-  returns `true`/`false` for executable presence
-  (`src/stdlib/which/mod.rs`).
+  returns `true`/`false` for executable presence (`src/stdlib/which/mod.rs`).
 - **`shell()`**: an *impure* Jinja filter that runs a command during rendering
   and sets the stdlib `impure` flag (`src/stdlib/command/`).
 
 ### Pipeline (data flow)
 
-`manifest::from_str/from_path`
-→ parse YAML to a raw `ManifestValue`
-→ register the stdlib into a Jinja `Environment` (this is where
-  `command_available` and `shell` are bound), capturing a `StdlibState`
-→ `expand::expand_foreach(&mut doc, &env)` removes `when:false` entries and
-  fans out `foreach`, injecting `item`/`index`
-→ deserialize to the typed AST (`deserialize_actions` stamps `phony: true`)
-→ `render::render_manifest` evaluates remaining string templates
-→ `ir::BuildGraph::from_manifest` lowers `sources`→`inputs`,
-  `deps`→`implicit_deps`, `order_only_deps`→`order_only_deps`, and runs cycle
-  detection over `inputs` + `implicit_deps`
-→ `ninja_gen::generate` formats `build` lines as
-  `build <out> [| <impl_out>]: <rule> <in> [| <impl_deps>] [|| <order_only>]`.
+`manifest::from_str/from_path` → parse YAML to a raw `ManifestValue` → register
+the stdlib into a Jinja `Environment` (this is where `command_available` and
+`shell` are bound), capturing a `StdlibState` →
+`expand::expand_foreach(&mut doc, &env)` removes `when:false` entries and fans
+out `foreach`, injecting `item`/`index` → deserialize to the typed AST
+(`deserialize_actions` stamps `phony: true`) → `render::render_manifest`
+evaluates remaining string templates → `ir::BuildGraph::from_manifest` lowers
+`sources`→`inputs`, `deps`→`implicit_deps`, `order_only_deps`→
+`order_only_deps`, and runs cycle detection over `inputs` + `implicit_deps` →
+`ninja_gen::generate` formats `build` lines as
+`build <out> [| <impl_out>]: <rule> <in> [| <impl_deps>] [|| <order_only>]`.
 
 Key files and symbols (full paths relative to repo root):
 
 - `src/ast.rs`: `Target` (fields `sources`, `deps`, `order_only_deps`,
   `phony`), `Rule.deps`, `StringOrList`, `deserialize_actions`.
 - `src/manifest/expand.rs`: `expand_foreach` (`pub(crate)`),
-  `expand_section`, `expand_target`, `when_allows`, `eval_when`,
-  `when_context`, `inject_iteration_vars`, `FilteringStats`.
+  `expand_section`, `expand_target`, `when_allows`, `eval_when`, `when_context`,
+  `inject_iteration_vars`, `FilteringStats`.
 - `src/manifest/mod.rs`: `from_str`, `from_path`, `from_str_named`
   (takes `stdlib_config: Option<StdlibConfig>`).
 - `src/stdlib/mod.rs`: `StdlibState::is_impure` / `reset_impure` (`pub`).
@@ -344,13 +327,14 @@ Key files and symbols (full paths relative to repo root):
   `command_available_with`, `is_command_available`.
 - `src/ir/from_manifest.rs`: `BuildGraph::from_manifest`, `process_targets`
   (`to_paths(&target.sources)`→inputs, `to_paths(&target.deps)`→implicit_deps).
-- `src/ir/graph.rs`: `BuildEdge { inputs, implicit_deps, order_only_deps, ... }`.
+- `src/ir/graph.rs`:
+  `BuildEdge { inputs, implicit_deps, order_only_deps, ... }`.
 - `src/ninja_gen.rs`: `generate`, `generate_into`, `DisplayEdge` (the `|`/`||`
   formatting).
 
 ### Existing coverage (do not duplicate; extend or complement)
 
-- `src/manifest/expand_test_cases/condition_cases.rs`: parameterised
+- `src/manifest/expand_test_cases/condition_cases.rs`: parameterized
   `targets`/`actions` cases for `when:false` removal before typed AST,
   `foreach` iteration-var injection, static action `when` dropping, sequence
   `foreach`, truthiness table, invalid-`when` errors, and **complementary
@@ -377,9 +361,9 @@ Key files and symbols (full paths relative to repo root):
    integrated regression fixture exercising an action that carries `foreach`,
    `when`, *and* `deps` together, end-to-end to Ninja.
 2. **Complementary nextest/legacy branches select exactly one action** — not
-   covered. The existing complementary tests are stubbed and use generic
-   names. New: a real-resolver, nextest-vs-legacy scenario proving exactly one
-   action survives in both the present and absent worlds.
+   covered. The existing complementary tests are stubbed and use generic names.
+   New: a real-resolver, nextest-vs-legacy scenario proving exactly one action
+   survives in both the present and absent worlds.
 3. **Absent-command fallback without invoking `shell()`** — not covered. New:
    assert `StdlibState::is_impure() == false` after selecting the fallback.
 4. **`deps` lowering for conditional actions, in IR and Ninja** — partially
@@ -411,7 +395,7 @@ an escalation, not an overload of `is_impure()`.)
 
 ## Plan of work
 
-### Stage A — confirm interfaces, run the interop spike, finalise gap analysis
+### Stage A — confirm interfaces, run the interop spike, finalize gap analysis
 
 This stage adds **one throwaway spike** (immediately reverted) and otherwise
 changes no code.
@@ -437,10 +421,11 @@ changes no code.
 
 2. **Confirm the injection seam (public, no new seam).** Verify
    `crate::stdlib::register_with_config(&mut Environment, StdlibConfig)
-   -> anyhow::Result<StdlibState>` and that `StdlibConfig::with_path_override`
-   threads into the resolver (`src/stdlib/register.rs:104`). Mirror the
-   precedent in `tests/which_diagnostic_snapshot_tests.rs:30`. Do **not** use
-   `WhichConfig` (private module).
+   -> anyhow::Result<StdlibState>`
+   and that `StdlibConfig::with_path_override` threads into the resolver
+   (`src/stdlib/register.rs:104`). Mirror the precedent in
+   `tests/which_diagnostic_snapshot_tests.rs:30`. Do **not** use `WhichConfig`
+   (private module).
 
 3. **Confirm `expand_foreach` drives selection** in a white-box test with the
    *real* `command_available` registered (existing cases use a stubbed
@@ -469,16 +454,17 @@ corresponds to the guarded behaviour, e.g. "expected len 1, got 2", or
 this proves the test fails for the *right reason*, which a bare pass/fail
 toggle does not. The sabotage diff is reverted with an explicit
 `git checkout -- <file>` (recorded so a resumed agent can confirm a clean tree)
-and is never committed; the transcript is recorded under "Artifacts and notes".
+and is never committed; the transcript is recorded under "Artefacts and notes".
 This is the documented substitute for the red stage (see the execplans guidance
 on observable substitutes).
 
 Add the following, smallest first:
 
 1. **In-crate: nextest-vs-legacy exactly-one-action (real resolver).**
-   New file `src/manifest/expand_test_cases/command_available_selection_cases.rs`
-   (wired into the `expand_test_cases` module). An `#[rstest]` parameterised
-   over two worlds, driving the *real* `command_available` (registered via
+   New file
+   `src/manifest/expand_test_cases/command_available_selection_cases.rs` (wired
+   into the `expand_test_cases` module). An `#[rstest]` parameterized over two
+   worlds, driving the *real* `command_available` (registered via
    `register_with_config` with a `StdlibConfig`):
    - *present*: a `tempfile::TempDir` containing a fake `cargo-nextest`
      executable, injected via `StdlibConfig::with_path_override`. Reuse the
@@ -493,15 +479,16 @@ Add the following, smallest first:
      guaranteed-absent command name + `cwd_mode="never"`. Expect exactly the
      `run-tests-legacy` action (`command: cargo test`) to survive.
    Drive `expand_foreach`, then assert (googletest, per Stage A spike):
-   `verify_that!(actions, len(eq(1)))?`, the surviving action's `name`/`command`
-   via `matches_pattern!`/`eq`, and that `when` was removed.
-   This also explicitly pins **bullet 1** for actions: include one case where
-   the surviving action additionally carries a `foreach` so the assertion
-   covers action-level fan-out and `when` together (complementing, not
-   duplicating, `condition_cases.rs`).
+   `verify_that!(actions, len(eq(1)))?`, the surviving action's `name`/
+   `command` via `matches_pattern!`/`eq`, and that `when` was removed. This
+   also explicitly pins **bullet 1** for actions: include one case where the
+   surviving action additionally carries a `foreach` so the assertion covers
+   action-level fan-out and `when` together (complementing, not duplicating,
+   `condition_cases.rs`).
 
 2. **In-crate: absent fallback without `shell()`.**
-   New file `src/manifest/expand_test_cases/command_available_no_shell_cases.rs`.
+   New file
+   `src/manifest/expand_test_cases/command_available_no_shell_cases.rs`.
    Register the full stdlib (so `command_available`, `shell`, `grep`, `fetch`
    all exist), capture `StdlibState`, expand a manifest whose two actions use
    `command_available("<guaranteed-absent>")` / `not command_available(...)`
@@ -518,39 +505,40 @@ Add the following, smallest first:
    skip-driven hole).
 
 3. **Integration + IR: conditional action carries `deps` into `implicit_deps`,
-   including the `item`-in-`deps` interaction.**
-   New fixture `tests/data/conditional_action_deps.yml`: a target and an action,
-   each selected via a complementary `command_available` pair using a
+   including the `item`-in-`deps` interaction.** New fixture
+   `tests/data/conditional_action_deps.yml`: a target and an action, each
+   selected via a complementary `command_available` pair using a
    guaranteed-absent command (`cwd_mode="never"` retained) so the fallback
    branch is deterministic, each carrying `sources`, `deps`, and
    `order_only_deps`. Crucially, the action uses `foreach` and interpolates
    `{{ item }}` (or `{{ index }}`) into **one `deps` entry** (e.g.
    `deps: [build/{{ item }}.o]`) — the per-item implicit-dependency case is the
    single most likely real-world regression and is currently untested anywhere.
-   **Add the new tests to the existing `tests/ir_from_manifest_tests.rs`** (beside
-   the static-deps cases `manifest_deps_populate_implicit_deps` /
-   `manifest_deps_do_not_contribute_to_recipe_inputs`, keeping all deps-lowering
-   tests in one place). Assert that each selected edge has `implicit_deps` equal
-   (unordered) to the declared/substituted `deps`, `inputs` equal to `sources`
-   only, `order_only_deps` carried through, the expected per-`item`
-   substitution, and that none of the *unselected* branch's paths appear in any
-   edge. (Cycle detection over `implicit_deps` is already owned by
-   `src/ir/cycle.rs` unit tests and is not re-tested here.)
+   **Add the new tests to the existing `tests/ir_from_manifest_tests.rs`**
+   (beside the static-deps cases `manifest_deps_populate_implicit_deps` /
+   `manifest_deps_do_not_contribute_to_recipe_inputs`, keeping all
+   deps-lowering tests in one place). Assert that each selected edge has
+   `implicit_deps` equal (unordered) to the declared/substituted `deps`,
+   `inputs` equal to `sources` only, `order_only_deps` carried through, the
+   expected per-`item` substitution, and that none of the *unselected* branch's
+   paths appear in any edge. (Cycle detection over `implicit_deps` is already
+   owned by `src/ir/cycle.rs` unit tests and is not re-tested here.)
 
 4. **Snapshot + real-ninja: conditional action deps reach the Ninja file.**
    New test `conditional_action_deps_ninja_snapshot` **added to
    `tests/ninja_snapshot_tests.rs`** using the fixture from B.3. Assert the
-   selected `build` line contains `| <dep>` (implicit) **and** the `|| <order_only>`
-   segment (make `order_only_deps` definitely present in the fixture so this is
-   not "where applicable"); assert the unselected branch's outputs/deps are
-   absent; then `insta::assert_snapshot!` into `tests/snapshots/ninja/` reusing
-   the existing `Settings::set_snapshot_path`. Use `insta::assert_snapshot!`
-   only for the rendered Ninja text — never `pretty_assertions::assert_eq!`.
-   Where `ninja`/`python3` are available, also run `ninja -t query`/`-n` to
-   prove the file is valid and reaches a no-op second pass, mirroring
-   `touch_manifest_ninja_validation`; surface any skip via `eprintln!` (captured
-   by the harness) in addition to `tracing::warn!` so a binary-less CI run does
-   not silently validate nothing (see Risks / Doggylump S2).
+   selected `build` line contains `| <dep>` (implicit) **and** the
+   `|| <order_only>` segment (make `order_only_deps` definitely present in the
+   fixture so this is not "where applicable"); assert the unselected branch's
+   outputs/deps are absent; then `insta::assert_snapshot!` into
+   `tests/snapshots/ninja/` reusing the existing `Settings::set_snapshot_path`.
+   Use `insta::assert_snapshot!` only for the rendered Ninja text — never
+   `pretty_assertions::assert_eq!`. Where `ninja`/`python3` are available, also
+   run `ninja -t query`/`-n` to prove the file is valid and reaches a no-op
+   second pass, mirroring `touch_manifest_ninja_validation`; surface any skip
+   via `eprintln!` (captured by the harness) in addition to `tracing::warn!` so
+   a binary-less CI run does not silently validate nothing (see Risks /
+   Doggylump S2).
 
 5. **BDD: the combined conditional-action-with-deps scenario only.**
    The unit (B.1), IR (B.3), and snapshot+real-ninja (B.4) layers already pin
@@ -558,13 +546,13 @@ Add the following, smallest first:
    (`tests/features/manifest.feature:132`, `tests/features/ninja.feature:31`)
    already cover fallback-selection and deps-emission *separately*. To avoid
    redundant step-matcher maintenance, B.5 adds **only** the genuinely new
-   externally-observable case: a single scenario where a *conditionally-selected*
-   action's `deps` appear as Ninja implicit dependencies end-to-end. Reuse
-   existing steps in `tests/bdd/steps/conditional_manifest.rs` and
-   `tests/bdd/steps/ninja.rs`; add at most one new `Then` (the selected action
-   exposes a given implicit dependency) if no existing step fits. If even this
-   is fully covered by reframing an existing scenario, prefer reframing over a
-   new scenario.
+   externally-observable case: a single scenario where a
+   *conditionally-selected* action's `deps` appear as Ninja implicit
+   dependencies end-to-end. Reuse existing steps in
+   `tests/bdd/steps/conditional_manifest.rs` and `tests/bdd/steps/ninja.rs`;
+   add at most one new `Then` (the selected action exposes a given implicit
+   dependency) if no existing step fits. If even this is fully covered by
+   reframing an existing scenario, prefer reframing over a new scenario.
 
 Each of B.1–B.5 ends with the focused test passing, its sabotage check
 recorded, and the relevant gate (`make test`) green.
@@ -581,13 +569,13 @@ recorded, and the relevant gate (`make test`) green.
   `path_override`/`cwd_mode` pattern for deterministic `command_available`
   tests, and the `is_impure()`-as-boundary-proxy idiom.
 - Component architecture doc for the manifest/stdlib boundary: record the
-  port framing (executable-discovery vs command-execution) and that 3.14.5
-  pins it. If the decision to standardise the boundary assertion is judged
+  port framing (executable-discovery vs command-execution) and that 3.14.5 pins
+  it. If the decision to standardize the boundary assertion is judged
   substantive, capture it as an ADR using the `arch-decision-records`
   Y-Statement format and reference it from this plan and the design doc.
 - `docs/roadmap.md`: tick 3.14.5 and its four sub-bullets on completion.
 
-### Stage D — gates, review, finalise
+### Stage D — gates, review, finalize
 
 Run the full gate suite, then `coderabbit review --agent`; clear all concerns
 before declaring done. Update Progress/Outcomes.
@@ -661,10 +649,10 @@ Quality criteria ("done"):
 All steps are additive and re-runnable. Snapshots are created deliberately via
 `cargo insta` and reviewed before acceptance; a wrong snapshot is corrected by
 re-reviewing, not by force-accepting. Sabotage checks are always reverted
-(`git checkout -- <file>`) and never committed. Commit after each of B.1–B.5
-so any step can be rolled back independently.
+(`git checkout -- <file>`) and never committed. Commit after each of B.1–B.5 so
+any step can be rolled back independently.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Record here, as work proceeds: the exact surviving-action assertions, the
 generated Ninja snapshot for the conditional-deps fixture, and the sabotage
@@ -673,7 +661,7 @@ each new test is non-vacuous.
 
 ## Interfaces and dependencies
 
-New `[dev-dependencies]` in `Cargo.toml` (pre-authorised by the brief):
+New `[dev-dependencies]` in `Cargo.toml` (pre-authorized by the brief):
 
 ```toml
 # Cargo.toml
@@ -681,7 +669,7 @@ googletest = "0.14"
 pretty_assertions = "1.4"
 ```
 
-Existing crates reused: `rstest` 0.18, `rstest-bdd`/`rstest-bdd-macros` 0.5,
+Existing crates reused: `rstest` 0.26, `rstest-bdd`/`rstest-bdd-macros` 0.5,
 `insta` 1 (yaml), `tempfile`, `test_support`, `anyhow` (`ensure!`).
 (`serial_test` is **not** needed — the new tests build their own environments
 and inject `path_override`, so they never touch process-global PATH; see the
@@ -690,17 +678,17 @@ env-scoped-cache Decision.)
 Seams relied upon (all already public/`pub(crate)` and present; **no new seam
 required**):
 
-- `crate::manifest::expand::expand_foreach(&mut ManifestValue, &Environment)
-  -> anyhow::Result<FilteringStats>` (`pub(crate)` — forces in-crate placement
-  of the selection/no-shell tests).
-- `crate::stdlib::register_with_config(&mut Environment, StdlibConfig)
-  -> anyhow::Result<StdlibState>` (`pub`; note the `Result`),
+- `crate::manifest::expand::expand_foreach` accepts a mutable `ManifestValue`
+  and an `Environment`, then returns `anyhow::Result<FilteringStats>`. It is
+  `pub(crate)`, which forces in-crate placement of the selection/no-shell tests.
+- `crate::stdlib::register_with_config(&mut Environment, StdlibConfig) -> anyhow::Result<StdlibState>`
+  (`pub`; note the `Result`),
   `StdlibConfig::with_path_override(impl Into<OsString>)` (`pub`,
   `src/stdlib/config.rs:240`), and `StdlibState::is_impure(&self) -> bool`
   (`pub`). Do **not** reference `WhichConfig` (private module).
-- `netsuke::ir::BuildGraph::from_manifest(&NetsukeManifest)
-  -> Result<BuildGraph, IrGenError>` and `netsuke::ninja_gen::generate(&BuildGraph)
-  -> Result<String, NinjaGenError>` (`pub`) for the integration/snapshot tests.
+- `netsuke::ir::BuildGraph::from_manifest` and
+  `netsuke::ninja_gen::generate(&BuildGraph) -> Result<String, NinjaGenError>`
+  are public seams for the integration/snapshot tests.
 
 New/changed test files and fixtures (final names to be confirmed in Stage A):
 
@@ -711,7 +699,8 @@ New/changed test files and fixtures (final names to be confirmed in Stage A):
 - additions to existing `tests/ir_from_manifest_tests.rs` (deps lowering) and
   `tests/ninja_snapshot_tests.rs` (Ninja snapshot + real-ninja) — kept beside
   their static-deps counterparts, not in a separate file.
-- new `tests/snapshots/ninja/ninja_snapshot_tests__conditional_action_deps_ninja.snap`.
+- new
+  `tests/snapshots/ninja/ninja_snapshot_tests__conditional_action_deps_ninja.snap`.
 - one new combined scenario in `tests/features/ninja.feature` (or
   `manifest.feature`) plus at most one new step.
 - new `[dev-dependencies]` entries `googletest = "0.14"` and
@@ -720,26 +709,24 @@ New/changed test files and fixtures (final names to be confirmed in Stage A):
 ## Open questions for the approver
 
 1. **googletest.** The brief mandates googletest; the community-of-experts
-   review unanimously recommended dropping it (keeping only `pretty_assertions`)
-   because it has no prior use here, its `#[gtest]`+`#[rstest]` interop is
-   unverified under `rstest` 0.18.0, and the assertions are trivial. This plan
-   keeps googletest in a confined, spike-gated form to respect the brief. The
-   approver may instead choose: (a) confined + spike-gated (as planned),
-   (b) `pretty_assertions` only, no googletest, or (c) googletest throughout.
+   review unanimously recommended dropping it (keeping only
+   `pretty_assertions`) because it has no prior use here, its `#[gtest]`+
+   `#[rstest]` interop is unverified under `rstest` 0.26.1, and the assertions
+   are trivial. This plan keeps googletest in a confined, spike-gated form to
+   respect the brief. The approver may instead choose: (a) confined +
+   spike-gated (as planned), (b) `pretty_assertions` only, no googletest, or
+   (c) googletest throughout.
 2. **BDD scope.** Reviewers judged a full BDD layer largely redundant; the plan
    reduces B.5 to the single combined scenario. Confirm this is the desired
    depth, or request fuller BDD coverage.
-3. **Stray file.** `src/stdlib/command/mod_backup.rs` is an unreferenced ~41 KB
-   backup duplicating impure-flag logic. Out of scope for 3.14.5, but flagged
-   for separate cleanup so future grep-based reasoning is not misled.
 
 ## Signposted documentation and skills
 
 Documentation to consult while implementing:
 
 - `docs/netsuke-design.md` §2.5 (manifest-time `foreach`/`when` semantics),
-  §2.4 and §5.3 (dependency classes and Ninja lowering),
-  and the "executable discovery" section (`command_available`).
+  §2.4 and §5.3 (dependency classes and Ninja lowering), and the "executable
+  discovery" section (`command_available`).
 - `docs/rust-testing-with-rstest-fixtures.md` — fixture and `#[case]` patterns.
 - `docs/reliable-testing-in-rust-via-dependency-injection.md` — the
   `path_override`/resolver-injection approach used for deterministic
@@ -773,7 +760,7 @@ Skills to load while implementing:
     `expand_foreach` being `pub(crate)`.
   - Restated the `is_impure()` boundary proxy honestly: it flips for `shell()`,
     `grep()`, *and* `fetch()`; downgraded the hexagonal claim accordingly.
-  - Added a Stage A `#[gtest]`+`#[rstest]` interop spike (rstest 0.18.0 risk)
+  - Added a Stage A `#[gtest]`+`#[rstest]` interop spike (rstest 0.26.1 risk)
     with a defined fallback; confined googletest to the two white-box files and
     surfaced the crew's "drop googletest" recommendation as an approver choice.
   - Hardened determinism: the absent case now requires empty `path_override` +
@@ -791,3 +778,8 @@ Skills to load while implementing:
   Effect on remaining work: scope and file count are essentially unchanged; the
   plan is now anchored to reachable seams and verifiable assumptions. No code
   has been written; the plan remains in DRAFT pending approval.
+
+- 2026-07-28 — Rebased onto `origin/main`. Updated the plan for the repository's
+  `rstest` 0.26.1 upgrade and removed the resolved `mod_backup.rs` cleanup
+  question because that file was deleted upstream. No implementation scope or
+  architectural boundary changed.
