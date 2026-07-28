@@ -14,5 +14,6 @@ __pycache__/
 .coverage
 .uv-cache/
 .uv-tools/
+.pytest_cache/
 .typos-oxendict-base.json
 .typos-oxendict-base.toml
