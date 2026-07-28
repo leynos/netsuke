@@ -13,13 +13,41 @@ change before 1.0. Pin the Netsuke version in automated workflows.
 Netsuke requires [Ninja](https://ninja-build.org/) on `PATH`. A source build
 also requires Rust 1.89 or later.
 
-To install a published release from crates.io:
+Netsuke v0.1.0 is available from crates.io:
 
 <!-- tested-example: guide-crates-io-install -->
 
 ```sh
 cargo install netsuke
 ```
+
+Pre-built installers are available from the
+[v0.1.0 GitHub release](https://github.com/leynos/netsuke/releases/tag/v0.1.0):
+
+| Platform | Architectures                        | Packages                         |
+| -------- | ------------------------------------ | -------------------------------- |
+| Linux    | x86-64 (`amd64`) and Arm64 (`arm64`) | Debian (`.deb`) and RPM (`.rpm`) |
+| macOS    | Intel x86-64 and Apple silicon Arm64 | Installer package (`.pkg`)       |
+| Windows  | x64 and Arm64                        | Windows Installer (`.msi`)       |
+
+Download the package for the host architecture, then install it with the
+platform tool. Replace `PACKAGE` with the downloaded filename:
+
+- Debian or Ubuntu: `sudo apt install ./PACKAGE.deb`
+- Fedora, Rocky Linux, or another RPM-based distribution:
+  `sudo dnf install ./PACKAGE.rpm`
+- macOS: `sudo installer -pkg ./PACKAGE.pkg -target /`
+- Windows: `msiexec.exe /i PACKAGE.msi`
+
+The Linux packages install the binary under `/usr/bin`, add the `netsuke.1`
+manual page and declare `ninja-build` as a dependency. The macOS packages
+install the binary under `/usr/local/bin`, along with the manual page and
+licence. Ninja must be installed separately when using the macOS or Windows
+installer.
+
+SHA-256 checksum files accompany the downloadable release files. Windows
+PowerShell help files are published beside each MSI as sidecar artefacts rather
+than embedded in the installer.
 
 To install the current source checkout with Cargo:
 
@@ -31,9 +59,8 @@ cd netsuke
 cargo install --path .
 ```
 
-Release archives contain platform-specific packages and help artefacts. Unix
-archives include a `netsuke.1` manual page. Windows archives include PowerShell
-external help:
+After installing the Windows PowerShell help sidecars, inspect the external
+help with:
 
 <!-- tested-example: guide-windows-help -->
 

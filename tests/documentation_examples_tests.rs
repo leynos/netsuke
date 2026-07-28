@@ -162,6 +162,24 @@ fn installation_examples_match_source_and_release_contracts() -> Result<()> {
         "user's guide crates.io install drifted"
     );
 
+    let expected_release_details = [
+        "https://github.com/leynos/netsuke/releases/tag/v0.1.0",
+        "Debian (`.deb`) and RPM (`.rpm`)",
+        "Installer package (`.pkg`)",
+        "Windows Installer (`.msi`)",
+        "x86-64 (`amd64`) and Arm64 (`arm64`)",
+        "SHA-256 checksum files",
+    ];
+    for path in ["README.md", "docs/users-guide.md"] {
+        let document = test_fs::read_to_string(path).with_context(|| format!("read {path}"))?;
+        for expected in expected_release_details {
+            ensure!(
+                document.contains(expected),
+                "{path} should document v0.1.0 release detail: {expected}"
+            );
+        }
+    }
+
     let readme = documented_example("readme-source-install")?;
     let guide = documented_example("guide-source-install")?;
     let expected = concat!(
