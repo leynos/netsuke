@@ -34,6 +34,8 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-source-install",
     "guide-utility-commands",
     "guide-windows-help",
+    "guide-windows-help-install",
+    "guide-windows-path",
     "readme-crates-io-install",
     "readme-first-build-commands",
     "readme-first-build-manifest",
@@ -153,15 +155,26 @@ fn installation_examples_match_source_and_release_contracts() -> Result<()> {
     let readme_release = documented_example("readme-crates-io-install")?;
     let guide_release = documented_example("guide-crates-io-install")?;
     let expected_release = "cargo install netsuke\n";
-    ensure!(
-        readme_release.body == expected_release,
-        "README crates.io install drifted"
-    );
-    ensure!(
-        guide_release.body == expected_release,
-        "user's guide crates.io install drifted"
-    );
-
+    ensure!(readme_release.body == expected_release, "README drifted");
+    ensure!(guide_release.body == expected_release, "user guide drifted");
+    let expected_release_details = [
+        "https://github.com/leynos/netsuke/releases/tag/v0.1.0",
+        "Debian (`.deb`) and RPM (`.rpm`)",
+        "Installer package (`.pkg`)",
+        "Windows Installer (`.msi`)",
+        "x86-64 (`amd64`) and Arm64 (`arm64`)",
+        "Installer packages do not have checksum",
+        "The Windows MSI installs to `C:\\Program Files\\netsuke`",
+    ];
+    for path in ["README.md", "docs/users-guide.md"] {
+        let document = test_fs::read_to_string(path).with_context(|| format!("read {path}"))?;
+        for expected in expected_release_details {
+            ensure!(
+                document.contains(expected),
+                "{path} should document v0.1.0 release detail: {expected}"
+            );
+        }
+    }
     let readme = documented_example("readme-source-install")?;
     let guide = documented_example("guide-source-install")?;
     let expected = concat!(
@@ -170,15 +183,33 @@ fn installation_examples_match_source_and_release_contracts() -> Result<()> {
         "cargo install --path .\n"
     );
     ensure!(readme.body == expected, "README source install drifted");
-    ensure!(
-        guide.body == expected,
-        "user's guide source install drifted"
-    );
-
+    ensure!(guide.body == expected, "user guide source install drifted");
     let windows = documented_example("guide-windows-help")?;
+    ensure!(windows.body == "Get-Help Netsuke -Full\n", "help drifted");
+    let windows_path = documented_example("guide-windows-path")?;
+    let windows_path_fragments = [
+        "SetEnvironmentVariable",
+        "$netsukeDirectory",
+        "SetEnvironmentVariable('Path', $newUserPath, 'User')",
+    ];
     ensure!(
-        windows.body == "Get-Help Netsuke -Full\n",
-        "PowerShell help command drifted"
+        windows_path_fragments
+            .into_iter()
+            .all(|fragment| windows_path.body.contains(fragment)),
+        "Windows PATH setup should persist the MSI installation directory"
+    );
+    let windows_help_install = documented_example("guide-windows-help-install")?;
+    let windows_help_fragments = [
+        "Import-Module",
+        "$moduleDirectory = Join-Path $moduleRoot 'Netsuke\\0.1.0'",
+        "Import-Module (Join-Path $moduleDirectory 'Netsuke.psd1')",
+        "*windows-$architecture*",
+    ];
+    ensure!(
+        windows_help_fragments
+            .into_iter()
+            .all(|fragment| windows_help_install.body.contains(fragment)),
+        "Windows help setup should import the downloaded sidecars"
     );
     let staging = test_fs::read_to_string(".github/release-staging.toml")
         .context("read release staging configuration")?;

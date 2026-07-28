@@ -37,13 +37,30 @@ Netsuke currently requires:
 
 ### Installation
 
-To install from crates.io:
+Netsuke v0.1.0 is available from crates.io:
 
 <!-- tested-example: readme-crates-io-install -->
 
 ```sh
 cargo install netsuke
 ```
+
+Pre-built installers are available from the
+[v0.1.0 GitHub release](https://github.com/leynos/netsuke/releases/tag/v0.1.0):
+
+| Platform | Architectures                        | Packages                         |
+| -------- | ------------------------------------ | -------------------------------- |
+| Linux    | x86-64 (`amd64`) and Arm64 (`arm64`) | Debian (`.deb`) and RPM (`.rpm`) |
+| macOS    | Intel x86-64 and Apple silicon Arm64 | Installer package (`.pkg`)       |
+| Windows  | x64 and Arm64                        | Windows Installer (`.msi`)       |
+
+The Linux packages install the `netsuke` manual page and declare `ninja-build`
+as a dependency. Ninja must be installed separately when using the macOS or
+Windows installer. The Windows MSI installs to `C:\Program Files\netsuke` and
+does not update `PATH`. SHA-256 checksum files accompany standalone binaries
+and staged help and licence files. Installer packages do not have checksum
+sidecars in v0.1.0. See the [user's guide](docs/users-guide.md#install-netsuke)
+for platform-specific commands and Windows setup.
 
 To install the current source checkout with Cargo:
 
@@ -110,9 +127,8 @@ The core build-system compiler is implemented:
 - unit, behavioural, integration, property, snapshot, and initial Kani
   verification coverage.
 
-Release automation is configured to build packages for Linux, macOS, and
-Windows, including platform help artefacts. v0.1.0 will be the first public
-release of this work.
+The v0.1.0 release provides packages for Linux, macOS, and Windows, including
+platform help artefacts. It is the first public release of this work.
 
 ______________________________________________________________________
 
