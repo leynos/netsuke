@@ -1,0 +1,18 @@
+---
+source: tests/ninja_snapshot_tests.rs
+expression: ninja_content
+---
+rule dfd2ff5921f146a85d62fcfeb725508df48b315134db4f325585bd6981940de6
+  command = echo alpha
+
+rule e119fafadd9fa5af44c4dc58e047f27d387ed098c0702aeffbce67f90746ca3c
+  command = echo beta
+
+rule e8c3bab461990fead7f11b007334dcd68b89db712472c5a294c69609dd7302b5
+  command = echo fallback
+
+build fallback-alpha: dfd2ff5921f146a85d62fcfeb725508df48b315134db4f325585bd6981940de6 src/alpha.in | build/alpha.o shared/action.cfg || order/alpha.stamp
+
+build fallback-beta: e119fafadd9fa5af44c4dc58e047f27d387ed098c0702aeffbce67f90746ca3c src/beta.in | build/beta.o shared/action.cfg || order/beta.stamp
+
+build out/fallback: e8c3bab461990fead7f11b007334dcd68b89db712472c5a294c69609dd7302b5 src/target.in | include/fallback.h || order/target.stamp
