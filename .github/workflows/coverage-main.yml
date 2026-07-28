@@ -24,7 +24,9 @@ jobs:
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@4d696e72fff6db49f34302ccf119ba978f1032c9
         with:
-          toolchain: stable
+          # Match rust-toolchain.toml: the tree needs -Zpolonius=next (see
+          # docs/adr-006-adopt-polonius-nightly-toolchain.md).
+          toolchain: nightly-2026-06-25
           components: rustfmt, clippy
       - name: Test and Measure Coverage
         uses: leynos/shared-actions/.github/actions/generate-coverage@18bed1ca49a6de3d8882bd72635a32ae3f023d57

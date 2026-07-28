@@ -76,6 +76,25 @@ they are per-invocation arguments tagged `#[serde(skip)]` on
 would silently change the artefact destination — a footgun the design avoids by
 construction.
 
+
+## Toolchain and borrow checker
+
+Netsuke builds on the dated nightly toolchain pinned in `rust-toolchain.toml`
+with the Polonius alpha borrow-checking analysis (`-Zpolonius=next`) enabled.
+`rustup` provisions the toolchain automatically, and `.cargo/config.toml`
+applies the flag to every Cargo invocation, including rust-analyzer and
+`cargo kani`. Makefile recipes that set `RUSTFLAGS` re-state the flag through
+the `POLONIUS_FLAGS` variable because an inherited `RUSTFLAGS` environment
+variable overrides `.cargo/config.toml`.
+
+[ADR-006](adr-006-adopt-polonius-nightly-toolchain.md) records the policy
+decision, and the [polonius migration notes](polonius.md) track every site
+whose design depends on the analysis. Sites tagged `POLONIUS(...)` fail to
+compile under plain non-lexical lifetimes (NLL); do not rewrite them into
+double lookups, unconditional key clones, or id indirection, and do not pad
+new code with defensive clones that only NLL required. When a borrow-centric
+form fails to compile, consult the migration notes before restructuring.
+
 ## Quality gates
 
 Run these commands before finalizing any change:
@@ -364,7 +383,10 @@ make install-kani
 `cargo install --locked kani-verifier --version <version>`, runs
 `cargo kani setup`, and verifies that `cargo kani` is callable. Kani may manage
 its own supporting Rust nightly toolchain during setup. That toolchain must not
-replace the repository's ordinary stable Rust workflow.
+replace the repository's pinned nightly workflow (see
+[ADR-006](adr-006-adopt-polonius-nightly-toolchain.md)). Kani builds pick up
+`-Zpolonius=next` from `.cargo/config.toml`, so Polonius-dependent code
+verifies unchanged.
 
 Delegated prover targets print maintainer diagnostics to standard error before
 invoking `rust-prover-tools`. Expect `prover-tools:` lines containing the

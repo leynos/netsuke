@@ -33,7 +33,11 @@ ______________________________________________________________________
 Netsuke currently requires:
 
 - [Ninja](https://ninja-build.org/) on `PATH`;
-- Rust 1.89 or later when installing from source.
+- when installing from source, the dated Rust nightly toolchain pinned in
+  [`rust-toolchain.toml`](rust-toolchain.toml) (`rustup` installs it
+  automatically in a checkout). Netsuke builds with the Polonius borrow
+  checker (`-Zpolonius=next`), which is nightly-only until it stabilizes; see
+  [ADR-006](docs/adr-006-adopt-polonius-nightly-toolchain.md).
 
 ### Installation
 

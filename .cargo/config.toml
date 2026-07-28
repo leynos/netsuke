@@ -1,0 +1,10 @@
+# Enable the Polonius alpha borrow-checking analysis for every Cargo
+# invocation, including rust-analyzer and `cargo kani`, so editors and
+# verification tooling agree with CI about what borrows are legal.
+#
+# Note: an inherited `RUSTFLAGS` environment variable overrides this table.
+# Wrappers that set `RUSTFLAGS` (see the Makefile) must re-state
+# `-Zpolonius=next` themselves. See
+# docs/adr-006-adopt-polonius-nightly-toolchain.md.
+[build]
+rustflags = ["-Zpolonius=next"]
