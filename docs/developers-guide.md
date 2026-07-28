@@ -168,6 +168,10 @@ set -o pipefail
 make test 2>&1 | tee /tmp/netsuke-make-test.log
 ```
 
+These gates always use the repository toolchain and the default codegen
+backend. For a faster inner loop between gate runs, see
+[local build acceleration](#local-build-acceleration).
+
 ### Workflow pins and Dependabot
 
 Dependabot owns the upgrade of GitHub Actions and reusable workflows, including
@@ -367,6 +371,150 @@ tests, plain `#[rstest]` parametrized cases for exhaustive state-enumeration
 unit tests, and `rstest-bdd` release-help scenarios.
 `src/cli/config_path_precedence_tests.rs` is the canonical exhaustive
 state-enumeration example.
+
+
+## Local build acceleration
+
+Debug builds and tests can optionally use the [`mold`] linker and the Cranelift
+`rustc` codegen backend to shorten the local edit-compile-test loop. This is a
+developer convenience only. It is opt-in, it is never used for release
+artefacts, and it changes nothing about what CI builds.
+
+[`mold`]: https://github.com/rui314/mold
+
+The canonical commands are:
+
+```bash
+make install-dev-fast   # install the pinned mold release and Cranelift backend
+make dev-fast-check     # verify the prerequisites are present
+make dev-build          # debug binary via Cranelift and mold
+make dev-test           # full test suite via Cranelift and mold
+```
+
+`make dev-build` and `make dev-test` both depend on `make dev-fast-check`, so a
+missing tool reports an installation hint before Cargo is invoked rather than
+surfacing as an opaque codegen-backend or linker error.
+
+
+### Toolchain contract
+
+Three pins keep the backend, linker, and toolchain in lockstep. Change them
+together, never individually.
+
+- `tools/cranelift/VERSION` holds the nightly toolchain date, formatted
+  `nightly-YYYY-MM-DD`. The `rustc-codegen-cranelift-preview` component is
+  installed for exactly that toolchain, and `make dev-*` selects it with
+  `RUSTUP_TOOLCHAIN`.
+- `tools/mold/VERSION` holds the `mold` release tag.
+- `tools/mold/SHA256SUMS` holds the SHA-256 checksum of each supported `mold`
+  release artefact. `make install-dev-fast` refuses to install an artefact that
+  is absent from this file or whose checksum does not match.
+
+`make install-dev-fast` unpacks `mold` under `~/.local` by default; override
+the location with `DEV_FAST_PREFIX`. That prefix's `bin/` directory must
+precede any distribution-packaged `mold` on `PATH`, otherwise a system `mold`
+of a different version is used. `make dev-fast-check` reports such a drift as a
+warning and still proceeds, because a newer `mold` is normally harmless; a
+missing `mold` is a hard failure.
+
+
+### Ownership boundary
+
+The accelerated configuration lives in `tools/dev-fast/config.toml`, which is
+deliberately *not* `.cargo/config.toml`. Cargo auto-discovers the latter, and
+placing these settings there would silently apply nightly-only unstable flags
+and a Linux-only linker choice to every build in the repository, including CI.
+The fragment is instead passed explicitly with
+`cargo --config tools/dev-fast/config.toml` from the `make dev-*` targets. Do
+not add a repository-root `.cargo/config.toml`, and do not source this fragment
+from any target that CI invokes.
+
+The fragment sets three things and nothing else: the `codegen-backend` unstable
+flag, `codegen-backend = "cranelift"` on the `dev` profile, and a
+`-Clink-arg=-fuse-ld=mold` rustflag gated behind `cfg(target_os = "linux")`.
+
+
+### Composition rules
+
+- **Quality gates.** `make check-fmt`, `make lint`, `make lint-clippy`,
+  `make test`, and `make typecheck` are unchanged and remain on the stable
+  toolchain from `rust-toolchain.toml` with the default LLVM backend. The
+  `dev-*` targets are not part of `make test`, `make lint`, `make check-fmt`, or
+  `make all`, mirroring the Kani boundary described below. Run the ordinary
+  gates before proposing a change; `make dev-test` is a faster inner-loop
+  proxy, not a substitute.
+- **`RUSTFLAGS`.** `make test` and `make typecheck` set
+  `RUSTFLAGS="-D warnings"`. An externally set `RUSTFLAGS` overrides the
+  `[target.*]` `rustflags` in a Cargo configuration file, so the `dev-*`
+  targets deliberately do not set it. Exporting `RUSTFLAGS` in your shell
+  silently disables `mold` for these targets.
+- **Release and packaging.** `make release`, `make build`, and everything under
+  `.github/workflows/build-and-package.yml` use the release profile, the LLVM
+  backend, and the platform linker. Cranelift is applied to the `dev` profile
+  only, so it cannot reach a shipped artefact even if the fragment were loaded.
+- **Coverage.** Coverage is generated through LLVM source-based instrumentation
+  in `.github/workflows/ci.yml` and `coverage-main.yml`. Cranelift does not
+  emit that instrumentation. Never combine the `dev-fast` fragment with a
+  coverage run.
+- **Formal verification.** Kani manages its own supporting nightly toolchain
+  during `cargo kani setup`. That nightly is unrelated to
+  `tools/cranelift/VERSION` and must not be conflated with it; verification
+  must run on Kani's own toolchain and the LLVM backend. The same applies to
+  Verus.
+- **Test runner.** Tests currently run through `cargo test`; `cargo-nextest` is
+  not used in this repository. If it is adopted later, the same
+  `RUSTUP_TOOLCHAIN` and `--config` overrides apply unchanged, because both are
+  Cargo-level rather than runner-level concerns.
+- **rust-analyzer.** No rust-analyzer configuration is committed, so the
+  language server uses the stable toolchain and default backend. Opting
+  rust-analyzer into Cranelift is a personal, machine-local choice; it needs a
+  separate target directory to avoid thrashing the cache shared with
+  `make test`.
+- **Polonius.** A future move to the Polonius borrow checker would also need a
+  nightly toolchain. It is a separate decision with its own pin; do not overload
+  `tools/cranelift/VERSION` to carry it.
+
+
+### Fallback behaviour
+
+- **Non-Linux hosts.** `mold` ships for Linux only, so on macOS and Windows
+  `make install-dev-fast` skips the linker installation, the
+  `cfg(target_os = "linux")` gate keeps the link argument inert, and
+  `make dev-fast-check` prints the fallback to the platform linker explicitly.
+  Cranelift still applies.
+- **Unsupported architecture.** `make install-dev-fast` fails with a clear
+  message rather than guessing when `uname -m` is not one of the architectures
+  recorded in `tools/mold/SHA256SUMS`.
+- **Missing tools.** `make dev-fast-check` names the absent component — `mold`,
+  `rustup`, the pinned toolchain, or the Cranelift backend — and points at
+  `make install-dev-fast`. It exits non-zero, so `make dev-build` and
+  `make dev-test` stop before Cargo runs.
+
+
+### Benchmark evidence
+
+`make bench-build` measures both paths with one repeatable command. It builds
+the `netsuke` binary from an empty target directory, touches `src/main.rs`, and
+rebuilds. Each variant uses its own target directory under `target/bench/`, so
+neither warms the other's cache nor disturbs the working `target/` tree.
+
+Results below were recorded on a 24-core x86_64 Linux host with Rust 1.89.0 as
+the default toolchain, `nightly-2026-06-29` supplying Cranelift 0.132.0, and
+`mold` 2.41.0. Regenerate the table verbatim with `make bench-build`. Absolute
+figures move with machine load — a clean build on this host ranged from 15 s to
+24 s across runs — so the ratio between the two rows is the durable signal, not
+the seconds.
+
+| Variant                         | Clean build (s) | Incremental build (s) |
+| ------------------------------- | --------------- | --------------------- |
+| Default (LLVM, platform linker) | 15.4            | 3.6                   |
+| dev-fast (Cranelift, `mold`)    | 10.6            | 0.7                   |
+
+Table: Debug build wall-clock time for the default and accelerated paths.
+
+The clean build gains roughly a third, dominated by codegen. The incremental
+rebuild — the case that actually paces the edit-compile-test loop — is about
+five times faster, because it is dominated by linking a single crate.
 
 ## Formal-verification tooling
 

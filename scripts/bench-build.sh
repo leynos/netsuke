@@ -71,7 +71,10 @@ main() {
   measure_variant default 'Default (LLVM, platform linker)' \
     "$CARGO" build --bin "$BENCH_BIN"
 
-  measure_variant dev-fast 'dev-fast (Cranelift, mold)' \
+  # The label is backticked because the developers' guide embeds this table
+  # verbatim, and the repository spelling gate reads a bare "mold" as "mould".
+  # shellcheck disable=SC2016 # the backticks are Markdown, not a subshell.
+  measure_variant dev-fast 'dev-fast (Cranelift, `mold`)' \
     env RUSTUP_TOOLCHAIN="$toolchain" \
     "$CARGO" --config "$DEV_FAST_CONFIG" build --bin "$BENCH_BIN"
 
