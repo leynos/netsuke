@@ -37,8 +37,15 @@ Netsuke currently requires:
 
 ### Installation
 
-Until the v0.1.0 release is published, install the current source checkout with
-Cargo:
+To install from crates.io:
+
+<!-- tested-example: readme-crates-io-install -->
+
+```sh
+cargo install netsuke
+```
+
+To install the current source checkout with Cargo:
 
 <!-- tested-example: readme-source-install -->
 

@@ -40,11 +40,12 @@ This:
    source-build path is taken, the installer reports that it is falling back to
    Cargo, and on success it prints
    `Installed <tool> from source with cargo install.`. After installation,
-   `cargo-dylint` is verified by running `cargo dylint --version`, while
-   `dylint-link` is verified by resolving the executable on `PATH` and then
-   invoking it with `--help`. The installer sets `RUSTUP_TOOLCHAIN` for that
-   probe when needed, which avoids false failures from upstream
-   `dylint-link --version` while still rejecting stale shims and broken scripts.
+   `cargo-dylint` is verified by running `cargo dylint --version`.
+   `dylint-link` is never executed: it is a linker wrapper that forwards its
+   arguments to the underlying linker, so it has no reliable self-reporting
+   subcommand. A release artefact is trusted once its checksum, extraction, and
+   executable permissions have been established, and a Cargo-managed copy is
+   checked by resolving it on `PATH` and comparing the version Cargo recorded.
 2. Clones the Whitaker repository to a platform-specific data directory
 3. Builds the lint libraries
 4. Creates `whitaker` and `whitaker-ls` wrapper scripts. `whitaker` invokes
@@ -58,8 +59,8 @@ After installation, run `whitaker --all` in any Rust project to lint it. Use
 On Windows, the installer's `PATH` check honours `PATHEXT` and falls back to
 the usual executable suffixes when `PATHEXT` is unset, so a normal
 Cargo-installed executable such as `dylint-link.exe` in
-`%USERPROFILE%\.cargo\bin` is located correctly and then verified with the same
-invocation-based probe without needing a separate wrapper or manual
+`%USERPROFILE%\.cargo\bin` is located correctly and then matched against the
+version Cargo recorded for it, without needing a separate wrapper or manual
 environment-variable workaround.
 
 **Options:**
@@ -67,8 +68,8 @@ environment-variable workaround.
 - `--cranelift` — Tell the installer to add the
   `rustc-codegen-cranelift` component via `rustup component add`. The
   `rustc-codegen-cranelift` component is not included in the standard nightly
-  toolchain, so enable `--cranelift` when your project or CI requires the
-  Cranelift back-end and you would otherwise need an explicit
+  toolchain, so enable `--cranelift` when a project or CI pipeline requires the
+  Cranelift back-end and would otherwise need an explicit
   `rustc-codegen-cranelift` component-add step before running the installer.
 - `--skip-deps` — Skip `cargo-dylint`/`dylint-link` installation check
 - `--skip-wrapper` — Skip wrapper script generation (prints
@@ -128,10 +129,10 @@ Stable releases differ from `rolling`: a stable tag is expected to contain the
 complete artefact set for the release. For production installs, pin to a stable
 release tag rather than consuming `rolling`.
 
-If you consume rolling-release archives from scripts or CI, verify that the
-required target archive exists before proceeding. Treat missing archives as an
-expected condition for rolling releases rather than assuming the artefact set
-is complete.
+Scripts or CI pipelines that consume rolling-release archives should verify
+that the required target archive exists before proceeding. Treat missing
+archives as an expected condition for rolling releases rather than assuming the
+artefact set is complete.
 
 ### Selecting individual lints
 
@@ -326,17 +327,6 @@ user-written source location (macro-only glue) are silently excluded from the
 ordering check, so the lint never fires on compiler- or macro-generated code
 that the developer cannot edit.
 
-The lint checks:
-
-- All functions, methods, and trait methods that carry at least one outer
-  attribute — including macro-heavy cases such as `#[rstest]` and `#[test]`.
-
-The lint ignores:
-
-- Attributes whose recovered span is macro-only (for example, inline hints
-  injected by `#[derive(...)]`).
-- Inner attributes (`#![...]`).
-
 <!-- markdownlint-disable-next-line MD024 -->
 #### Configuration
 
@@ -459,6 +449,7 @@ Set `additional_test_attributes` to an array of attribute paths written as
 strings. Each entry should match the path Whitaker sees on the test function,
 for example `my_framework::test` or `wasm_bindgen_test`.
 
+<!-- markdownlint-disable-next-line MD024 -->
 #### Ancestor context propagation
 
 `additional_test_attributes` now apply during ancestor context detection as
@@ -474,7 +465,7 @@ ancestry chain.
 
 #[my_framework::test]
 async fn my_test() {
-    helper(); // allowed — ancestor is a recognised test function
+    helper(); // allowed — ancestor is a recognized test function
 }
 
 fn helper() {
@@ -526,11 +517,12 @@ calls inside `#[rstest]` tests into injected `#[fixture]` parameters.
 <!-- markdownlint-disable-next-line MD024 -->
 #### Scope and behaviour
 
-This lint is experimental. The current implementation registers the lint and
-loads configuration defaults so teams can opt into the forthcoming rule without
-yet receiving helper-call diagnostics. Call-site collection, cross-test
-aggregation, and actionable diagnostics are tracked by the later roadmap items
-8.2.2 through 8.2.4.
+This lint is experimental. The current implementation registers the lint, loads
+configuration defaults, and passively collects local helper calls inside strict
+`#[rstest]` tests, fingerprinting fixture-local, literal, `const`, and `static`
+arguments for later aggregation. The lint remains diagnostic-silent: threshold
+evaluation and actionable diagnostics are tracked by 8.2.3, while UI pass/fail
+coverage is tracked by 8.2.4.
 
 <!-- markdownlint-disable-next-line MD024 -->
 #### Configuration
@@ -698,3 +690,46 @@ useful diagnostic. The rule denies only closures whose `panic!` message does
 not meet the interpolated-only test exception. When the closure contains a
 static string literal in tests, prefer `.expect("static message")`; only
 interpolated-only `panic!` fallbacks are permitted there.
+
+## Clone Detection: AST Feature Extraction
+
+Whitaker's experimental clone detector runs in two passes. Pass A is a token
+scan over the workspace; Pass B lifts each candidate span into an abstract
+syntax tree (AST) substrate that later scoring will consume. This release ships
+the Pass B substrate only — it does not yet report clones (see below).
+
+**What the substrate does.** Given a source file and a candidate byte range,
+`lower_span` validates a non-empty, UTF-8-aligned `ByteSpan`, parses the
+supplied source, and lowers the smallest syntax subtree that covers the span
+into a parser-independent `NormalizedTree`. Working from the smallest covering
+subtree keeps the representation tied to the candidate rather than the whole
+file.
+
+**Feature vectors.** From a `NormalizedTree`, extraction derives a
+deterministic set of features:
+
+- exact counts of each syntax kind;
+- dyadic fixed-point depth weighting (`2^63 >> depth`), so weights halve with
+  depth and collapse to zero beyond depth 63;
+- production bigrams and trigrams (parent-to-child and
+  grandparent-to-parent-to-child kind sequences); and
+- an opaque hexadecimal canonical hash of the normalized subtree.
+
+**Schema-versioned hashes.** Every canonical hash mixes in
+`PARSER_SCHEMA_VERSION`, which is tied to the pinned parser snapshot. A
+parser-schema change therefore changes every hash by design, intentionally
+invalidating persisted snapshots and caches so stale AST fingerprints are never
+reused across incompatible parser versions.
+
+**Parser feature.** `whitaker_clones_core` enables its exact-pinned
+`ra_ap_syntax` parser adapter through the default `parser` feature. The feature
+is on by default; building the crate with it disabled makes `lower_span` return
+`AstError::ParserUnavailable` instead of lowering anything.
+
+**Not yet emitted.** Type-3 clone scoring and SARIF Run 1 emission are deferred
+to roadmap item 7.3.2. This release builds and exposes the AST substrate only;
+it does not score clones or emit AST-based SARIF results.
+
+Contributors maintaining the pinned parser should follow the
+[`ra_ap_syntax` re-pinning runbook](developers-guide.md#ra_ap_syntax-re-pinning-runbook)
+in the Developer's Guide.

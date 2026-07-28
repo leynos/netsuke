@@ -55,7 +55,7 @@ fn process_workspace_entry(
     command: &str,
     _skip_dirs: &WorkspaceSkipList,
 ) -> Result<Option<Utf8PathBuf>, ResolveError> {
-    if !ambient_fs::entry_is_file(&entry) {
+    if !entry.file_type().is_file() {
         return Ok(None);
     }
 

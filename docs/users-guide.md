@@ -13,7 +13,15 @@ change before 1.0. Pin the Netsuke version in automated workflows.
 Netsuke requires [Ninja](https://ninja-build.org/) on `PATH`. A source build
 also requires Rust 1.89 or later.
 
-Until v0.1.0 is published, the current checkout can be installed with Cargo:
+To install a published release from crates.io:
+
+<!-- tested-example: guide-crates-io-install -->
+
+```sh
+cargo install netsuke
+```
+
+To install the current source checkout with Cargo:
 
 <!-- tested-example: guide-source-install -->
 
