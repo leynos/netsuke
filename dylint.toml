@@ -27,6 +27,7 @@ excluded_crates = [
     "cli_tests",
     "dependabot_config_tests",
     "logging_stderr_tests",
+    "makefile_test_target",
     "manifest_glob_tests",
     "ninja_snapshot_tests",
     "novice_flow_smoke_tests",
