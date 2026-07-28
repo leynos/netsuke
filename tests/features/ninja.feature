@@ -40,3 +40,11 @@ Feature: Ninja file generation
     And the ninja file contains "build regenerate: "
     And the ninja file contains " | schemas/user.yml tools/generator"
     And the ninja file contains "command = echo src/main.c src/main.c > out/app"
+
+  Scenario: Selected conditional action deps become implicit Ninja dependencies
+    When the manifest file "tests/data/conditional_action_deps.yml" is compiled to IR
+    Then the graph target "fallback-alpha" has inputs "src/alpha.in"
+    And the graph target "fallback-alpha" has implicit deps "build/alpha.o, shared/action.cfg"
+    When the ninja file is generated
+    Then the ninja file contains "build fallback-alpha: "
+    And the ninja file contains " src/alpha.in | build/alpha.o shared/action.cfg || order/alpha.stamp"
