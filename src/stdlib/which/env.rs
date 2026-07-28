@@ -50,16 +50,22 @@ impl EnvSnapshot {
         })
     }
 
-    pub(super) fn resolved_dirs(&self, mode: CwdMode) -> Vec<Utf8PathBuf> {
+    /// List the directories to search, borrowing them from the snapshot.
+    ///
+    /// Returns references rather than owned paths: the search loop and the
+    /// miss diagnostics only read the directories, and the error path copies
+    /// them into the owned [`super::resolve_error::ResolveError`] at the
+    /// boundary where the data outlives the snapshot.
+    pub(super) fn resolved_dirs(&self, mode: CwdMode) -> Vec<&Utf8Path> {
         let mut dirs = Vec::new();
         if matches!(mode, CwdMode::Always) {
-            dirs.push(self.cwd.clone());
+            dirs.push(self.cwd.as_path());
         }
         for entry in &self.entries {
             match entry {
-                PathEntry::Dir(path) => dirs.push(path.clone()),
+                PathEntry::Dir(path) => dirs.push(path.as_path()),
                 PathEntry::CurrentDir if matches!(mode, CwdMode::Always | CwdMode::Auto) => {
-                    dirs.push(self.cwd.clone());
+                    dirs.push(self.cwd.as_path());
                 }
                 PathEntry::CurrentDir => {}
             }

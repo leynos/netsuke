@@ -2,7 +2,7 @@
 
 use std::{fmt, io};
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use walkdir;
 
 use super::options::CwdMode;
@@ -108,10 +108,10 @@ impl std::error::Error for ResolveError {
 ///
 /// `command` is the lookup key, `dirs` is the searched directory set, and
 /// `mode` records how the current directory contributed to the search.
-pub(super) fn not_found(command: &str, dirs: &[Utf8PathBuf], mode: CwdMode) -> ResolveError {
+pub(super) fn not_found(command: &str, dirs: &[&Utf8Path], mode: CwdMode) -> ResolveError {
     ResolveError::NotFound {
         command: command.to_owned(),
-        dirs: dirs.to_vec(),
+        dirs: dirs.iter().map(|dir| dir.to_path_buf()).collect(),
         cwd_mode: mode,
     }
 }

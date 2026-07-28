@@ -234,7 +234,7 @@ struct HandleMissContext<'a> {
     env: &'a EnvSnapshot,
     command: &'a str,
     options: &'a WhichOptions,
-    dirs: &'a [Utf8PathBuf],
+    dirs: &'a [&'a Utf8Path],
     workspace_skips: &'a WorkspaceSkipList,
 }
 

@@ -174,11 +174,11 @@ fn relative_path_entries_resolve_against_cwd(
     let resolved_dirs = snapshot.resolved_dirs(CwdMode::Never);
 
     ensure!(
-        resolved_dirs.contains(&bin),
+        resolved_dirs.contains(&bin.as_path()),
         "resolved_dirs missing bin: {resolved_dirs:?}"
     );
     ensure!(
-        resolved_dirs.contains(&tools),
+        resolved_dirs.contains(&tools.as_path()),
         "resolved_dirs missing tools: {resolved_dirs:?}"
     );
 
