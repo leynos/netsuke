@@ -845,10 +845,12 @@ for the design rationale and re-entry criteria.
 
 Pull requests run a dedicated `kani-smoke` CI job alongside the ordinary
 `build-test` job. The job installs `uv`, installs the pinned Kani version
-through `make install-kani`, and runs only `make kani-check`; it does not run
-`make kani-full`, `make verus`, coverage, CodeScene upload, or the normal build
-matrix. Its cache is intentionally separate from ordinary Cargo build
-artefacts: the job uses a Kani-specific cache key derived from
+through `make install-kani`, runs `make kani-check` as a version-drift guard,
+and then runs the bounded harness suite through `make kani-ir` under a
+20-minute job timeout; it does not run `make verus`, coverage, CodeScene
+upload, or the normal build matrix. Its cache is intentionally separate from
+ordinary Cargo build artefacts: the job uses a Kani-specific cache key derived
+from
 `tools/kani/VERSION` and the Makefile, then caches the job-local Kani Cargo
 home plus Kani support-file home.
 

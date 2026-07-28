@@ -266,5 +266,15 @@ fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
             .any(|step| step_has(step, StepField::Runs, "make kani-check")),
         "Kani smoke job should check Kani through the Make target"
     );
+    ensure!(
+        steps
+            .iter()
+            .any(|step| step_has(step, StepField::Runs, "make kani-ir")),
+        "Kani smoke job should run the bounded Kani harnesses through the Make target"
+    );
+    ensure!(
+        mapping_get(kani_job, YamlKey("timeout-minutes")).and_then(Value::as_u64) == Some(20),
+        "Kani smoke job should enforce the 20-minute cold-run ceiling"
+    );
     Ok(())
 }
