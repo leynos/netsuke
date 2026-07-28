@@ -2,9 +2,10 @@ target/
 **/*.rs.bk
 **/*~
 *.swp
-.crush
+.crush/
 .claude/
 .memdb/
+.grepai/
 build.ninja
 *:Zone.Identifier
 /graph.dot
