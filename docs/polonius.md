@@ -87,6 +87,21 @@ Scanner suspects that turned out not to be NLL residue:
 - Test-suite `drop()` calls (environment guards, HTTP fixture teardown) are
   semantic Drop effects, not borrow appeasement.
 
+## Harness consequences
+
+Tooling that rebuilds the crate with its own flags must propagate the
+Polonius flag or avoid compiling the crate:
+
+- **trybuild** discards ambient `RUSTFLAGS` and workspace `build.rustflags`,
+  replacing them via `--config` on its scratch project, and it always builds
+  the host crate as a fixture dependency. The Kani cfg policy fixture is
+  therefore compiled and run directly with the workspace `rustc`
+  (`tests/kani_cfg_ui_tests.rs`); do not reintroduce trybuild cases that
+  depend on the `netsuke` crate while the tree is Polonius-only.
+- **Kani** and **Whitaker** run under their own toolchains but read the
+  workspace `.cargo/config.toml` or the Makefile `RUSTFLAGS`, so they
+  borrow-check with `-Zpolonius=next` and need no special handling.
+
 ## Clone counts
 
 Measured with `rg --count '\.clone\(\)'` over `src/` (tests included where
