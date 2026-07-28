@@ -357,3 +357,24 @@ fn golden_html_output_matches_snapshot() -> Result<()> {
     });
     Ok(())
 }
+
+#[rstest]
+#[case::miss_registers_source(None, NodeKind::Source)]
+#[case::hit_preserves_target(
+    Some(NodeKind::Target { phony: true, always: false }),
+    NodeKind::Target { phony: true, always: false },
+)]
+fn ensure_node_mut_registers_or_returns_existing(
+    #[case] pre_registered: Option<NodeKind>,
+    #[case] expected: NodeKind,
+) {
+    let mut registry = super::NodePathRegistry::default();
+    let path = p("out/app");
+    if let Some(kind) = pre_registered {
+        registry.insert_target(&path, kind);
+    }
+    assert_eq!(*registry.ensure_node_mut(&path), expected);
+    let paths = registry.into_inner();
+    assert_eq!(paths.len(), 1);
+    assert_eq!(paths.get(&path), Some(&expected));
+}

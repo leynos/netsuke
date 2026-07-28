@@ -4,6 +4,10 @@
 
 ### Changed
 
+- Route graph-view node registration through a borrow-returning
+  `NodePathRegistry` accessor that looks paths up once on hits and clones a
+  path only on insertion
+  ([#465](https://github.com/leynos/netsuke/issues/465))
 - Build with the Polonius borrow checker (`-Zpolonius=next`) on the pinned
   `nightly-2026-06-25` toolchain; building from source now requires that
   nightly, which `rustup` installs automatically
