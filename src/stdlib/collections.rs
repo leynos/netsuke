@@ -130,7 +130,7 @@ fn group_by_filter(values: &Value, attr: &str) -> Result<Value, Error> {
 
     for item in iter {
         let key_value = resolve_group_key(&item, attr)?;
-        groups.entry(key_value.clone()).or_default().push(item);
+        groups.entry(key_value).or_default().push(item);
     }
 
     Ok(Value::from_object(GroupedValues::new(groups)))
