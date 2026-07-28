@@ -468,6 +468,12 @@ there. The tests require workflow YAML files under `.github/workflows` and
 ensure local composite action manifests under `.github/actions` are covered by
 the configured Dependabot directory patterns.
 
+`tests/packaging_smoke_tests.rs` runs `cargo package --list` to confirm that
+the packaged manifest retains build-script sources, including
+`build_l10n_audit.rs`, and rejects stale `ninja_env/` paths. It uses `--list`
+rather than `cargo publish --dry-run` because the unversioned `ambient_fs` path
+dependency has `publish = false`, which blocks a full publish verification.
+
 ### User-facing documentation examples
 
 Every fenced example in `README.md`, `docs/users-guide.md`, and
