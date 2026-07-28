@@ -166,7 +166,7 @@ escalation, not workarounds.
       and googletest/rstest interoperability; retained only the approved dev
       dependencies after reverting the throwaway spike.
 - [ ] Stage B: add new tests/fixtures in the failing-then-passing discipline
-      with per-test sabotage evidence (completed: B.1–B.3; remaining: B.4–B.5).
+      with per-test sabotage evidence (completed: B.1–B.4; remaining: B.5).
 - [ ] Stage C: documentation updates (users-guide, developers-guide,
       component architecture, ADR if warranted).
 - [ ] Stage D: full gate run, CodeRabbit review, roadmap tick.
@@ -243,6 +243,14 @@ escalation, not workarounds.
   `resolve_direct` and bypasses PATH traversal entirely. The Constraints
   section now distinguishes this stronger direct-path guard from the three
   guards required for bare command names.
+
+- Observation: a manually-created output is not enough for Ninja's no-op check,
+  even when its modification time is newer than every prerequisite, because no
+  `.ninja_log` entry records the command metadata. Evidence: B.4's first two
+  focused attempts remained dirty until one harmless real pass populated the
+  log; the following `-n` pass then reported `no work to do`. Impact:
+  real-Ninja validation creates a future-dated output, runs the selected target
+  once to record its command, and then asserts the second pass is a no-op.
 
 ## Decision log
 
@@ -352,6 +360,11 @@ lowering. The selected alpha/beta actions preserve item-substituted explicit,
 implicit, and order-only dependency classes and remain phony; the selected
 target preserves the same classes without becoming phony. Filtered-branch paths
 are absent from the graph.
+
+B.4 now pins the generated Ninja text for the shared fixture. Assertions and
+the reviewed snapshot preserve `|` implicit and `||` order-only syntax for both
+foreach actions and the selected target; real Ninja accepts and queries the
+selected edges and reaches a no-op second pass. Filtered paths remain absent.
 
 ## Context and orientation
 
@@ -807,6 +820,26 @@ Transcripts:
 and
 `/tmp/b3-sabotage-netsuke-3-14-5-regression-coverage-for-conditional-action-dependency-manifests.out`.
 
+Stage B.4 Ninja-emission and sabotage evidence:
+
+```plaintext
+passing baseline:
+1 passed; 0 failed; 3 filtered out
+snapshot matched; Ninja query/build passed; second pass was a no-op
+
+temporary sabotage:
+write implicit deps as " {}" instead of " | {}"
+conditional_action_deps_ninja_snapshot:
+  fallback-alpha build line lacked "|" before build/alpha.o
+0 passed; 1 failed; 3 filtered out
+```
+
+The production line was restored immediately with an explicit inverse patch.
+Transcripts:
+`/tmp/b4-focused-netsuke-3-14-5-regression-coverage-for-conditional-action-dependency-manifests.out`
+and
+`/tmp/b4-sabotage-netsuke-3-14-5-regression-coverage-for-conditional-action-dependency-manifests.out`.
+
 ## Interfaces and dependencies
 
 New `[dev-dependencies]` in `Cargo.toml` (pre-authorized by the brief):
@@ -954,3 +987,9 @@ Skills to load while implementing:
   foreach actions and the selected target lower dependency classes correctly.
   Recorded the direct-path determinism decision and assertion-level sabotage
   failure. Remaining work starts at Stage B.4.
+
+- 2026-07-28 — Completed Stage B.4 implementation and its non-vacuity check.
+  Added the conditional-dependency Ninja snapshot, explicit dependency-class
+  assertions, and real-Ninja query/build/no-op validation. Recorded the
+  `.ninja_log` finding and missing-separator sabotage failure. Remaining work
+  starts at Stage B.5.
