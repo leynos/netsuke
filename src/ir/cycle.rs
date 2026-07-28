@@ -28,7 +28,9 @@ mod cycle_property_tests;
 mod support;
 #[cfg(any(test, kani))]
 use support::canonicalize_cycle_by;
-use support::{canonicalize_cycle, path_cmp, path_eq, state_for_path, target_entry_for_path};
+#[cfg(not(kani))]
+use support::path_cmp;
+use support::{canonicalize_cycle, path_eq, state_for_path, target_entry_for_path};
 
 #[cfg(test)]
 #[path = "cycle_tests.rs"]
