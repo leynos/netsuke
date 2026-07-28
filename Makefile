@@ -1,8 +1,14 @@
-.PHONY: help all clean test test-workflow-contracts test-typos-config build release lint lint-clippy lint-whitaker fmt check-fmt typecheck markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr
+.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-typos-config build release lint lint-clippy lint-whitaker fmt check-fmt typecheck markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr
 
 APP ?= netsuke
 CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$$HOME/.cargo/bin/cargo")
+# Extra build-parallelism flags for plain Cargo invocations, e.g. `-j 4`.
 BUILD_JOBS ?=
+# The same concept for cargo-nextest, which spells build parallelism
+# `--build-jobs N` and reserves `-j` for test concurrency. Keep the two
+# variables separate so a `-j` value is never reinterpreted as a test-thread
+# count.
+NEXTEST_BUILD_JOBS ?=
 CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
 KANI ?= cargo kani
 KANI_FLAGS ?=
@@ -51,8 +57,13 @@ all: release ## Default target builds release binary
 clean: ## Remove build artefacts
 	$(CARGO) clean
 
-test: ## Run tests with warnings treated as errors
-	RUSTFLAGS="-D warnings" $(CARGO) test --all-targets --all-features $(BUILD_JOBS)
+test: test-nextest doctest ## Run every Rust test with warnings treated as errors
+
+test-nextest: ## Run all non-doctest Rust tests through cargo-nextest
+	RUSTFLAGS="-D warnings" $(CARGO) nextest run --all-targets --all-features $(NEXTEST_BUILD_JOBS)
+
+doctest: ## Run doctests, which cargo-nextest cannot execute
+	RUSTFLAGS="-D warnings" $(CARGO) test --doc --all-features $(BUILD_JOBS)
 
 test-workflow-contracts: ## Validate the mutation-testing caller contract
 	uv run --with 'pytest>=8' --with 'pyyaml>=6' pytest tests/workflow_contracts -q
