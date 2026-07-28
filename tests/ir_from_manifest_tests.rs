@@ -258,6 +258,108 @@ fn manifest_deps_do_not_contribute_to_recipe_inputs() -> Result<()> {
     Ok(())
 }
 
+#[rstest]
+fn conditional_action_deps_populate_distinct_ir_classes() -> Result<()> {
+    let manifest = manifest::from_path("tests/data/conditional_action_deps.yml")?;
+    let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
+
+    assert_conditional_edge(
+        &graph,
+        "fallback-alpha",
+        &ExpectedEdge {
+            inputs: &["src/alpha.in"],
+            implicit_deps: &["build/alpha.o", "shared/action.cfg"],
+            order_only_deps: &["order/alpha.stamp"],
+            is_phony: true,
+        },
+    )?;
+    assert_conditional_edge(
+        &graph,
+        "fallback-beta",
+        &ExpectedEdge {
+            inputs: &["src/beta.in"],
+            implicit_deps: &["build/beta.o", "shared/action.cfg"],
+            order_only_deps: &["order/beta.stamp"],
+            is_phony: true,
+        },
+    )?;
+    assert_conditional_edge(
+        &graph,
+        "out/fallback",
+        &ExpectedEdge {
+            inputs: &["src/target.in"],
+            implicit_deps: &["include/fallback.h"],
+            order_only_deps: &["order/target.stamp"],
+            is_phony: false,
+        },
+    )?;
+
+    let rendered_paths = graph
+        .targets
+        .iter()
+        .flat_map(|(output, edge)| {
+            std::iter::once(output)
+                .chain(&edge.inputs)
+                .chain(&edge.implicit_deps)
+                .chain(&edge.order_only_deps)
+        })
+        .map(|path| path.as_str())
+        .collect::<Vec<_>>();
+    ensure!(
+        rendered_paths
+            .iter()
+            .all(|path| !path.starts_with("preferred")),
+        "filtered branches should not contribute paths to the IR: {rendered_paths:?}"
+    );
+    Ok(())
+}
+
+struct ExpectedEdge<'a> {
+    inputs: &'a [&'a str],
+    implicit_deps: &'a [&'a str],
+    order_only_deps: &'a [&'a str],
+    is_phony: bool,
+}
+
+fn assert_conditional_edge(
+    graph: &BuildGraph,
+    output: &str,
+    expected: &ExpectedEdge<'_>,
+) -> Result<()> {
+    let edge = graph
+        .targets
+        .get(&Utf8PathBuf::from(output))
+        .with_context(|| format!("expected edge for {output}"))?;
+    let expected_paths = |paths: &[&str]| {
+        paths
+            .iter()
+            .copied()
+            .map(Utf8PathBuf::from)
+            .collect::<Vec<_>>()
+    };
+    ensure!(
+        edge.inputs == expected_paths(expected.inputs),
+        "unexpected explicit inputs for {output}: {:?}",
+        edge.inputs
+    );
+    ensure!(
+        edge.implicit_deps == expected_paths(expected.implicit_deps),
+        "unexpected implicit deps for {output}: {:?}",
+        edge.implicit_deps
+    );
+    ensure!(
+        edge.order_only_deps == expected_paths(expected.order_only_deps),
+        "unexpected order-only deps for {output}: {:?}",
+        edge.order_only_deps
+    );
+    ensure!(
+        edge.phony == expected.is_phony,
+        "unexpected phony flag for {output}: {}",
+        edge.phony
+    );
+    Ok(())
+}
+
 #[test]
 fn dependency_only_entries_lower_to_deduplicated_phony_actions() -> Result<()> {
     let yaml = concat!(
