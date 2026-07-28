@@ -27,6 +27,10 @@ struct GroupedValues {
 impl GroupedValues {
     fn new(groups: IndexMap<Value, Vec<Value>>) -> Self {
         let mut string_keys = IndexMap::new();
+        // POLONIUS-REFUSED(miss-dominant): group keys are unique, so this
+        // first-wins registration almost always inserts; the owned-key
+        // `entry` form pays nothing on the rare duplicate-label hit and a
+        // borrow-returning accessor would buy nothing here.
         for key in groups.keys() {
             if let Some(label) = key.as_str() {
                 string_keys

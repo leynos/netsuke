@@ -93,6 +93,10 @@ impl WhichResolver {
         Ok(matches)
     }
 
+    // POLONIUS-REFUSED(lock-boundary): the hit is cloned out of the LRU
+    // because a reference cannot outlive the `MutexGuard`, and the resolver
+    // is shared across template evaluation sites. Owned returns at this
+    // boundary are an aliasing/synchronization constraint, not NLL residue.
     fn try_cache(&self, key: &CacheKey) -> Option<Vec<Utf8PathBuf>> {
         let mut guard = self.lock_cache();
         guard.get(key).map(|entry| entry.matches.clone())
