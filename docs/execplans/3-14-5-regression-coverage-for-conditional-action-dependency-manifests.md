@@ -65,14 +65,18 @@ escalation, not workarounds.
 - Determinism: no new test may depend on the host's real `PATH` contents.
   "Present" cases must inject a temporary directory containing a fake
   executable via the public `StdlibConfig::with_path_override(...)` seam.
-  "Absent" cases must combine **all three** guards together: an empty
-  `path_override`, a guaranteed-absent command name (for example a
-  UUID-suffixed name), *and* `cwd_mode="never"`. An empty `path_override` alone
-  is **not** sufficient: `parse_path_entries` maps an empty PATH component to
-  the current directory and the default `CwdMode::Auto` scans the cwd
-  (`src/stdlib/which/env.rs:91`, `src/stdlib/which/options.rs:11`), so without
-  `cwd_mode="never"` the temporary workspace's own contents could shadow the
-  lookup.
+  "Absent" cases using a bare command name must combine **all three** guards
+  together: an empty `path_override`, a guaranteed-absent command name (for
+  example a UUID-suffixed name), *and* `cwd_mode="never"`. An empty
+  `path_override` alone is **not** sufficient: `parse_path_entries` maps an
+  empty PATH component to the current directory and the default `CwdMode::Auto`
+  scans the cwd (`src/stdlib/which/env.rs:91`,
+  `src/stdlib/which/options.rs:11`), so without `cwd_mode="never"` the
+  temporary workspace's own contents could shadow the lookup. Integration
+  fixtures that cannot inject `path_override` must instead use a
+  guaranteed-absent **direct path** containing a separator; `resolve_direct`
+  bypasses PATH traversal entirely
+  (`src/stdlib/which/lookup/mod.rs:44,107-120`).
 
 ## Tolerances (exception triggers)
 
@@ -162,7 +166,7 @@ escalation, not workarounds.
       and googletest/rstest interoperability; retained only the approved dev
       dependencies after reverting the throwaway spike.
 - [ ] Stage B: add new tests/fixtures in the failing-then-passing discipline
-      with per-test sabotage evidence (completed: B.1–B.2; remaining: B.3–B.5).
+      with per-test sabotage evidence (completed: B.1–B.3; remaining: B.4–B.5).
 - [ ] Stage C: documentation updates (users-guide, developers-guide,
       component architecture, ADR if warranted).
 - [ ] Stage D: full gate run, CodeRabbit review, roadmap tick.
@@ -231,6 +235,14 @@ escalation, not workarounds.
   the built-in from a `when` expression and the expansion succeeds while
   `StdlibState::is_impure()` flips to `true`. Impact: the control verifies the
   same expansion boundary without an `ensure_binaries_available` skip.
+
+- Observation: the public integration-level manifest loaders do not expose
+  `StdlibConfig::with_path_override`; `from_path_with_policy` constructs its
+  own config. Evidence: `src/manifest/mod.rs:216-235`. Impact: the B.3 fixture
+  uses a guaranteed-absent direct path containing `/`, which routes through
+  `resolve_direct` and bypasses PATH traversal entirely. The Constraints
+  section now distinguishes this stronger direct-path guard from the three
+  guards required for bare command names.
 
 ## Decision log
 
@@ -309,6 +321,14 @@ escalation, not workarounds.
   0.26.1, matching the documented interoperability contract supplied by the
   approver. Date/Author: 2026-07-28, implementation agent.
 
+- Decision: Use a direct guaranteed-absent command path in external integration
+  fixtures. Rationale: public integration loaders intentionally own stdlib
+  configuration and do not accept a PATH override; adding a production API or
+  mutating process PATH would violate the test-only and isolation constraints.
+  A command containing `/` takes the resolver's direct path and never traverses
+  PATH, which is stronger than empty-PATH isolation for this absent-only
+  fixture. Date/Author: 2026-07-28, implementation agent.
+
 ## Outcomes & retrospective
 
 Stage A completed without requiring a new seam or changing production code. The
@@ -326,6 +346,12 @@ helper. Its paired shell-in-`when` control proves the shared impurity
 observable is live during the same expansion boundary. The claim remains
 deliberately broader than shell alone, as recorded under Risks and Hexagonal
 framing.
+
+B.3 now combines conditional selection with action `foreach` and dependency
+lowering. The selected alpha/beta actions preserve item-substituted explicit,
+implicit, and order-only dependency classes and remain phony; the selected
+target preserves the same classes without becoming phony. Filtered-branch paths
+are absent from the graph.
 
 ## Context and orientation
 
@@ -761,6 +787,26 @@ Transcripts:
 and
 `/tmp/b2-sabotage-netsuke-3-14-5-regression-coverage-for-conditional-action-dependency-manifests.out`.
 
+Stage B.3 IR-lowering and sabotage evidence:
+
+```plaintext
+passing baseline:
+1 passed; 0 failed; 15 filtered out
+
+temporary sabotage:
+implicit_deps = to_paths(&target.deps) -> Vec::new()
+conditional_action_deps_populate_distinct_ir_classes:
+  fallback-alpha expected ["build/alpha.o", "shared/action.cfg"]
+  actual []
+0 passed; 1 failed; 15 filtered out
+```
+
+The production line was restored immediately with an explicit inverse patch.
+Transcripts:
+`/tmp/b3-focused-netsuke-3-14-5-regression-coverage-for-conditional-action-dependency-manifests.out`
+and
+`/tmp/b3-sabotage-netsuke-3-14-5-regression-coverage-for-conditional-action-dependency-manifests.out`.
+
 ## Interfaces and dependencies
 
 New `[dev-dependencies]` in `Cargo.toml` (pre-authorized by the brief):
@@ -902,3 +948,9 @@ Skills to load while implementing:
   Added a pure absent-command selection case and a cross-platform shell
   control, then recorded both assertion-level failures under an inverted
   impurity observable. Remaining work starts at Stage B.3.
+
+- 2026-07-28 — Completed Stage B.3 implementation and its non-vacuity check.
+  Added the combined conditional dependency fixture and verified selected
+  foreach actions and the selected target lower dependency classes correctly.
+  Recorded the direct-path determinism decision and assertion-level sabotage
+  failure. Remaining work starts at Stage B.4.
