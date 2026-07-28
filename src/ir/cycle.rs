@@ -169,13 +169,18 @@ impl<'targets> CycleDetector<'targets> {
 
     #[cfg(not(kani))]
     fn detect_targets(&mut self, search: CycleSearch) -> CycleVisitResult {
-        let mut nodes: Vec<Utf8PathBuf> = self.targets.keys().cloned().collect();
+        // Snapshot borrowed keys (not clones): the `'targets` map outlives
+        // the traversal, so the collected references stay valid while `self`
+        // is mutated. The collection exists for sorting, not to appease the
+        // borrow checker.
+        let mut nodes: Vec<&'targets Utf8Path> =
+            self.targets.keys().map(Utf8PathBuf::as_path).collect();
         // Sort keys for deterministic traversal order.  The O(n log n) cost is
         // negligible for typical build graphs (100–10 000 targets) and is
         // outweighed by the benefit of stable, reproducible error messages.
-        nodes.sort_by(|left, right| path_cmp(left.as_path(), right.as_path()));
+        nodes.sort_by(|left, right| path_cmp(left, right));
         for node in nodes {
-            let Some((target, _)) = target_entry_for_path(self.targets, node.as_path()) else {
+            let Some((target, _)) = target_entry_for_path(self.targets, node) else {
                 continue;
             };
             if self.is_visited(target) {
