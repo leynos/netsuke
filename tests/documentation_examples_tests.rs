@@ -21,6 +21,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-cli-usage",
     "guide-command-available-manifest",
     "guide-complete-manifest",
+    "guide-crates-io-install",
     "guide-first-build-commands",
     "guide-first-build-manifest",
     "guide-foreach-manifest",
@@ -149,6 +150,18 @@ fn documented_first_run_flow_builds(
 
 #[test]
 fn installation_examples_match_source_and_release_contracts() -> Result<()> {
+    let readme_release = documented_example("readme-crates-io-install")?;
+    let guide_release = documented_example("guide-crates-io-install")?;
+    let expected_release = "cargo install netsuke\n";
+    ensure!(
+        readme_release.body == expected_release,
+        "README crates.io install drifted"
+    );
+    ensure!(
+        guide_release.body == expected_release,
+        "user's guide crates.io install drifted"
+    );
+
     let readme = documented_example("readme-source-install")?;
     let guide = documented_example("guide-source-install")?;
     let expected = concat!(
