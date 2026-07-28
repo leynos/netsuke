@@ -43,11 +43,13 @@ The Linux packages install the binary under `/usr/bin`, add the `netsuke.1`
 manual page and declare `ninja-build` as a dependency. The macOS packages
 install the binary under `/usr/local/bin`, along with the manual page and
 licence. Ninja must be installed separately when using the macOS or Windows
-installer.
+installer. The Windows MSI installs to `C:\Program Files\netsuke` and does not
+update `PATH`.
 
-SHA-256 checksum files accompany the downloadable release files. Windows
-PowerShell help files are published beside each MSI as sidecar artefacts rather
-than embedded in the installer.
+SHA-256 checksum files accompany standalone binaries and staged help and
+licence files. Installer packages do not have checksum sidecars in v0.1.0.
+Windows PowerShell help files are published beside each MSI as sidecar
+artefacts rather than embedded in the installer.
 
 To install the current source checkout with Cargo:
 
@@ -59,8 +61,80 @@ cd netsuke
 cargo install --path .
 ```
 
-After installing the Windows PowerShell help sidecars, inspect the external
-help with:
+### Complete Windows setup
+
+The MSI does not add its installation directory to `PATH`. Add it to the
+current user's persistent `PATH`, update the current PowerShell session, then
+verify that the command resolves:
+
+<!-- tested-example: guide-windows-path -->
+
+```powershell
+$netsukeDirectory = Join-Path $env:ProgramFiles 'netsuke'
+$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+$userEntries = @($userPath -split ';' | Where-Object { $_ })
+if ($userEntries -notcontains $netsukeDirectory) {
+    $newUserPath = (($userEntries + $netsukeDirectory) -join ';')
+    [Environment]::SetEnvironmentVariable('Path', $newUserPath, 'User')
+}
+if (($env:Path -split ';') -notcontains $netsukeDirectory) {
+    $env:Path = "$env:Path;$netsukeDirectory"
+}
+netsuke --version
+```
+
+The release publishes PowerShell help separately for each Windows architecture.
+The following script downloads the matching module script, manifest, Microsoft
+Assistance Markup Language (MAML) help, and about-help file. It then restores
+the versioned module layout under the current user's standard PowerShell module
+directory and imports the module. Set `$architecture` to match the downloaded
+MSI:
+
+<!-- tested-example: guide-windows-help-install -->
+
+```powershell
+$architecture = 'amd64' # Use 'arm64' for the Arm64 MSI.
+$releaseUri = 'https://api.github.com/repos/leynos/netsuke/releases/tags/v0.1.0'
+$release = Invoke-RestMethod -Uri $releaseUri
+
+$documents = [Environment]::GetFolderPath('MyDocuments')
+$editionDirectory = if ($PSVersionTable.PSEdition -eq 'Desktop') {
+    'WindowsPowerShell'
+} else {
+    'PowerShell'
+}
+$moduleRoot = Join-Path $documents "$editionDirectory\Modules"
+$moduleDirectory = Join-Path $moduleRoot 'Netsuke\0.1.0'
+$helpDirectory = Join-Path $moduleDirectory 'en-US'
+New-Item -ItemType Directory -Path $helpDirectory -Force | Out-Null
+
+$patterns = @{
+    'Netsuke.psm1' = '*Netsuke.psm1'
+    'Netsuke.psd1' = '*Netsuke.psd1'
+    'Netsuke-help.xml' = '*en-US-Netsuke-help.xml'
+    'about_Netsuke.help.txt' = '*en-US-about_Netsuke.help.txt'
+}
+$localizedFiles = @('Netsuke-help.xml', 'about_Netsuke.help.txt')
+foreach ($fileName in $patterns.Keys) {
+    $pattern = "*windows-$architecture*$($patterns[$fileName])"
+    $asset = $release.assets | Where-Object { $_.name -like $pattern } | Select-Object -First 1
+    if ($null -eq $asset) {
+        throw "Release asset not found: $pattern"
+    }
+    $destinationDirectory = if ($localizedFiles -contains $fileName) {
+        $helpDirectory
+    } else {
+        $moduleDirectory
+    }
+    $destination = Join-Path $destinationDirectory $fileName
+    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $destination -UseBasicParsing
+}
+
+Import-Module (Join-Path $moduleDirectory 'Netsuke.psd1') -Force
+```
+
+The versioned directory is discoverable in later PowerShell sessions. After the
+import, inspect the external help with:
 
 <!-- tested-example: guide-windows-help -->
 

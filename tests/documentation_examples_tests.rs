@@ -34,6 +34,8 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-source-install",
     "guide-utility-commands",
     "guide-windows-help",
+    "guide-windows-help-install",
+    "guide-windows-path",
     "readme-crates-io-install",
     "readme-first-build-commands",
     "readme-first-build-manifest",
@@ -168,7 +170,8 @@ fn installation_examples_match_source_and_release_contracts() -> Result<()> {
         "Installer package (`.pkg`)",
         "Windows Installer (`.msi`)",
         "x86-64 (`amd64`) and Arm64 (`arm64`)",
-        "SHA-256 checksum files",
+        "Installer packages do not have checksum",
+        "The Windows MSI installs to `C:\\Program Files\\netsuke`",
     ];
     for path in ["README.md", "docs/users-guide.md"] {
         let document = test_fs::read_to_string(path).with_context(|| format!("read {path}"))?;
@@ -197,6 +200,16 @@ fn installation_examples_match_source_and_release_contracts() -> Result<()> {
     ensure!(
         windows.body == "Get-Help Netsuke -Full\n",
         "PowerShell help command drifted"
+    );
+    let windows_path = documented_example("guide-windows-path")?;
+    ensure!(
+        windows_path.body.contains("SetEnvironmentVariable"),
+        "Windows PATH setup should persist the MSI installation directory"
+    );
+    let windows_help_install = documented_example("guide-windows-help-install")?;
+    ensure!(
+        windows_help_install.body.contains("Import-Module"),
+        "Windows help setup should import the downloaded sidecars"
     );
     let staging = test_fs::read_to_string(".github/release-staging.toml")
         .context("read release staging configuration")?;
