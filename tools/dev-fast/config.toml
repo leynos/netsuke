@@ -1,0 +1,29 @@
+# Opt-in Cargo configuration fragment for accelerated local debug builds.
+#
+# This file is deliberately NOT `.cargo/config.toml`: Cargo auto-discovers that
+# path, which would leak nightly-only unstable flags and a Linux-only linker
+# choice into CI's stable/MSRV legs, release packaging, coverage, and the formal
+# verification toolchains. The fragment is instead passed explicitly with
+# `cargo --config tools/dev-fast/config.toml ...` from the `make dev-*` targets,
+# so every other build path keeps the supported LLVM backend and platform
+# linker.
+#
+# The pinned nightly that supplies the Cranelift backend lives in
+# `tools/cranelift/VERSION`; the pinned mold release lives in
+# `tools/mold/VERSION`. See `docs/developers-guide.md` for the ownership
+# boundary and composition rules.
+
+[unstable]
+codegen-backend = true
+
+# Cranelift trades runtime performance for compile speed, so it is applied to
+# the dev profile only. `make dev-*` never builds release artefacts.
+[profile.dev]
+codegen-backend = "cranelift"
+
+# mold ships for Linux only, so the flag is gated behind a target `cfg`. On
+# macOS and Windows the table simply does not apply and the platform default
+# linker is used; `make dev-fast-check` reports that fallback explicitly rather
+# than leaving it implicit.
+[target.'cfg(target_os = "linux")']
+rustflags = ["-Clink-arg=-fuse-ld=mold"]

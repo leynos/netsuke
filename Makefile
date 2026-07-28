@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-typos-config build release lint lint-clippy lint-whitaker fmt check-fmt typecheck markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr
+.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-typos-config build release lint lint-clippy lint-whitaker fmt check-fmt typecheck markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build
 
 APP ?= netsuke
 CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$$HOME/.cargo/bin/cargo")
@@ -18,6 +18,19 @@ KANI_FLAGS ?=
 KANI_INSTALL_FLAGS ?=
 KANI_CHECK_FLAGS ?=
 KANI_VERSION_FILE ?= tools/kani/VERSION
+# Opt-in local build acceleration. The Cargo fragment is deliberately not
+# `.cargo/config.toml`, so only the `dev-*` targets below can reach it and CI's
+# stable, MSRV, release, coverage, and formal-verification legs stay on the
+# supported LLVM backend and platform linker.
+MOLD_VERSION_FILE ?= tools/mold/VERSION
+MOLD_SHA256SUMS_FILE ?= tools/mold/SHA256SUMS
+CRANELIFT_TOOLCHAIN_FILE ?= tools/cranelift/VERSION
+DEV_FAST_CONFIG ?= tools/dev-fast/config.toml
+DEV_FAST_ENV = MOLD_VERSION_FILE='$(MOLD_VERSION_FILE)' \
+	MOLD_SHA256SUMS_FILE='$(MOLD_SHA256SUMS_FILE)' \
+	CRANELIFT_TOOLCHAIN_FILE='$(CRANELIFT_TOOLCHAIN_FILE)' \
+	DEV_FAST_CONFIG='$(DEV_FAST_CONFIG)'
+DEV_FAST_TOOLCHAIN = $$(tr -d '[:space:]' <'$(CRANELIFT_TOOLCHAIN_FILE)')
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 NIXIE ?= nixie
 # Single source of truth for the typos version; the markdownlint target and CI
@@ -147,6 +160,21 @@ verus: ## Run the Verus proof entry point
 
 formal-pr: ## Run pull-request formal-verification checks
 	$(MAKE) kani-check
+
+install-dev-fast: ## Install the pinned mold linker and Cranelift backend
+	@$(DEV_FAST_ENV) scripts/install-dev-fast.sh
+
+dev-fast-check: ## Check the mold and Cranelift local build prerequisites
+	@$(DEV_FAST_ENV) scripts/dev-fast-check.sh
+
+dev-build: dev-fast-check ## Build the debug binary with Cranelift and mold
+	RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) --config '$(DEV_FAST_CONFIG)' build $(BUILD_JOBS) --bin $(APP)
+
+dev-test: dev-fast-check ## Run the test suite with Cranelift and mold
+	RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) --config '$(DEV_FAST_CONFIG)' test --all-targets --all-features $(BUILD_JOBS)
+
+bench-build: dev-fast-check ## Time clean and incremental debug builds for both paths
+	@$(DEV_FAST_ENV) CARGO='$(CARGO)' scripts/bench-build.sh
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \
