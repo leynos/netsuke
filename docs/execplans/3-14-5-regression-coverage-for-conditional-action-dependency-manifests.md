@@ -162,7 +162,7 @@ escalation, not workarounds.
       and googletest/rstest interoperability; retained only the approved dev
       dependencies after reverting the throwaway spike.
 - [ ] Stage B: add new tests/fixtures in the failing-then-passing discipline
-      with per-test sabotage evidence (completed: none; remaining: all).
+      with per-test sabotage evidence (completed: B.1; remaining: B.2–B.5).
 - [ ] Stage C: documentation updates (users-guide, developers-guide,
       component architecture, ADR if warranted).
 - [ ] Stage D: full gate run, CodeRabbit review, roadmap tick.
@@ -216,6 +216,14 @@ escalation, not workarounds.
   emitting explicit inputs, implicit dependencies, then order-only
   dependencies. Evidence: `src/ninja_gen.rs:286-304`. Impact: keep fixture
   dependency lists deliberately ordered so the new snapshot is deterministic.
+
+- Observation: googletest's `OrFail` trait is the intended bridge from fixture
+  setup errors into `googletest::Result`. Evidence: the first B.1 compile
+  attempt could not convert `TestAssertionFailure` into `anyhow::Error`;
+  changing the test return type to `googletest::Result<()>` and applying
+  `.or_fail()?` to setup operations preserved native matcher failures and
+  passed both parameterized cases. Impact: use the same error boundary in B.2
+  instead of flattening matcher diagnostics into `anyhow`.
 
 ## Decision log
 
@@ -300,6 +308,11 @@ Stage A completed without requiring a new seam or changing production code. The
 approved dev dependencies resolve to googletest 0.14.3 and pretty_assertions
 1.4.1. The real resolver injection, expansion entry point, and deterministic
 Ninja dependency ordering all remain available as planned.
+
+B.1 now pins complementary action selection through the real resolver in both
+deterministic worlds. The present case also combines action `foreach` with
+`when`; both cases assert exactly one action survives and that expansion
+removes control fields. No production seam or semantic change was required.
 
 ## Context and orientation
 
@@ -694,6 +707,26 @@ The throwaway module and its wiring were removed immediately after this run.
 The complete transcript is in
 `/tmp/stage-a-googletest-rstest-netsuke-3-14-5-regression-coverage-for-conditional-action-dependency-manifests.out`.
 
+Stage B.1 real-resolver and sabotage evidence:
+
+```plaintext
+passing baseline:
+2 passed; 0 failed; 436 filtered out
+
+temporary sabotage:
+is_command_available(NotFound | DirectNotFound): Ok(false) -> Ok(true)
+case_2_nextest_absent failed at the surviving-action name assertion:
+expected "run-tests-legacy"
+actual   "run-tests-nextest"
+1 passed; 1 failed; 436 filtered out
+```
+
+The production line was restored immediately with an explicit inverse patch;
+`git diff -- src/stdlib/which/mod.rs` was empty afterwards. Transcripts:
+`/tmp/b1-focused-netsuke-3-14-5-regression-coverage-for-conditional-action-dependency-manifests.out`
+and
+`/tmp/b1-sabotage-netsuke-3-14-5-regression-coverage-for-conditional-action-dependency-manifests.out`.
+
 ## Interfaces and dependencies
 
 New `[dev-dependencies]` in `Cargo.toml` (pre-authorized by the brief):
@@ -825,3 +858,8 @@ Skills to load while implementing:
   googletest/rstest interoperability with the approver-specified attribute
   order. Remaining work starts at Stage B.1; no production change or new seam
   is required.
+
+- 2026-07-28 — Completed Stage B.1 implementation and its non-vacuity check.
+  Added deterministic present/absent real-resolver cases, including the
+  action-level `foreach` interaction, and recorded the assertion-level sabotage
+  failure. Remaining work starts at Stage B.2.

@@ -7,6 +7,8 @@ use minijinja::Environment;
 mod a_tracing_capture;
 #[path = "expand_test_cases/action_condition_cases.rs"]
 mod action_condition_cases;
+#[path = "expand_test_cases/command_available_selection_cases.rs"]
+mod command_available_selection_cases;
 #[path = "expand_test_cases/condition_cases.rs"]
 mod condition_cases;
 #[path = "expand_test_cases/target_command_available_cases.rs"]
