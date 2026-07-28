@@ -27,7 +27,7 @@ pub(crate) use workspace::{WORKSPACE_SKIP_DIRS, WorkspaceSkipList};
 ///
 /// When `options.all` is `true`, every executable candidate is returned;
 /// otherwise resolution stops at the first match. The current working directory
-/// is injected according to `options.cwd_mode`. Results are canonicalised when
+/// is injected according to `options.cwd_mode`. Results are canonicalized when
 /// requested, and cache-friendly options (such as `fresh`) are respected
 /// upstream by the resolver.
 ///
@@ -66,7 +66,7 @@ pub(super) fn lookup(
     }
 
     if options.canonical {
-        canonicalise(matches)
+        canonicalize(matches)
     } else {
         Ok(matches)
     }
@@ -97,7 +97,7 @@ pub(super) fn resolve_direct(
         return Err(direct_not_found_error(command, &resolved));
     }
     if options.canonical {
-        canonicalise(matches)
+        canonicalize(matches)
     } else {
         Ok(matches)
     }
@@ -114,7 +114,7 @@ pub(super) fn resolve_direct(
         return Err(direct_not_found_error(command, &resolved));
     }
     if options.canonical {
-        canonicalise(vec![resolved])
+        canonicalize(vec![resolved])
     } else {
         Ok(vec![resolved])
     }
@@ -246,7 +246,7 @@ fn handle_miss(ctx: HandleMissContext<'_>) -> Result<Vec<Utf8PathBuf>, ResolveEr
             search_workspace(ctx.env, ctx.command, ctx.options.all, ctx.workspace_skips)?;
         if !discovered.is_empty() {
             return if ctx.options.canonical {
-                canonicalise(discovered)
+                canonicalize(discovered)
             } else {
                 Ok(discovered)
             };
@@ -256,21 +256,21 @@ fn handle_miss(ctx: HandleMissContext<'_>) -> Result<Vec<Utf8PathBuf>, ResolveEr
     Err(not_found(ctx.command, ctx.dirs, ctx.options.cwd_mode))
 }
 
-/// Canonicalise, de-duplicate, and UTF-8 validate discovered paths.
+/// Canonicalize, de-duplicate, and UTF-8 validate discovered paths.
 ///
 /// Returns an error when canonicalization fails or when any canonical path
 /// cannot be represented as UTF-8.
-pub(super) fn canonicalise(paths: Vec<Utf8PathBuf>) -> Result<Vec<Utf8PathBuf>, ResolveError> {
+pub(super) fn canonicalize(paths: Vec<Utf8PathBuf>) -> Result<Vec<Utf8PathBuf>, ResolveError> {
     let mut unique = IndexSet::new();
     let mut resolved = Vec::new();
     for path in paths {
         let canonical =
-            fs::canonicalize(path.as_std_path()).map_err(|source| ResolveError::Canonicalise {
+            fs::canonicalize(path.as_std_path()).map_err(|source| ResolveError::Canonicalize {
                 path: path.clone(),
                 source,
             })?;
         let utf8 =
-            Utf8PathBuf::from_path_buf(canonical).map_err(|_| ResolveError::CanonicaliseNonUtf8)?;
+            Utf8PathBuf::from_path_buf(canonical).map_err(|_| ResolveError::CanonicalizeNonUtf8)?;
         if unique.insert(utf8.clone()) {
             resolved.push(utf8);
         }

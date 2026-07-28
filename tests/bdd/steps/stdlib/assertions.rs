@@ -90,7 +90,7 @@ pub(crate) fn assert_fetch_cache_present(world: &TestWorld) -> Result<()> {
         .stdlib_url
         .get()
         .context("expected stdlib url for cache check")?;
-    let parsed_url = Url::parse(&url).context("canonicalise stdlib cache URL")?;
+    let parsed_url = Url::parse(&url).context("canonicalize stdlib cache URL")?;
     let key = hash::sha256_hex(parsed_url.as_str().as_bytes());
     let cache_path = camino::Utf8PathBuf::from(&root)
         .join(".netsuke")

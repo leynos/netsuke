@@ -435,15 +435,15 @@ pub(super) enum ResolveError {
     NotFound { command: String, dirs: Vec<Utf8PathBuf>, cwd_mode: CwdMode },
     DirectNotFound { command: String, path: Utf8PathBuf },
     Args { detail: String },
-    Canonicalise { path: Utf8PathBuf, source: std::io::Error },
-    CanonicaliseNonUtf8,
+    Canonicalize { path: Utf8PathBuf, source: std::io::Error },
+    CanonicalizeNonUtf8,
     WorkspaceNonUtf8 { command: String, path: String },
 }
 ```
 
 The variants exactly correspond to the existing `Error` constructions in
 `error.rs`. Move the existing constructors (`not_found_error`,
-`direct_not_found`, `args_error`, the `canonicalise` error site, and the
+`direct_not_found`, `args_error`, the `canonicalize` error site, and the
 workspace non-UTF-8 site in `lookup/workspace/mod.rs`) so they return
 `ResolveError` rather than `minijinja::Error`. Delete `is_not_found_error`
 entirely; nothing should string-match the error message after this milestone.
@@ -458,8 +458,8 @@ diagnostics and must match this table exactly:
 | `NotFound`             | `netsuke::jinja::which::not_found`  | `stdlib.which.not_found` (plus the cwd-mode hint key) |
 | `DirectNotFound`       | `netsuke::jinja::which::not_found`  | `stdlib.which.direct_not_found`                       |
 | `Args`                 | `netsuke::jinja::which::args`       | `stdlib.which.args_error`                             |
-| `Canonicalise`         | (no code prefix; current behaviour) | `stdlib.which.canonicalise_failed`                    |
-| `CanonicaliseNonUtf8`  | (no code prefix; current behaviour) | `stdlib.which.canonicalise_non_utf8`                  |
+| `Canonicalize`         | (no code prefix; current behaviour) | `stdlib.which.canonicalize_failed`                    |
+| `CanonicalizeNonUtf8`  | (no code prefix; current behaviour) | `stdlib.which.canonicalize_non_utf8`                  |
 | `WorkspaceNonUtf8`     | (no code prefix; current behaviour) | `stdlib.which.workspace_non_utf8`                     |
 
 If a snapshot diff appears during this milestone, that is the
@@ -701,8 +701,8 @@ pub(super) enum ResolveError {
     NotFound { command: String, dirs: Vec<Utf8PathBuf>, cwd_mode: CwdMode },
     DirectNotFound { command: String, path: Utf8PathBuf },
     Args { detail: String },
-    Canonicalise { path: Utf8PathBuf, source: std::io::Error },
-    CanonicaliseNonUtf8,
+    Canonicalize { path: Utf8PathBuf, source: std::io::Error },
+    CanonicalizeNonUtf8,
     WorkspaceNonUtf8 { command: String, path: String },
 }
 ```

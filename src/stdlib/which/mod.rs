@@ -174,17 +174,17 @@ fn resolve_error_parts(error: &ResolveError) -> (ErrorKind, String) {
             with_not_found_code(&direct_not_found_message(command, path)),
         ),
         ResolveError::Args { detail } => (ErrorKind::InvalidOperation, args_message(detail)),
-        ResolveError::Canonicalise { path, source } => (
+        ResolveError::Canonicalize { path, source } => (
             ErrorKind::InvalidOperation,
-            canonicalise_message(path, source),
+            canonicalize_message(path, source),
         ),
         ResolveError::IsExecutable { path, source } => (
             ErrorKind::InvalidOperation,
             is_executable_message(path, source),
         ),
-        ResolveError::CanonicaliseNonUtf8 => (
+        ResolveError::CanonicalizeNonUtf8 => (
             ErrorKind::InvalidOperation,
-            localization::message(keys::STDLIB_WHICH_CANONICALISE_NON_UTF8).to_string(),
+            localization::message(keys::STDLIB_WHICH_CANONICALIZE_NON_UTF8).to_string(),
         ),
         ResolveError::WorkspaceNonUtf8 { command, path } => (
             ErrorKind::InvalidOperation,
@@ -236,8 +236,8 @@ fn args_message(detail: impl std::fmt::Display) -> String {
         .to_string()
 }
 
-fn canonicalise_message(path: &Utf8Path, source: &std::io::Error) -> String {
-    localization::message(keys::STDLIB_WHICH_CANONICALISE_FAILED)
+fn canonicalize_message(path: &Utf8Path, source: &std::io::Error) -> String {
+    localization::message(keys::STDLIB_WHICH_CANONICALIZE_FAILED)
         .with_arg("path", path.as_str())
         .with_arg("details", source.to_string())
         .to_string()

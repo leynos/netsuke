@@ -196,7 +196,7 @@ fn which_filter_all_with_duplicates_respects_canonical_false() -> Result<()> {
 }
 
 #[rstest]
-fn which_filter_all_with_duplicates_deduplicates_canonicalised_paths() -> Result<()> {
+fn which_filter_all_with_duplicates_deduplicates_canonicalized_paths() -> Result<()> {
     let mut fixture = WhichTestFixture::with_tool_in_dirs(
         &ToolName::from("helper"),
         &[DirName::from("bin"), DirName::from("bin")],
