@@ -21,12 +21,13 @@ the oracle:
    per-module clone hotspots.
 
 Every change was compiled twice on `nightly-2026-06-25`: once with
-`-Zpolonius=next` (must pass) and once without (the outcome classifies the
-change). A failure without the flag proves the design genuinely depends on
-Polonius and the site is tagged `POLONIUS(...)`; success means the old form
-was habit rather than necessity and the improvement carries no toolchain
-caveat. Behavioural test suites were required to pass unchanged in either
-case.
+`-Zpolonius=next` (must pass) and once without. The no-flag compile exists
+only to classify the individual change: a failure proves the design
+genuinely depends on Polonius and the site is tagged `POLONIUS(...)`;
+success means the old form was habit rather than necessity and the
+improvement carries no toolchain caveat. The complete behavioural test
+suite runs under `-Zpolonius=next` — the tree's only supported
+configuration — and was required to pass unchanged after every change.
 
 ## Polonius-dependent sites
 
