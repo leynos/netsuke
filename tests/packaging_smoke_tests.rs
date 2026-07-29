@@ -6,6 +6,7 @@
 
 use std::collections::BTreeSet;
 use std::env;
+use std::path::Path;
 use std::process::Command;
 
 const REQUIRED_PACKAGED_FILES: [&str; 5] = [
@@ -57,9 +58,9 @@ fn packaged_manifest_retains_build_script_sources() {
     }
 
     assert!(
-        packaged_paths
-            .iter()
-            .all(|path| !path.contains("ninja_env")),
+        packaged_paths.iter().all(|path| Path::new(path)
+            .components()
+            .all(|component| { component.as_os_str() != "ninja_env" })),
         "packaged manifest should not contain stale `ninja_env` paths"
     );
 }
