@@ -265,31 +265,31 @@ impl EdgeRegistrar<'_> {
     /// Add one edge from `input` to every output, classified by whether the
     /// output is implicit.
     fn register_input_edges(&mut self, input: &Utf8PathBuf, implicit: &BTreeSet<&Utf8PathBuf>) {
-        for out in all_outputs(self.edge) {
-            let class = if implicit.contains(out) {
+        self.insert_edges(input, |out| {
+            if implicit.contains(out) {
                 EdgeClass::ImplicitOutput
             } else {
                 EdgeClass::Explicit
-            };
-            self.edges.insert(EdgeView {
-                from: input.clone(),
-                to: out.clone(),
-                class,
-            });
-        }
+            }
+        });
     }
 
     /// Register `deps` as source nodes with a `class` edge to every output.
     fn register_dependencies(&mut self, deps: &[Utf8PathBuf], class: EdgeClass) {
         for dep in deps {
             self.registry.ensure_node_mut(dep);
-            for out in all_outputs(self.edge) {
-                self.edges.insert(EdgeView {
-                    from: dep.clone(),
-                    to: out.clone(),
-                    class,
-                });
-            }
+            self.insert_edges(dep, |_| class);
+        }
+    }
+
+    /// Insert one edge from `from` to every output, classified by `class_for`.
+    fn insert_edges(&mut self, from: &Utf8PathBuf, class_for: impl Fn(&Utf8PathBuf) -> EdgeClass) {
+        for out in all_outputs(self.edge) {
+            self.edges.insert(EdgeView {
+                from: from.clone(),
+                to: out.clone(),
+                class: class_for(out),
+            });
         }
     }
 }

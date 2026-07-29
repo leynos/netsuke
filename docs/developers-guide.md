@@ -82,8 +82,9 @@ construction.
 Netsuke builds on the dated nightly toolchain pinned in `rust-toolchain.toml`
 with the Polonius alpha borrow-checking analysis (`-Zpolonius=next`) enabled.
 `rustup` provisions the toolchain automatically, and `.cargo/config.toml`
-applies the flag to every Cargo invocation, including rust-analyzer and
-`cargo kani`. Makefile recipes that set `RUSTFLAGS` re-state the flag through
+supplies the flag by default, covering Cargo invocations such as
+rust-analyzer and `cargo kani` that run without `RUSTFLAGS` in the
+environment. Makefile recipes that set `RUSTFLAGS` re-state the flag through
 the `POLONIUS_FLAGS` variable because an inherited `RUSTFLAGS` environment
 variable overrides `.cargo/config.toml`.
 

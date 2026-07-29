@@ -309,3 +309,41 @@ fn resolve_direct_appends_pathext(workspace: Result<TempWorkspace>) -> Result<()
     );
     Ok(())
 }
+
+#[rstest]
+fn cwd_always_lists_current_directory_once(
+    #[from(workspace)] workspace_res: Result<TempWorkspace>,
+) -> Result<()> {
+    let workspace = workspace_res?;
+    let bin = workspace.root().join("bin");
+    test_fs::create_dir_all(bin.as_std_path()).context("mkdir bin")?;
+
+    // The leading empty component parses as a current-directory PATH entry.
+    let path_value = std::env::join_paths([std::path::Path::new(""), bin.as_std_path()])
+        .context("join PATH entries")?;
+    let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
+        .context("capture env with a current-directory PATH entry")?;
+
+    let always_dirs = snapshot.resolved_dirs(CwdMode::Always);
+    let always_cwd_count = always_dirs
+        .iter()
+        .filter(|dir| **dir == snapshot.cwd)
+        .count();
+    ensure!(
+        always_cwd_count == 1,
+        "Always should list the working directory exactly once: {always_dirs:?}"
+    );
+    ensure!(
+        always_dirs.first() == Some(&snapshot.cwd.as_path()),
+        "Always should search the working directory first: {always_dirs:?}"
+    );
+
+    let auto_dirs = snapshot.resolved_dirs(CwdMode::Auto);
+    let auto_cwd_count = auto_dirs.iter().filter(|dir| **dir == snapshot.cwd).count();
+    ensure!(
+        auto_cwd_count == 1,
+        "Auto should honour the PATH-listed working directory once: {auto_dirs:?}"
+    );
+
+    Ok(())
+}

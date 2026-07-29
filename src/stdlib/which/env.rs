@@ -64,7 +64,9 @@ impl EnvSnapshot {
         for entry in &self.entries {
             match entry {
                 PathEntry::Dir(path) => dirs.push(path.as_path()),
-                PathEntry::CurrentDir if matches!(mode, CwdMode::Always | CwdMode::Auto) => {
+                // `Always` has already prepended the working directory, so a
+                // current-directory PATH entry would only duplicate it.
+                PathEntry::CurrentDir if matches!(mode, CwdMode::Auto) => {
                     dirs.push(self.cwd.as_path());
                 }
                 PathEntry::CurrentDir => {}
