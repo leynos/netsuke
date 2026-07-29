@@ -1,8 +1,10 @@
-//! Parser rendering tests for localized CLI long-help output.
+//! Tests for the CLI parser's localization rendering.
 //!
-//! These tests exercise the `parser.rs` localization path for `en-US` and
-//! `es-ES`, assert that `--config <FILE>` and its Fluent-resolved description
-//! are present, and pin the complete rendered help with Insta snapshots.
+//! Exercises locale-specific long-help output for the en-US and es-ES
+//! locales, asserts that `--config <FILE>` and its Fluent-resolved
+//! description are present, and pins the complete rendered help via Insta
+//! snapshots to detect regressions in flag naming, ordering, or
+//! localization drift.
 
 use super::*;
 use crate::cli_localization::build_localizer;
