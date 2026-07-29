@@ -33,13 +33,25 @@ pub fn create_temp_ninja_file(content: &NinjaContent) -> AnyResult<NamedTempFile
     Ok(tmp)
 }
 
-/// Sync a temporary Ninja file to disk before handing its path to Ninja.
-///
-/// The tempfile lives in the ambient system temp directory, so its already-open
-/// file handle is the narrowest available authority for the sync.
-fn sync_temp_ninja_file(tmp: &NamedTempFile) -> io::Result<()> {
-    tmp.as_file().sync_all()
+mod ambient_sync {
+    //! Ambient-authority durability boundary for the temporary Ninja file.
+    //!
+    //! `tempfile` places the file in the ambient system temporary directory, so
+    //! no `cap_std::fs::Dir` handle covers it and the already-open file
+    //! descriptor is the narrowest authority available for the sync. This module
+    //! is deliberately the only part of `file_io` outside the capability policy;
+    //! it is named in `dylint.toml` under `[no_std_fs_operations]
+    //! excluded_paths` so the rest of the module stays enforced.
+
+    use super::{NamedTempFile, io};
+
+    /// Sync a temporary Ninja file to disk before handing its path to Ninja.
+    pub(super) fn sync_temp_ninja_file(tmp: &NamedTempFile) -> io::Result<()> {
+        tmp.as_file().sync_all()
+    }
 }
+
+use ambient_sync::sync_temp_ninja_file;
 
 pub fn write_text_file_utf8(dir: &cap_fs::Dir, path: &Utf8Path, content: &str) -> AnyResult<()> {
     if let Some(parent) = path.parent().filter(|p| !p.as_str().is_empty()) {

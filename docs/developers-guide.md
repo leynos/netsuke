@@ -141,14 +141,22 @@ the standalone installer described in the
 continuous integration (CI); `make lint-clippy` runs the Clippy-only subset.
 Whitaker is configured by `dylint.toml` at the repository root, where each
 sanctioned ambient-filesystem scope for `no_std_fs_operations` carries a
-documented rationale.
+documented rationale. `docs/whitaker-users-guide.md` is a near-verbatim import
+of the [upstream Whitaker user's guide][whitaker-upstream-guide]; refresh it
+from that URL rather than editing it in place, preserving the "Netsuke
+deviation from upstream" callout, and record Netsuke-specific policy here and
+in `dylint.toml`.
+
+[whitaker-upstream-guide]: https://raw.githubusercontent.com/leynos/whitaker/refs/heads/main/docs/users-guide.md
 
 Prefer `excluded_paths` over `excluded_crates`: a path entry exempts one module
 and its descendants, whereas a crate entry exempts a whole compilation unit.
 The application crate is scoped this way — only
 `netsuke::stdlib::which::lookup` (executable discovery through `PATH` and
 cross-directory symlink canonicalization, which `cap_std` cannot express) and
-`netsuke::runner::process::file_io` (temporary-file synchronization), and
+`netsuke::runner::process::file_io::ambient_sync` (temporary-file
+synchronization, scoped to the submodule holding only that `sync_all` so the
+rest of `file_io` keeps writing through `cap_std` handles), and
 `netsuke::cli::discovery::paths` (canonicalizing an ambient `--directory` to
 match OrthoConfig's layer paths) are exempt; the rest of `netsuke` stays under
 the capability policy. The behavioural step definitions, CLI integration tests,
@@ -165,6 +173,13 @@ compile here; an in-source exemption must be a *temporary*, item-level
 `#[expect(no_std_fs_operations, reason = "…")]` that states the reason and the
 route back to compliance. Prefer migrating to `cap_std` over any of these;
 reach for an exclusion only when the operation is irreducibly ambient.
+
+To confirm the exclusions have not silently widened, add a temporary
+`std::fs::metadata` call to an unexcluded module — for example
+`src/stdlib/which/cache.rs`, a sibling of the excluded `lookup` module, or the
+body of `src/runner/process/file_io.rs` outside `ambient_sync` — then run
+`make lint-whitaker`. Both sites must still be reported; revert the probe
+afterwards.
 
 When command output is long, preserve exit codes and logs:
 

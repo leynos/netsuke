@@ -17,7 +17,12 @@ excluded_paths = [
     # so these operations cannot be capability-scoped.
     "netsuke::stdlib::which::lookup",
     # Syncs the ambient temporary file the runner writes its Ninja file to.
-    "netsuke::runner::process::file_io",
+    # `tempfile` creates that file in the ambient system temporary directory, so
+    # no directory handle covers it and the open file descriptor is the narrowest
+    # authority for `sync_all`. Scoped to the `ambient_sync` submodule that holds
+    # only that call, so the rest of `file_io` — which writes through `cap_std`
+    # handles — stays under the policy.
+    "netsuke::runner::process::file_io::ambient_sync",
     # Canonicalises a caller-supplied `--directory` so it can be compared with
     # the layer paths `ortho_config` records, which that crate canonicalises
     # through `std::fs`. The comparison has to mirror it exactly, and the
