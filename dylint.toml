@@ -13,7 +13,7 @@
 excluded_paths = [
     # Application boundary. `netsuke` probes executables in directories supplied
     # by the ambient PATH and follows cross-directory symlinks when
-    # canonicalising them; `cap_std` refuses symlinks that leave the directory,
+    # canonicalizing them; `cap_std` refuses symlinks that leave the directory,
     # so these operations cannot be capability-scoped.
     "netsuke::stdlib::which::lookup",
     # Syncs the ambient temporary file the runner writes its Ninja file to.
