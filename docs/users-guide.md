@@ -11,14 +11,20 @@ change before 1.0. Pin the Netsuke version in automated workflows.
 ## Install Netsuke
 
 Netsuke requires [Ninja](https://ninja-build.org/) on `PATH`. A source build
-also requires Rust 1.89 or later.
+also requires the dated Rust nightly toolchain pinned in
+`rust-toolchain.toml`, because Netsuke builds with the Polonius borrow
+checker (`-Zpolonius=next`); `rustup` installs it automatically inside a
+checkout.
 
-Netsuke v0.1.0 is available from crates.io:
+Netsuke v0.1.0 is available from crates.io. Registry installs build outside a
+repository checkout, so neither the pinned toolchain nor the Polonius flag is
+picked up automatically; supply both explicitly:
 
 <!-- tested-example: guide-crates-io-install -->
 
 ```sh
-cargo install netsuke
+rustup toolchain install nightly-2026-06-25
+RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke
 ```
 
 Pre-built installers are available from the

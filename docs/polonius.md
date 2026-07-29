@@ -111,6 +111,13 @@ Polonius flag or avoid compiling the crate:
   line of defence. `cargo-llvm-cov` appends its instrumentation flags to
   the ambient value, so coverage inherits the flag from the job
   environment.
+- **Registry installs**: the crates.io package excludes
+  `rust-toolchain.toml` and `.cargo/config.toml`, and registry builds run
+  outside the checkout, so `cargo install netsuke` must select the pinned
+  nightly and pass the flag explicitly
+  (`RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke`).
+  The README and users' guide document the command and
+  `tests/documentation_examples_tests.rs` pins it.
 - **cargo-mutants** (scheduled, informational) runs through the shared
   `mutation-cargo.yml` workflow, which controls its own environment; if its
   runs regress with E0499 at tagged sites, the shared workflow needs the

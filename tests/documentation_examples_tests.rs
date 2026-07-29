@@ -154,7 +154,13 @@ fn documented_first_run_flow_builds(
 fn installation_examples_match_source_and_release_contracts() -> Result<()> {
     let readme_release = documented_example("readme-crates-io-install")?;
     let guide_release = documented_example("guide-crates-io-install")?;
-    let expected_release = "cargo install netsuke\n";
+    // Registry installs run outside a checkout, so the packaged source sees
+    // neither rust-toolchain.toml nor .cargo/config.toml; the documented
+    // command must select the pinned nightly and the Polonius flag itself.
+    let expected_release = concat!(
+        "rustup toolchain install nightly-2026-06-25\n",
+        "RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke\n"
+    );
     ensure!(readme_release.body == expected_release, "README drifted");
     ensure!(guide_release.body == expected_release, "user guide drifted");
     let expected_release_details = [
