@@ -191,10 +191,12 @@ fn find_existing_ancestor<'a>(
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for manifest fixture creation.
+
     use super::*;
-    use anyhow::{Context, Result, anyhow};
+    use crate::fs;
+    use anyhow::{Context, Result};
     use camino::Utf8Path;
-    use std::fs;
     use std::io;
     use tempfile::TempDir;
 
@@ -264,8 +266,8 @@ mod tests {
         );
 
         // Sanity check that content was written, not an empty file.
-        let contents = std::fs::read_to_string(manifest_path.as_std_path())
-            .context("read manifest contents")?;
+        let contents =
+            fs::read_to_string(manifest_path.as_std_path()).context("read manifest contents")?;
         assert!(
             contents.contains("netsuke_version:"),
             "unexpected manifest contents: {contents}"

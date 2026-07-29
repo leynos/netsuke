@@ -143,8 +143,9 @@ mod tests {
         EnvVarGuard, TempDir, check_ninja::fake_ninja_check_build_file, env_lock::EnvLock,
         fake_ninja,
     };
+    use crate::fs;
     use anyhow::{Context, Result};
-    use std::{ffi::OsString, fs, os::unix::ffi::OsStringExt};
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
     #[test]
     fn fake_ninja_helpers_support_non_utf8_temp_directories() -> Result<()> {

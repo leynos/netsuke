@@ -29,6 +29,8 @@ impl Drop for CwdGuard {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the working-directory guard.
+
     use super::*;
     use crate::env_lock::EnvLock;
     use rstest::{fixture, rstest};
@@ -39,18 +41,23 @@ mod tests {
         EnvLock::acquire()
     }
 
+    /// Capture the directory that is current before a test mutates it.
+    ///
+    /// Fixtures arrange state rather than assert, so this propagates the
+    /// `current_dir` failure instead of panicking; each test body unwraps it.
     #[fixture]
-    fn original_dir(_env_lock: EnvLock) -> std::path::PathBuf {
-        std::env::current_dir().expect("current_dir")
+    fn original_dir(_env_lock: EnvLock) -> io::Result<std::path::PathBuf> {
+        std::env::current_dir()
     }
 
     #[rstest]
     #[case(CwdGuard::acquire)]
     #[case(CwdGuard::new)]
     fn constructor_captures_current_directory(
-        original_dir: std::path::PathBuf,
+        original_dir: io::Result<std::path::PathBuf>,
         #[case] ctor: fn() -> io::Result<CwdGuard>,
     ) {
+        let original_dir = original_dir.expect("current_dir");
         let guard = ctor().expect("CwdGuard constructor");
         assert_eq!(
             guard.0, original_dir,
@@ -59,7 +66,8 @@ mod tests {
     }
 
     #[rstest]
-    fn drop_restores_original_directory(original_dir: std::path::PathBuf) {
+    fn drop_restores_original_directory(original_dir: io::Result<std::path::PathBuf>) {
+        let original_dir = original_dir.expect("current_dir");
         let temp = tempfile::tempdir().expect("tempdir");
 
         {

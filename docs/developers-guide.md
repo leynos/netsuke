@@ -163,8 +163,17 @@ the capability policy. The behavioural step definitions, CLI integration tests,
 and shared workflow-reading helper that stage fixtures ambiently are scoped the
 same way. A crate-level entry is justified only when the ambient access lives
 in the crate root itself, where a path entry would be no narrower — that covers
-the Cargo build script, the `test_support` fixture crate, and the enumerated
-integration-test crates.
+the Cargo build script and the enumerated integration-test crates.
+
+`test_support` is excluded from the root Cargo workspace, so the root
+`dylint.toml` cannot reach it and `whitaker --all` at the repository root never
+lints it. `make lint-whitaker` therefore runs the suite a second time from
+`test_support/`, where `test_support/dylint.toml` supplies that crate's policy:
+a single `excluded_paths` entry for `test_support::fs`, the module wrapping the
+ambient fixture operations. Every other module routes through it — `exec`,
+`manifest`, and the crate-root regression tests directly, and `check_ninja` and
+`fake_ninja` via `exec::write_exec_with_content` — so a new direct `std::fs`
+call anywhere else in the crate still fails the lint.
 
 Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
 allows. The lint does honour in-source lint attributes, but this repository
@@ -179,7 +188,9 @@ To confirm the exclusions have not silently widened, add a temporary
 `src/stdlib/which/cache.rs`, a sibling of the excluded `lookup` module, or the
 body of `src/runner/process/file_io.rs` outside `ambient_sync` — then run
 `make lint-whitaker`. Both sites must still be reported; revert the probe
-afterwards.
+afterwards. The same check applies to `test_support`: a `std::fs` call in, say,
+`test_support/src/exec.rs` must be reported even though `test_support::fs` is
+exempt.
 
 When command output is long, preserve exit codes and logs:
 

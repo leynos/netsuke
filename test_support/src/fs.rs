@@ -4,12 +4,17 @@
 //! `cap_std` handles, enforced by Whitaker's `no_std_fs_operations` lint.
 //! Test fixtures, however, routinely stage workspaces in ambient temporary
 //! directories where a capability handle adds ceremony without isolation
-//! value. This module confines that ambient access to `test_support`, which
-//! `dylint.toml` excludes from the lint — the same pattern Whitaker itself
-//! uses for its `whitaker_common` test utilities.
+//! value. This module is the crate's single ambient boundary: `test_support/`
+//! carries its own `dylint.toml` naming `test_support::fs` as the only entry
+//! under `[no_std_fs_operations] excluded_paths`, so a direct `std::fs` call in
+//! any other module still fails the lint.
 //!
 //! Scope and reuse policy: test fixtures and assertions only; production code
-//! must keep using `cap_std`.
+//! must keep using `cap_std`. Other `test_support` modules that need fixture
+//! I/O call through here rather than reaching for `std::fs` themselves:
+//! `exec`, `manifest`, and the crate-root regression tests do so directly,
+//! while `check_ninja` and `fake_ninja` reach it via
+//! [`crate::exec::write_exec_with_content`].
 
 use std::fs;
 use std::io;

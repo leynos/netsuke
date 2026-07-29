@@ -1,0 +1,23 @@
+# Whitaker lint configuration for the `test_support` crate.
+#
+# `test_support` is deliberately excluded from the root workspace (see the
+# `[workspace] exclude` note in `../Cargo.toml`), so `whitaker --all` at the
+# repository root cannot reach it and the root `dylint.toml` does not apply.
+# `make lint-whitaker` therefore runs the suite a second time from this
+# directory, where this file supplies the crate's own policy.
+#
+# Reuse policy: the same rule as the root configuration. Do not add an entry to
+# silence a new diagnostic. Route fixture filesystem access through
+# `test_support::fs`, which is the crate's single ambient boundary module.
+[no_std_fs_operations]
+
+# `test_support::fs` is the one place in this crate permitted to touch ambient
+# `std::fs`. Test fixtures stage workspaces in ambient temporary directories,
+# where a `cap_std::fs::Dir` handle adds ceremony without isolation value, so
+# that module wraps the handful of operations fixtures need and every other
+# module goes through it: `exec`, `manifest`, and the crate-root regression
+# tests call it directly, while `check_ninja` and `fake_ninja` reach it via
+# `exec::write_exec_with_content`. Keeping the exclusion at this one module
+# means a new direct `std::fs` call anywhere else in the crate still fails the
+# lint.
+excluded_paths = ["test_support::fs"]

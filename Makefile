@@ -101,6 +101,9 @@ lint-clippy: ## Run rustdoc and Clippy with warnings denied
 
 lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(WHITAKER) --all -- --all-targets --all-features
+	# `test_support` is excluded from the root workspace, so the run above cannot
+	# reach it. Lint it separately against its own dylint.toml.
+	cd test_support && RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(WHITAKER) --all -- --all-targets --all-features
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all

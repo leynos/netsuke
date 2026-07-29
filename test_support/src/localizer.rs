@@ -45,8 +45,15 @@ pub struct EnLocalizer {
 /// ```
 #[fixture]
 pub fn en_localizer() -> EnLocalizer {
+    // A poisoned lock means an earlier test panicked while holding it. The lock
+    // guards nothing but the ordering of localiser installation, and
+    // `set_en_localizer` below re-establishes the global state unconditionally,
+    // so recovering the guard is safe. Panicking here would instead fail every
+    // subsequent test that takes this fixture. `crate::env_lock` recovers from
+    // poisoning the same way.
+    let lock = localizer_test_lock().unwrap_or_else(PoisonError::into_inner);
     EnLocalizer {
-        _lock: localizer_test_lock().expect("localizer test lock poisoned"),
+        _lock: lock,
         _guard: set_en_localizer(),
     }
 }

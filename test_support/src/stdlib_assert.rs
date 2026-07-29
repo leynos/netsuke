@@ -14,6 +14,8 @@ pub fn stdlib_output_or_error<'a>(output: Option<&'a str>, error: Option<&str>) 
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the standard library assertion helpers.
+
     use super::*;
 
     #[test]

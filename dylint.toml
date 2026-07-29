@@ -57,21 +57,19 @@ excluded_paths = [
 # - build_script_build: the Cargo build script writes generated man pages and
 #   audit artefacts to ambient paths supplied by Cargo (`OUT_DIR`, `target/`),
 #   where capability-based handles offer no benefit.
-# - test_support: the shared test-fixture crate; fixture management uses
-#   ambient tempdir access by design (see test_support/src/fs.rs), matching
-#   the "test support utilities" exclusion in the Whitaker user's guide. The
-#   crate is currently excluded from the workspace, so Whitaker does not lint
-#   it; the entry is kept so folding it in does not silently reopen the
-#   question.
 # - integration test crates (tests/*.rs): fixture management writes manifests,
 #   workspaces, and captured output with ambient tempdir access, which the
 #   Whitaker user's guide lists as a sanctioned exclusion.
 #
 # Add a new entry here only when the ambient I/O really is at the crate root;
 # otherwise add a path above, and prefer migrating to `cap_std` over either.
+#
+# `test_support` is deliberately absent. It is excluded from the workspace, so
+# this file cannot reach it; `make lint-whitaker` lints it separately against
+# `test_support/dylint.toml`, which narrows its exemption to the single
+# `test_support::fs` boundary module rather than exempting the whole crate.
 excluded_crates = [
     "build_script_build",
-    "test_support",
     "advanced_usage_tests",
     "assert_cmd_tests",
     "manifest_glob_tests",

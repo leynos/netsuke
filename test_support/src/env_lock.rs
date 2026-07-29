@@ -64,15 +64,26 @@ impl Drop for EnvLock {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the environment mutation lock.
+
     use super::*;
 
-    fn assert_underlying_lock_is_held(message: &str) {
-        assert!(ENV_LOCK.try_lock().is_err(), "{message}");
+    // Macros rather than helper functions so a failure reports the calling
+    // test's line number, and so the `try_lock` unwrap stays inside a test body
+    // where a panic is the verdict rather than a fixture failure.
+    macro_rules! assert_underlying_lock_is_held {
+        ($message:expr $(,)?) => {
+            assert!(ENV_LOCK.try_lock().is_err(), "{}", $message)
+        };
     }
 
-    fn assert_underlying_lock_is_released(message: &str) {
-        let lock = ENV_LOCK.try_lock().expect(message);
-        drop(lock);
+    macro_rules! assert_underlying_lock_is_released {
+        ($message:expr $(,)?) => {
+            match ENV_LOCK.try_lock() {
+                Ok(lock) => drop(lock),
+                Err(err) => panic!("{}: {err}", $message),
+            }
+        };
     }
 
     #[test]
@@ -85,17 +96,17 @@ mod tests {
         let outer = EnvLock::acquire();
         {
             let _inner = EnvLock::acquire();
-            assert_underlying_lock_is_held(
+            assert_underlying_lock_is_held!(
                 "ENV_LOCK should remain locked while nested EnvLock guards are alive",
             );
         }
 
-        assert_underlying_lock_is_held(
+        assert_underlying_lock_is_held!(
             "ENV_LOCK should remain locked until the outer EnvLock guard is dropped",
         );
 
         drop(outer);
-        assert_underlying_lock_is_released(
+        assert_underlying_lock_is_released!(
             "ENV_LOCK should be unlocked after final EnvLock guard is dropped",
         );
     }
@@ -106,12 +117,12 @@ mod tests {
         let inner = EnvLock::acquire();
 
         drop(outer);
-        assert_underlying_lock_is_held(
+        assert_underlying_lock_is_held!(
             "ENV_LOCK should remain locked while an inner EnvLock guard is alive",
         );
 
         drop(inner);
-        assert_underlying_lock_is_released(
+        assert_underlying_lock_is_released!(
             "ENV_LOCK should be unlocked after the final out-of-order guard drops",
         );
     }

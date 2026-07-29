@@ -15,14 +15,9 @@
 //! assert!(path.exists());
 //! ```
 
+use crate::fs;
 use anyhow::{Context, Result};
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
-
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
 
 /// Write a minimal executable file named `name` inside `root`.
 pub fn write_exec(root: &Path, name: &str) -> Result<PathBuf> {
@@ -57,9 +52,7 @@ pub fn write_exec_with_content(root: &Path, name: &str, content: &str) -> Result
 /// Mark an existing file as executable by setting its Unix permission bits.
 #[cfg(unix)]
 pub fn make_executable(path: &Path) -> Result<()> {
-    let mut perms = fs::metadata(path).context("stat exec stub")?.permissions();
-    perms.set_mode(0o755);
-    fs::set_permissions(path, perms).context("chmod exec stub")?;
+    fs::set_mode(path, 0o755).context("chmod exec stub")?;
     Ok(())
 }
 
