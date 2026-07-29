@@ -67,6 +67,11 @@ jobs:
       BIN_NAME: ${{ inputs['bin-name'] }}
       VERSION: ${{ inputs.version }}
       MAN_ARCH: ${{ inputs['package-arch'] != '' && inputs['package-arch'] || 'unknown' }}
+      # Pre-set RUSTFLAGS so the setup-rust-toolchain step nested inside
+      # rust-build-release does not export its "-D warnings" default, which
+      # would shadow .cargo/config.toml and strip -Zpolonius=next (see
+      # docs/adr-006-adopt-polonius-nightly-toolchain.md).
+      RUSTFLAGS: -Zpolonius=next
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         # v7.0.1
