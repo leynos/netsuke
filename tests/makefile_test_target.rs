@@ -10,6 +10,7 @@
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
+use toml::Value;
 
 /// Opens the repository root as a capability-scoped directory handle.
 ///
@@ -115,6 +116,10 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
         "test-nextest should route through cargo nextest run, found {nextest_recipe:?}"
     );
     ensure!(
+        nextest_recipe.contains("--all-targets"),
+        "test-nextest should cover every test target, found {nextest_recipe:?}"
+    );
+    ensure!(
         nextest_recipe.contains("--all-features"),
         "test-nextest should enable all features, found {nextest_recipe:?}"
     );
@@ -140,18 +145,49 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
     Ok(())
 }
 
-#[test]
-fn behavioural_nextest_config_declares_the_serial_env_group() -> Result<()> {
-    let config = read_repo_file(&Utf8Path::new(".config").join("nextest.toml"))?;
+/// Returns the `[[profile.default.overrides]]` entries.
+fn profile_overrides(config: &Value) -> Option<&[Value]> {
+    config
+        .get("profile")?
+        .get("default")?
+        .get("overrides")?
+        .as_array()
+        .map(Vec::as_slice)
+}
 
+/// Returns the `max-threads` declared for a named test group.
+fn test_group_max_threads(config: &Value, group: &str) -> Option<i64> {
+    config
+        .get("test-groups")?
+        .get(group)?
+        .get("max-threads")?
+        .as_integer()
+}
+
+#[test]
+fn behavioural_nextest_config_binds_the_env_binaries_to_the_serial_env_group() -> Result<()> {
+    let config: Value = read_repo_file(&Utf8Path::new(".config").join("nextest.toml"))?
+        .parse()
+        .context("nextest configuration should be valid TOML")?;
+
+    let max_threads = test_group_max_threads(&config, "serial-env")
+        .context("nextest configuration should declare the serial-env test group")?;
     ensure!(
-        config.contains("serial-env = { max-threads = 1 }"),
-        "nextest configuration should keep the serial-env mutual-exclusion group"
+        max_threads == 1,
+        "serial-env should serialize its members, found max-threads = {max_threads}"
     );
+
+    let overrides =
+        profile_overrides(&config).context("the default profile should declare overrides")?;
+    let filter = overrides
+        .iter()
+        .filter(|entry| entry.get("test-group").and_then(Value::as_str) == Some("serial-env"))
+        .find_map(|entry| entry.get("filter").and_then(Value::as_str))
+        .context("an override should assign the serial-env group with a filter")?;
     for binary in ["manifest_env_tests", "ninja_env_tests", "env_path_tests"] {
         ensure!(
-            config.contains(&format!("binary({binary})")),
-            "serial-env group should still cover {binary}"
+            filter.contains(&format!("binary({binary})")),
+            "the serial-env override should cover {binary}, found filter {filter:?}"
         );
     }
     Ok(())

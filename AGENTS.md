@@ -245,9 +245,13 @@ project:
 ### Testing
 
 - The non-doctest suite runs under [cargo-nextest](https://nexte.st/), which
-  executes each test in its own process. Install it locally so runs match
-  continuous integration (CI): `cargo install cargo-nextest --locked`, or
-  `cargo binstall cargo-nextest` for a prebuilt binary.
+  executes each test in its own process. Continuous integration (CI) pins the
+  version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`; install that same
+  version locally so runs match, with
+  `cargo install cargo-nextest --locked --version "$NEXTEST_VERSION"` or
+  `cargo binstall "cargo-nextest@$NEXTEST_VERSION"` for a prebuilt binary. See
+  "Quality gates" in `docs/developers-guide.md` for a copy-paste form that
+  reads the pin from the workflow.
 - The runner is configured by `.config/nextest.toml` at the repository root.
   Its scope, the narrow `serial-env` test group, and the no-blanket-retry
   policy are documented under "Test execution" in `docs/developers-guide.md`.

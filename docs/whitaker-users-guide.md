@@ -643,9 +643,15 @@ policy.
 > package names (hyphens). For example, use `my_cli_app` rather than
 > `my-cli-app`, and `my_app::legacy_io` rather than `my-app::legacy_io`.
 >
-> **Tip:** For an ad hoc, single-site exemption that travels with the code, a
-> standard `#[allow(no_std_fs_operations)]` attribute on the item or module
-> also works, since the lint honours Rust's lint-level attributes.
+> **Tip:** For an ad hoc, single-site exemption that travels with the code, an
+> item-level lint attribute also works, since the lint honours Rust's
+> lint-level attributes.
+>
+> **Netsuke deviation from upstream — preserve when re-importing this guide.**
+> This repository denies `clippy::allow_attributes`, so
+> `#[allow(no_std_fs_operations)]` will not compile here. Use a narrowly scoped
+> `excluded_paths` entry in `dylint.toml` for a permanent exemption, or a
+> temporary `#[expect(no_std_fs_operations, reason = "…")]` on the item.
 
 **How to fix:** Replace `std::fs` with `cap_std`:
 

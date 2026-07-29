@@ -86,15 +86,16 @@ Run these commands before finalizing any change:
 
 `make test` runs the non-doctest suite through
 [cargo-nextest](https://nexte.st/) and then runs the doctests separately.
-Install nextest locally so runs match continuous integration (CI), which pins
-the same version through `NEXTEST_VERSION` in `.github/workflows/ci.yml`:
+CI pins the runner version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`.
+Install that same version locally so local runs match CI; read the pin from the
+workflow rather than copying the number, so the two cannot drift:
 
 ```bash
-cargo install cargo-nextest --locked
-
-
+NEXTEST_VERSION="$(sed -n "s/.*NEXTEST_VERSION: '\(.*\)'.*/\1/p" \
+  .github/workflows/ci.yml)"
+cargo install cargo-nextest --locked --version "$NEXTEST_VERSION"
 # or, for a prebuilt binary:
-cargo binstall cargo-nextest
+cargo binstall --no-confirm "cargo-nextest@$NEXTEST_VERSION"
 ```
 
 See [Test execution](#test-execution) for what the checked-in nextest
@@ -124,10 +125,13 @@ crate root itself, where a path entry would be no narrower — that covers the
 Cargo build script, the `test_support` fixture crate, and the enumerated
 integration-test crates.
 
-The lint also honours in-source `#[allow(no_std_fs_operations)]` for a
-single-site exemption that travels with the code. Prefer migrating to `cap_std`
-over any of these; reach for an exclusion only when the operation is
-irreducibly ambient.
+Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
+allows. The lint does honour in-source lint attributes, but this repository
+denies `clippy::allow_attributes`, so `#[allow(no_std_fs_operations)]` will not
+compile here; an in-source exemption must be a *temporary*, item-level
+`#[expect(no_std_fs_operations, reason = "…")]` that states the reason and the
+route back to compliance. Prefer migrating to `cap_std` over any of these;
+reach for an exclusion only when the operation is irreducibly ambient.
 
 When command output is long, preserve exit codes and logs:
 
