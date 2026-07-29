@@ -1413,6 +1413,23 @@ be needed. Two 0.11 API removals shape the code here:
 The 0.11 crates also dropped the `std` feature; `alloc` is the equivalent
 minimal feature for returning an owned digest.
 
+Both removals are pinned by compile-fail fixtures in
+`tests/sha2_migration_ui_tests.rs`, which assert that `format!("{:x}", digest)`
+and `io::copy(reader, &mut hasher)` do not compile. Runtime tests confirm the
+replacements produce correct digests, but they cannot notice the pre-0.11
+patterns becoming available again — for example if `sha2` were downgraded. The
+`.stderr` files record diagnostics from the pinned toolchain; a toolchain bump
+can reword them without any real regression, so re-bless with
+`TRYBUILD=overwrite cargo test --test sha2_migration_ui_tests` and confirm the
+diff still shows the same unsatisfied trait bound.
+
+`stdlib::path::hash_utils` unit-tests the chunked streaming loop against a
+one-shot digest for inputs that span more than one 8192-byte read, plus a
+published `"abc"` vector so the cross-check cannot pass by agreeing on a wrong
+value. `test_support::hash::sha256_hex` is likewise pinned to the published
+empty-input and `"abc"` vectors, since behavioural tests use it as the
+yardstick for production cache keys.
+
 ## Manifest processing helpers
 
 ### Expansion helpers
