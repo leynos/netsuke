@@ -70,6 +70,7 @@ excluded_crates = [
     "advanced_usage_tests",
     "assert_cmd_tests",
     "dev_fast_install_tests",
+    "dev_fast_make_target_tests",
     "manifest_glob_tests",
     "ninja_snapshot_tests",
     "novice_flow_smoke_tests",

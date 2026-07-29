@@ -539,25 +539,50 @@ flag, `codegen-backend = "cranelift"` on the `dev` profile, and a
 
 ### Testing the tooling
 
-`tests/dev_fast_check_tests.rs` and `tests/dev_fast_install_tests.rs` cover the
-targets' observable behaviour: the diagnostics each failure mode emits, the
-exit status, and the installer's refusal to unpack an unverifiable artefact.
-They need neither `mold`, `rustup`, nor a network, so they run as part of
+Three suites cover the tooling's observable behaviour. All are hermetic — no
+network, and no real `mold`, `rustup`, or Cargo — so they run as part of
 `make test` on any Linux host.
 
-The harness is `test_support::dev_fast::Sandbox`. Because the scripts probe
-`PATH`, a test cannot express "the tool is absent" by prepending fakes on a
-machine that has the real tool installed. The sandbox therefore builds `PATH`
-from nothing — an explicit allowlist of ordinary utilities symlinked into a
-temporary directory, plus whichever fakes a case installs — and redirects
-`HOME` so the Makefile's `$(HOME)/.local/bin` export cannot reach outside it.
-Add to `SANDBOX_UTILITIES` when a script gains a dependency; a missing entry
-surfaces as a test failure rather than as a silent fallback to the developer's
-own tools.
+- `tests/dev_fast_check_tests.rs`: the capability gate. Which diagnostic each
+  failure mode emits, and that `dev-build` and `dev-test` stop before Cargo
+  runs.
+- `tests/dev_fast_install_tests.rs`: the installer and benchmark scripts,
+  invoked directly. Verification against a locally built release, and the
+  refusal to unpack an artefact whose checksum mismatches or is unlisted.
+- `tests/dev_fast_make_target_tests.rs`: the Make recipes' success paths. That
+  `dev-build` and `dev-test` select the pinned nightly, pass
+  `--config tools/dev-fast/config.toml`, run the expected Cargo subcommand, and
+  lead `PATH` with the install prefix; that `install-dev-fast` forwards the
+  prefix, pin overrides, and release URL; and that `bench-build` emits both
+  variant rows.
 
-Reuse the sandbox for any future target with the same shape. Do not reach for
-`PathGuard` here: these tests spawn children with a bespoke environment rather
-than mutating the parent's, which is what keeps them safe to run in parallel.
+The fixtures live in `test_support::dev_fast`:
+
+- `Sandbox` builds `PATH` from nothing — an explicit allowlist of ordinary
+  utilities symlinked into a temporary directory, plus whichever fakes a case
+  installs — and redirects `HOME` so the Makefile's `$(HOME)/.local/bin` export
+  cannot reach outside it. Prepending fakes would not do: on a machine with a
+  real `mold` installed, a test could not then express "the tool is absent".
+  Add to `SANDBOX_UTILITIES` when a script gains a dependency; a missing entry
+  surfaces as a test failure rather than as a silent fallback to the
+  developer's own tools.
+- `FakeRelease` publishes a tarball under the `v<version>` path the installer
+  requests and serves it over a `file://` URL, exercising the real URL layout,
+  checksum verification, and strip depth. Each release owns its version, so no
+  caller threads a version string around.
+- `RecordingCargo` is a fake `cargo` that logs the arguments,
+  `RUSTUP_TOOLCHAIN`,
+  and `PATH` of every invocation, turning a recipe's command line into a
+  checkable fact.
+- `MakeInvocation` describes a Make run. Variable overrides and environment
+  entries are kept apart deliberately: a command-line variable outranks a `?=`
+  default, whereas an environment entry is the only channel for a setting a
+  script reads without the Makefile naming it.
+
+Assert on the shape of a timing cell, never on a duration. Reuse the sandbox
+for any future target with the same shape, and do not reach for `PathGuard`:
+these tests spawn children with a bespoke environment rather than mutating the
+parent's, which is what keeps them safe to run in parallel.
 
 ### Benchmark evidence
 

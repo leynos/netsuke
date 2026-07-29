@@ -3,127 +3,128 @@
 //! The installer's security-relevant behaviour is that it refuses to unpack an
 //! artefact it cannot verify, so these tests serve a locally built tarball over
 //! a `file://` URL and vary only the recorded checksum. No network is used.
+//!
+//! The Make targets that wrap these scripts are covered separately in
+//! `dev_fast_make_target_tests.rs`.
 
 #![cfg(all(unix, target_os = "linux"))]
 
 use anyhow::{Context, Result, ensure};
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8PathBuf;
 use rstest::rstest;
 use std::fs;
-use std::process::Command;
-use test_support::dev_fast::{Sandbox, combined, pinned_mold_version, pinned_toolchain};
+use test_support::dev_fast::{
+    FakeRelease, Sandbox, combined, pinned_mold_version, pinned_toolchain,
+};
 
-/// A stand-in mold release laid out like the real tarball: a versioned root
-/// directory the installer strips, containing `bin/mold`.
-struct FakeRelease {
-    dir: Utf8PathBuf,
-    archive: Utf8PathBuf,
-    name: String,
-    sha256: String,
+/// The version the fake release is published as. Deliberately not a real mold
+/// version, so a test that accidentally reached the network would fail rather
+/// than silently succeed against an upstream artefact.
+const TEST_MOLD_VERSION: &str = "9.9.9";
+
+/// A digest that cannot match any artefact, for the mismatch case.
+const WRONG_SHA256: &str = "0000000000000000000000000000000000000000000000000000000000000000";
+
+/// The installer inputs pointing at a local fake release.
+///
+/// Grouping them keeps the version, pin path, checksum path, and URL travelling
+/// together as one value instead of as a handful of interchangeable strings.
+struct InstallerFixture {
+    version_pin: Utf8PathBuf,
+    checksums: Utf8PathBuf,
+    base_url: String,
 }
 
-fn build_fake_release(sandbox: &Sandbox, version: &str) -> Result<FakeRelease> {
-    let dir = sandbox.home().join("releases");
-    let root = format!("mold-{version}-x86_64-linux");
-    let staging = dir.join(&root);
-    fs::create_dir_all(staging.join("bin").as_std_path()).context("stage fake release tree")?;
-    fs::write(
-        staging.join("bin/mold").as_std_path(),
-        "#!/bin/sh\necho fake\n",
-    )
-    .context("write staged mold")?;
-
-    let name = format!("{root}.tar.gz");
-    let archive = dir.join(&name);
-    let status = Command::new(sandbox.bin().join("tar").as_std_path())
-        .current_dir(dir.as_std_path())
-        .args(["--create", "--gzip", "--file"])
-        .arg(&name)
-        .arg(&root)
-        .status()
-        .context("create fake release tarball")?;
-    ensure!(status.success(), "tar should build the fake release");
-
-    let sha256 = sha256_of(sandbox, &archive)?;
-    Ok(FakeRelease {
-        dir,
-        archive,
-        name,
-        sha256,
-    })
+impl InstallerFixture {
+    /// Environment overrides for a direct `install-dev-fast.sh` invocation.
+    fn script_env(&self) -> Vec<(&'static str, String)> {
+        vec![
+            ("MOLD_VERSION_FILE", self.version_pin.to_string()),
+            ("MOLD_SHA256SUMS_FILE", self.checksums.to_string()),
+            ("MOLD_RELEASE_BASE_URL", self.base_url.clone()),
+        ]
+    }
 }
 
-fn sha256_of(sandbox: &Sandbox, path: &Utf8Path) -> Result<String> {
-    let output = Command::new(sandbox.bin().join("sha256sum").as_std_path())
-        .arg(path.as_std_path())
-        .output()
-        .context("hash fake release tarball")?;
-    ensure!(output.status.success(), "sha256sum should succeed");
-    let text = String::from_utf8_lossy(&output.stdout);
-    Ok(text
-        .split_whitespace()
-        .next()
-        .context("parse sha256sum output")?
-        .to_owned())
+/// A sandbox with a published fake release and a usable `rustup`.
+struct InstallerScenario {
+    sandbox: Sandbox,
+    release: FakeRelease,
 }
 
-/// Point the installer at a local release directory, with a caller-chosen
-/// checksum recorded for the artefact.
-fn install_env(
-    sandbox: &Sandbox,
-    release: &FakeRelease,
-    version: &str,
-    recorded: &str,
-) -> Result<Vec<(&'static str, String)>> {
-    let version_file = sandbox.home().join("MOLD_VERSION");
-    let sums_file = sandbox.home().join("SHA256SUMS");
-    fs::write(version_file.as_std_path(), format!("{version}\n"))
-        .context("write test version pin")?;
-    fs::write(
-        sums_file.as_std_path(),
-        format!("{recorded}  {}\n", release.name),
-    )
-    .context("write test checksum file")?;
+impl InstallerScenario {
+    /// Publish a release and make the Cranelift toolchain appear installed, so
+    /// only the linker half of the installer is under test.
+    fn prepare() -> Result<Self> {
+        let sandbox = Sandbox::new()?;
+        sandbox.write_rustup(&pinned_toolchain()?, true)?;
+        let release = FakeRelease::publish(&sandbox, TEST_MOLD_VERSION)?;
+        Ok(Self { sandbox, release })
+    }
 
-    Ok(vec![
-        ("MOLD_VERSION_FILE", version_file.to_string()),
-        ("MOLD_SHA256SUMS_FILE", sums_file.to_string()),
-        (
-            "MOLD_RELEASE_BASE_URL",
-            // The installer appends `/v<version>/<name>`, so expose the release
-            // directory under a matching `v<version>` path.
-            format!("file://{}", release.dir),
-        ),
-    ])
+    /// Fixture recording the release's real digest, so verification passes.
+    fn with_matching_checksum(&self) -> Result<InstallerFixture> {
+        self.fixture(
+            self.release
+                .write_checksums(&self.sandbox, self.release.sha256())?,
+        )
+    }
+
+    /// Fixture whose checksum file fails verification in the given way.
+    fn with_failure(&self, failure: ChecksumFailure) -> Result<InstallerFixture> {
+        self.fixture(failure.write_checksums(&self.sandbox, &self.release)?)
+    }
+
+    fn fixture(&self, checksums: Utf8PathBuf) -> Result<InstallerFixture> {
+        Ok(InstallerFixture {
+            version_pin: self.release.write_version_pin(&self.sandbox)?,
+            checksums,
+            base_url: self.release.base_url(),
+        })
+    }
+
+    fn installed_mold(&self) -> Utf8PathBuf {
+        self.sandbox.prefix().join("bin/mold")
+    }
 }
 
-/// The installer builds `<base>/v<version>/<name>`; mirror the artefact there.
-fn publish_under_version_path(release: &FakeRelease, version: &str) -> Result<()> {
-    let versioned = release.dir.join(format!("v{version}"));
-    fs::create_dir_all(versioned.as_std_path()).context("create versioned release path")?;
-    fs::copy(
-        release.archive.as_std_path(),
-        versioned.join(&release.name).as_std_path(),
-    )
-    .context("publish fake release under its version path")?;
-    Ok(())
+/// The ways verification can legitimately fail.
+///
+/// A closed enum rather than a pair of strings: each variant owns both the
+/// checksum file it needs and the diagnostic the installer must emit, so the two
+/// cannot drift apart.
+#[derive(Copy, Clone, Debug)]
+enum ChecksumFailure {
+    /// The artefact is listed, but under a different digest.
+    Mismatch,
+    /// The checksum file is well-formed but says nothing about this artefact.
+    MissingEntry,
 }
 
-fn prepared_installer(version: &str) -> Result<(Sandbox, FakeRelease)> {
-    let sandbox = Sandbox::new()?;
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
-    let release = build_fake_release(&sandbox, version)?;
-    publish_under_version_path(&release, version)?;
-    Ok((sandbox, release))
+impl ChecksumFailure {
+    fn write_checksums(self, sandbox: &Sandbox, release: &FakeRelease) -> Result<Utf8PathBuf> {
+        match self {
+            Self::Mismatch => release.write_checksums(sandbox, WRONG_SHA256),
+            Self::MissingEntry => release.write_checksums_omitting_this_artefact(sandbox),
+        }
+    }
+
+    const fn expected_diagnostic(self) -> &'static str {
+        match self {
+            Self::Mismatch => "checksum mismatch",
+            Self::MissingEntry => "no checksum recorded",
+        }
+    }
 }
 
 #[test]
 fn installs_and_records_the_verification_when_the_checksum_matches() -> Result<()> {
-    let version = "9.9.9";
-    let (sandbox, release) = prepared_installer(version)?;
-    let env = install_env(&sandbox, &release, version, &release.sha256)?;
+    let scenario = InstallerScenario::prepare()?;
+    let fixture = scenario.with_matching_checksum()?;
 
-    let output = sandbox.script("install-dev-fast.sh", &env)?;
+    let output = scenario
+        .sandbox
+        .script("install-dev-fast.sh", &fixture.script_env())?;
     let text = combined(&output);
 
     ensure!(
@@ -131,11 +132,11 @@ fn installs_and_records_the_verification_when_the_checksum_matches() -> Result<(
         "install should succeed, got `{text}`"
     );
     ensure!(
-        text.contains(&format!("verified {}", release.name)),
+        text.contains(&format!("verified {}", scenario.release.name())),
         "should report the verification, got `{text}`"
     );
     ensure!(
-        sandbox.prefix().join("bin/mold").as_std_path().is_file(),
+        scenario.installed_mold().as_std_path().is_file(),
         "the tarball root should be stripped so bin/mold lands in the prefix"
     );
     ensure!(
@@ -146,34 +147,17 @@ fn installs_and_records_the_verification_when_the_checksum_matches() -> Result<(
 }
 
 /// Refusing an unverifiable artefact is the point of the checksum file, so both
-/// a mismatch and an unlisted name must abort before anything is unpacked.
+/// failure modes must abort before anything is unpacked.
 #[rstest]
-#[case::mismatch(
-    "0000000000000000000000000000000000000000000000000000000000000000",
-    "checksum mismatch"
-)]
-#[case::unlisted("", "no checksum recorded")]
-fn refuses_to_install_an_unverifiable_artefact(
-    #[case] recorded: &str,
-    #[case] expected: &str,
-) -> Result<()> {
-    let version = "9.9.9";
-    let (sandbox, release) = prepared_installer(version)?;
-    let mut env = install_env(&sandbox, &release, version, recorded)?;
-    if recorded.is_empty() {
-        // Record a checksum for a different artefact, so the file is valid but
-        // this release is absent from it.
-        let sums_file = sandbox.home().join("SHA256SUMS");
-        fs::write(
-            sums_file.as_std_path(),
-            format!("{}  mold-0.0.0-x86_64-linux.tar.gz\n", release.sha256),
-        )
-        .context("write checksum file without this artefact")?;
-        env.retain(|(key, _)| *key != "MOLD_SHA256SUMS_FILE");
-        env.push(("MOLD_SHA256SUMS_FILE", sums_file.to_string()));
-    }
+#[case::mismatch(ChecksumFailure::Mismatch)]
+#[case::missing_entry(ChecksumFailure::MissingEntry)]
+fn refuses_to_install_an_unverifiable_artefact(#[case] failure: ChecksumFailure) -> Result<()> {
+    let scenario = InstallerScenario::prepare()?;
+    let fixture = scenario.with_failure(failure)?;
 
-    let output = sandbox.script("install-dev-fast.sh", &env)?;
+    let output = scenario
+        .sandbox
+        .script("install-dev-fast.sh", &fixture.script_env())?;
     let text = combined(&output);
 
     ensure!(
@@ -181,11 +165,12 @@ fn refuses_to_install_an_unverifiable_artefact(
         "install should abort, got `{text}`"
     );
     ensure!(
-        text.contains(expected),
-        "should explain the refusal (`{expected}`), got `{text}`"
+        text.contains(failure.expected_diagnostic()),
+        "should explain the refusal (`{}`), got `{text}`",
+        failure.expected_diagnostic()
     );
     ensure!(
-        !sandbox.prefix().join("bin/mold").as_std_path().exists(),
+        !scenario.installed_mold().as_std_path().exists(),
         "nothing should be unpacked when verification fails"
     );
     Ok(())
@@ -225,7 +210,6 @@ fn benchmark_emits_a_markdown_table_for_both_paths() -> Result<()> {
         stdout.contains("| Variant | Clean build (s) | Incremental build (s) |"),
         "should emit the table header, got `{stdout}`"
     );
-    // Timings are inherently unstable, so assert on shape rather than values.
     let rows: Vec<&str> = stdout
         .lines()
         .filter(|line| line.starts_with("| Default") || line.starts_with("| dev-fast"))

@@ -1,20 +1,7 @@
-//! Sandbox harness for the opt-in `dev-fast` build-acceleration tooling.
+//! A hermetic `PATH` and `HOME` for exercising the `dev-fast` targets.
 //!
-//! The `make dev-*` targets and their backing scripts probe `PATH` for `mold`
-//! and `rustup`. A test that merely prepends fakes therefore cannot express
-//! "the tool is absent" on a machine that has the real thing installed. This
-//! harness instead builds a `PATH` from nothing: a sandbox directory holding
-//! symlinks to an explicit allowlist of ordinary utilities, plus whichever
-//! fakes a case installs. Anything unnamed is genuinely unreachable.
-//!
-//! `HOME` is redirected into the sandbox too, so the Makefile's unconditional
-//! `$(HOME)/.cargo/bin:$(HOME)/.local/bin` export cannot reach a real tool.
-//!
-//! Scope: these helpers exist for the `dev-fast` target tests. They spawn
-//! child processes with a bespoke environment and never mutate the parent's,
-//! so they compose with the repository's prohibition on direct environment
-//! mutation in tests.
-
+//! See the parent module for why the sandbox is built from nothing rather
+//! than by prepending fakes to the ambient `PATH`.
 use anyhow::{Context, Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
 use std::fs;
@@ -23,6 +10,7 @@ use std::process::{Command, Output};
 use tempfile::{TempDir, tempdir};
 
 use crate::exec::write_exec_with_content;
+use super::MakeInvocation;
 
 /// Utilities the scripts and `make` legitimately need. Kept explicit so a new
 /// dependency surfaces as a test failure rather than silently resolving to
@@ -177,18 +165,32 @@ impl Sandbox {
             .with_context(|| format!("run scripts/{name}"))
     }
 
-    /// Run a Make target with the sandbox as the entire environment.
+    /// Run a Make target with the sandbox as the entire environment and no
+    /// overrides beyond the sandbox's own install prefix.
     pub fn make(&self, target: &str) -> Result<Output> {
+        self.run_make(&MakeInvocation::new(target))
+    }
+
+    /// Run a described Make invocation with the sandbox as the entire
+    /// environment. The sandbox's install prefix is applied first, so an
+    /// invocation may still override it.
+    pub fn run_make(&self, invocation: &MakeInvocation) -> Result<Output> {
         let mut command = self.base_command(&self.bin().join("make"));
         command
             .arg("--no-print-directory")
             .arg("-f")
             .arg("Makefile")
-            .arg(format!("DEV_FAST_PREFIX={}", self.prefix()))
-            .arg(target);
+            .arg(format!("DEV_FAST_PREFIX={}", self.prefix()));
+        for (name, value) in invocation.environment_entries() {
+            command.env(name, value);
+        }
+        for argument in invocation.variable_arguments() {
+            command.arg(argument);
+        }
+        command.arg(invocation.target());
         command
             .output()
-            .with_context(|| format!("run make {target}"))
+            .with_context(|| format!("run make {}", invocation.target()))
     }
 }
 
