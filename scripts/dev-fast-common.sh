@@ -12,8 +12,11 @@ set -euo pipefail
 : "${MOLD_SHA256SUMS_FILE:?MOLD_SHA256SUMS_FILE must be set}"
 : "${CRANELIFT_TOOLCHAIN_FILE:?CRANELIFT_TOOLCHAIN_FILE must be set}"
 
-# Prefix for the mold installation tree. `bin/` is prepended to PATH by the
-# Makefile, so a pinned mold shadows any older distribution package.
+# Prefix for the mold installation tree. The `dev-*` recipes prepend this
+# prefix's `bin/` to PATH -- this exact prefix, not a hard-coded ~/.local -- so
+# an overridden DEV_FAST_PREFIX is the one that wins PATH resolution for both
+# `dev-fast-check` and `-fuse-ld=mold`. Invoking these scripts outside `make`
+# means arranging that PATH order separately.
 DEV_FAST_PREFIX="${DEV_FAST_PREFIX:-$HOME/.local}"
 
 # shellcheck disable=SC2034 # consumed by the scripts that source this file.
