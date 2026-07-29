@@ -15,6 +15,9 @@ jobs:
       # Match rust-toolchain.toml: the tree needs -Zpolonius=next (see
       # docs/adr-006-adopt-polonius-nightly-toolchain.md).
       NETSUKE_RUST_TOOLCHAIN: nightly-2026-06-25
+      # Pre-set RUSTFLAGS so setup-rust-toolchain's "-D warnings" default does
+      # not shadow .cargo/config.toml and strip -Zpolonius=next.
+      RUSTFLAGS: -Zpolonius=next
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1

@@ -101,6 +101,19 @@ Polonius flag or avoid compiling the crate:
 - **Kani** and **Whitaker** run under their own toolchains but read the
   workspace `.cargo/config.toml` or the Makefile `RUSTFLAGS`, so they
   borrow-check with `-Zpolonius=next` and need no special handling.
+- **CI setup actions**: `actions-rust-lang/setup-rust-toolchain` exports
+  `RUSTFLAGS="-D warnings"` into the job environment when the variable is
+  unset, which shadows `.cargo/config.toml` for every later step. The
+  workflows therefore pre-set `RUSTFLAGS` (including `-Zpolonius=next`) at
+  job level — the action defers to an existing value — and the Makefile
+  recipes append `POLONIUS_FLAGS` to any ambient `RUSTFLAGS` as a second
+  line of defence. `cargo-llvm-cov` appends its instrumentation flags to
+  the ambient value, so coverage inherits the flag from the job
+  environment.
+- **cargo-mutants** (scheduled, informational) runs through the shared
+  `mutation-cargo.yml` workflow, which controls its own environment; if its
+  runs regress with E0499 at tagged sites, the shared workflow needs the
+  same `RUSTFLAGS` treatment.
 
 ## Clone counts
 
