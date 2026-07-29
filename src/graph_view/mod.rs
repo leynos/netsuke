@@ -102,7 +102,12 @@ impl GraphView {
 
         for edge in &edges_seen {
             register_outputs(graph, edge, &mut registry, &mut node_metadata);
-            register_inputs_and_edges(edge, &mut registry, &mut edges);
+            EdgeRegistrar {
+                edge,
+                registry: &mut registry,
+                edges: &mut edges,
+            }
+            .register();
         }
 
         let nodes = registry
@@ -203,11 +208,7 @@ fn register_outputs(
         .actions
         .get(&edge.action_id)
         .and_then(|action| action.description.clone());
-    let outputs = edge
-        .explicit_outputs
-        .iter()
-        .chain(edge.implicit_outputs.iter());
-    for out in outputs {
+    for out in all_outputs(edge) {
         registry.insert_target(
             out,
             NodeKind::Target {
@@ -225,57 +226,70 @@ fn register_outputs(
     }
 }
 
-fn register_inputs_and_edges(
-    edge: &BuildEdge,
-    registry: &mut NodePathRegistry,
-    edges: &mut BTreeSet<EdgeView>,
-) {
-    let implicit: BTreeSet<&Utf8PathBuf> = edge.implicit_outputs.iter().collect();
-    for input in &edge.inputs {
-        registry.ensure_node_mut(input);
-        for out in edge
-            .explicit_outputs
-            .iter()
-            .chain(edge.implicit_outputs.iter())
-        {
+/// Every output produced by `edge`, explicit first, then implicit.
+fn all_outputs(edge: &BuildEdge) -> impl Iterator<Item = &Utf8PathBuf> {
+    edge.explicit_outputs
+        .iter()
+        .chain(edge.implicit_outputs.iter())
+}
+
+/// Registers the dependency nodes and edges contributed by one build edge.
+///
+/// Groups the edge with the mutable projection state so the per-class
+/// helpers share one borrow of the registry and edge set.
+struct EdgeRegistrar<'a> {
+    edge: &'a BuildEdge,
+    registry: &'a mut NodePathRegistry,
+    edges: &'a mut BTreeSet<EdgeView>,
+}
+
+impl EdgeRegistrar<'_> {
+    /// Register the edge's inputs and dependencies with their edge classes.
+    fn register(&mut self) {
+        self.register_inputs();
+        let edge = self.edge;
+        self.register_dependencies(&edge.implicit_deps, EdgeClass::ImplicitDep);
+        self.register_dependencies(&edge.order_only_deps, EdgeClass::OrderOnly);
+    }
+
+    /// Register explicit inputs, classifying edges into implicit outputs.
+    fn register_inputs(&mut self) {
+        let edge = self.edge;
+        let implicit: BTreeSet<&Utf8PathBuf> = edge.implicit_outputs.iter().collect();
+        for input in &edge.inputs {
+            self.registry.ensure_node_mut(input);
+            self.register_input_edges(input, &implicit);
+        }
+    }
+
+    /// Add one edge from `input` to every output, classified by whether the
+    /// output is implicit.
+    fn register_input_edges(&mut self, input: &Utf8PathBuf, implicit: &BTreeSet<&Utf8PathBuf>) {
+        for out in all_outputs(self.edge) {
             let class = if implicit.contains(out) {
                 EdgeClass::ImplicitOutput
             } else {
                 EdgeClass::Explicit
             };
-            edges.insert(EdgeView {
+            self.edges.insert(EdgeView {
                 from: input.clone(),
                 to: out.clone(),
                 class,
             });
         }
     }
-    for dep in &edge.implicit_deps {
-        registry.ensure_node_mut(dep);
-        for out in edge
-            .explicit_outputs
-            .iter()
-            .chain(edge.implicit_outputs.iter())
-        {
-            edges.insert(EdgeView {
-                from: dep.clone(),
-                to: out.clone(),
-                class: EdgeClass::ImplicitDep,
-            });
-        }
-    }
-    for dep in &edge.order_only_deps {
-        registry.ensure_node_mut(dep);
-        for out in edge
-            .explicit_outputs
-            .iter()
-            .chain(edge.implicit_outputs.iter())
-        {
-            edges.insert(EdgeView {
-                from: dep.clone(),
-                to: out.clone(),
-                class: EdgeClass::OrderOnly,
-            });
+
+    /// Register `deps` as source nodes with a `class` edge to every output.
+    fn register_dependencies(&mut self, deps: &[Utf8PathBuf], class: EdgeClass) {
+        for dep in deps {
+            self.registry.ensure_node_mut(dep);
+            for out in all_outputs(self.edge) {
+                self.edges.insert(EdgeView {
+                    from: dep.clone(),
+                    to: out.clone(),
+                    class,
+                });
+            }
         }
     }
 }
