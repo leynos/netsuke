@@ -165,6 +165,47 @@ fn installation_examples_match_source_and_release_contracts() -> Result<()> {
     assert_windows_setup_examples()
 }
 
+#[test]
+fn registry_install_examples_pin_toolchain_and_polonius() -> Result<()> {
+    // Registry installs build outside a checkout, where neither
+    // rust-toolchain.toml nor .cargo/config.toml applies, so every tagged
+    // example installing from crates.io must select the pinned nightly and
+    // pass the Polonius flag itself. `cargo install --path .` examples run
+    // inside a checkout and are exempt.
+    let mut registry_install_ids = Vec::new();
+    for example in load_documented_examples()? {
+        if !example.body.contains("install netsuke") {
+            continue;
+        }
+        ensure!(
+            example
+                .body
+                .contains("cargo +nightly-2026-06-25 install netsuke"),
+            "{id} must install with the pinned nightly toolchain",
+            id = example.id
+        );
+        ensure!(
+            example.body.contains("RUSTFLAGS=-Zpolonius=next"),
+            "{id} must pass the Polonius borrow-checker flag",
+            id = example.id
+        );
+        registry_install_ids.push(example.id);
+    }
+    ensure!(
+        registry_install_ids.len() >= 2,
+        "expected registry-install examples in the README and users' guide, found {registry_install_ids:?}"
+    );
+    // The quickstart carries no tested-example fences, so guard its prose
+    // against reintroducing an unsupported bare registry install.
+    let quickstart =
+        test_fs::read_to_string("docs/quickstart.md").context("read docs/quickstart.md")?;
+    ensure!(
+        !quickstart.contains("cargo install netsuke"),
+        "docs/quickstart.md must defer to the users' guide install command"
+    );
+    Ok(())
+}
+
 /// Check the documented crates.io install command and release details.
 fn assert_release_installation_contract() -> Result<()> {
     let readme_release = documented_example("readme-crates-io-install")?;
