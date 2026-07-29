@@ -17,6 +17,11 @@ script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 : "${CARGO:=cargo}"
 : "${DEV_FAST_CONFIG:?DEV_FAST_CONFIG must be set}"
 
+# The timer below reads EPOCHREALTIME, which Bash gained in 5.0. Fail here with
+# a named prerequisite rather than silently reporting every duration as zero.
+[ "${BASH_VERSINFO[0]:-0}" -ge 5 ] ||
+  fail "bash 5.0 or newer is required to benchmark; found ${BASH_VERSION:-unknown}"
+
 BENCH_ROOT=${BENCH_ROOT:-target/bench}
 BENCH_BIN=${BENCH_BIN:-netsuke}
 BENCH_TOUCH_FILE=${BENCH_TOUCH_FILE:-src/main.rs}

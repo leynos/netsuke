@@ -52,8 +52,12 @@ mold_arch() {
 }
 
 installed_mold_version() {
-  # `mold --version` prints e.g. "mold 2.41.0 (compatible with GNU ld)".
-  mold --version 2>/dev/null | awk 'NR == 1 { print $2 }'
+  # `mold --version` prints e.g. "mold 2.41.0 (compatible with GNU ld)". Capture
+  # first so a failing mold propagates its status instead of being masked by the
+  # exit status of a downstream awk.
+  local output
+  output=$(mold --version 2>/dev/null) || return 1
+  printf '%s' "$output" | awk 'NR == 1 { print $2 }'
 }
 
 has_cranelift_component() {

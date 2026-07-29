@@ -411,12 +411,16 @@ together, never individually.
   is absent from this file or whose checksum does not match.
 
 `make install-dev-fast` unpacks `mold` under `~/.local` by default; override
-the location with `DEV_FAST_PREFIX`. That prefix's `bin/` directory must
-precede any distribution-packaged `mold` on `PATH`, otherwise a system `mold`
-of a different version is used. `make dev-fast-check` reports such a drift as a
-warning and still proceeds, because a newer `mold` is normally harmless; a
-missing `mold` is a hard failure.
+the location with `DEV_FAST_PREFIX`. Every `dev-*` recipe prepends
+`$(DEV_FAST_PREFIX)/bin` to `PATH`, so an overridden prefix is the one actually
+selected — `-fuse-ld=mold` resolves by `PATH` order, and the Makefile otherwise
+puts `~/.local/bin` first unconditionally. Invoking the scripts directly rather
+than through `make` means arranging that `PATH` order yourself.
 
+`make dev-fast-check` prints the resolved `mold` path alongside its version, so
+an unexpected pick is visible. It treats a version that differs from the pin as
+a warning and still proceeds, because a newer `mold` is normally harmless. A
+missing `mold`, or one that cannot report its version, is a hard failure.
 
 ### Ownership boundary
 
@@ -446,12 +450,14 @@ flag, `codegen-backend = "cranelift"` on the `dev` profile, and a
 - **`RUSTFLAGS`.** `make test` and `make typecheck` set
   `RUSTFLAGS="-D warnings"`. An externally set `RUSTFLAGS` overrides the
   `[target.*]` `rustflags` in a Cargo configuration file, so the `dev-*`
-  targets deliberately do not set it. Exporting `RUSTFLAGS` in your shell
+  targets deliberately do not set it. Exporting `RUSTFLAGS` in the shell
   silently disables `mold` for these targets.
-- **Release and packaging.** `make release`, `make build`, and everything under
+- **Release and packaging.** `make release` and everything under
   `.github/workflows/build-and-package.yml` use the release profile, the LLVM
   backend, and the platform linker. Cranelift is applied to the `dev` profile
   only, so it cannot reach a shipped artefact even if the fragment were loaded.
+  `make build` produces a debug binary, but through the default backend and
+  linker; `make dev-build` is the accelerated counterpart.
 - **Coverage.** Coverage is generated through LLVM source-based instrumentation
   in `.github/workflows/ci.yml` and `coverage-main.yml`. Cranelift does not
   emit that instrumentation. Never combine the `dev-fast` fragment with a
@@ -474,7 +480,6 @@ flag, `codegen-backend = "cranelift"` on the `dev` profile, and a
   nightly toolchain. It is a separate decision with its own pin; do not overload
   `tools/cranelift/VERSION` to carry it.
 
-
 ### Fallback behaviour
 
 - **Non-Linux hosts.** `mold` ships for Linux only, so on macOS and Windows
@@ -496,7 +501,9 @@ flag, `codegen-backend = "cranelift"` on the `dev` profile, and a
 `make bench-build` measures both paths with one repeatable command. It builds
 the `netsuke` binary from an empty target directory, touches `src/main.rs`, and
 rebuilds. Each variant uses its own target directory under `target/bench/`, so
-neither warms the other's cache nor disturbs the working `target/` tree.
+neither warms the other's cache nor disturbs the working `target/` tree. The
+timer reads `EPOCHREALTIME`, so this target needs Bash 5.0 or newer; it fails
+with a named prerequisite on older shells rather than reporting zeroes.
 
 Results below were recorded on a 24-core x86_64 Linux host with Rust 1.89.0 as
 the default toolchain, `nightly-2026-06-29` supplying Cranelift 0.132.0, and

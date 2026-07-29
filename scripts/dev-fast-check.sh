@@ -13,21 +13,30 @@ script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 . "$script_dir/dev-fast-common.sh"
 
 check_mold() {
-  local pinned=$1 installed
+  local pinned=$1 installed resolved
   if ! is_linux; then
     note "mold is Linux-only; falling back to the default $(uname -s) linker"
     return 0
   fi
-  if ! command -v mold >/dev/null 2>&1; then
+  if ! resolved=$(command -v mold 2>/dev/null); then
     note "mold not found on PATH (pinned $pinned)"
     note 'install it with: make install-dev-fast'
     return 1
   fi
-  installed=$(installed_mold_version)
+  # A mold that cannot report its version is broken — a truncated download or
+  # an unresolved shared library — so treat it as a failure rather than letting
+  # the empty string surface as a confusing version-drift warning.
+  if ! installed=$(installed_mold_version) || [ -z "$installed" ]; then
+    note "mold at $resolved is on PATH but cannot report its version"
+    note 'reinstall it with: make install-dev-fast'
+    return 1
+  fi
+  # Report the resolved path, not just the version: `-fuse-ld=mold` selects by
+  # PATH order, so naming the winner makes an unexpected pick obvious.
   if [ "$installed" != "$pinned" ]; then
-    note "mold $installed found, pin is $pinned; run make install-dev-fast to match"
+    note "mold $installed at $resolved, pin is $pinned; run make install-dev-fast to match"
   else
-    note "mold $installed"
+    note "mold $installed at $resolved"
   fi
 }
 

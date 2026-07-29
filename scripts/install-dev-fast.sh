@@ -50,7 +50,9 @@ install_mold() {
   tar --extract --gzip --strip-components=1 --directory "$DEV_FAST_PREFIX" --file "$workdir/$name" ||
     fail "failed to unpack $name into $DEV_FAST_PREFIX"
   note "installed mold $version into $DEV_FAST_PREFIX"
-  note "ensure $DEV_FAST_PREFIX/bin precedes any distribution mold on PATH"
+  # The `make dev-*` recipes prepend this prefix to PATH themselves; the hint
+  # matters only when the scripts are invoked directly.
+  note "put $DEV_FAST_PREFIX/bin first on PATH when not using the make targets"
 }
 
 install_cranelift() {
