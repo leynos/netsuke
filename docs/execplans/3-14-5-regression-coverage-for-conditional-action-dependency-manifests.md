@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -169,7 +169,8 @@ escalation, not workarounds.
       passing focused run and assertion-level sabotage evidence for each.
 - [x] (2026-07-29 00:49Z) Stage C: updated the users' guide, developers' guide,
       component design, and roadmap; recorded why no ADR is warranted.
-- [ ] Stage D: full gate run, CodeRabbit review, roadmap tick.
+- [x] (2026-07-29 00:55Z) Stage D: passed the full gate stack and final
+      CodeRabbit review; roadmap item 3.14.5 is complete.
 
 (Timestamps to be added as work proceeds.)
 
@@ -383,6 +384,13 @@ users, records deterministic conditional-test conventions for developers,
 states the manifest/stdlib port boundary in the design, and marks roadmap item
 3.14.5 and its four sub-items complete. No ADR is warranted because runtime
 architecture and behaviour are unchanged.
+
+The completed change is test-and-documentation only. It adds deterministic
+real-resolver unit coverage, selection-time impurity coverage, conditional IR
+dependency assertions, a reviewed Ninja snapshot with real-Ninja validation,
+and one combined BDD scenario. All five focused sabotage checks failed at the
+intended assertion. The final branch-wide formatting, documentation, type,
+lint, and test gates passed, and CodeRabbit reported no actionable findings.
 
 ## Context and orientation
 
@@ -1046,3 +1054,7 @@ Skills to load while implementing:
 - 2026-07-29 — Completed Stage C after the full gate stack and CodeRabbit
   returned clean. Remaining work is Stage D final branch-wide validation,
   review, publication, and ExecPlan closure.
+
+- 2026-07-29 — Completed Stage D and closed the ExecPlan. The final branch-wide
+  gate stack passed with snapshot mutation disabled, and CodeRabbit returned
+  zero actionable findings across the complete committed diff.
