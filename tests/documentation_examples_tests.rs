@@ -190,6 +190,11 @@ fn installation_examples_match_source_and_release_contracts() -> Result<()> {
     );
     ensure!(readme.body == expected, "README source install drifted");
     ensure!(guide.body == expected, "user guide source install drifted");
+    assert_windows_setup_examples()
+}
+
+/// Check the documented Windows help, PATH, and staging contracts.
+fn assert_windows_setup_examples() -> Result<()> {
     let windows = documented_example("guide-windows-help")?;
     ensure!(windows.body == "Get-Help Netsuke -Full\n", "help drifted");
     let windows_path = documented_example("guide-windows-path")?;
