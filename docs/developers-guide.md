@@ -422,6 +422,47 @@ an unexpected pick is visible. It treats a version that differs from the pin as
 a warning and still proceeds, because a newer `mold` is normally harmless. A
 missing `mold`, or one that cannot report its version, is a hard failure.
 
+For screen readers: the following flowchart traces `make install-dev-fast` from
+start to exit. It reads the pinned linker version, then branches on the host
+platform. On Linux it selects the architecture, downloads the release tarball,
+verifies its checksum, unpacks it into the install prefix, and reports the
+`PATH` requirement; on other platforms it skips the linker entirely and falls
+back to the platform default. Both branches then converge on the toolchain
+half, which reads the pinned nightly, fails early if `rustup` is absent, and
+otherwise installs the toolchain and the Cranelift backend component before
+printing a readiness message.
+
+```mermaid
+flowchart TD
+  A["Start install-dev-fast.sh"] --> B["Source dev-fast-common.sh"]
+  B --> C["mold_version"]
+  C --> D{"is_linux"}
+  D -- No --> E["Skip linker installation<br/>Fall back to platform linker"]
+  D -- Yes --> F["mold_arch"]
+  F --> G["Download tarball from MOLD_RELEASE_BASE_URL"]
+  G --> H["verify_mold_archive"]
+  H --> I["tar extract into DEV_FAST_PREFIX"]
+  I --> J["Report DEV_FAST_PREFIX/bin PATH requirement"]
+
+  E --> K["cranelift_toolchain"]
+  J --> K
+  K --> L{"rustup on PATH?"}
+  L -- No --> M["fail: install rustup"]
+  L -- Yes --> N["rustup toolchain install pinned nightly --profile minimal"]
+  N --> O["rustup component add rustc-codegen-cranelift-preview"]
+  O --> P["Print ready; verify with make dev-fast-check"]
+  M --> Q["Exit"]
+  P --> Q
+```
+
+**Figure**: `make install-dev-fast` control flow. The `is_linux` branch is what
+keeps macOS and Windows on the platform linker while still installing
+Cranelift, and `verify_mold_archive` is the point at which an artefact absent
+from `tools/mold/SHA256SUMS`, or one whose checksum does not match, aborts the
+installation. The final node only reports the `PATH` requirement for direct
+script invocation; the `dev-*` recipes prepend `$(DEV_FAST_PREFIX)/bin`
+themselves.
+
 ### Ownership boundary
 
 The accelerated configuration lives in `tools/dev-fast/config.toml`, which is
