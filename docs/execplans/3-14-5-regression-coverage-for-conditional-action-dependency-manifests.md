@@ -167,8 +167,8 @@ escalation, not workarounds.
       dependencies after reverting the throwaway spike.
 - [x] (2026-07-28 23:14Z) Stage B: added B.1–B.5 tests and fixtures with a
       passing focused run and assertion-level sabotage evidence for each.
-- [ ] Stage C: documentation updates (users-guide, developers-guide,
-      component architecture, ADR if warranted).
+- [x] (2026-07-29 00:49Z) Stage C: updated the users' guide, developers' guide,
+      component design, and roadmap; recorded why no ADR is warranted.
 - [ ] Stage D: full gate run, CodeRabbit review, roadmap tick.
 
 (Timestamps to be added as work proceeds.)
@@ -1042,3 +1042,7 @@ Skills to load while implementing:
   because this work pins existing boundaries rather than creating a new
   architectural decision. Stage C remains pending until its gates and
   CodeRabbit review pass.
+
+- 2026-07-29 — Completed Stage C after the full gate stack and CodeRabbit
+  returned clean. Remaining work is Stage D final branch-wide validation,
+  review, publication, and ExecPlan closure.
