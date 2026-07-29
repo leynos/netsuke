@@ -519,14 +519,13 @@ nextest runs each test in its own process, so environment and
 working-directory mutations cannot leak between tests the way they can under
 the threaded in-process harness. The `EnvLock`, `EnvVarGuard`, and `CwdGuard`
 utilities described in [Test isolation utilities](#test-isolation-utilities),
-and the `#[serial]` markers on the three binaries above, remain necessary
-because the coverage workflow still drives an in-process runner.
+and the `#[serial]` markers on the tests in the three binaries above, remain
+necessary because the coverage workflow still drives an in-process runner.
 
 The `serial-env` group is therefore not load-bearing for the tests that exist
 today; it states the serialization contract once so both runners agree, and so
 it is not silently lost if a future test in those binaries reaches for
 genuinely shared state such as a fixed on-disk path.
-
 
 ### Runners not covered by this configuration
 
