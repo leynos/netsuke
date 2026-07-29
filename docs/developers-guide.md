@@ -537,6 +537,28 @@ flag, `codegen-backend = "cranelift"` on the `dev` profile, and a
   `make dev-test` stop before Cargo runs.
 
 
+### Testing the tooling
+
+`tests/dev_fast_check_tests.rs` and `tests/dev_fast_install_tests.rs` cover the
+targets' observable behaviour: the diagnostics each failure mode emits, the
+exit status, and the installer's refusal to unpack an unverifiable artefact.
+They need neither `mold`, `rustup`, nor a network, so they run as part of
+`make test` on any Linux host.
+
+The harness is `test_support::dev_fast::Sandbox`. Because the scripts probe
+`PATH`, a test cannot express "the tool is absent" by prepending fakes on a
+machine that has the real tool installed. The sandbox therefore builds `PATH`
+from nothing — an explicit allowlist of ordinary utilities symlinked into a
+temporary directory, plus whichever fakes a case installs — and redirects
+`HOME` so the Makefile's `$(HOME)/.local/bin` export cannot reach outside it.
+Add to `SANDBOX_UTILITIES` when a script gains a dependency; a missing entry
+surfaces as a test failure rather than as a silent fallback to the developer's
+own tools.
+
+Reuse the sandbox for any future target with the same shape. Do not reach for
+`PathGuard` here: these tests spawn children with a bespoke environment rather
+than mutating the parent's, which is what keeps them safe to run in parallel.
+
 ### Benchmark evidence
 
 `make bench-build` measures both paths with one repeatable command. It builds

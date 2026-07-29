@@ -12,6 +12,9 @@ script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/dev-fast-common.sh
 . "$script_dir/dev-fast-common.sh"
 
+# Report on the linker half of the prerequisites. Returns non-zero only when
+# mold is required but unusable; a non-Linux host and a version drift from the
+# pin are both tolerated, with a note explaining what will happen instead.
 check_mold() {
   local pinned=$1 installed resolved
   if ! is_linux; then
@@ -40,6 +43,9 @@ check_mold() {
   fi
 }
 
+# Report on the toolchain half of the prerequisites: rustup itself, the pinned
+# nightly, and the Cranelift backend component. Any absence is fatal, because
+# there is no meaningful fallback for a missing codegen backend.
 check_cranelift() {
   local toolchain=$1
   if ! command -v rustup >/dev/null 2>&1; then
@@ -60,6 +66,8 @@ check_cranelift() {
   note "$CRANELIFT_COMPONENT available on $toolchain"
 }
 
+# Run both checks unconditionally so a developer sees every missing piece in one
+# pass rather than fixing them one failed run at a time.
 main() {
   local status=0
   check_mold "$(mold_version)" || status=1

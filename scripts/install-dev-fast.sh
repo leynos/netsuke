@@ -25,6 +25,8 @@ verify_mold_archive() {
   note "verified $name against $MOLD_SHA256SUMS_FILE"
 }
 
+# Download, verify, and unpack the pinned mold release, or explain why the step
+# is being skipped on a platform mold does not support.
 install_mold() {
   local version=$1 arch name url workdir
   if ! is_linux; then
@@ -55,6 +57,9 @@ install_mold() {
   note "put $DEV_FAST_PREFIX/bin first on PATH when not using the make targets"
 }
 
+# Install the pinned nightly and its Cranelift backend component. Uses the
+# minimal profile: this toolchain exists to supply a codegen backend, not to
+# replace the repository's stable toolchain.
 install_cranelift() {
   local toolchain=$1
   command -v rustup >/dev/null 2>&1 ||
@@ -67,6 +72,8 @@ install_cranelift() {
     fail "failed to install $CRANELIFT_COMPONENT for $toolchain"
 }
 
+# Install both halves. The linker step runs first so a checksum failure aborts
+# before spending time on a toolchain download.
 main() {
   install_mold "$(mold_version)"
   install_cranelift "$(cranelift_toolchain)"

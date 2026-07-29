@@ -8,6 +8,7 @@
 //!   LocalizerGuard, localizer_test_lock, set_en_localizer)
 //! - computing SHA-256 hashes for cache keys (hash module)
 //! - spawning lightweight HTTP servers for network tests (http module)
+//! - sandboxing PATH and HOME for the dev-fast target tests (dev_fast module)
 //!
 //! All items are intended for use in tests within this workspace; avoid using
 //! them in production code.
@@ -17,6 +18,9 @@
 pub mod check_ninja;
 pub mod command_helper;
 pub mod cwd_guard;
+
+#[cfg(unix)]
+pub mod dev_fast;
 pub mod env;
 pub mod env_guard;
 pub mod env_lock;

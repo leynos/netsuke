@@ -59,6 +59,8 @@ measure_variant() {
   results+=("$label|$clean|$incremental")
 }
 
+# Render the accumulated rows as a Markdown table, ready to paste into the
+# developers' guide.
 report() {
   local row label clean incremental
   printf '\n| Variant | Clean build (s) | Incremental build (s) |\n'
@@ -69,6 +71,8 @@ report() {
   done
 }
 
+# Measure the default path first so its numbers are not attributed to a warm
+# page cache created by the accelerated run.
 main() {
   local toolchain
   toolchain=$(cranelift_toolchain)

@@ -22,13 +22,20 @@ DEV_FAST_PREFIX="${DEV_FAST_PREFIX:-$HOME/.local}"
 # shellcheck disable=SC2034 # consumed by the scripts that source this file.
 CRANELIFT_COMPONENT='rustc-codegen-cranelift-preview'
 
+# Emit a diagnostic. Always stderr, so a caller may capture a helper's stdout
+# without the diagnostics contaminating the captured value.
 note() { printf 'dev-fast: %s\n' "$*" >&2; }
 
+# Emit a diagnostic and abort. Used for conditions no caller can recover from,
+# such as a missing pin file or an unverifiable download.
 fail() {
   printf 'dev-fast: %s\n' "$*" >&2
   exit 1
 }
 
+# Read a single-line version pin, trimming surrounding whitespace. A missing or
+# blank pin aborts rather than yielding an empty version that would silently
+# produce a nonsensical download URL or toolchain name.
 read_pin() {
   local file=$1 value
   [ -f "$file" ] || fail "missing version pin: $file"
@@ -37,10 +44,13 @@ read_pin() {
   printf '%s' "$value"
 }
 
+# The pinned mold release tag, e.g. "2.41.0".
 mold_version() { read_pin "$MOLD_VERSION_FILE"; }
 
+# The pinned nightly supplying Cranelift, e.g. "nightly-2026-06-29".
 cranelift_toolchain() { read_pin "$CRANELIFT_TOOLCHAIN_FILE"; }
 
+# Whether the host can use mold at all; it ships for Linux only.
 is_linux() { [ "$(uname -s)" = 'Linux' ]; }
 
 # mold publishes per-architecture tarballs; map `uname -m` onto those names.
@@ -54,6 +64,8 @@ mold_arch() {
   esac
 }
 
+# The version of whichever mold PATH resolves to, or a non-zero status when
+# that mold cannot be run.
 installed_mold_version() {
   # `mold --version` prints e.g. "mold 2.41.0 (compatible with GNU ld)". Capture
   # first so a failing mold propagates its status instead of being masked by the
@@ -63,6 +75,8 @@ installed_mold_version() {
   printf '%s' "$output" | awk 'NR == 1 { print $2 }'
 }
 
+# Whether the Cranelift backend is installed for the given toolchain. rustup
+# reports the component with a host-triple suffix, so match on the prefix.
 has_cranelift_component() {
   local toolchain=$1
   rustup component list --installed --toolchain "$toolchain" 2>/dev/null |
