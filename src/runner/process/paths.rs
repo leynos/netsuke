@@ -1,5 +1,5 @@
 //! Path resolution helpers for the Ninja runner.
-//! Canonicalises UTF-8 paths via capability-based handles.
+//! Canonicalizes UTF-8 paths via capability-based handles.
 
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs as cap_fs};

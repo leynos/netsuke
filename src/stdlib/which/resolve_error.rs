@@ -21,7 +21,7 @@ pub(crate) enum ResolveError {
     Args {
         detail: String,
     },
-    Canonicalise {
+    Canonicalize {
         path: Utf8PathBuf,
         source: io::Error,
     },
@@ -30,7 +30,7 @@ pub(crate) enum ResolveError {
         path: Utf8PathBuf,
         source: io::Error,
     },
-    CanonicaliseNonUtf8,
+    CanonicalizeNonUtf8,
     WorkspaceNonUtf8 {
         command: String,
         path: String,
@@ -62,9 +62,9 @@ impl ResolveError {
             Self::NotFound { .. } => "not_found",
             Self::DirectNotFound { .. } => "direct_not_found",
             Self::Args { .. } => "args",
-            Self::Canonicalise { .. } => "canonicalise",
+            Self::Canonicalize { .. } => "canonicalize",
             Self::IsExecutable { .. } => "is_executable",
-            Self::CanonicaliseNonUtf8 => "canonicalise_non_utf8",
+            Self::CanonicalizeNonUtf8 => "canonicalize_non_utf8",
             Self::WorkspaceNonUtf8 { .. } => "workspace_non_utf8",
             Self::WalkDir { .. } => "walkdir",
             Self::CwdResolve { .. } => "cwd_resolve",
@@ -90,14 +90,14 @@ impl fmt::Display for ResolveError {
 impl std::error::Error for ResolveError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Canonicalise { source, .. }
+            Self::Canonicalize { source, .. }
             | Self::IsExecutable { source, .. }
             | Self::CwdResolve { source } => Some(source),
             Self::WalkDir { source } => Some(source),
             Self::NotFound { .. }
             | Self::DirectNotFound { .. }
             | Self::Args { .. }
-            | Self::CanonicaliseNonUtf8
+            | Self::CanonicalizeNonUtf8
             | Self::WorkspaceNonUtf8 { .. }
             | Self::CwdNonUtf8 => None,
         }

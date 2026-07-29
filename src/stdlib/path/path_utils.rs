@@ -1,5 +1,5 @@
 //! Path utilities backing stdlib filters for UTF-8 paths: basename/dirname, `with_suffix`,
-//! `relative_to`, canonicalise/realpath, and expanduser with Windows HOME fallbacks. Uses cap-std
+//! `relative_to`, canonicalize/realpath, and expanduser with Windows HOME fallbacks. Uses cap-std
 //! directory handles and consistent error mapping for template errors.
 use std::{env, io};
 
@@ -72,7 +72,7 @@ pub(super) fn canonicalize_any(path: &Utf8Path) -> Result<Utf8PathBuf, Error> {
         return current_dir_utf8().map_err(|err| {
             io_to_error(
                 Utf8Path::new("."),
-                &localization::message(keys::STDLIB_PATH_ACTION_CANONICALISE),
+                &localization::message(keys::STDLIB_PATH_ACTION_CANONICALIZE),
                 err,
             )
         });
@@ -99,7 +99,7 @@ pub(super) fn canonicalize_any(path: &Utf8Path) -> Result<Utf8PathBuf, Error> {
         .map_err(|err| {
             io_to_error(
                 path,
-                &localization::message(keys::STDLIB_PATH_ACTION_CANONICALISE),
+                &localization::message(keys::STDLIB_PATH_ACTION_CANONICALIZE),
                 err,
             )
         })
