@@ -1,5 +1,6 @@
 //! Expands manifest foreach directives into concrete targets and actions.
 use super::{ManifestMap, ManifestValue};
+use crate::hex::push_lower_hex_byte;
 use crate::localization::{self, keys};
 use anyhow::{Context, Result};
 use minijinja::{Environment, context, value::Value};
@@ -114,18 +115,9 @@ fn entry_name_hash(entry_name: &str) -> String {
         .iter()
         .take(4)
         .fold(String::with_capacity(8), |mut hash, byte| {
-            push_hex_byte(&mut hash, *byte);
+            push_lower_hex_byte(&mut hash, *byte);
             hash
         })
-}
-
-fn push_hex_byte(output: &mut String, byte: u8) {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    for nybble in [byte >> 4, byte & 0x0f] {
-        if let Some(digit) = HEX.get(usize::from(nybble)).copied() {
-            output.push(char::from(digit));
-        }
-    }
 }
 
 fn parse_foreach_values(expr_val: &ManifestValue, env: &Environment) -> Result<Vec<Value>> {

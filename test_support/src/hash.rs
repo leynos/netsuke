@@ -11,16 +11,15 @@
 //! let digest = sha256_hex(b"netsuke");
 //! assert_eq!(digest.len(), 64);
 //! ```
+use netsuke::hex::to_lower_hex;
 use sha2::{Digest, Sha256};
 
 /// Compute the SHA-256 digest for `data` and return it as a lowercase hex
 /// string.
+///
+/// Encoding is delegated to `netsuke::hex` so test expectations cannot drift
+/// from the rendering the production digest paths use.
+#[must_use]
 pub fn sha256_hex(data: &[u8]) -> String {
-    let digest = Sha256::digest(data);
-    let mut key = String::with_capacity(digest.len() * 2);
-    for byte in digest {
-        use std::fmt::Write;
-        let _ = write!(&mut key, "{byte:02x}");
-    }
-    key
+    to_lower_hex(&Sha256::digest(data))
 }

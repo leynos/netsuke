@@ -26,9 +26,9 @@ use std::{
     time::Duration,
 };
 
-use self::cache::{CacheEntry, FetchCache, cache_key, discard_partial_cache, read_cached};
 #[cfg(test)]
-use self::cache::{hex_string, open_cache_dir};
+use self::cache::open_cache_dir;
+use self::cache::{CacheEntry, FetchCache, cache_key, discard_partial_cache, read_cached};
 use super::{NetworkConfig, StdlibConfig, value_from_bytes};
 use crate::localization::{self, keys};
 use crate::stdlib::io_helpers::io_action_error;
