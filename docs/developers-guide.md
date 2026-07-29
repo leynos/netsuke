@@ -1369,6 +1369,50 @@ forwarded variables: `PATH` (from the host `std::env::var_os`) and
 current process). Use this helper for configuration-layering tests or any test
 that sets environment variables which could race with parallel test execution.
 
+
+## Digest rendering
+
+`src/hex.rs` (`netsuke::hex`) is the single owner of lowercase hexadecimal
+rendering for the whole workspace, including the `test_support` crate. It
+exposes two functions:
+
+- `to_lower_hex(bytes: &[u8]) -> String` — encode a whole digest.
+- `push_lower_hex_byte(output: &mut String, byte: u8)` — append one byte, for
+  callers such as `manifest::expand` that need only a short prefix and should
+  not allocate the full encoding.
+
+**Re-use policy:** every digest call site must render through this module. Do
+not reimplement an encoder, and do not format a digest with `{:x}`. Rendered
+digests are persisted build identities — action hashes feed build-graph action
+identity, and fetch cache keys name files on disk — so any divergence in casing
+or zero-padding silently invalidates caches and forces rebuilds. Routing
+`test_support` through the same helper keeps test expectations from drifting
+from production output.
+
+The module is unit-tested across the full `u8` range rather than with a handful
+of vectors, because leading-zero and casing regressions are exactly what
+example-based tests miss.
+
+
+### RustCrypto 0.11 constraint
+
+`sha2`, `digest`, `sha1`, and `md-5` are pinned to the 0.11 family and move in
+lockstep; the sibling Message Authentication Code (MAC) and Key Derivation
+Function (KDF) crates (`hmac`, `hkdf`, `pbkdf2`) are on 0.13 should they ever
+be needed. Two 0.11 API removals shape the code here:
+
+- `finalize()` returns `hybrid_array::Array<u8, _>`, which derefs to `[u8]` but
+  does not implement `core::fmt::LowerHex`. This is why `{:x}` is banned and
+  `netsuke::hex` exists.
+- The hashers no longer implement `std::io::Write`, so `io::copy` into a hasher
+  will not compile. `hasher::DigestWriter` is the sanctioned adapter: a newtype
+  that implements `io::Write` by forwarding to `Digest::update`. Use it, or a
+  bounded buffered read loop as in `stdlib::path::hash_utils::hash_stream`,
+  rather than relying on a blanket `Write` impl.
+
+The 0.11 crates also dropped the `std` feature; `alloc` is the equivalent
+minimal feature for returning an owned digest.
+
 ## Manifest processing helpers
 
 ### Expansion helpers
