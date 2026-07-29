@@ -84,6 +84,22 @@ Run these commands before finalizing any change:
 - `make lint`
 - `make test`
 
+`make test` runs the non-doctest suite through
+[cargo-nextest](https://nexte.st/) and then runs the doctests separately.
+Install nextest locally so runs match continuous integration (CI), which pins
+the same version through `NEXTEST_VERSION` in `.github/workflows/ci.yml`:
+
+```bash
+cargo install cargo-nextest --locked
+
+
+# or, for a prebuilt binary:
+cargo binstall cargo-nextest
+```
+
+See [Test execution](#test-execution) for what the checked-in nextest
+configuration does and does not cover.
+
 `make lint` runs rustdoc with warnings denied, `cargo clippy`, and the
 [Whitaker](whitaker-users-guide.md) Dylint suite
 (`whitaker --all -- --all-targets --all-features`). Install Whitaker through
@@ -442,6 +458,72 @@ artefacts: the job uses a Kani-specific cache key derived from
 `tools/kani/VERSION` and the Makefile, then caches the job-local Kani Cargo
 home plus Kani support-file home.
 
+## Test execution
+
+`make test` is the canonical entry point and composes two passes:
+
+- `make test-nextest` —
+  `cargo nextest run --all-targets --all-features`, with
+  `RUSTFLAGS="-D warnings"`. This runs every unit, integration, `rstest`, and
+  `rstest-bdd` test.
+- `make doctest` — `cargo test --doc --all-features`, with the same
+  `RUSTFLAGS`. nextest cannot execute doctests, so they need their own pass.
+  Note that the previous `cargo test --all-targets` invocation never ran
+  doctests either; the separate target is what makes a broken documentation
+  example fail the gate.
+
+If either pass fails, `make test` fails. Run the individual targets when
+iterating, but treat `make test` as the gate.
+
+Cargo spells build parallelism `-j`; nextest reserves `-j` for test
+concurrency and spells build parallelism `--build-jobs`. The Makefile
+therefore keeps `BUILD_JOBS` (Cargo flags) and `NEXTEST_BUILD_JOBS` (nextest
+flags) as separate variables rather than reinterpreting one as the other.
+
+### nextest configuration
+
+The runner is configured by `.config/nextest.toml` at the workspace root. It
+governs the non-doctest pass only, and deliberately stays small:
+
+- **`serial-env` test group** (`max-threads = 1`) covering exactly three
+  binaries: `manifest_env_tests`, `ninja_env_tests`, and `env_path_tests`.
+  These mutate process-global environment state — `PATH`, `NINJA_ENV`, and ad
+  hoc `NETSUKE_*` variables. Every other test remains fully parallel.
+- **No blanket retries.** A test that fails intermittently is a defect to
+  diagnose. Add a targeted override with a written rationale only when a
+  genuine external-resource constraint requires one.
+- **A conservative slow timeout** (warn after 60s, terminate after five
+  warning periods) so a hung test surfaces without failing the legitimately
+  slow documentation end-to-end suites, which shell out to real Ninja.
+
+### How this relates to `#[serial]` and the isolation utilities
+
+nextest runs each test in its own process, so environment and
+working-directory mutations cannot leak between tests the way they can under
+the threaded in-process harness. The `EnvLock`, `EnvVarGuard`, and `CwdGuard`
+utilities described in [Test isolation utilities](#test-isolation-utilities),
+and the `#[serial]` markers on the three binaries above, remain necessary
+because the coverage workflow still drives an in-process runner.
+
+The `serial-env` group is therefore not load-bearing for the tests that exist
+today; it states the serialization contract once so both runners agree, and so
+it is not silently lost if a future test in those binaries reaches for
+genuinely shared state such as a fixed on-disk path.
+
+
+### Runners not covered by this configuration
+
+- **Coverage** (`.github/workflows/coverage-main.yml`, and the coverage step in
+  `ci.yml`) delegates to the `generate-coverage` shared action, which drives
+  its own `cargo llvm-cov` invocation. It does not call `make test` and is
+  unaffected by `.config/nextest.toml`.
+- **Mutation testing** (`.github/workflows/mutation-testing.yml`) calls the
+  shared `mutation-cargo.yml` reusable workflow with `--all-features`, matching
+  the feature set `make test` uses. Its runner is owned by that workflow.
+
+Changing either to use nextest is a deliberate decision, not something that
+should follow implicitly from this file.
+
 ## Test suite map
 
 Netsuke uses a mixed strategy:
@@ -574,10 +656,16 @@ use the root crate's development dependency.
 
 ## Behavioural testing strategy
 
-Behavioural tests run through `cargo test` using `rstest-bdd`, not a bespoke
-runner. The `scenarios!` macro in `tests/bdd_tests.rs` discovers feature files
-and binds a shared fixture entry point (`world: TestWorld`) to each generated
-scenario test.
+Behavioural tests use `rstest-bdd`, not a bespoke runner, and are executed by
+cargo-nextest alongside every other test (see
+[Test execution](#test-execution)). The `scenarios!` macro in
+`tests/bdd_tests.rs` discovers feature files and binds a shared fixture entry
+point (`world: TestWorld`) to each generated scenario test.
+
+nextest runs each generated scenario in its own process. That reinforces the
+per-scenario isolation policy below rather than conflicting with it: scenario
+state cannot leak across process boundaries, so the policy's requirement to
+recreate state per test is enforced by the runner as well as by convention.
 
 ### State and isolation policy
 
@@ -634,7 +722,7 @@ These points are strategy rules, not optional style guidance.
 3. Reuse existing fixtures/helpers before adding new world state.
 4. Add typed parameter wrappers in `tests/bdd/types.rs` when step arguments
    represent distinct domain concepts.
-5. Run `cargo test --test bdd_tests` and then the full quality gates.
+5. Run `cargo nextest run --test bdd_tests` and then the full quality gates.
 
 ## Manifest `foreach` expansion
 

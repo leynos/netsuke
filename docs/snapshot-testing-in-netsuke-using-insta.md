@@ -278,6 +278,13 @@ function, serializing locale state across the test suite.
 
 ## Running and Updating Snapshot Tests
 
+> In this repository the canonical runner is cargo-nextest: `make test`, or
+> `cargo nextest run --test ninja_snapshot_tests` for a focused run. See
+> [Test execution](developers-guide.md#test-execution). `cargo insta` needs to
+> be told which runner to drive, so use `cargo insta test --test-runner
+> nextest` and `cargo insta review` when accepting changes. The `cargo test`
+> invocations below are the generic form.
+
 To execute the snapshot tests, run `cargo test`. All tests (including our new
 snapshot tests) will run. On the first run (or whenever a snapshot differs from
 expectations), test failures will indicate snapshot changes.
