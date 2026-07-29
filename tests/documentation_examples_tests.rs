@@ -152,6 +152,21 @@ fn documented_first_run_flow_builds(
 
 #[test]
 fn installation_examples_match_source_and_release_contracts() -> Result<()> {
+    assert_release_installation_contract()?;
+    let readme = documented_example("readme-source-install")?;
+    let guide = documented_example("guide-source-install")?;
+    let expected = concat!(
+        "git clone https://github.com/leynos/netsuke.git\n",
+        "cd netsuke\n",
+        "cargo install --path .\n"
+    );
+    ensure!(readme.body == expected, "README source install drifted");
+    ensure!(guide.body == expected, "user guide source install drifted");
+    assert_windows_setup_examples()
+}
+
+/// Check the documented crates.io install command and release details.
+fn assert_release_installation_contract() -> Result<()> {
     let readme_release = documented_example("readme-crates-io-install")?;
     let guide_release = documented_example("guide-crates-io-install")?;
     // Registry installs run outside a checkout, so the packaged source sees
@@ -181,16 +196,7 @@ fn installation_examples_match_source_and_release_contracts() -> Result<()> {
             );
         }
     }
-    let readme = documented_example("readme-source-install")?;
-    let guide = documented_example("guide-source-install")?;
-    let expected = concat!(
-        "git clone https://github.com/leynos/netsuke.git\n",
-        "cd netsuke\n",
-        "cargo install --path .\n"
-    );
-    ensure!(readme.body == expected, "README source install drifted");
-    ensure!(guide.body == expected, "user guide source install drifted");
-    assert_windows_setup_examples()
+    Ok(())
 }
 
 /// Check the documented Windows help, PATH, and staging contracts.
