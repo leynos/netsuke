@@ -106,15 +106,28 @@ configuration does and does not cover.
 the standalone installer described in the
 [Whitaker user's guide](whitaker-users-guide.md) so local linting matches
 continuous integration (CI); `make lint-clippy` runs the Clippy-only subset.
-Whitaker is configured by `dylint.toml` at the repository root. The
-`no_std_fs_operations` lint currently ignores in-source `allow`/`expect`
-attributes, so `dylint.toml` excludes each sanctioned ambient-filesystem scope
-with a documented rationale: the `build_script_build` Cargo build-script crate,
-the `netsuke` application crate, the `test_support` test-fixture crate, and the
-enumerated integration-test and workflow-contract crates. Netsuke itself needs
-ambient access for executable discovery through `PATH`, cross-directory symlink
-canonicalization, and temporary-file synchronization; other filesystem access
-should remain capability-scoped.
+Whitaker is configured by `dylint.toml` at the repository root, where each
+sanctioned ambient-filesystem scope for `no_std_fs_operations` carries a
+documented rationale.
+
+Prefer `excluded_paths` over `excluded_crates`: a path entry exempts one module
+and its descendants, whereas a crate entry exempts a whole compilation unit.
+The application crate is scoped this way — only
+`netsuke::stdlib::which::lookup` (executable discovery through `PATH` and
+cross-directory symlink canonicalization, which `cap_std` cannot express) and
+`netsuke::runner::process::file_io` (temporary-file synchronization) are
+exempt; the rest of `netsuke` stays under the capability policy. The
+behavioural step definitions, CLI integration tests, and shared
+workflow-reading helper that stage fixtures ambiently are scoped the same way.
+A crate-level entry is justified only when the ambient access lives in the
+crate root itself, where a path entry would be no narrower — that covers the
+Cargo build script, the `test_support` fixture crate, and the enumerated
+integration-test crates.
+
+The lint also honours in-source `#[allow(no_std_fs_operations)]` for a
+single-site exemption that travels with the code. Prefer migrating to `cap_std`
+over any of these; reach for an exclusion only when the operation is
+irreducibly ambient.
 
 When command output is long, preserve exit codes and logs:
 

@@ -620,6 +620,7 @@ Enforces capability-based filesystem access by forbidding direct use of
 ```toml
 [no_std_fs_operations]
 excluded_crates = ["my_cli_entrypoint", "my_test_utilities"]
+excluded_paths = ["my_app::legacy_io", "my_app::bin::migrate"]
 ```
 
 The `excluded_crates` option allows specified crates to use `std::fs`
@@ -629,8 +630,22 @@ operations without triggering diagnostics. This is useful for:
 - Test support utilities that manage fixtures with ambient access
 - Build scripts or code generators that require direct filesystem operations
 
-> **Note:** Use Rust crate names (underscores), not Cargo package names
-> (hyphens). For example, use `my_cli_app` rather than `my-cli-app`.
+The `excluded_paths` option narrows an exclusion to individual modules rather
+than a whole crate. Each entry is a fully qualified path anchored at the crate
+identifier, and it matches on segment boundaries: `my_app::legacy_io` exempts
+that module and everything nested beneath it (for example
+`my_app::legacy_io::reader`), but never a sibling such as
+`my_app::legacy_io_utils`. Reach for this when only a bounded corner of a crate
+needs ambient filesystem access, while the rest stays under the capability
+policy.
+
+> **Note:** For both options, use Rust identifiers (underscores), not Cargo
+> package names (hyphens). For example, use `my_cli_app` rather than
+> `my-cli-app`, and `my_app::legacy_io` rather than `my-app::legacy_io`.
+>
+> **Tip:** For an ad hoc, single-site exemption that travels with the code, a
+> standard `#[allow(no_std_fs_operations)]` attribute on the item or module
+> also works, since the lint honours Rust's lint-level attributes.
 
 **How to fix:** Replace `std::fs` with `cap_std`:
 

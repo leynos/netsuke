@@ -8,16 +8,22 @@
 //! serialisation group the environment-mutating suites depend on.
 
 use anyhow::{Context, Result, ensure};
-use std::fs;
-use std::path::{Path, PathBuf};
+use camino::Utf8Path;
+use cap_std::{ambient_authority, fs_utf8::Dir};
 
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+/// Opens the repository root as a capability-scoped directory handle.
+///
+/// Every read in this file is relative to that handle, so the tests cannot
+/// reach outside the checkout.
+fn repo_root() -> Result<Dir> {
+    Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
+        .context("open the repository root as a capability-scoped directory")
 }
 
-fn read_repo_file(relative: &Path) -> Result<String> {
-    let path = repo_root().join(relative);
-    fs::read_to_string(&path).with_context(|| format!("{} should be readable", path.display()))
+fn read_repo_file(relative: &Utf8Path) -> Result<String> {
+    repo_root()?
+        .read_to_string(relative)
+        .with_context(|| format!("{relative} should be readable"))
 }
 
 /// Splits a Make rule line into its target and its prerequisites.
@@ -91,7 +97,7 @@ fn unit_extracts_recipe_lines_for_a_target() {
 
 #[test]
 fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()> {
-    let makefile = read_repo_file(Path::new("Makefile"))?;
+    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
 
     let prerequisites =
         target_prerequisites(&makefile, "test").context("Makefile should declare a test target")?;
@@ -136,7 +142,7 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
 
 #[test]
 fn behavioural_nextest_config_declares_the_serial_env_group() -> Result<()> {
-    let config = read_repo_file(&Path::new(".config").join("nextest.toml"))?;
+    let config = read_repo_file(&Utf8Path::new(".config").join("nextest.toml"))?;
 
     ensure!(
         config.contains("serial-env = { max-threads = 1 }"),

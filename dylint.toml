@@ -1,33 +1,68 @@
 # Whitaker lint configuration.
 #
-# Crates excluded from the no_std_fs_operations lint because they legitimately
-# require std::fs access:
+# `no_std_fs_operations` enforces capability-based filesystem access. Where an
+# exclusion is genuinely warranted, prefer `excluded_paths` — it exempts one
+# module and its descendants — over `excluded_crates`, which exempts an entire
+# compilation unit. A crate-level entry is justified only when the ambient
+# access lives in the crate root itself, where a path entry would be identical
+# to a crate entry. See docs/whitaker-users-guide.md.
+[no_std_fs_operations]
+
+# Modules that need ambient filesystem access, scoped as narrowly as the lint
+# allows. Everything else in these crates stays under the capability policy.
+excluded_paths = [
+    # Application boundary. `netsuke` probes executables in directories supplied
+    # by the ambient PATH and follows cross-directory symlinks when
+    # canonicalising them; `cap_std` refuses symlinks that leave the directory,
+    # so these operations cannot be capability-scoped.
+    "netsuke::stdlib::which::lookup",
+    # Syncs the ambient temporary file the runner writes its Ninja file to.
+    "netsuke::runner::process::file_io",
+
+    # Behavioural step definitions that stage scenario fixtures — manifests,
+    # workspaces, and captured output — through ambient tempdir access.
+    "bdd_tests::bdd::steps::advanced_usage",
+    "bdd_tests::bdd::steps::conditional_manifest",
+    "bdd_tests::bdd::steps::fs",
+    "bdd_tests::bdd::steps::manifest_command",
+    "bdd_tests::bdd::steps::process",
+    "bdd_tests::bdd::steps::progress_output",
+    "bdd_tests::bdd::steps::stdlib::assertions",
+    "bdd_tests::bdd::steps::stdlib::workspace",
+
+    # CLI integration tests that stage configuration files in ambient tempdirs.
+    "cli_tests::cli_tests::config_discovery",
+    "cli_tests::cli_tests::config_selection",
+    "cli_tests::cli_tests::merge",
+
+    # The shared workflow-reading helper (`tests/common/mod.rs`), included by
+    # each workflow contract crate. The crates themselves stay under policy.
+    "workflow_ci::common",
+    "workflow_release::common",
+]
+
+# Whole crates whose ambient filesystem access lives in the crate root, so a
+# path entry would be no narrower than a crate entry:
 # - build_script_build: the Cargo build script writes generated man pages and
 #   audit artefacts to ambient paths supplied by Cargo (`OUT_DIR`, `target/`),
 #   where capability-based handles offer no benefit.
-# - netsuke: the application crate deliberately performs executable probes in
-#   directories supplied by ambient PATH, follows cross-directory symlinks when
-#   canonicalising those executables, and syncs its ambient temporary file.
-#   These application-boundary operations cannot be capability-scoped.
 # - test_support: the shared test-fixture crate; fixture management uses
 #   ambient tempdir access by design (see test_support/src/fs.rs), matching
-#   the "test support utilities" exclusion in the Whitaker user's guide.
+#   the "test support utilities" exclusion in the Whitaker user's guide. The
+#   crate is currently excluded from the workspace, so Whitaker does not lint
+#   it; the entry is kept so folding it in does not silently reopen the
+#   question.
 # - integration test crates (tests/*.rs): fixture management writes manifests,
 #   workspaces, and captured output with ambient tempdir access, which the
-#   Whitaker user's guide lists as a sanctioned exclusion. Add new test crates
-#   here deliberately when they need ambient fixture I/O.
-[no_std_fs_operations]
+#   Whitaker user's guide lists as a sanctioned exclusion.
+#
+# Add a new entry here only when the ambient I/O really is at the crate root;
+# otherwise add a path above, and prefer migrating to `cap_std` over either.
 excluded_crates = [
     "build_script_build",
-    "netsuke",
     "test_support",
     "advanced_usage_tests",
     "assert_cmd_tests",
-    "bdd_tests",
-    "cli_tests",
-    "dependabot_config_tests",
-    "logging_stderr_tests",
-    "makefile_test_target",
     "manifest_glob_tests",
     "ninja_snapshot_tests",
     "novice_flow_smoke_tests",
@@ -40,7 +75,5 @@ excluded_crates = [
     "stdlib_which_tests",
     "which_diagnostic_snapshot_tests",
     "workflow_build_and_package",
-    "workflow_ci",
-    "workflow_release",
     "workflow_shared_actions_pins",
 ]
