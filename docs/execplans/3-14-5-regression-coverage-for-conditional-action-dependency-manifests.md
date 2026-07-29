@@ -337,6 +337,13 @@ escalation, not workarounds.
   PATH, which is stronger than empty-PATH isolation for this absent-only
   fixture. Date/Author: 2026-07-28, implementation agent.
 
+- Decision: Do not add an ADR for the regression boundary. Rationale: Stage C
+  documents and tests existing architecture—the executable-discovery resolver,
+  command-execution helpers, and shared impurity marker—without introducing or
+  selecting a new port, adapter, interface, or runtime policy. The design and
+  developers' guides are the appropriate homes for this test contract.
+  Date/Author: 2026-07-28, implementation agent.
+
 ## Outcomes & retrospective
 
 Stage A completed without requiring a new seam or changing production code. The
@@ -370,6 +377,12 @@ B.5 completes the behavioural layer with one combined scenario assembled
 entirely from existing steps. It observes the selected action's explicit and
 implicit IR inputs and the emitted `|`/`||` Ninja segment without adding step
 matcher maintenance.
+
+Stage C documentation now explains the selected action's `deps` semantics to
+users, records deterministic conditional-test conventions for developers,
+states the manifest/stdlib port boundary in the design, and marks roadmap item
+3.14.5 and its four sub-items complete. No ADR is warranted because runtime
+architecture and behaviour are unchanged.
 
 ## Context and orientation
 
@@ -1023,3 +1036,9 @@ Skills to load while implementing:
 - 2026-07-28 — Completed Stage B.5 and Stage B overall. Added one combined BDD
   scenario using only existing steps, then recorded the public Gherkin
   missing-separator failure. Remaining work starts at Stage C documentation.
+
+- 2026-07-28 — Drafted Stage C documentation across the users' guide,
+  developers' guide, design, and roadmap. Recorded that no ADR is warranted
+  because this work pins existing boundaries rather than creating a new
+  architectural decision. Stage C remains pending until its gates and
+  CodeRabbit review pass.
