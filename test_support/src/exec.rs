@@ -54,17 +54,17 @@ pub fn write_exec_with_content(root: &Path, name: &str, content: &str) -> Result
     Ok(path)
 }
 
-/// Mark an existing file as executable on Unix; no-op elsewhere.
+/// Mark an existing file as executable by setting its Unix permission bits.
+#[cfg(unix)]
 pub fn make_executable(path: &Path) -> Result<()> {
-    #[cfg(unix)]
-    {
-        let mut perms = fs::metadata(path).context("stat exec stub")?.permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(path, perms).context("chmod exec stub")?;
-    }
+    let mut perms = fs::metadata(path).context("stat exec stub")?.permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(path, perms).context("chmod exec stub")?;
+    Ok(())
+}
 
-    #[cfg(not(unix))]
-    let _ = path;
-
+/// No-op on non-Unix platforms, where executability is not a permission bit.
+#[cfg(not(unix))]
+pub fn make_executable(_path: &Path) -> Result<()> {
     Ok(())
 }
