@@ -9,8 +9,8 @@ use std::os::unix::fs::PermissionsExt;
 use std::process::{Command, Output};
 use tempfile::{TempDir, tempdir};
 
-use crate::exec::write_exec_with_content;
 use super::MakeInvocation;
+use crate::exec::write_exec_with_content;
 
 /// Utilities the scripts and `make` legitimately need. Kept explicit so a new
 /// dependency surfaces as a test failure rather than silently resolving to

@@ -561,7 +561,10 @@ The fixtures live in `test_support::dev_fast`:
   real `mold` installed, a test could not then express "the tool is absent".
   Add to `SANDBOX_UTILITIES` when a script gains a dependency; a missing entry
   surfaces as a test failure rather than as a silent fallback to the
-  developer's own tools.
+  developer's own tools. Its `write_fake` is the domain helper described under
+  [temporary executable test helpers](#temporary-executable-test-helpers): it
+  composes `write_exec_with_content`, supplying the shebang so call sites carry
+  only the behaviour being faked.
 - `FakeRelease` publishes a tarball under the `v<version>` path the installer
   requests and serves it over a `file://` URL, exercising the real URL layout,
   checksum verification, and strip depth. Each release owns its version, so no
