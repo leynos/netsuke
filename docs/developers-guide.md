@@ -372,7 +372,6 @@ unit tests, and `rstest-bdd` release-help scenarios.
 `src/cli/config_path_precedence_tests.rs` is the canonical exhaustive
 state-enumeration example.
 
-
 ## Local build acceleration
 
 Debug builds and tests can optionally use the [`mold`] linker and the Cranelift
@@ -394,7 +393,6 @@ make dev-test           # full test suite via Cranelift and mold
 `make dev-build` and `make dev-test` both depend on `make dev-fast-check`, so a
 missing tool reports an installation hint before Cargo is invoked rather than
 surfacing as an opaque codegen-backend or linker error.
-
 
 ### Toolchain contract
 
@@ -478,7 +476,6 @@ The fragment sets three things and nothing else: the `codegen-backend` unstable
 flag, `codegen-backend = "cranelift"` on the `dev` profile, and a
 `-Clink-arg=-fuse-ld=mold` rustflag gated behind `cfg(target_os = "linux")`.
 
-
 ### Composition rules
 
 - **Quality gates.** `make check-fmt`, `make lint`, `make lint-clippy`,
@@ -536,7 +533,6 @@ flag, `codegen-backend = "cranelift"` on the `dev` profile, and a
   `make install-dev-fast`. It exits non-zero, so `make dev-build` and
   `make dev-test` stop before Cargo runs.
 
-
 ### Testing the tooling
 
 Three suites cover the tooling's observable behaviour. All are hermetic — no
@@ -571,9 +567,8 @@ The fixtures live in `test_support::dev_fast`:
   checksum verification, and strip depth. Each release owns its version, so no
   caller threads a version string around.
 - `RecordingCargo` is a fake `cargo` that logs the arguments,
-  `RUSTUP_TOOLCHAIN`,
-  and `PATH` of every invocation, turning a recipe's command line into a
-  checkable fact.
+  `RUSTUP_TOOLCHAIN`, and `PATH` of every invocation, turning a recipe's
+  command line into a checkable fact.
 - `MakeInvocation` describes a Make run. Variable overrides and environment
   entries are kept apart deliberately: a command-line variable outranks a `?=`
   default, whereas an environment entry is the only channel for a setting a
