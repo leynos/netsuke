@@ -474,7 +474,6 @@ packaged crate builds successfully for release. It then uses
 build-script sources, including `build_l10n_audit.rs`, and rejects stale
 `ninja_env/` paths.
 
-
 ### Temporary executable test helpers
 
 The low-level executable-stub primitive is owned by
