@@ -76,7 +76,6 @@ they are per-invocation arguments tagged `#[serde(skip)]` on
 would silently change the artefact destination — a footgun the design avoids by
 construction.
 
-
 ## Toolchain and borrow checker
 
 Netsuke builds on the dated nightly toolchain pinned in `rust-toolchain.toml`
