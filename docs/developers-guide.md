@@ -84,21 +84,54 @@ Run these commands before finalizing any change:
 - `make lint`
 - `make test`
 
+`make test` runs the non-doctest suite through
+[cargo-nextest](https://nexte.st/) and then runs the doctests separately.
+CI pins the runner version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`.
+Install that same version locally so local runs match CI; read the pin from the
+workflow rather than copying the number, so the two cannot drift:
+
+```bash
+NEXTEST_VERSION="$(sed -n "s/.*NEXTEST_VERSION: '\(.*\)'.*/\1/p" \
+  .github/workflows/ci.yml)"
+cargo install cargo-nextest --locked --version "$NEXTEST_VERSION"
+# or, for a prebuilt binary:
+cargo binstall --no-confirm "cargo-nextest@$NEXTEST_VERSION"
+```
+
+See [Test execution](#test-execution) for what the checked-in nextest
+configuration does and does not cover.
+
 `make lint` runs rustdoc with warnings denied, `cargo clippy`, and the
 [Whitaker](whitaker-users-guide.md) Dylint suite
 (`whitaker --all -- --all-targets --all-features`). Install Whitaker through
 the standalone installer described in the
 [Whitaker user's guide](whitaker-users-guide.md) so local linting matches
 continuous integration (CI); `make lint-clippy` runs the Clippy-only subset.
-Whitaker is configured by `dylint.toml` at the repository root. The
-`no_std_fs_operations` lint currently ignores in-source `allow`/`expect`
-attributes, so `dylint.toml` excludes each sanctioned ambient-filesystem scope
-with a documented rationale: the `build_script_build` Cargo build-script crate,
-the `netsuke` application crate, the `test_support` test-fixture crate, and the
-enumerated integration-test and workflow-contract crates. Netsuke itself needs
-ambient access for executable discovery through `PATH`, cross-directory symlink
-canonicalization, and temporary-file synchronization; other filesystem access
-should remain capability-scoped.
+Whitaker is configured by `dylint.toml` at the repository root, where each
+sanctioned ambient-filesystem scope for `no_std_fs_operations` carries a
+documented rationale.
+
+Prefer `excluded_paths` over `excluded_crates`: a path entry exempts one module
+and its descendants, whereas a crate entry exempts a whole compilation unit.
+The application crate is scoped this way — only
+`netsuke::stdlib::which::lookup` (executable discovery through `PATH` and
+cross-directory symlink canonicalization, which `cap_std` cannot express) and
+`netsuke::runner::process::file_io` (temporary-file synchronization) are
+exempt; the rest of `netsuke` stays under the capability policy. The
+behavioural step definitions, CLI integration tests, and shared
+workflow-reading helper that stage fixtures ambiently are scoped the same way.
+A crate-level entry is justified only when the ambient access lives in the
+crate root itself, where a path entry would be no narrower — that covers the
+Cargo build script, the `test_support` fixture crate, and the enumerated
+integration-test crates.
+
+Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
+allows. The lint does honour in-source lint attributes, but this repository
+denies `clippy::allow_attributes`, so `#[allow(no_std_fs_operations)]` will not
+compile here; an in-source exemption must be a *temporary*, item-level
+`#[expect(no_std_fs_operations, reason = "…")]` that states the reason and the
+route back to compliance. Prefer migrating to `cap_std` over any of these;
+reach for an exclusion only when the operation is irreducibly ambient.
 
 When command output is long, preserve exit codes and logs:
 
@@ -442,6 +475,71 @@ artefacts: the job uses a Kani-specific cache key derived from
 `tools/kani/VERSION` and the Makefile, then caches the job-local Kani Cargo
 home plus Kani support-file home.
 
+## Test execution
+
+`make test` is the canonical entry point and composes two passes:
+
+- `make test-nextest` —
+  `cargo nextest run --all-targets --all-features`, with
+  `RUSTFLAGS="-D warnings"`. This runs every unit, integration, `rstest`, and
+  `rstest-bdd` test.
+- `make doctest` — `cargo test --doc --all-features`, with the same
+  `RUSTFLAGS`. nextest cannot execute doctests, so they need their own pass.
+  Note that the previous `cargo test --all-targets` invocation never ran
+  doctests either; the separate target is what makes a broken documentation
+  example fail the gate.
+
+If either pass fails, `make test` fails. Run the individual targets when
+iterating, but treat `make test` as the gate.
+
+Cargo spells build parallelism `-j`; nextest reserves `-j` for test
+concurrency and spells build parallelism `--build-jobs`. The Makefile
+therefore keeps `BUILD_JOBS` (Cargo flags) and `NEXTEST_BUILD_JOBS` (nextest
+flags) as separate variables rather than reinterpreting one as the other.
+
+### nextest configuration
+
+The runner is configured by `.config/nextest.toml` at the workspace root. It
+governs the non-doctest pass only, and deliberately stays small:
+
+- **`serial-env` test group** (`max-threads = 1`) covering exactly three
+  binaries: `manifest_env_tests`, `ninja_env_tests`, and `env_path_tests`.
+  These mutate process-global environment state — `PATH`, `NINJA_ENV`, and ad
+  hoc `NETSUKE_*` variables. Every other test remains fully parallel.
+- **No blanket retries.** A test that fails intermittently is a defect to
+  diagnose. Add a targeted override with a written rationale only when a
+  genuine external-resource constraint requires one.
+- **A conservative slow timeout** (warn after 60s, terminate after five
+  warning periods) so a hung test surfaces without failing the legitimately
+  slow documentation end-to-end suites, which shell out to real Ninja.
+
+### How this relates to `#[serial]` and the isolation utilities
+
+nextest runs each test in its own process, so environment and
+working-directory mutations cannot leak between tests the way they can under
+the threaded in-process harness. The `EnvLock`, `EnvVarGuard`, and `CwdGuard`
+utilities described in [Test isolation utilities](#test-isolation-utilities),
+and the `#[serial]` markers on the tests in the three binaries above, remain
+necessary because the coverage workflow still drives an in-process runner.
+
+The `serial-env` group is therefore not load-bearing for the tests that exist
+today; it states the serialization contract once so both runners agree, and so
+it is not silently lost if a future test in those binaries reaches for
+genuinely shared state such as a fixed on-disk path.
+
+### Runners not covered by this configuration
+
+- **Coverage** (`.github/workflows/coverage-main.yml`, and the coverage step in
+  `ci.yml`) delegates to the `generate-coverage` shared action, which drives
+  its own `cargo llvm-cov` invocation. It does not call `make test` and is
+  unaffected by `.config/nextest.toml`.
+- **Mutation testing** (`.github/workflows/mutation-testing.yml`) calls the
+  shared `mutation-cargo.yml` reusable workflow with `--all-features`, matching
+  the feature set `make test` uses. Its runner is owned by that workflow.
+
+Changing either to use nextest is a deliberate decision, not something that
+should follow implicitly from this file.
+
 ## Test suite map
 
 Netsuke uses a mixed strategy:
@@ -573,10 +671,16 @@ use the root crate's development dependency.
 
 ## Behavioural testing strategy
 
-Behavioural tests run through `cargo test` using `rstest-bdd`, not a bespoke
-runner. The `scenarios!` macro in `tests/bdd_tests.rs` discovers feature files
-and binds a shared fixture entry point (`world: TestWorld`) to each generated
-scenario test.
+Behavioural tests use `rstest-bdd`, not a bespoke runner, and are executed by
+cargo-nextest alongside every other test (see
+[Test execution](#test-execution)). The `scenarios!` macro in
+`tests/bdd_tests.rs` discovers feature files and binds a shared fixture entry
+point (`world: TestWorld`) to each generated scenario test.
+
+nextest runs each generated scenario in its own process. That reinforces the
+per-scenario isolation policy below rather than conflicting with it: scenario
+state cannot leak across process boundaries, so the policy's requirement to
+recreate state per test is enforced by the runner as well as by convention.
 
 ### State and isolation policy
 
@@ -633,7 +737,7 @@ These points are strategy rules, not optional style guidance.
 3. Reuse existing fixtures/helpers before adding new world state.
 4. Add typed parameter wrappers in `tests/bdd/types.rs` when step arguments
    represent distinct domain concepts.
-5. Run `cargo test --test bdd_tests` and then the full quality gates.
+5. Run `cargo nextest run --test bdd_tests` and then the full quality gates.
 
 ## Manifest `foreach` expansion
 

@@ -27,6 +27,9 @@ jobs:
       # Override rust-toolchain.toml to actually use the matrix toolchain
       RUSTUP_TOOLCHAIN: ${{ matrix.rust }}
       WHITAKER_INSTALLER_VERSION: '0.2.6'
+      # Single source of truth for the cargo-nextest pin. `make test` runs the
+      # non-doctest suite through nextest, so every matrix leg needs it.
+      NEXTEST_VERSION: '0.9.133'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -38,6 +41,10 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
           components: rustfmt, clippy
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        with:
+          tool: nextest@${{ env.NEXTEST_VERSION }}
       - name: Show rustc version
         run: |
           rustup show

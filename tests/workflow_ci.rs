@@ -68,6 +68,147 @@ fn step_name<'a>(step: &'a Value, expected_name: &str) -> Option<&'a Mapping> {
     (name == expected_name).then_some(mapping)
 }
 
+fn named_step<'a>(steps: &'a [Value], name: &str) -> Result<&'a Mapping> {
+    steps
+        .iter()
+        .find_map(|step| step_name(step, name))
+        .with_context(|| format!("job should include the {name} step"))
+}
+
+fn step_index(steps: &[Value], name: &str) -> Result<usize> {
+    steps
+        .iter()
+        .position(|step| step_name(step, name).is_some())
+        .with_context(|| format!("job should include the {name} step"))
+}
+
+fn step_input(step: &Mapping, key: YamlKey) -> Option<&str> {
+    mapping_get(step, YamlKey("with"))
+        .and_then(Value::as_mapping)
+        .and_then(|with| mapping_get(with, key))
+        .and_then(Value::as_str)
+}
+
+fn job_env(job: &Mapping, key: YamlKey) -> Option<&str> {
+    mapping_get(job, YamlKey("env"))
+        .and_then(Value::as_mapping)
+        .and_then(|env| mapping_get(env, key))
+        .and_then(Value::as_str)
+}
+
+/// Returns true when `reference` is `<action>@<40-character lowercase-hex SHA>`.
+///
+/// Dependabot owns the SHA value, so contract tests assert the shape of the
+/// pin rather than a literal commit; see "Workflow pins and Dependabot" in
+/// `docs/developers-guide.md`.
+fn is_pinned_action_ref(reference: &str, action: &str) -> bool {
+    let Some(pin) = reference
+        .strip_prefix(action)
+        .and_then(|rest| rest.strip_prefix('@'))
+    else {
+        return false;
+    };
+    pin.len() == 40
+        && pin
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+}
+
+/// Returns true when `version` is an exact `major.minor.patch` pin.
+fn is_exact_version(version: &str) -> bool {
+    let mut parts = version.split('.');
+    let numeric = |component: Option<&str>| {
+        component.is_some_and(|value| {
+            !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit())
+        })
+    };
+    numeric(parts.next())
+        && numeric(parts.next())
+        && numeric(parts.next())
+        && parts.next().is_none()
+}
+
+#[test]
+fn unit_recognizes_pinned_action_refs() {
+    assert!(is_pinned_action_ref(
+        "taiki-e/install-action@0123456789abcdef0123456789abcdef01234567",
+        "taiki-e/install-action"
+    ));
+    assert!(!is_pinned_action_ref(
+        "taiki-e/install-action@v2",
+        "taiki-e/install-action"
+    ));
+    assert!(!is_pinned_action_ref(
+        "taiki-e/install-action@0123456789ABCDEF0123456789ABCDEF01234567",
+        "taiki-e/install-action"
+    ));
+    assert!(!is_pinned_action_ref(
+        "someone-else/install-action@0123456789abcdef0123456789abcdef01234567",
+        "taiki-e/install-action"
+    ));
+}
+
+#[test]
+fn unit_recognizes_exact_versions() {
+    assert!(is_exact_version("0.9.133"));
+    assert!(!is_exact_version("0.9"));
+    assert!(!is_exact_version("0.9.133.1"));
+    assert!(!is_exact_version("latest"));
+    assert!(!is_exact_version("^0.9.133"));
+}
+
+#[test]
+fn behavioural_ci_workflow_installs_pinned_cargo_nextest() -> Result<()> {
+    let contents = workflow_contents("ci.yml").expect("CI workflow should be readable");
+    let workflow: Value = serde_yaml::from_str(&contents).context("parse CI workflow YAML")?;
+    let build_test = job(&workflow, "build-test")?;
+
+    let version = job_env(build_test, YamlKey("NEXTEST_VERSION"))
+        .context("build-test job should pin NEXTEST_VERSION")?;
+    ensure!(
+        is_exact_version(version),
+        "NEXTEST_VERSION should pin an exact version, found {version:?}"
+    );
+
+    let steps = steps(build_test)?;
+    let install = named_step(steps, "Install cargo-nextest")?;
+    let uses = mapping_get(install, YamlKey("uses"))
+        .and_then(Value::as_str)
+        .context("Install cargo-nextest step should reference an action")?;
+    ensure!(
+        is_pinned_action_ref(uses, "taiki-e/install-action"),
+        "cargo-nextest installer should be pinned to a full commit SHA, found {uses:?}"
+    );
+    ensure!(
+        step_input(install, YamlKey("tool")) == Some("nextest@${{ env.NEXTEST_VERSION }}"),
+        "cargo-nextest installer should resolve its pin from NEXTEST_VERSION"
+    );
+    ensure!(
+        !install.contains_key(Value::String("if".to_owned())),
+        "cargo-nextest should install on every matrix leg because every leg runs make test"
+    );
+    Ok(())
+}
+
+#[test]
+fn behavioural_ci_workflow_runs_tests_through_the_make_target() -> Result<()> {
+    let contents = workflow_contents("ci.yml").expect("CI workflow should be readable");
+    let workflow: Value = serde_yaml::from_str(&contents).context("parse CI workflow YAML")?;
+    let build_test = job(&workflow, "build-test")?;
+    let steps = steps(build_test)?;
+
+    let test_step = named_step(steps, "Test")?;
+    ensure!(
+        mapping_get(test_step, YamlKey("run")).and_then(Value::as_str) == Some("make test"),
+        "the Test step should run the canonical make target"
+    );
+    ensure!(
+        step_index(steps, "Install cargo-nextest")? < step_index(steps, "Test")?,
+        "cargo-nextest should be installed before make test runs"
+    );
+    Ok(())
+}
+
 #[test]
 fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
     let contents = workflow_contents("ci.yml").expect("CI workflow should be readable");

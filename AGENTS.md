@@ -159,12 +159,16 @@ project:
   - `make test` executes:
 
     ```sh
-    cargo test --workspace
+    RUSTFLAGS="-D warnings" cargo nextest run --all-targets --all-features
+    RUSTFLAGS="-D warnings" cargo test --doc --all-features
     ```
 
-    running the full workspace test suite. Use `make fmt`
-    (`cargo fmt --workspace`) to apply formatting fixes reported by the
-    formatter check.
+    running every unit, integration, and behavioural test through
+    [cargo-nextest](https://nexte.st/), then the doctests separately because
+    nextest cannot execute them. Both passes deny warnings, and `make test`
+    fails if either does. `make test-nextest` and `make doctest` run the
+    individual passes. Use `make fmt` (`cargo fmt --workspace`) to apply
+    formatting fixes reported by the formatter check.
 - Clippy warnings MUST be disallowed.
 - Fix any warnings emitted during tests in the code itself rather than
   silencing them.
@@ -240,6 +244,24 @@ project:
 
 ### Testing
 
+- The non-doctest suite runs under [cargo-nextest](https://nexte.st/), which
+  executes each test in its own process. Continuous integration (CI) pins the
+  version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`. Read the pin from
+  the workflow rather than copying the number, then install that exact version
+  locally so local runs match CI:
+
+  ```sh
+  NEXTEST_VERSION="$(sed -n "s/.*NEXTEST_VERSION: '\(.*\)'.*/\1/p" \
+    .github/workflows/ci.yml)"
+  cargo install cargo-nextest --locked --version "$NEXTEST_VERSION"
+  # or, for a prebuilt binary:
+  cargo binstall --no-confirm "cargo-nextest@$NEXTEST_VERSION"
+  ```
+
+- The runner is configured by `.config/nextest.toml` at the repository root.
+  Its scope, the narrow `serial-env` test group, and the no-blanket-retry
+  policy are documented under "Test execution" in `docs/developers-guide.md`.
+  Do not add retries to hide a flaky test; fix the test.
 - Use `rstest` fixtures for shared setup.
 - Replace duplicated tests with `#[rstest(...)]` parameterized cases.
 - Prefer `mockall` for ad hoc mocks/stubs.
