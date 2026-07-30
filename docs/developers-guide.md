@@ -1413,6 +1413,14 @@ be needed. Two 0.11 API removals shape the code here:
 The 0.11 crates also dropped the `std` feature; `alloc` is the equivalent
 minimal feature for returning an owned digest.
 
+Because these crates share their breaking changes, `.github/dependabot.yml`
+collects them into a `rustcrypto` group for the `cargo` ecosystem, so the next
+major arrives as one buildable pull request rather than several that cannot
+compile individually. Add any new RustCrypto crate to that group's `patterns`
+list at the same time as the dependency itself. Never work around a lockstep
+break by pinning one member to an exact version: that blocks the whole family,
+which is what issue #477 had to undo.
+
 Both removals are pinned by compile-fail fixtures in
 `tests/sha2_migration_ui_tests.rs`, which assert that `format!("{:x}", digest)`
 and `io::copy(reader, &mut hasher)` do not compile. Runtime tests confirm the
