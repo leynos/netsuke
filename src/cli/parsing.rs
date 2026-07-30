@@ -31,17 +31,17 @@ pub(super) fn parse_jobs(localizer: &dyn Localizer, s: &str) -> Result<usize, St
             &format!("{s} is not a valid number"),
         )
     })?;
-    if (1..=super::parser::MAX_JOBS).contains(&value) {
+    if (1..=super::MAX_JOBS).contains(&value) {
         Ok(value)
     } else {
         let mut args = LocalizationArgs::default();
         args.insert("min", 1.to_string().into());
-        args.insert("max", super::parser::MAX_JOBS.to_string().into());
+        args.insert("max", super::MAX_JOBS.to_string().into());
         Err(super::parser::validation_message(
             localizer,
             keys::CLI_JOBS_OUT_OF_RANGE,
             Some(&args),
-            &format!("jobs must be between 1 and {}", super::parser::MAX_JOBS),
+            &format!("jobs must be between 1 and {}", super::MAX_JOBS),
         ))
     }
 }

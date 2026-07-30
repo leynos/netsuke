@@ -23,6 +23,9 @@ pub use parser::{
     parse_with_localizer_from,
 };
 
+/// Maximum number of jobs accepted by the CLI.
+pub(super) const MAX_JOBS: usize = 64;
+
 pub(super) fn validation_error(key: &str, message: &str) -> Arc<OrthoError> {
     Arc::new(OrthoError::Validation {
         key: key.to_owned(),

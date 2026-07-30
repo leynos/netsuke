@@ -1,0 +1,110 @@
+---
+source: src/cli/parser_tests.rs
+expression: normalized_help
+---
+Netsuke transforma manifiestos YAML + Jinja en grafos Ninja reproducibles y ejecuta Ninja con valores seguros.
+
+Usage: netsuke [OPTIONS] [COMMAND]
+
+Commands:
+  build     Compila objetivos definidos en el manifiesto (predeterminado).
+  clean     Elimina artefactos de compilación mediante Ninja.
+  graph     Emite el grafo de dependencias de compilación. El formato predeterminado es DOT.
+  generate  Genera el manifiesto Ninja sin ejecutar Ninja.
+  help      Print this message or the help of the given subcommand(s)
+
+Options:
+  -f, --file <FILE>
+          Ruta al archivo de manifiesto Netsuke.
+          
+          [default: Netsukefile]
+
+  -C, --directory <DIR>
+          Run as if started in this directory.
+          
+          This affects manifest lookup, output paths, and config discovery.
+
+      --config <FILE>
+          Ruta a un archivo de configuración, omitiendo la detección automática.
+
+  -j, --jobs <N>
+          Set the number of parallel build jobs.
+          
+          Values must be between 1 and 64.
+
+  -v, --verbose
+          Habilitar registro de diagnóstico detallado y resúmenes de tiempo al completar.
+
+      --locale <LOCALE>
+          Etiqueta de idioma para la CLI (por ejemplo: en-US, es-ES).
+
+      --fetch-allow-scheme <SCHEME>
+          Esquemas de URL adicionales permitidos para el ayudante fetch.
+
+      --fetch-allow-host <HOST>
+          Hostnames that are permitted when default deny is enabled.
+          
+          Supports wildcards such as `*.example.com`.
+
+      --fetch-block-host <HOST>
+          Hostnames that are always blocked, even when allowed elsewhere.
+          
+          Supports wildcards such as `*.example.com`.
+
+      --fetch-default-deny
+          Denegar todos los hosts por defecto; solo permitir la lista de permitidos.
+
+      --json
+          Emitir salida JSON legible por máquinas.
+
+      --no-input
+          No leer nunca entrada interactiva.
+
+      --color <POLICY>
+          Política de color de salida (auto, always, never).
+
+          Possible values:
+          - auto:   Follow the host environment
+          - always: Force colour output on when available
+          - never:  Force colour output off
+          
+          [default: auto]
+
+      --emoji <POLICY>
+          Política de emoji (auto, always, never).
+
+          Possible values:
+          - auto:   Follow the host environment and accessibility mode
+          - always: Force emoji glyphs on
+          - never:  Disable emoji glyphs
+          
+          [default: auto]
+
+      --progress <POLICY>
+          Política de progreso (auto, always, never).
+
+          Possible values:
+          - auto:   Follow Netsuke's default progress behaviour
+          - always: Force progress rendering on
+          - never:  Disable progress rendering
+          
+          [default: auto]
+
+      --accessibility <POLICY>
+          Política de accesibilidad (auto, on, off).
+
+          Possible values:
+          - auto: Follow terminal and environment detection
+          - on:   Force accessible output on
+          - off:  Force accessible output off
+          
+          [default: auto]
+
+      --default-target <TARGET>
+          Objetivos de compilación predeterminados cuando no se especifica ninguno.
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
