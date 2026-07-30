@@ -2,7 +2,6 @@
 //!
 //! These tests validate `OrthoConfig` layer precedence (defaults, file, env,
 //! CLI) and list-value appending.
-
 use anyhow::{Context, Result, ensure};
 use netsuke::cli::{CliConfig, ProgressPolicy};
 use netsuke::cli_localization;
@@ -186,7 +185,7 @@ json = true
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
         .context("parse CLI args for merge")?;
     ensure!(
-        netsuke::cli::resolve_merged_json(&cli, &matches),
+        netsuke::cli::resolve_merged_json(&cli, &matches)?,
         "pre-merge JSON mode should honour config json",
     );
     let merged = netsuke::cli::merge_with_config(&cli, &matches)

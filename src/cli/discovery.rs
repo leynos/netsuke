@@ -8,6 +8,7 @@ use ortho_config::{
     ConfigDiscovery, MergeComposer, MergeLayer, OrthoResult, load_config_file_as_chain,
 };
 use std::borrow::Cow;
+use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -16,16 +17,45 @@ use super::parser::Cli;
 
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG";
 
+/// Provides access to environment variables used during config discovery.
+///
+/// Production code uses [`StdEnvProvider`]. Tests can provide an in-memory
+/// implementation so config-selection logic does not mutate process-global
+/// environment state.
+pub trait EnvProvider {
+    /// Return the value of `key`, or `None` when the key is unset.
+    fn get(&self, key: &str) -> Option<OsString>;
+}
+
+/// Environment provider backed by [`std::env::var_os`].
+#[derive(Debug, Default, Clone, Copy)]
+pub struct StdEnvProvider;
+
+impl EnvProvider for StdEnvProvider {
+    fn get(&self, key: &str) -> Option<OsString> {
+        std::env::var_os(key)
+    }
+}
+
 pub(crate) fn push_file_layers(
     cli: &Cli,
     composer: &mut MergeComposer,
     errors: &mut Vec<Arc<ortho_config::OrthoError>>,
 ) {
-    let layers_result = explicit_config_path(cli).map_or_else(
-        || collect_file_layers(cli.directory.as_deref()),
-        |path| load_layers_from_path(&path),
-    );
-    match layers_result {
+    push_file_layers_with_env(cli, composer, errors, &StdEnvProvider);
+}
+
+/// Load configuration layers with environment access supplied by `env`.
+///
+/// Loading errors are appended to `errors`, matching the normal merge path
+/// without requiring callers to mutate the process environment.
+pub(crate) fn push_file_layers_with_env(
+    cli: &Cli,
+    composer: &mut MergeComposer,
+    errors: &mut Vec<Arc<ortho_config::OrthoError>>,
+    env: &impl EnvProvider,
+) {
+    match collect_file_layers_with_env(cli, env) {
         Ok(layers) => {
             for layer in layers {
                 composer.push_layer(layer);
@@ -33,6 +63,20 @@ pub(crate) fn push_file_layers(
         }
         Err(err) => errors.push(err),
     }
+}
+
+/// Load layers through the shared explicit-config precedence boundary.
+///
+/// Normal merging and early JSON resolution both use this helper so they
+/// select the same file layers while retaining their own error handling.
+fn collect_file_layers_with_env(
+    cli: &Cli,
+    env: &impl EnvProvider,
+) -> OrthoResult<Vec<MergeLayer<'static>>> {
+    explicit_config_path_with_env(cli, env).map_or_else(
+        || collect_file_layers(cli.directory.as_deref()),
+        |path| load_layers_from_path(&path),
+    )
 }
 
 fn config_discovery(directory: Option<&PathBuf>) -> ConfigDiscovery {
@@ -98,19 +142,24 @@ fn project_scope_layers(directory: Option<&Path>) -> OrthoResult<Vec<MergeLayer<
         Err(err) => Err(err),
     }
 }
-
-pub(crate) fn explicit_config_path(cli: &Cli) -> Option<PathBuf> {
+/// Select an explicit config path, giving `--config` precedence over `env`.
+pub(crate) fn explicit_config_path_with_env(cli: &Cli, env: &impl EnvProvider) -> Option<PathBuf> {
     cli.config
         .clone()
-        .or_else(|| env_config_path(CONFIG_ENV_VAR))
+        .or_else(|| env_config_path(env, CONFIG_ENV_VAR))
 }
 
-fn env_config_path(var_name: &str) -> Option<PathBuf> {
-    std::env::var_os(var_name)
+/// Read a non-empty config path from `var_name` through `env`.
+fn env_config_path(env: &impl EnvProvider, var_name: &str) -> Option<PathBuf> {
+    env.get(var_name)
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
 }
 
+/// Load the configuration chain rooted at an explicit file path.
+///
+/// Unlike discovery, a missing explicit file is an error because the caller
+/// selected it deliberately.
 pub(crate) fn load_layers_from_path(
     path: &std::path::Path,
 ) -> OrthoResult<Vec<MergeLayer<'static>>> {
@@ -131,17 +180,99 @@ pub(crate) fn load_layers_from_path(
     }
 }
 
-pub(crate) fn collect_diag_file_layers(cli: &Cli) -> OrthoResult<Vec<MergeLayer<'static>>> {
-    explicit_config_path(cli).map_or_else(
-        || collect_file_layers(cli.directory.as_deref()),
-        |path| load_layers_from_path(&path),
-    )
+/// Load file layers for early JSON resolution using injected environment access.
+///
+/// This delegates to the same precedence boundary as the normal merge path.
+pub(crate) fn collect_diag_file_layers_with_env(
+    cli: &Cli,
+    env: &impl EnvProvider,
+) -> OrthoResult<Vec<MergeLayer<'static>>> {
+    collect_file_layers_with_env(cli, env)
 }
 
-/// Tests for the explicit config-path selector precedence implemented by
-/// [`explicit_config_path`]. Enumerated cases cover every combination of
-/// `--config` and `NETSUKE_CONFIG` presence; a proptest property test asserts
-/// the invariant for generated path values.
+#[cfg(test)]
+mod tests {
+    //! Unit tests for config discovery through injected environment access.
+
+    use super::*;
+    use crate::cli::test_support::TestEnv;
+    use anyhow::ensure;
+    use cap_std::{ambient_authority, fs::Dir};
+    use rstest::rstest;
+    use tempfile::tempdir;
+
+    #[test]
+    fn env_config_path_returns_none_when_var_unset() {
+        let env = TestEnv::default();
+        assert!(env_config_path(&env, "__NETSUKE_TEST_VAR").is_none());
+    }
+
+    #[test]
+    fn env_config_path_returns_none_when_var_empty() {
+        let env = TestEnv::default().with_var("__NETSUKE_TEST_VAR", "");
+        assert!(env_config_path(&env, "__NETSUKE_TEST_VAR").is_none());
+    }
+
+    #[test]
+    fn env_config_path_returns_path_when_var_set() {
+        let env = TestEnv::default().with_var("__NETSUKE_TEST_VAR", "/tmp/foo.toml");
+        let result = env_config_path(&env, "__NETSUKE_TEST_VAR");
+        assert_eq!(result, Some(PathBuf::from("/tmp/foo.toml")));
+    }
+
+    #[rstest]
+    #[case::cli_wins_over_env(
+        Some("/env/path.toml"),
+        Some("/cli/path.toml"),
+        Some("/cli/path.toml")
+    )]
+    #[case::env_used_without_cli(Some("/env/path.toml"), None, Some("/env/path.toml"))]
+    #[case::none_when_sources_missing(None, None, None)]
+    fn explicit_config_path_obeys_precedence(
+        #[case] env_path: Option<&'static str>,
+        #[case] cli_path: Option<&'static str>,
+        #[case] expected: Option<&'static str>,
+    ) {
+        let mut env = TestEnv::default();
+        if let Some(path) = env_path {
+            env = env.with_var(CONFIG_ENV_VAR, path);
+        }
+        let cli = Cli {
+            config: cli_path.map(PathBuf::from),
+            ..Cli::default()
+        };
+
+        assert_eq!(
+            explicit_config_path_with_env(&cli, &env),
+            expected.map(PathBuf::from)
+        );
+    }
+
+    #[test]
+    fn collect_diag_file_layers_uses_injected_explicit_config() -> anyhow::Result<()> {
+        let dir = tempdir()?;
+        let config_path = dir.path().join("netsuke.toml");
+        let config_dir = Dir::open_ambient_dir(dir.path(), ambient_authority())?;
+        config_dir.write("netsuke.toml", b"json = true\n")?;
+
+        let env = TestEnv::default().with_var(CONFIG_ENV_VAR, config_path.as_os_str());
+        let layers = collect_diag_file_layers_with_env(&Cli::default(), &env)?;
+        let expected_path = config_path.to_string_lossy().into_owned();
+
+        ensure!(
+            layers.iter().any(|layer| layer
+                .path()
+                .is_some_and(|path| path.as_str() == expected_path)),
+            "should include the injected explicit config layer at {expected_path}"
+        );
+
+        Ok(())
+    }
+}
+
+/// Tests for explicit config-path precedence. Enumerated cases cover every
+/// combination of `--config` and `NETSUKE_CONFIG` presence; a proptest property
+/// test asserts the invariant for generated path values.
 #[cfg(test)]
 #[path = "config_path_precedence_tests.rs"]
 mod config_path_precedence_tests;

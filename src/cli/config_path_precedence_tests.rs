@@ -1,15 +1,15 @@
 //! Property and unit tests for the explicit config-path selector precedence
-//! enforced by [`super::explicit_config_path`] in `discovery.rs`.
+//! enforced by [`super::explicit_config_path_with_env`] in `discovery.rs`.
 //!
 //! The CLI `--config` selector takes precedence over `NETSUKE_CONFIG`. The
 //! table test covers every presence state, while the property test checks the
 //! same invariant over generated path values.
 
 use super::*;
+use crate::cli::test_support::TestEnv;
 use proptest::prelude::*;
 use rstest::rstest;
 use std::path::PathBuf;
-use test_support::{EnvVarGuard, env_lock::EnvLock};
 
 fn precedence_winner<'a>(
     cli_config: Option<&'a PathBuf>,
@@ -22,18 +22,15 @@ fn resolve_config_path_with_selectors(
     cli_config: Option<PathBuf>,
     env_config: Option<&PathBuf>,
 ) -> Option<PathBuf> {
-    let _lock = EnvLock::acquire();
-    let mut env_guards = vec![EnvVarGuard::remove(CONFIG_ENV_VAR)];
+    let mut env = TestEnv::default();
     if let Some(value) = env_config {
-        env_guards.push(EnvVarGuard::set(CONFIG_ENV_VAR, value.as_os_str()));
+        env = env.with_var(CONFIG_ENV_VAR, value.as_os_str());
     }
     let cli = Cli {
         config: cli_config,
         ..Cli::default()
     };
-    let result = explicit_config_path(&cli);
-    drop(env_guards);
-    result
+    explicit_config_path_with_env(&cli, &env)
 }
 
 /// The resolved path is the CLI selector when present, otherwise the
