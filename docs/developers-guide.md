@@ -965,7 +965,8 @@ config-file selection. It evaluates the precedence chain in this order:
 environment value into `PathBuf`. Both full merging and early JSON resolution
 use the same injected selector and file-layer implementation.
 
-The public API remains two arguments:
+The public APIs `merge_with_config` and `resolve_merged_json` each accept two
+arguments. `resolve_merged_json_with_env` accepts three:
 
 ```rust
 pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli>;
@@ -973,7 +974,7 @@ pub fn resolve_merged_json(cli: &Cli, matches: &ArgMatches) -> OrthoResult<bool>
 pub fn resolve_merged_json_with_env(
     cli: &Cli,
     matches: &ArgMatches,
-    env: &impl EnvProvider,
+    env: &impl ConfigEnvProvider,
 ) -> OrthoResult<bool>;
 ```
 
