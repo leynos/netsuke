@@ -7,7 +7,10 @@ minutes.
 
 Before beginning, ensure the following are available:
 
-- **Netsuke** installed — build from source inside a repository checkout with
+- **Netsuke** installed — install a prebuilt release binary with
+  `cargo binstall netsuke` where
+  [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) is
+  available, build from source inside a repository checkout with
   `cargo build --release`, or follow the registry-install command in the
   [users' guide](users-guide.md#install-netsuke). A bare `cargo install` is
   unsupported: registry builds need the pinned nightly toolchain and the

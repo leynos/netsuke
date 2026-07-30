@@ -18,6 +18,7 @@ use test_support::netsuke::{NetsukeRun, run_netsuke_in};
 
 const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-accessible-output",
+    "guide-binstall-install",
     "guide-cli-usage",
     "guide-command-available-manifest",
     "guide-complete-manifest",
@@ -36,6 +37,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-windows-help",
     "guide-windows-help-install",
     "guide-windows-path",
+    "readme-binstall-install",
     "readme-crates-io-install",
     "readme-first-build-commands",
     "readme-first-build-manifest",
@@ -170,26 +172,27 @@ fn registry_install_examples_pin_toolchain_and_polonius() -> Result<()> {
     // Registry installs build outside a checkout, where neither
     // rust-toolchain.toml nor .cargo/config.toml applies, so every tagged
     // example installing from crates.io must select the pinned nightly and
-    // pass the Polonius flag itself. `cargo install --path .` examples run
-    // inside a checkout and are exempt.
+    // pass the Polonius flag itself. `cargo binstall` fetches a prebuilt
+    // binary and `cargo install --path .` runs inside a checkout, so both
+    // are exempt.
     let mut registry_install_ids = Vec::new();
     for example in load_documented_examples()? {
-        if !example.body.contains("install netsuke") {
-            continue;
+        for line in example.body.lines() {
+            if !line.contains("install netsuke") || line.contains("binstall") {
+                continue;
+            }
+            ensure!(
+                line.contains("cargo +nightly-2026-06-25 install netsuke"),
+                "{id} must install with the pinned nightly toolchain: {line}",
+                id = example.id
+            );
+            ensure!(
+                line.contains("RUSTFLAGS=-Zpolonius=next"),
+                "{id} must pass the Polonius borrow-checker flag: {line}",
+                id = example.id
+            );
+            registry_install_ids.push(example.id.clone());
         }
-        ensure!(
-            example
-                .body
-                .contains("cargo +nightly-2026-06-25 install netsuke"),
-            "{id} must install with the pinned nightly toolchain",
-            id = example.id
-        );
-        ensure!(
-            example.body.contains("RUSTFLAGS=-Zpolonius=next"),
-            "{id} must pass the Polonius borrow-checker flag",
-            id = example.id
-        );
-        registry_install_ids.push(example.id);
     }
     ensure!(
         registry_install_ids.len() >= 2,
@@ -208,6 +211,17 @@ fn registry_install_examples_pin_toolchain_and_polonius() -> Result<()> {
 
 /// Check the documented crates.io install command and release details.
 fn assert_release_installation_contract() -> Result<()> {
+    let readme_binstall = documented_example("readme-binstall-install")?;
+    let guide_binstall = documented_example("guide-binstall-install")?;
+    let expected_binstall = "cargo binstall netsuke\n";
+    ensure!(
+        readme_binstall.body == expected_binstall,
+        "README binstall drifted"
+    );
+    ensure!(
+        guide_binstall.body == expected_binstall,
+        "user guide binstall drifted"
+    );
     let readme_release = documented_example("readme-crates-io-install")?;
     let guide_release = documented_example("guide-crates-io-install")?;
     // Registry installs run outside a checkout, so the packaged source sees

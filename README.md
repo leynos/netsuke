@@ -41,9 +41,20 @@ Netsuke currently requires:
 
 ### Installation
 
-Netsuke v0.1.0 is available from crates.io. Registry installs build outside a
-repository checkout, so neither the pinned toolchain nor the Polonius flag is
-picked up automatically; supply both explicitly:
+Netsuke v0.1.0 is available from crates.io. Where
+[`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) is
+available, prefer it: it fetches a prebuilt release binary and avoids the
+toolchain requirement below.
+
+<!-- tested-example: readme-binstall-install -->
+
+```sh
+cargo binstall netsuke
+```
+
+Building from the registry instead runs outside a repository checkout, so
+neither the pinned toolchain nor the Polonius flag is picked up
+automatically; supply both explicitly:
 
 <!-- tested-example: readme-crates-io-install -->
 
