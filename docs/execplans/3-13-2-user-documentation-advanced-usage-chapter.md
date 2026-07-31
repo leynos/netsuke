@@ -6,6 +6,15 @@ and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETED (Stages E–F descoped; Stage D completed)
 
+> **Superseded in part.** This plan's guidance to use `NETSUKE_CONFIG_PATH`
+> to point to a configuration file no longer holds. The legacy alias was
+> removed in #427, and
+> [ADR-004](../adr-004-explicit-config-selection-outside-orthoconfig.md)
+> (Accepted 2026-05-31) records `NETSUKE_CONFIG` as the *only* environment
+> selector; the precedence ladder is now `--config` > `NETSUKE_CONFIG` >
+> automatic discovery. Treat every `NETSUKE_CONFIG_PATH` requirement below as
+> historical context, not as a live constraint.
+
 ## Purpose / big picture
 
 Roadmap item 3.13.2 asks for an "Advanced Usage" chapter in the user guide that

@@ -6,6 +6,14 @@ and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
+> **Superseded in part.** This plan's `NETSUKE_CONFIG_PATH` backward-compatibility
+> requirement no longer holds. The legacy alias was removed in #427, and
+> [ADR-004](../adr-004-explicit-config-selection-outside-orthoconfig.md)
+> (Accepted 2026-05-31) records `NETSUKE_CONFIG` as the *only* environment
+> selector; the precedence ladder is now `--config` > `NETSUKE_CONFIG` >
+> automatic discovery. Treat every `NETSUKE_CONFIG_PATH` requirement below as
+> historical context, not as a live constraint.
+
 ## Purpose / big picture
 
 After this work, a Netsuke user can point the tool at an arbitrary
@@ -15,9 +23,11 @@ configuration file in two new, visible ways:
 2. An environment variable: `NETSUKE_CONFIG=/path/to/config.toml netsuke build`
 
 Both surfaces bypass automatic discovery and load the specified file directly.
-The existing `NETSUKE_CONFIG_PATH` environment variable continues to work as a
-silent alias for backward compatibility, but `NETSUKE_CONFIG` becomes the
-documented, user-facing name.
+At the time of writing, the existing `NETSUKE_CONFIG_PATH` environment
+variable continued to work as a silent alias for backward compatibility (the
+alias was later removed in #427, per
+[ADR-004](../adr-004-explicit-config-selection-outside-orthoconfig.md)), but
+`NETSUKE_CONFIG` becomes the documented, user-facing name.
 
 The repository also ships an annotated sample configuration file at
 `docs/sample-netsuke.toml` that documents every supported key, so users have a

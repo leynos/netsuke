@@ -953,6 +953,44 @@ Do **not** call `std::env::set_var` directly in BDD steps — use
 5. Guards drop in reverse declaration order — CWD and environment
    variables are restored while the lock is still held, preventing races.
 
+
+### `tracing_capture`
+
+`test_support::tracing_capture` is the workspace's single implementation
+for capturing structured tracing events in tests. `with_test_subscriber`
+installs a capturing `Layer` as the default subscriber for the duration of
+a closure, then returns the closure's result. Each event's fields are
+rendered as a space-separated list of `name=value` pairs — strings and
+`Debug` values are quoted — and appended to a shared buffer:
+
+```rust
+use test_support::tracing_capture::with_test_subscriber;
+use tracing_subscriber::filter::LevelFilter;
+
+with_test_subscriber(LevelFilter::TRACE, |captured| {
+    do_something_that_traces();
+    let events = captured.snapshot();
+    let field = "selector=\"cli_flag\"";
+    assert!(events.iter().any(|event| event.contains(field)));
+});
+```
+
+`with_test_subscriber` installs the subscriber through
+[`tracing::subscriber::with_default`], which registers a *thread-local*
+default. Only events emitted on the calling thread are captured; events
+emitted from threads spawned inside the closure are silently dropped.
+
+`CapturedEvents` has no `Default` implementation — obtain it only from the
+handle passed into the `with_test_subscriber` closure. `snapshot()`
+recovers a poisoned lock rather than panicking, so a panic on another test
+thread cannot cascade into a snapshot assertion.
+
+Tests that snapshot tracing output with `insta` should normalize
+runtime-dependent fields, such as the bounded `path_hash` correlation
+identifier, to a stable placeholder before asserting the snapshot, and
+assert the real value separately with its own check. See
+`src/cli/discovery_tracing_tests.rs` for this pattern.
+
 ## `TestWorld` field groups
 
 `TestWorld` (`tests/bdd/fixtures/mod.rs`) is the shared fixture for all BDD
@@ -1112,6 +1150,19 @@ should avoid `EnvLock`.
 Unit tests that only need to verify explicit config path precedence should test
 `explicit_config_path_with_env` with an injected provider instead of mutating
 the process environment.
+
+Config selector resolution remains a pure query: `resolve_config_selector`
+records the winning selector, its optional path, and every environment
+lookup evaluated, and emits no tracing itself. Structured diagnostics are
+emitted only at the file-layer boundary, where
+`collect_file_layers_with_env` calls `trace_config_path_resolution` after
+resolution completes.
+
+Tracing never logs full paths or formatted parser errors. Path values are
+bounded to a `path_hash` correlation identifier plus `path_file_name`, and
+load failures are classified with the `ConfigLoadFailureKind` enum instead
+of the formatted error text. `path_hash` is a bounded identifier for
+correlating events, not a cryptographic guarantee.
 
 #### `json` contract
 

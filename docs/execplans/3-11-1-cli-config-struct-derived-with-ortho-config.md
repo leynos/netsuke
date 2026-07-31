@@ -6,6 +6,15 @@ and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: IMPLEMENTED
 
+> **Superseded in part.** This plan's manual verification step invoking
+> `NETSUKE_CONFIG_PATH=/tmp/test.toml netsuke` no longer selects a
+> configuration file. The legacy alias was removed in #427, and
+> [ADR-004](../adr-004-explicit-config-selection-outside-orthoconfig.md)
+> (Accepted 2026-05-31) records `NETSUKE_CONFIG` as the *only* environment
+> selector; the precedence ladder is now `--config` > `NETSUKE_CONFIG` >
+> automatic discovery. Use `NETSUKE_CONFIG` when re-running that step, and treat
+> every `NETSUKE_CONFIG_PATH` reference below as historical context.
+
 ## Purpose / big picture
 
 Netsuke already derives `OrthoConfig` on the `Cli` struct in `src/cli/mod.rs`,
