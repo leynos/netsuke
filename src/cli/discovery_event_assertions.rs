@@ -1,4 +1,8 @@
-//! Shared assertion context for the configuration discovery tracing tests.
+//! Shared capture and assertion helpers for the configuration discovery tests.
+//!
+//! [`capture_events`] runs a closure under a capturing subscriber and
+//! [`find_event`] locates one emitted event, so the tracing and layer test
+//! modules share a single implementation of both.
 //!
 //! [`EventAssertion`] pairs a captured tracing event with the path under
 //! assertion so the discovery tests can check bounded field rendering, privacy,
@@ -7,8 +11,34 @@
 
 use anyhow::{Context, Result, ensure};
 use std::path::Path;
+use test_support::tracing_capture::with_test_subscriber;
+use tracing_subscriber::filter::LevelFilter;
 
 use super::diagnostics::path_hash;
+
+/// Run `test` under a TRACE-level capturing subscriber.
+///
+/// Returns the closure's value alongside every event it emitted, so a test can
+/// assert on both the outcome and its instrumentation.
+pub(super) fn capture_events<T, E>(
+    test: impl FnOnce() -> std::result::Result<T, E>,
+) -> std::result::Result<(T, Vec<String>), E> {
+    with_test_subscriber(LevelFilter::TRACE, |captured| {
+        let value = test()?;
+        Ok((value, captured.snapshot()))
+    })
+}
+
+/// Return the first captured event containing `message`.
+///
+/// Fails with the full event list when no event matches, so assertion failures
+/// show what was actually emitted.
+pub(super) fn find_event<'a>(events: &'a [String], message: &str) -> Result<&'a String> {
+    events
+        .iter()
+        .find(|event| event.contains(message))
+        .with_context(|| format!("expected event containing {message:?} in {events:?}"))
+}
 
 /// Bundles a captured tracing event with the path under assertion so the
 /// discovery-test helpers share that context instead of threading repeated

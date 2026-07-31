@@ -10,28 +10,8 @@ use crate::cli::test_support::TestEnv;
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
 use tempfile::{TempDir, tempdir};
-use test_support::tracing_capture::with_test_subscriber;
-use tracing_subscriber::filter::LevelFilter;
 
-use super::event_assertions::EventAssertion;
-
-/// Run `test` under a TRACE-level capturing subscriber.
-fn capture_events<T, E>(
-    test: impl FnOnce() -> std::result::Result<T, E>,
-) -> std::result::Result<(T, Vec<String>), E> {
-    with_test_subscriber(LevelFilter::TRACE, |captured| {
-        let value = test()?;
-        Ok((value, captured.snapshot()))
-    })
-}
-
-/// Return the first captured event containing `message`.
-fn find_event<'a>(events: &'a [String], message: &str) -> Result<&'a String> {
-    events
-        .iter()
-        .find(|event| event.contains(message))
-        .with_context(|| format!("expected event containing {message:?} in {events:?}"))
-}
+use super::event_assertions::{EventAssertion, capture_events, find_event};
 
 #[derive(Debug, Clone, Copy)]
 enum LayerScenario {

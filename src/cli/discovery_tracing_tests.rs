@@ -10,34 +10,8 @@ use anyhow::{Context, Result, ensure};
 use insta::assert_snapshot;
 use rstest::rstest;
 use tempfile::tempdir;
-use test_support::tracing_capture::with_test_subscriber;
-use tracing_subscriber::filter::LevelFilter;
 
-use super::event_assertions::EventAssertion;
-
-/// Run `test` under a TRACE-level capturing subscriber.
-///
-/// Returns the closure's value alongside every event it emitted, so a test can
-/// assert on both the outcome and its instrumentation.
-fn capture_events<T, E>(
-    test: impl FnOnce() -> std::result::Result<T, E>,
-) -> std::result::Result<(T, Vec<String>), E> {
-    with_test_subscriber(LevelFilter::TRACE, |captured| {
-        let value = test()?;
-        Ok((value, captured.snapshot()))
-    })
-}
-
-/// Return the first captured event containing `message`.
-///
-/// Fails with the full event list when no event matches, so assertion failures
-/// show what was actually emitted.
-fn find_event<'a>(events: &'a [String], message: &str) -> Result<&'a String> {
-    events
-        .iter()
-        .find(|event| event.contains(message))
-        .with_context(|| format!("expected event containing {message:?} in {events:?}"))
-}
+use super::event_assertions::{EventAssertion, capture_events, find_event};
 
 /// Snapshot `assertion`'s event under `snapshot_name`, with its hash normalized.
 ///
