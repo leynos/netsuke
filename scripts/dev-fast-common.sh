@@ -8,9 +8,20 @@
 
 set -euo pipefail
 
-: "${MOLD_VERSION_FILE:?MOLD_VERSION_FILE must be set}"
-: "${MOLD_SHA256SUMS_FILE:?MOLD_SHA256SUMS_FILE must be set}"
-: "${CRANELIFT_TOOLCHAIN_FILE:?CRANELIFT_TOOLCHAIN_FILE must be set}"
+# Locate the repository from this file rather than from the working directory,
+# so the entry points run correctly when invoked directly and not only through
+# the `make dev-*` recipes that used to supply every pin path. `BASH_SOURCE[0]`
+# is this file even when sourced, which is what makes the derivation reliable.
+DEV_FAST_HELPER_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+DEV_FAST_REPO_ROOT=$(cd -- "$DEV_FAST_HELPER_DIR/.." && pwd)
+
+# Pin files default to their committed locations. An explicit override still
+# wins, which is what lets the tests point the scripts at fixtures. `read_pin`
+# validates whichever path is selected, so a missing or empty file is reported
+# the same way whether it came from a default or an override.
+MOLD_VERSION_FILE="${MOLD_VERSION_FILE:-$DEV_FAST_REPO_ROOT/tools/mold/VERSION}"
+MOLD_SHA256SUMS_FILE="${MOLD_SHA256SUMS_FILE:-$DEV_FAST_REPO_ROOT/tools/mold/SHA256SUMS}"
+CRANELIFT_TOOLCHAIN_FILE="${CRANELIFT_TOOLCHAIN_FILE:-$DEV_FAST_REPO_ROOT/tools/cranelift/VERSION}"
 
 # Prefix for the mold installation tree. The `dev-*` recipes prepend this
 # prefix's `bin/` to PATH -- this exact prefix, not a hard-coded ~/.local -- so

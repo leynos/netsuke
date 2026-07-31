@@ -34,11 +34,24 @@ const SANDBOX_UTILITIES: &[&str] = &[
     "sed",
     "sh",
     "sha256sum",
+    "stat",
     "tar",
     "touch",
     "tr",
     "uname",
 ];
+
+/// Whether a script run supplies the pin-file environment overrides.
+///
+/// A closed choice rather than a bare `bool`, so a call site reads as the
+/// scenario it is describing.
+#[derive(Copy, Clone, Debug)]
+pub enum PinOverrides {
+    /// Point the script at the pin files explicitly, as the Makefile does.
+    Supplied,
+    /// Leave the variables unset, exercising the committed defaults.
+    Omitted,
+}
 
 /// A `PATH` and `HOME` containing only what a test explicitly puts there.
 pub struct Sandbox {
@@ -104,6 +117,18 @@ impl Sandbox {
         Utf8PathBuf::try_from(path).context("fake executable path must be UTF-8")
     }
 
+    /// Write a fixture file, creating its parent directory.
+    ///
+    /// Offered here so test crates can stage fixtures without reaching for
+    /// `std::fs` themselves, keeping the ambient filesystem access inside this
+    /// already-sanctioned support crate.
+    pub fn write_file(&self, path: &Utf8Path, contents: &str) -> Result<()> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent.as_std_path()).with_context(|| format!("create {parent}"))?;
+        }
+        fs::write(path.as_std_path(), contents).with_context(|| format!("write {path}"))
+    }
+
     /// A `mold` reporting the given version, formatted as the real one does.
     pub fn write_mold(&self, dir: &Utf8Path, version: &str) -> Result<Utf8PathBuf> {
         self.write_fake(
@@ -149,14 +174,31 @@ impl Sandbox {
     /// environment plus the given overrides. Use where a test must vary inputs
     /// the Makefile does not expose as variables.
     pub fn script(&self, name: &str, env: &[(&str, String)]) -> Result<Output> {
+        self.script_with(name, PinOverrides::Supplied, env)
+    }
+
+    /// As [`script`](Self::script), but choosing whether the pin-file
+    /// environment variables are supplied at all.
+    ///
+    /// Omitting them is how a test proves the scripts fall back to the
+    /// committed pins rather than depending on the caller to pass every path.
+    pub fn script_with(
+        &self,
+        name: &str,
+        pins: PinOverrides,
+        env: &[(&str, String)],
+    ) -> Result<Output> {
         let mut command = self.base_command(&self.bin().join("bash"));
         command
             .env("DEV_FAST_PREFIX", self.prefix().as_std_path())
-            .env("MOLD_VERSION_FILE", "tools/mold/VERSION")
-            .env("MOLD_SHA256SUMS_FILE", "tools/mold/SHA256SUMS")
-            .env("CRANELIFT_TOOLCHAIN_FILE", "tools/cranelift/VERSION")
-            .env("DEV_FAST_CONFIG", "tools/dev-fast/config.toml")
-            .arg(format!("scripts/{name}"));
+            .env("DEV_FAST_CONFIG", "tools/dev-fast/config.toml");
+        if matches!(pins, PinOverrides::Supplied) {
+            command
+                .env("MOLD_VERSION_FILE", "tools/mold/VERSION")
+                .env("MOLD_SHA256SUMS_FILE", "tools/mold/SHA256SUMS")
+                .env("CRANELIFT_TOOLCHAIN_FILE", "tools/cranelift/VERSION");
+        }
+        command.arg(format!("scripts/{name}"));
         for (key, value) in env {
             command.env(key, value);
         }

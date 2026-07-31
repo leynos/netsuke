@@ -14,7 +14,7 @@ use camino::Utf8PathBuf;
 use rstest::rstest;
 use std::fs;
 use test_support::dev_fast::{
-    FakeRelease, Sandbox, combined, pinned_mold_version, pinned_toolchain,
+    FakeRelease, PinOverrides, Sandbox, combined, pinned_mold_version, pinned_toolchain,
 };
 
 /// The version the fake release is published as. Deliberately not a real mold
@@ -172,6 +172,78 @@ fn refuses_to_install_an_unverifiable_artefact(#[case] failure: ChecksumFailure)
     ensure!(
         !scenario.installed_mold().as_std_path().exists(),
         "nothing should be unpacked when verification fails"
+    );
+    Ok(())
+}
+
+/// Run without the pin-file variables, the installer must resolve the committed
+/// pins from the script's own location.
+///
+/// It is pointed at a locally published artefact named for the *committed*
+/// version, whose digest cannot match the committed checksum. The refusal
+/// therefore proves both defaults were read — the version pin supplied the
+/// artefact name, and the checksum file supplied the digest it was measured
+/// against — while keeping the case hermetic.
+#[test]
+fn falls_back_to_the_committed_pins_when_no_overrides_are_given() -> Result<()> {
+    let sandbox = Sandbox::new()?;
+    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    let committed_version = pinned_mold_version()?;
+    let release = FakeRelease::publish(&sandbox, &committed_version)?;
+
+    let output = sandbox.script_with(
+        "install-dev-fast.sh",
+        PinOverrides::Omitted,
+        &[("MOLD_RELEASE_BASE_URL", release.base_url())],
+    )?;
+    let text = combined(&output);
+
+    ensure!(
+        !output.status.success(),
+        "a stand-in artefact cannot match the committed digest, got `{text}`"
+    );
+    ensure!(
+        text.contains(&format!("mold-{committed_version}-")),
+        "the committed version pin should name the artefact, got `{text}`"
+    );
+    ensure!(
+        text.contains("checksum mismatch"),
+        "the committed checksum file should reject it, got `{text}`"
+    );
+    ensure!(
+        !sandbox.prefix().join("bin/mold").as_std_path().exists(),
+        "nothing should be unpacked when verification fails"
+    );
+    Ok(())
+}
+
+/// An unreadable pin must abort rather than reaching the download as an empty
+/// string. `fail` exits, but from inside a command substitution that exit ends
+/// only the subshell, so the status has to be propagated explicitly.
+#[test]
+fn an_unreadable_pin_aborts_before_any_download() -> Result<()> {
+    let sandbox = Sandbox::new()?;
+    let missing = sandbox.home().join("absent/MOLD_VERSION");
+
+    let output = sandbox.script_with(
+        "install-dev-fast.sh",
+        PinOverrides::Omitted,
+        &[
+            ("MOLD_VERSION_FILE", missing.to_string()),
+            // A URL that would fail loudly if the installer ever reached it.
+            ("MOLD_RELEASE_BASE_URL", "file:///nonexistent".to_owned()),
+        ],
+    )?;
+    let text = combined(&output);
+
+    ensure!(!output.status.success(), "should abort, got `{text}`");
+    ensure!(
+        text.contains("missing version pin"),
+        "should name the unreadable pin, got `{text}`"
+    );
+    ensure!(
+        !text.contains("downloading"),
+        "must not attempt a download with an empty version, got `{text}`"
     );
     Ok(())
 }

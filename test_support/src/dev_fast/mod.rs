@@ -27,7 +27,7 @@ mod make;
 mod release;
 mod sandbox;
 
-pub use cargo_log::{CargoInvocation, RecordingCargo};
+pub use cargo_log::{CargoInvocation, RecordingCargo, TargetState};
 pub use make::MakeInvocation;
 pub use release::FakeRelease;
-pub use sandbox::{Sandbox, combined, pinned_mold_version, pinned_toolchain};
+pub use sandbox::{PinOverrides, Sandbox, combined, pinned_mold_version, pinned_toolchain};

@@ -11,11 +11,13 @@
 
 #![cfg(all(unix, target_os = "linux"))]
 
-use anyhow::{Result, ensure};
-use camino::Utf8PathBuf;
+use anyhow::{Context, Result, ensure};
+use camino::{Utf8Path, Utf8PathBuf};
 use rstest::rstest;
+use std::fs::File;
+use std::time::{Duration, UNIX_EPOCH};
 use test_support::dev_fast::{
-    CargoInvocation, FakeRelease, MakeInvocation, RecordingCargo, Sandbox, combined,
+    CargoInvocation, FakeRelease, MakeInvocation, RecordingCargo, Sandbox, TargetState, combined,
     pinned_mold_version, pinned_toolchain,
 };
 
@@ -152,6 +154,27 @@ fn install_target_forwards_the_prefix_pins_and_release_url() -> Result<()> {
     Ok(())
 }
 
+/// Timestamp stamped on the benchmark's touch file before the run, chosen far
+/// enough in the past that any `touch` is unambiguously newer. Comparing
+/// against a fixed baseline keeps the assertion deterministic, where comparing
+/// the two passes to each other would depend on filesystem timestamp
+/// granularity.
+const BASELINE_MTIME: i64 = 1_600_000_000;
+
+/// Target-directory slugs the benchmark uses, one per variant.
+const DEFAULT_SLUG: &str = "default";
+const DEV_FAST_SLUG: &str = "dev-fast";
+
+/// Create the touch file with [`BASELINE_MTIME`], returning that timestamp.
+fn write_with_old_mtime(path: &Utf8Path) -> Result<i64> {
+    let file = File::create(path.as_std_path())
+        .with_context(|| format!("create bench touch target {path}"))?;
+    let baseline = UNIX_EPOCH + Duration::from_secs(BASELINE_MTIME.unsigned_abs());
+    file.set_modified(baseline)
+        .with_context(|| format!("backdate {path}"))?;
+    Ok(BASELINE_MTIME)
+}
+
 #[test]
 fn bench_target_emits_both_variant_rows() -> Result<()> {
     let scenario = BuildScenario::prepare()?;
@@ -159,11 +182,20 @@ fn bench_target_emits_both_variant_rows() -> Result<()> {
     // Touch a disposable file rather than `src/main.rs`, so the benchmark does
     // not invalidate the working tree's build cache.
     let touch_file = sandbox.home().join("bench-touch");
-    std::fs::write(touch_file.as_std_path(), "").map_err(anyhow::Error::from)?;
+    let baseline_mtime = write_with_old_mtime(&touch_file)?;
+
+    // Seed both target directories, modelling a re-run. Without this the
+    // benchmark's `rm -rf` would be indistinguishable from doing nothing,
+    // because a fresh sandbox has no artefacts to remove.
+    let bench_root = sandbox.home().join("bench");
+    for slug in [DEFAULT_SLUG, DEV_FAST_SLUG] {
+        std::fs::create_dir_all(bench_root.join(slug).as_std_path())
+            .with_context(|| format!("seed stale {slug} target directory"))?;
+    }
 
     let invocation = MakeInvocation::new("bench-build")
         .variable("CARGO", scenario.cargo.executable())
-        .environment("BENCH_ROOT", sandbox.home().join("bench"))
+        .environment("BENCH_ROOT", &bench_root)
         .environment("BENCH_TOUCH_FILE", &touch_file);
     let output = sandbox.run_make(&invocation)?;
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -189,5 +221,126 @@ fn bench_target_emits_both_variant_rows() -> Result<()> {
         "should measure two builds per variant, recorded {}",
         invocations.len()
     );
+
+    // The benchmark measures the default variant first, then the accelerated
+    // one, each as a clean pass followed by an incremental pass.
+    let mut pairs = invocations.chunks_exact(2);
+    let default_pass = BenchVariant::from_pair(DEFAULT_SLUG, pairs.next(), false)?;
+    let dev_fast_pass = BenchVariant::from_pair(DEV_FAST_SLUG, pairs.next(), true)?;
+    for variant in [&default_pass, &dev_fast_pass] {
+        variant.check(&pinned_toolchain()?)?;
+    }
+
+    ensure!(
+        default_pass.target_dir() != dev_fast_pass.target_dir(),
+        "variants must not share a target directory, got `{}` and `{}`",
+        default_pass.target_dir(),
+        dev_fast_pass.target_dir()
+    );
+
+    // Only the very first pass runs before any touch; each variant touches the
+    // file between its own two passes, so every later pass must see a newer
+    // timestamp. Comparing against a backdated baseline rather than between
+    // passes keeps this free of filesystem timestamp granularity.
+    let first = invocations.first().context("expected a recorded pass")?;
+    ensure!(
+        first.touch_mtime() == Some(baseline_mtime),
+        "the first clean pass should precede any touch, got {:?}",
+        first.touch_mtime()
+    );
+    for (index, pass) in invocations.iter().enumerate().skip(1) {
+        ensure!(
+            pass.touch_mtime()
+                .is_some_and(|mtime| mtime > baseline_mtime),
+            "pass {index} should follow a touch, got {:?}",
+            pass.touch_mtime()
+        );
+    }
     Ok(())
+}
+
+/// One variant's pair of recorded builds: the clean pass then the incremental.
+struct BenchVariant<'a> {
+    label: &'a str,
+    clean: &'a CargoInvocation,
+    incremental: &'a CargoInvocation,
+    /// Whether this variant is the accelerated one, which alone carries the
+    /// Cranelift fragment and the pinned toolchain.
+    expects_fragment: bool,
+}
+
+impl<'a> BenchVariant<'a> {
+    /// Build a descriptor from the variant's recorded pair of passes.
+    fn from_pair(
+        label: &'a str,
+        pair: Option<&'a [CargoInvocation]>,
+        expects_fragment: bool,
+    ) -> Result<Self> {
+        let passes = pair.with_context(|| format!("no recorded passes for `{label}`"))?;
+        let clean = passes
+            .first()
+            .with_context(|| format!("no clean pass for `{label}`"))?;
+        let incremental = passes
+            .get(1)
+            .with_context(|| format!("no incremental pass for `{label}`"))?;
+        Ok(Self {
+            label,
+            clean,
+            incremental,
+            expects_fragment,
+        })
+    }
+
+    fn target_dir(&self) -> &str {
+        self.clean.target_dir()
+    }
+
+    fn check(&self, toolchain: &str) -> Result<()> {
+        let label = self.label;
+        for pass in [self.clean, self.incremental] {
+            ensure!(
+                pass.contains_sequence(&["build", "--bin", "netsuke"]),
+                "`{label}` should build the binary, got `{:?}`",
+                pass.arguments()
+            );
+            ensure!(
+                pass.contains_sequence(&["--config", DEV_FAST_CONFIG]) == self.expects_fragment,
+                "`{label}` fragment expectation ({}) not met, got `{:?}`",
+                self.expects_fragment,
+                pass.arguments()
+            );
+            let expected_toolchain = if self.expects_fragment { toolchain } else { "" };
+            ensure!(
+                pass.toolchain() == expected_toolchain,
+                "`{label}` should run under `{expected_toolchain}`, got `{}`",
+                pass.toolchain()
+            );
+        }
+
+        ensure!(
+            self.clean.target_dir() == self.incremental.target_dir(),
+            "`{label}` should reuse one target directory across its passes"
+        );
+        ensure!(
+            self.clean.target_dir().ends_with(label),
+            "`{label}` should measure in its own directory, got `{}`",
+            self.clean.target_dir()
+        );
+
+        // The harness removes the directory before the clean pass, and the
+        // clean pass leaves it behind, so this ordering is what distinguishes
+        // a genuine clean/incremental pair from two identical builds.
+        ensure!(
+            self.clean.target_state() == TargetState::Absent,
+            "`{label}` clean pass should start from an empty target directory, got {:?}",
+            self.clean.target_state()
+        );
+        ensure!(
+            self.incremental.target_state() == TargetState::Present,
+            "`{label}` incremental pass should reuse the clean pass's output, got {:?}",
+            self.incremental.target_state()
+        );
+
+        Ok(())
+    }
 }

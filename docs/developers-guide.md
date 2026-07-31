@@ -399,6 +399,15 @@ surfacing as an opaque codegen-backend or linker error.
 Three pins keep the backend, linker, and toolchain in lockstep. Change them
 together, never individually.
 
+The scripts locate these files relative to their own path, so `make dev-*`, a
+direct `scripts/dev-fast-check.sh`, and a run from any working directory all
+resolve the same committed pins. Setting `MOLD_VERSION_FILE`,
+`MOLD_SHA256SUMS_FILE`, or `CRANELIFT_TOOLCHAIN_FILE` overrides the
+corresponding default; the tests use that to point the scripts at fixtures.
+Either way a missing or empty file is reported as
+`dev-fast: missing version pin: <path>` rather than silently becoming an empty
+version.
+
 - `tools/cranelift/VERSION` holds the nightly toolchain date, formatted
   `nightly-YYYY-MM-DD`. The `rustc-codegen-cranelift-preview` component is
   installed for exactly that toolchain, and `make dev-*` selects it with
@@ -578,7 +587,17 @@ The fixtures live in `test_support::dev_fast`:
   caller threads a version string around.
 - `RecordingCargo` is a fake `cargo` that logs the arguments,
   `RUSTUP_TOOLCHAIN`, and `PATH` of every invocation, turning a recipe's
-  command line into a checkable fact.
+  command line into a checkable fact. It also records the target directory and
+  whether that directory already existed, which makes a benchmark's
+  clean-then-incremental cycle observable: the clean pass sees
+  `TargetState::Absent` because the harness wiped the directory, and the
+  incremental pass that follows sees `Present`. Seed a stale target directory
+  before asserting on that, or the wipe is indistinguishable from doing
+  nothing. It records the benchmark touch file's timestamp too, compared
+  against a backdated baseline rather than between passes so the assertion does
+  not depend on filesystem timestamp granularity.
+- `PinOverrides` selects whether a script run supplies the pin-file variables.
+  `Omitted` is how a test proves the scripts fall back to the committed pins.
 - `MakeInvocation` describes a Make run. Variable overrides and environment
   entries are kept apart deliberately: a command-line variable outranks a `?=`
   default, whereas an environment entry is the only channel for a setting a

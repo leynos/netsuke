@@ -69,9 +69,15 @@ check_cranelift() {
 # Run both checks unconditionally so a developer sees every missing piece in one
 # pass rather than fixing them one failed run at a time.
 main() {
-  local status=0
-  check_mold "$(mold_version)" || status=1
-  check_cranelift "$(cranelift_toolchain)" || status=1
+  local status=0 mold_pin toolchain_pin
+  # Resolve the pins into variables first. `fail` exits, but inside a command
+  # substitution that exit kills only the subshell, so passing `$(mold_version)`
+  # straight into a check would continue with an empty pin and report a
+  # nonsensical drift. An assignment propagates the status, so this stops.
+  mold_pin=$(mold_version) || return 1
+  toolchain_pin=$(cranelift_toolchain) || return 1
+  check_mold "$mold_pin" || status=1
+  check_cranelift "$toolchain_pin" || status=1
   [ "$status" -eq 0 ] || note 'capability check failed; see the messages above'
   return "$status"
 }

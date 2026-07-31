@@ -75,8 +75,15 @@ install_cranelift() {
 # Install both halves. The linker step runs first so a checksum failure aborts
 # before spending time on a toolchain download.
 main() {
-  install_mold "$(mold_version)"
-  install_cranelift "$(cranelift_toolchain)"
+  local mold_pin toolchain_pin
+  # Resolve the pins into variables first: `fail` exits, but inside a command
+  # substitution that exit kills only the subshell, so an unreadable pin would
+  # otherwise reach the installer as an empty string and be built into a
+  # download URL.
+  mold_pin=$(mold_version) || return 1
+  toolchain_pin=$(cranelift_toolchain) || return 1
+  install_mold "$mold_pin"
+  install_cranelift "$toolchain_pin"
   note 'ready; verify with: make dev-fast-check'
 }
 
