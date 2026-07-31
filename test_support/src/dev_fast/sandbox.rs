@@ -5,8 +5,11 @@
 use anyhow::{Context, Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
+use std::fs::File;
+use std::io::ErrorKind;
+use std::os::unix::fs::{FileExt, PermissionsExt};
 use std::process::{Command, Output};
+use std::time::SystemTime;
 use tempfile::{TempDir, tempdir};
 
 use super::MakeInvocation;
@@ -55,7 +58,10 @@ pub enum PinOverrides {
 
 /// A `PATH` and `HOME` containing only what a test explicitly puts there.
 pub struct Sandbox {
-    temp: TempDir,
+    /// Retained so the temporary tree outlives the sandbox; the usable path is
+    /// `root`, validated as UTF-8 once during construction.
+    _temp: TempDir,
+    root: Utf8PathBuf,
     repo: Utf8PathBuf,
 }
 
@@ -63,34 +69,35 @@ impl Sandbox {
     /// Build a sandbox and populate it with the utility allowlist.
     pub fn new() -> Result<Self> {
         let temp = tempdir().context("create sandbox directory")?;
+        let root = Utf8Path::from_path(temp.path())
+            .context("sandbox path must be UTF-8")?
+            .to_path_buf();
         let repo = std::env::current_dir().context("resolve repository root")?;
         let repo = Utf8PathBuf::try_from(repo).context("repository root must be UTF-8")?;
-        let sandbox = Self { temp, repo };
+        let sandbox = Self {
+            _temp: temp,
+            root,
+            repo,
+        };
         fs::create_dir_all(sandbox.bin().as_std_path()).context("create sandbox bin")?;
         fs::create_dir_all(sandbox.home().as_std_path()).context("create sandbox home")?;
         sandbox.link_utilities()?;
         Ok(sandbox)
     }
 
-    fn root(&self) -> Utf8PathBuf {
-        Utf8Path::from_path(self.temp.path())
-            .expect("tempdir path must be UTF-8")
-            .to_path_buf()
-    }
-
     /// The only directory on the sandbox `PATH`.
     pub fn bin(&self) -> Utf8PathBuf {
-        self.root().join("bin")
+        self.root.join("bin")
     }
 
     /// A `HOME` inside the sandbox, isolating the Makefile's `PATH` export.
     pub fn home(&self) -> Utf8PathBuf {
-        self.root().join("home")
+        self.root.join("home")
     }
 
     /// An install prefix that starts out empty; `DEV_FAST_PREFIX` points here.
     pub fn prefix(&self) -> Utf8PathBuf {
-        self.root().join("prefix")
+        self.root.join("prefix")
     }
 
     fn link_utilities(&self) -> Result<()> {
@@ -119,14 +126,46 @@ impl Sandbox {
 
     /// Write a fixture file, creating its parent directory.
     ///
-    /// Offered here so test crates can stage fixtures without reaching for
-    /// `std::fs` themselves, keeping the ambient filesystem access inside this
-    /// already-sanctioned support crate.
+    /// Offered here, along with [`create_dir`](Self::create_dir) and
+    /// [`write_file_with_mtime`](Self::write_file_with_mtime), so test crates
+    /// can stage fixtures without reaching for `std::fs` themselves. That keeps
+    /// the ambient filesystem access inside this already-sanctioned support
+    /// crate instead of widening the Whitaker exclusion list.
     pub fn write_file(&self, path: &Utf8Path, contents: &str) -> Result<()> {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent.as_std_path()).with_context(|| format!("create {parent}"))?;
-        }
+        self.create_parent(path)?;
         fs::write(path.as_std_path(), contents).with_context(|| format!("write {path}"))
+    }
+
+    /// Write a fixture file and backdate it to `mtime`, in seconds since the
+    /// Unix epoch.
+    ///
+    /// Tests that need to observe a later `touch` compare against a fixed old
+    /// timestamp rather than against each other, which keeps the observation
+    /// free of filesystem timestamp granularity.
+    pub fn write_file_with_mtime(
+        &self,
+        path: &Utf8Path,
+        contents: &str,
+        mtime: SystemTime,
+    ) -> Result<()> {
+        self.create_parent(path)?;
+        let file = File::create(path.as_std_path()).with_context(|| format!("create {path}"))?;
+        file.write_all_at(contents.as_bytes(), 0)
+            .with_context(|| format!("write {path}"))?;
+        file.set_modified(mtime)
+            .with_context(|| format!("backdate {path}"))
+    }
+
+    /// Create a directory and any missing parents.
+    pub fn create_dir(&self, path: &Utf8Path) -> Result<()> {
+        fs::create_dir_all(path.as_std_path()).with_context(|| format!("create {path}"))
+    }
+
+    fn create_parent(&self, path: &Utf8Path) -> Result<()> {
+        match path.parent() {
+            Some(parent) => self.create_dir(parent),
+            None => Ok(()),
+        }
     }
 
     /// A `mold` reporting the given version, formatted as the real one does.
@@ -140,6 +179,10 @@ impl Sandbox {
 
     /// A `rustup` reporting the given toolchain and, optionally, the Cranelift
     /// component as installed.
+    ///
+    /// Every invocation is appended to [`rustup_log`](Self::rustup_log), so a
+    /// test can assert which toolchain commands the installer actually issued
+    /// rather than inferring them from its diagnostics.
     pub fn write_rustup(&self, toolchain: &str, has_cranelift: bool) -> Result<Utf8PathBuf> {
         let component = if has_cranelift {
             "rustc-codegen-cranelift-x86_64-unknown-linux-gnu"
@@ -148,16 +191,36 @@ impl Sandbox {
         };
         let body = format!(
             concat!(
+                "printf '%s\\n' \"$*\" >> '{log}'\n",
                 "case \"$1 $2\" in\n",
                 "  'toolchain list') echo '{toolchain}-x86_64-unknown-linux-gnu' ;;\n",
                 "  'component list') echo '{component}' ;;\n",
                 "  *) exit 0 ;;\n",
                 "esac"
             ),
+            log = self.rustup_log(),
             toolchain = toolchain,
             component = component,
         );
         self.write_fake(&self.bin(), "rustup", &body)
+    }
+
+    /// Where [`write_rustup`](Self::write_rustup) records its invocations.
+    pub fn rustup_log(&self) -> Utf8PathBuf {
+        self.home().join("rustup-invocations.log")
+    }
+
+    /// The `rustup` command lines recorded so far, in order.
+    ///
+    /// A log that was never created means `rustup` was never called. Any other
+    /// read failure is propagated rather than reported as "it did not run".
+    pub fn rustup_invocations(&self) -> Result<Vec<String>> {
+        let log = self.rustup_log();
+        match fs::read_to_string(log.as_std_path()) {
+            Ok(text) => Ok(text.lines().map(str::to_owned).collect()),
+            Err(error) if error.kind() == ErrorKind::NotFound => Ok(Vec::new()),
+            Err(error) => Err(error).with_context(|| format!("read {log}")),
+        }
     }
 
     fn base_command(&self, program: &Utf8Path) -> Command {
@@ -279,6 +342,15 @@ fn read_pin(path: &str) -> Result<String> {
         .with_context(|| format!("read {path}"))?
         .trim()
         .to_owned())
+}
+
+/// The committed Cargo fragment's path, relative to the repository root.
+pub const DEV_FAST_CONFIG_PATH: &str = "tools/dev-fast/config.toml";
+
+/// The committed Cargo fragment's contents, so a test can assert on what the
+/// `dev-*` recipes actually apply rather than only on the path they pass.
+pub fn dev_fast_config() -> Result<String> {
+    fs::read_to_string(DEV_FAST_CONFIG_PATH).with_context(|| format!("read {DEV_FAST_CONFIG_PATH}"))
 }
 
 /// The repository's pinned mold release tag.

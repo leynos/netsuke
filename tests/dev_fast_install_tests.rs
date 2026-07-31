@@ -9,10 +9,11 @@
 
 #![cfg(all(unix, target_os = "linux"))]
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;
+use proptest::prelude::*;
+use proptest::proptest;
 use rstest::rstest;
-use std::fs;
 use test_support::dev_fast::{
     FakeRelease, PinOverrides, Sandbox, combined, pinned_mold_version, pinned_toolchain,
 };
@@ -139,9 +140,46 @@ fn installs_and_records_the_verification_when_the_checksum_matches() -> Result<(
         scenario.installed_mold().as_std_path().is_file(),
         "the tarball root should be stripped so bin/mold lands in the prefix"
     );
+    // Assert on the commands rustup actually received, not on the installer's
+    // own narration of them: a diagnostic can be emitted without the command
+    // ever running.
+    let rustup = scenario.sandbox.rustup_invocations()?;
+    let toolchain = pinned_toolchain()?;
     ensure!(
-        text.contains("rustc-codegen-cranelift-preview"),
-        "should install the Cranelift component, got `{text}`"
+        rustup
+            .iter()
+            .any(|call| call == &format!("toolchain install {toolchain} --profile minimal")),
+        "should install the pinned toolchain, recorded `{rustup:?}`"
+    );
+    ensure!(
+        rustup.iter().any(|call| {
+            call == &format!(
+                "component add rustc-codegen-cranelift-preview --toolchain {toolchain}"
+            )
+        }),
+        "should add the Cranelift component to the pinned toolchain, recorded `{rustup:?}`"
+    );
+    Ok(())
+}
+
+/// A refused artefact must abort before the toolchain half runs, so rustup sees
+/// nothing beyond whatever the capability probe needed.
+#[test]
+fn a_refused_artefact_never_reaches_the_toolchain_install() -> Result<()> {
+    let scenario = InstallerScenario::prepare()?;
+    let fixture = scenario.with_failure(ChecksumFailure::Mismatch)?;
+
+    let output = scenario
+        .sandbox
+        .script("install-dev-fast.sh", &fixture.script_env())?;
+    ensure!(!output.status.success(), "install should abort");
+
+    let rustup = scenario.sandbox.rustup_invocations()?;
+    ensure!(
+        !rustup
+            .iter()
+            .any(|call| call.starts_with("toolchain install") || call.starts_with("component add")),
+        "no toolchain should be installed after a refusal, recorded `{rustup:?}`"
     );
     Ok(())
 }
@@ -251,7 +289,43 @@ fn an_unreadable_pin_aborts_before_any_download() -> Result<()> {
 /// A cell holding a one-decimal duration, as `bench-build` formats them.
 /// Timings are inherently unstable, so tests assert on shape, not value.
 fn is_timing(cell: &str) -> bool {
-    !cell.is_empty() && cell.contains('.') && cell.chars().all(|c| c.is_ascii_digit() || c == '.')
+    // Exactly one point, with digits either side. A looser check accepts `.`,
+    // `..`, and `1.2.3`, none of which the benchmark can emit.
+    let Some((whole, fraction)) = cell.split_once('.') else {
+        return false;
+    };
+    !whole.is_empty()
+        && !fraction.is_empty()
+        && whole.chars().all(|c| c.is_ascii_digit())
+        && fraction.chars().all(|c| c.is_ascii_digit())
+}
+
+proptest! {
+    /// A timing cell is exactly `<digits>.<digits>`. Generating around that
+    /// shape covers the malformed neighbours — bare dots, multiple points, a
+    /// missing side — that a hand-picked example list tends to miss.
+    #[test]
+    fn is_timing_accepts_exactly_one_point_between_digits(
+        cell in r"[0-9.]{0,6}"
+    ) {
+        let expected = {
+            let mut parts = cell.split('.');
+            let whole = parts.next().unwrap_or_default();
+            let fraction = parts.next().unwrap_or_default();
+            parts.next().is_none()
+                && cell.contains('.')
+                && !whole.is_empty()
+                && !fraction.is_empty()
+        };
+        prop_assert_eq!(is_timing(&cell), expected, "cell `{}`", cell);
+    }
+
+    /// Whatever the digits, a well-formed one-decimal timing is accepted.
+    #[test]
+    fn is_timing_accepts_any_one_decimal_duration(whole in 0u32..100_000, fraction in 0u32..10) {
+        let cell = format!("{whole}.{fraction}");
+        prop_assert!(is_timing(&cell), "cell `{}`", cell);
+    }
 }
 
 #[test]
@@ -261,7 +335,7 @@ fn benchmark_emits_a_markdown_table_for_both_paths() -> Result<()> {
     sandbox.write_rustup(&pinned_toolchain()?, true)?;
     let cargo = sandbox.write_fake(&sandbox.bin(), "cargo", "exit 0")?;
     let touch_file = sandbox.home().join("bench-touch");
-    fs::write(touch_file.as_std_path(), "").context("create bench touch target")?;
+    sandbox.write_file(&touch_file, "")?;
 
     let output = sandbox.script(
         "bench-build.sh",

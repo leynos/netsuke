@@ -1398,10 +1398,12 @@ Configuration merge helpers:
 
 ### Environment lookup seams
 
-`EnvProvider` is the port for raw environment access during early CLI
-configuration resolution. The production `StdEnvProvider` adapter delegates to
-`std::env::var_os`; tests can inject map-backed providers without mutating
-process-global state.
+`cli::discovery::EnvProvider` is the port for raw environment access during
+early CLI configuration resolution; `src/cli/mod.rs` re-exports it as
+`ConfigEnvProvider` (and `StdEnvProvider` as `ConfigStdEnvProvider`), so
+external callers see only the `Config*` names below. The production
+`StdEnvProvider` adapter delegates to `std::env::var_os`; tests can inject
+map-backed providers without mutating process-global state.
 
 ```rust
 pub trait EnvProvider {

@@ -5,9 +5,11 @@
 //! prefix to `PATH`. Recording the arguments and environment each invocation
 //! received turns those into checkable facts rather than assumptions.
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
+use std::collections::HashMap;
 use std::fs;
+use std::io::ErrorKind;
 
 use super::Sandbox;
 
@@ -71,19 +73,22 @@ impl RecordingCargo {
 
     /// Every invocation recorded so far, in order.
     ///
-    /// An absent log means the fake was never called, which is reported as an
-    /// empty list so a test can assert on that directly.
+    /// A log that was never created means the fake was never called, reported
+    /// as an empty list so a test can assert on that directly. Any other read
+    /// failure is propagated: a permission or I/O error must not masquerade as
+    /// "cargo did not run", which is exactly the conclusion some tests draw.
     pub fn invocations(&self) -> Result<Vec<CargoInvocation>> {
-        if !self.log.as_std_path().exists() {
-            return Ok(Vec::new());
-        }
-        let text = fs::read_to_string(self.log.as_std_path())
-            .with_context(|| format!("read {}", self.log))?;
-        Ok(text
-            .split(RECORD_SEPARATOR)
+        let text = match fs::read_to_string(self.log.as_std_path()) {
+            Ok(text) => text,
+            Err(error) if error.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(error) => {
+                return Err(error).with_context(|| format!("read {}", self.log));
+            }
+        };
+        text.split(RECORD_SEPARATOR)
             .filter(|record| !record.trim().is_empty())
             .map(CargoInvocation::parse)
-            .collect())
+            .collect()
     }
 
     /// The single recorded invocation, or an error naming how many there were.
@@ -118,41 +123,58 @@ pub struct CargoInvocation {
 }
 
 impl CargoInvocation {
-    fn parse(record: &str) -> Self {
-        let mut invocation = Self {
-            arguments: Vec::new(),
-            toolchain: String::new(),
-            path: String::new(),
-            target_dir: String::new(),
-            target_state: TargetState::Unset,
-            touch_mtime: None,
+    /// Parse one record, rejecting anything the fake could not have written.
+    ///
+    /// A silently-defaulted field would let a harness bug read as a legitimate
+    /// observation — an unrecognised `target_state`, say, would look exactly
+    /// like "no target directory was set". Every field the fake emits is
+    /// therefore required, and every value must be one it can produce.
+    fn parse(record: &str) -> Result<Self> {
+        let mut fields: HashMap<&str, &str> = HashMap::new();
+        for line in record.lines().filter(|line| !line.trim().is_empty()) {
+            let (field, value) = line
+                .split_once('\t')
+                .with_context(|| format!("malformed record line `{line}`"))?;
+            fields.insert(field, value);
+        }
+
+        let take = |name: &str| -> Result<String> {
+            fields
+                .get(name)
+                .map(|value| (*value).to_owned())
+                .with_context(|| format!("record is missing the `{name}` field"))
         };
-        for line in record.lines() {
-            let Some((field, value)) = line.split_once('\t') else {
-                continue;
-            };
-            match field {
-                "arguments" => {
-                    invocation.arguments = value.split_whitespace().map(str::to_owned).collect();
-                }
-                "toolchain" => invocation.toolchain = value.to_owned(),
-                "path" => invocation.path = value.to_owned(),
-                "target_dir" => invocation.target_dir = value.to_owned(),
-                "target_state" => {
-                    invocation.target_state = match value {
-                        "present" => TargetState::Present,
-                        "absent" => TargetState::Absent,
-                        _ => TargetState::Unset,
-                    };
-                }
-                "touch_mtime" => invocation.touch_mtime = value.parse().ok(),
-                _ => {}
-            }
-        }
-        if invocation.target_dir.is_empty() {
-            invocation.target_state = TargetState::Unset;
-        }
-        invocation
+
+        let target_dir = take("target_dir")?;
+        let target_state = match (target_dir.is_empty(), take("target_state")?.as_str()) {
+            (true, _) => TargetState::Unset,
+            (false, "present") => TargetState::Present,
+            (false, "absent") => TargetState::Absent,
+            (false, other) => bail!("unrecognised target_state `{other}`"),
+        };
+
+        let raw_mtime = take("touch_mtime")?;
+        let touch_mtime = if raw_mtime.is_empty() {
+            None
+        } else {
+            Some(
+                raw_mtime
+                    .parse()
+                    .with_context(|| format!("malformed touch_mtime `{raw_mtime}`"))?,
+            )
+        };
+
+        Ok(Self {
+            arguments: take("arguments")?
+                .split_whitespace()
+                .map(str::to_owned)
+                .collect(),
+            toolchain: take("toolchain")?,
+            path: take("path")?,
+            target_dir,
+            target_state,
+            touch_mtime,
+        })
     }
 
     /// The arguments Cargo received. Recorded via `"$*"`, so an argument

@@ -33,7 +33,11 @@ results=()
 # the measurement sub-second without shelling out to an external timer.
 time_command() {
   local start=${EPOCHREALTIME/,/.} end
-  "$@" >/dev/null 2>&1 || fail "benchmark command failed: $*"
+  # Suppress stdout only. This function's stdout is captured by the caller, so
+  # build chatter would corrupt the measurement, but stderr must reach the
+  # terminal: without it a failing build reports only "benchmark command
+  # failed" and hides the compiler or linker diagnostic that explains why.
+  "$@" >/dev/null || fail "benchmark command failed: $*"
   end=${EPOCHREALTIME/,/.}
   LC_ALL=C awk -v start="$start" -v end="$end" 'BEGIN { printf "%.1f", end - start }'
 }

@@ -11,22 +11,17 @@
 
 #![cfg(all(unix, target_os = "linux"))]
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::rstest;
-use std::fs::File;
 use std::time::{Duration, UNIX_EPOCH};
 use test_support::dev_fast::{
-    CargoInvocation, FakeRelease, MakeInvocation, RecordingCargo, Sandbox, TargetState, combined,
-    pinned_mold_version, pinned_toolchain,
+    CargoInvocation, DEV_FAST_CONFIG_PATH, FakeRelease, MakeInvocation, RecordingCargo, Sandbox,
+    TargetState, combined, dev_fast_config, pinned_mold_version, pinned_toolchain,
 };
 
 /// The version the fake release is published as; see the installer tests.
 const TEST_MOLD_VERSION: &str = "9.9.9";
-
-/// The fragment the recipes must hand to Cargo. Hard-coded rather than derived,
-/// so a change to the committed path fails a test instead of passing silently.
-const DEV_FAST_CONFIG: &str = "tools/dev-fast/config.toml";
 
 /// A sandbox whose prerequisites all pass, with a recording `cargo` installed.
 struct BuildScenario {
@@ -90,7 +85,7 @@ fn build_targets_select_the_pinned_toolchain_and_fragment(
         invocation.toolchain()
     );
     ensure!(
-        invocation.contains_sequence(&["--config", DEV_FAST_CONFIG]),
+        invocation.contains_sequence(&["--config", DEV_FAST_CONFIG_PATH]),
         "`{}` should pass the fragment, got `{:?}`",
         target.name,
         invocation.arguments()
@@ -109,6 +104,91 @@ fn build_targets_select_the_pinned_toolchain_and_fragment(
         "`{}` should lead PATH with the install prefix, got `{}`",
         target.name,
         invocation.path()
+    );
+    Ok(())
+}
+
+/// The capability check gates the build targets, so a failing check must stop
+/// them before Cargo runs. Asserting on the recorded invocations proves that
+/// directly, where relying on Cargo's absence from the sandbox would pass even
+/// if the recipe did invoke it.
+#[rstest]
+#[case("dev-build")]
+#[case("dev-test")]
+fn a_failed_gate_invokes_cargo_not_at_all(#[case] target: &str) -> Result<()> {
+    let sandbox = Sandbox::new()?;
+    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    // A usable cargo is present and recording; only mold is missing.
+    let cargo = RecordingCargo::install(&sandbox)?;
+
+    let invocation = MakeInvocation::new(target).variable("CARGO", cargo.executable());
+    let output = sandbox.run_make(&invocation)?;
+    let text = combined(&output);
+
+    ensure!(
+        !output.status.success(),
+        "`{target}` should fail, got `{text}`"
+    );
+    ensure!(
+        text.contains("mold not found on PATH"),
+        "`{target}` should fail in the capability check, got `{text}`"
+    );
+    let recorded = cargo.invocations()?;
+    ensure!(
+        recorded.is_empty(),
+        "`{target}` should not reach Cargo, recorded {} invocation(s)",
+        recorded.len()
+    );
+    Ok(())
+}
+
+/// The recipes pass the fragment by path, so a test asserting only that the
+/// path appears would still pass if the file lost its contents. Read it.
+#[test]
+fn the_cargo_fragment_selects_cranelift_and_mold() -> Result<()> {
+    let fragment: toml::Value = toml::from_str(&dev_fast_config()?)?;
+
+    ensure!(
+        fragment
+            .get("unstable")
+            .and_then(|table| table.get("codegen-backend"))
+            == Some(&toml::Value::Boolean(true)),
+        "the fragment must enable the codegen-backend unstable flag, got `{fragment}`"
+    );
+    ensure!(
+        fragment
+            .get("profile")
+            .and_then(|table| table.get("dev"))
+            .and_then(|table| table.get("codegen-backend"))
+            .and_then(toml::Value::as_str)
+            == Some("cranelift"),
+        "the dev profile must select Cranelift, got `{fragment}`"
+    );
+    // Release artefacts must never inherit the backend, so no other profile may
+    // name one.
+    let profiles = fragment
+        .get("profile")
+        .and_then(toml::Value::as_table)
+        .context("the fragment must configure a profile")?;
+    for (name, table) in profiles {
+        ensure!(
+            name == "dev" || table.get("codegen-backend").is_none(),
+            "only the dev profile may select a backend, but `{name}` does"
+        );
+    }
+
+    let linux = fragment
+        .get("target")
+        .and_then(|table| table.get(r#"cfg(target_os = "linux")"#))
+        .and_then(|table| table.get("rustflags"))
+        .and_then(toml::Value::as_array)
+        .context("the fragment must gate rustflags behind the Linux cfg")?;
+    ensure!(
+        linux
+            .iter()
+            .filter_map(toml::Value::as_str)
+            .any(|flag| flag.contains("-fuse-ld=mold")),
+        "the Linux target must select mold, got `{linux:?}`"
     );
     Ok(())
 }
@@ -166,12 +246,9 @@ const DEFAULT_SLUG: &str = "default";
 const DEV_FAST_SLUG: &str = "dev-fast";
 
 /// Create the touch file with [`BASELINE_MTIME`], returning that timestamp.
-fn write_with_old_mtime(path: &Utf8Path) -> Result<i64> {
-    let file = File::create(path.as_std_path())
-        .with_context(|| format!("create bench touch target {path}"))?;
+fn write_with_old_mtime(sandbox: &Sandbox, path: &Utf8Path) -> Result<i64> {
     let baseline = UNIX_EPOCH + Duration::from_secs(BASELINE_MTIME.unsigned_abs());
-    file.set_modified(baseline)
-        .with_context(|| format!("backdate {path}"))?;
+    sandbox.write_file_with_mtime(path, "", baseline)?;
     Ok(BASELINE_MTIME)
 }
 
@@ -182,15 +259,14 @@ fn bench_target_emits_both_variant_rows() -> Result<()> {
     // Touch a disposable file rather than `src/main.rs`, so the benchmark does
     // not invalidate the working tree's build cache.
     let touch_file = sandbox.home().join("bench-touch");
-    let baseline_mtime = write_with_old_mtime(&touch_file)?;
+    let baseline_mtime = write_with_old_mtime(sandbox, &touch_file)?;
 
     // Seed both target directories, modelling a re-run. Without this the
     // benchmark's `rm -rf` would be indistinguishable from doing nothing,
     // because a fresh sandbox has no artefacts to remove.
     let bench_root = sandbox.home().join("bench");
     for slug in [DEFAULT_SLUG, DEV_FAST_SLUG] {
-        std::fs::create_dir_all(bench_root.join(slug).as_std_path())
-            .with_context(|| format!("seed stale {slug} target directory"))?;
+        sandbox.create_dir(&bench_root.join(slug))?;
     }
 
     let invocation = MakeInvocation::new("bench-build")
@@ -224,9 +300,17 @@ fn bench_target_emits_both_variant_rows() -> Result<()> {
 
     // The benchmark measures the default variant first, then the accelerated
     // one, each as a clean pass followed by an incremental pass.
-    let mut pairs = invocations.chunks_exact(2);
-    let default_pass = BenchVariant::from_pair(DEFAULT_SLUG, pairs.next(), false)?;
-    let dev_fast_pass = BenchVariant::from_pair(DEV_FAST_SLUG, pairs.next(), true)?;
+    let (pairs, rest) = invocations.as_chunks::<2>();
+    ensure!(
+        rest.is_empty(),
+        "passes should come in pairs, got {} spare",
+        rest.len()
+    );
+    let [default_chunk, dev_fast_chunk] = pairs else {
+        bail!("expected one pair per variant, got {}", pairs.len());
+    };
+    let default_pass = BenchVariant::from_pair(DEFAULT_SLUG, default_chunk, false);
+    let dev_fast_pass = BenchVariant::from_pair(DEV_FAST_SLUG, dev_fast_chunk, true);
     for variant in [&default_pass, &dev_fast_pass] {
         variant.check(&pinned_toolchain()?)?;
     }
@@ -271,24 +355,20 @@ struct BenchVariant<'a> {
 
 impl<'a> BenchVariant<'a> {
     /// Build a descriptor from the variant's recorded pair of passes.
-    fn from_pair(
+    ///
+    /// The fixed-size array makes the pairing a type-level fact, so there is no
+    /// absent-pass case left to handle at runtime.
+    const fn from_pair(
         label: &'a str,
-        pair: Option<&'a [CargoInvocation]>,
+        [clean, incremental]: &'a [CargoInvocation; 2],
         expects_fragment: bool,
-    ) -> Result<Self> {
-        let passes = pair.with_context(|| format!("no recorded passes for `{label}`"))?;
-        let clean = passes
-            .first()
-            .with_context(|| format!("no clean pass for `{label}`"))?;
-        let incremental = passes
-            .get(1)
-            .with_context(|| format!("no incremental pass for `{label}`"))?;
-        Ok(Self {
+    ) -> Self {
+        Self {
             label,
             clean,
             incremental,
             expects_fragment,
-        })
+        }
     }
 
     fn target_dir(&self) -> &str {
@@ -304,7 +384,8 @@ impl<'a> BenchVariant<'a> {
                 pass.arguments()
             );
             ensure!(
-                pass.contains_sequence(&["--config", DEV_FAST_CONFIG]) == self.expects_fragment,
+                pass.contains_sequence(&["--config", DEV_FAST_CONFIG_PATH])
+                    == self.expects_fragment,
                 "`{label}` fragment expectation ({}) not met, got `{:?}`",
                 self.expects_fragment,
                 pass.arguments()
