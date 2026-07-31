@@ -182,8 +182,8 @@ references, clone keys only on insertion, and build error context lazily.
   - `make test` executes:
 
     ```sh
-    RUSTFLAGS="-D warnings" cargo nextest run --all-targets --all-features
-    RUSTFLAGS="-D warnings" cargo test --doc --all-features
+    RUSTFLAGS="-D warnings -Zpolonius=next" cargo nextest run --all-targets --all-features
+    RUSTFLAGS="-D warnings -Zpolonius=next" cargo test --doc --all-features
     ```
 
     running every unit, integration, and behavioural test through

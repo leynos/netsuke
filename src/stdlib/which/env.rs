@@ -58,15 +58,19 @@ impl EnvSnapshot {
     /// boundary where the data outlives the snapshot.
     pub(super) fn resolved_dirs(&self, mode: CwdMode) -> Vec<&Utf8Path> {
         let mut dirs = Vec::new();
-        if matches!(mode, CwdMode::Always) {
+        let mut cwd_added = matches!(mode, CwdMode::Always);
+        if cwd_added {
             dirs.push(self.cwd.as_path());
         }
         for entry in &self.entries {
             match entry {
                 PathEntry::Dir(path) => dirs.push(path.as_path()),
-                // `Always` has already prepended the working directory, so a
-                // current-directory PATH entry would only duplicate it.
-                PathEntry::CurrentDir if matches!(mode, CwdMode::Auto) => {
+                // The working directory is searched at most once: `Always`
+                // has already prepended it, and repeated current-directory
+                // PATH entries (for example `::/usr/bin::`) collapse to the
+                // first occurrence.
+                PathEntry::CurrentDir if matches!(mode, CwdMode::Auto) && !cwd_added => {
+                    cwd_added = true;
                     dirs.push(self.cwd.as_path());
                 }
                 PathEntry::CurrentDir => {}

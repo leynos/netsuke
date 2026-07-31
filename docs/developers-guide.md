@@ -503,8 +503,9 @@ home plus Kani support-file home.
 
 - `make test-nextest` —
   `cargo nextest run --all-targets --all-features`, with
-  `RUSTFLAGS="-D warnings"`. This runs every unit, integration, `rstest`, and
-  `rstest-bdd` test.
+  `RUSTFLAGS="-D warnings $(POLONIUS_FLAGS)"` (the Makefile re-states the
+  Polonius flag because a set `RUSTFLAGS` overrides `.cargo/config.toml`).
+  This runs every unit, integration, `rstest`, and `rstest-bdd` test.
 - `make doctest` — `cargo test --doc --all-features`, with the same
   `RUSTFLAGS`. nextest cannot execute doctests, so they need their own pass.
   Note that the previous `cargo test --all-targets` invocation never ran

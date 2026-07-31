@@ -119,9 +119,9 @@ Polonius flag or avoid compiling the crate:
   The README and users' guide document the command and
   `tests/documentation_examples_tests.rs` pins it.
 - **cargo-mutants** (scheduled, informational) runs through the shared
-  `mutation-cargo.yml` workflow, which controls its own environment; if its
-  runs regress with E0499 at tagged sites, the shared workflow needs the
-  same `RUSTFLAGS` treatment.
+  `mutation-cargo.yml` workflow, which controls its own environment; if
+  those runs regress with E0499 at tagged sites, the shared workflow needs
+  the same `RUSTFLAGS` treatment.
 
 ## Clone counts
 

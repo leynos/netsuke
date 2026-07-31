@@ -318,11 +318,18 @@ fn cwd_always_lists_current_directory_once(
     let bin = workspace.root().join("bin");
     test_fs::create_dir_all(bin.as_std_path()).context("mkdir bin")?;
 
-    // The leading empty component parses as a current-directory PATH entry.
-    let path_value = std::env::join_paths([std::path::Path::new(""), bin.as_std_path()])
-        .context("join PATH entries")?;
+    // Empty components parse as current-directory PATH entries; the
+    // repeated blanks mirror a `::/usr/bin::`-style value and must collapse
+    // to a single working-directory search.
+    let path_value = std::env::join_paths([
+        std::path::Path::new(""),
+        std::path::Path::new(""),
+        bin.as_std_path(),
+        std::path::Path::new(""),
+    ])
+    .context("join PATH entries")?;
     let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
-        .context("capture env with a current-directory PATH entry")?;
+        .context("capture env with repeated current-directory PATH entries")?;
 
     let always_dirs = snapshot.resolved_dirs(CwdMode::Always);
     let always_cwd_count = always_dirs
