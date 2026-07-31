@@ -8,15 +8,24 @@ use ortho_config::{
     ConfigDiscovery, MergeComposer, MergeLayer, OrthoResult, load_config_file_as_chain,
 };
 use std::borrow::Cow;
-use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsString;
-use std::hash::{Hash, Hasher};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tracing::{debug, debug_span, trace, warn};
+use tracing::{debug, debug_span};
 
 use super::parser::Cli;
+
+#[path = "discovery_diagnostics.rs"]
+mod diagnostics;
+
+#[path = "discovery_paths.rs"]
+mod paths;
+use diagnostics::{
+    ConfigLoadFailureKind, debug_config_path, debug_optional_config_path, path_hash,
+    trace_config_path_variable, warn_explicit_config_load_failed,
+};
+use paths::normalized_path_key;
 
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG";
 
@@ -225,17 +234,6 @@ fn trace_config_path_resolution(resolution: &ConfigPathResolution) {
     );
 }
 
-/// Trace one environment lookup using bounded path fields.
-fn trace_config_path_variable(var_name: &str, path: Option<&Path>) {
-    trace!(
-        var_name,
-        found = path.is_some(),
-        path_hash = path.map(path_hash).as_deref(),
-        path_file_name = ?path.and_then(Path::file_name),
-        "read config path variable"
-    );
-}
-
 /// Read a non-empty config path from `var_name` through `env`.
 ///
 /// Returns `None` when the variable is unset or empty, so discovery still runs.
@@ -286,75 +284,6 @@ pub(crate) fn collect_diag_file_layers_with_env(
 ) -> OrthoResult<Vec<MergeLayer<'static>>> {
     let _span = debug_span!("collect_diag_file_layers").entered();
     collect_file_layers_with_env(cli, env)
-}
-
-/// Classifies an explicit configuration load failure without retaining error text.
-///
-/// An absent file is [`Self::Missing`]; invalid TOML is [`Self::LoadError`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ConfigLoadFailureKind {
-    /// The selected configuration file does not exist.
-    Missing,
-    /// The selected file exists but could not be loaded or parsed.
-    LoadError,
-}
-
-/// Warn that an explicit `path` failed with `failure_kind`.
-///
-/// The event exposes the failure class, file name, and correlation hash, but
-/// neither the full path nor the formatted parser or I/O error.
-fn warn_explicit_config_load_failed(path: &Path, failure_kind: ConfigLoadFailureKind) {
-    warn!(
-        path_hash = %path_hash(path),
-        path_file_name = ?path.file_name(),
-        failure_kind = ?failure_kind,
-        "explicit config load failed"
-    );
-}
-
-/// Emit `message` with bounded fields identifying `path`.
-fn debug_config_path(message: &'static str, path: &Path) {
-    debug!(
-        path_hash = %path_hash(path),
-        path_file_name = ?path.file_name(),
-        message
-    );
-}
-
-/// Emit `message` with presence and bounded fields for an optional path string.
-fn debug_optional_config_path(message: &'static str, path: Option<&str>) {
-    debug!(
-        path_hash = path.map(|value| short_hash(value.as_bytes())).as_deref(),
-        path_file_name = ?path.and_then(|value| Path::new(value).file_name()),
-        path_present = path.is_some(),
-        message
-    );
-}
-
-/// Return a stable-width correlation identifier for `value`.
-///
-/// This bounds log cardinality; it is not a cryptographic digest and must not
-/// be used as a security boundary.
-fn short_hash(value: &[u8]) -> String {
-    let mut hasher = DefaultHasher::new();
-    value.hash(&mut hasher);
-    format!("{:016x}", hasher.finish())
-}
-
-/// Return the bounded correlation hash for `path`.
-fn path_hash(path: &Path) -> String {
-    short_hash(path.to_string_lossy().as_bytes())
-}
-
-/// Return a comparable key for `path`, resolving it where the file exists.
-///
-/// `OrthoConfig` canonicalises every layer path it records, whereas the expected
-/// project path is joined from the caller's `--directory` verbatim. Passing both
-/// sides through this function keeps a relative or symlinked directory from
-/// looking like a different file.
-fn normalized_path_key(path: &str) -> PathBuf {
-    let candidate = Path::new(path);
-    std::fs::canonicalize(candidate).unwrap_or_else(|_| candidate.to_path_buf())
 }
 
 #[cfg(test)]

@@ -110,7 +110,7 @@ fn collect_diag_file_layers_logs_selected_branch(
 fn existing_project_scope_layer_is_not_appended_twice() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
     let project_dir = temp.path().join("project");
-    std::fs::create_dir(&project_dir).context("create project dir")?;
+    test_support::fs::create_dir(&project_dir).context("create project dir")?;
     test_support::fs::write(
         project_dir.join(".netsuke.toml"),
         "default_targets = [\"alpha\"]\n",

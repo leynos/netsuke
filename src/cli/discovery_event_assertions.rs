@@ -8,7 +8,7 @@
 use anyhow::{Context, Result, ensure};
 use std::path::Path;
 
-use super::path_hash;
+use super::diagnostics::path_hash;
 
 /// Bundles a captured tracing event with the path under assertion so the
 /// discovery-test helpers share that context instead of threading repeated
