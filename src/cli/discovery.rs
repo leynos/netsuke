@@ -164,6 +164,10 @@ fn project_scope_layers(directory: Option<&Path>) -> OrthoResult<Vec<MergeLayer<
 /// A thin wrapper over [`resolve_config_selector`] for callers that need only
 /// the winning path. Like that query it performs no tracing; orchestration
 /// boundaries call [`trace_config_path_resolution`] to emit diagnostics.
+///
+/// Production code takes the richer [`ConfigPathResolution`] so it can trace the
+/// environment lookups, leaving this as a convenience for precedence tests.
+#[cfg(test)]
 pub(crate) fn explicit_config_path_with_env(cli: &Cli, env: &impl EnvProvider) -> Option<PathBuf> {
     resolve_config_selector(cli.config.clone(), env).path
 }
@@ -352,6 +356,18 @@ fn normalized_path_key(path: &str) -> PathBuf {
     let candidate = Path::new(path);
     std::fs::canonicalize(candidate).unwrap_or_else(|_| candidate.to_path_buf())
 }
+
+#[cfg(test)]
+#[path = "discovery_event_assertions.rs"]
+mod event_assertions;
+
+#[cfg(test)]
+#[path = "discovery_tracing_tests.rs"]
+mod tracing_tests;
+
+#[cfg(test)]
+#[path = "discovery_layer_tests.rs"]
+mod layer_tests;
 
 #[cfg(test)]
 mod tests {
