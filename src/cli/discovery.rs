@@ -8,10 +8,13 @@ use ortho_config::{
     ConfigDiscovery, MergeComposer, MergeLayer, OrthoResult, load_config_file_as_chain,
 };
 use std::borrow::Cow;
+use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsString;
+use std::hash::{Hash, Hasher};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tracing::{debug, debug_span, trace, warn};
 
 use super::parser::Cli;
 
@@ -73,9 +76,17 @@ fn collect_file_layers_with_env(
     cli: &Cli,
     env: &impl EnvProvider,
 ) -> OrthoResult<Vec<MergeLayer<'static>>> {
-    explicit_config_path_with_env(cli, env).map_or_else(
-        || collect_file_layers(cli.directory.as_deref()),
-        |path| load_layers_from_path(&path),
+    let resolution = resolve_config_selector(cli.config.clone(), env);
+    trace_config_path_resolution(&resolution);
+    resolution.path.map_or_else(
+        || {
+            debug!("using config discovery");
+            collect_file_layers(cli.directory.as_deref())
+        },
+        |path| {
+            debug_config_path("using explicit config path", &path);
+            load_layers_from_path(&path)
+        },
     )
 }
 
@@ -101,15 +112,21 @@ pub(crate) fn collect_file_layers(
     }
 
     let project_file = project_scope_file_str(directory);
+    let project_key = project_file.as_deref().map(normalized_path_key);
     let has_project_layer = file_layers.value.iter().any(|layer| {
-        layer
-            .path()
-            .is_some_and(|path| project_file.as_deref() == Some(path.as_str()))
+        layer.path().is_some_and(|path| {
+            project_key.as_deref() == Some(normalized_path_key(path.as_str()).as_path())
+        })
     });
     if has_project_layer {
+        debug_optional_config_path(
+            "discovery included project-scope layers",
+            project_file.as_deref(),
+        );
         return Ok(file_layers.value);
     }
 
+    debug_optional_config_path("appending project-scope layers", project_file.as_deref());
     let project_layers = project_scope_layers(directory)?;
     Ok(file_layers
         .value
@@ -143,13 +160,82 @@ fn project_scope_layers(directory: Option<&Path>) -> OrthoResult<Vec<MergeLayer<
     }
 }
 /// Select an explicit config path, giving `--config` precedence over `env`.
+///
+/// A thin wrapper over [`resolve_config_selector`] for callers that need only
+/// the winning path. Like that query it performs no tracing; orchestration
+/// boundaries call [`trace_config_path_resolution`] to emit diagnostics.
 pub(crate) fn explicit_config_path_with_env(cli: &Cli, env: &impl EnvProvider) -> Option<PathBuf> {
-    cli.config
-        .clone()
-        .or_else(|| env_config_path(env, CONFIG_ENV_VAR))
+    resolve_config_selector(cli.config.clone(), env).path
+}
+
+/// Describes the result of the pure explicit-path selection query.
+///
+/// Records the winning selector, its optional path, and every environment
+/// lookup evaluated to reach the decision, so a caller can emit diagnostics
+/// afterwards without giving the query tracing side effects.
+#[derive(Debug, PartialEq, Eq)]
+struct ConfigPathResolution {
+    selector: &'static str,
+    path: Option<PathBuf>,
+    environment_lookups: Vec<(&'static str, Option<PathBuf>)>,
+}
+
+/// Select a config path from the CLI flag, then `NETSUKE_CONFIG` via `env`.
+///
+/// `cli_config` wins when present, in which case no environment lookup is
+/// recorded because none is performed. This query emits no tracing.
+fn resolve_config_selector(
+    cli_config: Option<PathBuf>,
+    env: &impl EnvProvider,
+) -> ConfigPathResolution {
+    if let Some(path) = cli_config {
+        return ConfigPathResolution {
+            selector: "cli_flag",
+            path: Some(path),
+            environment_lookups: Vec::new(),
+        };
+    }
+
+    let primary_path = env_config_path(env, CONFIG_ENV_VAR);
+    ConfigPathResolution {
+        selector: primary_path.as_ref().map_or("none", |_| CONFIG_ENV_VAR),
+        environment_lookups: vec![(CONFIG_ENV_VAR, primary_path.clone())],
+        path: primary_path,
+    }
+}
+
+/// Emit bounded diagnostics for a completed path `resolution`.
+///
+/// Environment lookups are traced before the selector event. A selected path
+/// contributes only a correlation hash and file name, never its full value.
+fn trace_config_path_resolution(resolution: &ConfigPathResolution) {
+    for (var_name, path) in &resolution.environment_lookups {
+        trace_config_path_variable(var_name, path.as_deref());
+    }
+    debug!(
+        selector = resolution.selector,
+        path_hash = resolution.path.as_deref().map(path_hash).as_deref(),
+        path_file_name = ?resolution.path.as_deref().and_then(Path::file_name),
+        path_present = resolution.path.is_some(),
+        "resolved config path"
+    );
+}
+
+/// Trace one environment lookup using bounded path fields.
+fn trace_config_path_variable(var_name: &str, path: Option<&Path>) {
+    trace!(
+        var_name,
+        found = path.is_some(),
+        path_hash = path.map(path_hash).as_deref(),
+        path_file_name = ?path.and_then(Path::file_name),
+        "read config path variable"
+    );
 }
 
 /// Read a non-empty config path from `var_name` through `env`.
+///
+/// Returns `None` when the variable is unset or empty, so discovery still runs.
+/// This query emits no tracing.
 fn env_config_path(env: &impl EnvProvider, var_name: &str) -> Option<PathBuf> {
     env.get(var_name)
         .filter(|value| !value.is_empty())
@@ -169,14 +255,21 @@ pub(crate) fn load_layers_from_path(
             .into_iter()
             .map(|(value, layer_path)| MergeLayer::file(Cow::Owned(value), Some(layer_path)))
             .collect()),
-        Ok(None) => Err(Arc::new(ortho_config::OrthoError::File {
-            path: path.to_path_buf(),
-            source: Box::new(io::Error::new(
-                io::ErrorKind::NotFound,
-                "explicit configuration file not found",
-            )),
-        })),
-        Err(err) => Err(err),
+        Ok(None) => {
+            let error = Arc::new(ortho_config::OrthoError::File {
+                path: path.to_path_buf(),
+                source: Box::new(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "explicit configuration file not found",
+                )),
+            });
+            warn_explicit_config_load_failed(path, ConfigLoadFailureKind::Missing);
+            Err(error)
+        }
+        Err(error) => {
+            warn_explicit_config_load_failed(path, ConfigLoadFailureKind::LoadError);
+            Err(error)
+        }
     }
 }
 
@@ -187,7 +280,77 @@ pub(crate) fn collect_diag_file_layers_with_env(
     cli: &Cli,
     env: &impl EnvProvider,
 ) -> OrthoResult<Vec<MergeLayer<'static>>> {
+    let _span = debug_span!("collect_diag_file_layers").entered();
     collect_file_layers_with_env(cli, env)
+}
+
+/// Classifies an explicit configuration load failure without retaining error text.
+///
+/// An absent file is [`Self::Missing`]; invalid TOML is [`Self::LoadError`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ConfigLoadFailureKind {
+    /// The selected configuration file does not exist.
+    Missing,
+    /// The selected file exists but could not be loaded or parsed.
+    LoadError,
+}
+
+/// Warn that an explicit `path` failed with `failure_kind`.
+///
+/// The event exposes the failure class, file name, and correlation hash, but
+/// neither the full path nor the formatted parser or I/O error.
+fn warn_explicit_config_load_failed(path: &Path, failure_kind: ConfigLoadFailureKind) {
+    warn!(
+        path_hash = %path_hash(path),
+        path_file_name = ?path.file_name(),
+        failure_kind = ?failure_kind,
+        "explicit config load failed"
+    );
+}
+
+/// Emit `message` with bounded fields identifying `path`.
+fn debug_config_path(message: &'static str, path: &Path) {
+    debug!(
+        path_hash = %path_hash(path),
+        path_file_name = ?path.file_name(),
+        message
+    );
+}
+
+/// Emit `message` with presence and bounded fields for an optional path string.
+fn debug_optional_config_path(message: &'static str, path: Option<&str>) {
+    debug!(
+        path_hash = path.map(|value| short_hash(value.as_bytes())).as_deref(),
+        path_file_name = ?path.and_then(|value| Path::new(value).file_name()),
+        path_present = path.is_some(),
+        message
+    );
+}
+
+/// Return a stable-width correlation identifier for `value`.
+///
+/// This bounds log cardinality; it is not a cryptographic digest and must not
+/// be used as a security boundary.
+fn short_hash(value: &[u8]) -> String {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+
+/// Return the bounded correlation hash for `path`.
+fn path_hash(path: &Path) -> String {
+    short_hash(path.to_string_lossy().as_bytes())
+}
+
+/// Return a comparable key for `path`, resolving it where the file exists.
+///
+/// `OrthoConfig` canonicalises every layer path it records, whereas the expected
+/// project path is joined from the caller's `--directory` verbatim. Passing both
+/// sides through this function keeps a relative or symlinked directory from
+/// looking like a different file.
+fn normalized_path_key(path: &str) -> PathBuf {
+    let candidate = Path::new(path);
+    std::fs::canonicalize(candidate).unwrap_or_else(|_| candidate.to_path_buf())
 }
 
 #[cfg(test)]
