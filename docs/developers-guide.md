@@ -1173,6 +1173,40 @@ Selected file-load errors and malformed `NETSUKE_JSON` values are returned to
 the caller. Accepted environment values are `true`, `false`, `1`, and `0`.
 An explicit root `--json` flag bypasses environment parsing.
 
+
+### Configuration discovery module layout
+
+`src/cli/discovery.rs` attaches several small `#[path = "..."]` modules that
+split diagnostics, path comparison, and tests out of the main discovery flow:
+
+- `discovery_diagnostics.rs` — bounded tracing helpers (`path_hash`,
+  `short_hash`, `debug_config_path`, `debug_optional_config_path`,
+  `warn_explicit_config_load_failed`) and the `ConfigLoadFailureKind` enum
+  used to classify a load failure without retaining error text.
+- `discovery_paths.rs` — `normalized_path_key` resolves a path to a
+  comparable, canonicalized form, so a relative or symlinked `--directory`
+  can be matched against OrthoConfig's canonicalized layer paths.
+- `discovery_event_assertions.rs` — shared test-only helpers:
+  `capture_events` runs a closure under a TRACE capturing subscriber,
+  `find_event` locates one emitted event by substring, and
+  `EventAssertion` bundles an event with its path to assert bounded
+  `path_hash`/`path_file_name` fields, the absence of the raw path or
+  formatted error text, and to normalize the hash before an `insta`
+  snapshot.
+- `discovery_tracing_tests.rs` — tests selector precedence
+  (`--config` versus `NETSUKE_CONFIG`), the removed legacy
+  `NETSUKE_CONFIG_PATH` alias, and event-schema snapshots for both
+  selection and explicit load failures.
+- `discovery_layer_tests.rs` — tests which branch
+  `collect_diag_file_layers_with_env` takes (explicit path versus automatic
+  discovery) and the project-scope second pass in `collect_file_layers`.
+
+Both test modules import `capture_events`, `find_event`, and
+`EventAssertion` from `discovery_event_assertions` rather than duplicating
+them. The `insta` snapshot calls themselves stay in the test modules
+because snapshot names bind to the test module's path, not to a shared
+helper module.
+
 ## BDD command helpers and environment handling
 
 The BDD step module `tests/bdd/steps/manifest_command_helpers.rs` provides

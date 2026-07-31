@@ -107,3 +107,108 @@ pub fn with_test_subscriber<T>(
     let subscriber = tracing_subscriber::registry().with(layer.with_filter(level_filter));
     tracing::subscriber::with_default(subscriber, || test(captured))
 }
+
+#[cfg(test)]
+mod tests {
+    //! Tests for the capture handle's shared-state guarantees.
+    //!
+    //! These live inside the module because poisoning the capture lock needs
+    //! the private `Arc<Mutex<_>>`; no public API can reach it.
+
+    use super::*;
+    use std::sync::{Arc, Barrier};
+
+    /// Cloned handles observe the same buffer from other threads.
+    ///
+    /// Only `snapshot()` runs off-thread: the subscriber is a thread-local
+    /// default, so a spawned thread could not emit captured events anyway.
+    #[test]
+    fn snapshot_is_readable_concurrently_from_cloned_handles() {
+        let events = with_test_subscriber(LevelFilter::TRACE, |captured| {
+            tracing::info!(step = 1, "first");
+            let barrier = Arc::new(Barrier::new(4));
+            let readers: Vec<_> = (0..3)
+                .map(|_| {
+                    let handle = captured.clone();
+                    let barrier = Arc::clone(&barrier);
+                    std::thread::spawn(move || {
+                        barrier.wait();
+                        handle.snapshot()
+                    })
+                })
+                .collect();
+            barrier.wait();
+            let snapshots: Vec<_> = readers
+                .into_iter()
+                .map(|reader| reader.join().expect("reader thread should not panic"))
+                .collect();
+            (captured.snapshot(), snapshots)
+        });
+
+        let (final_snapshot, concurrent) = events;
+        assert_eq!(final_snapshot.len(), 1, "one event was emitted");
+        for snapshot in concurrent {
+            assert!(
+                snapshot.iter().all(|event| final_snapshot.contains(event)),
+                "concurrent snapshot must be a subset of the final buffer"
+            );
+        }
+    }
+
+    /// A poisoned capture lock still yields a snapshot rather than panicking.
+    #[test]
+    fn snapshot_recovers_from_a_poisoned_lock() {
+        let captured = CapturedEvents {
+            fields: Arc::new(Mutex::new(vec!["seeded=1".to_owned()])),
+        };
+
+        let poisoner = Arc::clone(&captured.fields);
+        let handle = std::thread::spawn(move || {
+            let _guard = poisoner.lock().expect("lock should be held");
+            panic!("poison the capture lock");
+        });
+        assert!(handle.join().is_err(), "the thread should have panicked");
+        assert!(
+            captured.fields.is_poisoned(),
+            "the lock should now be poisoned"
+        );
+
+        assert_eq!(
+            captured.snapshot(),
+            vec!["seeded=1".to_owned()],
+            "snapshot should recover the guard instead of panicking"
+        );
+    }
+
+    /// A nested subscriber shadows the outer one for its scope.
+    ///
+    /// `with_default` keeps a thread-local stack, so events dispatch only to
+    /// the innermost subscriber; the outer handle never sees them.
+    #[test]
+    fn nested_subscribers_capture_only_their_own_scope() {
+        let (outer, inner) = with_test_subscriber(LevelFilter::TRACE, |outer_captured| {
+            tracing::info!(scope = "outer_before", "outer");
+            let inner_events = with_test_subscriber(LevelFilter::TRACE, |inner_captured| {
+                tracing::info!(scope = "inner", "inner");
+                inner_captured.snapshot()
+            });
+            tracing::info!(scope = "outer_after", "outer");
+            (outer_captured.snapshot(), inner_events)
+        });
+
+        assert_eq!(inner.len(), 1, "inner scope captures only its own event");
+        assert!(
+            inner[0].contains("inner"),
+            "inner snapshot should hold the nested event: {inner:?}"
+        );
+        assert_eq!(
+            outer.len(),
+            2,
+            "outer captures its own events only: {outer:?}"
+        );
+        assert!(
+            outer.iter().all(|event| !event.contains("scope=\"inner\"")),
+            "outer must not see the nested event: {outer:?}"
+        );
+    }
+}

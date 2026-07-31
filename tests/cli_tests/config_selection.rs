@@ -51,7 +51,8 @@ use std::ffi::OsStr;
 use std::fs;
 use std::sync::Arc;
 use tempfile::tempdir;
-use test_support::{EnvVarGuard, env_lock::EnvLock};
+use test_support::{EnvVarGuard, env_lock::EnvLock, tracing_capture::with_test_subscriber};
+use tracing_subscriber::filter::LevelFilter;
 
 /// RAII guard that restores the process working directory on drop.
 struct CwdGuard(std::path::PathBuf);
@@ -315,5 +316,82 @@ fn config_flag_with_nonexistent_file_produces_error(
         "error should mention the missing explicit config path, got {message}"
     );
     let _project_root = h.project.path();
+    Ok(())
+}
+
+/// Merging through the public boundary traces the explicit selection.
+///
+/// The unit tests drive the tracing helpers directly; this asserts the events
+/// actually reach the pipeline `main` calls. The `--config` flag short-circuits
+/// selection, so no environment variable is read to reach the traced branch.
+#[rstest]
+fn merge_with_config_traces_explicit_selection(
+    config_harness: Result<ConfigTestHarness>,
+) -> Result<()> {
+    let h = config_harness?;
+    let config_path = h.project.path().join("custom.toml");
+    fs::write(&config_path, "emoji = \"always\"\n").context("write explicit config")?;
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
+    let path_arg = config_path.to_string_lossy().into_owned();
+
+    let (merge_result, events) = with_test_subscriber(LevelFilter::TRACE, |captured| {
+        (
+            parse_and_merge(&["netsuke", "--config", &path_arg]),
+            captured.snapshot(),
+        )
+    });
+    let merged = merge_result?;
+
+    ensure!(
+        merged.emoji == EmojiPolicy::Always,
+        "the selected config should be applied, got {:?}",
+        merged.emoji
+    );
+    ensure!(
+        events
+            .iter()
+            .any(|event| event.contains("resolved config path")
+                && event.contains("selector=\"cli_flag\"")),
+        "merge should trace the winning selector: {events:?}"
+    );
+    ensure!(
+        events
+            .iter()
+            .any(|event| event.contains("using explicit config path")),
+        "merge should trace the explicit branch: {events:?}"
+    );
+    ensure!(
+        !events.iter().any(|event| event.contains(&path_arg)),
+        "merge tracing must not log the raw config path: {events:?}"
+    );
+    Ok(())
+}
+
+/// A failing explicit load is traced before the error surfaces to the caller.
+#[rstest]
+fn merge_with_config_traces_explicit_load_failure(
+    config_harness: Result<ConfigTestHarness>,
+) -> Result<()> {
+    let h = config_harness?;
+    h.write_config(".netsuke.toml", "emoji = \"always\"\n")?;
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
+
+    let (result, events) = with_test_subscriber(LevelFilter::TRACE, |captured| {
+        let result = parse_and_merge(&["netsuke", "--config", "missing-traced.toml"]);
+        (result, captured.snapshot())
+    });
+    result.expect_err("missing explicit config file should fail");
+
+    ensure!(
+        events
+            .iter()
+            .any(|event| event.contains("explicit config load failed")
+                && event.contains("failure_kind=Missing")),
+        "merge should trace the classified load failure: {events:?}"
+    );
+    ensure!(
+        !events.iter().any(|event| event.contains("error=")),
+        "failure tracing must not include the formatted error: {events:?}"
+    );
     Ok(())
 }

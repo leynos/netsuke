@@ -299,6 +299,10 @@ mod tracing_tests;
 mod layer_tests;
 
 #[cfg(test)]
+#[path = "discovery_helper_proptests.rs"]
+mod helper_proptests;
+
+#[cfg(test)]
 mod tests {
     //! Unit tests for config discovery through injected environment access.
 
