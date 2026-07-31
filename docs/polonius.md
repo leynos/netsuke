@@ -88,6 +88,13 @@ Scanner suspects that turned out not to be NLL residue:
 - Test-suite `drop()` calls (environment guards, HTTP fixture teardown) are
   semantic Drop effects, not borrow appeasement.
 
+The plumbing itself is contract-tested:
+`tests/polonius_toolchain_contract.rs` pins the dated-nightly channel, the
+`.cargo/config.toml` `build.rustflags` entry, the `POLONIUS_FLAGS` default
+and every RUSTFLAGS-setting Makefile recipe, and the `RUSTFLAGS` and
+toolchain presets in the CI, Netsukefile, coverage, and packaging
+workflows.
+
 ## Harness consequences
 
 Tooling that rebuilds the crate with its own flags must propagate the
