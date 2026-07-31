@@ -23,7 +23,7 @@ jobs:
       RUSTFLAGS: -D warnings -Zpolonius=next
       WHITAKER_INSTALLER_VERSION: '0.2.6'
       # Single source of truth for the cargo-nextest pin. `make test` runs the
-      # non-doctest suite through nextest, so every matrix leg needs it.
+      # non-doctest suite through nextest, so the job installs it up front.
       NEXTEST_VERSION: '0.9.133'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1

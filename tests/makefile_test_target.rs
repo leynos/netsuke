@@ -3,7 +3,8 @@
 //! `make test` is the single command local development and continuous
 //! integration (CI) both run. These tests pin the runner contract it encodes:
 //! non-doctest tests go through cargo-nextest, doctests run separately because
-//! nextest cannot execute them, and both passes deny warnings. They also assert
+//! nextest cannot execute them, and both passes deny warnings and re-state
+//! the Polonius flag that an inherited RUSTFLAGS would otherwise strip. They also assert
 //! that the checked-in nextest configuration still declares the narrow
 //! serialisation group the environment-mutating suites depend on.
 
@@ -124,8 +125,8 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
         "test-nextest should enable all features, found {nextest_recipe:?}"
     );
     ensure!(
-        nextest_recipe.contains(r#"RUSTFLAGS="-D warnings""#),
-        "test-nextest should deny warnings, found {nextest_recipe:?}"
+        nextest_recipe.contains(r#"RUSTFLAGS="-D warnings $(POLONIUS_FLAGS)""#),
+        "test-nextest should deny warnings and enable Polonius, found {nextest_recipe:?}"
     );
 
     let doctest_recipe =
@@ -139,8 +140,8 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
         "doctests cannot run under nextest, found {doctest_recipe:?}"
     );
     ensure!(
-        doctest_recipe.contains(r#"RUSTFLAGS="-D warnings""#),
-        "doctest should deny warnings, found {doctest_recipe:?}"
+        doctest_recipe.contains(r#"RUSTFLAGS="-D warnings $(POLONIUS_FLAGS)""#),
+        "doctest should deny warnings and enable Polonius, found {doctest_recipe:?}"
     );
     Ok(())
 }
