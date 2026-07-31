@@ -67,21 +67,38 @@ mod tests {
     //! Unit tests for the environment mutation lock.
 
     use super::*;
+    use std::sync::TryLockError;
 
     // Macros rather than helper functions so a failure reports the calling
     // test's line number, and so the `try_lock` unwrap stays inside a test body
     // where a panic is the verdict rather than a fixture failure.
+    //
+    // Neither macro may test `is_err()`. Rust's poison flag is sticky and
+    // independent of lock state, so `try_lock` on a mutex that is free but was
+    // held by a panicking thread returns `Err(Poisoned)`, not `Ok`. Only
+    // `WouldBlock` means a guard actually holds the lock. `EnvLock::acquire`
+    // recovers from poisoning via `into_inner`, so these treat a poisoned but
+    // free lock as released, matching the behaviour under test.
     macro_rules! assert_underlying_lock_is_held {
         ($message:expr $(,)?) => {
-            assert!(ENV_LOCK.try_lock().is_err(), "{}", $message)
+            match ENV_LOCK.try_lock() {
+                Err(TryLockError::WouldBlock) => {}
+                Err(TryLockError::Poisoned(_)) => panic!(
+                    "{}: ENV_LOCK is poisoned but free, so no guard holds it",
+                    $message
+                ),
+                Ok(_) => panic!("{}: ENV_LOCK was acquirable", $message),
+            }
         };
     }
 
     macro_rules! assert_underlying_lock_is_released {
         ($message:expr $(,)?) => {
             match ENV_LOCK.try_lock() {
-                Ok(lock) => drop(lock),
-                Err(err) => panic!("{}: {err}", $message),
+                Ok(_) | Err(TryLockError::Poisoned(_)) => {}
+                Err(TryLockError::WouldBlock) => {
+                    panic!("{}: ENV_LOCK is still held", $message)
+                }
             }
         };
     }

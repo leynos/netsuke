@@ -41,33 +41,45 @@ mod tests {
         EnvLock::acquire()
     }
 
+    /// The environment lock paired with the directory captured under it.
+    type LockedOriginalDir = (EnvLock, io::Result<std::path::PathBuf>);
+
     /// Capture the directory that is current before a test mutates it.
     ///
     /// Fixtures arrange state rather than assert, so this propagates the
     /// `current_dir` failure instead of panicking; each test body unwraps it.
+    ///
+    /// The lock is returned rather than merely taken as a parameter: a
+    /// by-value parameter is dropped when this fixture returns, which would
+    /// release the lock before the test body runs and leave the body's
+    /// `set_current_dir` racing other tests. Handing the guard back keeps the
+    /// process-wide lock held until the test body ends.
     #[fixture]
-    fn original_dir(_env_lock: EnvLock) -> io::Result<std::path::PathBuf> {
-        std::env::current_dir()
+    fn original_dir(env_lock: EnvLock) -> LockedOriginalDir {
+        let captured = std::env::current_dir();
+        (env_lock, captured)
     }
 
     #[rstest]
     #[case(CwdGuard::acquire)]
     #[case(CwdGuard::new)]
     fn constructor_captures_current_directory(
-        original_dir: io::Result<std::path::PathBuf>,
+        original_dir: LockedOriginalDir,
         #[case] ctor: fn() -> io::Result<CwdGuard>,
     ) {
-        let original_dir = original_dir.expect("current_dir");
+        let (_env_lock, captured) = original_dir;
+        let expected = captured.expect("current_dir");
         let guard = ctor().expect("CwdGuard constructor");
         assert_eq!(
-            guard.0, original_dir,
+            guard.0, expected,
             "guard should capture the directory that was current at acquire time"
         );
     }
 
     #[rstest]
-    fn drop_restores_original_directory(original_dir: io::Result<std::path::PathBuf>) {
-        let original_dir = original_dir.expect("current_dir");
+    fn drop_restores_original_directory(original_dir: LockedOriginalDir) {
+        let (_env_lock, captured) = original_dir;
+        let original_dir = captured.expect("current_dir");
         let temp = tempfile::tempdir().expect("tempdir");
 
         {

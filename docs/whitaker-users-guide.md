@@ -648,10 +648,14 @@ policy.
 > lint-level attributes.
 >
 > **Netsuke deviation from upstream — preserve when re-importing this guide.**
-> This repository denies `clippy::allow_attributes`, so
-> `#[allow(no_std_fs_operations)]` will not compile here. Use a narrowly scoped
-> `excluded_paths` entry in `dylint.toml` for a permanent exemption, or a
-> temporary `#[expect(no_std_fs_operations, reason = "…")]` on the item.
+> In the Whitaker build this repository pins, neither
+> `#[allow(no_std_fs_operations)]` nor
+> `#[expect(no_std_fs_operations, reason = "…")]` suppresses this lint, so the
+> Tip above does not apply here; `#[expect(...)]` additionally fails the build
+> with an unfulfilled-lint-expectation error under `-D warnings`. This
+> repository also denies `clippy::allow_attributes`, so
+> `#[allow(no_std_fs_operations)]` will not even compile. The only sanctioned
+> mechanism is a narrowly scoped `excluded_paths` entry in `dylint.toml`.
 
 **How to fix:** Replace `std::fs` with `cap_std`:
 

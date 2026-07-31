@@ -175,13 +175,15 @@ ambient fixture operations. Every other module routes through it — `exec`,
 `fake_ninja` via `exec::write_exec_with_content` — so a new direct `std::fs`
 call anywhere else in the crate still fails the lint.
 
-Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
-allows. The lint does honour in-source lint attributes, but this repository
-denies `clippy::allow_attributes`, so `#[allow(no_std_fs_operations)]` will not
-compile here; an in-source exemption must be a *temporary*, item-level
-`#[expect(no_std_fs_operations, reason = "…")]` that states the reason and the
-route back to compliance. Prefer migrating to `cap_std` over any of these;
-reach for an exclusion only when the operation is irreducibly ambient.
+Exceptions belong in `dylint.toml`, scoped as narrowly as the lint allows.
+Neither `#[allow(no_std_fs_operations)]` nor
+`#[expect(no_std_fs_operations, reason = "…")]` suppresses this lint in the
+Whitaker build this repository pins, so no in-source attribute is usable
+here (this repository also denies `clippy::allow_attributes`, so
+`#[allow(no_std_fs_operations)]` will not even compile). A narrowly scoped
+`excluded_paths` entry is the only working mechanism. Prefer migrating to
+`cap_std` over adding an exclusion; reach for an exclusion only when the
+operation is irreducibly ambient.
 
 To confirm the exclusions have not silently widened, add a temporary
 `std::fs::metadata` call to an unexcluded module — for example
