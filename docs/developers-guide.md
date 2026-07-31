@@ -111,8 +111,8 @@ or the README — also run:
 - `make nixie`
 
 `make test` runs the non-doctest suite through
-[cargo-nextest](https://nexte.st/) and then runs the doctests separately.
-CI pins the runner version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`.
+[cargo-nextest](https://nexte.st/) and then runs the doctests separately. CI
+pins the runner version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`.
 Install that same version locally so local runs match CI; read the pin from the
 workflow rather than copying the number, so the two cannot drift:
 
@@ -387,7 +387,7 @@ The canonical commands are:
 make install-dev-fast   # install the pinned mold release and Cranelift backend
 make dev-fast-check     # verify the prerequisites are present
 make dev-build          # debug binary via Cranelift and mold
-make dev-test           # full test suite via Cranelift and mold
+make dev-test           # the nextest pass via Cranelift and mold
 ```
 
 `make dev-build` and `make dev-test` both depend on `make dev-fast-check`, so a
@@ -485,8 +485,8 @@ flag, `codegen-backend = "cranelift"` on the `dev` profile, and a
   `make all`, mirroring the Kani boundary described below. Run the ordinary
   gates before proposing a change; `make dev-test` is a faster inner-loop
   proxy, not a substitute.
-- **`RUSTFLAGS`.** `make test` and `make typecheck` set
-  `RUSTFLAGS="-D warnings"`. An externally set `RUSTFLAGS` overrides the
+- **`RUSTFLAGS`.** `make test-nextest`, `make doctest`, and `make typecheck`
+  set `RUSTFLAGS="-D warnings"`. An externally set `RUSTFLAGS` overrides the
   `[target.*]` `rustflags` in a Cargo configuration file, so the `dev-*`
   targets deliberately do not set it. Exporting `RUSTFLAGS` in the shell
   silently disables `mold` for these targets.
@@ -505,10 +505,17 @@ flag, `codegen-backend = "cranelift"` on the `dev` profile, and a
   `tools/cranelift/VERSION` and must not be conflated with it; verification
   must run on Kani's own toolchain and the LLVM backend. The same applies to
   Verus.
-- **Test runner.** Tests currently run through `cargo test`; `cargo-nextest` is
-  not used in this repository. If it is adopted later, the same
-  `RUSTUP_TOOLCHAIN` and `--config` overrides apply unchanged, because both are
-  Cargo-level rather than runner-level concerns.
+- **Test runner.** `make dev-test` is the accelerated counterpart of
+  `make test-nextest`, not of `make test`: it runs the same
+  `cargo nextest run --all-targets --all-features`, and so is governed by the
+  same [`.config/nextest.toml`](#nextest-configuration), including the
+  `serial-env` group. It omits the `doctest` pass, because `cargo test --doc`
+  is a separate and comparatively quick runner; run `make test` before
+  proposing a change. The acceleration is applied through `RUSTUP_TOOLCHAIN` and
+  `cargo --config`, both Cargo-level rather than runner-level, which is why
+  they compose with nextest unchanged. Note the target uses
+  `NEXTEST_BUILD_JOBS`, not `BUILD_JOBS`: nextest reserves `-j` for test
+  concurrency, so a Cargo-shaped `-j` would silently become a thread count.
 - **rust-analyzer.** No rust-analyzer configuration is committed, so the
   language server uses the stable toolchain and default backend. Opting
   rust-analyzer into Cranelift is a personal, machine-local choice; it needs a
@@ -759,10 +766,10 @@ home plus Kani support-file home.
 If either pass fails, `make test` fails. Run the individual targets when
 iterating, but treat `make test` as the gate.
 
-Cargo spells build parallelism `-j`; nextest reserves `-j` for test
-concurrency and spells build parallelism `--build-jobs`. The Makefile
-therefore keeps `BUILD_JOBS` (Cargo flags) and `NEXTEST_BUILD_JOBS` (nextest
-flags) as separate variables rather than reinterpreting one as the other.
+Cargo spells build parallelism `-j`; nextest reserves `-j` for test concurrency
+and spells build parallelism `--build-jobs`. The Makefile therefore keeps
+`BUILD_JOBS` (Cargo flags) and `NEXTEST_BUILD_JOBS` (nextest flags) as separate
+variables rather than reinterpreting one as the other.
 
 ### nextest configuration
 
@@ -782,12 +789,12 @@ governs the non-doctest pass only, and deliberately stays small:
 
 ### How this relates to `#[serial]` and the isolation utilities
 
-nextest runs each test in its own process, so environment and
-working-directory mutations cannot leak between tests the way they can under
-the threaded in-process harness. The `EnvLock`, `EnvVarGuard`, and `CwdGuard`
-utilities described in [Test isolation utilities](#test-isolation-utilities),
-and the `#[serial]` markers on the tests in the three binaries above, remain
-necessary because the coverage workflow still drives an in-process runner.
+nextest runs each test in its own process, so environment and working-directory
+mutations cannot leak between tests the way they can under the threaded
+in-process harness. The `EnvLock`, `EnvVarGuard`, and `CwdGuard` utilities
+described in [Test isolation utilities](#test-isolation-utilities), and the
+`#[serial]` markers on the tests in the three binaries above, remain necessary
+because the coverage workflow still drives an in-process runner.
 
 The `serial-env` group is therefore not load-bearing for the tests that exist
 today; it states the serialization contract once so both runners agree, and so
@@ -1373,8 +1380,8 @@ Configuration merge helpers:
 ### Environment lookup seams
 
 `EnvProvider` is the port for raw environment access during early CLI
-configuration resolution. The production `StdEnvProvider` adapter delegates
-to `std::env::var_os`; tests can inject map-backed providers without mutating
+configuration resolution. The production `StdEnvProvider` adapter delegates to
+`std::env::var_os`; tests can inject map-backed providers without mutating
 process-global state.
 
 ```rust
@@ -1413,8 +1420,8 @@ bare `EnvProvider` name.
 
 Discovery tests that exercise OrthoConfig's `ConfigDiscovery` may still need
 `EnvLock` because the external discovery implementation reads platform
-environment variables directly. Tests for Netsuke's own environment port
-should avoid `EnvLock`.
+environment variables directly. Tests for Netsuke's own environment port should
+avoid `EnvLock`.
 
 Unit tests that only need to verify explicit config path precedence should test
 `explicit_config_path_with_env` with an injected provider instead of mutating
@@ -1439,8 +1446,8 @@ Early JSON resolution reads only the boolean `json` field from each
 configuration layer. File layers are applied in merge order, followed by
 `NETSUKE_JSON`; an explicit root `--json` flag has the highest precedence.
 Selected file-load errors and malformed `NETSUKE_JSON` values are returned to
-the caller. Accepted environment values are `true`, `false`, `1`, and `0`.
-An explicit root `--json` flag bypasses environment parsing.
+the caller. Accepted environment values are `true`, `false`, `1`, and `0`. An
+explicit root `--json` flag bypasses environment parsing.
 
 ### Configuration discovery module layout
 
