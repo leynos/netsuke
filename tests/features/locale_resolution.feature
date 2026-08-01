@@ -43,7 +43,7 @@ Feature: Locale resolution
     Then no locale is resolved
 
   Scenario: Unsupported locale falls back to English messages
-    Given the configuration locale is "fr-FR"
-    And the system locale is "fr-FR"
+    Given the configuration locale is "is-IS"
+    And the system locale is "is-IS"
     When the runtime localiser is built
     Then the localised message contains "not found"

@@ -57,7 +57,8 @@ fn which_message(command: &str) -> String {
 
 #[rstest]
 #[case("es-ES", "no encontrado")]
-#[case("fr-FR", "not found")]
+// Icelandic ships no catalogue, so the English source copy renders.
+#[case("is-IS", "not found")]
 fn localisation_resolves_expected_message(
     #[case] locale: &str,
     #[case] expected_substring: &str,
