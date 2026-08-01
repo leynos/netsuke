@@ -103,8 +103,12 @@ Run these commands before finalizing any change:
 - `make lint`
 - `make test`
 
-Changes that touch Markdown also require `make fmt`, `make markdownlint`,
-and `make nixie`; these are described further below.
+When the change touches any Markdown file — documentation, ADRs, execplans,
+or the README — also run:
+
+- `make fmt`
+- `make markdownlint`
+- `make nixie`
 
 `make test` runs the non-doctest suite through
 [cargo-nextest](https://nexte.st/) and then runs the doctests separately.
@@ -161,12 +165,6 @@ When command output is long, preserve exit codes and logs:
 set -o pipefail
 make test 2>&1 | tee /tmp/netsuke-make-test.log
 ```
-
-For documentation changes, also run:
-
-- `make fmt`
-- `make markdownlint`
-- `make nixie`
 
 ### Workflow pins and Dependabot
 
