@@ -55,7 +55,8 @@ macro_rules! define_locales {
 }
 
 define_locales![
-    "da", "de", "en-GB", "en-US", "es-419", "es-ES", "fi", "fr", "it", "nb", "pt-BR", "pt-PT", "sv",
+    "cs", "da", "de", "en-GB", "en-US", "es-419", "es-ES", "fi", "fr", "it", "nl", "pl", "pt-BR",
+    "pt-PT", "sv",
 ];
 
 /// Fallback policy for a language that ships more than one catalogue, or whose
@@ -192,9 +193,13 @@ fn subtag_catalogue(
 /// use netsuke::localization::locales::resolve_catalogue;
 /// use std::str::FromStr;
 ///
-/// let identifier = ortho_config::LanguageIdentifier::from_str("zh-Hant-TW")
-///     .expect("valid language identifier");
-/// assert_eq!(resolve_catalogue(&identifier).tag(), "zh-Hant");
+/// let parse = |tag: &str| {
+///     ortho_config::LanguageIdentifier::from_str(tag).expect("valid language identifier")
+/// };
+/// // A Latin American region resolves to the shared es-419 catalogue.
+/// assert_eq!(resolve_catalogue(&parse("es-MX")).tag(), "es-419");
+/// // Spain keeps its own.
+/// assert_eq!(resolve_catalogue(&parse("es-ES")).tag(), "es-ES");
 /// ```
 #[must_use]
 pub fn resolve_catalogue(locale: &LanguageIdentifier) -> &'static LocaleCatalogue {

@@ -23,7 +23,20 @@ categories = ["command-line-utilities", "development-tools::build-utils"]
 [package.metadata.ortho_config]
 root_type = "netsuke::cli::CliConfig"
 locales   = [
-    "da", "de", "en-GB", "en-US", "es-419", "es-ES", "fi", "fr", "it", "nb", "pt-BR", "pt-PT",
+    "cs",
+    "da",
+    "de",
+    "en-GB",
+    "en-US",
+    "es-419",
+    "es-ES",
+    "fi",
+    "fr",
+    "it",
+    "nl",
+    "pl",
+    "pt-BR",
+    "pt-PT",
     "sv",
 ]
 
