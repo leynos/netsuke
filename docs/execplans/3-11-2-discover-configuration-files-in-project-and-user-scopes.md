@@ -6,15 +6,6 @@ and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETED
 
-> **Superseded in part.** This plan's decision to keep `NETSUKE_CONFIG_PATH`
-> and the hidden `--config-path` compatibility surface no longer holds. The
-> legacy alias was removed in #427, and
-> [ADR-004](../adr-004-explicit-config-selection-outside-orthoconfig.md)
-> (Accepted 2026-05-31) records `NETSUKE_CONFIG` as the *only* environment
-> selector; the precedence ladder is now `--config` > `NETSUKE_CONFIG` >
-> automatic discovery. Treat every `NETSUKE_CONFIG_PATH` requirement below as
-> historical context, not as a live constraint.
-
 ## Purpose / big picture
 
 Netsuke already has layered configuration merging in `src/cli/config_merge.rs`:
@@ -199,12 +190,6 @@ Roadmap item 3.11.2 is complete as of 2026-04-03. The discovery contract was
 documented, integration tests were added, and all validation gates pass.
 
 ### Search order (documented in netsuke-design.md § 8.4.1)
-
-*Historical — records the search order as of 2026-04-03. The explicit
-override is now `--config` or `NETSUKE_CONFIG`; the `NETSUKE_CONFIG_PATH`
-alias was removed in #427 (see
-[ADR-004](../adr-004-explicit-config-selection-outside-orthoconfig.md)). The
-cross-referenced `netsuke-design.md` section has since been updated.*
 
 1. **Explicit override**: `NETSUKE_CONFIG_PATH` environment variable (bypasses
    automatic discovery entirely)

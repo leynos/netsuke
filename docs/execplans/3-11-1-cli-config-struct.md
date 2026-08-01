@@ -6,15 +6,6 @@ and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETED
 
-> **Superseded in part.** This plan's references to `NETSUKE_CONFIG_PATH`
-> and the hidden config-path behaviour no longer hold. The legacy alias was
-> removed in #427, and
-> [ADR-004](../adr-004-explicit-config-selection-outside-orthoconfig.md)
-> (Accepted 2026-05-31) records `NETSUKE_CONFIG` as the *only* environment
-> selector; the precedence ladder is now `--config` > `NETSUKE_CONFIG` >
-> automatic discovery. Treat every `NETSUKE_CONFIG_PATH` requirement below as
-> historical context, not as a live constraint.
-
 No `PLANS.md` file exists in this repository.
 
 ## Purpose / big picture
