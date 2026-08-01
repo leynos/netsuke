@@ -70,8 +70,9 @@ mod tests {
     use std::sync::TryLockError;
 
     // Macros rather than helper functions so a failure reports the calling
-    // test's line number, and so the `try_lock` unwrap stays inside a test body
-    // where a panic is the verdict rather than a fixture failure.
+    // test's line number, and so matching on `ENV_LOCK.try_lock()` stays
+    // inside a test body where a panic is the verdict rather than a fixture
+    // failure.
     //
     // Neither macro may test `is_err()`. Rust's poison flag is sticky and
     // independent of lock state, so `try_lock` on a mutex that is free but was

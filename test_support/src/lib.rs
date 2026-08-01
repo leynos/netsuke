@@ -161,9 +161,12 @@ mod tests {
 
         assert!(exit_script.starts_with(&non_utf8_root));
         assert!(check_script.starts_with(&non_utf8_root));
-        assert!(exit_script.exists(), "fake_ninja should create its script");
         assert!(
-            check_script.exists(),
+            fs::exists(&exit_script),
+            "fake_ninja should create its script"
+        );
+        assert!(
+            fs::exists(&check_script),
             "fake_ninja_check_build_file should create its script"
         );
         Ok(())
