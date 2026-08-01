@@ -1369,7 +1369,6 @@ forwarded variables: `PATH` (from the host `std::env::var_os`) and
 current process). Use this helper for configuration-layering tests or any test
 that sets environment variables which could race with parallel test execution.
 
-
 ## Digest rendering
 
 `src/hex.rs` (`netsuke::hex`) is the single owner of lowercase hexadecimal
@@ -1392,7 +1391,6 @@ from production output.
 The module is unit-tested across the full `u8` range rather than with a handful
 of vectors, because leading-zero and casing regressions are exactly what
 example-based tests miss.
-
 
 ### RustCrypto 0.11 constraint
 
@@ -1421,15 +1419,31 @@ list at the same time as the dependency itself. Never work around a lockstep
 break by pinning one member to an exact version: that blocks the whole family,
 which is what issue #477 had to undo.
 
-Both removals are pinned by compile-fail fixtures in
-`tests/sha2_migration_ui_tests.rs`, which assert that `format!("{:x}", digest)`
-and `io::copy(reader, &mut hasher)` do not compile. Runtime tests confirm the
-replacements produce correct digests, but they cannot notice the pre-0.11
-patterns becoming available again — for example if `sha2` were downgraded. The
-`.stderr` files record diagnostics from the pinned toolchain; a toolchain bump
-can reword them without any real regression, so re-bless with
-`TRYBUILD=overwrite cargo test --test sha2_migration_ui_tests` and confirm the
-diff still shows the same unsatisfied trait bound.
+Both removals are pinned by `tests/sha2_migration_guard_tests.rs`, which
+asserts at compile time that the digest type does not implement
+`core::fmt::LowerHex` and that the hasher does not implement `std::io::Write`.
+Rust has no stable negative trait bound, so each assertion uses an
+inherent-versus-trait probe: an inherent associated constant is resolved ahead
+of a trait one, but only when the inherent impl's bound is satisfied, so
+`Probe::<T>::IMPLEMENTED` reads `true` when the impl exists and `false`
+otherwise. Each assertion is paired with a positive control (`u8: LowerHex`,
+`Vec<u8>: io::Write`) so the probe cannot pass by reporting `false` for
+everything. Runtime tests confirm the replacements produce correct digests, but
+they cannot notice the pre-0.11 patterns becoming available again — for
+example if `sha2` were downgraded. A silent downgrade to 0.10 would not fail
+the ordinary build, because 0.10's `GenericArray` also derefs to `[u8]`, so
+`to_lower_hex` and `DigestWriter` keep compiling; the absence of the two impls
+is what distinguishes the versions, and it is what these guards check.
+
+This guard replaced an earlier `trybuild` compile-fail harness. Trybuild always
+builds the host crate as a fixture dependency while discarding workspace
+`build.rustflags`, so once `main` adopted the Polonius nightly toolchain it
+rebuilt `netsuke` without `-Zpolonius=next`; see the "Harness consequences"
+section of `docs/polonius.md`, which asks that trybuild cases depending on the
+`netsuke` crate not be reintroduced while the tree is Polonius-only. The
+compile-time probe is also strictly better on its own merits: no subprocess,
+no scratch project, and no toolchain-sensitive `.stderr` snapshot to re-bless
+on every compiler bump.
 
 `stdlib::path::hash_utils` unit-tests the chunked streaming loop against a
 one-shot digest for inputs that span more than one 8192-byte read, plus a
