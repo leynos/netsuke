@@ -954,7 +954,6 @@ Do **not** call `std::env::set_var` directly in BDD steps — use
 5. Guards drop in reverse declaration order — CWD and environment
    variables are restored while the lock is still held, preventing races.
 
-
 ### `tracing_capture`
 
 `test_support::tracing_capture` is the workspace's single implementation
@@ -1178,7 +1177,6 @@ configuration layer. File layers are applied in merge order, followed by
 Selected file-load errors and malformed `NETSUKE_JSON` values are returned to
 the caller. Accepted environment values are `true`, `false`, `1`, and `0`.
 An explicit root `--json` flag bypasses environment parsing.
-
 
 ### Configuration discovery module layout
 
