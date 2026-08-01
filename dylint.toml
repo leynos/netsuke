@@ -50,6 +50,12 @@ excluded_paths = [
     # each workflow contract crate. The crates themselves stay under policy.
     "workflow_ci::common",
     "workflow_release::common",
+
+    # The build script's key extractor, included by path so `cargo test` can
+    # reach it (build scripts are not test targets). It reads the source file
+    # Cargo hands it through `build_script_build`, which is excluded below for
+    # the same reason; this entry covers the copy compiled into the test crate.
+    "build_l10n_keys_tests::keys",
 ]
 
 # Whole crates whose ambient filesystem access lives in the crate root, so a

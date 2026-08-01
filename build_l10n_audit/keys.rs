@@ -71,187 +71,271 @@ fn find_matching_brace(source: &str) -> Result<usize, Box<dyn Error>> {
     Err("define_keys! macro body is missing '}'".into())
 }
 
-fn parse_string_literal(source: &str, start: usize) -> Result<(String, usize), Box<dyn Error>> {
-    if source.as_bytes().get(start) == Some(&b'"') {
-        return parse_regular_string_literal(source, start);
+/// A byte offset into a [`DefineKeysParser`]'s source.
+///
+/// Positions and counts are both `usize` underneath, and the scanner passes
+/// them side by side — a raw string literal's opening index next to its run of
+/// hashes. Naming the position separately keeps the two from being swapped.
+#[derive(Clone, Copy)]
+struct ByteIndex(usize);
+
+impl ByteIndex {
+    /// The start of the parsed body.
+    const START: Self = Self(0);
+
+    const fn get(self) -> usize {
+        self.0
     }
-    parse_raw_string_literal(source, start)
+
+    /// The position `delta` bytes further along.
+    const fn advance(self, delta: usize) -> Self {
+        Self(self.0 + delta)
+    }
+
+    /// The position `delta` bytes earlier, or `None` when that would underflow.
+    const fn retreat(self, delta: usize) -> Option<Self> {
+        match self.0.checked_sub(delta) {
+            Some(offset) => Some(Self(offset)),
+            None => None,
+        }
+    }
 }
 
-fn parse_regular_string_literal(
-    source: &str,
-    start: usize,
-) -> Result<(String, usize), Box<dyn Error>> {
-    let remainder = source
-        .get(start + 1..)
-        .ok_or_else(|| "string literal start is out of range".to_owned())?;
-    let mut value = String::new();
-    let mut escaped = false;
-    for (offset, ch) in remainder.char_indices() {
-        if escaped {
-            value.push(ch);
-            escaped = false;
-            continue;
+/// A scanner over the body of a `define_keys!` invocation.
+///
+/// The scan needs the body two ways: as `str`, to slice out literal contents
+/// without re-decoding, and as bytes, to test one character at a time. Holding
+/// both on one value keeps them paired, so no caller can pass a byte slice
+/// belonging to a different string from the one it slices.
+struct DefineKeysParser<'source> {
+    source: &'source str,
+    bytes: &'source [u8],
+}
+
+impl<'source> DefineKeysParser<'source> {
+    const fn new(source: &'source str) -> Self {
+        Self {
+            source,
+            bytes: source.as_bytes(),
         }
-        match ch {
-            '\\' => escaped = true,
-            '"' => {
-                let end = start + 1 + offset + 1;
-                return Ok((value, end));
+    }
+
+    /// Whether `index` has run past the end of the body.
+    const fn is_exhausted(&self, index: ByteIndex) -> bool {
+        index.get() >= self.bytes.len()
+    }
+
+    fn byte_at(&self, index: ByteIndex) -> Option<&u8> {
+        self.bytes.get(index.get())
+    }
+
+    fn byte_is(&self, index: ByteIndex, expected: u8) -> bool {
+        self.byte_at(index) == Some(&expected)
+    }
+
+    /// Parse the string literal starting at `start`, returning its value and
+    /// the position just past it.
+    fn parse_string_literal(
+        &self,
+        start: ByteIndex,
+    ) -> Result<(String, ByteIndex), Box<dyn Error>> {
+        if self.byte_is(start, b'"') {
+            return self.parse_regular_string_literal(start);
+        }
+        self.parse_raw_string_literal(start)
+    }
+
+    fn parse_regular_string_literal(
+        &self,
+        start: ByteIndex,
+    ) -> Result<(String, ByteIndex), Box<dyn Error>> {
+        let content_start = start.advance(1);
+        let remainder = self
+            .source
+            .get(content_start.get()..)
+            .ok_or_else(|| "string literal start is out of range".to_owned())?;
+        let mut value = String::new();
+        let mut escaped = false;
+        for (offset, ch) in remainder.char_indices() {
+            if escaped {
+                value.push(ch);
+                escaped = false;
+                continue;
             }
-            _ => value.push(ch),
+            match ch {
+                '\\' => escaped = true,
+                '"' => return Ok((value, content_start.advance(offset + 1))),
+                _ => value.push(ch),
+            }
         }
+        Err("unterminated string literal in localization keys".into())
     }
-    Err("unterminated string literal in localization keys".into())
-}
 
-fn parse_raw_string_literal(source: &str, start: usize) -> Result<(String, usize), Box<dyn Error>> {
-    let bytes = source.as_bytes();
-    let (mut idx, has_byte_prefix) = parse_raw_prefix(bytes, start)?;
-    if has_byte_prefix {
-        return Err("byte string literals are not supported in localization keys".into());
-    }
-    let hash_count = count_hashes(bytes, &mut idx);
-    if bytes.get(idx) != Some(&b'"') {
-        return Err("raw string literal missing opening quote".into());
-    }
-    idx += 1;
-    let content_start = idx;
-    let end = find_raw_string_end(bytes, idx, hash_count)
-        .ok_or_else(|| "unterminated raw string literal in localization keys".to_owned())?;
-    let content_end = end - 1 - hash_count;
-    let content = source
-        .get(content_start..content_end)
-        .ok_or_else(|| "raw string slice invalid".to_owned())?;
-    Ok((content.to_owned(), end))
-}
-
-fn parse_raw_prefix(bytes: &[u8], start: usize) -> Result<(usize, bool), Box<dyn Error>> {
-    let mut idx = start;
-    let has_byte_prefix = bytes.get(idx) == Some(&b'b');
-    if has_byte_prefix {
-        idx += 1;
-    }
-    if bytes.get(idx) != Some(&b'r') {
-        return Err("expected string literal after define_keys! =>".into());
-    }
-    Ok((idx + 1, has_byte_prefix))
-}
-
-fn count_hashes(bytes: &[u8], idx: &mut usize) -> usize {
-    let mut count = 0usize;
-    while bytes.get(*idx) == Some(&b'#') {
-        count += 1;
-        *idx += 1;
-    }
-    count
-}
-
-fn find_raw_string_end(bytes: &[u8], mut pos: usize, hash_count: usize) -> Option<usize> {
-    while let Some(byte) = bytes.get(pos) {
-        if *byte == b'"' && raw_hashes_match(bytes, pos + 1, hash_count) {
-            return Some(pos + 1 + hash_count);
+    fn parse_raw_string_literal(
+        &self,
+        start: ByteIndex,
+    ) -> Result<(String, ByteIndex), Box<dyn Error>> {
+        let (after_prefix, has_byte_prefix) = self.parse_raw_prefix(start)?;
+        if has_byte_prefix {
+            return Err("byte string literals are not supported in localization keys".into());
         }
-        pos += 1;
-    }
-    None
-}
-
-fn raw_hashes_match(bytes: &[u8], start: usize, count: usize) -> bool {
-    (0..count).all(|idx| bytes.get(start + idx) == Some(&b'#'))
-}
-
-fn is_line_comment(bytes: &[u8], idx: usize) -> bool {
-    bytes.get(idx) == Some(&b'/') && bytes.get(idx + 1) == Some(&b'/')
-}
-
-fn is_block_comment(bytes: &[u8], idx: usize) -> bool {
-    bytes.get(idx) == Some(&b'/') && bytes.get(idx + 1) == Some(&b'*')
-}
-
-fn skip_line_comment(bytes: &[u8], mut idx: usize) -> usize {
-    while let Some(byte) = bytes.get(idx) {
-        idx += 1;
-        if *byte == b'\n' {
-            break;
+        let (hash_count, after_hashes) = self.count_hashes(after_prefix);
+        if !self.byte_is(after_hashes, b'"') {
+            return Err("raw string literal missing opening quote".into());
         }
+        let content_start = after_hashes.advance(1);
+        let end = self
+            .find_raw_string_end(content_start, hash_count)
+            .ok_or_else(|| "unterminated raw string literal in localization keys".to_owned())?;
+        let content = end
+            .retreat(hash_count + 1)
+            .and_then(|content_end| self.source.get(content_start.get()..content_end.get()))
+            .ok_or_else(|| "raw string slice invalid".to_owned())?;
+        Ok((content.to_owned(), end))
     }
-    idx
-}
 
-fn skip_block_comment(bytes: &[u8], mut idx: usize) -> usize {
-    while idx + 1 < bytes.len() {
-        if bytes.get(idx) == Some(&b'*') && bytes.get(idx + 1) == Some(&b'/') {
-            return idx + 2;
-        }
-        idx += 1;
-    }
-    bytes.len()
-}
-
-fn skip_whitespace(bytes: &[u8], mut idx: usize) -> usize {
-    while let Some(byte) = bytes.get(idx) {
-        if byte.is_ascii_whitespace() {
-            idx += 1;
+    /// Consume an optional `b` prefix and the mandatory `r`, reporting whether
+    /// the literal was a byte string.
+    fn parse_raw_prefix(&self, start: ByteIndex) -> Result<(ByteIndex, bool), Box<dyn Error>> {
+        let has_byte_prefix = self.byte_is(start, b'b');
+        let raw_marker = if has_byte_prefix {
+            start.advance(1)
         } else {
-            break;
+            start
+        };
+        if !self.byte_is(raw_marker, b'r') {
+            return Err("expected string literal after define_keys! =>".into());
         }
-    }
-    idx
-}
-
-/// Attempts to parse a key-value pair starting at the given index.
-/// Returns the extracted key and the next index to continue parsing.
-fn try_parse_key_at_arrow(
-    body: &str,
-    bytes: &[u8],
-    idx: usize,
-) -> Result<Option<(String, usize)>, Box<dyn Error>> {
-    if bytes.get(idx) != Some(&b'=') || bytes.get(idx + 1) != Some(&b'>') {
-        return Ok(None);
+        Ok((raw_marker.advance(1), has_byte_prefix))
     }
 
-    let next_idx = skip_whitespace(bytes, idx + 2);
-    if next_idx >= bytes.len() {
-        return Ok(None);
+    /// Count the run of `#` characters at `start`, returning the count and the
+    /// position just past the run.
+    fn count_hashes(&self, start: ByteIndex) -> (usize, ByteIndex) {
+        let mut count = 0usize;
+        let mut index = start;
+        while self.byte_is(index, b'#') {
+            count += 1;
+            index = index.advance(1);
+        }
+        (count, index)
     }
 
-    let (value, next) = parse_string_literal(body, next_idx)?;
-    Ok(Some((value, next)))
-}
+    fn find_raw_string_end(&self, start: ByteIndex, hash_count: usize) -> Option<ByteIndex> {
+        let mut index = start;
+        while let Some(byte) = self.byte_at(index) {
+            if *byte == b'"' && self.raw_hashes_match(index.advance(1), hash_count) {
+                return Some(index.advance(hash_count + 1));
+            }
+            index = index.advance(1);
+        }
+        None
+    }
 
-fn process_token_at(
-    body: &str,
-    bytes: &[u8],
-    idx: usize,
-) -> Result<Option<(String, usize)>, Box<dyn Error>> {
-    if idx >= bytes.len() {
-        return Ok(None);
+    fn raw_hashes_match(&self, start: ByteIndex, count: usize) -> bool {
+        (0..count).all(|offset| self.byte_is(start.advance(offset), b'#'))
     }
-    if is_line_comment(bytes, idx) {
-        return Ok(Some((String::new(), skip_line_comment(bytes, idx + 2))));
+
+    fn is_line_comment(&self, index: ByteIndex) -> bool {
+        self.byte_is(index, b'/') && self.byte_is(index.advance(1), b'/')
     }
-    if is_block_comment(bytes, idx) {
-        return Ok(Some((String::new(), skip_block_comment(bytes, idx + 2))));
+
+    fn is_block_comment(&self, index: ByteIndex) -> bool {
+        self.byte_is(index, b'/') && self.byte_is(index.advance(1), b'*')
     }
-    if let Some((key, next)) = try_parse_key_at_arrow(body, bytes, idx)? {
-        return Ok(Some((key, next)));
+
+    fn skip_line_comment(&self, start: ByteIndex) -> ByteIndex {
+        let mut index = start;
+        while let Some(byte) = self.byte_at(index) {
+            let is_newline = *byte == b'\n';
+            index = index.advance(1);
+            if is_newline {
+                break;
+            }
+        }
+        index
     }
-    Ok(Some((String::new(), idx + 1)))
+
+    fn skip_block_comment(&self, start: ByteIndex) -> ByteIndex {
+        let mut index = start;
+        while index.advance(1).get() < self.bytes.len() {
+            if self.byte_is(index, b'*') && self.byte_is(index.advance(1), b'/') {
+                return index.advance(2);
+            }
+            index = index.advance(1);
+        }
+        ByteIndex(self.bytes.len())
+    }
+
+    fn skip_whitespace(&self, start: ByteIndex) -> ByteIndex {
+        let mut index = start;
+        while self.byte_at(index).is_some_and(u8::is_ascii_whitespace) {
+            index = index.advance(1);
+        }
+        index
+    }
+
+    /// Attempts to parse a key-value pair starting at the given index.
+    /// Returns the extracted key and the next index to continue parsing.
+    fn try_parse_key_at_arrow(
+        &self,
+        index: ByteIndex,
+    ) -> Result<Option<(String, ByteIndex)>, Box<dyn Error>> {
+        if !self.byte_is(index, b'=') || !self.byte_is(index.advance(1), b'>') {
+            return Ok(None);
+        }
+
+        let literal_start = self.skip_whitespace(index.advance(2));
+        if self.is_exhausted(literal_start) {
+            return Ok(None);
+        }
+
+        let (value, next) = self.parse_string_literal(literal_start)?;
+        Ok(Some((value, next)))
+    }
+
+    /// Consume one token at `index`, yielding any key it declares.
+    ///
+    /// Tokens that declare no key yield an empty string alongside the position
+    /// to resume from, so the caller advances uniformly.
+    fn process_token_at(
+        &self,
+        index: ByteIndex,
+    ) -> Result<Option<(String, ByteIndex)>, Box<dyn Error>> {
+        if self.is_exhausted(index) {
+            return Ok(None);
+        }
+        if self.is_line_comment(index) {
+            return Ok(Some((
+                String::new(),
+                self.skip_line_comment(index.advance(2)),
+            )));
+        }
+        if self.is_block_comment(index) {
+            return Ok(Some((
+                String::new(),
+                self.skip_block_comment(index.advance(2)),
+            )));
+        }
+        if let Some((key, next)) = self.try_parse_key_at_arrow(index)? {
+            return Ok(Some((key, next)));
+        }
+        Ok(Some((String::new(), index.advance(1))))
+    }
 }
 
 fn parse_define_keys_body(body: &str) -> Result<BTreeSet<String>, Box<dyn Error>> {
-    let bytes = body.as_bytes();
+    let parser = DefineKeysParser::new(body);
     let mut keys = BTreeSet::new();
-    let mut idx = 0usize;
-    while idx < bytes.len() {
-        let Some((value, next)) = process_token_at(body, bytes, idx)? else {
+    let mut index = ByteIndex::START;
+    while !parser.is_exhausted(index) {
+        let Some((value, next)) = parser.process_token_at(index)? else {
             break;
         };
         if !value.is_empty() {
             keys.insert(value);
         }
-        idx = next;
+        index = next;
     }
     Ok(keys)
 }
