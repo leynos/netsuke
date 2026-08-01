@@ -25,6 +25,7 @@ root_type = "netsuke::cli::CliConfig"
 locales   = [
     "ar",
     "cs",
+    "cy",
     "da",
     "de",
     "el",
@@ -35,7 +36,9 @@ locales   = [
     "fa",
     "fi",
     "fr",
+    "gd",
     "he",
+    "hi",
     "hu",
     "id",
     "it",
