@@ -118,6 +118,22 @@ mod tests {
     use super::*;
     use std::sync::{Arc, Barrier};
 
+    /// Snapshot `captured` from another thread once every reader has arrived.
+    ///
+    /// Extracted so the spawning closure stays shallow and the cloned barrier
+    /// does not shadow the original binding.
+    fn spawn_reader(
+        captured: &CapturedEvents,
+        barrier: &Arc<Barrier>,
+    ) -> std::thread::JoinHandle<Vec<String>> {
+        let handle = captured.clone();
+        let gate = Arc::clone(barrier);
+        std::thread::spawn(move || {
+            gate.wait();
+            handle.snapshot()
+        })
+    }
+
     /// Cloned handles observe the same buffer from other threads.
     ///
     /// Only `snapshot()` runs off-thread: the subscriber is a thread-local
@@ -127,16 +143,7 @@ mod tests {
         let events = with_test_subscriber(LevelFilter::TRACE, |captured| {
             tracing::info!(step = 1, "first");
             let barrier = Arc::new(Barrier::new(4));
-            let readers: Vec<_> = (0..3)
-                .map(|_| {
-                    let handle = captured.clone();
-                    let barrier = Arc::clone(&barrier);
-                    std::thread::spawn(move || {
-                        barrier.wait();
-                        handle.snapshot()
-                    })
-                })
-                .collect();
+            let readers: Vec<_> = (0..3).map(|_| spawn_reader(&captured, &barrier)).collect();
             barrier.wait();
             let snapshots: Vec<_> = readers
                 .into_iter()
@@ -198,7 +205,7 @@ mod tests {
 
         assert_eq!(inner.len(), 1, "inner scope captures only its own event");
         assert!(
-            inner[0].contains("inner"),
+            inner.first().is_some_and(|event| event.contains("inner")),
             "inner snapshot should hold the nested event: {inner:?}"
         );
         assert_eq!(
