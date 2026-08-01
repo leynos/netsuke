@@ -263,46 +263,48 @@ fn write_with_old_mtime(sandbox: &Sandbox, path: &Utf8Path) -> Result<i64> {
     Ok(BASELINE_MTIME)
 }
 
-#[test]
-fn bench_target_emits_both_variant_rows() -> Result<()> {
-    let scenario = BuildScenario::prepare()?;
+/// The disposable inputs one benchmark run needs.
+///
+/// Named fields rather than a returned tuple: `root` and `touch_file` are both
+/// paths, so positional returns could be transposed at the call site without
+/// the compiler noticing.
+struct BenchFixture {
+    /// Benchmark root; each variant gets its own target directory beneath it.
+    root: Utf8PathBuf,
+    /// The file the benchmark touches between a variant's two passes.
+    touch_file: Utf8PathBuf,
+    /// The touch file's timestamp before the run, for ordering assertions.
+    baseline_mtime: i64,
+}
+
+/// Stage a benchmark run's disposable inputs.
+///
+/// The touch file stands in for `src/main.rs`, so a run does not invalidate the
+/// working tree's build cache. Both target directories are seeded to model a
+/// re-run: on a fresh sandbox the benchmark's `rm -rf` would be
+/// indistinguishable from doing nothing, and the clean-pass assertion would
+/// hold vacuously.
+fn prepare_bench_fixture(scenario: &BuildScenario) -> Result<BenchFixture> {
     let sandbox = &scenario.sandbox;
-    // Touch a disposable file rather than `src/main.rs`, so the benchmark does
-    // not invalidate the working tree's build cache.
     let touch_file = sandbox.home().join("bench-touch");
     let baseline_mtime = write_with_old_mtime(sandbox, &touch_file)?;
 
-    // Seed both target directories, modelling a re-run. Without this the
-    // benchmark's `rm -rf` would be indistinguishable from doing nothing,
-    // because a fresh sandbox has no artefacts to remove.
-    let bench_root = sandbox.home().join("bench");
+    let root = sandbox.home().join("bench");
     for slug in [DEFAULT_SLUG, DEV_FAST_SLUG] {
-        sandbox.create_dir(&bench_root.join(slug))?;
+        sandbox.create_dir(&root.join(slug))?;
     }
+    Ok(BenchFixture {
+        root,
+        touch_file,
+        baseline_mtime,
+    })
+}
 
-    let invocation = MakeInvocation::new("bench-build")
-        .variable("CARGO", scenario.cargo.executable())
-        .environment("BENCH_ROOT", &bench_root)
-        .environment("BENCH_TOUCH_FILE", &touch_file);
-    let output = sandbox.run_make(&invocation)?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    ensure!(
-        output.status.success(),
-        "make bench-build should succeed, got `{}`",
-        combined(&output)
-    );
-    for variant in [
-        "| Default (LLVM, platform linker) |",
-        "| dev-fast (Cranelift,",
-    ] {
-        ensure!(
-            stdout.contains(variant),
-            "table should carry the `{variant}` row, got `{stdout}`"
-        );
-    }
+/// Check the recorded passes: their count and pairing, each variant's own
+/// contract, that the variants measured separately, and where each pass sits
+/// relative to the touch.
+fn check_benchmark_invocations(invocations: &[CargoInvocation], baseline_mtime: i64) -> Result<()> {
     // Four builds: clean and incremental, for each of the two variants.
-    let invocations = scenario.cargo.invocations()?;
     ensure!(
         invocations.len() == 4,
         "should measure two builds per variant, recorded {}",
@@ -333,10 +335,14 @@ fn bench_target_emits_both_variant_rows() -> Result<()> {
         dev_fast_pass.target_dir()
     );
 
-    // Only the very first pass runs before any touch; each variant touches the
-    // file between its own two passes, so every later pass must see a newer
-    // timestamp. Comparing against a backdated baseline rather than between
-    // passes keeps this free of filesystem timestamp granularity.
+    check_touch_ordering(invocations, baseline_mtime)
+}
+
+/// Only the very first pass runs before any touch; each variant touches the
+/// file between its own two passes, so every later pass must see a newer
+/// timestamp. Comparing against a backdated baseline rather than between passes
+/// keeps this free of filesystem timestamp granularity.
+fn check_touch_ordering(invocations: &[CargoInvocation], baseline_mtime: i64) -> Result<()> {
     let first = invocations.first().context("expected a recorded pass")?;
     ensure!(
         first.touch_mtime() == Some(baseline_mtime),
@@ -352,6 +358,36 @@ fn bench_target_emits_both_variant_rows() -> Result<()> {
         );
     }
     Ok(())
+}
+
+#[test]
+fn bench_target_emits_both_variant_rows() -> Result<()> {
+    let scenario = BuildScenario::prepare()?;
+    let fixture = prepare_bench_fixture(&scenario)?;
+
+    let invocation = MakeInvocation::new("bench-build")
+        .variable("CARGO", scenario.cargo.executable())
+        .environment("BENCH_ROOT", &fixture.root)
+        .environment("BENCH_TOUCH_FILE", &fixture.touch_file);
+    let output = scenario.sandbox.run_make(&invocation)?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    ensure!(
+        output.status.success(),
+        "make bench-build should succeed, got `{}`",
+        combined(&output)
+    );
+    for variant in [
+        "| Default (LLVM, platform linker) |",
+        "| dev-fast (Cranelift,",
+    ] {
+        ensure!(
+            stdout.contains(variant),
+            "table should carry the `{variant}` row, got `{stdout}`"
+        );
+    }
+
+    check_benchmark_invocations(&scenario.cargo.invocations()?, fixture.baseline_mtime)
 }
 
 /// One variant's pair of recorded builds: the clean pass then the incremental.
