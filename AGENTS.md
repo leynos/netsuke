@@ -288,11 +288,29 @@ references, clone keys only on insertion, and build error context lazily.
 - Use `rstest` fixtures for shared setup.
 - Replace duplicated tests with `#[rstest(...)]` parameterized cases.
 - Prefer `mockall` for ad hoc mocks/stubs.
-- For testing of functionality depending upon environment variables, dependency
-  injection and the `mockable` crate are the preferred option.
-- If mockable cannot be used, env mutations in tests MUST be wrapped in shared
-  guards and mutexes placed in a shared `test_utils` or `test_helpers` crate.
-  Direct environment mutation is FORBIDDEN in tests.
+- **In-process environment mutation is FORBIDDEN in tests.** No test executing
+  inside the harness process may call `std::env::set_var`,
+  `std::env::remove_var`, or any helper wrapping them. This binds unit tests,
+  integration-test binaries, and in-process behavioural tests such as
+  `rstest-bdd` steps alike.
+- **Inject the environment instead.** Any behaviour depending upon environment
+  variables must accept an injected environment: `mockable::Env`, with
+  `mockable::DefaultEnv` supplied in production and `mockable::MockEnv` in
+  tests. A narrow closure seam of the same shape is acceptable where a trait
+  object would be disproportionate. Production code must not reach for
+  `std::env::var`/`var_os` outside the thin adapter that constructs the
+  injected value.
+- **Process-wide locks are not an escape hatch.** Serializing environment
+  mutation behind a shared `Mutex`, `OnceLock`, or `serial_test` attribute is
+  not an accepted fallback. It serializes the suite, defeats property-based
+  tests that run many cases within one process, and leaves the ambient
+  dependency embedded in the production signature. Where injection looks
+  impossible the signature is wrong; correct the signature.
+- **Subprocess isolation is the sole exemption.** End-to-end behavioural tests
+  invoking `netsuke` through `assert_cmd` may configure the environment via
+  `Command::env`/`Command::env_clear`, because the mutation is confined to the
+  child process. A test manipulating the environment in-process does not
+  qualify, whatever layer it claims to occupy.
 
 ### Dependency management
 
