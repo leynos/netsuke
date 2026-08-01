@@ -22,7 +22,7 @@ categories = ["command-line-utilities", "development-tools::build-utils"]
 
 [package.metadata.ortho_config]
 root_type = "netsuke::cli::CliConfig"
-locales   = ["de", "en-GB", "en-US", "es-ES", "fr", "it"]
+locales   = ["de", "en-GB", "en-US", "es-419", "es-ES", "fr", "it", "pt-BR", "pt-PT"]
 
 [package.metadata.kani.flags]
 default-unwind = "6"

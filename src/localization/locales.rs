@@ -54,7 +54,9 @@ macro_rules! define_locales {
     };
 }
 
-define_locales!["de", "en-GB", "en-US", "es-ES", "fr", "it"];
+define_locales![
+    "de", "en-GB", "en-US", "es-419", "es-ES", "fr", "it", "pt-BR", "pt-PT",
+];
 
 /// Fallback policy for a language that ships more than one catalogue, or whose
 /// requests should be redirected to a differently named catalogue.
