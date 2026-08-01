@@ -612,6 +612,12 @@ for any future target with the same shape, and do not reach for `PathGuard`:
 these tests spawn children with a bespoke environment rather than mutating the
 parent's, which is what keeps them safe to run in parallel.
 
+A `#[cfg(test)]` unit test added inside `test_support` will not run as part
+of `make test`, because `Cargo.toml` excludes `test_support` from the
+workspace. Put assertions about the fixtures themselves in the
+`tests/dev_fast_*.rs` integration crates instead, where the gate will
+actually exercise them.
+
 ### Benchmark evidence
 
 `make bench-build` measures both paths with one repeatable command. It builds
