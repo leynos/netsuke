@@ -21,8 +21,9 @@ use test_support::netsuke::run_netsuke_in;
 /// continuation lines do not. Matching the full `YYYY-` prefix rather than a
 /// leading digit keeps the report's numbered source snippet (`1 | ...`) out.
 fn is_tracing_line(line: &str) -> bool {
-    let bytes = line.as_bytes();
-    bytes.len() > 4 && bytes[..4].iter().all(u8::is_ascii_digit) && bytes[4] == b'-'
+    line.split_once('-').is_some_and(|(year, _)| {
+        year.len() == 4 && year.chars().all(|digit| digit.is_ascii_digit())
+    })
 }
 
 fn diagnostic_lines(stderr: &str) -> Vec<&str> {

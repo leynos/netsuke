@@ -94,7 +94,7 @@ static TRACING_FILTER: OnceLock<reload::Handle<LevelFilter, Registry>> = OnceLoc
 /// JSON mode silences tracing entirely so stderr carries only the diagnostic
 /// document. `--verbose` selects `TRACE` because the `NETSUKE_CONFIG` lookup is
 /// traced at that level; otherwise only errors surface.
-fn startup_filter(mode: DiagMode, verbose: bool) -> LevelFilter {
+const fn startup_filter(mode: DiagMode, verbose: bool) -> LevelFilter {
     if mode.is_json() {
         LevelFilter::OFF
     } else if verbose {
@@ -123,14 +123,14 @@ fn init_tracing(initial: LevelFilter) {
         .try_init()
         .is_ok()
     {
-        let _ = TRACING_FILTER.set(handle);
+        TRACING_FILTER.set(handle).ok();
     }
 }
 
 /// Adjust the installed subscriber's level, if one was installed.
 fn set_tracing_filter(level: LevelFilter) {
     if let Some(handle) = TRACING_FILTER.get() {
-        let _ = handle.modify(|filter| *filter = level);
+        handle.modify(|filter| *filter = level).ok();
     }
 }
 
