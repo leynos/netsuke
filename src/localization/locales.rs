@@ -56,7 +56,8 @@ macro_rules! define_locales {
 
 define_locales![
     "cs", "da", "de", "el", "en-GB", "en-US", "es-419", "es-ES", "fi", "fr", "hu", "id", "it",
-    "nb", "nl", "pl", "pt-BR", "pt-PT", "ro", "ru", "sv", "tr", "uk", "vi",
+    "ja", "ko", "nb", "nl", "pl", "pt-BR", "pt-PT", "ro", "ru", "sv", "th", "tr", "uk", "vi",
+    "zh-Hans", "zh-Hant",
 ];
 
 /// Fallback policy for a language that ships more than one catalogue, or whose
@@ -200,6 +201,10 @@ fn subtag_catalogue(
 /// assert_eq!(resolve_catalogue(&parse("es-MX")).tag(), "es-419");
 /// // Spain keeps its own.
 /// assert_eq!(resolve_catalogue(&parse("es-ES")).tag(), "es-ES");
+/// // A script subtag wins over the region it is paired with.
+/// assert_eq!(resolve_catalogue(&parse("zh-Hant-TW")).tag(), "zh-Hant");
+/// // A language with a single catalogue serves all its regions.
+/// assert_eq!(resolve_catalogue(&parse("fr-CA")).tag(), "fr");
 /// ```
 #[must_use]
 pub fn resolve_catalogue(locale: &LanguageIdentifier) -> &'static LocaleCatalogue {

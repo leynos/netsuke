@@ -36,6 +36,8 @@ locales   = [
     "hu",
     "id",
     "it",
+    "ja",
+    "ko",
     "nb",
     "nl",
     "pl",
@@ -44,9 +46,12 @@ locales   = [
     "ro",
     "ru",
     "sv",
+    "th",
     "tr",
     "uk",
     "vi",
+    "zh-Hans",
+    "zh-Hant",
 ]
 
 [package.metadata.kani.flags]
