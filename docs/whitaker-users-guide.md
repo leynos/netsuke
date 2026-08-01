@@ -655,7 +655,9 @@ policy.
 > with an unfulfilled-lint-expectation error under `-D warnings`. This
 > repository also denies `clippy::allow_attributes`, so
 > `#[allow(no_std_fs_operations)]` will not even compile. The only sanctioned
-> mechanism is a narrowly scoped `excluded_paths` entry in `dylint.toml`.
+> mechanism is a `dylint.toml` entry: a narrowly scoped `excluded_paths` entry
+> for a bounded module, or an `excluded_crates` entry where the ambient access
+> lives at the crate root.
 
 **How to fix:** Replace `std::fs` with `cap_std`:
 

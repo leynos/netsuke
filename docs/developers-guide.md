@@ -180,8 +180,10 @@ Neither `#[allow(no_std_fs_operations)]` nor
 `#[expect(no_std_fs_operations, reason = "…")]` suppresses this lint in the
 Whitaker build this repository pins, so no in-source attribute is usable
 here (this repository also denies `clippy::allow_attributes`, so
-`#[allow(no_std_fs_operations)]` will not even compile). A narrowly scoped
-`excluded_paths` entry is the only working mechanism. Prefer migrating to
+`#[allow(no_std_fs_operations)]` will not even compile). A `dylint.toml` entry
+is the only working mechanism: a narrowly scoped `excluded_paths` entry for a
+bounded module, or, where the ambient access lives at the crate root and a path
+entry would be no narrower, an `excluded_crates` entry. Prefer migrating to
 `cap_std` over adding an exclusion; reach for an exclusion only when the
 operation is irreducibly ambient.
 
