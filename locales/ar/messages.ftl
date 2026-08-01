@@ -44,7 +44,7 @@ cli.subcommand.graph.flag.output.help = كتابة مخرج الرسم إلى م
 cli.subcommand.generate.flag.output.help = كتابة ملف بيانات Ninja المولَّد إلى ملف بدلًا من المخرج القياسي.
 
 # أخطاء التحقق في سطر الأوامر.
-cli.validation.jobs.invalid_number = { $value } ليس عددًا صالحًا.
+cli.validation.jobs.invalid_number = ‏{ $value } ليس عددًا صالحًا.
 cli.validation.jobs.out_of_range = يجب أن يقع عدد المهام بين { $min } و{ $max }.
 cli.validation.scheme.empty = يجب ألّا يكون المخطّط فارغًا.
 cli.validation.scheme.invalid_start = يجب أن يبدأ المخطّط «{ $scheme }» بحرف من ASCII.
@@ -103,7 +103,7 @@ runner.io.flush_stdout = تعذّر إفراغ ذاكرة المخرج القي�
 manifest.parse = فشل تحليل ملف البيانات.
 manifest.structure_error = خطأ في بنية ملف البيانات عند { $name }: { $details }
 manifest.yaml.parse = خطأ في تحليل YAML في السطر { $line } والعمود { $column }: { $details }
-manifest.yaml.label = YAML غير صالح
+manifest.yaml.label = ‏YAML غير صالح
 manifest.yaml.hint.tabs = لا يسمح YAML بمحارف الجدولة؛ استخدم المسافات في الإزاحة.
 manifest.yaml.hint.list_item = يجب أن تبدأ عناصر قوائم YAML بـ «-» وأن تكون مُزاحة بشكل صحيح.
 manifest.yaml.hint.expected_colon = يبدو هذا مدخلًا في تخطيط؛ ينقص «:» بعد المفتاح.
@@ -228,8 +228,8 @@ stdlib.command.terminated_by_signal = أُنهي { $location } بإشارة.
 stdlib.command.exited_with_status = انتهى { $location } بالحالة { $status }.
 stdlib.command.output_limit_exceeded = تجاوز { $location } حدّ { $mode } البالغ { $limit } بايت للتدفّق { $stream }.
 stdlib.command.timeout = تجاوز { $location } المهلة البالغة { $seconds } ثانية.
-stdlib.command.exit_status_suffix = (حالة الخروج { $status })
-stdlib.command.signal_suffix = (أُنهي بإشارة)
+stdlib.command.exit_status_suffix = ‏(حالة الخروج { $status })
+stdlib.command.signal_suffix = ‏(أُنهي بإشارة)
 stdlib.command.shell.empty = يجب ألّا يكون أمر الصدفة فارغًا.
 stdlib.command.grep.empty_pattern = يجب ألّا يكون نمط grep فارغًا.
 stdlib.command.grep.flags_not_string = يجب أن تكون رايات grep سلاسل نصية.
@@ -316,12 +316,12 @@ stdlib.time.label.microseconds = أجزاء من المليون من الثان�
 stdlib.time.label.nanoseconds = أجزاء من المليار من الثانية
 
 # تشخيصات مساعد which.
-stdlib.which.not_found = [netsuke::jinja::which::not_found] تعذّر العثور على الأمر «{ $command }» بعد فحص { $count } من مداخل PATH. معاينة: { $preview }
+stdlib.which.not_found = ‏[netsuke::jinja::which::not_found] تعذّر العثور على الأمر «{ $command }» بعد فحص { $count } من مداخل PATH. معاينة: { $preview }
 stdlib.which.not_found.hint.cwd_auto = تُتجاهل الأجزاء الفارغة من PATH؛ استخدم cwd_mode="auto" لتضمين دليل العمل.
 stdlib.which.not_found.hint.cwd_always = اضبط cwd_mode="always" لتضمين الدليل الحالي.
-stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] الأمر «{ $command }» في «{ $path }» غير موجود أو غير قابل للتنفيذ.
+stdlib.which.direct_not_found = ‏[netsuke::jinja::which::not_found] الأمر «{ $command }» في «{ $path }» غير موجود أو غير قابل للتنفيذ.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
-stdlib.which.path_preview.empty = <فارغ>
+stdlib.which.path_preview.empty = ‏<فارغ>
 stdlib.which.path_entry.non_utf8 = يتضمّن المدخل رقم { $index } في PATH محارف ليست UTF-8؛ ويتطلّب Netsuke مسارات بترميز UTF-8.
 stdlib.which.command.empty = يتطلّب which سلسلة نصية غير فارغة.
 stdlib.which.cwd_mode.invalid = يجب أن تكون قيمة cwd_mode إحدى «auto» أو «always» أو «never»، لكن ورد «{ $mode }».
@@ -373,7 +373,7 @@ graph.html.heading = رسم بناء Netsuke
 graph.html.description = رسم بناء عرضه Netsuke
 graph.html.outline.summary = الأهداف والاعتماديات (مخطّط نصي)
 graph.html.outline.no_inputs = لا توجد مدخلات
-graph.html.noscript.notice = JavaScript معطّلة. المخطّط النصي أعلاه هو الرسم كاملًا، ويليه مصدر DOT.
+graph.html.noscript.notice = ‏JavaScript معطّلة. المخطّط النصي أعلاه هو الرسم كاملًا، ويليه مصدر DOT.
 
 # البادئات الدلالية للإخراج الميسّر.
 semantic.prefix.error = خطأ:

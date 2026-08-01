@@ -7,6 +7,7 @@ use rstest::rstest;
 use test_support::localizer_test_lock;
 
 use netsuke::cli_localization;
+use netsuke::localization::locales::SUPPORTED_LOCALES;
 use netsuke::localization::{self, LocalizerGuard, keys};
 use test_support::fluent::normalize_fluent_isolates;
 
@@ -53,6 +54,81 @@ fn which_message(command: &str) -> String {
         .with_arg("count", 0)
         .with_arg("preview", "<none>")
         .to_string()
+}
+
+/// Every registered locale must render a message and interpolate its
+/// arguments; a catalogue that fails to parse would silently fall through to
+/// English and go unnoticed without this sweep.
+#[test]
+fn every_locale_renders_and_interpolates() -> Result<()> {
+    for entry in SUPPORTED_LOCALES {
+        let _guards = localizer_guards(entry.tag())?;
+        let message = normalize_fluent_isolates(&which_message("cc"));
+        ensure!(
+            !message.trim().is_empty(),
+            "locale {} rendered an empty message",
+            entry.tag()
+        );
+        ensure!(
+            message.contains("cc") && message.contains('0'),
+            "locale {} did not interpolate its arguments, got: {message}",
+            entry.tag()
+        );
+    }
+    Ok(())
+}
+
+/// Non-Latin catalogues must reach the terminal with their own script intact.
+#[rstest]
+#[case("ja", '\u{3040}', '\u{30FF}')]
+#[case("ko", '\u{AC00}', '\u{D7A3}')]
+#[case("ru", '\u{0400}', '\u{04FF}')]
+#[case("el", '\u{0370}', '\u{03FF}')]
+#[case("th", '\u{0E00}', '\u{0E7F}')]
+#[case("hi", '\u{0900}', '\u{097F}')]
+#[case("zh-Hans", '\u{4E00}', '\u{9FFF}')]
+fn non_latin_locales_render_their_own_script(
+    #[case] locale: &str,
+    #[case] first: char,
+    #[case] last: char,
+) -> Result<()> {
+    let _guards = localizer_guards(locale)?;
+
+    let message = localization::message(keys::MANIFEST_PARSE).to_string();
+    ensure!(
+        message.chars().any(|ch| (first..=last).contains(&ch)),
+        "expected {locale} to render characters in {first:?}..={last:?}, got: {message}"
+    );
+    Ok(())
+}
+
+/// Right-to-left locales must render right-to-left text, and a message that
+/// opens with a Latin token must still carry the mark that pins the
+/// paragraph's direction.
+#[rstest]
+#[case("ar", '\u{0600}', '\u{06FF}')]
+#[case("fa", '\u{0600}', '\u{06FF}')]
+#[case("he", '\u{0590}', '\u{05FF}')]
+fn rtl_locales_render_and_keep_direction_marks(
+    #[case] locale: &str,
+    #[case] first: char,
+    #[case] last: char,
+) -> Result<()> {
+    let _guards = localizer_guards(locale)?;
+
+    let message = localization::message(keys::MANIFEST_PARSE).to_string();
+    ensure!(
+        message.chars().any(|ch| (first..=last).contains(&ch)),
+        "expected {locale} to render its own script, got: {message}"
+    );
+
+    let label = localization::message(keys::MANIFEST_YAML_LABEL).to_string();
+    ensure!(
+        label.starts_with('\u{200F}'),
+        "expected {locale} to keep the right-to-left mark on a Latin-initial \
+         message, got: {label:?}"
+    );
+    Ok(())
 }
 
 #[rstest]

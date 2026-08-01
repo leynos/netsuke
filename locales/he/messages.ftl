@@ -44,7 +44,7 @@ cli.subcommand.graph.flag.output.help = כתיבת תוצר הגרף לקובץ;
 cli.subcommand.generate.flag.output.help = כתיבת מניפסט Ninja שנוצר לקובץ במקום לפלט התקני.
 
 # שגיאות אימות בשורת הפקודה.
-cli.validation.jobs.invalid_number = { $value } אינו מספר תקין.
+cli.validation.jobs.invalid_number = ‏{ $value } אינו מספר תקין.
 cli.validation.jobs.out_of_range = מספר המשימות חייב להיות בין { $min } ל‑{ $max }.
 cli.validation.scheme.empty = הסכימה אינה יכולה להיות ריקה.
 cli.validation.scheme.invalid_start = הסכימה „{ $scheme }” חייבת להתחיל באות ASCII.
@@ -221,15 +221,15 @@ stdlib.fetch.action.open_cache_entry = פתיחת רשומת מטמון fetch
 # אבחון עוזר הפקודות.
 stdlib.command.location = הפקודה „{ $command }” בתבנית „{ $template }”
 stdlib.command.spawn_failed = לא ניתן היה להפעיל את { $location }: { $details }.
-stdlib.command.io_failed = { $location } נכשל: { $details }.
+stdlib.command.io_failed = ‏{ $location } נכשל: { $details }.
 stdlib.command.closed_input_early = הקלט נסגר לפני שהכתיבה אל הפקודה הושלמה.
 stdlib.command.broken_pipe = הצינור נשבר בעת הרצת { $location }: { $details }.
-stdlib.command.terminated_by_signal = { $location } הופסק על ידי אות.
-stdlib.command.exited_with_status = { $location } הסתיים במצב { $status }.
-stdlib.command.output_limit_exceeded = { $location } חרג ממגבלת { $mode } של { $limit } בתים עבור { $stream }.
-stdlib.command.timeout = { $location } חרג ממגבלת הזמן של { $seconds } שניות.
-stdlib.command.exit_status_suffix = (מצב יציאה { $status })
-stdlib.command.signal_suffix = (הופסק על ידי אות)
+stdlib.command.terminated_by_signal = ‏{ $location } הופסק על ידי אות.
+stdlib.command.exited_with_status = ‏{ $location } הסתיים במצב { $status }.
+stdlib.command.output_limit_exceeded = ‏{ $location } חרג ממגבלת { $mode } של { $limit } בתים עבור { $stream }.
+stdlib.command.timeout = ‏{ $location } חרג ממגבלת הזמן של { $seconds } שניות.
+stdlib.command.exit_status_suffix = ‏(מצב יציאה { $status })
+stdlib.command.signal_suffix = ‏(הופסק על ידי אות)
 stdlib.command.shell.empty = פקודת המעטפת אינה יכולה להיות ריקה.
 stdlib.command.grep.empty_pattern = תבנית grep אינה יכולה להיות ריקה.
 stdlib.command.grep.flags_not_string = דגלי grep חייבים להיות מחרוזות.
@@ -291,7 +291,7 @@ stdlib.path.action.stat = קריאת נתונים
 stdlib.path.action.read = קריאה
 stdlib.path.action.open_file = פתיחת קובץ
 stdlib.path.with_suffix.empty_separator = ‏with_suffix מחייב מפריד שאינו ריק.
-stdlib.path.relative_to.mismatch = { $path } אינו יחסי אל { $root }.
+stdlib.path.relative_to.mismatch = ‏{ $path } אינו יחסי אל { $root }.
 stdlib.path.expanduser.unsupported = הרחבת ~ עבור משתמש מסוים אינה נתמכת.
 stdlib.path.expanduser.no_home = לא ניתן להרחיב את ~: לא הוגדר אף משתנה סביבה לספריית הבית.
 stdlib.path.contents.unsupported_encoding = קידוד שאינו נתמך: „{ $encoding }”.
@@ -316,12 +316,12 @@ stdlib.time.label.microseconds = מיליוניות שנייה
 stdlib.time.label.nanoseconds = מיליארדיות שנייה
 
 # אבחון העוזר which.
-stdlib.which.not_found = [netsuke::jinja::which::not_found] הפקודה „{ $command }” לא נמצאה לאחר בדיקת { $count } רשומות ב‑PATH. תצוגה מקדימה: { $preview }
+stdlib.which.not_found = ‏[netsuke::jinja::which::not_found] הפקודה „{ $command }” לא נמצאה לאחר בדיקת { $count } רשומות ב‑PATH. תצוגה מקדימה: { $preview }
 stdlib.which.not_found.hint.cwd_auto = מקטעים ריקים ב‑PATH מתעלמים מהם; השתמשו ב‑cwd_mode="auto" כדי לכלול את ספריית העבודה.
 stdlib.which.not_found.hint.cwd_always = הגדירו cwd_mode="always" כדי לכלול את הספרייה הנוכחית.
-stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] הפקודה „{ $command }” ב‑„{ $path }” חסרה או אינה ניתנת להרצה.
+stdlib.which.direct_not_found = ‏[netsuke::jinja::which::not_found] הפקודה „{ $command }” ב‑„{ $path }” חסרה או אינה ניתנת להרצה.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
-stdlib.which.path_preview.empty = <ריק>
+stdlib.which.path_preview.empty = ‏<ריק>
 stdlib.which.path_entry.non_utf8 = הרשומה מס׳ { $index } ב‑PATH מכילה תווים שאינם UTF-8; ‏Netsuke מחייב נתיבים בקידוד UTF-8.
 stdlib.which.command.empty = ‏which מחייב מחרוזת שאינה ריקה.
 stdlib.which.cwd_mode.invalid = ‏cwd_mode חייב להיות „auto”, „always” או „never”, אך התקבל „{ $mode }”.
@@ -357,7 +357,7 @@ status.stage.ninja_synthesis = הרכבת תוכנית הבנייה של Ninja
 status.stage.ninja_synthesis_execute = הרכבת תוכנית Ninja והרצת { $tool }
 status.stage.graph_rendering = עיבוד תוצר הגרף
 status.stage.graph_rendering_with_tool = עיבוד { $tool }
-status.complete = { $tool } הושלם.
+status.complete = ‏{ $tool } הושלם.
 status.timing.summary_header = סיכום זמנים לפי שלב:
 status.timing.stage_line = - { $label }: { $duration }
 status.timing.total_line = זמן כולל של הצינור: { $duration }

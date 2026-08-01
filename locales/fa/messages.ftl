@@ -44,7 +44,7 @@ cli.subcommand.graph.flag.output.help = نوشتن فرآوردهٔ گراف د�
 cli.subcommand.generate.flag.output.help = نوشتن مانیفست Ninja تولیدشده در پرونده به‌جای خروجی استاندارد.
 
 # خطاهای اعتبارسنجی خط فرمان.
-cli.validation.jobs.invalid_number = { $value } عدد معتبری نیست.
+cli.validation.jobs.invalid_number = ‏{ $value } عدد معتبری نیست.
 cli.validation.jobs.out_of_range = شمار کارها باید میان { $min } و { $max } باشد.
 cli.validation.scheme.empty = طرح نباید تهی باشد.
 cli.validation.scheme.invalid_start = طرح «{ $scheme }» باید با یک حرف ASCII آغاز شود.
@@ -221,15 +221,15 @@ stdlib.fetch.action.open_cache_entry = گشودن مدخل نهانگاه fetch
 # تشخیص‌های یاور فرمان‌ها.
 stdlib.command.location = فرمان «{ $command }» در قالب «{ $template }»
 stdlib.command.spawn_failed = راه‌اندازی { $location } ممکن نشد: { $details }.
-stdlib.command.io_failed = { $location } ناکام ماند: { $details }.
+stdlib.command.io_failed = ‏{ $location } ناکام ماند: { $details }.
 stdlib.command.closed_input_early = ورودی پیش از پایان نوشتن به فرمان بسته شد.
 stdlib.command.broken_pipe = گسست لوله هنگام اجرای { $location }: { $details }.
-stdlib.command.terminated_by_signal = { $location } با یک سیگنال پایان یافت.
-stdlib.command.exited_with_status = { $location } با وضعیت { $status } پایان یافت.
-stdlib.command.output_limit_exceeded = { $location } از کران { $mode } برابر { $limit } بایت برای { $stream } فراتر رفت.
-stdlib.command.timeout = { $location } از مهلت { $seconds } ثانیه فراتر رفت.
-stdlib.command.exit_status_suffix = (وضعیت خروج { $status })
-stdlib.command.signal_suffix = (با سیگنال پایان یافت)
+stdlib.command.terminated_by_signal = ‏{ $location } با یک سیگنال پایان یافت.
+stdlib.command.exited_with_status = ‏{ $location } با وضعیت { $status } پایان یافت.
+stdlib.command.output_limit_exceeded = ‏{ $location } از کران { $mode } برابر { $limit } بایت برای { $stream } فراتر رفت.
+stdlib.command.timeout = ‏{ $location } از مهلت { $seconds } ثانیه فراتر رفت.
+stdlib.command.exit_status_suffix = ‏(وضعیت خروج { $status })
+stdlib.command.signal_suffix = ‏(با سیگنال پایان یافت)
 stdlib.command.shell.empty = فرمان پوسته نباید تهی باشد.
 stdlib.command.grep.empty_pattern = الگوی grep نباید تهی باشد.
 stdlib.command.grep.flags_not_string = پرچم‌های grep باید رشته باشند.
@@ -291,7 +291,7 @@ stdlib.path.action.stat = خواندن مشخصات
 stdlib.path.action.read = خواندن
 stdlib.path.action.open_file = گشودن پرونده
 stdlib.path.with_suffix.empty_separator = ‏with_suffix به جداکننده‌ای ناتهی نیاز دارد.
-stdlib.path.relative_to.mismatch = { $path } نسبت به { $root } نسبی نیست.
+stdlib.path.relative_to.mismatch = ‏{ $path } نسبت به { $root } نسبی نیست.
 stdlib.path.expanduser.unsupported = گسترش ~ برای کاربری معین پشتیبانی نمی‌شود.
 stdlib.path.expanduser.no_home = گسترش ~ ممکن نیست: هیچ متغیر محیطی برای شاخهٔ خانگی تنظیم نشده است.
 stdlib.path.contents.unsupported_encoding = رمزگذاری پشتیبانی‌نشده: «{ $encoding }».
@@ -316,12 +316,12 @@ stdlib.time.label.microseconds = میکروثانیه
 stdlib.time.label.nanoseconds = نانوثانیه
 
 # تشخیص‌های یاور which.
-stdlib.which.not_found = [netsuke::jinja::which::not_found] فرمان «{ $command }» پس از بررسی { $count } مدخل PATH یافت نشد. پیش‌نمایش: { $preview }
+stdlib.which.not_found = ‏[netsuke::jinja::which::not_found] فرمان «{ $command }» پس از بررسی { $count } مدخل PATH یافت نشد. پیش‌نمایش: { $preview }
 stdlib.which.not_found.hint.cwd_auto = بخش‌های تهی PATH نادیده گرفته می‌شوند؛ برای دربرگرفتن شاخهٔ کاری از cwd_mode="auto" استفاده کنید.
 stdlib.which.not_found.hint.cwd_always = برای دربرگرفتن شاخهٔ کنونی، cwd_mode="always" را تنظیم کنید.
-stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] فرمان «{ $command }» در «{ $path }» وجود ندارد یا اجراشدنی نیست.
+stdlib.which.direct_not_found = ‏[netsuke::jinja::which::not_found] فرمان «{ $command }» در «{ $path }» وجود ندارد یا اجراشدنی نیست.
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
-stdlib.which.path_preview.empty = <تهی>
+stdlib.which.path_preview.empty = ‏<تهی>
 stdlib.which.path_entry.non_utf8 = مدخل شمارهٔ { $index } در PATH نویسه‌هایی دارد که UTF-8 نیستند؛ ‏Netsuke به مسیرهای UTF-8 نیاز دارد.
 stdlib.which.command.empty = ‏which به رشته‌ای ناتهی نیاز دارد.
 stdlib.which.cwd_mode.invalid = ‏cwd_mode باید «auto»، «always» یا «never» باشد، اما «{ $mode }» به دست آمد.
@@ -357,7 +357,7 @@ status.stage.ninja_synthesis = ترکیب طرح ساخت Ninja
 status.stage.ninja_synthesis_execute = ترکیب طرح Ninja و اجرای { $tool }
 status.stage.graph_rendering = نمایش فرآوردهٔ گراف
 status.stage.graph_rendering_with_tool = نمایش { $tool }
-status.complete = { $tool } به پایان رسید.
+status.complete = ‏{ $tool } به پایان رسید.
 status.timing.summary_header = خلاصهٔ زمان به تفکیک مرحله:
 status.timing.stage_line = - { $label }: { $duration }
 status.timing.total_line = زمان کل خط پردازش: { $duration }
