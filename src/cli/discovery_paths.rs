@@ -1,32 +1,59 @@
 //! Path comparison helpers for configuration discovery.
 
+use std::io;
 use std::path::{Path, PathBuf};
 
-/// Return a comparable key for `path`, resolving it where the file exists.
+/// Resolves a path to the canonical form used for layer comparison.
+///
+/// This is the seam through which discovery reaches the filesystem, so tests can
+/// force a resolution failure without depending on the ambient environment.
+pub(super) trait PathNormalizer {
+    /// Resolve `path`, propagating any I/O error to the caller.
+    fn normalize(&self, path: &Path) -> io::Result<PathBuf>;
+}
+
+/// Production normalizer backed by [`std::fs::canonicalize`].
+#[derive(Debug, Default, Clone, Copy)]
+pub(super) struct FsPathNormalizer;
+
+impl PathNormalizer for FsPathNormalizer {
+    fn normalize(&self, path: &Path) -> io::Result<PathBuf> {
+        std::fs::canonicalize(path)
+    }
+}
+
+/// Return the canonical comparison key for `path`.
 ///
 /// `OrthoConfig` canonicalizes every layer path it records, whereas the expected
 /// project path is joined from the caller's `--directory` verbatim. Passing both
-/// sides through this function keeps a relative or symlinked directory from
-/// looking like a different file.
+/// sides through the same normalizer keeps a relative or symlinked directory
+/// from looking like a different file.
 ///
-/// # Filesystem access and fallback policy
+/// Resolution failure is reported rather than absorbed: the caller decides what
+/// an unresolvable path means. See `collect_file_layers`, which compares such a
+/// path literally so a missing project `.netsuke.toml` or an unreadable
+/// directory does not fail configuration discovery.
+pub(super) fn normalized_path_key(
+    normalizer: &impl PathNormalizer,
+    path: &str,
+) -> io::Result<PathBuf> {
+    normalizer.normalize(Path::new(path))
+}
+
+/// A normalizer that always fails, so the failure branch is deterministic.
 ///
-/// This reads the filesystem through [`std::fs::canonicalize`], so it is not a
-/// pure function. Resolution failure is deliberately **not** an error: the
-/// common input is the expected `.netsuke.toml`, which usually does not exist,
-/// and a directory may equally be unreadable. The function is therefore total —
-/// an unresolvable path is returned unchanged and compared literally.
-///
-/// Returning `Result` would misreport the ordinary "no project config" case as a
-/// failure, and every caller would have to reapply this same fallback to get a
-/// key it can compare. Comparing literally is also sound: an unresolved path
-/// cannot equal a resolved one, so the caller simply treats the layer as
-/// unmatched and takes the append branch, which is the safe direction.
-///
-/// The policy is pinned by `normalized_path_key_is_identity_for_absent_paths`
-/// and `normalized_path_key_is_idempotent`, with `.`/`..` resolution covered by
-/// `normalized_path_key_resolves_non_canonical_forms`.
-pub(super) fn normalized_path_key(path: &str) -> PathBuf {
-    let candidate = Path::new(path);
-    std::fs::canonicalize(candidate).unwrap_or_else(|_| candidate.to_path_buf())
+/// Real canonicalization failure depends on the ambient filesystem — a missing
+/// file, an unreadable directory — which a test cannot force portably.
+#[cfg(test)]
+#[derive(Debug, Default, Clone, Copy)]
+pub(super) struct FailingPathNormalizer;
+
+#[cfg(test)]
+impl PathNormalizer for FailingPathNormalizer {
+    fn normalize(&self, _path: &Path) -> io::Result<PathBuf> {
+        Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "normalization refused for test",
+        ))
+    }
 }

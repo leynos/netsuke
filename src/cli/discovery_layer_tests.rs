@@ -12,6 +12,8 @@ use rstest::rstest;
 use tempfile::{TempDir, tempdir};
 
 use super::event_assertions::{EventAssertion, capture_events, find_event};
+use super::layers::collect_file_layers_with_normalizer;
+use super::paths::FailingPathNormalizer;
 
 #[derive(Debug, Clone, Copy)]
 enum LayerScenario {
@@ -114,5 +116,33 @@ fn existing_project_scope_layer_is_not_appended_twice() -> Result<()> {
         "project-scope layer should appear exactly once, found {project_layers}: {layers:?}"
     );
     find_event(&events, "discovery included project-scope layers")?;
+    Ok(())
+}
+
+/// Normalization failure must not fail configuration discovery.
+///
+/// A missing project `.netsuke.toml` or an unreadable directory makes
+/// canonicalization fail, which is ordinary rather than exceptional. The
+/// discovery-side policy compares such a path literally and carries on; only an
+/// unmatched project layer results, never an error.
+#[test]
+fn normalization_failure_does_not_fail_discovery() -> Result<()> {
+    let temp = tempdir().context("create temp dir")?;
+    let project_dir = temp.path().join("project");
+    test_support::fs::create_dir(&project_dir).context("create project dir")?;
+    test_support::fs::write(
+        project_dir.join(".netsuke.toml"),
+        "default_targets = [\"alpha\"]\n",
+    )
+    .context("write project config")?;
+
+    let layers =
+        collect_file_layers_with_normalizer(Some(project_dir.as_path()), &FailingPathNormalizer)
+            .context("discovery must succeed despite normalization failure")?;
+
+    ensure!(
+        !layers.is_empty(),
+        "the project layer should still be collected: {layers:?}"
+    );
     Ok(())
 }

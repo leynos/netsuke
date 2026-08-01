@@ -4,9 +4,7 @@
 //! through [`ConfigDiscovery`], handling explicit paths from CLI flags and
 //! environment variables, and loading TOML chains into [`MergeLayer`] values.
 
-use ortho_config::{
-    ConfigDiscovery, MergeComposer, MergeLayer, OrthoResult, load_config_file_as_chain,
-};
+use ortho_config::{MergeComposer, MergeLayer, OrthoResult, load_config_file_as_chain};
 use std::borrow::Cow;
 use std::ffi::OsString;
 use std::io;
@@ -21,11 +19,14 @@ mod diagnostics;
 
 #[path = "discovery_paths.rs"]
 mod paths;
+
+#[path = "discovery_layers.rs"]
+mod layers;
 use diagnostics::{
-    ConfigLoadFailureKind, debug_config_path, debug_optional_config_path, path_hash,
-    trace_config_path_variable, warn_explicit_config_load_failed,
+    ConfigLoadFailureKind, debug_config_path, path_hash, trace_config_path_variable,
+    warn_explicit_config_load_failed,
 };
-use paths::normalized_path_key;
+use layers::collect_file_layers;
 
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG";
 
@@ -99,75 +100,6 @@ fn collect_file_layers_with_env(
     )
 }
 
-fn config_discovery(directory: Option<&PathBuf>) -> ConfigDiscovery {
-    let mut builder = ConfigDiscovery::builder("netsuke").env_var(CONFIG_ENV_VAR);
-    if let Some(dir) = directory {
-        builder = builder.clear_project_roots().add_project_root(dir);
-    }
-    builder.build()
-}
-
-pub(crate) fn collect_file_layers(
-    directory: Option<&Path>,
-) -> OrthoResult<Vec<MergeLayer<'static>>> {
-    let discovery = config_discovery(directory.map(PathBuf::from).as_ref());
-    let mut file_layers = discovery.compose_layers();
-    let mut errors = file_layers.required_errors;
-    if file_layers.value.is_empty() {
-        errors.append(&mut file_layers.optional_errors);
-    }
-    if let Some(err) = errors.into_iter().next() {
-        return Err(err);
-    }
-
-    let project_file = project_scope_file_str(directory);
-    let project_key = project_file.as_deref().map(normalized_path_key);
-    let has_project_layer = file_layers.value.iter().any(|layer| {
-        layer.path().is_some_and(|path| {
-            project_key.as_deref() == Some(normalized_path_key(path.as_str()).as_path())
-        })
-    });
-    if has_project_layer {
-        debug_optional_config_path(
-            "discovery included project-scope layers",
-            project_file.as_deref(),
-        );
-        return Ok(file_layers.value);
-    }
-
-    debug_optional_config_path("appending project-scope layers", project_file.as_deref());
-    let project_layers = project_scope_layers(directory)?;
-    Ok(file_layers
-        .value
-        .into_iter()
-        .chain(project_layers)
-        .collect())
-}
-
-fn project_scope_file_str(directory: Option<&Path>) -> Option<String> {
-    let root = directory
-        .map(PathBuf::from)
-        .or_else(|| std::env::current_dir().ok())?;
-    root.join(".netsuke.toml").to_str().map(String::from)
-}
-
-fn project_scope_layers(directory: Option<&Path>) -> OrthoResult<Vec<MergeLayer<'static>>> {
-    let root = directory
-        .map(PathBuf::from)
-        .or_else(|| std::env::current_dir().ok());
-    let Some(project_file) = root.map(|dir| dir.join(".netsuke.toml")) else {
-        return Ok(Vec::new());
-    };
-    match load_config_file_as_chain(&project_file) {
-        Ok(Some(chain)) => Ok(chain
-            .values
-            .into_iter()
-            .map(|(value, path)| MergeLayer::file(Cow::Owned(value), Some(path)))
-            .collect()),
-        Ok(None) => Ok(Vec::new()),
-        Err(err) => Err(err),
-    }
-}
 /// Select an explicit config path, giving `--config` precedence over `env`.
 ///
 /// A thin wrapper over [`resolve_config_selector`] for callers that need only

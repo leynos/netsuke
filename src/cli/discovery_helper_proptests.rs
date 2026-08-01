@@ -9,11 +9,11 @@
 //! determinism within the run.
 
 use super::diagnostics::{path_hash, short_hash};
-use super::paths::normalized_path_key;
+use super::paths::{FailingPathNormalizer, FsPathNormalizer, normalized_path_key};
 use anyhow::{Context, Result, ensure};
 use proptest::prelude::*;
 use rstest::rstest;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tempfile::tempdir;
 
 /// Generate arbitrary byte strings, including empty and non-UTF-8 sequences.
@@ -72,18 +72,23 @@ proptest! {
         prop_assert!(ensure_bounded_hash(&hash).is_ok(), "unbounded hash: {hash}");
     }
 
-    /// Normalizing an absent path returns it unchanged, so comparison is stable.
+    /// An absent path reports the failure rather than absorbing it.
+    ///
+    /// The caller owns the fallback; see `collect_file_layers`.
     #[test]
-    fn normalized_path_key_is_identity_for_absent_paths(value in path_string()) {
+    fn normalized_path_key_reports_absent_paths(value in path_string()) {
         let absent = format!("/nonexistent-netsuke-proptest/{value}");
-        prop_assert_eq!(normalized_path_key(&absent), PathBuf::from(&absent));
+        prop_assert!(normalized_path_key(&FsPathNormalizer, &absent).is_err());
     }
 
     /// Normalization is idempotent, so repeated comparison cannot drift.
     #[test]
     fn normalized_path_key_is_idempotent(value in path_string()) {
-        let once = normalized_path_key(&value);
-        let twice = normalized_path_key(&once.to_string_lossy());
+        let Ok(once) = normalized_path_key(&FsPathNormalizer, &value) else {
+            return Ok(());
+        };
+        let twice = normalized_path_key(&FsPathNormalizer, &once.to_string_lossy())
+            .expect("an already-resolved path must normalize again");
         prop_assert_eq!(once, twice);
     }
 }
@@ -104,12 +109,26 @@ fn normalized_path_key_resolves_non_canonical_forms(
     test_support::fs::create_dir(&target).context("create target dir")?;
 
     let non_canonical = target.join(suffix);
-    let normalized = normalized_path_key(&non_canonical.to_string_lossy());
-    let expected = normalized_path_key(&target.to_string_lossy());
+    let normalized = normalized_path_key(&FsPathNormalizer, &non_canonical.to_string_lossy())
+        .context("normalize non-canonical path")?;
+    let expected = normalized_path_key(&FsPathNormalizer, &target.to_string_lossy())
+        .context("normalize target path")?;
 
     ensure!(
         normalized == expected,
         "non-canonical {non_canonical:?} should normalize to {expected:?}, got {normalized:?}"
+    );
+    Ok(())
+}
+
+/// `normalized_path_key` propagates the normalizer's error unchanged.
+#[test]
+fn normalized_path_key_propagates_normalizer_failure() -> Result<()> {
+    let error = normalized_path_key(&FailingPathNormalizer, "/any/path")
+        .expect_err("the failing normalizer must surface its error");
+    ensure!(
+        error.kind() == std::io::ErrorKind::PermissionDenied,
+        "expected the normalizer's own error kind, got {error:?}"
     );
     Ok(())
 }
