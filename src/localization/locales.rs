@@ -55,7 +55,7 @@ macro_rules! define_locales {
 }
 
 define_locales![
-    "de", "en-GB", "en-US", "es-419", "es-ES", "fr", "it", "pt-BR", "pt-PT",
+    "da", "de", "en-GB", "en-US", "es-419", "es-ES", "fi", "fr", "it", "nb", "pt-BR", "pt-PT", "sv",
 ];
 
 /// Fallback policy for a language that ships more than one catalogue, or whose
