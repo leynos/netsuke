@@ -70,8 +70,10 @@ output and some leaf files so the long-lived structure remains visible.
 - `examples/`: Example Netsuke manifests and minimal runnable sample projects.
 - `installer/`: Installer packaging assets and platform-specific packaging
   definitions.
-- `locales/`: Fluent localization catalogues for supported user-interface
-  languages.
+- `locales/`: Fluent localization catalogues, one `<tag>/messages.ftl` per
+  supported user-interface language. The authoritative list of tags lives in
+  `src/localization/locales.rs`; see the
+  [translator guide](translators-guide.md).
 - `scripts/`: Shell and helper scripts used by quality gates, release help
   generation, packaging, and formal checks.
 - `src/`: Main Netsuke Rust crate source code.

@@ -493,6 +493,61 @@ Important global options include:
 Run `netsuke --help` or `netsuke <command> --help` for the complete current
 surface.
 
+
+### Choose a language with `--locale`
+
+Netsuke's help text, validation errors, progress labels and runtime diagnostics
+are translated. The locale is chosen by the first of these that yields a valid
+BCP 47 tag: the `--locale` flag, the `NETSUKE_LOCALE` environment variable, the
+`locale` setting in the configuration file, then the system default. System
+values are normalized first, so `en_GB.UTF-8` is understood as `en-GB`.
+
+Table 1: Locales Netsuke ships
+
+| Tag      | Language                 | Tag       | Language              |
+| -------- | ------------------------ | --------- | --------------------- |
+| `ar`     | Arabic                   | `it`      | Italian               |
+| `cs`     | Czech                    | `ja`      | Japanese              |
+| `cy`     | Welsh                    | `ko`      | Korean                |
+| `da`     | Danish                   | `nb`      | Norwegian Bokmål      |
+| `de`     | German                   | `nl`      | Dutch                 |
+| `el`     | Greek                    | `pl`      | Polish                |
+| `en-GB`  | English (United Kingdom) | `pt-BR`   | Portuguese (Brazil)   |
+| `en-US`  | English (United States)  | `pt-PT`   | Portuguese (Portugal) |
+| `es-419` | Spanish (Latin America)  | `ro`      | Romanian              |
+| `es-ES`  | Spanish (Spain)          | `ru`      | Russian               |
+| `fa`     | Persian                  | `sv`      | Swedish               |
+| `fi`     | Finnish                  | `th`      | Thai                  |
+| `fr`     | French                   | `tr`      | Turkish               |
+| `gd`     | Scottish Gaelic          | `uk`      | Ukrainian             |
+| `he`     | Hebrew                   | `vi`      | Vietnamese            |
+| `hi`     | Hindi                    | `zh-Hans` | Chinese (Simplified)  |
+| `hu`     | Hungarian                | `zh-Hant` | Chinese (Traditional) |
+| `id`     | Indonesian               |           |                       |
+
+`en-US` is the source locale. Any message a translation has not yet covered
+falls back to the English text rather than disappearing.
+
+A tag Netsuke does not ship resolves by these rules, in order:
+
+1. The exact tag, if a catalogue carries it.
+2. A script or region rule for that language. Spanish outside Spain uses
+   `es-419`; Portuguese outside Brazil uses `pt-PT`; Chinese resolves by
+   script, with `zh-CN` and `zh-SG` taking Simplified and `zh-TW`, `zh-HK` and
+   `zh-MO` taking Traditional; English outside the United States uses `en-GB`;
+   and `no` resolves to `nb`.
+3. The only catalogue for that language, so `fr-CA` uses `fr` and `de-AT`
+   uses `de`.
+4. `en-US`, for anything still unmatched.
+
+Regional and script variants that differ in substance are never merged: asking
+for `pt-BR` never yields European Portuguese, and asking for `zh-TW` never
+yields Simplified Chinese.
+
+Manual pages and PowerShell help shipped in releases are generated in `en-US`
+only. Translated copy reaches users through the running binary, which embeds
+every catalogue.
+
 ### Anchor a project with `--directory`
 
 `--directory` changes manifest lookup, project configuration discovery and

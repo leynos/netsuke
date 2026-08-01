@@ -1050,8 +1050,10 @@ the configured Dependabot directory patterns.
 `tests/packaging_smoke_tests.rs` runs `cargo publish --dry-run` to verify the
 packaged crate builds successfully for release. It then uses
 `cargo package --list` to confirm that the packaged manifest retains
-build-script sources, including `build_l10n_audit.rs`, and rejects stale
-`ninja_env/` paths.
+build-script sources, including the `build_l10n_audit/` modules, and rejects
+stale `ninja_env/` paths. It also asserts that every catalogue named by the
+locale registry ships in the package, so adding a locale cannot silently omit
+its `messages.ftl` from a release.
 
 ### Temporary executable test helpers
 

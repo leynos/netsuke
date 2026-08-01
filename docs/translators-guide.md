@@ -9,11 +9,6 @@ Netsuke uses [Project Fluent](https://projectfluent.org/) for localization.
 Fluent is a modern localization system designed to handle the complexities of
 natural language whilst keeping translations simple and readable.
 
-**Current locales:**
-
-- `en-US` - English (United States) - source locale
-- `es-ES` - Spanish (Spain) - reference translation
-
 **Locale precedence** (highest to lowest):
 
 1. `--locale` command-line flag
@@ -22,16 +17,76 @@ natural language whilst keeping translations simple and readable.
 4. System default locale
 5. Fallback to `en-US`
 
-## 2. File structure
+`en-US` is the source locale: it defines the key set every other catalogue must
+match, and it renders any message a translation has not yet covered.
 
-Translation files are located in the `locales/` directory:
+### Shipped locales
+
+Table 1: Locales Netsuke ships, by script family
+
+| Script family | Tags                                                                                                                                                        |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Latin         | `cs`, `cy`, `da`, `de`, `en-GB`, `en-US`, `es-419`, `es-ES`, `fi`, `fr`, `gd`, `hu`, `id`, `it`, `nb`, `nl`, `pl`, `pt-BR`, `pt-PT`, `ro`, `sv`, `tr`, `vi` |
+| Cyrillic      | `ru`, `uk`                                                                                                                                                  |
+| Greek         | `el`                                                                                                                                                        |
+| Right-to-left | `ar`, `fa`, `he`                                                                                                                                            |
+| Indic         | `hi`                                                                                                                                                        |
+| Thai          | `th`                                                                                                                                                        |
+| CJK           | `ja`, `ko`, `zh-Hans`, `zh-Hant`                                                                                                                            |
+
+## 2. The locale registry
+
+`src/localization/locales.rs` owns the list of locales. Its `define_locales!`
+macro both declares the supported tags and embeds each catalogue, so a tag
+without a catalogue on disk fails to compile. Everything downstream reads the
+registry rather than keeping its own list: the build-time audit, the
+`cargo:rerun-if-changed` directives, the packaging smoke test, and the tests.
+
+The one necessary duplicate is `package.metadata.ortho_config.locales` in
+`Cargo.toml`, because Cargo metadata cannot call into Rust. The build audit
+compares the two and fails the build if they drift, so adding a locale means
+editing exactly two lists and nothing else.
+
+### Fallback policy
+
+Selection matches the exact BCP 47 tag first. A tag with no catalogue of its
+own resolves in this order:
+
+1. A script or region rule for that language, where the registry declares one.
+2. The only catalogue for that language, so `fr-CA` uses `fr`.
+3. `en-US`.
+
+Table 2: Deliberate per-language fallback rules
+
+| Language | Rule                                                                                |
+| -------- | ----------------------------------------------------------------------------------- |
+| `en`     | `en-US` for the bare tag and the United States; `en-GB` for every other region      |
+| `es`     | `es-ES` for the bare tag and Spain; `es-419` for every other region                 |
+| `pt`     | `pt-BR` for Brazil; `pt-PT` for the bare tag and every other region                 |
+| `zh`     | Script wins; otherwise `zh-Hans` for CN, SG and MY, and `zh-Hant` for TW, HK and MO |
+| `no`     | `nb`, the Bokmål catalogue                                                          |
+
+These rules exist so that variants which differ in substance stay distinct.
+`es-419` is not a synonym for `es-ES`, `pt-BR` is not a synonym for `pt-PT`, and
+`zh-Hans` is not a synonym for `zh-Hant`; collapsing any of these onto a
+generic language catalogue would ship the wrong copy. When adding a locale
+whose language already ships a catalogue, add a rule to the registry rather
+than relying on the unique-language step.
+
+## 3. File structure
+
+Translation files are located in the `locales/` directory, one directory per
+tag:
 
 ```text
 locales/
 ├── en-US/
 │   └── messages.ftl
-└── es-ES/
-    └── messages.ftl
+├── es-419/
+│   └── messages.ftl
+├── es-ES/
+│   └── messages.ftl
+└── …
 ```
 
 Each locale has a single `messages.ftl` file containing all translations.
@@ -56,11 +111,11 @@ greeting = Hello, { $name }!
 - Lines starting with `.` are attributes (sub-messages)
 - Lines starting with `-` are terms (reusable fragments, not referenced in code)
 
-## 3. Message key conventions
+## 4. Message key conventions
 
 Netsuke uses hierarchical dot-notation for message keys, organized by domain.
 
-Table 1: Message key domains and their purposes
+Table 3: Message key domains and their purposes
 
 | Domain             | Purpose                            | Example                       |
 | ------------------ | ---------------------------------- | ----------------------------- |
@@ -81,7 +136,7 @@ The corresponding Rust constants are defined in `src/localization/keys.rs`
 using UPPER_SNAKE_CASE (e.g., `CLI_FLAG_FILE_HELP` maps to
 `cli.flag.file.help`).
 
-## 4. Variable usage
+## 5. Variable usage
 
 Variables are placeholders replaced with dynamic values at runtime.
 
@@ -97,7 +152,7 @@ range-error = Value { $value } must be between { $min } and { $max }.
 
 ### Variable types
 
-Table 2: Variable types used in Fluent messages
+Table 4: Variable types used in Fluent messages
 
 | Type   | Description                        | Example                       |
 | ------ | ---------------------------------- | ----------------------------- |
@@ -140,7 +195,7 @@ Table 2: Variable types used in Fluent messages
 - `$limit` - Size limit in bytes
 - `$mode`, `$stream` - Output configuration
 
-## 5. Plural forms
+## 6. Plural forms
 
 Fluent uses Common Locale Data Repository (CLDR) plural rules to handle
 grammatical number. Different languages have different plural categories.
@@ -183,16 +238,27 @@ example.errors_found = { $count ->
 
 ### CLDR plural categories by language
 
-Table 3: CLDR plural categories for common languages
+Table 5: CLDR plural categories by shipped locale
 
-| Language | Categories                                   |
-| -------- | -------------------------------------------- |
-| English  | `one`, `other`                               |
-| Spanish  | `one`, `other`                               |
-| French   | `one`, `other`                               |
-| Russian  | `one`, `few`, `many`, `other`                |
-| Arabic   | `zero`, `one`, `two`, `few`, `many`, `other` |
-| Japanese | `other` (no grammatical plural)              |
+| Categories                                   | Locales                                                                                                                       |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `other`                                      | `hu`, `id`, `ja`, `ko`, `th`, `vi`, `zh-Hans`, `zh-Hant`                                                                      |
+| `one`, `other`                               | `da`, `de`, `el`, `en-GB`, `en-US`, `es-419`, `es-ES`, `fa`, `fi`, `fr`, `hi`, `it`, `nb`, `nl`, `pt-BR`, `pt-PT`, `sv`, `tr` |
+| `one`, `few`, `other`                        | `ro`                                                                                                                          |
+| `one`, `few`, `many`, `other`                | `cs`, `pl`, `ru`, `uk`                                                                                                        |
+| `one`, `two`, `few`, `other`                 | `gd`                                                                                                                          |
+| `one`, `two`, `many`, `other`                | `he`                                                                                                                          |
+| `zero`, `one`, `two`, `few`, `many`, `other` | `ar`, `cy`                                                                                                                    |
+
+A locale that lists a category must spell out its own wording for that variant.
+A test in `tests/locale_catalogue_tests.rs` asserts these category sets, so
+dropping Polish `few` or Welsh `two` fails the suite rather than quietly losing
+a form.
+
+Note that `one` does not always mean "exactly one": in French it also covers
+zero, and in Hindi likewise. Where a language prefers a distinct phrase for
+none at all, use an explicit `[0]` variant, as the shipped catalogues do for
+`example.errors_found`.
 
 Consult the
 [CLDR plural rules](https://cldr.unicode.org/index/cldr-spec/plural-rules) for
@@ -209,94 +275,131 @@ for CLDR category selection.
 FTL files include plural form examples demonstrating correct Fluent syntax for
 future compatibility when numeric argument support is added.
 
-## 6. Adding a new locale
+## 7. Adding a new locale
 
-To add support for a new language (e.g., French `fr-FR`):
+To add support for a new language (for example Icelandic, `is`):
 
-### Step 1: Create the locale directory
-
-```sh
-mkdir -p locales/fr-FR
-```
-
-### Step 2: Copy the English source file
+### Step 1: Start from the source catalogue
 
 ```sh
-cp locales/en-US/messages.ftl locales/fr-FR/messages.ftl
+mkdir -p locales/is
+cp locales/en-US/messages.ftl locales/is/messages.ftl
 ```
 
-### Step 3: Translate messages
+The copy is a starting scaffold, not a deliverable. A catalogue that still
+carries English values is not a translation, and a test rejects one.
 
-Edit `locales/fr-FR/messages.ftl` and translate each message. Keep the same
-keys; only change the values.
+### Step 2: Translate the messages
+
+Edit `locales/is/messages.ftl` and translate each value. Keep every key, keep
+each message's `{ $variables }` exactly as the English source has them, and
+translate the section comments so the next translator has the same context.
 
 ```ftl
 # Before (English):
 cli.about = Netsuke compiles YAML + Jinja manifests into Ninja build plans.
 
-# After (French):
-cli.about = Netsuke compile les manifestes YAML + Jinja en plans Ninja.
+# After (Icelandic):
+cli.about = Netsuke þýðir YAML + Jinja lýsingarskrár í Ninja-byggingaráætlanir.
 ```
 
-### Step 4: Update the localizer builder
+Leave Netsuke's own identifiers untranslated — users type them. That covers
+`foreach`, `when`, `vars`, `cwd_mode`, `with_suffix`, `group_by`, the
+`netsuke::jinja::*` diagnostic tags, the literal option values (`auto`,
+`always`, `never`, `on`, `off`) and the shell fragment `ninja -t clean`.
 
-Edit `src/cli_localization.rs` to include the new locale:
+### Step 3: Register the locale
 
-1. Add an embedded resource constant:
+Add the tag to the two lists that name it:
 
-   ```rust
-   const NETSUKE_FR_FR: &str = include_str!("../locales/fr-FR/messages.ftl");
-   ```
+1. `define_locales!` in `src/localization/locales.rs`, in tag order.
+2. `package.metadata.ortho_config.locales` in `Cargo.toml`, in the same order.
 
-2. Update `build_localizer()` to handle the new locale tag.
+If the language already ships a catalogue — a new Spanish or Chinese variant,
+say — also add or extend its entry in `LANGUAGE_FALLBACKS` so requests route to
+the right variant rather than falling through to the first match.
 
-### Step 5: Run the build
-
-The compile-time audit will verify all keys are present:
+### Step 4: Build
 
 ```sh
 cargo build
 ```
 
-If any keys are missing or orphaned, the build will fail with a detailed error.
+The compile-time audit verifies the tag lists agree and that the catalogue's
+keys and interpolation variables match the source.
 
-### Step 6: Test the locale
+### Step 5: Test the locale
 
 ```sh
-cargo run -- --locale fr-FR --help
+make test
+cargo run -- --locale is --help
 ```
 
-Verify the output appears in French.
+Verify the output appears in Icelandic.
 
-## 7. Quality checklist
+## 8. Right-to-left locales
+
+Arabic, Hebrew and Persian ship right-to-left catalogues. Fluent already wraps
+interpolated values in bidi isolation controls, so `{ $path }` needs no special
+handling. What does need care is the *first* character of a message: a value
+that opens with a Latin word, a bracket, or a placeable lets that token decide
+the paragraph direction, which flips the whole line in a terminal.
+
+Prefix such values with U+200F RIGHT-TO-LEFT MARK:
+
+```ftl
+# The leading Latin word would otherwise set the direction.
+manifest.yaml.label = ‏YAML غير صالح
+```
+
+A test in `tests/locale_catalogue_tests.rs` enforces this: in a right-to-left
+catalogue, any message containing right-to-left text must begin with either a
+right-to-left character or U+200F. Messages that are entirely Latin — `stdout`,
+`stderr`, the `netsuke::jinja::which::args` diagnostic — are left unmarked.
+
+## 9. Quality checklist
 
 Before submitting translations, verify:
 
 - [ ] All message keys from `en-US/messages.ftl` are present
 - [ ] No extra (orphaned) keys exist
 - [ ] All variables match the English source (same names, same count)
-- [ ] Plural forms use correct CLDR categories for the target language
+- [ ] Plural forms use the CLDR categories in Table 5 for the target language
+- [ ] Netsuke identifiers and literal option values are untranslated
+- [ ] Right-to-left catalogues carry the direction marks described in §8
 - [ ] Comments are translated or preserved for context
 - [ ] The build passes (`cargo build`)
+- [ ] The tests pass (`make test`)
 - [ ] The locale renders correctly (`netsuke --locale <tag> --help`)
 
-## 8. Compile-time validation
+## 10. Compile-time validation
 
-Netsuke validates translations at compile time via `build_l10n_audit.rs`:
+Netsuke validates every registered locale at compile time via
+`build_l10n_audit/`:
 
+- **Metadata drift**: `Cargo.toml`'s locale list disagreeing with the registry
 - **Missing keys**: Keys in `keys.rs` but not in the FTL file
 - **Orphaned keys**: Keys in the FTL file but not in `keys.rs`
+- **Variable mismatches**: A message interpolating different variables from the
+  English source — a dropped `{ $path }` or a stray `{ $name }`
 
-Both conditions cause the build to fail with a clear error message listing the
-problematic keys.
+Each condition fails the build with an error naming the locale and the keys
+concerned.
 
-## 9. Testing translations
+## 11. Testing translations
 
 Localization is tested via:
 
-- **Unit tests** (`tests/localization_tests.rs`): Verify message rendering
-- **Smoke tests**: Confirm secondary locales resolve correctly
-- **Fallback tests**: Verify unsupported locales fall back to English
+- **Rendering tests** (`tests/localization_tests.rs`): every registered locale
+  renders and interpolates its arguments; non-Latin scripts and right-to-left
+  direction marks survive to the rendered string
+- **Registry tests** (`tests/locale_registry_tests.rs`): each shipped tag
+  resolves to its own catalogue, each documented fallback rule holds, and
+  unsupported or unparsable tags fall back to `en-US`
+- **Catalogue tests** (`tests/locale_catalogue_tests.rs`): CLDR plural
+  categories per language, the right-to-left direction policy, untranslated
+  Netsuke identifiers, and the rule that a translation is not a copy of the
+  English source
 
 Run tests with:
 
@@ -304,7 +407,7 @@ Run tests with:
 make test
 ```
 
-## 10. Resources
+## 12. Resources
 
 - [Project Fluent](https://projectfluent.org/) - Fluent documentation
 - [Fluent Syntax Guide](https://projectfluent.org/fluent/guide/) - FTL syntax

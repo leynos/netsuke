@@ -2457,22 +2457,45 @@ is handled in `src/locale_resolution.rs` with the precedence `--locale` ->
 `NETSUKE_LOCALE` -> configuration `locale` -> system default. System locale
 strings are normalized by stripping encoding suffixes (such as `.UTF-8`),
 removing variant suffixes (such as `@latin`), and replacing underscores with
-hyphens before validation. English plus Spanish catalogues ship in `locales/`;
-unsupported locales fall back to `en-US`. Runtime diagnostics (for example
-manifest parsing, stdlib template errors, and runner failures) use the same
-Fluent localizer so the locale selection is consistent across user-facing
-output. A build-time audit in `build.rs` validates that all referenced Fluent
-message keys exist in the bundled catalogues, ensuring missing strings fail CI
-before release. CLI execution and dispatch live in `src/runner.rs`, keeping
-`main.rs` focused on parsing. Process management, Ninja invocation, argument
-redaction, and the temporary file helpers reside in `src/runner/process.rs`,
-allowing the runner entry point to delegate low-level concerns. The working
-directory flag mirrors Ninja's `-C` option but is resolved internally: Netsuke
-runs Ninja with a configured working directory and resolves relative output
-paths (for example `generate --output`) under the same directory so behaviour
-matches a real directory change. Error scenarios are validated using clap's
-`ErrorKind` enumeration in unit tests and via rstest-bdd behavioural
-steps/scenarios.
+hyphens before validation.
+
+`src/localization/locales.rs` is the authoritative registry of shipped
+catalogues. A `define_locales!` macro embeds `locales/<tag>/messages.ftl` for
+each declared tag, so a registry entry without a catalogue fails to compile.
+Every other surface reads that registry rather than repeating the list: the
+build-time audit, the `cargo:rerun-if-changed` directives, the packaging smoke
+test, and the test suite. `Cargo.toml`'s
+`package.metadata.ortho_config.locales` array is the one place the list is
+necessarily duplicated, because Cargo metadata cannot call into Rust; the build
+audit therefore compares it against the registry and fails on drift.
+
+Catalogue selection matches the exact BCP 47 tag first. When no catalogue
+carries that tag, resolution consults the per-language fallback rules recorded
+in the registry, then the sole catalogue for that language, and finally
+`en-US`. The rules exist so that variants which differ in substance stay
+distinct rather than collapsing onto a generic language catalogue: `es-419`
+serves Latin American regions while `es-ES` serves Spain, `pt-BR` and `pt-PT`
+never share, and `zh-Hans` and `zh-Hant` are selected by script or by the
+script a region conventionally uses. English outside the United States prefers
+the `en-GB` copy, and the bare `no` macrolanguage tag resolves to `nb`. The
+[translator guide](translators-guide.md) states the same policy for translators.
+
+Runtime diagnostics (for example manifest parsing, stdlib template errors, and
+runner failures) use the same Fluent localizer so the locale selection is
+consistent across user-facing output. The build-time audit in
+`build_l10n_audit/` validates every declared locale: it rejects declared keys a
+catalogue is missing, orphaned keys a catalogue carries beyond the declared
+set, and messages whose interpolation variables differ from the English source.
+Missing or drifted strings therefore fail CI before release. CLI execution and
+dispatch live in `src/runner.rs`, keeping `main.rs` focused on parsing. Process
+management, Ninja invocation, argument redaction, and the temporary file
+helpers reside in `src/runner/process.rs`, allowing the runner entry point to
+delegate low-level concerns. The working directory flag mirrors Ninja's `-C`
+option but is resolved internally: Netsuke runs Ninja with a configured working
+directory and resolves relative output paths (for example `generate --output`)
+under the same directory so behaviour matches a real directory change. Error
+scenarios are validated using clap's `ErrorKind` enumeration in unit tests and
+via rstest-bdd behavioural steps/scenarios.
 
 Real-time stage reporting now uses a six-stage model in `src/status.rs` backed
 by `indicatif::MultiProgress` for standard terminals. The reporter keeps one
@@ -2525,25 +2548,36 @@ subcommands, configuration layering, and JSON diagnostics so the guide stays
 synchronized with runtime behaviour rather than drifting behind it.
 
 For screen readers: The following flowchart shows how the build script audits
-localization keys against English and Spanish Fluent bundles.
+every registered locale's Fluent catalogue. It first checks that the Cargo
+metadata matches the locale registry, then reads the declared keys and the
+English source catalogue, then loops over each registered locale comparing keys
+and interpolation variables. Any missing key, orphaned key, or variable
+mismatch fails the build.
 
 ```mermaid
 flowchart TD
-    A_Start["Start build.rs"] --> B_ReadKeys
-    B_ReadKeys["extract_key_constants<br/>from src/localization/keys.rs"] --> C_ReadEn
-    C_ReadEn["extract_ftl_keys<br/>from locales/en-US/messages.ftl"] --> D_ReadEs
-    D_ReadEs["extract_ftl_keys<br/>from locales/es-ES/messages.ftl"] --> E_Compare
+    A_Start["Start build.rs"] --> B_Metadata
+    B_Metadata{"Cargo.toml locales<br/>match the registry?"} -->|No| H_Error
+    B_Metadata -->|Yes| C_ReadKeys
+    C_ReadKeys["extract_key_constants<br/>from src/localization/keys.rs"] --> D_ReadSource
+    D_ReadSource["parse_catalogue<br/>from locales/en-US/messages.ftl"] --> E_Loop
 
-    E_Compare["Compute differences<br/>between declared and en-US/es-ES keys"] --> F_CheckMissing
+    E_Loop["For each locale in<br/>SUPPORTED_LOCALES"] --> F_Parse
+    F_Parse["parse_catalogue<br/>from locales/&lt;tag&gt;/messages.ftl"] --> G_Compare
+    G_Compare["Compare keys and<br/>interpolation variables<br/>against the source"] --> I_Check
 
-    F_CheckMissing{"Any missing<br/>keys?"} -->|No| G_Success["Audit passes<br/>continue build"]
-    F_CheckMissing -->|Yes| H_Error["Emit error message<br/>with missing keys per locale<br/>and fail build"]
+    I_Check{"Missing, orphaned,<br/>or mismatched?"} -->|No| J_Next
+    I_Check -->|Yes| H_Error["Collect findings<br/>for this locale"]
 
-    H_Error --> I_End["Build script returns Err"]
-    G_Success --> I_End
+    J_Next{"More locales?"} -->|Yes| E_Loop
+    J_Next -->|No| K_Verdict
+    H_Error --> J_Next
+
+    K_Verdict{"Any findings?"} -->|No| L_Success["Audit passes<br/>continue build"]
+    K_Verdict -->|Yes| M_Fail["Emit findings per locale<br/>and fail the build"]
 ```
 
-Figure: Build script localization audit flow for Fluent key validation.
+Figure: Build script localization audit flow across every registered locale.
 
 The Ninja executable may be overridden via the `NETSUKE_NINJA` environment
 variable. For example, `NETSUKE_NINJA=/opt/ninja/bin/ninja netsuke build`
