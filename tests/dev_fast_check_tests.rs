@@ -65,7 +65,7 @@ fn falls_back_to_the_committed_pins_when_no_overrides_are_given() -> Result<()> 
     );
     ensure!(
         text.contains(&pinned_toolchain()?),
-        "should read tools/cranelift/VERSION by default, got `{text}`"
+        "should read rust-toolchain.toml by default, got `{text}`"
     );
     Ok(())
 }
@@ -96,8 +96,11 @@ fn default_pins_are_the_committed_ones_not_an_empty_fallback() -> Result<()> {
 #[test]
 fn an_explicit_pin_override_wins_over_the_committed_default() -> Result<()> {
     let sandbox = Sandbox::new()?;
-    let toolchain_pin = sandbox.home().join("CRANELIFT_VERSION");
-    sandbox.write_file(&toolchain_pin, "nightly-1970-01-01\n")?;
+    let toolchain_pin = sandbox.home().join("rust-toolchain.toml");
+    sandbox.write_file(
+        &toolchain_pin,
+        "[toolchain]\nchannel = \"nightly-1970-01-01\"\n",
+    )?;
     sandbox.write_mold(&sandbox.bin(), &pinned_mold_version()?)?;
     // rustup knows only the committed toolchain, so the run can fail only if
     // the override displaced the default.
@@ -106,7 +109,7 @@ fn an_explicit_pin_override_wins_over_the_committed_default() -> Result<()> {
     let output = sandbox.script_with(
         "dev-fast-check.sh",
         PinOverrides::Omitted,
-        &[("CRANELIFT_TOOLCHAIN_FILE", toolchain_pin.to_string())],
+        &[("RUST_TOOLCHAIN_FILE", toolchain_pin.to_string())],
     )?;
     let text = combined(&output);
 

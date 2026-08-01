@@ -42,7 +42,6 @@ output and some leaf files so the long-lived structure remains visible.
 │   ├── fixtures/
 │   └── snapshots/
 └── tools/
-    ├── cranelift/
     ├── dev-fast/
     ├── kani/
     └── mold/
@@ -100,8 +99,6 @@ output and some leaf files so the long-lived structure remains visible.
 - `tests/features/`: Cross-platform behavioural feature files.
 - `tests/features_unix/`: Unix-specific behavioural feature files.
 - `tests/snapshots/`: Checked-in integration-test snapshots.
-- `tools/cranelift/`: Pinned nightly toolchain date supplying the Cranelift
-  codegen backend used by the opt-in local build acceleration.
 - `tools/dev-fast/`: Non-auto-loaded Cargo configuration fragment for the
   opt-in Cranelift and `mold` build path. Cargo never discovers this file on
   its own; only the `make dev-*` targets pass it through `cargo --config`.

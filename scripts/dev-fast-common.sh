@@ -21,7 +21,7 @@ DEV_FAST_REPO_ROOT=$(cd -- "$DEV_FAST_HELPER_DIR/.." && pwd)
 # the same way whether it came from a default or an override.
 MOLD_VERSION_FILE="${MOLD_VERSION_FILE:-$DEV_FAST_REPO_ROOT/tools/mold/VERSION}"
 MOLD_SHA256SUMS_FILE="${MOLD_SHA256SUMS_FILE:-$DEV_FAST_REPO_ROOT/tools/mold/SHA256SUMS}"
-CRANELIFT_TOOLCHAIN_FILE="${CRANELIFT_TOOLCHAIN_FILE:-$DEV_FAST_REPO_ROOT/tools/cranelift/VERSION}"
+RUST_TOOLCHAIN_FILE="${RUST_TOOLCHAIN_FILE:-$DEV_FAST_REPO_ROOT/rust-toolchain.toml}"
 
 # Prefix for the mold installation tree. The `dev-*` recipes prepend this
 # prefix's `bin/` to PATH -- this exact prefix, not a hard-coded ~/.local -- so
@@ -58,8 +58,19 @@ read_pin() {
 # The pinned mold release tag, e.g. "2.41.0".
 mold_version() { read_pin "$MOLD_VERSION_FILE"; }
 
-# The pinned nightly supplying Cranelift, e.g. "nightly-2026-06-29".
-cranelift_toolchain() { read_pin "$CRANELIFT_TOOLCHAIN_FILE"; }
+# The repository's toolchain, read from `rust-toolchain.toml`.
+#
+# Deliberately the same toolchain the ordinary gates use, not a second pin.
+# The tree borrow-checks only under Polonius on that dated nightly (ADR-006),
+# so a separate dev-fast nightly would let the fast loop and the gate disagree
+# about which borrows are legal.
+cranelift_toolchain() {
+  local file=$RUST_TOOLCHAIN_FILE value
+  [ -f "$file" ] || fail "missing version pin: $file"
+  value=$(awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/ { print $2; exit }' "$file")
+  [ -n "$value" ] || fail "no channel found in: $file"
+  printf '%s' "$value"
+}
 
 # Whether the host can use mold at all; it ships for Linux only.
 is_linux() { [ "$(uname -s)" = 'Linux' ]; }

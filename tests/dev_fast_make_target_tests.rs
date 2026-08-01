@@ -190,6 +190,17 @@ fn the_cargo_fragment_selects_cranelift_and_mold() -> Result<()> {
             .any(|flag| flag.contains("-fuse-ld=mold")),
         "the Linux target must select mold, got `{linux:?}`"
     );
+    // Cargo picks one rustflags source rather than merging, and this table
+    // outranks `.cargo/config.toml`'s `[build]` table. Dropping the Polonius
+    // flag here does not merely diverge from the gate: the tree does not
+    // borrow-check without it, so `make dev-build` stops compiling.
+    ensure!(
+        linux
+            .iter()
+            .filter_map(toml::Value::as_str)
+            .any(|flag| flag == "-Zpolonius=next"),
+        "the Linux target must restate the Polonius flag it shadows, got `{linux:?}`"
+    );
     Ok(())
 }
 

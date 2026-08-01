@@ -18,13 +18,15 @@ KANI_FLAGS ?=
 KANI_INSTALL_FLAGS ?=
 KANI_CHECK_FLAGS ?=
 KANI_VERSION_FILE ?= tools/kani/VERSION
-# Opt-in local build acceleration. The Cargo fragment is deliberately not
-# `.cargo/config.toml`, so only the `dev-*` targets below can reach it and CI's
-# stable, MSRV, release, coverage, and formal-verification legs stay on the
-# supported LLVM backend and platform linker.
+# Opt-in local build acceleration. The Cargo fragment is deliberately separate
+# from `.cargo/config.toml`: that file is auto-discovered and carries the
+# repository-wide Polonius flag, whereas Cranelift and mold must stay opt-in so
+# release, packaging, coverage, and formal-verification paths keep the
+# supported LLVM backend and platform linker. The toolchain is not pinned
+# separately — dev-fast uses the repository's own nightly.
 MOLD_VERSION_FILE ?= tools/mold/VERSION
 MOLD_SHA256SUMS_FILE ?= tools/mold/SHA256SUMS
-CRANELIFT_TOOLCHAIN_FILE ?= tools/cranelift/VERSION
+RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 DEV_FAST_CONFIG ?= tools/dev-fast/config.toml
 DEV_FAST_PREFIX ?= $(HOME)/.local
 # The installer may write mold to a prefix other than the default, so every
@@ -35,10 +37,10 @@ DEV_FAST_PATH = PATH='$(DEV_FAST_PREFIX)/bin:$(PATH)'
 DEV_FAST_ENV = $(DEV_FAST_PATH) \
 	MOLD_VERSION_FILE='$(MOLD_VERSION_FILE)' \
 	MOLD_SHA256SUMS_FILE='$(MOLD_SHA256SUMS_FILE)' \
-	CRANELIFT_TOOLCHAIN_FILE='$(CRANELIFT_TOOLCHAIN_FILE)' \
+	RUST_TOOLCHAIN_FILE='$(RUST_TOOLCHAIN_FILE)' \
 	DEV_FAST_CONFIG='$(DEV_FAST_CONFIG)' \
 	DEV_FAST_PREFIX='$(DEV_FAST_PREFIX)'
-DEV_FAST_TOOLCHAIN = $$(tr -d '[:space:]' <'$(CRANELIFT_TOOLCHAIN_FILE)')
+DEV_FAST_TOOLCHAIN = $$(awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/ { print $$2; exit }' '$(RUST_TOOLCHAIN_FILE)')
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 NIXIE ?= nixie
 # Single source of truth for the typos version; the markdownlint target and CI

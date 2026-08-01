@@ -1,17 +1,17 @@
 # Opt-in Cargo configuration fragment for accelerated local debug builds.
 #
-# This file is deliberately NOT `.cargo/config.toml`: Cargo auto-discovers that
-# path, which would leak nightly-only unstable flags and a Linux-only linker
-# choice into CI's stable/MSRV legs, release packaging, coverage, and the formal
-# verification toolchains. The fragment is instead passed explicitly with
-# `cargo --config tools/dev-fast/config.toml ...` from the `make dev-*` targets,
-# so every other build path keeps the supported LLVM backend and platform
-# linker.
+# This file is deliberately kept out of `.cargo/config.toml`. Cargo
+# auto-discovers that path, and the repository uses it for settings every build
+# must have — the Polonius flag. Cranelift and a Linux-only linker are not in
+# that category: putting them there would apply them to release packaging,
+# coverage, and the formal-verification toolchains, which must keep the
+# supported LLVM backend and platform linker. This fragment is instead passed
+# explicitly with `cargo --config tools/dev-fast/config.toml ...` from the
+# `make dev-*` targets.
 #
-# The pinned nightly that supplies the Cranelift backend lives in
-# `tools/cranelift/VERSION`; the pinned mold release lives in
-# `tools/mold/VERSION`. See `docs/developers-guide.md` for the ownership
-# boundary and composition rules.
+# The toolchain is the repository's own, from `rust-toolchain.toml`; only the
+# mold release is pinned here, in `tools/mold/VERSION`. See
+# `docs/developers-guide.md` for the ownership boundary and composition rules.
 
 [unstable]
 codegen-backend = true
@@ -25,5 +25,11 @@ codegen-backend = "cranelift"
 # macOS and Windows the table simply does not apply and the platform default
 # linker is used; `make dev-fast-check` reports that fallback explicitly rather
 # than leaving it implicit.
+#
+# `-Zpolonius=next` is restated here, not inherited. Cargo picks a single
+# rustflags source rather than merging them, and a `[target.*]` table outranks
+# the `[build]` table in `.cargo/config.toml`, so naming any flag here drops
+# Polonius. The tree only borrow-checks under Polonius (ADR-006), so omitting
+# it does not merely diverge from the gate — it fails to compile.
 [target.'cfg(target_os = "linux")']
-rustflags = ["-Clink-arg=-fuse-ld=mold"]
+rustflags = ["-Zpolonius=next", "-Clink-arg=-fuse-ld=mold"]

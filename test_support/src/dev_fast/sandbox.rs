@@ -259,7 +259,7 @@ impl Sandbox {
             command
                 .env("MOLD_VERSION_FILE", "tools/mold/VERSION")
                 .env("MOLD_SHA256SUMS_FILE", "tools/mold/SHA256SUMS")
-                .env("CRANELIFT_TOOLCHAIN_FILE", "tools/cranelift/VERSION");
+                .env("RUST_TOOLCHAIN_FILE", "rust-toolchain.toml");
         }
         command.arg(format!("scripts/{name}"));
         for (key, value) in env {
@@ -358,7 +358,18 @@ pub fn pinned_mold_version() -> Result<String> {
     read_pin("tools/mold/VERSION")
 }
 
-/// The repository's pinned Cranelift-bearing nightly.
+/// The repository's toolchain, read from `rust-toolchain.toml`.
+///
+/// dev-fast deliberately shares it rather than pinning a second nightly, so the
+/// accelerated loop and the gates borrow-check identically under Polonius.
 pub fn pinned_toolchain() -> Result<String> {
-    read_pin("tools/cranelift/VERSION")
+    let contents = read_pin("rust-toolchain.toml")?;
+    contents
+        .lines()
+        .find_map(|line| {
+            let rest = line.trim().strip_prefix("channel")?;
+            let value = rest.trim_start().strip_prefix('=')?;
+            Some(value.trim().trim_matches('"').to_owned())
+        })
+        .context("rust-toolchain.toml should declare a channel")
 }

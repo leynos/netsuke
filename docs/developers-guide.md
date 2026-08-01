@@ -81,19 +81,19 @@ construction.
 Netsuke builds on the dated nightly toolchain pinned in `rust-toolchain.toml`
 with the Polonius alpha borrow-checking analysis (`-Zpolonius=next`) enabled.
 `rustup` provisions the toolchain automatically, and `.cargo/config.toml`
-supplies the flag by default, covering Cargo invocations such as
-rust-analyzer and `cargo kani` that run without `RUSTFLAGS` in the
-environment. Makefile recipes that set `RUSTFLAGS` re-state the flag through
-the `POLONIUS_FLAGS` variable because an inherited `RUSTFLAGS` environment
-variable overrides `.cargo/config.toml`.
+supplies the flag by default, covering Cargo invocations such as rust-analyzer
+and `cargo kani` that run without `RUSTFLAGS` in the environment. Makefile
+recipes that set `RUSTFLAGS` re-state the flag through the `POLONIUS_FLAGS`
+variable because an inherited `RUSTFLAGS` environment variable overrides
+`.cargo/config.toml`.
 
 [ADR-006](adr-006-adopt-polonius-nightly-toolchain.md) records the policy
 decision, and the [polonius migration notes](polonius.md) track every site
 whose design depends on the analysis. Sites tagged `POLONIUS(...)` fail to
 compile under plain non-lexical lifetimes (NLL); do not rewrite them into
-double lookups, unconditional key clones, or id indirection, and do not pad
-new code with defensive clones that only NLL required. When a borrow-centric
-form fails to compile, consult the migration notes before restructuring.
+double lookups, unconditional key clones, or id indirection, and do not pad new
+code with defensive clones that only NLL required. When a borrow-centric form
+fails to compile, consult the migration notes before restructuring.
 
 ## Quality gates
 
@@ -396,22 +396,23 @@ surfacing as an opaque codegen-backend or linker error.
 
 ### Toolchain contract
 
-Three pins keep the backend, linker, and toolchain in lockstep. Change them
-together, never individually.
+Two pins fix the linker; the toolchain is not pinned separately. Change the
+pins together, never individually.
 
 The scripts locate these files relative to their own path, so `make dev-*`, a
 direct `scripts/dev-fast-check.sh`, and a run from any working directory all
 resolve the same committed pins. Setting `MOLD_VERSION_FILE`,
-`MOLD_SHA256SUMS_FILE`, or `CRANELIFT_TOOLCHAIN_FILE` overrides the
-corresponding default; the tests use that to point the scripts at fixtures.
-Either way a missing or empty file is reported as
-`dev-fast: missing version pin: <path>` rather than silently becoming an empty
-version.
+`MOLD_SHA256SUMS_FILE`, or `RUST_TOOLCHAIN_FILE` overrides the corresponding
+default; the tests use that to point the scripts at fixtures. Either way a
+missing or empty file is reported as `dev-fast: missing version pin: <path>`
+rather than silently becoming an empty version.
 
-- `tools/cranelift/VERSION` holds the nightly toolchain date, formatted
-  `nightly-YYYY-MM-DD`. The `rustc-codegen-cranelift-preview` component is
-  installed for exactly that toolchain, and `make dev-*` selects it with
-  `RUSTUP_TOOLCHAIN`.
+- `rust-toolchain.toml` supplies the toolchain. dev-fast deliberately shares
+  the repository's own dated nightly rather than pinning a second one: the tree
+  borrow-checks only under Polonius on that nightly (ADR-006), so a separate
+  pin would let the accelerated loop and the gates disagree about which borrows
+  are legal. `make install-dev-fast` adds `rustc-codegen-cranelift-preview` to
+  that toolchain.
 - `tools/mold/VERSION` holds the `mold` release tag.
 - `tools/mold/SHA256SUMS` holds the SHA-256 checksum of each supported `mold`
   release artefact. `make install-dev-fast` refuses to install an artefact that
@@ -510,10 +511,9 @@ flag, `codegen-backend = "cranelift"` on the `dev` profile, and a
   emit that instrumentation. Never combine the `dev-fast` fragment with a
   coverage run.
 - **Formal verification.** Kani manages its own supporting nightly toolchain
-  during `cargo kani setup`. That nightly is unrelated to
-  `tools/cranelift/VERSION` and must not be conflated with it; verification
-  must run on Kani's own toolchain and the LLVM backend. The same applies to
-  Verus.
+  during `cargo kani setup`. That nightly is unrelated to the repository's
+  Polonius nightly and must not be conflated with it; verification must run on
+  Kani's own toolchain and the LLVM backend. The same applies to Verus.
 - **Test runner.** `make dev-test` is the accelerated counterpart of
   `make test-nextest`, not of `make test`: it runs the same
   `cargo nextest run --all-targets --all-features`, and so is governed by the
@@ -526,13 +526,17 @@ flag, `codegen-backend = "cranelift"` on the `dev` profile, and a
   `NEXTEST_BUILD_JOBS`, not `BUILD_JOBS`: nextest reserves `-j` for test
   concurrency, so a Cargo-shaped `-j` would silently become a thread count.
 - **rust-analyzer.** No rust-analyzer configuration is committed, so the
-  language server uses the stable toolchain and default backend. Opting
+  language server uses the repository toolchain and the default backend. Opting
   rust-analyzer into Cranelift is a personal, machine-local choice; it needs a
   separate target directory to avoid thrashing the cache shared with
   `make test`.
-- **Polonius.** A future move to the Polonius borrow checker would also need a
-  nightly toolchain. It is a separate decision with its own pin; do not overload
-  `tools/cranelift/VERSION` to carry it.
+- **Polonius.** `.cargo/config.toml` applies `-Zpolonius=next` to every Cargo
+  invocation, and the tree does not borrow-check without it (ADR-006). Cargo
+  picks a single rustflags source rather than merging them, and a `[target.*]`
+  table outranks that `[build]` table, so the dev-fast fragment restates the
+  flag alongside the `mold` link argument. Anything that adds a rustflag there
+  must restate it too: omitting it does not merely diverge from the gate, it
+  stops the tree compiling.
 
 ### Fallback behaviour
 
@@ -774,8 +778,8 @@ home plus Kani support-file home.
 - `make test-nextest` —
   `cargo nextest run --all-targets --all-features`, with
   `RUSTFLAGS="-D warnings $(POLONIUS_FLAGS)"` (the Makefile re-states the
-  Polonius flag because a set `RUSTFLAGS` overrides `.cargo/config.toml`).
-  This runs every unit, integration, `rstest`, and `rstest-bdd` test.
+  Polonius flag because a set `RUSTFLAGS` overrides `.cargo/config.toml`). This
+  runs every unit, integration, `rstest`, and `rstest-bdd` test.
 - `make doctest` — `cargo test --doc --all-features`, with the same
   `RUSTFLAGS`. nextest cannot execute doctests, so they need their own pass.
   Note that the previous `cargo test --all-targets` invocation never ran
