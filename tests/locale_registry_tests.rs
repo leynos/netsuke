@@ -6,7 +6,7 @@
 use std::collections::BTreeSet;
 use std::str::FromStr;
 
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use ortho_config::LanguageIdentifier;
 use rstest::rstest;
 
@@ -38,16 +38,17 @@ fn registry_tags_are_unique_and_sorted() {
 }
 
 #[test]
-fn registry_tags_are_valid_language_identifiers() {
+fn registry_tags_are_valid_language_identifiers() -> Result<()> {
     for tag in registry_tags() {
         let parsed = LanguageIdentifier::from_str(tag)
-            .unwrap_or_else(|error| panic!("{tag} should be a valid language identifier: {error}"));
-        assert_eq!(
-            parsed.to_string(),
-            tag,
-            "{tag} should already be in canonical form"
+            .with_context(|| format!("{tag} should be a valid language identifier"))?;
+        let canonical = parsed.to_string();
+        ensure!(
+            canonical == tag,
+            "{tag} should already be in canonical form, canonicalized to {canonical}"
         );
     }
+    Ok(())
 }
 
 #[test]
