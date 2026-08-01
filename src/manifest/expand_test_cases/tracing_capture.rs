@@ -1,9 +1,9 @@
 //! Tracing capture tests for manifest expansion filtering.
 
 use super::*;
+use crate::test_tracing_capture::with_test_subscriber;
 use anyhow::{Context, Result};
 use minijinja::Environment;
-use test_support::tracing_capture::with_test_subscriber;
 use tracing_subscriber::filter::LevelFilter;
 
 #[test]

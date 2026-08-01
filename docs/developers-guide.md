@@ -956,15 +956,16 @@ Do **not** call `std::env::set_var` directly in BDD steps — use
 
 ### `tracing_capture`
 
-`test_support::tracing_capture` is the workspace's single implementation
-for capturing structured tracing events in tests. `with_test_subscriber`
-installs a capturing `Layer` as the default subscriber for the duration of
-a closure, then returns the closure's result. Each event's fields are
-rendered as a space-separated list of `name=value` pairs — strings and
-`Debug` values are quoted — and appended to a shared buffer:
+`src/test_tracing_capture.rs` (`crate::test_tracing_capture`) is the
+workspace's single implementation for capturing structured tracing events
+in tests. `with_test_subscriber` installs a capturing `Layer` as the
+default subscriber for the duration of a closure, then returns the
+closure's result. Each event's fields are rendered as a space-separated
+list of `name=value` pairs — strings and `Debug` values are quoted — and
+appended to a shared buffer:
 
 ```rust
-use test_support::tracing_capture::with_test_subscriber;
+use crate::test_tracing_capture::with_test_subscriber;
 use tracing_subscriber::filter::LevelFilter;
 
 with_test_subscriber(LevelFilter::TRACE, |captured| {
@@ -979,6 +980,12 @@ with_test_subscriber(LevelFilter::TRACE, |captured| {
 [`tracing::subscriber::with_default`], which registers a *thread-local*
 default. Only events emitted on the calling thread are captured; events
 emitted from threads spawned inside the closure are silently dropped.
+
+The module is `#[cfg(test)]` in the root crate, so it is available to
+unit tests only; integration tests under `tests/` compile as separate
+crates and cannot reach it. Coverage that needs the real binary's tracing
+output instead asserts on the process's stderr — see
+`tests/logging_stderr/config_tracing.rs`.
 
 `CapturedEvents` has no `Default` implementation — obtain it only from the
 handle passed into the `with_test_subscriber` closure. `snapshot()`

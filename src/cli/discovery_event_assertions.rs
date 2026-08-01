@@ -9,9 +9,9 @@
 //! and snapshot normalization without threading repeated `&str`/`&Path`
 //! arguments through every helper.
 
+use crate::test_tracing_capture::with_test_subscriber;
 use anyhow::{Context, Result, ensure};
 use std::path::Path;
-use test_support::tracing_capture::with_test_subscriber;
 use tracing_subscriber::filter::LevelFilter;
 
 use super::diagnostics::path_hash;

@@ -12,11 +12,12 @@ use netsuke::{
 };
 use ortho_config::Localizer;
 use std::ffi::OsString;
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 use std::process::ExitCode;
-use std::sync::Arc;
-use tracing::Level;
-use tracing_subscriber::fmt;
+use std::sync::{Arc, OnceLock};
+use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::{Registry, fmt, reload};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DiagMode {
@@ -53,10 +54,19 @@ fn run_with_args(
         Ok(parsed) => parsed,
         Err(code) => return code,
     };
+    // Install the one global subscriber before configuration is resolved, so the
+    // selector and environment-lookup events emitted during resolution are
+    // recorded. The startup JSON hint gates it: JSON mode must put nothing but
+    // the diagnostic document on stderr.
+    init_tracing(startup_filter(startup_mode, parsed_cli.verbose));
+
     let mode = match resolve_json_mode_or_exit(&parsed_cli, &matches, startup_mode) {
         Ok(mode) => mode,
         Err(code) => return code,
     };
+    // Re-apply once the resolved mode is known, in case a config file enabled
+    // JSON when the raw arguments did not.
+    set_tracing_filter(startup_filter(mode, parsed_cli.verbose));
 
     let merged_cli = match merge_cli_or_exit(&parsed_cli, &matches, mode) {
         Ok(merged) => merged,
@@ -76,11 +86,52 @@ fn run_with_args(
     }
 }
 
-fn init_tracing(max_level: Level) {
-    fmt()
-        .with_max_level(max_level)
-        .with_writer(io::stderr)
-        .init();
+/// Handle for adjusting the installed subscriber's level after startup.
+static TRACING_FILTER: OnceLock<reload::Handle<LevelFilter, Registry>> = OnceLock::new();
+
+/// Choose the stderr verbosity for `mode`.
+///
+/// JSON mode silences tracing entirely so stderr carries only the diagnostic
+/// document. `--verbose` selects `TRACE` because the `NETSUKE_CONFIG` lookup is
+/// traced at that level; otherwise only errors surface.
+fn startup_filter(mode: DiagMode, verbose: bool) -> LevelFilter {
+    if mode.is_json() {
+        LevelFilter::OFF
+    } else if verbose {
+        LevelFilter::TRACE
+    } else {
+        LevelFilter::ERROR
+    }
+}
+
+/// Install the process-wide subscriber with a reloadable level filter.
+///
+/// Only the first call installs; later calls are ignored so exactly one global
+/// subscriber exists, and the level is adjusted through [`set_tracing_filter`]
+/// rather than by installing a second subscriber.
+fn init_tracing(initial: LevelFilter) {
+    let (filter, handle) = reload::Layer::new(initial);
+    if Registry::default()
+        .with(filter)
+        .with(
+            fmt::layer()
+                .with_writer(io::stderr)
+                // Colour only a terminal; piped or redirected logs stay plain so
+                // they remain greppable and free of escape sequences.
+                .with_ansi(io::stderr().is_terminal()),
+        )
+        .try_init()
+        .is_ok()
+    {
+        let _ = TRACING_FILTER.set(handle);
+    }
+}
+
+/// Adjust the installed subscriber's level, if one was installed.
+fn set_tracing_filter(level: LevelFilter) {
+    if let Some(handle) = TRACING_FILTER.get() {
+        let _ = handle.modify(|filter| *filter = level);
+    }
 }
 
 fn startup_localizer(
@@ -123,7 +174,6 @@ fn config_err_to_exit(err: &(dyn std::error::Error + 'static), mode: DiagMode) -
     if mode.is_json() {
         diagnostic_json::emit_or_fallback(diagnostic_json::render_error_json(err))
     } else {
-        init_tracing(Level::ERROR);
         tracing::error!(error = %err, "configuration load failed");
         ExitCode::FAILURE
     }
@@ -158,14 +208,7 @@ fn configure_runtime(
     let runtime_localizer = Arc::from(cli_localization::build_localizer(runtime_locale.as_deref()));
     localization::set_localizer(Arc::clone(&runtime_localizer));
 
-    if !mode.is_json() {
-        let max_level = if merged_cli.verbose {
-            Level::DEBUG
-        } else {
-            Level::ERROR
-        };
-        init_tracing(max_level);
-    }
+    set_tracing_filter(startup_filter(mode, merged_cli.verbose));
 }
 
 fn handle_runner_error(
