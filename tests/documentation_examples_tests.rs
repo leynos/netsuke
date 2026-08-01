@@ -18,6 +18,7 @@ use test_support::netsuke::{NetsukeRun, run_netsuke_in};
 
 const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-accessible-output",
+    "guide-binstall-install",
     "guide-cli-usage",
     "guide-command-available-manifest",
     "guide-complete-manifest",
@@ -36,6 +37,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-windows-help",
     "guide-windows-help-install",
     "guide-windows-path",
+    "readme-binstall-install",
     "readme-crates-io-install",
     "readme-first-build-commands",
     "readme-first-build-manifest",
@@ -152,9 +154,83 @@ fn documented_first_run_flow_builds(
 
 #[test]
 fn installation_examples_match_source_and_release_contracts() -> Result<()> {
+    assert_release_installation_contract()?;
+    let readme = documented_example("readme-source-install")?;
+    let guide = documented_example("guide-source-install")?;
+    let expected = concat!(
+        "git clone https://github.com/leynos/netsuke.git\n",
+        "cd netsuke\n",
+        "cargo install --path .\n"
+    );
+    ensure!(readme.body == expected, "README source install drifted");
+    ensure!(guide.body == expected, "user guide source install drifted");
+    assert_windows_setup_examples()
+}
+
+#[test]
+fn registry_install_examples_pin_toolchain_and_polonius() -> Result<()> {
+    // Registry installs build outside a checkout, where neither
+    // rust-toolchain.toml nor .cargo/config.toml applies, so every tagged
+    // example installing from crates.io must select the pinned nightly and
+    // pass the Polonius flag itself. `cargo binstall` fetches a prebuilt
+    // binary and `cargo install --path .` runs inside a checkout, so both
+    // are exempt.
+    let mut registry_install_ids = Vec::new();
+    for example in load_documented_examples()? {
+        for line in example.body.lines() {
+            if !line.contains("install netsuke") || line.contains("binstall") {
+                continue;
+            }
+            ensure!(
+                line.contains("cargo +nightly-2026-06-25 install netsuke"),
+                "{id} must install with the pinned nightly toolchain: {line}",
+                id = example.id
+            );
+            ensure!(
+                line.contains("RUSTFLAGS=-Zpolonius=next"),
+                "{id} must pass the Polonius borrow-checker flag: {line}",
+                id = example.id
+            );
+            registry_install_ids.push(example.id.clone());
+        }
+    }
+    ensure!(
+        registry_install_ids.len() >= 2,
+        "expected registry-install examples in the README and users' guide, found {registry_install_ids:?}"
+    );
+    // The quickstart carries no tested-example fences, so guard its prose
+    // against reintroducing an unsupported bare registry install.
+    let quickstart =
+        test_fs::read_to_string("docs/quickstart.md").context("read docs/quickstart.md")?;
+    ensure!(
+        !quickstart.contains("cargo install netsuke"),
+        "docs/quickstart.md must defer to the users' guide install command"
+    );
+    Ok(())
+}
+
+/// Check the documented crates.io install command and release details.
+fn assert_release_installation_contract() -> Result<()> {
+    let readme_binstall = documented_example("readme-binstall-install")?;
+    let guide_binstall = documented_example("guide-binstall-install")?;
+    let expected_binstall = "cargo binstall netsuke\n";
+    ensure!(
+        readme_binstall.body == expected_binstall,
+        "README binstall drifted"
+    );
+    ensure!(
+        guide_binstall.body == expected_binstall,
+        "user guide binstall drifted"
+    );
     let readme_release = documented_example("readme-crates-io-install")?;
     let guide_release = documented_example("guide-crates-io-install")?;
-    let expected_release = "cargo install netsuke\n";
+    // Registry installs run outside a checkout, so the packaged source sees
+    // neither rust-toolchain.toml nor .cargo/config.toml; the documented
+    // command must select the pinned nightly and the Polonius flag itself.
+    let expected_release = concat!(
+        "rustup toolchain install nightly-2026-06-25\n",
+        "RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke\n"
+    );
     ensure!(readme_release.body == expected_release, "README drifted");
     ensure!(guide_release.body == expected_release, "user guide drifted");
     let expected_release_details = [
@@ -175,15 +251,11 @@ fn installation_examples_match_source_and_release_contracts() -> Result<()> {
             );
         }
     }
-    let readme = documented_example("readme-source-install")?;
-    let guide = documented_example("guide-source-install")?;
-    let expected = concat!(
-        "git clone https://github.com/leynos/netsuke.git\n",
-        "cd netsuke\n",
-        "cargo install --path .\n"
-    );
-    ensure!(readme.body == expected, "README source install drifted");
-    ensure!(guide.body == expected, "user guide source install drifted");
+    Ok(())
+}
+
+/// Check the documented Windows help, PATH, and staging contracts.
+fn assert_windows_setup_examples() -> Result<()> {
     let windows = documented_example("guide-windows-help")?;
     ensure!(windows.body == "Get-Help Netsuke -Full\n", "help drifted");
     let windows_path = documented_example("guide-windows-path")?;

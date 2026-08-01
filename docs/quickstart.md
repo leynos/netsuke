@@ -7,8 +7,15 @@ minutes.
 
 Before beginning, ensure the following are available:
 
-- **Netsuke** installed (build from source with `cargo build --release` or
-  install via `cargo install netsuke`)
+- **Netsuke** installed — install a prebuilt release binary with
+  `cargo binstall netsuke` where
+  [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) is
+  available, install from source inside a repository checkout with
+  `cargo install --path .` (which puts `netsuke` on `PATH` for the commands
+  below), or follow the registry-install command in the
+  [users' guide](users-guide.md#install-netsuke). A bare `cargo install` is
+  unsupported: registry builds need the pinned nightly toolchain and the
+  Polonius borrow-checker flag supplied explicitly, as the guide shows.
 - **Ninja** build tool in the system PATH (install via the package manager,
   e.g., `apt install ninja-build` or `brew install ninja`)
 

@@ -19,12 +19,20 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       BUILD_PROFILE: debug
+      # Pre-set RUSTFLAGS so setup-rust-toolchain's "-D warnings" default does
+      # not shadow .cargo/config.toml and strip -Zpolonius=next; cargo-llvm-cov
+      # appends its instrumentation flags to this value.
+      RUSTFLAGS: -D warnings -Zpolonius=next
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@4d696e72fff6db49f34302ccf119ba978f1032c9
         with:
-          toolchain: stable
+          # Match rust-toolchain.toml: the tree needs -Zpolonius=next (see
+          # docs/adr-006-adopt-polonius-nightly-toolchain.md).
+          toolchain: nightly-2026-06-25
           components: rustfmt, clippy
       - name: Test and Measure Coverage
         uses: leynos/shared-actions/.github/actions/generate-coverage@18bed1ca49a6de3d8882bd72635a32ae3f023d57

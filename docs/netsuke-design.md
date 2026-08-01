@@ -2941,6 +2941,18 @@ selected for this project and the rationale for their inclusion.
 | Logging        | tracing                     | Structured, levelled diagnostic output for debugging and insight.                                                               |
 | Versioning     | semver                      | The standard library for parsing and evaluating Semantic Versioning strings, essential for the `netsuke_version` field.         |
 
+Netsuke compiles with the Polonius alpha borrow-checking analysis
+(`-Zpolonius=next`) on the dated nightly toolchain pinned in
+`rust-toolchain.toml`
+([ADR-006](adr-006-adopt-polonius-nightly-toolchain.md)). Internal APIs
+follow a borrow-centric design contract: lookups and registries return
+references (`&mut V` accessors with clone-on-miss keys), mutation happens in
+place, and error context is built lazily on the failure path. Owned-value
+style is reserved for genuine constraints — aliasing, suspension points,
+thread and process boundaries, and persistent identity — and each such
+refusal is recorded in the [polonius migration notes](polonius.md) alongside
+the sites that depend on the analysis.
+
 ### 9.3 Future Enhancements
 
 The architecture described in this document provides a solid foundation for a

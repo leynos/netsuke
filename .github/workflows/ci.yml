@@ -7,28 +7,23 @@ on:
 
 jobs:
   build-test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest]
-        rust: [stable, '1.89.0']
-        # Nightly is experimental; stable and MSRV are the supported toolchains
-        include:
-          - os: ubuntu-latest
-            rust: nightly
-            experimental: true
-    continue-on-error: ${{ matrix.experimental || false }}
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     env:
       CARGO_TERM_COLOR: always
       BUILD_PROFILE: debug
-      # Override rust-toolchain.toml to actually use the matrix toolchain
-      RUSTUP_TOOLCHAIN: ${{ matrix.rust }}
+      # The tree requires -Zpolonius=next (see
+      # docs/adr-006-adopt-polonius-nightly-toolchain.md), so CI builds with
+      # the dated nightly pinned in rust-toolchain.toml.
+      NETSUKE_RUST_TOOLCHAIN: nightly-2026-06-25
+      # Pre-set RUSTFLAGS so setup-rust-toolchain's "-D warnings" default does
+      # not shadow .cargo/config.toml and strip -Zpolonius=next; tools such as
+      # cargo-llvm-cov append their own flags to this value.
+      RUSTFLAGS: -D warnings -Zpolonius=next
       WHITAKER_INSTALLER_VERSION: '0.2.6'
       # Single source of truth for the cargo-nextest pin. `make test` runs the
-      # non-doctest suite through nextest, so every matrix leg needs it.
+      # non-doctest suite through nextest, so the job installs it up front.
       NEXTEST_VERSION: '0.9.133'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -39,7 +34,7 @@ jobs:
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@4d696e72fff6db49f34302ccf119ba978f1032c9
         with:
-          toolchain: ${{ matrix.rust }}
+          toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           components: rustfmt, clippy
       - name: Install cargo-nextest
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
@@ -55,7 +50,6 @@ jobs:
       - name: Format
         run: make check-fmt
       - name: Cache Whitaker installer
-        if: matrix.rust == 'stable'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
@@ -63,7 +57,6 @@ jobs:
             ~/.cache/cargo-binstall
           key: whitaker-installer-${{ runner.os }}-${{ runner.arch }}-${{ env.WHITAKER_INSTALLER_VERSION }}
       - name: Install Whitaker
-        if: matrix.rust == 'stable'
         run: |
           if ! command -v whitaker-installer >/dev/null 2>&1; then
             if cargo binstall --version >/dev/null 2>&1; then
@@ -75,13 +68,7 @@ jobs:
           fi
           whitaker-installer
       - name: Lint
-        if: matrix.rust == 'stable'
         run: make lint
-      # Whitaker lints under its own pinned toolchain, so re-running it per
-      # matrix leg repeats identical work; non-stable legs run Clippy only.
-      - name: Lint (Clippy only)
-        if: matrix.rust != 'stable'
-        run: make lint-clippy
       - name: Setup uv
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
         with:
@@ -93,9 +80,9 @@ jobs:
           path: |
             .typos-oxendict-base.json
             .typos-oxendict-base.toml
-          key: oxendict-${{ runner.os }}-${{ matrix.rust }}-${{ hashFiles('typos.local.toml') }}-${{ github.run_id }}
+          key: oxendict-${{ runner.os }}-${{ env.NETSUKE_RUST_TOOLCHAIN }}-${{ hashFiles('typos.local.toml') }}-${{ github.run_id }}
           restore-keys: |
-            oxendict-${{ runner.os }}-${{ matrix.rust }}-${{ hashFiles('typos.local.toml') }}-
+            oxendict-${{ runner.os }}-${{ env.NETSUKE_RUST_TOOLCHAIN }}-${{ hashFiles('typos.local.toml') }}-
       - name: Spelling
         run: make spelling
       - name: Workflow contract tests
@@ -103,7 +90,6 @@ jobs:
       - name: Test
         run: make test
       - name: Test and Measure Coverage
-        if: matrix.rust == 'stable'
         uses: leynos/shared-actions/.github/actions/generate-coverage@18bed1ca49a6de3d8882bd72635a32ae3f023d57
         with:
           output-path: lcov.info
@@ -112,7 +98,7 @@ jobs:
           # coverage-main.yml (caches saved on main are readable by every PR).
           with-ratchet: 'true'
       - name: Check coverage against CodeScene gates
-        if: matrix.rust == 'stable' && env.CS_ACCESS_TOKEN != '' && github.event_name == 'pull_request'
+        if: env.CS_ACCESS_TOKEN != '' && github.event_name == 'pull_request'
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@18bed1ca49a6de3d8882bd72635a32ae3f023d57

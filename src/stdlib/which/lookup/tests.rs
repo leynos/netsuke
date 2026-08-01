@@ -174,11 +174,11 @@ fn relative_path_entries_resolve_against_cwd(
     let resolved_dirs = snapshot.resolved_dirs(CwdMode::Never);
 
     ensure!(
-        resolved_dirs.contains(&bin),
+        resolved_dirs.contains(&bin.as_path()),
         "resolved_dirs missing bin: {resolved_dirs:?}"
     );
     ensure!(
-        resolved_dirs.contains(&tools),
+        resolved_dirs.contains(&tools.as_path()),
         "resolved_dirs missing tools: {resolved_dirs:?}"
     );
 
@@ -307,5 +307,50 @@ fn resolve_direct_appends_pathext(workspace: Result<TempWorkspace>) -> Result<()
         matches == vec![exe],
         "expected PATHEXT to expand direct path; got {matches:?}"
     );
+    Ok(())
+}
+
+#[rstest]
+fn cwd_always_lists_current_directory_once(
+    #[from(workspace)] workspace_res: Result<TempWorkspace>,
+) -> Result<()> {
+    let workspace = workspace_res?;
+    let bin = workspace.root().join("bin");
+    test_fs::create_dir_all(bin.as_std_path()).context("mkdir bin")?;
+
+    // Empty components parse as current-directory PATH entries; the
+    // repeated blanks mirror a `::/usr/bin::`-style value and must collapse
+    // to a single working-directory search.
+    let path_value = std::env::join_paths([
+        std::path::Path::new(""),
+        std::path::Path::new(""),
+        bin.as_std_path(),
+        std::path::Path::new(""),
+    ])
+    .context("join PATH entries")?;
+    let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
+        .context("capture env with repeated current-directory PATH entries")?;
+
+    let always_dirs = snapshot.resolved_dirs(CwdMode::Always);
+    let always_cwd_count = always_dirs
+        .iter()
+        .filter(|dir| **dir == snapshot.cwd)
+        .count();
+    ensure!(
+        always_cwd_count == 1,
+        "Always should list the working directory exactly once: {always_dirs:?}"
+    );
+    ensure!(
+        always_dirs.first() == Some(&snapshot.cwd.as_path()),
+        "Always should search the working directory first: {always_dirs:?}"
+    );
+
+    let auto_dirs = snapshot.resolved_dirs(CwdMode::Auto);
+    let auto_cwd_count = auto_dirs.iter().filter(|dir| **dir == snapshot.cwd).count();
+    ensure!(
+        auto_cwd_count == 1,
+        "Auto should honour the PATH-listed working directory once: {auto_dirs:?}"
+    );
+
     Ok(())
 }

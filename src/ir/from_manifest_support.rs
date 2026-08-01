@@ -51,6 +51,13 @@ pub(super) fn register_action(
             .with_arg("details", err.to_string()),
         source: err,
     })?;
+    // POLONIUS-REFUSED(id-is-data): the action hash is persistent IR
+    // identity — callers store it on every `BuildEdge` and it names the
+    // action in the generated Ninja file. Returning the owned hash (rather
+    // than a reference to an interned key) is a data-model choice, not an
+    // NLL workaround; the write-only `contains_key` guard below already
+    // compiles under NLL. Convert to a borrow-returning accessor only if
+    // callers develop a demonstrated need for the canonical interned value.
     if !actions.contains_key(hash.as_str()) {
         actions.insert(hash.clone(), action);
     }

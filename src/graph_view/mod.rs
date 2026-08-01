@@ -8,7 +8,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::ir::{BuildEdge, BuildGraph};
 
@@ -96,16 +96,22 @@ impl GraphView {
     pub fn from_build_graph(graph: &BuildGraph) -> Self {
         let edges_seen = collect_unique_edges(graph);
 
-        let mut node_paths: BTreeMap<Utf8PathBuf, NodeKind> = BTreeMap::new();
+        let mut registry = NodePathRegistry::default();
         let mut node_metadata: BTreeMap<Utf8PathBuf, NodeMetadata> = BTreeMap::new();
         let mut edges: BTreeSet<EdgeView> = BTreeSet::new();
 
         for edge in &edges_seen {
-            register_outputs(graph, edge, &mut node_paths, &mut node_metadata);
-            register_inputs_and_edges(edge, &mut node_paths, &mut edges);
+            register_outputs(graph, edge, &mut registry, &mut node_metadata);
+            EdgeRegistrar {
+                edge,
+                registry: &mut registry,
+                edges: &mut edges,
+            }
+            .register();
         }
 
-        let nodes = node_paths
+        let nodes = registry
+            .into_inner()
             .into_iter()
             .map(|(path, kind)| {
                 let meta = node_metadata.remove(&path).unwrap_or_default();
@@ -137,6 +143,46 @@ struct NodeMetadata {
     description: Option<String>,
 }
 
+/// Registry mapping node paths to their [`NodeKind`] classification.
+///
+/// Wraps the projection's path map behind borrow-returning accessors so
+/// callers work with references instead of cloning keys defensively.
+#[derive(Debug, Default)]
+struct NodePathRegistry {
+    paths: BTreeMap<Utf8PathBuf, NodeKind>,
+}
+
+impl NodePathRegistry {
+    /// Return the registered kind for `path`, recording a [`NodeKind::Source`]
+    /// node when the path is not yet known.
+    ///
+    /// Performs a single lookup on the hit path and clones `path` only when
+    /// inserting. An existing registration (for example a target produced by
+    /// an earlier edge) is returned unchanged.
+    // POLONIUS(case-3): the `get_mut` loan escapes only via the early return,
+    // so the insertion below is legal under `-Zpolonius=next` but rejected by
+    // NLL (E0499). Verified both ways on nightly-2026-06-25. Do not rewrite
+    // into `entry(path.clone())` or a `contains_key` double lookup.
+    fn ensure_node_mut(&mut self, path: &Utf8Path) -> &mut NodeKind {
+        if let Some(kind) = self.paths.get_mut(path) {
+            return kind;
+        }
+        self.paths
+            .entry(path.to_owned())
+            .or_insert(NodeKind::Source)
+    }
+
+    /// Record `path` as a target node, replacing any existing registration.
+    fn insert_target(&mut self, path: &Utf8Path, kind: NodeKind) {
+        self.paths.insert(path.to_owned(), kind);
+    }
+
+    /// Consume the registry, yielding the sorted path map.
+    fn into_inner(self) -> BTreeMap<Utf8PathBuf, NodeKind> {
+        self.paths
+    }
+}
+
 /// Deduplicate the build edges referenced by [`BuildGraph::targets`].
 ///
 /// `BuildGraph::targets` maps every output path back to a (cloned) `BuildEdge`,
@@ -155,20 +201,16 @@ fn collect_unique_edges(graph: &BuildGraph) -> Vec<BuildEdge> {
 fn register_outputs(
     graph: &BuildGraph,
     edge: &BuildEdge,
-    node_paths: &mut BTreeMap<Utf8PathBuf, NodeKind>,
+    registry: &mut NodePathRegistry,
     node_metadata: &mut BTreeMap<Utf8PathBuf, NodeMetadata>,
 ) {
     let description = graph
         .actions
         .get(&edge.action_id)
         .and_then(|action| action.description.clone());
-    let outputs = edge
-        .explicit_outputs
-        .iter()
-        .chain(edge.implicit_outputs.iter());
-    for out in outputs {
-        node_paths.insert(
-            out.clone(),
+    for out in all_outputs(edge) {
+        registry.insert_target(
+            out,
             NodeKind::Target {
                 phony: edge.phony,
                 always: edge.always,
@@ -184,56 +226,69 @@ fn register_outputs(
     }
 }
 
-fn register_inputs_and_edges(
-    edge: &BuildEdge,
-    node_paths: &mut BTreeMap<Utf8PathBuf, NodeKind>,
-    edges: &mut BTreeSet<EdgeView>,
-) {
-    let implicit: BTreeSet<&Utf8PathBuf> = edge.implicit_outputs.iter().collect();
-    for input in &edge.inputs {
-        node_paths.entry(input.clone()).or_insert(NodeKind::Source);
-        for out in edge
-            .explicit_outputs
-            .iter()
-            .chain(edge.implicit_outputs.iter())
-        {
-            let class = if implicit.contains(out) {
+/// Every output produced by `edge`, explicit first, then implicit.
+fn all_outputs(edge: &BuildEdge) -> impl Iterator<Item = &Utf8PathBuf> {
+    edge.explicit_outputs
+        .iter()
+        .chain(edge.implicit_outputs.iter())
+}
+
+/// Registers the dependency nodes and edges contributed by one build edge.
+///
+/// Groups the edge with the mutable projection state so the per-class
+/// helpers share one borrow of the registry and edge set.
+struct EdgeRegistrar<'a> {
+    edge: &'a BuildEdge,
+    registry: &'a mut NodePathRegistry,
+    edges: &'a mut BTreeSet<EdgeView>,
+}
+
+impl EdgeRegistrar<'_> {
+    /// Register the edge's inputs and dependencies with their edge classes.
+    fn register(&mut self) {
+        self.register_inputs();
+        let edge = self.edge;
+        self.register_dependencies(&edge.implicit_deps, EdgeClass::ImplicitDep);
+        self.register_dependencies(&edge.order_only_deps, EdgeClass::OrderOnly);
+    }
+
+    /// Register explicit inputs, classifying edges into implicit outputs.
+    fn register_inputs(&mut self) {
+        let edge = self.edge;
+        let implicit: BTreeSet<&Utf8PathBuf> = edge.implicit_outputs.iter().collect();
+        for input in &edge.inputs {
+            self.registry.ensure_node_mut(input);
+            self.register_input_edges(input, &implicit);
+        }
+    }
+
+    /// Add one edge from `input` to every output, classified by whether the
+    /// output is implicit.
+    fn register_input_edges(&mut self, input: &Utf8PathBuf, implicit: &BTreeSet<&Utf8PathBuf>) {
+        self.insert_edges(input, |out| {
+            if implicit.contains(out) {
                 EdgeClass::ImplicitOutput
             } else {
                 EdgeClass::Explicit
-            };
-            edges.insert(EdgeView {
-                from: input.clone(),
-                to: out.clone(),
-                class,
-            });
+            }
+        });
+    }
+
+    /// Register `deps` as source nodes with a `class` edge to every output.
+    fn register_dependencies(&mut self, deps: &[Utf8PathBuf], class: EdgeClass) {
+        for dep in deps {
+            self.registry.ensure_node_mut(dep);
+            self.insert_edges(dep, |_| class);
         }
     }
-    for dep in &edge.implicit_deps {
-        node_paths.entry(dep.clone()).or_insert(NodeKind::Source);
-        for out in edge
-            .explicit_outputs
-            .iter()
-            .chain(edge.implicit_outputs.iter())
-        {
-            edges.insert(EdgeView {
-                from: dep.clone(),
+
+    /// Insert one edge from `from` to every output, classified by `class_for`.
+    fn insert_edges(&mut self, from: &Utf8PathBuf, class_for: impl Fn(&Utf8PathBuf) -> EdgeClass) {
+        for out in all_outputs(self.edge) {
+            self.edges.insert(EdgeView {
+                from: from.clone(),
                 to: out.clone(),
-                class: EdgeClass::ImplicitDep,
-            });
-        }
-    }
-    for dep in &edge.order_only_deps {
-        node_paths.entry(dep.clone()).or_insert(NodeKind::Source);
-        for out in edge
-            .explicit_outputs
-            .iter()
-            .chain(edge.implicit_outputs.iter())
-        {
-            edges.insert(EdgeView {
-                from: dep.clone(),
-                to: out.clone(),
-                class: EdgeClass::OrderOnly,
+                class: class_for(out),
             });
         }
     }

@@ -12,10 +12,34 @@ use std::{
 };
 
 /// Verify repository policy files used by the `cfg(kani)` compile contract.
+///
+/// The fixture is compiled with the workspace `rustc` and then executed, so
+/// its assertions run against the checked-in policy files. Trybuild
+/// previously drove this case, but trybuild discards ambient `RUSTFLAGS`
+/// and workspace `build.rustflags`, so it rebuilt the `netsuke` dependency
+/// without `-Zpolonius=next` and rejected the crate's `POLONIUS(...)`
+/// sites; the fixture needs no dependencies, so a direct compile preserves
+/// the contract (see docs/polonius.md).
 #[test]
-fn trybuild_validates_kani_cfg_policy_sources() {
-    let cases = trybuild::TestCases::new();
-    cases.pass("tests/ui/cfg_kani_policy_pass.rs");
+fn compiled_fixture_validates_kani_cfg_policy_sources() -> io::Result<()> {
+    let output_dir = tempfile::tempdir()?;
+    let binary = output_dir.path().join("cfg-kani-policy-pass");
+    let compile = compile_ui_fixture("tests/ui/cfg_kani_policy_pass.rs", &binary)?;
+    if !compile.status.success() {
+        return Err(io::Error::other(format!(
+            "policy fixture should compile:\n{}",
+            stderr(&compile),
+        )));
+    }
+
+    let run = Command::new(&binary).output()?;
+    if !run.status.success() {
+        return Err(io::Error::other(format!(
+            "policy fixture assertions should pass:\n{}",
+            stderr(&run),
+        )));
+    }
+    Ok(())
 }
 
 /// `cfg(kani)` compiles when the expected check-cfg declaration is active.
@@ -55,10 +79,13 @@ fn unknown_cfg_is_rejected_by_compile_time_policy() -> io::Result<()> {
 }
 
 fn rustc_with_kani_check_cfg(source: &str) -> io::Result<Output> {
+    let output_dir = tempfile::tempdir()?;
+    compile_ui_fixture(source, &output_dir.path().join("ui-test-bin"))
+}
+
+fn compile_ui_fixture(source: &str, output_path: &Path) -> io::Result<Output> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let source_path = manifest_dir.join(source);
-    let output_dir = tempfile::tempdir()?;
-    let output_path = output_dir.path().join("ui-test-bin");
 
     Command::new(rustc())
         .arg("--edition=2024")

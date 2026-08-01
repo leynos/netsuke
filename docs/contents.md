@@ -41,6 +41,8 @@ operator, user, and contributor references are easier to find.
 - [adr-005-typed-which-resolve-error.md](adr-005-typed-which-resolve-error.md):
   Typed executable resolver error decision record for `which` and
   `command_available`.
+- [adr-006-adopt-polonius-nightly-toolchain.md](adr-006-adopt-polonius-nightly-toolchain.md):
+  Pinned-nightly Polonius borrow-checker adoption decision record.
 
 ## User and operator guides
 
@@ -60,6 +62,8 @@ operator, user, and contributor references are easier to find.
 
 - [developers-guide.md](developers-guide.md): Engineering workflow, quality
   gates, testing strategy, and stdlib resolver-boundary conventions.
+- [polonius.md](polonius.md): Polonius migration audit, borrow-centric API
+  evolution log, and principled refusals.
 - [documentation-style-guide.md](documentation-style-guide.md): Documentation
   conventions, roadmap-writing rules, and Markdown requirements.
 - [execplans/](execplans/): Execution plans and implementation handoff notes.

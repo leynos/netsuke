@@ -9,21 +9,24 @@ on:
 jobs:
   netsukefile:
     runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: false
-      matrix:
-        rust: [stable, '1.89.0']
     permissions:
       contents: read
     env:
-      RUSTUP_TOOLCHAIN: ${{ matrix.rust }}
+      # Match rust-toolchain.toml: the tree needs -Zpolonius=next (see
+      # docs/adr-006-adopt-polonius-nightly-toolchain.md).
+      NETSUKE_RUST_TOOLCHAIN: nightly-2026-06-25
+      # Pre-set RUSTFLAGS so setup-rust-toolchain's "-D warnings" default does
+      # not shadow .cargo/config.toml and strip -Zpolonius=next.
+      RUSTFLAGS: -Zpolonius=next
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@4d696e72fff6db49f34302ccf119ba978f1032c9
         with:
-          toolchain: ${{ matrix.rust }}
+          toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
       - name: Show rustc version
         run: |
           rustup show
@@ -36,9 +39,9 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-cargo-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ env.NETSUKE_RUST_TOOLCHAIN }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-${{ matrix.rust }}-
+            ${{ runner.os }}-cargo-${{ env.NETSUKE_RUST_TOOLCHAIN }}-
             ${{ runner.os }}-cargo-
       - name: Clean build artefacts
         run: make clean

@@ -133,6 +133,29 @@ This repository is written in Rust and uses Cargo for building and dependency
 management. Contributors should follow these best practices when working on the
 project:
 
+### Borrow checker: Polonius, not NLL
+
+Netsuke compiles with the Polonius alpha analysis (`-Zpolonius=next`) on the
+dated nightly pinned in `rust-toolchain.toml` (see
+`docs/adr-006-adopt-polonius-nightly-toolchain.md` and `docs/polonius.md`).
+Internal APIs are borrow-centric: lookups and get-or-create accessors return
+references, clone keys only on insertion, and build error context lazily.
+
+- **Never** rewrite a site tagged `POLONIUS(...)` into a double lookup
+  (`contains_key` + `get_mut`), an `entry(key.clone())` call, or an
+  id/index round-trip. Those forms are the NLL-era workarounds this
+  codebase deliberately retired; the direct form is compiler-verified.
+- **Never** silence a borrow error by adding a defensive `.clone()`, an
+  eager error-context computation, or a snapshot `collect()` without first
+  compiling the natural borrow-returning form under the project toolchain —
+  it usually compiles.
+- Respect `POLONIUS-REFUSED(...)` tags: the named constraint (persistent
+  identity, lock boundaries, aliasing, suspension points, thread
+  boundaries) is permanent. Do not convert those sites to
+  reference-returning forms.
+- When adding a new borrow-centric API, verify it with and without
+  `-Zpolonius=next` and record the classification in `docs/polonius.md`.
+
 - Run `make check-fmt`, `make lint`, and `make test` before committing. These
   targets wrap the following commands, so contributors understand the exact
   behaviour and policy enforced:
@@ -159,8 +182,8 @@ project:
   - `make test` executes:
 
     ```sh
-    RUSTFLAGS="-D warnings" cargo nextest run --all-targets --all-features
-    RUSTFLAGS="-D warnings" cargo test --doc --all-features
+    RUSTFLAGS="-D warnings -Zpolonius=next" cargo nextest run --all-targets --all-features
+    RUSTFLAGS="-D warnings -Zpolonius=next" cargo test --doc --all-features
     ```
 
     running every unit, integration, and behavioural test through

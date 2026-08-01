@@ -1,4 +1,4 @@
-//! Trybuild pass case for repository-level Kani cfg policy.
+//! Compile-and-run pass case for repository-level Kani cfg policy.
 
 const CARGO_TOML: &str = include_str!("../../Cargo.toml");
 const MAKEFILE: &str = include_str!("../../Makefile");

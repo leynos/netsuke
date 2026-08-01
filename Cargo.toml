@@ -2,7 +2,6 @@
 name = "netsuke"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.89.0"
 include = [
     "src/**",
     "locales/**",
@@ -173,7 +172,6 @@ strip-ansi-escapes = "0.2"
 toml = "0.8"
 serde_yaml = "0.9"
 proptest = "1.11.0"
-trybuild = "1.0.116"
 
 # Target-specific dev-deps
 [target.'cfg(unix)'.dev-dependencies]

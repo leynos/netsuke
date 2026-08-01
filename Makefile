@@ -2,6 +2,9 @@
 
 APP ?= netsuke
 CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$$HOME/.cargo/bin/cargo")
+# The Polonius borrow-checker flag normally flows from .cargo/config.toml, but
+# any recipe that sets RUSTFLAGS overrides that table and must re-state it.
+POLONIUS_FLAGS ?= -Zpolonius=next
 # Extra build-parallelism flags for plain Cargo invocations, e.g. `-j 4`.
 BUILD_JOBS ?=
 # The same concept for cargo-nextest, which spells build parallelism
@@ -60,10 +63,10 @@ clean: ## Remove build artefacts
 test: test-nextest doctest ## Run every Rust test with warnings treated as errors
 
 test-nextest: ## Run all non-doctest Rust tests through cargo-nextest
-	RUSTFLAGS="-D warnings" $(CARGO) nextest run --all-targets --all-features $(NEXTEST_BUILD_JOBS)
+	RUSTFLAGS="-D warnings $(POLONIUS_FLAGS)" $(CARGO) nextest run --all-targets --all-features $(NEXTEST_BUILD_JOBS)
 
 doctest: ## Run doctests, which cargo-nextest cannot execute
-	RUSTFLAGS="-D warnings" $(CARGO) test --doc --all-features $(BUILD_JOBS)
+	RUSTFLAGS="-D warnings $(POLONIUS_FLAGS)" $(CARGO) test --doc --all-features $(BUILD_JOBS)
 
 test-workflow-contracts: ## Validate the mutation-testing caller contract
 	uv run --with 'pytest>=8' --with 'pyyaml>=6' pytest tests/workflow_contracts -q
@@ -71,16 +74,16 @@ test-workflow-contracts: ## Validate the mutation-testing caller contract
 test-typos-config: spelling-helper-test ## Verify the shared spelling-policy integration
 
 target/%/$(APP): ## Build binary in debug or release mode
-	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP)
+	RUSTFLAGS="$${RUSTFLAGS-} $(POLONIUS_FLAGS)" $(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP)
 
 lint: lint-clippy lint-whitaker ## Run Clippy and the Whitaker Dylint suite with warnings denied
 
 lint-clippy: ## Run rustdoc and Clippy with warnings denied
-	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc --no-deps
-	$(CARGO) clippy $(CLIPPY_FLAGS)
+	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" RUSTFLAGS="$${RUSTFLAGS-} $(POLONIUS_FLAGS)" $(CARGO) doc --no-deps
+	RUSTFLAGS="-D warnings $(POLONIUS_FLAGS)" $(CARGO) clippy $(CLIPPY_FLAGS)
 
 lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
-	RUSTFLAGS="-D warnings" $(WHITAKER) --all -- --all-targets --all-features
+	RUSTFLAGS="-D warnings $(POLONIUS_FLAGS)" $(WHITAKER) --all -- --all-targets --all-features
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all
@@ -90,7 +93,7 @@ check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
 
 typecheck: ## Typecheck all targets and features
-	RUSTFLAGS="-D warnings" $(CARGO) check --all-targets --all-features $(BUILD_JOBS)
+	RUSTFLAGS="-D warnings $(POLONIUS_FLAGS)" $(CARGO) check --all-targets --all-features $(BUILD_JOBS)
 
 markdownlint: spelling ## Lint Markdown and enforce en-GB-oxendict spelling
 	$(MDLINT) "**/*.md"
