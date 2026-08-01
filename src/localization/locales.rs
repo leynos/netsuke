@@ -55,9 +55,9 @@ macro_rules! define_locales {
 }
 
 define_locales![
-    "cs", "da", "de", "el", "en-GB", "en-US", "es-419", "es-ES", "fi", "fr", "hu", "id", "it",
-    "ja", "ko", "nb", "nl", "pl", "pt-BR", "pt-PT", "ro", "ru", "sv", "th", "tr", "uk", "vi",
-    "zh-Hans", "zh-Hant",
+    "ar", "cs", "da", "de", "el", "en-GB", "en-US", "es-419", "es-ES", "fa", "fi", "fr", "he",
+    "hu", "id", "it", "ja", "ko", "nb", "nl", "pl", "pt-BR", "pt-PT", "ro", "ru", "sv", "th", "tr",
+    "uk", "vi", "zh-Hans", "zh-Hant",
 ];
 
 /// Fallback policy for a language that ships more than one catalogue, or whose
