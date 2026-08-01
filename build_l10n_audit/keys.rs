@@ -1,8 +1,8 @@
-//! Localization audit helpers for the build script.
+//! Extraction of Fluent message identifiers declared in Rust source.
 //!
-//! Parses the `define_keys!` macro in `src/localization/keys.rs` and compares
-//! the declared keys with Fluent bundles to keep localized resources aligned
-//! with the codebase.
+//! Parses the `define_keys!` macro in `src/localization/keys.rs` so the build
+//! audit can compare the keys the code references against the keys each
+//! catalogue provides.
 
 use std::collections::BTreeSet;
 use std::error::Error;
@@ -10,105 +10,6 @@ use std::fs;
 use std::path::Path;
 
 const DEFINE_KEYS_MACRO: &str = "define_keys!";
-type KeySets = (BTreeSet<String>, BTreeSet<String>, BTreeSet<String>);
-
-/// Represents the result of comparing declared keys against locale files.
-struct AuditDifferences {
-    missing_en_us: Vec<String>,
-    missing_es_es: Vec<String>,
-    orphaned_en_us: Vec<String>,
-    orphaned_es_es: Vec<String>,
-}
-
-impl AuditDifferences {
-    fn new(
-        declared: &BTreeSet<String>,
-        en_us_keys: &BTreeSet<String>,
-        es_es_keys: &BTreeSet<String>,
-    ) -> Self {
-        Self {
-            missing_en_us: declared.difference(en_us_keys).cloned().collect(),
-            missing_es_es: declared.difference(es_es_keys).cloned().collect(),
-            orphaned_en_us: en_us_keys.difference(declared).cloned().collect(),
-            orphaned_es_es: es_es_keys.difference(declared).cloned().collect(),
-        }
-    }
-
-    const fn has_issues(&self) -> bool {
-        !self.missing_en_us.is_empty()
-            || !self.missing_es_es.is_empty()
-            || !self.orphaned_en_us.is_empty()
-            || !self.orphaned_es_es.is_empty()
-    }
-
-    fn format_error_message(&self) -> String {
-        build_audit_error_message(
-            &self.missing_en_us,
-            &self.missing_es_es,
-            &self.orphaned_en_us,
-            &self.orphaned_es_es,
-        )
-    }
-}
-
-fn load_key_sets(
-    keys_path: &Path,
-    en_path: &Path,
-    es_path: &Path,
-) -> Result<KeySets, Box<dyn Error>> {
-    let declared = extract_key_constants(keys_path)?;
-    let en_us_keys = extract_ftl_keys(en_path)?;
-    let es_es_keys = extract_ftl_keys(es_path)?;
-    Ok((declared, en_us_keys, es_es_keys))
-}
-
-fn compute_audit_differences(
-    declared: &BTreeSet<String>,
-    en_us_keys: &BTreeSet<String>,
-    es_es_keys: &BTreeSet<String>,
-) -> AuditDifferences {
-    AuditDifferences::new(declared, en_us_keys, es_es_keys)
-}
-
-fn build_audit_error_message(
-    missing_en_us: &[String],
-    missing_es_es: &[String],
-    orphaned_en_us: &[String],
-    orphaned_es_es: &[String],
-) -> String {
-    let mut message = String::from("localization key audit failed:");
-    if !missing_en_us.is_empty() {
-        message.push_str("\n- missing in en-US: ");
-        message.push_str(&missing_en_us.join(", "));
-    }
-    if !missing_es_es.is_empty() {
-        message.push_str("\n- missing in es-ES: ");
-        message.push_str(&missing_es_es.join(", "));
-    }
-    if !orphaned_en_us.is_empty() {
-        message.push_str("\n- orphaned in en-US: ");
-        message.push_str(&orphaned_en_us.join(", "));
-    }
-    if !orphaned_es_es.is_empty() {
-        message.push_str("\n- orphaned in es-ES: ");
-        message.push_str(&orphaned_es_es.join(", "));
-    }
-    message
-}
-
-pub(super) fn audit_localization_keys() -> Result<(), Box<dyn Error>> {
-    let keys_path = Path::new("src/localization/keys.rs");
-    let en_path = Path::new("locales/en-US/messages.ftl");
-    let es_path = Path::new("locales/es-ES/messages.ftl");
-
-    let (declared, en_us_keys, es_es_keys) = load_key_sets(keys_path, en_path, es_path)?;
-    let results = compute_audit_differences(&declared, &en_us_keys, &es_es_keys);
-    if results.has_issues() {
-        Err(results.format_error_message().into())
-    } else {
-        Ok(())
-    }
-}
 
 /// Extracts localization key values from `keys.rs`.
 ///
@@ -122,7 +23,7 @@ pub(super) fn audit_localization_keys() -> Result<(), Box<dyn Error>> {
 /// # Errors
 ///
 /// Returns an error if the macro cannot be parsed or no keys are found.
-fn extract_key_constants(path: &Path) -> Result<BTreeSet<String>, Box<dyn Error>> {
+pub(super) fn extract_key_constants(path: &Path) -> Result<BTreeSet<String>, Box<dyn Error>> {
     let source = fs::read_to_string(path)?;
     let body = extract_define_keys_body(&source)?;
     let keys = parse_define_keys_body(body)?;
@@ -351,43 +252,6 @@ fn parse_define_keys_body(body: &str) -> Result<BTreeSet<String>, Box<dyn Error>
             keys.insert(value);
         }
         idx = next;
-    }
-    Ok(keys)
-}
-
-fn should_skip_ftl_line(trimmed: &str) -> bool {
-    trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('.')
-}
-
-/// Extract Fluent message identifiers from a `.ftl` bundle.
-///
-/// This parser expects simple message declarations of the form `id = ...` and
-/// skips blank lines, comments (starting with `#`), and attributes (starting
-/// with `.`). Term identifiers (those starting with `-`) are ignored by design
-/// because Netsuke only references message IDs in code.
-///
-/// # Errors
-///
-/// Returns an error if no keys are found in the bundle.
-fn extract_ftl_keys(path: &Path) -> Result<BTreeSet<String>, Box<dyn Error>> {
-    let source = fs::read_to_string(path)?;
-    let mut keys = BTreeSet::new();
-    for line in source.lines() {
-        let trimmed = line.trim_start();
-        if should_skip_ftl_line(trimmed) {
-            continue;
-        }
-        let Some((id_raw, _)) = trimmed.split_once('=') else {
-            continue;
-        };
-        let id = id_raw.trim();
-        if id.is_empty() || id.starts_with('-') {
-            continue;
-        }
-        keys.insert(id.to_owned());
-    }
-    if keys.is_empty() {
-        return Err(format!("no Fluent keys found in {}", path.display()).into());
     }
     Ok(keys)
 }

@@ -7,6 +7,7 @@
 //! respect `--locale` or `NETSUKE_LOCALE`.
 
 pub mod keys;
+pub mod locales;
 
 use ortho_config::{LocalizationArgs, Localizer};
 use std::fmt;

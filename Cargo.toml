@@ -9,7 +9,7 @@ include = [
     "README.md",
     "LICENSE",
     "build.rs",
-    "build_l10n_audit.rs",
+    "build_l10n_audit/**",
 ]
 license = "ISC"
 readme = "README.md"

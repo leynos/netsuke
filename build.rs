@@ -32,6 +32,10 @@ const FALLBACK_DATE: &str = "1970-01-01";
 #[path = "src/cli/mod.rs"]
 mod cli;
 
+#[expect(
+    dead_code,
+    reason = "shared library source; the unreached API is exercised by the library crate"
+)]
 #[path = "src/cli_localization.rs"]
 mod cli_localization;
 
@@ -136,8 +140,16 @@ fn emit_rerun_directives() {
     println!("cargo:rerun-if-env-changed=TARGET");
     println!("cargo:rerun-if-env-changed=PROFILE");
     println!("cargo:rerun-if-changed=src/localization/keys.rs");
-    println!("cargo:rerun-if-changed=locales/en-US/messages.ftl");
-    println!("cargo:rerun-if-changed=locales/es-ES/messages.ftl");
+    println!("cargo:rerun-if-changed=src/localization/locales.rs");
+    println!("cargo:rerun-if-changed=Cargo.toml");
+    // The locale registry owns the catalogue list, so the rerun directives are
+    // derived from it rather than repeated by hand.
+    for entry in localization::locales::SUPPORTED_LOCALES {
+        println!(
+            "cargo:rerun-if-changed={}",
+            build_l10n_audit::catalogue_path(entry.tag()).display()
+        );
+    }
 }
 
 #[expect(

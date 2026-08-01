@@ -1,14 +1,15 @@
 //! Locale-aware helpers for CLI messaging.
 //!
-//! Provides Fluent-backed localizers with an English fallback and
-//! consumer-provided Spanish translations to validate localization support.
+//! Builds Fluent-backed localizers from the catalogue registry in
+//! [`crate::localization::locales`], layering the requested locale over the
+//! English source catalogue so any message a translation has not yet covered
+//! still renders. Catalogue selection is by exact tag with the registry's
+//! documented fallback rules, so region and script variants stay distinct.
 
+use crate::localization::locales::{self, LocaleCatalogue};
 use ortho_config::LanguageIdentifier;
 use ortho_config::{FluentLocalizer, FluentLocalizerBuilder, Localizer, NoOpLocalizer};
 use std::str::FromStr;
-
-const NETSUKE_EN_US: &str = include_str!("../locales/en-US/messages.ftl");
-const NETSUKE_ES_ES: &str = include_str!("../locales/es-ES/messages.ftl");
 
 struct LayeredLocalizer {
     primary: Box<dyn Localizer>,
@@ -38,7 +39,7 @@ fn parse_locale_identifier(locale: &str) -> Option<LanguageIdentifier> {
 }
 
 fn build_en_localizer() -> Box<dyn Localizer> {
-    match FluentLocalizer::with_en_us_defaults([NETSUKE_EN_US]) {
+    match FluentLocalizer::with_en_us_defaults([locales::source_catalogue().resource()]) {
         Ok(localizer) => Box::new(localizer) as Box<dyn Localizer>,
         Err(err) => {
             tracing::warn!(error = %err, "failed to load default localization resources");
@@ -59,11 +60,49 @@ fn build_consumer_localizer(
         .map(|localizer| Box::new(localizer) as Box<dyn Localizer>)
 }
 
-fn locale_language(locale: &LanguageIdentifier) -> &str {
-    locale.language.as_str()
+/// Resolve the catalogue Netsuke will use for `preferred_locale`.
+///
+/// Unparseable tags resolve to the source catalogue, matching the behaviour of
+/// [`build_localizer`].
+///
+/// # Examples
+///
+/// ```rust
+/// use netsuke::cli_localization::resolve_catalogue_tag;
+///
+/// assert_eq!(resolve_catalogue_tag("es-ES"), "es-ES");
+/// assert_eq!(resolve_catalogue_tag("not a locale"), "en-US");
+/// ```
+#[must_use]
+pub fn resolve_catalogue_tag(preferred_locale: &str) -> &'static str {
+    parse_locale_identifier(preferred_locale)
+        .map_or_else(locales::source_catalogue, |locale| {
+            locales::resolve_catalogue(&locale)
+        })
+        .tag()
+}
+
+/// Build a localizer for `catalogue`, layered over the English source copy.
+///
+/// `fallback` is consumed as the layered localizer's second tier. When the
+/// catalogue itself fails to parse there is no fallback left to hand back, so a
+/// fresh English localizer is built for that rare path.
+fn build_layered_localizer(
+    locale: LanguageIdentifier,
+    catalogue: &'static LocaleCatalogue,
+    fallback: Box<dyn Localizer>,
+) -> Box<dyn Localizer> {
+    let builder = FluentLocalizer::builder(locale);
+    build_consumer_localizer(builder, catalogue.resource())
+        .map_or_else(build_en_localizer, |primary| {
+            Box::new(LayeredLocalizer::new(primary, fallback)) as Box<dyn Localizer>
+        })
 }
 
 /// Build a CLI localizer with an English fallback.
+///
+/// `preferred_locale` is matched against the catalogue registry; unsupported or
+/// unparseable tags fall back to the English source catalogue.
 #[must_use]
 pub fn build_localizer(preferred_locale: Option<&str>) -> Box<dyn Localizer> {
     let fallback = build_en_localizer();
@@ -74,12 +113,9 @@ pub fn build_localizer(preferred_locale: Option<&str>) -> Box<dyn Localizer> {
         return fallback;
     };
 
-    if locale_language(&locale) == "es" {
-        let builder = FluentLocalizer::builder(locale);
-        if let Some(primary) = build_consumer_localizer(builder, NETSUKE_ES_ES) {
-            return Box::new(LayeredLocalizer::new(primary, fallback));
-        }
+    let catalogue = locales::resolve_catalogue(&locale);
+    if catalogue.tag() == locales::SOURCE_LOCALE {
+        return fallback;
     }
-
-    fallback
+    build_layered_localizer(locale, catalogue, fallback)
 }
