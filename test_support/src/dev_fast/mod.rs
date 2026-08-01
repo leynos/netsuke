@@ -19,8 +19,12 @@
 //!
 //! Scope: these helpers exist for the `dev-fast` target tests. They spawn child
 //! processes with a bespoke environment and never mutate the parent's, so they
-//! compose with the repository's prohibition on direct environment mutation in
-//! tests.
+//! qualify for the subprocess-isolation exemption to the ban on in-process
+//! environment mutation (`AGENTS.md`). That exemption is written around
+//! `assert_cmd`; these helpers use `std::process::Command` directly, because
+//! the subject under test is `make` and the `scripts/` entry points rather than
+//! the `netsuke` binary. The isolation is the same, and stricter: `env_clear`
+//! means a child inherits nothing it was not handed.
 
 mod cargo_log;
 mod make;
