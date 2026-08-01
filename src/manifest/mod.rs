@@ -70,23 +70,33 @@ pub enum ManifestLoadStage {
 /// Returns the variable's value or a structured error that mirrors Jinja's
 /// failure modes, ensuring templates halt when a variable is missing or not
 /// valid UTF-8.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// use std::ffi::OsStr;
-/// use test_support::env::VarGuard;
-///
-/// let _guard = VarGuard::set("FOO", OsStr::new("bar"));
-/// assert_eq!(env("FOO").unwrap(), "bar");
-/// // guard restores prior value on drop
-/// ```
 #[expect(
     clippy::disallowed_methods,
     reason = "composition root: supplies the process environment to the env() Jinja helper"
 )]
 fn env_var(name: &str) -> std::result::Result<String, Error> {
-    match std::env::var(name) {
+    env_var_with(name, |key| std::env::var(key))
+}
+
+/// Resolve `name` through `read_env`, mapping failures to Jinja errors.
+///
+/// Separated from [`env_var`] so all three outcomes — present, absent, and
+/// non-UTF-8 — can be exercised without mutating the process environment. The
+/// non-UTF-8 branch is otherwise unreachable from a test: fabricating such a
+/// value in the live environment needs platform-specific `OsString` surgery,
+/// and the AGENTS.md testing mandate forbids in-process mutation regardless.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let value = env_var_with("FOO", |_| Ok(String::from("bar")));
+/// assert_eq!(value.expect("FOO"), "bar");
+/// ```
+fn env_var_with<F>(name: &str, read_env: F) -> std::result::Result<String, Error>
+where
+    F: FnOnce(&str) -> std::result::Result<String, std::env::VarError>,
+{
+    match read_env(name) {
         Ok(val) => Ok(val),
         Err(std::env::VarError::NotPresent) => Err(Error::new(
             ErrorKind::UndefinedError,
