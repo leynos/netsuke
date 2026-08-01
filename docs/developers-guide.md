@@ -103,6 +103,9 @@ Run these commands before finalizing any change:
 - `make lint`
 - `make test`
 
+Changes that touch Markdown also require `make fmt`, `make markdownlint`,
+and `make nixie`; these are described further below.
+
 `make test` runs the non-doctest suite through
 [cargo-nextest](https://nexte.st/) and then runs the doctests separately.
 CI pins the runner version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`.
@@ -1138,9 +1141,14 @@ pub fn resolve_merged_json(cli: &Cli, matches: &ArgMatches) -> OrthoResult<bool>
 pub fn resolve_merged_json_with_env(
     cli: &Cli,
     matches: &ArgMatches,
-    env: &impl ConfigEnvProvider,
+    env: &impl EnvProvider,
 ) -> OrthoResult<bool>;
 ```
+
+The `cli` module re-exports this trait publicly as `ConfigEnvProvider` (and
+`StdEnvProvider` as `ConfigStdEnvProvider`) to avoid colliding with the
+unrelated `EnvProvider` in `locale_resolution`; crate-internal code uses the
+bare `EnvProvider` name.
 
 Discovery tests that exercise OrthoConfig's `ConfigDiscovery` may still need
 `EnvLock` because the external discovery implementation reads platform

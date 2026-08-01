@@ -12,7 +12,9 @@ use tracing::{debug, trace, warn};
 
 /// Classifies an explicit configuration load failure without retaining error text.
 ///
-/// An absent file is [`Self::Missing`]; invalid TOML is [`Self::LoadError`].
+/// An absent file is [`Self::Missing`]. Every other failure to load or parse the
+/// selected file is [`Self::LoadError`], covering malformed syntax in any
+/// supported format as well as I/O and permission errors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum ConfigLoadFailureKind {
     /// The selected configuration file does not exist.
