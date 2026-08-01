@@ -39,9 +39,12 @@ Adopt Polonius now, as a nightly-only source tree:
 - Pin the dated toolchain `nightly-2026-06-25` in `rust-toolchain.toml` so
   builds stay reproducible.
 - Enable `-Zpolonius=next` in `.cargo/config.toml` under `[build] rustflags`,
-  so plain Cargo invocations, rust-analyzer, and `cargo kani` all borrow-check
-  with the same analysis. Makefile recipes that set `RUSTFLAGS` (which
-  overrides that table) re-state the flag via the `POLONIUS_FLAGS` variable.
+  so plain Cargo invocations and rust-analyzer borrow-check with the same
+  analysis. Makefile recipes that set `RUSTFLAGS` (which overrides that table)
+  re-state the flag via the `POLONIUS_FLAGS` variable. `cargo kani` sets
+  `CARGO_ENCODED_RUSTFLAGS` itself, which also bypasses the table, so the
+  `kani-full` recipe passes the flag through the `RUSTFLAGS` environment
+  variable, which Kani appends to its own flags.
 - Collapse the CI matrices in `ci.yml` and `netsukefile-test.yml` to the
   pinned nightly, and align `coverage-main.yml`. Stable and MSRV legs are
   removed because the tree no longer compiles without Polonius.

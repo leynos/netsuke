@@ -146,7 +146,7 @@ kani-check: ## Check the installed Kani verifier version
 	@$(PROVER_TOOLS) kani check-version --kani-command "$(KANI)" $(KANI_CHECK_FLAGS) || { status=$$?; printf 'prover-tools: target=kani-check failed exit=%s\n' "$$status" >&2; exit "$$status"; }
 
 kani-full: ## Run the full Kani verification suite
-	$(KANI) $(KANI_FLAGS)
+	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }$(POLONIUS_FLAGS)" $(KANI) $(KANI_FLAGS)
 
 kani-ir: kani-full ## Run the IR Kani verification suite
 
