@@ -31,14 +31,21 @@ results=()
 
 # The benchmark touches BENCH_TOUCH_FILE to make the second pass incremental,
 # and that file defaults to a tracked source. Leaving it newer than the ordinary
-# `target/` outputs would silently force the developer's next real build to
-# redo work, long after the benchmark finished, so the timestamp is restored on
-# exit — including when a measurement fails or the run is interrupted.
+# `target/` outputs would silently force the developer's next real build to redo
+# work, long after the benchmark finished, so the timestamp is restored on exit —
+# including when a measurement fails or the run is interrupted.
+#
+# This holds a scratch file whose own timestamp is the one to put back, rather
+# than an epoch number: `touch -r` is POSIX, whereas reading the stamp with
+# `stat -c` and replaying it with `touch -d @epoch` is GNU-only and fails on
+# macOS. The benchmark is reachable there, because the capability check tolerates
+# a non-Linux host rather than aborting.
 BENCH_TOUCH_STAMP=
 
 restore_touch_file() {
   [ -n "$BENCH_TOUCH_STAMP" ] || return 0
-  touch -d "@$BENCH_TOUCH_STAMP" -- "$BENCH_TOUCH_FILE" || true
+  touch -r "$BENCH_TOUCH_STAMP" "$BENCH_TOUCH_FILE" || true
+  rm -f "$BENCH_TOUCH_STAMP"
   BENCH_TOUCH_STAMP=
 }
 
@@ -71,8 +78,11 @@ measure_variant() {
   clean=$(time_command "$@")
 
   note "measuring $label (incremental)"
-  [ -n "$BENCH_TOUCH_STAMP" ] || BENCH_TOUCH_STAMP=$(stat -c %Y -- "$BENCH_TOUCH_FILE")
-  touch -- "$BENCH_TOUCH_FILE"
+  if [ -z "$BENCH_TOUCH_STAMP" ]; then
+    BENCH_TOUCH_STAMP=$(mktemp)
+    touch -r "$BENCH_TOUCH_FILE" "$BENCH_TOUCH_STAMP"
+  fi
+  touch "$BENCH_TOUCH_FILE"
   incremental=$(time_command "$@")
 
   unset CARGO_TARGET_DIR

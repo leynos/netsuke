@@ -31,6 +31,7 @@ mod make;
 mod release;
 mod sandbox;
 mod scenario;
+mod staging;
 
 pub use cargo_log::{CargoInvocation, RecordingCargo, TargetState};
 pub use make::MakeInvocation;

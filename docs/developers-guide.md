@@ -500,12 +500,12 @@ rustflags list carrying both `-Zpolonius=next` and
 ### Composition rules
 
 - **Quality gates.** `make check-fmt`, `make lint`, `make lint-clippy`,
-  `make test`, and `make typecheck` are unchanged and remain on the stable
-  toolchain from `rust-toolchain.toml` with the default LLVM backend. The
-  `dev-*` targets are not part of `make test`, `make lint`, `make check-fmt`, or
-  `make all`, mirroring the Kani boundary described below. Run the ordinary
-  gates before proposing a change; `make dev-test` is a faster inner-loop
-  proxy, not a substitute.
+  `make test`, and `make typecheck` are unchanged and remain on the
+  repository's pinned nightly toolchain from `rust-toolchain.toml` with the
+  default LLVM backend. The `dev-*` targets are not part of `make test`,
+  `make lint`, `make check-fmt`, or `make all`, mirroring the Kani boundary
+  described below. Run the ordinary gates before proposing a change;
+  `make dev-test` is a faster inner-loop proxy, not a substitute.
 - **`RUSTFLAGS`.** `make test-nextest`, `make doctest`, and `make typecheck`
   set `RUSTFLAGS="-D warnings"`. An externally set `RUSTFLAGS` overrides the
   `[target.*]` `rustflags` in a Cargo configuration file, so the `dev-*`
@@ -678,7 +678,11 @@ the `netsuke` binary from an empty target directory, touches `src/main.rs`, and
 rebuilds. Each variant uses its own target directory under `target/bench/`, so
 neither warms the other's cache nor disturbs the working `target/` tree. The
 timer reads `EPOCHREALTIME`, so this target needs Bash 5.0 or newer; it fails
-with a named prerequisite on older shells rather than reporting zeroes.
+with a named prerequisite on older shells rather than reporting zeroes. The
+benchmark assumes it is the only run in flight: `BENCH_ROOT` and
+`BENCH_TOUCH_FILE` default to the shared `target/bench` directory and the
+tracked `src/main.rs`, so concurrent runs would interfere with each other's
+measurements; run one at a time, or override both variables per run.
 
 Results below were recorded on a 24-core x86_64 Linux host, with both variants
 on the repository's own `nightly-2026-06-25` supplying Cranelift 0.132.0, and

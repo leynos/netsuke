@@ -44,11 +44,6 @@ impl FakeRelease {
         })
     }
 
-    /// The version this release was published as.
-    pub fn version(&self) -> &str {
-        &self.version
-    }
-
     /// The artefact's file name, as it appears in a checksum file.
     pub fn name(&self) -> &str {
         &self.name

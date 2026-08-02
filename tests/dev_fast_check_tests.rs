@@ -40,173 +40,69 @@ fn reports_resolved_path_and_version_when_prerequisites_are_met() -> Result<()> 
     Ok(())
 }
 
-/// Run without the pin-file variables, the check must still find the committed
-/// pins by locating the repository from the script's own path.
-#[test]
-fn falls_back_to_the_committed_pins_when_no_overrides_are_given() -> Result<()> {
-    let sandbox = Sandbox::new()?;
-    // Both fakes report exactly what the committed pins name, so the check can
-    // only pass if it read those files rather than defaulting to nothing. The
-    // mold goes on the sandbox PATH directly: only the Make recipes prepend the
-    // install prefix, and this case invokes the script itself.
-    sandbox.write_mold(&sandbox.bin(), &pinned_mold_version()?)?;
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
-
-    let output = sandbox.script_with("dev-fast-check.sh", PinOverrides::Omitted, &[])?;
-    let text = combined(&output);
-
-    ensure!(
-        output.status.success(),
-        "check should pass on the committed pins, got `{text}`"
-    );
-    ensure!(
-        text.contains(&format!("mold {}", pinned_mold_version()?)),
-        "should read tools/mold/VERSION by default, got `{text}`"
-    );
-    ensure!(
-        text.contains(&pinned_toolchain()?),
-        "should read rust-toolchain.toml by default, got `{text}`"
-    );
-    Ok(())
-}
-
-/// The drift diagnostic names the pinned version, so a mismatching fake proves
-/// which file the default resolved to rather than merely that some file was
-/// read.
-#[test]
-fn default_pins_are_the_committed_ones_not_an_empty_fallback() -> Result<()> {
-    let sandbox = Sandbox::new()?;
-    sandbox.write_mold(&sandbox.bin(), "99.0.0")?;
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
-
-    let output = sandbox.script_with("dev-fast-check.sh", PinOverrides::Omitted, &[])?;
-    let text = combined(&output);
-
-    ensure!(
-        !output.status.success(),
-        "a drift should fail, got `{text}`"
-    );
-    ensure!(
-        text.contains(&format!("the pin {}", pinned_mold_version()?)),
-        "the drift message should name the committed pin, got `{text}`"
-    );
-    Ok(())
-}
-
-/// An override must still win over the default.
-#[test]
-fn an_explicit_pin_override_wins_over_the_committed_default() -> Result<()> {
-    let sandbox = Sandbox::new()?;
-    let toolchain_pin = sandbox.home().join("rust-toolchain.toml");
-    sandbox.write_file(
-        &toolchain_pin,
-        "[toolchain]\nchannel = \"nightly-1970-01-01\"\n",
-    )?;
-    sandbox.write_mold(&sandbox.bin(), &pinned_mold_version()?)?;
-    // rustup knows only the committed toolchain, so the run can fail only if
-    // the override displaced the default.
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
-
-    let output = sandbox.script_with(
-        "dev-fast-check.sh",
-        PinOverrides::Omitted,
-        &[("RUST_TOOLCHAIN_FILE", toolchain_pin.to_string())],
-    )?;
-    let text = combined(&output);
-
-    ensure!(
-        !output.status.success(),
-        "the overridden toolchain is not installed, so the check should fail: `{text}`"
-    );
-    ensure!(
-        text.contains("nightly-1970-01-01"),
-        "the override should be the toolchain reported, got `{text}`"
-    );
-    Ok(())
-}
-
-/// A pin path that does not exist must produce the ordinary actionable
-/// diagnostic, whether it arrived as a default or as an override.
-#[test]
-fn a_missing_pin_file_reports_the_actionable_diagnostic() -> Result<()> {
-    let sandbox = Sandbox::new()?;
-    sandbox.write_mold(&sandbox.bin(), &pinned_mold_version()?)?;
-    sandbox.write_rustup(&pinned_toolchain()?, true)?;
-    let missing = sandbox.home().join("absent/MOLD_VERSION");
-
-    let output = sandbox.script_with(
-        "dev-fast-check.sh",
-        PinOverrides::Omitted,
-        &[("MOLD_VERSION_FILE", missing.to_string())],
-    )?;
-    let text = combined(&output);
-
-    ensure!(!output.status.success(), "should fail, got `{text}`");
-    ensure!(
-        text.contains("missing version pin") && text.contains(missing.as_str()),
-        "should name the missing pin file, got `{text}`"
-    );
-    Ok(())
-}
-
-/// A malformed pin must be refused, never silently rewritten.
+/// On a host without `mold`, the check reports the platform-linker fallback and
+/// still passes.
 ///
-/// Deleting every whitespace character would turn `1.2 3` into `1.23` and two
-/// lines into their concatenation, so a corrupted pin would reach the download
-/// URL looking well-formed. Boundary whitespace is the only kind trimmed.
-#[rstest]
-#[case::internal_space("1.2 3\n", "contains whitespace")]
-#[case::internal_tab("1.2\t3\n", "contains whitespace")]
-#[case::two_lines("1.2.3\n4.5.6\n", "expected one line")]
-#[case::blank("\n", "empty version pin")]
-fn a_malformed_version_pin_is_refused_not_rewritten(
-    #[case] contents: &str,
-    #[case] expected: &str,
-) -> Result<()> {
+/// The documented promise is that macOS and Windows keep Cranelift and lose
+/// only the linker. Faking `uname` is what makes that testable from Linux —
+/// otherwise the branch is reachable only on hardware CI does not have, which
+/// is exactly where an untested fallback rots.
+#[test]
+fn a_non_linux_host_skips_mold_and_still_passes() -> Result<()> {
     let sandbox = Sandbox::new()?;
-    sandbox.write_mold(&sandbox.bin(), &pinned_mold_version()?)?;
     sandbox.write_rustup(&pinned_toolchain()?, true)?;
-    let pin = sandbox.home().join("MOLD_VERSION");
-    sandbox.write_file(&pin, contents)?;
+    // No mold anywhere: the point is that its absence stops mattering.
+    sandbox.write_fake(&sandbox.bin(), "uname", "echo Darwin")?;
 
-    let output = sandbox.script_with(
-        "dev-fast-check.sh",
-        PinOverrides::Omitted,
-        &[("MOLD_VERSION_FILE", pin.to_string())],
-    )?;
+    let output = sandbox.script_with("dev-fast-check.sh", PinOverrides::Omitted, &[])?;
     let text = combined(&output);
 
-    ensure!(!output.status.success(), "should refuse, got `{text}`");
     ensure!(
-        text.contains(expected),
-        "should report `{expected}`, got `{text}`"
+        output.status.success(),
+        "a non-Linux host should pass without mold, got `{text}`"
+    );
+    ensure!(
+        text.contains("mold is Linux-only") && text.contains("Darwin"),
+        "should name the fallback and the host, got `{text}`"
+    );
+    ensure!(
+        text.contains("rustc-codegen-cranelift-preview"),
+        "Cranelift should still be required off Linux, got `{text}`"
     );
     Ok(())
 }
 
-/// Whitespace either side of the version is trimmed, so a pin file written with
-/// a trailing newline or stray indentation still resolves.
-#[rstest]
-#[case::trailing_newline("2.41.0\n")]
-#[case::surrounding_spaces("   2.41.0   \n")]
-#[case::no_trailing_newline("2.41.0")]
-fn boundary_whitespace_around_a_pin_is_trimmed(#[case] contents: &str) -> Result<()> {
+/// The installer likewise skips the linker off Linux rather than failing, and
+/// goes on to install the toolchain half.
+#[test]
+fn a_non_linux_host_skips_the_mold_install() -> Result<()> {
     let sandbox = Sandbox::new()?;
-    sandbox.write_mold(&sandbox.bin(), "2.41.0")?;
     sandbox.write_rustup(&pinned_toolchain()?, true)?;
-    let pin = sandbox.home().join("MOLD_VERSION");
-    sandbox.write_file(&pin, contents)?;
-
+    sandbox.write_fake(&sandbox.bin(), "uname", "echo Darwin")?;
+    // A URL that would fail loudly if the download were ever attempted.
     let output = sandbox.script_with(
-        "dev-fast-check.sh",
+        "install-dev-fast.sh",
         PinOverrides::Omitted,
-        &[("MOLD_VERSION_FILE", pin.to_string())],
+        &[("MOLD_RELEASE_BASE_URL", "file:///nonexistent".to_owned())],
     )?;
     let text = combined(&output);
 
     ensure!(
         output.status.success(),
-        "`{contents:?}` should resolve to 2.41.0, got `{text}`"
+        "the install should succeed off Linux, got `{text}`"
+    );
+    ensure!(
+        text.contains("skipping on Darwin"),
+        "should say why the linker was skipped, got `{text}`"
+    );
+    ensure!(
+        !text.contains("downloading"),
+        "no download should be attempted off Linux, got `{text}`"
+    );
+    let rustup = sandbox.rustup_invocations()?;
+    ensure!(
+        rustup.iter().any(|call| call.starts_with("component add")),
+        "the toolchain half should still run, recorded `{rustup:?}`"
     );
     Ok(())
 }

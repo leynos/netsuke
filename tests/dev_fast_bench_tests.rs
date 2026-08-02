@@ -17,6 +17,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use proptest::prelude::*;
 use proptest::proptest;
 use proptest::test_runner::FileFailurePersistence;
+use rstest::rstest;
 use std::time::{Duration, UNIX_EPOCH};
 use test_support::dev_fast::{
     BuildScenario, CargoInvocation, DEV_FAST_CONFIG_PATH, MakeInvocation, Sandbox, TargetState,
@@ -234,6 +235,51 @@ proptest! {
             dev_fast_pre
         );
     }
+}
+
+/// The touched file's timestamp must be put back, whether the run finishes or
+/// aborts partway.
+///
+/// The benchmark touches a tracked source to make its second pass incremental.
+/// Leaving it newer than `target/` would make the developer's next ordinary
+/// build redo work for reasons nothing on screen explains — and a failed run is
+/// the case most likely to leave it that way, so it is the one worth asserting.
+#[rstest]
+#[case::completes(true)]
+#[case::aborts(false)]
+fn the_touched_file_is_restored_however_the_run_ends(#[case] succeeds: bool) -> Result<()> {
+    let scenario = BuildScenario::prepare()?;
+    let sandbox = scenario.sandbox();
+    let fixture = prepare_bench_fixture(&scenario)?;
+
+    if !succeeds {
+        // Fail the second variant, after the first has already touched the file.
+        sandbox.write_fake(
+            &sandbox.bin(),
+            "cargo",
+            "case \"$*\" in *--config*) exit 1 ;; *) exit 0 ;; esac",
+        )?;
+    }
+
+    let invocation = MakeInvocation::new("bench-build")
+        .variable("CARGO", scenario.cargo().executable())
+        .environment("BENCH_ROOT", &fixture.root)
+        .environment("BENCH_TOUCH_FILE", &fixture.touch_file);
+    let output = sandbox.run_make(&invocation)?;
+    ensure!(
+        output.status.success() == succeeds,
+        "the run should {} , got `{}`",
+        if succeeds { "succeed" } else { "abort" },
+        combined(&output)
+    );
+
+    ensure!(
+        sandbox.mtime_seconds(&fixture.touch_file)? == fixture.baseline_mtime,
+        "the touched file should be restored to {}, found {}",
+        fixture.baseline_mtime,
+        sandbox.mtime_seconds(&fixture.touch_file)?
+    );
+    Ok(())
 }
 
 #[test]
