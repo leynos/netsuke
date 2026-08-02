@@ -29,6 +29,16 @@ pub struct StubEnv {
 
 impl StubEnv {
     /// Create a stub declaring nothing; every read panics until one is added.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,should_panic
+    /// use netsuke::locale_resolution::EnvProvider;
+    /// use test_support::locale_stubs::StubEnv;
+    ///
+    /// // Nothing is declared, so any read is a programming error.
+    /// StubEnv::strict().var("ANYTHING");
+    /// ```
     #[must_use]
     pub fn strict() -> Self {
         Self {
@@ -38,6 +48,16 @@ impl StubEnv {
     }
 
     /// Create a stub answering `NETSUKE_LOCALE` with `locale`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use netsuke::locale_resolution::EnvProvider;
+    /// use test_support::locale_stubs::StubEnv;
+    ///
+    /// let env = StubEnv::with_locale("es-ES");
+    /// assert_eq!(env.var("NETSUKE_LOCALE").as_deref(), Some("es-ES"));
+    /// ```
     #[must_use]
     pub fn with_locale(locale: impl Into<String>) -> Self {
         Self::strict().with_var(locale_resolution::NETSUKE_LOCALE_ENV, locale)
@@ -47,16 +67,41 @@ impl StubEnv {
     ///
     /// Distinct from a stub that never expected the read at all: an unset
     /// variable is a legitimate case to exercise.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use netsuke::locale_resolution::EnvProvider;
+    /// use test_support::locale_stubs::StubEnv;
+    ///
+    /// // Declared, so the read is permitted; unset, so it reports `None`.
+    /// assert_eq!(StubEnv::without_locale().var("NETSUKE_LOCALE"), None);
+    /// ```
     #[must_use]
     pub fn without_locale() -> Self {
         Self::strict().allowing(locale_resolution::NETSUKE_LOCALE_ENV)
     }
 
     /// Answer `key` with `value`.
+    ///
+    /// The most recent declaration for a key wins, so this overrides an earlier
+    /// [`StubEnv::allowing`] for the same key.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use netsuke::locale_resolution::EnvProvider;
+    /// use test_support::locale_stubs::StubEnv;
+    ///
+    /// let env = StubEnv::strict().allowing("X").with_var("X", "set");
+    /// assert_eq!(env.var("X").as_deref(), Some("set"));
+    /// ```
     #[must_use]
     pub fn with_var(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         let key = key.into();
-        self.allowed.push(key.clone());
+        if !self.allowed.iter().any(|allowed| allowed == &key) {
+            self.allowed.push(key.clone());
+        }
         self.values.insert(key, value.into());
         self
     }
@@ -65,9 +110,28 @@ impl StubEnv {
     ///
     /// Needed because an unset variable is a legitimate case to test, and must
     /// be distinguishable from a variable the test never expected to be read.
+    ///
+    /// The most recent declaration for a key wins, so this clears a value set
+    /// by an earlier [`StubEnv::with_var`]. Were it merely to append to the
+    /// permitted list, the builder would read as declaring the key unset while
+    /// still answering with the old value.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use netsuke::locale_resolution::EnvProvider;
+    /// use test_support::locale_stubs::StubEnv;
+    ///
+    /// let env = StubEnv::strict().with_var("X", "set").allowing("X");
+    /// assert_eq!(env.var("X"), None);
+    /// ```
     #[must_use]
     pub fn allowing(mut self, key: impl Into<String>) -> Self {
-        self.allowed.push(key.into());
+        let key = key.into();
+        self.values.remove(&key);
+        if !self.allowed.iter().any(|allowed| allowed == &key) {
+            self.allowed.push(key);
+        }
         self
     }
 }
@@ -76,10 +140,13 @@ impl LocaleEnvProvider for StubEnv {
     fn var(&self, key: &str) -> Option<String> {
         assert!(
             self.allowed.iter().any(|allowed| allowed == key),
-            "StubEnv was asked for {key:?}, which the test did not declare. \
-             Declare it with `.with_var(..)` or `.allowing(..)` if the read is \
-             intended; otherwise the code under test is reading a variable the \
-             test does not know about."
+            concat!(
+                "StubEnv was asked for {:?}, which the test did not declare. ",
+                "Declare it with `.with_var(..)` or `.allowing(..)` if the read ",
+                "is intended; otherwise the code under test is reading a ",
+                "variable the test does not know about."
+            ),
+            key
         );
         self.values.get(key).cloned()
     }

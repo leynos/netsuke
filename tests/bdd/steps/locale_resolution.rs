@@ -76,14 +76,10 @@ fn set_cli_override(world: &TestWorld, locale: &str) {
 
 #[when("the startup locale is resolved for {args:string}")]
 fn resolve_startup_locale(world: &TestWorld, args: &str) {
-    // `NETSUKE_JSON` is read alongside the locale on some startup paths, so it
-    // is declared as legitimately-readable-but-unset rather than left to trip
-    // the stub's unexpected-key assertion.
     let env = world
         .locale_env
         .get()
-        .map_or_else(StubEnv::without_locale, StubEnv::with_locale)
-        .allowing(netsuke::locale_resolution::NETSUKE_JSON_ENV);
+        .map_or_else(StubEnv::without_locale, StubEnv::with_locale);
     let system = StubSystemLocale {
         locale: world.locale_system.get(),
     };
