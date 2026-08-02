@@ -152,6 +152,10 @@ fn current_dir_utf8() -> Result<Utf8PathBuf, io::Error> {
 }
 
 #[cfg(windows)]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "composition root: home resolution is the path stdlib's ambient boundary; the injected ladders are tracked in the environment meta issue"
+)]
 fn home_from_env() -> Option<String> {
     env::var("HOME")
         .or_else(|_| env::var("USERPROFILE"))
@@ -165,6 +169,10 @@ fn home_from_env() -> Option<String> {
 }
 
 #[cfg(not(windows))]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "composition root: home resolution is the path stdlib's ambient boundary; the injected ladders are tracked in the environment meta issue"
+)]
 fn home_from_env() -> Option<String> {
     env::var("HOME").or_else(|_| env::var("USERPROFILE")).ok()
 }

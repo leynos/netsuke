@@ -1408,6 +1408,53 @@ still safe to use. See the
 [locale-pinned snapshot tests](snapshot-testing-in-netsuke-using-insta.md#locale-pinned-snapshot-tests)
 section for the fixture's intended usage.
 
+### Enforcing the environment mandate
+
+`clippy.toml` disallows the six process-environment entry points, so
+`make lint` rejects a new one:
+
+```toml
+disallowed-methods = [
+  { path = "std::env::var", reason = "inject an environment reader" },
+  { path = "std::env::set_var", reason = "use a stub environment in tests" },
+  # ... var_os, vars, vars_os, remove_var
+]
+```
+
+The reason string appears in the diagnostic, so a contributor who trips the
+lint is told what to do instead, not merely that they may not. `test_support`
+is excluded from the workspace, so it carries its own copy of the list.
+
+#### Annotating a sanctioned site
+
+Use `#[expect]`, never `allow`:
+
+```rust
+#[expect(
+    clippy::disallowed_methods,
+    reason = "composition root: supplies the process environment to the read_env seam"
+)]
+pub fn resolve(no_emoji: Option<bool>) -> OutputPrefs {
+    resolve_with(no_emoji, |key| env::var(key).ok())
+}
+```
+
+`expect` becomes *unfulfilled* — and warns — once the site stops tripping the
+lint. A migrated file therefore fails the gate until its annotation is removed,
+so the backlog cannot rot silently. `allow` would go stale invisibly.
+
+Three dispositions are in use:
+
+- **Composition roots** in `src/` keep a permanent site-level expectation naming
+  the seam they supply. These are the sanctioned ambient boundary.
+- **Build scripts and artefact discovery** keep a permanent module-level
+  expectation: they read what Cargo reports, and there is no seam to inject.
+- **Pending migrations** in `tests/` carry a module-level expectation naming the
+  tracking issue, removed as each file migrates.
+
+Scope an expectation as tightly as the site allows — a function where one call
+is involved, a module only where the whole file is pending migration.
+
 ### `EnvLock`
 
 `test_support::env_lock::EnvLock` is a global mutex that serializes all

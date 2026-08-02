@@ -1,5 +1,10 @@
 //! Shared fixtures for release-help generation script tests.
 
+#![expect(
+    clippy::disallowed_methods,
+    reason = "locating build artefacts Cargo reports through the environment; there is no seam to inject and no process state to isolate"
+)]
+
 #[cfg(test)]
 mod script_functions;
 

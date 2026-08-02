@@ -106,6 +106,10 @@ pub(super) fn should_visit_entry(entry: &walkdir::DirEntry, skip_dirs: &Workspac
     !skip_dirs.contains(&name)
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "composition root: supplies the process environment to the workspace fallback seam"
+)]
 fn workspace_fallback_enabled() -> bool {
     match env::var(WORKSPACE_FALLBACK_ENV) {
         Ok(value) => {

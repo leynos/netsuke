@@ -49,6 +49,10 @@ impl OutputMode {
 /// assert_eq!(resolve(Some(false), None), OutputMode::Standard);
 /// ```
 #[must_use]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "composition root: supplies the process environment to the read_env seam"
+)]
 pub fn resolve(explicit: Option<bool>, colour_policy: Option<ColourPolicy>) -> OutputMode {
     resolve_with(explicit, colour_policy, |key| env::var(key).ok())
 }

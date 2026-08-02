@@ -44,6 +44,10 @@ pub trait EnvProvider {
 #[derive(Debug, Default, Clone, Copy)]
 pub struct StdEnvProvider;
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "composition root: StdEnvProvider is the process-backed adapter behind the EnvProvider seam"
+)]
 impl EnvProvider for StdEnvProvider {
     fn get(&self, key: &str) -> Option<OsString> {
         std::env::var_os(key)

@@ -4,6 +4,11 @@
 //! `EnvLock`. Tests verify that set variables are restored, absent variables
 //! are removed, and empty snapshots are handled gracefully.
 
+#![expect(
+    clippy::disallowed_methods,
+    reason = "covers the guards being retired; deleted under #493 (integration-binary migration)"
+)]
+
 use anyhow::{Result, ensure};
 use rstest::rstest;
 use std::collections::HashMap;
