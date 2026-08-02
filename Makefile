@@ -29,17 +29,11 @@ MOLD_SHA256SUMS_FILE ?= tools/mold/SHA256SUMS
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 DEV_FAST_CONFIG ?= tools/dev-fast/config.toml
 DEV_FAST_PREFIX ?= $(HOME)/.local
-# The installer may write mold to a prefix other than the default, so every
-# dev-fast recipe puts that prefix first on PATH. Without this the PATH export
-# below would keep selecting whichever mold sits in ~/.local/bin, silently
-# ignoring an overridden DEV_FAST_PREFIX.
-DEV_FAST_PATH = PATH='$(DEV_FAST_PREFIX)/bin:$(PATH)'
-DEV_FAST_ENV = $(DEV_FAST_PATH) \
-	MOLD_VERSION_FILE='$(MOLD_VERSION_FILE)' \
-	MOLD_SHA256SUMS_FILE='$(MOLD_SHA256SUMS_FILE)' \
-	RUST_TOOLCHAIN_FILE='$(RUST_TOOLCHAIN_FILE)' \
-	DEV_FAST_CONFIG='$(DEV_FAST_CONFIG)' \
-	DEV_FAST_PREFIX='$(DEV_FAST_PREFIX)'
+# Exported rather than interpolated into the recipes. Make hands an exported
+# variable to the child process directly, so a path containing a quote cannot
+# break the command line the shell parses; a `VAR='$(VAR)'` prefix could.
+export MOLD_VERSION_FILE MOLD_SHA256SUMS_FILE RUST_TOOLCHAIN_FILE
+export DEV_FAST_CONFIG DEV_FAST_PREFIX
 DEV_FAST_TOOLCHAIN = $$(awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/ { print $$2; exit }' '$(RUST_TOOLCHAIN_FILE)')
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 NIXIE ?= nixie
@@ -172,19 +166,26 @@ formal-pr: ## Run pull-request formal-verification checks
 	$(MAKE) kani-check
 
 install-dev-fast: ## Install the pinned mold linker and Cranelift backend
-	@$(DEV_FAST_ENV) scripts/install-dev-fast.sh
+	@scripts/install-dev-fast.sh
 
 dev-fast-check: ## Check the mold and Cranelift local build prerequisites
-	@$(DEV_FAST_ENV) scripts/dev-fast-check.sh
+	@scripts/dev-fast-check.sh
+
+# Every dev-fast target needs the install prefix ahead of a distribution mold:
+# the check probes PATH for it, and `-fuse-ld=mold` resolves by PATH order.
+# Target-specific exports do not reach prerequisites, so `dev-fast-check` is
+# listed in its own right as well as being a prerequisite of the others.
+DEV_FAST_TARGETS = install-dev-fast dev-fast-check dev-build dev-test bench-build
+$(DEV_FAST_TARGETS): export PATH := $(DEV_FAST_PREFIX)/bin:$(PATH)
 
 dev-build: dev-fast-check ## Build the debug binary with Cranelift and mold
-	$(DEV_FAST_PATH) RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) --config '$(DEV_FAST_CONFIG)' build $(BUILD_JOBS) --bin $(APP)
+	RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) --config "$$DEV_FAST_CONFIG" build $(BUILD_JOBS) --bin $(APP)
 
 dev-test: dev-fast-check ## Run the nextest pass with Cranelift and mold
-	$(DEV_FAST_PATH) RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) --config '$(DEV_FAST_CONFIG)' nextest run --all-targets --all-features $(NEXTEST_BUILD_JOBS)
+	RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) --config "$$DEV_FAST_CONFIG" nextest run --all-targets --all-features $(NEXTEST_BUILD_JOBS)
 
 bench-build: dev-fast-check ## Time clean and incremental debug builds for both paths
-	@$(DEV_FAST_ENV) CARGO='$(CARGO)' scripts/bench-build.sh
+	@CARGO="$(CARGO)" scripts/bench-build.sh
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \

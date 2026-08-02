@@ -661,23 +661,29 @@ neither warms the other's cache nor disturbs the working `target/` tree. The
 timer reads `EPOCHREALTIME`, so this target needs Bash 5.0 or newer; it fails
 with a named prerequisite on older shells rather than reporting zeroes.
 
-Results below were recorded on a 24-core x86_64 Linux host with Rust 1.89.0 as
-the default toolchain, `nightly-2026-06-29` supplying Cranelift 0.132.0, and
+Results below were recorded on a 24-core x86_64 Linux host, with both variants
+on the repository's own `nightly-2026-06-25` supplying Cranelift 0.132.0, and
 `mold` 2.41.0. Regenerate the table verbatim with `make bench-build`. Absolute
-figures move with machine load — a clean build on this host ranged from 15 s to
-24 s across runs — so the ratio between the two rows is the durable signal, not
-the seconds.
+figures move with machine load, so the ratio between the two rows is the
+durable signal, not the seconds; the run below is representative of three
+consecutive runs that agreed to within 0.4 s.
 
 | Variant                         | Clean build (s) | Incremental build (s) |
 | ------------------------------- | --------------- | --------------------- |
-| Default (LLVM, platform linker) | 15.4            | 3.6                   |
-| dev-fast (Cranelift, `mold`)    | 10.6            | 0.7                   |
+| Default (LLVM, platform linker) | 11.6            | 0.8                   |
+| dev-fast (Cranelift, `mold`)    | 10.7            | 0.6                   |
 
 Table: Debug build wall-clock time for the default and accelerated paths.
 
-The clean build gains roughly a third, dominated by codegen. The incremental
-rebuild — the case that actually paces the edit-compile-test loop — is about
-five times faster, because it is dominated by linking a single crate.
+Be realistic about the size of this: roughly 8% off a clean build and a quarter
+off an incremental one, which on this host is a few hundred milliseconds. Two
+things bound it. Both variants now share one nightly, so the comparison
+isolates Cranelift and `mold` rather than also capturing a toolchain change —
+earlier figures in this document did not, and overstated the gain. And the
+benchmark builds only `--bin netsuke`, the smallest useful target, so it
+under-represents what `make dev-test` sees, where Cranelift has every test
+binary's codegen to save on. Measure your own workload before concluding the
+acceleration is or is not worth the setup.
 
 ## Formal-verification tooling
 

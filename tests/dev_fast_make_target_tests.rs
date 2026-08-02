@@ -13,6 +13,7 @@
 
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
+use std::process::Command;
 use test_support::dev_fast::{
     BuildScenario, DEV_FAST_CONFIG_PATH, FakeRelease, MakeInvocation, RecordingCargo, Sandbox,
     combined, dev_fast_config, pinned_toolchain,
@@ -136,6 +137,53 @@ fn a_drifting_mold_invokes_cargo_not_at_all(#[case] target: &str) -> Result<()> 
         recorded.is_empty(),
         "`{target}` should not reach Cargo, recorded {} invocation(s)",
         recorded.len()
+    );
+    Ok(())
+}
+
+/// Ask Cargo what the fragment means, rather than only what it contains.
+///
+/// Parsing the TOML proves the file is well-formed; it cannot prove Cargo
+/// accepts the key paths. A backend nested under the wrong table, or a
+/// misspelled key, parses perfectly and is then silently ignored. `cargo config
+/// get` reports Cargo's own resolved view, so a misplaced key shows up as a
+/// missing value instead of passing unnoticed.
+///
+/// This exercises configuration resolution, not code generation: proving
+/// Cranelift and `mold` are genuinely used needs both installed, which
+/// `make dev-fast-check` gates at the point of use.
+/// The Linux entry is queried through its parent table: `config get` cannot
+/// address a key whose name is a quoted `cfg` expression.
+#[rstest]
+#[case::dev_profile_backend(
+    "profile.dev.codegen-backend",
+    "profile.dev.codegen-backend = \"cranelift\""
+)]
+#[case::unstable_flag("unstable.codegen-backend", "unstable.codegen-backend = true")]
+#[case::linux_rustflags(
+    "target",
+    "target.'cfg(target_os = \"linux\")'.rustflags = \
+     [\"-Zpolonius=next\", \"-Clink-arg=-fuse-ld=mold\"]"
+)]
+fn cargo_resolves_the_fragment_to_the_intended_settings(
+    #[case] query: &str,
+    #[case] expected: &str,
+) -> Result<()> {
+    let output = Command::new(env!("CARGO"))
+        .args(["--config", DEV_FAST_CONFIG_PATH, "-Zunstable-options"])
+        .args(["config", "get", query])
+        .output()
+        .with_context(|| format!("ask cargo for {query}"))?;
+    let reported = String::from_utf8_lossy(&output.stdout);
+
+    ensure!(
+        output.status.success(),
+        "cargo should resolve `{query}`, got `{}`",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    ensure!(
+        reported.contains(expected),
+        "cargo should report `{expected}`, got `{reported}`"
     );
     Ok(())
 }

@@ -29,6 +29,21 @@ BENCH_TOUCH_FILE=${BENCH_TOUCH_FILE:-src/main.rs}
 # Populated as "<label>|<clean seconds>|<incremental seconds>" rows.
 results=()
 
+# The benchmark touches BENCH_TOUCH_FILE to make the second pass incremental,
+# and that file defaults to a tracked source. Leaving it newer than the ordinary
+# `target/` outputs would silently force the developer's next real build to
+# redo work, long after the benchmark finished, so the timestamp is restored on
+# exit — including when a measurement fails or the run is interrupted.
+BENCH_TOUCH_STAMP=
+
+restore_touch_file() {
+  [ -n "$BENCH_TOUCH_STAMP" ] || return 0
+  touch -d "@$BENCH_TOUCH_STAMP" -- "$BENCH_TOUCH_FILE" || true
+  BENCH_TOUCH_STAMP=
+}
+
+trap restore_touch_file EXIT INT TERM
+
 # Wall-clock seconds for a command, to one decimal place. EPOCHREALTIME keeps
 # the measurement sub-second without shelling out to an external timer.
 time_command() {
@@ -56,7 +71,8 @@ measure_variant() {
   clean=$(time_command "$@")
 
   note "measuring $label (incremental)"
-  touch "$BENCH_TOUCH_FILE"
+  [ -n "$BENCH_TOUCH_STAMP" ] || BENCH_TOUCH_STAMP=$(stat -c %Y -- "$BENCH_TOUCH_FILE")
+  touch -- "$BENCH_TOUCH_FILE"
   incremental=$(time_command "$@")
 
   unset CARGO_TARGET_DIR

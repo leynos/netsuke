@@ -14,6 +14,22 @@ script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 MOLD_RELEASE_BASE_URL=${MOLD_RELEASE_BASE_URL:-https://github.com/rui314/mold/releases/download}
 
+# The scratch directory the EXIT trap removes. A trap whose action is a string
+# is re-parsed by the shell when it fires, so a path containing a quote — from a
+# quote-bearing `TMPDIR`, say — breaks the quoting and the cleanup never runs.
+# Naming a function instead means the path is only ever a variable, expanded at
+# removal time and never re-parsed. It is script-scope rather than local because
+# the trap fires after `install_mold` has returned.
+DEV_FAST_WORKDIR=
+
+remove_workdir() {
+  [ -n "$DEV_FAST_WORKDIR" ] || return 0
+  rm -rf -- "$DEV_FAST_WORKDIR"
+  DEV_FAST_WORKDIR=
+}
+
+trap remove_workdir EXIT
+
 # Verify the downloaded tarball against the single matching line in
 # SHA256SUMS. An unlisted artefact is a hard failure, never a silent skip.
 verify_mold_archive() {
@@ -46,9 +62,8 @@ install_mold() {
   name="mold-$version-$arch-linux.tar.gz"
   url="$MOLD_RELEASE_BASE_URL/v$version/$name"
 
-  workdir=$(mktemp -d)
-  # shellcheck disable=SC2064 # expand workdir now so the trap cannot lose it.
-  trap "rm -rf '$workdir'" EXIT
+  DEV_FAST_WORKDIR=$(mktemp -d)
+  workdir=$DEV_FAST_WORKDIR
 
   note "downloading $url"
   curl --fail --silent --show-error --location --output "$workdir/$name" "$url" ||
