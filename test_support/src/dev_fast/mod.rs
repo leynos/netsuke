@@ -30,6 +30,7 @@ mod cargo_log;
 mod make;
 mod release;
 mod sandbox;
+mod scenario;
 
 pub use cargo_log::{CargoInvocation, RecordingCargo, TargetState};
 pub use make::MakeInvocation;
@@ -38,3 +39,4 @@ pub use sandbox::{
     DEV_FAST_CONFIG_PATH, PinOverrides, Sandbox, combined, dev_fast_config, pinned_mold_version,
     pinned_toolchain,
 };
+pub use scenario::BuildScenario;

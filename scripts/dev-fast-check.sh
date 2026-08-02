@@ -4,7 +4,7 @@
 # Runs before `make dev-build` and `make dev-test` so a missing tool produces an
 # actionable installation hint rather than an opaque codegen-backend or linker
 # failure deep inside a Cargo invocation. Exits non-zero when a required
-# component is absent; a version drift from the pin is reported but tolerated.
+# component is absent, unusable, or does not match its pin.
 
 set -euo pipefail
 
@@ -12,9 +12,9 @@ script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/dev-fast-common.sh
 . "$script_dir/dev-fast-common.sh"
 
-# Report on the linker half of the prerequisites. Returns non-zero only when
-# mold is required but unusable; a non-Linux host and a version drift from the
-# pin are both tolerated, with a note explaining what will happen instead.
+# Report on the linker half of the prerequisites. Returns non-zero when mold is
+# required but missing, unusable, or a different version from the pin. Only a
+# non-Linux host is tolerated, with a note explaining what is used instead.
 check_mold() {
   local pinned=$1 installed resolved
   if ! is_linux; then
@@ -36,11 +36,18 @@ check_mold() {
   fi
   # Report the resolved path, not just the version: `-fuse-ld=mold` selects by
   # PATH order, so naming the winner makes an unexpected pick obvious.
+  #
+  # A drift from the pin fails rather than warns. An advisory pin is not a pin:
+  # tolerating it means the linker actually used, and so the benchmark figures
+  # and any linker-specific behaviour, silently stop matching what the
+  # repository claims. `make install-dev-fast` puts the pinned release ahead of
+  # a distribution one on PATH, so the remedy is a single command.
   if [ "$installed" != "$pinned" ]; then
-    note "mold $installed at $resolved, pin is $pinned; run make install-dev-fast to match"
-  else
-    note "mold $installed at $resolved"
+    note "mold $installed at $resolved does not match the pin $pinned"
+    note 'run make install-dev-fast to match'
+    return 1
   fi
+  note "mold $installed at $resolved"
 }
 
 # Report on the toolchain half of the prerequisites: rustup itself, the pinned

@@ -426,9 +426,12 @@ puts `~/.local/bin` first unconditionally. Invoking the scripts directly rather
 than through `make` means arranging that `PATH` order yourself.
 
 `make dev-fast-check` prints the resolved `mold` path alongside its version, so
-an unexpected pick is visible. It treats a version that differs from the pin as
-a warning and still proceeds, because a newer `mold` is normally harmless. A
-missing `mold`, or one that cannot report its version, is a hard failure.
+an unexpected pick is visible. A version that differs from the pin fails the
+check, as does a missing `mold` or one that cannot report its version; run
+`make install-dev-fast` to install the pinned release ahead of any
+distribution `mold` on `PATH`. An advisory pin is not a pin: tolerating drift
+would let the linker actually in use stop matching what the repository
+claims.
 
 For screen readers: the following flowchart traces `make install-dev-fast` from
 start to exit. It reads the pinned linker version, then branches on the host
@@ -474,17 +477,25 @@ themselves.
 ### Ownership boundary
 
 The accelerated configuration lives in `tools/dev-fast/config.toml`, which is
-deliberately *not* `.cargo/config.toml`. Cargo auto-discovers the latter, and
-placing these settings there would silently apply nightly-only unstable flags
-and a Linux-only linker choice to every build in the repository, including CI.
-The fragment is instead passed explicitly with
-`cargo --config tools/dev-fast/config.toml` from the `make dev-*` targets. Do
-not add a repository-root `.cargo/config.toml`, and do not source this fragment
-from any target that CI invokes.
+deliberately *not* `.cargo/config.toml`. Cargo auto-discovers the latter, so
+placing Cranelift and the Linux-only `mold` linker there would silently apply
+them to every build in the repository, including release, packaging,
+coverage, and formal-verification builds. The fragment is instead passed
+explicitly with `cargo --config tools/dev-fast/config.toml` from the
+`make dev-*` targets, and must not be sourced from any target that CI
+invokes.
 
-The fragment sets three things and nothing else: the `codegen-backend` unstable
-flag, `codegen-backend = "cranelift"` on the `dev` profile, and a
-`-Clink-arg=-fuse-ld=mold` rustflag gated behind `cfg(target_os = "linux")`.
+A repository-root `.cargo/config.toml` does exist, and legitimately so: it
+carries the Polonius flag (`[build] rustflags = ["-Zpolonius=next"]`, see
+Polonius under Composition rules) needed by every build in the repository.
+The rule is about what belongs in that file, not about whether it may exist:
+settings needed everywhere may go there; settings that are only safe for the
+accelerated dev loop must not.
+
+The fragment sets the `codegen-backend` unstable flag, `codegen-backend =
+"cranelift"` on the `dev` profile, and a `cfg(target_os = "linux")`-gated
+rustflags list carrying both `-Zpolonius=next` and
+`-Clink-arg=-fuse-ld=mold`.
 
 ### Composition rules
 
@@ -555,22 +566,23 @@ flag, `codegen-backend = "cranelift"` on the `dev` profile, and a
 
 ### Testing the tooling
 
-Three suites cover the tooling's observable behaviour. All are hermetic — no
+Five suites cover the tooling's observable behaviour. All are hermetic — no
 network, and no real `mold`, `rustup`, or Cargo — so they run as part of
 `make test` on any Linux host.
 
 - `tests/dev_fast_check_tests.rs`: the capability gate. Which diagnostic each
-  failure mode emits, and that `dev-build` and `dev-test` stop before Cargo
-  runs.
-- `tests/dev_fast_install_tests.rs`: the installer and benchmark scripts,
-  invoked directly. Verification against a locally built release, and the
-  refusal to unpack an artefact whose checksum mismatches or is unlisted.
-- `tests/dev_fast_make_target_tests.rs`: the Make recipes' success paths. That
-  `dev-build` and `dev-test` select the pinned nightly, pass
-  `--config tools/dev-fast/config.toml`, run the expected Cargo subcommand, and
-  lead `PATH` with the install prefix; that `install-dev-fast` forwards the
-  prefix, pin overrides, and release URL; and that `bench-build` emits both
-  variant rows.
+  failure mode emits, exit status, pin resolution, and refusal of a
+  malformed pin.
+- `tests/dev_fast_install_tests.rs`: the installer's happy path and its
+  refusals, plus the benchmark script's Markdown output.
+- `tests/dev_fast_checksum_tests.rs`: property coverage for checksum
+  verification against a model.
+- `tests/dev_fast_make_target_tests.rs`: the Make recipes. Toolchain and
+  fragment selection; that a failed gate reaches zero Cargo invocations
+  (`dev-build` and `dev-test` stop before Cargo runs); the fragment's
+  contents; and `install-dev-fast` forwarding.
+- `tests/dev_fast_bench_tests.rs`: `make bench-build`. Per-variant target
+  directories, the clean/incremental cycle, and both variant rows.
 
 The fixtures live in `test_support::dev_fast`:
 

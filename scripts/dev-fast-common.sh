@@ -44,14 +44,29 @@ fail() {
   exit 1
 }
 
-# Read a single-line version pin, trimming surrounding whitespace. A missing or
-# blank pin aborts rather than yielding an empty version that would silently
-# produce a nonsensical download URL or toolchain name.
+# Read a single-line version pin, trimming only its leading and trailing
+# whitespace.
+#
+# A missing, blank, or multi-line pin aborts rather than yielding a version that
+# would silently produce a nonsensical download URL. Deleting every whitespace
+# character instead would corrupt rather than reject: a stray space would turn
+# `1.2 3` into `1.23`, and a second line would concatenate into `1.2.34.5.6`.
+# Internal whitespace is likewise rejected, because no pin legitimately contains
+# any and silently rewriting one is worse than refusing it.
 read_pin() {
-  local file=$1 value
+  local file=$1 value lines
   [ -f "$file" ] || fail "missing version pin: $file"
-  value=$(tr -d '[:space:]' <"$file")
+  lines=$(grep -c '' <"$file")
+  [ "$lines" -le 1 ] || fail "expected one line in version pin: $file, found $lines"
+  # `$(...)` strips trailing newlines; the parameter expansions trim spaces and
+  # tabs from each end without touching anything between them.
+  value=$(cat -- "$file")
+  value=${value#"${value%%[![:space:]]*}"}
+  value=${value%"${value##*[![:space:]]}"}
   [ -n "$value" ] || fail "empty version pin: $file"
+  case $value in
+    *[[:space:]]*) fail "version pin contains whitespace: $file" ;;
+  esac
   printf '%s' "$value"
 }
 

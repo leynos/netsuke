@@ -70,8 +70,9 @@ fn falls_back_to_the_committed_pins_when_no_overrides_are_given() -> Result<()> 
     Ok(())
 }
 
-/// A drift warning names the pinned version, so a mismatching fake proves which
-/// file the default resolved to rather than merely that some file was read.
+/// The drift diagnostic names the pinned version, so a mismatching fake proves
+/// which file the default resolved to rather than merely that some file was
+/// read.
 #[test]
 fn default_pins_are_the_committed_ones_not_an_empty_fallback() -> Result<()> {
     let sandbox = Sandbox::new()?;
@@ -82,11 +83,11 @@ fn default_pins_are_the_committed_ones_not_an_empty_fallback() -> Result<()> {
     let text = combined(&output);
 
     ensure!(
-        output.status.success(),
-        "a drift is tolerated, got `{text}`"
+        !output.status.success(),
+        "a drift should fail, got `{text}`"
     );
     ensure!(
-        text.contains(&format!("pin is {}", pinned_mold_version()?)),
+        text.contains(&format!("the pin {}", pinned_mold_version()?)),
         "the drift message should name the committed pin, got `{text}`"
     );
     Ok(())
@@ -148,6 +149,68 @@ fn a_missing_pin_file_reports_the_actionable_diagnostic() -> Result<()> {
     Ok(())
 }
 
+/// A malformed pin must be refused, never silently rewritten.
+///
+/// Deleting every whitespace character would turn `1.2 3` into `1.23` and two
+/// lines into their concatenation, so a corrupted pin would reach the download
+/// URL looking well-formed. Boundary whitespace is the only kind trimmed.
+#[rstest]
+#[case::internal_space("1.2 3\n", "contains whitespace")]
+#[case::internal_tab("1.2\t3\n", "contains whitespace")]
+#[case::two_lines("1.2.3\n4.5.6\n", "expected one line")]
+#[case::blank("\n", "empty version pin")]
+fn a_malformed_version_pin_is_refused_not_rewritten(
+    #[case] contents: &str,
+    #[case] expected: &str,
+) -> Result<()> {
+    let sandbox = Sandbox::new()?;
+    sandbox.write_mold(&sandbox.bin(), &pinned_mold_version()?)?;
+    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    let pin = sandbox.home().join("MOLD_VERSION");
+    sandbox.write_file(&pin, contents)?;
+
+    let output = sandbox.script_with(
+        "dev-fast-check.sh",
+        PinOverrides::Omitted,
+        &[("MOLD_VERSION_FILE", pin.to_string())],
+    )?;
+    let text = combined(&output);
+
+    ensure!(!output.status.success(), "should refuse, got `{text}`");
+    ensure!(
+        text.contains(expected),
+        "should report `{expected}`, got `{text}`"
+    );
+    Ok(())
+}
+
+/// Whitespace either side of the version is trimmed, so a pin file written with
+/// a trailing newline or stray indentation still resolves.
+#[rstest]
+#[case::trailing_newline("2.41.0\n")]
+#[case::surrounding_spaces("   2.41.0   \n")]
+#[case::no_trailing_newline("2.41.0")]
+fn boundary_whitespace_around_a_pin_is_trimmed(#[case] contents: &str) -> Result<()> {
+    let sandbox = Sandbox::new()?;
+    sandbox.write_mold(&sandbox.bin(), "2.41.0")?;
+    sandbox.write_rustup(&pinned_toolchain()?, true)?;
+    let pin = sandbox.home().join("MOLD_VERSION");
+    sandbox.write_file(&pin, contents)?;
+
+    let output = sandbox.script_with(
+        "dev-fast-check.sh",
+        PinOverrides::Omitted,
+        &[("MOLD_VERSION_FILE", pin.to_string())],
+    )?;
+    let text = combined(&output);
+
+    ensure!(
+        output.status.success(),
+        "`{contents:?}` should resolve to 2.41.0, got `{text}`"
+    );
+    Ok(())
+}
+
 /// The regression this guards: the Makefile unconditionally exports
 /// `$(HOME)/.local/bin` ahead of the caller's `PATH`, so an overridden
 /// `DEV_FAST_PREFIX` used to be installed to but never selected.
@@ -174,8 +237,11 @@ fn overridden_prefix_wins_over_a_mold_in_the_default_location() -> Result<()> {
     Ok(())
 }
 
+/// An advisory pin is not a pin: a `mold` that does not match it must fail the
+/// gate, so the linker actually used cannot silently diverge from the one the
+/// repository claims.
 #[test]
-fn tolerates_a_version_drift_from_the_pin() -> Result<()> {
+fn rejects_a_version_drift_from_the_pin() -> Result<()> {
     let sandbox = Sandbox::new()?;
     sandbox.write_rustup(&pinned_toolchain()?, true)?;
     sandbox.write_mold(&sandbox.prefix().join("bin"), "99.0.0")?;
@@ -184,12 +250,12 @@ fn tolerates_a_version_drift_from_the_pin() -> Result<()> {
     let text = combined(&output);
 
     ensure!(
-        output.status.success(),
-        "a newer mold is harmless and must not fail the check, got `{text}`"
+        !output.status.success(),
+        "a drifting mold should fail the check, got `{text}`"
     );
     ensure!(
         text.contains("run make install-dev-fast to match"),
-        "drift should still be reported, got `{text}`"
+        "the remedy should be named, got `{text}`"
     );
     Ok(())
 }
