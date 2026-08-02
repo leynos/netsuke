@@ -1390,7 +1390,14 @@ from production output.
 
 The module is unit-tested across the full `u8` range rather than with a handful
 of vectors, because leading-zero and casing regressions are exactly what
-example-based tests miss.
+example-based tests miss. A per-byte sweep cannot see faults that need more
+than one byte to appear, so `src/hex_property_tests.rs` adds `proptest`
+coverage over arbitrary slices: two digits per byte, lowercase output, a decode
+round trip, agreement with `push_lower_hex_byte`, and distribution over
+concatenation. That last property is what pins each byte's encoding as
+independent of its neighbours and its position — reversing the byte order
+leaves the per-byte sweep green but fails the round-trip and concatenation
+properties.
 
 ### RustCrypto 0.11 constraint
 
@@ -1448,7 +1455,10 @@ on every compiler bump.
 `stdlib::path::hash_utils` unit-tests the chunked streaming loop against a
 one-shot digest for inputs that span more than one 8192-byte read, plus a
 published `"abc"` vector so the cross-check cannot pass by agreeing on a wrong
-value. `test_support::hash::sha256_hex` is likewise pinned to the published
+value. Those sizes are chosen to straddle the buffer boundary; a `proptest`
+alongside them generates the length instead, so the chunk partition varies
+freely and the awkward remainders either side of a boundary are covered too.
+`test_support::hash::sha256_hex` is likewise pinned to the published
 empty-input and `"abc"` vectors, since behavioural tests use it as the
 yardstick for production cache keys.
 

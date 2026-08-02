@@ -65,6 +65,10 @@ pub fn push_lower_hex_byte(output: &mut String, byte: u8) {
 }
 
 #[cfg(test)]
+#[path = "hex_property_tests.rs"]
+mod property_tests;
+
+#[cfg(test)]
 mod tests {
     //! Unit tests for lowercase hexadecimal encoding.
     //!

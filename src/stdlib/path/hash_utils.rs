@@ -189,4 +189,38 @@ mod tests {
         );
         Ok(())
     }
+
+    mod properties {
+        //! Property tests for the chunked streaming loop.
+        //!
+        //! The cases above pin sizes chosen to straddle the 8192-byte read
+        //! buffer. They cannot cover how the loop behaves at an arbitrary
+        //! offset within a chunk, which is where a partial final read or a
+        //! mishandled boundary would hide. Generating the length instead lets
+        //! the partition vary freely, including the awkward remainders either
+        //! side of a buffer boundary.
+
+        use proptest::prelude::*;
+        use sha2::{Digest, Sha256};
+
+        use super::{compute_hash, fixture, to_lower_hex};
+
+        proptest! {
+            /// Streaming a payload of any length agrees with a one-shot digest.
+            ///
+            /// The range spans several buffer fills so the generated lengths
+            /// exercise both exact multiples and partial trailing reads.
+            #[test]
+            fn streamed_digest_matches_a_one_shot_digest_for_any_length(
+                payload in prop::collection::vec(any::<u8>(), 0..20_000),
+            ) {
+                let (_dir, file) = fixture(&payload).expect("stage the payload");
+
+                let streamed = compute_hash(&file, "sha256").expect("hash the payload");
+                let one_shot = to_lower_hex(&Sha256::digest(&payload));
+
+                prop_assert_eq!(streamed, one_shot);
+            }
+        }
+    }
 }
