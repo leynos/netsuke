@@ -26,9 +26,14 @@ use crate::{
 use anyhow::{Context, Result, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use minijinja::{Environment, Error, ErrorKind, UndefinedBehavior, value::Value};
+use minijinja::{Environment, UndefinedBehavior, value::Value};
 use serde::de::Error as _;
-use std::{env, path::Path};
+use std::sync::Arc;
+
+use env_reader::env_var_with;
+pub use env_reader::{EnvReader, process_env_reader};
+use std::env as std_env;
+use std::path::Path;
 
 mod diagnostics;
 mod expand;
@@ -65,54 +70,6 @@ pub enum ManifestLoadStage {
     FinalRendering,
 }
 
-/// Resolve the value of an environment variable for the `env()` Jinja helper.
-///
-/// Returns the variable's value or a structured error that mirrors Jinja's
-/// failure modes, ensuring templates halt when a variable is missing or not
-/// valid UTF-8.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "composition root: supplies the process environment to the env() Jinja helper"
-)]
-fn env_var(name: &str) -> std::result::Result<String, Error> {
-    env_var_with(name, |key| std::env::var(key))
-}
-
-/// Resolve `name` through `read_env`, mapping failures to Jinja errors.
-///
-/// Separated from [`env_var`] so all three outcomes — present, absent, and
-/// non-UTF-8 — can be exercised without mutating the process environment. The
-/// non-UTF-8 branch is otherwise unreachable from a test: fabricating such a
-/// value in the live environment needs platform-specific `OsString` surgery,
-/// and the AGENTS.md testing mandate forbids in-process mutation regardless.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// let value = env_var_with("FOO", |_| Ok(String::from("bar")));
-/// assert_eq!(value.expect("FOO"), "bar");
-/// ```
-fn env_var_with<F>(name: &str, read_env: F) -> std::result::Result<String, Error>
-where
-    F: FnOnce(&str) -> std::result::Result<String, std::env::VarError>,
-{
-    match read_env(name) {
-        Ok(val) => Ok(val),
-        Err(std::env::VarError::NotPresent) => Err(Error::new(
-            ErrorKind::UndefinedError,
-            localization::message(keys::MANIFEST_ENV_MISSING)
-                .with_arg("name", name)
-                .to_string(),
-        )),
-        Err(std::env::VarError::NotUnicode(_)) => Err(Error::new(
-            ErrorKind::InvalidOperation,
-            localization::message(keys::MANIFEST_ENV_INVALID_UTF8)
-                .with_arg("name", name)
-                .to_string(),
-        )),
-    }
-}
-
 /// Invoke the stage callback when present.
 fn notify_stage(
     on_stage: &mut Option<&mut dyn FnMut(ManifestLoadStage)>,
@@ -131,12 +88,26 @@ fn notify_stage(
 /// # Errors
 ///
 /// Returns an error if YAML parsing or Jinja evaluation fails.
+/// Inputs to a manifest parse, bundled to keep the parameter list bounded.
+struct ManifestParse<'a> {
+    /// Name reported in diagnostics.
+    name: &'a ManifestName,
+    /// Optional stdlib configuration override.
+    stdlib_config: Option<StdlibConfig>,
+    /// Environment reader backing the `env()` helper.
+    env_reader: &'a EnvReader,
+}
+
 fn from_str_named(
     yaml: &str,
-    name: &ManifestName,
-    stdlib_config: Option<StdlibConfig>,
+    parse: ManifestParse<'_>,
     on_stage: &mut Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
+    let ManifestParse {
+        name,
+        stdlib_config,
+        env_reader,
+    } = parse;
     notify_stage(on_stage, ManifestLoadStage::InitialYamlParsing);
     let mut doc: ManifestValue =
         serde_saphyr::from_str(yaml).map_err(|e| ManifestError::Parse {
@@ -147,7 +118,10 @@ fn from_str_named(
     let mut jinja = Environment::new();
     jinja.set_undefined_behavior(UndefinedBehavior::Strict);
     // Expose custom helpers to templates.
-    jinja.add_function("env", |var_name: String| env_var(&var_name));
+    let reader = Arc::clone(env_reader);
+    jinja.add_function("env", move |var_name: String| {
+        env_var_with(&var_name, |key| reader(key))
+    });
     jinja.add_function("glob", |pattern: String| glob_paths(&pattern));
     let _stdlib_state = match stdlib_config {
         Some(config) => crate::stdlib::register_with_config(&mut jinja, config),
@@ -196,7 +170,44 @@ fn from_str_named(
 ///
 /// Returns an error if YAML parsing or Jinja evaluation fails.
 pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
-    from_str_named(yaml, &ManifestName::new("Netsukefile"), None, &mut None)
+    from_str_with_env(yaml, &process_env_reader())
+}
+
+/// Parse a manifest string with an explicit environment reader.
+///
+/// Lets a caller — in practice a test — drive the `env()` helper without
+/// touching the process environment.
+///
+/// # Errors
+///
+/// Returns an error if YAML parsing or Jinja evaluation fails.
+///
+/// # Examples
+///
+/// ```rust
+/// use netsuke::manifest::{EnvReader, from_str_with_env};
+/// use std::sync::Arc;
+///
+/// let reader: EnvReader = Arc::new(|_| Ok(String::from("release")));
+/// let yaml = concat!(
+///     "netsuke_version: \"1.0.0\"\n",
+///     "targets:\n",
+///     "  - name: \"{{ env('PROFILE') }}\"\n",
+///     "    command: echo hi\n",
+/// );
+/// let manifest = from_str_with_env(yaml, &reader).expect("parse");
+/// assert!(format!("{:?}", manifest.targets[0].name).contains("release"));
+/// ```
+pub fn from_str_with_env(yaml: &str, env_reader: &EnvReader) -> Result<NetsukeManifest> {
+    from_str_named(
+        yaml,
+        ManifestParse {
+            name: &ManifestName::new("Netsukefile"),
+            stdlib_config: None,
+            env_reader,
+        },
+        &mut None,
+    )
 }
 
 /// Load a [`NetsukeManifest`] from the given file path.
@@ -246,8 +257,18 @@ pub fn from_path_with_policy(
     let config = StdlibConfig::new(workspace.dir)?
         .with_workspace_root_path(workspace.root)?
         .with_network_policy(policy);
-    from_str_named(&data, &name, Some(config), &mut on_stage)
+    from_str_named(
+        &data,
+        ManifestParse {
+            name: &name,
+            stdlib_config: Some(config),
+            env_reader: &process_env_reader(),
+        },
+        &mut on_stage,
+    )
 }
+
+mod env_reader;
 
 #[cfg(test)]
 mod tests;
@@ -257,7 +278,7 @@ fn resolve_absolute_workspace_root(utf8_parent: &Utf8Path) -> Result<Utf8PathBuf
     let workspace_base = if utf8_parent.is_absolute() {
         utf8_parent.to_path_buf().into_std_path_buf()
     } else {
-        env::current_dir()
+        std_env::current_dir()
             .context(localization::message(keys::MANIFEST_RESOLVE_WORKSPACE_ROOT))?
             .join(utf8_parent.as_std_path())
     };

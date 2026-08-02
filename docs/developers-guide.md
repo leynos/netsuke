@@ -1638,6 +1638,36 @@ lock is still held; `try_lock` from the owning thread returns `WouldBlock`, so
 "blocked" means the bundle still holds it. Reverting the field order turns that
 assertion red deterministically.
 
+### Manifest `env()` reader
+
+The `env()` Jinja helper reads through an injected [`EnvReader`], a shared
+`Fn(&str) -> Result<String, VarError>`. `minijinja` requires registered
+functions to be `Send + Sync`, so the reader is an `Arc` captured by the
+registered closure rather than a borrowed parameter.
+
+`manifest::from_str` supplies `process_env_reader()`; `from_str_with_env` takes
+one explicitly, so a test can drive the **real registration path** — the same
+`Environment`, the same `add_function("env", ..)` call — without touching the
+process.
+
+#### Ownership and permitted call sites
+
+- The reader is owned by `manifest::from_str_named`, which is the only place
+  the `env()` function is registered. Nothing else constructs one except the
+  public entry points.
+- `process_env_reader()` is the sole production supplier and the only place
+  `std::env::var` appears in the module.
+- Tests use `from_str_with_env`. They must not reach past it to the leaf
+  mapper: covering `env_var_with` alone would leave the registration untested,
+  which is the gap that made the earlier process-mutating tests necessary.
+
+#### Reader composition rules
+
+- One reader serves an entire parse. A manifest reading several variables
+  passes one reader consulted repeatedly, never a per-variable registry.
+- The reader answers by name only. It must not enumerate, and it must not
+  mutate.
+
 ### `EnvLock`
 
 `test_support::env_lock::EnvLock` is a global mutex that serializes all
