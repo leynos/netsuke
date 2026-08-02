@@ -66,6 +66,9 @@ RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 VERUS_FLAGS ?=
 VERUS_INSTALL_FLAGS ?=
 WHITAKER ?= whitaker
+# `test_support` is excluded from the root workspace, so root-level cargo
+# invocations cannot reach it; the test and lint recipes target it explicitly.
+TEST_SUPPORT_MANIFEST ?= test_support/Cargo.toml
 
 export PATH := $(HOME)/.cargo/bin:$(HOME)/.local/bin:$(HOME)/.bun/bin:$(PATH)
 
@@ -81,9 +84,13 @@ test: test-nextest doctest ## Run every Rust test with warnings treated as error
 
 test-nextest: ## Run all non-doctest Rust tests through cargo-nextest
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) nextest run --all-targets --all-features $(NEXTEST_BUILD_JOBS)
+	# `test_support` is excluded from the root workspace, so the run above cannot
+	# reach its own tests. Run them separately, as lint-whitaker does.
+	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) nextest run --manifest-path $(TEST_SUPPORT_MANIFEST) --all-targets --all-features $(NEXTEST_BUILD_JOBS)
 
 doctest: ## Run doctests, which cargo-nextest cannot execute
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) test --doc --all-features $(BUILD_JOBS)
+	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) test --doc --manifest-path $(TEST_SUPPORT_MANIFEST) --all-features $(BUILD_JOBS)
 
 test-workflow-contracts: ## Validate the mutation-testing caller contract
 	uv run --with 'pytest>=8' --with 'pyyaml>=6' pytest tests/workflow_contracts -q

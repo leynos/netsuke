@@ -26,9 +26,16 @@ pub fn set_en_localizer() -> LocalizerGuard {
 ///
 /// Construct via the [`en_localizer`] rstest fixture.  Both guards are
 /// released when this value is dropped.
+///
+/// Field order is load-bearing: struct fields drop in declaration order, so
+/// `_guard` must precede `_lock`. The localizer restoration in
+/// `LocalizerGuard::drop` writes the global localizer, which is exactly what
+/// the test lock serializes; releasing the lock first would let a waiting
+/// thread install its own override and capture this test's override as its
+/// "previous", so that thread would later restore the wrong value.
 pub struct EnLocalizer {
-    _lock: MutexGuard<'static, ()>,
     _guard: LocalizerGuard,
+    _lock: MutexGuard<'static, ()>,
 }
 
 /// Rstest fixture that acquires the global localizer test lock and installs
@@ -53,8 +60,8 @@ pub fn en_localizer() -> EnLocalizer {
     // poisoning the same way.
     let lock = localizer_test_lock().unwrap_or_else(PoisonError::into_inner);
     EnLocalizer {
-        _lock: lock,
         _guard: set_en_localizer(),
+        _lock: lock,
     }
 }
 
@@ -63,30 +70,28 @@ mod tests {
     //! Coverage for the poisoned-lock recovery in the [`en_localizer`] fixture.
 
     use super::{LOCALIZER_TEST_LOCK, en_localizer, localizer_test_lock};
-    use std::{panic, thread};
+    use std::thread;
 
     /// Poison the lock the way a panicking test would: hold the guard across a
     /// panic on another thread.
     ///
-    /// The default panic hook is suppressed for the duration so the deliberate
-    /// panic does not print a misleading backtrace during an otherwise passing
-    /// run.
+    /// The panic hook is deliberately left alone. `panic::set_hook` is
+    /// process-wide, so swapping it out for the duration would suppress — or,
+    /// if two threads raced on take/restore, permanently replace — the hook any
+    /// concurrently panicking test relies on to report itself. The stderr noise
+    /// from one deliberate panic is the cheaper cost.
     ///
     /// The whole `Result` is bound rather than unwrapped: the guard lives
     /// inside either variant, so holding it across the panic poisons the mutex
     /// without this helper — which Whitaker does not recognise as test code —
     /// needing an `expect`.
     fn poison_localizer_test_lock() {
-        let hook = panic::take_hook();
-        panic::set_hook(Box::new(|_| {}));
         let poisoner = thread::spawn(|| {
             let _guard = localizer_test_lock();
             panic!("deliberately poisoning LOCALIZER_TEST_LOCK");
         });
-        let outcome = poisoner.join();
-        panic::set_hook(hook);
         assert!(
-            outcome.is_err(),
+            poisoner.join().is_err(),
             "the poisoning thread should have panicked"
         );
     }
@@ -109,5 +114,18 @@ mod tests {
         // Recovery does not clear the poison flag, so a second call must also
         // succeed rather than depending on the first having reset it.
         drop(en_localizer());
+
+        // Leave the static as it was found. The flag is sticky and the lock is
+        // shared with every other test that takes this fixture, so a deliberate
+        // poisoning must not outlive the test that caused it.
+        if let Some(lock) = LOCALIZER_TEST_LOCK.get() {
+            lock.clear_poison();
+        }
+        assert!(
+            LOCALIZER_TEST_LOCK
+                .get()
+                .is_some_and(|lock| !lock.is_poisoned()),
+            "the poison flag should be cleared before leaving the test"
+        );
     }
 }

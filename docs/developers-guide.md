@@ -894,13 +894,20 @@ Cargo home plus Kani support-file home.
   `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)"` (the
   Makefile re-states the Polonius flag because a set `RUSTFLAGS` overrides
   `.cargo/config.toml`, and the `$${RUSTFLAGS:+$$RUSTFLAGS }` prefix preserves
-  any `RUSTFLAGS` inherited from the caller). This runs every unit, integration,
-  `rstest`, and `rstest-bdd` test.
+  any `RUSTFLAGS` inherited from the caller). `test_support` is excluded from
+  the root Cargo workspace, so this root-level invocation cannot reach its
+  tests; the target therefore runs `cargo nextest` a second time against
+  `test_support/Cargo.toml`, mirroring how `make lint-whitaker` runs the
+  Whitaker suite twice for the same reason (see above). Together the two
+  invocations run every unit, integration, `rstest`, and `rstest-bdd` test
+  across both the root workspace and `test_support`.
 - `make doctest` — `cargo test --doc --all-features`, with the same
   `RUSTFLAGS`. nextest cannot execute doctests, so they need their own pass.
   Note that the previous `cargo test --all-targets` invocation never ran
   doctests either; the separate target is what makes a broken documentation
-  example fail the gate.
+  example fail the gate. For the same reason as `test-nextest`, `doctest`
+  also runs a second time against `test_support/Cargo.toml` to cover its
+  doctests.
 
 If either pass fails, `make test` fails. Run the individual targets when
 iterating, but treat `make test` as the gate.
