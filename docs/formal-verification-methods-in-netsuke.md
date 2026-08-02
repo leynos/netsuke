@@ -216,8 +216,10 @@ development and continuous integration. These pins serve several purposes:
 The first formal-verification commands should extend the existing `Makefile`
 without disturbing the current developer workflow.[^2]
 
-- `make kani-check` should run the fast installed-version check suitable for
-  pull requests until substantive Kani harnesses exist.
+- `make kani-check` should run the fast pinned-version drift guard suitable
+  for pull requests.
+- The bounded Kani harness suite now also runs on pull requests through
+  `make kani-ir`.
 - `make kani-full` should run the full Kani suite.
 - `make install-kani` should install the pinned Kani version through
   `rust-prover-tools`.
@@ -236,12 +238,16 @@ Formal verification should not be folded into the existing `build-test` job.
 The current `CI` workflow already performs formatting, linting, tests, and
 coverage, and those checks should remain intact.[^3]
 
-The first additional job should be a dedicated `kani-smoke` job that:
+The `kani-smoke` job is a dedicated, pull-request-only job (it runs only when
+`github.event_name == 'pull_request'`) that:
 
 - installs `uv` and then installs the pinned Kani toolchain through
   `make install-kani`,
-- runs `make kani-check`, and
-- caches tool downloads separately from the ordinary Rust build artefacts.
+- runs `make kani-check` and then the bounded harness suite through
+  `make kani-ir` (13 harnesses across the manifest-verification and
+  cycle-verification modules),
+- caches tool downloads separately from the ordinary Rust build artefacts, and
+- is bounded by a 20-minute job timeout (`timeout-minutes: 20`).
 
 Any later Verus job should be added only after a stable proof kernel exists.
 

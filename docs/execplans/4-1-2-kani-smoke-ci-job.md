@@ -569,3 +569,19 @@ The references section should include:
 - Lody session:
   <https://lody.ai/leynos/sessions/48bbbaef-5f08-49d0-9666-fa4506326e10>
 ```
+
+## Addendum: 2026-08-02 — bounded harness wiring completed
+
+The bounded Kani harness work deferred at the time of this ExecPlan's
+execution has since been completed, in follow-up work tracked as
+[issue #445](https://github.com/leynos/netsuke/issues/445). The pull-request
+`kani-smoke` job now runs `make kani-check` (the pinned-version drift guard)
+and then `make kani-ir` (the bounded harness suite), after
+`make install-kani`. The `kani-smoke` job declares `timeout-minutes: 20`. The
+bounded suite contains 13 `#[kani::proof]` harnesses: 4 in
+`src/ir/from_manifest_verification.rs` and 9 in
+`src/ir/cycle_verification.rs`.
+[Pull request #470](https://github.com/leynos/netsuke/pull/470) carries the
+implementation and declares `Closes #445`; the issue itself remains open at
+the time of writing and closes on merge. This addendum records later work and
+does not amend the plan as executed.
