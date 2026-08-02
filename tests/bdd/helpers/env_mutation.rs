@@ -3,6 +3,11 @@
 //! Provides shared utilities for safely mutating process-global environment
 //! variables within BDD scenarios using the `EnvLock` serialization mechanism.
 
+#![expect(
+    clippy::disallowed_methods,
+    reason = "pending migration under #492 (rstest-bdd migration)"
+)]
+
 use crate::bdd::fixtures::TestWorld;
 use crate::bdd::types::EnvVarKey;
 use anyhow::{Result, ensure};

@@ -1,5 +1,10 @@
 //! Steps for preparing file-system fixtures used in Jinja tests (Unix only).
 
+#![expect(
+    clippy::disallowed_methods,
+    reason = "pending migration under #492 (rstest-bdd migration)"
+)]
+
 use crate::bdd::fixtures::TestWorld;
 use anyhow::{Context, Result, anyhow, ensure};
 use camino::Utf8PathBuf;

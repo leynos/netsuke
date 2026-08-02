@@ -1,6 +1,11 @@
 //! Tests for scoped manipulation of `PATH` via `prepend_dir_to_path` and
 //! `PathGuard`.
 
+#![expect(
+    clippy::disallowed_methods,
+    reason = "pending migration under #493 (integration-binary migration)"
+)]
+
 use anyhow::{Context, Result, ensure};
 use mockable::Env;
 use rstest::rstest;

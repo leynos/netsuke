@@ -10,6 +10,11 @@
 //! still letting later assertions inspect the command outputs and environment
 //! mutations created by the manifest under test.
 
+#![expect(
+    clippy::disallowed_methods,
+    reason = "pending migration under #492 (rstest-bdd migration)"
+)]
+
 use crate::bdd::fixtures::TestWorld;
 use anyhow::{Context, Result};
 use rstest_bdd_macros::given;

@@ -5,6 +5,11 @@
 //! - `helpers.rs` - Typed assertion utilities and target accessor functions
 //! - `targets.rs` - Target-specific assertion steps
 
+#![expect(
+    clippy::disallowed_methods,
+    reason = "pending migration under #492 (rstest-bdd migration)"
+)]
+
 mod helpers;
 mod targets;
 
