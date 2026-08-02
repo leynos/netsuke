@@ -13,6 +13,8 @@
 
 use anyhow::{Context, Result, bail, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
+use proptest::prelude::*;
+use proptest::proptest;
 use rstest::rstest;
 use std::time::{Duration, UNIX_EPOCH};
 use test_support::dev_fast::{
@@ -358,6 +360,94 @@ fn check_touch_ordering(invocations: &[CargoInvocation], baseline_mtime: i64) ->
         );
     }
     Ok(())
+}
+
+/// What a variant's target directory holds before the benchmark starts.
+#[derive(Copy, Clone, Debug)]
+enum PreState {
+    /// Nothing there, as on a first run.
+    Absent,
+    /// The directory exists but is empty.
+    Empty,
+    /// The directory exists and holds an artefact from an earlier run.
+    Populated,
+}
+
+impl PreState {
+    fn stage(self, sandbox: &Sandbox, dir: &Utf8Path) -> Result<()> {
+        match self {
+            Self::Absent => Ok(()),
+            Self::Empty => sandbox.create_dir(dir),
+            Self::Populated => sandbox.write_file(&dir.join("stale-artefact"), "stale"),
+        }
+    }
+}
+
+fn pre_state_strategy() -> impl Strategy<Value = PreState> {
+    prop_oneof![
+        Just(PreState::Absent),
+        Just(PreState::Empty),
+        Just(PreState::Populated),
+    ]
+}
+
+proptest! {
+    // Nine combinations; a few extra draws cost little because the fake Cargo
+    // returns immediately.
+    #![proptest_config(ProptestConfig { cases: 12, ..ProptestConfig::default() })]
+
+    /// Whatever each variant's target directory held beforehand, every variant
+    /// must record a clean pass then an incremental one.
+    ///
+    /// This is the invariant the `rm -rf` exists to provide: the benchmark's
+    /// first measurement must not inherit a previous run's artefacts, or the
+    /// "clean build" column measures something else entirely. Ranging over the
+    /// prior states shows the wipe erases history rather than merely working on
+    /// an empty sandbox.
+    #[test]
+    fn the_benchmark_wipes_whatever_each_variant_started_from(
+        default_pre in pre_state_strategy(),
+        dev_fast_pre in pre_state_strategy(),
+    ) {
+        let fail = |error: anyhow::Error| TestCaseError::fail(error.to_string());
+        let scenario = BuildScenario::prepare().map_err(fail)?;
+        let sandbox = &scenario.sandbox;
+
+        let touch_file = sandbox.home().join("bench-touch");
+        write_with_old_mtime(sandbox, &touch_file).map_err(fail)?;
+        let bench_root = sandbox.home().join("bench");
+        for (slug, pre) in [(DEFAULT_SLUG, default_pre), (DEV_FAST_SLUG, dev_fast_pre)] {
+            pre.stage(sandbox, &bench_root.join(slug)).map_err(fail)?;
+        }
+
+        let invocation = MakeInvocation::new("bench-build")
+            .variable("CARGO", scenario.cargo.executable())
+            .environment("BENCH_ROOT", &bench_root)
+            .environment("BENCH_TOUCH_FILE", &touch_file);
+        let output = sandbox.run_make(&invocation).map_err(fail)?;
+        prop_assert!(
+            output.status.success(),
+            "bench-build should succeed from {:?}/{:?}, got `{}`",
+            default_pre,
+            dev_fast_pre,
+            combined(&output)
+        );
+
+        let invocations = scenario.cargo.invocations().map_err(fail)?;
+        let states: Vec<TargetState> = invocations.iter().map(CargoInvocation::target_state).collect();
+        prop_assert_eq!(
+            states,
+            vec![
+                TargetState::Absent,
+                TargetState::Present,
+                TargetState::Absent,
+                TargetState::Present,
+            ],
+            "each variant should measure a clean then an incremental pass, from {:?}/{:?}",
+            default_pre,
+            dev_fast_pre
+        );
+    }
 }
 
 #[test]

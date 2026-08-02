@@ -17,9 +17,18 @@ MOLD_RELEASE_BASE_URL=${MOLD_RELEASE_BASE_URL:-https://github.com/rui314/mold/re
 # Verify the downloaded tarball against the single matching line in
 # SHA256SUMS. An unlisted artefact is a hard failure, never a silent skip.
 verify_mold_archive() {
-  local archive=$1 name=$2 expected
+  local archive=$1 name=$2 expected recorded
   expected=$(awk -v name="$name" '$2 == name { print $1 }' "$MOLD_SHA256SUMS_FILE")
   [ -n "$expected" ] || fail "no checksum recorded for $name in $MOLD_SHA256SUMS_FILE"
+  # Refuse an ambiguous file rather than guessing. Several rows for one artefact
+  # make `expected` multi-line, and the check below would then hand `sha256sum`
+  # one malformed line per extra digest plus a single well-formed one. Malformed
+  # lines are only warned about, so the verdict would silently rest on whichever
+  # digest happened to come last — a file recording a wrong digest alongside the
+  # right one would verify.
+  recorded=$(printf '%s\n' "$expected" | grep -c .)
+  [ "$recorded" -eq 1 ] ||
+    fail "$recorded checksums recorded for $name in $MOLD_SHA256SUMS_FILE; refusing to guess"
   printf '%s  %s\n' "$expected" "$archive" | sha256sum --check --status ||
     fail "checksum mismatch for $name; refusing to install"
   note "verified $name against $MOLD_SHA256SUMS_FILE"

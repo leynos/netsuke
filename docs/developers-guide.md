@@ -612,6 +612,28 @@ for any future target with the same shape, and do not reach for `PathGuard`:
 these tests spawn children with a bespoke environment rather than mutating the
 parent's, which is what keeps them safe to run in parallel.
 
+Three invariants carry property coverage rather than fixed examples, because
+each ranges over inputs an enumerated list tends to under-sample:
+
+- **Checksum verification.** The strategy ranges over the structural
+  relationships a checksum row can have to the artefact — right digest, wrong,
+  truncated, re-cased, another artefact's, duplicated, whitespace-padded —
+  rather than over random digests, which never match and so explore a single
+  equivalence class. A model predicts the verdict, and the installer must agree
+  with it. That model found a real defect: several rows for one artefact made
+  the shell's `expected` multi-line, which silently reduced verification to
+  whichever digest came last. The installer now refuses an ambiguous file.
+- **Clean and incremental passes.** The strategy ranges over what each
+  variant's target directory held beforehand — absent, empty, populated — and
+  asserts every variant still records a clean pass then an incremental one.
+  That is what the benchmark's `rm -rf` exists to guarantee; without ranging
+  over prior states, the assertion holds vacuously on a fresh sandbox.
+- **Timing-cell format**, as above.
+
+Prefer a model that predicts an outcome over a table that restates one. Where
+an invariant lives in a shell script, the cost is a process per case, so keep
+the corpus small and the strategy structural.
+
 A `#[cfg(test)]` unit test added inside `test_support` will not run as part
 of `make test`, because `Cargo.toml` excludes `test_support` from the
 workspace. Put assertions about the fixtures themselves in the
