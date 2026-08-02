@@ -17,10 +17,6 @@ jobs:
       # docs/adr-006-adopt-polonius-nightly-toolchain.md), so CI builds with
       # the dated nightly pinned in rust-toolchain.toml.
       NETSUKE_RUST_TOOLCHAIN: nightly-2026-06-25
-      # Pre-set RUSTFLAGS so setup-rust-toolchain's "-D warnings" default does
-      # not shadow .cargo/config.toml and strip -Zpolonius=next; tools such as
-      # cargo-llvm-cov append their own flags to this value.
-      RUSTFLAGS: -D warnings -Zpolonius=next
       WHITAKER_INSTALLER_VERSION: '0.2.7'
       # Single source of truth for the cargo-nextest pin. `make test` runs the
       # non-doctest suite through nextest, so the job installs it up front.
@@ -53,6 +49,8 @@ jobs:
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           components: rustfmt, clippy
+          # Preserve warnings-as-errors and Polonius through toolchain setup.
+          rustflags: -D warnings -Zpolonius=next
       - name: Install cargo-nextest
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
         with:

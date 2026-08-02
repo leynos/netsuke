@@ -87,6 +87,66 @@ fn makefile_declares_the_polonius_flags_variable() -> Result<()> {
 }
 
 #[rstest]
+#[case::ci(".github/workflows/ci.yml", "build-test", "Setup Rust", true)]
+#[case::netsukefile(
+    ".github/workflows/netsukefile-test.yml",
+    "netsukefile",
+    "Setup Rust",
+    true
+)]
+#[case::coverage(
+    ".github/workflows/coverage-main.yml",
+    "coverage-upload",
+    "Setup Rust",
+    false
+)]
+#[case::packaging(
+    ".github/workflows/build-and-package.yml",
+    "build",
+    "Build release binary",
+    false
+)]
+fn workflows_pass_polonius_rustflags_to_shared_actions(
+    #[case] path: &str,
+    #[case] job: &str,
+    #[case] step_name: &str,
+    #[case] pins_toolchain_env: bool,
+) -> Result<()> {
+    let workflow: YamlValue = serde_yaml::from_str(&read_repo_file(Utf8Path::new(path))?)
+        .with_context(|| format!("parse {path}"))?;
+    ensure!(
+        yaml_str(&workflow, &["jobs", job, "env", "RUSTFLAGS"]).is_none(),
+        "{path} job {job} should pass RUSTFLAGS through the shared action input"
+    );
+    let steps = workflow
+        .get("jobs")
+        .and_then(|jobs| jobs.get(job))
+        .and_then(|job_value| job_value.get("steps"))
+        .and_then(YamlValue::as_sequence)
+        .with_context(|| format!("{path} job {job} should declare steps"))?;
+    let shared_action = steps
+        .iter()
+        .find(|step| yaml_str(step, &["name"]) == Some(step_name))
+        .with_context(|| format!("{path} job {job} should include {step_name}"))?;
+    let rustflags = yaml_str(shared_action, &["with", "rustflags"])
+        .with_context(|| format!("{path} {step_name} should pass rustflags"))?;
+    ensure!(
+        rustflags.contains(POLONIUS_FLAG),
+        "{path} {step_name} passes rustflags without {POLONIUS_FLAG}: {rustflags:?}"
+    );
+    if pins_toolchain_env {
+        let expected = pinned_toolchain()?;
+        let toolchain = yaml_str(&workflow, &["jobs", job, "env", "NETSUKE_RUST_TOOLCHAIN"])
+            .with_context(|| format!("{path} job {job} should pin NETSUKE_RUST_TOOLCHAIN"))?;
+        ensure!(
+            toolchain == expected,
+            "{path} job {job} pins {toolchain:?}, but rust-toolchain.toml pins {expected:?}"
+        );
+    }
+    Ok(())
+}
+
+#[rstest]
 #[case::test_nextest("test-nextest", true)]
 #[case::doctest("doctest", true)]
 #[case::typecheck("typecheck", true)]
@@ -113,36 +173,6 @@ fn rustflags_setting_recipes_apply_polonius_policy(
         ensure!(
             contains_polonius == expects_polonius,
             "{target} has the wrong Polonius policy in {line:?}"
-        );
-    }
-    Ok(())
-}
-
-#[rstest]
-#[case::ci(".github/workflows/ci.yml", "build-test", true)]
-#[case::netsukefile(".github/workflows/netsukefile-test.yml", "netsukefile", true)]
-#[case::coverage(".github/workflows/coverage-main.yml", "coverage-upload", false)]
-#[case::packaging(".github/workflows/build-and-package.yml", "build", false)]
-fn workflows_preset_polonius_rustflags(
-    #[case] path: &str,
-    #[case] job: &str,
-    #[case] pins_toolchain_env: bool,
-) -> Result<()> {
-    let workflow: YamlValue = serde_yaml::from_str(&read_repo_file(Utf8Path::new(path))?)
-        .with_context(|| format!("parse {path}"))?;
-    let rustflags = yaml_str(&workflow, &["jobs", job, "env", "RUSTFLAGS"])
-        .with_context(|| format!("{path} job {job} should preset RUSTFLAGS"))?;
-    ensure!(
-        rustflags.contains(POLONIUS_FLAG),
-        "{path} job {job} presets RUSTFLAGS without {POLONIUS_FLAG}: {rustflags:?}"
-    );
-    if pins_toolchain_env {
-        let expected = pinned_toolchain()?;
-        let toolchain = yaml_str(&workflow, &["jobs", job, "env", "NETSUKE_RUST_TOOLCHAIN"])
-            .with_context(|| format!("{path} job {job} should pin NETSUKE_RUST_TOOLCHAIN"))?;
-        ensure!(
-            toolchain == expected,
-            "{path} job {job} pins {toolchain:?}, but rust-toolchain.toml pins {expected:?}"
         );
     }
     Ok(())
