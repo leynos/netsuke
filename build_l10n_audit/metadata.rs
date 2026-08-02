@@ -29,10 +29,17 @@ pub(super) fn parse_metadata_locales(manifest: &str) -> Option<Vec<&str>> {
 
 /// The body of the `[package.metadata.ortho_config]` table.
 ///
-/// The table ends at the next table header, which is the next `[` at the start
-/// of a line.
+/// The header is matched only where it begins a line, so a commented-out or
+/// quoted mention of the table earlier in the manifest does not capture the
+/// search and return the text above the real table. The table ends at the next
+/// table header, which is the next `[` at the start of a line.
 fn ortho_config_table(manifest: &str) -> Option<&str> {
-    let tail = manifest.split("[package.metadata.ortho_config]").nth(1)?;
+    const HEADER: &str = "[package.metadata.ortho_config]";
+    let start = manifest
+        .match_indices(HEADER)
+        .find(|(start, _)| begins_a_line(manifest, *start))
+        .map(|(start, _)| start)?;
+    let tail = manifest.get(start.saturating_add(HEADER.len())..)?;
     Some(tail.split("\n[").next().unwrap_or(tail))
 }
 

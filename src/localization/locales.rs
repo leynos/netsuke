@@ -25,12 +25,31 @@ pub struct LocaleCatalogue {
 
 impl LocaleCatalogue {
     /// BCP 47 tag naming this catalogue, for example `pt-BR`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::localization::locales::catalogue;
+    ///
+    /// let entry = catalogue("pt-BR").expect("pt-BR ships a catalogue");
+    /// assert_eq!(entry.tag(), "pt-BR");
+    /// ```
     #[must_use]
     pub const fn tag(&self) -> &'static str {
         self.tag
     }
 
     /// Fluent source text embedded from `locales/<tag>/messages.ftl`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::localization::locales::catalogue;
+    ///
+    /// let entry = catalogue("fr").expect("fr ships a catalogue");
+    /// // The catalogue is the FTL source itself, so it declares Netsuke's keys.
+    /// assert!(entry.resource().contains("cli.about"));
+    /// ```
     #[must_use]
     pub const fn resource(&self) -> &'static str {
         self.resource
@@ -126,6 +145,20 @@ const LANGUAGE_FALLBACKS: &[LanguageFallback] = &[
 ];
 
 /// Look up a catalogue by exact tag.
+///
+/// No fallback is applied: a tag that ships no catalogue of its own yields
+/// `None`, even when a related one exists. Use [`resolve_catalogue`] to apply
+/// the registry's fallback rules.
+///
+/// # Examples
+///
+/// ```
+/// use netsuke::localization::locales::catalogue;
+///
+/// assert_eq!(catalogue("zh-Hant").map(|entry| entry.tag()), Some("zh-Hant"));
+/// // `zh-TW` resolves to `zh-Hant`, but does not ship a catalogue itself.
+/// assert!(catalogue("zh-TW").is_none());
+/// ```
 #[must_use]
 pub fn catalogue(tag: &str) -> Option<&'static LocaleCatalogue> {
     SUPPORTED_LOCALES.iter().find(|entry| entry.tag == tag)
@@ -144,6 +177,15 @@ const EMPTY_SOURCE: LocaleCatalogue = LocaleCatalogue {
 ///
 /// [`SOURCE_LOCALE`] is a registry member, so the fallback arms below are
 /// unreachable in practice; they exist to keep this a panic-free path.
+///
+/// # Examples
+///
+/// ```
+/// use netsuke::localization::locales::{SOURCE_LOCALE, source_catalogue};
+///
+/// assert_eq!(source_catalogue().tag(), SOURCE_LOCALE);
+/// assert_eq!(source_catalogue().tag(), "en-US");
+/// ```
 #[must_use]
 pub fn source_catalogue() -> &'static LocaleCatalogue {
     catalogue(SOURCE_LOCALE).unwrap_or(&EMPTY_SOURCE)

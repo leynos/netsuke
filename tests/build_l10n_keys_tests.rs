@@ -181,21 +181,41 @@ fn malformed_macro_invocations_are_rejected(
     Ok(())
 }
 
-/// The body scanner counts braces without regard for comments or string
-/// literals, so an unbalanced brace inside either makes it run past the
-/// macro's closing brace and report the body as unterminated.
-///
-/// The repository's own macro contains no such brace, and the audit fails
-/// loudly rather than silently dropping keys, so the behaviour is pinned here
-/// rather than relied upon. A parser that tracked comments and strings in this
-/// pass would be an improvement, not a bug fix.
+/// Braces inside comments and string literals are not source, so the body
+/// scan must step over them. Before it did, a doc comment mentioning `}` or a
+/// key whose value contained one truncated the declared key set or failed the
+/// build outright.
 #[rstest]
-// A brace inside a line comment.
-#[case("A => \"a.key\",\n    // { stray brace")]
-// A brace inside a key's value.
-#[case("A => \"{\",")]
-fn unbalanced_braces_in_comments_or_values_end_the_body_early(#[case] entries: &str) -> Result<()> {
-    let message = extraction_error(entries)?;
+// An unbalanced brace in a line comment.
+#[case("A => \"a.key\",\n    // { stray brace", "a.key")]
+// An unbalanced brace in a doc comment, which is how this would really arrive.
+#[case("/// Braces like } appear in prose.\n    A => \"a.key\",", "a.key")]
+// An unbalanced brace in a block comment.
+#[case("/* } */\n    A => \"a.key\",", "a.key")]
+// An unbalanced brace inside a key's value.
+#[case("A => \"{\",", "{")]
+// An unbalanced brace inside a raw string value.
+#[case("A => r#\"a}key\"#,", "a}key")]
+fn braces_in_comments_and_literals_do_not_end_the_body(
+    #[case] entries: &str,
+    #[case] expected: &str,
+) -> Result<()> {
+    let extracted = extract(entries)?;
+    ensure!(
+        extracted.contains(expected),
+        "expected the body scan to reach {expected:?}, got {extracted:?}"
+    );
+    Ok(())
+}
+
+/// A body that genuinely never closes is still an error.
+#[test]
+fn an_unterminated_body_is_still_reported() -> Result<()> {
+    let source = "define_keys! {\n    A => \"a.key\",\n";
+    let message = match extract_source(source) {
+        Ok(keys) => bail!("expected an unterminated body error, got {keys:?}"),
+        Err(error) => error.to_string(),
+    };
     ensure!(
         message.contains("define_keys! macro body is missing '}'"),
         "expected the body scan to report an unterminated body, got {message:?}"

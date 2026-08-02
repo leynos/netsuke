@@ -2,13 +2,15 @@
 
 use std::sync::{Arc, MutexGuard};
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use rstest::rstest;
 use test_support::localizer_test_lock;
 
 use netsuke::cli_localization;
 use netsuke::localization::locales::SUPPORTED_LOCALES;
 use netsuke::localization::{self, LocalizerGuard, keys};
+use ortho_config::{FluentLocalizer, LanguageIdentifier};
+use std::str::FromStr;
 use test_support::fluent::normalize_fluent_isolates;
 
 /// Guard pair holding both the test lock and the localizer override.
@@ -56,9 +58,34 @@ fn which_message(command: &str) -> String {
         .to_string()
 }
 
+/// Every catalogue must parse on its own, with no English underneath it.
+///
+/// `build_localizer` layers the requested locale over the English source, so a
+/// catalogue that fails to parse still renders — in English, with the same
+/// arguments interpolated. That is indistinguishable from a working
+/// translation at the rendering level, which is why the sweep below cannot
+/// catch it. Building each resource directly with the defaults disabled can.
+#[test]
+fn every_catalogue_parses_without_the_english_fallback() -> Result<()> {
+    for entry in SUPPORTED_LOCALES {
+        let locale = LanguageIdentifier::from_str(entry.tag())
+            .with_context(|| format!("locale {} is not a valid BCP 47 tag", entry.tag()))?;
+        let built = FluentLocalizer::builder(locale)
+            .with_consumer_resources([entry.resource()])
+            .disable_defaults()
+            .try_build();
+        if let Err(err) = built {
+            bail!(
+                "locale {} has a catalogue that does not parse: {err}",
+                entry.tag()
+            );
+        }
+    }
+    Ok(())
+}
 /// Every registered locale must render a message and interpolate its
-/// arguments; a catalogue that fails to parse would silently fall through to
-/// English and go unnoticed without this sweep.
+/// arguments. This is a rendering sweep, not a parse check: see
+/// `every_catalogue_parses_without_the_english_fallback` for the latter.
 #[test]
 fn every_locale_renders_and_interpolates() -> Result<()> {
     for entry in SUPPORTED_LOCALES {

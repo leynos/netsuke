@@ -17,9 +17,10 @@
 
 # Locale for CLI messages, as a BCP 47 tag, for example `en-US`, `pt-BR` or
 # `zh-Hant`. The exact tag is matched first, then the registry's per-language
-# script and region rules, then `en-US`. Variants that differ in substance stay
-# distinct: `pt-BR` never yields European Portuguese. See the users' guide for
-# the full list.
+# script and region rules, then the sole catalogue for that language if it has
+# only one, so `fr-CA` uses `fr`, and finally `en-US`. Variants that differ in
+# substance stay distinct: `pt-BR` never yields European Portuguese. See the
+# users' guide for the full list.
 # locale = "en-US"
 
 # Emit one versioned JSON document: a result on success or diagnostic on failure.

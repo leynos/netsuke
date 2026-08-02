@@ -109,7 +109,7 @@ manifest.yaml.hint.list_item = YAML-listeelementer skal begynde med "-" og være
 manifest.yaml.hint.expected_colon = Dette ligner et opslag i en tilknytning; der mangler et ":" efter nøglen.
 manifest.yaml.hint.mapping_values = YAML-tilknytninger kræver en værdi efter ":" (eller en indrykket blok).
 manifest.yaml.hint.invalid_token = YAML-symbolet er ugyldigt eller uventet.
-manifest.yaml.hint.escape = Undvig omvendte skråstreger, eller fjern ugyldige undvigesekvenser.
+manifest.yaml.hint.escape = Escape omvendte skråstreger, eller fjern ugyldige escape-sekvenser.
 manifest.env.missing = Den påkrævede miljøvariabel "{ $name }" er ikke sat.
 manifest.env.invalid_utf8 = Miljøvariablen "{ $name }" indeholder ugyldig UTF-8.
 manifest.vars.not_object = Manifestets `vars` skal være en tilknytning eller et objekt.
@@ -378,7 +378,7 @@ graph.html.noscript.notice = JavaScript er slået fra. Tekstoversigten ovenfor e
 # Semantiske præfikser til tilgængeligt output.
 semantic.prefix.error = Fejl:
 semantic.prefix.warning = Advarsel:
-semantic.prefix.success = Fuldført:
+semantic.prefix.success = Succes:
 semantic.prefix.info = Info:
 semantic.prefix.timing = Tid:
 semantic.prefix.rendered = {"{"}symbol{"}"} {"{"}label{"}"}

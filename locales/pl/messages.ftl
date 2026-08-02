@@ -156,7 +156,7 @@ ir.empty_rule = Cel „{ $target }” musi odwoływać się do reguły.
 ir.duplicate_outputs = Wykryto zduplikowane wyjścia: { $outputs }.
 ir.circular_dependency = Wykryto zależność cykliczną: { $cycle }.
 ir.action_serialisation = Nie udało się zserializować akcji: { $details }.
-ir.invalid_command = Nieprawidłowe wstawienie w poleceniu: { $snippet }.
+ir.invalid_command = Nieprawidłowa interpolacja w poleceniu: { $snippet }.
 
 # Błędy generowania plików Ninja.
 ninja_gen.missing_action = Brakuje akcji „{ $id }”, do której odwołuje się krawędź budowania.

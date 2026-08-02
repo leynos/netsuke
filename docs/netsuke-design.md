@@ -2485,9 +2485,9 @@ runner failures) use the same Fluent localizer so the locale selection is
 consistent across user-facing output. The build-time audit in
 `build_l10n_audit/` validates every declared locale: it rejects catalogues that
 omit a declared key, carry a key beyond the declared set, or interpolate a
-different set of variables from the English source catalogue.
-Missing or drifted strings therefore fail CI before release. CLI execution and
-dispatch live in `src/runner.rs`, keeping `main.rs` focused on parsing. Process
+different set of variables from the English source catalogue. Missing or
+drifted strings therefore fail CI before release. CLI execution and dispatch
+live in `src/runner.rs`, keeping `main.rs` focused on parsing. Process
 management, Ninja invocation, argument redaction, and the temporary file
 helpers reside in `src/runner/process.rs`, allowing the runner entry point to
 delegate low-level concerns. The working directory flag mirrors Ninja's `-C`

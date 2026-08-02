@@ -177,6 +177,25 @@ fn decoys_do_not_displace_the_key(#[case] body: &str) -> Result<()> {
     Ok(())
 }
 
+/// The table header must be matched only where it begins a line. A commented
+/// or quoted mention of it earlier in the manifest previously captured the
+/// search, so the parser returned the text above the real table and the audit
+/// reported a valid manifest as missing its metadata.
+#[rstest]
+// A commented-out header before the real one.
+#[case("# [package.metadata.ortho_config]\n# locales = [\"wrong\"]\n")]
+// The header named inside a string value.
+#[case("[package]\ndescription = \"see [package.metadata.ortho_config]\"\n")]
+// The header indented rather than at column zero is still a real header.
+#[case("[package]\nname = \"netsuke\"\n")]
+fn a_decoy_header_does_not_displace_the_table(#[case] preamble: &str) -> Result<()> {
+    let manifest = format!("{preamble}{TABLE}locales = [\"en-US\"]\n");
+    let found = metadata_locales(&manifest)
+        .ok_or_else(|| anyhow!("expected the locales key to be found"))?;
+    ensure!(found == ["en-US"], "got {found:?}");
+    Ok(())
+}
+
 #[rstest]
 // No such table.
 #[case("[package]\nname = \"netsuke\"\n")]

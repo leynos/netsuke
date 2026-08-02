@@ -38,47 +38,52 @@ test, and the test suite all do.
 
 `Cargo.toml`'s `package.metadata.ortho_config.locales` is the one unavoidable
 duplicate, because Cargo metadata cannot call into Rust. The build audit
-compares it against the registry and fails on drift, so adding a locale means
-editing two lists and nothing else.
+compares it against the registry and fails on drift.
+
+Adding a locale therefore means: create `locales/<tag>/messages.ftl` with every
+declared key translated, add the tag to `define_locales!`, and add it to the
+`package.metadata.ortho_config.locales` array. If the language already ships a
+catalogue, add a `LANGUAGE_FALLBACKS` rule too, so the new tag and the existing
+one resolve as intended rather than one of them capturing the other. The build
+fails if any of these is skipped, apart from the fallback rule, which is a
+judgement about which variants are interchangeable.
 
 Table 1: The locale API surface
 
-| Item                                     | Purpose                                                            |
-| ---------------------------------------- | ------------------------------------------------------------------ |
-| `locales::SUPPORTED_LOCALES`             | Every shipped catalogue, ordered by tag                            |
-| `locales::catalogue(tag)`                | Exact lookup; `None` when the tag ships no catalogue               |
-| `locales::resolve_catalogue(identifier)` | Exact match, then the fallback rules, then `en-US`                 |
-| `locales::source_catalogue()`            | The `en-US` catalogue every locale falls back to                   |
-| `cli_localization::build_localizer(tag)` | The runtime entry point: resolves, then layers over `en-US`        |
+| Item                                     | Purpose                                                     |
+| ---------------------------------------- | ----------------------------------------------------------- |
+| `locales::SUPPORTED_LOCALES`             | Every shipped catalogue, ordered by tag                     |
+| `locales::catalogue(tag)`                | Exact lookup; `None` when the tag ships no catalogue        |
+| `locales::resolve_catalogue(identifier)` | Exact match, then the fallback rules, then `en-US`          |
+| `locales::source_catalogue()`            | The `en-US` catalogue every locale falls back to            |
+| `cli_localization::build_localizer(tag)` | The runtime entry point: resolves, then layers over `en-US` |
 
 Selection matches the exact BCP 47 tag first. A tag with no catalogue resolves
-through the per-language rules in `LANGUAGE_FALLBACKS`, then the sole
-catalogue for that language, then `en-US`. The rules keep variants that differ
-in substance apart — `es-419` from `es-ES`, `pt-BR` from `pt-PT`, `zh-Hans`
-from `zh-Hant` — so a new locale whose language already ships a catalogue
-needs a rule rather than the unique-language step. The
+through the per-language rules in `LANGUAGE_FALLBACKS`, then the sole catalogue
+for that language, then `en-US`. The rules keep variants that differ in
+substance apart — `es-419` from `es-ES`, `pt-BR` from `pt-PT`, `zh-Hans` from
+`zh-Hant` — so a new locale whose language already ships a catalogue needs a
+rule rather than the unique-language step. The
 [translator guide](translators-guide.md) states the same policy for
 translators, and the users' guide lists the tags.
 
-Netsuke resolves the locale twice: `startup_localizer` before the
-configuration merge, for help and usage errors, and `configure_runtime`
-afterwards, for diagnostics and progress. Only the second sees a configuration
-file's `locale`, because `--help` must render before Netsuke knows which
-configuration file to read.
-
+Netsuke resolves the locale twice: `startup_localizer` before the configuration
+merge, for help and usage errors, and `configure_runtime` afterwards, for
+diagnostics and progress. Only the second sees a configuration file's `locale`,
+because `--help` must render before Netsuke knows which configuration file to
+read.
 
 ### Adding or changing messages
 
 Every user-facing string is a Fluent message keyed from
 `src/localization/keys.rs`. Adding one means adding the constant, adding the
-message to all 35 catalogues, and keeping its `{ $variables }` identical
-across them: the build audit rejects a missing key, an orphaned key, or a
-variable set that differs from `en-US`. The audit lives in
-`build_l10n_audit/`, split into `keys.rs` (the `define_keys!` macro),
-`ftl.rs` (catalogues), `metadata.rs` (the Cargo metadata), and `compare.rs`
-(the rules). Because build scripts are not test targets, those modules are
-included by path from `tests/build_l10n_keys_tests.rs` and
-`tests/build_l10n_parser_tests.rs`.
+message to all 35 catalogues, and keeping its `{ $variables }` identical across
+them: the build audit rejects a missing key, an orphaned key, or a variable set
+that differs from `en-US`. The audit lives in `build_l10n_audit/`, split into
+`keys.rs` (the `define_keys!` macro), `ftl.rs` (catalogues), `metadata.rs` (the
+Cargo metadata), and `compare.rs` (the rules). Because build scripts are not
+test targets, those modules are included by path from
+`tests/build_l10n_keys_tests.rs` and `tests/build_l10n_parser_tests.rs`.
 
 ## Graph view projection and renderer adapters
 
@@ -171,8 +176,8 @@ the README — also run:
 - `make nixie`
 
 `make test` runs the non-doctest suite through
-[cargo-nextest](https://nexte.st/) and then runs the doctests separately.
-CI pins the runner version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`.
+[cargo-nextest](https://nexte.st/) and then runs the doctests separately. CI
+pins the runner version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`.
 Install that same version locally so local runs match CI; read the pin from the
 workflow rather than copying the number, so the two cannot drift:
 
@@ -1050,12 +1055,12 @@ governs the non-doctest pass only, and deliberately stays small:
 
 ### How this relates to `#[serial]` and the isolation utilities
 
-nextest runs each test in its own process, so environment and
-working-directory mutations cannot leak between tests the way they can under
-the threaded in-process harness. The `EnvLock`, `EnvVarGuard`, and `CwdGuard`
-utilities described in [Test isolation utilities](#test-isolation-utilities),
-and the `#[serial]` markers on the tests in the three binaries above, remain
-necessary because the coverage workflow still drives an in-process runner.
+nextest runs each test in its own process, so environment and working-directory
+mutations cannot leak between tests the way they can under the threaded
+in-process harness. The `EnvLock`, `EnvVarGuard`, and `CwdGuard` utilities
+described in [Test isolation utilities](#test-isolation-utilities), and the
+`#[serial]` markers on the tests in the three binaries above, remain necessary
+because the coverage workflow still drives an in-process runner.
 
 The `serial-env` group is therefore not load-bearing for the tests that exist
 today; it states the serialization contract once so both runners agree, and so
@@ -1891,8 +1896,8 @@ Early JSON resolution reads only the boolean `json` field from each
 configuration layer. File layers are applied in merge order, followed by
 `NETSUKE_JSON`; an explicit root `--json` flag has the highest precedence.
 Selected file-load errors and malformed `NETSUKE_JSON` values are returned to
-the caller. Accepted environment values are `true`, `false`, `1`, and `0`.
-An explicit root `--json` flag bypasses environment parsing.
+the caller. Accepted environment values are `true`, `false`, `1`, and `0`. An
+explicit root `--json` flag bypasses environment parsing.
 
 ### Configuration discovery module layout
 

@@ -496,11 +496,19 @@ surface.
 
 ### Choose a language with `--locale`
 
-Netsuke's help text, validation errors, progress labels and runtime diagnostics
-are translated. The locale is chosen by the first of these that yields a valid
-BCP 47 tag: the `--locale` flag, the `NETSUKE_LOCALE` environment variable, the
-`locale` setting in the configuration file, then the system default. System
-values are normalized first, so `en_GB.UTF-8` is understood as `en-GB`.
+Netsuke's help text, validation errors, progress labels, and runtime
+diagnostics are translated. The locale is chosen by the first source that
+yields a valid BCP 47 tag, and which sources are available depends on when the
+message is rendered.
+
+Help, usage, and command-line validation errors are produced before any
+configuration file is read, so they use the `--locale` flag, then
+`NETSUKE_LOCALE`, then the system default, then `en-US`. Diagnostics, progress,
+and status output are rendered after the configuration merge, so they consult
+the configuration file's `locale` setting as well, between `NETSUKE_LOCALE` and
+the system default.
+
+System values are normalized first, so `en_GB.UTF-8` is understood as `en-GB`.
 
 Table 1: Locales Netsuke ships
 
@@ -533,9 +541,9 @@ A requested tag resolves by these rules, in order:
 1. The exact tag, if a catalogue carries it.
 2. A script or region rule for that language. Spanish outside Spain uses
    `es-419`; Portuguese outside Brazil uses `pt-PT`; Chinese resolves by
-   script, with `zh-CN` and `zh-SG` taking Simplified and `zh-TW`, `zh-HK` and
-   `zh-MO` taking Traditional; English outside the United States uses `en-GB`;
-   and `no` resolves to `nb`.
+   script, with `zh-CN`, `zh-SG`, and `zh-MY` taking Simplified and `zh-TW`,
+   `zh-HK`, and `zh-MO` taking Traditional; English outside the United States
+   uses `en-GB`; and `no` resolves to `nb`.
 3. The only catalogue for that language, so `fr-CA` uses `fr` and `de-AT`
    uses `de`.
 4. `en-US`, for anything still unmatched.

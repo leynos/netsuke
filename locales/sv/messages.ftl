@@ -378,7 +378,7 @@ graph.html.noscript.notice = JavaScript är avstängt. Textöversikten ovan är 
 # Semantiska prefix för tillgänglig utdata.
 semantic.prefix.error = Fel:
 semantic.prefix.warning = Varning:
-semantic.prefix.success = Klart:
+semantic.prefix.success = Lyckades:
 semantic.prefix.info = Info:
 semantic.prefix.timing = Tid:
 semantic.prefix.rendered = {"{"}symbol{"}"} {"{"}label{"}"}

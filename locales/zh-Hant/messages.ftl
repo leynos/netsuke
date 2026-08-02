@@ -101,7 +101,7 @@ runner.io.flush_stdout = 無法清空標準輸出的緩衝區。
 # 資訊清單診斷。
 manifest.parse = 資訊清單剖析失敗。
 manifest.structure_error = 資訊清單在 { $name } 處有結構錯誤：{ $details }
-manifest.yaml.parse = 第 { $line } 列第 { $column } 行發生 YAML 剖析錯誤：{ $details }
+manifest.yaml.parse = 第 { $line } 行第 { $column } 列發生 YAML 剖析錯誤：{ $details }
 manifest.yaml.label = 無效的 YAML
 manifest.yaml.hint.tabs = YAML 不允許定位字元；縮排請使用空白。
 manifest.yaml.hint.list_item = YAML 清單項目必須以「-」開頭並正確縮排。

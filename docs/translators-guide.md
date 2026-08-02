@@ -9,8 +9,8 @@ Netsuke uses [Project Fluent](https://projectfluent.org/) for localization.
 Fluent is a modern localization system designed to handle the complexities of
 natural language whilst keeping translations simple and readable.
 
-**Locale precedence** (highest to lowest). Netsuke resolves twice, because
-help and usage errors are rendered before any configuration file is read.
+**Locale precedence** (highest to lowest). Netsuke resolves twice because help
+and usage errors are rendered before any configuration file is read.
 
 At startup, for help, usage, and command-line validation errors:
 
@@ -57,8 +57,13 @@ registry rather than keeping its own list: the build-time audit, the
 
 The one necessary duplicate is `package.metadata.ortho_config.locales` in
 `Cargo.toml` because Cargo metadata cannot call into Rust. The build audit
-compares the two and fails the build if they drift, so adding a locale means
-editing exactly two lists and nothing else.
+compares the two and fails the build if they drift.
+
+Adding a locale means creating `locales/<tag>/messages.ftl`, adding the tag to
+`define_locales!` in `src/localization/locales.rs`, and adding it to that
+`Cargo.toml` array. When the language already ships a catalogue, it also means
+adding a `LANGUAGE_FALLBACKS` rule to say how the two variants divide the
+regions between them.
 
 ### Fallback policy
 
@@ -271,7 +276,7 @@ second test fails if any registry locale is missing from it.
 
 The categories are the ones `intl_pluralrules` implements, which is what Fluent
 selects with; they can lag a newer CLDR release. CLDR also gives French,
-Spanish, Italian and Portuguese a `many` category, but only for large round
+Spanish, Italian, and Portuguese a `many` category, but only for large round
 numbers in compact notation, which Netsuke's plain integer counts never select.
 
 Note that `one` does not always mean "exactly one": in French it also covers

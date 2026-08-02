@@ -260,7 +260,7 @@ stdlib.path.io.invalid_data = dados inválidos
 stdlib.path.io.timed_out = tempo esgotado
 stdlib.path.io.interrupted = interrompido
 stdlib.path.io.would_block = bloquearia
-stdlib.path.io.write_zero = escrita nula
+stdlib.path.io.write_zero = não foi escrito nenhum byte
 stdlib.path.io.unexpected_eof = fim de ficheiro inesperado
 stdlib.path.io.broken_pipe = canal quebrado
 stdlib.path.io.connection_refused = ligação recusada
@@ -379,7 +379,7 @@ graph.html.noscript.notice = O JavaScript está desativado. O esquema textual ac
 # Prefixos semânticos para a saída acessível.
 semantic.prefix.error = Erro:
 semantic.prefix.warning = Aviso:
-semantic.prefix.success = Concluído:
+semantic.prefix.success = Sucesso:
 semantic.prefix.info = Info:
 semantic.prefix.timing = Tempos:
 semantic.prefix.rendered = {"{"}symbol{"}"} {"{"}label{"}"}
