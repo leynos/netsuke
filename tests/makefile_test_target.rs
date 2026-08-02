@@ -710,11 +710,19 @@ fn behavioural_nextest_config_binds_the_env_binaries_to_the_serial_env_group() -
         .filter(|entry| entry.get("test-group").and_then(Value::as_str) == Some("serial-env"))
         .find_map(|entry| entry.get("filter").and_then(Value::as_str))
         .context("an override should assign the serial-env group with a filter")?;
-    for binary in ["manifest_env_tests", "ninja_env_tests", "env_path_tests"] {
+    for binary in ["ninja_env_tests", "env_path_tests"] {
         ensure!(
             filter.contains(&format!("binary({binary})")),
             "the serial-env override should cover {binary}, found filter {filter:?}"
         );
     }
+    // A binary that no longer mutates process state must leave the group, or
+    // the configuration outlives the constraint it describes and quietly
+    // serializes tests that need not be. `manifest_env_tests` moved to an
+    // injected reader and was removed; assert it stays out.
+    ensure!(
+        !filter.contains("binary(manifest_env_tests)"),
+        "manifest_env_tests uses an injected reader and must not be serialized, found filter {filter:?}"
+    );
     Ok(())
 }

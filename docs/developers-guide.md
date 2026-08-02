@@ -1137,10 +1137,11 @@ variables rather than reinterpreting one as the other.
 The runner is configured by `.config/nextest.toml` at the workspace root. It
 governs the non-doctest pass only, and deliberately stays small:
 
-- **`serial-env` test group** (`max-threads = 1`) covering exactly three
-  binaries: `manifest_env_tests`, `ninja_env_tests`, and `env_path_tests`.
-  These mutate process-global environment state — `PATH`, `NINJA_ENV`, and ad
-  hoc `NETSUKE_*` variables. Every other test remains fully parallel.
+- **`serial-env` test group** (`max-threads = 1`) covering exactly two
+  binaries: `ninja_env_tests` and `env_path_tests`. These mutate process-global
+  environment state — `PATH` and `NINJA_ENV`. Every other test remains fully
+  parallel. `manifest_env_tests` was a member until it moved to an injected
+  reader; it mutates nothing now, so it runs parallel with the rest.
 - **No blanket retries.** A test that fails intermittently is a defect to
   diagnose. Add a targeted override with a written rationale only when a
   genuine external-resource constraint requires one.
@@ -1154,8 +1155,13 @@ nextest runs each test in its own process, so environment and working-directory
 mutations cannot leak between tests the way they can under the threaded
 in-process harness. The `EnvLock`, `EnvVarGuard`, and `CwdGuard` utilities
 described in [Test isolation utilities](#test-isolation-utilities), and the
-`#[serial]` markers on the tests in the three binaries above, remain necessary
+`#[serial]` markers on the tests in the two binaries above, remain necessary
 because the coverage workflow still drives an in-process runner.
+
+They are needed only for binaries that still mutate process-global state. A
+binary migrated to an injected seam should leave the group and drop its
+`#[serial]` markers in the same change, so the configuration does not outlive
+the constraint it describes.
 
 The `serial-env` group is therefore not load-bearing for the tests that exist
 today; it states the serialization contract once so both runners agree, and so

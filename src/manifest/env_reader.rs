@@ -24,12 +24,14 @@ pub type EnvReader =
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,no_run
 /// use netsuke::manifest::process_env_reader;
 ///
+/// // Reads whatever the process has. Not executed: the result depends on the
+/// // caller's environment, so running it would make the doctest a hostage to
+/// // whatever CI happens to export.
 /// let reader = process_env_reader();
-/// // Reads whatever the process has; absent variables report `NotPresent`.
-/// assert!(reader("NETSUKE_DEFINITELY_UNSET_VARIABLE").is_err());
+/// let _ = reader("PATH");
 /// ```
 #[must_use]
 #[expect(
@@ -47,7 +49,7 @@ pub fn process_env_reader() -> EnvReader {
 /// valid UTF-8.
 /// Resolve `name` through `read_env`, mapping failures to Jinja errors.
 ///
-/// Separated from [`env_var`] so all three outcomes — present, absent, and
+/// Kept separate from the Jinja registration so all three outcomes — present, absent, and
 /// non-UTF-8 — can be exercised without mutating the process environment. The
 /// non-UTF-8 branch is otherwise unreachable from a test: fabricating such a
 /// value in the live environment needs platform-specific `OsString` surgery,
