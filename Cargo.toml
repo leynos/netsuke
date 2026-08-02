@@ -62,7 +62,7 @@ tempfile = "3.8.0"
 shell-quote = { version = "0.7.2", default-features = false, features = ["sh"] }
 shlex = "2.0.1"
 time = { version = "0.3.44", features = ["formatting", "macros", "parsing", "serde"] }
-ureq = { version = "2.10.5" }
+ureq = { version = "3.3.0" }
 wait-timeout = "0.2"
 url = "^2.5.0"
 ortho_config = { version = "0.8.0", features = ["serde_json"] }
