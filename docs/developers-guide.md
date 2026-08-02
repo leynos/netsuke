@@ -142,8 +142,10 @@ and its descendants, whereas a crate entry exempts a whole compilation unit.
 The application crate is scoped this way — only
 `netsuke::stdlib::which::lookup` (executable discovery through `PATH` and
 cross-directory symlink canonicalization, which `cap_std` cannot express) and
-`netsuke::runner::process::file_io` (temporary-file synchronization) are
-exempt; the rest of `netsuke` stays under the capability policy. The
+`netsuke::runner::process::file_io` (temporary-file synchronization), and
+`netsuke::cli::discovery::paths` (canonicalizing an ambient `--directory` to
+match OrthoConfig's layer paths) are exempt; the rest of `netsuke` stays under
+the capability policy. The
 behavioural step definitions, CLI integration tests, and shared
 workflow-reading helper that stage fixtures ambiently are scoped the same way.
 A crate-level entry is justified only when the ambient access lives in the
@@ -956,6 +958,20 @@ Do **not** call `std::env::set_var` directly in BDD steps — use
 
 ### `tracing_capture`
 
+Production tracing has one process-wide subscriber, installed by
+`init_tracing` in `src/main.rs` with a reloadable filter initially set to
+`OFF`. Early configuration resolution therefore cannot write selector events
+before the effective JSON mode is known. On success,
+`resolve_json_mode_or_exit` calls `set_tracing_filter` with the resolved mode:
+JSON stays `OFF`, while human mode enables `TRACE` for `--verbose` or `ERROR`
+otherwise. Full human-mode merging repeats discovery after the filter is
+enabled, so its selector events remain available. If early resolution fails,
+human mode enables its fallback filter and replays resolution to retain bounded
+failure diagnostics; JSON mode leaves the filter off and discards them. No
+library module installs a global subscriber.
+
+Tests use a separate capture boundary:
+
 `src/test_tracing_capture.rs` (`crate::test_tracing_capture`) is the
 workspace's single implementation for capturing structured tracing events
 in tests. `with_test_subscriber` installs a capturing `Layer` as the
@@ -1200,7 +1216,9 @@ split diagnostics, path comparison, and tests out of the main discovery flow:
   literally when resolution fails, continues discovery, and emits only the
   normal append debug event. This lets relative or symlinked `--directory`
   values match OrthoConfig's canonicalized layer paths without making an
-  unresolved path fatal.
+  unresolved path fatal. `FsPathNormalizer` is confined to this comparison
+  boundary: selectors remain pure path queries, OrthoConfig supplies the layer
+  path, and tracing remains at the orchestration boundary.
 - `discovery_event_assertions.rs` — shared test-only helpers:
   `capture_events` runs a closure under a TRACE capturing subscriber,
   `find_event` locates one emitted event by substring, and

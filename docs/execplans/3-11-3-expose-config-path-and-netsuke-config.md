@@ -6,6 +6,16 @@ and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
+> **Historical status:** This completed plan records the implementation as it
+> stood on 2026-04-21. Later issue #292 removed the undocumented
+> `NETSUKE_CONFIG_PATH` alias, split configuration discovery across focused
+> modules, and added bounded tracing at orchestration boundaries. Current
+> behaviour and architecture are documented in the
+> [users' guide](../users-guide.md#configure-netsuke) and
+> [developers' guide](../developers-guide.md#configuration-discovery-module-layout).
+> References below to the legacy alias and the original single-file helper
+> layout are retained only as implementation history.
+
 ## Purpose / big picture
 
 After this work, a Netsuke user can point the tool at an arbitrary

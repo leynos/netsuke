@@ -554,6 +554,24 @@ this order:
 An explicit file that is missing or invalid causes an error; Netsuke does not
 fall back to discovery.
 
+### Diagnose configuration selection
+
+Pass `--verbose` to see how Netsuke selected its configuration. Structured
+events report whether `--config`, `NETSUKE_CONFIG`, or automatic discovery won,
+whether a path was present, and which environment lookups were attempted.
+Events then identify whether Netsuke uses an explicit file or discovered
+layers.
+
+If an explicit file cannot be loaded, the warning records `failure_kind` as
+`Missing` or `LoadError`. Path fields are bounded to `path_hash` and
+`path_file_name`; full paths and formatted parser errors are not tracing
+fields. The file name is visible, and the unkeyed hash is only a correlation
+identifier: it does not confidentially conceal a guessable path.
+
+Configuration tracing is disabled in JSON mode, including when `json = true`
+comes from a configuration file. This keeps stderr empty for successful JSON
+commands and reserves it for the single diagnostic document on failure.
+
 The annotated [sample configuration](sample-netsuke.toml) lists every key. A
 small project configuration looks like this:
 
