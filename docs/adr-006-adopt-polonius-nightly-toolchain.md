@@ -1,4 +1,4 @@
-# Architecture Decision Record (ADR): Adopt the Polonius borrow checker on a pinned nightly toolchain
+# Architecture decision record (ADR): Adopt the Polonius borrow checker on a pinned nightly toolchain
 
 ## Status
 
