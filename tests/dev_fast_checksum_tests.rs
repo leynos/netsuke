@@ -142,9 +142,9 @@ proptest! {
     ) {
         let scenario = InstallerScenario::prepare()
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
-        let real = scenario.release().sha256().to_owned();
-        let artefact = scenario.release().name().to_owned();
-        let contents: String = rows.iter().map(|row| row.render(&real, &artefact)).collect();
+        let real = scenario.release().sha256();
+        let artefact = scenario.release().name();
+        let contents: String = rows.iter().map(|row| row.render(real, artefact)).collect();
 
         let checksums = scenario.sandbox().home().join("SHA256SUMS");
         scenario

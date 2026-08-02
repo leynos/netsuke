@@ -32,6 +32,7 @@ const SANDBOX_UTILITIES: &[&str] = &[
     "mkdir",
     "mktemp",
     "rm",
+    "rmdir",
     "sed",
     "sh",
     "sha256sum",

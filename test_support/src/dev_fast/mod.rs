@@ -26,6 +26,7 @@
 //! the `netsuke` binary. The isolation is the same, and stricter: `env_clear`
 //! means a child inherits nothing it was not handed.
 
+mod bench;
 mod cargo_log;
 mod make;
 mod release;
@@ -33,6 +34,7 @@ mod sandbox;
 mod scenario;
 mod staging;
 
+pub use bench::{BASELINE_MTIME, BenchFixture, DEFAULT_SLUG, DEV_FAST_SLUG, write_with_old_mtime};
 pub use cargo_log::{CargoInvocation, RecordingCargo, TargetState};
 pub use make::MakeInvocation;
 pub use release::FakeRelease;

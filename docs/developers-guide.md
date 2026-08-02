@@ -583,6 +583,10 @@ network, and no real `mold`, `rustup`, or Cargo — so they run as part of
   contents; and `install-dev-fast` forwarding.
 - `tests/dev_fast_bench_tests.rs`: `make bench-build`. Per-variant target
   directories, the clean/incremental cycle, and both variant rows.
+- `tests/dev_fast_bench_lock_tests.rs`: the benchmark's exclusion lock. That a
+  held lock rejects a second run before it mutates anything, that the lock is
+  released however a run ends, and that a later run can take it after an
+  aborted one.
 
 The fixtures live in `test_support::dev_fast`:
 
@@ -678,11 +682,19 @@ the `netsuke` binary from an empty target directory, touches `src/main.rs`, and
 rebuilds. Each variant uses its own target directory under `target/bench/`, so
 neither warms the other's cache nor disturbs the working `target/` tree. The
 timer reads `EPOCHREALTIME`, so this target needs Bash 5.0 or newer; it fails
-with a named prerequisite on older shells rather than reporting zeroes. The
-benchmark assumes it is the only run in flight: `BENCH_ROOT` and
-`BENCH_TOUCH_FILE` default to the shared `target/bench` directory and the
-tracked `src/main.rs`, so concurrent runs would interfere with each other's
-measurements; run one at a time, or override both variables per run.
+with a named prerequisite on older shells rather than reporting zeroes.
+
+`BENCH_ROOT` and `BENCH_TOUCH_FILE` default to the shared `target/bench`
+directory and the tracked `src/main.rs`, so two runs in one checkout would
+delete each other's caches mid-measurement and leave the touched source
+permanently newer. Rather than leave that to convention, the benchmark takes
+`$BENCH_ROOT.lock` exclusively for the duration of a run. A second run refuses
+immediately, naming the lock and the remedy, and does so before touching
+anything, so the holder's state is unaffected. The lock is released however the
+run ends, including on interrupt. To benchmark two things at once, override
+`BENCH_ROOT` and `BENCH_TOUCH_FILE` per run; the lock path follows `BENCH_ROOT`,
+so distinct roots do not contend. If a killed run ever leaves the directory
+behind, remove it.
 
 Results below were recorded on a 24-core x86_64 Linux host, with both variants
 on the repository's own `nightly-2026-06-25` supplying Cranelift 0.132.0, and

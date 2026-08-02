@@ -13,71 +13,16 @@
 #![cfg(all(unix, target_os = "linux"))]
 
 use anyhow::{Context, Result, bail, ensure};
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 use proptest::prelude::*;
 use proptest::proptest;
 use proptest::test_runner::FileFailurePersistence;
 use rstest::rstest;
-use std::time::{Duration, UNIX_EPOCH};
 use test_support::dev_fast::{
-    BuildScenario, CargoInvocation, DEV_FAST_CONFIG_PATH, MakeInvocation, Sandbox, TargetState,
-    combined, pinned_toolchain,
+    BenchFixture, BuildScenario, CargoInvocation, DEFAULT_SLUG, DEV_FAST_CONFIG_PATH,
+    DEV_FAST_SLUG, MakeInvocation, Sandbox, TargetState, combined, pinned_toolchain,
+    write_with_old_mtime,
 };
-
-/// Timestamp stamped on the benchmark's touch file before the run, chosen far
-/// enough in the past that any `touch` is unambiguously newer. Comparing
-/// against a fixed baseline keeps the assertion deterministic, where comparing
-/// the two passes to each other would depend on filesystem timestamp
-/// granularity.
-const BASELINE_MTIME: i64 = 1_600_000_000;
-
-/// Target-directory slugs the benchmark uses, one per variant.
-const DEFAULT_SLUG: &str = "default";
-const DEV_FAST_SLUG: &str = "dev-fast";
-
-/// Create the touch file with [`BASELINE_MTIME`], returning that timestamp.
-fn write_with_old_mtime(sandbox: &Sandbox, path: &Utf8Path) -> Result<i64> {
-    let baseline = UNIX_EPOCH + Duration::from_secs(BASELINE_MTIME.unsigned_abs());
-    sandbox.write_file_with_mtime(path, "", baseline)?;
-    Ok(BASELINE_MTIME)
-}
-
-/// The disposable inputs one benchmark run needs.
-///
-/// Named fields rather than a returned tuple: `root` and `touch_file` are both
-/// paths, so positional returns could be transposed at the call site without
-/// the compiler noticing.
-struct BenchFixture {
-    /// Benchmark root; each variant gets its own target directory beneath it.
-    root: Utf8PathBuf,
-    /// The file the benchmark touches between a variant's two passes.
-    touch_file: Utf8PathBuf,
-    /// The touch file's timestamp before the run, for ordering assertions.
-    baseline_mtime: i64,
-}
-
-/// Stage a benchmark run's disposable inputs.
-///
-/// The touch file stands in for `src/main.rs`, so a run does not invalidate the
-/// working tree's build cache. Both target directories are seeded to model a
-/// re-run: on a fresh sandbox the benchmark's `rm -rf` would be
-/// indistinguishable from doing nothing, and the clean-pass assertion would
-/// hold vacuously.
-fn prepare_bench_fixture(scenario: &BuildScenario) -> Result<BenchFixture> {
-    let sandbox = scenario.sandbox();
-    let touch_file = sandbox.home().join("bench-touch");
-    let baseline_mtime = write_with_old_mtime(sandbox, &touch_file)?;
-
-    let root = sandbox.home().join("bench");
-    for slug in [DEFAULT_SLUG, DEV_FAST_SLUG] {
-        sandbox.create_dir(&root.join(slug))?;
-    }
-    Ok(BenchFixture {
-        root,
-        touch_file,
-        baseline_mtime,
-    })
-}
 
 /// Check the recorded passes: their count and pairing, each variant's own
 /// contract, that the variants measured separately, and where each pass sits
@@ -250,7 +195,7 @@ proptest! {
 fn the_touched_file_is_restored_however_the_run_ends(#[case] succeeds: bool) -> Result<()> {
     let scenario = BuildScenario::prepare()?;
     let sandbox = scenario.sandbox();
-    let fixture = prepare_bench_fixture(&scenario)?;
+    let fixture = BenchFixture::prepare(&scenario)?;
 
     if !succeeds {
         // Fail the second variant, after the first has already touched the file.
@@ -285,7 +230,7 @@ fn the_touched_file_is_restored_however_the_run_ends(#[case] succeeds: bool) -> 
 #[test]
 fn bench_target_emits_both_variant_rows() -> Result<()> {
     let scenario = BuildScenario::prepare()?;
-    let fixture = prepare_bench_fixture(&scenario)?;
+    let fixture = BenchFixture::prepare(&scenario)?;
 
     let invocation = MakeInvocation::new("bench-build")
         .variable("CARGO", scenario.cargo().executable())

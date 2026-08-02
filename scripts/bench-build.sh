@@ -25,6 +25,7 @@ script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 BENCH_ROOT=${BENCH_ROOT:-target/bench}
 BENCH_BIN=${BENCH_BIN:-netsuke}
 BENCH_TOUCH_FILE=${BENCH_TOUCH_FILE:-src/main.rs}
+BENCH_LOCK_DIR=${BENCH_LOCK_DIR:-$BENCH_ROOT.lock}
 
 # Populated as "<label>|<clean seconds>|<incremental seconds>" rows.
 results=()
@@ -49,7 +50,41 @@ restore_touch_file() {
   BENCH_TOUCH_STAMP=
 }
 
-trap restore_touch_file EXIT INT TERM
+# Two benchmark runs in one checkout are not independent: they share the variant
+# target directories, so one run's `rm -rf` for its clean pass deletes the other
+# run's warm cache mid-measurement, and they share the touch file, so the second
+# run captures a stamp the first has already moved and restores that instead of
+# the original. The result is neither a crash nor a comparable figure — it is a
+# plausible-looking table and a permanently newer source file.
+#
+# So take the run exclusively rather than documenting the hazard. `mkdir` is the
+# portable atomic test-and-set: it succeeds for exactly one caller and needs no
+# `flock`, which is util-linux and absent on macOS, where this script is
+# reachable because the capability check tolerates a non-Linux host.
+BENCH_LOCK_HELD=
+
+acquire_bench_lock() {
+  mkdir -p -- "$(dirname -- "$BENCH_LOCK_DIR")"
+  mkdir -- "$BENCH_LOCK_DIR" 2>/dev/null || fail \
+    "another benchmark run holds $BENCH_LOCK_DIR; wait for it to finish, or remove that directory if it was left behind by a killed run"
+  BENCH_LOCK_HELD=1
+}
+
+release_bench_lock() {
+  [ -n "$BENCH_LOCK_HELD" ] || return 0
+  rmdir -- "$BENCH_LOCK_DIR" 2>/dev/null || true
+  BENCH_LOCK_HELD=
+}
+
+# One handler for both, so an interrupted run releases the lock as well as
+# restoring the timestamp. Each half is idempotent, so EXIT firing after INT or
+# TERM is harmless.
+cleanup() {
+  restore_touch_file
+  release_bench_lock
+}
+
+trap cleanup EXIT INT TERM
 
 # Wall-clock seconds for a command, to one decimal place. EPOCHREALTIME keeps
 # the measurement sub-second without shelling out to an external timer.
@@ -106,6 +141,10 @@ report() {
 main() {
   local toolchain
   toolchain=$(cranelift_toolchain)
+
+  # Before the first `rm -rf` or `touch`, so a rejected run leaves the holder's
+  # state untouched.
+  acquire_bench_lock
 
   measure_variant default 'Default (LLVM, platform linker)' \
     "$CARGO" build --bin "$BENCH_BIN"
