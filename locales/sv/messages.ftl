@@ -29,7 +29,7 @@ cli.subcommand.build.long_about = Bygg de begärda målen; om inga anges använd
 cli.subcommand.clean.about = Ta bort byggartefakter via Ninja.
 cli.subcommand.clean.long_about = Skapa en tillfällig Ninja-fil och kör sedan `ninja -t clean`.
 cli.subcommand.graph.about = Skriv ut byggets beroendegraf. Standardformatet är DOT.
-cli.subcommand.graph.long_about = Projicera det inlästa Netsuke-manifestet till en kanonisk bygggraf och skriv den som Graphviz DOT, eller som en fristående HTML-sida med `--html`. Använd `--output <FIL>` för att skriva till en fil; `-` skriver till stdout.
+cli.subcommand.graph.long_about = Projicera det tolkade Netsuke-manifestet till en kanonisk bygggraf och skriv den som Graphviz DOT, eller som en fristående HTML-sida med `--html`. Använd `--output <FIL>` för att skriva till en fil; `-` skriver till stdout.
 cli.subcommand.generate.about = Skapa Ninja-manifestet utan att köra Ninja.
 cli.subcommand.generate.long_about = Skriv det skapade Ninja-manifestet till stdout eller till en fil som väljs med `--output`.
 
@@ -100,7 +100,7 @@ runner.io.write_stdout = Ninja-manifestet kunde inte skrivas till stdout.
 runner.io.flush_stdout = Bufferten för stdout kunde inte tömmas.
 
 # Manifestdiagnostik.
-manifest.parse = Inläsningen av manifestet misslyckades.
+manifest.parse = Tolkningen av manifestet misslyckades.
 manifest.structure_error = Strukturfel i manifestet vid { $name }: { $details }
 manifest.yaml.parse = YAML-fel på rad { $line }, kolumn { $column }: { $details }
 manifest.yaml.label = ogiltig YAML
@@ -127,7 +127,7 @@ manifest.when.template_error = Mallen `when` ”{ $expr }” kunde inte renderas
 manifest.target.vars_not_object = Målets `vars` måste vara ett objekt, men gav { $value }.
 manifest.vars.entry_not_object = En `vars`-post i manifestet måste vara ett objekt.
 manifest.field_not_string = Fältet ”{ $field }” måste vara en sträng.
-manifest.expression.parse_error = Uttrycket { $name } kunde inte läsas in.
+manifest.expression.parse_error = Uttrycket { $name } kunde inte tolkas.
 manifest.expression.eval_error = Uttrycket { $name } kunde inte utvärderas.
 
 # Diagnostik för manifestmakron.
@@ -156,7 +156,7 @@ ir.empty_rule = Målet ”{ $target }” måste hänvisa till en regel.
 ir.duplicate_outputs = Dubblerade utdata upptäcktes: { $outputs }.
 ir.circular_dependency = Ett cirkulärt beroende upptäcktes: { $cycle }.
 ir.action_serialisation = Åtgärden kunde inte serialiseras: { $details }.
-ir.invalid_command = Ogiltig inflätning i kommandot: { $snippet }.
+ir.invalid_command = Ogiltig interpolering i kommandot: { $snippet }.
 
 # Fel vid generering av Ninja.
 ninja_gen.missing_action = Åtgärden ”{ $id }” som en byggbåge hänvisar till saknas.
@@ -349,7 +349,7 @@ status.stage.summary_with_task = [{ $state }] { $label } ({ $task_progress })
 status.task.progress_label = Uppgift { $current }/{ $total }
 status.task.progress_update = { $task }: { $description }
 status.stage.manifest_ingestion = Läser manifestfilen
-status.stage.initial_yaml_parsing = Läser in YAML-dokumentet
+status.stage.initial_yaml_parsing = Tolkar YAML-dokumentet
 status.stage.template_expansion = Expanderar malldirektiv
 status.stage.final_rendering = Deserialiserar och renderar manifestets värden
 status.stage.ir_generation_validation = Bygger och validerar beroendegrafen

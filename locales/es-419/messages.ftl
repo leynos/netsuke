@@ -358,7 +358,7 @@ status.stage.ninja_synthesis = Sintetizando el plan de compilación de Ninja
 status.stage.ninja_synthesis_execute = Sintetizando el plan de Ninja y ejecutando { $tool }
 status.stage.graph_rendering = Representando el artefacto del grafo
 status.stage.graph_rendering_with_tool = Representando { $tool }
-status.complete = { $tool } completo.
+status.complete = { $tool }: operación finalizada.
 status.timing.summary_header = Resumen de tiempos por etapa:
 status.timing.stage_line = - { $label }: { $duration }
 status.timing.total_line = Tiempo total de la canalización: { $duration }
@@ -386,7 +386,8 @@ semantic.prefix.rendered = {"{"}symbol{"}"} {"{"}label{"}"}
 
 # Ejemplos de formas plurales para traductores.
 # El español usa las categorías CLDR `one` y `other`, igual que el idioma
-# de origen; solo cambia la conjugación del verbo.
+# de origen; cambian tanto la conjugación del verbo como el número del
+# sustantivo.
 example.files_processed = { $count ->
     [one] Se procesó { $count } archivo.
    *[other] Se procesaron { $count } archivos.

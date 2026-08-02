@@ -156,7 +156,7 @@ ir.empty_rule = Målet «{ $target }» må vise til en regel.
 ir.duplicate_outputs = Det ble funnet dupliserte utdata: { $outputs }.
 ir.circular_dependency = Det ble funnet en sirkulær avhengighet: { $cycle }.
 ir.action_serialisation = Handlingen kunne ikke serialiseres: { $details }.
-ir.invalid_command = Ugyldig innsetting i kommandoen: { $snippet }.
+ir.invalid_command = Ugyldig interpolasjon i kommandoen: { $snippet }.
 
 # Feil ved generering av Ninja.
 ninja_gen.missing_action = Handlingen «{ $id }» som en byggekant viser til, mangler.
@@ -259,7 +259,7 @@ stdlib.path.io.invalid_data = ugyldige data
 stdlib.path.io.timed_out = tidsgrensen løp ut
 stdlib.path.io.interrupted = avbrutt
 stdlib.path.io.would_block = ville blokkere
-stdlib.path.io.write_zero = null byte skrevet
+stdlib.path.io.write_zero = ingen byte skrevet
 stdlib.path.io.unexpected_eof = uventet filslutt
 stdlib.path.io.broken_pipe = brutt datakanal
 stdlib.path.io.connection_refused = tilkoblingen ble avvist
@@ -378,7 +378,7 @@ graph.html.noscript.notice = JavaScript er slått av. Tekstoversikten over er he
 # Semantiske prefikser for tilgjengelig utdata.
 semantic.prefix.error = Feil:
 semantic.prefix.warning = Advarsel:
-semantic.prefix.success = Fullført:
+semantic.prefix.success = Vellykket:
 semantic.prefix.info = Info:
 semantic.prefix.timing = Tid:
 semantic.prefix.rendered = {"{"}symbol{"}"} {"{"}label{"}"}

@@ -344,10 +344,10 @@ status.state.running = در جریان
 status.state.done = انجام شد
 status.state.failed = ناکام
 status.stage.label = مرحلهٔ { $current }/{ $total }: { $description }
-status.stage.summary = [{ $state }] { $label }
-status.stage.summary_with_task = [{ $state }] { $label } ({ $task_progress })
+status.stage.summary = ‏[{ $state }] { $label }
+status.stage.summary_with_task = ‏[{ $state }] { $label } ({ $task_progress })
 status.task.progress_label = کار { $current }/{ $total }
-status.task.progress_update = { $task }: { $description }
+status.task.progress_update = ‏{ $task }: { $description }
 status.stage.manifest_ingestion = خواندن پروندهٔ مانیفست
 status.stage.initial_yaml_parsing = تجزیهٔ سند YAML
 status.stage.template_expansion = گسترش دستورهای قالب
@@ -359,7 +359,7 @@ status.stage.graph_rendering = نمایش فرآوردهٔ گراف
 status.stage.graph_rendering_with_tool = نمایش { $tool }
 status.complete = ‏{ $tool } به پایان رسید.
 status.timing.summary_header = خلاصهٔ زمان به تفکیک مرحله:
-status.timing.stage_line = - { $label }: { $duration }
+status.timing.stage_line = ‏- { $label }: { $duration }
 status.timing.total_line = زمان کل خط پردازش: { $duration }
 status.tool.build = ساخت
 status.tool.clean = پاک‌سازی
@@ -386,12 +386,12 @@ semantic.prefix.rendered = {"{"}symbol{"}"} {"{"}label{"}"}
 # نمونه‌های صورت جمع برای مترجمان.
 # فارسی در CLDR دو ردهٔ `one` و `other` دارد، ولی اسم پس از عدد مفرد می‌ماند.
 example.files_processed = { $count ->
-    [one] { $count } پرونده پردازش شد.
-   *[other] { $count } پرونده پردازش شد.
+    [one] ‏{ $count } پرونده پردازش شد.
+   *[other] ‏{ $count } پرونده پردازش شد.
 }
 
 example.errors_found = { $count ->
     [0] هیچ خطایی یافت نشد.
-    [one] { $count } خطا یافت شد.
-   *[other] { $count } خطا یافت شد.
+    [one] ‏{ $count } خطا یافت شد.
+   *[other] ‏{ $count } خطا یافت شد.
 }

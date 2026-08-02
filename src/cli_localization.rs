@@ -84,19 +84,18 @@ pub fn resolve_catalogue_tag(preferred_locale: &str) -> &'static str {
 
 /// Build a localizer for `catalogue`, layered over the English source copy.
 ///
-/// `fallback` is consumed as the layered localizer's second tier. When the
-/// catalogue itself fails to parse there is no fallback left to hand back, so a
-/// fresh English localizer is built for that rare path.
+/// `fallback` becomes the layered localizer's second tier. When the catalogue
+/// itself fails to parse, it is handed straight back rather than rebuilt.
 fn build_layered_localizer(
     locale: LanguageIdentifier,
     catalogue: &'static LocaleCatalogue,
     fallback: Box<dyn Localizer>,
 ) -> Box<dyn Localizer> {
     let builder = FluentLocalizer::builder(locale);
-    build_consumer_localizer(builder, catalogue.resource())
-        .map_or_else(build_en_localizer, |primary| {
-            Box::new(LayeredLocalizer::new(primary, fallback)) as Box<dyn Localizer>
-        })
+    match build_consumer_localizer(builder, catalogue.resource()) {
+        Some(primary) => Box::new(LayeredLocalizer::new(primary, fallback)),
+        None => fallback,
+    }
 }
 
 /// Build a CLI localizer with an English fallback.

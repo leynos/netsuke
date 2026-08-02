@@ -77,41 +77,89 @@ fn categories(names: &[&str]) -> BTreeSet<String> {
     names.iter().map(|name| (*name).to_owned()).collect()
 }
 
+/// The CLDR cardinal plural categories each shipped locale must declare.
+///
+/// Fluent selects variants through `intl_pluralrules` (7.0.2, per
+/// `Cargo.lock`), so these are that crate's cardinal categories rather than
+/// any newer CLDR release. Revisit the table when that dependency is bumped.
+///
+/// The Romance locales carry `one`/`other` only. CLDR also defines `many` for
+/// French, Spanish, Italian and Portuguese, but solely for large round numbers
+/// in compact notation ("2 millions"); Netsuke counts files and errors as
+/// plain integers, which never select it.
+const PLURAL_CATEGORIES: &[(&str, &[&str])] = &[
+    ("ar", &["zero", "one", "two", "few", "many", "other"]),
+    ("cs", &["one", "few", "many", "other"]),
+    ("cy", &["zero", "one", "two", "few", "many", "other"]),
+    ("da", &["one", "other"]),
+    ("de", &["one", "other"]),
+    ("el", &["one", "other"]),
+    ("en-GB", &["one", "other"]),
+    ("en-US", &["one", "other"]),
+    ("es-419", &["one", "other"]),
+    ("es-ES", &["one", "other"]),
+    ("fa", &["one", "other"]),
+    ("fi", &["one", "other"]),
+    ("fr", &["one", "other"]),
+    ("gd", &["one", "two", "few", "other"]),
+    ("he", &["one", "two", "many", "other"]),
+    ("hi", &["one", "other"]),
+    // Hungarian keeps the noun singular after a numeral, so both variants read
+    // alike, but CLDR still defines `one` and a catalogue must offer it.
+    ("hu", &["one", "other"]),
+    ("id", &["other"]),
+    ("it", &["one", "other"]),
+    ("ja", &["other"]),
+    ("ko", &["other"]),
+    ("nb", &["one", "other"]),
+    ("nl", &["one", "other"]),
+    ("pl", &["one", "few", "many", "other"]),
+    ("pt-BR", &["one", "other"]),
+    ("pt-PT", &["one", "other"]),
+    ("ro", &["one", "few", "other"]),
+    ("ru", &["one", "few", "many", "other"]),
+    ("sv", &["one", "other"]),
+    ("th", &["other"]),
+    ("tr", &["one", "other"]),
+    ("uk", &["one", "few", "many", "other"]),
+    ("vi", &["other"]),
+    ("zh-Hans", &["other"]),
+    ("zh-Hant", &["other"]),
+];
+
+/// The table must name every shipped locale, or a catalogue could ship with
+/// the wrong categories and never be checked.
+#[test]
+fn the_plural_table_covers_every_registry_locale() -> Result<()> {
+    let tabled: BTreeSet<&str> = PLURAL_CATEGORIES.iter().map(|(tag, _)| *tag).collect();
+    for entry in SUPPORTED_LOCALES {
+        ensure!(
+            tabled.contains(entry.tag()),
+            "{} has no entry in PLURAL_CATEGORIES",
+            entry.tag()
+        );
+    }
+    ensure!(
+        tabled.len() == SUPPORTED_LOCALES.len(),
+        "PLURAL_CATEGORIES has {} entries for {} locales",
+        tabled.len(),
+        SUPPORTED_LOCALES.len()
+    );
+    Ok(())
+}
+
 /// Every locale must declare exactly the CLDR plural categories its language
 /// uses; a translator who drops `few` from Polish silently loses a form.
-#[rstest]
-#[case("ar", &["zero", "one", "two", "few", "many", "other"])]
-#[case("cy", &["zero", "one", "two", "few", "many", "other"])]
-#[case("gd", &["one", "two", "few", "other"])]
-#[case("he", &["one", "two", "many", "other"])]
-#[case("cs", &["one", "few", "many", "other"])]
-#[case("pl", &["one", "few", "many", "other"])]
-#[case("ru", &["one", "few", "many", "other"])]
-#[case("uk", &["one", "few", "many", "other"])]
-#[case("ro", &["one", "few", "other"])]
-#[case("de", &["one", "other"])]
-#[case("en-US", &["one", "other"])]
-#[case("fa", &["one", "other"])]
-#[case("hi", &["one", "other"])]
-#[case("tr", &["one", "other"])]
-#[case("hu", &["other"])]
-#[case("id", &["other"])]
-#[case("ja", &["other"])]
-#[case("ko", &["other"])]
-#[case("th", &["other"])]
-#[case("vi", &["other"])]
-#[case("zh-Hans", &["other"])]
-#[case("zh-Hant", &["other"])]
-fn plural_examples_declare_the_language_categories(
-    #[case] tag: &str,
-    #[case] expected: &[&str],
-) -> Result<()> {
-    let found = plural_categories(catalogue_text(tag)?, PLURAL_EXAMPLE);
-    ensure!(
-        found == categories(expected),
-        "{tag} declares the CLDR plural categories {found:?} for {PLURAL_EXAMPLE}, \
-         expected {expected:?}"
-    );
+#[test]
+fn plural_examples_declare_the_language_categories() -> Result<()> {
+    for (tag, expected) in PLURAL_CATEGORIES {
+        let found = plural_categories(catalogue_text(tag)?, PLURAL_EXAMPLE);
+        ensure!(
+            found == categories(expected),
+            "{tag} declares the CLDR plural categories {found:?} for {PLURAL_EXAMPLE}, \
+             expected {expected:?}"
+        );
+    }
     Ok(())
 }
 
@@ -136,32 +184,89 @@ const fn is_rtl(ch: char) -> bool {
 /// Right-to-left marker that pins a message's paragraph direction.
 const RTL_MARK: char = '\u{200F}';
 
-/// Messages whose opening character decides the paragraph direction.
+/// Messages that are deliberately direction-neutral.
 ///
-/// Comment lines are skipped, and a value with no right-to-left text — the
-/// bare `stdout` label, say — imposes no direction requirement.
-fn direction_sensitive_messages(text: &str) -> impl Iterator<Item = (&str, &str)> {
-    text.lines()
-        .filter_map(|line| line.split_once('='))
-        .map(|(id, value)| (id.trim(), value.trim()))
-        .filter(|(id, _)| !id.starts_with('#'))
-        .filter(|(_, value)| value.chars().any(is_rtl))
+/// Each is either a bare technical token substituted into another message, or
+/// an all-Latin diagnostic line. Pinning these to right-to-left would move a
+/// Latin identifier to the wrong edge of the terminal, so they are exempt.
+const DIRECTION_NEUTRAL: [&str; 5] = [
+    // Clap's usage string, which names the binary and its Latin flags.
+    "cli.usage",
+    // Stream names, substituted into the command diagnostics.
+    "stdlib.command.output.stream.stdout",
+    "stdlib.command.output.stream.stderr",
+    // An all-Latin diagnostic tag followed by its detail.
+    "stdlib.which.args_error",
+    // A `{symbol} {label}` composition template for accessible output.
+    "semantic.prefix.rendered",
+];
+
+/// Whether `value` opens a `select` expression rather than carrying text.
+///
+/// The selector line renders nothing; its variants carry the text, and they
+/// are checked separately.
+fn opens_select(value: &str) -> bool {
+    value.ends_with("->")
+}
+
+/// Every rendered fragment of a catalogue, as `(id, text)` pairs.
+///
+/// A message's own value is one fragment; each variant of a `select`
+/// expression is another, because whichever variant Fluent picks becomes the
+/// whole rendered string and so decides the paragraph direction on its own.
+fn rendered_fragments(text: &str) -> Vec<(String, String)> {
+    let mut fragments = Vec::new();
+    let mut current = String::new();
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('#') || trimmed.is_empty() {
+            continue;
+        }
+        if let Some(variant) = trimmed.trim_start_matches('*').strip_prefix('[') {
+            if let Some(rendered) = variant
+                .split_once(']')
+                .map(|(_, rest)| rest.trim())
+                .filter(|rest| !rest.is_empty())
+            {
+                fragments.push((current.clone(), rendered.to_owned()));
+            }
+            continue;
+        }
+        let Some((id, raw_value)) = trimmed.split_once('=') else {
+            continue;
+        };
+        id.trim().clone_into(&mut current);
+        let value = raw_value.trim();
+        if !value.is_empty() && !opens_select(value) {
+            fragments.push((current.clone(), value.to_owned()));
+        }
+    }
+    fragments
 }
 
 /// A right-to-left message that opens with a Latin word, a bracket or a
 /// placeable would otherwise take its paragraph direction from that token.
 /// Prefixing the value with U+200F keeps the direction with the locale.
+///
+/// Fluent wraps every interpolated value in bidi isolates, so a template built
+/// only from placeables and punctuation — `[{ $state }] { $label }` — carries
+/// no strong character at all and defaults to left-to-right. Those need the
+/// mark just as much as a Latin-initial sentence does, so the check covers
+/// every rendered fragment rather than only those with visible script.
 #[rstest]
 #[case("ar")]
 #[case("fa")]
 #[case("he")]
 fn rtl_catalogues_pin_paragraph_direction(#[case] tag: &str) -> Result<()> {
-    for (id, value) in direction_sensitive_messages(catalogue_text(tag)?) {
+    for (id, value) in rendered_fragments(catalogue_text(tag)?) {
+        if DIRECTION_NEUTRAL.contains(&id.as_str()) {
+            continue;
+        }
         let first = value.chars().next().unwrap_or(RTL_MARK);
         ensure!(
             first == RTL_MARK || is_rtl(first),
-            "{tag}: {id} contains right-to-left text but starts with {first:?}; \
-             prefix the value with U+200F"
+            "{tag}: {id} renders text starting with {first:?}, which leaves the \
+             paragraph direction to that character; prefix the value with U+200F"
         );
     }
     Ok(())

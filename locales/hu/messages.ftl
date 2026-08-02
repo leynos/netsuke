@@ -384,13 +384,16 @@ semantic.prefix.timing = Idő:
 semantic.prefix.rendered = {"{"}symbol{"}"} {"{"}label{"}"}
 
 # Többes számú alakok példái fordítóknak.
-# A magyar egyetlen CLDR-kategóriát használ (`other`), mert a számnév után a
-# főnév egyes számban áll: „5 fájl”.
+# A CLDR szerint a magyarnak `one` és `other` kategóriája van, de a számnév
+# után a főnév egyes számban marad, ezért a két változat szövege azonos:
+# „1 fájl”, „5 fájl”.
 example.files_processed = { $count ->
+    [one] { $count } fájl feldolgozva.
    *[other] { $count } fájl feldolgozva.
 }
 
 example.errors_found = { $count ->
     [0] Nem található hiba.
+    [one] { $count } hiba található.
    *[other] { $count } hiba található.
 }

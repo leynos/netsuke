@@ -12,9 +12,11 @@
 
 mod ftl;
 mod keys;
+mod metadata;
 
 use crate::localization::locales::{LocaleCatalogue, SOURCE_LOCALE, SUPPORTED_LOCALES};
 use ftl::MessageVariables;
+use metadata::parse_metadata_locales;
 use std::collections::BTreeSet;
 use std::error::Error;
 use std::path::{Path, PathBuf};
@@ -134,22 +136,6 @@ fn audit_cargo_metadata() -> Result<(), Box<dyn Error>> {
     .into())
 }
 
-/// Read the `locales = [...]` array from the `ortho_config` metadata table.
-fn parse_metadata_locales(manifest: &str) -> Option<Vec<&str>> {
-    let tail = manifest.split("[package.metadata.ortho_config]").nth(1)?;
-    let table = tail.split("\n[").next().unwrap_or(tail);
-    let (_, after) = table.split_once("locales")?;
-    let (_, open) = after.split_once('[')?;
-    let (entries, _) = open.split_once(']')?;
-    Some(
-        entries
-            .split(',')
-            .map(|entry| entry.trim().trim_matches('"'))
-            .filter(|entry| !entry.is_empty())
-            .collect(),
-    )
-}
-
 fn build_error_message(findings: &[LocaleFindings]) -> String {
     let mut message = String::from("localization audit failed:");
     for finding in findings {
@@ -162,6 +148,19 @@ fn source_catalogue_variables() -> Result<MessageVariables, Box<dyn Error>> {
     ftl::parse_catalogue(&catalogue_path(SOURCE_LOCALE))
 }
 
+/// Audit every registered locale, failing the build on the first problem.
+///
+/// This is the audit's entry point, called from `build.rs`. It checks that
+/// `Cargo.toml`'s locale metadata matches the registry, then compares each
+/// catalogue against the keys `define_keys!` declares and against the English
+/// source's interpolation variables.
+///
+/// # Errors
+///
+/// Returns an error when the metadata has drifted from the registry, when a
+/// catalogue cannot be read, or when any catalogue is missing a declared key,
+/// carries an orphaned key, or interpolates the wrong variables. The message
+/// names every offending locale and key so one build reports them all.
 pub(super) fn audit_localization_keys() -> Result<(), Box<dyn Error>> {
     audit_cargo_metadata()?;
     let declared = keys::extract_key_constants(Path::new(KEYS_PATH))?;

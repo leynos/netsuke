@@ -91,7 +91,7 @@ Feature: Progress output
     And stderr should contain "Etapa 1/6"
     And stderr should contain "Etapa 6/6"
     And stderr should contain "Éxito:"
-    And stderr should contain "Generar completo."
+    And stderr should contain "Generar: operación finalizada."
 
   Scenario: Accessible mode prefixes stage labels with info marker
     Given a minimal Netsuke workspace

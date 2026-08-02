@@ -242,8 +242,8 @@ Table 5: CLDR plural categories by shipped locale
 
 | Categories                                   | Locales                                                                                                                       |
 | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `other`                                      | `hu`, `id`, `ja`, `ko`, `th`, `vi`, `zh-Hans`, `zh-Hant`                                                                      |
-| `one`, `other`                               | `da`, `de`, `el`, `en-GB`, `en-US`, `es-419`, `es-ES`, `fa`, `fi`, `fr`, `hi`, `it`, `nb`, `nl`, `pt-BR`, `pt-PT`, `sv`, `tr` |
+| `other`                                      | `id`, `ja`, `ko`, `th`, `vi`, `zh-Hans`, `zh-Hant`                                                                                  |
+| `one`, `other`                               | `da`, `de`, `el`, `en-GB`, `en-US`, `es-419`, `es-ES`, `fa`, `fi`, `fr`, `hi`, `hu`, `it`, `nb`, `nl`, `pt-BR`, `pt-PT`, `sv`, `tr` |
 | `one`, `few`, `other`                        | `ro`                                                                                                                          |
 | `one`, `few`, `many`, `other`                | `cs`, `pl`, `ru`, `uk`                                                                                                        |
 | `one`, `two`, `few`, `other`                 | `gd`                                                                                                                          |
@@ -251,13 +251,23 @@ Table 5: CLDR plural categories by shipped locale
 | `zero`, `one`, `two`, `few`, `many`, `other` | `ar`, `cy`                                                                                                                    |
 
 A locale that lists a category must spell out its own wording for that variant.
-A test in `tests/locale_catalogue_tests.rs` asserts these category sets, so
-dropping Polish `few` or Welsh `two` fails the suite rather than quietly losing
-a form.
+A test in `tests/locale_catalogue_tests.rs` asserts these category sets for
+every shipped locale, so dropping Polish `few` or Welsh `two` fails the suite
+rather than quietly losing a form. That test carries the same table, and a
+second test fails if any registry locale is missing from it.
+
+The categories are the ones `intl_pluralrules` implements, which is what Fluent
+selects with; they can lag a newer CLDR release. CLDR also gives French,
+Spanish, Italian and Portuguese a `many` category, but only for large round
+numbers in compact notation, which Netsuke's plain integer counts never
+select.
 
 Note that `one` does not always mean "exactly one": in French it also covers
-zero, and in Hindi likewise. Where a language prefers a distinct phrase for
-none at all, use an explicit `[0]` variant, as the shipped catalogues do for
+zero, and in Hindi likewise. Nor does listing `one` imply the wording differs
+from `other` — Hungarian and Turkish keep the noun singular after any numeral,
+so both variants read alike, but CLDR defines `one` for them and the catalogue
+must offer it. Where a language prefers a distinct phrase for none at all, use
+an explicit `[0]` variant, as the shipped catalogues do for
 `example.errors_found`.
 
 Consult the
@@ -352,10 +362,29 @@ Prefix such values with U+200F RIGHT-TO-LEFT MARK:
 manifest.yaml.label = ‏YAML غير صالح
 ```
 
-A test in `tests/locale_catalogue_tests.rs` enforces this: in a right-to-left
-catalogue, any message containing right-to-left text must begin with either a
-right-to-left character or U+200F. Messages that are entirely Latin — `stdout`,
-`stderr`, the `netsuke::jinja::which::args` diagnostic — are left unmarked.
+A template assembled only from placeables and punctuation needs the mark just
+as much, and less obviously. Because Fluent isolates every interpolated value,
+`[{ $state }] { $label }` carries no strong character of its own at all, so its
+paragraph direction falls back to left-to-right and the brackets land on the
+wrong side:
+
+```ftl
+# No strong character outside the isolates, so the direction must be stated.
+status.stage.summary = ‏[{ $state }] { $label }
+```
+
+The same applies to each variant of a `select` expression: whichever variant
+Fluent picks becomes the entire rendered string, so a variant that opens with
+`{ $count }` needs its own mark.
+
+A test in `tests/locale_catalogue_tests.rs` enforces this. Every rendered
+fragment of a right-to-left catalogue — each message value and each `select`
+variant — must begin with either a right-to-left character or U+200F. The
+exceptions are listed explicitly in that test: `cli.usage`, the `stdout` and
+`stderr` stream names, the `netsuke::jinja::which::args` diagnostic, and the
+`semantic.prefix.rendered` composition template. Each is a technical token or
+an all-Latin line, where pinning the direction would push a Latin identifier to
+the wrong edge of the terminal.
 
 ## 9. Quality checklist
 

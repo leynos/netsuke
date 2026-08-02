@@ -156,7 +156,7 @@ ir.empty_rule = 대상 '{ $target }'은(는) 규칙을 참조해야 합니다.
 ir.duplicate_outputs = 중복된 출력이 발견되었습니다: { $outputs }.
 ir.circular_dependency = 순환 의존성이 발견되었습니다: { $cycle }.
 ir.action_serialisation = 동작을 직렬화하지 못했습니다: { $details }.
-ir.invalid_command = 명령의 삽입이 잘못되었습니다: { $snippet }.
+ir.invalid_command = 명령의 보간이 잘못되었습니다: { $snippet }.
 
 # Ninja 생성 오류.
 ninja_gen.missing_action = 빌드 간선이 참조하는 동작 '{ $id }'이(가) 없습니다.

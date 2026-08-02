@@ -11,7 +11,7 @@ cli.flag.config.help = 設定檔的路徑，略過自動搜尋。
 cli.flag.jobs.help = 設定平行建置工作的數量。
 cli.flag.verbose.help = 啟用詳細的診斷記錄與完成時的耗時摘要。
 cli.flag.locale.help = 命令列文字的地區設定標記（例如：en-US、zh-Hant）。
-cli.flag.fetch_allow_scheme.help = fetch 輔助函式額外允許的 URL 配置。
+cli.flag.fetch_allow_scheme.help = fetch 輔助函式額外允許的 URL 通訊協定。
 cli.flag.fetch_allow_host.help = 啟用預設拒絕時仍然允許的主機名稱。
 cli.flag.fetch_block_host.help = 一律封鎖的主機名稱，即使在別處獲得允許。
 cli.flag.fetch_default_deny.help = 預設拒絕所有主機；只放行所宣告的允許清單。
@@ -46,9 +46,9 @@ cli.subcommand.generate.flag.output.help = 將產生的 Ninja 資訊清單寫入
 # 命令列驗證錯誤。
 cli.validation.jobs.invalid_number = { $value } 不是有效的數字。
 cli.validation.jobs.out_of_range = 工作數必須介於 { $min } 與 { $max } 之間。
-cli.validation.scheme.empty = 配置不得為空。
-cli.validation.scheme.invalid_start = 配置「{ $scheme }」必須以 ASCII 字母開頭。
-cli.validation.scheme.invalid = 無效的配置「{ $scheme }」。
+cli.validation.scheme.empty = 通訊協定不得為空。
+cli.validation.scheme.invalid_start = 通訊協定「{ $scheme }」必須以 ASCII 字母開頭。
+cli.validation.scheme.invalid = 無效的通訊協定「{ $scheme }」。
 cli.validation.locale.empty = 地區設定標記不得為空。
 cli.validation.locale.invalid = 無效的地區設定標記「{ $locale }」。
 cli.validation.color.invalid = 無效的色彩原則「{ $value }」。有效值：auto、always、never。
@@ -163,7 +163,7 @@ ninja_gen.format = 無法格式化 Ninja 資訊清單的輸出。
 
 # 主機樣式驗證。
 host_pattern.empty = 主機樣式不得為空。
-host_pattern.contains_scheme = 主機樣式「{ $pattern }」不得含有 URL 配置。
+host_pattern.contains_scheme = 主機樣式「{ $pattern }」不得含有 URL 通訊協定。
 host_pattern.contains_slash = 主機樣式「{ $pattern }」不得含有「/」。
 host_pattern.missing_suffix = 主機樣式「{ $pattern }」必須在「*.」之後帶有字尾。
 host_pattern.empty_label = 主機樣式「{ $pattern }」含有空白標籤。
@@ -173,10 +173,10 @@ host_pattern.label_too_long = 主機樣式「{ $pattern }」含有超過 63 個�
 host_pattern.too_long = 主機樣式「{ $pattern }」超出 255 個字元的上限。
 
 # 網路原則。
-network_policy.scheme.empty = 配置不得為空。
-network_policy.scheme.invalid = 配置「{ $scheme }」含有無效字元。
+network_policy.scheme.empty = 通訊協定不得為空。
+network_policy.scheme.invalid = 通訊協定「{ $scheme }」含有無效字元。
 network_policy.allowlist.empty = 主機允許清單不得為空。
-network_policy.scheme.not_allowed = 不允許使用配置「{ $scheme }」。
+network_policy.scheme.not_allowed = 不允許使用通訊協定「{ $scheme }」。
 network_policy.missing_host = URL 缺少主機。
 network_policy.host.blocked = 主機「{ $host }」已被原則封鎖。
 network_policy.host.not_allowlisted = 主機「{ $host }」不在允許清單中。
@@ -323,7 +323,7 @@ stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <空白>
 stdlib.which.path_entry.non_utf8 = 第 { $index } 個 PATH 項目含有非 UTF-8 字元；Netsuke 需要 UTF-8 路徑。
 stdlib.which.command.empty = which 需要非空白的字串。
-stdlib.which.cwd_mode.invalid = cwd_mode 必須是「auto」「always」或「never」，卻得到「{ $mode }」。
+stdlib.which.cwd_mode.invalid = cwd_mode 必須是「auto」、「always」或「never」，卻得到「{ $mode }」。
 stdlib.which.cwd.resolve_failed = 無法判定目前的目錄：{ $details }。
 stdlib.which.cwd.non_utf8 = 目前的目錄含有非 UTF-8 的部分。
 stdlib.which.canonicalize_failed = 無法正規化「{ $path }」：{ $details }。

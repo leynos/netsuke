@@ -38,10 +38,10 @@ cli.subcommand.build.flag.targets.help = Derlenecek hedefler (belirtilmezse bild
 
 # graph alt komutunun seçenekleri için yardım metni.
 cli.subcommand.graph.flag.html.help = Çizgeyi DOT yerine kendi kendine yeten bir HTML sayfası olarak işle.
-cli.subcommand.graph.flag.output.help = Çizge ürününü DOSYAya yaz; standart çıktı için `-` kullanın.
+cli.subcommand.graph.flag.output.help = Çizge ürününü DOSYA'ya yaz; standart çıktı için `-` kullanın.
 
 # generate alt komutunun seçenekleri için yardım metni.
-cli.subcommand.generate.flag.output.help = Üretilen Ninja bildirimini standart çıktı yerine DOSYAya yaz.
+cli.subcommand.generate.flag.output.help = Üretilen Ninja bildirimini standart çıktı yerine DOSYA'ya yaz.
 
 # Komut satırı doğrulama hataları.
 cli.validation.jobs.invalid_number = { $value } geçerli bir sayı değil.
