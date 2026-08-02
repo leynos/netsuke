@@ -151,7 +151,7 @@ fn json_mode_emits_no_tracing() -> Result<()> {
     let config = temp.path().join("selected.toml");
     test_support::fs::write(&config, "emoji = \"always\"\n").context("write config")?;
 
-    let run = run_netsuke_in(
+    let cli_json_run = run_netsuke_in(
         temp.path(),
         &[
             "--json",
@@ -161,18 +161,36 @@ fn json_mode_emits_no_tracing() -> Result<()> {
             "generate",
         ],
     )?;
+    test_support::fs::write(&config, "json = true\nemoji = \"always\"\n")
+        .context("write JSON config")?;
+    let config_json_run = run_netsuke_in(
+        temp.path(),
+        &[
+            "--verbose",
+            "--config",
+            config.to_string_lossy().as_ref(),
+            "generate",
+        ],
+    )?;
 
-    for marker in [
-        "resolved config path",
-        "read config path variable",
-        "using explicit config path",
-        "using config discovery",
-    ] {
+    for (source, run) in [("CLI", cli_json_run), ("config", config_json_run)] {
         ensure!(
-            !run.stderr.contains(marker),
-            "JSON mode must not emit tracing ({marker}): {}",
+            run.stderr.is_empty(),
+            "{source}-selected JSON mode must leave stderr empty: {}",
             run.stderr
         );
+        for marker in [
+            "resolved config path",
+            "read config path variable",
+            "using explicit config path",
+            "using config discovery",
+        ] {
+            ensure!(
+                !run.stderr.contains(marker),
+                "{source}-selected JSON mode must not emit tracing ({marker}): {}",
+                run.stderr
+            );
+        }
     }
     Ok(())
 }

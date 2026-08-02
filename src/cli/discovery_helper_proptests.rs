@@ -2,7 +2,8 @@
 //!
 //! These cover invariants that fixed cases cannot: that every correlation hash
 //! is the same bounded width and charset whatever the input, and that path
-//! normalization is idempotent for both existing and absent paths.
+//! normalization is idempotent for existing paths while absent paths report an
+//! error.
 //!
 //! `DefaultHasher`'s algorithm is explicitly not stable across Rust releases,
 //! so nothing here asserts a specific hash value — only width, charset, and
@@ -55,7 +56,7 @@ proptest! {
         prop_assert_eq!(short_hash(&value), short_hash(&value));
     }
 
-    /// A hash never echoes its input, so paths cannot leak through the field.
+    /// A hash field never contains its input verbatim.
     #[test]
     fn short_hash_does_not_echo_input(value in "[A-Za-z0-9._/-]{8,64}") {
         let hash = short_hash(value.as_bytes());
@@ -83,10 +84,14 @@ proptest! {
 
     /// Normalization is idempotent, so repeated comparison cannot drift.
     #[test]
-    fn normalized_path_key_is_idempotent(value in path_string()) {
-        let Ok(once) = normalized_path_key(&FsPathNormalizer, &value) else {
-            return Ok(());
-        };
+    fn normalized_path_key_is_idempotent(
+        value in "[A-Za-z0-9][A-Za-z0-9._-]{0,63}"
+    ) {
+        let temp = tempdir().expect("create temp dir for resolvable path");
+        let path = temp.path().join(value);
+        test_support::fs::create_dir(&path).expect("create generated directory");
+        let once = normalized_path_key(&FsPathNormalizer, &path.to_string_lossy())
+            .expect("generated path must normalize");
         let twice = normalized_path_key(&FsPathNormalizer, &once.to_string_lossy())
             .expect("an already-resolved path must normalize again");
         prop_assert_eq!(once, twice);

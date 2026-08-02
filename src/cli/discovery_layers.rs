@@ -35,9 +35,9 @@ pub(crate) fn collect_file_layers(
 /// This is the discovery-side fallback policy for [`normalized_path_key`]. A
 /// path that cannot be resolved — most often the expected `.netsuke.toml`, which
 /// frequently does not exist, or a directory the process cannot read — is
-/// compared literally rather than failing discovery. Comparing literally is
-/// sound because an unresolved path cannot equal a resolved one, so the layer is
-/// simply treated as unmatched and the project-scope pass appends it.
+/// compared literally with `OrthoConfig`'s already-canonicalized layer path
+/// rather than failing discovery. An exact textual match still identifies the layer;
+/// otherwise the project-scope pass appends it and emits its normal debug event.
 fn comparison_key(normalizer: &impl PathNormalizer, path: &str) -> PathBuf {
     normalized_path_key(normalizer, path).unwrap_or_else(|_| PathBuf::from(path))
 }
@@ -57,25 +57,31 @@ pub(super) fn collect_file_layers_with_normalizer(
         return Err(err);
     }
 
-    let project_file = project_scope_file_str(directory);
+    let project_file = project_scope_file(directory);
     let project_key = project_file
         .as_deref()
-        .map(|path| comparison_key(normalizer, path));
+        .map(|path| comparison_key(normalizer, &path.to_string_lossy()));
     let has_project_layer = file_layers.value.iter().any(|layer| {
         layer.path().is_some_and(|path| {
-            project_key.as_deref() == Some(comparison_key(normalizer, path.as_str()).as_path())
+            project_key
+                .as_deref()
+                .is_some_and(|key| key.to_string_lossy() == path.as_str())
         })
     });
+    let project_file_display = project_file.as_deref().map(Path::to_string_lossy);
     if has_project_layer {
         debug_optional_config_path(
             "discovery included project-scope layers",
-            project_file.as_deref(),
+            project_file_display.as_deref(),
         );
         return Ok(file_layers.value);
     }
 
-    debug_optional_config_path("appending project-scope layers", project_file.as_deref());
-    let project_layers = project_scope_layers(directory)?;
+    debug_optional_config_path(
+        "appending project-scope layers",
+        project_file_display.as_deref(),
+    );
+    let project_layers = project_scope_layers(project_file.as_deref())?;
     Ok(file_layers
         .value
         .into_iter()
@@ -83,25 +89,22 @@ pub(super) fn collect_file_layers_with_normalizer(
         .collect())
 }
 
-fn project_scope_file_str(directory: Option<&Path>) -> Option<String> {
+fn project_scope_file(directory: Option<&Path>) -> Option<PathBuf> {
     let root = directory
         .map(PathBuf::from)
         .or_else(|| std::env::current_dir().ok())?;
-    root.join(".netsuke.toml").to_str().map(String::from)
+    Some(root.join(".netsuke.toml"))
 }
 
-fn project_scope_layers(directory: Option<&Path>) -> OrthoResult<Vec<MergeLayer<'static>>> {
-    let root = directory
-        .map(PathBuf::from)
-        .or_else(|| std::env::current_dir().ok());
-    let Some(project_file) = root.map(|dir| dir.join(".netsuke.toml")) else {
+fn project_scope_layers(project_file: Option<&Path>) -> OrthoResult<Vec<MergeLayer<'static>>> {
+    let Some(path) = project_file else {
         return Ok(Vec::new());
     };
-    match load_config_file_as_chain(&project_file) {
+    match load_config_file_as_chain(path) {
         Ok(Some(chain)) => Ok(chain
             .values
             .into_iter()
-            .map(|(value, path)| MergeLayer::file(Cow::Owned(value), Some(path)))
+            .map(|(value, layer_path)| MergeLayer::file(Cow::Owned(value), Some(layer_path)))
             .collect()),
         Ok(None) => Ok(Vec::new()),
         Err(err) => Err(err),

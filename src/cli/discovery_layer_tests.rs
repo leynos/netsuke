@@ -140,9 +140,34 @@ fn normalization_failure_does_not_fail_discovery() -> Result<()> {
         collect_file_layers_with_normalizer(Some(project_dir.as_path()), &FailingPathNormalizer)
             .context("discovery must succeed despite normalization failure")?;
 
-    ensure!(
-        !layers.is_empty(),
-        "the project layer should still be collected: {layers:?}"
-    );
+    ensure!(layers.len() == 1, "expected one project layer: {layers:?}");
+    Ok(())
+}
+
+/// A non-UTF-8 project directory still matches the discovered project layer.
+#[cfg(unix)]
+#[test]
+fn non_utf8_directory_does_not_duplicate_project_layer() -> Result<()> {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let temp = tempdir().context("create temp dir")?;
+    let project_dir = temp
+        .path()
+        .join(OsString::from_vec(b"project-\xff".to_vec()));
+    test_support::fs::create_dir(&project_dir).context("create project dir")?;
+    // OrthoConfig records paths lossily, so provide the equivalent alias it
+    // uses for filesystem access while retaining a non-UTF-8 `--directory`.
+    let lossy_project_dir = temp.path().join("project-\u{fffd}");
+    test_support::fs::symlink(&project_dir, &lossy_project_dir)
+        .context("create lossy project alias")?;
+    test_support::fs::write(
+        project_dir.join(".netsuke.toml"),
+        "default_targets = [\"alpha\"]\n",
+    )
+    .context("write project config")?;
+
+    let layers = collect_file_layers(Some(project_dir.as_path()))?;
+    ensure!(layers.len() == 1, "expected one project layer: {layers:?}");
     Ok(())
 }

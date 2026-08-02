@@ -113,3 +113,22 @@ pub fn set_mode(path: impl AsRef<Path>, mode: u32) -> io::Result<()> {
     permissions.set_mode(mode);
     fs::set_permissions(path, permissions)
 }
+
+/// Create a symbolic link at `link` pointing to `target` on Unix.
+///
+/// # Errors
+///
+/// Propagates the underlying symbolic-link creation failure.
+///
+/// # Examples
+///
+/// ```
+/// let dir = tempfile::tempdir().expect("create tempdir");
+/// let target = dir.path().join("target");
+/// test_support::fs::create_dir(&target).expect("create target");
+/// test_support::fs::symlink(&target, dir.path().join("link")).expect("create symlink");
+/// ```
+#[cfg(unix)]
+pub fn symlink(target: impl AsRef<Path>, link: impl AsRef<Path>) -> io::Result<()> {
+    std::os::unix::fs::symlink(target, link)
+}

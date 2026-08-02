@@ -1195,8 +1195,12 @@ split diagnostics, path comparison, and tests out of the main discovery flow:
   `warn_explicit_config_load_failed`) and the `ConfigLoadFailureKind` enum
   used to classify a load failure without retaining error text.
 - `discovery_paths.rs` — `normalized_path_key` resolves a path to a
-  comparable, canonicalized form, so a relative or symlinked `--directory`
-  can be matched against OrthoConfig's canonicalized layer paths.
+  comparable, canonicalized form and returns canonicalization errors to its
+  caller. The discovery-side `comparison_key` fallback uses the original path
+  literally when resolution fails, continues discovery, and emits only the
+  normal append debug event. This lets relative or symlinked `--directory`
+  values match OrthoConfig's canonicalized layer paths without making an
+  unresolved path fatal.
 - `discovery_event_assertions.rs` — shared test-only helpers:
   `capture_events` runs a closure under a TRACE capturing subscriber,
   `find_event` locates one emitted event by substring, and

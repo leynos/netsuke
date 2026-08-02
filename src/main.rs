@@ -54,20 +54,14 @@ fn run_with_args(
         Ok(parsed) => parsed,
         Err(code) => return code,
     };
-    // Install the one global subscriber before configuration is resolved, so the
-    // selector and environment-lookup events emitted during resolution are
-    // recorded. The startup JSON hint gates it: JSON mode must put nothing but
-    // the diagnostic document on stderr.
-    init_tracing(startup_filter(startup_mode, parsed_cli.verbose));
+    // Install the subscriber disabled until the effective JSON mode is known.
+    // Human-mode config merging repeats discovery after the filter is enabled.
+    init_tracing();
 
     let mode = match resolve_json_mode_or_exit(&parsed_cli, &matches, startup_mode) {
         Ok(mode) => mode,
         Err(code) => return code,
     };
-    // Re-apply once the resolved mode is known, in case a config file enabled
-    // JSON when the raw arguments did not.
-    set_tracing_filter(startup_filter(mode, parsed_cli.verbose));
-
     let merged_cli = match merge_cli_or_exit(&parsed_cli, &matches, mode) {
         Ok(merged) => merged,
         Err(code) => return code,
@@ -104,13 +98,14 @@ const fn startup_filter(mode: DiagMode, verbose: bool) -> LevelFilter {
     }
 }
 
-/// Install the process-wide subscriber with a reloadable level filter.
+/// Install the process-wide subscriber with a disabled reloadable level filter.
 ///
 /// Only the first call installs; later calls are ignored so exactly one global
 /// subscriber exists, and the level is adjusted through [`set_tracing_filter`]
-/// rather than by installing a second subscriber.
-fn init_tracing(initial: LevelFilter) {
-    let (filter, handle) = reload::Layer::new(initial);
+/// rather than by installing a second subscriber. Starting disabled suppresses
+/// discovery events until configuration-backed JSON mode has been resolved.
+fn init_tracing() {
+    let (filter, handle) = reload::Layer::new(LevelFilter::OFF);
     if Registry::default()
         .with(filter)
         .with(
@@ -184,9 +179,23 @@ fn resolve_json_mode_or_exit(
     matches: &ArgMatches,
     fallback_mode: DiagMode,
 ) -> Result<DiagMode, ExitCode> {
-    cli::resolve_merged_json(parsed_cli, matches)
-        .map(DiagMode::from_json_enabled)
-        .map_err(|err| config_err_to_exit(err.as_ref(), fallback_mode))
+    match cli::resolve_merged_json(parsed_cli, matches) {
+        Ok(is_json_enabled) => {
+            let mode = DiagMode::from_json_enabled(is_json_enabled);
+            set_tracing_filter(startup_filter(mode, parsed_cli.verbose));
+            Ok(mode)
+        }
+        Err(err) => {
+            let fallback_filter = startup_filter(fallback_mode, parsed_cli.verbose);
+            set_tracing_filter(fallback_filter);
+            // Resolution failed before its diagnostics could be emitted. Replay
+            // only for human output after enabling its filter; JSON remains OFF.
+            if fallback_filter != LevelFilter::OFF {
+                drop(cli::resolve_merged_json(parsed_cli, matches));
+            }
+            Err(config_err_to_exit(err.as_ref(), fallback_mode))
+        }
+    }
 }
 
 fn merge_cli_or_exit(

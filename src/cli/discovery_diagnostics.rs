@@ -68,15 +68,21 @@ pub(super) fn debug_optional_config_path(message: &'static str, path: Option<&st
 
 /// Return a stable-width correlation identifier for `value`.
 ///
-/// This bounds log cardinality; it is not a cryptographic digest and must not
-/// be used as a security boundary.
+/// This unkeyed hash does not conceal or confidentially redact guessable
+/// values. Its purpose is limited to bounding log cardinality and correlating
+/// events within one run; it is not a cryptographic digest or security
+/// boundary.
 pub(super) fn short_hash(value: &[u8]) -> String {
     let mut hasher = DefaultHasher::new();
     value.hash(&mut hasher);
     format!("{:016x}", hasher.finish())
 }
 
-/// Return the bounded correlation hash for `path`.
+/// Return the bounded, run-local correlation hash for `path`.
+///
+/// The unkeyed hash does not conceal or confidentially redact a guessable path.
+/// It only bounds log cardinality and correlates events within one run; it is
+/// neither a cryptographic digest nor a security boundary.
 pub(super) fn path_hash(path: &Path) -> String {
     short_hash(path.to_string_lossy().as_bytes())
 }
