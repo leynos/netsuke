@@ -1,5 +1,6 @@
 //! Helpers for constructing manifest fixtures in tests.
 
+use crate::fs;
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8};
 use std::io;
@@ -39,7 +40,7 @@ pub fn manifest_yaml(body: &str) -> String {
 pub fn ensure_manifest_exists(temp_dir: &Utf8Path, cli_file: &Utf8Path) -> io::Result<Utf8PathBuf> {
     let manifest_path = resolve_manifest_path(temp_dir, cli_file)?;
 
-    if manifest_path.is_dir() {
+    if fs::is_dir(&manifest_path) {
         return Err(io::Error::new(
             io::ErrorKind::IsADirectory,
             format!(
@@ -49,7 +50,7 @@ pub fn ensure_manifest_exists(temp_dir: &Utf8Path, cli_file: &Utf8Path) -> io::R
         ));
     }
 
-    if manifest_path.exists() {
+    if fs::exists(&manifest_path) {
         return Ok(manifest_path);
     }
 
@@ -120,11 +121,11 @@ fn persist_manifest_file(file: NamedTempFile, manifest_path: &Utf8Path) -> io::R
 }
 
 fn ensure_parent_directory(manifest_path: &Utf8Path, dest_dir: &Utf8Path) -> io::Result<()> {
-    if dest_dir.exists() {
+    if fs::exists(dest_dir) {
         // If the path exists but is not a directory, report a clear error that
         // includes the final manifest path. Returning AlreadyExists mirrors the
         // semantics that the desired directory “exists” but is unusable.
-        if dest_dir.is_dir() {
+        if fs::is_dir(dest_dir) {
             return Ok(());
         }
         return Err(io::Error::new(
@@ -177,7 +178,7 @@ fn find_existing_ancestor<'a>(
     ancestors.next(); // Skip self
 
     ancestors
-        .find(|candidate| candidate.exists())
+        .find(|candidate| fs::exists(candidate))
         .ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::NotFound,
@@ -194,7 +195,6 @@ mod tests {
     //! Unit tests for manifest fixture creation.
 
     use super::*;
-    use crate::fs;
     use anyhow::{Context, Result};
     use camino::Utf8Path;
     use std::io;

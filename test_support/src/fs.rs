@@ -96,6 +96,26 @@ pub fn exists(path: impl AsRef<Path>) -> bool {
     fs::metadata(path).is_ok()
 }
 
+/// Return `true` when `path` is a directory (following symlinks).
+///
+/// Mirrors `Path::is_dir`: an unreadable or absent path reports `false` rather
+/// than surfacing the metadata error.
+///
+/// # Examples
+///
+/// ```
+/// let dir = tempfile::tempdir().expect("create tempdir");
+/// let file = dir.path().join("file");
+/// test_support::fs::write(&file, "contents").expect("write file");
+/// assert!(test_support::fs::is_dir(dir.path()));
+/// assert!(!test_support::fs::is_dir(&file));
+/// assert!(!test_support::fs::is_dir(dir.path().join("absent")));
+/// ```
+#[must_use]
+pub fn is_dir(path: impl AsRef<Path>) -> bool {
+    fs::metadata(path).is_ok_and(|metadata| metadata.is_dir())
+}
+
 /// Return the length in bytes of the file at `path`.
 ///
 /// # Errors
