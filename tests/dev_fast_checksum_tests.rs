@@ -13,61 +13,10 @@
 
 #![cfg(all(unix, target_os = "linux"))]
 
-use anyhow::Result;
-use camino::Utf8PathBuf;
 use proptest::prelude::*;
 use proptest::proptest;
-use test_support::dev_fast::{FakeRelease, Sandbox, combined, pinned_toolchain};
-
-/// The version the fake release is published as; see the installer tests.
-const TEST_MOLD_VERSION: &str = "9.9.9";
-
-/// A digest that cannot match any artefact.
-const WRONG_SHA256: &str = "0000000000000000000000000000000000000000000000000000000000000000";
-
-/// The installer inputs pointing at a local fake release.
-struct InstallerFixture {
-    version_pin: Utf8PathBuf,
-    checksums: Utf8PathBuf,
-    base_url: String,
-}
-
-impl InstallerFixture {
-    fn script_env(&self) -> Vec<(&'static str, String)> {
-        vec![
-            ("MOLD_VERSION_FILE", self.version_pin.to_string()),
-            ("MOLD_SHA256SUMS_FILE", self.checksums.to_string()),
-            ("MOLD_RELEASE_BASE_URL", self.base_url.clone()),
-        ]
-    }
-}
-
-/// A sandbox with a published fake release and a usable `rustup`.
-struct InstallerScenario {
-    sandbox: Sandbox,
-    release: FakeRelease,
-}
-
-impl InstallerScenario {
-    fn prepare() -> Result<Self> {
-        let sandbox = Sandbox::new()?;
-        sandbox.write_rustup(&pinned_toolchain()?, true)?;
-        let release = FakeRelease::publish(&sandbox, TEST_MOLD_VERSION)?;
-        Ok(Self { sandbox, release })
-    }
-
-    fn fixture(&self, checksums: Utf8PathBuf) -> Result<InstallerFixture> {
-        Ok(InstallerFixture {
-            version_pin: self.release.write_version_pin(&self.sandbox)?,
-            checksums,
-            base_url: self.release.base_url(),
-        })
-    }
-
-    fn installed_mold(&self) -> Utf8PathBuf {
-        self.sandbox.prefix().join("bin/mold")
-    }
-}
+use proptest::test_runner::FileFailurePersistence;
+use test_support::dev_fast::{InstallerScenario, WRONG_SHA256, combined};
 
 /// How one recorded digest relates to the artefact's real one.
 #[derive(Copy, Clone, Debug)]
@@ -168,7 +117,17 @@ fn row_strategy() -> impl Strategy<Value = Row> {
 proptest! {
     // Each case runs the installer, so keep the corpus small enough to stay a
     // second or two while still ranging over the row space.
-    #![proptest_config(ProptestConfig { cases: 24, ..ProptestConfig::default() })]
+    #![proptest_config(ProptestConfig {
+        cases: 24,
+        // Name the file explicitly. The default `SourceParallel` policy
+        // looks for a `lib.rs` or `main.rs` beside the source and gives up
+        // in an integration-test crate, so recorded seeds were neither
+        // written nor replayed — the file on disk was inert.
+        failure_persistence: Some(Box::new(FileFailurePersistence::Direct(
+            "tests/dev_fast_checksum_tests.proptest-regressions",
+        ))),
+        ..ProptestConfig::default()
+    })]
 
     /// Whatever rows a checksum file carries, the installer's decision must
     /// match the model, and a refusal must leave nothing unpacked.
@@ -183,13 +142,13 @@ proptest! {
     ) {
         let scenario = InstallerScenario::prepare()
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
-        let real = scenario.release.sha256().to_owned();
-        let artefact = scenario.release.name().to_owned();
+        let real = scenario.release().sha256().to_owned();
+        let artefact = scenario.release().name().to_owned();
         let contents: String = rows.iter().map(|row| row.render(&real, &artefact)).collect();
 
-        let checksums = scenario.sandbox.home().join("SHA256SUMS");
+        let checksums = scenario.sandbox().home().join("SHA256SUMS");
         scenario
-            .sandbox
+            .sandbox()
             .write_file(&checksums, &contents)
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
         let fixture = scenario
@@ -197,7 +156,7 @@ proptest! {
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
 
         let output = scenario
-            .sandbox
+            .sandbox()
             .script("install-dev-fast.sh", &fixture.script_env())
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
 

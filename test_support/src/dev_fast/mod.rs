@@ -39,4 +39,6 @@ pub use sandbox::{
     DEV_FAST_CONFIG_PATH, PinOverrides, Sandbox, combined, dev_fast_config, pinned_mold_version,
     pinned_toolchain,
 };
-pub use scenario::BuildScenario;
+pub use scenario::{
+    BuildScenario, InstallerFixture, InstallerScenario, TEST_MOLD_VERSION, WRONG_SHA256,
+};

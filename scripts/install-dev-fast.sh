@@ -14,6 +14,11 @@ script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 MOLD_RELEASE_BASE_URL=${MOLD_RELEASE_BASE_URL:-https://github.com/rui314/mold/releases/download}
 
+# Download bounds, overridable so a test can drive them without waiting.
+CURL_CONNECT_TIMEOUT=${CURL_CONNECT_TIMEOUT:-15}
+CURL_MIN_BYTES_PER_SECOND=${CURL_MIN_BYTES_PER_SECOND:-1024}
+CURL_STALL_SECONDS=${CURL_STALL_SECONDS:-60}
+
 # The scratch directory the EXIT trap removes. A trap whose action is a string
 # is re-parsed by the shell when it fires, so a path containing a quote — from a
 # quote-bearing `TMPDIR`, say — breaks the quoting and the cleanup never runs.
@@ -66,7 +71,16 @@ install_mold() {
   workdir=$DEV_FAST_WORKDIR
 
   note "downloading $url"
-  curl --fail --silent --show-error --location --output "$workdir/$name" "$url" ||
+  # Bound both the handshake and the transfer. Without these a server that
+  # accepts the connection and then stalls leaves `curl` waiting indefinitely,
+  # so the failure path below is never reached and `make install-dev-fast`
+  # simply hangs. The transfer bound is a stall detector rather than a deadline:
+  # a plain `--max-time` would punish a slow-but-progressing link, whereas
+  # `--speed-limit`/`--speed-time` only fire when throughput actually dies.
+  curl --fail --silent --show-error --location \
+    --connect-timeout "$CURL_CONNECT_TIMEOUT" \
+    --speed-limit "$CURL_MIN_BYTES_PER_SECOND" --speed-time "$CURL_STALL_SECONDS" \
+    --output "$workdir/$name" "$url" ||
     fail "failed to download $name"
   verify_mold_archive "$workdir/$name" "$name"
 

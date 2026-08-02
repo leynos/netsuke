@@ -15,78 +15,19 @@ use proptest::prelude::*;
 use proptest::proptest;
 use rstest::rstest;
 use test_support::dev_fast::{
-    FakeRelease, PinOverrides, Sandbox, combined, pinned_mold_version, pinned_toolchain,
+    FakeRelease, InstallerFixture, InstallerScenario, PinOverrides, Sandbox, WRONG_SHA256,
+    combined, pinned_mold_version, pinned_toolchain,
 };
 
-/// The version the fake release is published as. Deliberately not a real mold
-/// version, so a test that accidentally reached the network would fail rather
-/// than silently succeed against an upstream artefact.
-const TEST_MOLD_VERSION: &str = "9.9.9";
-
-/// A digest that cannot match any artefact, for the mismatch case.
-const WRONG_SHA256: &str = "0000000000000000000000000000000000000000000000000000000000000000";
-
-/// The installer inputs pointing at a local fake release.
+/// Inputs whose checksum file fails verification in the given way.
 ///
-/// Grouping them keeps the version, pin path, checksum path, and URL travelling
-/// together as one value instead of as a handful of interchangeable strings.
-struct InstallerFixture {
-    version_pin: Utf8PathBuf,
-    checksums: Utf8PathBuf,
-    base_url: String,
-}
-
-impl InstallerFixture {
-    /// Environment overrides for a direct `install-dev-fast.sh` invocation.
-    fn script_env(&self) -> Vec<(&'static str, String)> {
-        vec![
-            ("MOLD_VERSION_FILE", self.version_pin.to_string()),
-            ("MOLD_SHA256SUMS_FILE", self.checksums.to_string()),
-            ("MOLD_RELEASE_BASE_URL", self.base_url.clone()),
-        ]
-    }
-}
-
-/// A sandbox with a published fake release and a usable `rustup`.
-struct InstallerScenario {
-    sandbox: Sandbox,
-    release: FakeRelease,
-}
-
-impl InstallerScenario {
-    /// Publish a release and make the Cranelift toolchain appear installed, so
-    /// only the linker half of the installer is under test.
-    fn prepare() -> Result<Self> {
-        let sandbox = Sandbox::new()?;
-        sandbox.write_rustup(&pinned_toolchain()?, true)?;
-        let release = FakeRelease::publish(&sandbox, TEST_MOLD_VERSION)?;
-        Ok(Self { sandbox, release })
-    }
-
-    /// Fixture recording the release's real digest, so verification passes.
-    fn with_matching_checksum(&self) -> Result<InstallerFixture> {
-        self.fixture(
-            self.release
-                .write_checksums(&self.sandbox, self.release.sha256())?,
-        )
-    }
-
-    /// Fixture whose checksum file fails verification in the given way.
-    fn with_failure(&self, failure: ChecksumFailure) -> Result<InstallerFixture> {
-        self.fixture(failure.write_checksums(&self.sandbox, &self.release)?)
-    }
-
-    fn fixture(&self, checksums: Utf8PathBuf) -> Result<InstallerFixture> {
-        Ok(InstallerFixture {
-            version_pin: self.release.write_version_pin(&self.sandbox)?,
-            checksums,
-            base_url: self.release.base_url(),
-        })
-    }
-
-    fn installed_mold(&self) -> Utf8PathBuf {
-        self.sandbox.prefix().join("bin/mold")
-    }
+/// Stays with this suite rather than moving to `test_support`: it encodes one
+/// suite's failure taxonomy, which is not shared ground.
+fn with_failure(
+    scenario: &InstallerScenario,
+    failure: ChecksumFailure,
+) -> Result<InstallerFixture> {
+    scenario.fixture(failure.write_checksums(scenario.sandbox(), scenario.release())?)
 }
 
 /// The ways verification can legitimately fail.
@@ -124,7 +65,7 @@ fn installs_and_records_the_verification_when_the_checksum_matches() -> Result<(
     let fixture = scenario.with_matching_checksum()?;
 
     let output = scenario
-        .sandbox
+        .sandbox()
         .script("install-dev-fast.sh", &fixture.script_env())?;
     let text = combined(&output);
 
@@ -133,7 +74,7 @@ fn installs_and_records_the_verification_when_the_checksum_matches() -> Result<(
         "install should succeed, got `{text}`"
     );
     ensure!(
-        text.contains(&format!("verified {}", scenario.release.name())),
+        text.contains(&format!("verified {}", scenario.release().name())),
         "should report the verification, got `{text}`"
     );
     ensure!(
@@ -143,7 +84,7 @@ fn installs_and_records_the_verification_when_the_checksum_matches() -> Result<(
     // Assert on the commands rustup actually received, not on the installer's
     // own narration of them: a diagnostic can be emitted without the command
     // ever running.
-    let rustup = scenario.sandbox.rustup_invocations()?;
+    let rustup = scenario.sandbox().rustup_invocations()?;
     let toolchain = pinned_toolchain()?;
     ensure!(
         rustup
@@ -162,19 +103,59 @@ fn installs_and_records_the_verification_when_the_checksum_matches() -> Result<(
     Ok(())
 }
 
+/// The download must be bounded at both ends.
+///
+/// A server that completes the handshake and then stops sending leaves an
+/// unbounded `curl` waiting forever, so `install-dev-fast` hangs and its own
+/// failure path is never reached. Asserting on the flags `curl` actually
+/// received is the only way to see that from outside: a bounded and an
+/// unbounded download look identical unless one is left to stall.
+#[rstest]
+#[case::connect_timeout("--connect-timeout")]
+#[case::stall_floor("--speed-limit")]
+#[case::stall_window("--speed-time")]
+fn the_download_is_bounded_at_both_ends(#[case] flag: &str) -> Result<()> {
+    let scenario = InstallerScenario::prepare()?;
+    let fixture = scenario.with_matching_checksum()?;
+    let log = scenario.sandbox().home().join("curl-args.log");
+    // Record and fail: the arguments are the subject, and refusing the download
+    // keeps the case hermetic.
+    scenario.sandbox().write_fake(
+        &scenario.sandbox().bin(),
+        "curl",
+        &format!("printf '%s\\n' \"$*\" >> '{log}'\nexit 7"),
+    )?;
+
+    let output = scenario
+        .sandbox()
+        .script("install-dev-fast.sh", &fixture.script_env())?;
+    ensure!(
+        !output.status.success(),
+        "a refused download should abort, got `{}`",
+        combined(&output)
+    );
+
+    let recorded = scenario.sandbox().read_file(&log)?;
+    ensure!(
+        recorded.contains(flag),
+        "curl should receive `{flag}`, got `{recorded}`"
+    );
+    Ok(())
+}
+
 /// A refused artefact must abort before the toolchain half runs, so rustup sees
 /// nothing beyond whatever the capability probe needed.
 #[test]
 fn a_refused_artefact_never_reaches_the_toolchain_install() -> Result<()> {
     let scenario = InstallerScenario::prepare()?;
-    let fixture = scenario.with_failure(ChecksumFailure::Mismatch)?;
+    let fixture = with_failure(&scenario, ChecksumFailure::Mismatch)?;
 
     let output = scenario
-        .sandbox
+        .sandbox()
         .script("install-dev-fast.sh", &fixture.script_env())?;
     ensure!(!output.status.success(), "install should abort");
 
-    let rustup = scenario.sandbox.rustup_invocations()?;
+    let rustup = scenario.sandbox().rustup_invocations()?;
     ensure!(
         !rustup
             .iter()
@@ -191,10 +172,10 @@ fn a_refused_artefact_never_reaches_the_toolchain_install() -> Result<()> {
 #[case::missing_entry(ChecksumFailure::MissingEntry)]
 fn refuses_to_install_an_unverifiable_artefact(#[case] failure: ChecksumFailure) -> Result<()> {
     let scenario = InstallerScenario::prepare()?;
-    let fixture = scenario.with_failure(failure)?;
+    let fixture = with_failure(&scenario, failure)?;
 
     let output = scenario
-        .sandbox
+        .sandbox()
         .script("install-dev-fast.sh", &fixture.script_env())?;
     let text = combined(&output);
 

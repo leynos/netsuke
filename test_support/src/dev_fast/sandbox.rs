@@ -119,6 +119,17 @@ impl Sandbox {
     /// sites stay focused on the behaviour they are faking.
     pub fn write_fake(&self, dir: &Utf8Path, name: &str, body: &str) -> Result<Utf8PathBuf> {
         fs::create_dir_all(dir.as_std_path()).with_context(|| format!("create {dir}"))?;
+        // Unlink first. The utility allowlist symlinks real binaries into this
+        // directory, and writing to a symlink follows it — faking a utility
+        // that is already linked would otherwise truncate the host's copy of
+        // it. Only file permissions have stood between that and a broken
+        // system.
+        let target = dir.join(name);
+        match fs::remove_file(target.as_std_path()) {
+            Ok(()) => {}
+            Err(error) if error.kind() == ErrorKind::NotFound => {}
+            Err(error) => return Err(error).with_context(|| format!("replace {target}")),
+        }
         let script = format!("#!/bin/sh\n{body}\n");
         let path = write_exec_with_content(dir.as_std_path(), name, &script)?;
         Utf8PathBuf::try_from(path).context("fake executable path must be UTF-8")
@@ -154,6 +165,15 @@ impl Sandbox {
             .with_context(|| format!("write {path}"))?;
         file.set_modified(mtime)
             .with_context(|| format!("backdate {path}"))
+    }
+
+    /// Read a file staged in the sandbox.
+    ///
+    /// A missing file is an error rather than an empty string: a test asserting
+    /// on recorded output would otherwise read "the command was never run" as
+    /// "the command recorded nothing".
+    pub fn read_file(&self, path: &Utf8Path) -> Result<String> {
+        fs::read_to_string(path.as_std_path()).with_context(|| format!("read {path}"))
     }
 
     /// Create a directory and any missing parents.

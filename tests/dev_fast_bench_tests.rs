@@ -16,6 +16,7 @@ use anyhow::{Context, Result, bail, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use proptest::prelude::*;
 use proptest::proptest;
+use proptest::test_runner::FileFailurePersistence;
 use std::time::{Duration, UNIX_EPOCH};
 use test_support::dev_fast::{
     BuildScenario, CargoInvocation, DEV_FAST_CONFIG_PATH, MakeInvocation, Sandbox, TargetState,
@@ -169,7 +170,17 @@ fn pre_state_strategy() -> impl Strategy<Value = PreState> {
 proptest! {
     // Nine combinations; a few extra draws cost little because the fake Cargo
     // returns immediately.
-    #![proptest_config(ProptestConfig { cases: 12, ..ProptestConfig::default() })]
+    #![proptest_config(ProptestConfig {
+        cases: 12,
+        // Name the file explicitly. The default `SourceParallel` policy
+        // looks for a `lib.rs` or `main.rs` beside the source and gives up
+        // in an integration-test crate, so recorded seeds were neither
+        // written nor replayed — the file on disk was inert.
+        failure_persistence: Some(Box::new(FileFailurePersistence::Direct(
+            "tests/dev_fast_bench_tests.proptest-regressions",
+        ))),
+        ..ProptestConfig::default()
+    })]
 
     /// Whatever each variant's target directory held beforehand, every variant
     /// must record a clean pass then an incremental one.

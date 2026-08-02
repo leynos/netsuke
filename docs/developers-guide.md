@@ -618,6 +618,25 @@ The fixtures live in `test_support::dev_fast`:
   entries are kept apart deliberately: a command-line variable outranks a `?=`
   default, whereas an environment entry is the only channel for a setting a
   script reads without the Makefile naming it.
+- `test_support::dev_fast::scenario` builds on the fixtures above to assemble
+  two starting points. `BuildScenario` is a sandbox where `make dev-fast-check`
+  passes — pinned `mold` on the install prefix, a `rustup` reporting the
+  Cranelift component, and a `RecordingCargo` installed — and is shared by the
+  Make-target and benchmark suites. `InstallerScenario` is a sandbox with a
+  published `FakeRelease` and a usable `rustup`, letting a test concentrate on
+  the linker half of the installer; the installer and checksum suites share
+  it. The module also exports `TEST_MOLD_VERSION`, deliberately not a real
+  `mold` version so a test that accidentally reaches the network fails rather
+  than silently succeeding against an upstream artefact, and `WRONG_SHA256`.
+  `InstallerFixture` groups the installer's pin path, checksum path, and
+  release URL, and renders them via `script_env()`.
+
+A scenario earns its place here once a second suite needs it, and not before;
+suite-specific conveniences stay with their suite — the installer tests keep
+their own `ChecksumFailure` enum and `with_failure` helper, because a fixture
+encoding one suite's failure taxonomy is not shared ground. Scenario
+constructors stay free of assertions, so a scenario cannot decide on a
+caller's behalf what counts as correct.
 
 Assert on the shape of a timing cell, never on a duration. Reuse the sandbox
 for any future target with the same shape, and do not reach for `PathGuard`:
