@@ -12,6 +12,7 @@ pub mod diagnostic_json;
 pub(crate) mod diagnostics;
 pub mod graph_view;
 pub mod hasher;
+pub mod hex;
 pub mod host_pattern;
 pub mod ir;
 mod json_envelope;

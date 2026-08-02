@@ -25,6 +25,7 @@
 
 use sha2::{Digest, Sha256};
 
+use crate::hex::to_lower_hex;
 use crate::ir::Action;
 use serde_json_canonicalizer::to_writer;
 use std::io::{self, Write};
@@ -60,6 +61,6 @@ impl ActionHasher {
             let mut writer = DigestWriter(&mut hasher);
             to_writer(action, &mut writer)?;
         }
-        Ok(format!("{:x}", hasher.finalize()))
+        Ok(to_lower_hex(&hasher.finalize()))
     }
 }

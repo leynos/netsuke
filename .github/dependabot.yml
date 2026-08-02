@@ -20,6 +20,26 @@ updates:
 
   # Enable version updates for Cargo
   - package-ecosystem: "cargo"
+    groups:
+      # The RustCrypto crates release in lockstep and share their breaking API
+      # changes, so a bump that arrives on its own cannot compile: the 0.11
+      # family moved `finalize()` to `hybrid_array::Array` and dropped the
+      # hashers' `io::Write` impls together. Group them so a major arrives as
+      # one reviewable, buildable pull request. See the "RustCrypto 0.11
+      # constraint" section of docs/developers-guide.md.
+      rustcrypto:
+        patterns:
+          - "digest"
+          - "sha1"
+          - "sha2"
+          - "sha3"
+          - "md-5"
+          - "hmac"
+          - "hkdf"
+          - "pbkdf2"
+          - "block-buffer"
+          - "crypto-common"
+          - "hybrid-array"
     directories:
       - "/"
       - "/test_support"

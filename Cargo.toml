@@ -43,10 +43,10 @@ anyhow = "1"
 indicatif = "0.18.4"
 thiserror = "1"
 miette = { version = "7.6.0", features = ["fancy"] }
-digest = "0.10"
-sha2 = "0.10"
-sha1 = { version = "0.10", optional = true }
-md5 = { package = "md-5", version = "0.10", optional = true }
+digest = "0.11"
+sha2 = "0.11"
+sha1 = { version = "0.11", optional = true }
+md5 = { package = "md-5", version = "0.11", optional = true }
 itoa = "1"
 itertools = "0.12"
 indexmap = { version = "2.5", features = ["serde"] }

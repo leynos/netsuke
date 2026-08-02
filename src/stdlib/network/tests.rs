@@ -34,11 +34,6 @@ fn cache_key_hashes_url() {
 }
 
 #[rstest]
-fn hex_string_encodes_bytes() {
-    assert_eq!(hex_string(&[0xde, 0xad, 0xbe, 0xef]), "deadbeef");
-}
-
-#[rstest]
 fn to_value_returns_bytes_for_invalid_utf8() {
     let value = value_from_bytes(vec![0xff, 0xfe, 0xfd]);
     assert_eq!(value.as_bytes(), Some(&[0xff, 0xfe, 0xfd][..]));

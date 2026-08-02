@@ -13,6 +13,7 @@ use minijinja::{Error, ErrorKind};
 use sha2::{Digest, Sha256};
 
 use super::{NetworkConfig, StdlibConfig, io_error, response_limit_error_from_cache};
+use crate::hex::to_lower_hex;
 use crate::localization::{self, keys};
 use std::io::Read;
 
@@ -154,19 +155,7 @@ fn open_cache_writer(dir: &Dir, path: &Utf8Path) -> Result<File, Error> {
 }
 
 pub(super) fn cache_key(url: &str) -> String {
-    let digest = Sha256::digest(url.as_bytes());
-    hex_string(&digest)
-}
-
-pub(super) fn hex_string(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        // `from_digit` cannot fail for values below 16; fall back to '0'
-        // rather than panicking to keep this helper total.
-        out.push(char::from_digit(u32::from(byte >> 4), 16).unwrap_or('0'));
-        out.push(char::from_digit(u32::from(byte & 0x0f), 16).unwrap_or('0'));
-    }
-    out
+    to_lower_hex(&Sha256::digest(url.as_bytes()))
 }
 
 /// Internal cache configuration and directory handle.
