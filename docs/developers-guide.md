@@ -103,6 +103,13 @@ Run these commands before finalizing any change:
 - `make lint`
 - `make test`
 
+When the change touches any Markdown file — documentation, ADRs, execplans,
+or the README — also run:
+
+- `make fmt`
+- `make markdownlint`
+- `make nixie`
+
 `make test` runs the non-doctest suite through
 [cargo-nextest](https://nexte.st/) and then runs the doctests separately.
 CI pins the runner version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`.
@@ -135,8 +142,10 @@ and its descendants, whereas a crate entry exempts a whole compilation unit.
 The application crate is scoped this way — only
 `netsuke::stdlib::which::lookup` (executable discovery through `PATH` and
 cross-directory symlink canonicalization, which `cap_std` cannot express) and
-`netsuke::runner::process::file_io` (temporary-file synchronization) are
-exempt; the rest of `netsuke` stays under the capability policy. The
+`netsuke::runner::process::file_io` (temporary-file synchronization), and
+`netsuke::cli::discovery::paths` (canonicalizing an ambient `--directory` to
+match OrthoConfig's layer paths) are exempt; the rest of `netsuke` stays under
+the capability policy. The
 behavioural step definitions, CLI integration tests, and shared
 workflow-reading helper that stage fixtures ambiently are scoped the same way.
 A crate-level entry is justified only when the ambient access lives in the
@@ -158,12 +167,6 @@ When command output is long, preserve exit codes and logs:
 set -o pipefail
 make test 2>&1 | tee /tmp/netsuke-make-test.log
 ```
-
-For documentation changes, also run:
-
-- `make fmt`
-- `make markdownlint`
-- `make nixie`
 
 ### Workflow pins and Dependabot
 
@@ -953,6 +956,64 @@ Do **not** call `std::env::set_var` directly in BDD steps — use
 5. Guards drop in reverse declaration order — CWD and environment
    variables are restored while the lock is still held, preventing races.
 
+### `tracing_capture`
+
+Production tracing has one process-wide subscriber, installed by
+`init_tracing` in `src/main.rs` with a reloadable filter initially set to
+`OFF`. Early configuration resolution therefore cannot write selector events
+before the effective JSON mode is known. On success,
+`resolve_json_mode_or_exit` calls `set_tracing_filter` with the resolved mode:
+JSON stays `OFF`, while human mode enables `TRACE` for `--verbose` or `ERROR`
+otherwise. Full human-mode merging repeats discovery after the filter is
+enabled, so its selector events remain available. If early resolution fails,
+human mode enables its fallback filter and replays resolution to retain bounded
+failure diagnostics; JSON mode leaves the filter off and discards them. No
+library module installs a global subscriber.
+
+Tests use a separate capture boundary:
+
+`src/test_tracing_capture.rs` (`crate::test_tracing_capture`) is the
+workspace's single implementation for capturing structured tracing events
+in tests. `with_test_subscriber` installs a capturing `Layer` as the
+default subscriber for the duration of a closure, then returns the
+closure's result. Each event's fields are rendered as a space-separated
+list of `name=value` pairs — strings and `Debug` values are quoted — and
+appended to a shared buffer:
+
+```rust
+use crate::test_tracing_capture::with_test_subscriber;
+use tracing_subscriber::filter::LevelFilter;
+
+with_test_subscriber(LevelFilter::TRACE, |captured| {
+    do_something_that_traces();
+    let events = captured.snapshot();
+    let field = "selector=\"cli_flag\"";
+    assert!(events.iter().any(|event| event.contains(field)));
+});
+```
+
+`with_test_subscriber` installs the subscriber through
+[`tracing::subscriber::with_default`], which registers a *thread-local*
+default. Only events emitted on the calling thread are captured; events
+emitted from threads spawned inside the closure are silently dropped.
+
+The module is `#[cfg(test)]` in the root crate, so it is available to
+unit tests only; integration tests under `tests/` compile as separate
+crates and cannot reach it. Coverage that needs the real binary's tracing
+output instead asserts on the process's stderr — see
+`tests/logging_stderr/config_tracing.rs`.
+
+`CapturedEvents` has no `Default` implementation — obtain it only from the
+handle passed into the `with_test_subscriber` closure. `snapshot()`
+recovers a poisoned lock rather than panicking, so a panic on another test
+thread cannot cascade into a snapshot assertion.
+
+Tests that snapshot tracing output with `insta` should normalize
+runtime-dependent fields, such as the bounded `path_hash` correlation
+identifier, to a stable placeholder before asserting the snapshot, and
+assert the real value separately with its own check. See
+`src/cli/discovery_tracing_tests.rs` for this pattern.
+
 ## `TestWorld` field groups
 
 `TestWorld` (`tests/bdd/fixtures/mod.rs`) is the shared fixture for all BDD
@@ -1100,9 +1161,14 @@ pub fn resolve_merged_json(cli: &Cli, matches: &ArgMatches) -> OrthoResult<bool>
 pub fn resolve_merged_json_with_env(
     cli: &Cli,
     matches: &ArgMatches,
-    env: &impl ConfigEnvProvider,
+    env: &impl EnvProvider,
 ) -> OrthoResult<bool>;
 ```
+
+The `cli` module re-exports this trait publicly as `ConfigEnvProvider` (and
+`StdEnvProvider` as `ConfigStdEnvProvider`) to avoid colliding with the
+unrelated `EnvProvider` in `locale_resolution`; crate-internal code uses the
+bare `EnvProvider` name.
 
 Discovery tests that exercise OrthoConfig's `ConfigDiscovery` may still need
 `EnvLock` because the external discovery implementation reads platform
@@ -1113,6 +1179,19 @@ Unit tests that only need to verify explicit config path precedence should test
 `explicit_config_path_with_env` with an injected provider instead of mutating
 the process environment.
 
+Config selector resolution remains a pure query: `resolve_config_selector`
+records the winning selector, its optional path, and every environment
+lookup evaluated, and emits no tracing itself. Structured diagnostics are
+emitted only at the file-layer boundary, where
+`collect_file_layers_with_env` calls `trace_config_path_resolution` after
+resolution completes.
+
+Tracing never logs full paths or formatted parser errors. Path values are
+bounded to a `path_hash` correlation identifier plus `path_file_name`, and
+load failures are classified with the `ConfigLoadFailureKind` enum instead
+of the formatted error text. `path_hash` is a bounded identifier for
+correlating events, not a cryptographic guarantee.
+
 #### `json` contract
 
 Early JSON resolution reads only the boolean `json` field from each
@@ -1121,6 +1200,45 @@ configuration layer. File layers are applied in merge order, followed by
 Selected file-load errors and malformed `NETSUKE_JSON` values are returned to
 the caller. Accepted environment values are `true`, `false`, `1`, and `0`.
 An explicit root `--json` flag bypasses environment parsing.
+
+### Configuration discovery module layout
+
+`src/cli/discovery.rs` attaches several small `#[path = "..."]` modules that
+split diagnostics, path comparison, and tests out of the main discovery flow:
+
+- `discovery_diagnostics.rs` — bounded tracing helpers (`path_hash`,
+  `short_hash`, `debug_config_path`, `debug_optional_config_path`,
+  `warn_explicit_config_load_failed`) and the `ConfigLoadFailureKind` enum
+  used to classify a load failure without retaining error text.
+- `discovery_paths.rs` — `normalized_path_key` resolves a path to a
+  comparable, canonicalized form and returns canonicalization errors to its
+  caller. The discovery-side `comparison_key` fallback uses the original path
+  literally when resolution fails, continues discovery, and emits only the
+  normal append debug event. This lets relative or symlinked `--directory`
+  values match OrthoConfig's canonicalized layer paths without making an
+  unresolved path fatal. `FsPathNormalizer` is confined to this comparison
+  boundary: selectors remain pure path queries, OrthoConfig supplies the layer
+  path, and tracing remains at the orchestration boundary.
+- `discovery_event_assertions.rs` — shared test-only helpers:
+  `capture_events` runs a closure under a TRACE capturing subscriber,
+  `find_event` locates one emitted event by substring, and
+  `EventAssertion` bundles an event with its path to assert bounded
+  `path_hash`/`path_file_name` fields, the absence of the raw path or
+  formatted error text, and to normalize the hash before an `insta`
+  snapshot.
+- `discovery_tracing_tests.rs` — tests selector precedence
+  (`--config` versus `NETSUKE_CONFIG`), the removed legacy
+  `NETSUKE_CONFIG_PATH` alias, and event-schema snapshots for both
+  selection and explicit load failures.
+- `discovery_layer_tests.rs` — tests which branch
+  `collect_diag_file_layers_with_env` takes (explicit path versus automatic
+  discovery) and the project-scope second pass in `collect_file_layers`.
+
+Both test modules import `capture_events`, `find_event`, and
+`EventAssertion` from `discovery_event_assertions` rather than duplicating
+them. The `insta` snapshot calls themselves stay in the test modules
+because snapshot names bind to the test module's path, not to a shared
+helper module.
 
 ## BDD command helpers and environment handling
 

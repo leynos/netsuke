@@ -18,6 +18,12 @@ excluded_paths = [
     "netsuke::stdlib::which::lookup",
     # Syncs the ambient temporary file the runner writes its Ninja file to.
     "netsuke::runner::process::file_io",
+    # Canonicalises a caller-supplied `--directory` so it can be compared with
+    # the layer paths `ortho_config` records, which that crate canonicalises
+    # through `std::fs`. The comparison has to mirror it exactly, and the
+    # directory is ambient input that may be relative or symlinked, which
+    # `cap_std` refuses to resolve across directory boundaries.
+    "netsuke::cli::discovery::paths",
 
     # Behavioural step definitions that stage scenario fixtures — manifests,
     # workspaces, and captured output — through ambient tempdir access.

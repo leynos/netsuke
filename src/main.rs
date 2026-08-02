@@ -12,11 +12,12 @@ use netsuke::{
 };
 use ortho_config::Localizer;
 use std::ffi::OsString;
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 use std::process::ExitCode;
-use std::sync::Arc;
-use tracing::Level;
-use tracing_subscriber::fmt;
+use std::sync::{Arc, OnceLock};
+use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::{Registry, fmt, reload};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DiagMode {
@@ -53,11 +54,14 @@ fn run_with_args(
         Ok(parsed) => parsed,
         Err(code) => return code,
     };
+    // Install the subscriber disabled until the effective JSON mode is known.
+    // Human-mode config merging repeats discovery after the filter is enabled.
+    init_tracing();
+
     let mode = match resolve_json_mode_or_exit(&parsed_cli, &matches, startup_mode) {
         Ok(mode) => mode,
         Err(code) => return code,
     };
-
     let merged_cli = match merge_cli_or_exit(&parsed_cli, &matches, mode) {
         Ok(merged) => merged,
         Err(code) => return code,
@@ -76,11 +80,53 @@ fn run_with_args(
     }
 }
 
-fn init_tracing(max_level: Level) {
-    fmt()
-        .with_max_level(max_level)
-        .with_writer(io::stderr)
-        .init();
+/// Handle for adjusting the installed subscriber's level after startup.
+static TRACING_FILTER: OnceLock<reload::Handle<LevelFilter, Registry>> = OnceLock::new();
+
+/// Choose the stderr verbosity for `mode`.
+///
+/// JSON mode silences tracing entirely so stderr carries only the diagnostic
+/// document. `--verbose` selects `TRACE` because the `NETSUKE_CONFIG` lookup is
+/// traced at that level; otherwise only errors surface.
+const fn startup_filter(mode: DiagMode, verbose: bool) -> LevelFilter {
+    if mode.is_json() {
+        LevelFilter::OFF
+    } else if verbose {
+        LevelFilter::TRACE
+    } else {
+        LevelFilter::ERROR
+    }
+}
+
+/// Install the process-wide subscriber with a disabled reloadable level filter.
+///
+/// Only the first call installs; later calls are ignored so exactly one global
+/// subscriber exists, and the level is adjusted through [`set_tracing_filter`]
+/// rather than by installing a second subscriber. Starting disabled suppresses
+/// discovery events until configuration-backed JSON mode has been resolved.
+fn init_tracing() {
+    let (filter, handle) = reload::Layer::new(LevelFilter::OFF);
+    if Registry::default()
+        .with(filter)
+        .with(
+            fmt::layer()
+                .with_writer(io::stderr)
+                // Colour only a terminal; piped or redirected logs stay plain so
+                // they remain greppable and free of escape sequences.
+                .with_ansi(io::stderr().is_terminal()),
+        )
+        .try_init()
+        .is_ok()
+    {
+        TRACING_FILTER.set(handle).ok();
+    }
+}
+
+/// Adjust the installed subscriber's level, if one was installed.
+fn set_tracing_filter(level: LevelFilter) {
+    if let Some(handle) = TRACING_FILTER.get() {
+        handle.modify(|filter| *filter = level).ok();
+    }
 }
 
 fn startup_localizer(
@@ -123,7 +169,6 @@ fn config_err_to_exit(err: &(dyn std::error::Error + 'static), mode: DiagMode) -
     if mode.is_json() {
         diagnostic_json::emit_or_fallback(diagnostic_json::render_error_json(err))
     } else {
-        init_tracing(Level::ERROR);
         tracing::error!(error = %err, "configuration load failed");
         ExitCode::FAILURE
     }
@@ -134,9 +179,23 @@ fn resolve_json_mode_or_exit(
     matches: &ArgMatches,
     fallback_mode: DiagMode,
 ) -> Result<DiagMode, ExitCode> {
-    cli::resolve_merged_json(parsed_cli, matches)
-        .map(DiagMode::from_json_enabled)
-        .map_err(|err| config_err_to_exit(err.as_ref(), fallback_mode))
+    match cli::resolve_merged_json(parsed_cli, matches) {
+        Ok(is_json_enabled) => {
+            let mode = DiagMode::from_json_enabled(is_json_enabled);
+            set_tracing_filter(startup_filter(mode, parsed_cli.verbose));
+            Ok(mode)
+        }
+        Err(err) => {
+            let fallback_filter = startup_filter(fallback_mode, parsed_cli.verbose);
+            set_tracing_filter(fallback_filter);
+            // Resolution failed before its diagnostics could be emitted. Replay
+            // only for human output after enabling its filter; JSON remains OFF.
+            if fallback_filter != LevelFilter::OFF {
+                drop(cli::resolve_merged_json(parsed_cli, matches));
+            }
+            Err(config_err_to_exit(err.as_ref(), fallback_mode))
+        }
+    }
 }
 
 fn merge_cli_or_exit(
@@ -158,14 +217,7 @@ fn configure_runtime(
     let runtime_localizer = Arc::from(cli_localization::build_localizer(runtime_locale.as_deref()));
     localization::set_localizer(Arc::clone(&runtime_localizer));
 
-    if !mode.is_json() {
-        let max_level = if merged_cli.verbose {
-            Level::DEBUG
-        } else {
-            Level::ERROR
-        };
-        init_tracing(max_level);
-    }
+    set_tracing_filter(startup_filter(mode, merged_cli.verbose));
 }
 
 fn handle_runner_error(

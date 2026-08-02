@@ -110,12 +110,12 @@ state to fixture-based scenario isolation.
 flowchart TD
     A["Start migration"] --> B{"Does the suite rely on<br/>shared mutable state<br/>across scenarios?"}
 
-    B -- Yes --> C["Identify global World like structures<br/>and cross-scenario mutation"]
+    B -- Yes --> C["Identify global World-like structures<br/>and cross-scenario mutation"]
     C --> D["Move shared mutable data into<br/>scenario-local fixtures<br/>using &mut FixtureType or Slot"]
     D --> E{"Is any expensive, mostly<br/>read-only infrastructure used?"}
 
-    E -- Yes --> F["Wrap expensive, read-only infra<br/>in #once fixtures<br/>for reuse across scenarios"]
-    E -- No --> G["Keep all fixtures per-scenario<br/>without #once"]
+    E -- Yes --> F["Wrap expensive, read-only infra<br/>in &#35;once fixtures<br/>for reuse across scenarios"]
+    E -- No --> G["Keep all fixtures per-scenario<br/>without &#35;once"]
 
     F --> H["Ensure scenario data is recreated<br/>per scenario and does not<br/>depend on execution order"]
     G --> H
