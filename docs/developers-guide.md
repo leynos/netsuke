@@ -139,6 +139,30 @@ configuration does and does not cover.
 the standalone installer described in the
 [Whitaker user's guide](whitaker-users-guide.md) so local linting matches
 continuous integration (CI); `make lint-clippy` runs the Clippy-only subset.
+CI pins the installer version in `WHITAKER_INSTALLER_VERSION` in
+`.github/workflows/ci.yml`. Install that same version locally so local runs
+match CI; read the pin from the workflow rather than copying the number, so
+the two cannot drift:
+
+```bash
+WHITAKER_INSTALLER_VERSION="$(sed -n \
+  "s/.*WHITAKER_INSTALLER_VERSION: '\(.*\)'.*/\1/p" \
+  .github/workflows/ci.yml)"
+cargo install --locked whitaker-installer \
+  --version "$WHITAKER_INSTALLER_VERSION"
+# or, for a prebuilt binary:
+cargo binstall --no-confirm --locked \
+  "whitaker-installer@$WHITAKER_INSTALLER_VERSION"
+```
+
+This pin matters: 0.2.7 is the first installer release whose staged lint
+libraries carry [Whitaker PR #315][whitaker-pr-315], which added the
+`excluded_paths` option. Every module-scoped exemption in `dylint.toml`
+depends on it — an older installer silently ignores `excluded_paths`, and
+the exemptions stop applying without any error.
+
+[whitaker-pr-315]: https://github.com/leynos/whitaker/pull/315
+
 Whitaker is configured by `dylint.toml` at the repository root, where each
 sanctioned ambient-filesystem scope for `no_std_fs_operations` carries a
 documented rationale. `docs/whitaker-users-guide.md` is a near-verbatim import
@@ -908,6 +932,11 @@ Cargo home plus Kani support-file home.
   example fail the gate. For the same reason as `test-nextest`, `doctest`
   also runs a second time against `test_support/Cargo.toml` to cover its
   doctests.
+
+The `test_support/Cargo.toml` path used for the second pass comes from the
+overridable `TEST_SUPPORT_MANIFEST` Makefile variable (default
+`test_support/Cargo.toml`); point it elsewhere with, for example,
+`make test TEST_SUPPORT_MANIFEST=path/to/Cargo.toml`.
 
 If either pass fails, `make test` fails. Run the individual targets when
 iterating, but treat `make test` as the gate.

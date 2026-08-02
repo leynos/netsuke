@@ -166,6 +166,61 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
     Ok(())
 }
 
+/// `test_support` is excluded from the root workspace, so a root-level cargo
+/// invocation cannot reach its tests. Both passes must therefore target its
+/// manifest explicitly; dropping either line silently un-gates that crate,
+/// which is invisible in a green test run.
+///
+/// The `RUSTFLAGS` those lines set is asserted by `RUSTFLAGS_CASES`, which
+/// expands each assignment rather than matching recipe text.
+#[rstest]
+#[case::nextest("test-nextest", "nextest run")]
+#[case::doctest("doctest", "--doc")]
+fn behavioural_test_passes_also_target_test_support(
+    #[case] target: &str,
+    #[case] harness: &str,
+) -> Result<()> {
+    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
+    let recipe = target_recipe(&makefile, target)
+        .with_context(|| format!("Makefile should declare a {target} target"))?;
+
+    let scoped: Vec<&str> = recipe
+        .lines()
+        .filter(|line| line.contains("--manifest-path $(TEST_SUPPORT_MANIFEST)"))
+        .collect();
+    ensure!(
+        scoped.len() == 1,
+        "{target} should invoke the harness once against $(TEST_SUPPORT_MANIFEST), \
+         found {count}: {recipe:?}",
+        count = scoped.len()
+    );
+    for line in &scoped {
+        ensure!(
+            line.contains(harness),
+            "{target}'s test_support pass should use {harness}, found {line:?}"
+        );
+        ensure!(
+            line.contains("--all-features"),
+            "{target}'s test_support pass should enable all features, found {line:?}"
+        );
+    }
+    Ok(())
+}
+
+/// The manifest path is a `?=` variable so a caller can point the second pass
+/// at a relocated crate without editing the recipes.
+#[test]
+fn behavioural_test_support_manifest_is_overridable() -> Result<()> {
+    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
+    ensure!(
+        makefile
+            .lines()
+            .any(|line| line.trim() == "TEST_SUPPORT_MANIFEST ?= test_support/Cargo.toml"),
+        "the Makefile should default TEST_SUPPORT_MANIFEST overridably"
+    );
+    Ok(())
+}
+
 /// The prefix introducing a quoted `RUSTFLAGS` assignment in a recipe.
 const RUSTFLAGS_PREFIX: &str = "RUSTFLAGS=\"";
 
@@ -248,6 +303,40 @@ impl RustflagsCase {
         }
     }
 
+    // `test_support` is excluded from the root workspace, so `test-nextest`,
+    // `doctest`, and `lint-whitaker` each run a second time against its
+    // manifest. Those lines set `RUSTFLAGS` too and hold the same contract as
+    // their root counterparts. Their markers must select the scoped line
+    // rather than the root one, which `recipe_line` would otherwise find
+    // first: the root lines match `nextest run`, `--doc`, and `$(WHITAKER)`
+    // as well.
+    const fn test_nextest_test_support() -> Self {
+        Self {
+            target: "test-nextest",
+            line_marker: "--manifest-path $(TEST_SUPPORT_MANIFEST)",
+            denies_warnings: true,
+            separator_only_when_set: true,
+        }
+    }
+
+    const fn doctest_test_support() -> Self {
+        Self {
+            target: "doctest",
+            line_marker: "--manifest-path $(TEST_SUPPORT_MANIFEST)",
+            denies_warnings: true,
+            separator_only_when_set: true,
+        }
+    }
+
+    const fn lint_whitaker_test_support() -> Self {
+        Self {
+            target: "lint-whitaker",
+            line_marker: "cd test_support",
+            denies_warnings: true,
+            separator_only_when_set: true,
+        }
+    }
+
     const fn typecheck() -> Self {
         Self {
             target: "typecheck",
@@ -268,13 +357,16 @@ impl RustflagsCase {
 }
 
 /// Every `RUSTFLAGS`-setting recipe line under contract.
-const RUSTFLAGS_CASES: [RustflagsCase; 8] = [
+const RUSTFLAGS_CASES: [RustflagsCase; 11] = [
     RustflagsCase::test_nextest(),
+    RustflagsCase::test_nextest_test_support(),
     RustflagsCase::doctest(),
+    RustflagsCase::doctest_test_support(),
     RustflagsCase::binary_build(),
     RustflagsCase::lint_clippy_rustdoc(),
     RustflagsCase::lint_clippy(),
     RustflagsCase::lint_whitaker(),
+    RustflagsCase::lint_whitaker_test_support(),
     RustflagsCase::typecheck(),
     RustflagsCase::kani_full(),
 ];
