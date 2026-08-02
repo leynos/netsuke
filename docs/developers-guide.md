@@ -1007,6 +1007,26 @@ writes that content and applies executable permissions only on Unix.
 `write_exec` is the minimal-script convenience wrapper;
 `write_exec_with_content` is the shared primitive for custom behaviour.
 
+The helpers take `&Utf8Path` and return `Utf8PathBuf`, matching the camino
+types used throughout Netsuke. Callers that already hold camino paths pass
+them directly. `tempfile::TempDir::path()` still yields an OS-native `&Path`,
+so callers convert at that boundary with `exec::utf8_path`, the single
+conversion point. `utf8_path` returns a `Result` rather than panicking: it
+names the offending path in the error (`path is not valid UTF-8: {path}`),
+and callers propagate it with their own context, as `fake_ninja` and
+`fake_ninja_check_build_file` do.
+
+```rust
+let temp = TempDir::new()?;
+let root = exec::utf8_path(temp.path()).context("temporary directory")?;
+let stub = write_exec(root, "tool")?;
+```
+
+Because a camino path cannot represent a non-UTF-8 path, the fake-executable
+factories now fail on a temporary directory whose path is not valid UTF-8,
+rather than succeeding as they previously did. The `test_support` test
+`fake_ninja_helpers_reject_non_utf8_temp_directories` pins this behaviour.
+
 ### User-facing documentation examples
 
 Every fenced example in `README.md`, `docs/users-guide.md`, and

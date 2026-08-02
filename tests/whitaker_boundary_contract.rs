@@ -31,6 +31,14 @@ use toml::Value as TomlValue;
 /// The one module in `test_support` permitted to touch ambient `std::fs`.
 const TEST_SUPPORT_BOUNDARY: &str = "test_support::fs";
 
+/// PATH resolution for the `which` standard library function, whose candidate
+/// directories come from the ambient `PATH`.
+const WHICH_LOOKUP_BOUNDARY: &str = "netsuke::stdlib::which::lookup";
+
+/// Durability sync for the runner's temporary Ninja file, scoped to the
+/// submodule holding only that `sync_all`.
+const RUNNER_SYNC_BOUNDARY: &str = "netsuke::runner::process::file_io::ambient_sync";
+
 /// Opens the repository root as a capability-scoped directory handle.
 fn repo_root() -> Result<Dir> {
     Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
@@ -201,11 +209,8 @@ fn crate_is_not_exempted_wholesale(#[case] crate_name: &str) -> Result<()> {
 /// would turn every reviewed addition into a test failure without catching any
 /// widening of the entries that matter.
 #[rstest]
-#[case::which_lookup("netsuke::stdlib::which::lookup", "netsuke::stdlib::which")]
-#[case::runner_ambient_sync(
-    "netsuke::runner::process::file_io::ambient_sync",
-    "netsuke::runner::process::file_io"
-)]
+#[case::which_lookup(WHICH_LOOKUP_BOUNDARY, "netsuke::stdlib::which")]
+#[case::runner_ambient_sync(RUNNER_SYNC_BOUNDARY, "netsuke::runner::process::file_io")]
 fn production_boundaries_stay_narrowly_scoped(
     #[case] required: &str,
     #[case] widened: &str,
@@ -251,7 +256,7 @@ proptest::proptest! {
     fn exemptions_cover_their_descendants(
         segments in proptest::collection::vec("[a-z][a-z0-9_]{0,7}", 1..4),
     ) {
-        let entry = "netsuke::stdlib::which::lookup";
+        let entry = WHICH_LOOKUP_BOUNDARY;
         let descendant = format!("{entry}::{}", segments.join("::"));
         proptest::prop_assert!(
             entry_covers(entry, &descendant),
@@ -265,7 +270,7 @@ proptest::proptest! {
     fn exemptions_never_cover_prefix_siblings(
         suffix in "[a-z0-9_]{1,8}",
     ) {
-        let entry = "netsuke::stdlib::which::lookup";
+        let entry = WHICH_LOOKUP_BOUNDARY;
         let sibling = format!("{entry}{suffix}");
         proptest::prop_assert!(
             !entry_covers(entry, &sibling),
@@ -280,7 +285,7 @@ proptest::proptest! {
     fn shorter_prefixes_are_strictly_wider(
         depth in 1usize..4,
     ) {
-        let entry = "netsuke::runner::process::file_io::ambient_sync";
+        let entry = RUNNER_SYNC_BOUNDARY;
         let segments: Vec<&str> = entry.split("::").collect();
         let keep = segments.len().saturating_sub(depth).max(1);
         let prefix = segments

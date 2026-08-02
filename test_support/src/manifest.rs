@@ -249,19 +249,20 @@ mod tests {
         let cli_file = Utf8Path::new("missing/subdir/manifest.yml");
         let expected_path = temp_path.join(cli_file);
         assert!(
-            !expected_path.exists(),
+            !fs::exists(&expected_path),
             "precondition: path should not exist"
         );
 
         let manifest_path =
             ensure_manifest_exists(temp_path, cli_file).context("create manifest when missing")?;
         assert_eq!(manifest_path, expected_path);
-        assert!(manifest_path.exists(), "manifest file should exist");
+        assert!(fs::exists(&manifest_path), "manifest file should exist");
         assert!(
-            manifest_path
-                .parent()
-                .ok_or_else(|| anyhow::anyhow!("manifest path missing parent"))?
-                .exists(),
+            fs::exists(
+                manifest_path
+                    .parent()
+                    .ok_or_else(|| anyhow::anyhow!("manifest path missing parent"))?
+            ),
             "parent directory should be created"
         );
 
