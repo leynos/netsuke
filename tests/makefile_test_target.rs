@@ -3,10 +3,11 @@
 //! `make test` is the single command local development and continuous
 //! integration (CI) both run. These tests pin the runner contract it encodes:
 //! non-doctest tests go through cargo-nextest, doctests run separately because
-//! nextest cannot execute them, and both passes deny warnings and re-state
-//! the Polonius flag that an inherited RUSTFLAGS would otherwise strip. They also assert
-//! that the checked-in nextest configuration still declares the narrow
-//! serialisation group the environment-mutating suites depend on.
+//! nextest cannot execute them, and both passes preserve any inherited
+//! RUSTFLAGS while denying warnings and re-stating the Polonius flag that
+//! setting RUSTFLAGS would otherwise strip. They also assert that the
+//! checked-in nextest configuration still declares the narrow serialisation
+//! group the environment-mutating suites depend on.
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
@@ -125,7 +126,8 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
         "test-nextest should enable all features, found {nextest_recipe:?}"
     );
     ensure!(
-        nextest_recipe.contains(r#"RUSTFLAGS="-D warnings $(POLONIUS_FLAGS)""#),
+        nextest_recipe
+            .contains(r#"RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)""#),
         "test-nextest should deny warnings and enable Polonius, found {nextest_recipe:?}"
     );
 
@@ -140,7 +142,8 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
         "doctests cannot run under nextest, found {doctest_recipe:?}"
     );
     ensure!(
-        doctest_recipe.contains(r#"RUSTFLAGS="-D warnings $(POLONIUS_FLAGS)""#),
+        doctest_recipe
+            .contains(r#"RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)""#),
         "doctest should deny warnings and enable Polonius, found {doctest_recipe:?}"
     );
     Ok(())

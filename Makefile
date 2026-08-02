@@ -80,10 +80,10 @@ clean: ## Remove build artefacts
 test: test-nextest doctest ## Run every Rust test with warnings treated as errors
 
 test-nextest: ## Run all non-doctest Rust tests through cargo-nextest
-	RUSTFLAGS="-D warnings $(POLONIUS_FLAGS)" $(CARGO) nextest run --all-targets --all-features $(NEXTEST_BUILD_JOBS)
+	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) nextest run --all-targets --all-features $(NEXTEST_BUILD_JOBS)
 
 doctest: ## Run doctests, which cargo-nextest cannot execute
-	RUSTFLAGS="-D warnings $(POLONIUS_FLAGS)" $(CARGO) test --doc --all-features $(BUILD_JOBS)
+	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) test --doc --all-features $(BUILD_JOBS)
 
 test-workflow-contracts: ## Validate the mutation-testing caller contract
 	uv run --with 'pytest>=8' --with 'pyyaml>=6' pytest tests/workflow_contracts -q
@@ -97,10 +97,10 @@ lint: lint-clippy lint-whitaker ## Run Clippy and the Whitaker Dylint suite with
 
 lint-clippy: ## Run rustdoc and Clippy with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" RUSTFLAGS="$${RUSTFLAGS-} $(POLONIUS_FLAGS)" $(CARGO) doc --no-deps
-	RUSTFLAGS="-D warnings $(POLONIUS_FLAGS)" $(CARGO) clippy $(CLIPPY_FLAGS)
+	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) clippy $(CLIPPY_FLAGS)
 
 lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
-	RUSTFLAGS="-D warnings $(POLONIUS_FLAGS)" $(WHITAKER) --all -- --all-targets --all-features
+	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(WHITAKER) --all -- --all-targets --all-features
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all
@@ -110,7 +110,7 @@ check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
 
 typecheck: ## Typecheck all targets and features
-	RUSTFLAGS="-D warnings $(POLONIUS_FLAGS)" $(CARGO) check --all-targets --all-features $(BUILD_JOBS)
+	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) check --all-targets --all-features $(BUILD_JOBS)
 
 markdownlint: spelling ## Lint Markdown and enforce en-GB-oxendict spelling
 	$(MDLINT) "**/*.md"
