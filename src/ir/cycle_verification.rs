@@ -1,5 +1,6 @@
 //! Kani harnesses for bounded IR cycle-handling properties.
 
+use super::support::rotate_index;
 use super::*;
 
 /// Prove a self-dependency reports a cycle and no missing dependency.

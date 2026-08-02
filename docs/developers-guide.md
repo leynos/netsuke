@@ -82,10 +82,16 @@ Netsuke builds on the dated nightly toolchain pinned in `rust-toolchain.toml`
 with the Polonius alpha borrow-checking analysis (`-Zpolonius=next`) enabled.
 `rustup` provisions the toolchain automatically, and `.cargo/config.toml`
 supplies the flag by default, covering Cargo invocations such as rust-analyzer
-and `cargo kani` that run without `RUSTFLAGS` in the environment. Makefile
-recipes that set `RUSTFLAGS` re-state the flag through the `POLONIUS_FLAGS`
-variable because an inherited `RUSTFLAGS` environment variable overrides
-`.cargo/config.toml`.
+that run without `RUSTFLAGS` in the environment. Makefile recipes that set
+`RUSTFLAGS` re-state the flag through the `POLONIUS_FLAGS` variable because an
+inherited `RUSTFLAGS` environment variable overrides `.cargo/config.toml`. The
+recipes that add `-D warnings` and `$(POLONIUS_FLAGS)` build the value as
+`RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)"`; the
+`$${RUSTFLAGS:+$$RUSTFLAGS }` expansion prepends any `RUSTFLAGS` already set by
+the caller (for example a CI wrapper), so those flags survive rather than being
+silently discarded. `cargo kani` sets `CARGO_ENCODED_RUSTFLAGS` itself, which
+also overrides the table, so `make kani-full` passes the flag through
+`RUSTFLAGS` as well.
 
 [ADR-006](adr-006-adopt-polonius-nightly-toolchain.md) records the policy
 decision, and the [polonius migration notes](polonius.md) track every site
@@ -845,10 +851,12 @@ for the design rationale and re-entry criteria.
 
 Pull requests run a dedicated `kani-smoke` CI job alongside the ordinary
 `build-test` job. The job installs `uv`, installs the pinned Kani version
-through `make install-kani`, and runs only `make kani-check`; it does not run
-`make kani-full`, `make verus`, coverage, CodeScene upload, or the normal build
-matrix. Its cache is intentionally separate from ordinary Cargo build
-artefacts: the job uses a Kani-specific cache key derived from
+through `make install-kani`, runs `make kani-check` as a version-drift guard,
+and then runs the bounded harness suite through `make kani-ir` under a
+20-minute job timeout; it does not run `make verus`, coverage, CodeScene
+upload, or the normal build matrix. Its cache is intentionally separate from
+ordinary Cargo build artefacts: the job uses a Kani-specific cache key derived
+from
 `tools/kani/VERSION` and the Makefile, then caches the job-local Kani Cargo
 home plus Kani support-file home.
 
@@ -858,9 +866,11 @@ home plus Kani support-file home.
 
 - `make test-nextest` —
   `cargo nextest run --all-targets --all-features`, with
-  `RUSTFLAGS="-D warnings $(POLONIUS_FLAGS)"` (the Makefile re-states the
-  Polonius flag because a set `RUSTFLAGS` overrides `.cargo/config.toml`). This
-  runs every unit, integration, `rstest`, and `rstest-bdd` test.
+  `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)"` (the
+  Makefile re-states the Polonius flag because a set `RUSTFLAGS` overrides
+  `.cargo/config.toml`, and the `$${RUSTFLAGS:+$$RUSTFLAGS }` prefix preserves
+  any `RUSTFLAGS` inherited from the caller). This runs every unit,
+  integration, `rstest`, and `rstest-bdd` test.
 - `make doctest` — `cargo test --doc --all-features`, with the same
   `RUSTFLAGS`. nextest cannot execute doctests, so they need their own pass.
   Note that the previous `cargo test --all-targets` invocation never ran

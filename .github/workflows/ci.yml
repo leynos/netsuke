@@ -112,6 +112,7 @@ jobs:
   kani-smoke:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     env:
@@ -140,3 +141,5 @@ jobs:
         run: make install-kani
       - name: Kani version check
         run: make kani-check
+      - name: Run Kani harnesses
+        run: make kani-ir

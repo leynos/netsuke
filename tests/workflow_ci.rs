@@ -254,17 +254,25 @@ fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
         "Kani smoke job should cache tools using the Kani version and Makefile"
     );
 
+    let install_kani_index = steps
+        .iter()
+        .position(|step| step_has(step, StepField::Runs, "make install-kani"))
+        .context("Kani smoke job should install Kani through the Make target")?;
+    let kani_check_index = steps
+        .iter()
+        .position(|step| step_has(step, StepField::Runs, "make kani-check"))
+        .context("Kani smoke job should check Kani through the Make target")?;
+    let kani_ir_index = steps
+        .iter()
+        .position(|step| step_has(step, StepField::Runs, "make kani-ir"))
+        .context("Kani smoke job should run the bounded Kani harnesses through the Make target")?;
     ensure!(
-        steps
-            .iter()
-            .any(|step| step_has(step, StepField::Runs, "make install-kani")),
-        "Kani smoke job should install Kani through the Make target"
+        install_kani_index < kani_check_index && kani_check_index < kani_ir_index,
+        "Kani smoke job should install Kani, check its version, then run the bounded harnesses"
     );
     ensure!(
-        steps
-            .iter()
-            .any(|step| step_has(step, StepField::Runs, "make kani-check")),
-        "Kani smoke job should check Kani through the Make target"
+        mapping_get(kani_job, YamlKey("timeout-minutes")).and_then(Value::as_u64) == Some(20),
+        "Kani smoke job should enforce the 20-minute cold-run ceiling"
     );
     Ok(())
 }

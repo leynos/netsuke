@@ -355,11 +355,10 @@ and test workflow intact. See
   Requires 4.1.1. See
   [formal-verification-methods-in-netsuke.md §Continuous integration (CI)](formal-verification-methods-in-netsuke.md#continuous-integration-ci).
   - [x] Keep the existing `build-test` job unchanged.
-  - [x] Run the bounded smoke path on pull requests. As scoped for this item,
-    the `kani-smoke` job in `.github/workflows/ci.yml` runs `make install-kani`
-    and `make kani-check` (a Kani version check); the harness set was empty when
-    this lane shipped. Wiring the bounded harnesses since landed by `4.2.*` into
-    the pull-request job is tracked separately as
+  - [x] Run the bounded smoke path on pull requests. The `kani-smoke` job in
+    `.github/workflows/ci.yml` runs `make install-kani`, `make kani-check` (a
+    Kani version check), and `make kani-ir` (the bounded harnesses landed by
+    `4.2.*`). The harness wiring resolved the follow-up previously tracked as
     [issue #445](https://github.com/leynos/netsuke/issues/445).
   - [x] Cache Kani tool downloads separately from ordinary Cargo artefacts.
 - [x] 4.1.3. Record the phase-1 scope boundary for Verus and Stateright. See
