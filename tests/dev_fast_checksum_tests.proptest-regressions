@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 39afa002e740912843c3a4d7702ae68f00b99fab91d2059392f008404d1026e6 # shrinks to rows = [Row { digest: Wrong, named: ThisArtefact, padded: false }, Row { digest: Real, named: ThisArtefact, padded: false }]

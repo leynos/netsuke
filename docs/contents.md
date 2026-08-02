@@ -61,7 +61,8 @@ operator, user, and contributor references are easier to find.
 ## Contributor guidance
 
 - [developers-guide.md](developers-guide.md): Engineering workflow, quality
-  gates, testing strategy, and stdlib resolver-boundary conventions.
+  gates, local build acceleration, testing strategy, and stdlib
+  resolver-boundary conventions.
 - [polonius.md](polonius.md): Polonius migration audit, borrow-centric API
   evolution log, and principled refusals.
 - [documentation-style-guide.md](documentation-style-guide.md): Documentation

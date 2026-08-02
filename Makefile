@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-typos-config build release lint lint-clippy lint-whitaker fmt check-fmt typecheck markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr
+.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-typos-config build release lint lint-clippy lint-whitaker fmt check-fmt typecheck markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build
 
 APP ?= netsuke
 CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$$HOME/.cargo/bin/cargo")
@@ -18,6 +18,23 @@ KANI_FLAGS ?=
 KANI_INSTALL_FLAGS ?=
 KANI_CHECK_FLAGS ?=
 KANI_VERSION_FILE ?= tools/kani/VERSION
+# Opt-in local build acceleration. The Cargo fragment is deliberately separate
+# from `.cargo/config.toml`: that file is auto-discovered and carries the
+# repository-wide Polonius flag, whereas Cranelift and mold must stay opt-in so
+# release, packaging, coverage, and formal-verification paths keep the
+# supported LLVM backend and platform linker. The toolchain is not pinned
+# separately — dev-fast uses the repository's own nightly.
+MOLD_VERSION_FILE ?= tools/mold/VERSION
+MOLD_SHA256SUMS_FILE ?= tools/mold/SHA256SUMS
+RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
+DEV_FAST_CONFIG ?= tools/dev-fast/config.toml
+DEV_FAST_PREFIX ?= $(HOME)/.local
+# Exported rather than interpolated into the recipes. Make hands an exported
+# variable to the child process directly, so a path containing a quote cannot
+# break the command line the shell parses; a `VAR='$(VAR)'` prefix could.
+export MOLD_VERSION_FILE MOLD_SHA256SUMS_FILE RUST_TOOLCHAIN_FILE
+export DEV_FAST_CONFIG DEV_FAST_PREFIX
+DEV_FAST_TOOLCHAIN = $$(awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/ { print $$2; exit }' '$(RUST_TOOLCHAIN_FILE)')
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 NIXIE ?= nixie
 # Single source of truth for the typos version; the markdownlint target and CI
@@ -147,6 +164,28 @@ verus: ## Run the Verus proof entry point
 
 formal-pr: ## Run pull-request formal-verification checks
 	$(MAKE) kani-check
+
+install-dev-fast: ## Install the pinned mold linker and Cranelift backend
+	@scripts/install-dev-fast.sh
+
+dev-fast-check: ## Check the mold and Cranelift local build prerequisites
+	@scripts/dev-fast-check.sh
+
+# Every dev-fast target needs the install prefix ahead of a distribution mold:
+# the check probes PATH for it, and `-fuse-ld=mold` resolves by PATH order.
+# Target-specific exports do not reach prerequisites, so `dev-fast-check` is
+# listed in its own right as well as being a prerequisite of the others.
+DEV_FAST_TARGETS = install-dev-fast dev-fast-check dev-build dev-test bench-build
+$(DEV_FAST_TARGETS): export PATH := $(DEV_FAST_PREFIX)/bin:$(PATH)
+
+dev-build: dev-fast-check ## Build the debug binary with Cranelift and mold
+	RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) --config "$$DEV_FAST_CONFIG" build $(BUILD_JOBS) --bin $(APP)
+
+dev-test: dev-fast-check ## Run the nextest pass with Cranelift and mold
+	RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) --config "$$DEV_FAST_CONFIG" nextest run --all-targets --all-features $(NEXTEST_BUILD_JOBS)
+
+bench-build: dev-fast-check ## Time clean and incremental debug builds for both paths
+	@CARGO="$(CARGO)" scripts/bench-build.sh
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \
