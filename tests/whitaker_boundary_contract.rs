@@ -141,10 +141,17 @@ fn lint_whitaker_also_runs_inside_test_support() -> Result<()> {
 fn test_support_carries_its_own_scoped_lint_config() -> Result<()> {
     let config = read_repo_file(Utf8Path::new("test_support/dylint.toml"))?;
 
+    // Membership, not an exact set. The general-purpose boundary must always be
+    // present, but the crate legitimately gains narrower entries — the dev_fast
+    // sandbox modules need an open `std::fs::File` no wrapper can hand back —
+    // and pinning the whole list would fail on every reviewed addition without
+    // catching a widening. `excluded_paths_name_bounded_modules` keeps every
+    // entry module-scoped, and the `excluded_crates` check below keeps the
+    // crate from being exempted wholesale.
     let paths = exclusion_list(&config, "excluded_paths")?;
     ensure!(
-        paths == [TEST_SUPPORT_BOUNDARY],
-        "test_support/dylint.toml should exempt only {TEST_SUPPORT_BOUNDARY}, found {paths:?}"
+        paths.iter().any(|path| path == TEST_SUPPORT_BOUNDARY),
+        "test_support/dylint.toml should exempt {TEST_SUPPORT_BOUNDARY}, found {paths:?}"
     );
 
     let crates = exclusion_list(&config, "excluded_crates")?;

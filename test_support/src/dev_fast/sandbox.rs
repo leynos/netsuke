@@ -130,8 +130,7 @@ impl Sandbox {
             Err(error) => return Err(error).with_context(|| format!("replace {target}")),
         }
         let script = format!("#!/bin/sh\n{body}\n");
-        let path = write_exec_with_content(dir.as_std_path(), name, &script)?;
-        Utf8PathBuf::try_from(path).context("fake executable path must be UTF-8")
+        write_exec_with_content(dir, name, &script)
     }
 
     /// A `mold` reporting the given version, formatted as the real one does.

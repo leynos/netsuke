@@ -8,16 +8,37 @@
 #
 # Reuse policy: the same rule as the root configuration. Do not add an entry to
 # silence a new diagnostic. Route fixture filesystem access through
-# `test_support::fs`, which is the crate's single ambient boundary module.
+# `test_support::fs`, which is the crate's ambient boundary module, and reach
+# for an entry here only when the operation cannot be expressed through a thin
+# wrapper at all.
 [no_std_fs_operations]
 
-# `test_support::fs` is the one place in this crate permitted to touch ambient
-# `std::fs`. Test fixtures stage workspaces in ambient temporary directories,
-# where a `cap_std::fs::Dir` handle adds ceremony without isolation value, so
-# that module wraps the handful of operations fixtures need and every other
-# module goes through it: `exec`, `manifest`, and the crate-root regression
-# tests call it directly, while `check_ninja` and `fake_ninja` reach it via
-# `exec::write_exec_with_content`. Keeping the exclusion at this one module
-# means a new direct `std::fs` call anywhere else in the crate still fails the
-# lint.
-excluded_paths = ["test_support::fs"]
+# `test_support::fs` is the general-purpose ambient boundary. Test fixtures
+# stage workspaces in ambient temporary directories, where a `cap_std::fs::Dir`
+# handle adds ceremony without isolation value, so that module wraps the
+# operations fixtures need and the rest of the crate goes through it: `exec`,
+# `manifest`, and the crate-root regression tests call it directly, while
+# `check_ninja` and `fake_ninja` reach it via
+# `exec::write_exec_with_content`.
+#
+# The `dev_fast` submodules below build and inspect throwaway PATH/HOME
+# sandboxes for the dev-fast build-acceleration tests. Their ambient access is
+# the harness itself rather than incidental fixture I/O, and part of it cannot
+# route through `test_support::fs` even in principle: driving incremental-build
+# benchmarks needs an open `std::fs::File` for `set_modified` and
+# `write_all_at`, and a wrapper handing that file back would simply move the
+# diagnostic to its caller. Metadata inspection (`modified`, `permissions`,
+# `is_file`) has the same shape. The entries name the four modules that need
+# it, so `dev_fast::bench`, `dev_fast::make`, and `dev_fast::scenario` stay
+# under the policy.
+#
+# Where a `test_support::fs` wrapper does exist, prefer it inside these modules
+# too: the exemption is a floor for what the harness cannot express, not a
+# licence to stop using the boundary.
+excluded_paths = [
+    "test_support::fs",
+    "test_support::dev_fast::cargo_log",
+    "test_support::dev_fast::release",
+    "test_support::dev_fast::sandbox",
+    "test_support::dev_fast::staging",
+]
