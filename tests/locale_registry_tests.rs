@@ -8,12 +8,25 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result, ensure};
 use ortho_config::LanguageIdentifier;
+use proptest::prelude::*;
 use rstest::rstest;
 
-use netsuke::cli_localization::resolve_catalogue_tag;
 use netsuke::localization::locales::{
-    LocaleCatalogue, SOURCE_LOCALE, SUPPORTED_LOCALES, catalogue,
+    LocaleCatalogue, SOURCE_LOCALE, SUPPORTED_LOCALES, catalogue, resolve_catalogue,
+    source_catalogue,
 };
+
+/// The tag of the catalogue serving `requested`.
+///
+/// Mirrors what `cli_localization::build_localizer` does with a requested
+/// locale: parse it, resolve through the registry, and fall back to the source
+/// catalogue when the tag will not parse.
+fn resolve_catalogue_tag(requested: &str) -> &'static str {
+    LanguageIdentifier::from_str(requested)
+        .as_ref()
+        .map_or_else(|_| source_catalogue(), resolve_catalogue)
+        .tag()
+}
 
 fn registry_tags() -> Vec<&'static str> {
     SUPPORTED_LOCALES.iter().map(LocaleCatalogue::tag).collect()
@@ -133,4 +146,49 @@ fn fallback_rules_keep_regional_variants_distinct(#[case] requested: &str, #[cas
         expected,
         "{requested} should resolve to {expected}"
     );
+}
+
+/// Resolution must be total: whatever tag arrives, the caller gets a
+/// catalogue that is actually in the registry, never a dangling or synthesised
+/// one. Fixed cases cannot cover the tag space, so this is a property.
+#[test]
+fn resolution_always_lands_on_a_registry_catalogue() {
+    let tags: BTreeSet<&str> = registry_tags().into_iter().collect();
+    proptest!(|(requested in "\\PC{0,24}")| {
+        let resolved = resolve_catalogue_tag(&requested);
+        prop_assert!(
+            tags.contains(resolved),
+            "{requested:?} resolved to {resolved:?}, which is not in the registry"
+        );
+    });
+}
+
+/// A well-formed tag whose language ships a catalogue must reach that
+/// language, never a different one. Generated from the registry so a new
+/// locale is covered without editing the test.
+#[test]
+fn a_known_language_never_resolves_to_another_language() {
+    let languages: Vec<String> = registry_tags()
+        .iter()
+        .map(|tag| tag.split('-').next().unwrap_or(tag).to_owned())
+        .collect();
+    let count = languages.len();
+    proptest!(|(index in 0usize..1024, region in "[A-Z]{2}")| {
+        let Some(language) = languages.get(index.wrapping_rem(count)) else {
+            return Ok(());
+        };
+        let requested = format!("{language}-{region}");
+        let Ok(parsed) = LanguageIdentifier::from_str(&requested) else {
+            return Ok(());
+        };
+        let resolved = resolve_catalogue(&parsed).tag();
+        let resolved_language = resolved.split('-').next().unwrap_or(resolved);
+        prop_assert_eq!(
+            resolved_language,
+            language.as_str(),
+            "{} resolved to {}, changing language",
+            requested,
+            resolved
+        );
+    });
 }

@@ -9,13 +9,26 @@ Netsuke uses [Project Fluent](https://projectfluent.org/) for localization.
 Fluent is a modern localization system designed to handle the complexities of
 natural language whilst keeping translations simple and readable.
 
-**Locale precedence** (highest to lowest):
+**Locale precedence** (highest to lowest). Netsuke resolves twice, because
+help and usage errors are rendered before any configuration file is read.
+
+At startup, for help, usage, and command-line validation errors:
+
+1. `--locale` command-line flag
+2. `NETSUKE_LOCALE` environment variable
+3. System default locale
+4. Fallback to `en-US`
+
+After the configuration merge, for diagnostics, progress, and status output:
 
 1. `--locale` command-line flag
 2. `NETSUKE_LOCALE` environment variable
 3. Configuration file `locale` setting
 4. System default locale
 5. Fallback to `en-US`
+
+`startup_localizer` in `src/main.rs` performs the first and `configure_runtime`
+the second; both resolve through `src/locale_resolution.rs`.
 
 `en-US` is the source locale: it defines the key set every other catalogue must
 match, and it renders any message a translation has not yet covered.

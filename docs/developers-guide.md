@@ -26,6 +26,60 @@ as the durable architecture record.
 
 [adr-003-cli]: adr-003-agent-consistent-human-first-cli.md
 
+
+## Localization
+
+`src/localization/locales.rs` is the authoritative registry of shipped
+catalogues. `define_locales!` declares the tags and embeds
+`locales/<tag>/messages.ftl` for each, so a tag without a catalogue on disk
+fails to compile. Read the registry rather than writing a locale list of your
+own; the build audit, the `rerun-if-changed` directives, the packaging smoke
+test, and the test suite all do.
+
+`Cargo.toml`'s `package.metadata.ortho_config.locales` is the one unavoidable
+duplicate, because Cargo metadata cannot call into Rust. The build audit
+compares it against the registry and fails on drift, so adding a locale means
+editing two lists and nothing else.
+
+Table 1: The locale API surface
+
+| Item                                     | Purpose                                                            |
+| ---------------------------------------- | ------------------------------------------------------------------ |
+| `locales::SUPPORTED_LOCALES`             | Every shipped catalogue, ordered by tag                            |
+| `locales::catalogue(tag)`                | Exact lookup; `None` when the tag ships no catalogue               |
+| `locales::resolve_catalogue(identifier)` | Exact match, then the fallback rules, then `en-US`                 |
+| `locales::source_catalogue()`            | The `en-US` catalogue every locale falls back to                   |
+| `cli_localization::build_localizer(tag)` | The runtime entry point: resolves, then layers over `en-US`        |
+
+Selection matches the exact BCP 47 tag first. A tag with no catalogue resolves
+through the per-language rules in `LANGUAGE_FALLBACKS`, then the sole
+catalogue for that language, then `en-US`. The rules keep variants that differ
+in substance apart — `es-419` from `es-ES`, `pt-BR` from `pt-PT`, `zh-Hans`
+from `zh-Hant` — so a new locale whose language already ships a catalogue
+needs a rule rather than the unique-language step. The
+[translator guide](translators-guide.md) states the same policy for
+translators, and the users' guide lists the tags.
+
+Netsuke resolves the locale twice: `startup_localizer` before the
+configuration merge, for help and usage errors, and `configure_runtime`
+afterwards, for diagnostics and progress. Only the second sees a configuration
+file's `locale`, because `--help` must render before Netsuke knows which
+configuration file to read.
+
+
+### Adding or changing messages
+
+Every user-facing string is a Fluent message keyed from
+`src/localization/keys.rs`. Adding one means adding the constant, adding the
+message to all 35 catalogues, and keeping its `{ $variables }` identical
+across them: the build audit rejects a missing key, an orphaned key, or a
+variable set that differs from `en-US`. The audit lives in
+`build_l10n_audit/`, split into `keys.rs` (the `define_keys!` macro),
+`ftl.rs` (catalogues), `metadata.rs` (the Cargo metadata), and `compare.rs`
+(the rules). Because build scripts are not test targets, those modules are
+included by path from `tests/build_l10n_keys_tests.rs` and
+`tests/build_l10n_parser_tests.rs`.
+
 ## Graph view projection and renderer adapters
 
 The `graph` subcommand renders the build dependency graph in-process. Its

@@ -135,6 +135,16 @@ fn rtl_locales_render_and_keep_direction_marks(
 #[case("es-ES", "no encontrado")]
 // Icelandic ships no catalogue, so the English source copy renders.
 #[case("is-IS", "not found")]
+// A tag that will not parse at all takes the same path.
+#[case("not a locale", "not found")]
+#[case("", "not found")]
+// A region with no catalogue of its own reaches its language's copy.
+#[case("de-AT", "nicht gefunden")]
+// A Latin American region reaches es-419 rather than Spain's catalogue.
+#[case("es-MX", "no se encontró")]
+// Script and region variants stay apart at run time, not just in resolution.
+#[case("zh-TW", "找不到")]
+#[case("zh-CN", "未找到")]
 fn localisation_resolves_expected_message(
     #[case] locale: &str,
     #[case] expected_substring: &str,

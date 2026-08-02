@@ -32,10 +32,6 @@ const FALLBACK_DATE: &str = "1970-01-01";
 #[path = "src/cli/mod.rs"]
 mod cli;
 
-#[expect(
-    dead_code,
-    reason = "shared library source; the unreached API is exercised by the library crate"
-)]
 #[path = "src/cli_localization.rs"]
 mod cli_localization;
 
