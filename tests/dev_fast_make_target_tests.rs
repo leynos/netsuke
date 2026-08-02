@@ -16,7 +16,7 @@ use rstest::rstest;
 use std::process::Command;
 use test_support::dev_fast::{
     BuildScenario, DEV_FAST_CONFIG_PATH, FakeRelease, MakeInvocation, RecordingCargo, Sandbox,
-    combined, dev_fast_config, pinned_toolchain,
+    combined, dev_fast_config, pinned_mold_version, pinned_toolchain,
 };
 
 /// The version the fake release is published as; see the installer tests.
@@ -131,6 +131,13 @@ fn a_drifting_mold_invokes_cargo_not_at_all(#[case] target: &str) -> Result<()> 
     ensure!(
         !output.status.success(),
         "`{target}` should fail on a drifting mold, got `{text}`"
+    );
+    // Pin the failure to its cause. Asserting only the exit status would let
+    // this pass on an unrelated failure — a missing `rustup`, or a broken
+    // recipe — and so would stop testing the drift gate at all.
+    ensure!(
+        text.contains("does not match the pin") && text.contains(&pinned_mold_version()?),
+        "`{target}` should name the version mismatch and the pin, got `{text}`"
     );
     let recorded = cargo.invocations()?;
     ensure!(
