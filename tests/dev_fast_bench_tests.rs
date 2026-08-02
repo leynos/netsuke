@@ -20,7 +20,7 @@ use proptest::test_runner::FileFailurePersistence;
 use rstest::rstest;
 use test_support::dev_fast::{
     BenchFixture, BuildScenario, CargoInvocation, DEFAULT_SLUG, DEV_FAST_CONFIG_PATH,
-    DEV_FAST_SLUG, MakeInvocation, Sandbox, TargetState, combined, pinned_toolchain,
+    DEV_FAST_SLUG, MakeInvocation, Sandbox, TargetState, combined, pinned_toolchain, real_utility,
     write_with_old_mtime,
 };
 
@@ -223,6 +223,52 @@ fn the_touched_file_is_restored_however_the_run_ends(#[case] succeeds: bool) -> 
         "the touched file should be restored to {}, found {}",
         fixture.baseline_mtime,
         sandbox.mtime_seconds(&fixture.touch_file)?
+    );
+    Ok(())
+}
+
+/// When the restore itself fails, the run must say so.
+///
+/// This is the one case where silence costs the most: the developer keeps a
+/// source file newer than the build outputs, so every later build redoes work,
+/// and has nothing on screen connecting that to the benchmark they ran.
+#[test]
+fn a_failed_restore_warns_rather_than_passing_silently() -> Result<()> {
+    let scenario = BuildScenario::prepare()?;
+    let sandbox = scenario.sandbox();
+    let fixture = BenchFixture::prepare(&scenario)?;
+
+    // A `touch` that captures the stamp and then refuses to put it back. Only
+    // the second `-r` fails, because the first is the capture the script needs
+    // to get as far as a restore at all. Delegating to the real binary keeps
+    // every other use — the touches between passes — behaving normally.
+    let real_touch = real_utility("touch")?;
+    let marker = sandbox.home().join("stamp-captured");
+    sandbox.write_fake(
+        &sandbox.bin(),
+        "touch",
+        &format!(
+            "if [ \"$1\" = -r ]; then\n\
+             \x20 [ -e '{marker}' ] && exit 1\n\
+             \x20 : >'{marker}'\n\
+             fi\n\
+             exec '{real_touch}' \"$@\""
+        ),
+    )?;
+
+    let invocation = MakeInvocation::new("bench-build")
+        .variable("CARGO", scenario.cargo().executable())
+        .environment("BENCH_ROOT", &fixture.root)
+        .environment("BENCH_TOUCH_FILE", &fixture.touch_file);
+    let text = combined(&sandbox.run_make(&invocation)?);
+
+    ensure!(
+        text.contains("failed to restore the timestamp"),
+        "a failed restore should be reported, got `{text}`"
+    );
+    ensure!(
+        text.contains(fixture.touch_file.as_str()),
+        "the warning should name the file left newer, got `{text}`"
     );
     Ok(())
 }

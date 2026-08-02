@@ -45,7 +45,13 @@ BENCH_TOUCH_STAMP=
 
 restore_touch_file() {
   [ -n "$BENCH_TOUCH_STAMP" ] || return 0
-  touch -r "$BENCH_TOUCH_STAMP" "$BENCH_TOUCH_FILE" || true
+  # Swallowing this would be the worst of both worlds: the developer keeps the
+  # consequence — a source file left newer than the build outputs, so the next
+  # real build silently redoes work — and loses the only notice that it
+  # happened. The trap must not abort the run, so warn rather than fail, and say
+  # enough that the state can be checked and put right by hand.
+  touch -r "$BENCH_TOUCH_STAMP" "$BENCH_TOUCH_FILE" ||
+    note "failed to restore the timestamp of $BENCH_TOUCH_FILE; it is left newer than before the benchmark, so the next build will redo work. Check it with: ls -l $BENCH_TOUCH_FILE"
   rm -f "$BENCH_TOUCH_STAMP"
   BENCH_TOUCH_STAMP=
 }

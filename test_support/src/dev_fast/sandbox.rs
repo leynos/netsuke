@@ -265,6 +265,15 @@ impl Sandbox {
     }
 }
 
+/// The genuine binary behind a sandboxed utility name.
+///
+/// A fake that must delegate to the real tool — one that intercepts a single
+/// invocation and passes the rest through — needs an absolute path to it,
+/// because `PATH` inside the sandbox names the fake.
+pub fn real_utility(utility: &str) -> Result<Utf8PathBuf> {
+    which(utility)
+}
+
 /// Resolve a utility against the ambient `PATH`, before it is replaced.
 ///
 /// Executability is part of the match, not an afterthought: `uv` installs a
