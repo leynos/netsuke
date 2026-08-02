@@ -203,6 +203,17 @@ fn behavioural_test_passes_also_target_test_support(
             line.contains("--all-features"),
             "{target}'s test_support pass should enable all features, found {line:?}"
         );
+        // Checked per line rather than over the whole recipe: the root pass
+        // carries the same flag, so a recipe-wide `contains` stays satisfied
+        // even after the scoped pass loses it. `cargo test --doc` takes no
+        // `--all-targets`, so this applies to the nextest case alone.
+        if harness == "nextest run" {
+            ensure!(
+                line.contains("--all-targets"),
+                "{target}'s test_support pass should cover every test target, \
+                 found {line:?}"
+            );
+        }
     }
     Ok(())
 }

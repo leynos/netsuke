@@ -15,18 +15,20 @@ use test_support::fluent::normalize_fluent_isolates;
 /// The test lock ensures localization tests run serially, and the localizer
 /// guard restores the previous localizer when dropped.
 ///
+/// Both fields are underscore-prefixed because they exist only to be dropped:
+/// nothing reads them, and the prefix states that without suppressing the
+/// `dead_code` lint. `test_support::localizer::EnLocalizer` is named the same
+/// way for the same reason.
+///
 /// Field order is load-bearing: struct fields drop in declaration order, so
-/// `localizer` must precede `lock`. `LocalizerGuard::drop` writes the global
-/// localizer, which is what `lock` serializes; releasing the lock first would
+/// `_localizer` must precede `_lock`. `LocalizerGuard::drop` writes the global
+/// localizer, which is what `_lock` serializes; releasing the lock first would
 /// let a waiting test install its own override and capture this test's
 /// override as its "previous", so that test would later restore the wrong
-/// value. `test_support::localizer::EnLocalizer` orders its fields the same
-/// way for the same reason.
+/// value.
 struct LocalizerTestGuards {
-    #[expect(dead_code, reason = "Held for lifetime, not accessed directly")]
-    localizer: LocalizerGuard,
-    #[expect(dead_code, reason = "Held for lifetime, not accessed directly")]
-    lock: MutexGuard<'static, ()>,
+    _localizer: LocalizerGuard,
+    _lock: MutexGuard<'static, ()>,
 }
 
 /// Create localizer guards for a given locale.
@@ -40,8 +42,8 @@ fn localizer_guards(locale: &str) -> Result<LocalizerTestGuards> {
     let localizer = cli_localization::build_localizer(Some(locale));
     let guard = localization::set_localizer_for_tests(Arc::from(localizer));
     Ok(LocalizerTestGuards {
-        localizer: guard,
-        lock,
+        _localizer: guard,
+        _lock: lock,
     })
 }
 
