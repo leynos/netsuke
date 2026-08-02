@@ -1,0 +1,15 @@
+{
+  "usage": "Repo-scoped CodeScene overrides. Keep each rule_set narrowly scoped and justify it in matching_content_path_doc, so a reader can tell a deliberate exemption from an unexamined one.",
+  "rule_sets": [
+    {
+      "matching_content_path": "build_l10n_audit/**",
+      "matching_content_path_doc": "Hand-rolled scanners over borrowed source text. These modules parse the define_keys! macro, the Fluent catalogues, and the Cargo metadata without taking a parser dependency into the build script, so their helpers necessarily take &str views into a buffer the caller owns: a line and its trimmed form, a message body, a table. Grouping those borrows into a context type would add a value that is constructed once and immediately unpacked at each call site, and taking String instead would allocate per line across 35 catalogues while breaking the borrowed returns. Each helper is private, called only from its own module, and reachable from a single entry point (parse_catalogue, extract_key_constants, parse_metadata_locales), so the parameter grouping is visible at a glance rather than spread across an API. Reassess if these parsers grow beyond one screen each or gain external callers.",
+      "rules": [
+        {
+          "name": "String Heavy Function Arguments",
+          "weight": 0.0
+        }
+      ]
+    }
+  ]
+}

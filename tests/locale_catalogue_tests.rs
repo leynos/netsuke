@@ -209,6 +209,27 @@ fn opens_select(value: &str) -> bool {
     value.ends_with("->")
 }
 
+/// The text a `select` variant line renders, if the line is one.
+fn variant_text(trimmed: &str) -> Option<&str> {
+    trimmed
+        .trim_start_matches('*')
+        .strip_prefix('[')?
+        .split_once(']')
+        .map(|(_, rest)| rest.trim())
+        .filter(|rest| !rest.is_empty())
+}
+
+/// The identifier a message line declares, with the text it renders.
+///
+/// The text is `None` when the line opens a `select`, because the variants
+/// carry the text instead, or when the value is empty.
+fn message_text(trimmed: &str) -> Option<(&str, Option<&str>)> {
+    let (id, raw_value) = trimmed.split_once('=')?;
+    let value = raw_value.trim();
+    let rendered = (!value.is_empty() && !opens_select(value)).then_some(value);
+    Some((id.trim(), rendered))
+}
+
 /// Every rendered fragment of a catalogue, as `(id, text)` pairs.
 ///
 /// A message's own value is one fragment; each variant of a `select`
@@ -217,28 +238,20 @@ fn opens_select(value: &str) -> bool {
 fn rendered_fragments(text: &str) -> Vec<(String, String)> {
     let mut fragments = Vec::new();
     let mut current = String::new();
-    for line in text.lines() {
-        let trimmed = line.trim();
+    for trimmed in text.lines().map(str::trim) {
         if trimmed.starts_with('#') || trimmed.is_empty() {
             continue;
         }
-        if let Some(variant) = trimmed.trim_start_matches('*').strip_prefix('[') {
-            if let Some(rendered) = variant
-                .split_once(']')
-                .map(|(_, rest)| rest.trim())
-                .filter(|rest| !rest.is_empty())
-            {
-                fragments.push((current.clone(), rendered.to_owned()));
-            }
+        if let Some(rendered) = variant_text(trimmed) {
+            fragments.push((current.clone(), rendered.to_owned()));
             continue;
         }
-        let Some((id, raw_value)) = trimmed.split_once('=') else {
+        let Some((id, rendered)) = message_text(trimmed) else {
             continue;
         };
-        id.trim().clone_into(&mut current);
-        let value = raw_value.trim();
-        if !value.is_empty() && !opens_select(value) {
-            fragments.push((current.clone(), value.to_owned()));
+        id.clone_into(&mut current);
+        if let Some(body) = rendered {
+            fragments.push((current.clone(), body.to_owned()));
         }
     }
     fragments
