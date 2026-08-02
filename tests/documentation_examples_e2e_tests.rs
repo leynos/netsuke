@@ -22,7 +22,7 @@ fn executable_path(stub_directory: &Utf8Path) -> Result<String> {
 }
 
 fn write_stub(directory: &Utf8Path, name: &str, script: &str) -> Result<()> {
-    write_exec_with_content(directory.as_std_path(), name, script)
+    write_exec_with_content(directory, name, script)
         .with_context(|| format!("write {name} stub"))?;
     Ok(())
 }
@@ -358,7 +358,7 @@ fn stdlib_host_context_example_uses_controlled_process_state() -> Result<()> {
             "done\n"
         ),
     )?;
-    write_exec(stub_directory.as_std_path(), "guide-tool")?;
+    write_exec(&stub_directory, "guide-tool")?;
     let path = executable_path(&stub_directory)?;
     let run = run_netsuke_in_with_env(
         workspace.path(),

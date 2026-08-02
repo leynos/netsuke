@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
-use crate::exec::write_exec_with_content;
+use crate::exec::{utf8_path, write_exec_with_content};
 
 /// Represents a Ninja tool name (e.g., "clean", "compdb").
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,9 +64,13 @@ impl ShellFlag {
 /// both so callers keep the directory alive for the script's lifetime.
 fn write_fake_ninja_script(script: &str, context: &str) -> Result<(TempDir, PathBuf)> {
     let dir = TempDir::new().with_context(|| format!("{context}: create temp dir"))?;
-    let path = write_exec_with_content(dir.path(), "ninja", script)
-        .with_context(|| format!("{context}: write script"))?;
-    Ok((dir, path))
+    let path = {
+        let root =
+            utf8_path(dir.path()).with_context(|| format!("{context}: temporary directory"))?;
+        write_exec_with_content(root, "ninja", script)
+            .with_context(|| format!("{context}: write script"))?
+    };
+    Ok((dir, path.into_std_path_buf()))
 }
 
 /// Create a fake Ninja that validates the build file path provided via `-f`.

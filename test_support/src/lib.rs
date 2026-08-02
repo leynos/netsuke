@@ -114,31 +114,33 @@ impl std::error::Error for ProbesError {}
 pub fn fake_ninja(exit_code: u8) -> Result<(TempDir, PathBuf)> {
     let dir = TempDir::new().context("fake_ninja: create temporary directory")?;
 
-    #[cfg(unix)]
-    let path = exec::write_exec_with_content(
-        dir.path(),
-        "ninja",
-        &format!("#!/bin/sh\nexit {exit_code}\n"),
-    )
-    .context("fake_ninja: write script")?;
-    #[cfg(windows)]
-    let path = exec::write_exec_with_content(
-        dir.path(),
-        "ninja.cmd",
-        &format!("@echo off\r\nexit /B {exit_code}\r\n"),
-    )
-    .context("fake_ninja: write batch file")?;
+    let path = {
+        let root = exec::utf8_path(dir.path()).context("fake_ninja: temporary directory")?;
+        #[cfg(unix)]
+        let path =
+            exec::write_exec_with_content(root, "ninja", &format!("#!/bin/sh\nexit {exit_code}\n"))
+                .context("fake_ninja: write script")?;
+        #[cfg(windows)]
+        let path = exec::write_exec_with_content(
+            root,
+            "ninja.cmd",
+            &format!("@echo off\r\nexit /B {exit_code}\r\n"),
+        )
+        .context("fake_ninja: write batch file")?;
+        path
+    };
 
-    Ok((dir, path))
+    Ok((dir, path.into_std_path_buf()))
 }
 
 #[cfg(all(test, unix))]
 mod tests {
-    //! Regression coverage for the fake-executable helpers on non-UTF-8
-    //! temporary directories: exercises [`super::fake_ninja`] and
-    //! [`super::check_ninja::fake_ninja_check_build_file`] with a temp
-    //! directory rooted under a path containing invalid UTF-8 bytes,
-    //! confirming both stubs are created on OS-native paths.
+    //! Coverage for the UTF-8 boundary in the fake-executable helpers.
+    //!
+    //! The stub helpers take camino paths, so a temporary directory whose path
+    //! is not valid UTF-8 cannot be represented. Both factories must surface
+    //! that as a contextual error naming the offending path rather than
+    //! panicking or silently substituting a lossy conversion.
     use super::{
         EnvVarGuard, TempDir, check_ninja::fake_ninja_check_build_file, env_lock::EnvLock,
         fake_ninja,
@@ -147,8 +149,17 @@ mod tests {
     use anyhow::{Context, Result};
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
+    /// Assert `error` names the UTF-8 boundary rather than a downstream failure.
+    fn assert_reports_non_utf8(error: &anyhow::Error, helper: &str) {
+        let rendered = format!("{error:#}");
+        assert!(
+            rendered.contains("not valid UTF-8"),
+            "{helper} should report the UTF-8 boundary, got: {rendered}"
+        );
+    }
+
     #[test]
-    fn fake_ninja_helpers_support_non_utf8_temp_directories() -> Result<()> {
+    fn fake_ninja_helpers_reject_non_utf8_temp_directories() -> Result<()> {
         let parent = TempDir::new().context("create parent temporary directory")?;
         let non_utf8_root = parent.path().join(OsString::from_vec(b"tmp-\xff".to_vec()));
         fs::create_dir(&non_utf8_root).context("create non-UTF-8 temporary directory")?;
@@ -156,19 +167,12 @@ mod tests {
         let _env_lock = EnvLock::acquire();
         let _tmpdir = EnvVarGuard::set("TMPDIR", non_utf8_root.as_os_str());
 
-        let (_exit_dir, exit_script) = fake_ninja(0)?;
-        let (_check_dir, check_script) = fake_ninja_check_build_file()?;
+        let exit_err = fake_ninja(0).expect_err("fake_ninja should reject a non-UTF-8 tempdir");
+        assert_reports_non_utf8(&exit_err, "fake_ninja");
 
-        assert!(exit_script.starts_with(&non_utf8_root));
-        assert!(check_script.starts_with(&non_utf8_root));
-        assert!(
-            fs::exists(&exit_script),
-            "fake_ninja should create its script"
-        );
-        assert!(
-            fs::exists(&check_script),
-            "fake_ninja_check_build_file should create its script"
-        );
+        let check_err = fake_ninja_check_build_file()
+            .expect_err("fake_ninja_check_build_file should reject a non-UTF-8 tempdir");
+        assert_reports_non_utf8(&check_err, "fake_ninja_check_build_file");
         Ok(())
     }
 }

@@ -4,23 +4,72 @@
 //! tests can exercise PATH resolution without depending on real binaries.
 //! Callers own the containing directory's lifetime to keep the stub on disk.
 //!
+//! Paths are camino UTF-8 types throughout, matching the rest of Netsuke.
+//! `tempfile` yields OS-native paths, so callers convert at that boundary with
+//! [`utf8_path`], which reports a non-UTF-8 path rather than discarding it.
+//!
 //! # Examples
 //!
 //! ```rust
 //! use tempfile::TempDir;
-//! use test_support::write_exec;
+//! use test_support::exec::{utf8_path, write_exec};
 //!
 //! let temp = TempDir::new().expect("tempdir");
-//! let path = write_exec(temp.path(), "tool").expect("stub executable");
+//! let root = utf8_path(temp.path()).expect("temporary directory is UTF-8");
+//! let path = write_exec(root, "tool").expect("stub executable");
 //! assert!(path.exists());
 //! ```
 
 use crate::fs;
 use anyhow::{Context, Result};
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
+use std::path::Path;
+
+/// Borrow an OS-native path as UTF-8, naming the path when it is not.
+///
+/// This is the single conversion boundary between `tempfile`'s OS-native paths
+/// and the camino types the stub helpers take. It returns an error rather than
+/// panicking so callers propagate the failure with their own context.
+///
+/// # Errors
+///
+/// Returns an error identifying `path` when it is not valid UTF-8.
+///
+/// # Examples
+///
+/// ```rust
+/// use tempfile::TempDir;
+/// use test_support::exec::utf8_path;
+///
+/// let temp = TempDir::new().expect("tempdir");
+/// let root = utf8_path(temp.path()).expect("temporary directory is UTF-8");
+/// assert!(root.is_absolute());
+/// ```
+///
+/// A path that is not valid UTF-8 is reported rather than silently lost:
+///
+/// ```rust
+/// # #[cfg(unix)]
+/// # {
+/// use std::{ffi::OsString, os::unix::ffi::OsStringExt, path::PathBuf};
+/// use test_support::exec::utf8_path;
+///
+/// let raw = PathBuf::from(OsString::from_vec(b"/tmp/not-\xff-utf8".to_vec()));
+/// let err = utf8_path(&raw).expect_err("path is not UTF-8");
+/// assert!(err.to_string().contains("not valid UTF-8"));
+/// # }
+/// ```
+pub fn utf8_path(path: &Path) -> Result<&Utf8Path> {
+    Utf8Path::from_path(path)
+        .with_context(|| format!("path is not valid UTF-8: {}", path.display()))
+}
 
 /// Write a minimal executable file named `name` inside `root`.
-pub fn write_exec(root: &Path, name: &str) -> Result<PathBuf> {
+///
+/// # Errors
+///
+/// Returns an error when the stub cannot be written or marked executable.
+pub fn write_exec(root: &Utf8Path, name: &str) -> Result<Utf8PathBuf> {
     write_exec_with_content(root, name, "#!/bin/sh\n")
 }
 
@@ -31,18 +80,23 @@ pub fn write_exec(root: &Path, name: &str) -> Result<PathBuf> {
 /// executable on Unix. Callers provide platform-appropriate content (for
 /// example a POSIX shell script on Unix or a batch file on Windows).
 ///
+/// # Errors
+///
+/// Returns an error when the stub cannot be written or marked executable.
+///
 /// # Examples
 ///
 /// ```rust
 /// use tempfile::TempDir;
-/// use test_support::exec::write_exec_with_content;
+/// use test_support::exec::{utf8_path, write_exec_with_content};
 ///
 /// let temp = TempDir::new().expect("tempdir");
-/// let path = write_exec_with_content(temp.path(), "tool", "#!/bin/sh\nexit 3\n")
+/// let root = utf8_path(temp.path()).expect("temporary directory is UTF-8");
+/// let path = write_exec_with_content(root, "tool", "#!/bin/sh\nexit 3\n")
 ///     .expect("stub executable");
 /// assert!(path.exists());
 /// ```
-pub fn write_exec_with_content(root: &Path, name: &str, content: &str) -> Result<PathBuf> {
+pub fn write_exec_with_content(root: &Utf8Path, name: &str, content: &str) -> Result<Utf8PathBuf> {
     let path = root.join(name);
     fs::write(&path, content).with_context(|| format!("write exec stub {name}"))?;
     make_executable(&path)?;
@@ -50,14 +104,22 @@ pub fn write_exec_with_content(root: &Path, name: &str, content: &str) -> Result
 }
 
 /// Mark an existing file as executable by setting its Unix permission bits.
+///
+/// # Errors
+///
+/// Returns an error when the permission bits cannot be set.
 #[cfg(unix)]
-pub fn make_executable(path: &Path) -> Result<()> {
+pub fn make_executable(path: &Utf8Path) -> Result<()> {
     fs::set_mode(path, 0o755).context("chmod exec stub")?;
     Ok(())
 }
 
 /// No-op on non-Unix platforms, where executability is not a permission bit.
+///
+/// # Errors
+///
+/// Never returns an error; the signature matches the Unix variant.
 #[cfg(not(unix))]
-pub fn make_executable(_path: &Path) -> Result<()> {
+pub fn make_executable(_path: &Utf8Path) -> Result<()> {
     Ok(())
 }
