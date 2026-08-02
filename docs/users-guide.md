@@ -528,7 +528,7 @@ Table 1: Locales Netsuke ships
 `en-US` is the source locale. Any message a translation has not yet covered
 falls back to the English text rather than disappearing.
 
-A tag Netsuke does not ship resolves by these rules, in order:
+A requested tag resolves by these rules, in order:
 
 1. The exact tag, if a catalogue carries it.
 2. A script or region rule for that language. Spanish outside Spain uses

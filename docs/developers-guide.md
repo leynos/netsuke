@@ -117,8 +117,8 @@ the README — also run:
 - `make nixie`
 
 `make test` runs the non-doctest suite through
-[cargo-nextest](https://nexte.st/) and then runs the doctests separately. CI
-pins the runner version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`.
+[cargo-nextest](https://nexte.st/) and then runs the doctests separately.
+CI pins the runner version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`.
 Install that same version locally so local runs match CI; read the pin from the
 workflow rather than copying the number, so the two cannot drift:
 
@@ -996,12 +996,12 @@ governs the non-doctest pass only, and deliberately stays small:
 
 ### How this relates to `#[serial]` and the isolation utilities
 
-nextest runs each test in its own process, so environment and working-directory
-mutations cannot leak between tests the way they can under the threaded
-in-process harness. The `EnvLock`, `EnvVarGuard`, and `CwdGuard` utilities
-described in [Test isolation utilities](#test-isolation-utilities), and the
-`#[serial]` markers on the tests in the three binaries above, remain necessary
-because the coverage workflow still drives an in-process runner.
+nextest runs each test in its own process, so environment and
+working-directory mutations cannot leak between tests the way they can under
+the threaded in-process harness. The `EnvLock`, `EnvVarGuard`, and `CwdGuard`
+utilities described in [Test isolation utilities](#test-isolation-utilities),
+and the `#[serial]` markers on the tests in the three binaries above, remain
+necessary because the coverage workflow still drives an in-process runner.
 
 The `serial-env` group is therefore not load-bearing for the tests that exist
 today; it states the serialization contract once so both runners agree, and so
@@ -1837,8 +1837,8 @@ Early JSON resolution reads only the boolean `json` field from each
 configuration layer. File layers are applied in merge order, followed by
 `NETSUKE_JSON`; an explicit root `--json` flag has the highest precedence.
 Selected file-load errors and malformed `NETSUKE_JSON` values are returned to
-the caller. Accepted environment values are `true`, `false`, `1`, and `0`. An
-explicit root `--json` flag bypasses environment parsing.
+the caller. Accepted environment values are `true`, `false`, `1`, and `0`.
+An explicit root `--json` flag bypasses environment parsing.
 
 ### Configuration discovery module layout
 

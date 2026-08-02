@@ -43,7 +43,7 @@ registry rather than keeping its own list: the build-time audit, the
 `cargo:rerun-if-changed` directives, the packaging smoke test, and the tests.
 
 The one necessary duplicate is `package.metadata.ortho_config.locales` in
-`Cargo.toml`, because Cargo metadata cannot call into Rust. The build audit
+`Cargo.toml` because Cargo metadata cannot call into Rust. The build audit
 compares the two and fails the build if they drift, so adding a locale means
 editing exactly two lists and nothing else.
 
@@ -240,15 +240,15 @@ example.errors_found = { $count ->
 
 Table 5: CLDR plural categories by shipped locale
 
-| Categories                                   | Locales                                                                                                                       |
-| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Categories                                   | Locales                                                                                                                             |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `other`                                      | `id`, `ja`, `ko`, `th`, `vi`, `zh-Hans`, `zh-Hant`                                                                                  |
 | `one`, `other`                               | `da`, `de`, `el`, `en-GB`, `en-US`, `es-419`, `es-ES`, `fa`, `fi`, `fr`, `hi`, `hu`, `it`, `nb`, `nl`, `pt-BR`, `pt-PT`, `sv`, `tr` |
-| `one`, `few`, `other`                        | `ro`                                                                                                                          |
-| `one`, `few`, `many`, `other`                | `cs`, `pl`, `ru`, `uk`                                                                                                        |
-| `one`, `two`, `few`, `other`                 | `gd`                                                                                                                          |
-| `one`, `two`, `many`, `other`                | `he`                                                                                                                          |
-| `zero`, `one`, `two`, `few`, `many`, `other` | `ar`, `cy`                                                                                                                    |
+| `one`, `few`, `other`                        | `ro`                                                                                                                                |
+| `one`, `few`, `many`, `other`                | `cs`, `pl`, `ru`, `uk`                                                                                                              |
+| `one`, `two`, `few`, `other`                 | `gd`                                                                                                                                |
+| `one`, `two`, `many`, `other`                | `he`                                                                                                                                |
+| `zero`, `one`, `two`, `few`, `many`, `other` | `ar`, `cy`                                                                                                                          |
 
 A locale that lists a category must spell out its own wording for that variant.
 A test in `tests/locale_catalogue_tests.rs` asserts these category sets for
@@ -259,8 +259,7 @@ second test fails if any registry locale is missing from it.
 The categories are the ones `intl_pluralrules` implements, which is what Fluent
 selects with; they can lag a newer CLDR release. CLDR also gives French,
 Spanish, Italian and Portuguese a `many` category, but only for large round
-numbers in compact notation, which Netsuke's plain integer counts never
-select.
+numbers in compact notation, which Netsuke's plain integer counts never select.
 
 Note that `one` does not always mean "exactly one": in French it also covers
 zero, and in Hindi likewise. Nor does listing `one` imply the wording differs
@@ -349,7 +348,7 @@ Verify the output appears in Icelandic.
 
 ## 8. Right-to-left locales
 
-Arabic, Hebrew and Persian ship right-to-left catalogues. Fluent already wraps
+Arabic, Hebrew, and Persian ship right-to-left catalogues. Fluent already wraps
 interpolated values in bidi isolation controls, so `{ $path }` needs no special
 handling. What does need care is the *first* character of a message: a value
 that opens with a Latin word, a bracket, or a placeable lets that token decide
@@ -406,7 +405,7 @@ Before submitting translations, verify:
 Netsuke validates every registered locale at compile time via
 `build_l10n_audit/`:
 
-- **Metadata drift**: `Cargo.toml`'s locale list disagreeing with the registry
+- **Metadata drift**: `Cargo.toml`'s locale list disagrees with the registry
 - **Missing keys**: Keys in `keys.rs` but not in the FTL file
 - **Orphaned keys**: Keys in the FTL file but not in `keys.rs`
 - **Variable mismatches**: A message interpolating different variables from the

@@ -2483,9 +2483,9 @@ the `en-GB` copy, and the bare `no` macrolanguage tag resolves to `nb`. The
 Runtime diagnostics (for example manifest parsing, stdlib template errors, and
 runner failures) use the same Fluent localizer so the locale selection is
 consistent across user-facing output. The build-time audit in
-`build_l10n_audit/` validates every declared locale: it rejects declared keys a
-catalogue is missing, orphaned keys a catalogue carries beyond the declared
-set, and messages whose interpolation variables differ from the English source.
+`build_l10n_audit/` validates every declared locale: it rejects catalogues that
+omit a declared key, carry a key beyond the declared set, or interpolate a
+different set of variables from the English source catalogue.
 Missing or drifted strings therefore fail CI before release. CLI execution and
 dispatch live in `src/runner.rs`, keeping `main.rs` focused on parsing. Process
 management, Ninja invocation, argument redaction, and the temporary file
@@ -2549,15 +2549,18 @@ synchronized with runtime behaviour rather than drifting behind it.
 
 For screen readers: The following flowchart shows how the build script audits
 every registered locale's Fluent catalogue. It first checks that the Cargo
-metadata matches the locale registry, then reads the declared keys and the
-English source catalogue, then loops over each registered locale comparing keys
-and interpolation variables. Any missing key, orphaned key, or variable
-mismatch fails the build.
+metadata matches the locale registry; a mismatch is reported on its own and
+fails the build immediately, without examining any catalogue. Otherwise it
+reads the declared keys and the English source catalogue, then loops over each
+registered locale comparing keys and interpolation variables, collecting that
+locale's findings before moving to the next. Once every locale has been
+examined, any collected finding fails the build.
 
 ```mermaid
 flowchart TD
     A_Start["Start build.rs"] --> B_Metadata
-    B_Metadata{"Cargo.toml locales<br/>match the registry?"} -->|No| H_Error
+    B_Metadata{"Cargo.toml locales<br/>match the registry?"} -->|No| N_Drift
+    N_Drift["Report the metadata drift"] --> M_Fail
     B_Metadata -->|Yes| C_ReadKeys
     C_ReadKeys["extract_key_constants<br/>from src/localization/keys.rs"] --> D_ReadSource
     D_ReadSource["parse_catalogue<br/>from locales/en-US/messages.ftl"] --> E_Loop
@@ -2568,10 +2571,10 @@ flowchart TD
 
     I_Check{"Missing, orphaned,<br/>or mismatched?"} -->|No| J_Next
     I_Check -->|Yes| H_Error["Collect findings<br/>for this locale"]
+    H_Error --> J_Next
 
     J_Next{"More locales?"} -->|Yes| E_Loop
     J_Next -->|No| K_Verdict
-    H_Error --> J_Next
 
     K_Verdict{"Any findings?"} -->|No| L_Success["Audit passes<br/>continue build"]
     K_Verdict -->|Yes| M_Fail["Emit findings per locale<br/>and fail the build"]
