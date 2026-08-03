@@ -40,42 +40,36 @@ fn message_value<'a>(text: &'a str, key: &str) -> Option<&'a str> {
 
 /// Collect the CLDR categories a `select` expression declares.
 ///
-/// Variant lines look like `[one] …` or `*[other] …`; numeric selectors such
-/// as `[0]` are exact matches rather than CLDR categories and are skipped.
+/// The scan runs in two passes over one iterator: find the line defining
+/// `key`, then read variant lines until the closing brace. Only a `select`
+/// opens a variant block — a plain message with the same key yields the empty
+/// set rather than letting the scan run on and collect the categories of
+/// whichever `select` came next.
+///
+/// Variant lines look like `[one] …` or `*[other] …`. Numeric selectors such
+/// as `[0]` are exact matches rather than CLDR categories, so they are skipped.
 fn plural_categories(text: &str, key: &str) -> BTreeSet<String> {
-    let mut categories = BTreeSet::new();
-    let mut inside = false;
-    for line in text.lines() {
-        let trimmed = line.trim();
-        if let Some((id, value)) = trimmed.split_once('=')
-            && id.trim() == key
-        {
-            // Only a select opens a variant block. Without this check a
-            // non-select message with the same key would leave the scan
-            // running, and it would collect the categories of whichever
-            // select came next.
-            if !value.trim_end().ends_with("->") {
-                return BTreeSet::new();
-            }
-            inside = true;
-            continue;
-        }
-        if !inside {
-            continue;
-        }
-        if trimmed == "}" {
-            break;
-        }
-        let variant = trimmed.trim_start_matches('*');
-        if let Some(name) = variant
-            .strip_prefix('[')
-            .and_then(|rest| rest.split(']').next())
-            && !name.chars().all(|ch| ch.is_ascii_digit())
-        {
-            categories.insert(name.to_owned());
-        }
+    let mut lines = text.lines().map(str::trim);
+    let Some((_, value)) =
+        lines.find_map(|trimmed| trimmed.split_once('=').filter(|(id, _)| id.trim() == key))
+    else {
+        return BTreeSet::new();
+    };
+    if !opens_select(value.trim()) {
+        return BTreeSet::new();
     }
-    categories
+    lines
+        .take_while(|trimmed| *trimmed != "}")
+        .filter_map(|trimmed| {
+            let name = trimmed
+                .trim_start_matches('*')
+                .strip_prefix('[')?
+                .split(']')
+                .next()?;
+            (!name.chars().all(|ch| ch.is_ascii_digit())).then_some(name)
+        })
+        .map(str::to_owned)
+        .collect()
 }
 
 fn categories(names: &[&str]) -> BTreeSet<String> {
@@ -328,4 +322,77 @@ fn catalogues_preserve_netsuke_identifiers() {
             );
         }
     }
+}
+
+/// A key that names a plain message must not borrow a later `select`'s
+/// categories.
+///
+/// This is the failure the two-pass scan exists to prevent: the requested key
+/// is found, is not a `select`, and the scan stops there rather than running
+/// on into `other.plural`.
+#[test]
+fn a_matching_non_select_message_yields_no_categories() -> Result<()> {
+    let catalogue = concat!(
+        "wanted.key = Just a message.\n",
+        "other.plural = { $count ->\n",
+        "    [one] One.\n",
+        "   *[other] Many.\n",
+        "}\n",
+    );
+    let found = plural_categories(catalogue, "wanted.key");
+    ensure!(found.is_empty(), "expected no categories, got {found:?}");
+    Ok(())
+}
+
+/// A key absent from the catalogue yields nothing rather than the first
+/// `select` it happens to meet.
+#[test]
+fn an_absent_key_yields_no_categories() -> Result<()> {
+    let catalogue = "other.plural = { $count ->\n    [one] One.\n   *[other] Many.\n}\n";
+    let found = plural_categories(catalogue, "wanted.key");
+    ensure!(found.is_empty(), "expected no categories, got {found:?}");
+    Ok(())
+}
+
+/// Named selectors are collected; numeric ones are exact matches, not CLDR
+/// categories, so they are skipped. The default `*` marker is not part of the
+/// name.
+#[test]
+fn named_selectors_are_collected_and_numeric_ones_skipped() -> Result<()> {
+    let catalogue = concat!(
+        "wanted.key = { $count ->\n",
+        "    [0] None at all.\n",
+        "    [one] One.\n",
+        "    [few] A few.\n",
+        "   *[other] Many.\n",
+        "}\n",
+    );
+    let found = plural_categories(catalogue, "wanted.key");
+    ensure!(
+        found == categories(&["few", "one", "other"]),
+        "expected the named categories only, got {found:?}"
+    );
+    Ok(())
+}
+
+/// The scan stops at the closing brace, so a `select` defined after the
+/// requested one contributes nothing.
+#[test]
+fn the_scan_terminates_at_the_closing_brace() -> Result<()> {
+    let catalogue = concat!(
+        "wanted.key = { $count ->\n",
+        "    [one] One.\n",
+        "   *[other] Many.\n",
+        "}\n",
+        "later.plural = { $count ->\n",
+        "    [two] Two.\n",
+        "   *[other] Many.\n",
+        "}\n",
+    );
+    let found = plural_categories(catalogue, "wanted.key");
+    ensure!(
+        found == categories(&["one", "other"]),
+        "expected only the requested select's categories, got {found:?}"
+    );
+    Ok(())
 }
