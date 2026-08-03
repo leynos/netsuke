@@ -53,13 +53,13 @@ judgement about which variants are interchangeable.
 
 Table 1: The locale API surface
 
-| Item                                     | Purpose                                                     |
-| ---------------------------------------- | ----------------------------------------------------------- |
-| `locales::SUPPORTED_LOCALES`             | Every shipped catalogue, ordered by tag                     |
-| `locales::catalogue(tag)`                | Exact lookup; `None` when the tag ships no catalogue        |
-| `locales::resolve_catalogue(identifier)` | Exact match, then the fallback rules, then `en-US`          |
-| `locales::source_catalogue()`            | The `en-US` catalogue every locale falls back to            |
-| `cli_localization::build_localizer(tag)` | The runtime entry point: resolves, then layers over `en-US` |
+| Item                                     | Purpose                                                                                       |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `locales::SUPPORTED_LOCALES`             | Every shipped catalogue, ordered by tag                                                       |
+| `locales::catalogue(tag)`                | Exact lookup; `None` when the tag ships no catalogue                                          |
+| `locales::resolve_catalogue(identifier)` | Exact match, then the fallback rules, then the sole catalogue for that language, then `en-US` |
+| `locales::source_catalogue()`            | The `en-US` catalogue every locale falls back to                                              |
+| `cli_localization::build_localizer(tag)` | The runtime entry point: resolves, then layers over `en-US`                                   |
 
 Selection matches the exact BCP 47 tag first. A tag with no catalogue resolves
 through the per-language rules in `LANGUAGE_FALLBACKS`, then the sole catalogue

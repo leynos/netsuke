@@ -275,9 +275,12 @@ rather than quietly losing a form. That test carries the same table, and a
 second test fails if any registry locale is missing from it.
 
 The categories are the ones `intl_pluralrules` implements, which is what Fluent
-selects with; they can lag a newer CLDR release. CLDR also gives French,
-Spanish, Italian, and Portuguese a `many` category, but only for large round
-numbers in compact notation, which Netsuke's plain integer counts never select.
+selects with; they can lag a newer CLDR release.
+
+CLDR also gives French, Spanish, Italian, and Portuguese a `many` category, at
+million-scale values and in compact-number forms. That is a property of CLDR,
+not of Netsuke: whether Netsuke ever selects it depends on the counts its
+messages carry, and none of the shipped messages counts in millions.
 
 Note that `one` does not always mean "exactly one": in French it also covers
 zero, and in Hindi likewise. Nor does listing `one` imply the wording differs

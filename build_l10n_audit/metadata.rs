@@ -54,17 +54,53 @@ fn locales_assignment(table: &str) -> Option<&str> {
         })
 }
 
-/// Whether `start` is preceded only by whitespace on its line.
+/// Whether `start` begins a line of TOML source.
 ///
-/// This is what distinguishes the `locales` key from the `locales` inside
-/// `extra_locales`, which has a word character before it.
+/// Two things disqualify it. A word character earlier on the line means this is
+/// the tail of a longer key — the `locales` inside `extra_locales`. Being
+/// inside a multiline string means it is content rather than source: a
+/// `description` written with triple quotes can contain a line reading
+/// `[package.metadata.ortho_config]`, and selecting it would make the audit
+/// read a prose paragraph as the table.
 fn begins_a_line(table: &str, start: usize) -> bool {
-    table.get(..start).is_some_and(|before| {
-        before
-            .rsplit('\n')
-            .next()
-            .is_some_and(|indent| indent.trim().is_empty())
-    })
+    let Some(before) = table.get(..start) else {
+        return false;
+    };
+    let line_start = before
+        .rsplit('\n')
+        .next()
+        .is_some_and(|indent| indent.trim().is_empty());
+    line_start && !inside_multiline_string(before)
+}
+
+/// The two TOML multiline string delimiters.
+const MULTILINE_DELIMITERS: [&str; 2] = ["\"\"\"", "'''"];
+
+/// Whether `prefix` ends inside a multiline string.
+///
+/// Each delimiter toggles the state, and the two quote styles are tracked
+/// separately because neither terminates the other. Single-line strings need no
+/// handling: they cannot span the newline that must precede a line-initial
+/// match.
+fn inside_multiline_string(prefix: &str) -> bool {
+    let mut open: Option<&str> = None;
+    let mut index = 0usize;
+    while index < prefix.len() {
+        let Some(window) = prefix.get(index..index.saturating_add(3)) else {
+            break;
+        };
+        let delimiter = MULTILINE_DELIMITERS
+            .into_iter()
+            .find(|candidate| *candidate == window)
+            .filter(|candidate| open.is_none_or(|current| current == *candidate));
+        if let Some(found) = delimiter {
+            open = if open.is_some() { None } else { Some(found) };
+            index = index.saturating_add(3);
+            continue;
+        }
+        index = index.saturating_add(1);
+    }
+    open.is_some()
 }
 
 /// Whether `rest` opens with `locales` followed by an `=`.

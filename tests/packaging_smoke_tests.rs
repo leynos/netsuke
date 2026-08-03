@@ -10,12 +10,13 @@ use std::env;
 use std::path::Path;
 use std::process::Command;
 
-const REQUIRED_PACKAGED_FILES: [&str; 8] = [
+const REQUIRED_PACKAGED_FILES: [&str; 9] = [
     "build_l10n_audit/mod.rs",
     "build_l10n_audit/compare.rs",
     "build_l10n_audit/ftl.rs",
     "build_l10n_audit/keys.rs",
     "build_l10n_audit/scanner.rs",
+    "build_l10n_audit/byte_index.rs",
     "build_l10n_audit/metadata.rs",
     "build.rs",
     "src/localization/keys.rs",

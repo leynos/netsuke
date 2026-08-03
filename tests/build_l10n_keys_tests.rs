@@ -245,6 +245,26 @@ fn a_mention_of_the_macro_does_not_displace_the_invocation(#[case] preamble: &st
     Ok(())
 }
 
+/// Trivia between the macro name and its delimiter must not be mistaken for
+/// the delimiter, and nested block comments must close at the outer `*/`.
+#[rstest]
+// A brace inside a comment between the name and the real delimiter.
+#[case("define_keys! /* { */ {\n    A => \"a.key\",\n}\n")]
+// A line comment between the name and the delimiter.
+#[case("define_keys! // opens below\n{\n    A => \"a.key\",\n}\n")]
+// A nested block comment before the invocation.
+#[case("/* outer /* inner */ still a comment */\ndefine_keys! {\n    A => \"a.key\",\n}\n")]
+// A macro whose name merely ends with the one being looked for.
+#[case("other_define_keys! { NOT => \"not.a.key\", }\ndefine_keys! {\n    A => \"a.key\",\n}\n")]
+fn the_real_invocation_is_selected(#[case] source: &str) -> Result<()> {
+    let extracted = extract_source(source)?;
+    ensure!(
+        extracted == key_set(&["a.key"]),
+        "expected only the real invocation's key, got {extracted:?}"
+    );
+    Ok(())
+}
+
 /// The real macro body is the contract this parser exists to read.
 #[test]
 fn the_repository_macro_parses() -> Result<()> {

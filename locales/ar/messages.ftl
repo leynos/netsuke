@@ -320,7 +320,7 @@ stdlib.which.not_found = ‏[netsuke::jinja::which::not_found] تعذّر الع
 stdlib.which.not_found.hint.cwd_auto = تُتجاهل الأجزاء الفارغة من PATH؛ استخدم cwd_mode="auto" لتضمين دليل العمل.
 stdlib.which.not_found.hint.cwd_always = اضبط cwd_mode="always" لتضمين الدليل الحالي.
 stdlib.which.direct_not_found = ‏[netsuke::jinja::which::not_found] الأمر «{ $command }» في «{ $path }» غير موجود أو غير قابل للتنفيذ.
-stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
+stdlib.which.args_error = ‏[netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = ‏<فارغ>
 stdlib.which.path_entry.non_utf8 = يتضمّن المدخل رقم { $index } في PATH محارف ليست UTF-8؛ ويتطلّب Netsuke مسارات بترميز UTF-8.
 stdlib.which.command.empty = يتطلّب which سلسلة نصية غير فارغة.

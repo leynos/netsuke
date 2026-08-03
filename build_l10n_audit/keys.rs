@@ -44,13 +44,16 @@ fn extract_define_keys_body(source: &str) -> Result<&str, Box<dyn Error>> {
     let Some(macro_pos) = DefineKeysParser::new(source).find_in_source(DEFINE_KEYS_MACRO) else {
         return Err("define_keys! macro not found in localization keys".into());
     };
-    let after_macro = source
-        .get(macro_pos + DEFINE_KEYS_MACRO.len()..)
+    // Trivia may sit between the macro name and its delimiter, and a brace
+    // inside it is not the delimiter: `define_keys! /* { */ { … }` is valid
+    // Rust.
+    let parser = DefineKeysParser::new(source);
+    let after_name = macro_pos
+        .checked_add(DEFINE_KEYS_MACRO.len())
         .ok_or_else(|| "define_keys! macro start is out of range".to_owned())?;
-    let Some(open_brace) = after_macro.find('{') else {
+    let Some(body_start) = parser.body_start_after(ByteIndex::from_offset(after_name)) else {
         return Err("define_keys! macro body is missing '{'".into());
     };
-    let body_start = macro_pos + DEFINE_KEYS_MACRO.len() + open_brace + 1;
     let remainder = source
         .get(body_start..)
         .ok_or_else(|| "define_keys! macro body is out of range".to_owned())?;

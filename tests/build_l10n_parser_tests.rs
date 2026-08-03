@@ -196,6 +196,25 @@ fn a_decoy_header_does_not_displace_the_table(#[case] preamble: &str) -> Result<
     Ok(())
 }
 
+/// A multiline string can contain a line that looks like the table header or
+/// the key. Its content is not source, so it must not capture the search.
+#[rstest]
+// The header spelled inside a multiline basic string, at column zero.
+#[case(
+    "[package]\ndescription = \"\"\"\n[package.metadata.ortho_config]\nlocales = [\"wrong\"]\n\"\"\"\n"
+)]
+// The same, in a multiline literal string.
+#[case(
+    "[package]\ndescription = '''\n[package.metadata.ortho_config]\nlocales = [\"wrong\"]\n'''\n"
+)]
+fn a_multiline_string_decoy_does_not_displace_the_table(#[case] preamble: &str) -> Result<()> {
+    let manifest = format!("{preamble}{TABLE}locales = [\"en-US\"]\n");
+    let found = metadata_locales(&manifest)
+        .ok_or_else(|| anyhow!("expected the real locales key to be found"))?;
+    ensure!(found == ["en-US"], "got {found:?}");
+    Ok(())
+}
+
 #[rstest]
 // No such table.
 #[case("[package]\nname = \"netsuke\"\n")]

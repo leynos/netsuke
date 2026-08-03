@@ -1,5 +1,6 @@
 //! Tests covering localization helpers and fallback behaviour.
 
+use std::collections::BTreeSet;
 use std::sync::{Arc, MutexGuard};
 
 use anyhow::{Context, Result, bail, ensure};
@@ -539,6 +540,107 @@ fn a_stringified_count_falls_through_to_the_default_variant() -> Result<()> {
     ensure!(
         as_string != as_number,
         "a string count must not select the `one` variant; both gave {as_string}"
+    );
+    Ok(())
+}
+
+/// The variants a catalogue's `key` declares, as `(category, template)`.
+///
+/// The template is the variant's literal text, still carrying `{ $count }`.
+fn declared_variants(resource: &str, key: &str) -> Vec<(String, String)> {
+    let mut lines = resource.lines().map(str::trim);
+    let opened = lines
+        .find_map(|trimmed| trimmed.split_once('=').filter(|(id, _)| id.trim() == key))
+        .is_some_and(|(_, value)| value.trim().ends_with("->"));
+    if !opened {
+        return Vec::new();
+    }
+    lines
+        .take_while(|trimmed| *trimmed != "}")
+        .filter_map(|trimmed| {
+            let (name, text) = trimmed
+                .trim_start_matches('*')
+                .strip_prefix('[')?
+                .split_once(']')?;
+            (!name.chars().all(|ch| ch.is_ascii_digit()))
+                .then(|| (name.to_owned(), text.trim().to_owned()))
+        })
+        .collect()
+}
+
+/// Which declared categories could have produced `rendered` for `count`.
+///
+/// More than one qualifies when a locale words two categories identically —
+/// Hungarian and Turkish keep the noun singular after any numeral — so the
+/// result is a set rather than a single answer.
+fn matching_categories(variants: &[(String, String)], rendered: &str, count: i64) -> Vec<String> {
+    variants
+        .iter()
+        .filter(|(_, template)| {
+            let expected = template.replace("{ $count }", &count.to_string());
+            normalize_fluent_isolates(&expected) == rendered
+        })
+        .map(|(category, _)| category.clone())
+        .collect()
+}
+
+/// Every locale must select a declared branch, and at least one that is not
+/// the default.
+///
+/// The rendering sweep above cannot tell selection from fallback: a locale
+/// that always resolved to `*[other]` would still render non-empty text
+/// containing the numeral. This checks the rendered string against the
+/// catalogue's own variant templates, so the branch Fluent actually chose is
+/// identified rather than assumed.
+#[test]
+fn every_locale_selects_a_declared_plural_branch() -> Result<()> {
+    let mut covered = 0usize;
+    for entry in SUPPORTED_LOCALES {
+        let variants = declared_variants(entry.resource(), keys::EXAMPLE_FILES_PROCESSED);
+        ensure!(
+            !variants.is_empty(),
+            "locale {} declares no plural variants",
+            entry.tag()
+        );
+        let default_category = entry
+            .resource()
+            .lines()
+            .map(str::trim)
+            .find_map(|line| line.strip_prefix("*["))
+            .and_then(|rest| rest.split(']').next())
+            .unwrap_or("other")
+            .to_owned();
+
+        let _guards = localizer_guards(entry.tag())?;
+        let mut selected: BTreeSet<String> = BTreeSet::new();
+        for count in PLURAL_PROBE_COUNTS {
+            let rendered = render_with_count(keys::EXAMPLE_FILES_PROCESSED, count)
+                .with_context(|| format!("locale {} rendered nothing", entry.tag()))?;
+            let normalized = normalize_fluent_isolates(&rendered);
+            let matched = matching_categories(&variants, &normalized, count);
+            ensure!(
+                !matched.is_empty(),
+                "locale {} count {count} rendered {normalized:?}, which matches no declared variant",
+                entry.tag()
+            );
+            selected.extend(matched);
+        }
+
+        // A locale declaring only a default has nothing to select between.
+        if variants.len() > 1 {
+            ensure!(
+                selected
+                    .iter()
+                    .any(|category| *category != default_category),
+                "locale {} only ever selected its default `{default_category}` branch across {PLURAL_PROBE_COUNTS:?}",
+                entry.tag()
+            );
+        }
+        covered += 1;
+    }
+    ensure!(
+        covered == EXPECTED_SHIPPED_LOCALE_COUNT,
+        "the oracle covered {covered} locales, expected {EXPECTED_SHIPPED_LOCALE_COUNT}"
     );
     Ok(())
 }

@@ -51,9 +51,10 @@ mod host_pattern;
 
 /// The locale registry, shared with the library crate.
 ///
-/// Exposed as `crate::locale_catalogues`, the path `localization` and the
-/// audit both name it by. Public because `localization` re-exports it, and a
-/// private module cannot be re-exported from a public path. The build script
+/// Both `localization` and the audit reach the registry through
+/// `crate::locale_catalogues`, so it is declared at this crate's root under
+/// that name. It is public because `localization` re-exports it, and a private
+/// module cannot be re-exported from a public path. The build script itself
 /// reads `SUPPORTED_LOCALES` to emit one `rerun-if-changed` directive per
 /// catalogue.
 #[path = "src/locale_catalogues.rs"]

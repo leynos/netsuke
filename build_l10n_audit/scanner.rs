@@ -8,35 +8,10 @@
 
 use std::error::Error;
 
-/// A byte offset into a [`DefineKeysParser`]'s source.
-///
-/// Positions and counts are both `usize` underneath, and the scanner passes
-/// them side by side — a raw string literal's opening index next to its run of
-/// hashes. Naming the position separately keeps the two from being swapped.
-#[derive(Clone, Copy)]
-pub(super) struct ByteIndex(usize);
+#[path = "byte_index.rs"]
+mod byte_index;
 
-impl ByteIndex {
-    /// The start of the parsed body.
-    pub(super) const START: Self = Self(0);
-
-    const fn get(self) -> usize {
-        self.0
-    }
-
-    /// The position `delta` bytes further along.
-    const fn advance(self, delta: usize) -> Self {
-        Self(self.0 + delta)
-    }
-
-    /// The position `delta` bytes earlier, or `None` when that would underflow.
-    const fn retreat(self, delta: usize) -> Option<Self> {
-        match self.0.checked_sub(delta) {
-            Some(offset) => Some(Self(offset)),
-            None => None,
-        }
-    }
-}
+pub(crate) use byte_index::ByteIndex;
 
 /// A scanner over the body of a `define_keys!` invocation.
 ///
@@ -193,15 +168,37 @@ impl<'source> DefineKeysParser<'source> {
         index
     }
 
+    /// Skip to just past the `*/` closing the block comment opened before
+    /// `start`.
+    ///
+    /// Rust block comments nest, so `/* /* */ */` is one comment. Stopping at
+    /// the first `*/` would leave the scan inside the outer comment and read
+    /// its remainder as source.
     fn skip_block_comment(&self, start: ByteIndex) -> ByteIndex {
         let mut index = start;
+        let mut depth = 1usize;
         while index.advance(1).get() < self.bytes.len() {
-            if self.byte_is(index, b'*') && self.byte_is(index.advance(1), b'/') {
-                return index.advance(2);
+            if self.is_block_comment(index) {
+                depth = depth.saturating_add(1);
+                index = index.advance(2);
+                continue;
             }
-            index = index.advance(1);
+            if !self.closes_block_comment(index) {
+                index = index.advance(1);
+                continue;
+            }
+            depth = depth.saturating_sub(1);
+            index = index.advance(2);
+            if depth == 0 {
+                return index;
+            }
         }
-        ByteIndex(self.bytes.len())
+        ByteIndex::from_offset(self.bytes.len())
+    }
+
+    /// Whether a `*/` sits at `index`.
+    fn closes_block_comment(&self, index: ByteIndex) -> bool {
+        self.byte_is(index, b'*') && self.byte_is(index.advance(1), b'/')
     }
 
     fn skip_whitespace(&self, start: ByteIndex) -> ByteIndex {
@@ -274,6 +271,25 @@ impl<'source> DefineKeysParser<'source> {
         Ok(None)
     }
 
+    /// Whether `needle` starts at `index` and is not the tail of a longer
+    /// identifier.
+    ///
+    /// `other_define_keys!` contains `define_keys!`, so a bare prefix test
+    /// would select the wrong macro.
+    fn matches_whole_identifier(&self, index: ByteIndex, needle: &str) -> bool {
+        let starts_here = self
+            .source
+            .get(index.get()..)
+            .is_some_and(|rest| rest.starts_with(needle));
+        if !starts_here {
+            return false;
+        }
+        index.retreat(1).is_none_or(|before| {
+            self.byte_at(before)
+                .is_none_or(|byte| !byte.is_ascii_alphanumeric() && *byte != b'_')
+        })
+    }
+
     /// Offset of `needle` where it appears as source, not inside a comment or
     /// a string literal.
     ///
@@ -287,12 +303,30 @@ impl<'source> DefineKeysParser<'source> {
                 index = next;
                 continue;
             }
-            if self
-                .source
-                .get(index.get()..)
-                .is_some_and(|rest| rest.starts_with(needle))
-            {
+            if self.matches_whole_identifier(index, needle) {
                 return Some(index.get());
+            }
+            index = index.advance(1);
+        }
+        None
+    }
+
+    /// Offset just past the `{` that opens the body, starting the search at
+    /// `start`.
+    ///
+    /// Trivia between the macro name and its delimiter is skipped, so
+    /// `define_keys! /* { */ {` opens at the real brace. Taking the commented
+    /// one would make the scan treat the real brace as nested and never find
+    /// the body's end.
+    pub(super) fn body_start_after(&self, start: ByteIndex) -> Option<usize> {
+        let mut index = start;
+        while !self.is_exhausted(index) {
+            if let Ok(Some(next)) = self.skip_comment_or_literal(index) {
+                index = next;
+                continue;
+            }
+            if self.byte_is(index, b'{') {
+                return Some(index.advance(1).get());
             }
             index = index.advance(1);
         }
