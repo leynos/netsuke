@@ -138,12 +138,20 @@ pub fn fake_ninja(exit_code: u8) -> Result<(TempDir, PathBuf)> {
 
 #[cfg(all(test, unix))]
 mod tests {
-    //! Coverage for the UTF-8 boundary in the fake-executable helpers.
+    //! Coverage for the fake-executable helpers.
     //!
-    //! The stub helpers take camino paths, so a temporary directory whose path
-    //! is not valid UTF-8 cannot be represented. Both factories must surface
-    //! that as a contextual error naming the offending path rather than
-    //! panicking or silently substituting a lossy conversion.
+    //! Both the ordinary path and the UTF-8 boundary. On the ordinary path each
+    //! factory must leave an executable file behind at the path it returns —
+    //! callers put that path on `PATH` and expect it to run.
+    //!
+    //! At the boundary: the stub helpers take camino paths, so a temporary
+    //! directory whose path is not valid UTF-8 cannot be represented. Both
+    //! factories must surface that as a contextual error naming the offending
+    //! path rather than panicking or silently substituting a lossy conversion.
+    //!
+    //! The scripts are never executed here. These tests assert on what the
+    //! helpers wrote, and the module is `unix`-gated, so the executable-bit
+    //! check needs no further conditional.
     use super::{
         EnvVarGuard, TempDir, check_ninja::fake_ninja_check_build_file, env_lock::EnvLock,
         fake_ninja,
@@ -159,6 +167,41 @@ mod tests {
             rendered.contains("not valid UTF-8"),
             "{helper} should report the UTF-8 boundary, got: {rendered}"
         );
+    }
+
+    /// Assert the helper left an executable file at `path`.
+    ///
+    /// The caller keeps its `TempDir` alive across this call; the directory is
+    /// removed on drop, which would make both checks fail.
+    fn assert_executable_script(path: &std::path::Path, helper: &str) {
+        assert!(
+            fs::exists(path),
+            "{helper} should leave a script at {}",
+            path.display()
+        );
+        assert!(
+            fs::is_executable_file(path),
+            "{helper} should mark {} executable",
+            path.display()
+        );
+    }
+
+    #[test]
+    fn fake_ninja_writes_an_executable_script() -> Result<()> {
+        let (dir, script) = fake_ninja(0)?;
+        assert_executable_script(&script, "fake_ninja");
+        // Explicit, because the assertions are only meaningful while the
+        // temporary directory still exists.
+        drop(dir);
+        Ok(())
+    }
+
+    #[test]
+    fn fake_ninja_check_build_file_writes_an_executable_script() -> Result<()> {
+        let (dir, script) = fake_ninja_check_build_file()?;
+        assert_executable_script(&script, "fake_ninja_check_build_file");
+        drop(dir);
+        Ok(())
     }
 
     #[test]

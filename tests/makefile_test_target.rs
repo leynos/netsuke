@@ -192,6 +192,66 @@ fn behavioural_test_support_passes_quote_the_manifest_variable() -> Result<()> {
     Ok(())
 }
 
+/// Splits `fragment` with `sh` and returns the resulting arguments.
+///
+/// The sibling `expand` helper refuses an expression containing `"`, which is
+/// exactly the character under test here, so this splits rather than expands.
+/// Only `sh` is involved: nothing runs Make, Cargo, or any other tool.
+#[cfg(unix)]
+fn shell_arguments(fragment: &str) -> Result<Vec<String>> {
+    ensure!(
+        !fragment.contains('\'') && !fragment.contains('`') && !fragment.contains("$("),
+        "the splitting helper cannot safely embed {fragment:?}"
+    );
+    let script = format!("set -- {fragment}\nfor arg in \"$@\"; do printf '%s\\n' \"$arg\"; done");
+    let output = Command::new("sh")
+        .arg("-c")
+        .arg(&script)
+        .output()
+        .with_context(|| format!("split {fragment:?} with sh"))?;
+    ensure!(
+        output.status.success(),
+        "sh should split {fragment:?}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).context("split arguments should be UTF-8")?;
+    Ok(stdout.lines().map(ToOwned::to_owned).collect())
+}
+
+/// A quoted override survives word-splitting; an unquoted one does not.
+///
+/// `TEST_SUPPORT_MANIFEST` is overridable, so a caller may point it at a path
+/// containing spaces. Make expands the variable itself and hands the resulting
+/// text to the shell, so the quotes in the recipe are what keep that path one
+/// argument. `behavioural_test_support_passes_quote_the_manifest_variable`
+/// pins that the Makefile really does use `QUOTED_MANIFEST_FLAG`; this checks
+/// what that spelling buys.
+///
+/// The unquoted case is asserted too, so the test fails if the shell stops
+/// discriminating rather than silently passing for the wrong reason.
+#[cfg(unix)]
+#[test]
+fn behavioural_a_quoted_manifest_override_stays_one_argument() -> Result<()> {
+    let spacey = "/tmp/netsuke contract/Cargo.toml";
+
+    let quoted = QUOTED_MANIFEST_FLAG.replace("$(TEST_SUPPORT_MANIFEST)", spacey);
+    let arguments = shell_arguments(&quoted)?;
+    ensure!(
+        arguments == ["--manifest-path".to_owned(), spacey.to_owned()],
+        "the quoted flag should split into two arguments, got {arguments:?}"
+    );
+
+    // The control. Without it a shell that stopped splitting at all would let
+    // the assertion above pass while proving nothing about the quotes.
+    let unquoted = quoted.replace('"', "");
+    let split = shell_arguments(&unquoted)?;
+    ensure!(
+        split.len() > 2,
+        "an unquoted override should word-split, got {split:?}"
+    );
+    Ok(())
+}
+
 /// The manifest path is a `?=` variable so a caller can point the second pass
 /// at a relocated crate without editing the recipes.
 #[test]
