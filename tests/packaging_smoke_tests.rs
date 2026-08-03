@@ -4,11 +4,6 @@
 //! build-script sources remain in its manifest, where an omission would
 //! otherwise fail only during release.
 
-#![expect(
-    clippy::disallowed_methods,
-    reason = "locating build artefacts Cargo reports through the environment; there is no seam to inject and no process state to isolate"
-)]
-
 use std::collections::BTreeSet;
 use std::env;
 use std::path::Path;
@@ -23,6 +18,10 @@ const REQUIRED_PACKAGED_FILES: [&str; 5] = [
 ];
 
 #[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "locating build artefacts Cargo reports through the environment; there is no seam to inject and no process state to isolate"
+)]
 fn packaged_manifest_retains_build_script_sources() {
     let cargo_binary = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let publish_output = Command::new(&cargo_binary)

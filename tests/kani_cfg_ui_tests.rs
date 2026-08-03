@@ -5,11 +5,6 @@
 //! misspelled cfg names should still be rejected when the same check-cfg policy
 //! is applied.
 
-#![expect(
-    clippy::disallowed_methods,
-    reason = "locating build artefacts Cargo reports through the environment; there is no seam to inject and no process state to isolate"
-)]
-
 use std::{
     io,
     path::{Path, PathBuf},
@@ -103,6 +98,10 @@ fn compile_ui_fixture(source: &str, output_path: &Path) -> io::Result<Output> {
         .output()
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "locating build artefacts Cargo reports through the environment; there is no seam to inject and no process state to isolate"
+)]
 fn rustc() -> PathBuf {
     std::env::var_os("RUSTC").map_or_else(|| Path::new("rustc").to_path_buf(), PathBuf::from)
 }

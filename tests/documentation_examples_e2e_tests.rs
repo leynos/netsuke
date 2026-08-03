@@ -1,9 +1,5 @@
 //! End-to-end contracts for user-facing build examples.
 
-#![expect(
-    clippy::disallowed_methods,
-    reason = "locating build artefacts Cargo reports through the environment; there is no seam to inject and no process state to isolate"
-)]
 #![cfg(unix)]
 
 mod documentation_examples;
@@ -20,6 +16,10 @@ use test_support::fs as test_fs;
 use test_support::netsuke::{NetsukeRun, run_netsuke_in_with_env};
 use test_support::{ninja::ninja_integration_workspace, write_exec, write_exec_with_content};
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "locating build artefacts Cargo reports through the environment; there is no seam to inject and no process state to isolate"
+)]
 fn executable_path(stub_directory: &Utf8Path) -> Result<String> {
     let host_path = std::env::var("PATH").context("read host PATH")?;
     Ok(format!("{stub_directory}:{host_path}"))
