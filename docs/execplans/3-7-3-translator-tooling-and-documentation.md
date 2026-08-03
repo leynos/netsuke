@@ -115,6 +115,10 @@ Success is observable by:
   expand scope significantly. Manual variable documentation in the translator
   guide is sufficient for this milestone. Date/Author: 2026-01-31 (Plan)
 
+  Superseded: the audit now also validates Fluent interpolation-variable parity
+  against `en-US`, which this decision had left out of scope. The original
+  scoping stands as recorded; the contract it describes has since widened.
+
 - Decision: Keep plural form examples as documentation, despite selection not
   working. Rationale: The FTL syntax is valid and demonstrates correct Fluent
   patterns for future compatibility when numeric argument support is added.

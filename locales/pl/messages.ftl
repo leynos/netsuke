@@ -385,7 +385,8 @@ semantic.prefix.rendered = {"{"}symbol{"}"} {"{"}label{"}"}
 
 # Przykłady form liczby mnogiej dla tłumaczy.
 # Polski korzysta z czterech kategorii CLDR: `one`, `few`, `many` i `other`.
-# `few` obejmuje 2–4 (oraz 22–24 itd.), a `many` pozostałe liczby całkowite.
+# `few` obejmuje liczby kończące się na 2–4 (22–24, 32–34 itd.), ale nie
+# 12–14; `many` obejmuje 12–14 oraz pozostałe liczby całkowite.
 example.files_processed = { $count ->
     [one] Przetworzono { $count } plik.
     [few] Przetworzono { $count } pliki.

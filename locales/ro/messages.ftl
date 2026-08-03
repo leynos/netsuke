@@ -384,8 +384,9 @@ semantic.prefix.timing = Timp:
 semantic.prefix.rendered = {"{"}symbol{"}"} {"{"}label{"}"}
 
 # Exemple de forme de plural pentru traducători.
-# Româna are trei categorii CLDR: `one`, `few` (0 și 2–19, plus resturile
-# 101–119) și `other`, care cere prepoziția „de”.
+# Româna are trei categorii CLDR: `one`, `few` și `other`. `few` acoperă 0,
+# 2–19 și resturile 101–119, precum și valorile zecimale, de exemplu 1,5;
+# `other` acoperă restul numerelor întregi și cere prepoziția „de”.
 example.files_processed = { $count ->
     [one] S-a procesat { $count } fișier.
     [few] S-au procesat { $count } fișiere.

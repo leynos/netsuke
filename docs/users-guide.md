@@ -538,11 +538,12 @@ falls back to the English text rather than disappearing.
 A requested tag resolves by these rules, in order:
 
 1. The exact tag, if a catalogue carries it.
-2. A script or region rule for that language. Spanish outside Spain uses
-   `es-419`; Portuguese outside Brazil uses `pt-PT`; Chinese resolves by
-   script, with `zh-CN`, `zh-SG`, and `zh-MY` taking Simplified and `zh-TW`,
-   `zh-HK`, and `zh-MO` taking Traditional; English outside the United States
-   uses `en-GB`; and `no` resolves to `nb`.
+2. A script or region rule for that language. Bare `es` and `es-ES` use
+   `es-ES`, and every other Spanish region uses `es-419`; bare `pt` and every
+   Portuguese region except Brazil use `pt-PT`; Chinese resolves by script, with
+   `zh-CN`, `zh-SG`, and `zh-MY` taking Simplified and `zh-TW`, `zh-HK`, and
+   `zh-MO` taking Traditional; English outside the United States uses `en-GB`;
+   and `no` resolves to `nb`.
 3. The only catalogue for that language, so `fr-CA` uses `fr` and `de-AT`
    uses `de`.
 4. `en-US`, for anything still unmatched.

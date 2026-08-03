@@ -16,26 +16,16 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
-// These modules are production source included by path. This crate reaches
-// only the audit entry point and the registry's tag list, so the rest of each
-// module's surface is unused *here*; it is exercised where it actually lives,
-// by the library crate and the build script, whose own dead-code analysis is
-// untouched by this expectation.
-#[expect(
-    dead_code,
-    reason = "production source included by path; only the audit entry point is reachable here"
-)]
-#[path = "../src/locale_catalogues.rs"]
-mod locale_catalogues;
+// The audit reads the registry through `crate::locale_catalogues`. Re-exporting
+// the library's module under that path satisfies it without compiling a second
+// copy of the registry into this crate — which is also why no dead-code
+// expectation is needed for it.
+pub use netsuke::locale_catalogues;
 
-#[expect(
-    dead_code,
-    reason = "production source included by path; only the audit entry point is reachable here"
-)]
 #[path = "../build_l10n_audit/mod.rs"]
 mod build_l10n_audit;
 
-use build_l10n_audit::audit_localization_keys_in;
+use build_l10n_audit::{audit_localization_keys, audit_localization_keys_in, catalogue_path};
 use locale_catalogues::{LocaleCatalogue, SUPPORTED_LOCALES};
 
 fn repository_root() -> PathBuf {
@@ -190,5 +180,35 @@ fn every_registry_tag_has_a_readable_catalogue() -> Result<()> {
             .any(|tag| tag == "en-US"),
         "the registry must contain the source locale"
     );
+    Ok(())
+}
+
+/// `catalogue_path` is what `build.rs` emits its `rerun-if-changed` directives
+/// from, so its shape is a contract: a path relative to the repository root.
+#[test]
+fn the_catalogue_path_is_repository_relative() -> Result<()> {
+    let path = catalogue_path("pt-BR");
+    ensure!(
+        path == Path::new("locales/pt-BR/messages.ftl"),
+        "expected a repository-relative catalogue path, got {}",
+        path.display()
+    );
+    Ok(())
+}
+
+/// The build script's own entry point must pass from the repository root.
+///
+/// `audit_localization_keys` reads paths relative to the working directory,
+/// which Cargo sets to the manifest directory for integration tests — the same
+/// directory it uses when running the build script.
+#[test]
+fn the_build_script_entry_point_passes_from_the_manifest_directory() -> Result<()> {
+    ensure!(
+        std::env::current_dir()? == repository_root(),
+        "this test assumes Cargo runs it from the manifest directory"
+    );
+    if let Err(error) = audit_localization_keys() {
+        bail!("the build script's entry point must pass over the committed tree: {error}");
+    }
     Ok(())
 }

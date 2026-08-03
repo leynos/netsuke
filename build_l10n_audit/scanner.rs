@@ -274,6 +274,31 @@ impl<'source> DefineKeysParser<'source> {
         Ok(None)
     }
 
+    /// Offset of `needle` where it appears as source, not inside a comment or
+    /// a string literal.
+    ///
+    /// `str::find` would match `define_keys!` written in a doc comment or
+    /// quoted in a string, and the audit would then read that text as the
+    /// macro body.
+    pub(super) fn find_in_source(&self, needle: &str) -> Option<usize> {
+        let mut index = ByteIndex::START;
+        while !self.is_exhausted(index) {
+            if let Ok(Some(next)) = self.skip_comment_or_literal(index) {
+                index = next;
+                continue;
+            }
+            if self
+                .source
+                .get(index.get()..)
+                .is_some_and(|rest| rest.starts_with(needle))
+            {
+                return Some(index.get());
+            }
+            index = index.advance(1);
+        }
+        None
+    }
+
     /// Offset of the `}` that closes the body opening at the start of `self`.
     ///
     /// A literal that fails to parse is stepped over one byte at a time rather

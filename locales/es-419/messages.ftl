@@ -379,7 +379,7 @@ graph.html.noscript.notice = JavaScript está desactivado. El esquema de texto a
 # Prefijos semánticos para la salida accesible.
 semantic.prefix.error = Error:
 semantic.prefix.warning = Advertencia:
-semantic.prefix.success = Correcto:
+semantic.prefix.success = Éxito:
 semantic.prefix.info = Info:
 semantic.prefix.timing = Tiempos:
 semantic.prefix.rendered = {"{"}symbol{"}"} {"{"}label{"}"}

@@ -223,6 +223,28 @@ fn an_unterminated_body_is_still_reported() -> Result<()> {
     Ok(())
 }
 
+/// Macro-shaped text that is not the invocation must not be mistaken for it.
+///
+/// A doc comment naming `define_keys!`, or a string containing it, previously
+/// captured the search: extraction started from the mention and read the wrong
+/// text as the body.
+#[rstest]
+// Named in a line doc comment above the real invocation.
+#[case("/// See define_keys! for the declaration format.\n")]
+// Named in a block comment.
+#[case("/* define_keys! { NOT => \"not.a.key\", } */\n")]
+// Quoted in a string constant, braces and all.
+#[case("const SAMPLE: &str = \"define_keys! { NOT => \\\"not.a.key\\\", }\";\n")]
+fn a_mention_of_the_macro_does_not_displace_the_invocation(#[case] preamble: &str) -> Result<()> {
+    let source = format!("{preamble}define_keys! {{\n    A => \"a.key\",\n}}\n");
+    let extracted = extract_source(&source)?;
+    ensure!(
+        extracted == key_set(&["a.key"]),
+        "expected only the real invocation's key, got {extracted:?}"
+    );
+    Ok(())
+}
+
 /// The real macro body is the contract this parser exists to read.
 #[test]
 fn the_repository_macro_parses() -> Result<()> {

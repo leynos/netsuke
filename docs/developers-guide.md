@@ -35,9 +35,9 @@ reads the registry; a registry inside `localization` would close that into a
 module cycle. `localization::locales` re-exports it, so the older path still
 resolves for callers. `define_locales!` declares the tags and embeds
 `locales/<tag>/messages.ftl` for each, so a tag without a catalogue on disk
-fails to compile. Read the registry rather than writing a locale list of your
-own; the build audit, the `rerun-if-changed` directives, the packaging smoke
-test, and the test suite all do.
+fails to compile. Read the registry rather than writing a separate locale list;
+the build audit, the `rerun-if-changed` directives, the packaging smoke test,
+and the test suite all do.
 
 `Cargo.toml`'s `package.metadata.ortho_config.locales` is the one unavoidable
 duplicate, because Cargo metadata cannot call into Rust. The build audit
@@ -709,7 +709,7 @@ and `-Clink-arg=-fuse-ld=mold`.
 
 ### Testing the tooling
 
-Five suites cover the tooling's observable behaviour. All are hermetic — no
+Six suites cover the tooling's observable behaviour. All are hermetic — no
 network, and no real `mold`, `rustup`, or Cargo — so they run as part of
 `make test` on any Linux host.
 

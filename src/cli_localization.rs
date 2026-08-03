@@ -77,11 +77,19 @@ fn build_consumer_localizer(
 ///
 /// `fallback` becomes the layered localizer's second tier. When the catalogue
 /// itself fails to parse, it is handed straight back rather than rebuilt.
+///
+/// The bundle is built for the catalogue's own locale, not the requested one.
+/// A request resolves to a catalogue that may name a different tag — `pt-AO`
+/// serves European Portuguese — and Fluent takes plural rules and number
+/// formatting from the bundle's locale. Building the bundle for `pt-AO` while
+/// loading the `pt-PT` catalogue would pair one locale's messages with
+/// another's rules.
 fn build_layered_localizer(
-    locale: LanguageIdentifier,
+    requested: &LanguageIdentifier,
     catalogue: &'static LocaleCatalogue,
     fallback: Box<dyn Localizer>,
 ) -> Box<dyn Localizer> {
+    let locale = parse_locale_identifier(catalogue.tag()).unwrap_or_else(|| requested.clone());
     let builder = FluentLocalizer::builder(locale);
     match build_consumer_localizer(builder, catalogue.tag(), catalogue.resource()) {
         Some(primary) => Box::new(LayeredLocalizer::new(primary, fallback)),
@@ -120,7 +128,7 @@ pub fn build_localizer(preferred_locale: Option<&str>) -> Box<dyn Localizer> {
     if catalogue.tag() == locales::SOURCE_LOCALE {
         return fallback;
     }
-    build_layered_localizer(locale, catalogue, fallback)
+    build_layered_localizer(&locale, catalogue, fallback)
 }
 
 #[cfg(test)]

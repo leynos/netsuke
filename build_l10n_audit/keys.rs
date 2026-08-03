@@ -38,7 +38,10 @@ pub(super) fn extract_key_constants(path: &Path) -> Result<BTreeSet<String>, Box
 }
 
 fn extract_define_keys_body(source: &str) -> Result<&str, Box<dyn Error>> {
-    let Some(macro_pos) = source.find(DEFINE_KEYS_MACRO) else {
+    // Scanned rather than searched: `define_keys!` named in a doc comment or
+    // quoted in a string is not the invocation, and reading from there would
+    // take the wrong text as the macro body.
+    let Some(macro_pos) = DefineKeysParser::new(source).find_in_source(DEFINE_KEYS_MACRO) else {
         return Err("define_keys! macro not found in localization keys".into());
     };
     let after_macro = source

@@ -47,9 +47,16 @@ fn plural_categories(text: &str, key: &str) -> BTreeSet<String> {
     let mut inside = false;
     for line in text.lines() {
         let trimmed = line.trim();
-        if let Some((id, _)) = trimmed.split_once('=')
+        if let Some((id, value)) = trimmed.split_once('=')
             && id.trim() == key
         {
+            // Only a select opens a variant block. Without this check a
+            // non-select message with the same key would leave the scan
+            // running, and it would collect the categories of whichever
+            // select came next.
+            if !value.trim_end().ends_with("->") {
+                return BTreeSet::new();
+            }
             inside = true;
             continue;
         }

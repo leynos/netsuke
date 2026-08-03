@@ -118,3 +118,43 @@ fn a_well_formed_catalogue_reports_no_failure() -> Result<()> {
     );
     Ok(())
 }
+
+/// A fallback-resolved request must use the catalogue's locale, not its own.
+///
+/// `pt-AO` ships no catalogue and resolves to `pt-PT`. Fluent reads plural
+/// rules from the bundle's locale, so building the bundle for `pt-AO` while
+/// loading `pt-PT` messages would pair one locale's text with another's rules.
+/// Rendering identically to a direct `pt-PT` request is what shows they agree.
+#[rstest]
+#[case("pt-AO", "pt-PT")]
+#[case("es-MX", "es-419")]
+#[case("zh-TW", "zh-Hant")]
+fn a_fallback_resolved_request_renders_as_its_catalogue(
+    #[case] requested: &str,
+    #[case] catalogue_tag: &str,
+) -> Result<()> {
+    let via_fallback = build_localizer(Some(requested));
+    let via_catalogue = build_localizer(Some(catalogue_tag));
+
+    for count in [0_i64, 1, 2, 5] {
+        let mut args = ortho_config::LocalizationArgs::new();
+        args.insert("count", fluent_bundle::FluentValue::from(count));
+        let fallback_text = via_fallback.lookup(
+            crate::localization::keys::EXAMPLE_FILES_PROCESSED,
+            Some(&args),
+        );
+        let catalogue_text = via_catalogue.lookup(
+            crate::localization::keys::EXAMPLE_FILES_PROCESSED,
+            Some(&args),
+        );
+        ensure!(
+            fallback_text == catalogue_text,
+            "{requested} must render as {catalogue_tag} for count {count}: {fallback_text:?} vs {catalogue_text:?}"
+        );
+        ensure!(
+            fallback_text.is_some_and(|text| !text.trim().is_empty()),
+            "{requested} rendered nothing for count {count}"
+        );
+    }
+    Ok(())
+}
