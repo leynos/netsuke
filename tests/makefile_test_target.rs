@@ -191,7 +191,7 @@ fn behavioural_test_passes_also_target_test_support(
 
     let scoped: Vec<&str> = recipe
         .lines()
-        .filter(|line| line.contains("--manifest-path $(TEST_SUPPORT_MANIFEST)"))
+        .filter(|line| line.contains(QUOTED_MANIFEST_FLAG))
         .collect();
     ensure!(
         scoped.len() == 1,
@@ -231,6 +231,48 @@ fn behavioural_test_passes_also_target_test_support(
     Ok(())
 }
 
+/// Every recipe reaching `test_support` must quote the manifest variable.
+///
+/// `TEST_SUPPORT_MANIFEST` is overridable, so an unquoted expansion
+/// word-splits on a path containing spaces and hands Cargo a truncated
+/// manifest path. This reads the Makefile only — it neither runs Make nor
+/// invokes Cargo — so it stays a fast static check.
+#[test]
+fn behavioural_test_support_passes_quote_the_manifest_variable() -> Result<()> {
+    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
+    let unquoted = "--manifest-path $(TEST_SUPPORT_MANIFEST)";
+
+    let offenders: Vec<&str> = makefile
+        .lines()
+        .filter(|line| line.contains(unquoted) && !line.contains(QUOTED_MANIFEST_FLAG))
+        .map(str::trim)
+        .collect();
+    ensure!(
+        offenders.is_empty(),
+        "every --manifest-path must quote the variable, found {offenders:#?}"
+    );
+
+    for target in ["test-nextest", "doctest", "dev-test", "lint-clippy"] {
+        let recipe = target_recipe(&makefile, target)
+            .with_context(|| format!("Makefile should declare a {target} target"))?;
+        let quoted = recipe
+            .lines()
+            .filter(|line| line.contains(QUOTED_MANIFEST_FLAG))
+            .count();
+        ensure!(
+            quoted == 1,
+            concat!(
+                "{target} should reach test_support on exactly one quoted ",
+                "--manifest-path line, found {quoted}: {recipe:?}",
+            ),
+            target = target,
+            quoted = quoted,
+            recipe = recipe
+        );
+    }
+    Ok(())
+}
+
 /// The manifest path is a `?=` variable so a caller can point the second pass
 /// at a relocated crate without editing the recipes.
 #[test]
@@ -244,6 +286,13 @@ fn behavioural_test_support_manifest_is_overridable() -> Result<()> {
     );
     Ok(())
 }
+
+/// The manifest flag every `test_support` pass must carry, quoted.
+///
+/// The quotes are the contract, not incidental formatting: `TEST_SUPPORT_MANIFEST`
+/// is overridable, so an unquoted expansion word-splits on a path containing
+/// spaces and hands Cargo a truncated manifest path.
+const QUOTED_MANIFEST_FLAG: &str = "--manifest-path \"$(TEST_SUPPORT_MANIFEST)\"";
 
 /// The prefix introducing a quoted `RUSTFLAGS` assignment in a recipe.
 const RUSTFLAGS_PREFIX: &str = "RUSTFLAGS=\"";
@@ -323,7 +372,7 @@ impl RustflagsCase {
     const fn lint_clippy_test_support() -> Self {
         Self {
             target: "lint-clippy",
-            line_marker: "--manifest-path $(TEST_SUPPORT_MANIFEST)",
+            line_marker: QUOTED_MANIFEST_FLAG,
             denies_warnings: true,
             separator_only_when_set: true,
         }
@@ -348,7 +397,7 @@ impl RustflagsCase {
     const fn test_nextest_test_support() -> Self {
         Self {
             target: "test-nextest",
-            line_marker: "--manifest-path $(TEST_SUPPORT_MANIFEST)",
+            line_marker: QUOTED_MANIFEST_FLAG,
             denies_warnings: true,
             separator_only_when_set: true,
         }
@@ -357,7 +406,7 @@ impl RustflagsCase {
     const fn doctest_test_support() -> Self {
         Self {
             target: "doctest",
-            line_marker: "--manifest-path $(TEST_SUPPORT_MANIFEST)",
+            line_marker: QUOTED_MANIFEST_FLAG,
             denies_warnings: true,
             separator_only_when_set: true,
         }

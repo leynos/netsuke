@@ -86,11 +86,11 @@ test-nextest: ## Run all non-doctest Rust tests through cargo-nextest
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) nextest run --all-targets --all-features $(NEXTEST_BUILD_JOBS)
 	# `test_support` is excluded from the root workspace, so the run above cannot
 	# reach its own tests. Run them separately, as lint-whitaker does.
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) nextest run --all-targets --all-features --manifest-path $(TEST_SUPPORT_MANIFEST) $(NEXTEST_BUILD_JOBS)
+	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) nextest run --all-targets --all-features --manifest-path "$(TEST_SUPPORT_MANIFEST)" $(NEXTEST_BUILD_JOBS)
 
 doctest: ## Run doctests, which cargo-nextest cannot execute
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) test --doc --all-features $(BUILD_JOBS)
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) test --doc --all-features --manifest-path $(TEST_SUPPORT_MANIFEST) $(BUILD_JOBS)
+	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) test --doc --all-features --manifest-path "$(TEST_SUPPORT_MANIFEST)" $(BUILD_JOBS)
 
 test-workflow-contracts: ## Validate the mutation-testing caller contract
 	uv run --with 'pytest>=8' --with 'pyyaml>=6' pytest tests/workflow_contracts -q
@@ -107,7 +107,7 @@ lint-clippy: ## Run rustdoc and Clippy with warnings denied
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) clippy $(CLIPPY_FLAGS)
 	# `test_support` is excluded from the root workspace, so the run above cannot
 	# reach it. Lint it separately, as lint-whitaker does.
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) clippy --manifest-path $(TEST_SUPPORT_MANIFEST) $(CLIPPY_FLAGS)
+	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) clippy --manifest-path "$(TEST_SUPPORT_MANIFEST)" $(CLIPPY_FLAGS)
 
 lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(WHITAKER) --all -- --all-targets --all-features
@@ -198,7 +198,7 @@ dev-test: dev-fast-check ## Run the nextest pass with Cranelift and mold
 	RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) --config "$$DEV_FAST_CONFIG" nextest run --all-targets --all-features $(NEXTEST_BUILD_JOBS)
 	# Mirrors test-nextest: `test_support` is excluded from the root workspace,
 	# so the run above cannot reach its tests.
-	RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) --config "$$DEV_FAST_CONFIG" nextest run --all-targets --all-features --manifest-path $(TEST_SUPPORT_MANIFEST) $(NEXTEST_BUILD_JOBS)
+	RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) --config "$$DEV_FAST_CONFIG" nextest run --all-targets --all-features --manifest-path "$(TEST_SUPPORT_MANIFEST)" $(NEXTEST_BUILD_JOBS)
 
 bench-build: dev-fast-check ## Time clean and incremental debug builds for both paths
 	@CARGO="$(CARGO)" scripts/bench-build.sh

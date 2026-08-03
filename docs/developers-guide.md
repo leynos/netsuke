@@ -684,7 +684,11 @@ The fixtures live in `test_support::dev_fast`:
   two starting points. `BuildScenario` is a sandbox where `make dev-fast-check`
   passes — pinned `mold` on the install prefix, a `rustup` reporting the
   Cranelift component, and a `RecordingCargo` installed — and is shared by the
-  Make-target and benchmark suites. `InstallerScenario` is a sandbox with a
+  Make-target and benchmark suites. `BuildScenario::run(target)` returns the
+  single Cargo invocation a target must produce; `run_all(target)` returns
+  every invocation in order, for targets that invoke Cargo more than once,
+  such as `dev-test`, which runs the root pass and then `test_support`.
+  `InstallerScenario` is a sandbox with a
   published `FakeRelease` and a usable `rustup`, letting a test concentrate on
   the linker half of the installer; the installer and checksum suites share it.
   The module also exports `TEST_MOLD_VERSION`, deliberately not a real `mold`
@@ -727,10 +731,15 @@ Prefer a model that predicts an outcome over a table that restates one. Where
 an invariant lives in a shell script, the cost is a process per case, so keep
 the corpus small and the strategy structural.
 
-A `#[cfg(test)]` unit test added inside `test_support` will not run as part of
-`make test`, because `Cargo.toml` excludes `test_support` from the workspace.
-Put assertions about the fixtures themselves in the `tests/dev_fast_*.rs`
-integration crates instead, where the gate will actually exercise them.
+`Cargo.toml` excludes `test_support` from the workspace, but `make test` still
+exercises it: `test-nextest` and `doctest` each run a second time with
+`--manifest-path "$(TEST_SUPPORT_MANIFEST)"` (see
+[Test execution](#test-execution)), so a `#[cfg(test)]` unit test added inside
+`test_support` is covered by `make test`. `lint-clippy` and `lint-whitaker` run
+their passes against `test_support/Cargo.toml` the same way. Prefer putting
+assertions about the fixtures themselves in the `tests/dev_fast_*.rs`
+integration crates when the assertion belongs with the suite that consumes the
+fixture, rather than with the fixture's own unit tests.
 
 ### Benchmark evidence
 
@@ -1260,6 +1269,51 @@ pattern documented in the
 `src/snapshot_test_support.rs` owns output-oriented unit-test fixtures;
 `no_color_env` is shared across output-preference and theme tests that exercise
 optional `NO_COLOR` lookup behaviour.
+
+### `test_support::fs`
+
+`test_support::fs` (`test_support/src/fs.rs`) is the crate's single
+ambient-filesystem boundary. Fixture code routes filesystem access through it
+rather than reaching for `std::fs` directly; Whitaker enforces this (see
+[Quality gates](#quality-gates)) for every other module in the crate.
+
+Two wrappers are worth calling out because their behaviour differs from a
+naive `std::fs` call:
+
+- `is_dir(path) -> bool` mirrors `Path::is_dir`: it follows symlinks, and an
+  absent or unreadable path returns `false` rather than surfacing the
+  underlying metadata error. Fixture code must use this wrapper rather than
+  calling `std::fs::metadata(...).is_dir()` or `Path::is_dir` directly.
+- `is_executable_file(path) -> bool` (Unix only) is `true` when the path is a
+  regular file with any execute bit set, and `false` for an absent or
+  unreadable path. It is the inverse of `set_mode`, and exists for probing a
+  sandbox `PATH` the way an executable lookup would.
+
+### `EnLocalizer` field ordering
+
+`EnLocalizer` (`test_support/src/localizer.rs`) holds both the localizer
+override guard and the global localizer mutex guard:
+
+```rust
+pub struct EnLocalizer {
+    _guard: LocalizerGuard,
+    _lock: MutexGuard<'static, ()>,
+}
+```
+
+The declaration order is load-bearing: struct fields drop in declaration
+order, so `LocalizerGuard` must be declared before the mutex guard. That keeps
+the mutex held while `LocalizerGuard` restores the process-global localizer,
+so a test waiting on the lock cannot acquire it, install its own override, and
+capture this test's override as its "previous" state.
+
+`en_localizer()` recovers a poisoned `LOCALIZER_TEST_LOCK` with
+`PoisonError::into_inner` rather than propagating the poison: a poisoned lock
+only means an earlier test panicked while holding it, and `set_en_localizer`
+re-establishes the global state unconditionally, so the recovered guard is
+still safe to use. See the
+[locale-pinned snapshot tests](snapshot-testing-in-netsuke-using-insta.md#locale-pinned-snapshot-tests)
+section for the fixture's intended usage.
 
 ### `EnvLock`
 

@@ -68,6 +68,7 @@ mod tests {
 
     use super::*;
     use std::sync::TryLockError;
+    use std::thread;
 
     // Macros rather than helper functions so a failure reports the calling
     // test's line number, and so matching on `ENV_LOCK.try_lock()` stays
@@ -126,6 +127,50 @@ mod tests {
         drop(outer);
         assert_underlying_lock_is_released!(
             "ENV_LOCK should be unlocked after final EnvLock guard is dropped",
+        );
+    }
+
+    /// Poison `ENV_LOCK` the way a panicking test would: hold the guard across
+    /// a panic on another thread.
+    ///
+    /// The panic hook is left alone. `panic::set_hook` is process-wide, so
+    /// swapping it out would suppress the report any concurrently panicking
+    /// test relies on. One line of stderr noise is the cheaper cost.
+    fn poison_env_lock() {
+        let poisoner = thread::spawn(|| {
+            let _guard = ENV_LOCK.lock();
+            panic!("deliberately poisoning ENV_LOCK");
+        });
+        assert!(
+            poisoner.join().is_err(),
+            "the poisoning thread should have panicked"
+        );
+        assert!(ENV_LOCK.is_poisoned(), "ENV_LOCK should now be poisoned");
+    }
+
+    #[test]
+    fn env_lock_recovers_from_a_poisoned_mutex() {
+        poison_env_lock();
+
+        // `acquire` must recover through `PoisonError::into_inner` rather than
+        // propagating: a panic here would fail every later test taking the lock.
+        let guard = EnvLock::acquire();
+        assert_underlying_lock_is_held!(
+            "a recovered EnvLock should still hold the underlying mutex",
+        );
+
+        drop(guard);
+        assert_underlying_lock_is_released!(
+            "a recovered EnvLock should release the mutex when dropped",
+        );
+
+        // Leave the static as it was found. The flag is sticky and the mutex is
+        // shared with every other test, so a deliberate poisoning must not
+        // outlive the test that caused it.
+        ENV_LOCK.clear_poison();
+        assert!(
+            !ENV_LOCK.is_poisoned(),
+            "the poison flag should be cleared before leaving the test"
         );
     }
 
