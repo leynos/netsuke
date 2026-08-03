@@ -126,7 +126,7 @@ pub fn compile_rust_helper(
     name: &str,
     source: &str,
 ) -> Result<Utf8PathBuf> {
-    dir.write(&format!("{name}.rs"), source.as_bytes())
+    dir.write(format!("{name}.rs"), source.as_bytes())
         .with_context(|| format!("write helper source {name}.rs"))?;
 
     let src_path = root.join(format!("{name}.rs"));

@@ -140,13 +140,10 @@ fn ensure_parent_directory(manifest_path: &Utf8Path, dest_dir: &Utf8Path) -> io:
     let base = find_existing_ancestor(dest_dir, manifest_path)?;
 
     let relative = dest_dir.strip_prefix(base).map_err(|_| {
-        io::Error::new(
-            io::ErrorKind::Other,
-            format!(
-                "Failed to derive relative path for {} from ancestor {}",
-                dest_dir, base,
-            ),
-        )
+        io::Error::other(format!(
+            "Failed to derive relative path for {} from ancestor {}",
+            dest_dir, base,
+        ))
     })?;
 
     let dir = fs_utf8::Dir::open_ambient_dir(base, ambient_authority()).map_err(|e| {

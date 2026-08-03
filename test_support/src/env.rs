@@ -292,7 +292,7 @@ pub fn override_ninja_env(env: &impl EnvMut, path: &Path) -> NinjaEnvGuard {
     // races while the guard is alive.
     unsafe { env.set_var(NINJA_ENV, path.as_os_str()) };
     NinjaEnvGuard {
-        inner: EnvGuard::with_env_and_lock(NINJA_ENV, original, StdEnv::default(), false),
+        inner: EnvGuard::with_env_and_lock(NINJA_ENV, original, StdEnv, false),
         _lock: lock,
     }
 }

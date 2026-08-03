@@ -21,7 +21,7 @@ use std::{cell::RefCell, thread_local};
 
 #[cfg(test)]
 thread_local! {
-    static DURATION_WARNINGS: RefCell<Vec<String>> = RefCell::new(Vec::new());
+    static DURATION_WARNINGS: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
 /// Configuration for HTTP fixtures, including timeouts used during polling.

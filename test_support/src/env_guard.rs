@@ -57,12 +57,12 @@ pub struct EnvGuard<E: Environment = StdEnv> {
 impl EnvGuard {
     /// Create a guard for `key` using [`StdEnv`].
     pub fn new(key: impl Into<Cow<'static, str>>, original: Option<OsString>) -> Self {
-        Self::with_env_and_lock(key, original, StdEnv::default(), true)
+        Self::with_env_and_lock(key, original, StdEnv, true)
     }
 
     /// Create a guard that skips locking on drop.
     pub fn new_unlocked(key: impl Into<Cow<'static, str>>, original: Option<OsString>) -> Self {
-        Self::with_env_and_lock(key, original, StdEnv::default(), false)
+        Self::with_env_and_lock(key, original, StdEnv, false)
     }
 }
 

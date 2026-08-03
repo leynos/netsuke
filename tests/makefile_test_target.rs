@@ -318,6 +318,17 @@ impl RustflagsCase {
         }
     }
 
+    /// Clippy's `test_support` pass. The marker must be the manifest flag:
+    /// `clippy` alone matches the root line, which `recipe_line` finds first.
+    const fn lint_clippy_test_support() -> Self {
+        Self {
+            target: "lint-clippy",
+            line_marker: "--manifest-path $(TEST_SUPPORT_MANIFEST)",
+            denies_warnings: true,
+            separator_only_when_set: true,
+        }
+    }
+
     const fn lint_whitaker() -> Self {
         Self {
             target: "lint-whitaker",
@@ -381,7 +392,7 @@ impl RustflagsCase {
 }
 
 /// Every `RUSTFLAGS`-setting recipe line under contract.
-const RUSTFLAGS_CASES: [RustflagsCase; 11] = [
+const RUSTFLAGS_CASES: [RustflagsCase; 12] = [
     RustflagsCase::test_nextest(),
     RustflagsCase::test_nextest_test_support(),
     RustflagsCase::doctest(),
@@ -389,6 +400,7 @@ const RUSTFLAGS_CASES: [RustflagsCase; 11] = [
     RustflagsCase::binary_build(),
     RustflagsCase::lint_clippy_rustdoc(),
     RustflagsCase::lint_clippy(),
+    RustflagsCase::lint_clippy_test_support(),
     RustflagsCase::lint_whitaker(),
     RustflagsCase::lint_whitaker_test_support(),
     RustflagsCase::typecheck(),
@@ -510,6 +522,7 @@ fn unit_extracts_the_rustflags_assignment_from_a_recipe_line() {
 #[case(RustflagsCase::binary_build())]
 #[case(RustflagsCase::lint_clippy_rustdoc())]
 #[case(RustflagsCase::lint_clippy())]
+#[case(RustflagsCase::lint_clippy_test_support())]
 #[case(RustflagsCase::lint_whitaker())]
 #[case(RustflagsCase::lint_whitaker_test_support())]
 #[case(RustflagsCase::typecheck())]
@@ -555,6 +568,7 @@ fn behavioural_rustflags_recipes_preserve_inherited_flags(
 #[case(RustflagsCase::binary_build())]
 #[case(RustflagsCase::lint_clippy_rustdoc())]
 #[case(RustflagsCase::lint_clippy())]
+#[case(RustflagsCase::lint_clippy_test_support())]
 #[case(RustflagsCase::lint_whitaker())]
 #[case(RustflagsCase::lint_whitaker_test_support())]
 #[case(RustflagsCase::typecheck())]
