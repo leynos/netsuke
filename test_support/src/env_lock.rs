@@ -67,63 +67,78 @@ mod tests {
     //! Unit tests for the environment mutation lock.
 
     use super::*;
-    use std::sync::{PoisonError, TryLockError};
+    use rstest::{fixture, rstest};
+    use std::sync::PoisonError;
     use std::thread;
 
     /// Serialises this module's tests against each other.
     ///
-    /// They all assert on the process-global `ENV_LOCK`, so two running
-    /// concurrently observe each other's guards. nextest isolates every test in
-    /// its own process and never sees this, but plain `cargo test` shares one,
+    /// Only the poisoning test needs this: it sets and clears the sticky,
+    /// process-global poison flag, and two tests doing that concurrently would
+    /// observe each other. The held/released assertions below are thread-local
+    /// and need no serialisation. nextest isolates every test in its own
+    /// process and never sees any of this, but plain `cargo test` shares one,
     /// and the crate must not be flaky under either.
     static TEST_SERIAL: Mutex<()> = Mutex::new(());
 
-    /// Hold the module's serialisation lock for the caller's scope.
+    /// Hold the module's serialisation lock for the whole test.
+    ///
+    /// A fixture rather than a `let` binding so the guard is a parameter, and
+    /// so drops after every local the test declares.
     ///
     /// Recovers from poisoning: a panicking test leaves the flag set, and that
     /// must not cascade into every later test in the module.
+    #[fixture]
     fn serialised() -> MutexGuard<'static, ()> {
         TEST_SERIAL.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     // Macros rather than helper functions so a failure reports the calling
-    // test's line number, and so matching on `ENV_LOCK.try_lock()` stays
-    // inside a test body where a panic is the verdict rather than a fixture
-    // failure.
+    // test's line number.
     //
-    // Neither macro may test `is_err()`. Rust's poison flag is sticky and
-    // independent of lock state, so `try_lock` on a mutex that is free but was
-    // held by a panicking thread returns `Err(Poisoned)`, not `Ok`. Only
-    // `WouldBlock` means a guard actually holds the lock. `EnvLock::acquire`
-    // recovers from poisoning via `into_inner`, so these treat a poisoned but
-    // free lock as released, matching the behaviour under test.
+    // These probe this thread's `ENV_LOCK_STATE`, not `ENV_LOCK.try_lock()`.
+    // The global probe was racy and did fail in practice: `ENV_LOCK` is
+    // acquired by `env::set_var`, `env::with_isolated_path`,
+    // `EnvGuard::drop` and other *library* functions, so any test anywhere
+    // calling the public API holds it transitively. A concurrent holder made
+    // `try_lock` return `WouldBlock`, and the released-assertion reported
+    // "ENV_LOCK is still held" for a guard this thread had correctly dropped.
+    // Serialising this module's tests could not fix that, because the
+    // competing acquisitions are not in this module and not in tests at all.
+    //
+    // The thread-local probe is both race-free and more precise. Holding a
+    // `MutexGuard` means the mutex is locked, so `guard.is_some()` is exactly
+    // "this thread holds `ENV_LOCK`" and `guard.is_none()` is exactly "this
+    // thread released it" — which is the `Drop` contract under test. Another
+    // thread's unrelated guard is now correctly invisible.
     macro_rules! assert_underlying_lock_is_held {
         ($message:expr $(,)?) => {
-            match ENV_LOCK.try_lock() {
-                Err(TryLockError::WouldBlock) => {}
-                Err(TryLockError::Poisoned(_)) => panic!(
-                    "{}: ENV_LOCK is poisoned but free, so no guard holds it",
+            ENV_LOCK_STATE.with(|state| {
+                assert!(
+                    state.borrow().guard.is_some(),
+                    "{}: this thread holds no ENV_LOCK guard",
                     $message
-                ),
-                Ok(_) => panic!("{}: ENV_LOCK was acquirable", $message),
-            }
+                );
+            });
         };
     }
 
     macro_rules! assert_underlying_lock_is_released {
         ($message:expr $(,)?) => {
-            match ENV_LOCK.try_lock() {
-                Ok(_) | Err(TryLockError::Poisoned(_)) => {}
-                Err(TryLockError::WouldBlock) => {
-                    panic!("{}: ENV_LOCK is still held", $message)
-                }
-            }
+            ENV_LOCK_STATE.with(|state| {
+                assert!(
+                    state.borrow().guard.is_none(),
+                    "{}: this thread still holds an ENV_LOCK guard",
+                    $message
+                );
+            });
         };
     }
 
-    #[test]
-    fn reentrant_env_lock_nested_acquire_and_release() {
-        let _serial = serialised();
+    #[rstest]
+    fn reentrant_env_lock_nested_acquire_and_release(
+        #[from(serialised)] _serial: MutexGuard<'static, ()>,
+    ) {
         {
             let _outer = EnvLock::acquire();
             let _inner = EnvLock::acquire();
@@ -165,9 +180,10 @@ mod tests {
         assert!(ENV_LOCK.is_poisoned(), "ENV_LOCK should now be poisoned");
     }
 
-    #[test]
-    fn env_lock_recovers_from_a_poisoned_mutex() {
-        let _serial = serialised();
+    #[rstest]
+    fn env_lock_recovers_from_a_poisoned_mutex(
+        #[from(serialised)] _serial: MutexGuard<'static, ()>,
+    ) {
         poison_env_lock();
 
         // `acquire` must recover through `PoisonError::into_inner` rather than
@@ -192,9 +208,10 @@ mod tests {
         );
     }
 
-    #[test]
-    fn reentrant_env_lock_stays_locked_when_outer_drops_first() {
-        let _serial = serialised();
+    #[rstest]
+    fn reentrant_env_lock_stays_locked_when_outer_drops_first(
+        #[from(serialised)] _serial: MutexGuard<'static, ()>,
+    ) {
         let outer = EnvLock::acquire();
         let inner = EnvLock::acquire();
 
