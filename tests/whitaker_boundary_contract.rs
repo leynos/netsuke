@@ -22,9 +22,12 @@
 //! and `docs/developers-guide.md` records the manual negative probe for
 //! confirming the exclusions have not widened.
 
+#[path = "support/makefile.rs"]
+mod makefile;
+
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
-use cap_std::{ambient_authority, fs_utf8::Dir};
+use makefile::{read_repo_file, target_recipe};
 use rstest::rstest;
 use toml::Value as TomlValue;
 
@@ -38,34 +41,6 @@ const WHICH_LOOKUP_BOUNDARY: &str = "netsuke::stdlib::which::lookup";
 /// Durability sync for the runner's temporary Ninja file, scoped to the
 /// submodule holding only that `sync_all`.
 const RUNNER_SYNC_BOUNDARY: &str = "netsuke::runner::process::file_io::ambient_sync";
-
-/// Opens the repository root as a capability-scoped directory handle.
-fn repo_root() -> Result<Dir> {
-    Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
-        .context("open the repository root as a capability-scoped directory")
-}
-
-fn read_repo_file(relative: &Utf8Path) -> Result<String> {
-    repo_root()?
-        .read_to_string(relative)
-        .with_context(|| format!("{relative} should be readable"))
-}
-
-/// Returns the tab-indented recipe lines for `target`, joined by newlines.
-fn target_recipe(contents: &str, target: &str) -> Option<String> {
-    let mut lines = contents.lines().skip_while(|line| {
-        line.starts_with(['\t', ' ', '#', '.'])
-            || line
-                .split_once(':')
-                .is_none_or(|(name, rest)| name.trim() != target || rest.starts_with('='))
-    });
-    lines.next()?;
-    let recipe: Vec<&str> = lines
-        .take_while(|line| line.starts_with('\t') || line.trim().is_empty())
-        .filter(|line| line.starts_with('\t'))
-        .collect();
-    Some(recipe.join("\n"))
-}
 
 /// Returns the string entries of `key` under `[no_std_fs_operations]`.
 fn exclusion_list(dylint_toml: &str, key: &str) -> Result<Vec<String>> {

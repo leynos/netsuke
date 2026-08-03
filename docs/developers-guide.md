@@ -1289,6 +1289,52 @@ naive `std::fs` call:
   unreadable path. It is the inverse of `set_mode`, and exists for probing a
   sandbox `PATH` the way an executable lookup would.
 
+### Shared Makefile contract helpers
+
+`tests/support/makefile.rs` is a shared module for integration tests that
+assert facts about the repository's `Makefile` — for example, that a target
+declares a given prerequisite or recipe. It provides five helpers:
+
+- `repo_root() -> Result<cap_std::fs_utf8::Dir>` opens the repository root
+  through `cap_std::fs_utf8::Dir` and `ambient_authority()`, so a contract
+  test cannot read outside the checkout.
+- `read_repo_file(relative: &Utf8Path) -> Result<String>` reads a file under
+  the repository root via that capability-scoped directory.
+- `parse_rule(line: &str) -> Option<(&str, Vec<&str>)>` parses a single
+  `target: prerequisites` line. It returns `None` for recipe or continuation
+  lines, comments, `.PHONY`-style directives, and variable assignments
+  (`:=` is caught by testing whether the text after the colon starts with
+  `=`). It strips trailing `##` help comments from the prerequisite list.
+- `target_prerequisites(contents: &str, target: &str) -> Option<Vec<String>>`
+  finds a target's rule line and returns its prerequisites.
+- `target_recipe(contents: &str, target: &str) -> Option<String>` returns
+  `Some("")` for a target with no recipe and `None` for an absent target.
+  Blank lines inside a recipe are traversed but dropped, so a recipe split by
+  a blank line is returned whole.
+
+Because every file under `tests/` compiles as an independent crate, there is
+no library through which to share this module, and `tests/support/` is a
+subdirectory that Cargo does not auto-discover as a test target. Consumers
+include it with:
+
+```rust
+#[path = "support/makefile.rs"]
+mod makefile;
+```
+
+This mirrors the shape of `tests/common/mod.rs`, which the workflow-contract
+crates include with `mod common;`. The module carries its own `#[cfg(test)]`
+unit tests covering every helper, so a consumer that needs only part of the
+surface does not trip `dead_code`; these tests run once per including crate.
+
+Scope and reuse policy: this module exists only for static Makefile contract
+tests and capability-scoped reads from the repository root. It must not grow
+into a general test-utility bag — fixture construction, process invocation,
+and environment control belong in the `test_support` crate, which is
+versioned, linted, and documented as such. A helper earns a place here only
+when more than one contract test needs the same reading or parsing
+behaviour. Nothing in it runs Make, runs Cargo, or writes anything.
+
 ### `EnLocalizer` field ordering
 
 `EnLocalizer` (`test_support/src/localizer.rs`) holds both the localizer

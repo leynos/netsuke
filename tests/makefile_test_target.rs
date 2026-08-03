@@ -23,97 +23,16 @@
 //! valid when the command a recipe runs changes. A guard test fails if a
 //! recipe starts setting `RUSTFLAGS` without joining the covered set.
 
+#[path = "support/makefile.rs"]
+mod makefile;
+
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
-use cap_std::{ambient_authority, fs_utf8::Dir};
+use makefile::{read_repo_file, target_prerequisites, target_recipe};
 use rstest::rstest;
 use std::collections::BTreeSet;
 use std::process::Command;
 use toml::Value;
-
-/// Opens the repository root as a capability-scoped directory handle.
-///
-/// Every read in this file is relative to that handle, so the tests cannot
-/// reach outside the checkout.
-fn repo_root() -> Result<Dir> {
-    Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
-        .context("open the repository root as a capability-scoped directory")
-}
-
-fn read_repo_file(relative: &Utf8Path) -> Result<String> {
-    repo_root()?
-        .read_to_string(relative)
-        .with_context(|| format!("{relative} should be readable"))
-}
-
-/// Splits a Make rule line into its target and its prerequisites.
-///
-/// Trailing `## ` help comments are discarded so `help` annotations do not leak
-/// into the prerequisite list.
-fn parse_rule(line: &str) -> Option<(&str, Vec<&str>)> {
-    if line.starts_with(['\t', ' ', '#', '.']) {
-        return None;
-    }
-    let (target, rest) = line.split_once(':')?;
-    if target.is_empty() || rest.starts_with('=') {
-        return None;
-    }
-    let prerequisites = rest
-        .split("##")
-        .next()
-        .unwrap_or_default()
-        .split_whitespace()
-        .collect();
-    Some((target.trim(), prerequisites))
-}
-
-/// Returns the prerequisites declared for `target`.
-fn target_prerequisites(contents: &str, target: &str) -> Option<Vec<String>> {
-    contents.lines().find_map(|line| {
-        let (name, prerequisites) = parse_rule(line)?;
-        (name == target).then(|| prerequisites.into_iter().map(ToOwned::to_owned).collect())
-    })
-}
-
-/// Returns the tab-indented recipe lines for `target`, joined by newlines.
-fn target_recipe(contents: &str, target: &str) -> Option<String> {
-    let mut lines = contents
-        .lines()
-        .skip_while(|line| parse_rule(line).is_none_or(|(name, _)| name != target));
-    lines.next()?;
-    let recipe: Vec<&str> = lines
-        .take_while(|line| line.starts_with('\t') || line.trim().is_empty())
-        .filter(|line| line.starts_with('\t'))
-        .collect();
-    Some(recipe.join("\n"))
-}
-
-#[test]
-fn unit_parses_make_rules_and_ignores_help_comments() {
-    assert_eq!(
-        parse_rule("test: test-nextest doctest ## Run every Rust test"),
-        Some(("test", vec!["test-nextest", "doctest"]))
-    );
-    assert_eq!(
-        parse_rule("doctest: ## Run doctests"),
-        Some(("doctest", vec![]))
-    );
-    assert_eq!(parse_rule("BUILD_JOBS ?="), None);
-    assert_eq!(parse_rule("\tcargo nextest run"), None);
-    assert_eq!(parse_rule(".PHONY: test doctest"), None);
-}
-
-#[test]
-fn unit_extracts_recipe_lines_for_a_target() {
-    let makefile = "test: doctest ## composite\n\ndoctest: ## docs\n\tcargo test --doc\n\techo done\n\nother:\n\ttrue\n";
-
-    assert_eq!(target_recipe(makefile, "test").as_deref(), Some(""));
-    assert_eq!(
-        target_recipe(makefile, "doctest").as_deref(),
-        Some("\tcargo test --doc\n\techo done")
-    );
-    assert_eq!(target_recipe(makefile, "missing"), None);
-}
 
 #[test]
 fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()> {
