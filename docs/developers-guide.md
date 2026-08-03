@@ -109,8 +109,8 @@ Run these commands before finalizing any change:
 - `make lint`
 - `make test`
 
-When the change touches any Markdown file — documentation, ADRs, execplans,
-or the README — also run:
+When the change touches any Markdown file — documentation, ADRs, execplans, or
+the README — also run:
 
 - `make fmt`
 - `make markdownlint`
@@ -151,12 +151,11 @@ cross-directory symlink canonicalization, which `cap_std` cannot express) and
 `netsuke::runner::process::file_io` (temporary-file synchronization), and
 `netsuke::cli::discovery::paths` (canonicalizing an ambient `--directory` to
 match OrthoConfig's layer paths) are exempt; the rest of `netsuke` stays under
-the capability policy. The
-behavioural step definitions, CLI integration tests, and shared
-workflow-reading helper that stage fixtures ambiently are scoped the same way.
-A crate-level entry is justified only when the ambient access lives in the
-crate root itself, where a path entry would be no narrower — that covers the
-Cargo build script, the `test_support` fixture crate, and the enumerated
+the capability policy. The behavioural step definitions, CLI integration tests,
+and shared workflow-reading helper that stage fixtures ambiently are scoped the
+same way. A crate-level entry is justified only when the ambient access lives
+in the crate root itself, where a path entry would be no narrower — that covers
+the Cargo build script, the `test_support` fixture crate, and the enumerated
 integration-test crates.
 
 Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
@@ -434,10 +433,9 @@ than through `make` means arranging that `PATH` order yourself.
 `make dev-fast-check` prints the resolved `mold` path alongside its version, so
 an unexpected pick is visible. A version that differs from the pin fails the
 check, as does a missing `mold` or one that cannot report its version; run
-`make install-dev-fast` to install the pinned release ahead of any
-distribution `mold` on `PATH`. An advisory pin is not a pin: tolerating drift
-would let the linker actually in use stop matching what the repository
-claims.
+`make install-dev-fast` to install the pinned release ahead of any distribution
+`mold` on `PATH`. An advisory pin is not a pin: tolerating drift would let the
+linker actually in use stop matching what the repository claims.
 
 For screen readers: the following flowchart traces `make install-dev-fast` from
 start to exit. It reads the pinned linker version, then branches on the host
@@ -485,23 +483,22 @@ themselves.
 The accelerated configuration lives in `tools/dev-fast/config.toml`, which is
 deliberately *not* `.cargo/config.toml`. Cargo auto-discovers the latter, so
 placing Cranelift and the Linux-only `mold` linker there would silently apply
-them to every build in the repository, including release, packaging,
-coverage, and formal-verification builds. The fragment is instead passed
-explicitly with `cargo --config tools/dev-fast/config.toml` from the
-`make dev-*` targets, and must not be sourced from any target that CI
-invokes.
+them to every build in the repository, including release, packaging, coverage,
+and formal-verification builds. The fragment is instead passed explicitly with
+`cargo --config tools/dev-fast/config.toml` from the `make dev-*` targets, and
+must not be sourced from any target that CI invokes.
 
 A repository-root `.cargo/config.toml` does exist, and legitimately so: it
 carries the Polonius flag (`[build] rustflags = ["-Zpolonius=next"]`, see
-Polonius under Composition rules) needed by every build in the repository.
-The rule is about what belongs in that file, not about whether it may exist:
+Polonius under Composition rules) needed by every build in the repository. The
+rule is about what belongs in that file, not about whether it may exist:
 settings needed everywhere may go there; settings that are only safe for the
 accelerated dev loop must not.
 
-The fragment sets the `codegen-backend` unstable flag, `codegen-backend =
-"cranelift"` on the `dev` profile, and a `cfg(target_os = "linux")`-gated
-rustflags list carrying both `-Zpolonius=next` and
-`-Clink-arg=-fuse-ld=mold`.
+The fragment sets the `codegen-backend` unstable flag,
+`codegen-backend = "cranelift"` on the `dev` profile, and a
+`cfg(target_os = "linux")`-gated rustflags list carrying both `-Zpolonius=next`
+and `-Clink-arg=-fuse-ld=mold`.
 
 ### Composition rules
 
@@ -577,16 +574,16 @@ network, and no real `mold`, `rustup`, or Cargo — so they run as part of
 `make test` on any Linux host.
 
 - `tests/dev_fast_check_tests.rs`: the capability gate. Which diagnostic each
-  failure mode emits, exit status, pin resolution, and refusal of a
-  malformed pin.
+  failure mode emits, exit status, pin resolution, and refusal of a malformed
+  pin.
 - `tests/dev_fast_install_tests.rs`: the installer's happy path and its
   refusals, plus the benchmark script's Markdown output.
 - `tests/dev_fast_checksum_tests.rs`: property coverage for checksum
   verification against a model.
 - `tests/dev_fast_make_target_tests.rs`: the Make recipes. Toolchain and
   fragment selection; that a failed gate reaches zero Cargo invocations
-  (`dev-build` and `dev-test` stop before Cargo runs); the fragment's
-  contents; and `install-dev-fast` forwarding.
+  (`dev-build` and `dev-test` stop before Cargo runs); the fragment's contents;
+  and `install-dev-fast` forwarding.
 - `tests/dev_fast_bench_tests.rs`: `make bench-build`. Per-variant target
   directories, the clean/incremental cycle, and both variant rows.
 - `tests/dev_fast_bench_lock_tests.rs`: the benchmark's exclusion lock. That a
@@ -634,10 +631,10 @@ The fixtures live in `test_support::dev_fast`:
   Cranelift component, and a `RecordingCargo` installed — and is shared by the
   Make-target and benchmark suites. `InstallerScenario` is a sandbox with a
   published `FakeRelease` and a usable `rustup`, letting a test concentrate on
-  the linker half of the installer; the installer and checksum suites share
-  it. The module also exports `TEST_MOLD_VERSION`, deliberately not a real
-  `mold` version so a test that accidentally reaches the network fails rather
-  than silently succeeding against an upstream artefact, and `WRONG_SHA256`.
+  the linker half of the installer; the installer and checksum suites share it.
+  The module also exports `TEST_MOLD_VERSION`, deliberately not a real `mold`
+  version so a test that accidentally reaches the network fails rather than
+  silently succeeding against an upstream artefact, and `WRONG_SHA256`.
   `InstallerFixture` groups the installer's pin path, checksum path, and
   release URL, and renders them via `script_env()`.
 
@@ -645,8 +642,8 @@ A scenario earns its place here once a second suite needs it, and not before;
 suite-specific conveniences stay with their suite — the installer tests keep
 their own `ChecksumFailure` enum and `with_failure` helper, because a fixture
 encoding one suite's failure taxonomy is not shared ground. Scenario
-constructors stay free of assertions, so a scenario cannot decide on a
-caller's behalf what counts as correct.
+constructors stay free of assertions, so a scenario cannot decide on a caller's
+behalf what counts as correct.
 
 Assert on the shape of a timing cell, never on a duration. Reuse the sandbox
 for any future target with the same shape, and do not reach for `PathGuard`:
@@ -675,11 +672,10 @@ Prefer a model that predicts an outcome over a table that restates one. Where
 an invariant lives in a shell script, the cost is a process per case, so keep
 the corpus small and the strategy structural.
 
-A `#[cfg(test)]` unit test added inside `test_support` will not run as part
-of `make test`, because `Cargo.toml` excludes `test_support` from the
-workspace. Put assertions about the fixtures themselves in the
-`tests/dev_fast_*.rs` integration crates instead, where the gate will
-actually exercise them.
+A `#[cfg(test)]` unit test added inside `test_support` will not run as part of
+`make test`, because `Cargo.toml` excludes `test_support` from the workspace.
+Put assertions about the fixtures themselves in the `tests/dev_fast_*.rs`
+integration crates instead, where the gate will actually exercise them.
 
 ### Benchmark evidence
 
@@ -698,9 +694,9 @@ permanently newer. Rather than leave that to convention, the benchmark takes
 immediately, naming the lock and the remedy, and does so before touching
 anything, so the holder's state is unaffected. The lock is released however the
 run ends, including on interrupt. To benchmark two things at once, override
-`BENCH_ROOT` and `BENCH_TOUCH_FILE` per run; the lock path follows `BENCH_ROOT`,
-so distinct roots do not contend. If a killed run ever leaves the directory
-behind, remove it.
+`BENCH_ROOT` and `BENCH_TOUCH_FILE` per run; the lock path follows
+`BENCH_ROOT`, so distinct roots do not contend. If a killed run ever leaves the
+directory behind, remove it.
 
 Results below were recorded on a 24-core x86_64 Linux host, with both variants
 on the repository's own `nightly-2026-06-25` supplying Cranelift 0.132.0, and
@@ -856,9 +852,8 @@ and then runs the bounded harness suite through `make kani-ir` under a
 20-minute job timeout; it does not run `make verus`, coverage, CodeScene
 upload, or the normal build matrix. Its cache is intentionally separate from
 ordinary Cargo build artefacts: the job uses a Kani-specific cache key derived
-from
-`tools/kani/VERSION` and the Makefile, then caches the job-local Kani Cargo
-home plus Kani support-file home.
+from `tools/kani/VERSION` and the Makefile, then caches the job-local Kani
+Cargo home plus Kani support-file home.
 
 ## Test execution
 
@@ -869,8 +864,8 @@ home plus Kani support-file home.
   `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)"` (the
   Makefile re-states the Polonius flag because a set `RUSTFLAGS` overrides
   `.cargo/config.toml`, and the `$${RUSTFLAGS:+$$RUSTFLAGS }` prefix preserves
-  any `RUSTFLAGS` inherited from the caller). This runs every unit,
-  integration, `rstest`, and `rstest-bdd` test.
+  any `RUSTFLAGS` inherited from the caller). This runs every unit, integration,
+  `rstest`, and `rstest-bdd` test.
 - `make doctest` — `cargo test --doc --all-features`, with the same
   `RUSTFLAGS`. nextest cannot execute doctests, so they need their own pass.
   Note that the previous `cargo test --all-targets` invocation never ran
@@ -1320,27 +1315,26 @@ Do **not** call `std::env::set_var` directly in BDD steps — use
 
 ### `tracing_capture`
 
-Production tracing has one process-wide subscriber, installed by
-`init_tracing` in `src/main.rs` with a reloadable filter initially set to
-`OFF`. Early configuration resolution therefore cannot write selector events
-before the effective JSON mode is known. On success,
-`resolve_json_mode_or_exit` calls `set_tracing_filter` with the resolved mode:
-JSON stays `OFF`, while human mode enables `TRACE` for `--verbose` or `ERROR`
-otherwise. Full human-mode merging repeats discovery after the filter is
-enabled, so its selector events remain available. If early resolution fails,
-human mode enables its fallback filter and replays resolution to retain bounded
-failure diagnostics; JSON mode leaves the filter off and discards them. No
-library module installs a global subscriber.
+Production tracing has one process-wide subscriber, installed by `init_tracing`
+in `src/main.rs` with a reloadable filter initially set to `OFF`. Early
+configuration resolution therefore cannot write selector events before the
+effective JSON mode is known. On success, `resolve_json_mode_or_exit` calls
+`set_tracing_filter` with the resolved mode: JSON stays `OFF`, while human mode
+enables `TRACE` for `--verbose` or `ERROR` otherwise. Full human-mode merging
+repeats discovery after the filter is enabled, so its selector events remain
+available. If early resolution fails, human mode enables its fallback filter
+and replays resolution to retain bounded failure diagnostics; JSON mode leaves
+the filter off and discards them. No library module installs a global
+subscriber.
 
 Tests use a separate capture boundary:
 
 `src/test_tracing_capture.rs` (`crate::test_tracing_capture`) is the
-workspace's single implementation for capturing structured tracing events
-in tests. `with_test_subscriber` installs a capturing `Layer` as the
-default subscriber for the duration of a closure, then returns the
-closure's result. Each event's fields are rendered as a space-separated
-list of `name=value` pairs — strings and `Debug` values are quoted — and
-appended to a shared buffer:
+workspace's single implementation for capturing structured tracing events in
+tests. `with_test_subscriber` installs a capturing `Layer` as the default
+subscriber for the duration of a closure, then returns the closure's result.
+Each event's fields are rendered as a space-separated list of `name=value`
+pairs — strings and `Debug` values are quoted — and appended to a shared buffer:
 
 ```rust
 use crate::test_tracing_capture::with_test_subscriber;
@@ -1356,24 +1350,23 @@ with_test_subscriber(LevelFilter::TRACE, |captured| {
 
 `with_test_subscriber` installs the subscriber through
 [`tracing::subscriber::with_default`], which registers a *thread-local*
-default. Only events emitted on the calling thread are captured; events
-emitted from threads spawned inside the closure are silently dropped.
+default. Only events emitted on the calling thread are captured; events emitted
+from threads spawned inside the closure are silently dropped.
 
-The module is `#[cfg(test)]` in the root crate, so it is available to
-unit tests only; integration tests under `tests/` compile as separate
-crates and cannot reach it. Coverage that needs the real binary's tracing
-output instead asserts on the process's stderr — see
-`tests/logging_stderr/config_tracing.rs`.
+The module is `#[cfg(test)]` in the root crate, so it is available to unit
+tests only; integration tests under `tests/` compile as separate crates and
+cannot reach it. Coverage that needs the real binary's tracing output instead
+asserts on the process's stderr — see `tests/logging_stderr/config_tracing.rs`.
 
 `CapturedEvents` has no `Default` implementation — obtain it only from the
-handle passed into the `with_test_subscriber` closure. `snapshot()`
-recovers a poisoned lock rather than panicking, so a panic on another test
-thread cannot cascade into a snapshot assertion.
+handle passed into the `with_test_subscriber` closure. `snapshot()` recovers a
+poisoned lock rather than panicking, so a panic on another test thread cannot
+cascade into a snapshot assertion.
 
 Tests that snapshot tracing output with `insta` should normalize
 runtime-dependent fields, such as the bounded `path_hash` correlation
-identifier, to a stable placeholder before asserting the snapshot, and
-assert the real value separately with its own check. See
+identifier, to a stable placeholder before asserting the snapshot, and assert
+the real value separately with its own check. See
 `src/cli/discovery_tracing_tests.rs` for this pattern.
 
 ## `TestWorld` field groups
@@ -1544,17 +1537,16 @@ Unit tests that only need to verify explicit config path precedence should test
 the process environment.
 
 Config selector resolution remains a pure query: `resolve_config_selector`
-records the winning selector, its optional path, and every environment
-lookup evaluated, and emits no tracing itself. Structured diagnostics are
-emitted only at the file-layer boundary, where
-`collect_file_layers_with_env` calls `trace_config_path_resolution` after
-resolution completes.
+records the winning selector, its optional path, and every environment lookup
+evaluated, and emits no tracing itself. Structured diagnostics are emitted only
+at the file-layer boundary, where `collect_file_layers_with_env` calls
+`trace_config_path_resolution` after resolution completes.
 
 Tracing never logs full paths or formatted parser errors. Path values are
-bounded to a `path_hash` correlation identifier plus `path_file_name`, and
-load failures are classified with the `ConfigLoadFailureKind` enum instead
-of the formatted error text. `path_hash` is a bounded identifier for
-correlating events, not a cryptographic guarantee.
+bounded to a `path_hash` correlation identifier plus `path_file_name`, and load
+failures are classified with the `ConfigLoadFailureKind` enum instead of the
+formatted error text. `path_hash` is a bounded identifier for correlating
+events, not a cryptographic guarantee.
 
 #### `json` contract
 
@@ -1572,8 +1564,8 @@ split diagnostics, path comparison, and tests out of the main discovery flow:
 
 - `discovery_diagnostics.rs` — bounded tracing helpers (`path_hash`,
   `short_hash`, `debug_config_path`, `debug_optional_config_path`,
-  `warn_explicit_config_load_failed`) and the `ConfigLoadFailureKind` enum
-  used to classify a load failure without retaining error text.
+  `warn_explicit_config_load_failed`) and the `ConfigLoadFailureKind` enum used
+  to classify a load failure without retaining error text.
 - `discovery_paths.rs` — `normalized_path_key` resolves a path to a
   comparable, canonicalized form and returns canonicalization errors to its
   caller. The discovery-side `comparison_key` fallback uses the original path
@@ -1585,24 +1577,22 @@ split diagnostics, path comparison, and tests out of the main discovery flow:
   path, and tracing remains at the orchestration boundary.
 - `discovery_event_assertions.rs` — shared test-only helpers:
   `capture_events` runs a closure under a TRACE capturing subscriber,
-  `find_event` locates one emitted event by substring, and
-  `EventAssertion` bundles an event with its path to assert bounded
-  `path_hash`/`path_file_name` fields, the absence of the raw path or
-  formatted error text, and to normalize the hash before an `insta`
-  snapshot.
+  `find_event` locates one emitted event by substring, and `EventAssertion`
+  bundles an event with its path to assert bounded `path_hash`/`path_file_name`
+  fields, the absence of the raw path or formatted error text, and to normalize
+  the hash before an `insta` snapshot.
 - `discovery_tracing_tests.rs` — tests selector precedence
   (`--config` versus `NETSUKE_CONFIG`), the removed legacy
-  `NETSUKE_CONFIG_PATH` alias, and event-schema snapshots for both
-  selection and explicit load failures.
+  `NETSUKE_CONFIG_PATH` alias, and event-schema snapshots for both selection
+  and explicit load failures.
 - `discovery_layer_tests.rs` — tests which branch
   `collect_diag_file_layers_with_env` takes (explicit path versus automatic
   discovery) and the project-scope second pass in `collect_file_layers`.
 
-Both test modules import `capture_events`, `find_event`, and
-`EventAssertion` from `discovery_event_assertions` rather than duplicating
-them. The `insta` snapshot calls themselves stay in the test modules
-because snapshot names bind to the test module's path, not to a shared
-helper module.
+Both test modules import `capture_events`, `find_event`, and `EventAssertion`
+from `discovery_event_assertions` rather than duplicating them. The `insta`
+snapshot calls themselves stay in the test modules because snapshot names bind
+to the test module's path, not to a shared helper module.
 
 ## BDD command helpers and environment handling
 
@@ -1800,9 +1790,9 @@ of a trait one, but only when the inherent impl's bound is satisfied, so
 otherwise. Each assertion is paired with a positive control (`u8: LowerHex`,
 `Vec<u8>: io::Write`) so the probe cannot pass by reporting `false` for
 everything. Runtime tests confirm the replacements produce correct digests, but
-they cannot notice the pre-0.11 patterns becoming available again — for
-example if `sha2` were downgraded. A silent downgrade to 0.10 would not fail
-the ordinary build, because 0.10's `GenericArray` also derefs to `[u8]`, so
+they cannot notice the pre-0.11 patterns becoming available again — for example
+if `sha2` were downgraded. A silent downgrade to 0.10 would not fail the
+ordinary build, because 0.10's `GenericArray` also derefs to `[u8]`, so
 `to_lower_hex` and `DigestWriter` keep compiling; the absence of the two impls
 is what distinguishes the versions, and it is what these guards check.
 
@@ -1812,9 +1802,9 @@ builds the host crate as a fixture dependency while discarding workspace
 rebuilt `netsuke` without `-Zpolonius=next`; see the "Harness consequences"
 section of `docs/polonius.md`, which asks that trybuild cases depending on the
 `netsuke` crate not be reintroduced while the tree is Polonius-only. The
-compile-time probe is also strictly better on its own merits: no subprocess,
-no scratch project, and no toolchain-sensitive `.stderr` snapshot to re-bless
-on every compiler bump.
+compile-time probe is also strictly better on its own merits: no subprocess, no
+scratch project, and no toolchain-sensitive `.stderr` snapshot to re-bless on
+every compiler bump.
 
 `stdlib::path::hash_utils` unit-tests the chunked streaming loop against a
 one-shot digest for inputs that span more than one 8192-byte read, plus a
