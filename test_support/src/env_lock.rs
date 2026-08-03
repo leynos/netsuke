@@ -67,8 +67,24 @@ mod tests {
     //! Unit tests for the environment mutation lock.
 
     use super::*;
-    use std::sync::TryLockError;
+    use std::sync::{PoisonError, TryLockError};
     use std::thread;
+
+    /// Serialises this module's tests against each other.
+    ///
+    /// They all assert on the process-global `ENV_LOCK`, so two running
+    /// concurrently observe each other's guards. nextest isolates every test in
+    /// its own process and never sees this, but plain `cargo test` shares one,
+    /// and the crate must not be flaky under either.
+    static TEST_SERIAL: Mutex<()> = Mutex::new(());
+
+    /// Hold the module's serialisation lock for the caller's scope.
+    ///
+    /// Recovers from poisoning: a panicking test leaves the flag set, and that
+    /// must not cascade into every later test in the module.
+    fn serialised() -> MutexGuard<'static, ()> {
+        TEST_SERIAL.lock().unwrap_or_else(PoisonError::into_inner)
+    }
 
     // Macros rather than helper functions so a failure reports the calling
     // test's line number, and so matching on `ENV_LOCK.try_lock()` stays
@@ -107,6 +123,7 @@ mod tests {
 
     #[test]
     fn reentrant_env_lock_nested_acquire_and_release() {
+        let _serial = serialised();
         {
             let _outer = EnvLock::acquire();
             let _inner = EnvLock::acquire();
@@ -150,6 +167,7 @@ mod tests {
 
     #[test]
     fn env_lock_recovers_from_a_poisoned_mutex() {
+        let _serial = serialised();
         poison_env_lock();
 
         // `acquire` must recover through `PoisonError::into_inner` rather than
@@ -176,6 +194,7 @@ mod tests {
 
     #[test]
     fn reentrant_env_lock_stays_locked_when_outer_drops_first() {
+        let _serial = serialised();
         let outer = EnvLock::acquire();
         let inner = EnvLock::acquire();
 
