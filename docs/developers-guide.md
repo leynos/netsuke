@@ -428,7 +428,7 @@ the location with `DEV_FAST_PREFIX`. Every `dev-*` recipe prepends
 `$(DEV_FAST_PREFIX)/bin` to `PATH`, so an overridden prefix is the one actually
 selected — `-fuse-ld=mold` resolves by `PATH` order, and the Makefile otherwise
 puts `~/.local/bin` first unconditionally. Invoking the scripts directly rather
-than through `make` means arranging that `PATH` order yourself.
+than through `make` means arranging that `PATH` order manually.
 
 `make dev-fast-check` prints the resolved `mold` path alongside its version, so
 an unexpected pick is visible. A version that differs from the pin fails the
@@ -719,7 +719,7 @@ isolates Cranelift and `mold` rather than also capturing a toolchain change —
 earlier figures in this document did not, and overstated the gain. And the
 benchmark builds only `--bin netsuke`, the smallest useful target, so it
 under-represents what `make dev-test` sees, where Cranelift has every test
-binary's codegen to save on. Measure your own workload before concluding the
+binary's codegen to save on. Measure the actual workload before concluding the
 acceleration is or is not worth the setup.
 
 ## Formal-verification tooling
