@@ -134,7 +134,26 @@ impl BuildScenario {
 
     /// Run `target`, pointing `CARGO` at the recording fake, and return the
     /// single invocation it must have produced.
+    ///
+    /// Use [`run_all`](Self::run_all) for a target that invokes Cargo more than
+    /// once, such as `dev-test`'s root and `test_support` passes.
     pub fn run(&self, target: &str) -> Result<CargoInvocation> {
+        self.run_recording(target)?;
+        self.cargo.sole_invocation()
+    }
+
+    /// Run `target` and return every invocation it produced, in order.
+    pub fn run_all(&self, target: &str) -> Result<Vec<CargoInvocation>> {
+        self.run_recording(target)?;
+        let invocations = self.cargo.invocations()?;
+        ensure!(
+            !invocations.is_empty(),
+            "make {target} should invoke cargo at least once"
+        );
+        Ok(invocations)
+    }
+
+    fn run_recording(&self, target: &str) -> Result<()> {
         let invocation = MakeInvocation::new(target).variable("CARGO", self.cargo.executable());
         let output = self.sandbox.run_make(&invocation)?;
         ensure!(
@@ -142,6 +161,6 @@ impl BuildScenario {
             "make {target} should succeed, got `{}`",
             combined(&output)
         );
-        self.cargo.sole_invocation()
+        Ok(())
     }
 }

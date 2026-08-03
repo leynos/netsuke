@@ -27,18 +27,21 @@
 # route through `test_support::fs` even in principle: driving incremental-build
 # benchmarks needs an open `std::fs::File` for `set_modified` and
 # `write_all_at`, and a wrapper handing that file back would simply move the
-# diagnostic to its caller. Metadata inspection (`modified`, `permissions`,
-# `is_file`) has the same shape. The entries name the four modules that need
-# it, so `dev_fast::bench`, `dev_fast::make`, and `dev_fast::scenario` stay
-# under the policy.
+# diagnostic to its caller. Metadata inspection (`modified`) has the same
+# shape.
 #
-# Where a `test_support::fs` wrapper does exist, prefer it inside these modules
-# too: the exemption is a floor for what the harness cannot express, not a
-# licence to stop using the boundary.
+# The entries name only the modules that need it. `dev_fast::bench`,
+# `dev_fast::make`, `dev_fast::sandbox`, and `dev_fast::scenario` stay under
+# the policy: `sandbox` routes every operation through `test_support::fs`,
+# including the `is_executable_file` probe added for it.
+#
+# Where a `test_support::fs` wrapper does exist, prefer it inside the exempt
+# modules too, and drop a module from this list once it needs none: the
+# exemption is a floor for what the harness cannot express, not a licence to
+# stop using the boundary.
 excluded_paths = [
     "test_support::fs",
     "test_support::dev_fast::cargo_log",
     "test_support::dev_fast::release",
-    "test_support::dev_fast::sandbox",
     "test_support::dev_fast::staging",
 ]

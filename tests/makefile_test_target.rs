@@ -167,15 +167,20 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
 }
 
 /// `test_support` is excluded from the root workspace, so a root-level cargo
-/// invocation cannot reach its tests. Both passes must therefore target its
-/// manifest explicitly; dropping either line silently un-gates that crate,
-/// which is invisible in a green test run.
+/// invocation cannot reach its tests. Each pass must therefore target its
+/// manifest explicitly; dropping one of those lines silently un-gates that
+/// crate, which is invisible in a green test run. `dev-test` is covered too:
+/// the guide calls it the accelerated counterpart of `test-nextest`, so it
+/// carries the same obligation.
 ///
-/// The `RUSTFLAGS` those lines set is asserted by `RUSTFLAGS_CASES`, which
-/// expands each assignment rather than matching recipe text.
+/// Where such a line sets `RUSTFLAGS` — the `test-nextest` and `doctest`
+/// passes, but not `dev-test`, which selects its toolchain instead — the value
+/// is asserted by `RUSTFLAGS_CASES`, which expands each assignment rather than
+/// matching recipe text.
 #[rstest]
 #[case::nextest("test-nextest", "nextest run")]
 #[case::doctest("doctest", "--doc")]
+#[case::dev_test("dev-test", "nextest run")]
 fn behavioural_test_passes_also_target_test_support(
     #[case] target: &str,
     #[case] harness: &str,

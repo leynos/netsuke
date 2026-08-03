@@ -43,35 +43,39 @@ fn build_targets_select_the_pinned_toolchain_and_fragment(
     #[case] target: BuildTarget,
 ) -> Result<()> {
     let scenario = BuildScenario::prepare()?;
-    let invocation = scenario.run(target.name)?;
-
-    ensure!(
-        invocation.toolchain() == pinned_toolchain()?,
-        "`{}` should select the pinned nightly, got `{}`",
-        target.name,
-        invocation.toolchain()
-    );
-    ensure!(
-        invocation.contains_sequence(&["--config", DEV_FAST_CONFIG_PATH]),
-        "`{}` should pass the fragment, got `{:?}`",
-        target.name,
-        invocation.arguments()
-    );
-    ensure!(
-        invocation.contains_sequence(target.subcommand),
-        "`{}` should run `{:?}`, got `{:?}`",
-        target.name,
-        target.subcommand,
-        invocation.arguments()
-    );
-    // The linker is resolved by PATH order, so leading the prefix is the whole
-    // mechanism by which the pinned mold, and not a system one, gets used.
-    ensure!(
-        invocation.path_starts_with(&scenario.prefix_bin()),
-        "`{}` should lead PATH with the install prefix, got `{}`",
-        target.name,
-        invocation.path()
-    );
+    // Every invocation, not just the first: `dev-test` runs the root pass and
+    // then `test_support`, and the toolchain, fragment, and PATH contract has
+    // to hold for both.
+    for invocation in scenario.run_all(target.name)? {
+        ensure!(
+            invocation.toolchain() == pinned_toolchain()?,
+            "`{}` should select the pinned nightly, got `{}`",
+            target.name,
+            invocation.toolchain()
+        );
+        ensure!(
+            invocation.contains_sequence(&["--config", DEV_FAST_CONFIG_PATH]),
+            "`{}` should pass the fragment, got `{:?}`",
+            target.name,
+            invocation.arguments()
+        );
+        ensure!(
+            invocation.contains_sequence(target.subcommand),
+            "`{}` should run `{:?}`, got `{:?}`",
+            target.name,
+            target.subcommand,
+            invocation.arguments()
+        );
+        // The linker is resolved by PATH order, so leading the prefix is the
+        // whole mechanism by which the pinned mold, and not a system one, gets
+        // used.
+        ensure!(
+            invocation.path_starts_with(&scenario.prefix_bin()),
+            "`{}` should lead PATH with the install prefix, got `{}`",
+            target.name,
+            invocation.path()
+        );
+    }
     Ok(())
 }
 

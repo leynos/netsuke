@@ -584,9 +584,10 @@ and `-Clink-arg=-fuse-ld=mold`.
   Kani's own toolchain and the LLVM backend. The same applies to Verus.
 - **Test runner.** `make dev-test` is the accelerated counterpart of
   `make test-nextest`, not of `make test`: it runs the same
-  `cargo nextest run --all-targets --all-features`, and so is governed by the
-  same [`.config/nextest.toml`](#nextest-configuration), including the
-  `serial-env` group. It omits the `doctest` pass, because `cargo test --doc`
+  `cargo nextest run --all-targets --all-features`, over the root workspace and
+  then `test_support`, and so is governed by the same
+  [`.config/nextest.toml`](#nextest-configuration), including the `serial-env`
+  group. It omits the `doctest` pass, because `cargo test --doc`
   is a separate and comparatively quick runner; run `make test` before
   proposing a change. The acceleration is applied through `RUSTUP_TOOLCHAIN` and
   `cargo --config`, both Cargo-level rather than runner-level, which is why

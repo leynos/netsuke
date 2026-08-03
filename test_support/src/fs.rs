@@ -139,6 +139,30 @@ pub fn set_mode(path: impl AsRef<Path>, mode: u32) -> io::Result<()> {
     fs::set_permissions(path, permissions)
 }
 
+/// Return `true` when `path` is a regular file with any execute bit set.
+///
+/// The inverse of [`set_mode`], for probing a sandbox `PATH` the way an
+/// executable lookup would. An unreadable or absent path reports `false`.
+///
+/// # Examples
+///
+/// ```
+/// let dir = tempfile::tempdir().expect("create tempdir");
+/// let path = dir.path().join("tool");
+/// test_support::fs::write(&path, "#!/bin/sh\n").expect("write stub");
+/// assert!(!test_support::fs::is_executable_file(&path));
+/// test_support::fs::set_mode(&path, 0o755).expect("mark executable");
+/// assert!(test_support::fs::is_executable_file(&path));
+/// assert!(!test_support::fs::is_executable_file(dir.path()));
+/// ```
+#[cfg(unix)]
+#[must_use]
+pub fn is_executable_file(path: impl AsRef<Path>) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    fs::metadata(path)
+        .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+}
+
 /// Create a symbolic link at `link` pointing to `target` on Unix.
 ///
 /// # Errors
