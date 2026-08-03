@@ -1277,8 +1277,9 @@ ambient-filesystem boundary. Fixture code routes filesystem access through it
 rather than reaching for `std::fs` directly; Whitaker enforces this (see
 [Quality gates](#quality-gates)) for every other module in the crate.
 
-Two wrappers are worth calling out because their behaviour differs from a
-naive `std::fs` call:
+Most wrappers forward to their `std::fs` namesake unchanged. These are worth
+calling out because their behaviour, platform support, or reason for existing
+is not obvious from the name:
 
 - `is_dir(path) -> bool` mirrors `Path::is_dir`: it follows symlinks, and an
   absent or unreadable path returns `false` rather than surfacing the
@@ -1288,6 +1289,26 @@ naive `std::fs` call:
   regular file with any execute bit set, and `false` for an absent or
   unreadable path. It is the inverse of `set_mode`, and exists for probing a
   sandbox `PATH` the way an executable lookup would.
+- `copy(from, to) -> io::Result<u64>` forwards to `std::fs::copy`, returning
+  the number of bytes copied and propagating its failure. The `dev_fast`
+  release fixtures use it to place a built archive under its versioned name.
+- `modified(path) -> io::Result<SystemTime>` returns the file's modification
+  time. It propagates both the metadata failure and the platform's failure to
+  report a timestamp, so it is `io::Result` rather than an `Option`. The
+  `dev_fast` staging fixtures use it to assert a file was or was not rebuilt.
+- `write_with_mtime(path, contents, mtime) -> io::Result<()>` (Unix only)
+  creates or truncates `path`, writes `contents`, and sets the modification
+  time to `mtime`, propagating whichever step fails. The staging fixtures use
+  it to backdate a file so a later build sees it as stale.
+
+`write_with_mtime` is the reason `test_support/dylint.toml` carries no
+`dev_fast` exemption. Backdating a fixture needs one open file for both the
+write and the timestamp, which reads like an irreducibly ambient operation
+that has to happen at the call site. Taking the timestamp as an argument
+keeps the handle inside this module instead: the caller never sees a `File`,
+so the ambient boundary stays where the lint expects it. Prefer that shape —
+pass in what the operation needs and keep the handle here — over widening an
+exclusion to a module that wants a raw `File`.
 
 ### Shared Makefile contract helpers
 
