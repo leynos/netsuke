@@ -1,12 +1,12 @@
 //! Locale-aware helpers for CLI messaging.
 //!
 //! Builds Fluent-backed localizers from the catalogue registry in
-//! [`crate::localization::locales`], layering the requested locale over the
+//! [`crate::locale_catalogues`], layering the requested locale over the
 //! English source catalogue so any message a translation has not yet covered
 //! still renders. Catalogue selection is by exact tag with the registry's
 //! documented fallback rules, so region and script variants stay distinct.
 
-use crate::localization::locales::{self, LocaleCatalogue};
+use crate::locale_catalogues::{self as locales, LocaleCatalogue};
 use ortho_config::LanguageIdentifier;
 use ortho_config::{FluentLocalizer, FluentLocalizerBuilder, Localizer, NoOpLocalizer};
 use std::str::FromStr;
@@ -122,3 +122,7 @@ pub fn build_localizer(preferred_locale: Option<&str>) -> Box<dyn Localizer> {
     }
     build_layered_localizer(locale, catalogue, fallback)
 }
+
+#[cfg(test)]
+#[path = "cli_localization_tracing_tests.rs"]
+mod tracing_tests;

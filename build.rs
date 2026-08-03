@@ -49,8 +49,13 @@ mod cli_l10n;
 #[path = "src/host_pattern.rs"]
 mod host_pattern;
 
+// Public because `localization/mod.rs` re-exports it; a private module cannot
+// be re-exported from a public path.
+#[path = "src/locale_catalogues.rs"]
+pub mod locale_catalogues;
+
 #[path = "src/localization/mod.rs"]
-mod localization;
+pub mod localization;
 
 #[expect(
     dead_code,
@@ -136,11 +141,11 @@ fn emit_rerun_directives() {
     println!("cargo:rerun-if-env-changed=TARGET");
     println!("cargo:rerun-if-env-changed=PROFILE");
     println!("cargo:rerun-if-changed=src/localization/keys.rs");
-    println!("cargo:rerun-if-changed=src/localization/locales.rs");
+    println!("cargo:rerun-if-changed=src/locale_catalogues.rs");
     println!("cargo:rerun-if-changed=Cargo.toml");
     // The locale registry owns the catalogue list, so the rerun directives are
     // derived from it rather than repeated by hand.
-    for entry in localization::locales::SUPPORTED_LOCALES {
+    for entry in locale_catalogues::SUPPORTED_LOCALES {
         println!(
             "cargo:rerun-if-changed={}",
             build_l10n_audit::catalogue_path(entry.tag()).display()

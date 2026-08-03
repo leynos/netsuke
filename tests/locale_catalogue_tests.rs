@@ -9,9 +9,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Context, Result, ensure};
-use netsuke::localization::locales::{
-    LocaleCatalogue, SOURCE_LOCALE, SUPPORTED_LOCALES, catalogue,
-};
+use netsuke::locale_catalogues::{LocaleCatalogue, SOURCE_LOCALE, SUPPORTED_LOCALES, catalogue};
 use rstest::rstest;
 
 /// Message used to demonstrate plural handling in every catalogue.

@@ -73,7 +73,7 @@ output and some leaf files so the long-lived structure remains visible.
 - `locales/`: Fluent localization catalogues, one `<tag>/messages.ftl` per
   supported locale tag, so regional and script variants such as `es-419`,
   `pt-BR`, and `zh-Hant` each keep their own directory. The authoritative list
-  of tags lives in `src/localization/locales.rs`; see the
+  of tags lives in `src/locale_catalogues.rs`; see the
   [translator guide](translators-guide.md).
 - `scripts/`: Shell and helper scripts used by quality gates, release help
   generation, packaging, and formal checks.

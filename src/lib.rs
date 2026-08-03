@@ -16,6 +16,7 @@ pub mod hex;
 pub mod host_pattern;
 pub mod ir;
 mod json_envelope;
+pub mod locale_catalogues;
 pub mod locale_resolution;
 pub mod localization;
 pub mod manifest;

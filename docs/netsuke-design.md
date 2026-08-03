@@ -2459,15 +2459,15 @@ strings are normalized by stripping encoding suffixes (such as `.UTF-8`),
 removing variant suffixes (such as `@latin`), and replacing underscores with
 hyphens before validation.
 
-`src/localization/locales.rs` is the authoritative registry of shipped
-catalogues. A `define_locales!` macro embeds `locales/<tag>/messages.ftl` for
-each declared tag, so a registry entry without a catalogue fails to compile.
-Every other surface reads that registry rather than repeating the list: the
-build-time audit, the `cargo:rerun-if-changed` directives, the packaging smoke
-test, and the test suite. `Cargo.toml`'s
-`package.metadata.ortho_config.locales` array is the one place the list is
-necessarily duplicated, because Cargo metadata cannot call into Rust; the build
-audit therefore compares it against the registry and fails on drift.
+`src/locale_catalogues.rs` is the authoritative registry of shipped catalogues.
+A `define_locales!` macro embeds `locales/<tag>/messages.ftl` for each declared
+tag, so a registry entry without a catalogue fails to compile. Every other
+surface reads that registry rather than repeating the list: the build-time
+audit, the `cargo:rerun-if-changed` directives, the packaging smoke test, and
+the test suite. `Cargo.toml`'s `package.metadata.ortho_config.locales` array is
+the one place the list is necessarily duplicated, because Cargo metadata cannot
+call into Rust; the build audit therefore compares it against the registry and
+fails on drift.
 
 Catalogue selection matches the exact BCP 47 tag first. When no catalogue
 carries that tag, resolution consults the per-language fallback rules recorded

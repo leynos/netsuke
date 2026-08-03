@@ -28,8 +28,12 @@ as the durable architecture record.
 
 ## Localization
 
-`src/localization/locales.rs` is the authoritative registry of shipped
-catalogues. `define_locales!` declares the tags and embeds
+`src/locale_catalogues.rs` is the authoritative registry of shipped catalogues.
+It sits at the crate root, not under `localization/`, because `localization`
+builds its default localizer through `cli_localization`, and `cli_localization`
+reads the registry; a registry inside `localization` would close that into a
+module cycle. `localization::locales` re-exports it, so the older path still
+resolves for callers. `define_locales!` declares the tags and embeds
 `locales/<tag>/messages.ftl` for each, so a tag without a catalogue on disk
 fails to compile. Read the registry rather than writing a locale list of your
 own; the build audit, the `rerun-if-changed` directives, the packaging smoke

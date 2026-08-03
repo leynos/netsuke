@@ -11,7 +11,7 @@ use ortho_config::LanguageIdentifier;
 use proptest::prelude::*;
 use rstest::rstest;
 
-use netsuke::localization::locales::{
+use netsuke::locale_catalogues::{
     LocaleCatalogue, SOURCE_LOCALE, SUPPORTED_LOCALES, catalogue, resolve_catalogue,
     source_catalogue,
 };
@@ -30,6 +30,36 @@ fn resolve_catalogue_tag(requested: &str) -> &'static str {
 
 fn registry_tags() -> Vec<&'static str> {
     SUPPORTED_LOCALES.iter().map(LocaleCatalogue::tag).collect()
+}
+
+/// Every locale this release ships, written out rather than derived.
+///
+/// The other tests in this file check the registry against itself, which keeps
+/// them true no matter what the registry says. This list is the independent
+/// statement of intent: adding or dropping a catalogue has to be a deliberate
+/// edit here as well, so neither can happen by accident.
+const EXPECTED_SHIPPED_TAGS: [&str; 35] = [
+    "ar", "cs", "cy", "da", "de", "el", "en-GB", "en-US", "es-419", "es-ES", "fa", "fi", "fr",
+    "gd", "he", "hi", "hu", "id", "it", "ja", "ko", "nb", "nl", "pl", "pt-BR", "pt-PT", "ro", "ru",
+    "sv", "th", "tr", "uk", "vi", "zh-Hans", "zh-Hant",
+];
+
+#[test]
+fn the_registry_ships_exactly_the_expected_locales() {
+    let shipped: BTreeSet<&str> = registry_tags().into_iter().collect();
+    let expected: BTreeSet<&str> = EXPECTED_SHIPPED_TAGS.into_iter().collect();
+
+    let missing: Vec<&&str> = expected.difference(&shipped).collect();
+    let unexpected: Vec<&&str> = shipped.difference(&expected).collect();
+    assert!(
+        missing.is_empty() && unexpected.is_empty(),
+        "registry drifted from the expected locale set: missing {missing:?}, unexpected {unexpected:?}"
+    );
+    assert_eq!(
+        shipped.len(),
+        EXPECTED_SHIPPED_TAGS.len(),
+        "the expected list must not contain duplicates"
+    );
 }
 
 #[test]

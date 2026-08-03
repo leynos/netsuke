@@ -4,7 +4,7 @@
 //! build-script sources remain in its manifest, where an omission would
 //! otherwise fail only during release.
 
-use netsuke::localization::locales::SUPPORTED_LOCALES;
+use netsuke::locale_catalogues::SUPPORTED_LOCALES;
 use std::collections::BTreeSet;
 use std::env;
 use std::path::Path;

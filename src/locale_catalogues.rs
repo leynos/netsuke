@@ -29,7 +29,7 @@ impl LocaleCatalogue {
     /// # Examples
     ///
     /// ```
-    /// use netsuke::localization::locales::catalogue;
+    /// use netsuke::locale_catalogues::catalogue;
     ///
     /// let entry = catalogue("pt-BR").expect("pt-BR ships a catalogue");
     /// assert_eq!(entry.tag(), "pt-BR");
@@ -44,7 +44,7 @@ impl LocaleCatalogue {
     /// # Examples
     ///
     /// ```
-    /// use netsuke::localization::locales::catalogue;
+    /// use netsuke::locale_catalogues::catalogue;
     ///
     /// let entry = catalogue("fr").expect("fr ships a catalogue");
     /// // The catalogue is the FTL source itself, so it declares Netsuke's keys.
@@ -67,7 +67,7 @@ macro_rules! define_locales {
         pub const SUPPORTED_LOCALES: &[LocaleCatalogue] = &[
             $(LocaleCatalogue {
                 tag: $tag,
-                resource: include_str!(concat!("../../locales/", $tag, "/messages.ftl")),
+                resource: include_str!(concat!("../locales/", $tag, "/messages.ftl")),
             }),+
         ];
     };
@@ -153,7 +153,7 @@ const LANGUAGE_FALLBACKS: &[LanguageFallback] = &[
 /// # Examples
 ///
 /// ```
-/// use netsuke::localization::locales::catalogue;
+/// use netsuke::locale_catalogues::catalogue;
 ///
 /// assert_eq!(catalogue("zh-Hant").map(|entry| entry.tag()), Some("zh-Hant"));
 /// // `zh-TW` resolves to `zh-Hant`, but does not ship a catalogue itself.
@@ -181,7 +181,7 @@ const EMPTY_SOURCE: LocaleCatalogue = LocaleCatalogue {
 /// # Examples
 ///
 /// ```
-/// use netsuke::localization::locales::{SOURCE_LOCALE, source_catalogue};
+/// use netsuke::locale_catalogues::{SOURCE_LOCALE, source_catalogue};
 ///
 /// assert_eq!(source_catalogue().tag(), SOURCE_LOCALE);
 /// assert_eq!(source_catalogue().tag(), "en-US");
@@ -233,7 +233,7 @@ fn subtag_catalogue(
 /// # Examples
 ///
 /// ```rust
-/// use netsuke::localization::locales::resolve_catalogue;
+/// use netsuke::locale_catalogues::resolve_catalogue;
 /// use std::str::FromStr;
 ///
 /// let parse = |tag: &str| {

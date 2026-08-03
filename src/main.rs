@@ -48,15 +48,17 @@ fn run_with_args(
     system_locale: &impl locale_resolution::SystemLocale,
 ) -> ExitCode {
     let json_hint = locale_resolution::resolve_startup_json(&args, env);
+    // Install the subscriber before the first localizer is built, so locale
+    // resolution and catalogue-load failures are reported rather than dropped.
+    // The level is provisional: only `json_hint` is known here, and the
+    // effective verbosity arrives with the configuration merge.
+    init_tracing(startup_tracing_filter(json_hint));
     let localizer = startup_localizer(&args, env, system_locale);
     let startup_mode = DiagMode::from_json_enabled(json_hint);
     let (parsed_cli, matches) = match parse_cli_or_exit(args, &localizer, startup_mode) {
         Ok(parsed) => parsed,
         Err(code) => return code,
     };
-    // Install the subscriber disabled until the effective JSON mode is known.
-    // Human-mode config merging repeats discovery after the filter is enabled.
-    init_tracing();
 
     let mode = match resolve_json_mode_or_exit(&parsed_cli, &matches, startup_mode) {
         Ok(mode) => mode,
@@ -98,14 +100,30 @@ const fn startup_filter(mode: DiagMode, verbose: bool) -> LevelFilter {
     }
 }
 
-/// Install the process-wide subscriber with a disabled reloadable level filter.
+/// The stderr verbosity to start with, before the configuration merge.
+///
+/// Only the JSON hint is known this early, so the level is deliberately
+/// conservative: warnings and errors surface, and anything more detailed waits
+/// for [`startup_filter`] once `--verbose` has been parsed. `WARN` rather than
+/// `ERROR` because a locale that fails to load is reported at warning level,
+/// and dropping it would leave the run silently rendering English.
+const fn startup_tracing_filter(json_hint: bool) -> LevelFilter {
+    if json_hint {
+        LevelFilter::OFF
+    } else {
+        LevelFilter::WARN
+    }
+}
+
+/// Install the process-wide subscriber with a reloadable level filter set to
+/// `initial`.
 ///
 /// Only the first call installs; later calls are ignored so exactly one global
 /// subscriber exists, and the level is adjusted through [`set_tracing_filter`]
-/// rather than by installing a second subscriber. Starting disabled suppresses
-/// discovery events until configuration-backed JSON mode has been resolved.
-fn init_tracing() {
-    let (filter, handle) = reload::Layer::new(LevelFilter::OFF);
+/// rather than by installing a second subscriber. Events are written to stderr,
+/// never stdout, so a JSON diagnostic document is never interleaved with logs.
+fn init_tracing(initial: LevelFilter) {
+    let (filter, handle) = reload::Layer::new(initial);
     if Registry::default()
         .with(filter)
         .with(

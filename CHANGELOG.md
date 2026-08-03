@@ -17,7 +17,7 @@
   rules, so `es-419` and `es-ES`, `pt-BR` and `pt-PT`, and `zh-Hans` and
   `zh-Hant` stay distinct instead of collapsing onto one catalogue per language
   ([#466](https://github.com/leynos/netsuke/issues/466))
-- Make `src/localization/locales.rs` the authoritative locale registry, read by
+- Make `src/locale_catalogues.rs` the authoritative locale registry, read by
   the embedded catalogues, the build-time audit, the `rerun-if-changed`
   directives, packaging, and the tests; the build now fails if `Cargo.toml`'s
   `ortho_config` locale metadata drifts from it

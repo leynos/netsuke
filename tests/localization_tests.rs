@@ -6,9 +6,11 @@ use anyhow::{Context, Result, bail, ensure};
 use rstest::rstest;
 use test_support::localizer_test_lock;
 
+use fluent_bundle::FluentValue;
 use netsuke::cli_localization;
-use netsuke::localization::locales::SUPPORTED_LOCALES;
+use netsuke::locale_catalogues::SUPPORTED_LOCALES;
 use netsuke::localization::{self, LocalizerGuard, keys};
+use ortho_config::LocalizationArgs;
 use ortho_config::{FluentLocalizer, LanguageIdentifier};
 use std::str::FromStr;
 use test_support::fluent::normalize_fluent_isolates;
@@ -58,6 +60,44 @@ fn which_message(command: &str) -> String {
         .to_string()
 }
 
+/// The number of catalogues this release ships.
+///
+/// `tests/locale_registry_tests.rs` pins the exact tag set; this count is what
+/// lets the sweeps below assert they covered all of it rather than silently
+/// iterating a shortened registry.
+const EXPECTED_SHIPPED_LOCALE_COUNT: usize = 35;
+
+/// Counts chosen to select every CLDR cardinal category some shipped locale
+/// uses.
+///
+/// `zero` and `two` are Welsh and Arabic; `few` and `many` are Polish, Russian,
+/// and Czech among others; `one` and `other` are near-universal. A locale
+/// ignores the counts that its plural rules do not distinguish, so one list
+/// serves them all.
+const PLURAL_PROBE_COUNTS: [i64; 9] = [0, 1, 2, 3, 5, 6, 11, 21, 100];
+
+/// The `(locale, count)` pairs whose idiomatic wording carries no numeral.
+///
+/// Arabic and Hebrew name small quantities as words rather than digits — "one
+/// file", and a dual form for two — and Arabic's `zero` variant reads "no files
+/// were processed". Omitting the numeral there is correct translation, not a
+/// dropped interpolation, so these are listed rather than excused by a weaker
+/// assertion: the sweep below requires the numeral everywhere else, and
+/// requires its *absence* here, so a regression in either direction fails.
+const NUMERAL_OMITTED_BY_IDIOM: [(&str, i64); 5] =
+    [("ar", 0), ("ar", 1), ("ar", 2), ("he", 1), ("he", 2)];
+
+/// Render `key` with a numeric `count`, as Fluent's plural selector requires.
+///
+/// `LocalizedMessage::with_arg` stringifies its value, and a `FluentValue::String`
+/// never matches a plural category — every locale would silently fall to
+/// `*[other]`. Passing a `FluentValue::from(i64)` is what actually exercises
+/// `intl_pluralrules`.
+fn render_with_count(key: &str, count: i64) -> Option<String> {
+    let mut args: LocalizationArgs<'_> = LocalizationArgs::new();
+    args.insert("count", FluentValue::from(count));
+    localization::localizer().lookup(key, Some(&args))
+}
 /// Every catalogue must parse on its own, with no English underneath it.
 ///
 /// `build_localizer` layers the requested locale over the English source, so a
@@ -88,6 +128,7 @@ fn every_catalogue_parses_without_the_english_fallback() -> Result<()> {
 /// `every_catalogue_parses_without_the_english_fallback` for the latter.
 #[test]
 fn every_locale_renders_and_interpolates() -> Result<()> {
+    let mut covered = 0usize;
     for entry in SUPPORTED_LOCALES {
         let _guards = localizer_guards(entry.tag())?;
         let message = normalize_fluent_isolates(&which_message("cc"));
@@ -101,7 +142,17 @@ fn every_locale_renders_and_interpolates() -> Result<()> {
             "locale {} did not interpolate its arguments, got: {message}",
             entry.tag()
         );
+        ensure!(
+            !message.contains(keys::STDLIB_WHICH_NOT_FOUND),
+            "locale {} rendered the key identifier instead of a message: {message}",
+            entry.tag()
+        );
+        covered += 1;
     }
+    ensure!(
+        covered == EXPECTED_SHIPPED_LOCALE_COUNT,
+        "the sweep covered {covered} locales, expected {EXPECTED_SHIPPED_LOCALE_COUNT}"
+    );
     Ok(())
 }
 
@@ -396,6 +447,98 @@ fn timing_summary_messages_resolve(
     ensure!(
         normalized_total_line.contains(expected_total_prefix),
         "expected timing total line for locale {locale} to contain {expected_total_prefix:?}, got: {total_line}"
+    );
+    Ok(())
+}
+
+/// Plural selection must work at runtime, for every shipped locale.
+///
+/// `tests/locale_catalogue_tests.rs` checks that each catalogue *declares* the
+/// CLDR categories its language needs. That is a structural check on the FTL
+/// text; it cannot tell whether Fluent actually selects those variants when
+/// given a number. This renders `example.files_processed` through the live
+/// localizer for a spread of counts, so a catalogue whose variants are declared
+/// but unreachable fails here.
+#[test]
+fn plural_selection_renders_for_every_locale_and_count() -> Result<()> {
+    let mut covered = 0usize;
+    for entry in SUPPORTED_LOCALES {
+        let _guards = localizer_guards(entry.tag())?;
+        for count in PLURAL_PROBE_COUNTS {
+            let rendered =
+                render_with_count(keys::EXAMPLE_FILES_PROCESSED, count).with_context(|| {
+                    format!(
+                        "locale {} returned no message for count {count}",
+                        entry.tag()
+                    )
+                })?;
+            let message = normalize_fluent_isolates(&rendered);
+            ensure!(
+                !message.trim().is_empty(),
+                "locale {} rendered empty for count {count}",
+                entry.tag()
+            );
+            ensure!(
+                !message.contains(keys::EXAMPLE_FILES_PROCESSED),
+                "locale {} fell back to the key identifier for count {count}: {message}",
+                entry.tag()
+            );
+            let numeral_expected = !NUMERAL_OMITTED_BY_IDIOM.contains(&(entry.tag(), count));
+            ensure!(
+                message.contains(&count.to_string()) == numeral_expected,
+                "locale {} count {count}: expected the numeral present={numeral_expected}, got {message}",
+                entry.tag()
+            );
+        }
+        covered += 1;
+    }
+    ensure!(
+        covered == EXPECTED_SHIPPED_LOCALE_COUNT,
+        "plural sweep covered {covered} locales, expected {EXPECTED_SHIPPED_LOCALE_COUNT}"
+    );
+    Ok(())
+}
+
+/// A numeric argument must actually reach the plural selector.
+///
+/// This is the guard on the helper above: if `render_with_count` ever passed a
+/// string, every locale would render its `*[other]` variant and the sweep would
+/// still pass. A language whose `one` and `other` wordings differ proves the
+/// selector ran.
+#[test]
+fn a_numeric_count_selects_a_different_variant_from_the_default() -> Result<()> {
+    let _guards = localizer_guards("en-US")?;
+
+    let singular = render_with_count(keys::EXAMPLE_FILES_PROCESSED, 1)
+        .context("en-US must render for count 1")?;
+    let plural = render_with_count(keys::EXAMPLE_FILES_PROCESSED, 2)
+        .context("en-US must render for count 2")?;
+
+    ensure!(
+        singular != plural,
+        "count 1 and count 2 must select different variants, both gave {singular}"
+    );
+    Ok(())
+}
+
+/// A stringified count must NOT select a category, which is why the helper
+/// exists. Pinning this stops someone "simplifying" the helper back to
+/// `with_arg` and silently disabling every plural assertion above.
+#[test]
+fn a_stringified_count_falls_through_to_the_default_variant() -> Result<()> {
+    let _guards = localizer_guards("en-US")?;
+
+    let mut args: LocalizationArgs<'_> = LocalizationArgs::new();
+    args.insert("count", FluentValue::from("1"));
+    let as_string = localization::localizer()
+        .lookup(keys::EXAMPLE_FILES_PROCESSED, Some(&args))
+        .context("en-US must render for a string count")?;
+    let as_number = render_with_count(keys::EXAMPLE_FILES_PROCESSED, 1)
+        .context("en-US must render for a numeric count")?;
+
+    ensure!(
+        as_string != as_number,
+        "a string count must not select the `one` variant; both gave {as_string}"
     );
     Ok(())
 }

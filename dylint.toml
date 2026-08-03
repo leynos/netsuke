@@ -77,6 +77,11 @@ excluded_paths = [
 # `test_support::fs` boundary module rather than exempting the whole crate.
 excluded_crates = [
     "build_script_build",
+    # Stages the audit's inputs into a TempDir and runs the real audit over
+    # them and over CARGO_MANIFEST_DIR. Both roots are ambient by
+    # construction, and the audit modules it includes by path read files the
+    # build script hands them the same way.
+    "build_l10n_audit_tests",
     "advanced_usage_tests",
     "assert_cmd_tests",
     "manifest_glob_tests",

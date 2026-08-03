@@ -208,6 +208,11 @@ strip-ansi-escapes = "0.2"
 toml = "0.8"
 serde_yaml = "0.9"
 proptest = "1.11.0"
+# Plural-selection tests must pass numeric arguments to Fluent. `ortho_config`
+# exposes `LocalizationArgs` as a map of `FluentValue`, but does not re-export
+# the value type, so the tests need `fluent-bundle` directly. Pinned to the
+# version `ortho_config` resolves, or the `FluentValue` types would differ.
+fluent-bundle = "0.16.0"
 
 # Target-specific dev-deps
 [target.'cfg(unix)'.dev-dependencies]

@@ -49,7 +49,7 @@ Table 1: Locales Netsuke ships, by script family
 
 ## 2. The locale registry
 
-`src/localization/locales.rs` owns the list of locales. Its `define_locales!`
+`src/locale_catalogues.rs` owns the list of locales. Its `define_locales!`
 macro both declares the supported tags and embeds each catalogue, so a tag
 without a catalogue on disk fails to compile. Everything downstream reads the
 registry rather than keeping its own list: the build-time audit, the
@@ -60,7 +60,7 @@ The one necessary duplicate is `package.metadata.ortho_config.locales` in
 compares the two and fails the build if they drift.
 
 Adding a locale means creating `locales/<tag>/messages.ftl`, adding the tag to
-`define_locales!` in `src/localization/locales.rs`, and adding it to that
+`define_locales!` in `src/locale_catalogues.rs`, and adding it to that
 `Cargo.toml` array. When the language already ships a catalogue, it also means
 adding a `LANGUAGE_FALLBACKS` rule to say how the two variants divide the
 regions between them.
@@ -339,7 +339,7 @@ Leave Netsuke's own identifiers untranslated — users type them. That covers
 
 Add the tag to the two lists that name it:
 
-1. `define_locales!` in `src/localization/locales.rs`, in tag order.
+1. `define_locales!` in `src/locale_catalogues.rs`, in tag order.
 2. `package.metadata.ortho_config.locales` in `Cargo.toml`, in the same order.
 
 If the language already ships a catalogue — a new Spanish or Chinese variant,
