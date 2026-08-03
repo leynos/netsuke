@@ -19,8 +19,8 @@ several of these shapes, so the natural borrow-returning form of an accessor
 can compile where NLL rejected it.
 
 Adopting those borrow-centric designs binds the source tree to a
-Polonius-enabled compiler, which is nightly-only until the analysis stabilizes.
-That conflicts with three standing policies:
+Polonius-enabled compiler, which is nightly-only until the analysis
+stabilizes. That conflicts with three standing policies:
 
 - `rust-toolchain.toml` pinned stable `1.89.0`;
 - `Cargo.toml` declared `rust-version = "1.89.0"` as a minimum supported Rust
@@ -52,20 +52,20 @@ Adopt Polonius now, as a nightly-only source tree:
   nightly requirement there, and advertising `1.89.0` would misstate the
   contract; `rust-toolchain.toml` is now the single source of truth.
 
-Every borrow-centric rewrite that depends on the flag is verified both with and
-without `-Zpolonius=next` and recorded in
+Every borrow-centric rewrite that depends on the flag is verified both with
+and without `-Zpolonius=next` and recorded in
 [polonius migration notes](polonius.md), including refusals where owned style
 remains correct.
 
 ## Rationale
 
 - **Design over deployment breadth.** Netsuke ships binaries, not a library
-  API. Consumers install packaged artefacts or build from source; the toolchain
-  pin costs contributors one `rustup` fetch, whereas NLL-era double lookups and
-  key clones cost every call site, forever.
+  API. Consumers install packaged artefacts or build from source; the
+  toolchain pin costs contributors one `rustup` fetch, whereas NLL-era
+  double lookups and key clones cost every call site, forever.
 - **Reproducibility.** A dated nightly behaves like a release: the same
-  compiler bits build the tree everywhere. `rustup` provisions it automatically
-  from `rust-toolchain.toml`.
+  compiler bits build the tree everywhere. `rustup` provisions it
+  automatically from `rust-toolchain.toml`.
 - **Coherent tooling.** Putting the flag in `.cargo/config.toml` keeps
   rust-analyzer, Clippy, Whitaker (whose Dylint driver is nightly-based), and
   Kani borrow-checking the same dialect, avoiding phantom editor errors on
