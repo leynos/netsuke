@@ -21,27 +21,16 @@
 # `check_ninja` and `fake_ninja` reach it via
 # `exec::write_exec_with_content`.
 #
-# The `dev_fast` submodules below build and inspect throwaway PATH/HOME
-# sandboxes for the dev-fast build-acceleration tests. Their ambient access is
-# the harness itself rather than incidental fixture I/O, and part of it cannot
-# route through `test_support::fs` even in principle: driving incremental-build
-# benchmarks needs an open `std::fs::File` for `set_modified` and
-# `write_all_at`, and a wrapper handing that file back would simply move the
-# diagnostic to its caller. Metadata inspection (`modified`) has the same
-# shape.
+# `dev_fast` is not listed. Its sandbox, staging, release, and cargo-log
+# modules stage throwaway PATH/HOME trees for the build-acceleration tests, and
+# every operation they need has a wrapper here — including the ones that once
+# looked irreducible. Backdating a fixture needs one open file for the write and
+# the timestamp, but `fs::write_with_mtime` takes the timestamp as an argument
+# and keeps the handle inside this module; reading an mtime never opened a file
+# at all, and `fs::modified` returns the `SystemTime` directly.
 #
-# The entries name only the modules that need it. `dev_fast::bench`,
-# `dev_fast::make`, `dev_fast::sandbox`, and `dev_fast::scenario` stay under
-# the policy: `sandbox` routes every operation through `test_support::fs`,
-# including the `is_executable_file` probe added for it.
-#
-# Where a `test_support::fs` wrapper does exist, prefer it inside the exempt
-# modules too, and drop a module from this list once it needs none: the
-# exemption is a floor for what the harness cannot express, not a licence to
-# stop using the boundary.
-excluded_paths = [
-    "test_support::fs",
-    "test_support::dev_fast::cargo_log",
-    "test_support::dev_fast::release",
-    "test_support::dev_fast::staging",
-]
+# The lesson is worth keeping: reach for an entry below only after trying to
+# express the operation as a wrapper that returns plain data. A wrapper that
+# hands a `std::fs::File` back would just move the diagnostic to its caller, but
+# that is an argument against that wrapper shape, not for an exemption.
+excluded_paths = ["test_support::fs"]

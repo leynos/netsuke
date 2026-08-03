@@ -10,10 +10,10 @@
 
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
-use std::fs;
 use std::process::Command;
 
 use super::Sandbox;
+use crate::fs;
 
 /// A published fake release, ready for the installer to fetch.
 pub struct FakeRelease {
@@ -62,8 +62,7 @@ impl FakeRelease {
     /// Write a version pin naming this release, and return its path.
     pub fn write_version_pin(&self, sandbox: &Sandbox) -> Result<Utf8PathBuf> {
         let path = sandbox.home().join("MOLD_VERSION");
-        fs::write(path.as_std_path(), format!("{}\n", self.version))
-            .context("write test version pin")?;
+        fs::write(&path, format!("{}\n", self.version)).context("write test version pin")?;
         Ok(path)
     }
 
@@ -83,7 +82,7 @@ impl FakeRelease {
 
     fn write_checksum_file(&self, sandbox: &Sandbox, contents: &str) -> Result<Utf8PathBuf> {
         let path = sandbox.home().join("SHA256SUMS");
-        fs::write(path.as_std_path(), contents).context("write test checksum file")?;
+        fs::write(&path, contents).context("write test checksum file")?;
         Ok(path)
     }
 }
@@ -91,12 +90,8 @@ impl FakeRelease {
 /// Lay out the tarball's versioned root containing `bin/mold`, so a correct
 /// `--strip-components` lands the binary directly in the install prefix.
 fn stage_release_tree(root: &Utf8Path) -> Result<()> {
-    fs::create_dir_all(root.join("bin").as_std_path()).context("stage fake release tree")?;
-    fs::write(
-        root.join("bin/mold").as_std_path(),
-        "#!/bin/sh\necho fake\n",
-    )
-    .context("write staged mold")
+    fs::create_dir_all(root.join("bin")).context("stage fake release tree")?;
+    fs::write(root.join("bin/mold"), "#!/bin/sh\necho fake\n").context("write staged mold")
 }
 
 fn build_archive(
@@ -137,8 +132,8 @@ fn publish_under_version_path(
     version: &str,
 ) -> Result<()> {
     let versioned = directory.join(format!("v{version}"));
-    fs::create_dir_all(versioned.as_std_path()).context("create versioned release path")?;
-    fs::copy(archive.as_std_path(), versioned.join(name).as_std_path())
+    fs::create_dir_all(&versioned).context("create versioned release path")?;
+    fs::copy(archive, versioned.join(name))
         .context("publish fake release under its version path")?;
     Ok(())
 }

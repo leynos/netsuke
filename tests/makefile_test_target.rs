@@ -195,9 +195,13 @@ fn behavioural_test_passes_also_target_test_support(
         .collect();
     ensure!(
         scoped.len() == 1,
-        "{target} should invoke the harness once against $(TEST_SUPPORT_MANIFEST), \
-         found {count}: {recipe:?}",
-        count = scoped.len()
+        concat!(
+            "{target} should invoke the harness once against ",
+            "$(TEST_SUPPORT_MANIFEST), found {count}: {recipe:?}",
+        ),
+        target = target,
+        count = scoped.len(),
+        recipe = recipe
     );
     for line in &scoped {
         ensure!(
@@ -215,8 +219,12 @@ fn behavioural_test_passes_also_target_test_support(
         if harness == "nextest run" {
             ensure!(
                 line.contains("--all-targets"),
-                "{target}'s test_support pass should cover every test target, \
-                 found {line:?}"
+                concat!(
+                    "{target}'s test_support pass should cover every test ",
+                    "target, found {line:?}",
+                ),
+                target = target,
+                line = line
             );
         }
     }
@@ -521,9 +529,13 @@ fn behavioural_rustflags_recipes_preserve_inherited_flags(
     );
     ensure!(
         expanded.contains(&polonius),
-        "{} should re-state {polonius} because setting RUSTFLAGS overrides \
-         .cargo/config.toml, expanded to {expanded:?}",
-        case.target
+        concat!(
+            "{} should re-state {polonius} because setting RUSTFLAGS ",
+            "overrides .cargo/config.toml, expanded to {expanded:?}",
+        ),
+        case.target,
+        polonius = polonius,
+        expanded = expanded
     );
     ensure!(
         expanded.contains(DENY_WARNINGS) == case.denies_warnings,
@@ -558,9 +570,13 @@ fn behavioural_rustflags_recipes_are_well_formed_without_inherited_flags(
 
     ensure!(
         expanded.contains(&polonius),
-        "{} should re-state {polonius} even with no inherited RUSTFLAGS, \
-         expanded to {expanded:?}",
-        case.target
+        concat!(
+            "{} should re-state {polonius} even with no inherited RUSTFLAGS, ",
+            "expanded to {expanded:?}",
+        ),
+        case.target,
+        polonius = polonius,
+        expanded = expanded
     );
     ensure!(
         !expanded.contains(CALLER_RUSTFLAGS),
@@ -575,9 +591,12 @@ fn behavioural_rustflags_recipes_are_well_formed_without_inherited_flags(
     if case.separator_only_when_set {
         ensure!(
             !expanded.starts_with(' '),
-            "{} should not emit a leading separator when RUSTFLAGS is unset, \
-             expanded to {expanded:?}",
-            case.target
+            concat!(
+                "{} should not emit a leading separator when RUSTFLAGS is ",
+                "unset, expanded to {expanded:?}",
+            ),
+            case.target,
+            expanded = expanded
         );
     }
     Ok(())

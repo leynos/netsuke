@@ -7,7 +7,11 @@
 //! linker. A fake `cargo` records each invocation so those become checked facts
 //! rather than assumptions.
 //!
-//! Every case is hermetic: no network, and no real mold, rustup, or Cargo.
+//! Every case is hermetic: no network, and no real mold or rustup. The
+//! exception is `cargo_resolves_the_fragment_to_the_intended_settings`,
+//! which runs the real Cargo via `env!("CARGO")` because only the real
+//! Cargo can confirm how it resolves the `tools/dev-fast/config.toml`
+//! fragment. Every other case exercises the recording fake `cargo`.
 
 #![cfg(all(unix, target_os = "linux"))]
 
@@ -173,8 +177,10 @@ fn a_drifting_mold_invokes_cargo_not_at_all(#[case] target: &str) -> Result<()> 
 #[case::unstable_flag("unstable.codegen-backend", "unstable.codegen-backend = true")]
 #[case::linux_rustflags(
     "target",
-    "target.'cfg(target_os = \"linux\")'.rustflags = \
-     [\"-Zpolonius=next\", \"-Clink-arg=-fuse-ld=mold\"]"
+    concat!(
+        "target.'cfg(target_os = \"linux\")'.rustflags = ",
+        "[\"-Zpolonius=next\", \"-Clink-arg=-fuse-ld=mold\"]",
+    )
 )]
 fn cargo_resolves_the_fragment_to_the_intended_settings(
     #[case] query: &str,

@@ -19,6 +19,9 @@ pub mod check_ninja;
 pub mod command_helper;
 pub mod cwd_guard;
 
+/// Helpers for the `dev-fast` build-acceleration target tests: a hermetic
+/// PATH/HOME sandbox, staged fake releases, a recording `cargo`, and the
+/// Make invocation wrappers those tests drive. Unix-only.
 #[cfg(unix)]
 pub mod dev_fast;
 pub mod env;

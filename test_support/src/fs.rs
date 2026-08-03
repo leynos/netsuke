@@ -19,6 +19,7 @@
 use std::fs;
 use std::io;
 use std::path::Path;
+use std::time::SystemTime;
 
 /// Write `contents` to `path`, creating or truncating the file.
 ///
@@ -114,6 +115,47 @@ pub fn exists(path: impl AsRef<Path>) -> bool {
 #[must_use]
 pub fn is_dir(path: impl AsRef<Path>) -> bool {
     fs::metadata(path).is_ok_and(|metadata| metadata.is_dir())
+}
+
+/// Copy `from` to `to`, returning the number of bytes copied.
+///
+/// # Errors
+///
+/// Propagates the underlying `std::fs::copy` failure.
+pub fn copy(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<u64> {
+    fs::copy(from, to)
+}
+
+/// Return the modification time of the file at `path`.
+///
+/// # Errors
+///
+/// Propagates the underlying metadata failure, or the platform's failure to
+/// report a modification time.
+pub fn modified(path: impl AsRef<Path>) -> io::Result<SystemTime> {
+    fs::metadata(path)?.modified()
+}
+
+/// Write `contents` to `path` and set its modification time to `mtime`.
+///
+/// Backdating a fixture needs the same open file for the write and the
+/// timestamp, so both happen here rather than through separate calls. The
+/// handle never leaves this function: returning it would push the ambient
+/// operation out to the caller, which is what this module exists to prevent.
+///
+/// # Errors
+///
+/// Propagates the create, write, or timestamp failure.
+#[cfg(unix)]
+pub fn write_with_mtime(
+    path: impl AsRef<Path>,
+    contents: impl AsRef<[u8]>,
+    mtime: SystemTime,
+) -> io::Result<()> {
+    use std::os::unix::fs::FileExt;
+    let file = fs::File::create(path)?;
+    file.write_all_at(contents.as_ref(), 0)?;
+    file.set_modified(mtime)
 }
 
 /// Return the length in bytes of the file at `path`.
