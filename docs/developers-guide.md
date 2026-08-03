@@ -138,11 +138,11 @@ configuration does and does not cover.
 (`whitaker --all -- --all-targets --all-features`). Install Whitaker through
 the standalone installer described in the
 [Whitaker user's guide](whitaker-users-guide.md) so local linting matches
-continuous integration (CI); `make lint-clippy` runs the Clippy-only subset.
-CI pins the installer version in `WHITAKER_INSTALLER_VERSION` in
+continuous integration (CI); `make lint-clippy` runs the Clippy-only subset. CI
+pins the installer version in `WHITAKER_INSTALLER_VERSION` in
 `.github/workflows/ci.yml`. Install that same version locally so local runs
-match CI; read the pin from the workflow rather than copying the number, so
-the two cannot drift:
+match CI; read the pin from the workflow rather than copying the number, so the
+two cannot drift:
 
 ```bash
 WHITAKER_INSTALLER_VERSION="$(sed -n \
@@ -157,9 +157,9 @@ cargo binstall --no-confirm --locked \
 
 This pin matters: 0.2.7 is the first installer release whose staged lint
 libraries carry [Whitaker PR #315][whitaker-pr-315], which added the
-`excluded_paths` option. Every module-scoped exemption in `dylint.toml`
-depends on it — an older installer silently ignores `excluded_paths`, and
-the exemptions stop applying without any error.
+`excluded_paths` option. Every module-scoped exemption in `dylint.toml` depends
+on it — an older installer silently ignores `excluded_paths`, and the
+exemptions stop applying without any error.
 
 [whitaker-pr-315]: https://github.com/leynos/whitaker/pull/315
 
@@ -168,8 +168,8 @@ sanctioned ambient-filesystem scope for `no_std_fs_operations` carries a
 documented rationale. `docs/whitaker-users-guide.md` is a near-verbatim import
 of the [upstream Whitaker user's guide][whitaker-upstream-guide]; refresh it
 from that URL rather than editing it in place, preserving the "Netsuke
-deviation from upstream" callout, and record Netsuke-specific policy here and
-in `dylint.toml`.
+deviation from upstream" callout, and record Netsuke-specific policy here and in
+`dylint.toml`.
 
 [whitaker-upstream-guide]: https://raw.githubusercontent.com/leynos/whitaker/refs/heads/main/docs/users-guide.md
 
@@ -202,8 +202,8 @@ call anywhere else in the crate still fails the lint.
 Exceptions belong in `dylint.toml`, scoped as narrowly as the lint allows.
 Neither `#[allow(no_std_fs_operations)]` nor
 `#[expect(no_std_fs_operations, reason = "…")]` suppresses this lint in the
-Whitaker build this repository pins, so no in-source attribute is usable
-here (this repository also denies `clippy::allow_attributes`, so
+Whitaker build this repository pins, so no in-source attribute is usable here
+(this repository also denies `clippy::allow_attributes`, so
 `#[allow(no_std_fs_operations)]` will not even compile). A `dylint.toml` entry
 is the only working mechanism: a narrowly scoped `excluded_paths` entry for a
 bounded module, or, where the ambient access lives at the crate root and a path
@@ -587,13 +587,13 @@ and `-Clink-arg=-fuse-ld=mold`.
   `cargo nextest run --all-targets --all-features`, over the root workspace and
   then `test_support`, and so is governed by the same
   [`.config/nextest.toml`](#nextest-configuration), including the `serial-env`
-  group. It omits the `doctest` pass, because `cargo test --doc`
-  is a separate and comparatively quick runner; run `make test` before
-  proposing a change. The acceleration is applied through `RUSTUP_TOOLCHAIN` and
-  `cargo --config`, both Cargo-level rather than runner-level, which is why
-  they compose with nextest unchanged. Note the target uses
-  `NEXTEST_BUILD_JOBS`, not `BUILD_JOBS`: nextest reserves `-j` for test
-  concurrency, so a Cargo-shaped `-j` would silently become a thread count.
+  group. It omits the `doctest` pass, because `cargo test --doc` is a separate
+  and comparatively quick runner; run `make test` before proposing a change.
+  The acceleration is applied through `RUSTUP_TOOLCHAIN` and `cargo --config`,
+  both Cargo-level rather than runner-level, which is why they compose with
+  nextest unchanged. Note the target uses `NEXTEST_BUILD_JOBS`, not
+  `BUILD_JOBS`: nextest reserves `-j` for test concurrency, so a Cargo-shaped
+  `-j` would silently become a thread count.
 - **rust-analyzer.** No rust-analyzer configuration is committed, so the
   language server uses the repository toolchain and the default backend. Opting
   rust-analyzer into Cranelift is a personal, machine-local choice; it needs a
@@ -686,16 +686,16 @@ The fixtures live in `test_support::dev_fast`:
   Cranelift component, and a `RecordingCargo` installed — and is shared by the
   Make-target and benchmark suites. `BuildScenario::run(target)` returns the
   single Cargo invocation a target must produce; `run_all(target)` returns
-  every invocation in order, for targets that invoke Cargo more than once,
-  such as `dev-test`, which runs the root pass and then `test_support`.
-  `InstallerScenario` is a sandbox with a
-  published `FakeRelease` and a usable `rustup`, letting a test concentrate on
-  the linker half of the installer; the installer and checksum suites share it.
-  The module also exports `TEST_MOLD_VERSION`, deliberately not a real `mold`
-  version so a test that accidentally reaches the network fails rather than
-  silently succeeding against an upstream artefact, and `WRONG_SHA256`.
-  `InstallerFixture` groups the installer's pin path, checksum path, and
-  release URL, and renders them via `script_env()`.
+  every invocation in order, for targets that invoke Cargo more than once, such
+  as `dev-test`, which runs the root pass and then `test_support`.
+  `InstallerScenario` is a sandbox with a published `FakeRelease` and a usable
+  `rustup`, letting a test concentrate on the linker half of the installer; the
+  installer and checksum suites share it. The module also exports
+  `TEST_MOLD_VERSION`, deliberately not a real `mold` version so a test that
+  accidentally reaches the network fails rather than silently succeeding
+  against an upstream artefact, and `WRONG_SHA256`. `InstallerFixture` groups
+  the installer's pin path, checksum path, and release URL, and renders them via
+  `script_env()`.
 
 A scenario earns its place here once a second suite needs it, and not before;
 suite-specific conveniences stay with their suite — the installer tests keep
@@ -939,9 +939,8 @@ Cargo home plus Kani support-file home.
   `RUSTFLAGS`. nextest cannot execute doctests, so they need their own pass.
   Note that the previous `cargo test --all-targets` invocation never ran
   doctests either; the separate target is what makes a broken documentation
-  example fail the gate. For the same reason as `test-nextest`, `doctest`
-  also runs a second time against `test_support/Cargo.toml` to cover its
-  doctests.
+  example fail the gate. For the same reason as `test-nextest`, `doctest` also
+  runs a second time against `test_support/Cargo.toml` to cover its doctests.
 
 The `test_support/Cargo.toml` path used for the second pass comes from the
 overridable `TEST_SUPPORT_MANIFEST` Makefile variable (default
@@ -1047,12 +1046,12 @@ writes that content and applies executable permissions only on Unix.
 `write_exec_with_content` is the shared primitive for custom behaviour.
 
 The helpers take `&Utf8Path` and return `Utf8PathBuf`, matching the camino
-types used throughout Netsuke. Callers that already hold camino paths pass
-them directly. `tempfile::TempDir::path()` still yields an OS-native `&Path`,
-so callers convert at that boundary with `exec::utf8_path`, the single
-conversion point. `utf8_path` returns a `Result` rather than panicking: it
-names the offending path in the error (`path is not valid UTF-8: {path}`),
-and callers propagate it with their own context, as `fake_ninja` and
+types used throughout Netsuke. Callers that already hold camino paths pass them
+directly. `tempfile::TempDir::path()` still yields an OS-native `&Path`, so
+callers convert at that boundary with `exec::utf8_path`, the single conversion
+point. `utf8_path` returns a `Result` rather than panicking: it names the
+offending path in the error (`path is not valid UTF-8: {path}`), and callers
+propagate it with their own context, as `fake_ninja` and
 `fake_ninja_check_build_file` do.
 
 ```rust
@@ -1303,12 +1302,12 @@ is not obvious from the name:
 
 `write_with_mtime` is the reason `test_support/dylint.toml` carries no
 `dev_fast` exemption. Backdating a fixture needs one open file for both the
-write and the timestamp, which reads like an irreducibly ambient operation
-that has to happen at the call site. Taking the timestamp as an argument
-keeps the handle inside this module instead: the caller never sees a `File`,
-so the ambient boundary stays where the lint expects it. Prefer that shape —
-pass in what the operation needs and keep the handle here — over widening an
-exclusion to a module that wants a raw `File`.
+write and the timestamp, which reads like an irreducibly ambient operation that
+has to happen at the call site. Taking the timestamp as an argument keeps the
+handle inside this module instead: the caller never sees a `File`, so the
+ambient boundary stays where the lint expects it. Prefer that shape — pass in
+what the operation needs and keep the handle here — over widening an exclusion
+to a module that wants a raw `File`.
 
 ### Shared Makefile contract helpers
 
@@ -1317,24 +1316,24 @@ assert facts about the repository's `Makefile` — for example, that a target
 declares a given prerequisite or recipe. It provides five helpers:
 
 - `repo_root() -> Result<cap_std::fs_utf8::Dir>` opens the repository root
-  through `cap_std::fs_utf8::Dir` and `ambient_authority()`, so a contract
-  test cannot read outside the checkout.
+  through `cap_std::fs_utf8::Dir` and `ambient_authority()`, so a contract test
+  cannot read outside the checkout.
 - `read_repo_file(relative: &Utf8Path) -> Result<String>` reads a file under
   the repository root via that capability-scoped directory.
 - `parse_rule(line: &str) -> Option<(&str, Vec<&str>)>` parses a single
   `target: prerequisites` line. It returns `None` for recipe or continuation
-  lines, comments, `.PHONY`-style directives, and variable assignments
-  (`:=` is caught by testing whether the text after the colon starts with
-  `=`). It strips trailing `##` help comments from the prerequisite list.
+  lines, comments, `.PHONY`-style directives, and variable assignments (`:=` is
+  caught by testing whether the text after the colon starts with `=`). It
+  strips trailing `##` help comments from the prerequisite list.
 - `target_prerequisites(contents: &str, target: &str) -> Option<Vec<String>>`
   finds a target's rule line and returns its prerequisites.
 - `target_recipe(contents: &str, target: &str) -> Option<String>` returns
-  `Some("")` for a target with no recipe and `None` for an absent target.
-  Blank lines inside a recipe are traversed but dropped, so a recipe split by
-  a blank line is returned whole.
+  `Some("")` for a target with no recipe and `None` for an absent target. Blank
+  lines inside a recipe are traversed but dropped, so a recipe split by a blank
+  line is returned whole.
 
-Because every file under `tests/` compiles as an independent crate, there is
-no library through which to share this module, and `tests/support/` is a
+Because every file under `tests/` compiles as an independent crate, there is no
+library through which to share this module, and `tests/support/` is a
 subdirectory that Cargo does not auto-discover as a test target. Consumers
 include it with:
 
@@ -1350,11 +1349,11 @@ surface does not trip `dead_code`; these tests run once per including crate.
 
 Scope and reuse policy: this module exists only for static Makefile contract
 tests and capability-scoped reads from the repository root. It must not grow
-into a general test-utility bag — fixture construction, process invocation,
-and environment control belong in the `test_support` crate, which is
-versioned, linted, and documented as such. A helper earns a place here only
-when more than one contract test needs the same reading or parsing
-behaviour. Nothing in it runs Make, runs Cargo, or writes anything.
+into a general test-utility bag — fixture construction, process invocation, and
+environment control belong in the `test_support` crate, which is versioned,
+linted, and documented as such. A helper earns a place here only when more than
+one contract test needs the same reading or parsing behaviour. Nothing in it
+runs Make, runs Cargo, or writes anything.
 
 ### `EnLocalizer` field ordering
 
@@ -1368,10 +1367,10 @@ pub struct EnLocalizer {
 }
 ```
 
-The declaration order is load-bearing: struct fields drop in declaration
-order, so `LocalizerGuard` must be declared before the mutex guard. That keeps
-the mutex held while `LocalizerGuard` restores the process-global localizer,
-so a test waiting on the lock cannot acquire it, install its own override, and
+The declaration order is load-bearing: struct fields drop in declaration order,
+so `LocalizerGuard` must be declared before the mutex guard. That keeps the
+mutex held while `LocalizerGuard` restores the process-global localizer, so a
+test waiting on the lock cannot acquire it, install its own override, and
 capture this test's override as its "previous" state.
 
 `en_localizer()` recovers a poisoned `LOCALIZER_TEST_LOCK` with
