@@ -142,16 +142,17 @@ Internal APIs are borrow-centric: lookups and get-or-create accessors return
 references, clone keys only on insertion, and build error context lazily.
 
 - **Never** rewrite a site tagged `POLONIUS(...)` into a double lookup
-  (`contains_key` + `get_mut`), an `entry(key.clone())` call, or an id/index
-  round-trip. Those forms are the NLL-era workarounds this codebase
-  deliberately retired; the direct form is compiler-verified.
+  (`contains_key` + `get_mut`), an `entry(key.clone())` call, or an
+  id/index round-trip. Those forms are the NLL-era workarounds this
+  codebase deliberately retired; the direct form is compiler-verified.
 - **Never** silence a borrow error by adding a defensive `.clone()`, an
   eager error-context computation, or a snapshot `collect()` without first
-  compiling the natural borrow-returning form under the project toolchain — it
-  usually compiles.
+  compiling the natural borrow-returning form under the project toolchain —
+  it usually compiles.
 - Respect `POLONIUS-REFUSED(...)` tags: the named constraint (persistent
-  identity, lock boundaries, aliasing, suspension points, thread boundaries) is
-  permanent. Do not convert those sites to reference-returning forms.
+  identity, lock boundaries, aliasing, suspension points, thread
+  boundaries) is permanent. Do not convert those sites to
+  reference-returning forms.
 - When adding a new borrow-centric API, verify it with and without
   `-Zpolonius=next` and record the classification in `docs/polonius.md`.
 

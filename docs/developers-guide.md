@@ -26,7 +26,6 @@ as the durable architecture record.
 
 [adr-003-cli]: adr-003-agent-consistent-human-first-cli.md
 
-
 ## Localization
 
 `src/localization/locales.rs` is the authoritative registry of shipped

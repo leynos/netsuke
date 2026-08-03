@@ -493,7 +493,6 @@ Important global options include:
 Run `netsuke --help` or `netsuke <command> --help` for the complete current
 surface.
 
-
 ### Choose a language with `--locale`
 
 Netsuke's help text, validation errors, progress labels, and runtime

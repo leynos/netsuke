@@ -102,6 +102,8 @@ const PLURAL_CATEGORIES: &[(&str, &[&str])] = &[
     ("fi", &["one", "other"]),
     ("fr", &["one", "other"]),
     ("gd", &["one", "two", "few", "other"]),
+    // intl_pluralrules 7.0.2 implements CLDR 37, which gives Hebrew four
+    // cardinal categories: one, two, many, and other.
     ("he", &["one", "two", "many", "other"]),
     ("hi", &["one", "other"]),
     // Hungarian keeps the noun singular after a numeral, so both variants read
@@ -156,8 +158,10 @@ fn plural_examples_declare_the_language_categories() -> Result<()> {
         let found = plural_categories(catalogue_text(tag)?, PLURAL_EXAMPLE);
         ensure!(
             found == categories(expected),
-            "{tag} declares the CLDR plural categories {found:?} for {PLURAL_EXAMPLE}, \
-             expected {expected:?}"
+            concat!(
+                "{tag} declares the CLDR plural categories {found:?} ",
+                "for {PLURAL_EXAMPLE}, expected {expected:?}"
+            )
         );
     }
     Ok(())
