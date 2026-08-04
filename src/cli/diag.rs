@@ -10,10 +10,10 @@ use clap::parser::ValueSource;
 use ortho_config::{OrthoError, OrthoResult};
 use std::sync::Arc;
 
+use super::command::Cli;
 use super::discovery::{
     DiscoveryOutcome, EnvProvider, StdEnvProvider, collect_diag_file_layers_with_env,
 };
-use super::parser::Cli;
 
 /// Environment variable carrying an explicit JSON-output preference.
 const JSON_ENV_VAR: &str = "NETSUKE_JSON";

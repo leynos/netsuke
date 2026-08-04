@@ -9,7 +9,8 @@ use crate::localization::{self, LocalizedMessage, keys};
 use thiserror::Error;
 use url::Url;
 
-use crate::host_pattern::{HostCandidate, HostPattern, HostPatternError};
+use crate::host_matching::HostCandidate;
+use crate::host_pattern::{HostPattern, HostPatternError};
 
 /// Declarative allow- and deny-list policy for outbound network requests.
 ///

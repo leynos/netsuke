@@ -1,7 +1,10 @@
 //! Shared host pattern validation helpers.
 //!
-//! The module centralizes normalization and matching logic so CLI parsing and
-//! runtime policy evaluation agree on allowable host syntax.
+//! The module centralizes host pattern normalization so CLI parsing and
+//! runtime policy evaluation agree on allowable host syntax. Matching a
+//! concrete hostname against a parsed pattern lives in
+//! `crate::host_matching`, which keeps this module's dependency surface
+//! narrow enough for `build.rs` to compile it for man-page generation.
 
 use crate::localization::{self, LocalizedMessage, keys};
 use serde::{Deserialize, Serialize};
@@ -18,18 +21,6 @@ impl<'a> HostPatternInput<'a> {
         self.0
     }
 }
-
-/// Host name presented for matching against a `HostPattern`.
-#[derive(Copy, Clone)]
-pub(crate) struct HostCandidate<'a>(pub(crate) &'a str);
-
-impl<'a> HostCandidate<'a> {
-    /// Return the wrapped host name.
-    const fn as_str(self) -> &'a str {
-        self.0
-    }
-}
-
 /// Shared validation state for one host pattern.
 struct ValidationContext<'a> {
     /// Original pattern, used in error messages.
@@ -242,22 +233,6 @@ impl HostPattern {
             wildcard,
         })
     }
-
-    /// Return whether a candidate host matches this pattern. Wildcard patterns
-    /// match subdomains only, never the apex domain itself.
-    pub(crate) fn matches(&self, candidate: HostCandidate<'_>) -> bool {
-        let host = candidate.as_str().to_ascii_lowercase();
-        if self.wildcard {
-            // Wildcard patterns match only subdomains, not the apex domain.
-            // Example: "*.example.com" matches "sub.example.com" but not
-            // "example.com".
-            host.strip_suffix(&self.pattern)
-                .and_then(|prefix| prefix.strip_suffix('.'))
-                .is_some_and(|prefix| !prefix.is_empty())
-        } else {
-            host == self.pattern
-        }
-    }
 }
 
 impl<'a> TryFrom<&'a str> for HostPattern {
@@ -310,7 +285,7 @@ impl<'de> Deserialize<'de> for HostPattern {
 
 #[cfg(test)]
 mod tests {
-    //! Unit tests for host pattern parsing and wildcard matching.
+    //! Unit tests for host pattern parsing and normalisation.
     use super::*;
 
     use anyhow::{Result, ensure};
@@ -328,26 +303,6 @@ mod tests {
         ensure!(
             parsed.wildcard == wildcard,
             "expected wildcard {wildcard} for pattern {pattern}",
-        );
-        Ok(())
-    }
-
-    #[rstest]
-    #[case("example.com", "example.com", true)]
-    #[case("example.com", "sub.example.com", false)]
-    #[case("*.example.com", "sub.example.com", true)]
-    #[case("*.example.com", "example.com", false)]
-    #[case("*.example.com", "deep.sub.example.com", true)]
-    #[case("*.example.com", "other.com", false)]
-    fn host_pattern_matches_expected(
-        #[case] pattern: &str,
-        #[case] host: &str,
-        #[case] expected: bool,
-    ) -> Result<()> {
-        let parsed = HostPattern::parse(pattern)?;
-        ensure!(
-            parsed.matches(HostCandidate(host)) == expected,
-            "expected match={expected} for {host} against {pattern}",
         );
         Ok(())
     }

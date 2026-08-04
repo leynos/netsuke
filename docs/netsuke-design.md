@@ -2734,7 +2734,9 @@ the targets listed in the `defaults` section of the manifest are built.
 
 ### 8.4 Design Decisions
 
-The parser-facing `Cli` type is now defined in `src/cli/parser.rs`, while
+The parser-facing `Cli` type is now defined in `src/cli/command.rs`, with the
+localization-aware parsing entry point in `src/cli/parser.rs` and the runtime
+preference accessors in `src/cli/preferences.rs`, while
 layered configuration lives in a dedicated `CliConfig` struct derived with
 OrthoConfig in `src/cli/config.rs`. The top-level `src/cli/mod.rs` module
 re-exports that public CLI surface. This separation keeps parsing,

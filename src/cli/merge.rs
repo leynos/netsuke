@@ -1,6 +1,6 @@
 //! Layer-composition and conversion helpers for CLI configuration.
 //!
-//! This module bridges the Clap-facing [`Cli`] type from [`super::parser`]
+//! This module bridges the Clap-facing [`Cli`] type from [`super::command`]
 //! and the OrthoConfig-derived [`CliConfig`] schema from [`super::config`].
 //! It implements the full four-layer merge pipeline:
 //!
@@ -13,7 +13,8 @@
 //!
 //! **Pipeline position:** merge layer.
 //!
-//! - Consumes `(Cli, ArgMatches)` from [`super::parser`].
+//! - Consumes `(Cli, ArgMatches)` from [`super::parser`], whose schema lives
+//!   in [`super::command`].
 //! - Applies `CliConfig`'s `PostMergeHook` for cross-field validation.
 //! - Produces a fully resolved `Cli` for the runner.
 //!
@@ -28,6 +29,7 @@ use serde::Serialize;
 
 use serde_json::{Map, Value, json};
 
+use super::command::{BuildArgs, Cli, Commands};
 use super::config::{BuildConfig, CliConfig, validation_rejection_reason};
 use super::discovery::{
     DiscoveredLayers, EnvProvider, StdEnvProvider, discover_file_layers,
@@ -38,8 +40,7 @@ use super::merge_input::{CachedMergeInput, MergeComposition};
 use super::merge_observability::{
     NoopMergeObserver, collect_override_leaf_paths, is_empty_configuration_value,
 };
-use super::parser::{BuildArgs, Cli, Commands};
-use super::validation_error;
+use super::validation::validation_error;
 use super::{MergeEvent, MergeObserver};
 
 /// Merge discovered configuration layers over parsed CLI input.
@@ -354,7 +355,7 @@ fn apply_config(parsed: &Cli, config: CliConfig) -> Cli {
         fetch_block_host: config.fetch_block_host,
         fetch_default_deny: config.fetch_default_deny,
         json: config.json,
-        interaction: super::parser::InteractionArgs {
+        interaction: super::command::InteractionArgs {
             no_input: config.no_input.is_enabled(),
         },
         color: config.color,

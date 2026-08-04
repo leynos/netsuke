@@ -9,6 +9,7 @@
 //!   in `locales/*/messages.ftl`, failing the build if any declared key is missing from a
 //!   locale.
 use cap_std::{ambient_authority, fs::Dir};
+use clap::CommandFactory;
 use clap_complete::aot::{Shell, generate_to};
 use clap_mangen::Man;
 use std::{
@@ -23,34 +24,49 @@ use time::{OffsetDateTime, format_description::well_known::Iso8601};
 /// does not supply the reproducible-builds epoch.
 const FALLBACK_DATE: &str = "1970-01-01";
 
-// The build script recompiles the parser subset needed to construct
-// `cli::Cli::command()` for man-page generation. Runtime discovery is excluded:
-// the build script does not perform discovery, and compiling it here would pull
-// its ambient canonicalization boundary into this separate compilation unit.
-// The parser subset exposes more library API than this binary reaches, so the
-// compiler reports unused items that the library crate and its tests exercise.
-#[expect(
-    dead_code,
-    unused_imports,
-    reason = "shared library source; the unreached API is exercised by the library crate"
-)]
-#[path = "src/cli/build_support.rs"]
-mod cli;
+// The build script recompiles a slice of the library as its own crate so that
+// `cli::Cli::command()` (used for man-page and completion generation) can be
+// constructed, and so that the localization audit can read the declared key
+// registry.
+//
+// The slice is named file by file rather than by pulling in `src/cli/mod.rs`,
+// because that would drag the whole `cli` subtree: configuration discovery,
+// merging, diagnostics, and localized value parsing, none of which is
+// reachable here. Runtime discovery is excluded deliberately: the build script
+// does not perform discovery, and compiling it here would pull its ambient
+// canonicalization boundary into this separate compilation unit. Recompiling
+// only what is reachable keeps rustc's unused-item analysis meaningful here
+// instead of requiring module-wide `#[expect(dead_code)]` suppressions that
+// would also mask genuinely dead library code.
+//
+// The library modules below are laid out to keep this slice small:
+// `src/cli/command.rs` holds command-schema and default-command behavior,
+// including `Cli::with_default_command`, with runtime preferences in
+// `src/cli/preferences.rs` and the localization-aware parsing entry point in
+// `src/cli/parser.rs`; matching logic is split out of `src/host_pattern.rs`
+// into `src/host_matching.rs`. Adding a dependency on anything outside this
+// slice will surface here as a compile error, which is the intended signal.
+#[path = "src/cli"]
+mod cli {
+    //! The Clap schema slice of `src/cli`, mirroring `src/cli/mod.rs`.
+
+    #[path = "config.rs"]
+    pub mod config;
+    #[path = "validation.rs"]
+    mod validation;
+
+    #[path = "help.rs"]
+    mod help;
+
+    #[path = "command.rs"]
+    mod command;
+
+    pub use command::Cli;
+    pub use config::{AccessibilityPolicy, ColourPolicy, EmojiPolicy, ProgressPolicy};
+}
 
 #[path = "src/cli_localization.rs"]
 mod cli_localization;
-
-#[expect(
-    dead_code,
-    reason = "shared library source; the unreached API is exercised by the library crate"
-)]
-#[path = "src/cli_l10n.rs"]
-mod cli_l10n;
-
-#[expect(
-    dead_code,
-    reason = "shared library source; the unreached API is exercised by the library crate"
-)]
 #[path = "src/host_pattern.rs"]
 mod host_pattern;
 
@@ -65,6 +81,7 @@ mod host_pattern;
 #[path = "src/locale_catalogues.rs"]
 pub mod locale_catalogues;
 
+mod build_l10n_audit;
 /// Message rendering, shared with the library crate.
 ///
 /// Exposed as `crate::localization`, which `cli`, `cli_l10n`, and
@@ -73,22 +90,6 @@ pub mod locale_catalogues;
 /// reachable at `crate::localization::locales`.
 #[path = "src/localization/mod.rs"]
 pub mod localization;
-
-#[expect(
-    dead_code,
-    reason = "shared library source; the unreached API is exercised by the library crate"
-)]
-#[path = "src/output_mode.rs"]
-mod output_mode;
-
-#[expect(
-    dead_code,
-    reason = "shared library source; the unreached API is exercised by the library crate"
-)]
-#[path = "src/theme.rs"]
-mod theme;
-
-mod build_l10n_audit;
 
 /// Compute the manual page date from `SOURCE_DATE_EPOCH`.
 ///
@@ -170,11 +171,11 @@ fn write_man_page(data: &[u8], dir: &Path, page_name: &str) -> std::io::Result<P
 /// Changing any listed file must rerun the build script so the man page and
 /// completions stay in sync with the CLI they describe.
 fn emit_rerun_directives() {
-    println!("cargo:rerun-if-changed=src/cli/build_support.rs");
+    // Only the modules this script actually compiles need to trigger a rerun.
+    println!("cargo:rerun-if-changed=src/cli/command.rs");
     println!("cargo:rerun-if-changed=src/cli/config.rs");
-    println!("cargo:rerun-if-changed=src/cli/help.rs");
-    println!("cargo:rerun-if-changed=src/cli/parser.rs");
-    println!("cargo:rerun-if-changed=src/cli/parsing.rs");
+    println!("cargo:rerun-if-changed=src/cli/validation.rs");
+    println!("cargo:rerun-if-changed=src/host_pattern.rs");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_VERSION");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_DESCRIPTION");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_AUTHORS");
@@ -211,7 +212,7 @@ fn emit_rerun_directives() {
 fn generate_man_page(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     // Build artefacts preserve the source en-US wording while still using the
     // configured parser metadata, so documentation stays deterministic.
-    let cmd = cli::configured_command(None);
+    let cmd = cli::Cli::command();
     let name = cmd
         .get_bin_name()
         .unwrap_or_else(|| cmd.get_name())
@@ -259,7 +260,7 @@ fn generate_completions(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>
     let working_dir = Dir::open_ambient_dir(".", ambient_authority())?;
     working_dir.create_dir_all(out_dir)?;
     // Keep completion metadata in the same source en-US wording as the manual.
-    let cli_command = cli::configured_command(None);
+    let cli_command = cli::Cli::command();
     let name = cli_command
         .get_bin_name()
         .unwrap_or_else(|| cli_command.get_name())
@@ -272,7 +273,7 @@ fn generate_completions(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>
         Shell::PowerShell,
         Shell::Zsh,
     ] {
-        let mut completion_command = cli::configured_command(None);
+        let mut completion_command = cli::Cli::command();
         generate_to(shell, &mut completion_command, &name, out_dir)?;
     }
 
