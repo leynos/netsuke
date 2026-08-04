@@ -11,7 +11,7 @@ use std::fmt;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use super::validation_error;
+use super::validation::validation_error;
 use crate::host_pattern::HostPattern;
 
 /// Required non-interactive execution setting.
@@ -275,7 +275,7 @@ impl CliConfig {
     }
 }
 
-const MAX_JOBS: usize = super::MAX_JOBS;
+const MAX_JOBS: usize = super::validation::MAX_JOBS;
 
 const fn jobs_out_of_bounds(jobs: usize) -> bool {
     jobs == 0 || jobs > MAX_JOBS

@@ -30,10 +30,10 @@ use serde::Serialize;
 
 use serde_json::{Map, Value, json};
 
+use super::command::{BuildArgs, Cli, Commands};
 use super::config::{BuildConfig, CliConfig};
 use super::discovery::push_file_layers;
-use super::parser::{BuildArgs, Cli, Commands};
-use super::validation_error;
+use super::validation::validation_error;
 
 const ENV_PREFIX: &str = "NETSUKE_";
 
@@ -191,7 +191,7 @@ fn apply_config(parsed: &Cli, config: CliConfig) -> Cli {
         fetch_block_host: config.fetch_block_host,
         fetch_default_deny: config.fetch_default_deny,
         json: config.json,
-        interaction: super::parser::InteractionArgs {
+        interaction: super::command::InteractionArgs {
             no_input: config.no_input.is_enabled(),
         },
         color: config.color,

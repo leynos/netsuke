@@ -377,6 +377,39 @@ unit tests, and `rstest-bdd` release-help scenarios.
 `src/cli/config_path_precedence_tests.rs` is the canonical exhaustive
 state-enumeration example.
 
+## The build script's module slice
+
+`build.rs` recompiles part of the library as its own crate: it needs
+`cli::Cli::command()` for man-page generation and the key registry in
+`src/localization/keys.rs` for the Fluent audit. Rather than declaring
+`src/cli/mod.rs` and inheriting the whole subtree, it declares an inline `cli`
+module naming exactly three files — `src/cli/command.rs`, `src/cli/config.rs`,
+and `src/cli/validation.rs`.
+
+That slice is a maintained boundary, not an accident:
+
+- `src/cli/command.rs` holds Clap definitions only. Runtime behaviour on `Cli`
+  belongs in `src/cli/preferences.rs`, and the localization-aware parsing entry
+  point belongs in `src/cli/parser.rs`.
+- `src/cli/validation.rs` holds the shared limits and error constructor that
+  `src/cli/config.rs` needs, so neither file has to reach up into
+  `src/cli/mod.rs`.
+- `src/host_pattern.rs` covers pattern syntax; matching a concrete hostname
+  against a parsed pattern lives in `src/host_matching.rs`, which the build
+  script does not compile.
+
+Keeping the slice narrow is what lets rustc's unused-item analysis run normally
+inside the build-script crate. Widening it — for example by making
+`src/cli/command.rs` depend on the merge or discovery layers — reintroduces
+unreachable items and, with them, the module-wide `#[expect(dead_code)]`
+suppressions that issue #513 removed. Those suppressions also masked genuinely
+dead code: an unused `pub` item in `src/cli/config.rs` is reported by the
+build-script crate but not by the library, because the library exports that
+module publicly.
+
+A dependency added outside the slice surfaces as a build-script compile error.
+Prefer moving the new code into a sibling module over widening the slice.
+
 ## Local build acceleration
 
 Debug builds and tests can optionally use the [`mold`] linker and the Cranelift

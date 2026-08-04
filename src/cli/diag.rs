@@ -11,8 +11,8 @@ use ortho_config::{OrthoError, OrthoResult};
 use serde_json::Value;
 use std::sync::Arc;
 
+use super::command::Cli;
 use super::discovery::{EnvProvider, StdEnvProvider, collect_diag_file_layers_with_env};
-use super::parser::Cli;
 
 const JSON_ENV_VAR: &str = "NETSUKE_JSON";
 
