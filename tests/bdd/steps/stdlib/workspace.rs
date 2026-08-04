@@ -285,10 +285,6 @@ pub(crate) fn stdlib_path_entries(world: &TestWorld, entries: &str) -> Result<()
 }
 
 #[given("HOME points to the stdlib workspace root")]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "pending migration under #492 (rstest-bdd migration)"
-)]
 pub(crate) fn home_points_to_stdlib_root(world: &TestWorld) -> Result<()> {
     let root = ensure_workspace(world)?;
     let os_root = OsStr::new(root.as_str());

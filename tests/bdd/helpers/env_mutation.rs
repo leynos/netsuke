@@ -27,10 +27,6 @@ use std::ffi::{OsStr, OsString};
 ///
 /// Returns an error if the environment variable name is empty, contains '=',
 /// or contains `'\0'`, or if `new_value` contains `'\0'`.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "pending migration under #492 (rstest-bdd migration)"
-)]
 pub fn mutate_env_var(world: &TestWorld, key: EnvVarKey, new_value: Option<&str>) -> Result<()> {
     ensure!(
         !key.as_str().is_empty(),
