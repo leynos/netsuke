@@ -11,9 +11,12 @@ change before 1.0. Pin the Netsuke version in automated workflows.
 ## Install Netsuke
 
 Netsuke requires [Ninja](https://ninja-build.org/) on `PATH`. A source build
-also requires the dated Rust nightly toolchain pinned in `rust-toolchain.toml`,
-because Netsuke builds with the Polonius borrow checker (`-Zpolonius=next`);
-`rustup` installs it automatically inside a checkout.
+also requires the dated Rust nightly toolchain pinned in `rust-toolchain.toml`
+because Netsuke builds with the Polonius borrow checker (`-Zpolonius=next`).
+
+Inside a checkout both settings are inherited automatically: `rustup` installs
+the pinned toolchain, and the repository's `.cargo/config.toml` supplies
+`RUSTFLAGS=-Zpolonius=next`. Neither has to be passed on the command line.
 
 Netsuke v0.1.0 is available from crates.io. Where
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) is available,
@@ -67,7 +70,9 @@ licence files. Installer packages do not have checksum sidecars in v0.1.0.
 Windows PowerShell help files are published beside each MSI as sidecar
 artefacts rather than embedded in the installer.
 
-To install the current source checkout with Cargo:
+To install the current source checkout with Cargo. The clone supplies both the
+pinned nightly toolchain and `RUSTFLAGS=-Zpolonius=next`, so neither is given
+here — unlike the registry install above, which runs outside a checkout:
 
 <!-- tested-example: guide-source-install -->
 
