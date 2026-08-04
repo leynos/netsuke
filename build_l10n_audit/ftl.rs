@@ -12,6 +12,11 @@ use std::error::Error;
 /// Message identifiers mapped to the variables their value interpolates.
 pub(super) type MessageVariables = BTreeMap<String, BTreeSet<String>>;
 
+/// Whether `trimmed` opens a comment.
+///
+/// Only meaningful for a line that starts an entry: an indented line is
+/// pattern text even when it begins with `#`, so callers must rule out a
+/// continuation first.
 fn is_comment(trimmed: &str) -> bool {
     trimmed.starts_with('#')
 }
@@ -62,17 +67,22 @@ pub(super) fn parse_catalogue(source: &str) -> Result<MessageVariables, Box<dyn 
 
     for line in source.lines() {
         let trimmed = line.trim();
-        if is_comment(trimmed) {
-            continue;
-        }
         // A blank line does not end a pattern in Fluent; only the next entry
         // does. Clearing here would drop the variables of every continuation
         // after it.
         if trimmed.is_empty() {
             continue;
         }
+        // Continuation is tested before comment. Fluent's comment syntax
+        // applies only to a line that starts an entry, so an indented line is
+        // pattern text whatever its first character — including `#`. Testing
+        // for a comment first would discard such a line and lose the
+        // variables it references.
         if is_continuation(line, trimmed) {
             append_continuation(&mut messages, current.as_deref(), trimmed);
+            continue;
+        }
+        if is_comment(trimmed) {
             continue;
         }
         current = start_message(&mut messages, trimmed);

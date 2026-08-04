@@ -217,3 +217,25 @@ fn a_supported_locale_warns_about_nothing() -> Result<()> {
     );
     Ok(())
 }
+
+/// A differently spelled source locale is supported, not a fallback.
+///
+/// `en-us` normalizes to `en-US` and resolves to the source catalogue, so
+/// warning about it would report a supported request as unsupported — and a
+/// warning that fires on correct input trains readers to ignore it.
+#[rstest]
+#[case("en-US")]
+#[case("en-us")]
+#[case("EN-US")]
+fn a_source_locale_spelling_warns_about_nothing(#[case] requested: &str) -> Result<()> {
+    let (_, at_warn) = with_test_subscriber(LevelFilter::WARN, |captured| {
+        let localizer = build_localizer(Some(requested));
+        (localizer, captured.snapshot())
+    });
+
+    ensure!(
+        at_warn.is_empty(),
+        "{requested} resolves to the source catalogue and must not warn, got {at_warn:?}"
+    );
+    Ok(())
+}

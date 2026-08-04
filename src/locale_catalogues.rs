@@ -226,9 +226,13 @@ fn subtag_catalogue(
 /// Resolve the catalogue serving `locale`, applying the documented fallback
 /// rules and finishing at the source locale.
 ///
-/// Resolution order is exact tag, then the language's script or region rule,
-/// then the language's default, then the sole catalogue for that language, and
-/// finally [`SOURCE_LOCALE`].
+/// An exact tag match wins. Failing that, the two remaining rules are
+/// alternatives rather than successive steps: a language with a fallback
+/// policy of its own resolves entirely through it — script or
+/// region rule, then that language's default — and never reaches the
+/// sole-catalogue lookup. Only a language absent from that table falls back to
+/// its single catalogue, and [`SOURCE_LOCALE`] serves anything still
+/// unmatched.
 ///
 /// # Examples
 ///

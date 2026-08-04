@@ -9,8 +9,6 @@ mod ftl;
 #[path = "../build_l10n_audit/metadata.rs"]
 mod metadata;
 
-/// `compare.rs` reaches its sibling parser through `super::ftl`, which resolves
-/// here because both modules sit at this crate's root.
 use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail, ensure};
@@ -183,8 +181,9 @@ fn decoys_do_not_displace_the_key(#[case] body: &str) -> Result<()> {
 #[case("# [package.metadata.ortho_config]\n# locales = [\"wrong\"]\n")]
 // The header named inside a string value.
 #[case("[package]\ndescription = \"see [package.metadata.ortho_config]\"\n")]
-// The header indented rather than at column zero is still a real header.
-#[case("[package]\nname = \"netsuke\"\n")]
+// Indented, so `begins_a_line` sees a preceding fragment that trims to empty
+// and must still accept it as a real header.
+#[case("[package]\nname = \"netsuke\"\n  ")]
 fn a_decoy_header_does_not_displace_the_table(#[case] preamble: &str) -> Result<()> {
     let manifest = format!("{preamble}{TABLE}locales = [\"en-US\"]\n");
     let found = metadata_locales(&manifest)
@@ -267,5 +266,54 @@ fn a_tab_indented_line_is_not_a_continuation() -> Result<()> {
         found == ["one"],
         "expected only $one on a.key, got {found:?}"
     );
+    Ok(())
+}
+
+/// An indented continuation beginning with `#` is pattern text, not a comment.
+///
+/// Fluent's comment syntax applies only to entry-starting lines, so a
+/// continuation keeps its text whatever its first character. Reading it as a
+/// comment dropped the variables it referenced — and dropping a variable makes
+/// the audit *less* likely to complain, so it would have failed silently.
+#[test]
+fn an_indented_hash_line_continues_the_message() -> Result<()> {
+    let parsed = parse("a.key = first { $one }\n    #{ $two } still the pattern\n")?;
+    let found = variables_of(&parsed, "a.key")?;
+    ensure!(
+        found == ["one", "two"],
+        "expected both variables, got {found:?}"
+    );
+    Ok(())
+}
+
+/// An unindented comment is still a comment.
+#[test]
+fn an_unindented_hash_line_is_a_comment() -> Result<()> {
+    let parsed = parse("a.key = first { $one }\n# { $ghost } a comment\nb.key = second\n")?;
+    let found = variables_of(&parsed, "a.key")?;
+    ensure!(
+        found == ["one"],
+        "a comment must contribute nothing, got {found:?}"
+    );
+    Ok(())
+}
+
+/// Triple quotes inside an ordinary single-line string are content, not a
+/// multiline delimiter.
+///
+/// Counting delimiters without tracking single-line strings toggled the
+/// multiline state on this text and mis-located the table.
+#[rstest]
+// The delimiter spelled inside a basic string.
+#[case("[package]\ndescription = \"see \\\"\\\"\\\" here\"\n")]
+// The same, inside a literal string, where backslashes do not escape.
+#[case("[package]\ndescription = 'see \"\"\" here'\n")]
+// A non-ASCII character before the table must not truncate the scan.
+#[case("[package]\ndescription = \"a Ünicöde description — with dashes\"\n")]
+fn string_content_does_not_toggle_the_multiline_state(#[case] preamble: &str) -> Result<()> {
+    let manifest = format!("{preamble}{TABLE}locales = [\"en-US\"]\n");
+    let found = metadata_locales(&manifest)
+        .ok_or_else(|| anyhow!("expected the locales key to be found"))?;
+    ensure!(found == ["en-US"], "got {found:?}");
     Ok(())
 }

@@ -191,7 +191,12 @@ pub fn locale_localizer(locale: &str) -> anyhow::Result<LocaleLocalizer> {
     // Lock first, then install: the guard returned by
     // `set_localizer_for_tests` captures the localizer to restore, so it must
     // be created under the lock.
-    let lock = localizer_test_lock().map_err(|error| anyhow::anyhow!("{error}"))?;
+    // Poisoning is recovered from, as `en_localizer` does and for the same
+    // reason: the lock orders localizer installation and nothing more, and the
+    // installation below re-establishes the global state unconditionally.
+    // Propagating instead would make one panicking test fail every later test
+    // that takes this lock, long after the original failure.
+    let lock = localizer_test_lock().unwrap_or_else(PoisonError::into_inner);
     let localizer = cli_localization::build_localizer(Some(locale));
     Ok(LocaleLocalizer {
         _guard: RestoreProbe::new(localization::set_localizer_for_tests(Arc::from(localizer))),

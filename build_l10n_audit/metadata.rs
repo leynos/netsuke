@@ -84,23 +84,66 @@ const MULTILINE_DELIMITERS: [&str; 2] = ["\"\"\"", "'''"];
 /// match.
 fn inside_multiline_string(prefix: &str) -> bool {
     let mut open: Option<&str> = None;
-    let mut index = 0usize;
-    while index < prefix.len() {
-        let Some(window) = prefix.get(index..index.saturating_add(3)) else {
-            break;
-        };
-        let delimiter = MULTILINE_DELIMITERS
-            .into_iter()
-            .find(|candidate| *candidate == window)
-            .filter(|candidate| open.is_none_or(|current| current == *candidate));
-        if let Some(found) = delimiter {
-            open = if open.is_some() { None } else { Some(found) };
-            index = index.saturating_add(3);
+    let mut single: Option<char> = None;
+    let mut escaped = false;
+    let mut chars = prefix.char_indices();
+    while let Some((index, ch)) = chars.next() {
+        if single.is_some() {
+            (single, escaped) = step_single_line(single, escaped, ch);
             continue;
         }
-        index = index.saturating_add(1);
+        let Some(found) = multiline_delimiter_at(prefix, index, open) else {
+            single = open.is_none().then(|| single_line_opener(ch)).flatten();
+            continue;
+        };
+        open = if open.is_some() { None } else { Some(found) };
+        // Skip the delimiter's remaining two characters.
+        chars.next();
+        chars.next();
     }
     open.is_some()
+}
+
+/// Advance a single-line string scan by one character.
+///
+/// Returns the quote still open, if any, and whether the next character is
+/// escaped. Only a basic string honours the escape; a literal string takes its
+/// contents verbatim.
+const fn step_single_line(single: Option<char>, escaped: bool, ch: char) -> (Option<char>, bool) {
+    let Some(quote) = single else {
+        return (None, false);
+    };
+    if escaped {
+        return (Some(quote), false);
+    }
+    if ch == '\\' && quote == '"' {
+        return (Some(quote), true);
+    }
+    if ch == quote || ch == '\n' {
+        return (None, false);
+    }
+    (Some(quote), false)
+}
+
+/// The multiline delimiter starting at `index`, if one does.
+///
+/// A window that does not land on a character boundary is not a delimiter, so
+/// `get` returning `None` yields `None` rather than ending the scan — a
+/// multi-byte character earlier in the manifest must not truncate it.
+fn multiline_delimiter_at(prefix: &str, index: usize, open: Option<&str>) -> Option<&'static str> {
+    let window = prefix.get(index..index.saturating_add(3))?;
+    MULTILINE_DELIMITERS
+        .into_iter()
+        .find(|candidate| *candidate == window)
+        .filter(|candidate| open.is_none_or(|current| current == *candidate))
+}
+
+/// The quote opening a single-line string, if `ch` is one.
+const fn single_line_opener(ch: char) -> Option<char> {
+    match ch {
+        '"' | '\'' => Some(ch),
+        _ => None,
+    }
 }
 
 /// Whether `rest` opens with `locales` followed by an `=`.

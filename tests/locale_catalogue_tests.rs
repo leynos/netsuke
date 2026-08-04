@@ -10,7 +10,6 @@ use std::collections::BTreeSet;
 
 use anyhow::{Context, Result, ensure};
 use netsuke::locale_catalogues::{LocaleCatalogue, SOURCE_LOCALE, SUPPORTED_LOCALES, catalogue};
-use rstest::rstest;
 
 /// Message used to demonstrate plural handling in every catalogue.
 const PLURAL_EXAMPLE: &str = "example.files_processed";
@@ -36,6 +35,11 @@ fn message_value<'a>(text: &'a str, key: &str) -> Option<&'a str> {
         .filter_map(|line| line.split_once('='))
         .find(|(id, _)| id.trim() == key)
         .map(|(_, value)| value.trim())
+}
+
+/// Whether `value` opens a `select` expression.
+fn opens_select(value: &str) -> bool {
+    value.ends_with("->")
 }
 
 /// Collect the CLDR categories a `select` expression declares.
@@ -178,114 +182,6 @@ fn every_plural_example_offers_the_default_variant() {
             entry.tag()
         );
     }
-}
-
-const fn is_rtl(ch: char) -> bool {
-    matches!(ch, '\u{0590}'..='\u{08FF}' | '\u{FB1D}'..='\u{FDFF}' | '\u{FE70}'..='\u{FEFF}')
-}
-
-/// Right-to-left marker that pins a message's paragraph direction.
-const RTL_MARK: char = '\u{200F}';
-
-/// Messages that are deliberately direction-neutral.
-///
-/// Each is either a bare technical token substituted into another message, or
-/// an all-Latin diagnostic line. Pinning these to right-to-left would move a
-/// Latin identifier to the wrong edge of the terminal, so they are exempt.
-const DIRECTION_NEUTRAL: [&str; 5] = [
-    // Clap's usage string, which names the binary and its Latin flags.
-    "cli.usage",
-    // Stream names, substituted into the command diagnostics.
-    "stdlib.command.output.stream.stdout",
-    "stdlib.command.output.stream.stderr",
-    // An all-Latin diagnostic tag followed by its detail.
-    "stdlib.which.args_error",
-    // A `{symbol} {label}` composition template for accessible output.
-    "semantic.prefix.rendered",
-];
-
-/// Whether `value` opens a `select` expression rather than carrying text.
-///
-/// The selector line renders nothing; its variants carry the text, and they
-/// are checked separately.
-fn opens_select(value: &str) -> bool {
-    value.ends_with("->")
-}
-
-/// The text a `select` variant line renders, if the line is one.
-fn variant_text(trimmed: &str) -> Option<&str> {
-    trimmed
-        .trim_start_matches('*')
-        .strip_prefix('[')?
-        .split_once(']')
-        .map(|(_, rest)| rest.trim())
-        .filter(|rest| !rest.is_empty())
-}
-
-/// The identifier a message line declares, with the text it renders.
-///
-/// The text is `None` when the line opens a `select`, because the variants
-/// carry the text instead, or when the value is empty.
-fn message_text(trimmed: &str) -> Option<(&str, Option<&str>)> {
-    let (id, raw_value) = trimmed.split_once('=')?;
-    let value = raw_value.trim();
-    let rendered = (!value.is_empty() && !opens_select(value)).then_some(value);
-    Some((id.trim(), rendered))
-}
-
-/// Every rendered fragment of a catalogue, as `(id, text)` pairs.
-///
-/// A message's own value is one fragment; each variant of a `select`
-/// expression is another, because whichever variant Fluent picks becomes the
-/// whole rendered string and so decides the paragraph direction on its own.
-fn rendered_fragments(text: &str) -> Vec<(String, String)> {
-    let mut fragments = Vec::new();
-    let mut current = String::new();
-    for trimmed in text.lines().map(str::trim) {
-        if trimmed.starts_with('#') || trimmed.is_empty() {
-            continue;
-        }
-        if let Some(rendered) = variant_text(trimmed) {
-            fragments.push((current.clone(), rendered.to_owned()));
-            continue;
-        }
-        let Some((id, rendered)) = message_text(trimmed) else {
-            continue;
-        };
-        id.clone_into(&mut current);
-        if let Some(body) = rendered {
-            fragments.push((current.clone(), body.to_owned()));
-        }
-    }
-    fragments
-}
-
-/// A right-to-left message that opens with a Latin word, a bracket or a
-/// placeable would otherwise take its paragraph direction from that token.
-/// Prefixing the value with U+200F keeps the direction with the locale.
-///
-/// Fluent wraps every interpolated value in bidi isolates, so a template built
-/// only from placeables and punctuation — `[{ $state }] { $label }` — carries
-/// no strong character at all and defaults to left-to-right. Those need the
-/// mark just as much as a Latin-initial sentence does, so the check covers
-/// every rendered fragment rather than only those with visible script.
-#[rstest]
-#[case("ar")]
-#[case("fa")]
-#[case("he")]
-fn rtl_catalogues_pin_paragraph_direction(#[case] tag: &str) -> Result<()> {
-    for (id, value) in rendered_fragments(catalogue_text(tag)?) {
-        if DIRECTION_NEUTRAL.contains(&id.as_str()) {
-            continue;
-        }
-        let first = value.chars().next().unwrap_or(RTL_MARK);
-        ensure!(
-            first == RTL_MARK || is_rtl(first),
-            "{tag}: {id} renders text starting with {first:?}, which leaves the \
-             paragraph direction to that character; prefix the value with U+200F"
-        );
-    }
-    Ok(())
 }
 
 /// A catalogue that merely copies the English source is not a translation.

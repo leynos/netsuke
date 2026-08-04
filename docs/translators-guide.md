@@ -66,11 +66,10 @@ added or dropped by accident, since it would just be confirming the registry
 agrees with itself.
 
 Adding a locale means creating `locales/<tag>/messages.ftl`, adding the tag to
-`define_locales!` in `src/locale_catalogues.rs`, adding it to that
-`Cargo.toml` array, and adding it to `EXPECTED_SHIPPED_TAGS`. When the
-language already ships a catalogue, it also means adding a
-`LANGUAGE_FALLBACKS` rule to say how the two variants divide the regions
-between them.
+`define_locales!` in `src/locale_catalogues.rs`, adding it to that `Cargo.toml`
+array, and adding it to `EXPECTED_SHIPPED_TAGS`. When the language already
+ships a catalogue, it also means adding a `LANGUAGE_FALLBACKS` rule to say how
+the two variants divide the regions between them.
 
 ### Fallback policy
 

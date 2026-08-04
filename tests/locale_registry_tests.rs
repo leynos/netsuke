@@ -3,7 +3,7 @@
 //! These cover the registry's structural invariants and the deliberate
 //! fallback rules that keep region and script variants distinct.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
 
 use anyhow::{Context, Result, ensure};
@@ -221,4 +221,48 @@ fn a_known_language_never_resolves_to_another_language() {
             resolved
         );
     });
+}
+
+/// Every language shipping more than one catalogue must have an explicit
+/// fallback rule.
+///
+/// Without one, `resolve_catalogue` reaches the sole-catalogue lookup, which
+/// returns nothing for a language with two — so the request silently falls all
+/// the way through to English. The rule is a judgement about which variants
+/// are interchangeable and cannot be inferred, so nothing but a test can
+/// require it. Derived from the registry rather than listed, so a new pair is
+/// covered without editing this test.
+#[test]
+fn a_language_with_two_catalogues_has_a_fallback_rule() {
+    let mut per_language: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for tag in registry_tags() {
+        let language = tag.split('-').next().unwrap_or(tag);
+        per_language.entry(language).or_default().push(tag);
+    }
+
+    let missing: Vec<&str> = per_language
+        .iter()
+        .filter(|(_, tags)| tags.len() > 1)
+        .map(|(language, _)| *language)
+        .filter(|language| !has_fallback_rule(language))
+        .collect();
+
+    assert!(
+        missing.is_empty(),
+        "these languages ship more than one catalogue but have no LANGUAGE_FALLBACKS \
+         rule, so requests for them fall through to the source locale: {missing:?}"
+    );
+}
+
+/// Whether `language` resolves through an explicit fallback rule.
+///
+/// `LANGUAGE_FALLBACKS` is private, so this probes the observable behaviour
+/// instead: a language with a rule resolves a region it does not ship to one
+/// of its own catalogues, where a language without one reaches the source.
+fn has_fallback_rule(language: &str) -> bool {
+    let Ok(probe) = LanguageIdentifier::from_str(&format!("{language}-ZZ")) else {
+        return false;
+    };
+    let resolved = resolve_catalogue(&probe).tag();
+    resolved != SOURCE_LOCALE && resolved.starts_with(language)
 }

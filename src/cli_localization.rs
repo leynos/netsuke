@@ -120,7 +120,11 @@ pub fn build_localizer(preferred_locale: Option<&str>) -> Box<dyn Localizer> {
     };
 
     let catalogue = locales::resolve_catalogue(&locale);
-    if catalogue.tag() == locales::SOURCE_LOCALE && preferred != locales::SOURCE_LOCALE {
+    // Compared after normalization: `en-us` parses to `en-US` and resolves to
+    // the source catalogue, so comparing the raw request would warn that a
+    // supported locale was unsupported.
+    let normalized = locale.to_string();
+    if catalogue.tag() == locales::SOURCE_LOCALE && normalized != locales::SOURCE_LOCALE {
         // Asked for something specific and got English. That is the case a
         // user would report as a bug, so it has to be visible by default.
         tracing::warn!(
