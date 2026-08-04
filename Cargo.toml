@@ -1,5 +1,5 @@
 [package]
-name = "netsuke"
+name = "netsuke-build"
 version = "0.1.0"
 edition = "2024"
 include = [
@@ -20,6 +20,12 @@ repository = "https://github.com/leynos/netsuke"
 keywords = ["build", "ninja", "jinja", "yaml", "automation"]
 categories = ["command-line-utilities", "development-tools::build-utils"]
 
+[lib]
+name = "netsuke"
+
+[[bin]]
+name = "netsuke"
+path = "src/main.rs"
 [package.metadata.ortho_config]
 root_type = "netsuke::cli::CliConfig"
 locales   = [

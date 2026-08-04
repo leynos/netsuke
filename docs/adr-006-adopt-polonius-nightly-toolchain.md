@@ -79,14 +79,14 @@ remains correct.
 
 - Publishing to crates.io remains possible, but the packaged source excludes
   `rust-toolchain.toml` and `.cargo/config.toml` (and Cargo would not apply
-  them to a registry build anyway), so a bare `cargo install netsuke` of a
-  Polonius-dependent release fails borrow checking on the user's default
+  them to a registry build anyway), so a bare `cargo install netsuke-build` of
+  a Polonius-dependent release fails borrow checking on the user's default
   toolchain. Registry installs must select the pinned nightly and pass the flag
   explicitly
-  (`RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke`); the
-  README and users' guide document this command and a contract test pins it.
-  Source installs from a checkout are unaffected because the pinned toolchain
-  and workspace configuration apply there.
+  (`RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke-build`);
+  the README and users' guide document this command and a contract test pins
+  it. Source installs from a checkout are unaffected because the pinned
+  toolchain and workspace configuration apply there.
 - Release packaging builds from the pinned nightly. Binary artefacts are
   unaffected: the borrow checker changes what compiles, not what is generated.
 - Dependabot-style toolchain drift is impossible; moving the pin is a

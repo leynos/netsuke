@@ -178,11 +178,11 @@ fn registry_install_examples_pin_toolchain_and_polonius() -> Result<()> {
     let mut registry_install_ids = Vec::new();
     for example in load_documented_examples()? {
         for line in example.body.lines() {
-            if !line.contains("install netsuke") || line.contains("binstall") {
+            if !line.contains("install netsuke-build") || line.contains("binstall") {
                 continue;
             }
             ensure!(
-                line.contains("cargo +nightly-2026-06-25 install netsuke"),
+                line.contains("cargo +nightly-2026-06-25 install netsuke-build"),
                 "{id} must install with the pinned nightly toolchain: {line}",
                 id = example.id
             );
@@ -203,7 +203,7 @@ fn registry_install_examples_pin_toolchain_and_polonius() -> Result<()> {
     let quickstart =
         test_fs::read_to_string("docs/quickstart.md").context("read docs/quickstart.md")?;
     ensure!(
-        !quickstart.contains("cargo install netsuke"),
+        !quickstart.contains("cargo install netsuke-build"),
         "docs/quickstart.md must defer to the users' guide install command"
     );
     Ok(())
@@ -213,7 +213,7 @@ fn registry_install_examples_pin_toolchain_and_polonius() -> Result<()> {
 fn assert_release_installation_contract() -> Result<()> {
     let readme_binstall = documented_example("readme-binstall-install")?;
     let guide_binstall = documented_example("guide-binstall-install")?;
-    let expected_binstall = "cargo binstall netsuke\n";
+    let expected_binstall = "cargo binstall netsuke-build\n";
     ensure!(
         readme_binstall.body == expected_binstall,
         "README binstall drifted"
@@ -229,7 +229,7 @@ fn assert_release_installation_contract() -> Result<()> {
     // command must select the pinned nightly and the Polonius flag itself.
     let expected_release = concat!(
         "rustup toolchain install nightly-2026-06-25\n",
-        "RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke\n"
+        "RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke-build\n"
     );
     ensure!(readme_release.body == expected_release, "README drifted");
     ensure!(guide_release.body == expected_release, "user guide drifted");

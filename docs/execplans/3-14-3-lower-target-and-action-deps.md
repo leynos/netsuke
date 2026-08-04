@@ -698,7 +698,7 @@ Expected: the new parameterized cases pass; existing IR cases continue to pass.
 After Stage D (cycle detection):
 
 ```sh
-cargo test -p netsuke ir::cycle \
+cargo test -p netsuke-build ir::cycle \
   2>&1 \
   | tee /tmp/stage-d-netsuke-3-14-3-lower-target-and-action-deps.out
 ```

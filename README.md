@@ -49,7 +49,7 @@ requirement below.
 <!-- tested-example: readme-binstall-install -->
 
 ```sh
-cargo binstall netsuke
+cargo binstall netsuke-build
 ```
 
 Building from the registry instead runs outside a repository checkout, so
@@ -60,7 +60,7 @@ supply both explicitly:
 
 ```sh
 rustup toolchain install nightly-2026-06-25
-RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke
+RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke-build
 ```
 
 Pre-built installers are available from the
