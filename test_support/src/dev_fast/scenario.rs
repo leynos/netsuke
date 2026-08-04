@@ -148,7 +148,7 @@ impl BuildScenario {
     ///     let scenario = BuildScenario::prepare()?;
     ///     let invocation = scenario.run("dev-build")?;
     ///     assert!(invocation.contains_sequence(&["build", "--bin", "netsuke"]));
-    ///     println!("toolchain: {}", invocation.toolchain());
+    ///     assert!(!invocation.toolchain().is_empty());
     ///     Ok(())
     /// }
     /// ```

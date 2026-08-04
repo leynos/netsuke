@@ -41,14 +41,39 @@ pub struct EnLocalizer {
 /// Rstest fixture that acquires the global localizer test lock and installs
 /// the English localizer, returning an [`EnLocalizer`] RAII bundle.
 ///
-/// Bind the returned value immediately in each test body:
+/// Bind the returned value immediately in each test body, since dropping it
+/// straight away would release the localizer before assertions run.
 ///
-/// ```rust,ignore
-/// #[rstest]
-/// fn my_test(en_localizer: EnLocalizer) {
+/// # Examples
+///
+/// `#[rstest]` expands a test taking `en_localizer: EnLocalizer` into a
+/// zero-argument `#[test]` function that only `cargo test` can invoke, so it
+/// is shown here for the usage pattern and defined but not called directly.
+/// The shared `assert_localized` helper carries the actual assertion, and is
+/// called both from the illustrated test and directly below so this example
+/// still exercises real, meaningful output when run as a doctest.
+///
+/// ```rust
+/// use netsuke::localization::{keys::CLI_ABOUT, message};
+/// use rstest::rstest;
+/// use test_support::localizer::{en_localizer, EnLocalizer};
+///
+/// fn assert_localized(en_localizer: EnLocalizer) {
 ///     let _en_localizer = en_localizer;
-///     // … assertions …
+///
+///     let resolved = message(CLI_ABOUT).to_string();
+///
+///     // A resolved message differs from the raw key; a match would mean the
+///     // Fluent catalogue failed to load and lookup fell back to the key.
+///     assert_ne!(resolved, CLI_ABOUT);
 /// }
+///
+/// #[rstest]
+/// fn resolves_localized_cli_about(en_localizer: EnLocalizer) {
+///     assert_localized(en_localizer);
+/// }
+///
+/// assert_localized(en_localizer());
 /// ```
 #[fixture]
 pub fn en_localizer() -> EnLocalizer {
