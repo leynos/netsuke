@@ -1,11 +1,6 @@
 //! Tests for scoped manipulation of `PATH` via `prepend_dir_to_path` and
 //! `PathGuard`.
 
-#![expect(
-    clippy::disallowed_methods,
-    reason = "pending migration under #493 (integration-binary migration)"
-)]
-
 use anyhow::{Context, Result, ensure};
 use mockable::Env;
 use rstest::rstest;
@@ -15,6 +10,10 @@ use test_support::env::{VarGuard, mocked_path_env, prepend_dir_to_path, system_e
 
 #[rstest]
 #[serial]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "pending migration under #493 (integration-binary migration)"
+)]
 fn prepend_dir_to_path_sets_and_restores() -> Result<()> {
     let env = mocked_path_env();
     let original = env.raw("PATH").context("mock PATH should be set")?;
@@ -42,6 +41,10 @@ fn prepend_dir_to_path_sets_and_restores() -> Result<()> {
 
 #[rstest]
 #[serial]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "pending migration under #493 (integration-binary migration)"
+)]
 fn prepend_dir_to_path_handles_empty_path() -> Result<()> {
     let _path_guard = VarGuard::set("PATH", OsStr::new(""));
     let env = system_env();
@@ -66,6 +69,10 @@ fn prepend_dir_to_path_handles_empty_path() -> Result<()> {
 
 #[rstest]
 #[serial]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "pending migration under #493 (integration-binary migration)"
+)]
 fn prepend_dir_to_path_handles_missing_path() -> Result<()> {
     let _path_guard = VarGuard::unset("PATH");
     let env = system_env();

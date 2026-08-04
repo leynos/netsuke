@@ -1,8 +1,3 @@
-#![expect(
-    clippy::disallowed_methods,
-    reason = "build scripts read CARGO_* and OUT_DIR from the environment Cargo provides; there is no seam to inject and no test to isolate"
-)]
-
 //! Build script for Netsuke.
 //!
 //! This script performs two main tasks:
@@ -73,6 +68,10 @@ mod theme;
 
 mod build_l10n_audit;
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "SOURCE_DATE_EPOCH is the reproducible-builds contract: the build system supplies it to the build script's process, so there is no seam to inject it through"
+)]
 fn manual_date() -> String {
     let Ok(raw) = env::var("SOURCE_DATE_EPOCH") else {
         return FALLBACK_DATE.into();
@@ -100,6 +99,10 @@ fn manual_date() -> String {
     })
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "TARGET and PROFILE are set by Cargo for the build script alone; nothing else knows the triple and profile being built, so they cannot be passed in"
+)]
 fn out_dir_for_target_profile() -> PathBuf {
     let target = env::var("TARGET").unwrap_or_else(|_| "unknown-target".into());
     let profile = env::var("PROFILE").unwrap_or_else(|_| "unknown-profile".into());
@@ -137,6 +140,10 @@ fn emit_rerun_directives() {
     println!("cargo:rerun-if-changed=locales/es-ES/messages.ftl");
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "CARGO_BIN_NAME, CARGO_PKG_NAME, CARGO_PKG_VERSION and OUT_DIR are Cargo's own build-script inputs; they describe the crate being compiled and Cargo provides them only through the environment"
+)]
 fn generate_man_page(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let cmd = cli::Cli::command();
     let name = cmd

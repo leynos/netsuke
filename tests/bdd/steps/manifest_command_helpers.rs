@@ -3,11 +3,6 @@
 //! Split from `manifest_command.rs` so both files stay within the module size
 //! budget; the step definitions in the parent module call these helpers.
 
-#![expect(
-    clippy::disallowed_methods,
-    reason = "pending migration under #492 (rstest-bdd migration)"
-)]
-
 use super::OutputType;
 use crate::bdd::fixtures::TestWorld;
 use crate::bdd::helpers::assertions::{assert_slot_contains, normalize_fluent_isolates};
@@ -144,6 +139,10 @@ pub(super) fn netsuke_executable() -> Result<PathBuf> {
 /// - Controlled `PATH` variable
 ///
 /// Returns the configured command ready for execution.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "pending migration under #492 (rstest-bdd migration)"
+)]
 pub(super) fn build_netsuke_command(
     world: &TestWorld,
     args: &[&str],

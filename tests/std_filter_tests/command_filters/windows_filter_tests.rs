@@ -81,6 +81,10 @@ impl WindowsSetupContext {
     }
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the code under test resolves commands through the real process PATH, so the helper directory must be prepended to the inherited value rather than to an injected one; pending migration under #493 (integration-binary migration)"
+)]
 fn windows_command_setup(
     ctx: WindowsSetupContext,
     helper_name: &str,
