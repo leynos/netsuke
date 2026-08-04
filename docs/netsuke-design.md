@@ -2577,7 +2577,7 @@ flowchart TD
     J_Next -->|No| K_Verdict
 
     K_Verdict{"Any findings?"} -->|No| L_Success["Audit passes<br/>continue build"]
-    K_Verdict -->|Yes| M_Fail["Report every finding<br/>and fail the build"]
+    K_Verdict -->|Yes| M_Fail["Report the failures<br/>and fail the build"]
 ```
 
 Figure: Build script localization audit flow across every registered locale.

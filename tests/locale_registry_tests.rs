@@ -56,7 +56,7 @@ fn the_registry_ships_exactly_the_expected_locales() {
         "registry drifted from the expected locale set: missing {missing:?}, unexpected {unexpected:?}"
     );
     assert_eq!(
-        shipped.len(),
+        expected.len(),
         EXPECTED_SHIPPED_TAGS.len(),
         "the expected list must not contain duplicates"
     );

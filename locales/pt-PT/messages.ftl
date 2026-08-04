@@ -86,19 +86,19 @@ runner.context.render_graph = Não foi possível representar o artefacto do graf
 
 runner.io.create_temp_file = Não foi possível criar o ficheiro Ninja temporário.
 runner.io.write_temp_ninja = Não foi possível escrever o ficheiro Ninja temporário.
-runner.io.flush_temp_ninja = Não foi possível esvaziar o ficheiro Ninja temporário.
+runner.io.flush_temp_ninja = Não foi possível esvaziar o buffer do ficheiro Ninja temporário.
 runner.io.sync_temp_ninja = Não foi possível sincronizar o ficheiro Ninja temporário.
 runner.io.create_parent_dir = Não foi possível criar a pasta principal { $path }.
 runner.io.create_ninja_file = Não foi possível criar o ficheiro Ninja em { $path }.
 runner.io.write_ninja_file = Não foi possível escrever o ficheiro Ninja em { $path }.
-runner.io.flush_ninja_file = Não foi possível esvaziar o ficheiro Ninja em { $path }.
+runner.io.flush_ninja_file = Não foi possível esvaziar o buffer do ficheiro Ninja em { $path }.
 runner.io.sync_ninja_file = Não foi possível sincronizar o ficheiro Ninja em { $path }.
 runner.io.open_ambient_dir = Não foi possível abrir a pasta do ambiente.
 runner.io.no_existing_ancestor = Não existe nenhuma pasta ascendente para { $path }.
 runner.io.derive_relative_path = Não foi possível derivar o caminho Ninja relativo.
 runner.io.non_utf8_path = Não são suportados caminhos que não sejam UTF-8 (caminho: { $path }).
 runner.io.write_stdout = Não foi possível escrever o manifesto Ninja no stdout.
-runner.io.flush_stdout = Não foi possível esvaziar o stdout.
+runner.io.flush_stdout = Não foi possível esvaziar o buffer do stdout.
 
 # Diagnósticos do manifesto.
 manifest.parse = A análise do manifesto falhou.

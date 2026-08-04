@@ -108,18 +108,31 @@ pub fn build_localizer(preferred_locale: Option<&str>) -> Box<dyn Localizer> {
         return fallback;
     };
     let Some(locale) = parse_locale_identifier(preferred) else {
-        // Callers normalize tags before reaching here, so an unparseable one
-        // means the normalization was bypassed; say which tag was dropped.
-        tracing::debug!(
+        // A request that cannot be honoured at all: warned, not debugged, so a
+        // run that silently falls back to English says so without `--verbose`.
+        tracing::warn!(
             requested = preferred,
             effective = locales::SOURCE_LOCALE,
             reason = "unparseable",
-            "locale request did not parse"
+            "locale request did not parse; falling back to the source locale"
         );
         return fallback;
     };
 
     let catalogue = locales::resolve_catalogue(&locale);
+    if catalogue.tag() == locales::SOURCE_LOCALE && preferred != locales::SOURCE_LOCALE {
+        // Asked for something specific and got English. That is the case a
+        // user would report as a bug, so it has to be visible by default.
+        tracing::warn!(
+            requested = preferred,
+            effective = locales::SOURCE_LOCALE,
+            reason = "unsupported",
+            "no catalogue for the requested locale; falling back to the source locale"
+        );
+        return fallback;
+    }
+    // A resolution that landed on a real catalogue is routine; the detail is
+    // only wanted when tracing the choice.
     tracing::debug!(
         requested = preferred,
         effective = catalogue.tag(),

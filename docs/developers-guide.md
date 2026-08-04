@@ -36,20 +36,26 @@ module cycle. `localization::locales` re-exports it, so the older path still
 resolves for callers. `define_locales!` declares the tags and embeds
 `locales/<tag>/messages.ftl` for each, so a tag without a catalogue on disk
 fails to compile. Read the registry rather than writing a separate locale list;
-the build audit, the `rerun-if-changed` directives, the packaging smoke test,
-and the test suite all do.
+the build audit, the `rerun-if-changed` directives, and the packaging smoke
+test all do. `tests/locale_registry_tests.rs` is the deliberate exception: its
+`EXPECTED_SHIPPED_TAGS` constant writes out every shipped tag by hand rather
+than reading the registry, and asserts the registry matches it. A test that
+reads the registry could only confirm the registry agrees with itself, so this
+list stands as an independent oracle — adding or dropping a catalogue has to be
+a conscious edit to it as well as to the registry.
 
 `Cargo.toml`'s `package.metadata.ortho_config.locales` is the one unavoidable
 duplicate, because Cargo metadata cannot call into Rust. The build audit
 compares it against the registry and fails on drift.
 
 Adding a locale therefore means: create `locales/<tag>/messages.ftl` with every
-declared key translated, add the tag to `define_locales!`, and add it to the
-`package.metadata.ortho_config.locales` array. If the language already ships a
-catalogue, add a `LANGUAGE_FALLBACKS` rule too, so the new tag and the existing
-one resolve as intended rather than one of them capturing the other. The build
-fails if any of these is skipped, apart from the fallback rule, which is a
-judgement about which variants are interchangeable.
+declared key translated, add the tag to `define_locales!`, add it to the
+`package.metadata.ortho_config.locales` array, and add it to
+`EXPECTED_SHIPPED_TAGS` in `tests/locale_registry_tests.rs`. If the language
+already ships a catalogue, add a `LANGUAGE_FALLBACKS` rule too, so the new tag
+and the existing one resolve as intended rather than one of them capturing the
+other. The build fails if any of these is skipped, apart from the fallback
+rule, which is a judgement about which variants are interchangeable.
 
 Table 1: The locale API surface
 
@@ -83,10 +89,16 @@ Every user-facing string is a Fluent message keyed from
 message to all 35 catalogues, and keeping its `{ $variables }` identical across
 them: the build audit rejects a missing key, an orphaned key, or a variable set
 that differs from `en-US`. The audit lives in `build_l10n_audit/`, split into
-`keys.rs` (the `define_keys!` macro), `ftl.rs` (catalogues), `metadata.rs` (the
+`keys.rs` and `scanner.rs` (the `define_keys!` scanner, with `byte_index.rs`
+for its byte-position bookkeeping), `ftl.rs` (catalogues), `metadata.rs` (the
 Cargo metadata), and `compare.rs` (the rules). Because build scripts are not
-test targets, those modules are included by path from
-`tests/build_l10n_keys_tests.rs` and `tests/build_l10n_parser_tests.rs`.
+test targets, those modules are included by path from three test files:
+`tests/build_l10n_keys_tests.rs` exercises the `define_keys!` scanner
+(`keys.rs`, `scanner.rs`, `byte_index.rs`); `tests/build_l10n_parser_tests.rs`
+exercises the catalogue and metadata parsers (`ftl.rs`, `metadata.rs`) and the
+comparison rules (`compare.rs`); and `tests/build_l10n_audit_tests.rs` runs the
+orchestration end to end, both over the checked-in tree and over deliberately
+corrupted copies of it.
 
 ## Graph view projection and renderer adapters
 

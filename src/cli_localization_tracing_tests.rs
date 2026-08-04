@@ -135,6 +135,7 @@ fn a_fallback_resolved_request_renders_as_its_catalogue(
 ) -> Result<()> {
     let via_fallback = build_localizer(Some(requested));
     let via_catalogue = build_localizer(Some(catalogue_tag));
+    let via_source = build_localizer(Some(locales::SOURCE_LOCALE));
 
     for count in [0_i64, 1, 2, 5] {
         let mut args = ortho_config::LocalizationArgs::new();
@@ -151,10 +152,68 @@ fn a_fallback_resolved_request_renders_as_its_catalogue(
             fallback_text == catalogue_text,
             "{requested} must render as {catalogue_tag} for count {count}: {fallback_text:?} vs {catalogue_text:?}"
         );
+        // Agreement alone would also hold if both fell through to English, so
+        // this is what shows the requested catalogue was actually loaded.
+        let source_text = via_source.lookup(
+            crate::localization::keys::EXAMPLE_FILES_PROCESSED,
+            Some(&args),
+        );
+        ensure!(
+            fallback_text != source_text,
+            "{requested} rendered the English source rather than {catalogue_tag} for count {count}: {fallback_text:?}"
+        );
         ensure!(
             fallback_text.is_some_and(|text| !text.trim().is_empty()),
             "{requested} rendered nothing for count {count}"
         );
     }
+    Ok(())
+}
+
+/// An unsupported locale must be visible at the level a normal run uses.
+///
+/// The startup filter is `WARN` when JSON mode is off, so a fallback reported
+/// only at `DEBUG` would be invisible without `--verbose` — a run would render
+/// English with nothing said about it. These assert the level, not just the
+/// event, because that is the part that decides visibility.
+#[rstest]
+// A tag that parses but ships no catalogue, and whose language ships none.
+#[case("is-IS")]
+// A tag that cannot parse at all.
+#[case("not a locale")]
+fn an_english_fallback_is_reported_at_warn(#[case] requested: &str) -> Result<()> {
+    let (_, at_warn) = with_test_subscriber(LevelFilter::WARN, |captured| {
+        let localizer = build_localizer(Some(requested));
+        (localizer, captured.snapshot())
+    });
+
+    ensure!(
+        at_warn
+            .iter()
+            .any(|event| event.contains("falling back to the source locale")),
+        "a fallback to English must be reported at WARN, got {at_warn:?}"
+    );
+    ensure!(
+        at_warn.iter().any(|event| event.contains(requested)),
+        "the event must name the requested tag {requested:?}, got {at_warn:?}"
+    );
+    Ok(())
+}
+
+/// A supported locale must stay quiet at `WARN`.
+///
+/// Otherwise the warning above would fire on every ordinary run and stop
+/// meaning anything.
+#[test]
+fn a_supported_locale_warns_about_nothing() -> Result<()> {
+    let (_, at_warn) = with_test_subscriber(LevelFilter::WARN, |captured| {
+        let localizer = build_localizer(Some("fr"));
+        (localizer, captured.snapshot())
+    });
+
+    ensure!(
+        at_warn.is_empty(),
+        "a shipped catalogue must not warn, got {at_warn:?}"
+    );
     Ok(())
 }

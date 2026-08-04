@@ -212,7 +212,7 @@ stdlib.fetch.response_buffer_overflow = Overflow del buffer durante la lettura d
 stdlib.fetch.cache_write_failed = Impossibile scrivere la cache per «{ $url }»: { $details }.
 stdlib.fetch.response_limit_exceeded = La risposta da «{ $url }» ha superato il limite di { $limit } byte.
 stdlib.fetch.cache_limit_exceeded = La risposta in cache «{ $name }» ha superato il limite di { $limit } byte.
-stdlib.fetch.io_failed = { $action } non riuscita per { $path }: { $details }.
+stdlib.fetch.io_failed = L'operazione di { $action } non è riuscita per { $path }: { $details }.
 stdlib.fetch.action.sync_cache = sincronizzare la cache di fetch
 stdlib.fetch.action.create_cache_dir = creare la directory di cache di fetch
 stdlib.fetch.action.open_cache_dir = aprire la directory di cache di fetch
@@ -249,9 +249,9 @@ stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
 # Diagnostica dell'helper dei percorsi.
-stdlib.path.io.failed = { $action } non riuscita per { $path } ({ $label }).
-stdlib.path.io.failed_with_detail = { $action } non riuscita per { $path }: { $detail }.
-stdlib.path.io.failed_with_label_and_detail = { $action } non riuscita per { $path } ({ $label }): { $detail }.
+stdlib.path.io.failed = L'operazione di { $action } non è riuscita per { $path } ({ $label }).
+stdlib.path.io.failed_with_detail = L'operazione di { $action } non è riuscita per { $path }: { $detail }.
+stdlib.path.io.failed_with_label_and_detail = L'operazione di { $action } non è riuscita per { $path } ({ $label }): { $detail }.
 stdlib.path.io.not_found = non trovato
 stdlib.path.io.permission_denied = autorizzazione negata
 stdlib.path.io.already_exists = già esistente

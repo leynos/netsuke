@@ -96,7 +96,7 @@ than relying on the unique-language step.
 Translation files are located in the `locales/` directory, one directory per
 tag:
 
-```text
+```plaintext
 locales/
 ├── en-US/
 │   └── messages.ftl

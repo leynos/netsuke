@@ -90,6 +90,32 @@ pub fn en_localizer() -> EnLocalizer {
     }
 }
 
+/// RAII bundle holding the localizer test lock and an arbitrary locale.
+///
+/// [`EnLocalizer`] covers the common case of pinning English. Catalogue sweeps
+/// need the same pairing for each locale in turn, which is what this provides.
+pub struct LocaleLocalizer {
+    _lock: MutexGuard<'static, ()>,
+    _guard: LocalizerGuard,
+}
+
+/// Acquire the localizer test lock and install the localizer for `locale`.
+///
+/// Fallible rather than panicking: a fixture arranges state, and arrangement
+/// can fail, so the caller decides what a poisoned lock means for its test.
+///
+/// # Errors
+///
+/// Returns an error when the localizer test lock is poisoned.
+pub fn locale_localizer(locale: &str) -> anyhow::Result<LocaleLocalizer> {
+    let lock = localizer_test_lock().map_err(|error| anyhow::anyhow!("{error}"))?;
+    let localizer = cli_localization::build_localizer(Some(locale));
+    Ok(LocaleLocalizer {
+        _lock: lock,
+        _guard: localization::set_localizer_for_tests(Arc::from(localizer)),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     //! Coverage for the poisoned-lock recovery in the [`en_localizer`] fixture.
