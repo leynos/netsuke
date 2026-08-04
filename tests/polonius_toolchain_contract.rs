@@ -4,8 +4,11 @@
 //! pinned in `rust-toolchain.toml` (see ADR-006 and docs/polonius.md). An
 //! inherited `RUSTFLAGS` environment variable overrides the
 //! `.cargo/config.toml` `build.rustflags` table, so Makefile recipes that
-//! compile borrow-checked targets and workflows that preset it must re-state
-//! the flag. These tests fail when any layer drops the required policy.
+//! compile borrow-checked targets must restate the flag, while workflows must
+//! pass it through the shared action's `with.rustflags` input and reject a
+//! job-level `env.RUSTFLAGS` override. These tests fail when any layer drops
+//! the required policy, so a regression cannot reach CI as a confusing
+//! borrow-check error.
 
 #[path = "support/makefile.rs"]
 mod makefile;
@@ -19,6 +22,53 @@ use toml::Value as TomlValue;
 
 const POLONIUS_FLAG: &str = "-Zpolonius=next";
 const POLONIUS_VAR: &str = "$(POLONIUS_FLAGS)";
+const SETUP_RUST_ACTION: &str = concat!(
+    "leynos/shared-actions/.github/actions/setup-rust@",
+    "2f90d1041ea108148be0620e3bbcc1fa80ac03e4"
+);
+const RUST_BUILD_RELEASE_ACTION: &str = concat!(
+    "leynos/shared-actions/.github/actions/rust-build-release@",
+    "2f90d1041ea108148be0620e3bbcc1fa80ac03e4"
+);
+const WARNINGS_POLONIUS_RUSTFLAGS: &str = "-D warnings -Zpolonius=next";
+
+/// Describes one workflow's shared-action and toolchain contract.
+struct WorkflowExpectation {
+    path: &'static str,
+    job: &'static str,
+    action: &'static str,
+    rustflags: &'static str,
+    pins_toolchain_env: bool,
+}
+
+const CI_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
+    path: ".github/workflows/ci.yml",
+    job: "build-test",
+    action: SETUP_RUST_ACTION,
+    rustflags: WARNINGS_POLONIUS_RUSTFLAGS,
+    pins_toolchain_env: true,
+};
+const NETSUKEFILE_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
+    path: ".github/workflows/netsukefile-test.yml",
+    job: "netsukefile",
+    action: SETUP_RUST_ACTION,
+    rustflags: POLONIUS_FLAG,
+    pins_toolchain_env: true,
+};
+const COVERAGE_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
+    path: ".github/workflows/coverage-main.yml",
+    job: "coverage-upload",
+    action: SETUP_RUST_ACTION,
+    rustflags: WARNINGS_POLONIUS_RUSTFLAGS,
+    pins_toolchain_env: false,
+};
+const PACKAGING_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
+    path: ".github/workflows/build-and-package.yml",
+    job: "build",
+    action: RUST_BUILD_RELEASE_ACTION,
+    rustflags: POLONIUS_FLAG,
+    pins_toolchain_env: false,
+};
 
 /// Returns the dated nightly channel pinned in `rust-toolchain.toml`.
 ///
@@ -87,31 +137,20 @@ fn makefile_declares_the_polonius_flags_variable() -> Result<()> {
 }
 
 #[rstest]
-#[case::ci(".github/workflows/ci.yml", "build-test", "Setup Rust", true)]
-#[case::netsukefile(
-    ".github/workflows/netsukefile-test.yml",
-    "netsukefile",
-    "Setup Rust",
-    true
-)]
-#[case::coverage(
-    ".github/workflows/coverage-main.yml",
-    "coverage-upload",
-    "Setup Rust",
-    false
-)]
-#[case::packaging(
-    ".github/workflows/build-and-package.yml",
-    "build",
-    "Build release binary",
-    false
-)]
+#[case::ci(CI_WORKFLOW)]
+#[case::netsukefile(NETSUKEFILE_WORKFLOW)]
+#[case::coverage(COVERAGE_WORKFLOW)]
+#[case::packaging(PACKAGING_WORKFLOW)]
 fn workflows_pass_polonius_rustflags_to_shared_actions(
-    #[case] path: &str,
-    #[case] job: &str,
-    #[case] step_name: &str,
-    #[case] pins_toolchain_env: bool,
+    #[case] expectation: WorkflowExpectation,
 ) -> Result<()> {
+    let WorkflowExpectation {
+        path,
+        job,
+        action: expected_action,
+        rustflags: expected_rustflags,
+        pins_toolchain_env,
+    } = expectation;
     let workflow: YamlValue = serde_yaml::from_str(&read_repo_file(Utf8Path::new(path))?)
         .with_context(|| format!("parse {path}"))?;
     ensure!(
@@ -126,21 +165,27 @@ fn workflows_pass_polonius_rustflags_to_shared_actions(
         .with_context(|| format!("{path} job {job} should declare steps"))?;
     let shared_action = steps
         .iter()
-        .find(|step| yaml_str(step, &["name"]) == Some(step_name))
-        .with_context(|| format!("{path} job {job} should include {step_name}"))?;
+        .find(|step| yaml_str(step, &["uses"]) == Some(expected_action))
+        .with_context(|| format!("{path} job {job} should use {expected_action}"))?;
     let rustflags = yaml_str(shared_action, &["with", "rustflags"])
-        .with_context(|| format!("{path} {step_name} should pass rustflags"))?;
+        .with_context(|| format!("{path} {expected_action} should pass rustflags"))?;
     ensure!(
-        rustflags.contains(POLONIUS_FLAG),
-        "{path} {step_name} passes rustflags without {POLONIUS_FLAG}: {rustflags:?}"
+        rustflags == expected_rustflags,
+        "{path} {expected_action} passes {rustflags:?}, expected {expected_rustflags:?}"
     );
+    let toolchain_env = yaml_str(&workflow, &["jobs", job, "env", "NETSUKE_RUST_TOOLCHAIN"]);
     if pins_toolchain_env {
         let expected = pinned_toolchain()?;
-        let toolchain = yaml_str(&workflow, &["jobs", job, "env", "NETSUKE_RUST_TOOLCHAIN"])
+        let toolchain = toolchain_env
             .with_context(|| format!("{path} job {job} should pin NETSUKE_RUST_TOOLCHAIN"))?;
         ensure!(
             toolchain == expected,
             "{path} job {job} pins {toolchain:?}, but rust-toolchain.toml pins {expected:?}"
+        );
+    } else {
+        ensure!(
+            toolchain_env.is_none(),
+            "{path} job {job} should not override NETSUKE_RUST_TOOLCHAIN, found {toolchain_env:?}"
         );
     }
     Ok(())

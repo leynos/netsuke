@@ -89,8 +89,8 @@ Scanner suspects that turned out not to be NLL residue:
 The plumbing itself is contract-tested: `tests/polonius_toolchain_contract.rs`
 pins the dated-nightly channel, the `.cargo/config.toml` `build.rustflags`
 entry, the `POLONIUS_FLAGS` default and every RUSTFLAGS-setting Makefile
-recipe, and the `RUSTFLAGS` and toolchain presets in the CI, Netsukefile,
-coverage, and packaging workflows.
+recipe, and the shared-action `with.rustflags` and toolchain inputs in the CI,
+Netsukefile, coverage, and packaging workflows.
 
 ## Harness consequences
 
@@ -106,14 +106,14 @@ flag or avoid compiling the crate:
 - **Kani** and **Whitaker** run under their own toolchains but read the
   workspace `.cargo/config.toml` or the Makefile `RUSTFLAGS`, so they
   borrow-check with `-Zpolonius=next` and need no special handling.
-- **CI setup actions**: `actions-rust-lang/setup-rust-toolchain` exports
-  `RUSTFLAGS="-D warnings"` into the job environment when the variable is
-  unset, which shadows `.cargo/config.toml` for every later step. The workflows
-  therefore pre-set `RUSTFLAGS` (including `-Zpolonius=next`) at job level —
-  the action defers to an existing value — and the Makefile recipes append
-  `POLONIUS_FLAGS` to any ambient `RUSTFLAGS` as a second line of defence.
-  `cargo-llvm-cov` appends its instrumentation flags to the ambient value, so
-  coverage inherits the flag from the job environment.
+- **CI setup actions**: the shared `setup-rust` and `rust-build-release`
+  actions receive the Polonius flags through their `with.rustflags` inputs;
+  workflows must not set a job-level `env.RUSTFLAGS`. CI and coverage pass
+  `-D warnings -Zpolonius=next`, while Netsukefile tests and packaging pass
+  `-Zpolonius=next`. The coverage action's `cargo-llvm-cov` invocation inherits
+  the flags exported by `setup-rust` and appends its instrumentation flags.
+  Makefile recipes still append `POLONIUS_FLAGS` when they set ambient
+  `RUSTFLAGS`.
 - **Registry installs**: the crates.io package excludes
   `rust-toolchain.toml` and `.cargo/config.toml`, and registry builds run
   outside the checkout, so `cargo install netsuke-build` must select the pinned
