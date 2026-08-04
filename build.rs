@@ -1,8 +1,3 @@
-#![expect(
-    clippy::disallowed_methods,
-    reason = "build scripts read CARGO_* and OUT_DIR from the environment Cargo provides; there is no seam to inject and no test to isolate"
-)]
-
 //! Build script for Netsuke.
 //!
 //! This script performs two main tasks:

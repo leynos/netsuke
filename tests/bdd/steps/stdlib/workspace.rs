@@ -1,11 +1,6 @@
 //! Helpers for preparing stdlib workspaces during BDD scenarios, wiring
 //! up temporary directories, fixtures, and environment overrides for tests.
 
-#![expect(
-    clippy::disallowed_methods,
-    reason = "pending migration under #492 (rstest-bdd migration)"
-)]
-
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use crate::bdd::types::{FileContents, HelperName, HttpResponseBody, PathEntries};
 use anyhow::{Context, Result, anyhow};

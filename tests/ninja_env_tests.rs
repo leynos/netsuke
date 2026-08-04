@@ -1,10 +1,5 @@
 //! Tests for overriding the `NINJA_ENV` variable via a mock environment.
 
-#![expect(
-    clippy::disallowed_methods,
-    reason = "pending migration under #493 (integration-binary migration)"
-)]
-
 use anyhow::{Context, Result, ensure};
 use mockable::MockEnv;
 use netsuke::runner::NINJA_ENV;
