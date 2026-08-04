@@ -1282,8 +1282,12 @@ is not obvious from the name:
 
 - `is_dir(path) -> bool` mirrors `Path::is_dir`: it follows symlinks, and an
   absent or unreadable path returns `false` rather than surfacing the
-  underlying metadata error. Fixture code must use this wrapper rather than
-  calling `std::fs::metadata(...).is_dir()` or `Path::is_dir` directly.
+  underlying metadata error. Fixture code must use this wrapper for directory
+  predicates rather than calling `std::fs::metadata(...).is_dir()` or
+  `Path::is_dir` directly. `test_support/src/manifest.rs` is an existing caller:
+  `ensure_manifest_exists` uses it both to reject a directory where a manifest
+  file is expected, and to accept a destination directory that is already
+  present.
 - `is_executable_file(path) -> bool` (Unix only) is `true` when the path is a
   regular file with any execute bit set, and `false` for an absent or
   unreadable path. It is the inverse of `set_mode`, and exists for probing a
