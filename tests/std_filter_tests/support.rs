@@ -15,6 +15,13 @@ pub(crate) use test_support::{EnvVarGuard, env_lock::EnvLock};
 pub(crate) type Workspace = (tempfile::TempDir, Utf8PathBuf);
 
 pub(crate) mod fallible {
+    //! Fallible variants of the `support` helpers, returning `anyhow::Result`
+    //! instead of panicking on setup failure.
+    //!
+    //! The parent module re-exports these functions so most call sites reach
+    //! them via `support::*`; keeping them namespaced here separates the
+    //! error-propagating implementations from the workspace types they
+    //! operate on.
     use super::{Workspace, stdlib};
     use anyhow::{anyhow, Context, Result};
     use camino::Utf8PathBuf;

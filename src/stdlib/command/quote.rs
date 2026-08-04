@@ -91,6 +91,10 @@ pub(super) fn quote(arg: &str) -> Result<String, QuoteError> {
 
 #[cfg(all(windows, test))]
 mod tests {
+    //! Unit tests for the Windows `cmd.exe` quoting rules implemented by
+    //! `quote` in the parent module. Gated on `windows` because it exercises
+    //! the `cfg(windows)` branch of `quote`, so it does not run on other
+    //! platforms; see `non_windows_tests` below for the Unix counterpart.
     use super::*;
     use anyhow::{Result, ensure};
 
