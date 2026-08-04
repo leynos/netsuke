@@ -1295,6 +1295,20 @@ Netsuke uses a mixed strategy:
   adjacent to the code under test, included via
   `#[cfg(test)] #[path = "..."] mod ...;` declarations.
 
+Cargo discovers integration-test binaries only from Rust files directly below
+`tests/`. Module trees rooted at `tests/*/mod.rs` must therefore be declared by
+at least one top-level integration-test source, either with `mod name;` or an
+explicit `#[path = "name/mod.rs"]` attribute. The narrowly scoped discovery
+helpers in `tests/integration_test_wiring_tests.rs` own this structural check;
+reuse them only for the immediate integration-test tree rather than as a
+general Rust source parser.
+
+The `std_filter_tests` target owns its command fixtures within
+`tests/std_filter_tests/command_filters/`. `CommandFixture` provides the
+capability-scoped temporary workspace, while `ShellCase` groups each
+parameterized shell scenario. Keep both private to that test feature; shared
+integration-test facilities belong in `test_support` instead.
+
 The Dependabot integration tests parse the checked-in configuration and verify
 that repository dependency manifests remain covered as the tree changes. They
 assert the Cargo and GitHub Actions update policies, the configured schedules,

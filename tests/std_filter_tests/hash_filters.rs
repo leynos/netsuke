@@ -2,10 +2,11 @@
 //!
 //! Validates SHA-256, SHA-512, and optionally SHA-1 and MD5 (under the
 //! `legacy-digests` feature) for both the `hash` and `digest` filters.
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{Context, Result, bail, ensure};
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use minijinja::{context, ErrorKind};
+use minijinja::{ErrorKind, context};
 use rstest::rstest;
+use test_support::fluent::normalize_fluent_isolates;
 
 use super::support::fallible;
 
@@ -50,9 +51,8 @@ fn hash_and_digest_filters(
     #[case] alg: &str,
     #[case] expected_hash: &str,
     #[case] expected_digest: &str,
-
 ) -> Result<()> {
-    let ( _temp, root) = fallible::filter_workspace()?;
+    let (_temp, root) = fallible::filter_workspace()?;
     let mut env = fallible::stdlib_env()?;
     let dir = Dir::open_ambient_dir(&root, ambient_authority())
         .context("open workspace root for hashing tests")?;
@@ -106,9 +106,9 @@ fn hash_filter_legacy_algorithms_disabled() -> Result<()> {
         .context("fetch template 'hash_sha1'")?;
     let result = template.render(context!(path => root.join("file").as_str()));
     let err = match result {
-        Ok(output) => bail!(
-            "expected hash to require legacy digests for sha1 but rendered {output}"
-        ),
+        Ok(output) => {
+            bail!("expected hash to require legacy digests for sha1 but rendered {output}")
+        }
         Err(err) => err,
     };
     ensure!(
@@ -135,9 +135,7 @@ fn hash_filter_rejects_unknown_algorithm() -> Result<()> {
         .context("fetch template 'hash_unknown'")?;
     let hash_result = hash_template.render(context!(path => file.as_str()));
     let hash_err = match hash_result {
-        Ok(output) => bail!(
-            "expected hash to reject unsupported algorithm but rendered {output}"
-        ),
+        Ok(output) => bail!("expected hash to reject unsupported algorithm but rendered {output}"),
         Err(err) => err,
     };
     ensure!(
@@ -146,9 +144,8 @@ fn hash_filter_rejects_unknown_algorithm() -> Result<()> {
         hash_err.kind()
     );
     ensure!(
-        hash_err
-            .to_string()
-            .contains("unsupported hash algorithm 'whirlpool'"),
+        normalize_fluent_isolates(&hash_err.to_string())
+            .contains("Unsupported hash algorithm 'whirlpool'"),
         "error should mention unsupported algorithm: {hash_err}"
     );
 
@@ -162,9 +159,9 @@ fn hash_filter_rejects_unknown_algorithm() -> Result<()> {
         .context("fetch template 'digest_unknown'")?;
     let digest_result = digest_template.render(context!(path => file.as_str()));
     let digest_err = match digest_result {
-        Ok(output) => bail!(
-            "expected digest to reject unsupported algorithms but rendered {output}"
-        ),
+        Ok(output) => {
+            bail!("expected digest to reject unsupported algorithms but rendered {output}")
+        }
         Err(err) => err,
     };
     ensure!(
@@ -173,9 +170,8 @@ fn hash_filter_rejects_unknown_algorithm() -> Result<()> {
         digest_err.kind()
     );
     ensure!(
-        digest_err
-            .to_string()
-            .contains("unsupported hash algorithm 'whirlpool'"),
+        normalize_fluent_isolates(&digest_err.to_string())
+            .contains("Unsupported hash algorithm 'whirlpool'"),
         "error should mention unsupported algorithm: {digest_err}"
     );
     Ok(())

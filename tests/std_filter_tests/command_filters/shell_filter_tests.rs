@@ -1,43 +1,51 @@
 //! Shell filter behaviour tests.
 
-use anyhow::{bail, ensure, Context, Result};
-use minijinja::{context, ErrorKind};
+use anyhow::{Context, Result, bail, ensure};
+use minijinja::{ErrorKind, context};
 use rstest::rstest;
-use std::fs;
 use test_support::command_helper::{
-    compile_failure_helper,
-    compile_large_output_helper,
-    compile_uppercase_helper,
+    compile_failure_helper, compile_large_output_helper, compile_uppercase_helper,
 };
+use test_support::fluent::normalize_fluent_isolates;
+use test_support::fs;
 
-use super::{
-    CommandCompiler, CommandFixture, ShellExpectation, StdlibConfig, fallible,
-};
+use super::{CommandCompiler, CommandFixture, ShellExpectation, fallible};
+
+struct ShellCase {
+    compiler: CommandCompiler,
+    binary: &'static str,
+    template_name: &'static str,
+    template_src: &'static str,
+    expectation: ShellExpectation,
+}
 
 #[rstest]
-#[case::uppercase(
-    compile_uppercase_helper,
-    "cmd_upper",
-    "shell_upper",
-    "{{ 'hello' | shell(cmd) | trim }}",
-    ShellExpectation::Success("HELLO")
-)]
+#[case::uppercase(ShellCase {
+    compiler: compile_uppercase_helper,
+    binary: "cmd_upper",
+    template_name: "shell_upper",
+    template_src: "{{ 'hello' | shell(cmd) | trim }}",
+    expectation: ShellExpectation::Success("HELLO"),
+})]
 #[case::failure(
-    compile_failure_helper,
-    "cmd_fail",
-    "shell_fail",
-    "{{ 'data' | shell(cmd) }}",
-    ShellExpectation::Failure {
-        substrings: &["command", "exited"],
-    },
+    ShellCase {
+        compiler: compile_failure_helper,
+        binary: "cmd_fail",
+        template_name: "shell_fail",
+        template_src: "{{ 'data' | shell(cmd) }}",
+        expectation: ShellExpectation::Failure {
+            substrings: &["command", "exited"],
+        },
+    }
 )]
-fn shell_filter_behaviour(
-    #[case] compiler: CommandCompiler,
-    #[case] binary: &'static str,
-    #[case] template_name: &'static str,
-    #[case] template_src: &'static str,
-    #[case] expectation: ShellExpectation,
-) -> Result<()> {
+fn shell_filter_behaviour(#[case] shell_case: ShellCase) -> Result<()> {
+    let ShellCase {
+        compiler,
+        binary,
+        template_name,
+        template_src,
+        expectation,
+    } = shell_case;
     let mut fixture = CommandFixture::new(compiler, binary)?;
     {
         let env = fixture.env();
@@ -55,13 +63,14 @@ fn shell_filter_behaviour(
             let rendered = template
                 .render(context!(cmd => command.clone()))
                 .context("render shell template")?;
-            ensure!(rendered == expected, "expected '{expected}' but rendered {rendered}");
+            ensure!(
+                rendered == expected,
+                "expected '{expected}' but rendered {rendered}"
+            );
         }
         ShellExpectation::Failure { substrings } => {
             let err = match template.render(context!(cmd => command.clone())) {
-                Ok(output) => bail!(
-                    "expected shell to propagate failures but rendered {output}"
-                ),
+                Ok(output) => bail!("expected shell to propagate failures but rendered {output}"),
                 Err(err) => err,
             };
             ensure!(
@@ -89,16 +98,14 @@ fn shell_filter_behaviour(
 #[cfg(unix)]
 #[rstest]
 fn shell_filter_times_out_long_commands() -> Result<()> {
-    let (mut env, mut state) = fallible::stdlib_env_with_state()?;
+    let (mut env, state) = fallible::stdlib_env_with_state()?;
     state.reset_impure();
     fallible::register_template(&mut env, "shell_timeout", "{{ '' | shell('sleep 10') }}")?;
     let template = env
         .get_template("shell_timeout")
         .context("fetch template 'shell_timeout'")?;
     let err = match template.render(context! {}) {
-        Ok(output) => bail!(
-            "expected shell timeout but command completed with output {output}"
-        ),
+        Ok(output) => bail!("expected shell timeout but command completed with output {output}"),
         Err(err) => err,
     };
     ensure!(
@@ -117,7 +124,7 @@ fn shell_filter_times_out_long_commands() -> Result<()> {
 #[cfg(unix)]
 #[rstest]
 fn shell_filter_tolerates_commands_that_close_stdin() -> Result<()> {
-    let (mut env, mut state) = fallible::stdlib_env_with_state()?;
+    let (mut env, state) = fallible::stdlib_env_with_state()?;
     state.reset_impure();
     fallible::register_template(
         &mut env,
@@ -131,7 +138,10 @@ fn shell_filter_tolerates_commands_that_close_stdin() -> Result<()> {
     let rendered = template
         .render(context! {})
         .context("render shell head template")?;
-    ensure!(rendered == "alpha", "expected 'alpha' but rendered {rendered}");
+    ensure!(
+        rendered == "alpha",
+        "expected 'alpha' but rendered {rendered}"
+    );
     ensure!(
         state.is_impure(),
         "head command should mark template impure"
@@ -141,7 +151,7 @@ fn shell_filter_tolerates_commands_that_close_stdin() -> Result<()> {
 
 #[rstest]
 fn shell_filter_rejects_empty_command() -> Result<()> {
-    let (mut env, mut state) = fallible::stdlib_env_with_state()?;
+    let (mut env, state) = fallible::stdlib_env_with_state()?;
     state.reset_impure();
     fallible::register_template(&mut env, "shell_empty", "{{ 'hi' | shell('   ') }}")?;
     let template = env
@@ -157,7 +167,7 @@ fn shell_filter_rejects_empty_command() -> Result<()> {
         err.kind()
     );
     ensure!(
-        err.to_string().contains("requires a non-empty command"),
+        normalize_fluent_isolates(&err.to_string()).contains("Shell command must not be empty"),
         "error should mention validation message: {err}"
     );
     ensure!(state.is_impure(), "shell should still mark template impure");
@@ -166,10 +176,10 @@ fn shell_filter_rejects_empty_command() -> Result<()> {
 
 #[rstest]
 fn shell_filter_enforces_output_limit() -> Result<()> {
-    let config = StdlibConfig::from_current_dir()?
-        .with_command_max_output_bytes(1024)?;
     let mut fixture =
-        CommandFixture::with_config(compile_large_output_helper, "cmd_large", config)?;
+        CommandFixture::with_config(compile_large_output_helper, "cmd_large", |config| {
+            config.with_command_max_output_bytes(1024)
+        })?;
     {
         let env = fixture.env();
         fallible::register_template(env, "shell_large", "{{ '' | shell(cmd) }}")?;
@@ -190,20 +200,25 @@ fn shell_filter_enforces_output_limit() -> Result<()> {
         err.kind()
     );
     ensure!(
-        err.to_string().contains("exceeded capture stdout limit of 1024 bytes"),
+        normalize_fluent_isolates(&err.to_string())
+            .contains("exceeded capture stdout limit of 1024 bytes"),
         "limit error should mention configured budget: {err}"
     );
-    ensure!(fixture.state().is_impure(), "limit error should mark template impure");
+    ensure!(
+        fixture.state().is_impure(),
+        "limit error should mark template impure"
+    );
     Ok(())
 }
 
 #[rstest]
 fn shell_filter_streams_to_tempfiles() -> Result<()> {
-    let config = StdlibConfig::from_current_dir()?
-        .with_command_max_output_bytes(512)?
-        .with_command_max_stream_bytes(200_000)?;
     let mut fixture =
-        CommandFixture::with_config(compile_large_output_helper, "cmd_stream", config)?;
+        CommandFixture::with_config(compile_large_output_helper, "cmd_stream", |config| {
+            config
+                .with_command_max_output_bytes(512)?
+                .with_command_max_stream_bytes(200_000)
+        })?;
     {
         let env = fixture.env();
         fallible::register_template(
@@ -221,11 +236,13 @@ fn shell_filter_streams_to_tempfiles() -> Result<()> {
     let rendered = template
         .render(context!(cmd => command))
         .context("render shell streaming template")?;
-    ensure!(fixture.state().is_impure(), "streaming should mark template impure");
+    ensure!(
+        fixture.state().is_impure(),
+        "streaming should mark template impure"
+    );
     let path = camino::Utf8Path::new(&rendered);
-    let data = fs::read(path.as_std_path()).with_context(|| {
-        format!("read streamed output from {}", path.as_str())
-    })?;
+    let data = fs::read(path.as_std_path())
+        .with_context(|| format!("read streamed output from {}", path.as_str()))?;
     ensure!(
         data.len() >= 65_000,
         "expected streamed output to contain command data"
@@ -239,11 +256,12 @@ fn shell_filter_streams_to_tempfiles() -> Result<()> {
 
 #[rstest]
 fn shell_streaming_honours_size_limit() -> Result<()> {
-    let config = StdlibConfig::from_current_dir()?
-        .with_command_max_output_bytes(256)?
-        .with_command_max_stream_bytes(1024)?;
     let mut fixture =
-        CommandFixture::with_config(compile_large_output_helper, "cmd_stream_limit", config)?;
+        CommandFixture::with_config(compile_large_output_helper, "cmd_stream_limit", |config| {
+            config
+                .with_command_max_output_bytes(256)?
+                .with_command_max_stream_bytes(1024)
+        })?;
     {
         let env = fixture.env();
         fallible::register_template(
@@ -268,9 +286,13 @@ fn shell_streaming_honours_size_limit() -> Result<()> {
         err.kind()
     );
     ensure!(
-        err.to_string().contains("exceeded streaming stdout limit of 1024 bytes"),
+        normalize_fluent_isolates(&err.to_string())
+            .contains("exceeded streaming stdout limit of 1024 bytes"),
         "streaming limit error should mention configured budget: {err}"
     );
-    ensure!(fixture.state().is_impure(), "streaming limit should mark template impure");
+    ensure!(
+        fixture.state().is_impure(),
+        "streaming limit should mark template impure"
+    );
     Ok(())
 }

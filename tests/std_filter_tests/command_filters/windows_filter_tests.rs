@@ -4,7 +4,7 @@
 //! interpretation), streaming and handling of large outputs, and preservation of
 //! shell metacharacters when invoking external processes.
 
-use anyhow::{anyhow, ensure, Context, Result};
+use anyhow::{Context, Result, anyhow, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::context;
@@ -73,7 +73,12 @@ impl WindowsSetupContext {
         dir: &'static str,
         compile: &'static str,
     ) -> Self {
-        Self { tempdir, root, dir, compile }
+        Self {
+            tempdir,
+            root,
+            dir,
+            compile,
+        }
     }
 }
 
@@ -86,11 +91,12 @@ fn windows_command_setup(
     let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
         .map_err(|path| anyhow!("{}: {path:?}", ctx.root))?;
     let dir = Dir::open_ambient_dir(&root, ambient_authority()).context(ctx.dir)?;
-    let helper = compile_rust_helper(&dir, &root, helper_name, helper_source)
-        .context(ctx.compile)?;
+    let helper =
+        compile_rust_helper(&dir, &root, helper_name, helper_source).context(ctx.compile)?;
 
     let process_env = DefaultEnv;
-    let path_value = prepend_path_value(process_env.os_string("PATH").as_deref(), root.as_std_path())?;
+    let path_value =
+        prepend_path_value(process_env.os_string("PATH").as_deref(), root.as_std_path())?;
 
     Ok((temp, path_value, helper))
 }
@@ -124,7 +130,10 @@ line2
     let rendered = template
         .render(context! {})
         .context("render windows grep template")?;
-    ensure!(rendered == "line2", "expected 'line2' but rendered {rendered}");
+    ensure!(
+        rendered == "line2",
+        "expected 'line2' but rendered {rendered}"
+    );
     ensure!(state.is_impure(), "grep should mark template impure");
     Ok(())
 }
@@ -160,7 +169,10 @@ fn grep_streams_large_output_on_windows() -> Result<()> {
     let rendered = template
         .render(context!(text => payload.clone()))
         .context("render windows grep streaming template")?;
-    ensure!(state.is_impure(), "grep streaming should mark template impure");
+    ensure!(
+        state.is_impure(),
+        "grep streaming should mark template impure"
+    );
     let path = camino::Utf8Path::new(rendered.as_str());
     let metadata = fs::metadata(path.as_std_path())
         .with_context(|| format!("stat streamed windows grep output {}", path))?;
@@ -201,7 +213,10 @@ fn shell_preserves_cmd_meta_characters() -> Result<()> {
     let rendered = template
         .render(context!(cmd => command))
         .context("render shell meta template")?;
-    ensure!(rendered.trim() == "literal %^!", "expected literal %^! but rendered {rendered}");
+    ensure!(
+        rendered.trim() == "literal %^!",
+        "expected literal %^! but rendered {rendered}"
+    );
     ensure!(
         state.is_impure(),
         "shell filter should mark template impure"

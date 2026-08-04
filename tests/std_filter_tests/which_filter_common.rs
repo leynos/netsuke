@@ -2,9 +2,9 @@
 
 use anyhow::{Context, Result, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
-use minijinja::{context, Environment};
+use minijinja::{Environment, context};
 use std::ffi::{OsStr, OsString};
-
+use test_support::fs;
 
 use super::support::{self, fallible};
 
@@ -12,52 +12,72 @@ use super::support::{self, fallible};
 pub(crate) struct ToolName(String);
 
 impl ToolName {
-    pub(crate) fn new(name: impl Into<String>) -> Self { Self(name.into()) }
-    pub(crate) fn as_str(&self) -> &str { &self.0 }
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 impl From<&str> for ToolName {
-    fn from(s: &str) -> Self { Self(s.to_owned()) }
+    fn from(s: &str) -> Self {
+        Self(s.to_owned())
+    }
 }
 
 impl AsRef<str> for ToolName {
-    fn as_ref(&self) -> &str { &self.0 }
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct DirName(String);
 
 impl DirName {
-    pub(crate) fn new(name: impl Into<String>) -> Self { Self(name.into()) }
-    pub(crate) fn as_str(&self) -> &str { &self.0 }
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 impl From<&str> for DirName {
-    fn from(s: &str) -> Self { Self(s.to_owned()) }
+    fn from(s: &str) -> Self {
+        Self(s.to_owned())
+    }
 }
 
 impl AsRef<str> for DirName {
-    fn as_ref(&self) -> &str { &self.0 }
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
 }
 
 impl AsRef<OsStr> for DirName {
-    fn as_ref(&self) -> &OsStr { OsStr::new(&self.0) }
+    fn as_ref(&self) -> &OsStr {
+        OsStr::new(&self.0)
+    }
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct Template(String);
 
 impl Template {
-    pub(crate) fn new(template: impl Into<String>) -> Self { Self(template.into()) }
-    pub(crate) fn as_str(&self) -> &str { &self.0 }
+    pub(crate) fn new(template: impl Into<String>) -> Self {
+        Self(template.into())
+    }
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 impl From<&str> for Template {
-    fn from(s: &str) -> Self { Self(s.to_owned()) }
+    fn from(s: &str) -> Self {
+        Self(s.to_owned())
+    }
 }
 
 impl AsRef<str> for Template {
-    fn as_ref(&self) -> &str { &self.0 }
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
 }
 
 pub(crate) struct PathEnv(OsString);
@@ -84,39 +104,41 @@ pub(crate) fn write_tool(dir: &Utf8Path, name: &ToolName) -> Result<Utf8PathBuf>
     let parent = path
         .parent()
         .context("tool path should have a parent directory")?;
-    std::fs::create_dir_all(parent.as_std_path())
-        .with_context(|| format!("create parent for {path:?}"))?;
-    std::fs::write(path.as_std_path(), script_contents())
-        .with_context(|| format!("write fixture {path:?}"))?;
+    fs::create_dir_all(parent).with_context(|| format!("create parent for {path:?}"))?;
+    fs::write(&path, script_contents()).with_context(|| format!("write fixture {path:?}"))?;
     mark_executable(&path)?;
     Ok(path)
 }
 
 #[cfg(unix)]
 fn mark_executable(path: &Utf8Path) -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-    let mut perms = std::fs::metadata(path.as_std_path())
-        .with_context(|| format!("stat {path:?}"))?
-        .permissions();
-    perms.set_mode(0o755);
-    std::fs::set_permissions(path.as_std_path(), perms)
-        .with_context(|| format!("chmod {path:?}"))
+    fs::set_mode(path, 0o755).with_context(|| format!("chmod {path:?}"))
 }
 
 #[cfg(not(unix))]
-fn mark_executable(_path: &Utf8Path) -> Result<()> { Ok(()) }
+fn mark_executable(_path: &Utf8Path) -> Result<()> {
+    Ok(())
+}
 
 #[cfg(windows)]
-fn tool_name(base: &ToolName) -> String { format!("{}.cmd", base.as_str()) }
+fn tool_name(base: &ToolName) -> String {
+    format!("{}.cmd", base.as_str())
+}
 
 #[cfg(not(windows))]
-fn tool_name(base: &ToolName) -> String { base.as_str().to_owned() }
+fn tool_name(base: &ToolName) -> String {
+    base.as_str().to_owned()
+}
 
-fn script_contents() -> &'static [u8] {
+const fn script_contents() -> &'static [u8] {
     #[cfg(windows)]
-    { b"@echo off\r\n" }
+    {
+        b"@echo off\r\n"
+    }
     #[cfg(not(windows))]
-    { b"#!/bin/sh\nexit 0\n" }
+    {
+        b"#!/bin/sh\nexit 0\n"
+    }
 }
 
 pub(crate) fn render(env: &mut Environment<'_>, template: &Template) -> Result<String> {
@@ -138,8 +160,7 @@ impl WhichTestFixture {
         let mut tool_paths = Vec::new();
         for dir_name in dir_names {
             let dir = root.join(dir_name.as_str());
-            std::fs::create_dir_all(dir.as_std_path())
-                .with_context(|| format!("create directory {}", dir))?;
+            fs::create_dir_all(&dir).with_context(|| format!("create directory {dir}"))?;
             let tool_path = write_tool(&dir, tool_name)?;
             dirs.push(dir);
             tool_paths.push(tool_path);
