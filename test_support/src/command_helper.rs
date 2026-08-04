@@ -38,6 +38,15 @@ const LARGE_OUTPUT_SOURCE: &str = concat!(
     "}\n",
 );
 
+/// Source inputs for one helper compilation.
+///
+/// This private request keeps compiler selection inside this module while
+/// avoiding a wider public API solely for test injection.
+#[derive(Clone, Copy)]
+struct RustHelperSource<'a> {
+    name: &'a str,
+    source: &'a str,
+}
 /// Compile a helper binary that converts stdin to upper case and return the
 /// executable path.
 ///
@@ -104,6 +113,9 @@ pub fn compile_large_output_helper(
 /// executable path, which remains valid whilst `dir`'s backing directory
 /// exists.
 ///
+/// The compiler is selected from `RUSTC` through [`mockable::DefaultEnv`]. If
+/// `RUSTC` is absent, the conventional `rustc` command is used.
+///
 /// # Examples
 ///
 /// ```rust,no_run
@@ -128,58 +140,24 @@ pub fn compile_large_output_helper(
 ///
 /// # Errors
 ///
-/// Returns an error if the source cannot be written or `rustc` cannot compile it.
+/// Returns an error if the source cannot be written or the selected compiler
+/// cannot compile it.
 pub fn compile_rust_helper(
     dir: &Dir,
     root: &Utf8PathBuf,
     name: &str,
     source: &str,
 ) -> Result<Utf8PathBuf> {
-    compile_rust_helper_with_env(&DefaultEnv, dir, root, name, source)
+    compile_rust_helper_with_env(&DefaultEnv, dir, root, RustHelperSource { name, source })
 }
 
-/// Compile an arbitrary Rust helper using the compiler selected by an
-/// injected environment.
-///
-/// `RUSTC` is honoured when present, including absolute paths that are not
-/// discoverable through `PATH`. If it is absent, the conventional `rustc`
-/// command is used.
-///
-/// # Examples
-///
-/// ```rust,no_run
-/// # use camino::Utf8PathBuf;
-/// # use cap_std::{ambient_authority, fs_utf8::Dir};
-/// # use mockable::DefaultEnv;
-/// # use tempfile::tempdir;
-/// # use test_support::command_helper::compile_rust_helper_with_env;
-/// let temp = tempdir().expect("tempdir");
-/// let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-///     .expect("utf8 path");
-/// let dir = Dir::open_ambient_dir(&root, ambient_authority())
-///     .expect("open temp dir");
-/// let exe = compile_rust_helper_with_env(
-///     &DefaultEnv,
-///     &dir,
-///     &root,
-///     "cmd",
-///     "fn main() {}\n",
-/// )
-/// .expect("compile Rust helper");
-/// assert!(exe.as_std_path().exists());
-/// ```
-///
-/// # Errors
-///
-/// Returns an error if the source cannot be written or the selected compiler
-/// cannot compile it.
-pub fn compile_rust_helper_with_env(
+fn compile_rust_helper_with_env(
     env: &impl Env,
     dir: &Dir,
     root: &Utf8PathBuf,
-    name: &str,
-    source: &str,
+    helper: RustHelperSource<'_>,
 ) -> Result<Utf8PathBuf> {
+    let RustHelperSource { name, source } = helper;
     dir.write(format!("{name}.rs"), source.as_bytes())
         .with_context(|| format!("write helper source {name}.rs"))?;
 
@@ -211,9 +189,21 @@ fn rust_compiler(env: &impl Env) -> OsString {
 
 #[cfg(test)]
 mod tests {
-    use super::rust_compiler;
+    use super::{RustHelperSource, compile_rust_helper_with_env, rust_compiler};
+    #[cfg(unix)]
+    use crate::exec::write_exec_with_content;
+    #[cfg(unix)]
+    use anyhow::{Context, Result, ensure};
+    #[cfg(unix)]
+    use camino::Utf8PathBuf;
+    #[cfg(unix)]
+    use cap_std::{ambient_authority, fs_utf8::Dir};
     use mockable::MockEnv;
     use std::ffi::OsString;
+    #[cfg(unix)]
+    use std::path::PathBuf;
+    #[cfg(unix)]
+    use tempfile::tempdir;
 
     #[test]
     fn rust_compiler_honours_configured_path() {
@@ -237,5 +227,63 @@ mod tests {
             .return_once(|_| None);
 
         assert_eq!(rust_compiler(&env), OsString::from("rustc"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn compile_helper_invokes_configured_absolute_wrapper() -> Result<()> {
+        let temp = tempdir().context("create compiler wrapper directory")?;
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+            .map_err(|path| anyhow::anyhow!("compiler wrapper path is not UTF-8: {path:?}"))?;
+        let dir = Dir::open_ambient_dir(&root, ambient_authority())
+            .context("open compiler wrapper directory")?;
+        let wrapper = write_exec_with_content(
+            temp.path(),
+            "configured-rustc",
+            concat!(
+                "#!/bin/sh\n",
+                "set -eu\n",
+                "output=\n",
+                "while [ \"$#\" -gt 0 ]; do\n",
+                "    if [ \"$1\" = \"-o\" ]; then\n",
+                "        shift\n",
+                "        output=$1\n",
+                "        break\n",
+                "    fi\n",
+                "    shift\n",
+                "done\n",
+                "test -n \"$output\"\n",
+                ": > \"$output\"\n",
+                "printf invoked > \"$0.invoked\"\n",
+            ),
+        )
+        .context("write configured compiler wrapper")?;
+        let marker = PathBuf::from(format!("{}.invoked", wrapper.display()));
+        let configured = wrapper.into_os_string();
+        let mut env = MockEnv::new();
+        env.expect_os_string()
+            .withf(|key| key == "RUSTC")
+            .once()
+            .return_once(move |_| Some(configured));
+
+        let executable = compile_rust_helper_with_env(
+            &env,
+            &dir,
+            &root,
+            RustHelperSource {
+                name: "probe",
+                source: "fn main() {}\n",
+            },
+        )?;
+
+        ensure!(
+            marker.exists(),
+            "configured compiler wrapper was not invoked"
+        );
+        ensure!(
+            executable.as_std_path().exists(),
+            "configured compiler wrapper did not create the requested output"
+        );
+        Ok(())
     }
 }
