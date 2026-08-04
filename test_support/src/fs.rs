@@ -4,16 +4,22 @@
 //! `cap_std` handles, enforced by Whitaker's `no_std_fs_operations` lint.
 //! Test fixtures, however, routinely stage workspaces in ambient temporary
 //! directories where a capability handle adds ceremony without isolation
-//! value. This module confines that ambient access to `test_support`, which
-//! `dylint.toml` excludes from the lint — the same pattern Whitaker itself
-//! uses for its `whitaker_common` test utilities.
+//! value. This module is the crate's single ambient boundary: `test_support/`
+//! carries its own `dylint.toml` naming `test_support::fs` as the only entry
+//! under `[no_std_fs_operations] excluded_paths`, so a direct `std::fs` call in
+//! any other module still fails the lint.
 //!
 //! Scope and reuse policy: test fixtures and assertions only; production code
-//! must keep using `cap_std`.
+//! must keep using `cap_std`. Other `test_support` modules that need fixture
+//! I/O call through here rather than reaching for `std::fs` themselves:
+//! `exec`, `manifest`, and the crate-root regression tests do so directly,
+//! while `check_ninja` and `fake_ninja` reach it via
+//! [`crate::exec::write_exec_with_content`].
 
 use std::fs;
 use std::io;
 use std::path::Path;
+use std::time::SystemTime;
 
 /// Write `contents` to `path`, creating or truncating the file.
 ///
@@ -91,6 +97,110 @@ pub fn exists(path: impl AsRef<Path>) -> bool {
     fs::metadata(path).is_ok()
 }
 
+/// Return `true` when `path` is a directory (following symlinks).
+///
+/// Mirrors `Path::is_dir`: an unreadable or absent path reports `false` rather
+/// than surfacing the metadata error.
+///
+/// # Examples
+///
+/// ```
+/// let dir = tempfile::tempdir().expect("create tempdir");
+/// let file = dir.path().join("file");
+/// test_support::fs::write(&file, "contents").expect("write file");
+/// assert!(test_support::fs::is_dir(dir.path()));
+/// assert!(!test_support::fs::is_dir(&file));
+/// assert!(!test_support::fs::is_dir(dir.path().join("absent")));
+/// ```
+#[must_use]
+pub fn is_dir(path: impl AsRef<Path>) -> bool {
+    fs::metadata(path).is_ok_and(|metadata| metadata.is_dir())
+}
+
+/// Copy `from` to `to`, returning the number of bytes copied.
+///
+/// # Errors
+///
+/// Propagates the underlying `std::fs::copy` failure.
+///
+/// # Examples
+///
+/// ```
+/// let dir = tempfile::tempdir().expect("create tempdir");
+/// let from = dir.path().join("source.txt");
+/// let to = dir.path().join("dest.txt");
+/// test_support::fs::write(&from, "hello").expect("write source");
+/// let bytes = test_support::fs::copy(&from, &to).expect("copy file");
+/// assert_eq!(bytes, 5);
+/// assert_eq!(test_support::fs::read(&to).expect("read dest"), b"hello");
+/// ```
+pub fn copy(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<u64> {
+    fs::copy(from, to)
+}
+
+/// Return the modification time of the file at `path`.
+///
+/// # Errors
+///
+/// Propagates the underlying metadata failure, or the platform's failure to
+/// report a modification time.
+///
+/// # Examples
+///
+/// ```
+/// use std::time::{Duration, SystemTime};
+///
+/// let dir = tempfile::tempdir().expect("create tempdir");
+/// let path = dir.path().join("fixture.txt");
+/// // A second of slack: some filesystems truncate timestamps to whole
+/// // seconds, which would put the recorded mtime just behind `before`.
+/// let before = SystemTime::now() - Duration::from_secs(1);
+/// test_support::fs::write(&path, "hello").expect("write fixture");
+/// let mtime = test_support::fs::modified(&path).expect("read mtime");
+/// assert!(mtime >= before);
+/// ```
+pub fn modified(path: impl AsRef<Path>) -> io::Result<SystemTime> {
+    fs::metadata(path)?.modified()
+}
+
+/// Write `contents` to `path` and set its modification time to `mtime`.
+///
+/// Backdating a fixture needs the same open file for the write and the
+/// timestamp, so both happen here rather than through separate calls. The
+/// handle never leaves this function: returning it would push the ambient
+/// operation out to the caller, which is what this module exists to prevent.
+///
+/// # Errors
+///
+/// Propagates the create, write, or timestamp failure.
+///
+/// # Examples
+///
+/// ```
+/// # #[cfg(unix)]
+/// # {
+/// use std::time::{Duration, UNIX_EPOCH};
+///
+/// let dir = tempfile::tempdir().expect("create tempdir");
+/// let path = dir.path().join("fixture.txt");
+/// let mtime = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+/// test_support::fs::write_with_mtime(&path, "hello", mtime).expect("write with mtime");
+/// assert_eq!(test_support::fs::modified(&path).expect("read mtime"), mtime);
+/// assert_eq!(test_support::fs::read(&path).expect("read contents"), b"hello");
+/// # }
+/// ```
+#[cfg(unix)]
+pub fn write_with_mtime(
+    path: impl AsRef<Path>,
+    contents: impl AsRef<[u8]>,
+    mtime: SystemTime,
+) -> io::Result<()> {
+    use std::os::unix::fs::FileExt;
+    let file = fs::File::create(path)?;
+    file.write_all_at(contents.as_ref(), 0)?;
+    file.set_modified(mtime)
+}
+
 /// Return the length in bytes of the file at `path`.
 ///
 /// # Errors
@@ -112,6 +222,30 @@ pub fn set_mode(path: impl AsRef<Path>, mode: u32) -> io::Result<()> {
     let mut permissions = fs::metadata(path)?.permissions();
     permissions.set_mode(mode);
     fs::set_permissions(path, permissions)
+}
+
+/// Return `true` when `path` is a regular file with any execute bit set.
+///
+/// The inverse of [`set_mode`], for probing a sandbox `PATH` the way an
+/// executable lookup would. An unreadable or absent path reports `false`.
+///
+/// # Examples
+///
+/// ```
+/// let dir = tempfile::tempdir().expect("create tempdir");
+/// let path = dir.path().join("tool");
+/// test_support::fs::write(&path, "#!/bin/sh\n").expect("write stub");
+/// assert!(!test_support::fs::is_executable_file(&path));
+/// test_support::fs::set_mode(&path, 0o755).expect("mark executable");
+/// assert!(test_support::fs::is_executable_file(&path));
+/// assert!(!test_support::fs::is_executable_file(dir.path()));
+/// ```
+#[cfg(unix)]
+#[must_use]
+pub fn is_executable_file(path: impl AsRef<Path>) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    fs::metadata(path)
+        .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
 }
 
 /// Create a symbolic link at `link` pointing to `target` on Unix.

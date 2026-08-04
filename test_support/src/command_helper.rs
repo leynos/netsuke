@@ -53,7 +53,8 @@ const LARGE_OUTPUT_SOURCE: &str = concat!(
 ///     .expect("utf8 path");
 /// let dir = Dir::open_ambient_dir(&root, ambient_authority())
 ///     .expect("open temp dir");
-/// let exe = compile_uppercase_helper(&dir, &root, "cmd_upper");
+/// let exe = compile_uppercase_helper(&dir, &root, "cmd_upper")
+///     .expect("compile helper");
 /// assert!(exe.as_std_path().exists());
 /// ```
 pub fn compile_uppercase_helper(dir: &Dir, root: &Utf8PathBuf, name: &str) -> Result<Utf8PathBuf> {
@@ -75,7 +76,8 @@ pub fn compile_uppercase_helper(dir: &Dir, root: &Utf8PathBuf, name: &str) -> Re
 ///     .expect("utf8 path");
 /// let dir = Dir::open_ambient_dir(&root, ambient_authority())
 ///     .expect("open temp dir");
-/// let exe = compile_failure_helper(&dir, &root, "cmd_fail");
+/// let exe = compile_failure_helper(&dir, &root, "cmd_fail")
+///     .expect("compile helper");
 /// assert!(exe.as_std_path().exists());
 /// ```
 pub fn compile_failure_helper(dir: &Dir, root: &Utf8PathBuf, name: &str) -> Result<Utf8PathBuf> {
@@ -114,7 +116,8 @@ pub fn compile_large_output_helper(
 ///     &root,
 ///     "cmd",
 ///     "fn main() {}\n",
-/// );
+/// )
+/// .expect("compile helper");
 /// assert!(exe.as_std_path().exists());
 /// ```
 pub fn compile_rust_helper(
@@ -123,7 +126,7 @@ pub fn compile_rust_helper(
     name: &str,
     source: &str,
 ) -> Result<Utf8PathBuf> {
-    dir.write(&format!("{name}.rs"), source.as_bytes())
+    dir.write(format!("{name}.rs"), source.as_bytes())
         .with_context(|| format!("write helper source {name}.rs"))?;
 
     let src_path = root.join(format!("{name}.rs"));

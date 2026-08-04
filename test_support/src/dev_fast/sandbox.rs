@@ -4,14 +4,13 @@
 //! than by prepending fakes to the ambient `PATH`.
 use anyhow::{Context, Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
-use std::fs;
 use std::io::ErrorKind;
-use std::os::unix::fs::PermissionsExt;
 use std::process::{Command, Output};
 use tempfile::{TempDir, tempdir};
 
 use super::MakeInvocation;
 use crate::exec::write_exec_with_content;
+use crate::fs;
 
 /// Utilities the scripts and `make` legitimately need. Kept explicit so a new
 /// dependency surfaces as a test failure rather than silently resolving to
@@ -78,8 +77,8 @@ impl Sandbox {
             root,
             repo,
         };
-        fs::create_dir_all(sandbox.bin().as_std_path()).context("create sandbox bin")?;
-        fs::create_dir_all(sandbox.home().as_std_path()).context("create sandbox home")?;
+        fs::create_dir_all(sandbox.bin()).context("create sandbox bin")?;
+        fs::create_dir_all(sandbox.home()).context("create sandbox home")?;
         sandbox.link_utilities()?;
         Ok(sandbox)
     }
@@ -103,11 +102,8 @@ impl Sandbox {
         for utility in SANDBOX_UTILITIES {
             let source =
                 which(utility).with_context(|| format!("locate `{utility}` for the sandbox"))?;
-            std::os::unix::fs::symlink(
-                source.as_std_path(),
-                self.bin().join(utility).as_std_path(),
-            )
-            .with_context(|| format!("link `{utility}` into the sandbox"))?;
+            fs::symlink(&source, self.bin().join(utility))
+                .with_context(|| format!("link `{utility}` into the sandbox"))?;
         }
         Ok(())
     }
@@ -117,21 +113,20 @@ impl Sandbox {
     /// `body` is a shell fragment without a shebang; this adds one, so call
     /// sites stay focused on the behaviour they are faking.
     pub fn write_fake(&self, dir: &Utf8Path, name: &str, body: &str) -> Result<Utf8PathBuf> {
-        fs::create_dir_all(dir.as_std_path()).with_context(|| format!("create {dir}"))?;
+        fs::create_dir_all(dir).with_context(|| format!("create {dir}"))?;
         // Unlink first. The utility allowlist symlinks real binaries into this
         // directory, and writing to a symlink follows it — faking a utility
         // that is already linked would otherwise truncate the host's copy of
         // it. Only file permissions have stood between that and a broken
         // system.
         let target = dir.join(name);
-        match fs::remove_file(target.as_std_path()) {
+        match fs::remove_file(&target) {
             Ok(()) => {}
             Err(error) if error.kind() == ErrorKind::NotFound => {}
             Err(error) => return Err(error).with_context(|| format!("replace {target}")),
         }
         let script = format!("#!/bin/sh\n{body}\n");
-        let path = write_exec_with_content(dir.as_std_path(), name, &script)?;
-        Utf8PathBuf::try_from(path).context("fake executable path must be UTF-8")
+        write_exec_with_content(dir, name, &script)
     }
 
     /// A `mold` reporting the given version, formatted as the real one does.
@@ -182,7 +177,7 @@ impl Sandbox {
     /// read failure is propagated rather than reported as "it did not run".
     pub fn rustup_invocations(&self) -> Result<Vec<String>> {
         let log = self.rustup_log();
-        match fs::read_to_string(log.as_std_path()) {
+        match fs::read_to_string(&log) {
             Ok(text) => Ok(text.lines().map(str::to_owned).collect()),
             Err(error) if error.kind() == ErrorKind::NotFound => Ok(Vec::new()),
             Err(error) => Err(error).with_context(|| format!("read {log}")),
@@ -295,9 +290,7 @@ fn which(utility: &str) -> Result<Utf8PathBuf> {
 }
 
 fn is_executable_file(path: &Utf8Path) -> bool {
-    fs::metadata(path.as_std_path())
-        .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
-        .unwrap_or(false)
+    fs::is_executable_file(path)
 }
 
 /// Combined stdout and stderr, for asserting on diagnostics regardless of the

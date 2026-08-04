@@ -21,7 +21,7 @@ jobs:
       # not shadow .cargo/config.toml and strip -Zpolonius=next; tools such as
       # cargo-llvm-cov append their own flags to this value.
       RUSTFLAGS: -D warnings -Zpolonius=next
-      WHITAKER_INSTALLER_VERSION: '0.2.6'
+      WHITAKER_INSTALLER_VERSION: '0.2.7'
       # Single source of truth for the cargo-nextest pin. `make test` runs the
       # non-doctest suite through nextest, so the job installs it up front.
       NEXTEST_VERSION: '0.9.133'

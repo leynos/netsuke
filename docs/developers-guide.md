@@ -138,33 +138,110 @@ configuration does and does not cover.
 (`whitaker --all -- --all-targets --all-features`). Install Whitaker through
 the standalone installer described in the
 [Whitaker user's guide](whitaker-users-guide.md) so local linting matches
-continuous integration (CI); `make lint-clippy` runs the Clippy-only subset.
+continuous integration (CI); `make lint-clippy` runs the Clippy-only subset. CI
+pins the installer version in `WHITAKER_INSTALLER_VERSION` in
+`.github/workflows/ci.yml`. Install that same version locally so local runs
+match CI; read the pin from the workflow rather than copying the number, so the
+two cannot drift:
+
+```bash
+WHITAKER_INSTALLER_VERSION="$(sed -n \
+  "s/.*WHITAKER_INSTALLER_VERSION: '\(.*\)'.*/\1/p" \
+  .github/workflows/ci.yml)"
+cargo install --locked whitaker-installer \
+  --version "$WHITAKER_INSTALLER_VERSION"
+# or, for a prebuilt binary:
+cargo binstall --no-confirm --locked \
+  "whitaker-installer@$WHITAKER_INSTALLER_VERSION"
+```
+
+`whitaker-installer` and the lint libraries are separate artefacts with
+separate versions. `WHITAKER_INSTALLER_VERSION` pins the installer — the tool
+that stages libraries — and nothing else. The installer keeps its own checkout
+of the Whitaker repository under `~/.local/share/whitaker`, updates it with
+`git pull`, and stages the libraries from its default branch. Lint behaviour
+therefore tracks Whitaker HEAD.
+
+**Running the lint libraries at HEAD is deliberate.** Netsuke follows the suite
+as it develops, so new lints and fixes arrive without a version bump here. Do
+not add a `[workspace.metadata.dylint]` block pinning `whitaker_suite` to a
+`tag` or `rev`. The [Whitaker user's guide](whitaker-users-guide.md) documents
+that form, and it is the right answer for a project wanting reproducible lint
+results, but adopting it here would reverse a standing decision rather than fix
+a defect.
+
+The cost is worth stating plainly: a change upstream can alter lint results
+between two runs with no change in this repository, and a local checkout that
+has not been restaged will disagree with CI, which stages fresh on every job.
+Restaging is what reconciles them.
+
+What the module-scoped exemptions in `dylint.toml` actually depend on is
+[Whitaker PR #315][whitaker-pr-315], which added the `excluded_paths` option,
+so the staged libraries must be recent enough to include it. Libraries staged
+from an older checkout ignore `excluded_paths` silently — the exemptions stop
+applying with no error, and the lint reports the modules they covered. Re-run
+`whitaker-installer` to restage from HEAD. If that checkout has been left on a
+detached HEAD, the install fails at its `git pull`; put it back on the default
+branch and re-run.
+
+[whitaker-pr-315]: https://github.com/leynos/whitaker/pull/315
+
 Whitaker is configured by `dylint.toml` at the repository root, where each
 sanctioned ambient-filesystem scope for `no_std_fs_operations` carries a
-documented rationale.
+documented rationale. `docs/whitaker-users-guide.md` is a near-verbatim import
+of the [upstream Whitaker user's guide][whitaker-upstream-guide]; refresh it
+from that URL rather than editing it in place, preserving the "Netsuke
+deviation from upstream" callout, and record Netsuke-specific policy here and in
+`dylint.toml`.
+
+[whitaker-upstream-guide]: https://raw.githubusercontent.com/leynos/whitaker/refs/heads/main/docs/users-guide.md
 
 Prefer `excluded_paths` over `excluded_crates`: a path entry exempts one module
 and its descendants, whereas a crate entry exempts a whole compilation unit.
 The application crate is scoped this way — only
 `netsuke::stdlib::which::lookup` (executable discovery through `PATH` and
 cross-directory symlink canonicalization, which `cap_std` cannot express) and
-`netsuke::runner::process::file_io` (temporary-file synchronization), and
+`netsuke::runner::process::file_io::ambient_sync` (temporary-file
+synchronization, scoped to the submodule holding only that `sync_all` so the
+rest of `file_io` keeps writing through `cap_std` handles), and
 `netsuke::cli::discovery::paths` (canonicalizing an ambient `--directory` to
 match OrthoConfig's layer paths) are exempt; the rest of `netsuke` stays under
 the capability policy. The behavioural step definitions, CLI integration tests,
 and shared workflow-reading helper that stage fixtures ambiently are scoped the
 same way. A crate-level entry is justified only when the ambient access lives
 in the crate root itself, where a path entry would be no narrower — that covers
-the Cargo build script, the `test_support` fixture crate, and the enumerated
-integration-test crates.
+the Cargo build script and the enumerated integration-test crates.
 
-Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
-allows. The lint does honour in-source lint attributes, but this repository
-denies `clippy::allow_attributes`, so `#[allow(no_std_fs_operations)]` will not
-compile here; an in-source exemption must be a *temporary*, item-level
-`#[expect(no_std_fs_operations, reason = "…")]` that states the reason and the
-route back to compliance. Prefer migrating to `cap_std` over any of these;
-reach for an exclusion only when the operation is irreducibly ambient.
+`test_support` is excluded from the root Cargo workspace, so the root
+`dylint.toml` cannot reach it and `whitaker --all` at the repository root never
+lints it. `make lint-whitaker` therefore runs the suite a second time from
+`test_support/`, where `test_support/dylint.toml` supplies that crate's policy:
+a single `excluded_paths` entry for `test_support::fs`, the module wrapping the
+ambient fixture operations. Every other module routes through it — `exec`,
+`manifest`, and the crate-root regression tests directly, and `check_ninja` and
+`fake_ninja` via `exec::write_exec_with_content` — so a new direct `std::fs`
+call anywhere else in the crate still fails the lint.
+
+Exceptions belong in `dylint.toml`, scoped as narrowly as the lint allows.
+Neither `#[allow(no_std_fs_operations)]` nor
+`#[expect(no_std_fs_operations, reason = "…")]` suppresses this lint in the
+Whitaker build this repository pins, so no in-source attribute is usable here
+(this repository also denies `clippy::allow_attributes`, so
+`#[allow(no_std_fs_operations)]` will not even compile). A `dylint.toml` entry
+is the only working mechanism: a narrowly scoped `excluded_paths` entry for a
+bounded module, or, where the ambient access lives at the crate root and a path
+entry would be no narrower, an `excluded_crates` entry. Prefer migrating to
+`cap_std` over adding an exclusion; reach for an exclusion only when the
+operation is irreducibly ambient.
+
+To confirm the exclusions have not silently widened, add a temporary
+`std::fs::metadata` call to an unexcluded module — for example
+`src/stdlib/which/cache.rs`, a sibling of the excluded `lookup` module, or the
+body of `src/runner/process/file_io.rs` outside `ambient_sync` — then run
+`make lint-whitaker`. Both sites must still be reported; revert the probe
+afterwards. The same check applies to `test_support`: a `std::fs` call in, say,
+`test_support/src/exec.rs` must be reported even though `test_support::fs` is
+exempt.
 
 When command output is long, preserve exit codes and logs:
 
@@ -530,15 +607,16 @@ and `-Clink-arg=-fuse-ld=mold`.
   Kani's own toolchain and the LLVM backend. The same applies to Verus.
 - **Test runner.** `make dev-test` is the accelerated counterpart of
   `make test-nextest`, not of `make test`: it runs the same
-  `cargo nextest run --all-targets --all-features`, and so is governed by the
-  same [`.config/nextest.toml`](#nextest-configuration), including the
-  `serial-env` group. It omits the `doctest` pass, because `cargo test --doc`
-  is a separate and comparatively quick runner; run `make test` before
-  proposing a change. The acceleration is applied through `RUSTUP_TOOLCHAIN` and
-  `cargo --config`, both Cargo-level rather than runner-level, which is why
-  they compose with nextest unchanged. Note the target uses
-  `NEXTEST_BUILD_JOBS`, not `BUILD_JOBS`: nextest reserves `-j` for test
-  concurrency, so a Cargo-shaped `-j` would silently become a thread count.
+  `cargo nextest run --all-targets --all-features`, over the root workspace and
+  then `test_support`, and so is governed by the same
+  [`.config/nextest.toml`](#nextest-configuration), including the `serial-env`
+  group. It omits the `doctest` pass, because `cargo test --doc` is a separate
+  and comparatively quick runner; run `make test` before proposing a change.
+  The acceleration is applied through `RUSTUP_TOOLCHAIN` and `cargo --config`,
+  both Cargo-level rather than runner-level, which is why they compose with
+  nextest unchanged. Note the target uses `NEXTEST_BUILD_JOBS`, not
+  `BUILD_JOBS`: nextest reserves `-j` for test concurrency, so a Cargo-shaped
+  `-j` would silently become a thread count.
 - **rust-analyzer.** No rust-analyzer configuration is committed, so the
   language server uses the repository toolchain and the default backend. Opting
   rust-analyzer into Cranelift is a personal, machine-local choice; it needs a
@@ -629,14 +707,18 @@ The fixtures live in `test_support::dev_fast`:
   two starting points. `BuildScenario` is a sandbox where `make dev-fast-check`
   passes — pinned `mold` on the install prefix, a `rustup` reporting the
   Cranelift component, and a `RecordingCargo` installed — and is shared by the
-  Make-target and benchmark suites. `InstallerScenario` is a sandbox with a
-  published `FakeRelease` and a usable `rustup`, letting a test concentrate on
-  the linker half of the installer; the installer and checksum suites share it.
-  The module also exports `TEST_MOLD_VERSION`, deliberately not a real `mold`
-  version so a test that accidentally reaches the network fails rather than
-  silently succeeding against an upstream artefact, and `WRONG_SHA256`.
-  `InstallerFixture` groups the installer's pin path, checksum path, and
-  release URL, and renders them via `script_env()`.
+  Make-target and benchmark suites. `BuildScenario::run(target)` returns the
+  single Cargo invocation a target must produce; `run_all(target)` returns
+  every invocation in order, for targets that invoke Cargo more than once, such
+  as `dev-test`, which runs the root pass and then `test_support`.
+  `InstallerScenario` is a sandbox with a published `FakeRelease` and a usable
+  `rustup`, letting a test concentrate on the linker half of the installer; the
+  installer and checksum suites share it. The module also exports
+  `TEST_MOLD_VERSION`, deliberately not a real `mold` version so a test that
+  accidentally reaches the network fails rather than silently succeeding
+  against an upstream artefact, and `WRONG_SHA256`. `InstallerFixture` groups
+  the installer's pin path, checksum path, and release URL, and renders them via
+  `script_env()`.
 
 A scenario earns its place here once a second suite needs it, and not before;
 suite-specific conveniences stay with their suite — the installer tests keep
@@ -672,10 +754,15 @@ Prefer a model that predicts an outcome over a table that restates one. Where
 an invariant lives in a shell script, the cost is a process per case, so keep
 the corpus small and the strategy structural.
 
-A `#[cfg(test)]` unit test added inside `test_support` will not run as part of
-`make test`, because `Cargo.toml` excludes `test_support` from the workspace.
-Put assertions about the fixtures themselves in the `tests/dev_fast_*.rs`
-integration crates instead, where the gate will actually exercise them.
+`Cargo.toml` excludes `test_support` from the workspace, but `make test` still
+exercises it: `test-nextest` and `doctest` each run a second time with
+`--manifest-path "$(TEST_SUPPORT_MANIFEST)"` (see
+[Test execution](#test-execution)), so a `#[cfg(test)]` unit test added inside
+`test_support` is covered by `make test`. `lint-clippy` and `lint-whitaker` run
+their passes against `test_support/Cargo.toml` the same way. Prefer putting
+assertions about the fixtures themselves in the `tests/dev_fast_*.rs`
+integration crates when the assertion belongs with the suite that consumes the
+fixture, rather than with the fixture's own unit tests.
 
 ### Benchmark evidence
 
@@ -864,13 +951,24 @@ Cargo home plus Kani support-file home.
   `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)"` (the
   Makefile re-states the Polonius flag because a set `RUSTFLAGS` overrides
   `.cargo/config.toml`, and the `$${RUSTFLAGS:+$$RUSTFLAGS }` prefix preserves
-  any `RUSTFLAGS` inherited from the caller). This runs every unit, integration,
-  `rstest`, and `rstest-bdd` test.
+  any `RUSTFLAGS` inherited from the caller). `test_support` is excluded from
+  the root Cargo workspace, so this root-level invocation cannot reach its
+  tests; the target therefore runs `cargo nextest` a second time against
+  `test_support/Cargo.toml`, mirroring how `make lint-whitaker` runs the
+  Whitaker suite twice for the same reason (see above). Together the two
+  invocations run every unit, integration, `rstest`, and `rstest-bdd` test
+  across both the root workspace and `test_support`.
 - `make doctest` — `cargo test --doc --all-features`, with the same
   `RUSTFLAGS`. nextest cannot execute doctests, so they need their own pass.
   Note that the previous `cargo test --all-targets` invocation never ran
   doctests either; the separate target is what makes a broken documentation
-  example fail the gate.
+  example fail the gate. For the same reason as `test-nextest`, `doctest` also
+  runs a second time against `test_support/Cargo.toml` to cover its doctests.
+
+The `test_support/Cargo.toml` path used for the second pass comes from the
+overridable `TEST_SUPPORT_MANIFEST` Makefile variable (default
+`test_support/Cargo.toml`); point it elsewhere with, for example,
+`make test TEST_SUPPORT_MANIFEST=path/to/Cargo.toml`.
 
 If either pass fails, `make test` fails. Run the individual targets when
 iterating, but treat `make test` as the gate.
@@ -969,6 +1067,26 @@ Callers supply a platform-appropriate filename and script body. The helper
 writes that content and applies executable permissions only on Unix.
 `write_exec` is the minimal-script convenience wrapper;
 `write_exec_with_content` is the shared primitive for custom behaviour.
+
+The helpers take `&Utf8Path` and return `Utf8PathBuf`, matching the camino
+types used throughout Netsuke. Callers that already hold camino paths pass them
+directly. `tempfile::TempDir::path()` still yields an OS-native `&Path`, so
+callers convert at that boundary with `exec::utf8_path`, the single conversion
+point. `utf8_path` returns a `Result` rather than panicking: it names the
+offending path in the error (`path is not valid UTF-8: {path}`), and callers
+propagate it with their own context, as `fake_ninja` and
+`fake_ninja_check_build_file` do.
+
+```rust
+let temp = TempDir::new()?;
+let root = exec::utf8_path(temp.path()).context("temporary directory")?;
+let stub = write_exec(root, "tool")?;
+```
+
+Because a camino path cannot represent a non-UTF-8 path, the fake-executable
+factories now fail on a temporary directory whose path is not valid UTF-8,
+rather than succeeding as they previously did. The `test_support` test
+`fake_ninja_helpers_reject_non_utf8_temp_directories` pins this behaviour.
 
 ### User-facing documentation examples
 
@@ -1173,6 +1291,122 @@ pattern documented in the
 `src/snapshot_test_support.rs` owns output-oriented unit-test fixtures;
 `no_color_env` is shared across output-preference and theme tests that exercise
 optional `NO_COLOR` lookup behaviour.
+
+### `test_support::fs`
+
+`test_support::fs` (`test_support/src/fs.rs`) is the crate's single
+ambient-filesystem boundary. Fixture code routes filesystem access through it
+rather than reaching for `std::fs` directly; Whitaker enforces this (see
+[Quality gates](#quality-gates)) for every other module in the crate.
+
+Most wrappers forward to their `std::fs` namesake unchanged. These are worth
+calling out because their behaviour, platform support, or reason for existing
+is not obvious from the name:
+
+- `is_dir(path) -> bool` mirrors `Path::is_dir`: it follows symlinks, and an
+  absent or unreadable path returns `false` rather than surfacing the
+  underlying metadata error. Fixture code must use this wrapper for directory
+  predicates rather than calling `std::fs::metadata(...).is_dir()` or
+  `Path::is_dir` directly. `test_support/src/manifest.rs` is an existing caller:
+  `ensure_manifest_exists` uses it both to reject a directory where a manifest
+  file is expected, and to accept a destination directory that is already
+  present.
+- `is_executable_file(path) -> bool` (Unix only) is `true` when the path is a
+  regular file with any execute bit set, and `false` for an absent or
+  unreadable path. It is the inverse of `set_mode`, and exists for probing a
+  sandbox `PATH` the way an executable lookup would.
+- `copy(from, to) -> io::Result<u64>` forwards to `std::fs::copy`, returning
+  the number of bytes copied and propagating its failure. The `dev_fast`
+  release fixtures use it to place a built archive under its versioned name.
+- `modified(path) -> io::Result<SystemTime>` returns the file's modification
+  time. It propagates both the metadata failure and the platform's failure to
+  report a timestamp, so it is `io::Result` rather than an `Option`. The
+  `dev_fast` staging fixtures use it to assert a file was or was not rebuilt.
+- `write_with_mtime(path, contents, mtime) -> io::Result<()>` (Unix only)
+  creates or truncates `path`, writes `contents`, and sets the modification
+  time to `mtime`, propagating whichever step fails. The staging fixtures use
+  it to backdate a file so a later build sees it as stale.
+
+`write_with_mtime` is the reason `test_support/dylint.toml` carries no
+`dev_fast` exemption. Backdating a fixture needs one open file for both the
+write and the timestamp, which reads like an irreducibly ambient operation that
+has to happen at the call site. Taking the timestamp as an argument keeps the
+handle inside this module instead: the caller never sees a `File`, so the
+ambient boundary stays where the lint expects it. Prefer that shape — pass in
+what the operation needs and keep the handle here — over widening an exclusion
+to a module that wants a raw `File`.
+
+### Shared Makefile contract helpers
+
+`tests/support/makefile.rs` is a shared module for integration tests that
+assert facts about the repository's `Makefile` — for example, that a target
+declares a given prerequisite or recipe. It provides five helpers:
+
+- `repo_root() -> Result<cap_std::fs_utf8::Dir>` opens the repository root
+  through `cap_std::fs_utf8::Dir` and `ambient_authority()`, so a contract test
+  cannot read outside the checkout.
+- `read_repo_file(relative: &Utf8Path) -> Result<String>` reads a file under
+  the repository root via that capability-scoped directory.
+- `parse_rule(line: &str) -> Option<(&str, Vec<&str>)>` parses a single
+  `target: prerequisites` line. It returns `None` for recipe or continuation
+  lines, comments, `.PHONY`-style directives, and variable assignments (`:=` is
+  caught by testing whether the text after the colon starts with `=`). It
+  strips trailing `##` help comments from the prerequisite list.
+- `target_prerequisites(contents: &str, target: &str) -> Option<Vec<String>>`
+  finds a target's rule line and returns its prerequisites.
+- `target_recipe(contents: &str, target: &str) -> Option<String>` returns
+  `Some("")` for a target with no recipe and `None` for an absent target. Blank
+  lines inside a recipe are traversed but dropped, so a recipe split by a blank
+  line is returned whole.
+
+Because every file under `tests/` compiles as an independent crate, there is no
+library through which to share this module, and `tests/support/` is a
+subdirectory that Cargo does not auto-discover as a test target. Consumers
+include it with:
+
+```rust
+#[path = "support/makefile.rs"]
+mod makefile;
+```
+
+This mirrors the shape of `tests/common/mod.rs`, which the workflow-contract
+crates include with `mod common;`. The module carries its own `#[cfg(test)]`
+unit tests covering every helper, so a consumer that needs only part of the
+surface does not trip `dead_code`; these tests run once per including crate.
+
+Scope and reuse policy: this module exists only for static Makefile contract
+tests and capability-scoped reads from the repository root. It must not grow
+into a general test-utility bag — fixture construction, process invocation, and
+environment control belong in the `test_support` crate, which is versioned,
+linted, and documented as such. A helper earns a place here only when more than
+one contract test needs the same reading or parsing behaviour. Nothing in it
+runs Make, runs Cargo, or writes anything.
+
+### `EnLocalizer` field ordering
+
+`EnLocalizer` (`test_support/src/localizer.rs`) holds both the localizer
+override guard and the global localizer mutex guard:
+
+```rust
+pub struct EnLocalizer {
+    _guard: LocalizerGuard,
+    _lock: MutexGuard<'static, ()>,
+}
+```
+
+The declaration order is load-bearing: struct fields drop in declaration order,
+so `LocalizerGuard` must be declared before the mutex guard. That keeps the
+mutex held while `LocalizerGuard` restores the process-global localizer, so a
+test waiting on the lock cannot acquire it, install its own override, and
+capture this test's override as its "previous" state.
+
+`en_localizer()` recovers a poisoned `LOCALIZER_TEST_LOCK` with
+`PoisonError::into_inner` rather than propagating the poison: a poisoned lock
+only means an earlier test panicked while holding it, and `set_en_localizer`
+re-establishes the global state unconditionally, so the recovered guard is
+still safe to use. See the
+[locale-pinned snapshot tests](snapshot-testing-in-netsuke-using-insta.md#locale-pinned-snapshot-tests)
+section for the fixture's intended usage.
 
 ### `EnvLock`
 

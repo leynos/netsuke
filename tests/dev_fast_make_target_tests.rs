@@ -7,7 +7,11 @@
 //! linker. A fake `cargo` records each invocation so those become checked facts
 //! rather than assumptions.
 //!
-//! Every case is hermetic: no network, and no real mold, rustup, or Cargo.
+//! Every case is hermetic: no network, and no real mold or rustup. The
+//! exception is `cargo_resolves_the_fragment_to_the_intended_settings`,
+//! which runs the real Cargo via `env!("CARGO")` because only the real
+//! Cargo can confirm how it resolves the `tools/dev-fast/config.toml`
+//! fragment. Every other case exercises the recording fake `cargo`.
 
 #![cfg(all(unix, target_os = "linux"))]
 
@@ -27,51 +31,76 @@ const TEST_MOLD_VERSION: &str = "9.9.9";
 struct BuildTarget {
     name: &'static str,
     subcommand: &'static [&'static str],
+    /// How many Cargo invocations the recipe must produce.
+    ///
+    /// Pinned per target rather than merely "at least one": `dev-test` runs the
+    /// root pass and then `test_support`, and dropping either would otherwise
+    /// leave the per-invocation checks below trivially satisfied by whichever
+    /// pass survived.
+    invocations: usize,
 }
 
 #[rstest]
-#[case::dev_build(BuildTarget { name: "dev-build", subcommand: &["build", "--bin", "netsuke"] })]
+#[case::dev_build(BuildTarget {
+    name: "dev-build",
+    subcommand: &["build", "--bin", "netsuke"],
+    invocations: 1,
+})]
 #[case::dev_test(
     BuildTarget {
         name: "dev-test",
         // Mirrors `make test-nextest`, so the accelerated loop and the gate run
         // the same runner under the same `.config/nextest.toml`.
         subcommand: &["nextest", "run", "--all-targets", "--all-features"],
+        invocations: 2,
     }
 )]
 fn build_targets_select_the_pinned_toolchain_and_fragment(
     #[case] target: BuildTarget,
 ) -> Result<()> {
     let scenario = BuildScenario::prepare()?;
-    let invocation = scenario.run(target.name)?;
+    let invocations = scenario.run_all(target.name)?;
+    ensure!(
+        invocations.len() == target.invocations,
+        "`{}` should invoke cargo {} time(s), recorded {}",
+        target.name,
+        target.invocations,
+        invocations.len()
+    );
 
-    ensure!(
-        invocation.toolchain() == pinned_toolchain()?,
-        "`{}` should select the pinned nightly, got `{}`",
-        target.name,
-        invocation.toolchain()
-    );
-    ensure!(
-        invocation.contains_sequence(&["--config", DEV_FAST_CONFIG_PATH]),
-        "`{}` should pass the fragment, got `{:?}`",
-        target.name,
-        invocation.arguments()
-    );
-    ensure!(
-        invocation.contains_sequence(target.subcommand),
-        "`{}` should run `{:?}`, got `{:?}`",
-        target.name,
-        target.subcommand,
-        invocation.arguments()
-    );
-    // The linker is resolved by PATH order, so leading the prefix is the whole
-    // mechanism by which the pinned mold, and not a system one, gets used.
-    ensure!(
-        invocation.path_starts_with(&scenario.prefix_bin()),
-        "`{}` should lead PATH with the install prefix, got `{}`",
-        target.name,
-        invocation.path()
-    );
+    // Every invocation, not just the first: `dev-test` runs the root pass and
+    // then `test_support`, and the toolchain, fragment, and PATH contract has
+    // to hold for both.
+    for invocation in invocations {
+        ensure!(
+            invocation.toolchain() == pinned_toolchain()?,
+            "`{}` should select the pinned nightly, got `{}`",
+            target.name,
+            invocation.toolchain()
+        );
+        ensure!(
+            invocation.contains_sequence(&["--config", DEV_FAST_CONFIG_PATH]),
+            "`{}` should pass the fragment, got `{:?}`",
+            target.name,
+            invocation.arguments()
+        );
+        ensure!(
+            invocation.contains_sequence(target.subcommand),
+            "`{}` should run `{:?}`, got `{:?}`",
+            target.name,
+            target.subcommand,
+            invocation.arguments()
+        );
+        // The linker is resolved by PATH order, so leading the prefix is the
+        // whole mechanism by which the pinned mold, and not a system one, gets
+        // used.
+        ensure!(
+            invocation.path_starts_with(&scenario.prefix_bin()),
+            "`{}` should lead PATH with the install prefix, got `{}`",
+            target.name,
+            invocation.path()
+        );
+    }
     Ok(())
 }
 
@@ -169,8 +198,10 @@ fn a_drifting_mold_invokes_cargo_not_at_all(#[case] target: &str) -> Result<()> 
 #[case::unstable_flag("unstable.codegen-backend", "unstable.codegen-backend = true")]
 #[case::linux_rustflags(
     "target",
-    "target.'cfg(target_os = \"linux\")'.rustflags = \
-     [\"-Zpolonius=next\", \"-Clink-arg=-fuse-ld=mold\"]"
+    concat!(
+        "target.'cfg(target_os = \"linux\")'.rustflags = ",
+        "[\"-Zpolonius=next\", \"-Clink-arg=-fuse-ld=mold\"]",
+    )
 )]
 fn cargo_resolves_the_fragment_to_the_intended_settings(
     #[case] query: &str,

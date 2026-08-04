@@ -1,5 +1,6 @@
 //! Helpers for constructing manifest fixtures in tests.
 
+use crate::fs;
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8};
 use std::io;
@@ -39,7 +40,7 @@ pub fn manifest_yaml(body: &str) -> String {
 pub fn ensure_manifest_exists(temp_dir: &Utf8Path, cli_file: &Utf8Path) -> io::Result<Utf8PathBuf> {
     let manifest_path = resolve_manifest_path(temp_dir, cli_file)?;
 
-    if manifest_path.is_dir() {
+    if fs::is_dir(&manifest_path) {
         return Err(io::Error::new(
             io::ErrorKind::IsADirectory,
             format!(
@@ -49,7 +50,7 @@ pub fn ensure_manifest_exists(temp_dir: &Utf8Path, cli_file: &Utf8Path) -> io::R
         ));
     }
 
-    if manifest_path.exists() {
+    if fs::exists(&manifest_path) {
         return Ok(manifest_path);
     }
 
@@ -120,11 +121,11 @@ fn persist_manifest_file(file: NamedTempFile, manifest_path: &Utf8Path) -> io::R
 }
 
 fn ensure_parent_directory(manifest_path: &Utf8Path, dest_dir: &Utf8Path) -> io::Result<()> {
-    if dest_dir.exists() {
+    if fs::exists(dest_dir) {
         // If the path exists but is not a directory, report a clear error that
         // includes the final manifest path. Returning AlreadyExists mirrors the
         // semantics that the desired directory “exists” but is unusable.
-        if dest_dir.is_dir() {
+        if fs::is_dir(dest_dir) {
             return Ok(());
         }
         return Err(io::Error::new(
@@ -139,13 +140,10 @@ fn ensure_parent_directory(manifest_path: &Utf8Path, dest_dir: &Utf8Path) -> io:
     let base = find_existing_ancestor(dest_dir, manifest_path)?;
 
     let relative = dest_dir.strip_prefix(base).map_err(|_| {
-        io::Error::new(
-            io::ErrorKind::Other,
-            format!(
-                "Failed to derive relative path for {} from ancestor {}",
-                dest_dir, base,
-            ),
-        )
+        io::Error::other(format!(
+            "Failed to derive relative path for {} from ancestor {}",
+            dest_dir, base,
+        ))
     })?;
 
     let dir = fs_utf8::Dir::open_ambient_dir(base, ambient_authority()).map_err(|e| {
@@ -177,7 +175,7 @@ fn find_existing_ancestor<'a>(
     ancestors.next(); // Skip self
 
     ancestors
-        .find(|candidate| candidate.exists())
+        .find(|candidate| fs::exists(candidate))
         .ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::NotFound,
@@ -191,10 +189,11 @@ fn find_existing_ancestor<'a>(
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for manifest fixture creation.
+
     use super::*;
-    use anyhow::{Context, Result, anyhow};
+    use anyhow::{Context, Result};
     use camino::Utf8Path;
-    use std::fs;
     use std::io;
     use tempfile::TempDir;
 
@@ -247,25 +246,26 @@ mod tests {
         let cli_file = Utf8Path::new("missing/subdir/manifest.yml");
         let expected_path = temp_path.join(cli_file);
         assert!(
-            !expected_path.exists(),
+            !fs::exists(&expected_path),
             "precondition: path should not exist"
         );
 
         let manifest_path =
             ensure_manifest_exists(temp_path, cli_file).context("create manifest when missing")?;
         assert_eq!(manifest_path, expected_path);
-        assert!(manifest_path.exists(), "manifest file should exist");
+        assert!(fs::exists(&manifest_path), "manifest file should exist");
         assert!(
-            manifest_path
-                .parent()
-                .ok_or_else(|| anyhow::anyhow!("manifest path missing parent"))?
-                .exists(),
+            fs::exists(
+                manifest_path
+                    .parent()
+                    .ok_or_else(|| anyhow::anyhow!("manifest path missing parent"))?
+            ),
             "parent directory should be created"
         );
 
         // Sanity check that content was written, not an empty file.
-        let contents = std::fs::read_to_string(manifest_path.as_std_path())
-            .context("read manifest contents")?;
+        let contents =
+            fs::read_to_string(manifest_path.as_std_path()).context("read manifest contents")?;
         assert!(
             contents.contains("netsuke_version:"),
             "unexpected manifest contents: {contents}"

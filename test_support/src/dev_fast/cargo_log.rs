@@ -8,10 +8,10 @@
 use anyhow::{Context, Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
 use std::collections::HashMap;
-use std::fs;
 use std::io::ErrorKind;
 
 use super::Sandbox;
+use crate::fs;
 
 /// Separator between records in the log. Chosen so it cannot collide with an
 /// argument or a path.
@@ -78,7 +78,7 @@ impl RecordingCargo {
     /// failure is propagated: a permission or I/O error must not masquerade as
     /// "cargo did not run", which is exactly the conclusion some tests draw.
     pub fn invocations(&self) -> Result<Vec<CargoInvocation>> {
-        let text = match fs::read_to_string(self.log.as_std_path()) {
+        let text = match fs::read_to_string(&self.log) {
             Ok(text) => text,
             Err(error) if error.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
             Err(error) => {

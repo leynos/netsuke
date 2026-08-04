@@ -9,12 +9,10 @@
 
 use anyhow::{Context, Result};
 use camino::Utf8Path;
-use std::fs;
-use std::fs::File;
-use std::os::unix::fs::FileExt;
 use std::time::SystemTime;
 
 use super::Sandbox;
+use crate::fs;
 
 impl Sandbox {
     /// Write a fixture file, creating its parent directory.
@@ -26,7 +24,7 @@ impl Sandbox {
     /// crate instead of widening the Whitaker exclusion list.
     pub fn write_file(&self, path: &Utf8Path, contents: &str) -> Result<()> {
         self.create_parent(path)?;
-        fs::write(path.as_std_path(), contents).with_context(|| format!("write {path}"))
+        fs::write(path, contents).with_context(|| format!("write {path}"))
     }
 
     /// Write a fixture file and backdate it to `mtime`, in seconds since the
@@ -42,11 +40,8 @@ impl Sandbox {
         mtime: SystemTime,
     ) -> Result<()> {
         self.create_parent(path)?;
-        let file = File::create(path.as_std_path()).with_context(|| format!("create {path}"))?;
-        file.write_all_at(contents.as_bytes(), 0)
-            .with_context(|| format!("write {path}"))?;
-        file.set_modified(mtime)
-            .with_context(|| format!("backdate {path}"))
+        fs::write_with_mtime(path, contents, mtime)
+            .with_context(|| format!("write and backdate {path}"))
     }
 
     /// Read a file staged in the sandbox.
@@ -55,7 +50,7 @@ impl Sandbox {
     /// on recorded output would otherwise read "the command was never run" as
     /// "the command recorded nothing".
     pub fn read_file(&self, path: &Utf8Path) -> Result<String> {
-        fs::read_to_string(path.as_std_path()).with_context(|| format!("read {path}"))
+        fs::read_to_string(path).with_context(|| format!("read {path}"))
     }
 
     /// A file's modification time, in whole seconds since the Unix epoch.
@@ -63,10 +58,7 @@ impl Sandbox {
     /// Whole seconds because the callers compare against a deliberately
     /// backdated stamp, not against each other.
     pub fn mtime_seconds(&self, path: &Utf8Path) -> Result<i64> {
-        let modified = fs::metadata(path.as_std_path())
-            .with_context(|| format!("stat {path}"))?
-            .modified()
-            .with_context(|| format!("read mtime of {path}"))?;
+        let modified = fs::modified(path).with_context(|| format!("read mtime of {path}"))?;
         let since_epoch = modified
             .duration_since(SystemTime::UNIX_EPOCH)
             .with_context(|| format!("{path} predates the Unix epoch"))?;
@@ -75,7 +67,7 @@ impl Sandbox {
 
     /// Create a directory and any missing parents.
     pub fn create_dir(&self, path: &Utf8Path) -> Result<()> {
-        fs::create_dir_all(path.as_std_path()).with_context(|| format!("create {path}"))
+        fs::create_dir_all(path).with_context(|| format!("create {path}"))
     }
 
     fn create_parent(&self, path: &Utf8Path) -> Result<()> {

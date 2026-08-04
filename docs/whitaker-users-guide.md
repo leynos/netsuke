@@ -113,6 +113,16 @@ libraries = [
 ]
 ```
 
+> **Netsuke deviation from upstream — preserve when re-importing this guide.**
+> Netsuke does not pin the lint libraries and carries no
+> `[workspace.metadata.dylint]` block. It installs them at Whitaker HEAD
+> through `whitaker-installer`, deliberately, so the suite's improvements
+> arrive without a version bump. `WHITAKER_INSTALLER_VERSION` in
+> `.github/workflows/ci.yml` pins the installer binary, which is a different
+> artefact from the libraries this section pins — the installer's version says
+> nothing about which lints get staged. Adopting the form above would reverse a
+> standing decision; see "Quality gates" in `docs/developers-guide.md`.
+
 ### Rolling release downloads
 
 Whitaker publishes a `rolling` pre-release tag that is continuously updated and
@@ -648,10 +658,16 @@ policy.
 > lint-level attributes.
 >
 > **Netsuke deviation from upstream — preserve when re-importing this guide.**
-> This repository denies `clippy::allow_attributes`, so
-> `#[allow(no_std_fs_operations)]` will not compile here. Use a narrowly scoped
-> `excluded_paths` entry in `dylint.toml` for a permanent exemption, or a
-> temporary `#[expect(no_std_fs_operations, reason = "…")]` on the item.
+> In the Whitaker build this repository pins, neither
+> `#[allow(no_std_fs_operations)]` nor
+> `#[expect(no_std_fs_operations, reason = "…")]` suppresses this lint, so the
+> Tip above does not apply here; `#[expect(...)]` additionally fails the build
+> with an unfulfilled-lint-expectation error under `-D warnings`. This
+> repository also denies `clippy::allow_attributes`, so
+> `#[allow(no_std_fs_operations)]` will not even compile. The only sanctioned
+> mechanism is a `dylint.toml` entry: a narrowly scoped `excluded_paths` entry
+> for a bounded module, or an `excluded_crates` entry where the ambient access
+> lives at the crate root.
 
 **How to fix:** Replace `std::fs` with `cap_std`:
 

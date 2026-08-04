@@ -26,7 +26,7 @@ impl PathGuard {
     /// Returns a guard that restores the variable when dropped.
     pub fn new(original: Option<OsString>) -> Self {
         Self {
-            inner: EnvGuard::with_env_and_lock("PATH", original, StdEnv::default(), true),
+            inner: EnvGuard::with_env_and_lock("PATH", original, StdEnv, true),
         }
     }
 }

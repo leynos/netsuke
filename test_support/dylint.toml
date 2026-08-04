@@ -1,0 +1,36 @@
+# Whitaker lint configuration for the `test_support` crate.
+#
+# `test_support` is deliberately excluded from the root workspace (see the
+# `[workspace] exclude` note in `../Cargo.toml`), so `whitaker --all` at the
+# repository root cannot reach it and the root `dylint.toml` does not apply.
+# `make lint-whitaker` therefore runs the suite a second time from this
+# directory, where this file supplies the crate's own policy.
+#
+# Reuse policy: the same rule as the root configuration. Do not add an entry to
+# silence a new diagnostic. Route fixture filesystem access through
+# `test_support::fs`, which is the crate's ambient boundary module, and reach
+# for an entry here only when the operation cannot be expressed through a thin
+# wrapper at all.
+[no_std_fs_operations]
+
+# `test_support::fs` is the general-purpose ambient boundary. Test fixtures
+# stage workspaces in ambient temporary directories, where a `cap_std::fs::Dir`
+# handle adds ceremony without isolation value, so that module wraps the
+# operations fixtures need and the rest of the crate goes through it: `exec`,
+# `manifest`, and the crate-root regression tests call it directly, while
+# `check_ninja` and `fake_ninja` reach it via
+# `exec::write_exec_with_content`.
+#
+# `dev_fast` is not listed. Its sandbox, staging, release, and cargo-log
+# modules stage throwaway PATH/HOME trees for the build-acceleration tests, and
+# every operation they need has a wrapper here — including the ones that once
+# looked irreducible. Backdating a fixture needs one open file for the write and
+# the timestamp, but `fs::write_with_mtime` takes the timestamp as an argument
+# and keeps the handle inside this module; reading an mtime never opened a file
+# at all, and `fs::modified` returns the `SystemTime` directly.
+#
+# The lesson is worth keeping: reach for an entry below only after trying to
+# express the operation as a wrapper that returns plain data. A wrapper that
+# hands a `std::fs::File` back would just move the diagnostic to its caller, but
+# that is an argument against that wrapper shape, not for an exemption.
+excluded_paths = ["test_support::fs"]

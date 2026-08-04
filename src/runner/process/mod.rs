@@ -47,6 +47,13 @@ type StatusObserver<'a> = &'a mut dyn FnMut(u32, u32, &str);
 // testing surface without exporting them in release builds.
 #[cfg(doctest)]
 pub mod doc {
+    //! Re-exports of otherwise-private `process` items for doctests only.
+    //!
+    //! Doctests compile as a separate crate and cannot reach `pub(crate)` or
+    //! private items in `process`, so this module surfaces the redaction
+    //! helpers and a handful of Ninja-invocation functions under `cfg(doctest)`
+    //! to give doc examples something to call without widening the crate's
+    //! release-build API.
     pub use super::redaction::{
         CommandArg, is_sensitive_arg, redact_argument, redact_sensitive_args,
     };

@@ -180,7 +180,10 @@ rustix = { version = "1.0.8", features = ["fs"] }
 
 [workspace]
 # `test_support` is a path dependency that Cargo would otherwise auto-include as a
-# member. It is excluded here to keep its gate coverage unchanged in this focused
-# change; folding it into the workspace is tracked separately as it requires
-# clearing its own lint backlog.
+# member. It stays excluded so its gate coverage is decided deliberately rather
+# than inherited; folding it into the workspace is tracked separately. Because
+# the exclusion also puts the crate out of reach of workspace-root cargo
+# invocations, `make lint-whitaker` runs the Whitaker suite a second time
+# against `test_support/dylint.toml`, and `make test-nextest` and `make doctest`
+# each run a second time against `$(TEST_SUPPORT_MANIFEST)`.
 exclude = ["test_support"]
