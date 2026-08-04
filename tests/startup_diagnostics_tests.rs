@@ -14,7 +14,8 @@
 
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
-use std::process::Output;
+use tempfile::TempDir;
+use test_support::netsuke::{NetsukeRun, run_netsuke_in_with_env};
 
 /// A locale that ships no catalogue, and whose language ships none either, so
 /// it resolves to the English source and reports a fallback.
@@ -23,15 +24,22 @@ const UNSUPPORTED_LOCALE: &str = "is-IS";
 /// The message `build_localizer` emits when a request cannot be honoured.
 const FALLBACK_WARNING: &str = "falling back to the source locale";
 
-fn run(args: &[&str]) -> Result<Output> {
-    assert_cmd::cargo::cargo_bin_cmd!("netsuke")
-        .args(args)
-        .output()
-        .context("run the netsuke binary")
+/// Run the binary with an explicitly empty environment, in an empty directory.
+///
+/// `run_netsuke_in_with_env` clears the child's environment rather than
+/// inheriting it, so what these tests observe depends only on the arguments
+/// they pass. That matters here more than most: the behaviour under test is
+/// how a *locale* is resolved, and `NETSUKE_LOCALE` in the developer's or CI
+/// environment would otherwise silently take part. The temporary directory
+/// does the same for the working tree, so `build` cannot find the
+/// repository's own manifest.
+fn run(args: &[&str]) -> Result<NetsukeRun> {
+    let directory = TempDir::new().context("stage an empty working directory")?;
+    run_netsuke_in_with_env(directory.path(), args, &[])
 }
 
-fn stderr_of(output: &Output) -> String {
-    String::from_utf8_lossy(&output.stderr).into_owned()
+fn stderr_of(run: &NetsukeRun) -> String {
+    run.stderr.clone()
 }
 
 /// Human mode must report an unsupported startup locale, whichever way the run
