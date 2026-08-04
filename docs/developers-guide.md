@@ -155,11 +155,20 @@ cargo binstall --no-confirm --locked \
   "whitaker-installer@$WHITAKER_INSTALLER_VERSION"
 ```
 
-This pin matters: 0.2.7 is the first installer release whose staged lint
-libraries carry [Whitaker PR #315][whitaker-pr-315], which added the
-`excluded_paths` option. Every module-scoped exemption in `dylint.toml` depends
-on it — an older installer silently ignores `excluded_paths`, and the
-exemptions stop applying without any error.
+The pin covers the installer only. It does not pin the lint libraries: the
+installer stages those from the Whitaker repository's default branch at install
+time, keeping its own checkout under `~/.local/share/whitaker` and updating it
+with `git pull`. Lint behaviour therefore tracks Whitaker HEAD, not
+`WHITAKER_INSTALLER_VERSION`.
+
+What the module-scoped exemptions in `dylint.toml` actually depend on is
+[Whitaker PR #315][whitaker-pr-315], which added the `excluded_paths` option,
+so the staged libraries must be recent enough to include it. Libraries staged
+from an older checkout ignore `excluded_paths` silently — the exemptions stop
+applying with no error, and the lint reports the modules they covered. Re-run
+`whitaker-installer` to restage from HEAD. If that checkout has been left on a
+detached HEAD, the install fails at its `git pull`; put it back on the default
+branch and re-run.
 
 [whitaker-pr-315]: https://github.com/leynos/whitaker/pull/315
 
