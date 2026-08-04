@@ -348,6 +348,26 @@ implementation begins.
   the `kani-smoke` job, steps, `with` mappings, and run commands directly.
   Date/Author: 2026-06-01 / implementing agent.
 
+- Decision: Record explicit approval for the Makefile and CI scope extension.
+  Rationale: Issue #331 noted that PR #311 shipped non-documentation changes
+  under this approval-gated, documentation-only plan without an on-record
+  approval: new `Makefile` targets (`install-kani`, `kani-check`,
+  `install-verus`, `verus`) delegating to `rust-prover-tools` via
+  `uv tool run`, a revised `.github/workflows/ci.yml` (uv installation,
+  `make install-kani`, updated `kani-smoke` cache key), and deletion of
+  `scripts/install-kani.sh` and `scripts/check-kani-version.sh`. These changes
+  were a necessary consequential extension of the documentation work: the
+  recorded boundary names `make install-kani` and `make kani-check` as the
+  supported Kani contract, and the delegated `rust-prover-tools` install
+  supersedes the bespoke shell scripts previously maintained under roadmap
+  item `4.1.1`. The extension was validated (tests passing, CI green after
+  the setup-uv fix) and reviewed by CodeRabbit with zero findings. Approval:
+  @leynos approved the extension by reviewing and merging PR #311 on
+  2026-06-02; this entry records that approval in the plan per issue #331.
+  No separate ExecPlan entry is warranted because the Makefile and CI
+  behaviour is already covered by this plan's follow-up test decisions above.
+  Date/Author: 2026-06-12 / implementing agent.
+
 ## Implementation plan
 
 Start from a clean understanding of the branch. Run:
