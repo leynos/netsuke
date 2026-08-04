@@ -10,7 +10,7 @@ use std::collections::HashMap;
 ///
 /// Answers only the variables it was given, and **panics** on any other key.
 ///
-/// The permissive alternative — returning `None` for anything unrecognised —
+/// The permissive alternative — returning `None` for anything unrecognized —
 /// hides exactly the change a test double should catch. Were the code under
 /// test altered to read a differently-named variable, through a rename, a typo,
 /// or a new precedence rung, a permissive stub would quietly answer `None` and
