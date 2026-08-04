@@ -32,6 +32,14 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 /// # Errors
 ///
 /// Returns an error when the manifest directory cannot be opened.
+///
+/// # Examples
+///
+/// ```no_run
+/// let root = repo_root().expect("open the repository root");
+/// let makefile = root.read_to_string("Makefile").expect("read the Makefile");
+/// assert!(makefile.contains("test-nextest:"));
+/// ```
 pub fn repo_root() -> Result<Dir> {
     Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
         .context("open the repository root as a capability-scoped directory")
@@ -42,6 +50,15 @@ pub fn repo_root() -> Result<Dir> {
 /// # Errors
 ///
 /// Returns an error naming `relative` when it cannot be read.
+///
+/// # Examples
+///
+/// ```no_run
+/// use camino::Utf8Path;
+///
+/// let makefile = read_repo_file(Utf8Path::new("Makefile")).expect("read the Makefile");
+/// assert!(makefile.contains("test-nextest:"));
+/// ```
 pub fn read_repo_file(relative: &Utf8Path) -> Result<String> {
     repo_root()?
         .read_to_string(relative)
@@ -57,6 +74,18 @@ pub fn read_repo_file(relative: &Utf8Path) -> Result<String> {
 ///
 /// Trailing `## ` help comments are discarded so `help` annotations do not leak
 /// into the prerequisite list.
+///
+/// # Examples
+///
+/// ```
+/// let (target, prerequisites) =
+///     parse_rule("alpha: beta gamma ## build everything").expect("a rule header");
+/// assert_eq!(target, "alpha");
+/// assert_eq!(prerequisites, ["beta", "gamma"]);
+///
+/// // A recipe line is not a rule header.
+/// assert_eq!(parse_rule("\techo one"), None);
+/// ```
 pub fn parse_rule(line: &str) -> Option<(&str, Vec<&str>)> {
     if line.starts_with(['\t', ' ', '#', '.']) {
         return None;
@@ -75,6 +104,18 @@ pub fn parse_rule(line: &str) -> Option<(&str, Vec<&str>)> {
 }
 
 /// Returns the prerequisites declared for `target`.
+///
+/// Yields `None` when `contents` declares no such target.
+///
+/// # Examples
+///
+/// ```
+/// let makefile = "alpha: beta gamma\n\techo one\n";
+/// assert_eq!(
+///     target_prerequisites(makefile, "alpha"),
+///     Some(vec!["beta".to_owned(), "gamma".to_owned()])
+/// );
+/// ```
 pub fn target_prerequisites(contents: &str, target: &str) -> Option<Vec<String>> {
     contents.lines().find_map(|line| {
         let (name, prerequisites) = parse_rule(line)?;
@@ -87,6 +128,16 @@ pub fn target_prerequisites(contents: &str, target: &str) -> Option<Vec<String>>
 /// A target with no recipe yields an empty string; an absent target yields
 /// `None`. Blank lines inside a recipe are traversed but dropped, so a recipe
 /// separated by a blank line is returned whole.
+///
+/// # Examples
+///
+/// ```
+/// let makefile = "alpha: beta\n\techo one\n\n\techo two\n\nbeta:\n";
+/// assert_eq!(
+///     target_recipe(makefile, "alpha").as_deref(),
+///     Some("\techo one\n\techo two")
+/// );
+/// ```
 pub fn target_recipe(contents: &str, target: &str) -> Option<String> {
     let mut lines = contents
         .lines()
