@@ -48,11 +48,11 @@ fn run_with_args(
     system_locale: &impl locale_resolution::SystemLocale,
 ) -> ExitCode {
     let json_hint = locale_resolution::resolve_startup_json(&args, env);
-    // Install the subscriber before the first localizer is built, so locale
-    // resolution and catalogue-load failures are reported rather than dropped.
-    // The level is provisional: only `json_hint` is known here, and the
-    // effective verbosity arrives with the configuration merge.
-    init_tracing(startup_tracing_filter(json_hint));
+    // Installed disabled. `json_hint` is only a hint — configuration can still
+    // turn JSON on — and the JSON diagnostic is written to stderr, so any event
+    // emitted before the effective mode is known could interleave with it.
+    // `configure_runtime` raises the level once the mode is settled.
+    init_tracing(LevelFilter::OFF);
     let localizer = startup_localizer(&args, env, system_locale);
     let startup_mode = DiagMode::from_json_enabled(json_hint);
     let (parsed_cli, matches) = match parse_cli_or_exit(args, &localizer, startup_mode) {
@@ -89,27 +89,16 @@ static TRACING_FILTER: OnceLock<reload::Handle<LevelFilter, Registry>> = OnceLoc
 ///
 /// JSON mode silences tracing entirely so stderr carries only the diagnostic
 /// document. `--verbose` selects `TRACE` because the `NETSUKE_CONFIG` lookup is
-/// traced at that level; otherwise only errors surface.
+/// traced at that level.
+///
+/// Otherwise `WARN`: a run that falls back to English, or loads a catalogue
+/// that fails to parse, reports it at that level, and `ERROR` would leave both
+/// silent — which is the condition a user would report as a bug.
 const fn startup_filter(mode: DiagMode, verbose: bool) -> LevelFilter {
     if mode.is_json() {
         LevelFilter::OFF
     } else if verbose {
         LevelFilter::TRACE
-    } else {
-        LevelFilter::ERROR
-    }
-}
-
-/// The stderr verbosity to start with, before the configuration merge.
-///
-/// Only the JSON hint is known this early, so the level is deliberately
-/// conservative: warnings and errors surface, and anything more detailed waits
-/// for [`startup_filter`] once `--verbose` has been parsed. `WARN` rather than
-/// `ERROR` because a locale that fails to load is reported at warning level,
-/// and dropping it would leave the run silently rendering English.
-const fn startup_tracing_filter(json_hint: bool) -> LevelFilter {
-    if json_hint {
-        LevelFilter::OFF
     } else {
         LevelFilter::WARN
     }
@@ -231,11 +220,14 @@ fn configure_runtime(
     system_locale: &impl locale_resolution::SystemLocale,
     mode: DiagMode,
 ) {
+    // Raised before the localizer is built, so a fallback warning is both
+    // visible in a normal run and suppressed in JSON mode, where stderr
+    // carries the diagnostic document.
+    set_tracing_filter(startup_filter(mode, merged_cli.verbose));
+
     let runtime_locale = locale_resolution::resolve_runtime_locale(merged_cli, system_locale);
     let runtime_localizer = Arc::from(cli_localization::build_localizer(runtime_locale.as_deref()));
     localization::set_localizer(Arc::clone(&runtime_localizer));
-
-    set_tracing_filter(startup_filter(mode, merged_cli.verbose));
 }
 
 fn handle_runner_error(

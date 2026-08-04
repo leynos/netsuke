@@ -54,8 +54,16 @@ declared key translated, add the tag to `define_locales!`, add it to the
 `EXPECTED_SHIPPED_TAGS` in `tests/locale_registry_tests.rs`. If the language
 already ships a catalogue, add a `LANGUAGE_FALLBACKS` rule too, so the new tag
 and the existing one resolve as intended rather than one of them capturing the
-other. The build fails if any of these is skipped, apart from the fallback
-rule, which is a judgement about which variants are interchangeable.
+other.
+
+Each omission is caught, but not all by the same gate. A missing catalogue file
+fails compilation, because `define_locales!` embeds it with `include_str!`. A
+missing `Cargo.toml` entry fails the build-time audit. A missing
+`EXPECTED_SHIPPED_TAGS` entry fails `make test` rather than the build, since
+the oracle is a test: that is the cost of its independence, and the reason to
+run the suite before assuming a locale is wired up. The `LANGUAGE_FALLBACKS`
+rule is the exception with no gate at all — it is a judgement about which
+variants are interchangeable, and nothing can infer it.
 
 Table 1: The locale API surface
 

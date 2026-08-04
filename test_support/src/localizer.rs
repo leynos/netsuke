@@ -104,6 +104,25 @@ pub struct LocaleLocalizer {
 /// Fallible rather than panicking: a fixture arranges state, and arrangement
 /// can fail, so the caller decides what a poisoned lock means for its test.
 ///
+/// Dropping the returned guard restores the previously installed localizer and
+/// releases the shared test lock, so locale-specific tests can run in sequence
+/// without leaking state into one another.
+///
+/// # Examples
+///
+/// ```
+/// use netsuke::localization::{self, keys};
+/// use test_support::localizer::locale_localizer;
+///
+/// # fn main() -> anyhow::Result<()> {
+/// let guard = locale_localizer("fr")?;
+/// let rendered = localization::message(keys::CLI_ABOUT).to_string();
+/// assert!(rendered.contains("Netsuke"));
+/// drop(guard); // the previous localizer is restored here
+/// # Ok(())
+/// # }
+/// ```
+///
 /// # Errors
 ///
 /// Returns an error when the localizer test lock is poisoned.

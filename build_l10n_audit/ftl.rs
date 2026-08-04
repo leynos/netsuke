@@ -16,10 +16,13 @@ fn is_comment(trimmed: &str) -> bool {
     trimmed.starts_with('#')
 }
 
-/// A continuation line belongs to the message above it: FTL requires
-/// continuations to be indented, and blank lines end a message body.
+/// A continuation line belongs to the message above it.
+///
+/// Fluent defines U+0020 alone as indentation, so a tab-indented line is not a
+/// continuation — treating it as one would attribute its variables to the
+/// message above and hide a malformed entry.
 fn is_continuation(line: &str, trimmed: &str) -> bool {
-    !trimmed.is_empty() && line.starts_with([' ', '\t'])
+    !trimmed.is_empty() && line.starts_with(' ')
 }
 
 fn message_identifier(trimmed: &str) -> Option<&str> {
@@ -60,6 +63,12 @@ pub(super) fn parse_catalogue(source: &str) -> Result<MessageVariables, Box<dyn 
     for line in source.lines() {
         let trimmed = line.trim();
         if is_comment(trimmed) {
+            continue;
+        }
+        // A blank line does not end a pattern in Fluent; only the next entry
+        // does. Clearing here would drop the variables of every continuation
+        // after it.
+        if trimmed.is_empty() {
             continue;
         }
         if is_continuation(line, trimmed) {

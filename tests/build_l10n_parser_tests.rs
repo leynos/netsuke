@@ -90,14 +90,22 @@ fn variables_are_collected(#[case] source: &str, #[case] expected: &[&str]) -> R
     Ok(())
 }
 
-/// A blank line ends a message body, so an indented line after one belongs to
-/// no message and its variables must not be attributed to the message above.
+/// A blank line does not end a pattern; the next entry does.
+///
+/// This previously asserted the opposite. Fluent permits blank lines inside a
+/// multiline pattern, so an indented line after one is still a continuation of
+/// the message above, and its variables belong to that message. Reading it the
+/// old way dropped variables the audit is meant to compare.
 #[test]
-fn a_blank_line_ends_the_message_body() -> Result<()> {
-    let parsed = parse("key = value\n\n    stray { $ghost }\nother = second\n")?;
+fn an_indented_line_after_a_blank_continues_the_message() -> Result<()> {
+    let parsed = parse("key = value\n\n    continued { $ghost }\nother = second\n")?;
     ensure!(
-        variables_of(&parsed, "key")?.is_empty(),
-        "a line after a blank line was attributed to the message above it"
+        variables_of(&parsed, "key")? == ["ghost"],
+        "the continuation's variable belongs to the message above the blank line"
+    );
+    ensure!(
+        variables_of(&parsed, "other")?.is_empty(),
+        "the next entry starts a new message"
     );
     Ok(())
 }
@@ -333,5 +341,33 @@ fn every_rule_is_reported_together() -> Result<()> {
             "expected {expected:?} in {message:?}"
         );
     }
+    Ok(())
+}
+
+/// Fluent allows a blank line inside a multiline pattern; it does not end the
+/// pattern. Clearing the current message there would drop the variables of
+/// every continuation after it.
+#[test]
+fn a_blank_line_does_not_end_a_pattern() -> Result<()> {
+    let parsed =
+        parse("a.key = first { $one }\n    continued { $two }\n\n    after blank { $three }\n")?;
+    let found = variables_of(&parsed, "a.key")?;
+    ensure!(
+        found == ["one", "three", "two"],
+        "expected all three variables, got {found:?}"
+    );
+    Ok(())
+}
+
+/// Only U+0020 indents a continuation. A tab-indented line is not one, so its
+/// variables must not be attributed to the message above.
+#[test]
+fn a_tab_indented_line_is_not_a_continuation() -> Result<()> {
+    let parsed = parse("a.key = first { $one }\n\tb.key = tabbed { $two }\n")?;
+    let found = variables_of(&parsed, "a.key")?;
+    ensure!(
+        found == ["one"],
+        "expected only $one on a.key, got {found:?}"
+    );
     Ok(())
 }
