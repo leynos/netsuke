@@ -35,6 +35,28 @@ impl DiagMode {
     }
 }
 
+#[path = "startup_tracing.rs"]
+mod startup_tracing;
+
+use startup_tracing::StartupWriter;
+
+/// Send buffered startup diagnostics where `mode` says they belong.
+///
+/// Human mode releases them to stderr; JSON mode drops them, so the diagnostic
+/// document is the only thing on that stream.
+fn settle_startup_diagnostics(writer: &StartupWriter, mode: DiagMode) {
+    if mode.is_json() {
+        writer.discard();
+    } else if let Err(err) = writer.release_to_stderr() {
+        // Nothing better to do: the channel for reporting this is the one that
+        // just failed.
+        drop(writeln!(
+            io::stderr(),
+            "failed to flush startup diagnostics: {err}"
+        ));
+    }
+}
+
 fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().collect();
     let env = locale_resolution::SystemEnv;
@@ -48,22 +70,34 @@ fn run_with_args(
     system_locale: &impl locale_resolution::SystemLocale,
 ) -> ExitCode {
     let json_hint = locale_resolution::resolve_startup_json(&args, env);
-    // Installed disabled. `json_hint` is only a hint — configuration can still
-    // turn JSON on — and the JSON diagnostic is written to stderr, so any event
-    // emitted before the effective mode is known could interleave with it.
-    // `configure_runtime` raises the level once the mode is settled.
-    init_tracing(LevelFilter::OFF);
+    // Recorded at `WARN` but written to a buffer, not to stderr. `json_hint` is
+    // only a hint — configuration can still turn JSON on — and the JSON
+    // diagnostic goes to stderr, so an event emitted now could corrupt it.
+    // Buffering keeps the locale fallback report without taking that risk.
+    let startup_writer = StartupWriter::buffering();
+    init_tracing(LevelFilter::WARN, startup_writer.clone());
     let localizer = startup_localizer(&args, env, system_locale);
     let startup_mode = DiagMode::from_json_enabled(json_hint);
     let (parsed_cli, matches) = match parse_cli_or_exit(args, &localizer, startup_mode) {
         Ok(parsed) => parsed,
-        Err(code) => return code,
+        Err(code) => {
+            // Exiting during argument parsing still settles the buffer, or a
+            // human-mode usage error would swallow the locale warning.
+            settle_startup_diagnostics(&startup_writer, startup_mode);
+            return code;
+        }
     };
 
     let mode = match resolve_json_mode_or_exit(&parsed_cli, &matches, startup_mode) {
         Ok(mode) => mode,
-        Err(code) => return code,
+        Err(code) => {
+            settle_startup_diagnostics(&startup_writer, startup_mode);
+            return code;
+        }
     };
+    // The effective mode is known here, before configuration is merged, so the
+    // startup warning reaches the user ahead of any configuration processing.
+    settle_startup_diagnostics(&startup_writer, mode);
     let merged_cli = match merge_cli_or_exit(&parsed_cli, &matches, mode) {
         Ok(merged) => merged,
         Err(code) => return code,
@@ -109,15 +143,16 @@ const fn startup_filter(mode: DiagMode, verbose: bool) -> LevelFilter {
 ///
 /// Only the first call installs; later calls are ignored so exactly one global
 /// subscriber exists, and the level is adjusted through [`set_tracing_filter`]
-/// rather than by installing a second subscriber. Events are written to stderr,
-/// never stdout, so a JSON diagnostic document is never interleaved with logs.
-fn init_tracing(initial: LevelFilter) {
+/// rather than by installing a second subscriber. Events go to `writer`, which
+/// buffers until the effective mode is known and then releases to stderr or
+/// discards — never to stdout, so a JSON document is never interleaved.
+fn init_tracing(initial: LevelFilter, writer: StartupWriter) {
     let (filter, handle) = reload::Layer::new(initial);
     if Registry::default()
         .with(filter)
         .with(
             fmt::layer()
-                .with_writer(io::stderr)
+                .with_writer(writer)
                 // Colour only a terminal; piped or redirected logs stay plain so
                 // they remain greppable and free of escape sequences.
                 .with_ansi(io::stderr().is_terminal()),
@@ -267,3 +302,7 @@ fn render_runtime_error_json(err: &anyhow::Error) -> serde_json::Result<String> 
     }
     diagnostic_json::render_error_json(err.as_ref())
 }
+
+#[cfg(test)]
+#[path = "main_tests.rs"]
+mod tests;

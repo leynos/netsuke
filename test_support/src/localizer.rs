@@ -21,6 +21,53 @@ pub fn set_en_localizer() -> LocalizerGuard {
     localization::set_localizer_for_tests(Arc::from(localizer))
 }
 
+/// Records whether the test lock was still held when the localizer guard
+/// began to drop.
+///
+/// This is the seam that makes the drop-order invariant observable. The
+/// ordering it protects has no behavioural signature under normal scheduling —
+/// a waiting thread almost never lands inside the window — so a contention
+/// test alone cannot distinguish correct from incorrect field order.
+#[cfg(test)]
+pub(crate) static LOCK_HELD_AT_RESTORE: Mutex<Option<bool>> = Mutex::new(None);
+
+/// Wraps the localizer guard so the moment it drops can be observed.
+///
+/// Transparent in production: the wrapper exists so that a test can ask
+/// whether the lock was still held at the instant the restore began. The
+/// wrapper's `Drop` body runs before its field is dropped, which is exactly
+/// that instant.
+pub struct RestoreProbe {
+    /// Held for its `Drop`, which restores the previous localizer. Never read:
+    /// the value has no API, only an effect at end of scope.
+    #[expect(dead_code, reason = "held for its Drop effect, not accessed")]
+    guard: LocalizerGuard,
+}
+
+impl RestoreProbe {
+    fn new(guard: LocalizerGuard) -> Self {
+        Self { guard }
+    }
+}
+
+impl Drop for RestoreProbe {
+    fn drop(&mut self) {
+        #[cfg(test)]
+        {
+            // `try_lock` from the thread already holding it returns
+            // `WouldBlock`: `std::sync::Mutex` is not reentrant. So "blocked"
+            // means the guard bundle still holds the lock, and "acquired"
+            // means the lock was released before the restore — the fault.
+            let held = LOCALIZER_TEST_LOCK
+                .get()
+                .is_some_and(|lock| lock.try_lock().is_err());
+            let mut slot = LOCK_HELD_AT_RESTORE
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            *slot = Some(held);
+        }
+    }
+}
 /// RAII bundle holding both the global localizer test lock and the English
 /// locale guard for the lifetime of a test.
 ///
@@ -34,7 +81,11 @@ pub fn set_en_localizer() -> LocalizerGuard {
 /// thread install its own override and capture this test's override as its
 /// "previous", so that thread would later restore the wrong value.
 pub struct EnLocalizer {
-    _guard: LocalizerGuard,
+    // Field order is the invariant: Rust drops fields in declaration order, so
+    // the localizer guard must come first. It restores the process-global
+    // localizer, and doing that after the mutex was released would let another
+    // test install its own localizer into the window and have it overwritten.
+    _guard: RestoreProbe,
     _lock: MutexGuard<'static, ()>,
 }
 
@@ -85,7 +136,7 @@ pub fn en_localizer() -> EnLocalizer {
     // poisoning the same way.
     let lock = localizer_test_lock().unwrap_or_else(PoisonError::into_inner);
     EnLocalizer {
-        _guard: set_en_localizer(),
+        _guard: RestoreProbe::new(set_en_localizer()),
         _lock: lock,
     }
 }
@@ -95,8 +146,10 @@ pub fn en_localizer() -> EnLocalizer {
 /// [`EnLocalizer`] covers the common case of pinning English. Catalogue sweeps
 /// need the same pairing for each locale in turn, which is what this provides.
 pub struct LocaleLocalizer {
+    // Declared before the lock so the restore happens while the lock is still
+    // held; see [`EnLocalizer`].
+    _guard: RestoreProbe,
     _lock: MutexGuard<'static, ()>,
-    _guard: LocalizerGuard,
 }
 
 /// Acquire the localizer test lock and install the localizer for `locale`.
@@ -127,11 +180,14 @@ pub struct LocaleLocalizer {
 ///
 /// Returns an error when the localizer test lock is poisoned.
 pub fn locale_localizer(locale: &str) -> anyhow::Result<LocaleLocalizer> {
+    // Lock first, then install: the guard returned by
+    // `set_localizer_for_tests` captures the localizer to restore, so it must
+    // be created under the lock.
     let lock = localizer_test_lock().map_err(|error| anyhow::anyhow!("{error}"))?;
     let localizer = cli_localization::build_localizer(Some(locale));
     Ok(LocaleLocalizer {
+        _guard: RestoreProbe::new(localization::set_localizer_for_tests(Arc::from(localizer))),
         _lock: lock,
-        _guard: localization::set_localizer_for_tests(Arc::from(localizer)),
     })
 }
 
@@ -199,3 +255,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "localizer_tests.rs"]
+mod drop_order_tests;
