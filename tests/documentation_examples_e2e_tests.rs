@@ -4,25 +4,15 @@
 
 mod documentation_examples;
 
-use anyhow::{Context, Result, ensure};
-use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::{ambient_authority, fs_utf8::Dir};
-use documentation_examples::{assert_success, documented_example, manifest_workspace};
-use rstest::rstest;
-use rustix::fs::{Dev, FileType, Mode, mknodat};
-use std::path::Path;
-use std::process::Command;
-use test_support::fs as test_fs;
-use test_support::netsuke::{NetsukeRun, run_netsuke_in_with_env};
-use test_support::{ninja::ninja_integration_workspace, write_exec, write_exec_with_content};
-
 #[expect(
     clippy::disallowed_methods,
-    reason = "locating build artefacts Cargo reports through the environment; there is no seam to inject and no process state to isolate"
+    reason = "end-to-end adapter forwarding the host executable search path into an isolated child process"
 )]
+fn host_executable_path() -> Result<String> {
+    std::env::var("PATH").context("read host PATH")
+}
 fn executable_path(stub_directory: &Utf8Path) -> Result<String> {
-    let host_path = std::env::var("PATH").context("read host PATH")?;
-    Ok(format!("{stub_directory}:{host_path}"))
+    Ok(format!("{stub_directory}:{}", host_executable_path()?))
 }
 
 fn write_stub(directory: &Utf8Path, name: &str, script: &str) -> Result<()> {
@@ -32,10 +22,11 @@ fn write_stub(directory: &Utf8Path, name: &str, script: &str) -> Result<()> {
 }
 
 fn run_build(workspace: &Path, args: &[&str], path: Option<&str>) -> Result<NetsukeRun> {
-    let mut environment = vec![("NETSUKE_NINJA", "ninja")];
-    if let Some(executable_path) = path {
-        environment.push(("PATH", executable_path));
-    }
+    let executable_path = path.map_or_else(host_executable_path, |value| Ok(value.to_owned()))?;
+    let environment = [
+        ("NETSUKE_NINJA", "ninja"),
+        ("PATH", executable_path.as_str()),
+    ];
     run_netsuke_in_with_env(workspace, args, &environment)
 }
 
