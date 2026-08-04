@@ -100,7 +100,7 @@ runner.io.write_stdout = Das Ninja-Manifest konnte nicht nach stdout geschrieben
 runner.io.flush_stdout = stdout konnte nicht geleert werden.
 
 # Manifest-Diagnosen.
-manifest.parse = Das Einlesen des Manifests ist fehlgeschlagen.
+manifest.parse = Das Parsen des Manifests ist fehlgeschlagen.
 manifest.structure_error = Strukturfehler im Manifest bei { $name }: { $details }
 manifest.yaml.parse = YAML-Fehler in Zeile { $line }, Spalte { $column }: { $details }
 manifest.yaml.label = ungültiges YAML

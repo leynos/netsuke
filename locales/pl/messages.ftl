@@ -211,7 +211,7 @@ stdlib.fetch.response_buffer_overflow = Przepełnienie bufora podczas odczytu �
 stdlib.fetch.cache_write_failed = Nie udało się zapisać pamięci podręcznej dla „{ $url }”: { $details }.
 stdlib.fetch.response_limit_exceeded = Odpowiedź z „{ $url }” przekroczyła limit { $limit } bajtów.
 stdlib.fetch.cache_limit_exceeded = Zapisana w pamięci podręcznej odpowiedź „{ $name }” przekroczyła limit { $limit } bajtów.
-stdlib.fetch.io_failed = { $action } nie powiodło się dla { $path }: { $details }.
+stdlib.fetch.io_failed = Operacja „{ $action }” nie powiodła się dla { $path }: { $details }.
 stdlib.fetch.action.sync_cache = synchronizacja pamięci podręcznej fetch
 stdlib.fetch.action.create_cache_dir = utworzenie katalogu pamięci podręcznej fetch
 stdlib.fetch.action.open_cache_dir = otwarcie katalogu pamięci podręcznej fetch
@@ -248,9 +248,9 @@ stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
 # Diagnostyka pomocnika ścieżek.
-stdlib.path.io.failed = { $action } nie powiodło się dla { $path } ({ $label }).
-stdlib.path.io.failed_with_detail = { $action } nie powiodło się dla { $path }: { $detail }.
-stdlib.path.io.failed_with_label_and_detail = { $action } nie powiodło się dla { $path } ({ $label }): { $detail }.
+stdlib.path.io.failed = Operacja „{ $action }” nie powiodła się dla { $path } ({ $label }).
+stdlib.path.io.failed_with_detail = Operacja „{ $action }” nie powiodła się dla { $path }: { $detail }.
+stdlib.path.io.failed_with_label_and_detail = Operacja „{ $action }” nie powiodła się dla { $path } ({ $label }): { $detail }.
 stdlib.path.io.not_found = nie znaleziono
 stdlib.path.io.permission_denied = odmowa dostępu
 stdlib.path.io.already_exists = już istnieje

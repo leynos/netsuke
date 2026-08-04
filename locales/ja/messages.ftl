@@ -373,7 +373,7 @@ graph.html.heading = Netsuke のビルドグラフ
 graph.html.description = Netsuke が描画したビルドグラフ
 graph.html.outline.summary = ターゲットと依存関係（テキストの概要）
 graph.html.outline.no_inputs = 入力なし
-graph.html.noscript.notice = JavaScript が無効です。上のテキスト概要がグラフ全体で、続いて DOT のソースが続きます。
+graph.html.noscript.notice = JavaScript が無効です。上のテキスト概要がグラフ全体であり、続けて DOT のソースが表示されます。
 
 # アクセシブル出力の意味づけ接頭辞。
 semantic.prefix.error = エラー:

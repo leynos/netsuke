@@ -62,7 +62,14 @@ impl locale_resolution::SystemLocale for NoSystemLocale {
 ///
 /// `startup_localizer` installs a process-global localizer, so the previous one
 /// is restored before returning.
-fn record_startup(locale: &str) -> (StartupWriter, String) {
+fn record_startup(locale: &str) -> Result<(StartupWriter, String)> {
+    // `startup_localizer` writes the process-global localizer, so the shared
+    // lock is held across installation and restoration. Without it another test
+    // doing the same could capture this one's override as its "previous" and
+    // later restore the wrong value — the lock only serializes the tests that
+    // take it.
+    let _lock = test_support::localizer_test_lock()
+        .map_err(|error| anyhow::anyhow!("localizer test lock poisoned: {error}"))?;
     let writer = StartupWriter::buffering();
     let subscriber = Registry::default()
         .with(LevelFilter::WARN)
@@ -79,7 +86,7 @@ fn record_startup(locale: &str) -> (StartupWriter, String) {
     localization::set_localizer(previous);
 
     let recorded = String::from_utf8_lossy(&writer.buffered()).into_owned();
-    (writer, recorded)
+    Ok((writer, recorded))
 }
 
 /// An unsupported startup locale must be buffered by the startup orchestration.
@@ -90,7 +97,7 @@ fn record_startup(locale: &str) -> (StartupWriter, String) {
 /// JSON document.
 #[test]
 fn an_unsupported_startup_locale_is_recorded_before_parsing() -> Result<()> {
-    let (_writer, recorded) = record_startup("is-IS");
+    let (_writer, recorded) = record_startup("is-IS")?;
 
     ensure!(
         recorded.contains("falling back to the source locale"),
@@ -156,7 +163,7 @@ fn settling_empties_the_startup_buffer(
     #[case] mode: DiagMode,
     #[case] expectation: &str,
 ) -> Result<()> {
-    let (writer, recorded) = record_startup("is-IS");
+    let (writer, recorded) = record_startup("is-IS")?;
     ensure!(
         !recorded.is_empty(),
         "expected startup to record a warning before settlement"
@@ -172,7 +179,7 @@ fn settling_empties_the_startup_buffer(
 /// and stop carrying information.
 #[test]
 fn a_supported_startup_locale_records_nothing() -> Result<()> {
-    let (_writer, recorded) = record_startup("fr");
+    let (_writer, recorded) = record_startup("fr")?;
     ensure!(
         recorded.is_empty(),
         "a shipped catalogue must not warn at startup, got {recorded:?}"
@@ -212,10 +219,11 @@ fn startup_installs_and_restores_the_global_localizer() -> Result<()> {
     let emitted = Arc::new(Barrier::new(2));
     let during = Arc::new(Mutex::new(String::new()));
 
-    let (thread_installed, thread_emitted, thread_during) = (
+    let (thread_installed, thread_emitted, thread_during, thread_writer) = (
         Arc::clone(&installed),
         Arc::clone(&emitted),
         Arc::clone(&during),
+        writer.clone(),
     );
     let observer = thread::spawn(move || {
         thread_installed.wait();
@@ -224,7 +232,17 @@ fn startup_installs_and_restores_the_global_localizer() -> Result<()> {
         if let Ok(mut slot) = thread_during.lock() {
             *slot = rendered;
         }
-        tracing::warn!(target: "concurrent", "observed during startup");
+        // `with_default` installs a *thread-local* subscriber, so an event
+        // emitted here would reach the main thread's subscriber only if this
+        // thread had one of its own. Installing one over a clone of the same
+        // writer is what makes this exercise the shared buffer rather than
+        // silently emit into nothing.
+        let observer_subscriber = Registry::default()
+            .with(LevelFilter::WARN)
+            .with(fmt::layer().with_writer(thread_writer).with_ansi(false));
+        tracing::subscriber::with_default(observer_subscriber, || {
+            tracing::warn!(target: "concurrent", "observed during startup");
+        });
         thread_emitted.wait();
     });
 
@@ -246,6 +264,12 @@ fn startup_installs_and_restores_the_global_localizer() -> Result<()> {
         rendered_during_startup != before,
         "the concurrent observer must see the installed French localizer, \
          got {rendered_during_startup:?}"
+    );
+
+    let buffered = String::from_utf8_lossy(&writer.buffered()).into_owned();
+    ensure!(
+        buffered.contains("observed during startup"),
+        "the concurrent thread's event must reach the shared writer, got {buffered:?}"
     );
 
     localization::set_localizer(previous);

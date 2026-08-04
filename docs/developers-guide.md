@@ -100,13 +100,14 @@ that differs from `en-US`. The audit lives in `build_l10n_audit/`, split into
 `keys.rs` and `scanner.rs` (the `define_keys!` scanner, with `byte_index.rs`
 for its byte-position bookkeeping), `ftl.rs` (catalogues), `metadata.rs` (the
 Cargo metadata), and `compare.rs` (the rules). Because build scripts are not
-test targets, those modules are included by path from three test files:
+test targets, those modules are included by path from four test files:
 `tests/build_l10n_keys_tests.rs` exercises the `define_keys!` scanner
 (`keys.rs`, `scanner.rs`, `byte_index.rs`); `tests/build_l10n_parser_tests.rs`
-exercises the catalogue and metadata parsers (`ftl.rs`, `metadata.rs`) and the
-comparison rules (`compare.rs`); and `tests/build_l10n_audit_tests.rs` runs the
-orchestration end to end, both over the checked-in tree and over deliberately
-corrupted copies of it.
+exercises the catalogue and metadata parsers (`ftl.rs`, `metadata.rs`);
+`tests/build_l10n_audit_rules_tests.rs` exercises the comparison rules
+(`compare.rs`, alongside `ftl.rs`); and `tests/build_l10n_audit_tests.rs` runs
+the orchestration end to end, both over the checked-in tree and over
+deliberately corrupted copies of it.
 
 ## Graph view projection and renderer adapters
 

@@ -53,17 +53,24 @@ Table 1: Locales Netsuke ships, by script family
 macro both declares the supported tags and embeds each catalogue, so a tag
 without a catalogue on disk fails to compile. Everything downstream reads the
 registry rather than keeping its own list: the build-time audit, the
-`cargo:rerun-if-changed` directives, the packaging smoke test, and the tests.
+`cargo:rerun-if-changed` directives, the packaging smoke test, and the tests —
+with one deliberate exception, described below.
 
-The one necessary duplicate is `package.metadata.ortho_config.locales` in
-`Cargo.toml` because Cargo metadata cannot call into Rust. The build audit
-compares the two and fails the build if they drift.
+Two places name the locale list independently of the registry, for different
+reasons. `package.metadata.ortho_config.locales` in `Cargo.toml` duplicates it
+because Cargo metadata cannot call into Rust; the build audit compares the two
+and fails the build if they drift. `EXPECTED_SHIPPED_TAGS` in
+`tests/locale_registry_tests.rs` duplicates it deliberately, as an independent
+oracle: a test that only read the registry back could never catch a locale
+added or dropped by accident, since it would just be confirming the registry
+agrees with itself.
 
 Adding a locale means creating `locales/<tag>/messages.ftl`, adding the tag to
-`define_locales!` in `src/locale_catalogues.rs`, and adding it to that
-`Cargo.toml` array. When the language already ships a catalogue, it also means
-adding a `LANGUAGE_FALLBACKS` rule to say how the two variants divide the
-regions between them.
+`define_locales!` in `src/locale_catalogues.rs`, adding it to that
+`Cargo.toml` array, and adding it to `EXPECTED_SHIPPED_TAGS`. When the
+language already ships a catalogue, it also means adding a
+`LANGUAGE_FALLBACKS` rule to say how the two variants divide the regions
+between them.
 
 ### Fallback policy
 
@@ -340,10 +347,12 @@ Leave Netsuke's own identifiers untranslated — users type them. That covers
 
 ### Step 3: Register the locale
 
-Add the tag to the two lists that name it:
+Add the tag to the three lists that name it:
 
 1. `define_locales!` in `src/locale_catalogues.rs`, in tag order.
 2. `package.metadata.ortho_config.locales` in `Cargo.toml`, in the same order.
+3. `EXPECTED_SHIPPED_TAGS` in `tests/locale_registry_tests.rs`, the
+   independent test oracle, in the same order.
 
 If the language already ships a catalogue — a new Spanish or Chinese variant,
 say — also add or extend its entry in `LANGUAGE_FALLBACKS` so requests route to

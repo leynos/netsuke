@@ -2477,11 +2477,17 @@ depends on how much a run emits.
 A `define_locales!` macro embeds `locales/<tag>/messages.ftl` for each declared
 tag, so a registry entry without a catalogue fails to compile. Every other
 surface reads that registry rather than repeating the list: the build-time
-audit, the `cargo:rerun-if-changed` directives, the packaging smoke test, and
-the test suite. `Cargo.toml`'s `package.metadata.ortho_config.locales` array is
-the one place the list is necessarily duplicated, because Cargo metadata cannot
-call into Rust; the build audit therefore compares it against the registry and
-fails on drift.
+audit, the `cargo:rerun-if-changed` directives, and the packaging smoke test.
+`Cargo.toml`'s `package.metadata.ortho_config.locales` array is a place the
+list is necessarily duplicated, because Cargo metadata cannot call into Rust;
+the build audit therefore compares it against the registry and fails on drift.
+`tests/locale_registry_tests.rs` is the deliberate exception: its
+`EXPECTED_SHIPPED_TAGS` constant writes out the shipped locale set by hand
+rather than deriving it from the registry, because a test that reads the
+registry and asserts the registry against itself can only confirm the registry
+agrees with itself — it cannot catch an accidental addition or removal. That
+list is therefore an independent statement of intent, kept in step with the
+registry by deliberate edit.
 
 Catalogue selection matches the exact BCP 47 tag first. When no catalogue
 carries that tag, resolution consults the per-language fallback rules recorded

@@ -58,7 +58,7 @@ cli.validation.accessibility.invalid = سیاست دسترس‌پذیری نام
 cli.validation.config.expected_object = انتظار می‌رفت مقادیر خط فرمان به یک شیء تبدیل شوند، اما { $value } به دست آمد.
 
 # پیام‌های خطای Clap.
-clap-error-missing-argument = آرگومان الزامی وجود ندارد: { $argument }
+clap-error-missing-argument = آرگومان الزامی ارائه نشده است: { $argument }
 clap-error-missing-subcommand = زیرفرمان وجود ندارد. گزینه‌های در دسترس: { $valid_subcommands }
 clap-error-unknown-argument = آرگومان ناشناخته: { $argument }
 clap-error-invalid-value = مقدار نامعتبر برای { $argument }: { $value }
@@ -320,7 +320,7 @@ stdlib.which.not_found = ‏[netsuke::jinja::which::not_found] فرمان «{ $c
 stdlib.which.not_found.hint.cwd_auto = بخش‌های تهی PATH نادیده گرفته می‌شوند؛ برای دربرگرفتن شاخهٔ کاری از cwd_mode="auto" استفاده کنید.
 stdlib.which.not_found.hint.cwd_always = برای دربرگرفتن شاخهٔ کنونی، cwd_mode="always" را تنظیم کنید.
 stdlib.which.direct_not_found = ‏[netsuke::jinja::which::not_found] فرمان «{ $command }» در «{ $path }» وجود ندارد یا اجراشدنی نیست.
-stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
+stdlib.which.args_error = ‏[netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = ‏<تهی>
 stdlib.which.path_entry.non_utf8 = مدخل شمارهٔ { $index } در PATH نویسه‌هایی دارد که UTF-8 نیستند؛ ‏Netsuke به مسیرهای UTF-8 نیاز دارد.
 stdlib.which.command.empty = ‏which به رشته‌ای ناتهی نیاز دارد.
