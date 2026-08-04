@@ -21,7 +21,7 @@ const REQUIRED_PACKAGED_FILES: [&str; 9] = [
     "build.rs",
     "src/localization/keys.rs",
 ];
-
+const FORBIDDEN_PACKAGED_ROOTS: [&str; 2] = [".uv-cache", "test_support"];
 /// Every catalogue named by the locale registry must ship in the package;
 /// omitting one would break the build-time audit for downstream builds.
 fn required_catalogue_paths() -> Vec<String> {
@@ -84,6 +84,18 @@ fn packaged_manifest_retains_build_script_sources() {
         assert!(
             packaged_paths.contains(required_path.as_str()),
             "packaged manifest should contain `{required_path}`"
+        );
+    }
+
+    for forbidden_root in FORBIDDEN_PACKAGED_ROOTS {
+        assert!(
+            packaged_paths.iter().all(|path| {
+                Path::new(path)
+                    .components()
+                    .next()
+                    .is_none_or(|component| component.as_os_str() != forbidden_root)
+            }),
+            "packaged manifest should not contain `{forbidden_root}`"
         );
     }
 

@@ -1266,7 +1266,10 @@ packaged crate builds successfully for release. It then uses
 build-script sources, including the `build_l10n_audit/` modules, and rejects
 stale `ninja_env/` paths. It also asserts that every catalogue named by the
 locale registry ships in the package, so adding a locale cannot silently omit
-its `messages.ftl` from a release.
+its `messages.ftl` from a release. Package `include` patterns are anchored to
+the crate root so similarly named files below local caches cannot leak into
+the archive. The smoke test also confirms that `.uv-cache/` and the
+workspace-only `test_support/` crate are absent from the netsuke package.
 
 `tests/man_page_contract_tests.rs` and `tests/binstall_metadata_tests.rs` guard
 the package-versus-target naming split described in

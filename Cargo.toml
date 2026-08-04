@@ -3,13 +3,13 @@ name = "netsuke-build"
 version = "0.1.0"
 edition = "2024"
 include = [
-    "src/**",
-    "locales/**",
-    "Cargo.toml",
-    "README.md",
-    "LICENSE",
-    "build.rs",
-    "build_l10n_audit/**",
+    "/src/**",
+    "/locales/**",
+    "/Cargo.toml",
+    "/README.md",
+    "/LICENSE",
+    "/build.rs",
+    "/build_l10n_audit/**",
 ]
 license = "ISC"
 readme = "README.md"
