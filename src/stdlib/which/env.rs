@@ -21,6 +21,10 @@ pub(super) struct EnvSnapshot {
 }
 
 impl EnvSnapshot {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "composition root: PATH and PATHEXT capture is the which resolver's ambient boundary; injection is tracked in the environment meta issue"
+    )]
     pub(super) fn capture(
         cwd_override: Option<&Utf8Path>,
         path_override: Option<&OsStr>,

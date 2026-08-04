@@ -64,6 +64,10 @@ where
 
 /// Resolve the configured Ninja executable as a UTF-8 path.
 #[must_use]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "composition root: supplies the process environment to the ninja program resolver seam"
+)]
 pub fn resolve_ninja_program_utf8() -> Utf8PathBuf {
     resolve_ninja_program_utf8_with(|key| env::var_os(key))
 }

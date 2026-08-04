@@ -276,6 +276,10 @@ fn write_response(stream: &mut TcpStream, body: &str) {
     let _ = stream.write_all(response.as_bytes());
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "reads an ambient tuning variable for the stub HTTP server; the fixture is configured by the environment it runs in, and no seam reaches it"
+)]
 fn duration_from_env(var: &str, default: Duration) -> Duration {
     match env::var(var) {
         Ok(value) => {

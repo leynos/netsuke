@@ -81,6 +81,10 @@ impl WindowsSetupContext {
     }
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the test must read the inherited Windows PATH so it can prepend its temporary helper directory: the code under test resolves commands through the real process environment, so an injected value would not be consulted; pending migration under #493 (integration-binary migration)"
+)]
 fn windows_command_setup(
     ctx: WindowsSetupContext,
     helper_name: &str,

@@ -27,6 +27,10 @@ use std::ffi::OsString;
 ///
 /// Returns an error if the environment variable name is empty, contains '=',
 /// or contains `'\0'`, or if `new_value` contains `'\0'`.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "pending migration under #492 (rstest-bdd migration)"
+)]
 pub fn mutate_env_var(world: &TestWorld, key: EnvVarKey, new_value: Option<&str>) -> Result<()> {
     ensure!(
         !key.as_str().is_empty(),
@@ -80,6 +84,19 @@ mod tests {
         expect_present: bool,
     }
 
+    /// Read a variable back to confirm the mutation under test took effect.
+    ///
+    /// The expectation lives here rather than on the test because `rstest`
+    /// generates one function per case and the attribute does not survive that
+    /// expansion; a single narrow helper is tighter than a module-wide waiver.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "pending migration under #492 (rstest-bdd migration)"
+    )]
+    fn read_back(key: &str) -> Result<String, std::env::VarError> {
+        std::env::var(key)
+    }
+
     #[rstest]
     #[case::empty_key(MutationTestCase { key: "", new_value: None, expect_error: true, expect_present: false })]
     #[case::key_with_equals(MutationTestCase { key: "KEY=VALUE", new_value: Some("test"), expect_error: true, expect_present: false })]
@@ -116,7 +133,7 @@ mod tests {
 
             if tc.expect_present {
                 assert_eq!(
-                    std::env::var(tc.key).ok().as_deref(),
+                    read_back(tc.key).ok().as_deref(),
                     tc.new_value,
                     "variable should be set to expected value"
                 );
@@ -125,7 +142,7 @@ mod tests {
                     .expect("cleanup should succeed");
             } else if !tc.key.is_empty() {
                 assert!(
-                    std::env::var(tc.key).is_err(),
+                    read_back(tc.key).is_err(),
                     "variable should have been removed"
                 );
             }

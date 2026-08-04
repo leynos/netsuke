@@ -37,6 +37,10 @@ impl EnvVarGuard {
     /// Mutating process-global state is `unsafe` in Rust 2024. Callers must hold
     /// an [`EnvLock`](crate::env_lock::EnvLock) to serialise mutations.
     #[must_use]
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the guard's whole purpose is to mutate and restore a real process variable; injecting here would leave nothing to guard"
+    )]
     pub fn set(name: impl Into<Cow<'static, str>>, val: impl AsRef<OsStr>) -> Self {
         let name = name.into();
         let prev = std::env::var_os(&*name);
@@ -54,6 +58,10 @@ impl EnvVarGuard {
     /// Callers must hold an [`EnvLock`](crate::env_lock::EnvLock) to serialise
     /// mutations of the process environment.
     #[must_use]
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the guard's whole purpose is to mutate and restore a real process variable; injecting here would leave nothing to guard"
+    )]
     pub fn remove(name: impl Into<Cow<'static, str>>) -> Self {
         let name = name.into();
         let prev = std::env::var_os(&*name);

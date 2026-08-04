@@ -25,6 +25,10 @@ pub trait EnvProvider {
 #[derive(Debug, Default, Copy, Clone)]
 pub struct SystemEnv;
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "composition root: SystemEnv is the process-backed adapter behind the EnvProvider seam"
+)]
 impl EnvProvider for SystemEnv {
     fn var(&self, key: &str) -> Option<String> {
         std::env::var(key).ok()

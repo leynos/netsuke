@@ -186,6 +186,10 @@ impl OutputPrefs {
 /// assert!(!prefs.emoji_allowed());
 /// ```
 #[must_use]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "composition root: supplies the process environment to the read_env seam"
+)]
 pub fn resolve_from_theme(theme: Option<ThemePreference>, context: ThemeContext) -> OutputPrefs {
     resolve_from_theme_with(theme, context, |key| env::var(key).ok())
 }
@@ -227,6 +231,10 @@ where
 /// assert!(resolve_with(Some(false), |_| None).emoji_allowed());
 /// ```
 #[must_use]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "composition root: supplies the process environment to the read_env seam"
+)]
 pub fn resolve(no_emoji: Option<bool>) -> OutputPrefs {
     resolve_with(no_emoji, |key| env::var(key).ok())
 }

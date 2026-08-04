@@ -120,6 +120,10 @@ pub fn compile_large_output_helper(
 /// .expect("compile helper");
 /// assert!(exe.as_std_path().exists());
 /// ```
+#[expect(
+    clippy::disallowed_methods,
+    reason = "reads the inherited environment to invoke rustc for a helper binary; the compiler must see the real toolchain"
+)]
 pub fn compile_rust_helper(
     dir: &Dir,
     root: &Utf8PathBuf,

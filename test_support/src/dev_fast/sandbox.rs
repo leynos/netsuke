@@ -275,6 +275,10 @@ pub fn real_utility(utility: &str) -> Result<Utf8PathBuf> {
 /// sourceable `env` shell fragment into `~/.local/bin`, so a plain file probe
 /// selects a non-executable file and every sandboxed `env` invocation then
 /// fails with a permission error.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "resolves a tool through the real PATH, which is what the sandbox under test must observe"
+)]
 fn which(utility: &str) -> Result<Utf8PathBuf> {
     let path = std::env::var_os("PATH").context("read PATH")?;
     for dir in std::env::split_paths(&path) {

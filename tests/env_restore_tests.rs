@@ -16,6 +16,10 @@ fn test_var(suffix: &str) -> String {
 }
 
 #[rstest]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "covers the guards being retired; deleted under #493 (integration-binary migration)"
+)]
 fn restore_many_restores_previously_set_variable() -> Result<()> {
     let key = test_var("SET");
     let _previous = set_var(&key, std::ffi::OsStr::new("original"));
@@ -42,6 +46,10 @@ fn restore_many_restores_previously_set_variable() -> Result<()> {
 }
 
 #[rstest]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "covers the guards being retired; deleted under #493 (integration-binary migration)"
+)]
 fn restore_many_removes_variable_when_prior_value_is_none() -> Result<()> {
     let key = test_var("NONE");
     let _ = set_var(&key, std::ffi::OsStr::new("transient"));
@@ -65,6 +73,10 @@ fn restore_many_handles_empty_map() {
 }
 
 #[rstest]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "covers the guards being retired; deleted under #493 (integration-binary migration)"
+)]
 fn restore_many_restores_multiple_variables() -> Result<()> {
     let key_a = test_var("MULTI_A");
     let key_b = test_var("MULTI_B");
@@ -96,6 +108,10 @@ fn restore_many_restores_multiple_variables() -> Result<()> {
 }
 
 #[rstest]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "covers the guards being retired; deleted under #493 (integration-binary migration)"
+)]
 fn restore_many_mixed_set_and_remove() -> Result<()> {
     let key_set = test_var("MIX_SET");
     let key_remove = test_var("MIX_REMOVE");

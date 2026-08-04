@@ -43,12 +43,20 @@ pub trait EnvMut: Env {
 }
 
 impl EnvMut for DefaultEnv {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "test_support::env is the crate's process-environment boundary: these guards exist to set and restore real variables for subprocess and legacy in-process tests, which AGENTS.md sanctions"
+    )]
     unsafe fn set_var(&self, key: &str, value: &OsStr) {
         unsafe { std::env::set_var(key, value) };
     }
 }
 
 impl EnvMut for MockEnv {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "test_support::env is the crate's process-environment boundary: these guards exist to set and restore real variables for subprocess and legacy in-process tests, which AGENTS.md sanctions"
+    )]
     unsafe fn set_var(&self, key: &str, value: &OsStr) {
         unsafe { std::env::set_var(key, value) };
     }
@@ -59,6 +67,10 @@ impl EnvMut for MockEnv {
 /// Returns a `MockEnv` that yields the current `PATH` when queried. Tests can
 /// modify the real environment while the mock continues to expose the initial
 /// value.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "test_support::env is the crate's process-environment boundary: these guards exist to set and restore real variables for subprocess and legacy in-process tests, which AGENTS.md sanctions"
+)]
 pub fn mocked_path_env() -> MockEnv {
     let original = std::env::var("PATH").unwrap_or_default();
     let mut env = MockEnv::new();
@@ -72,6 +84,10 @@ pub fn mocked_path_env() -> MockEnv {
 ///
 /// The mutation is `unsafe` in Rust 2024 as it alters process state. The
 /// unsafety is scoped by acquiring [`EnvLock`].
+#[expect(
+    clippy::disallowed_methods,
+    reason = "test_support::env is the crate's process-environment boundary: these guards exist to set and restore real variables for subprocess and legacy in-process tests, which AGENTS.md sanctions"
+)]
 pub fn set_var(key: &str, value: &OsStr) -> Option<OsString> {
     let _lock = EnvLock::acquire();
     let previous = std::env::var_os(key);
@@ -81,6 +97,10 @@ pub fn set_var(key: &str, value: &OsStr) -> Option<OsString> {
 }
 
 /// Set an environment variable while the caller already holds [`EnvLock`].
+#[expect(
+    clippy::disallowed_methods,
+    reason = "test_support::env is the crate's process-environment boundary: these guards exist to set and restore real variables for subprocess and legacy in-process tests, which AGENTS.md sanctions"
+)]
 pub fn set_var_locked(lock: &EnvLock, key: &str, value: &OsStr) -> Option<OsString> {
     let _ = lock;
     let previous = std::env::var_os(key);
@@ -93,6 +113,10 @@ pub fn set_var_locked(lock: &EnvLock, key: &str, value: &OsStr) -> Option<OsStri
 ///
 /// The mutation is `unsafe` in Rust 2024 as it alters process state. The
 /// unsafety is scoped by acquiring [`EnvLock`].
+#[expect(
+    clippy::disallowed_methods,
+    reason = "test_support::env is the crate's process-environment boundary: these guards exist to set and restore real variables for subprocess and legacy in-process tests, which AGENTS.md sanctions"
+)]
 pub fn remove_var(key: &str) -> Option<OsString> {
     let _lock = EnvLock::acquire();
     let previous = std::env::var_os(key);
@@ -136,6 +160,10 @@ pub fn restore_many(vars: HashMap<String, Option<OsString>>) {
 /// # Safety
 ///
 /// Caller must hold [`EnvLock`] for the duration of this call.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "test_support::env is the crate's process-environment boundary: these guards exist to set and restore real variables for subprocess and legacy in-process tests, which AGENTS.md sanctions"
+)]
 pub unsafe fn restore_many_locked(vars: HashMap<String, Option<OsString>>) {
     for (key, val) in vars {
         if let Some(v) = val {
@@ -156,6 +184,10 @@ pub struct VarGuard {
 
 /// Run `action` with `PATH` temporarily set to `value`, restoring on drop and
 /// serialising mutations with `EnvLock`.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "test_support::env is the crate's process-environment boundary: these guards exist to set and restore real variables for subprocess and legacy in-process tests, which AGENTS.md sanctions"
+)]
 pub fn with_isolated_path<T>(value: &OsStr, action: impl FnOnce() -> T) -> T {
     let _lock = EnvLock::acquire();
     let original = std::env::var_os("PATH");

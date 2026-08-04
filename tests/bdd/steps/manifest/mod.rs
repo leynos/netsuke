@@ -115,6 +115,10 @@ fn assert_parsed(world: &TestWorld) -> Result<()> {
 // Environment variable helpers
 // ---------------------------------------------------------------------------
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "pending migration under #492 (rstest-bdd migration)"
+)]
 fn parse_env_token<I>(chars: &mut std::iter::Peekable<I>) -> String
 where
     I: Iterator<Item = char>,

@@ -15,6 +15,10 @@ fn ninja_tmp() -> PathBuf {
 
 #[rstest]
 #[serial]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "pending migration under #493 (integration-binary migration)"
+)]
 fn override_ninja_env_sets_and_restores(ninja_tmp: PathBuf) -> Result<()> {
     let before = std::env::var_os(NINJA_ENV);
     let original = before
@@ -43,6 +47,10 @@ fn override_ninja_env_sets_and_restores(ninja_tmp: PathBuf) -> Result<()> {
 
 #[rstest]
 #[serial]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "pending migration under #493 (integration-binary migration)"
+)]
 fn override_ninja_env_unset_removes_variable(ninja_tmp: PathBuf) -> Result<()> {
     let before = std::env::var_os(NINJA_ENV);
     let mut env = MockEnv::new();

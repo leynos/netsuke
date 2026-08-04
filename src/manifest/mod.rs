@@ -81,6 +81,10 @@ pub enum ManifestLoadStage {
 /// assert_eq!(env("FOO").unwrap(), "bar");
 /// // guard restores prior value on drop
 /// ```
+#[expect(
+    clippy::disallowed_methods,
+    reason = "composition root: supplies the process environment to the env() Jinja helper"
+)]
 fn env_var(name: &str) -> std::result::Result<String, Error> {
     match std::env::var(name) {
         Ok(val) => Ok(val),

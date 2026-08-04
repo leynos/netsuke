@@ -125,6 +125,10 @@ esac
 "#
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "locating build artefacts Cargo reports through the environment; there is no seam to inject and no process state to isolate"
+)]
 pub fn path_with_fake_cargo_orthohelp(fixture: &ScriptFixture) -> Result<OsString> {
     let existing_path = std::env::var_os("PATH").unwrap_or_default();
     let mut entries = vec![fixture.fake_bin_dir.clone()];
