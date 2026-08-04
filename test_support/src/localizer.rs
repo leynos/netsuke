@@ -39,14 +39,15 @@ pub(crate) static LOCK_HELD_AT_RESTORE: Mutex<Option<bool>> = Mutex::new(None);
 /// that instant.
 pub struct RestoreProbe {
     /// Held for its `Drop`, which restores the previous localizer. Never read:
-    /// the value has no API, only an effect at end of scope.
-    #[expect(dead_code, reason = "held for its Drop effect, not accessed")]
-    guard: LocalizerGuard,
+    /// the value has no API, only an effect at end of scope. The leading
+    /// underscore is what exempts it from `dead_code`, rather than an
+    /// expectation that would outlive any work it could be linked to.
+    _guard: LocalizerGuard,
 }
 
 impl RestoreProbe {
     fn new(guard: LocalizerGuard) -> Self {
-        Self { guard }
+        Self { _guard: guard }
     }
 }
 
@@ -145,9 +146,16 @@ pub fn en_localizer() -> EnLocalizer {
 ///
 /// [`EnLocalizer`] covers the common case of pinning English. Catalogue sweeps
 /// need the same pairing for each locale in turn, which is what this provides.
+/// RAII bundle holding the localizer test lock and an installed locale.
+///
+/// Obtained from [`locale_localizer`]. Dropping it restores the localizer that
+/// was installed beforehand and *then* releases the shared test lock, in that
+/// order — so no other test can be admitted into the window between the two and
+/// have its own localizer overwritten.
+///
+/// The ordering is the field declaration order, since Rust drops fields in the
+/// order they are declared; see [`EnLocalizer`] for the same arrangement.
 pub struct LocaleLocalizer {
-    // Declared before the lock so the restore happens while the lock is still
-    // held; see [`EnLocalizer`].
     _guard: RestoreProbe,
     _lock: MutexGuard<'static, ()>,
 }

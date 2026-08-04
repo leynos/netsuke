@@ -78,15 +78,12 @@ fn run_with_args(
     init_tracing(LevelFilter::WARN, startup_writer.clone());
     let localizer = startup_localizer(&args, env, system_locale);
     let startup_mode = DiagMode::from_json_enabled(json_hint);
-    let (parsed_cli, matches) = match parse_cli_or_exit(args, &localizer, startup_mode) {
-        Ok(parsed) => parsed,
-        Err(code) => {
-            // Exiting during argument parsing still settles the buffer, or a
-            // human-mode usage error would swallow the locale warning.
-            settle_startup_diagnostics(&startup_writer, startup_mode);
-            return code;
-        }
-    };
+    let (parsed_cli, matches) =
+        match parse_cli_or_exit(args, &localizer, startup_mode, &startup_writer) {
+            Ok(parsed) => parsed,
+            // The buffer was settled inside, before the branch that exits.
+            Err(code) => return code,
+        };
 
     let mode = match resolve_json_mode_or_exit(&parsed_cli, &matches, startup_mode) {
         Ok(mode) => mode,
@@ -186,10 +183,16 @@ fn parse_cli_or_exit(
     args: Vec<OsString>,
     localizer: &Arc<dyn Localizer>,
     mode: DiagMode,
+    startup_writer: &StartupWriter,
 ) -> Result<(cli::Cli, ArgMatches), ExitCode> {
     match cli::parse_with_localizer_from(args, localizer) {
         Ok(parsed) => Ok(parsed),
         Err(err) => {
+            // Every arm below terminates the process or returns, and
+            // `Error::exit` never returns, so the buffered startup
+            // diagnostics have to be settled here. Configuration is never
+            // read on these paths, so `mode` is the effective mode.
+            settle_startup_diagnostics(startup_writer, mode);
             if matches!(
                 err.kind(),
                 ErrorKind::DisplayHelp | ErrorKind::DisplayVersion

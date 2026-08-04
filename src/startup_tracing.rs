@@ -38,6 +38,17 @@ pub struct StartupWriter {
 
 impl StartupWriter {
     /// A writer that holds everything written to it.
+    ///
+    /// # Examples
+    ///
+    /// ```text
+    /// let w = StartupWriter::buffering();
+    /// warn!("locale fell back");   ->  held; nothing reaches stderr
+    /// ```
+    ///
+    /// Examples are shown rather than run: this module is compiled into the
+    /// binary, and Cargo does not run doctests for a binary target, so a
+    /// `rust` block would never be checked and would rot unnoticed.
     #[must_use]
     pub fn buffering() -> Self {
         Self {
@@ -52,6 +63,16 @@ impl StartupWriter {
     }
 
     /// Write everything buffered to stderr, and write through from now on.
+    ///
+    /// Called when the effective mode turns out to be human.
+    ///
+    /// # Examples
+    ///
+    /// ```text
+    /// warn!("locale fell back");   ->  held
+    /// w.release_to_stderr()?;      ->  the held bytes reach stderr, buffer emptied
+    /// warn!("something later");    ->  written straight to stderr
+    /// ```
     ///
     /// # Errors
     ///
@@ -71,6 +92,17 @@ impl StartupWriter {
     }
 
     /// Drop everything buffered, and discard whatever follows.
+    ///
+    /// Called when the effective mode turns out to be JSON, so that stderr
+    /// carries only the diagnostic document.
+    ///
+    /// # Examples
+    ///
+    /// ```text
+    /// warn!("locale fell back");   ->  held
+    /// w.discard();                 ->  the held bytes are dropped
+    /// warn!("something later");    ->  dropped too, not re-buffered
+    /// ```
     pub fn discard(&self) {
         let mut sink = self.lock();
         *sink = Sink::Discard;
