@@ -122,6 +122,18 @@ pub fn is_dir(path: impl AsRef<Path>) -> bool {
 /// # Errors
 ///
 /// Propagates the underlying `std::fs::copy` failure.
+///
+/// # Examples
+///
+/// ```
+/// let dir = tempfile::tempdir().expect("create tempdir");
+/// let from = dir.path().join("source.txt");
+/// let to = dir.path().join("dest.txt");
+/// test_support::fs::write(&from, "hello").expect("write source");
+/// let bytes = test_support::fs::copy(&from, &to).expect("copy file");
+/// assert_eq!(bytes, 5);
+/// assert_eq!(test_support::fs::read(&to).expect("read dest"), b"hello");
+/// ```
 pub fn copy(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<u64> {
     fs::copy(from, to)
 }
@@ -132,6 +144,21 @@ pub fn copy(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<u64> {
 ///
 /// Propagates the underlying metadata failure, or the platform's failure to
 /// report a modification time.
+///
+/// # Examples
+///
+/// ```
+/// use std::time::{Duration, SystemTime};
+///
+/// let dir = tempfile::tempdir().expect("create tempdir");
+/// let path = dir.path().join("fixture.txt");
+/// // A second of slack: some filesystems truncate timestamps to whole
+/// // seconds, which would put the recorded mtime just behind `before`.
+/// let before = SystemTime::now() - Duration::from_secs(1);
+/// test_support::fs::write(&path, "hello").expect("write fixture");
+/// let mtime = test_support::fs::modified(&path).expect("read mtime");
+/// assert!(mtime >= before);
+/// ```
 pub fn modified(path: impl AsRef<Path>) -> io::Result<SystemTime> {
     fs::metadata(path)?.modified()
 }
@@ -146,6 +173,22 @@ pub fn modified(path: impl AsRef<Path>) -> io::Result<SystemTime> {
 /// # Errors
 ///
 /// Propagates the create, write, or timestamp failure.
+///
+/// # Examples
+///
+/// ```
+/// # #[cfg(unix)]
+/// # {
+/// use std::time::{Duration, UNIX_EPOCH};
+///
+/// let dir = tempfile::tempdir().expect("create tempdir");
+/// let path = dir.path().join("fixture.txt");
+/// let mtime = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+/// test_support::fs::write_with_mtime(&path, "hello", mtime).expect("write with mtime");
+/// assert_eq!(test_support::fs::modified(&path).expect("read mtime"), mtime);
+/// assert_eq!(test_support::fs::read(&path).expect("read contents"), b"hello");
+/// # }
+/// ```
 #[cfg(unix)]
 pub fn write_with_mtime(
     path: impl AsRef<Path>,

@@ -137,12 +137,48 @@ impl BuildScenario {
     ///
     /// Use [`run_all`](Self::run_all) for a target that invokes Cargo more than
     /// once, such as `dev-test`'s root and `test_support` passes.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use anyhow::Result;
+    /// use test_support::dev_fast::BuildScenario;
+    ///
+    /// fn run() -> Result<()> {
+    ///     let scenario = BuildScenario::prepare()?;
+    ///     let invocation = scenario.run("dev-build")?;
+    ///     assert!(invocation.contains_sequence(&["build", "--bin", "netsuke"]));
+    ///     println!("toolchain: {}", invocation.toolchain());
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn run(&self, target: &str) -> Result<CargoInvocation> {
         self.run_recording(target)?;
         self.cargo.sole_invocation()
     }
 
     /// Run `target` and return every invocation it produced, in order.
+    ///
+    /// Use this instead of [`run`](Self::run) when the target invokes Cargo
+    /// more than once — `dev-test`, for example, runs a root pass and then a
+    /// `test_support` pass, and `run` would fail rather than pick one.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use anyhow::Result;
+    /// use test_support::dev_fast::BuildScenario;
+    ///
+    /// fn run() -> Result<()> {
+    ///     let scenario = BuildScenario::prepare()?;
+    ///     let invocations = scenario.run_all("dev-test")?;
+    ///     assert_eq!(invocations.len(), 2);
+    ///     for invocation in &invocations {
+    ///         assert!(invocation.contains_sequence(&["nextest", "run"]));
+    ///     }
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn run_all(&self, target: &str) -> Result<Vec<CargoInvocation>> {
         self.run_recording(target)?;
         let invocations = self.cargo.invocations()?;

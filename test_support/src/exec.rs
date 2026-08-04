@@ -69,6 +69,22 @@ pub fn utf8_path(path: &Path) -> Result<&Utf8Path> {
 /// # Errors
 ///
 /// Returns an error when the stub cannot be written or marked executable.
+///
+/// # Examples
+///
+/// ```rust
+/// use tempfile::TempDir;
+/// use test_support::exec::{utf8_path, write_exec};
+///
+/// let temp = TempDir::new().expect("tempdir");
+/// let root = utf8_path(temp.path()).expect("temporary directory is UTF-8");
+/// let path = write_exec(root, "tool").expect("stub executable");
+/// assert!(test_support::fs::exists(&path));
+/// # #[cfg(unix)]
+/// # {
+/// assert!(test_support::fs::is_executable_file(&path));
+/// # }
+/// ```
 pub fn write_exec(root: &Utf8Path, name: &str) -> Result<Utf8PathBuf> {
     write_exec_with_content(root, name, "#!/bin/sh\n")
 }
@@ -108,6 +124,25 @@ pub fn write_exec_with_content(root: &Utf8Path, name: &str, content: &str) -> Re
 /// # Errors
 ///
 /// Returns an error when the permission bits cannot be set.
+///
+/// # Examples
+///
+/// ```rust
+/// # #[cfg(unix)]
+/// # {
+/// use tempfile::TempDir;
+/// use test_support::exec::{make_executable, utf8_path};
+/// use test_support::fs::is_executable_file;
+///
+/// let temp = TempDir::new().expect("tempdir");
+/// let root = utf8_path(temp.path()).expect("temporary directory is UTF-8");
+/// let path = root.join("tool");
+/// test_support::fs::write(&path, "#!/bin/sh\n").expect("write stub");
+/// assert!(!is_executable_file(&path));
+/// make_executable(&path).expect("mark executable");
+/// assert!(is_executable_file(&path));
+/// # }
+/// ```
 #[cfg(unix)]
 pub fn make_executable(path: &Utf8Path) -> Result<()> {
     fs::set_mode(path, 0o755).context("chmod exec stub")?;
