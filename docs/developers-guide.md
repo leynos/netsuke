@@ -1587,7 +1587,18 @@ disallowed-methods = [
 The reason string appears in the diagnostic, so a contributor who trips the
 lint is told what to do instead, not merely that they may not. `test_support`
 is a workspace member and carries its own Clippy configuration file because
-Clippy configuration is discovered per crate.
+Clippy configuration is discovered per crate, even when `make lint` invokes
+Clippy once with `--workspace`. The root and `test_support/clippy.toml` files
+therefore intentionally repeat the CodeScene complexity and size ceilings,
+`allow-expect-in-tests`, and the environment-method restrictions. Keep these
+shared settings synchronized: `[workspace.lints]` shares lint levels, but not
+the values in `clippy.toml`.
+
+Dylint resolves configuration differently. A workspace member discovers the
+workspace-root configuration, so `test_support` needs the separate Whitaker
+invocation and `DYLINT_TOML` override described in
+[Quality gates](#quality-gates) to load its narrow
+`test_support/dylint.toml` boundary policy.
 
 ### Environment and template ports
 
