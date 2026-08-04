@@ -71,8 +71,10 @@ pub fn run_netsuke_in(current_dir: &Path, args: &[&str]) -> Result<NetsukeRun> {
 /// Run `netsuke` in `current_dir` with an isolated environment.
 ///
 /// Unlike [`run_netsuke_in`], this variant uses `env_clear()` so the child
-/// process inherits **only** the variables supplied in `extra_env`. This
-/// prevents process-level environment races when tests run in parallel.
+/// inherits no process environment variables. The child receives only an
+/// isolated `PATH`, `HOME`, `XDG_CONFIG_HOME`, and the variables supplied in
+/// `extra_env`. This prevents process-level environment races when tests run
+/// in parallel.
 ///
 /// # Errors
 ///
@@ -89,9 +91,10 @@ pub fn run_netsuke_in_with_env(
 ) -> Result<NetsukeRun> {
     let mut cmd = assert_cmd::Command::new(netsuke_executable()?);
     let isolated_config_home = current_dir.join(".config");
+    let isolated_path = tempfile::tempdir().context("create isolated executable directory")?;
     cmd.current_dir(current_dir)
         .env_clear()
-        .env("PATH", "")
+        .env("PATH", isolated_path.path())
         .env("HOME", current_dir)
         .env("XDG_CONFIG_HOME", isolated_config_home);
     for &(key, value) in extra_env {

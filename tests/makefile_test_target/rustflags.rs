@@ -1,0 +1,366 @@
+//! Contract model for Makefile recipes that set `RUSTFLAGS`.
+
+use super::{read_repo_file, target_recipe};
+use anyhow::{Context, Result, ensure};
+use camino::Utf8Path;
+use rstest::rstest;
+use std::{collections::BTreeSet, process::Command};
+
+/// The prefix introducing a quoted `RUSTFLAGS` assignment in a recipe.
+const RUSTFLAGS_PREFIX: &str = "RUSTFLAGS=\"";
+
+/// A value a caller might already have exported before invoking `make`.
+const CALLER_RUSTFLAGS: &str = "-C target-cpu=native";
+
+const DENY_WARNINGS: &str = "-D warnings";
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum WarningPolicy {
+    Deny,
+    Default,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum InheritancePolicy {
+    Conditional,
+    Plain,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PoloniusPolicy {
+    Enabled,
+    Disabled,
+}
+
+#[test]
+fn unit_polonius_policy_represents_both_states() {
+    assert_ne!(PoloniusPolicy::Enabled, PoloniusPolicy::Disabled);
+}
+
+/// A recipe line that overrides `RUSTFLAGS`, and the contract it must meet.
+#[derive(Clone, Copy, Debug)]
+struct RustflagsCase {
+    /// The Make target owning the recipe.
+    target: &'static str,
+    /// Substring selecting the recipe line.
+    line_marker: &'static str,
+    /// Whether the recipe adds `-D warnings`.
+    warning_policy: WarningPolicy,
+    /// How the recipe handles a caller-supplied value.
+    inheritance_policy: InheritancePolicy,
+    /// Whether the recipe enables the Polonius borrow checker.
+    polonius_policy: PoloniusPolicy,
+}
+
+impl RustflagsCase {
+    const fn test_nextest() -> Self {
+        Self {
+            target: "test-nextest",
+            line_marker: "nextest run",
+            warning_policy: WarningPolicy::Deny,
+            inheritance_policy: InheritancePolicy::Conditional,
+            polonius_policy: PoloniusPolicy::Enabled,
+        }
+    }
+
+    const fn doctest() -> Self {
+        Self {
+            target: "doctest",
+            line_marker: "--doc",
+            warning_policy: WarningPolicy::Deny,
+            inheritance_policy: InheritancePolicy::Conditional,
+            polonius_policy: PoloniusPolicy::Enabled,
+        }
+    }
+
+    const fn binary_build() -> Self {
+        Self {
+            target: "target/%/$(APP)",
+            line_marker: "build",
+            warning_policy: WarningPolicy::Default,
+            inheritance_policy: InheritancePolicy::Plain,
+            polonius_policy: PoloniusPolicy::Enabled,
+        }
+    }
+
+    const fn lint_rustdoc() -> Self {
+        Self {
+            target: "lint-clippy",
+            line_marker: "doc --workspace",
+            warning_policy: WarningPolicy::Deny,
+            inheritance_policy: InheritancePolicy::Conditional,
+            polonius_policy: PoloniusPolicy::Enabled,
+        }
+    }
+
+    const fn lint_clippy() -> Self {
+        Self {
+            target: "lint-clippy",
+            line_marker: "clippy",
+            warning_policy: WarningPolicy::Deny,
+            inheritance_policy: InheritancePolicy::Conditional,
+            polonius_policy: PoloniusPolicy::Enabled,
+        }
+    }
+
+    const fn lint_whitaker() -> Self {
+        Self {
+            target: "lint-whitaker",
+            line_marker: "$(WHITAKER)",
+            warning_policy: WarningPolicy::Deny,
+            inheritance_policy: InheritancePolicy::Conditional,
+            polonius_policy: PoloniusPolicy::Enabled,
+        }
+    }
+
+    const fn typecheck() -> Self {
+        Self {
+            target: "typecheck",
+            line_marker: "check",
+            warning_policy: WarningPolicy::Deny,
+            inheritance_policy: InheritancePolicy::Conditional,
+            polonius_policy: PoloniusPolicy::Enabled,
+        }
+    }
+
+    const fn kani_full() -> Self {
+        Self {
+            target: "kani-full",
+            line_marker: "$(KANI)",
+            warning_policy: WarningPolicy::Default,
+            inheritance_policy: InheritancePolicy::Conditional,
+            polonius_policy: PoloniusPolicy::Enabled,
+        }
+    }
+}
+
+/// Every `RUSTFLAGS`-setting recipe line under contract.
+const RUSTFLAGS_CASES: [RustflagsCase; 8] = [
+    RustflagsCase::test_nextest(),
+    RustflagsCase::doctest(),
+    RustflagsCase::binary_build(),
+    RustflagsCase::lint_rustdoc(),
+    RustflagsCase::lint_clippy(),
+    RustflagsCase::lint_whitaker(),
+    RustflagsCase::typecheck(),
+    RustflagsCase::kani_full(),
+];
+
+/// Returns the value of a simple `NAME ?= value` or `NAME = value` variable.
+fn make_variable(contents: &str, name: &str) -> Option<String> {
+    contents.lines().find_map(|line| {
+        let rest = line.strip_prefix(name)?;
+        let value = rest
+            .strip_prefix(" ?= ")
+            .or_else(|| rest.strip_prefix(" = "))?;
+        Some(value.trim().to_owned())
+    })
+}
+
+/// Extracts the double-quoted `RUSTFLAGS` assignment from a recipe line.
+///
+/// `RUSTDOCFLAGS="…"` does not contain `RUSTFLAGS="`, so a line setting both
+/// still yields the `RUSTFLAGS` value.
+fn rustflags_assignment(line: &str) -> Option<&str> {
+    let start = line.find(RUSTFLAGS_PREFIX)? + RUSTFLAGS_PREFIX.len();
+    let rest = line.get(start..)?;
+    let end = rest.find('"')?;
+    rest.get(..end)
+}
+
+/// Returns the recipe line `case` selects.
+fn recipe_line(makefile: &str, case: RustflagsCase) -> Result<String> {
+    let recipe = target_recipe(makefile, case.target)
+        .with_context(|| format!("Makefile should declare a {} target", case.target))?;
+    recipe
+        .lines()
+        .find(|line| line.contains(RUSTFLAGS_PREFIX) && line.contains(case.line_marker))
+        .map(str::trim)
+        .map(ToOwned::to_owned)
+        .with_context(|| {
+            format!(
+                "{} should set RUSTFLAGS on a line matching {:?}",
+                case.target, case.line_marker
+            )
+        })
+}
+
+/// Returns `case`'s `RUSTFLAGS` assignment as a shell expression.
+///
+/// Make variable references are resolved, and Make's `$$` escape is reduced to
+/// the single `$` the shell receives.
+fn shell_expression(makefile: &str, case: RustflagsCase) -> Result<String> {
+    let line = recipe_line(makefile, case)?;
+    let assignment = rustflags_assignment(&line).with_context(|| {
+        format!(
+            "{} should assign a double-quoted RUSTFLAGS value",
+            case.target
+        )
+    })?;
+    let polonius = make_variable(makefile, "POLONIUS_FLAGS")
+        .context("Makefile should define POLONIUS_FLAGS")?;
+    let resolved = assignment.replace("$(POLONIUS_FLAGS)", &polonius);
+    ensure!(
+        !resolved.contains("$("),
+        "{}: RUSTFLAGS assignment {resolved:?} names a Make variable this test cannot resolve",
+        case.target
+    );
+    Ok(resolved.replace("$$", "$"))
+}
+
+/// Expands `expression` in a shell, exporting `inherited` as `RUSTFLAGS`.
+///
+/// Only the assignment is expanded; the command the recipe would run is never
+/// executed, so no test here invokes Cargo, Kani, nextest, or Dylint.
+#[cfg(unix)]
+fn expand(expression: &str, inherited: Option<&str>) -> Result<String> {
+    ensure!(
+        !expression.contains('"') && !expression.contains('`'),
+        "the expansion helper cannot safely embed {expression:?}"
+    );
+    let mut command = Command::new("sh");
+    command
+        .arg("-c")
+        .arg(format!("printf '%s' \"{expression}\""))
+        .env_remove("RUSTFLAGS");
+    if let Some(value) = inherited {
+        command.env("RUSTFLAGS", value);
+    }
+
+    let output = command
+        .output()
+        .with_context(|| format!("expand {expression:?} with sh"))?;
+    ensure!(
+        output.status.success(),
+        "sh should expand {expression:?}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).context("expanded RUSTFLAGS should be UTF-8")
+}
+
+#[test]
+fn unit_extracts_the_rustflags_assignment_from_a_recipe_line() {
+    assert_eq!(
+        rustflags_assignment(r#"	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) x"#),
+        Some(r"$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings")
+    );
+    // A line setting RUSTDOCFLAGS first still yields the RUSTFLAGS value.
+    assert_eq!(
+        rustflags_assignment(r#"	RUSTDOCFLAGS="-D warnings" RUSTFLAGS="$${RUSTFLAGS-} -Z" x"#),
+        Some(r"$${RUSTFLAGS-} -Z")
+    );
+    assert_eq!(rustflags_assignment("\tcargo build"), None);
+}
+
+#[cfg(unix)]
+#[rstest]
+#[case(RustflagsCase::test_nextest())]
+#[case(RustflagsCase::doctest())]
+#[case(RustflagsCase::binary_build())]
+#[case(RustflagsCase::lint_rustdoc())]
+#[case(RustflagsCase::lint_clippy())]
+#[case(RustflagsCase::lint_whitaker())]
+#[case(RustflagsCase::typecheck())]
+#[case(RustflagsCase::kani_full())]
+fn behavioural_rustflags_recipes_preserve_inherited_flags(
+    #[case] case: RustflagsCase,
+) -> Result<()> {
+    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
+    let polonius = make_variable(&makefile, "POLONIUS_FLAGS")
+        .context("Makefile should define POLONIUS_FLAGS")?;
+    let expanded = expand(&shell_expression(&makefile, case)?, Some(CALLER_RUSTFLAGS))?;
+
+    ensure!(
+        expanded.contains(CALLER_RUSTFLAGS),
+        "{} inherited-RUSTFLAGS contract should hold, expanded to {expanded:?}",
+        case.target
+    );
+    ensure!(
+        expanded.contains(&polonius) == (case.polonius_policy == PoloniusPolicy::Enabled),
+        "{} Polonius contract should hold for {polonius}, expanded to {expanded:?}",
+        case.target
+    );
+    ensure!(
+        expanded.contains(DENY_WARNINGS) == (case.warning_policy == WarningPolicy::Deny),
+        "{} should {}deny warnings, expanded to {expanded:?}",
+        case.target,
+        if case.warning_policy == WarningPolicy::Deny {
+            ""
+        } else {
+            "not "
+        }
+    );
+    Ok(())
+}
+
+#[cfg(unix)]
+#[rstest]
+#[case(RustflagsCase::test_nextest())]
+#[case(RustflagsCase::doctest())]
+#[case(RustflagsCase::binary_build())]
+#[case(RustflagsCase::lint_rustdoc())]
+#[case(RustflagsCase::lint_clippy())]
+#[case(RustflagsCase::lint_whitaker())]
+#[case(RustflagsCase::typecheck())]
+#[case(RustflagsCase::kani_full())]
+fn behavioural_rustflags_recipes_are_well_formed_without_inherited_flags(
+    #[case] case: RustflagsCase,
+) -> Result<()> {
+    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
+    let polonius = make_variable(&makefile, "POLONIUS_FLAGS")
+        .context("Makefile should define POLONIUS_FLAGS")?;
+    let expression = shell_expression(&makefile, case)?;
+    let expanded = expand(&expression, None)?;
+
+    ensure!(
+        expanded.contains(&polonius) == (case.polonius_policy == PoloniusPolicy::Enabled),
+        "{} Polonius contract should hold for {polonius}, expanded to {expanded:?}",
+        case.target
+    );
+    ensure!(
+        !expanded.contains(CALLER_RUSTFLAGS),
+        "{} should not invent flags the caller never set, expanded to {expanded:?}",
+        case.target
+    );
+    // `${VAR:+VAR }` contributes its separator only alongside a value, so an
+    // unset RUSTFLAGS must not leave a leading space. Recipes spelling the
+    // expansion `${VAR-}` tolerate one, so the case declares which contract
+    // applies. This is what separates the idiom from a bare `$RUSTFLAGS `
+    // prefix, which preserves the caller's flags but strands a separator.
+    if case.inheritance_policy == InheritancePolicy::Conditional {
+        ensure!(
+            !expanded.starts_with(' '),
+            "{} should not emit a leading separator when RUSTFLAGS is unset, \
+             expanded to {expanded:?}",
+            case.target
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn behavioural_every_rustflags_recipe_line_is_under_contract() -> Result<()> {
+    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
+    let declared: BTreeSet<String> = makefile
+        .lines()
+        .filter(|line| line.starts_with('\t') && line.contains(RUSTFLAGS_PREFIX))
+        .map(|line| line.trim().to_owned())
+        .collect();
+    let covered: BTreeSet<String> = RUSTFLAGS_CASES
+        .iter()
+        .map(|case| recipe_line(&makefile, *case))
+        .collect::<Result<_>>()?;
+
+    let uncovered: Vec<&String> = declared.difference(&covered).collect();
+    ensure!(
+        uncovered.is_empty(),
+        "every recipe setting RUSTFLAGS needs a RustflagsCase; uncovered: {uncovered:#?}"
+    );
+    ensure!(
+        covered.len() == RUSTFLAGS_CASES.len(),
+        "each RustflagsCase should select a distinct recipe line, {} cases selected {} lines",
+        RUSTFLAGS_CASES.len(),
+        covered.len()
+    );
+    Ok(())
+}

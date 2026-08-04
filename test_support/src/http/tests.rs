@@ -1,3 +1,9 @@
+//! Unit tests for the HTTP fixture implementation in the parent module.
+//!
+//! These tests exercise timeout configuration, connection acceptance, and
+//! warning capture without exposing test-only helpers through `http`'s public
+//! interface.
+
 use super::{
     ENV_HTTP_ACCEPT_TIMEOUT_MS, ENV_HTTP_POLL_INTERVAL_MS, ENV_HTTP_READ_TIMEOUT_MS,
     HttpServerConfig, accept_connection, duration_from_env, take_duration_warnings,

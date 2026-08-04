@@ -40,22 +40,19 @@ fn ninja_with_exit_code(#[default(0u8)] exit_code: u8) -> Result<(tempfile::Temp
     fixtures::ninja_with_exit_code(exit_code)
 }
 
-/// Fixture: point `NINJA_ENV` at a fake `ninja` that validates `-f` files.
+/// Fixture: create a fake `ninja` that validates `-f` files.
 ///
-/// Using `NINJA_ENV` avoids mutating `PATH`, letting tests run in parallel
-/// without trampling each other's environment.
-///
-/// Returns: (tempdir holding ninja, `NINJA_ENV` guard)
+/// Returns the temporary directory and executable path for explicit injection.
 #[fixture]
 fn checking_ninja() -> Result<(tempfile::TempDir, PathBuf)> {
     let (ninja_dir, ninja_path) = check_ninja::fake_ninja_check_build_file()?;
     Ok((ninja_dir, ninja_path))
 }
 
-/// Shared setup for tests that rely on `NINJA_ENV`.
+/// Shared setup for tests that inject a fake Ninja executable path.
 ///
-/// Returns the fake ninja directory, temp project directory, constructed CLI,
-/// and the guard keeping `NINJA_ENV` set for the test duration.
+/// Returns the fake Ninja directory, executable path, temporary project
+/// directory, and constructed CLI.
 fn setup_ninja_env_test() -> Result<(tempfile::TempDir, PathBuf, tempfile::TempDir, Cli)> {
     let (ninja_dir, ninja_path) = checking_ninja()?;
     let (temp, manifest_path) = create_test_manifest()?;

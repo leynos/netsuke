@@ -26,40 +26,61 @@ impl EnvSnapshot {
         cwd_override: Option<&Utf8Path>,
         path_override: Option<&OsStr>,
     ) -> Result<Self, ResolveError> {
-        Self::capture_with_pathext(cwd_override, path_override, None)
+        Self::capture_with_env(cwd_override, path_override, &DefaultEnv)
     }
 
+    pub(super) fn capture_with_env(
+        cwd_override: Option<&Utf8Path>,
+        path_override: Option<&OsStr>,
+        env: &impl Env,
+    ) -> Result<Self, ResolveError> {
+        #[cfg(windows)]
+        return Self::capture_impl(cwd_override, path_override, env, None);
+        #[cfg(not(windows))]
+        Self::capture_impl(cwd_override, path_override, env)
+    }
+
+    #[cfg(windows)]
     pub(super) fn capture_with_pathext(
         cwd_override: Option<&Utf8Path>,
         path_override: Option<&OsStr>,
         pathext_override: Option<&OsStr>,
     ) -> Result<Self, ResolveError> {
-        #[cfg(not(windows))]
-        let _ = pathext_override;
-        let cwd = if let Some(override_cwd) = cwd_override {
-            override_cwd.to_path_buf()
-        } else {
-            current_dir_utf8()?
-        };
-        let process_env = DefaultEnv;
-        let raw_path = path_override
-            .map(OsString::from)
-            .or_else(|| process_env.os_string("PATH"));
-        let entries = parse_path_entries(raw_path.clone(), &cwd)?;
-        #[cfg(windows)]
+        Self::capture_impl(cwd_override, path_override, &DefaultEnv, pathext_override)
+    }
+
+    #[cfg(not(windows))]
+    fn capture_impl(
+        cwd_override: Option<&Utf8Path>,
+        path_override: Option<&OsStr>,
+        env: &impl Env,
+    ) -> Result<Self, ResolveError> {
+        let (cwd, raw_path, entries) = capture_common(cwd_override, path_override, env)?;
+        Ok(Self {
+            cwd,
+            raw_path,
+            raw_pathext: None,
+            entries,
+        })
+    }
+
+    #[cfg(windows)]
+    fn capture_impl(
+        cwd_override: Option<&Utf8Path>,
+        path_override: Option<&OsStr>,
+        env: &impl Env,
+        pathext_override: Option<&OsStr>,
+    ) -> Result<Self, ResolveError> {
+        let (cwd, raw_path, entries) = capture_common(cwd_override, path_override, env)?;
         let raw_pathext = pathext_override
             .map(OsString::from)
-            .or_else(|| process_env.os_string("PATHEXT"));
-        #[cfg(windows)]
+            .or_else(|| env.os_string("PATHEXT"));
         let pathext = parse_pathext(raw_pathext.as_deref());
-        #[cfg(not(windows))]
-        let raw_pathext = None;
         Ok(Self {
             cwd,
             raw_path,
             raw_pathext,
             entries,
-            #[cfg(windows)]
             pathext,
         })
     }
@@ -97,6 +118,23 @@ impl EnvSnapshot {
     pub(super) fn pathext(&self) -> &[String] {
         &self.pathext
     }
+}
+
+fn capture_common(
+    cwd_override: Option<&Utf8Path>,
+    path_override: Option<&OsStr>,
+    env: &impl Env,
+) -> Result<(Utf8PathBuf, Option<OsString>, Vec<PathEntry>), ResolveError> {
+    let cwd = if let Some(override_cwd) = cwd_override {
+        override_cwd.to_path_buf()
+    } else {
+        current_dir_utf8()?
+    };
+    let raw_path = path_override
+        .map(OsString::from)
+        .or_else(|| env.os_string("PATH"));
+    let entries = parse_path_entries(raw_path.clone(), &cwd)?;
+    Ok((cwd, raw_path, entries))
 }
 
 #[derive(Clone, Debug)]
@@ -186,4 +224,33 @@ pub(super) fn candidate_paths(
         paths.push(Utf8PathBuf::from(candidate));
     }
     paths
+}
+
+#[cfg(all(test, not(windows)))]
+mod tests {
+    //! Unit tests for injected executable-search environment capture.
+
+    use super::*;
+    use mockable::MockEnv;
+
+    #[test]
+    fn capture_uses_the_injected_path_provider() {
+        let cwd = Utf8Path::new("/workspace");
+        let configured = OsString::from("/configured/bin");
+        let expected = configured.clone();
+        let mut env = MockEnv::new();
+        env.expect_os_string()
+            .withf(|key| key == "PATH")
+            .once()
+            .return_once(move |_| Some(configured));
+
+        let snapshot = EnvSnapshot::capture_with_env(Some(cwd), None, &env)
+            .expect("injected PATH should produce an environment snapshot");
+
+        assert_eq!(snapshot.raw_path, Some(expected));
+        assert_eq!(
+            snapshot.resolved_dirs(CwdMode::Never),
+            [Utf8Path::new("/configured/bin")]
+        );
+    }
 }

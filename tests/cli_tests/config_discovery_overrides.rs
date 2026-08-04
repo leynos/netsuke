@@ -2,7 +2,7 @@
 //! discovered config, CLI flags over both, directory-flag anchoring,
 //! explicit config path bypass, and list-field appending across layers.
 
-use super::super::merge_probe::merge_in_child;
+use super::super::merge_probe::{isolated_environment, merge_in_child};
 use anyhow::{Context, Result, ensure};
 use netsuke::cli::config::{ColourPolicy, EmojiPolicy};
 use rstest::rstest;
@@ -13,17 +13,9 @@ use tempfile::tempdir;
 fn merge_in_project(
     args: &[&str],
     project: &std::path::Path,
-    extra_environment: Vec<(OsString, OsString)>,
+    extra_environment: &[(OsString, OsString)],
 ) -> Result<netsuke::cli::Cli> {
-    let mut environment = vec![
-        (OsString::from("HOME"), project.as_os_str().to_owned()),
-        (
-            OsString::from("XDG_CONFIG_HOME"),
-            project.join(".config").into_os_string(),
-        ),
-        (OsString::from("XDG_CONFIG_DIRS"), OsString::new()),
-    ];
-    environment.extend(extra_environment);
+    let environment = isolated_environment(project, extra_environment);
     merge_in_child(args, project, &environment)
 }
 
@@ -46,7 +38,7 @@ json = false
     let merged = merge_in_project(
         &["netsuke"],
         temp_project.path(),
-        vec![
+        &[
             (OsString::from("NETSUKE_EMOJI"), OsString::from("always")),
             (OsString::from("NETSUKE_JOBS"), OsString::from("12")),
         ],
@@ -64,9 +56,6 @@ json = false
         !merged.json,
         "project config JSON value should apply when no env override exists"
     );
-    // Restore the cwd before `temp_project` (declared later) drops: implicit
-    // reverse-declaration drop order would remove the temp dir while it is still
-    // the process cwd, which fails on Windows.
     Ok(())
 }
 
@@ -90,7 +79,7 @@ json = false
     let merged = merge_in_project(
         &["netsuke", "--emoji", "never", "--jobs", "16", "--json"],
         temp_project.path(),
-        vec![
+        &[
             (OsString::from("NETSUKE_EMOJI"), OsString::from("always")),
             (OsString::from("NETSUKE_JOBS"), OsString::from("8")),
             (OsString::from("NETSUKE_COLOR"), OsString::from("always")),
@@ -133,7 +122,7 @@ jobs = 6
     .context("write project .netsuke.toml in subdirectory")?;
 
     // Stay in outer directory but use directory flag to point to project
-    let merged = merge_in_project(&["netsuke", flag, "project"], temp_outer.path(), Vec::new())?;
+    let merged = merge_in_project(&["netsuke", flag, "project"], temp_outer.path(), &[])?;
 
     ensure!(
         merged.emoji == EmojiPolicy::Always,
@@ -177,7 +166,7 @@ color = "always"
     let merged = merge_in_project(
         &["netsuke"],
         temp_project.path(),
-        vec![(
+        &[(
             OsString::from("NETSUKE_CONFIG"),
             custom_config.into_os_string(),
         )],
@@ -271,7 +260,7 @@ fetch_allow_scheme = ["https"]
             "ftp",
         ],
         temp_project.path(),
-        vec![
+        &[
             (
                 OsString::from("NETSUKE_DEFAULT_TARGETS"),
                 OsString::from("test"),

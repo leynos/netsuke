@@ -2,19 +2,22 @@
 //! project-file discovery, user-scope fallback, and project-over-user
 //! precedence on Unix and Windows.
 
-use super::super::merge_probe::merge_in_child;
+use super::super::merge_probe::{isolated_environment, merge_in_child};
 use anyhow::{Context, Result, ensure};
 use netsuke::cli::config::{ColourPolicy, EmojiPolicy};
 use rstest::rstest;
 use std::ffi::OsString;
 use std::fs;
+use std::path::Path;
 use tempfile::tempdir;
 
 fn run_scope_scenario(
-    project: &tempfile::TempDir,
-    environment: &[(OsString, OsString)],
+    project: &Path,
+    home: &Path,
+    overrides: &[(OsString, OsString)],
 ) -> Result<netsuke::cli::Cli> {
-    merge_in_child(&["netsuke"], project.path(), environment)
+    let environment = isolated_environment(home, overrides);
+    merge_in_child(&["netsuke"], project, &environment)
 }
 
 #[rstest]
@@ -33,16 +36,7 @@ jobs = 8
     )
     .context("write project .netsuke.toml")?;
 
-    let merged = run_scope_scenario(
-        &temp_dir,
-        &[
-            (
-                OsString::from("HOME"),
-                temp_dir.path().as_os_str().to_owned(),
-            ),
-            (OsString::from("XDG_CONFIG_DIRS"), OsString::new()),
-        ],
-    )?;
+    let merged = run_scope_scenario(temp_dir.path(), temp_dir.path(), &[])?;
 
     ensure!(
         merged.emoji == EmojiPolicy::Always,
@@ -96,18 +90,12 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     let xdg_config_home = temp_home.path().join(".config");
     fs::create_dir_all(&xdg_config_home).context("create sandboxed XDG_CONFIG_HOME")?;
     let merged = run_scope_scenario(
-        &temp_project,
-        &[
-            (
-                OsString::from("HOME"),
-                temp_home.path().as_os_str().to_owned(),
-            ),
-            (
-                OsString::from("XDG_CONFIG_HOME"),
-                xdg_config_home.into_os_string(),
-            ),
-            (OsString::from("XDG_CONFIG_DIRS"), OsString::new()),
-        ],
+        temp_project.path(),
+        temp_home.path(),
+        &[(
+            OsString::from("XDG_CONFIG_HOME"),
+            xdg_config_home.into_os_string(),
+        )],
     )?;
     assert_user_config_applied(&merged)
 }
@@ -128,7 +116,8 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
 
     // Set APPDATA to fake directory (Windows)
     let merged = run_scope_scenario(
-        &temp_project,
+        temp_project.path(),
+        temp_project.path(),
         &[(
             OsString::from("APPDATA"),
             temp_appdata.path().as_os_str().to_owned(),
@@ -187,18 +176,12 @@ fn project_config_takes_precedence_over_user_config() -> Result<()> {
 
     let temp_xdg_home = tempdir().context("create temporary XDG config home")?;
     let merged = run_scope_scenario(
-        &temp_project,
-        &[
-            (
-                OsString::from("HOME"),
-                temp_home.path().as_os_str().to_owned(),
-            ),
-            (
-                OsString::from("XDG_CONFIG_HOME"),
-                temp_xdg_home.path().as_os_str().to_owned(),
-            ),
-            (OsString::from("XDG_CONFIG_DIRS"), OsString::new()),
-        ],
+        temp_project.path(),
+        temp_home.path(),
+        &[(
+            OsString::from("XDG_CONFIG_HOME"),
+            temp_xdg_home.path().as_os_str().to_owned(),
+        )],
     )?;
     assert_project_precedence_applied(&merged)
 }
@@ -226,7 +209,8 @@ fn project_config_takes_precedence_over_user_config() -> Result<()> {
     .context("write project .netsuke.toml")?;
 
     let merged = run_scope_scenario(
-        &temp_project,
+        temp_project.path(),
+        temp_project.path(),
         &[(
             OsString::from("APPDATA"),
             temp_appdata.path().as_os_str().to_owned(),

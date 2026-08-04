@@ -1,10 +1,8 @@
 # Whitaker lint configuration for the `test_support` crate.
 #
-# `test_support` is deliberately excluded from the root workspace (see the
-# `[workspace] exclude` note in `../Cargo.toml`), so `whitaker --all` at the
-# repository root cannot reach it and the root `dylint.toml` does not apply.
-# `make lint-whitaker` therefore runs the suite a second time from this
-# directory, where this file supplies the crate's own policy.
+# `test_support` is a workspace member, but its sanctioned ambient boundary is
+# intentionally crate-specific. `make lint-whitaker` therefore runs the suite
+# from this directory as well, ensuring this file supplies the crate's policy.
 #
 # Reuse policy: the same rule as the root configuration. Do not add an entry to
 # silence a new diagnostic. Route fixture filesystem access through

@@ -85,7 +85,7 @@ test-nextest: ## Run all non-doctest Rust tests through cargo-nextest
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) nextest run --all-targets --all-features $(NEXTEST_BUILD_JOBS)
 
 doctest: ## Run doctests, which cargo-nextest cannot execute
-	RUSTFLAGS="-D warnings" $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)
+	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)
 
 test-workflow-contracts: ## Validate the mutation-testing caller contract
 	uv run --with 'pytest>=8' --with 'pyyaml>=6' pytest tests/workflow_contracts -q
@@ -98,13 +98,13 @@ target/%/$(APP): ## Build binary in debug or release mode
 lint: lint-clippy lint-whitaker ## Run Clippy and the Whitaker Dylint suite with warnings denied
 
 lint-clippy: ## Run rustdoc and Clippy with warnings denied
-	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc --workspace --no-deps
+	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) doc --workspace --no-deps
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) clippy $(CLIPPY_FLAGS)
 
 lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(WHITAKER) --all -- --all-targets --all-features
-	# `test_support` is excluded from the root workspace, so the run above cannot
-	# reach it. Lint it separately against its own dylint.toml.
+	# Run from the crate directory as well so Whitaker loads the narrow
+	# `test_support::fs` exemption from test_support/dylint.toml.
 	cd test_support && RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(WHITAKER) --all -- --all-targets --all-features
 
 fmt: ## Format Rust and Markdown sources

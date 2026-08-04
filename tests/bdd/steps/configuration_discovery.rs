@@ -39,7 +39,7 @@ fn write_config_file(world: &TestWorld, file_name: &str, content: &str, chdir: b
 
     if chdir {
         // Acquire scenario-scoped lock before process-global CWD mutation
-        world.ensure_global_state_lock();
+        world.ensure_global_state_lock()?;
         std::env::set_current_dir(&temp_dir).context("failed to change to temp directory")?;
     }
 

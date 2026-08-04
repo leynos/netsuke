@@ -287,12 +287,12 @@ pub(crate) fn stdlib_path_entries(world: &TestWorld, entries: &str) -> Result<()
 #[given("HOME points to the stdlib workspace root")]
 pub(crate) fn home_points_to_stdlib_root(world: &TestWorld) -> Result<()> {
     let root = ensure_workspace(world)?;
-    let new_val = root.as_std_path().as_os_str().to_owned();
-    world.track_env_var("HOME".into(), Some(new_val.clone()));
+    let home_path = root.as_std_path().as_os_str().to_owned();
 
     #[cfg(windows)]
     {
-        world.track_env_var("USERPROFILE".into(), Some(new_val));
+        world.track_env_var("USERPROFILE".into(), Some(home_path.clone()));
     }
+    world.track_env_var("HOME".into(), Some(home_path));
     Ok(())
 }

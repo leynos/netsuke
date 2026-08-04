@@ -21,7 +21,26 @@ const WORKER_NAME: &str = "cli_tests::merge_probe::merge_probe_worker";
 #[derive(Deserialize, Serialize)]
 struct ProbeResult {
     cli: Cli,
+    /// Preserve the subcommand separately because `Cli::command` is skipped by
+    /// Serde and therefore cannot survive the normal worker-result round trip.
     command: Option<netsuke::cli::Commands>,
+}
+
+/// Build the baseline environment for an isolated configuration probe.
+pub(super) fn isolated_environment(
+    home: &Path,
+    overrides: &[(OsString, OsString)],
+) -> Vec<(OsString, OsString)> {
+    let mut environment = vec![
+        (OsString::from("HOME"), home.as_os_str().to_owned()),
+        (
+            OsString::from("XDG_CONFIG_HOME"),
+            home.join(".config").into_os_string(),
+        ),
+        (OsString::from("XDG_CONFIG_DIRS"), OsString::new()),
+    ];
+    environment.extend_from_slice(overrides);
+    environment
 }
 
 /// Merge configuration in an isolated process with the supplied environment.
@@ -37,7 +56,14 @@ pub(super) fn merge_in_child(
     command
         .args(["--ignored", "--exact", WORKER_NAME])
         .current_dir(current_dir)
-        .env_clear()
+        .env_clear();
+    let process_env = DefaultEnv;
+    for key in ["SystemRoot", "PATH", "TEMP", "TMP"] {
+        if let Some(value) = process_env.os_string(key) {
+            command.env(key, value);
+        }
+    }
+    command
         .env(ARGS_ENV, encoded_args)
         .env(OUTPUT_ENV, &output_path);
     for (key, value) in environment {

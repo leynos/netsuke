@@ -217,7 +217,11 @@ fn compile_manifest_impl(world: &TestWorld, path: &str) {
     // that glob patterns inside the manifest resolve correctly.
     let resolved = if std::path::Path::new(path).is_relative() && path.starts_with("tests/") {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        world.ensure_global_state_lock();
+        if let Err(error) = world.ensure_global_state_lock() {
+            let outcome = Err(format!("failed to capture current directory: {error}"));
+            store_parse_outcome(&world.build_graph, &world.generation_error, outcome);
+            return;
+        }
         if let Err(e) = std::env::set_current_dir(manifest_dir) {
             let outcome = Err(format!(
                 "failed to set current directory to {manifest_dir} for path {path}: {e}"

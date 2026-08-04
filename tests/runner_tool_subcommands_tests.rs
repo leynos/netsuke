@@ -136,9 +136,9 @@ fn assert_subcommand_fails_with_invalid_manifest(
 
 type NinjaToolFixture = fn() -> Result<(tempfile::TempDir, PathBuf)>;
 
-/// Fixture: point `NINJA_ENV` at a fake `ninja` that expects `-t clean`.
+/// Fixture: create a fake `ninja` that expects `-t clean`.
 ///
-/// Returns: (tempdir holding ninja, path to ninja, `NINJA_ENV` guard)
+/// Returns the temporary directory and executable path for explicit injection.
 #[fixture]
 fn ninja_expecting_clean() -> Result<(tempfile::TempDir, PathBuf)> {
     let (ninja_dir, ninja_path) = check_ninja::fake_ninja_expect_tool(ToolName::new("clean"))?;

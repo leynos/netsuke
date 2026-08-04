@@ -5,8 +5,7 @@
 //! inherited `RUSTFLAGS` environment variable overrides the
 //! `.cargo/config.toml` `build.rustflags` table, so Makefile recipes that
 //! compile borrow-checked targets and workflows that preset it must re-state
-//! the flag. Doctests intentionally use stable warning flags only. These tests
-//! fail when any layer violates that split.
+//! the flag. These tests fail when any layer drops the required policy.
 
 #[path = "support/makefile.rs"]
 mod makefile;
@@ -89,7 +88,7 @@ fn makefile_declares_the_polonius_flags_variable() -> Result<()> {
 
 #[rstest]
 #[case::test_nextest("test-nextest", true)]
-#[case::doctest("doctest", false)]
+#[case::doctest("doctest", true)]
 #[case::typecheck("typecheck", true)]
 #[case::lint_clippy("lint-clippy", true)]
 #[case::lint_whitaker("lint-whitaker", true)]
@@ -110,8 +109,9 @@ fn rustflags_setting_recipes_apply_polonius_policy(
         "{target} should set RUSTFLAGS, found {recipe:?}"
     );
     for line in rustflags_lines {
+        let contains_polonius = line.contains(POLONIUS_VAR) || line.contains(POLONIUS_FLAG);
         ensure!(
-            line.contains(POLONIUS_VAR) == expects_polonius,
+            contains_polonius == expects_polonius,
             "{target} has the wrong Polonius policy in {line:?}"
         );
     }

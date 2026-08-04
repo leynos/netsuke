@@ -20,30 +20,14 @@
 //! - `tests/features/configuration_discovery.feature`: BDD scenarios that
 //!   duplicate the key precedence cases at the acceptance level.
 //!
-//! # Test infrastructure
-//!
-//! Every test receives a [`ConfigTestHarness`] via the `config_harness`
-//! rstest fixture.  The harness:
-//!
-//! 1. Acquires [`EnvLock`] (serialises all env-mutating tests process-wide).
-//! 2. Captures the process working directory via [`CwdGuard`].
-//! 3. Creates isolated `project` and `home` tempdirs.
-//! 4. Calls [`sandbox_user_scope`] to point `HOME`, `XDG_CONFIG_HOME`, and
-//!    `XDG_CONFIG_DIRS` at the fake home so `OrthoConfig` user-scope discovery
-//!    cannot read real host config files.
-//! 5. Changes the process CWD to the project tempdir.
-//!
-//! Fields drop in declaration order; `_cwd_guard` is declared first so the
-//! CWD is restored before `_env_lock` releases the mutex, preventing a race
-//! where another test calls `std::env::current_dir()` while the CWD still
-//! points at a deleted tempdir.
-//!
-//! [`parse_and_merge`] parses CLI arguments with a localiser and drives the
-//! full `merge_with_config` pipeline, returning the merged [`Cli`] struct.
-//! [`ConfigSelectionCase`] is a const-buildable descriptor used by the main
-//! parametric test [`config_selection_precedence_cases`].
+//! Each test receives a [`ConfigTestHarness`] with isolated project and home
+//! directories. Configuration merging runs in a child process whose
+//! environment is assembled explicitly, so the harness process does not
+//! mutate its environment or working directory. [`ConfigSelectionCase`] is a
+//! const-buildable descriptor used by the main parametric test
+//! [`config_selection_precedence_cases`].
 
-use super::merge_probe::merge_in_child;
+use super::merge_probe::{isolated_environment, merge_in_child};
 use anyhow::{Context, Result, ensure};
 use netsuke::cli::EmojiPolicy;
 use rstest::{fixture, rstest};
@@ -74,20 +58,9 @@ impl ConfigTestHarness {
     fn merge(
         &self,
         args: &[&str],
-        extra_environment: Vec<(OsString, OsString)>,
+        extra_environment: &[(OsString, OsString)],
     ) -> Result<netsuke::cli::Cli> {
-        let mut environment = vec![
-            (
-                OsString::from("HOME"),
-                self.home.path().as_os_str().to_owned(),
-            ),
-            (
-                OsString::from("XDG_CONFIG_HOME"),
-                self.home.path().join(".config").into_os_string(),
-            ),
-            (OsString::from("XDG_CONFIG_DIRS"), OsString::new()),
-        ];
-        environment.extend(extra_environment);
+        let environment = isolated_environment(self.home.path(), extra_environment);
         merge_in_child(args, self.project.path(), &environment)
     }
 }
@@ -248,7 +221,7 @@ fn config_selection_precedence_cases(
     }
 
     let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
-    let merged = h.merge(&arg_refs, environment)?;
+    let merged = h.merge(&arg_refs, &environment)?;
     ensure!(merged.emoji == case.expected_emoji, "{}", case.message);
     Ok(())
 }
@@ -259,7 +232,7 @@ fn config_flag_with_nonexistent_file_produces_error(
 ) -> Result<()> {
     let h = config_harness?;
     h.write_config(".netsuke.toml", "emoji = \"always\"\n")?;
-    let error = match h.merge(&["netsuke", "--config", "missing.toml"], Vec::new()) {
+    let error = match h.merge(&["netsuke", "--config", "missing.toml"], &[]) {
         Ok(value) => anyhow::bail!("missing explicit config file should fail: {value:?}"),
         Err(error) => error,
     };

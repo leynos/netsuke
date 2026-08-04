@@ -285,103 +285,34 @@ NEXTEST_VERSION="$(sed -n "s/.*NEXTEST_VERSION: '\(.*\)'.*/\1/p" \
   .github/workflows/ci.yml)"
 cargo install cargo-nextest --locked --version "$NEXTEST_VERSION"
 # or, for a prebuilt binary:
-cargo binstall --no-confirm --locked \
-  "whitaker-installer@$WHITAKER_INSTALLER_VERSION"
+cargo binstall --no-confirm "cargo-nextest@$NEXTEST_VERSION"
 ```
 
-`whitaker-installer` and the lint libraries are separate artefacts with
-separate versions. `WHITAKER_INSTALLER_VERSION` pins the installer — the tool
-that stages libraries — and nothing else. The installer keeps its own checkout
-of the Whitaker repository under `~/.local/share/whitaker`, updates it with
-`git pull`, and stages the libraries from its default branch. Lint behaviour
-therefore tracks Whitaker HEAD.
+See [Test execution](#test-execution) for what the checked-in nextest
+configuration does and does not cover.
 
-**Running the lint libraries at HEAD is deliberate.** Netsuke follows the suite
-as it develops, so new lints and fixes arrive without a version bump here. Do
-not add a `[workspace.metadata.dylint]` block pinning `whitaker_suite` to a
-`tag` or `rev`. The [Whitaker user's guide](whitaker-users-guide.md) documents
-that form, and it is the right answer for a project wanting reproducible lint
-results, but adopting it here would reverse a standing decision rather than fix
-a defect.
-
-The cost is worth stating plainly: a change upstream can alter lint results
-between two runs with no change in this repository, and a local checkout that
-has not been restaged will disagree with CI, which stages fresh on every job.
-Restaging is what reconciles them.
-
-What the module-scoped exemptions in `dylint.toml` actually depend on is
-[Whitaker PR #315][whitaker-pr-315], which added the `excluded_paths` option,
-so the staged libraries must be recent enough to include it. Libraries staged
-from an older checkout ignore `excluded_paths` silently — the exemptions stop
-applying with no error, and the lint reports the modules they covered. Re-run
-`whitaker-installer` to restage from HEAD. If that checkout has been left on a
-detached HEAD, the install fails at its `git pull`; put it back on the default
-branch and re-run.
-
-[whitaker-pr-315]: https://github.com/leynos/whitaker/pull/315
-
-Whitaker is configured by `dylint.toml` at the repository root, where each
-sanctioned ambient-filesystem scope for `no_std_fs_operations` carries a
-documented rationale. `docs/whitaker-users-guide.md` is a near-verbatim import
-of the [upstream Whitaker user's guide][whitaker-upstream-guide]; refresh it
-from that URL rather than editing it in place, preserving the "Netsuke
-deviation from upstream" callout, and record Netsuke-specific policy here and in
-`dylint.toml`.
-
-[whitaker-upstream-guide]: https://raw.githubusercontent.com/leynos/whitaker/refs/heads/main/docs/users-guide.md
-
-The shared Rust, Rustdoc, and Clippy policy lives under `[workspace.lints]` in
-the root manifest. Both `netsuke` and the private `test_support` crate opt into
-that policy with `lints.workspace = true`; adding a crate to `members` alone
-does not inherit workspace lints.
-
-Prefer `excluded_paths` over `excluded_crates`: a path entry exempts one module
-and its descendants, whereas a crate entry exempts a whole compilation unit.
-The application crate is scoped this way — only
-`netsuke::stdlib::which::lookup` (executable discovery through `PATH` and
-cross-directory symlink canonicalization, which `cap_std` cannot express) and
-`netsuke::runner::process::file_io::ambient_sync` (temporary-file
-synchronization, scoped to the submodule holding only that `sync_all` so the
-rest of `file_io` keeps writing through `cap_std` handles), and
-`netsuke::cli::discovery::paths` (canonicalizing an ambient `--directory` to
-match OrthoConfig's layer paths) are exempt; the rest of `netsuke` stays under
-the capability policy. The behavioural step definitions, CLI integration tests,
-and shared workflow-reading helper that stage fixtures ambiently are scoped the
-same way. A crate-level entry is justified only when the ambient access lives
-in the crate root itself, where a path entry would be no narrower — that covers
-the Cargo build script and the enumerated integration-test crates. The
-`test_support` crate uses capability-backed fixture helpers and remains fully
-linted by Whitaker.
-
-`test_support` is a workspace member, but its one sanctioned ambient boundary
-is configured per crate rather than in the root `dylint.toml`.
-`make lint-whitaker` therefore runs the suite again from `test_support/`, where
-`test_support/dylint.toml` names only `test_support::fs` in `excluded_paths`.
-The root `excluded_crates` must not contain `test_support`: every other module
-in the crate remains subject to the filesystem policy.
-
-Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
-allows. The lint does honour in-source lint attributes, but this repository
-denies `clippy::allow_attributes`, so `#[allow(no_std_fs_operations)]` will not
-compile here; an in-source exemption must be a *temporary*, item-level
-`#[expect(no_std_fs_operations, reason = "…")]` that states the reason and the
-route back to compliance. Prefer migrating to `cap_std` over any of these;
-reach for an exclusion only when the operation is irreducibly ambient.
-
-When command output is long, preserve exit codes and logs:
+`make lint` starts with workspace-wide rustdoc through
+`RUSTDOCFLAGS="$(RUSTDOC_FLAGS)"` and
+`RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)"`. This
+denies warnings, enables Polonius, and preserves any `RUSTFLAGS` supplied by
+the caller. It then runs workspace-wide
+`cargo clippy --all-targets --all-features` and the
+[Whitaker](whitaker-users-guide.md) Dylint suite
+(`whitaker --all -- --all-targets --all-features`). Install Whitaker through
+the standalone installer described in the
+[Whitaker user's guide](whitaker-users-guide.md) so local linting matches
+continuous integration (CI); `make lint-clippy` runs the Clippy-only subset. CI
+pins the installer version in `WHITAKER_INSTALLER_VERSION` in
+`.github/workflows/ci.yml`. Install that same version locally so local runs
+match CI; read the pin from the workflow rather than copying the number, so the
+two cannot drift:
 
 ```bash
-set -o pipefail
-make test 2>&1 | tee /tmp/netsuke-make-test.log
-```
-
-These gates always use the repository toolchain and the default codegen
-backend. For a faster inner loop between gate runs, see
-[local build acceleration](#local-build-acceleration).
-
-For documentation changes, also run `make fmt`, `make markdownlint`, and
-`make nixie`.
-
+WHITAKER_INSTALLER_VERSION="$(sed -n \
+  "s/.*WHITAKER_INSTALLER_VERSION: '\(.*\)'.*/\1/p" \
+  .github/workflows/ci.yml)"
+cargo install --locked whitaker-installer \
+  --version "$WHITAKER_INSTALLER_VERSION"
 # or, for a prebuilt binary:
 cargo binstall --no-confirm --locked \
   "whitaker-installer@$WHITAKER_INSTALLER_VERSION"
@@ -428,11 +359,6 @@ deviation from upstream" callout, and record Netsuke-specific policy here and in
 
 [whitaker-upstream-guide]: https://raw.githubusercontent.com/leynos/whitaker/refs/heads/main/docs/users-guide.md
 
-The shared Rust, Rustdoc, and Clippy policy lives under `[workspace.lints]` in
-the root manifest. Both `netsuke` and the private `test_support` crate opt into
-that policy with `lints.workspace = true`; adding a crate to `members` alone
-does not inherit workspace lints.
-
 Prefer `excluded_paths` over `excluded_crates`: a path entry exempts one module
 and its descendants, whereas a crate entry exempts a whole compilation unit.
 The application crate is scoped this way — only
@@ -447,24 +373,38 @@ the capability policy. The behavioural step definitions, CLI integration tests,
 and shared workflow-reading helper that stage fixtures ambiently are scoped the
 same way. A crate-level entry is justified only when the ambient access lives
 in the crate root itself, where a path entry would be no narrower — that covers
-the Cargo build script and the enumerated integration-test crates. The
-`test_support` crate uses capability-backed fixture helpers and remains fully
-linted by Whitaker.
+the Cargo build script and the enumerated integration-test crates.
 
-`test_support` is a workspace member, but its one sanctioned ambient boundary
-is configured per crate rather than in the root `dylint.toml`.
-`make lint-whitaker` therefore runs the suite again from `test_support/`, where
-`test_support/dylint.toml` names only `test_support::fs` in `excluded_paths`.
-The root `excluded_crates` must not contain `test_support`: every other module
-in the crate remains subject to the filesystem policy.
+`test_support` is excluded from the root Cargo workspace, so the root
+`dylint.toml` cannot reach it and `whitaker --all` at the repository root never
+lints it. `make lint-whitaker` therefore runs the suite a second time from
+`test_support/`, where `test_support/dylint.toml` supplies that crate's policy:
+a single `excluded_paths` entry for `test_support::fs`, the module wrapping the
+ambient fixture operations. Every other module routes through it — `exec`,
+`manifest`, and the crate-root regression tests directly, and `check_ninja` and
+`fake_ninja` via `exec::write_exec_with_content` — so a new direct `std::fs`
+call anywhere else in the crate still fails the lint.
 
-Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
-allows. The lint does honour in-source lint attributes, but this repository
-denies `clippy::allow_attributes`, so `#[allow(no_std_fs_operations)]` will not
-compile here; an in-source exemption must be a *temporary*, item-level
-`#[expect(no_std_fs_operations, reason = "…")]` that states the reason and the
-route back to compliance. Prefer migrating to `cap_std` over any of these;
-reach for an exclusion only when the operation is irreducibly ambient.
+Exceptions belong in `dylint.toml`, scoped as narrowly as the lint allows.
+Neither `#[allow(no_std_fs_operations)]` nor
+`#[expect(no_std_fs_operations, reason = "…")]` suppresses this lint in the
+Whitaker build this repository pins, so no in-source attribute is usable here
+(this repository also denies `clippy::allow_attributes`, so
+`#[allow(no_std_fs_operations)]` will not even compile). A `dylint.toml` entry
+is the only working mechanism: a narrowly scoped `excluded_paths` entry for a
+bounded module, or, where the ambient access lives at the crate root and a path
+entry would be no narrower, an `excluded_crates` entry. Prefer migrating to
+`cap_std` over adding an exclusion; reach for an exclusion only when the
+operation is irreducibly ambient.
+
+To confirm the exclusions have not silently widened, add a temporary
+`std::fs::metadata` call to an unexcluded module — for example
+`src/stdlib/which/cache.rs`, a sibling of the excluded `lookup` module, or the
+body of `src/runner/process/file_io.rs` outside `ambient_sync` — then run
+`make lint-whitaker`. Both sites must still be reported; revert the probe
+afterwards. The same check applies to `test_support`: a `std::fs` call in, say,
+`test_support/src/exec.rs` must be reported even though `test_support::fs` is
+exempt.
 
 When command output is long, preserve exit codes and logs:
 
@@ -811,11 +751,12 @@ and `-Clink-arg=-fuse-ld=mold`.
   `make lint`, `make check-fmt`, or `make all`, mirroring the Kani boundary
   described below. Run the ordinary gates before proposing a change;
   `make dev-test` is a faster inner-loop proxy, not a substitute.
-- **`RUSTFLAGS`.** `make test-nextest`, `make doctest`, and `make typecheck`
-  set `RUSTFLAGS="-D warnings"`. An externally set `RUSTFLAGS` overrides the
-  `[target.*]` `rustflags` in a Cargo configuration file, so the `dev-*`
-  targets deliberately do not set it. Exporting `RUSTFLAGS` in the shell
-  silently disables `mold` for these targets.
+- **`RUSTFLAGS`.** `make test-nextest`, `make doctest`, `make typecheck`, and
+  the rustdoc stage of `make lint` append `-D warnings` and
+  `$(POLONIUS_FLAGS)` to any flags inherited from the caller. An externally set
+  `RUSTFLAGS` overrides the `[target.*]` `rustflags` in a Cargo configuration
+  file, so the `dev-*` targets deliberately do not set it. Exporting
+  `RUSTFLAGS` in the shell silently disables `mold` for these targets.
 - **Release and packaging.** `make release` and everything under
   `.github/workflows/build-and-package.yml` use the release profile, the LLVM
   backend, and the platform linker. Cranelift is applied to the `dev` profile
@@ -832,16 +773,15 @@ and `-Clink-arg=-fuse-ld=mold`.
   Kani's own toolchain and the LLVM backend. The same applies to Verus.
 - **Test runner.** `make dev-test` is the accelerated counterpart of
   `make test-nextest`, not of `make test`: it runs the same
-  `cargo nextest run --all-targets --all-features`, over the root workspace and
-  then `test_support`, and so is governed by the same
-  [`.config/nextest.toml`](#nextest-configuration), including the `serial-env`
-  group. It omits the `doctest` pass, because `cargo test --doc` is a separate
-  and comparatively quick runner; run `make test` before proposing a change.
-  The acceleration is applied through `RUSTUP_TOOLCHAIN` and `cargo --config`,
-  both Cargo-level rather than runner-level, which is why they compose with
-  nextest unchanged. Note the target uses `NEXTEST_BUILD_JOBS`, not
-  `BUILD_JOBS`: nextest reserves `-j` for test concurrency, so a Cargo-shaped
-  `-j` would silently become a thread count.
+  `cargo nextest run --all-targets --all-features`, and so is governed by the
+  same [`.config/nextest.toml`](#nextest-configuration). It omits the
+  `doctest` pass, because `cargo test --doc` is a separate and comparatively
+  quick runner; run `make test` before proposing a change. The acceleration is
+  applied through `RUSTUP_TOOLCHAIN` and `cargo --config`, both Cargo-level
+  rather than runner-level, which is why they compose with nextest unchanged.
+  Note the target uses `NEXTEST_BUILD_JOBS`, not `BUILD_JOBS`: nextest reserves
+  `-j` for test concurrency, so a Cargo-shaped `-j` would silently become a
+  thread count.
 - **rust-analyzer.** No rust-analyzer configuration is committed, so the
   language server uses the repository toolchain and the default backend. Opting
   rust-analyzer into Cranelift is a personal, machine-local choice; it needs a
@@ -983,15 +923,11 @@ Prefer a model that predicts an outcome over a table that restates one. Where
 an invariant lives in a shell script, the cost is a process per case, so keep
 the corpus small and the strategy structural.
 
-`Cargo.toml` excludes `test_support` from the workspace, but `make test` still
-exercises it: `test-nextest` and `doctest` each run a second time with
-`--manifest-path "$(TEST_SUPPORT_MANIFEST)"` (see
-[Test execution](#test-execution)), so a `#[cfg(test)]` unit test added inside
-`test_support` is covered by `make test`. `lint-clippy` and `lint-whitaker` run
-their passes against `test_support/Cargo.toml` the same way. Prefer putting
-assertions about the fixtures themselves in the `tests/dev_fast_*.rs`
-integration crates when the assertion belongs with the suite that consumes the
-fixture, rather than with the fixture's own unit tests.
+`test_support` is a workspace member, so `make test`, rustdoc, Clippy, and
+Whitaker visit its unit tests and library code. Keep fixture tests beside the
+fixture when they exercise a local invariant; use the `tests/dev_fast_*.rs`
+integration crates when the assertion spans the application-facing sandbox or
+Makefile contract.
 
 ### Benchmark evidence
 
@@ -1183,10 +1119,12 @@ Cargo home plus Kani support-file home.
   any `RUSTFLAGS` inherited from the caller). This runs every unit, integration,
   `rstest`, and `rstest-bdd` test.
 - `make doctest` — `cargo test --workspace --doc --all-features`, with
-  `RUSTFLAGS="-D warnings"`. nextest cannot execute doctests, so they need
-  their own pass. Note that the previous `cargo test --all-targets` invocation
-  never ran doctests either; the separate target is what makes a broken
-  documentation example fail the gate.
+  `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)"`.
+  This preserves flags inherited from the caller and restores Polonius while
+  denying warnings. nextest cannot execute doctests, so they need their own
+  pass. Note that the previous `cargo test --all-targets` invocation never ran
+  doctests either; the separate target is what makes a broken documentation
+  example fail the gate.
 
 If either pass fails, `make test` fails. Run the individual targets when
 iterating, but treat `make test` as the gate.
@@ -1216,9 +1154,10 @@ governs the non-doctest pass only, and deliberately stays small:
 
 nextest runs each test in its own process, but the codebase does not rely on
 that isolation for environment safety. Tests pass environment values through
-explicit configuration seams or `Command::env` after `env_clear()`. `EnvLock`
-and `CwdGuard` remain only for the few tests that exercise process working
-directory behaviour, because the in-process coverage runner shares that state.
+explicit configuration seams or configure a child with `env_clear()` followed
+by `Command::env`. `EnvLock` and `CwdGuard` remain only for the few tests that
+exercise process working-directory behaviour, because the in-process coverage
+runner shares that state.
 
 ### Runners not covered by this configuration
 
@@ -1345,9 +1284,9 @@ all valid inputs.
 
 - Use the `proptest!` macro; write assertions with `prop_assert_eq!` /
   `prop_assert!` rather than `assert_eq!` / `assert!` inside proptest bodies.
-- Property tests that mutate the process environment must acquire `EnvLock`
-  inside the strategy helper - never hold `EnvLock` across a `proptest!` loop
-  iteration boundary.
+- Environment-dependent properties must use injected providers. When the
+  contract itself requires ambient discovery, configure a child process with
+  `env_clear()` followed by `Command::env`; do not mutate the harness process.
 - Canonical example: `src/cli/config_path_precedence_tests.rs` -
   `resolve_config_path_obeys_precedence_invariant` asserts the
   `explicit_config_path` selector-precedence invariant for generated optional
@@ -1814,9 +1753,9 @@ Production-facing unit and integration tests follow the same rule. Use the
 appropriate injected seam, such as `run_with_ninja_program`,
 `from_path_with_policy_and_env`, `StdlibConfig::with_path_override`,
 `StdlibConfig::with_home_override`, or
-`StdlibConfig::with_command_path_override`. End-to-end tests may apply values
-with `Command::env` after `env_clear()` because the mutation is confined to the
-child.
+`StdlibConfig::with_command_path_override`. End-to-end tests may call
+`env_clear()` and then apply values with `Command::env`, because the mutation
+is confined to the child.
 
 ### Ordering rules
 
@@ -2047,10 +1986,12 @@ The `cli` module re-exports this trait publicly as `ConfigEnvProvider` (and
 unrelated `EnvProvider` in `locale_resolution`; crate-internal code uses the
 bare `EnvProvider` name.
 
-Discovery tests that exercise OrthoConfig's `ConfigDiscovery` may still need
-`EnvLock` because the external discovery implementation reads platform
-environment variables directly. Tests for Netsuke's own environment port should
-avoid `EnvLock`.
+Discovery tests that exercise OrthoConfig's `ConfigDiscovery` must run the
+ambient adapter in an isolated child configured with `env_clear()` followed by
+`Command::env`. Tests for Netsuke's own environment port should inject a
+provider directly. `EnvLock` is reserved for tests that change the process
+working directory alongside `CwdGuard`; it does not justify environment
+mutation.
 
 Unit tests that only need to verify explicit config path precedence should test
 `explicit_config_path_with_env` with an injected provider instead of mutating

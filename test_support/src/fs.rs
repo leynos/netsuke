@@ -266,3 +266,45 @@ pub fn is_executable_file(path: impl AsRef<Path>) -> bool {
 pub fn symlink(target: impl AsRef<Path>, link: impl AsRef<Path>) -> io::Result<()> {
     std::os::unix::fs::symlink(target, link)
 }
+
+#[cfg(test)]
+mod tests {
+    //! Coverage for directory creation at existing-path boundaries.
+
+    use super::{create_dir_all, write};
+    use std::io;
+
+    #[test]
+    fn create_dir_all_accepts_an_existing_directory() -> io::Result<()> {
+        let temp = tempfile::tempdir()?;
+        create_dir_all(temp.path())
+    }
+
+    #[test]
+    fn create_dir_all_rejects_an_existing_file() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let file = temp.path().join("not-a-directory");
+        write(&file, b"fixture")?;
+
+        let error = create_dir_all(&file).expect_err("an existing file is not a directory");
+        anyhow::ensure!(
+            matches!(
+                error.kind(),
+                io::ErrorKind::AlreadyExists | io::ErrorKind::NotADirectory
+            ),
+            "existing file should report a directory conflict, got {error:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn create_dir_all_creates_missing_parent_directories() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let nested = temp.path().join("one").join("two");
+
+        create_dir_all(&nested)?;
+
+        anyhow::ensure!(nested.is_dir(), "recursive creation should produce a directory");
+        Ok(())
+    }
+}

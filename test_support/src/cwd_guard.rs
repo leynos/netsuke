@@ -42,61 +42,47 @@ mod tests {
         EnvLock::acquire()
     }
 
-    /// The environment lock paired with the directory captured under it.
-    type LockedOriginalDir = (EnvLock, io::Result<std::path::PathBuf>);
-
-    /// Capture the directory that is current before a test mutates it.
-    ///
-    /// Fixtures arrange state rather than assert, so this propagates the
-    /// `current_dir` failure instead of panicking; each test body unwraps it.
-    ///
-    /// The lock is returned rather than merely taken as a parameter: a
-    /// by-value parameter is dropped when this fixture returns, which would
-    /// release the lock before the test body runs and leave the body's
-    /// `set_current_dir` racing other tests. Handing the guard back keeps the
-    /// process-wide lock held until the test body ends.
     #[fixture]
-    fn original_dir(env_lock: EnvLock) -> LockedOriginalDir {
-        let captured = std::env::current_dir();
-        (env_lock, captured)
+    fn original_dir(env_lock: EnvLock) -> io::Result<(EnvLock, std::path::PathBuf)> {
+        Ok((env_lock, std::env::current_dir()?))
     }
 
     #[rstest]
     #[case(CwdGuard::acquire)]
     #[case(CwdGuard::new)]
     fn constructor_captures_current_directory(
-        original_dir: LockedOriginalDir,
+        #[from(original_dir)] original_dir_result: io::Result<(EnvLock, std::path::PathBuf)>,
         #[case] ctor: fn() -> io::Result<CwdGuard>,
-    ) {
-        let (_env_lock, captured) = original_dir;
-        let expected = captured.expect("current_dir");
-        let guard = ctor().expect("CwdGuard constructor");
-        assert_eq!(
-            guard.0, expected,
+    ) -> anyhow::Result<()> {
+        let (_lock, original_dir) = original_dir_result?;
+        let guard = ctor()?;
+        anyhow::ensure!(
+            guard.0 == original_dir,
             "guard should capture the directory that was current at acquire time"
         );
+        Ok(())
     }
 
     #[rstest]
-    fn drop_restores_original_directory(original_dir: LockedOriginalDir) {
-        let (_env_lock, captured) = original_dir;
-        let original_dir = captured.expect("current_dir");
-        let temp = tempfile::tempdir().expect("tempdir");
+    fn drop_restores_original_directory(
+        #[from(original_dir)] original_dir_result: io::Result<(EnvLock, std::path::PathBuf)>,
+    ) -> anyhow::Result<()> {
+        let (_lock, original_dir) = original_dir_result?;
+        let temp = tempfile::tempdir()?;
 
         {
-            let _guard = CwdGuard::acquire().expect("CwdGuard::acquire");
-            std::env::set_current_dir(temp.path()).expect("chdir to temp");
-            assert_ne!(
-                std::env::current_dir().expect("current_dir"),
-                original_dir,
+            let _guard = CwdGuard::acquire()?;
+            std::env::set_current_dir(temp.path())?;
+            anyhow::ensure!(
+                std::env::current_dir()? != original_dir,
                 "CWD should be temp dir inside the guard scope"
             );
         }
 
-        assert_eq!(
-            std::env::current_dir().expect("current_dir"),
-            original_dir,
+        anyhow::ensure!(
+            std::env::current_dir()? == original_dir,
             "CWD should be restored after guard is dropped"
         );
+        Ok(())
     }
 }

@@ -77,7 +77,14 @@ fn parse_manifest_inner(world: &TestWorld, path: &ManifestPath) {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         // Hold the env lock and set CWD to the project root so that relative
         // glob patterns (e.g. `tests/data/glob_files/*.txt`) resolve correctly.
-        world.ensure_global_state_lock();
+        if let Err(error) = world.ensure_global_state_lock() {
+            store_parse_outcome(
+                &world.manifest,
+                &world.manifest_error,
+                Err(format!("failed to capture current directory: {error}")),
+            );
+            return;
+        }
         // EnvLock is held; safe to mutate CWD for this scenario.
         if let Err(e) = std::env::set_current_dir(manifest_dir) {
             store_parse_outcome(

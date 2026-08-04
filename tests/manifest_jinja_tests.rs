@@ -128,7 +128,13 @@ fn renders_global_vars() -> Result<()> {
 
 #[rstest]
 fn renders_env_function() -> Result<()> {
-    let reader: EnvReader = Arc::new(|_| Ok(String::from("42")));
+    let reader: EnvReader = Arc::new(|name| {
+        if name == "NETSUKE_TEST_ENV" {
+            Ok(String::from("42"))
+        } else {
+            Err(VarError::NotPresent)
+        }
+    });
     let yaml = manifest_yaml(ENV_YAML);
 
     let manifest = manifest::from_str_with_env(&yaml, &reader)?;
@@ -140,6 +146,10 @@ fn renders_env_function() -> Result<()> {
         bail!("expected command recipe, got {:?}", first.recipe);
     };
     ensure!(command == "echo 42", "unexpected command: {command}");
+    ensure!(
+        reader("NETSUKE_WRONG_ENV").is_err(),
+        "the reader should reject a variable not named by the manifest"
+    );
     Ok(())
 }
 

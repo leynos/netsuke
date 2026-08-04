@@ -19,8 +19,15 @@ use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::MutexGuard;
+use test_support::CwdGuard;
 use test_support::env_lock::EnvLock;
 use test_support::http::HttpServer;
+
+#[derive(Debug)]
+struct GlobalStateGuard {
+    env_lock: EnvLock,
+    cwd_guard: CwdGuard,
+}
 
 /// Combined test world for all BDD scenarios.
 ///
@@ -136,15 +143,25 @@ pub struct TestWorld {
     /// Values supplied to child Netsuke processes for scenario-tracked variables.
     pub env_vars_forward: RefCell<HashMap<String, OsString>>,
     /// Scenario-scoped lock for the few remaining process-global CWD operations.
-    pub global_state_lock: RefCell<Option<EnvLock>>,
+    global_state_lock: RefCell<Option<GlobalStateGuard>>,
 }
 
 impl TestWorld {
     /// Acquire the scenario lock before changing the process working directory.
-    pub fn ensure_global_state_lock(&self) {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the current working directory cannot be captured.
+    pub fn ensure_global_state_lock(&self) -> std::io::Result<()> {
         if self.global_state_lock.borrow().is_none() {
-            *self.global_state_lock.borrow_mut() = Some(EnvLock::acquire());
+            let env_lock = EnvLock::acquire();
+            let cwd_guard = CwdGuard::acquire()?;
+            *self.global_state_lock.borrow_mut() = Some(GlobalStateGuard {
+                env_lock,
+                cwd_guard,
+            });
         }
+        Ok(())
     }
 
     /// Set or remove a variable in the child-process environment specification.
@@ -182,7 +199,14 @@ impl Drop for TestWorld {
         self.localization_guard.borrow_mut().take();
         self.localization_lock.borrow_mut().take();
         self.env_vars_forward.borrow_mut().clear();
-        self.global_state_lock.borrow_mut().take();
+        if let Some(GlobalStateGuard {
+            env_lock,
+            cwd_guard,
+        }) = self.global_state_lock.borrow_mut().take()
+        {
+            drop(cwd_guard);
+            drop(env_lock);
+        }
         self.stdlib_text.clear();
     }
 }

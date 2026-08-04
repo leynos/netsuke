@@ -32,9 +32,7 @@ fn prepend_dir_to_path_preserves_existing_entries() -> Result<()> {
 fn prepend_dir_to_path_handles_empty_path() -> Result<()> {
     let dir = tempfile::tempdir().context("create temp dir")?;
     let composed = prepend_path_value(Some(OsStr::new("")), dir.path())?;
-    let paths = std::env::split_paths(&composed)
-        .filter(|p| !p.as_os_str().is_empty())
-        .collect::<Vec<_>>();
+    let paths = std::env::split_paths(&composed).collect::<Vec<_>>();
     ensure!(
         paths == vec![dir.path().to_path_buf()],
         "expected PATH to contain only {}; got {paths:?}",

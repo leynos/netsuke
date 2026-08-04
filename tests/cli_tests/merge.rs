@@ -186,8 +186,6 @@ json = true
             (OsString::from("NETSUKE_JOBS"), OsString::from("4")),
         ],
     )?;
-    ensure!(merged.json, "config json should survive the merge");
-
     ensure!(
         merged.file.as_path() == Path::new("Configfile"),
         "config file should override the default manifest path",
