@@ -31,7 +31,7 @@ pub type EnvReader =
 /// // caller's environment, so running it would make the doctest a hostage to
 /// // whatever CI happens to export.
 /// let reader = process_env_reader();
-/// let _ = reader("PATH");
+/// drop(reader("PATH"));
 /// ```
 #[must_use]
 #[expect(

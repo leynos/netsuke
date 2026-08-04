@@ -1659,13 +1659,20 @@ process.
 #### Ownership and permitted call sites
 
 - The reader is owned by `manifest::from_str_named`, which is the only place
-  the `env()` function is registered. Nothing else constructs one except the
-  public entry points.
+  the `env()` function is registered. In production nothing else constructs
+  one; tests build their own with `Arc::new`, which is the point of the seam.
 - `process_env_reader()` is the sole production supplier and the only place
   `std::env::var` appears in the module.
-- Tests use `from_str_with_env`. They must not reach past it to the leaf
-  mapper: covering `env_var_with` alone would leave the registration untested,
-  which is the gap that made the earlier process-mutating tests necessary.
+- The two test layers cover different things, and both are needed:
+  - **Integration tests use `from_str_with_env`.** Only they exercise
+    registration — that the reader actually reaches the `env()` function
+    Jinja calls. Covering the leaf mapper alone would leave that untested,
+    which is the gap the earlier process-mutating tests existed to fill.
+  - **Unit tests may call `env_var_with` directly** to cover error mapping.
+    `src/manifest/tests/env_function.rs` does so deliberately: the
+    present, absent, and non-UTF-8 branches are cheaper to drive at the leaf,
+    and the non-UTF-8 case is unreachable through a real environment without
+    platform-specific `OsString` surgery.
 
 #### Reader composition rules
 
