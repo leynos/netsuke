@@ -42,7 +42,7 @@ the hexagonal port/adapter pattern:
   `render(&self, view: &GraphView, sink: &mut dyn io::Write) -> Result<(), GraphRenderError>`.
   Adapters consume `GraphView` only — they never touch `BuildGraph` directly.
 - [`DotRenderer`](../src/graph_view/render_dot.rs) emits Graphviz DOT.
-- [`HtmlRenderer`](../src/graph_view/render_html.rs) emits a self-contained
+- [`HtmlRenderer`](../src/graph_view/render_html/mod.rs) emits a self-contained
   HTML page (server-rendered SVG, accessible textual outline, and a
   `<noscript>` fallback containing the DOT source verbatim).
 
