@@ -12,9 +12,9 @@ pub(super) fn manifest_env_reader(world: &TestWorld) -> manifest::EnvReader {
         values
             .get(key)
             .cloned()
-            .ok_or(std::env::VarError::NotPresent)?
+            .ok_or(manifest::EnvReadError::NotPresent)?
             .into_string()
-            .map_err(std::env::VarError::NotUnicode)
+            .map_err(|_| manifest::EnvReadError::NotUnicode)
     })
 }
 

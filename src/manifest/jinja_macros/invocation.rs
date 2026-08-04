@@ -72,7 +72,7 @@ fn capture_macro<'source>(
         Error::new(
             ErrorKind::InvalidOperation,
             localization::message(keys::MANIFEST_MACRO_MISSING)
-                .with_arg("macro", macro_name)
+                .with_arg("name", macro_name)
                 .to_string(),
         )
     })?;
@@ -85,4 +85,55 @@ fn collect_kwargs(macro_kwargs: &Kwargs) -> Result<Option<Kwargs>, Error> {
         entries.push((key.to_owned(), macro_kwargs.peek::<Value>(key)?));
     }
     Ok((!entries.is_empty()).then(|| entries.into_iter().collect()))
+}
+
+#[cfg(test)]
+mod tests {
+    //! Snapshots for localized macro-invocation failures.
+
+    use super::validate_macro;
+    use minijinja::{Environment, UndefinedBehavior};
+    use rstest::rstest;
+    use test_support::{EnLocalizer, en_localizer, fluent::normalize_fluent_isolates};
+
+    #[rstest]
+    fn missing_template_diagnostic_snapshot(en_localizer: EnLocalizer) {
+        let _en = en_localizer;
+        let env = Environment::new();
+        let error = validate_macro(&env, "missing-template", "missing_macro")
+            .expect_err("missing template should fail validation");
+
+        insta::assert_snapshot!(error.to_string(), @"template not found: Failed to load macro template.");
+    }
+
+    #[rstest]
+    fn initialization_diagnostic_snapshot(en_localizer: EnLocalizer) {
+        let _en = en_localizer;
+        let mut env = Environment::new();
+        env.set_undefined_behavior(UndefinedBehavior::Strict);
+        env.add_template("invalid-template", "{{ missing }}")
+            .expect("invalid fixture template should compile");
+        let error = validate_macro(&env, "invalid-template", "missing_macro")
+            .expect_err("template initialization should fail validation");
+
+        insta::assert_snapshot!(error.to_string(), @"undefined value: Failed to initialise macro environment.");
+    }
+
+    #[rstest]
+    fn missing_macro_diagnostic_snapshot(en_localizer: EnLocalizer) {
+        let _en = en_localizer;
+        let mut env = Environment::new();
+        env.add_template(
+            "macro-template",
+            "{% macro present() %}present{% endmacro %}",
+        )
+        .expect("macro fixture template should compile");
+        let error = validate_macro(&env, "macro-template", "missing_macro")
+            .expect_err("missing macro should fail validation");
+
+        insta::assert_snapshot!(
+            normalize_fluent_isolates(&error.to_string()),
+            @"invalid operation: Macro missing_macro is missing."
+        );
+    }
 }

@@ -3,17 +3,19 @@
 use anyhow::{Context, Result, anyhow, ensure};
 use netsuke::{
     ast::Recipe,
-    manifest::{self, EnvReader},
+    manifest::{self, EnvReadError, EnvReader},
 };
 use rstest::rstest;
-use std::{env::VarError, ffi::OsString, sync::Arc};
-use test_support::manifest::manifest_yaml;
+use std::sync::Arc;
+use test_support::{
+    EnLocalizer, en_localizer, fluent::normalize_fluent_isolates, manifest::manifest_yaml,
+};
 
-fn reader_yielding(result: Result<String, VarError>) -> EnvReader {
+fn reader_yielding(result: Result<String, EnvReadError>) -> EnvReader {
     Arc::new(move |_| result.clone())
 }
 
-fn rendered_command(value: Result<String, VarError>) -> Result<String> {
+fn rendered_command(value: Result<String, EnvReadError>) -> Result<String> {
     let yaml =
         manifest_yaml("targets:\n  - name: hello\n    command: \"echo {{ env('PROFILE') }}\"\n");
     let manifest = manifest::from_str_with_env(&yaml, &reader_yielding(value))?;
@@ -60,9 +62,12 @@ fn the_template_variable_name_reaches_the_reader() -> Result<()> {
 }
 
 #[rstest]
-#[case::missing(VarError::NotPresent, "is not set")]
-#[case::non_utf8(VarError::NotUnicode(OsString::from("bad")), "invalid utf-8")]
-fn lookup_failures_are_diagnostic(#[case] failure: VarError, #[case] expected: &str) -> Result<()> {
+#[case::missing(EnvReadError::NotPresent, "is not set")]
+#[case::non_utf8(EnvReadError::NotUnicode, "invalid utf-8")]
+fn lookup_failures_are_diagnostic(
+    #[case] failure: EnvReadError,
+    #[case] expected: &str,
+) -> Result<()> {
     let error = rendered_command(Err(failure)).expect_err("lookup should fail");
     ensure!(
         error
@@ -70,5 +75,33 @@ fn lookup_failures_are_diagnostic(#[case] failure: VarError, #[case] expected: &
             .any(|cause| cause.to_string().to_lowercase().contains(expected)),
         "unexpected error: {error}"
     );
+    Ok(())
+}
+
+fn localized_lookup_failure(failure: EnvReadError) -> Result<String> {
+    let Err(error) = rendered_command(Err(failure)) else {
+        return Err(anyhow!("environment lookup should fail"));
+    };
+    let message = error
+        .chain()
+        .map(ToString::to_string)
+        .find(|message| message.contains("PROFILE"))
+        .context("lookup error should contain its localized environment diagnostic")?;
+    Ok(normalize_fluent_isolates(&message))
+}
+
+#[rstest]
+fn missing_lookup_diagnostic_snapshot(en_localizer: EnLocalizer) -> Result<()> {
+    let _en = en_localizer;
+    let message = localized_lookup_failure(EnvReadError::NotPresent)?;
+    insta::assert_snapshot!(message, @"undefined value: Required environment variable 'PROFILE' is not set. (in <string>:1)");
+    Ok(())
+}
+
+#[rstest]
+fn non_unicode_lookup_diagnostic_snapshot(en_localizer: EnLocalizer) -> Result<()> {
+    let _en = en_localizer;
+    let message = localized_lookup_failure(EnvReadError::NotUnicode)?;
+    insta::assert_snapshot!(message, @"invalid operation: Environment variable 'PROFILE' contains invalid UTF-8. (in <string>:1)");
     Ok(())
 }

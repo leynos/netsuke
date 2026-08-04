@@ -1,5 +1,7 @@
 //! Tests covering manifest workspace resolution and filesystem helpers.
-use super::super::{EnvReader, from_path_with_policy_and_env, open_manifest_workspace};
+use super::super::{
+    EnvReadError, EnvReader, from_path_with_policy_and_env, open_manifest_workspace,
+};
 use crate::ast::Recipe;
 use crate::stdlib::NetworkPolicy;
 use anyhow::{Context, Result as AnyResult, anyhow, ensure};
@@ -173,7 +175,7 @@ fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
         if key == "NETSUKE_MANIFEST_URL" {
             Ok(manifest_url.clone())
         } else {
-            Err(std::env::VarError::NotPresent)
+            Err(EnvReadError::NotPresent)
         }
     });
 

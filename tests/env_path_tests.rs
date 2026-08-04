@@ -1,8 +1,9 @@
 //! Tests for composing isolated child-process `PATH` values.
 
 use anyhow::{Context, Result, ensure};
+use proptest::prelude::*;
 use rstest::rstest;
-use std::ffi::OsStr;
+use std::{ffi::OsStr, path::PathBuf};
 use test_support::env::prepend_path_value;
 
 #[rstest]
@@ -52,4 +53,24 @@ fn prepend_dir_to_path_handles_missing_path() -> Result<()> {
         dir.path().display()
     );
     Ok(())
+}
+
+proptest! {
+    #[test]
+    fn prepend_dir_to_path_preserves_every_generated_entry(
+        entries in prop::collection::vec("[A-Za-z0-9._-]{1,8}", 0..16),
+    ) {
+        let original = std::env::join_paths(&entries)
+            .expect("generated PATH entries should be joinable");
+        let dir = tempfile::tempdir().expect("create property-test temp dir");
+
+        let composed = prepend_path_value(Some(&original), dir.path())
+            .expect("prepend generated PATH entries");
+        let actual = std::env::split_paths(&composed).collect::<Vec<_>>();
+        let expected = std::iter::once(dir.path().to_path_buf())
+            .chain(entries.into_iter().map(PathBuf::from))
+            .collect::<Vec<_>>();
+
+        prop_assert_eq!(actual, expected);
+    }
 }

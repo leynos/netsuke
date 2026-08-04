@@ -45,7 +45,7 @@ pub type ManifestMap = serde_json::Map<String, ManifestValue>;
 pub use diagnostics::{
     ManifestError, ManifestName, ManifestSource, map_data_error, map_yaml_error,
 };
-pub use env_reader::{EnvReader, process_env_reader};
+pub use env_reader::{EnvReadError, EnvReader, process_env_reader};
 pub use glob::glob_paths;
 
 pub(crate) use expand::expand_foreach;

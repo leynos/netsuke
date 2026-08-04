@@ -3,9 +3,9 @@
 
 use anyhow::{Context, Result, bail, ensure};
 use netsuke::ast::{NetsukeManifest, Recipe, StringOrList, Target};
-use netsuke::manifest::{self, EnvReader, ManifestError};
+use netsuke::manifest::{self, EnvReadError, EnvReader, ManifestError};
 use rstest::rstest;
-use std::{env::VarError, sync::Arc};
+use std::sync::Arc;
 use test_support::manifest::manifest_yaml;
 
 /// Manifest fields asserted repeatedly within the test suite.
@@ -132,7 +132,7 @@ fn renders_env_function() -> Result<()> {
         if name == "NETSUKE_TEST_ENV" {
             Ok(String::from("42"))
         } else {
-            Err(VarError::NotPresent)
+            Err(EnvReadError::NotPresent)
         }
     });
     let yaml = manifest_yaml(ENV_YAML);
@@ -156,7 +156,7 @@ fn renders_env_function() -> Result<()> {
 #[rstest]
 fn renders_env_function_missing_var() -> Result<()> {
     let name = "NETSUKE_TEST_ENV_MISSING";
-    let reader: EnvReader = Arc::new(|_| Err(VarError::NotPresent));
+    let reader: EnvReader = Arc::new(|_| Err(EnvReadError::NotPresent));
     let yaml = manifest_yaml(ENV_MISSING_YAML);
 
     match manifest::from_str_with_env(&yaml, &reader) {
