@@ -2650,8 +2650,8 @@ flowchart LR
 ```
 
 Netsuke configuration discovery is implemented in `src/cli/discovery.rs`.
-Explicit file selection is handled by `explicit_config_path_with_env(...)`, which
-applies the precedence `--config` > `NETSUKE_CONFIG`. Layer loading and
+Explicit file selection is handled by `explicit_config_path_with_env(...)`,
+which applies the precedence `--config` > `NETSUKE_CONFIG`. Layer loading and
 automatic discovery are handled by `push_file_layers(...)`, which also applies
 the `-C/--directory` flag as the project-discovery root.
 
@@ -2768,11 +2768,10 @@ manual flag repetition.
   override, relying on OrthoConfig's platform-specific defaults for standard
   directory resolution.
 - Netsuke-owned environment reads for explicit config selection and early JSON
-  resolution go through the `EnvProvider` port in
-  `src/cli/discovery.rs`. Production code uses `StdEnvProvider`; tests can
-  inject a map-backed provider instead of mutating the process environment.
-  OrthoConfig discovery remains an external boundary and may still read
-  platform environment variables directly.
+  resolution go through the `EnvProvider` port in `src/cli/discovery.rs`.
+  Production code uses `StdEnvProvider`; tests can inject a map-backed provider
+  instead of mutating the process environment. OrthoConfig discovery remains an
+  external boundary and may still read platform environment variables directly.
 - Configuration files use TOML format by default. JSON5 (`.json`, `.json5`) and
   YAML (`.yaml`, `.yml`) formats are supported when the corresponding Cargo
   features are enabled.
@@ -3009,13 +3008,12 @@ selected for this project and the rationale for their inclusion.
 
 Netsuke compiles with the Polonius alpha borrow-checking analysis
 (`-Zpolonius=next`) on the dated nightly toolchain pinned in
-`rust-toolchain.toml`
-([ADR-006](adr-006-adopt-polonius-nightly-toolchain.md)). Internal APIs
-follow a borrow-centric design contract: lookups and registries return
-references (`&mut V` accessors with clone-on-miss keys), mutation happens in
-place, and error context is built lazily on the failure path. Owned-value
-style is reserved for genuine constraints — aliasing, suspension points,
-thread and process boundaries, and persistent identity — and each such
+`rust-toolchain.toml` ([ADR-006](adr-006-adopt-polonius-nightly-toolchain.md)).
+Internal APIs follow a borrow-centric design contract: lookups and registries
+return references (`&mut V` accessors with clone-on-miss keys), mutation
+happens in place, and error context is built lazily on the failure path.
+Owned-value style is reserved for genuine constraints — aliasing, suspension
+points, thread and process boundaries, and persistent identity — and each such
 refusal is recorded in the [polonius migration notes](polonius.md) alongside
 the sites that depend on the analysis.
 
