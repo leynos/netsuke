@@ -97,6 +97,18 @@ const CALLER_RUSTFLAGS: &str = "-C target-cpu=native";
 
 const DENY_WARNINGS: &str = "-D warnings";
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum WarningPolicy {
+    Deny,
+    Default,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum InheritancePolicy {
+    Conditional,
+    Plain,
+    Replace,
+}
 /// A recipe line that overrides `RUSTFLAGS`, and the contract it must meet.
 #[derive(Clone, Copy, Debug)]
 struct RustflagsCase {
@@ -105,18 +117,13 @@ struct RustflagsCase {
     /// Substring selecting the recipe line.
     line_marker: &'static str,
     /// Whether the recipe adds `-D warnings`.
-    denies_warnings: bool,
-    /// Whether the recipe preserves a caller-supplied value.
-    preserves_inherited: bool,
-    /// Whether the recipe re-states the Polonius compiler flag.
-    requires_polonius: bool,
-    /// Whether the recipe must contribute its separator only alongside an
-    /// inherited value, so an unset `RUSTFLAGS` leaves no leading space.
+    warning_policy: WarningPolicy,
+    /// How the recipe handles a caller-supplied value.
     ///
-    /// This is the contract the case asserts, deliberately not read back from
-    /// the Makefile: inferring it from the assignment would let a rewrite to a
-    /// bare `$RUSTFLAGS ` prefix delete the assertion along with the idiom.
-    separator_only_when_set: bool,
+    /// Polonius recipes preserve the caller either conditionally (without a
+    /// leading separator when unset) or plainly. The stable doctest recipe
+    /// replaces the caller's flags.
+    inheritance_policy: InheritancePolicy,
 }
 
 impl RustflagsCase {
@@ -124,10 +131,8 @@ impl RustflagsCase {
         Self {
             target: "test-nextest",
             line_marker: "nextest run",
-            denies_warnings: true,
-            preserves_inherited: true,
-            requires_polonius: true,
-            separator_only_when_set: true,
+            warning_policy: WarningPolicy::Deny,
+            inheritance_policy: InheritancePolicy::Conditional,
         }
     }
 
@@ -135,10 +140,8 @@ impl RustflagsCase {
         Self {
             target: "doctest",
             line_marker: "--doc",
-            denies_warnings: true,
-            preserves_inherited: false,
-            requires_polonius: false,
-            separator_only_when_set: false,
+            warning_policy: WarningPolicy::Deny,
+            inheritance_policy: InheritancePolicy::Replace,
         }
     }
 
@@ -146,10 +149,8 @@ impl RustflagsCase {
         Self {
             target: "target/%/$(APP)",
             line_marker: "build",
-            denies_warnings: false,
-            preserves_inherited: true,
-            requires_polonius: true,
-            separator_only_when_set: false,
+            warning_policy: WarningPolicy::Default,
+            inheritance_policy: InheritancePolicy::Plain,
         }
     }
 
@@ -157,10 +158,8 @@ impl RustflagsCase {
         Self {
             target: "lint-clippy",
             line_marker: "clippy",
-            denies_warnings: true,
-            preserves_inherited: true,
-            requires_polonius: true,
-            separator_only_when_set: true,
+            warning_policy: WarningPolicy::Deny,
+            inheritance_policy: InheritancePolicy::Conditional,
         }
     }
 
@@ -168,10 +167,8 @@ impl RustflagsCase {
         Self {
             target: "lint-whitaker",
             line_marker: "$(WHITAKER)",
-            denies_warnings: true,
-            preserves_inherited: true,
-            requires_polonius: true,
-            separator_only_when_set: true,
+            warning_policy: WarningPolicy::Deny,
+            inheritance_policy: InheritancePolicy::Conditional,
         }
     }
 
@@ -191,10 +188,8 @@ impl RustflagsCase {
         Self {
             target: "typecheck",
             line_marker: "check",
-            denies_warnings: true,
-            preserves_inherited: true,
-            requires_polonius: true,
-            separator_only_when_set: true,
+            warning_policy: WarningPolicy::Deny,
+            inheritance_policy: InheritancePolicy::Conditional,
         }
     }
 
@@ -202,10 +197,8 @@ impl RustflagsCase {
         Self {
             target: "kani-full",
             line_marker: "$(KANI)",
-            denies_warnings: false,
-            preserves_inherited: true,
-            requires_polonius: true,
-            separator_only_when_set: true,
+            warning_policy: WarningPolicy::Default,
+            inheritance_policy: InheritancePolicy::Conditional,
         }
     }
 }
@@ -347,20 +340,25 @@ fn behavioural_rustflags_recipes_preserve_inherited_flags(
     let expanded = expand(&shell_expression(&makefile, case)?, Some(CALLER_RUSTFLAGS))?;
 
     ensure!(
-        expanded.contains(CALLER_RUSTFLAGS) == case.preserves_inherited,
+        expanded.contains(CALLER_RUSTFLAGS)
+            == (case.inheritance_policy != InheritancePolicy::Replace),
         "{} inherited-RUSTFLAGS contract should hold, expanded to {expanded:?}",
         case.target
     );
     ensure!(
-        expanded.contains(&polonius) == case.requires_polonius,
+        expanded.contains(&polonius) == (case.inheritance_policy != InheritancePolicy::Replace),
         "{} Polonius contract should hold for {polonius}, expanded to {expanded:?}",
         case.target
     );
     ensure!(
-        expanded.contains(DENY_WARNINGS) == case.denies_warnings,
+        expanded.contains(DENY_WARNINGS) == (case.warning_policy == WarningPolicy::Deny),
         "{} should {}deny warnings, expanded to {expanded:?}",
         case.target,
-        if case.denies_warnings { "" } else { "not " }
+        if case.warning_policy == WarningPolicy::Deny {
+            ""
+        } else {
+            "not "
+        }
     );
     Ok(())
 }
@@ -385,7 +383,7 @@ fn behavioural_rustflags_recipes_are_well_formed_without_inherited_flags(
     let expanded = expand(&expression, None)?;
 
     ensure!(
-        expanded.contains(&polonius) == case.requires_polonius,
+        expanded.contains(&polonius) == (case.inheritance_policy != InheritancePolicy::Replace),
         "{} Polonius contract should hold for {polonius}, expanded to {expanded:?}",
         case.target
     );
@@ -399,7 +397,7 @@ fn behavioural_rustflags_recipes_are_well_formed_without_inherited_flags(
     // expansion `${VAR-}` tolerate one, so the case declares which contract
     // applies. This is what separates the idiom from a bare `$RUSTFLAGS `
     // prefix, which preserves the caller's flags but strands a separator.
-    if case.separator_only_when_set {
+    if case.inheritance_policy == InheritancePolicy::Conditional {
         ensure!(
             !expanded.starts_with(' '),
             concat!(

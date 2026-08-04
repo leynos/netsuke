@@ -1643,7 +1643,6 @@ lint is told what to do instead, not merely that they may not. `test_support`
 is a workspace member and carries its own Clippy configuration file because
 Clippy configuration is discovered per crate.
 
-
 ### Environment and template ports
 
 `manifest::EnvReader` owns environment lookup for the manifest `env()` helper.
@@ -1656,6 +1655,11 @@ environment. Each invocation captures the macro from the active template state
 and immediately evaluates it; callers must use the shared manifest rendering
 helper so caller blocks retain their template context. This adapter belongs to
 manifest rendering and must not be reused as a general MiniJinja cache.
+
+The `test_support::dev_fast` sandbox reuses `mockable::Env` only while locating
+the host utilities it explicitly links into its hermetic `PATH`.
+`real_utility_with_env` is the test seam for that lookup; it is not a general
+executable-discovery API and must not be used outside dev-fast test scaffolding.
 
 #### Annotating a sanctioned site
 

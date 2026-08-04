@@ -8,9 +8,10 @@ use std::io::ErrorKind;
 use std::process::{Command, Output};
 use tempfile::{TempDir, tempdir};
 
-use super::MakeInvocation;
 use crate::exec::write_exec_with_content;
 use crate::fs;
+use mockable::{DefaultEnv, Env};
+use super::MakeInvocation;
 
 /// Utilities the scripts and `make` legitimately need. Kept explicit so a new
 /// dependency surfaces as a test failure rather than silently resolving to
@@ -66,21 +67,7 @@ pub struct Sandbox {
 impl Sandbox {
     /// Build a sandbox and populate it with the utility allowlist.
     pub fn new() -> Result<Self> {
-        let temp = tempdir().context("create sandbox directory")?;
-        let root = Utf8Path::from_path(temp.path())
-            .context("sandbox path must be UTF-8")?
-            .to_path_buf();
-        let repo = std::env::current_dir().context("resolve repository root")?;
-        let repo = Utf8PathBuf::try_from(repo).context("repository root must be UTF-8")?;
-        let sandbox = Self {
-            _temp: temp,
-            root,
-            repo,
-        };
-        fs::create_dir_all(sandbox.bin()).context("create sandbox bin")?;
-        fs::create_dir_all(sandbox.home()).context("create sandbox home")?;
-        sandbox.link_utilities()?;
-        Ok(sandbox)
+        Self::with_env(&DefaultEnv)
     }
 
     /// The only directory on the sandbox `PATH`.
@@ -98,11 +85,11 @@ impl Sandbox {
         self.root.join("prefix")
     }
 
-    fn link_utilities(&self) -> Result<()> {
+    fn link_utilities(&self, env: &impl Env) -> Result<()> {
         for utility in SANDBOX_UTILITIES {
-            let source =
-                which(utility).with_context(|| format!("locate `{utility}` for the sandbox"))?;
-            fs::symlink(&source, self.bin().join(utility))
+            let source = which(env, utility)
+                .with_context(|| format!("locate `{utility}` for the sandbox"))?;
+            fs::symlink(source.as_std_path(), self.bin().join(utility).as_std_path())
                 .with_context(|| format!("link `{utility}` into the sandbox"))?;
         }
         Ok(())
@@ -258,6 +245,29 @@ impl Sandbox {
             .output()
             .with_context(|| format!("run make {}", invocation.target()))
     }
+
+    /// Build a sandbox using `env` to resolve the utility allowlist.
+    ///
+    /// This seam is limited to locating the real tools copied into the
+    /// sandbox; child processes still receive only the explicit environment
+    /// assembled when commands are constructed.
+    pub fn with_env(env: &impl Env) -> Result<Self> {
+        let temp = tempdir().context("create sandbox directory")?;
+        let root = Utf8Path::from_path(temp.path())
+            .context("sandbox path must be UTF-8")?
+            .to_path_buf();
+        let repo = std::env::current_dir().context("resolve repository root")?;
+        let repo = Utf8PathBuf::try_from(repo).context("repository root must be UTF-8")?;
+        let sandbox = Self {
+            _temp: temp,
+            root,
+            repo,
+        };
+        fs::create_dir_all(sandbox.bin().as_std_path()).context("create sandbox bin")?;
+        fs::create_dir_all(sandbox.home().as_std_path()).context("create sandbox home")?;
+        sandbox.link_utilities(env)?;
+        Ok(sandbox)
+    }
 }
 
 /// The genuine binary behind a sandboxed utility name.
@@ -266,22 +276,25 @@ impl Sandbox {
 /// invocation and passes the rest through — needs an absolute path to it,
 /// because `PATH` inside the sandbox names the fake.
 pub fn real_utility(utility: &str) -> Result<Utf8PathBuf> {
-    which(utility)
+    real_utility_with_env(&DefaultEnv, utility)
 }
 
+/// Resolve a genuine utility using an injected environment.
+///
+/// This is the test seam for [`real_utility`]; it is not a general-purpose
+/// executable discovery API.
+pub fn real_utility_with_env(env: &impl Env, utility: &str) -> Result<Utf8PathBuf> {
+    which(env, utility)
+}
 /// Resolve a utility against the ambient `PATH`, before it is replaced.
 ///
 /// Executability is part of the match, not an afterthought: `uv` installs a
 /// sourceable `env` shell fragment into `~/.local/bin`, so a plain file probe
 /// selects a non-executable file and every sandboxed `env` invocation then
 /// fails with a permission error.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "resolves a tool through the real PATH, which is what the sandbox under test must observe"
-)]
-fn which(utility: &str) -> Result<Utf8PathBuf> {
-    let path = std::env::var_os("PATH").context("read PATH")?;
-    for dir in std::env::split_paths(&path) {
+fn which(env: &impl Env, utility: &str) -> Result<Utf8PathBuf> {
+    let path = env.raw("PATH").context("read PATH")?;
+    for dir in std::env::split_paths(std::ffi::OsStr::new(&path)) {
         let Ok(dir) = Utf8PathBuf::try_from(dir) else {
             continue;
         };
@@ -294,7 +307,7 @@ fn which(utility: &str) -> Result<Utf8PathBuf> {
 }
 
 fn is_executable_file(path: &Utf8Path) -> bool {
-    fs::is_executable_file(path)
+    fs::is_executable_file(path.as_std_path())
 }
 
 /// Combined stdout and stderr, for asserting on diagnostics regardless of the

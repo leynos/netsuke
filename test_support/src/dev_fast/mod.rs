@@ -40,7 +40,7 @@ pub use make::MakeInvocation;
 pub use release::FakeRelease;
 pub use sandbox::{
     DEV_FAST_CONFIG_PATH, PinOverrides, Sandbox, combined, dev_fast_config, pinned_mold_version,
-    pinned_toolchain, real_utility,
+    pinned_toolchain, real_utility, real_utility_with_env,
 };
 pub use scenario::{
     BuildScenario, InstallerFixture, InstallerScenario, TEST_MOLD_VERSION, WRONG_SHA256,
