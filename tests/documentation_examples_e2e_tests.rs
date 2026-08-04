@@ -247,10 +247,15 @@ fn stdlib_path_and_collection_example_reports_fixture_values() -> Result<()> {
     let root = Dir::open_ambient_dir(&root_path, ambient_authority())?;
     root.symlink("message.txt", "fixtures/message-link")?;
     let home = workspace.path().to_string_lossy().into_owned();
+    let executable_path = host_executable_path()?;
     let run = run_netsuke_in_with_env(
         workspace.path(),
         &[],
-        &[("NETSUKE_NINJA", "ninja"), ("HOME", home.as_str())],
+        &[
+            ("NETSUKE_NINJA", "ninja"),
+            ("HOME", home.as_str()),
+            ("PATH", executable_path.as_str()),
+        ],
     )?;
     assert_success(&run, "stdlib path and collection example")?;
 
