@@ -10,19 +10,9 @@
 mod keys;
 
 use std::collections::BTreeSet;
-use std::io::Write as _;
 
 use anyhow::{Result, anyhow, bail, ensure};
 use rstest::rstest;
-use tempfile::NamedTempFile;
-
-/// Stage `source` as a Rust file for the extractor to read.
-fn write_source(source: &str) -> Result<NamedTempFile> {
-    let mut file = NamedTempFile::new()?;
-    file.write_all(source.as_bytes())?;
-    file.flush()?;
-    Ok(file)
-}
 
 /// Wrap `entries` in a `define_keys!` invocation and extract its keys.
 fn extract(entries: &str) -> Result<BTreeSet<String>> {
@@ -30,15 +20,13 @@ fn extract(entries: &str) -> Result<BTreeSet<String>> {
 }
 
 fn extract_source(source: &str) -> Result<BTreeSet<String>> {
-    let file = write_source(source)?;
-    keys::extract_key_constants(file.path()).map_err(|error| anyhow!("{error}"))
+    keys::extract_key_constants(source).map_err(|error| anyhow!("{error}"))
 }
 
 /// Extract from a `define_keys!` body expected to fail, returning the message.
 fn extraction_error(entries: &str) -> Result<String> {
     let source = format!("define_keys! {{\n{entries}\n}}\n");
-    let file = write_source(&source)?;
-    match keys::extract_key_constants(file.path()) {
+    match keys::extract_key_constants(&source) {
         Ok(extracted) => bail!("expected extraction to fail, got {extracted:?}"),
         Err(error) => Ok(error.to_string()),
     }
@@ -169,8 +157,7 @@ fn malformed_macro_invocations_are_rejected(
     #[case] source: &str,
     #[case] expected: &str,
 ) -> Result<()> {
-    let file = write_source(source)?;
-    let message = match keys::extract_key_constants(file.path()) {
+    let message = match keys::extract_key_constants(source) {
         Ok(extracted) => bail!("expected extraction to fail, got {extracted:?}"),
         Err(error) => error.to_string(),
     };

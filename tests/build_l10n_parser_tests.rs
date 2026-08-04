@@ -15,20 +15,15 @@ mod metadata;
 mod compare;
 
 use std::collections::BTreeSet;
-use std::io::Write as _;
 
 use anyhow::{Result, anyhow, bail, ensure};
 use rstest::rstest;
-use tempfile::NamedTempFile;
 
 // ---------------------------------------------------------------- FTL parser
 
-/// Stage `source` as a catalogue and parse it.
+/// Parse `source` as a catalogue.
 fn parse(source: &str) -> Result<ftl::MessageVariables> {
-    let mut file = NamedTempFile::new()?;
-    file.write_all(source.as_bytes())?;
-    file.flush()?;
-    ftl::parse_catalogue(file.path()).map_err(|error| anyhow!("{error}"))
+    ftl::parse_catalogue(source).map_err(|error| anyhow!("{error}"))
 }
 
 /// The variables the parser found for `key`.
@@ -123,10 +118,7 @@ fn terms_are_ignored() -> Result<()> {
 #[case("")]
 #[case("# only comments\n")]
 fn catalogues_without_messages_are_rejected(#[case] source: &str) -> Result<()> {
-    let mut file = NamedTempFile::new()?;
-    file.write_all(source.as_bytes())?;
-    file.flush()?;
-    match ftl::parse_catalogue(file.path()) {
+    match ftl::parse_catalogue(source) {
         Ok(parsed) => bail!("expected a parse failure, got {parsed:?}"),
         Err(error) => ensure!(
             error.to_string().contains("no Fluent messages found"),

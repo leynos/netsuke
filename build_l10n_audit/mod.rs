@@ -40,9 +40,7 @@ fn catalogue_path_in(root: &Path, tag: &str) -> PathBuf {
 /// The metadata is consumed by `ortho_config` tooling, so it must not drift
 /// from the catalogues the binary actually embeds.
 fn audit_cargo_metadata(root: &Path) -> Result<(), Box<dyn Error>> {
-    let manifest_path = root.join(CARGO_MANIFEST);
-    let manifest = std::fs::read_to_string(&manifest_path)
-        .map_err(|err| format!("failed to read {}: {err}", manifest_path.display()))?;
+    let manifest = read_source(&root.join(CARGO_MANIFEST))?;
     let declared = parse_metadata_locales(&manifest)
         .ok_or("Cargo.toml is missing package.metadata.ortho_config.locales")?;
     let expected: Vec<&str> = SUPPORTED_LOCALES.iter().map(LocaleCatalogue::tag).collect();
@@ -58,8 +56,27 @@ fn audit_cargo_metadata(root: &Path) -> Result<(), Box<dyn Error>> {
     .into())
 }
 
+/// Read `path`, naming it in the error.
+///
+/// Every filesystem read the audit performs goes through here. The parsers
+/// below it take `&str`, so this module is the only one holding an ambient
+/// path, and they stay testable without staging files.
+fn read_source(path: &Path) -> Result<String, Box<dyn Error>> {
+    std::fs::read_to_string(path)
+        .map_err(|err| format!("failed to read {}: {err}", path.display()).into())
+}
+
+/// Parse the catalogue at `path`, naming it if parsing fails.
+///
+/// The parser takes text and so cannot name the file itself; the path is added
+/// back here, where it is known, so a failure still says which catalogue.
+fn parse_catalogue_at(path: &Path) -> Result<MessageVariables, Box<dyn Error>> {
+    ftl::parse_catalogue(&read_source(path)?)
+        .map_err(|err| format!("{}: {err}", path.display()).into())
+}
+
 fn source_catalogue_variables(root: &Path) -> Result<MessageVariables, Box<dyn Error>> {
-    ftl::parse_catalogue(&catalogue_path_in(root, SOURCE_LOCALE))
+    parse_catalogue_at(&catalogue_path_in(root, SOURCE_LOCALE))
 }
 
 /// Audit every registered locale, failing the build on the first problem.
@@ -92,12 +109,14 @@ pub(super) fn audit_localization_keys() -> Result<(), Box<dyn Error>> {
 /// As [`audit_localization_keys`].
 pub(crate) fn audit_localization_keys_in(root: &Path) -> Result<(), Box<dyn Error>> {
     audit_cargo_metadata(root)?;
-    let declared = keys::extract_key_constants(&root.join(KEYS_PATH))?;
+    let keys_path = root.join(KEYS_PATH);
+    let declared = keys::extract_key_constants(&read_source(&keys_path)?)
+        .map_err(|err| format!("{}: {err}", keys_path.display()))?;
     let source = source_catalogue_variables(root)?;
 
     let mut findings = Vec::new();
     for entry in SUPPORTED_LOCALES {
-        let catalogue = ftl::parse_catalogue(&catalogue_path_in(root, entry.tag()))?;
+        let catalogue = parse_catalogue_at(&catalogue_path_in(root, entry.tag()))?;
         let result = audit_catalogue(entry.tag(), &declared, &source, &catalogue);
         if !result.is_clean() {
             findings.push(result);

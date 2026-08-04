@@ -8,8 +8,6 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
-use std::fs;
-use std::path::Path;
 
 /// Message identifiers mapped to the variables their value interpolates.
 pub(super) type MessageVariables = BTreeMap<String, BTreeSet<String>>;
@@ -55,9 +53,7 @@ fn collect_variables(body: &str, into: &mut BTreeSet<String>) {
 /// # Errors
 ///
 /// Returns an error if the file cannot be read or declares no messages.
-pub(super) fn parse_catalogue(path: &Path) -> Result<MessageVariables, Box<dyn Error>> {
-    let source = fs::read_to_string(path)
-        .map_err(|err| format!("failed to read {}: {err}", path.display()))?;
+pub(super) fn parse_catalogue(source: &str) -> Result<MessageVariables, Box<dyn Error>> {
     let mut messages = MessageVariables::new();
     let mut current: Option<String> = None;
 
@@ -74,7 +70,7 @@ pub(super) fn parse_catalogue(path: &Path) -> Result<MessageVariables, Box<dyn E
     }
 
     if messages.is_empty() {
-        return Err(format!("no Fluent messages found in {}", path.display()).into());
+        return Err("no Fluent messages found in the catalogue".into());
     }
     Ok(messages)
 }

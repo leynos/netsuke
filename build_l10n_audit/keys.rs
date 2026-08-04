@@ -10,8 +10,6 @@ mod scanner;
 use scanner::{ByteIndex, DefineKeysParser};
 use std::collections::BTreeSet;
 use std::error::Error;
-use std::fs;
-use std::path::Path;
 
 const DEFINE_KEYS_MACRO: &str = "define_keys!";
 
@@ -27,12 +25,11 @@ const DEFINE_KEYS_MACRO: &str = "define_keys!";
 /// # Errors
 ///
 /// Returns an error if the macro cannot be parsed or no keys are found.
-pub(super) fn extract_key_constants(path: &Path) -> Result<BTreeSet<String>, Box<dyn Error>> {
-    let source = fs::read_to_string(path)?;
-    let body = extract_define_keys_body(&source)?;
+pub(super) fn extract_key_constants(source: &str) -> Result<BTreeSet<String>, Box<dyn Error>> {
+    let body = extract_define_keys_body(source)?;
     let keys = parse_define_keys_body(body)?;
     if keys.is_empty() {
-        return Err(format!("no localization keys found in {}", path.display()).into());
+        return Err("no localization keys found in the localization key source".into());
     }
     Ok(keys)
 }
