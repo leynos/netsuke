@@ -16,6 +16,12 @@
 //! `excluded_paths`, or the application crate reappearing in `excluded_crates`,
 //! would exempt far more than the ambient boundary it was added for.
 //!
+//! Third, neither manifest may pin the lint-library source. Installing the
+//! libraries at Whitaker HEAD is a decision, not an oversight in the installer
+//! pin, and it has been proposed as a defect more than once. A
+//! `[workspace.metadata.dylint]` block would quietly reverse it, so the absence
+//! is asserted here rather than left to review.
+//!
 //! These assertions are deterministic file checks. They do not invoke Whitaker:
 //! the suite needs its own pinned toolchain and driver, which `make test` does
 //! not require. `make lint-whitaker` remains the gate that actually runs it,
@@ -41,6 +47,50 @@ const WHICH_LOOKUP_BOUNDARY: &str = "netsuke::stdlib::which::lookup";
 /// Durability sync for the runner's temporary Ninja file, scoped to the
 /// submodule holding only that `sync_all`.
 const RUNNER_SYNC_BOUNDARY: &str = "netsuke::runner::process::file_io::ambient_sync";
+
+/// Manifest tables that can carry a `metadata.dylint` block, either of which
+/// Dylint would honour to resolve lint libraries from a pinned git source.
+const METADATA_TABLES: [&str; 2] = ["workspace", "package"];
+
+/// Neither manifest may pin `whitaker_suite` to a tag or revision.
+///
+/// Netsuke installs the lint libraries at Whitaker HEAD through
+/// `whitaker-installer`, which stages them from the suite's default branch.
+/// `WHITAKER_INSTALLER_VERSION` pins the installer binary — a separate artefact
+/// that says nothing about which lints are staged. A `metadata.dylint` block
+/// would take over library resolution and freeze lint behaviour at whatever
+/// revision it names, which is the opposite of the intended policy.
+///
+/// Keyed on the `dylint` entry rather than on `metadata`, because the root
+/// manifest legitimately carries `package.metadata` for other tools.
+#[rstest]
+#[case::root("Cargo.toml")]
+#[case::test_support("test_support/Cargo.toml")]
+fn manifests_do_not_pin_the_lint_libraries(#[case] relative: &str) -> Result<()> {
+    let manifest: TomlValue = read_repo_file(Utf8Path::new(relative))?
+        .parse()
+        .with_context(|| format!("parse {relative}"))?;
+
+    for table in METADATA_TABLES {
+        let pinned = manifest
+            .get(table)
+            .and_then(|section| section.get("metadata"))
+            .and_then(|metadata| metadata.get("dylint"));
+        ensure!(
+            pinned.is_none(),
+            concat!(
+                "{relative} declares [{table}.metadata.dylint], which would pin ",
+                "the lint libraries to a fixed source. This repository installs ",
+                "them at Whitaker HEAD on purpose; WHITAKER_INSTALLER_VERSION ",
+                "pins the installer, not the libraries. Read the quality-gates ",
+                "section of docs/developers-guide.md before changing this.",
+            ),
+            relative = relative,
+            table = table
+        );
+    }
+    Ok(())
+}
 
 /// Returns the string entries of `key` under `[no_std_fs_operations]`.
 fn exclusion_list(dylint_toml: &str, key: &str) -> Result<Vec<String>> {
