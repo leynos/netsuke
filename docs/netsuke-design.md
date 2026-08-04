@@ -2459,6 +2459,20 @@ strings are normalized by stripping encoding suffixes (such as `.UTF-8`),
 removing variant suffixes (such as `@latin`), and replacing underscores with
 hyphens before validation.
 
+Startup diagnostics are buffered rather than written. The locale is resolved
+before the command line is parsed, so a fallback can be reported before the
+effective diagnostic mode is known, and the JSON diagnostic document is written
+to stderr — an eagerly emitted warning could corrupt it. `StartupWriter` in
+`src/startup_tracing.rs` therefore holds startup tracing until the mode is
+settled. `settle_startup_diagnostics` in `src/main.rs` then releases the buffer
+to stderr in human mode, or discards it in JSON mode so that stderr carries a
+single diagnostic document. Settlement happens after the JSON mode is resolved
+but before the configuration merge, so a human-mode warning still precedes any
+configuration processing, and on the paths where clap terminates the process it
+happens before that exit. The buffer is bounded: it keeps the earliest bytes,
+appends a truncation marker once, and drops the remainder, so its size never
+depends on how much a run emits.
+
 `src/locale_catalogues.rs` is the authoritative registry of shipped catalogues.
 A `define_locales!` macro embeds `locales/<tag>/messages.ftl` for each declared
 tag, so a registry entry without a catalogue fails to compile. Every other

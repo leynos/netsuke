@@ -2,7 +2,10 @@
 
 use super::*;
 use anyhow::{Result, ensure};
+use netsuke::localization::keys;
 use rstest::rstest;
+use std::sync::{Arc, Barrier, Mutex};
+use std::thread;
 use tracing_subscriber::{fmt, registry::Registry};
 
 /// The level a run starts reporting at, per mode.
@@ -141,33 +144,27 @@ fn the_startup_path_resolves_the_locale_from_the_environment() -> Result<()> {
     Ok(())
 }
 
-/// Human mode releases what startup recorded.
-#[test]
-fn human_mode_releases_the_startup_warning() -> Result<()> {
+/// Settlement empties the buffer, whichever way the mode sends it.
+///
+/// The two modes differ in *where* the recorded warning goes — released to
+/// stderr, or dropped — but both must leave the writer holding nothing, so the
+/// startup buffer never leaks into the rest of the run.
+#[rstest]
+#[case(DiagMode::Human, "human mode must release the buffer to stderr")]
+#[case(DiagMode::Json, "JSON mode must drop the buffer")]
+fn settling_empties_the_startup_buffer(
+    #[case] mode: DiagMode,
+    #[case] expectation: &str,
+) -> Result<()> {
     let (writer, recorded) = record_startup("is-IS");
-    ensure!(!recorded.is_empty(), "expected a recorded warning");
-
-    settle_startup_diagnostics(&writer, DiagMode::Human);
-
     ensure!(
-        writer.buffered().is_empty(),
-        "human mode must release the buffer rather than hold it"
+        !recorded.is_empty(),
+        "expected startup to record a warning before settlement"
     );
-    Ok(())
-}
 
-/// JSON mode drops it, so stderr carries only the diagnostic document.
-#[test]
-fn json_mode_discards_the_startup_warning() -> Result<()> {
-    let (writer, recorded) = record_startup("is-IS");
-    ensure!(!recorded.is_empty(), "expected a recorded warning");
+    settle_startup_diagnostics(&writer, mode);
 
-    settle_startup_diagnostics(&writer, DiagMode::Json);
-
-    ensure!(
-        writer.buffered().is_empty(),
-        "JSON mode must drop the buffer"
-    );
+    ensure!(writer.buffered().is_empty(), "{expectation}");
     Ok(())
 }
 
@@ -179,6 +176,83 @@ fn a_supported_startup_locale_records_nothing() -> Result<()> {
     ensure!(
         recorded.is_empty(),
         "a shipped catalogue must not warn at startup, got {recorded:?}"
+    );
+    Ok(())
+}
+
+/// The startup orchestration installs the resolved localizer globally, and the
+/// previous one is restored once the scope ends.
+///
+/// `startup_localizer` mutates process-global state, so this holds the shared
+/// test-localizer lock across installation, observation, and restoration. A
+/// second thread emits one controlled event while the startup localizer is
+/// installed, coordinated by barriers rather than timing, to show that the
+/// buffered writer is shared correctly and that a concurrent emitter cannot
+/// observe a half-installed state.
+#[test]
+fn startup_installs_and_restores_the_global_localizer() -> Result<()> {
+    let _lock = test_support::localizer_test_lock()
+        .map_err(|error| anyhow::anyhow!("localizer test lock poisoned: {error}"))?;
+
+    let before = localization::message(keys::CLI_ABOUT).to_string();
+    let writer = StartupWriter::buffering();
+    let subscriber = Registry::default()
+        .with(LevelFilter::WARN)
+        .with(fmt::layer().with_writer(writer.clone()).with_ansi(false));
+
+    let args: Vec<OsString> = ["netsuke", "--locale", "fr"]
+        .into_iter()
+        .map(OsString::from)
+        .collect();
+    let previous = localization::localizer();
+
+    // Two rendezvous: the first once the localizer is installed, the second
+    // once the concurrent event has been emitted.
+    let installed = Arc::new(Barrier::new(2));
+    let emitted = Arc::new(Barrier::new(2));
+    let during = Arc::new(Mutex::new(String::new()));
+
+    let (thread_installed, thread_emitted, thread_during) = (
+        Arc::clone(&installed),
+        Arc::clone(&emitted),
+        Arc::clone(&during),
+    );
+    let observer = thread::spawn(move || {
+        thread_installed.wait();
+        // Observed while the startup localizer is installed.
+        let rendered = localization::message(keys::CLI_ABOUT).to_string();
+        if let Ok(mut slot) = thread_during.lock() {
+            *slot = rendered;
+        }
+        tracing::warn!(target: "concurrent", "observed during startup");
+        thread_emitted.wait();
+    });
+
+    tracing::subscriber::with_default(subscriber, || {
+        drop(startup_localizer(&args, &EmptyEnv, &NoSystemLocale));
+        installed.wait();
+        emitted.wait();
+    });
+
+    observer
+        .join()
+        .map_err(|_| anyhow::anyhow!("observer thread panicked"))?;
+
+    let rendered_during_startup = during
+        .lock()
+        .map_err(|error| anyhow::anyhow!("observation lock poisoned: {error}"))?
+        .clone();
+    ensure!(
+        rendered_during_startup != before,
+        "the concurrent observer must see the installed French localizer, \
+         got {rendered_during_startup:?}"
+    );
+
+    localization::set_localizer(previous);
+    let after = localization::message(keys::CLI_ABOUT).to_string();
+    ensure!(
+        after == before,
+        "the previous localizer must be restored, got {after:?} rather than {before:?}"
     );
     Ok(())
 }

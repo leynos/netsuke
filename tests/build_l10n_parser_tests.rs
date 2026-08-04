@@ -11,9 +11,6 @@ mod metadata;
 
 /// `compare.rs` reaches its sibling parser through `super::ftl`, which resolves
 /// here because both modules sit at this crate's root.
-#[path = "../build_l10n_audit/compare.rs"]
-mod compare;
-
 use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail, ensure};
@@ -242,105 +239,6 @@ fn the_repository_manifest_parses() -> Result<()> {
         found.contains(&"en-US") && found.contains(&"zh-Hant"),
         "expected the repository locales, got {found:?}"
     );
-    Ok(())
-}
-
-// ------------------------------------------------------------ audit rules
-
-/// Build a `MessageVariables` map from `(key, variables)` pairs.
-fn catalogue(entries: &[(&str, &[&str])]) -> ftl::MessageVariables {
-    entries
-        .iter()
-        .map(|(key, vars)| {
-            (
-                (*key).to_owned(),
-                vars.iter().map(|v| (*v).to_owned()).collect(),
-            )
-        })
-        .collect()
-}
-
-fn declared(keys: &[&str]) -> BTreeSet<String> {
-    keys.iter().map(|key| (*key).to_owned()).collect()
-}
-
-/// Audit `entries` for a locale against a one-key source, returning the
-/// failure message, or `None` when the catalogue is clean.
-fn audit(
-    declared_keys: &[&str],
-    source: &[(&str, &[&str])],
-    entries: &[(&str, &[&str])],
-) -> Option<String> {
-    let findings = compare::audit_catalogue(
-        "xx",
-        &declared(declared_keys),
-        &catalogue(source),
-        &catalogue(entries),
-    );
-    (!findings.is_clean()).then(|| compare::build_error_message(std::slice::from_ref(&findings)))
-}
-
-const SOURCE: &[(&str, &[&str])] = &[("a.key", &["path"]), ("b.key", &[])];
-const DECLARED: &[&str] = &["a.key", "b.key"];
-
-/// A catalogue matching the declared keys and the source variables passes.
-#[test]
-fn a_matching_catalogue_is_clean() -> Result<()> {
-    let message = audit(DECLARED, SOURCE, SOURCE);
-    ensure!(message.is_none(), "expected no findings, got {message:?}");
-    Ok(())
-}
-
-/// Catalogues that each break one audit rule against `SOURCE`.
-const OMITS_A_DECLARED_KEY: &[(&str, &[&str])] = &[("a.key", &["path"])];
-const CARRIES_AN_UNDECLARED_KEY: &[(&str, &[&str])] =
-    &[("a.key", &["path"]), ("b.key", &[]), ("c.key", &[])];
-const DROPS_A_VARIABLE: &[(&str, &[&str])] = &[("a.key", &[]), ("b.key", &[])];
-const INVENTS_A_VARIABLE: &[(&str, &[&str])] = &[("a.key", &["path"]), ("b.key", &["name"])];
-const RENAMES_A_VARIABLE: &[(&str, &[&str])] = &[("a.key", &["route"]), ("b.key", &[])];
-
-#[rstest]
-#[case(OMITS_A_DECLARED_KEY, "missing in xx: b.key")]
-#[case(CARRIES_AN_UNDECLARED_KEY, "orphaned in xx: c.key")]
-#[case(
-    DROPS_A_VARIABLE,
-    "variable mismatch in xx: a.key (expected $path, found none)"
-)]
-#[case(
-    INVENTS_A_VARIABLE,
-    "variable mismatch in xx: b.key (expected none, found $name)"
-)]
-#[case(
-    RENAMES_A_VARIABLE,
-    "variable mismatch in xx: a.key (expected $path, found $route)"
-)]
-fn the_audit_rejects(#[case] entries: &[(&str, &[&str])], #[case] expected: &str) -> Result<()> {
-    let message = audit(DECLARED, SOURCE, entries)
-        .ok_or_else(|| anyhow!("expected the audit to report a finding"))?;
-    ensure!(
-        message.contains(expected),
-        "expected a finding mentioning {expected:?}, got {message:?}"
-    );
-    Ok(())
-}
-
-/// One catalogue can fail several rules at once, and the message names each.
-#[test]
-fn every_rule_is_reported_together() -> Result<()> {
-    const BREAKS_EVERY_RULE: &[(&str, &[&str])] = &[("a.key", &[]), ("c.key", &[])];
-    let entries = BREAKS_EVERY_RULE;
-    let message = audit(DECLARED, SOURCE, entries)
-        .ok_or_else(|| anyhow!("expected the audit to report findings"))?;
-    for expected in [
-        "missing in xx: b.key",
-        "orphaned in xx: c.key",
-        "variable mismatch in xx: a.key",
-    ] {
-        ensure!(
-            message.contains(expected),
-            "expected {expected:?} in {message:?}"
-        );
-    }
     Ok(())
 }
 

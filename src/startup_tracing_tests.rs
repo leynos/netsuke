@@ -98,3 +98,139 @@ fn releasing_an_empty_buffer_succeeds() -> Result<()> {
     );
     Ok(())
 }
+
+/// Write `bytes` straight through the writer, bypassing the tracing layer.
+///
+/// The bound is a property of the writer, not of any event, so these drive it
+/// directly rather than trying to provoke a large event.
+fn write_raw(writer: &StartupWriter, bytes: &[u8]) -> Result<usize> {
+    use std::io::Write as _;
+    let mut handle = writer.make_writer();
+    Ok(handle.write(bytes)?)
+}
+
+/// Below the bound, everything is kept and nothing is marked.
+#[test]
+fn a_write_below_the_limit_is_kept_whole() -> Result<()> {
+    let writer = StartupWriter::buffering();
+    let payload = vec![b'a'; MAX_BUFFERED_BYTES - 1];
+
+    let written = write_raw(&writer, &payload)?;
+
+    ensure!(written == payload.len(), "the whole slice must be reported");
+    let buffered = writer.buffered();
+    ensure!(buffered == payload, "the bytes must be kept unchanged");
+    ensure!(
+        !buffered.ends_with(TRUNCATION_MARKER),
+        "nothing was dropped, so nothing should be marked"
+    );
+    Ok(())
+}
+
+/// Exactly at the bound is not an overflow.
+#[test]
+fn a_write_at_the_limit_is_kept_whole() -> Result<()> {
+    let writer = StartupWriter::buffering();
+    let payload = vec![b'a'; MAX_BUFFERED_BYTES];
+
+    write_raw(&writer, &payload)?;
+
+    let buffered = writer.buffered();
+    ensure!(
+        buffered.len() == MAX_BUFFERED_BYTES,
+        "expected exactly the bound, got {}",
+        buffered.len()
+    );
+    ensure!(
+        !buffered.ends_with(TRUNCATION_MARKER),
+        "a write that fits exactly must not be marked as truncated"
+    );
+    Ok(())
+}
+
+/// Overflow keeps the first bytes, marks the truncation, and never exceeds the
+/// bound.
+#[test]
+fn an_overflowing_write_keeps_the_first_bytes_and_marks_it() -> Result<()> {
+    let writer = StartupWriter::buffering();
+    let payload = vec![b'a'; MAX_BUFFERED_BYTES + 4096];
+
+    let written = write_raw(&writer, &payload)?;
+
+    ensure!(
+        written == payload.len(),
+        "dropped overflow must still report the whole slice as written"
+    );
+    let buffered = writer.buffered();
+    ensure!(
+        buffered.len() <= MAX_BUFFERED_BYTES,
+        "the buffer must not exceed its bound, got {}",
+        buffered.len()
+    );
+    ensure!(
+        buffered.starts_with(b"aaaa"),
+        "the earliest bytes are the ones kept"
+    );
+    ensure!(
+        buffered.ends_with(TRUNCATION_MARKER),
+        "an overflow must be marked"
+    );
+    Ok(())
+}
+
+/// Repeated overflow adds nothing further, and marks once only.
+#[test]
+fn repeated_overflow_marks_once_and_grows_no_further() -> Result<()> {
+    let writer = StartupWriter::buffering();
+    write_raw(&writer, &vec![b'a'; MAX_BUFFERED_BYTES + 1])?;
+    let after_first = writer.buffered();
+
+    for _ in 0..3 {
+        write_raw(&writer, b"more diagnostics that must be dropped")?;
+    }
+    let after_more = writer.buffered();
+
+    ensure!(
+        after_more == after_first,
+        "writes after truncation must change nothing"
+    );
+    let marker = String::from_utf8_lossy(TRUNCATION_MARKER).into_owned();
+    let rendered = String::from_utf8_lossy(&after_more).into_owned();
+    ensure!(
+        rendered.matches(&marker).count() == 1,
+        "the marker must appear exactly once, found {}",
+        rendered.matches(&marker).count()
+    );
+    Ok(())
+}
+
+/// Releasing after truncation empties the buffer and resumes write-through, so
+/// a truncated startup does not stay truncated for the rest of the run.
+#[test]
+fn releasing_after_truncation_empties_the_buffer() -> Result<()> {
+    let writer = StartupWriter::buffering();
+    write_raw(&writer, &vec![b'a'; MAX_BUFFERED_BYTES + 1])?;
+
+    writer.release_to_stderr()?;
+
+    ensure!(
+        writer.buffered().is_empty(),
+        "the buffer must be emptied once released"
+    );
+    Ok(())
+}
+
+/// Discarding after truncation drops everything, as it does untruncated.
+#[test]
+fn discarding_after_truncation_drops_the_buffer() -> Result<()> {
+    let writer = StartupWriter::buffering();
+    write_raw(&writer, &vec![b'a'; MAX_BUFFERED_BYTES + 1])?;
+
+    writer.discard();
+
+    ensure!(
+        writer.buffered().is_empty(),
+        "discarding must drop a truncated buffer too"
+    );
+    Ok(())
+}

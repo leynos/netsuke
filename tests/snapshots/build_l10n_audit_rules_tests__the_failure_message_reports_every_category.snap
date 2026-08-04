@@ -1,0 +1,8 @@
+---
+source: tests/build_l10n_audit_rules_tests.rs
+expression: message
+---
+localization audit failed:
+- missing in xx: a.key
+- orphaned in xx: z.orphan
+- variable mismatch in xx: b.key (expected $count, found $tally)

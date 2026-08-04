@@ -57,6 +57,7 @@ excluded_paths = [
     # reason; these entries cover the copies compiled into the test crates.
     "build_l10n_keys_tests::keys",
     "build_l10n_parser_tests::ftl",
+    "build_l10n_audit_rules_tests::ftl",
 ]
 
 # Whole crates whose ambient filesystem access lives in the crate root, so a

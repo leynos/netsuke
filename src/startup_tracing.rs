@@ -17,14 +17,86 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use tracing_subscriber::fmt::MakeWriter;
 
+/// The most startup diagnostics that will be held before the effective mode is
+/// known.
+///
+/// The window is short — locale resolution, then command-line parsing — and
+/// what it carries is a handful of one-line warnings. The bound exists so that
+/// the size of what is buffered never depends on how much a run happens to
+/// emit: without it, a pathological run could hold arbitrary bytes in memory
+/// before anything decided where they belong.
+///
+/// Overflow keeps the first bytes rather than the last: the earliest
+/// diagnostics describe how the run was configured, which is what a reader
+/// needs, and later ones are progressively less informative about the startup
+/// decision. Once full, [`TRUNCATION_MARKER`] is appended once, if it fits, and
+/// everything after is dropped.
+const MAX_BUFFERED_BYTES: usize = 64 * 1024;
+
+/// Appended once when [`MAX_BUFFERED_BYTES`] is reached, so a truncated buffer
+/// says so rather than appearing to be the whole of it.
+const TRUNCATION_MARKER: &[u8] = b"\n[startup diagnostics truncated]\n";
+
 /// Where startup diagnostics are going right now.
 enum Sink {
     /// Held until the effective mode is known.
-    Buffered(Vec<u8>),
+    Buffered(BoundedBuffer),
     /// Human mode: written through to stderr.
     Stderr,
     /// JSON mode: discarded, so stderr carries only the diagnostic document.
     Discard,
+}
+
+/// A byte buffer that stops growing at [`MAX_BUFFERED_BYTES`].
+///
+/// Once full it records that it truncated, so the marker is appended exactly
+/// once however many writes follow.
+#[derive(Default)]
+struct BoundedBuffer {
+    bytes: Vec<u8>,
+    truncated: bool,
+}
+
+impl BoundedBuffer {
+    /// Append as much of `buf` as the bound allows.
+    ///
+    /// The first write to overflow keeps the bytes that fit, then appends the
+    /// truncation marker if there is room for it. Later writes are dropped.
+    fn append(&mut self, buf: &[u8]) {
+        if self.truncated {
+            return;
+        }
+        let remaining = MAX_BUFFERED_BYTES.saturating_sub(self.bytes.len());
+        if buf.len() <= remaining {
+            self.bytes.extend_from_slice(buf);
+            return;
+        }
+        // Room for the marker is reserved rather than claimed afterwards. A
+        // buffer filled to exactly the bound would leave none, and the marker
+        // would be dropped in precisely the case it is needed.
+        let content_limit = MAX_BUFFERED_BYTES.saturating_sub(TRUNCATION_MARKER.len());
+        if self.bytes.len() < content_limit {
+            let keep = content_limit.saturating_sub(self.bytes.len());
+            // `get` rather than a slice index: the lint forbids slicing that
+            // could panic, and a short `buf` is a legitimate input here.
+            if let Some(head) = buf.get(..keep.min(buf.len())) {
+                self.bytes.extend_from_slice(head);
+            }
+        }
+        self.bytes.truncate(content_limit);
+        self.bytes.extend_from_slice(TRUNCATION_MARKER);
+        self.truncated = true;
+    }
+
+    fn take(&mut self) -> Vec<u8> {
+        self.truncated = false;
+        std::mem::take(&mut self.bytes)
+    }
+
+    #[cfg(test)]
+    fn as_slice(&self) -> &[u8] {
+        &self.bytes
+    }
 }
 
 /// A writer that buffers until told where the output belongs.
@@ -52,7 +124,7 @@ impl StartupWriter {
     #[must_use]
     pub fn buffering() -> Self {
         Self {
-            sink: Arc::new(Mutex::new(Sink::Buffered(Vec::new()))),
+            sink: Arc::new(Mutex::new(Sink::Buffered(BoundedBuffer::default()))),
         }
     }
 
@@ -80,7 +152,7 @@ impl StartupWriter {
     pub fn release_to_stderr(&self) -> io::Result<()> {
         let mut sink = self.lock();
         let buffered = match &mut *sink {
-            Sink::Buffered(bytes) => std::mem::take(bytes),
+            Sink::Buffered(buffer) => buffer.take(),
             Sink::Stderr | Sink::Discard => Vec::new(),
         };
         *sink = Sink::Stderr;
@@ -117,7 +189,7 @@ impl StartupWriter {
     #[must_use]
     pub fn buffered(&self) -> Vec<u8> {
         match &*self.lock() {
-            Sink::Buffered(bytes) => bytes.clone(),
+            Sink::Buffered(buffer) => buffer.as_slice().to_vec(),
             Sink::Stderr | Sink::Discard => Vec::new(),
         }
     }
@@ -132,8 +204,12 @@ impl Write for StartupWriterHandle {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let mut sink = self.sink.lock().unwrap_or_else(PoisonError::into_inner);
         match &mut *sink {
-            Sink::Buffered(bytes) => {
-                bytes.extend_from_slice(buf);
+            Sink::Buffered(buffer) => {
+                buffer.append(buf);
+                // The whole slice is reported as written even when the bound
+                // dropped some of it: the formatter has no recourse, and a
+                // short write would be reported through the channel being
+                // truncated.
                 Ok(buf.len())
             }
             Sink::Stderr => {

@@ -1539,6 +1539,27 @@ Three dispositions are in use:
 Scope an expectation as tightly as the site allows — a function where one call
 is involved, a module only where the whole file is pending migration.
 
+### `LocaleLocalizer`
+
+`test_support::localizer::locale_localizer` installs a test locale under
+`LOCALIZER_TEST_LOCK`, the same lock the `en_localizer` fixture uses, so tests
+that mutate the process-global localizer run in sequence rather than racing.
+
+Dropping the returned `LocaleLocalizer` restores the previously installed
+localizer and *then* releases the lock, in that order. The ordering is the
+field declaration order, since Rust drops fields in the order they are
+declared, and it is the whole point of the type: releasing first would admit
+another test into the window between the two, where its localizer would be
+installed and then overwritten by the restore.
+
+That ordering has no behavioural signature under normal scheduling — a waiting
+thread almost never lands inside a window a few instructions wide — so a
+contention test cannot detect the wrong order. `RestoreProbe` wraps the
+localizer guard and records, at the instant restoration begins, whether the
+lock is still held; `try_lock` from the owning thread returns `WouldBlock`, so
+"blocked" means the bundle still holds it. Reverting the field order turns that
+assertion red deterministically.
+
 ### `EnvLock`
 
 `test_support::env_lock::EnvLock` is a global mutex that serializes all

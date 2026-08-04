@@ -666,8 +666,13 @@ Common environment equivalents include:
 - `NETSUKE_EMOJI=never`
 - `NETSUKE_PROGRESS=never`
 - `NETSUKE_ACCESSIBILITY=on`
+- `NETSUKE_LOCALE=en-US`
 - `NETSUKE_DEFAULT_TARGETS__0=hello.txt`
 - `NETSUKE_NINJA=/opt/ninja/bin/ninja`
+
+`NETSUKE_LOCALE` selects the interface language; see
+[Choose a language with `--locale`](#choose-a-language-with---locale) for how
+it combines with the flag and the system default.
 
 `NETSUKE_NINJA` overrides the Ninja executable used by `build` and `clean`.
 Leave it unset to use `ninja` from `PATH`, or set another executable name or an
