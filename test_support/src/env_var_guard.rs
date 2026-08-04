@@ -5,6 +5,11 @@
 //! [`EnvLock`](crate::env_lock::EnvLock) for the entire lifetime of any
 //! [`EnvVarGuard`] to serialise mutations across threads. The guard uses RAII to
 //! restore the previous value when it is dropped.
+
+#![expect(
+    clippy::disallowed_methods,
+    reason = "process-backed RAII adapter retained for subprocess-inheritance tests"
+)]
 //!
 //! # Examples
 //!

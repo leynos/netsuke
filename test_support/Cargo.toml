@@ -19,5 +19,6 @@ thiserror = "1"
 assert_cmd = "2.0.0"
 netsuke = { package = "netsuke-build", path = ".." }
 rstest = "0.26.1"
+tracing = "0.1"
 
 [dev-dependencies]

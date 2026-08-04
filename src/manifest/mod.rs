@@ -28,12 +28,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, UndefinedBehavior, value::Value};
 use serde::de::Error as _;
-use std::sync::Arc;
-
-use env_reader::env_var_with;
-pub use env_reader::{EnvReader, process_env_reader};
-use std::env as std_env;
-use std::path::Path;
+use std::{env, path::Path, sync::Arc};
 
 mod diagnostics;
 mod expand;
@@ -50,12 +45,13 @@ pub type ManifestMap = serde_json::Map<String, ManifestValue>;
 pub use diagnostics::{
     ManifestError, ManifestName, ManifestSource, map_data_error, map_yaml_error,
 };
+pub use env_reader::{EnvReader, process_env_reader};
 pub use glob::glob_paths;
 
 pub(crate) use expand::expand_foreach;
 pub use render::render_manifest;
 
-use self::jinja_macros::register_manifest_macros;
+use self::{env_reader::env_var_with, jinja_macros::register_manifest_macros};
 
 /// Stages in the manifest-loading sub-pipeline.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

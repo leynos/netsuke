@@ -31,23 +31,17 @@ to pass unchanged after every change.
 
 ## Polonius-dependent sites
 
-| Site                                                          | Tag                | Verification                                                                    |
-| ------------------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------- |
-| `src/graph_view/mod.rs` — `NodePathRegistry::ensure_node_mut` | `POLONIUS(case-3)` | Passes with `-Zpolonius=next`; rejected by NLL with E0499 on nightly-2026-06-25 |
-
-`ensure_node_mut` is the get-or-insert accessor behind graph projection: it
-returns `&mut NodeKind`, performs a single lookup on the hit path, and clones
-the path only on insertion. It replaced three
-`entry(path.clone()).or_insert(NodeKind::Source)` sites that cloned every
-input, implicit-dependency, and order-only path on every registration. The
-`get_mut` loan escapes only via the early return, which is the canonical
-Polonius problem-case-3 shape (conditional early return of a borrow).
+There are currently no tagged Polonius-dependent sites.
 
 ## Evolutions that compile under both checkers
 
 These came out of the design-pressure scan. Each compiles under plain NLL as
 well — the owned style was habit, so they carry no toolchain caveat:
 
+- `src/graph_view/mod.rs` — `NodePathRegistry::ensure_node_mut` uses
+  `hashbrown::HashMap::entry_ref` for a borrowed single lookup. It returns
+  `&mut NodeKind` and allocates an owned path only for a vacant entry, while
+  compiling both with and without `-Zpolonius=next`.
 - `src/stdlib/collections.rs` — `group_by_filter` consumed its resolved key
   in `entry(key_value)` instead of cloning it first.
 - `src/ir/cycle.rs` — `detect_targets` snapshots borrowed

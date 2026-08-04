@@ -16,11 +16,11 @@ use rstest::fixture;
 use rstest_bdd::Slot;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
 use std::sync::MutexGuard;
 use test_support::PathGuard;
-use test_support::env::{NinjaEnvGuard, restore_many_locked};
+use test_support::env::{NinjaEnvGuard, remove_var_locked, restore_many_locked, set_var_locked};
 use test_support::env_lock::EnvLock;
 use test_support::http::HttpServer;
 
@@ -176,12 +176,32 @@ impl TestWorld {
         self.env_vars.borrow_mut().entry(key).or_insert(previous);
     }
 
+    /// Set a scenario environment variable through the locked test adapter.
+    pub fn set_env_var(&self, key: &str, value: &OsStr) -> Option<OsString> {
+        self.ensure_env_lock();
+        let locks = self.env_lock.borrow();
+        locks
+            .as_ref()
+            .and_then(|lock| set_var_locked(lock, key, value))
+    }
+
+    /// Remove a scenario environment variable through the locked test adapter.
+    pub fn remove_env_var(&self, key: &str) -> Option<OsString> {
+        self.ensure_env_lock();
+        let locks = self.env_lock.borrow();
+        locks.as_ref().and_then(|lock| remove_var_locked(lock, key))
+    }
+
     /// Restore any environment variables overridden during the scenario.
-    unsafe fn restore_environment_locked(&self) {
+    fn restore_environment_locked(&self) {
         let vars = std::mem::take(&mut *self.env_vars.borrow_mut());
         if !vars.is_empty() {
-            // SAFETY: The caller holds EnvLock.
-            unsafe { restore_many_locked(vars) };
+            let locks = self.env_lock.borrow();
+            let Some(lock) = locks.as_ref() else {
+                *self.env_vars.borrow_mut() = vars;
+                return;
+            };
+            restore_many_locked(lock, vars);
         }
         self.env_vars_forward.borrow_mut().clear();
     }
@@ -217,7 +237,7 @@ impl Drop for TestWorld {
                 drop(std::env::set_current_dir(original_cwd));
             }
             // SAFETY: EnvLock is still held.
-            unsafe { self.restore_environment_locked() };
+            self.restore_environment_locked();
         }
         self.env_lock.borrow_mut().take();
         self.stdlib_text.clear();

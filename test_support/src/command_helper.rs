@@ -117,13 +117,9 @@ pub fn compile_large_output_helper(
 ///     "cmd",
 ///     "fn main() {}\n",
 /// )
-/// .expect("compile helper");
+/// .expect("compile Rust helper");
 /// assert!(exe.as_std_path().exists());
 /// ```
-#[expect(
-    clippy::disallowed_methods,
-    reason = "reads the inherited environment to invoke rustc for a helper binary; the compiler must see the real toolchain"
-)]
 pub fn compile_rust_helper(
     dir: &Dir,
     root: &Utf8PathBuf,
@@ -135,13 +131,18 @@ pub fn compile_rust_helper(
 
     let src_path = root.join(format!("{name}.rs"));
     let exe_path = root.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
-    let rustc = std::env::var_os("RUSTC").unwrap_or_else(|| OsString::from("rustc"));
+    let rustc = OsString::from("rustc");
     let status = Command::new(&rustc)
         .arg(src_path.as_std_path())
         .arg("-o")
         .arg(exe_path.as_std_path())
         .status()
-        .with_context(|| format!("invoke {rustc:?} to compile helper {name}"))?;
+        .with_context(|| {
+            format!(
+                "invoke {} to compile helper {name}",
+                rustc.to_string_lossy()
+            )
+        })?;
 
     if !status.success() {
         bail!("failed to compile helper {name}: {status:?}");

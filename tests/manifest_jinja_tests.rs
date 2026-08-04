@@ -3,18 +3,10 @@
 
 use anyhow::{Context, Result, bail, ensure};
 use netsuke::ast::{NetsukeManifest, Recipe, StringOrList, Target};
-use netsuke::manifest::{self, ManifestError};
-use rstest::{fixture, rstest};
-use test_support::{EnvVarGuard, env_lock::EnvLock, manifest::manifest_yaml};
-
-/// Domain-specific environment variables exercised by manifest tests.
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum EnvVar {
-    /// Environment variable populated to verify successful interpolation.
-    TestEnv,
-    /// Environment variable intentionally absent to surface diagnostics.
-    TestEnvMissing,
-}
+use netsuke::manifest::{self, EnvReader, ManifestError};
+use rstest::rstest;
+use std::{env::VarError, sync::Arc};
+use test_support::manifest::manifest_yaml;
 
 /// Manifest fields asserted repeatedly within the test suite.
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -29,15 +21,6 @@ pub enum FieldName {
     OrderOnlyDeps,
     /// Nested rule reference field.
     Rule,
-}
-
-impl EnvVar {
-    const fn as_str(self) -> &'static str {
-        match self {
-            Self::TestEnv => "NETSUKE_TEST_ENV",
-            Self::TestEnvMissing => "NETSUKE_TEST_ENV_MISSING",
-        }
-    }
 }
 
 impl FieldName {
@@ -55,11 +38,6 @@ impl FieldName {
 const ENV_YAML: &str = "targets:\n  - name: env\n    command: echo {{ env('NETSUKE_TEST_ENV') }}\n";
 const ENV_MISSING_YAML: &str =
     "targets:\n  - name: env_missing\n    command: echo {{ env('NETSUKE_TEST_ENV_MISSING') }}\n";
-
-#[fixture]
-fn env_lock() -> EnvLock {
-    EnvLock::acquire()
-}
 
 fn assert_string_or_list_eq(actual: &StringOrList, expected: &str, field: FieldName) -> Result<()> {
     match actual {
@@ -149,12 +127,11 @@ fn renders_global_vars() -> Result<()> {
 }
 
 #[rstest]
-fn renders_env_function(env_lock: EnvLock) -> Result<()> {
-    let _env_lock = env_lock;
-    let _guard = EnvVarGuard::set(EnvVar::TestEnv.as_str(), "42");
+fn renders_env_function() -> Result<()> {
+    let reader: EnvReader = Arc::new(|_| Ok(String::from("42")));
     let yaml = manifest_yaml(ENV_YAML);
 
-    let manifest = manifest::from_str(&yaml)?;
+    let manifest = manifest::from_str_with_env(&yaml, &reader)?;
     let first = manifest
         .targets
         .first()
@@ -167,13 +144,12 @@ fn renders_env_function(env_lock: EnvLock) -> Result<()> {
 }
 
 #[rstest]
-fn renders_env_function_missing_var(env_lock: EnvLock) -> Result<()> {
-    let _env_lock = env_lock;
-    let name = EnvVar::TestEnvMissing;
-    let _guard = EnvVarGuard::remove(name.as_str());
+fn renders_env_function_missing_var() -> Result<()> {
+    let name = "NETSUKE_TEST_ENV_MISSING";
+    let reader: EnvReader = Arc::new(|_| Err(VarError::NotPresent));
     let yaml = manifest_yaml(ENV_MISSING_YAML);
 
-    match manifest::from_str(&yaml) {
+    match manifest::from_str_with_env(&yaml, &reader) {
         Ok(parsed) => bail!("expected missing env var to error, got manifest {parsed:?}"),
         Err(err) => {
             if let Some(manifest_err) = err.downcast_ref::<ManifestError>() {
@@ -185,14 +161,14 @@ fn renders_env_function_missing_var(env_lock: EnvLock) -> Result<()> {
                 ensure!(
                     err.chain().any(|source| {
                         format!("{source:?}").contains("UndefinedError")
-                            && source.to_string().contains(name.as_str())
+                            && source.to_string().contains(name)
                     }),
                     "unexpected error type or message: {err:?}"
                 );
             }
             let msg = format!("{err:?}");
             ensure!(
-                msg.contains(name.as_str()),
+                msg.contains(name),
                 "missing env var name not present in message: {msg}"
             );
             Ok(())

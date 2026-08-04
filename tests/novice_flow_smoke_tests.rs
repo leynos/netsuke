@@ -5,9 +5,8 @@ use rstest::rstest;
 use std::path::Path;
 use tempfile::{TempDir, tempdir};
 use test_support::check_ninja;
-use test_support::env::{override_ninja_env, system_env};
 use test_support::fluent::normalize_fluent_isolates;
-use test_support::netsuke::run_netsuke_in;
+use test_support::netsuke::{run_netsuke_in, run_netsuke_in_with_env};
 
 /// Captured output from a netsuke invocation, with normalized Fluent isolates.
 struct CommandOutput {
@@ -24,8 +23,11 @@ fn run_netsuke(
     args: &[&str],
     ninja_env: Option<&Path>,
 ) -> Result<CommandOutput> {
-    let _guard = ninja_env.map(|path| override_ninja_env(&system_env(), path));
-    let run = run_netsuke_in(current_dir, args)?;
+    let ninja = ninja_env.map(|path| path.to_string_lossy());
+    let run = match ninja.as_deref() {
+        Some(path) => run_netsuke_in_with_env(current_dir, args, &[("NETSUKE_NINJA", path)])?,
+        None => run_netsuke_in(current_dir, args)?,
+    };
     Ok(CommandOutput {
         stdout: normalize_fluent_isolates(&run.stdout),
         stderr: normalize_fluent_isolates(&run.stderr),

@@ -1,5 +1,10 @@
 //! Generic guard for restoring environment variables.
 
+#![expect(
+    clippy::disallowed_methods,
+    reason = "process-backed adapter that restores test state through the Environment port"
+)]
+
 use std::{
     borrow::Cow,
     ffi::{OsStr, OsString},
@@ -28,7 +33,7 @@ pub trait Environment {
     unsafe fn remove_var(&mut self, key: &str);
 }
 
-/// Concrete [`Environment`] backed by [`std::env`].
+/// Concrete [`Environment`] backed by [`mod@std::env`].
 #[derive(Debug, Default)]
 pub struct StdEnv;
 

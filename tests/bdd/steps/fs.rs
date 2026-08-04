@@ -121,19 +121,11 @@ fn setup_environment_variables(
     ];
     for (key, path) in entries {
         let new_val = path.as_std_path().as_os_str().to_owned();
-        let original = std::env::var_os(key);
-        // SAFETY: EnvLock (held via world.env_lock) serialises mutations
-        unsafe {
-            std::env::set_var(key, path.as_std_path().as_os_str());
-        }
+        let original = world.set_env_var(key, path.as_std_path().as_os_str());
         world.track_env_var(key.to_owned(), original, Some(new_val));
     }
     let new_val = root.as_std_path().as_os_str().to_owned();
-    let original = std::env::var_os("WORKSPACE");
-    // SAFETY: EnvLock (held via world.env_lock) serialises mutations
-    unsafe {
-        std::env::set_var("WORKSPACE", root.as_std_path().as_os_str());
-    }
+    let original = world.set_env_var("WORKSPACE", root.as_std_path().as_os_str());
     world.track_env_var("WORKSPACE".into(), original, Some(new_val));
 }
 

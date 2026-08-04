@@ -1,72 +1,33 @@
 //! Environment access for the manifest `env()` Jinja helper.
 //!
-//! Isolated from `manifest::mod` so the reader type, its process-backed
-//! default, and the failure mapping sit together, and so neither module
-//! exceeds the repository's 400-line file limit.
-//!
-//! See the "Manifest `env()` reader" section of the developers' guide for this
-//! seam's ownership boundary and composition rules.
+//! The reader port keeps process access at the composition root while tests
+//! inject deterministic values without mutating global state.
 
 use std::sync::Arc;
 
 use minijinja::{Error, ErrorKind};
+use mockable::{DefaultEnv, Env};
 
 use crate::localization::{self, keys};
 
 /// Environment reader supplied to the `env()` Jinja helper.
-///
-/// Shared and `Send + Sync` because `minijinja` requires registered functions
-/// to be both, and the reader is captured by the registered closure.
 pub type EnvReader =
     Arc<dyn Fn(&str) -> std::result::Result<String, std::env::VarError> + Send + Sync>;
 
-/// Reader backed by the live process environment.
-///
-/// # Examples
-///
-/// ```rust,no_run
-/// use netsuke::manifest::process_env_reader;
-///
-/// // Reads whatever the process has. Not executed: the result depends on the
-/// // caller's environment, so running it would make the doctest a hostage to
-/// // whatever CI happens to export.
-/// let reader = process_env_reader();
-/// drop(reader("PATH"));
-/// ```
+/// Construct the process-backed environment reader used by production loads.
 #[must_use]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "composition root: supplies the process environment to the env() Jinja helper"
-)]
 pub fn process_env_reader() -> EnvReader {
-    Arc::new(|key: &str| std::env::var(key))
+    let env = DefaultEnv;
+    Arc::new(move |key| env.raw(key))
 }
 
-/// Resolve the value of an environment variable for the `env()` Jinja helper.
-///
-/// Returns the variable's value or a structured error that mirrors Jinja's
-/// failure modes, ensuring templates halt when a variable is missing or not
-/// valid UTF-8.
 /// Resolve `name` through `read_env`, mapping failures to Jinja errors.
-///
-/// Kept separate from the Jinja registration so all three outcomes — present, absent, and
-/// non-UTF-8 — can be exercised without mutating the process environment. The
-/// non-UTF-8 branch is otherwise unreachable from a test: fabricating such a
-/// value in the live environment needs platform-specific `OsString` surgery,
-/// and the AGENTS.md testing mandate forbids in-process mutation regardless.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// let value = env_var_with("FOO", |_| Ok(String::from("bar")));
-/// assert_eq!(value.expect("FOO"), "bar");
-/// ```
-pub(super) fn env_var_with<F>(name: &str, read_env: F) -> std::result::Result<String, Error>
-where
-    F: FnOnce(&str) -> std::result::Result<String, std::env::VarError>,
-{
+pub(super) fn env_var_with(
+    name: &str,
+    read_env: impl FnOnce(&str) -> std::result::Result<String, std::env::VarError>,
+) -> std::result::Result<String, Error> {
     match read_env(name) {
-        Ok(val) => Ok(val),
+        Ok(value) => Ok(value),
         Err(std::env::VarError::NotPresent) => Err(Error::new(
             ErrorKind::UndefinedError,
             localization::message(keys::MANIFEST_ENV_MISSING)

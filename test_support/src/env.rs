@@ -3,6 +3,11 @@
 //! Provides fixtures and utilities for managing `PATH` and writing minimal
 //! manifests.
 
+#![expect(
+    clippy::disallowed_methods,
+    reason = "process-backed test adapter; callers use injected environments unless exercising subprocess inheritance"
+)]
+
 use anyhow::{Context, Result};
 use mockable::{DefaultEnv, Env, MockEnv};
 use netsuke::runner::NINJA_ENV;
@@ -109,6 +114,14 @@ pub fn set_var_locked(lock: &EnvLock, key: &str, value: &OsStr) -> Option<OsStri
     previous
 }
 
+/// Remove an environment variable while the caller already holds [`EnvLock`].
+pub fn remove_var_locked(lock: &EnvLock, key: &str) -> Option<OsString> {
+    let _ = lock;
+    let previous = std::env::var_os(key);
+    // SAFETY: Caller provided the scenario-held `EnvLock`.
+    unsafe { std::env::remove_var(key) };
+    previous
+}
 /// Remove an environment variable, returning its previous value.
 ///
 /// The mutation is `unsafe` in Rust 2024 as it alters process state. The
@@ -148,7 +161,7 @@ pub fn restore_many(vars: HashMap<String, Option<OsString>>) {
     }
     let _lock = EnvLock::acquire();
     // SAFETY: We hold EnvLock via _lock.
-    unsafe { restore_many_locked(vars) };
+    restore_many_locked(&_lock, vars);
 }
 
 /// Restore multiple environment variables without acquiring EnvLock.
@@ -160,11 +173,8 @@ pub fn restore_many(vars: HashMap<String, Option<OsString>>) {
 /// # Safety
 ///
 /// Caller must hold [`EnvLock`] for the duration of this call.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "test_support::env is the crate's process-environment boundary: these guards exist to set and restore real variables for subprocess and legacy in-process tests, which AGENTS.md sanctions"
-)]
-pub unsafe fn restore_many_locked(vars: HashMap<String, Option<OsString>>) {
+pub fn restore_many_locked(lock: &EnvLock, vars: HashMap<String, Option<OsString>>) {
+    let _ = lock;
     for (key, val) in vars {
         if let Some(v) = val {
             // SAFETY: Caller guarantees EnvLock is held.

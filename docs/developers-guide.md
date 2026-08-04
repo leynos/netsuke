@@ -153,6 +153,10 @@ the hexagonal port/adapter pattern:
   collection (nodes, edges, default targets), and is invariant under `HashMap`
   insertion order. The shuffled-insertion proptest in
   [`src/graph_view/tests.rs`](../src/graph_view/tests.rs) covers this invariant.
+- `NodePathRegistry` owns graph-path deduplication. Its borrowed `entry_ref`
+  lookup avoids cloning existing paths; conversion to `BTreeMap` at the
+  projection boundary restores deterministic ordering. This registry is
+  internal to graph projection and must not become a general application map.
 - [`GraphRenderer`](../src/graph_view/render.rs) is the trait every renderer
   adapter implements. The contract is intentionally minimal:
   `render(&self, view: &GraphView, sink: &mut dyn io::Write) -> Result<(), GraphRenderError>`.
@@ -281,29 +285,98 @@ NEXTEST_VERSION="$(sed -n "s/.*NEXTEST_VERSION: '\(.*\)'.*/\1/p" \
   .github/workflows/ci.yml)"
 cargo install cargo-nextest --locked --version "$NEXTEST_VERSION"
 # or, for a prebuilt binary:
-cargo binstall --no-confirm "cargo-nextest@$NEXTEST_VERSION"
+cargo binstall --no-confirm --locked \
+  "whitaker-installer@$WHITAKER_INSTALLER_VERSION"
 ```
 
-See [Test execution](#test-execution) for what the checked-in nextest
-configuration does and does not cover.
+`whitaker-installer` and the lint libraries are separate artefacts with
+separate versions. `WHITAKER_INSTALLER_VERSION` pins the installer — the tool
+that stages libraries — and nothing else. The installer keeps its own checkout
+of the Whitaker repository under `~/.local/share/whitaker`, updates it with
+`git pull`, and stages the libraries from its default branch. Lint behaviour
+therefore tracks Whitaker HEAD.
 
-`make lint` runs rustdoc with warnings denied, `cargo clippy`, and the
-[Whitaker](whitaker-users-guide.md) Dylint suite
-(`whitaker --all -- --all-targets --all-features`). Install Whitaker through
-the standalone installer described in the
-[Whitaker user's guide](whitaker-users-guide.md) so local linting matches
-continuous integration (CI); `make lint-clippy` runs the Clippy-only subset. CI
-pins the installer version in `WHITAKER_INSTALLER_VERSION` in
-`.github/workflows/ci.yml`. Install that same version locally so local runs
-match CI; read the pin from the workflow rather than copying the number, so the
-two cannot drift:
+**Running the lint libraries at HEAD is deliberate.** Netsuke follows the suite
+as it develops, so new lints and fixes arrive without a version bump here. Do
+not add a `[workspace.metadata.dylint]` block pinning `whitaker_suite` to a
+`tag` or `rev`. The [Whitaker user's guide](whitaker-users-guide.md) documents
+that form, and it is the right answer for a project wanting reproducible lint
+results, but adopting it here would reverse a standing decision rather than fix
+a defect.
+
+The cost is worth stating plainly: a change upstream can alter lint results
+between two runs with no change in this repository, and a local checkout that
+has not been restaged will disagree with CI, which stages fresh on every job.
+Restaging is what reconciles them.
+
+What the module-scoped exemptions in `dylint.toml` actually depend on is
+[Whitaker PR #315][whitaker-pr-315], which added the `excluded_paths` option,
+so the staged libraries must be recent enough to include it. Libraries staged
+from an older checkout ignore `excluded_paths` silently — the exemptions stop
+applying with no error, and the lint reports the modules they covered. Re-run
+`whitaker-installer` to restage from HEAD. If that checkout has been left on a
+detached HEAD, the install fails at its `git pull`; put it back on the default
+branch and re-run.
+
+[whitaker-pr-315]: https://github.com/leynos/whitaker/pull/315
+
+Whitaker is configured by `dylint.toml` at the repository root, where each
+sanctioned ambient-filesystem scope for `no_std_fs_operations` carries a
+documented rationale. `docs/whitaker-users-guide.md` is a near-verbatim import
+of the [upstream Whitaker user's guide][whitaker-upstream-guide]; refresh it
+from that URL rather than editing it in place, preserving the "Netsuke
+deviation from upstream" callout, and record Netsuke-specific policy here and in
+`dylint.toml`.
+
+[whitaker-upstream-guide]: https://raw.githubusercontent.com/leynos/whitaker/refs/heads/main/docs/users-guide.md
+
+Prefer `excluded_paths` over `excluded_crates`: a path entry exempts one module
+and its descendants, whereas a crate entry exempts a whole compilation unit.
+The application crate is scoped this way — only
+`netsuke::stdlib::which::lookup` (executable discovery through `PATH` and
+cross-directory symlink canonicalization, which `cap_std` cannot express) and
+`netsuke::runner::process::file_io::ambient_sync` (temporary-file
+synchronization, scoped to the submodule holding only that `sync_all` so the
+rest of `file_io` keeps writing through `cap_std` handles), and
+`netsuke::cli::discovery::paths` (canonicalizing an ambient `--directory` to
+match OrthoConfig's layer paths) are exempt; the rest of `netsuke` stays under
+the capability policy. The behavioural step definitions, CLI integration tests,
+and shared workflow-reading helper that stage fixtures ambiently are scoped the
+same way. A crate-level entry is justified only when the ambient access lives
+in the crate root itself, where a path entry would be no narrower — that covers
+the Cargo build script and the enumerated integration-test crates. The
+`test_support` crate uses capability-backed fixture helpers and remains fully
+linted by Whitaker.
+
+`test_support` is a workspace member, but its one sanctioned ambient boundary
+is configured per crate rather than in the root `dylint.toml`.
+`make lint-whitaker` therefore runs the suite again from `test_support/`, where
+`test_support/dylint.toml` names only `test_support::fs` in `excluded_paths`.
+The root `excluded_crates` must not contain `test_support`: every other module
+in the crate remains subject to the filesystem policy.
+
+Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
+allows. The lint does honour in-source lint attributes, but this repository
+denies `clippy::allow_attributes`, so `#[allow(no_std_fs_operations)]` will not
+compile here; an in-source exemption must be a *temporary*, item-level
+`#[expect(no_std_fs_operations, reason = "…")]` that states the reason and the
+route back to compliance. Prefer migrating to `cap_std` over any of these;
+reach for an exclusion only when the operation is irreducibly ambient.
+
+When command output is long, preserve exit codes and logs:
 
 ```bash
-WHITAKER_INSTALLER_VERSION="$(sed -n \
-  "s/.*WHITAKER_INSTALLER_VERSION: '\(.*\)'.*/\1/p" \
-  .github/workflows/ci.yml)"
-cargo install --locked whitaker-installer \
-  --version "$WHITAKER_INSTALLER_VERSION"
+set -o pipefail
+make test 2>&1 | tee /tmp/netsuke-make-test.log
+```
+
+These gates always use the repository toolchain and the default codegen
+backend. For a faster inner loop between gate runs, see
+[local build acceleration](#local-build-acceleration).
+
+For documentation changes, also run `make fmt`, `make markdownlint`, and
+`make nixie`.
+
 # or, for a prebuilt binary:
 cargo binstall --no-confirm --locked \
   "whitaker-installer@$WHITAKER_INSTALLER_VERSION"
@@ -364,38 +437,24 @@ the capability policy. The behavioural step definitions, CLI integration tests,
 and shared workflow-reading helper that stage fixtures ambiently are scoped the
 same way. A crate-level entry is justified only when the ambient access lives
 in the crate root itself, where a path entry would be no narrower — that covers
-the Cargo build script and the enumerated integration-test crates.
+the Cargo build script and the enumerated integration-test crates. The
+`test_support` crate uses capability-backed fixture helpers and remains fully
+linted by Whitaker.
 
-`test_support` is excluded from the root Cargo workspace, so the root
-`dylint.toml` cannot reach it and `whitaker --all` at the repository root never
-lints it. `make lint-whitaker` therefore runs the suite a second time from
-`test_support/`, where `test_support/dylint.toml` supplies that crate's policy:
-a single `excluded_paths` entry for `test_support::fs`, the module wrapping the
-ambient fixture operations. Every other module routes through it — `exec`,
-`manifest`, and the crate-root regression tests directly, and `check_ninja` and
-`fake_ninja` via `exec::write_exec_with_content` — so a new direct `std::fs`
-call anywhere else in the crate still fails the lint.
+`test_support` is a workspace member, but its one sanctioned ambient boundary
+is configured per crate rather than in the root `dylint.toml`.
+`make lint-whitaker` therefore runs the suite again from `test_support/`, where
+`test_support/dylint.toml` names only `test_support::fs` in `excluded_paths`.
+The root `excluded_crates` must not contain `test_support`: every other module
+in the crate remains subject to the filesystem policy.
 
-Exceptions belong in `dylint.toml`, scoped as narrowly as the lint allows.
-Neither `#[allow(no_std_fs_operations)]` nor
-`#[expect(no_std_fs_operations, reason = "…")]` suppresses this lint in the
-Whitaker build this repository pins, so no in-source attribute is usable here
-(this repository also denies `clippy::allow_attributes`, so
-`#[allow(no_std_fs_operations)]` will not even compile). A `dylint.toml` entry
-is the only working mechanism: a narrowly scoped `excluded_paths` entry for a
-bounded module, or, where the ambient access lives at the crate root and a path
-entry would be no narrower, an `excluded_crates` entry. Prefer migrating to
-`cap_std` over adding an exclusion; reach for an exclusion only when the
-operation is irreducibly ambient.
-
-To confirm the exclusions have not silently widened, add a temporary
-`std::fs::metadata` call to an unexcluded module — for example
-`src/stdlib/which/cache.rs`, a sibling of the excluded `lookup` module, or the
-body of `src/runner/process/file_io.rs` outside `ambient_sync` — then run
-`make lint-whitaker`. Both sites must still be reported; revert the probe
-afterwards. The same check applies to `test_support`: a `std::fs` call in, say,
-`test_support/src/exec.rs` must be reported even though `test_support::fs` is
-exempt.
+Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
+allows. The lint does honour in-source lint attributes, but this repository
+denies `clippy::allow_attributes`, so `#[allow(no_std_fs_operations)]` will not
+compile here; an in-source exemption must be a *temporary*, item-level
+`#[expect(no_std_fs_operations, reason = "…")]` that states the reason and the
+route back to compliance. Prefer migrating to `cap_std` over any of these;
+reach for an exclusion only when the operation is irreducibly ambient.
 
 When command output is long, preserve exit codes and logs:
 
@@ -407,6 +466,9 @@ make test 2>&1 | tee /tmp/netsuke-make-test.log
 These gates always use the repository toolchain and the default codegen
 backend. For a faster inner loop between gate runs, see
 [local build acceleration](#local-build-acceleration).
+
+For documentation changes, also run `make fmt`, `make markdownlint`, and
+`make nixie`.
 
 ### Workflow pins and Dependabot
 
@@ -474,10 +536,9 @@ The caller passes two configuration inputs, each carrying intent:
   feature) as untested.
 
 The caller does not set `extra-crate-dirs`, the input reserved for crate
-directories outside the Cargo workspace. Netsuke is a single publishable crate;
-its sanctioned ambient-filesystem operations live at their application call
-sites. `test_support` is deliberately excluded from the workspace
-(`exclude = ["test_support"]`) and this workflow does not mutate it.
+directories outside the Cargo workspace. Netsuke is the only publishable crate,
+while `test_support` is a workspace member so the ordinary documentation,
+Clippy, and Whitaker gates cover its code alongside the application crate.
 
 The `uses:` reference pins the shared workflow to a full 40-character commit
 SHA rather than a branch or tag, so a force-push upstream cannot silently
@@ -1103,26 +1164,15 @@ Cargo home plus Kani support-file home.
 - `make test-nextest` —
   `cargo nextest run --all-targets --all-features`, with
   `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)"` (the
-  Makefile re-states the Polonius flag because a set `RUSTFLAGS` overrides
-  `.cargo/config.toml`, and the `$${RUSTFLAGS:+$$RUSTFLAGS }` prefix preserves
-  any `RUSTFLAGS` inherited from the caller). `test_support` is excluded from
-  the root Cargo workspace, so this root-level invocation cannot reach its
-  tests; the target therefore runs `cargo nextest` a second time against
-  `test_support/Cargo.toml`, mirroring how `make lint-whitaker` runs the
-  Whitaker suite twice for the same reason (see above). Together the two
-  invocations run every unit, integration, `rstest`, and `rstest-bdd` test
-  across both the root workspace and `test_support`.
-- `make doctest` — `cargo test --doc --all-features`, with the same
-  `RUSTFLAGS`. nextest cannot execute doctests, so they need their own pass.
-  Note that the previous `cargo test --all-targets` invocation never ran
-  doctests either; the separate target is what makes a broken documentation
-  example fail the gate. For the same reason as `test-nextest`, `doctest` also
-  runs a second time against `test_support/Cargo.toml` to cover its doctests.
-
-The `test_support/Cargo.toml` path used for the second pass comes from the
-overridable `TEST_SUPPORT_MANIFEST` Makefile variable (default
-`test_support/Cargo.toml`); point it elsewhere with, for example,
-`make test TEST_SUPPORT_MANIFEST=path/to/Cargo.toml`.
+    Makefile re-states the Polonius flag because a set `RUSTFLAGS` overrides
+    `.cargo/config.toml`, and the `$${RUSTFLAGS:+$$RUSTFLAGS }` prefix preserves
+  any `RUSTFLAGS` inherited from the caller). This runs every unit, integration,
+  `rstest`, and `rstest-bdd` test.
+- `make doctest` — `cargo test --workspace --doc --all-features`, with
+  `RUSTFLAGS="-D warnings"`. nextest cannot execute doctests, so they need
+  their own pass. Note that the previous `cargo test --all-targets` invocation
+  never ran doctests either; the separate target is what makes a broken
+  documentation example fail the gate.
 
 If either pass fails, `make test` fails. Run the individual targets when
 iterating, but treat `make test` as the gate.
@@ -1137,11 +1187,10 @@ variables rather than reinterpreting one as the other.
 The runner is configured by `.config/nextest.toml` at the workspace root. It
 governs the non-doctest pass only, and deliberately stays small:
 
-- **`serial-env` test group** (`max-threads = 1`) covering exactly two
-  binaries: `ninja_env_tests` and `env_path_tests`. These mutate process-global
-  environment state — `PATH` and `NINJA_ENV`. Every other test remains fully
-  parallel. `manifest_env_tests` was a member until it moved to an injected
-  reader; it mutates nothing now, so it runs parallel with the rest.
+- **`serial-env` test group** (`max-threads = 1`) covering only
+  `env_path_tests`, the remaining integration binary that exercises a
+  process-global `PATH` guard. Manifest and Ninja environment resolution use
+  injected readers and run fully in parallel.
 - **No blanket retries.** A test that fails intermittently is a defect to
   diagnose. Add a targeted override with a written rationale only when a
   genuine external-resource constraint requires one.
@@ -1591,7 +1640,22 @@ disallowed-methods = [
 
 The reason string appears in the diagnostic, so a contributor who trips the
 lint is told what to do instead, not merely that they may not. `test_support`
-is excluded from the workspace, so it carries its own copy of the list.
+is a workspace member and carries its own Clippy configuration file because
+Clippy configuration is discovered per crate.
+
+
+### Environment and template ports
+
+`manifest::EnvReader` owns environment lookup for the manifest `env()` helper.
+Production constructs the process-backed adapter at the manifest loading
+boundary; tests pass an `Arc`-backed reader directly. The port is only for
+manifest template lookup and must not become a general configuration service.
+
+Manifest macro registration stores import declarations in the Jinja
+environment. Each invocation captures the macro from the active template state
+and immediately evaluates it; callers must use the shared manifest rendering
+helper so caller blocks retain their template context. This adapter belongs to
+manifest rendering and must not be reused as a general MiniJinja cache.
 
 #### Annotating a sanctioned site
 

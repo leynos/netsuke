@@ -127,8 +127,10 @@ itertools = "0.12"
 indexmap = { version = "2.5", features = ["serde"] }
 lru = "0.18"
 glob = "0.3.3"
+hashbrown = "0.17.1"
 walkdir = "2.5"
 metrics = "0.24.6"
+mockable = "3.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
 serde_json = { version = "1", features = ["preserve_order"] }
@@ -161,8 +163,10 @@ allow_attributes                    = "deny"
 allow_attributes_without_reason     = "deny"
 blanket_clippy_restriction_lints    = "deny"
 cognitive_complexity                = "deny"
+disallowed_methods                  = "deny"
 needless_pass_by_value              = "deny"
 implicit_hasher                     = "deny"
+missing_assert_message              = "deny"
 
 # 2. debugging leftovers
 dbg_macro                           = "deny"
@@ -218,6 +222,7 @@ result_large_err                    = "deny"
 [lints.rust]
 unknown_lints                       = "deny"
 renamed_and_removed_lints           = "deny"
+unsafe_code                         = "forbid"
 missing_docs                        = "deny"
 unexpected_cfgs                     = { level = "warn", check-cfg = ["cfg(kani)", "cfg(dylint_lib, values(any()))"] }
 
@@ -259,11 +264,4 @@ fluent-bundle = "0.16.0"
 rustix = { version = "1.0.8", features = ["fs"] }
 
 [workspace]
-# `test_support` is a path dependency that Cargo would otherwise auto-include as a
-# member. It stays excluded so its gate coverage is decided deliberately rather
-# than inherited; folding it into the workspace is tracked separately. Because
-# the exclusion also puts the crate out of reach of workspace-root cargo
-# invocations, `make lint-whitaker` runs the Whitaker suite a second time
-# against `test_support/dylint.toml`, and `make test-nextest` and `make doctest`
-# each run a second time against `$(TEST_SUPPORT_MANIFEST)`.
-exclude = ["test_support"]
+members = ["test_support"]

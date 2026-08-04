@@ -9,6 +9,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use camino::{Utf8Path, Utf8PathBuf};
+use hashbrown::HashMap;
 
 use crate::ir::{BuildEdge, BuildGraph};
 
@@ -149,7 +150,7 @@ struct NodeMetadata {
 /// callers work with references instead of cloning keys defensively.
 #[derive(Debug, Default)]
 struct NodePathRegistry {
-    paths: BTreeMap<Utf8PathBuf, NodeKind>,
+    paths: HashMap<Utf8PathBuf, NodeKind>,
 }
 
 impl NodePathRegistry {
@@ -159,17 +160,8 @@ impl NodePathRegistry {
     /// Performs a single lookup on the hit path and clones `path` only when
     /// inserting. An existing registration (for example a target produced by
     /// an earlier edge) is returned unchanged.
-    // POLONIUS(case-3): the `get_mut` loan escapes only via the early return,
-    // so the insertion below is legal under `-Zpolonius=next` but rejected by
-    // NLL (E0499). Verified both ways on nightly-2026-06-25. Do not rewrite
-    // into `entry(path.clone())` or a `contains_key` double lookup.
     fn ensure_node_mut(&mut self, path: &Utf8Path) -> &mut NodeKind {
-        if let Some(kind) = self.paths.get_mut(path) {
-            return kind;
-        }
-        self.paths
-            .entry(path.to_owned())
-            .or_insert(NodeKind::Source)
+        self.paths.entry_ref(path).or_insert(NodeKind::Source)
     }
 
     /// Record `path` as a target node, replacing any existing registration.
@@ -179,7 +171,7 @@ impl NodePathRegistry {
 
     /// Consume the registry, yielding the sorted path map.
     fn into_inner(self) -> BTreeMap<Utf8PathBuf, NodeKind> {
-        self.paths
+        self.paths.into_iter().collect()
     }
 }
 

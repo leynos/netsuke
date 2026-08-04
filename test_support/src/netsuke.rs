@@ -5,23 +5,13 @@
 //! capturing stdout/stderr for assertions.
 
 use anyhow::{Context, Result, ensure};
-use netsuke::runner::NINJA_ENV;
 use std::path::Path;
 use std::path::PathBuf;
 
 /// Locate the built `netsuke` executable for integration-style tests.
 ///
-/// Prefer `CARGO_BIN_EXE_netsuke` when available, otherwise fall back to a
-/// `target/(debug|release)`-derived path based on the current test binary.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "reads the inherited environment to build the subprocess invocation; assert_cmd subprocess isolation is the sanctioned exemption in AGENTS.md"
-)]
+/// Derive the path from the current test executable's target directory.
 fn netsuke_executable() -> Result<PathBuf> {
-    if let Some(path) = std::env::var_os("CARGO_BIN_EXE_netsuke") {
-        return Ok(path.into());
-    }
-
     let mut target_dir = std::env::current_exe().context("locate current test executable")?;
     target_dir.pop();
     if target_dir.ends_with("deps") {
@@ -84,12 +74,6 @@ pub fn run_netsuke_in(current_dir: &Path, args: &[&str]) -> Result<NetsukeRun> {
 /// process inherits **only** the variables supplied in `extra_env`. This
 /// prevents process-level environment races when tests run in parallel.
 ///
-/// `NETSUKE_NINJA` is automatically forwarded from the current process when
-/// present (set by [`override_ninja_env`]), so callers that install a fake
-/// ninja guard before calling this function get the expected behaviour.
-///
-/// [`override_ninja_env`]: crate::env::override_ninja_env
-///
 /// # Errors
 ///
 /// Returns an error when `netsuke` cannot be located or the process cannot be
@@ -105,13 +89,6 @@ pub fn run_netsuke_in_with_env(
 ) -> Result<NetsukeRun> {
     let mut cmd = assert_cmd::Command::new(netsuke_executable()?);
     cmd.current_dir(current_dir).env_clear();
-    if let Some(host_path) = std::env::var_os("PATH") {
-        cmd.env("PATH", host_path);
-    }
-    // Forward NETSUKE_NINJA when an override_ninja_env guard is active.
-    if let Some(ninja) = std::env::var_os(NINJA_ENV) {
-        cmd.env(NINJA_ENV, ninja);
-    }
     for &(key, value) in extra_env {
         cmd.env(key, value);
     }

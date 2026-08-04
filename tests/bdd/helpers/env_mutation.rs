@@ -6,7 +6,7 @@
 use crate::bdd::fixtures::TestWorld;
 use crate::bdd::types::EnvVarKey;
 use anyhow::{Result, ensure};
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 
 /// Mutate an environment variable under the scenario's `EnvLock`, track it for
 /// cleanup, and return `Ok(())`.
@@ -50,16 +50,11 @@ pub fn mutate_env_var(world: &TestWorld, key: EnvVarKey, new_value: Option<&str>
             "environment variable value must not contain null bytes"
         );
     }
-    world.ensure_env_lock();
-    let original = std::env::var_os(key.as_str());
     let forward_value = new_value.map(OsString::from);
-    // SAFETY: EnvLock (held via world.env_lock) serializes mutations
-    unsafe {
-        match new_value {
-            Some(val) => std::env::set_var(key.as_str(), val),
-            None => std::env::remove_var(key.as_str()),
-        }
-    }
+    let original = new_value.map_or_else(
+        || world.remove_env_var(key.as_str()),
+        |value| world.set_env_var(key.as_str(), OsStr::new(value)),
+    );
     world.track_env_var(key.into_string(), original, forward_value);
     Ok(())
 }

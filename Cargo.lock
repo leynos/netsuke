@@ -1434,6 +1434,7 @@ dependencies = [
  "digest 0.11.3",
  "fluent-bundle",
  "glob",
+ "hashbrown 0.17.1",
  "indexmap",
  "indicatif",
  "insta",
@@ -2639,6 +2640,7 @@ dependencies = [
  "sha2 0.11.0",
  "tempfile",
  "thiserror 1.0.69",
+ "tracing",
 ]
 
 [[package]]

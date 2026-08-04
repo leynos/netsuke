@@ -4,8 +4,9 @@
 //! body. The listener is configured in non-blocking mode and guarded by a
 //! deadline so hung clients cannot stall the test suite.
 
+use mockable::{DefaultEnv, Env};
 use std::{
-    env, fmt,
+    fmt,
     io::{self, Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
     thread,
@@ -48,15 +49,20 @@ impl HttpServerConfig {
     /// Polling interval overrides are clamped to a minimum of 1 ms to avoid
     /// busy-spinning when the environment provides `0`.
     pub fn from_env() -> Self {
+        Self::from_env_provider(&DefaultEnv)
+    }
+
+    fn from_env_provider(env: &impl Env) -> Self {
         let mut config = Self::default();
         config.accept_timeout =
-            duration_from_env(ENV_HTTP_ACCEPT_TIMEOUT_MS, config.accept_timeout);
-        config.read_timeout = duration_from_env(ENV_HTTP_READ_TIMEOUT_MS, config.read_timeout);
+            duration_from_env(env, ENV_HTTP_ACCEPT_TIMEOUT_MS, config.accept_timeout);
+        config.read_timeout = duration_from_env(env, ENV_HTTP_READ_TIMEOUT_MS, config.read_timeout);
         // Prevent busy-spin when overrides specify a zero-millisecond poll
         // interval. Tests only need millisecond precision, so clamp to at
         // least 1 ms.
-        config.poll_interval = duration_from_env(ENV_HTTP_POLL_INTERVAL_MS, config.poll_interval)
-            .max(Duration::from_millis(1));
+        config.poll_interval =
+            duration_from_env(env, ENV_HTTP_POLL_INTERVAL_MS, config.poll_interval)
+                .max(Duration::from_millis(1));
         config
     }
 
@@ -183,8 +189,10 @@ fn run_http_server(listener: TcpListener, body: String, config: HttpServerConfig
         panic!("failed to configure stream non-blocking: {err}");
     }
     let bytes_read = read_request(&mut stream, config.read_deadline(), config.poll_interval);
-    if bytes_read > 0 {
-        write_response(&mut stream, &body);
+    if bytes_read > 0
+        && let Err(err) = write_response(&mut stream, &body)
+    {
+        panic!("failed to write fixture response: {err}");
     }
 }
 
@@ -267,21 +275,17 @@ fn read_request(stream: &mut TcpStream, deadline: Instant, poll_interval: Durati
     }
 }
 
-fn write_response(stream: &mut TcpStream, body: &str) {
+fn write_response(stream: &mut TcpStream, body: &str) -> io::Result<()> {
     let response = format!(
         "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
         body.len(),
         body
     );
-    let _ = stream.write_all(response.as_bytes());
+    stream.write_all(response.as_bytes())
 }
 
-#[expect(
-    clippy::disallowed_methods,
-    reason = "reads an ambient tuning variable for the stub HTTP server; the fixture is configured by the environment it runs in, and no seam reaches it"
-)]
-fn duration_from_env(var: &str, default: Duration) -> Duration {
-    match env::var(var) {
+fn duration_from_env(env: &impl Env, var: &str, default: Duration) -> Duration {
+    match env.raw(var) {
         Ok(value) => {
             let trimmed = value.trim();
             match trimmed.parse::<u64>() {
@@ -304,7 +308,7 @@ fn log_duration_parse_error(var: &str, value: &str, err: &dyn fmt::Display) {
 
     #[cfg(not(test))]
     {
-        eprintln!("netsuke: ignoring invalid {var} value '{value}': {err}");
+        tracing::warn!(variable = var, value, error = %err, "ignoring invalid fixture duration");
     }
 }
 

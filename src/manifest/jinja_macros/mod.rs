@@ -13,11 +13,13 @@ use minijinja::{
     Environment, Error, State,
     value::{Kwargs, Value},
 };
-use std::sync::Arc;
+use serde::Serialize;
 
-mod cache;
+mod invocation;
 
-use cache::{MacroCache, make_macro_fn};
+use invocation::{make_macro_fn, validate_macro};
+
+const MACRO_IMPORTS_GLOBAL: &str = "__netsuke_manifest_macro_imports";
 
 /// Extract the macro identifier from a signature string.
 ///
@@ -68,12 +70,6 @@ pub(crate) fn parse_macro_name(signature: &str) -> Result<String> {
 /// with the extracted macro name. The template name is synthesised using the
 /// provided index to ensure uniqueness.
 ///
-/// # Lifetimes
-///
-/// The macro cache stores compiled template state for the lifetime of the
-/// process, so the environment must be `'static`. Callers that hold a shorter
-/// lived [`Environment`] should clone the macro body rather than caching it.
-///
 /// # Errors
 ///
 /// Returns an error if the macro signature is invalid or template compilation
@@ -95,9 +91,12 @@ pub(crate) fn register_macro(
             localization::message(keys::MANIFEST_MACRO_COMPILE_FAILED).with_arg("name", &name)
         })?;
 
-    let cache = Arc::new(MacroCache::new(template_name, name.clone()));
-    cache.prepare(env)?;
-    env.add_function(name, make_macro_fn(cache));
+    validate_macro(env, &template_name, &name)?;
+    env.add_function(
+        name.clone(),
+        make_macro_fn(template_name.clone(), name.clone()),
+    );
+    register_macro_import(env, &template_name, &name);
     Ok(())
 }
 
@@ -129,6 +128,35 @@ pub(crate) fn register_manifest_macros(
         })?;
     }
     Ok(())
+}
+
+/// Render a manifest template with all registered manifest macros imported.
+///
+/// Imports place macro values in the active template state, which preserves
+/// Jinja caller-block context without raw pointers or extended lifetimes.
+pub(crate) fn render_template(
+    env: &Environment,
+    template: &str,
+    context: &impl Serialize,
+) -> Result<String, Error> {
+    let Some(imports) = macro_imports(env) else {
+        return env.render_str(template, context);
+    };
+    env.render_str(&[imports.as_str(), template].concat(), context)
+}
+
+fn register_macro_import(env: &mut Environment<'static>, template_name: &str, macro_name: &str) {
+    let existing = macro_imports(env).unwrap_or_default();
+    let import = format!("{{% from '{template_name}' import {macro_name} %}}");
+    env.add_global(MACRO_IMPORTS_GLOBAL, [existing, import].concat());
+}
+
+fn macro_imports(env: &Environment) -> Option<String> {
+    env.globals().find_map(|(name, value)| {
+        (name == MACRO_IMPORTS_GLOBAL)
+            .then(|| value.as_str().map(str::to_owned))
+            .flatten()
+    })
 }
 
 /// Invoke a `MiniJinja` value with optional keyword arguments.

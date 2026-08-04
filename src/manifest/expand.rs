@@ -1,4 +1,5 @@
 //! Expands manifest foreach directives into concrete targets and actions.
+use super::jinja_macros::render_template;
 use super::{ManifestMap, ManifestValue};
 use crate::hex::push_lower_hex_byte;
 use crate::localization::{self, keys};
@@ -160,7 +161,7 @@ fn eval_when(env: &Environment, expr: &str, ctx: Value) -> Result<bool> {
     }
 
     // Expression parsing failed - treat as template syntax (e.g., "{{ path is dir }}")
-    let rendered = env.render_str(expr, ctx).with_context(|| {
+    let rendered = render_template(env, expr, &ctx).with_context(|| {
         localization::message(keys::MANIFEST_WHEN_TEMPLATE_ERROR).with_arg("expr", expr)
     })?;
     // Treat "true" or "1" as truthy, anything else (including "false", "") as falsy

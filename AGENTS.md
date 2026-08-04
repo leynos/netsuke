@@ -168,8 +168,8 @@ references, clone keys only on insertion, and build error context lazily.
   - `make lint` executes:
 
     ```sh
-    cargo doc --no-deps
-    cargo clippy --all-targets --all-features -- -D warnings
+    RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo doc --workspace --no-deps
+    cargo clippy --workspace --all-targets --all-features -- -D warnings
     whitaker --all -- --all-targets --all-features
     ```
 
@@ -182,7 +182,7 @@ references, clone keys only on insertion, and build error context lazily.
 
     ```sh
     RUSTFLAGS="-D warnings -Zpolonius=next" cargo nextest run --all-targets --all-features
-    RUSTFLAGS="-D warnings -Zpolonius=next" cargo test --doc --all-features
+    RUSTFLAGS="-D warnings" cargo test --workspace --doc --all-features
     ```
 
     running every unit, integration, and behavioural test through

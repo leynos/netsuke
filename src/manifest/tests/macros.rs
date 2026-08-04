@@ -1,6 +1,6 @@
 //! Tests covering manifest macro parsing and registration.
 use super::super::jinja_macros::{
-    call_macro_value, parse_macro_name, register_macro, register_manifest_macros,
+    call_macro_value, parse_macro_name, register_macro, register_manifest_macros, render_template,
 };
 use super::super::{ManifestMap, ManifestValue};
 use crate::ast::MacroDefinition;
@@ -19,7 +19,7 @@ struct MacroRenderCase<'a> {
 }
 
 fn render_with(env: &Environment, template: &str) -> AnyResult<String> {
-    Ok(env.render_str(template, ())?)
+    Ok(render_template(env, template, &())?)
 }
 
 #[fixture]
@@ -160,7 +160,7 @@ fn register_macro_is_reusable(mut strict_env: Environment<'static>) -> AnyResult
     let rendered = render_with(&strict_env, template)?;
     ensure!(rendered.trim() == "first second");
 
-    // Re-render to ensure the cached macro value remains valid.
+    // Re-render to ensure the registered macro remains reusable.
     let rendered_again = render_with(&strict_env, template)?;
     ensure!(rendered_again.trim() == "first second");
     Ok(())

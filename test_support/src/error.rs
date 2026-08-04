@@ -6,7 +6,7 @@ use std::error::Error;
 /// assertions.
 ///
 /// Works with any error implementing [`std::error::Error`]. Types like
-/// [`miette::Report`] can be passed via [`AsRef::as_ref`].
+/// `miette::Report` can be passed via [`AsRef::as_ref`].
 ///
 /// # Examples
 ///
