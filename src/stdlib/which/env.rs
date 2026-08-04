@@ -5,6 +5,7 @@ use std::ffi::{OsStr, OsString};
 use camino::{Utf8Path, Utf8PathBuf};
 #[cfg(windows)]
 use indexmap::IndexSet;
+use mockable::{DefaultEnv, Env};
 
 use crate::localization::{self, keys};
 
@@ -21,25 +22,34 @@ pub(super) struct EnvSnapshot {
 }
 
 impl EnvSnapshot {
-    #[expect(
-        clippy::disallowed_methods,
-        reason = "composition root: PATH and PATHEXT capture is the which resolver's ambient boundary; injection is tracked in the environment meta issue"
-    )]
     pub(super) fn capture(
         cwd_override: Option<&Utf8Path>,
         path_override: Option<&OsStr>,
     ) -> Result<Self, ResolveError> {
+        Self::capture_with_pathext(cwd_override, path_override, None)
+    }
+
+    pub(super) fn capture_with_pathext(
+        cwd_override: Option<&Utf8Path>,
+        path_override: Option<&OsStr>,
+        pathext_override: Option<&OsStr>,
+    ) -> Result<Self, ResolveError> {
+        #[cfg(not(windows))]
+        let _ = pathext_override;
         let cwd = if let Some(override_cwd) = cwd_override {
             override_cwd.to_path_buf()
         } else {
             current_dir_utf8()?
         };
+        let process_env = DefaultEnv;
         let raw_path = path_override
             .map(OsString::from)
-            .or_else(|| std::env::var_os("PATH"));
+            .or_else(|| process_env.os_string("PATH"));
         let entries = parse_path_entries(raw_path.clone(), &cwd)?;
         #[cfg(windows)]
-        let raw_pathext = std::env::var_os("PATHEXT");
+        let raw_pathext = pathext_override
+            .map(OsString::from)
+            .or_else(|| process_env.os_string("PATHEXT"));
         #[cfg(windows)]
         let pathext = parse_pathext(raw_pathext.as_deref());
         #[cfg(not(windows))]

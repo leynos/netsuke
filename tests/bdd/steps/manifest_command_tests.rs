@@ -9,7 +9,6 @@ use super::*;
 use anyhow::ensure;
 use rstest::fixture;
 use std::ffi::{OsStr, OsString};
-use test_support::env::VarGuard;
 
 fn env_value<'a>(cmd: &'a assert_cmd::Command, key: &str) -> Option<&'a OsStr> {
     cmd.get_envs()
@@ -33,7 +32,6 @@ fn world_env_vars_with_value_are_applied(prepared_world: Result<TestWorld>) -> R
     // will be forwarded to the child command, not read from process env.
     world.track_env_var(
         "NETSUKE_TEST_FLAG".to_owned(),
-        None,
         Some(OsString::from("enabled")),
     );
 
@@ -52,9 +50,6 @@ fn world_env_vars_with_value_are_applied(prepared_world: Result<TestWorld>) -> R
 fn host_env_vars_are_not_inherited(prepared_world: Result<TestWorld>) -> Result<()> {
     let world = prepared_world?;
 
-    // Set a host env var that should NOT be inherited (not tracked in world.env_vars)
-    let _guard = VarGuard::set("NETSUKE_HOST_VAR", OsStr::new("should-not-inherit"));
-
     let cmd = build_netsuke_command(&world, &["--help"]).expect("build command");
 
     // Command should NOT contain the host env var because env_clear() was called
@@ -72,8 +67,7 @@ fn host_path_is_forwarded_and_netsuke_executable_is_used(
 ) -> Result<()> {
     let world = prepared_world?;
 
-    // Simulate a different netsuke early in PATH
-    let _guard = VarGuard::set("PATH", OsStr::new("/fake/bin"));
+    world.track_env_var("PATH".to_owned(), Some(OsString::from("/fake/bin")));
 
     let cmd = build_netsuke_command(&world, &["--version"]).expect("build command");
 

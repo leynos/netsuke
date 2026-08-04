@@ -121,8 +121,8 @@ fn test_duplicate_paths(
 fn test_cwd_mode_resolution(cwd_mode_value: &str) -> Result<()> {
     let (_temp, root) = support::filter_workspace()?;
     let tool = write_tool(&root, &ToolName::from("local"))?;
-    let _path = PathEnv::new(&[])?;
-    let (mut env, _state) = fallible::stdlib_env_with_state()?;
+    let path = PathEnv::new(&[])?;
+    let (mut env, _state) = fallible::stdlib_env_with_path(path.into_inner())?;
     let template = Template::from(format!("{{{{ which('local', cwd_mode='{cwd_mode_value}') }}}}"));
     let output = render(&mut env, &template)?;
     assert_eq!(output, tool.as_str());
@@ -212,8 +212,8 @@ fn which_function_honours_cwd_mode() -> Result<()> {
 #[rstest]
 fn which_function_rejects_invalid_cwd_mode() -> Result<()> {
     let (_temp, _root) = support::filter_workspace()?;
-    let _path = PathEnv::new(&[])?;
-    let (mut env, _state) = fallible::stdlib_env_with_state()?;
+    let path = PathEnv::new(&[])?;
+    let (mut env, _state) = fallible::stdlib_env_with_path(path.into_inner())?;
     let template = Template::from("{{ which('local', cwd_mode='invalid') }}");
 
     let err = render(&mut env, &template)
@@ -240,8 +240,8 @@ fn which_function_accepts_case_insensitive_cwd_mode() -> Result<()> {
 #[rstest]
 fn which_filter_reports_missing_command() -> Result<()> {
     let (_temp, _root) = support::filter_workspace()?;
-    let _path = PathEnv::new(&[])?;
-    let (mut env, _state) = fallible::stdlib_env_with_state()?;
+    let path = PathEnv::new(&[])?;
+    let (mut env, _state) = fallible::stdlib_env_with_path(path.into_inner())?;
     let err = env
         .render_str("{{ 'absent' | which }}", context! {})
         .expect_err("render should fail for missing command");
@@ -254,8 +254,8 @@ fn which_filter_reports_missing_command() -> Result<()> {
 fn which_filter_falls_back_to_workspace_when_path_empty() -> Result<()> {
     let (_temp, root) = support::filter_workspace()?;
     let tool = write_tool(&root, &ToolName::from("helper"))?;
-    let _path = PathEnv::new(&[])?;
-    let (mut env, _state) = fallible::stdlib_env_with_state()?;
+    let path = PathEnv::new(&[])?;
+    let (mut env, _state) = fallible::stdlib_env_with_path(path.into_inner())?;
     let output = render(&mut env, &Template::from("{{ 'helper' | which }}"))?;
     assert_eq!(output, tool.as_str());
     Ok(())
@@ -267,8 +267,8 @@ fn which_filter_skips_heavy_directories() -> Result<()> {
     let target = root.join("target");
     std::fs::create_dir_all(target.as_std_path())?;
     write_tool(&target, &ToolName::from("helper"))?;
-    let _path = PathEnv::new(&[])?;
-    let (mut env, _state) = fallible::stdlib_env_with_state()?;
+    let path = PathEnv::new(&[])?;
+    let (mut env, _state) = fallible::stdlib_env_with_path(path.into_inner())?;
     let err = env
         .render_str("{{ 'helper' | which }}", context! {})
         .expect_err("render should fail when tool is in skipped directory");
@@ -288,8 +288,9 @@ fn which_resolver_honours_workspace_root_override() -> Result<()> {
         Dir::open_ambient_dir(&root, ambient_authority()).context("open workspace")?,
     )?
     .with_workspace_root_path(root.clone())?;
-    let _path = PathEnv::new(&[])?;
-    let (mut env, _state) = fallible::stdlib_env_with_config(config)?;
+    let path = PathEnv::new(&[])?;
+    let (mut env, _state) =
+        fallible::stdlib_env_with_config(config.with_path_override(path.into_inner()))?;
     let output = render(&mut env, &Template::from("{{ 'helper' | which }}"))?;
     assert_eq!(output, tool.as_str());
     Ok(())

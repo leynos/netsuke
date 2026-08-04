@@ -10,6 +10,7 @@ use minijinja::{Error, ErrorKind};
 
 use super::fs_utils::{ParentDir, open_parent_dir};
 use crate::localization::{self, keys};
+use crate::stdlib::config_types::HomeDirectory;
 use crate::stdlib::io_helpers::io_to_error;
 
 pub(super) fn basename(path: &Utf8Path) -> String {
@@ -112,7 +113,7 @@ pub(super) fn is_user_specific_expansion(stripped: &str) -> bool {
     )
 }
 
-pub(super) fn expanduser(raw: &str) -> Result<String, Error> {
+pub(super) fn expanduser(raw: &str, home_directory: &HomeDirectory) -> Result<String, Error> {
     if let Some(stripped) = raw.strip_prefix('~') {
         if is_user_specific_expansion(stripped) {
             return Err(Error::new(
@@ -120,7 +121,7 @@ pub(super) fn expanduser(raw: &str) -> Result<String, Error> {
                 localization::message(keys::STDLIB_PATH_EXPANDUSER_UNSUPPORTED).to_string(),
             ));
         }
-        let home = resolve_home()?;
+        let home = resolve_home(home_directory)?;
         Ok(format!("{home}{stripped}"))
     } else {
         Ok(raw.to_owned())
@@ -133,8 +134,13 @@ pub(super) fn normalise_parent(parent: Option<&Utf8Path>) -> Utf8PathBuf {
         .map_or_else(|| Utf8PathBuf::from("."), Utf8Path::to_path_buf)
 }
 
-fn resolve_home() -> Result<String, Error> {
-    home_from_env().ok_or_else(|| {
+fn resolve_home(home_directory: &HomeDirectory) -> Result<String, Error> {
+    let home = match home_directory {
+        HomeDirectory::Ambient => home_from_env(),
+        HomeDirectory::Missing => None,
+        HomeDirectory::Explicit(home) => Some(home.clone()),
+    };
+    home.ok_or_else(|| {
         Error::new(
             ErrorKind::InvalidOperation,
             localization::message(keys::STDLIB_PATH_EXPANDUSER_NO_HOME).to_string(),

@@ -11,26 +11,7 @@ use minijinja::{Environment, ErrorKind};
 use rstest::rstest;
 use serde_json::{Value, json};
 
-use super::support::{
-    EnvLock, EnvVarGuard, Workspace, fallible,
-};
-
-/// Helper for tests requiring environment variable manipulation
-fn with_clean_env_vars<F, R>(home_value: Option<&str>, test_fn: F) -> R
-where
-    F: FnOnce() -> R,
-{
-    let _lock = EnvLock::acquire();
-    let _home = home_value.map_or_else(
-        || EnvVarGuard::remove("HOME"),
-        |value| EnvVarGuard::set("HOME", value),
-    );
-    let _profile = EnvVarGuard::remove("USERPROFILE");
-    let _drive = EnvVarGuard::remove("HOMEDRIVE");
-    let _path = EnvVarGuard::remove("HOMEPATH");
-    let _share = EnvVarGuard::remove("HOMESHARE");
-    test_fn()
-}
+use super::support::{Workspace, fallible};
 
 /// Helper for standard filter environment setup
 fn setup_filter_env() -> Result<Environment<'static>> {
@@ -107,19 +88,17 @@ fn assert_filter_error_with_env<F>(
 where
     F: for<'a> FnOnce(&'a Utf8Path) -> TemplateErrorSpec<'a>,
 {
-    with_filter_env(filter_workspace, |root, env| {
-        let home = home_value.map(|value| {
-            if value.is_empty() {
-                root.as_str()
-            } else {
-                value
-            }
-        });
-        with_clean_env_vars(home, || {
-            let spec = spec_builder(root);
-            assert_template_error(env, spec)
-        })
-    })
+    let (_temp, root) = filter_workspace;
+    let home = home_value.map(|value| {
+        if value.is_empty() {
+            root.as_str()
+        } else {
+            value
+        }
+    });
+    let mut env = fallible::stdlib_env_with_home(&root, home.map(str::to_owned))?;
+    let spec = spec_builder(&root);
+    assert_template_error(&mut env, spec)
 }
 
 fn assert_filter_error_simple<F>(filter_workspace: Workspace, spec_builder: F) -> Result<()>
@@ -141,25 +120,27 @@ fn assert_filter_success_with_env<F>(
 where
     F: FnOnce(&Utf8Path) -> String,
 {
-    with_filter_env(filter_workspace, |root, env| {
-        let home = home_value.map(|value| {
-            if value.is_empty() {
-                root.as_str()
-            } else {
-                value
-            }
-        });
-        with_clean_env_vars(home, move || {
-            let FilterSuccessSpec { name, template, path } = spec;
-            let result = fallible::render(env, name, template, path)?;
-            let expected_value = expected(root);
-            ensure!(
-                result == expected_value,
-                "expected '{expected_value}' but rendered {result}"
-            );
-            Ok(())
-        })
-    })
+    let (_temp, root) = filter_workspace;
+    let home = home_value.map(|value| {
+        if value.is_empty() {
+            root.as_str()
+        } else {
+            value
+        }
+    });
+    let mut env = fallible::stdlib_env_with_home(&root, home.map(str::to_owned))?;
+    let FilterSuccessSpec {
+        name,
+        template,
+        path,
+    } = spec;
+    let result = fallible::render(&mut env, name, template, path)?;
+    let expected_value = expected(&root);
+    ensure!(
+        result == expected_value,
+        "expected '{expected_value}' but rendered {result}"
+    );
+    Ok(())
 }
 
 /// Test data for filter error tests

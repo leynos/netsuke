@@ -19,6 +19,7 @@ use super::workspace::{ensure_workspace, resolve_template_path};
 /// Configuration values extracted from the test world for stdlib rendering.
 struct RenderConfig {
     policy: Option<NetworkPolicy>,
+    home: Option<String>,
     fetch_max_bytes: Option<u64>,
     command_max_output_bytes: Option<u64>,
     command_stream_max_bytes: Option<u64>,
@@ -27,6 +28,11 @@ struct RenderConfig {
 fn extract_render_config(world: &TestWorld) -> RenderConfig {
     RenderConfig {
         policy: world.stdlib_policy.with_ref(Clone::clone),
+        home: world
+            .env_vars_forward
+            .borrow()
+            .get("HOME")
+            .and_then(|value| value.to_str().map(str::to_owned)),
         fetch_max_bytes: world.stdlib_fetch_max_bytes.get(),
         command_max_output_bytes: world.stdlib_command_max_output_bytes.get(),
         command_stream_max_bytes: world.stdlib_command_stream_max_bytes.get(),
@@ -69,6 +75,9 @@ pub(crate) fn render_template_with_context(
 
     if let Some(policy) = render_cfg.policy {
         config = config.with_network_policy(policy);
+    }
+    if let Some(home) = render_cfg.home {
+        config = config.with_home_override(Some(home));
     }
     if let Some(limit) = render_cfg.fetch_max_bytes {
         config = config

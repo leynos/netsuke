@@ -48,6 +48,7 @@ impl HttpServerConfig {
     /// Notes:
     /// Polling interval overrides are clamped to a minimum of 1 ms to avoid
     /// busy-spinning when the environment provides `0`.
+    #[must_use]
     pub fn from_env() -> Self {
         Self::from_env_provider(&DefaultEnv)
     }
@@ -101,17 +102,20 @@ pub struct HttpServer {
 
 impl HttpServer {
     /// Join the server thread and propagate any panic.
+    ///
+    /// # Errors
+    ///
+    /// Returns the server thread's panic payload if the thread panicked.
     pub fn join(mut self) -> thread::Result<()> {
         self.shutdown_listener();
-        match self.handle.take() {
-            Some(handle) => handle.join(),
-            None => Ok(()),
-        }
+        self.handle
+            .take()
+            .map_or_else(|| Ok(()), std::thread::JoinHandle::join)
     }
 
     fn shutdown_listener(&self) {
         // Connect to unblock the accept loop; the outcome is irrelevant.
-        let _ = TcpStream::connect(self.addr);
+        drop(TcpStream::connect(self.addr));
     }
 }
 
@@ -119,7 +123,7 @@ impl Drop for HttpServer {
     fn drop(&mut self) {
         self.shutdown_listener();
         if let Some(handle) = self.handle.take() {
-            let _ = handle.join();
+            drop(handle.join());
         }
     }
 }
@@ -154,17 +158,17 @@ pub fn spawn_http_server(body: impl Into<String>) -> io::Result<(String, HttpSer
 /// the fixture thread. Subsequent operations may panic if unexpected I/O
 /// conditions occur while handling the client connection.
 pub fn spawn_http_server_with_config(
-    body: impl Into<String>,
+    response_body: impl Into<String>,
     config: HttpServerConfig,
 ) -> io::Result<(String, HttpServer)> {
-    let body = body.into();
+    let body = response_body.into();
     let listener = TcpListener::bind(("127.0.0.1", 0))?;
     listener.set_nonblocking(true)?;
     let addr = listener.local_addr()?;
     let url = format!("http://{addr}");
     let handle = thread::Builder::new()
         .name("netsuke-http-fixture".into())
-        .spawn(move || run_http_server(listener, body, config))?;
+        .spawn(move || run_http_server(&listener, &body, &config))?;
     Ok((
         url,
         HttpServer {
@@ -178,9 +182,9 @@ pub fn spawn_http_server_with_config(
     clippy::panic,
     reason = "test HTTP helper should fail fast when networking fails"
 )]
-fn run_http_server(listener: TcpListener, body: String, config: HttpServerConfig) {
+fn run_http_server(listener: &TcpListener, body: &str, config: &HttpServerConfig) {
     let mut stream = accept_connection(
-        &listener,
+        listener,
         config.accept_deadline(),
         config.poll_interval,
         config.accept_timeout,
@@ -190,7 +194,7 @@ fn run_http_server(listener: TcpListener, body: String, config: HttpServerConfig
     }
     let bytes_read = read_request(&mut stream, config.read_deadline(), config.poll_interval);
     if bytes_read > 0
-        && let Err(err) = write_response(&mut stream, &body)
+        && let Err(err) = write_response(&mut stream, body)
     {
         panic!("failed to write fixture response: {err}");
     }
@@ -206,12 +210,10 @@ fn should_retry_accept(
     poll_interval: Duration,
     accept_timeout: Duration,
 ) -> bool {
-    if is_past_deadline(deadline) {
-        panic!(
-            "timed out waiting for fetch test connection (accept_timeout={:?}, poll_interval={:?})",
-            accept_timeout, poll_interval
-        );
-    }
+    assert!(
+        !is_past_deadline(deadline),
+        "timed out waiting for fetch test connection (accept_timeout={accept_timeout:?}, poll_interval={poll_interval:?})"
+    );
     // Treat transient readiness states (EAGAIN/EWOULDBLOCK) and EINTR as retryable.
     matches!(
         err.kind(),
@@ -263,15 +265,13 @@ fn try_read(stream: &mut TcpStream) -> Option<usize> {
 
 fn read_request(stream: &mut TcpStream, deadline: Instant, poll_interval: Duration) -> usize {
     loop {
-        match try_read(stream) {
-            Some(bytes_read) => return bytes_read,
-            None => {
-                if Instant::now() >= deadline {
-                    return 0;
-                }
-                thread::sleep(poll_interval);
-            }
+        if let Some(bytes_read) = try_read(stream) {
+            return bytes_read;
         }
+        if Instant::now() >= deadline {
+            return 0;
+        }
+        thread::sleep(poll_interval);
     }
 }
 
@@ -285,19 +285,16 @@ fn write_response(stream: &mut TcpStream, body: &str) -> io::Result<()> {
 }
 
 fn duration_from_env(env: &impl Env, var: &str, default: Duration) -> Duration {
-    match env.raw(var) {
-        Ok(value) => {
-            let trimmed = value.trim();
-            match trimmed.parse::<u64>() {
-                Ok(ms) => Duration::from_millis(ms),
-                Err(err) => {
-                    log_duration_parse_error(var, value.as_str(), &err);
-                    default
-                }
+    env.raw(var).map_or(default, |value| {
+        let trimmed = value.trim();
+        match trimmed.parse::<u64>() {
+            Ok(ms) => Duration::from_millis(ms),
+            Err(err) => {
+                log_duration_parse_error(var, value.as_str(), &err);
+                default
             }
         }
-        Err(_) => default,
-    }
+    })
 }
 
 fn log_duration_parse_error(var: &str, value: &str, err: &dyn fmt::Display) {

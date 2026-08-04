@@ -5,7 +5,6 @@ use camino::{Utf8Path, Utf8PathBuf};
 use minijinja::{context, Environment};
 use std::ffi::{OsStr, OsString};
 
-use test_support::{env::VarGuard, env_lock::EnvLock};
 
 use super::support::{self, fallible};
 
@@ -61,31 +60,21 @@ impl AsRef<str> for Template {
     fn as_ref(&self) -> &str { &self.0 }
 }
 
-pub(crate) struct PathEnv {
-    _lock: EnvLock,
-    path_guard: VarGuard,
-    #[cfg(windows)]
-    pathext_guard: VarGuard,
-}
+pub(crate) struct PathEnv(OsString);
 
 impl PathEnv {
     pub(crate) fn new(entries: &[Utf8PathBuf]) -> Result<Self> {
-        let lock = EnvLock::acquire();
         let joined = if entries.is_empty() {
             OsString::new()
         } else {
             std::env::join_paths(entries.iter().map(|entry| entry.as_std_path()))
                 .context("join PATH entries")?
         };
-        let path_guard = VarGuard::set("PATH", joined.as_os_str());
-        #[cfg(windows)]
-        let pathext_guard = VarGuard::set("PATHEXT", OsStr::new(".cmd;.exe"));
-        Ok(Self {
-            _lock: lock,
-            path_guard,
-            #[cfg(windows)]
-            pathext_guard,
-        })
+        Ok(Self(joined))
+    }
+
+    pub(crate) fn into_inner(self) -> OsString {
+        self.0
     }
 }
 
@@ -140,7 +129,6 @@ pub(crate) struct WhichTestFixture {
     pub(crate) env: Environment<'static>,
     pub(crate) state: netsuke::stdlib::StdlibState,
     pub(crate) paths: Vec<Utf8PathBuf>,
-    _path_env: PathEnv,
 }
 
 impl WhichTestFixture {
@@ -157,13 +145,12 @@ impl WhichTestFixture {
             tool_paths.push(tool_path);
         }
         let path_env = PathEnv::new(&dirs)?;
-        let (env, state) = fallible::stdlib_env_with_state()?;
+        let (env, state) = fallible::stdlib_env_with_path(path_env.into_inner())?;
         Ok(Self {
             _temp: temp,
             env,
             state,
             paths: tool_paths,
-            _path_env: path_env,
         })
     }
 

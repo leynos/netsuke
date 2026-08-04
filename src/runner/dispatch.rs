@@ -1,45 +1,34 @@
 //! Dispatch parsed commands and emit their successful JSON result documents.
 
 use super::{
-    NinjaToolSpec, generate_ninja, graph, handle_build, handle_ninja_tool, process,
-    resolve_output_path,
+    ExecutionContext, NinjaToolSpec, generate_ninja, graph, handle_build, handle_ninja_tool,
+    process, resolve_output_path,
 };
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::localization::keys;
 use crate::result_json;
-use crate::status::StatusReporter;
 use anyhow::{Context, Result};
 
-pub(super) fn execute(
-    cli: &Cli,
-    command: Commands,
-    reporter: &dyn StatusReporter,
-    progress_enabled: bool,
-) -> Result<()> {
+pub(super) fn execute(cli: &Cli, command: Commands, context: &ExecutionContext<'_>) -> Result<()> {
     match command {
-        Commands::Build(args) => execute_build(cli, &args, reporter, progress_enabled),
-        Commands::Generate { output } => execute_generate(cli, output.as_ref(), reporter),
-        Commands::Clean => execute_clean(cli, reporter, progress_enabled),
-        Commands::Graph(args) => graph::handle_graph(cli, &args, reporter),
+        Commands::Build(args) => execute_build(cli, &args, context),
+        Commands::Generate { output } => execute_generate(cli, output.as_ref(), context),
+        Commands::Clean => execute_clean(cli, context),
+        Commands::Graph(args) => graph::handle_graph(cli, &args, context.reporter),
     }
 }
 
-fn execute_build(
-    cli: &Cli,
-    args: &BuildArgs,
-    reporter: &dyn StatusReporter,
-    progress_enabled: bool,
-) -> Result<()> {
-    handle_build(cli, args, reporter, progress_enabled)?;
+fn execute_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> Result<()> {
+    handle_build(cli, args, context)?;
     write_json_result(cli, "build", None)
 }
 
 fn execute_generate(
     cli: &Cli,
     output: Option<&std::path::PathBuf>,
-    reporter: &dyn StatusReporter,
+    context: &ExecutionContext<'_>,
 ) -> Result<()> {
-    let ninja = generate_ninja(cli, reporter, None)?;
+    let ninja = generate_ninja(cli, context.reporter, None)?;
     if let Some(file) = output {
         let output_path = resolve_output_path(cli, file.as_path());
         process::write_ninja_file(output_path.as_ref(), &ninja)?;
@@ -48,7 +37,9 @@ fn execute_generate(
     } else {
         process::write_ninja_stdout(&ninja)?;
     }
-    reporter.report_complete(keys::STATUS_TOOL_GENERATE.into());
+    context
+        .reporter
+        .report_complete(keys::STATUS_TOOL_GENERATE.into());
     if output.is_some() {
         write_json_result(cli, "generate", None)
     } else {
@@ -56,15 +47,14 @@ fn execute_generate(
     }
 }
 
-fn execute_clean(cli: &Cli, reporter: &dyn StatusReporter, progress_enabled: bool) -> Result<()> {
+fn execute_clean(cli: &Cli, context: &ExecutionContext<'_>) -> Result<()> {
     handle_ninja_tool(
         cli,
         NinjaToolSpec {
             name: "clean",
             key: keys::STATUS_TOOL_CLEAN.into(),
         },
-        reporter,
-        progress_enabled,
+        context,
     )?;
     write_json_result(cli, "clean", None)
 }

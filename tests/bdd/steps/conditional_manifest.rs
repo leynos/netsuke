@@ -12,6 +12,7 @@
 
 use crate::bdd::fixtures::TestWorld;
 use anyhow::{Context, Result};
+use mockable::{DefaultEnv, Env};
 use rstest_bdd_macros::given;
 use std::fs;
 use std::path::Path;
@@ -106,17 +107,14 @@ fn mark_executable(_path: &Path) -> Result<()> {
     Ok(())
 }
 
-#[expect(
-    clippy::disallowed_methods,
-    reason = "pending migration under #492 (rstest-bdd migration)"
-)]
 fn prepend_path_for_child(world: &TestWorld, dir: &Path) -> Result<()> {
     let mut entries = vec![dir.to_path_buf()];
-    if let Some(host_path) = std::env::var_os("PATH") {
+    let process_env = DefaultEnv;
+    if let Some(host_path) = process_env.os_string("PATH") {
         entries.extend(std::env::split_paths(&host_path));
     }
     let joined = std::env::join_paths(entries).context("join PATH entries")?;
-    world.track_env_var("PATH".to_owned(), std::env::var_os("PATH"), Some(joined));
+    world.track_env_var("PATH".to_owned(), Some(joined));
     Ok(())
 }
 

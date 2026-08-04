@@ -10,12 +10,17 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 pub static LOCALIZER_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 /// Acquire the global localizer test lock.
+///
+/// # Errors
+///
+/// Returns an error if another test poisoned the localizer mutex.
 pub fn localizer_test_lock() -> Result<MutexGuard<'static, ()>, PoisonError<MutexGuard<'static, ()>>>
 {
     LOCALIZER_TEST_LOCK.get_or_init(|| Mutex::new(())).lock()
 }
 
 /// Install the English localizer for tests.
+#[must_use]
 pub fn set_en_localizer() -> LocalizerGuard {
     let localizer = cli_localization::build_localizer(Some("en-US"));
     localization::set_localizer_for_tests(Arc::from(localizer))

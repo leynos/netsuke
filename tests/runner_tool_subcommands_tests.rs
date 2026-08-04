@@ -8,12 +8,11 @@ use anyhow::{Context, Result, bail, ensure};
 use netsuke::cli::{Cli, Commands};
 use netsuke::localization::{self, keys};
 use netsuke::output_prefs;
-use netsuke::runner::run;
+use netsuke::runner::{run, run_with_ninja_program};
 use rstest::{fixture, rstest};
 use std::path::PathBuf;
 use test_support::{
     check_ninja::{self, ToolName},
-    env::{NinjaEnvGuard, override_ninja_env, system_env},
     localizer_test_lock, set_en_localizer,
 };
 
@@ -25,11 +24,9 @@ use fixtures::create_test_manifest;
 /// This is a re-export of `common::ninja_with_exit_code` so `rstest` can
 /// discover it in this integration test crate.
 ///
-/// Returns: (`tempfile::TempDir`, path to the ninja binary, `NinjaEnvGuard`)
+/// Returns the temporary directory and path to the fake Ninja binary.
 #[fixture]
-fn ninja_with_exit_code(
-    #[default(0u8)] exit_code: u8,
-) -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
+fn ninja_with_exit_code(#[default(0u8)] exit_code: u8) -> Result<(tempfile::TempDir, PathBuf)> {
     fixtures::ninja_with_exit_code(exit_code)
 }
 
@@ -39,7 +36,7 @@ fn assert_ninja_failure_propagates(command: Commands) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("{e}"))
         .context("localizer test lock poisoned")?;
     let _guard = set_en_localizer();
-    let (_ninja_dir, _ninja_path, _ninja_guard) = ninja_with_exit_code(7)?;
+    let (_ninja_dir, ninja_path) = ninja_with_exit_code(7)?;
     let (temp, manifest_path) = create_test_manifest()?;
     let expected_tool = match &command {
         Commands::Clean => "clean",
@@ -52,7 +49,7 @@ fn assert_ninja_failure_propagates(command: Commands) -> Result<()> {
         ..Cli::default()
     };
 
-    let Err(err) = run(&cli, output_prefs::resolve(None)) else {
+    let Err(err) = run_with_ninja_program(&cli, output_prefs::resolve(None), &ninja_path) else {
         bail!("expected run to fail when ninja exits non-zero");
     };
     let messages: Vec<String> = err
@@ -79,11 +76,11 @@ fn assert_ninja_failure_propagates(command: Commands) -> Result<()> {
 }
 
 fn assert_subcommand_succeeds_without_persisting_file(
-    fixture: Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)>,
+    fixture: Result<(tempfile::TempDir, PathBuf)>,
     command: Commands,
     name: &'static str,
 ) -> Result<()> {
-    let (_ninja_dir, _ninja_path, _guard) = fixture?;
+    let (_ninja_dir, ninja_path) = fixture?;
     let (temp, manifest_path) = create_test_manifest()?;
     let cli = Cli {
         file: manifest_path.clone(),
@@ -92,7 +89,7 @@ fn assert_subcommand_succeeds_without_persisting_file(
         ..Cli::default()
     };
 
-    run(&cli, output_prefs::resolve(None))
+    run_with_ninja_program(&cli, output_prefs::resolve(None), &ninja_path)
         .with_context(|| format!("expected {name} subcommand to succeed"))?;
 
     ensure!(
@@ -137,17 +134,15 @@ fn assert_subcommand_fails_with_invalid_manifest(
     Ok(())
 }
 
-type NinjaToolFixture = fn() -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)>;
+type NinjaToolFixture = fn() -> Result<(tempfile::TempDir, PathBuf)>;
 
 /// Fixture: point `NINJA_ENV` at a fake `ninja` that expects `-t clean`.
 ///
 /// Returns: (tempdir holding ninja, path to ninja, `NINJA_ENV` guard)
 #[fixture]
-fn ninja_expecting_clean() -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
+fn ninja_expecting_clean() -> Result<(tempfile::TempDir, PathBuf)> {
     let (ninja_dir, ninja_path) = check_ninja::fake_ninja_expect_tool(ToolName::new("clean"))?;
-    let env = system_env();
-    let guard = override_ninja_env(&env, ninja_path.as_path());
-    Ok((ninja_dir, ninja_path, guard))
+    Ok((ninja_dir, ninja_path))
 }
 
 #[cfg(unix)]

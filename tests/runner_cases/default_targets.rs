@@ -3,10 +3,9 @@
 use anyhow::{Context, Result, ensure};
 use netsuke::cli::{BuildArgs, Cli, Commands};
 use netsuke::output_prefs;
-use netsuke::runner::run;
+use netsuke::runner::run_with_ninja_program;
 use rstest::{fixture, rstest};
 use std::path::PathBuf;
-use test_support::env::{NinjaEnvGuard, override_ninja_env, system_env};
 
 use crate::fixtures::create_test_manifest;
 
@@ -19,7 +18,7 @@ use crate::fixtures::create_test_manifest;
 #[cfg(unix)]
 struct FakeNinjaFixture {
     _ninja_dir: tempfile::TempDir,
-    _guard: NinjaEnvGuard,
+    ninja_path: PathBuf,
     args_log: PathBuf,
 }
 
@@ -49,11 +48,9 @@ fn fake_ninja_fixture() -> Result<FakeNinjaFixture> {
     fs::set_permissions(&ninja_path, permissions)
         .with_context(|| format!("chmod fake ninja {}", ninja_path.display()))?;
 
-    let env = system_env();
-    let guard = override_ninja_env(&env, ninja_path.as_path());
     Ok(FakeNinjaFixture {
         _ninja_dir: ninja_dir,
-        _guard: guard,
+        ninja_path,
         args_log,
     })
 }
@@ -77,7 +74,8 @@ fn run_build_uses_cli_default_targets_when_no_targets_are_requested(
         ..Cli::default()
     };
 
-    run(&cli, output_prefs::resolve(None)).context("run build with cli default targets")?;
+    run_with_ninja_program(&cli, output_prefs::resolve(None), &fixture.ninja_path)
+        .context("run build with cli default targets")?;
 
     let logged_args = fs::read_to_string(&fixture.args_log)
         .with_context(|| format!("read fake ninja args log {}", fixture.args_log.display()))?;

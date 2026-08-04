@@ -23,19 +23,19 @@
 use clap::ArgMatches;
 use clap::parser::ValueSource;
 use ortho_config::declarative::LayerComposition;
-use ortho_config::figment::{Figment, providers::Env};
-use ortho_config::uncased::Uncased;
+use ortho_config::figment::Figment;
 use ortho_config::{MergeComposer, OrthoMergeExt, OrthoResult, sanitize_value};
 use serde::Serialize;
 
 use serde_json::{Map, Value, json};
 
 use super::config::{BuildConfig, CliConfig};
-use super::discovery::push_file_layers;
+use super::discovery::{EnvProvider, StdEnvProvider, push_file_layers_with_env};
+use super::environment::EnvironmentLayer;
 use super::parser::{BuildArgs, Cli, Commands};
 use super::validation_error;
 
-const ENV_PREFIX: &str = "NETSUKE_";
+pub(super) const ENV_PREFIX: &str = "NETSUKE_";
 
 /// Merge discovered configuration layers over parsed CLI input.
 ///
@@ -44,6 +44,24 @@ const ENV_PREFIX: &str = "NETSUKE_";
 /// Returns an [`ortho_config::OrthoError`] if layer composition or merging
 /// fails.
 pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli> {
+    merge_with_config_and_env(cli, matches, &StdEnvProvider)
+}
+
+/// Merge configuration layers using an explicit environment provider.
+///
+/// This is the deterministic boundary for tests and adapters that must supply
+/// both configuration selectors and `NETSUKE_*` values without mutating the
+/// process environment.
+///
+/// # Errors
+///
+/// Returns an [`ortho_config::OrthoError`] if layer composition or merging
+/// fails.
+pub fn merge_with_config_and_env(
+    cli: &Cli,
+    matches: &ArgMatches,
+    env: &impl EnvProvider,
+) -> OrthoResult<Cli> {
     let mut errors = Vec::new();
     let mut composer = MergeComposer::with_capacity(4);
 
@@ -52,12 +70,9 @@ pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli> {
         Err(err) => errors.push(err),
     }
 
-    push_file_layers(cli, &mut composer, &mut errors);
+    push_file_layers_with_env(cli, &mut composer, &mut errors, env);
 
-    let env_provider = env_provider()
-        .map(|key| Uncased::new(key.as_str().to_ascii_uppercase()))
-        .split("__");
-    match Figment::from(env_provider)
+    match Figment::from(EnvironmentLayer::new(env.entries()))
         .extract::<Value>()
         .into_ortho_merge()
     {
@@ -74,10 +89,6 @@ pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli> {
     let composition = LayerComposition::new(composer.layers(), errors);
     let merged = composition.into_merge_result(CliConfig::merge_from_layers)?;
     Ok(apply_config(cli, merged))
-}
-
-pub(crate) fn env_provider() -> Env {
-    Env::prefixed(ENV_PREFIX)
 }
 
 fn is_empty_value(value: &Value) -> bool {

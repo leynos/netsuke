@@ -20,9 +20,14 @@ pub const BASELINE_MTIME: i64 = 1_600_000_000;
 
 /// Target-directory slugs the benchmark uses, one per variant.
 pub const DEFAULT_SLUG: &str = "default";
+/// Stable benchmark scenario identifier used in generated paths and commands.
 pub const DEV_FAST_SLUG: &str = "dev-fast";
 
 /// Create the touch file with [`BASELINE_MTIME`], returning that timestamp.
+///
+/// # Errors
+///
+/// Returns an error if the fixture cannot be written or its timestamp cannot be changed.
 pub fn write_with_old_mtime(sandbox: &Sandbox, path: &Utf8Path) -> Result<i64> {
     let baseline = UNIX_EPOCH + Duration::from_secs(BASELINE_MTIME.unsigned_abs());
     sandbox.write_file_with_mtime(path, "", baseline)?;
@@ -51,6 +56,10 @@ impl BenchFixture {
     /// model a re-run: on a fresh sandbox the benchmark's `rm -rf` would be
     /// indistinguishable from doing nothing, and the clean-pass assertion would
     /// hold vacuously.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the benchmark fixture cannot be prepared.
     pub fn prepare(scenario: &BuildScenario) -> Result<Self> {
         let sandbox = scenario.sandbox();
         let touch_file = sandbox.home().join("bench-touch");

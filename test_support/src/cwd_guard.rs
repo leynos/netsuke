@@ -11,11 +11,19 @@ pub struct CwdGuard(PathBuf);
 
 impl CwdGuard {
     /// Capture the current working directory for later restoration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the current directory cannot be read.
     pub fn acquire() -> std::io::Result<Self> {
         Ok(Self(std::env::current_dir()?))
     }
 
     /// Alias for [`CwdGuard::acquire`] to support existing test call sites.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the current directory cannot be read.
     pub fn new() -> std::io::Result<Self> {
         Self::acquire()
     }
@@ -29,13 +37,6 @@ impl Drop for CwdGuard {
 
 #[cfg(test)]
 mod tests {
-    //! Unit tests for the working-directory guard.
-
-    use super::*;
-    use crate::env_lock::EnvLock;
-    use rstest::{fixture, rstest};
-    use std::io;
-
     #[fixture]
     fn env_lock() -> EnvLock {
         EnvLock::acquire()

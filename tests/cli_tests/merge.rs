@@ -2,18 +2,16 @@
 //!
 //! These tests validate `OrthoConfig` layer precedence (defaults, file, env,
 //! CLI) and list-value appending.
+use super::merge_probe::merge_in_child;
 use anyhow::{Context, Result, ensure};
 use netsuke::cli::{CliConfig, ProgressPolicy};
-use netsuke::cli_localization;
 use ortho_config::{MergeComposer, sanitize_value};
 use rstest::{fixture, rstest};
 use serde_json::json;
-use std::ffi::OsStr;
+use std::ffi::OsString;
 use std::fs;
 use std::path::Path;
-use std::sync::Arc;
 use tempfile::tempdir;
-use test_support::{EnvVarGuard, env_lock::EnvLock};
 
 #[fixture]
 fn default_cli_json() -> Result<serde_json::Value> {
@@ -24,16 +22,17 @@ fn with_config_file<F, T>(toml_content: &str, cli_args: &[&str], f: F) -> anyhow
 where
     F: FnOnce(netsuke::cli::Cli) -> anyhow::Result<T>,
 {
-    let _env_lock = test_support::env_lock::EnvLock::acquire();
     let temp_dir = tempfile::tempdir().context("create temporary config directory")?;
     let config_path = temp_dir.path().join("netsuke.toml");
     std::fs::write(&config_path, toml_content).context("write netsuke.toml")?;
-    let _config_guard = test_support::EnvVarGuard::set("NETSUKE_CONFIG", config_path.as_os_str());
-    let localizer = std::sync::Arc::from(netsuke::cli_localization::build_localizer(None));
-    let (cli, matches) = netsuke::cli::parse_with_localizer_from(cli_args, &localizer)
-        .context("parse CLI args for merge")?;
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
-        .context("merge CLI and configuration layers")?;
+    let merged = merge_in_child(
+        cli_args,
+        temp_dir.path(),
+        &[(
+            OsString::from("NETSUKE_CONFIG"),
+            config_path.into_os_string(),
+        )],
+    )?;
     f(merged)
 }
 
@@ -162,7 +161,6 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
 
 #[rstest]
 fn cli_merge_with_config_respects_precedence_and_skips_empty_cli_layer() -> Result<()> {
-    let _env_lock = EnvLock::acquire();
     let temp_dir = tempdir().context("create temporary config directory")?;
     let config_path = temp_dir.path().join("netsuke.toml");
     let config = r#"
@@ -177,20 +175,18 @@ json = true
 "#;
     fs::write(&config_path, config).context("write netsuke.toml")?;
 
-    let _config_guard = EnvVarGuard::set("NETSUKE_CONFIG", config_path.as_os_str());
-    let _jobs_guard = EnvVarGuard::set("NETSUKE_JOBS", OsStr::new("4"));
-    let _scheme_guard = EnvVarGuard::remove("NETSUKE_FETCH_ALLOW_SCHEME");
-
-    let localizer = Arc::from(cli_localization::build_localizer(None));
-    let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
-        .context("parse CLI args for merge")?;
-    ensure!(
-        netsuke::cli::resolve_merged_json(&cli, &matches)?,
-        "pre-merge JSON mode should honour config json",
-    );
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
-        .context("merge CLI and configuration layers")?
-        .with_default_command();
+    let merged = merge_in_child(
+        &["netsuke"],
+        temp_dir.path(),
+        &[
+            (
+                OsString::from("NETSUKE_CONFIG"),
+                config_path.into_os_string(),
+            ),
+            (OsString::from("NETSUKE_JOBS"), OsString::from("4")),
+        ],
+    )?;
+    ensure!(merged.json, "config json should survive the merge");
 
     ensure!(
         merged.file.as_path() == Path::new("Configfile"),

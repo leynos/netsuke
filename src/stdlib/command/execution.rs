@@ -65,6 +65,7 @@ fn run_child(
     input: &[u8],
     context: &CommandContext,
 ) -> Result<StdoutResult, CommandFailure> {
+    context.config().configure_environment(&mut command);
     let mut child = command.spawn().map_err(CommandFailure::Spawn)?;
     let mut stdin_handle = child.stdin.take().map(|mut stdin| {
         let buffer = input.to_vec();

@@ -3,10 +3,7 @@
 use anyhow::{Context, Result};
 use rstest::fixture;
 use std::path::PathBuf;
-use test_support::{
-    env::{NinjaEnvGuard, override_ninja_env, system_env},
-    fake_ninja,
-};
+use test_support::fake_ninja;
 
 /// Create a temporary project with a Netsukefile from `minimal.yml`.
 pub fn create_test_manifest() -> Result<(tempfile::TempDir, PathBuf)> {
@@ -19,13 +16,9 @@ pub fn create_test_manifest() -> Result<(tempfile::TempDir, PathBuf)> {
 
 /// Fixture: point `NINJA_ENV` at a fake `ninja` with a configurable exit code.
 ///
-/// Returns: (tempdir holding ninja, `NINJA_ENV` guard)
+/// Returns the owning temporary directory and fake Ninja path.
 #[fixture]
-pub fn ninja_with_exit_code(
-    #[default(0u8)] exit_code: u8,
-) -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
+pub fn ninja_with_exit_code(#[default(0u8)] exit_code: u8) -> Result<(tempfile::TempDir, PathBuf)> {
     let (ninja_dir, ninja_path) = fake_ninja(exit_code)?;
-    let env = system_env();
-    let guard = override_ninja_env(&env, ninja_path.as_path());
-    Ok((ninja_dir, ninja_path, guard))
+    Ok((ninja_dir, ninja_path))
 }

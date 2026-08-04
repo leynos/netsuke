@@ -190,14 +190,15 @@ fn relative_path_entries_resolve_against_cwd(
 fn pathext_empty_uses_default_fallback(
     #[from(workspace)] workspace_res: Result<TempWorkspace>,
 ) -> Result<()> {
-    use test_support::env::VarGuard;
-
     let workspace = workspace_res?;
-    let _pathext_guard = VarGuard::set("PATHEXT", std::ffi::OsStr::new(""));
     let path_value = std::ffi::OsString::from(workspace.root().as_str());
 
-    let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
-        .context("capture env for empty PATHEXT")?;
+    let snapshot = EnvSnapshot::capture_with_pathext(
+        Some(workspace.root()),
+        Some(path_value.as_os_str()),
+        Some(std::ffi::OsStr::new("")),
+    )
+    .context("capture env for empty PATHEXT")?;
     let pathexts = snapshot.pathext();
 
     ensure!(
@@ -217,13 +218,14 @@ fn pathext_empty_uses_default_fallback(
 fn pathext_without_leading_dots_is_normalised_and_deduplicated(
     #[from(workspace)] workspace_res: Result<TempWorkspace>,
 ) -> Result<()> {
-    use test_support::env::VarGuard;
-
     let workspace = workspace_res?;
-    let _pathext_guard = VarGuard::set("PATHEXT", std::ffi::OsStr::new("COM;EXE;EXE; .BAT ;bat"));
     let path_value = std::ffi::OsString::from(workspace.root().as_str());
 
-    let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))?;
+    let snapshot = EnvSnapshot::capture_with_pathext(
+        Some(workspace.root()),
+        Some(path_value.as_os_str()),
+        Some(std::ffi::OsStr::new("COM;EXE;EXE; .BAT ;bat")),
+    )?;
     let mut pathexts = snapshot.pathext().to_vec();
     pathexts.sort_unstable_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
 

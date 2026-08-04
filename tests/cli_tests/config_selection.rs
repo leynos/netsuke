@@ -43,93 +43,52 @@
 //! [`ConfigSelectionCase`] is a const-buildable descriptor used by the main
 //! parametric test [`config_selection_precedence_cases`].
 
+use super::merge_probe::merge_in_child;
 use anyhow::{Context, Result, ensure};
 use netsuke::cli::EmojiPolicy;
-use netsuke::cli_localization;
 use rstest::{fixture, rstest};
-use std::ffi::OsStr;
+use std::ffi::OsString;
 use std::fs;
-use std::sync::Arc;
 use tempfile::tempdir;
-use test_support::{EnvVarGuard, env_lock::EnvLock};
-
-/// RAII guard that restores the process working directory on drop.
-struct CwdGuard(std::path::PathBuf);
-
-impl CwdGuard {
-    fn acquire() -> Result<Self> {
-        Ok(Self(
-            std::env::current_dir().context("capture current working directory")?,
-        ))
-    }
-}
-
-impl Drop for CwdGuard {
-    fn drop(&mut self) {
-        drop(std::env::set_current_dir(&self.0));
-    }
-}
-
-fn parse_and_merge(args: &[&str]) -> Result<netsuke::cli::Cli> {
-    let localizer = Arc::from(cli_localization::build_localizer(None));
-    let (cli, matches) = netsuke::cli::parse_with_localizer_from(args, &localizer)
-        .context("parse CLI for config selection test")?;
-    netsuke::cli::merge_with_config(&cli, &matches)
-        .context("merge CLI with selected config")?
-        .with_default_command()
-        .pipe(Ok)
-}
-
-trait Pipe: Sized {
-    fn pipe<T>(self, f: impl FnOnce(Self) -> T) -> T {
-        f(self)
-    }
-}
-
-impl<T> Pipe for T {}
-
-fn sandbox_user_scope(home: &tempfile::TempDir) -> Result<(EnvVarGuard, EnvVarGuard, EnvVarGuard)> {
-    let xdg_config_home = home.path().join(".config");
-    fs::create_dir_all(&xdg_config_home).context("create sandboxed XDG config home")?;
-    Ok((
-        EnvVarGuard::set("HOME", home.path().as_os_str()),
-        EnvVarGuard::set("XDG_CONFIG_HOME", xdg_config_home.as_os_str()),
-        EnvVarGuard::set("XDG_CONFIG_DIRS", OsStr::new("")),
-    ))
-}
 
 struct ConfigTestHarness {
-    // Struct fields drop in declaration order; keep the lock last so process
-    // state is restored before another test can acquire `EnvLock`.
-    _cwd_guard: CwdGuard,
-    _user_scope: (EnvVarGuard, EnvVarGuard, EnvVarGuard),
-    _home: tempfile::TempDir,
+    home: tempfile::TempDir,
     project: tempfile::TempDir,
-    _env_lock: EnvLock,
 }
 
 impl ConfigTestHarness {
     fn setup() -> Result<Self> {
-        let env_lock = EnvLock::acquire();
-        let cwd_guard = CwdGuard::acquire()?;
         let project = tempdir().context("create project directory")?;
         let home = tempdir().context("create fake home directory")?;
-        let user_scope = sandbox_user_scope(&home)?;
-        std::env::set_current_dir(project.path()).context("change to project directory")?;
-        Ok(Self {
-            _env_lock: env_lock,
-            project,
-            _home: home,
-            _user_scope: user_scope,
-            _cwd_guard: cwd_guard,
-        })
+        fs::create_dir_all(home.path().join(".config"))
+            .context("create sandboxed XDG config home")?;
+        Ok(Self { home, project })
     }
 
     fn write_config(&self, name: &str, content: &str) -> Result<std::path::PathBuf> {
         let path = self.project.path().join(name);
         fs::write(&path, content).with_context(|| format!("write config file {name}"))?;
-        std::env::set_current_dir(self.project.path()).context("change to project directory")?;
         Ok(path)
+    }
+
+    fn merge(
+        &self,
+        args: &[&str],
+        extra_environment: Vec<(OsString, OsString)>,
+    ) -> Result<netsuke::cli::Cli> {
+        let mut environment = vec![
+            (
+                OsString::from("HOME"),
+                self.home.path().as_os_str().to_owned(),
+            ),
+            (
+                OsString::from("XDG_CONFIG_HOME"),
+                self.home.path().join(".config").into_os_string(),
+            ),
+            (OsString::from("XDG_CONFIG_DIRS"), OsString::new()),
+        ];
+        environment.extend(extra_environment);
+        merge_in_child(args, self.project.path(), &environment)
     }
 }
 
@@ -266,19 +225,16 @@ fn config_selection_precedence_cases(
     #[case] case: ConfigSelectionCase,
 ) -> Result<()> {
     let h = config_harness?;
-    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _emoji_guard = EnvVarGuard::remove("NETSUKE_EMOJI");
-
     let _project_config = write_optional_config(&h, case.project_config)?;
     let cli_config = write_optional_config(&h, case.cli_config)?;
     let env_config = write_optional_config(&h, case.env_config)?;
 
-    let mut env_guards = Vec::new();
+    let mut environment = Vec::new();
     if let Some(path) = env_config.as_deref() {
-        env_guards.push(EnvVarGuard::set("NETSUKE_CONFIG", path));
+        environment.push((OsString::from("NETSUKE_CONFIG"), OsString::from(path)));
     }
     if let Some(emoji) = case.env_emoji {
-        env_guards.push(EnvVarGuard::set("NETSUKE_EMOJI", emoji));
+        environment.push((OsString::from("NETSUKE_EMOJI"), OsString::from(emoji)));
     }
 
     let mut args = vec![String::from("netsuke")];
@@ -292,10 +248,8 @@ fn config_selection_precedence_cases(
     }
 
     let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
-    let merged = parse_and_merge(&arg_refs)?;
+    let merged = h.merge(&arg_refs, environment)?;
     ensure!(merged.emoji == case.expected_emoji, "{}", case.message);
-    let _project_root = h.project.path();
-    drop(env_guards);
     Ok(())
 }
 
@@ -305,15 +259,14 @@ fn config_flag_with_nonexistent_file_produces_error(
 ) -> Result<()> {
     let h = config_harness?;
     h.write_config(".netsuke.toml", "emoji = \"always\"\n")?;
-    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-
-    let error = parse_and_merge(&["netsuke", "--config", "missing.toml"])
-        .expect_err("missing explicit config file should fail");
+    let error = match h.merge(&["netsuke", "--config", "missing.toml"], Vec::new()) {
+        Ok(value) => anyhow::bail!("missing explicit config file should fail: {value:?}"),
+        Err(error) => error,
+    };
     let message = format!("{error:?}");
     ensure!(
         message.contains("missing.toml"),
         "error should mention the missing explicit config path, got {message}"
     );
-    let _project_root = h.project.path();
     Ok(())
 }

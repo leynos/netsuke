@@ -23,6 +23,7 @@ use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
 use std::io::IsTerminal;
+use std::path::Path;
 use tracing::{debug, info};
 
 /// Default Ninja executable to invoke.
@@ -48,6 +49,13 @@ pub use process::doc;
 pub use process::{run_ninja, run_ninja_tool};
 
 use path_helpers::{ensure_manifest_exists_or_error, resolve_manifest_path, resolve_output_path};
+
+/// Runtime dependencies shared by command dispatch handlers.
+struct ExecutionContext<'a> {
+    reporter: &'a dyn StatusReporter,
+    progress_enabled: bool,
+    ninja_program: &'a Path,
+}
 
 /// Wrapper around generated Ninja manifest text.
 #[derive(Debug, Clone)]
@@ -146,6 +154,19 @@ const fn should_force_text_task_updates(mode: OutputMode, stdout_is_tty: bool) -
 ///
 /// Returns an error if manifest generation or the Ninja process fails.
 pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
+    let program = process::resolve_ninja_program();
+    run_with_ninja_program(cli, prefs, &program)
+}
+
+/// Execute parsed commands with an explicitly selected Ninja executable.
+///
+/// This is the injected process-program boundary used by adapters and tests
+/// that must not mutate the process environment to select Ninja.
+///
+/// # Errors
+///
+/// Returns an error if manifest generation or the selected Ninja process fails.
+pub fn run_with_ninja_program(cli: &Cli, prefs: OutputPrefs, program: &Path) -> Result<()> {
     let mode = output_mode::resolve(cli.accessibility_override(), Some(cli.color));
     let progress_enabled = cli.progress_enabled() && !cli.json;
     let stdout_is_tty = std::io::stdout().is_terminal();
@@ -160,7 +181,12 @@ pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
     let command = cli.command.clone().unwrap_or(Commands::Build(BuildArgs {
         targets: Vec::new(),
     }));
-    dispatch::execute(cli, command, reporter.as_ref(), progress_enabled)
+    let context = ExecutionContext {
+        reporter: reporter.as_ref(),
+        progress_enabled,
+        ninja_program: program,
+    };
+    dispatch::execute(cli, command, &context)
 }
 
 fn on_task_progress_callback(reporter: &dyn StatusReporter) -> impl FnMut(u32, u32, &str) + '_ {
@@ -174,13 +200,8 @@ fn on_task_progress_callback(reporter: &dyn StatusReporter) -> impl FnMut(u32, u
 /// # Errors
 ///
 /// Returns an error if manifest generation or Ninja execution fails.
-fn handle_build(
-    cli: &Cli,
-    args: &BuildArgs,
-    reporter: &dyn StatusReporter,
-    progress_enabled: bool,
-) -> Result<()> {
-    let ninja = generate_ninja(cli, reporter, Some(keys::STATUS_TOOL_BUILD.into()))?;
+fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> Result<()> {
+    let ninja = generate_ninja(cli, context.reporter, Some(keys::STATUS_TOOL_BUILD.into()))?;
     let targets = if args.targets.is_empty() {
         BuildTargets::new(&cli.default_targets)
     } else {
@@ -190,19 +211,18 @@ fn handle_build(
     let build_file = process::create_temp_ninja_file(&ninja)?;
     let build_path = build_file.path();
 
-    let program = process::resolve_ninja_program();
     let ctx = || {
         format!(
             "running {} with build file {}",
-            program.display(),
+            context.ninja_program.display(),
             build_path.display()
         )
     };
-    if progress_enabled {
-        let mut on_task_progress = on_task_progress_callback(reporter);
+    if context.progress_enabled {
+        let mut on_task_progress = on_task_progress_callback(context.reporter);
         process::run_ninja_with_status(
             process::NinjaBuildRequest {
-                program: program.as_path(),
+                program: context.ninja_program,
                 cli,
                 build_file: build_path,
                 targets: &targets,
@@ -211,9 +231,11 @@ fn handle_build(
         )
         .with_context(ctx)?;
     } else {
-        run_ninja(program.as_path(), cli, build_path, &targets).with_context(ctx)?;
+        run_ninja(context.ninja_program, cli, build_path, &targets).with_context(ctx)?;
     }
-    reporter.report_complete(keys::STATUS_TOOL_BUILD.into());
+    context
+        .reporter
+        .report_complete(keys::STATUS_TOOL_BUILD.into());
     Ok(())
 }
 
@@ -236,33 +258,31 @@ struct NinjaToolSpec<'a> {
 fn handle_ninja_tool(
     cli: &Cli,
     tool: NinjaToolSpec<'_>,
-    reporter: &dyn StatusReporter,
-    progress_enabled: bool,
+    context: &ExecutionContext<'_>,
 ) -> Result<()> {
     info!(
         target: "netsuke::subcommand",
         subcommand = tool.name,
         "Preparing Ninja tool invocation"
     );
-    let ninja = generate_ninja(cli, reporter, Some(tool.key))?;
+    let ninja = generate_ninja(cli, context.reporter, Some(tool.key))?;
 
     let tmp = process::create_temp_ninja_file(&ninja)?;
     let build_path = tmp.path();
 
-    let program = process::resolve_ninja_program();
     let ctx = || {
         format!(
             "running {} -t {} with build file {}",
-            program.display(),
+            context.ninja_program.display(),
             tool.name,
             build_path.display()
         )
     };
-    if progress_enabled {
-        let mut on_task_progress = on_task_progress_callback(reporter);
+    if context.progress_enabled {
+        let mut on_task_progress = on_task_progress_callback(context.reporter);
         process::run_ninja_tool_with_status(
             process::NinjaToolRequest {
-                program: program.as_path(),
+                program: context.ninja_program,
                 cli,
                 build_file: build_path,
                 tool: tool.name,
@@ -271,9 +291,9 @@ fn handle_ninja_tool(
         )
         .with_context(ctx)?;
     } else {
-        run_ninja_tool(program.as_path(), cli, build_path, tool.name).with_context(ctx)?;
+        run_ninja_tool(context.ninja_program, cli, build_path, tool.name).with_context(ctx)?;
     }
-    reporter.report_complete(tool.key);
+    context.reporter.report_complete(tool.key);
     Ok(())
 }
 

@@ -85,6 +85,10 @@ pub fn compile_failure_helper(dir: &Dir, root: &Utf8PathBuf, name: &str) -> Resu
 }
 
 /// Compile a helper that writes a sizeable payload to stdout.
+///
+/// # Errors
+///
+/// Returns an error if the helper source cannot be written or compiled.
 pub fn compile_large_output_helper(
     dir: &Dir,
     root: &Utf8PathBuf,
@@ -120,6 +124,10 @@ pub fn compile_large_output_helper(
 /// .expect("compile Rust helper");
 /// assert!(exe.as_std_path().exists());
 /// ```
+///
+/// # Errors
+///
+/// Returns an error if the source cannot be written or `rustc` cannot compile it.
 pub fn compile_rust_helper(
     dir: &Dir,
     root: &Utf8PathBuf,

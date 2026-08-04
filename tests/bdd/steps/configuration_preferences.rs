@@ -1,6 +1,7 @@
 //! Step definitions for canonical layered CLI configuration preferences.
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
+use crate::bdd::helpers::config_environment::merge_with_world_env;
 use crate::bdd::helpers::env_mutation::mutate_env_var;
 use crate::bdd::helpers::parse_store::store_parse_outcome;
 use crate::bdd::helpers::tokens::build_tokens;
@@ -47,7 +48,7 @@ fn merge_cli(world: &TestWorld, args: &str) {
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let outcome = netsuke::cli::parse_with_localizer_from(tokens, &localizer)
         .and_then(|(cli, matches)| {
-            netsuke::cli::merge_with_config(&cli, &matches).map_err(|err| {
+            merge_with_world_env(world, &cli, &matches).map_err(|err| {
                 clap::Error::raw(
                     clap::error::ErrorKind::InvalidValue,
                     display_error_chain(err.as_ref()),

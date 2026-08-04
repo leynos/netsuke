@@ -458,31 +458,24 @@ fn test_group_max_threads(config: &Value, group: &str) -> Option<i64> {
 }
 
 #[test]
-fn behavioural_nextest_config_binds_the_env_binary_to_the_serial_env_group() -> Result<()> {
+fn behavioural_nextest_config_does_not_serialize_environment_tests() -> Result<()> {
     let config: Value = read_repo_file(&Utf8Path::new(".config").join("nextest.toml"))?
         .parse()
         .context("nextest configuration should be valid TOML")?;
 
-    let max_threads = test_group_max_threads(&config, "serial-env")
-        .context("nextest configuration should declare the serial-env test group")?;
     ensure!(
-        max_threads == 1,
-        "serial-env should serialize its members, found max-threads = {max_threads}"
+        test_group_max_threads(&config, "serial-env").is_none(),
+        "environment tests use injected state and should not declare a serial-env test group"
     );
 
-    let overrides =
-        profile_overrides(&config).context("the default profile should declare overrides")?;
-    let filter = overrides
-        .iter()
-        .filter(|entry| entry.get("test-group").and_then(Value::as_str) == Some("serial-env"))
-        .find_map(|entry| entry.get("filter").and_then(Value::as_str))
-        .context("an override should assign the serial-env group with a filter")?;
-    // Exact membership, not merely presence: a binary that stops mutating
-    // process state must leave the group, or the configuration outlives the
-    // constraint it describes.
+    let has_serial_override = profile_overrides(&config).is_some_and(|overrides| {
+        overrides
+            .iter()
+            .any(|entry| entry.get("test-group").and_then(Value::as_str) == Some("serial-env"))
+    });
     ensure!(
-        filter == "binary(env_path_tests)",
-        "the serial-env override should cover only env_path_tests, found {filter:?}"
+        !has_serial_override,
+        "environment tests use injected state and should not have a serial-env override"
     );
     Ok(())
 }

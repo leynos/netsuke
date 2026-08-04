@@ -8,6 +8,7 @@ use crate::bdd::fixtures::TestWorld;
 use crate::bdd::helpers::assertions::{assert_slot_contains, normalize_fluent_isolates};
 use crate::bdd::types::{DirectoryName, FileName, ManifestOutputPath, OutputFragment};
 use anyhow::{Context, Result, ensure};
+use mockable::{DefaultEnv, Env};
 use rstest_bdd::Slot;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -139,10 +140,6 @@ pub(super) fn netsuke_executable() -> Result<PathBuf> {
 /// - Controlled `PATH` variable
 ///
 /// Returns the configured command ready for execution.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "pending migration under #492 (rstest-bdd migration)"
-)]
 pub(super) fn build_netsuke_command(
     world: &TestWorld,
     args: &[&str],
@@ -152,21 +149,10 @@ pub(super) fn build_netsuke_command(
     let mut cmd = assert_cmd::Command::new(netsuke_executable()?);
     cmd.current_dir(&temp_path).env_clear().args(args);
 
-    // Read PATH without holding EnvLock.
-    //
-    // Two cases apply:
-    // 1. A NinjaEnvGuard is alive in world.ninja_env_guard — that guard holds
-    //    EnvLock for the scenario lifetime, so no concurrent thread can mutate
-    //    any env var; the read is therefore safe.
-    // 2. No NinjaEnvGuard is alive — PATH is mutated only inside
-    //    prepend_dir_to_path, which holds EnvLock only for the duration of the
-    //    set_var call.  That mutation completes before build_netsuke_command is
-    //    called, so the read is safe.
-    //
-    // Acquiring EnvLock here would deadlock when case 1 applies because Mutex
-    // is not reentrant and the same thread already holds the lock via
-    // NinjaEnvGuard.
-    if let Some(host_path) = std::env::var_os("PATH") {
+    let process_env = DefaultEnv;
+    if !world.env_vars_forward.borrow().contains_key("PATH")
+        && let Some(host_path) = process_env.os_string("PATH")
+    {
         cmd.env("PATH", host_path);
     }
 

@@ -8,5 +8,6 @@ mod helpers;
 mod locale;
 mod merge;
 mod merge_diag;
+mod merge_probe;
 mod parsing;
 mod policy;

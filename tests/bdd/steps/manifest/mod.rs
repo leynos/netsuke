@@ -5,6 +5,7 @@
 //! - `helpers.rs` - Typed assertion utilities and target accessor functions
 //! - `targets.rs` - Target-specific assertion steps
 
+mod environment;
 mod helpers;
 mod targets;
 
@@ -15,9 +16,11 @@ use crate::bdd::types::{
     EnvVarKey, EnvVarValue, ErrorPattern, ManifestPath, RuleName, VersionString,
 };
 use anyhow::{Context, Result, bail, ensure};
+use environment::{expand_env, manifest_env_reader};
 use netsuke::{
     ast::{Recipe, StringOrList, Target},
     manifest,
+    stdlib::NetworkPolicy,
 };
 use rstest_bdd_macros::{given, then, when};
 use test_support::display_error_chain;
@@ -74,7 +77,7 @@ fn parse_manifest_inner(world: &TestWorld, path: &ManifestPath) {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         // Hold the env lock and set CWD to the project root so that relative
         // glob patterns (e.g. `tests/data/glob_files/*.txt`) resolve correctly.
-        world.ensure_env_lock();
+        world.ensure_global_state_lock();
         // EnvLock is held; safe to mutate CWD for this scenario.
         if let Err(e) = std::env::set_current_dir(manifest_dir) {
             store_parse_outcome(
@@ -91,7 +94,14 @@ fn parse_manifest_inner(world: &TestWorld, path: &ManifestPath) {
     } else {
         path.as_str().to_owned()
     };
-    let outcome = manifest::from_path(&manifest_path).map_err(|e| display_error_chain(e.as_ref()));
+    let env_reader = manifest_env_reader(world);
+    let outcome = manifest::from_path_with_policy_and_env(
+        &manifest_path,
+        NetworkPolicy::default(),
+        &env_reader,
+        None,
+    )
+    .map_err(|e| display_error_chain(e.as_ref()));
     store_parse_outcome(&world.manifest, &world.manifest_error, outcome);
 }
 
@@ -112,68 +122,18 @@ fn assert_parsed(world: &TestWorld) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// Environment variable helpers
-// ---------------------------------------------------------------------------
-
-#[expect(
-    clippy::disallowed_methods,
-    reason = "pending migration under #492 (rstest-bdd migration)"
-)]
-fn parse_env_token<I>(chars: &mut std::iter::Peekable<I>) -> String
-where
-    I: Iterator<Item = char>,
-{
-    chars.next();
-    let mut name = String::new();
-    for ch in chars.by_ref() {
-        if ch == '}' {
-            break;
-        }
-        name.push(ch);
-    }
-    std::env::var(&name).unwrap_or_else(|_| ["${", &name, "}"].concat())
-}
-
-/// Expand `${VAR}` patterns in the input string using environment variables.
-///
-/// Supported syntax:
-/// - `${VAR}` - replaced by the value of environment variable `VAR`
-///
-/// Unsupported syntax (passed through unchanged):
-/// - `$VAR` - bare dollar sign variables
-/// - `${VAR:-default}` - default value syntax
-/// - `${VAR:+alternate}` - alternate value syntax
-fn expand_env(raw: &str) -> String {
-    let mut out = String::new();
-    let mut chars = raw.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == '$' && chars.peek() == Some(&'{') {
-            out.push_str(&parse_env_token(&mut chars));
-        } else {
-            out.push(c);
-        }
-    }
-    out
-}
-
-/// Wrapper around the shared `mutate_env_var` helper for backward compatibility.
-fn mutate_env_var(world: &TestWorld, key: EnvVarKey, new_value: Option<&str>) -> Result<()> {
-    shared_mutate_env_var(world, key, new_value)
-}
-
-// ---------------------------------------------------------------------------
 // Given steps
 // ---------------------------------------------------------------------------
 
 #[given("the environment variable {key:string} is set to {value:string}")]
 fn set_env_var_step(world: &TestWorld, key: EnvVarKey, value: EnvVarValue) -> Result<()> {
-    let expanded = expand_env(value.as_str());
-    mutate_env_var(world, key, Some(&expanded))
+    let expanded = expand_env(world, value.as_str());
+    shared_mutate_env_var(world, key, Some(&expanded))
 }
 
 #[given("the environment variable {key:string} is unset")]
 fn unset_env_var_step(world: &TestWorld, key: EnvVarKey) -> Result<()> {
-    mutate_env_var(world, key, None)
+    shared_mutate_env_var(world, key, None)
 }
 
 #[expect(

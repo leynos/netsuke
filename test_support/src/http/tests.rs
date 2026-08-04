@@ -11,8 +11,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-fn fixture_env(values: &[(&str, &str)]) -> MockEnv {
-    let values: HashMap<String, String> = values
+fn fixture_env(entries: &[(&str, &str)]) -> MockEnv {
+    let values: HashMap<String, String> = entries
         .iter()
         .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
         .collect();
@@ -90,12 +90,13 @@ fn duration_from_env_reports_invalid_values() {
     assert_eq!(duration, Duration::from_secs(3));
     let warnings = take_duration_warnings();
     assert_eq!(warnings.len(), 1);
+    let warning = warnings.first().map_or("", String::as_str);
     assert!(
-        warnings[0].contains(ENV_HTTP_ACCEPT_TIMEOUT_MS),
+        warning.contains(ENV_HTTP_ACCEPT_TIMEOUT_MS),
         "warning should mention the variable name"
     );
     assert!(
-        warnings[0].contains("not-a-number"),
+        warning.contains("not-a-number"),
         "warning should include the invalid value"
     );
 }
@@ -116,11 +117,9 @@ fn duration_from_env_trims_whitespace() {
 }
 
 #[test]
-fn accept_connection_respects_accept_timeout() {
-    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind listener");
-    listener
-        .set_nonblocking(true)
-        .expect("set listener non-blocking");
+fn accept_connection_respects_accept_timeout() -> anyhow::Result<()> {
+    let listener = TcpListener::bind(("127.0.0.1", 0))?;
+    listener.set_nonblocking(true)?;
 
     let accept_timeout = Duration::from_millis(20);
     let poll_interval = Duration::from_millis(200);
@@ -128,23 +127,25 @@ fn accept_connection_respects_accept_timeout() {
     let deadline = start + accept_timeout;
 
     let result = panic::catch_unwind(|| {
-        let _ = accept_connection(&listener, deadline, poll_interval, accept_timeout);
+        drop(accept_connection(
+            &listener,
+            deadline,
+            poll_interval,
+            accept_timeout,
+        ));
     });
-    let panic_payload = result.expect_err("accept_connection should panic when no client connects");
+    let Err(panic_payload) = result else {
+        anyhow::bail!("accept_connection should panic when no client connects");
+    };
 
     let elapsed = start.elapsed();
-    assert!(
+    anyhow::ensure!(
         elapsed >= accept_timeout,
-        "panic should not occur before the accept timeout (elapsed {:?}, timeout {:?})",
-        elapsed,
-        accept_timeout,
+        "panic should not occur before the accept timeout (elapsed {elapsed:?}, timeout {accept_timeout:?})",
     );
-    assert!(
+    anyhow::ensure!(
         elapsed <= accept_timeout + poll_interval + Duration::from_millis(50),
-        "panic overshot accept timeout by more than one poll interval: elapsed={:?}, accept_timeout={:?}, poll_interval={:?}",
-        elapsed,
-        accept_timeout,
-        poll_interval,
+        "panic overshot accept timeout by more than one poll interval: elapsed={elapsed:?}, accept_timeout={accept_timeout:?}, poll_interval={poll_interval:?}",
     );
 
     let panic_ref = panic_payload.as_ref();
@@ -154,15 +155,16 @@ fn accept_connection_respects_accept_timeout() {
         .or_else(|| {
             panic_ref
                 .downcast_ref::<&'static str>()
-                .map(|s| s.to_string())
+                .map(std::string::ToString::to_string)
         })
         .unwrap_or_else(|| format!("{panic_payload:?}"));
-    assert!(
-        panic_text.contains(&format!("accept_timeout={:?}", accept_timeout)),
+    anyhow::ensure!(
+        panic_text.contains(&format!("accept_timeout={accept_timeout:?}")),
         "panic message should embed the accept timeout: {panic_text}",
     );
-    assert!(
-        panic_text.contains(&format!("poll_interval={:?}", poll_interval)),
+    anyhow::ensure!(
+        panic_text.contains(&format!("poll_interval={poll_interval:?}")),
         "panic message should embed the poll interval: {panic_text}",
     );
+    Ok(())
 }

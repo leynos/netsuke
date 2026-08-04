@@ -1,14 +1,14 @@
 //! Tests covering manifest workspace resolution and filesystem helpers.
-use super::super::{from_path_with_policy, open_manifest_workspace};
+use super::super::{EnvReader, from_path_with_policy_and_env, open_manifest_workspace};
 use crate::ast::Recipe;
 use crate::stdlib::NetworkPolicy;
 use anyhow::{Context, Result as AnyResult, anyhow, ensure};
 use camino::Utf8Path;
 use rstest::rstest;
-use std::path::Path;
+use std::{path::Path, sync::Arc};
 use tempfile::tempdir;
 use test_support::fs as test_fs;
-use test_support::{EnvVarGuard, env_lock::EnvLock, hash, http};
+use test_support::{env_lock::EnvLock, hash, http};
 use url::Url;
 
 struct CurrentDirGuard {
@@ -168,14 +168,22 @@ fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
     test_fs::write(&manifest_path, manifest_yaml)?;
 
     let _cwd_guard = CurrentDirGuard::change_to(&outside)?;
-    let _url_guard = EnvVarGuard::set("NETSUKE_MANIFEST_URL", &url);
+    let manifest_url = url.clone();
+    let env_reader: EnvReader = Arc::new(move |key| {
+        if key == "NETSUKE_MANIFEST_URL" {
+            Ok(manifest_url.clone())
+        } else {
+            Err(std::env::VarError::NotPresent)
+        }
+    });
 
-    let manifest = from_path_with_policy(
+    let manifest = from_path_with_policy_and_env(
         &manifest_path,
         NetworkPolicy::default()
             .deny_all_hosts()
             .allow_hosts(["127.0.0.1", "localhost"])?
             .allow_scheme("http")?,
+        &env_reader,
         None,
     )?;
     if let Err(err) = server.join() {

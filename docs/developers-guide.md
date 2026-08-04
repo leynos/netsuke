@@ -330,6 +330,11 @@ deviation from upstream" callout, and record Netsuke-specific policy here and in
 
 [whitaker-upstream-guide]: https://raw.githubusercontent.com/leynos/whitaker/refs/heads/main/docs/users-guide.md
 
+The shared Rust, Rustdoc, and Clippy policy lives under `[workspace.lints]` in
+the root manifest. Both `netsuke` and the private `test_support` crate opt into
+that policy with `lints.workspace = true`; adding a crate to `members` alone
+does not inherit workspace lints.
+
 Prefer `excluded_paths` over `excluded_crates`: a path entry exempts one module
 and its descendants, whereas a crate entry exempts a whole compilation unit.
 The application crate is scoped this way — only
@@ -422,6 +427,11 @@ deviation from upstream" callout, and record Netsuke-specific policy here and in
 `dylint.toml`.
 
 [whitaker-upstream-guide]: https://raw.githubusercontent.com/leynos/whitaker/refs/heads/main/docs/users-guide.md
+
+The shared Rust, Rustdoc, and Clippy policy lives under `[workspace.lints]` in
+the root manifest. Both `netsuke` and the private `test_support` crate opt into
+that policy with `lints.workspace = true`; adding a crate to `members` alone
+does not inherit workspace lints.
 
 Prefer `excluded_paths` over `excluded_crates`: a path entry exempts one module
 and its descendants, whereas a crate entry exempts a whole compilation unit.
@@ -1191,10 +1201,9 @@ variables rather than reinterpreting one as the other.
 The runner is configured by `.config/nextest.toml` at the workspace root. It
 governs the non-doctest pass only, and deliberately stays small:
 
-- **`serial-env` test group** (`max-threads = 1`) covering only
-  `env_path_tests`, the remaining integration binary that exercises a
-  process-global `PATH` guard. Manifest and Ninja environment resolution use
-  injected readers and run fully in parallel.
+- **No serialized environment group.** Environment-dependent tests inject
+  readers or configure child processes, so all test binaries can run in
+  parallel without mutating the harness environment.
 - **No blanket retries.** A test that fails intermittently is a defect to
   diagnose. Add a targeted override with a written rationale only when a
   genuine external-resource constraint requires one.
@@ -1202,24 +1211,14 @@ governs the non-doctest pass only, and deliberately stays small:
   warning periods) so a hung test surfaces without failing the legitimately
   slow documentation end-to-end suites, which shell out to real Ninja.
 
-### How this relates to `#[serial]` and the isolation utilities
 
-nextest runs each test in its own process, so environment and working-directory
-mutations cannot leak between tests the way they can under the threaded
-in-process harness. The `EnvLock`, `EnvVarGuard`, and `CwdGuard` utilities
-described in [Test isolation utilities](#test-isolation-utilities), and the
-`#[serial]` markers on the tests in the two binaries above, remain necessary
-because the coverage workflow still drives an in-process runner.
+### How this relates to the isolation utilities
 
-They are needed only for binaries that still mutate process-global state. A
-binary migrated to an injected seam should leave the group and drop its
-`#[serial]` markers in the same change, so the configuration does not outlive
-the constraint it describes.
-
-The `serial-env` group is therefore not load-bearing for the tests that exist
-today; it states the serialization contract once so both runners agree, and so
-it is not silently lost if a future test in those binaries reaches for
-genuinely shared state such as a fixed on-disk path.
+nextest runs each test in its own process, but the codebase does not rely on
+that isolation for environment safety. Tests pass environment values through
+explicit configuration seams or `Command::env` after `env_clear()`. `EnvLock`
+and `CwdGuard` remain only for the few tests that exercise process working
+directory behaviour, because the in-process coverage runner shares that state.
 
 ### Runners not covered by this configuration
 
@@ -1762,10 +1761,9 @@ process.
 
 ### `EnvLock`
 
-`test_support::env_lock::EnvLock` is a global mutex that serializes all
-process-global mutations (environment variables, current working directory)
-across concurrent test threads. Acquire it at the start of any test that
-mutates the environment:
+`test_support::env_lock::EnvLock` serializes the few tests that change the
+process working directory. Acquire it before `CwdGuard` so restoration occurs
+before the lock is released:
 
 ```rust
 use test_support::env_lock::EnvLock;
@@ -1773,60 +1771,14 @@ use test_support::env_lock::EnvLock;
 let _env_lock = EnvLock::acquire();
 ```
 
-The lock is released when the guard is dropped. In BDD scenarios,
-`TestWorld::ensure_env_lock()` acquires it once per scenario and holds it for
-the scenario lifetime.
-
-### `EnvVarGuard`
-
-`test_support::EnvVarGuard` is a lightweight RAII guard for setting or removing
-a single environment variable and restoring it on drop:
-
-```rust
-use test_support::env_lock::EnvLock;
-use test_support::EnvVarGuard;
-
-let _env_lock = EnvLock::acquire();
-let _guard = EnvVarGuard::set("HOME", temp.path().as_os_str());
-let _guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-```
-
-For BDD steps that need to track mutations through `TestWorld`, use
-`mutate_env_var` from `tests/bdd/helpers/env_mutation.rs` instead.
-
-### `original_ref()` on environment guards
-
-`NinjaEnvGuard` and `EnvGuard<E>` both expose a non-consuming accessor:
-
-```rust
-pub fn original_ref(&self) -> Option<&OsString>
-```
-
-Use this to inspect the value that was in the environment *before* the guard
-was activated, without consuming the guard.  This is the correct way for BDD
-steps to obtain the prior value when calling `track_env_var` because the
-consuming `into_original(self)` would drop the guard prematurely:
-
-```rust
-let guard = override_ninja_env(&SystemEnv::new(), &ninja_path);
-let previous = guard.original_ref().cloned();
-world.track_env_var(
-    netsuke::runner::NINJA_ENV.to_owned(),
-    previous,
-    Some(ninja_path.as_os_str().to_owned()),
-);
-world.ninja_env_guard = Some(guard);
-```
-
-The consuming `into_original(self) -> Option<OsString>` method remains
-available when the guard is no longer needed after the read.
+Do not use this lock to justify process-environment mutation. Environment
+access must remain injected, or confined to a spawned child process.
 
 ### `CwdGuard`
 
 Tests that call `std::env::set_current_dir` must restore the original working
-directory after the test. `CwdGuard` is available from `test_support`, and is
-used in `tests/cli_tests/config_discovery.rs` and `tests/cli_tests/merge.rs`.
-It captures the current directory on construction and restores it on drop:
+directory after the test. `CwdGuard` is available from `test_support`; it
+captures the current directory on construction and restores it on drop:
 
 ```rust
 use test_support::CwdGuard;
@@ -1840,41 +1792,12 @@ std::env::set_current_dir(temp.path())?;
 Acquire `EnvLock` and then `CwdGuard` so Rust drops them in reverse declaration
 order: `CwdGuard` restores the CWD first, and `EnvLock` releases second.
 
-### `restore_many` and `restore_many_locked`
 
-`test_support::env::restore_many` restores a batch of environment variables
-from a `HashMap<String, Option<OsString>>` snapshot. It acquires `EnvLock`
-internally, so callers do not need to hold the lock:
-
-```rust
-use std::collections::HashMap;
-use std::ffi::OsStr;
-use test_support::env::{restore_many, set_var};
-
-let mut snapshot = HashMap::new();
-snapshot.insert("HELLO".into(), set_var("HELLO", OsStr::new("world")));
-restore_many(snapshot);
-// "HELLO" is now restored to its prior value (or removed if it was unset).
-```
-
-`restore_many_locked` is the `unsafe` variant for callers that already hold
-`EnvLock` — typically `Drop` implementations. The caller **must** hold the lock
-for the duration of the call:
-
-```rust
-// SAFETY: EnvLock is held via self.env_lock.
-unsafe { test_support::env::restore_many_locked(vars) };
-```
-
-Prefer `restore_many` in normal test code. Use `restore_many_locked` only inside
-`Drop` or other contexts where `EnvLock` is already acquired.
-
-### `mutate_env_var` (BDD scenarios)
+### Injected and child-process environments
 
 `mutate_env_var` in `tests/bdd/helpers/env_mutation.rs` is the canonical way to
-set or remove an environment variable within a BDD scenario. It acquires the
-scenario-scoped `EnvLock`, performs the mutation, and registers the key for
-automatic restoration when the scenario ends:
+set or remove a variable for a BDD child process. It validates and records the
+value in `TestWorld::env_vars_forward`; it never changes the harness process:
 
 ```rust
 use crate::bdd::helpers::env_mutation::mutate_env_var;
@@ -1887,17 +1810,20 @@ mutate_env_var(world, EnvVarKey::from("NETSUKE_COLOR"), Some("never"))?;
 mutate_env_var(world, EnvVarKey::from("NETSUKE_EMOJI"), None)?;
 ```
 
-Do **not** call `std::env::set_var` directly in BDD steps — use
-`mutate_env_var` so that cleanup is tracked through `TestWorld`.
+Production-facing unit and integration tests follow the same rule. Use the
+appropriate injected seam, such as `run_with_ninja_program`,
+`from_path_with_policy_and_env`, `StdlibConfig::with_path_override`,
+`StdlibConfig::with_home_override`, or
+`StdlibConfig::with_command_path_override`. End-to-end tests may apply values
+with `Command::env` after `env_clear()` because the mutation is confined to the
+child.
 
 ### Ordering rules
 
-1. Acquire `EnvLock` first.
-2. Acquire `CwdGuard` second.
-3. Create `EnvVarGuard`s for all variables that need sandboxing.
-4. Perform the test.
-5. Guards drop in reverse declaration order — CWD and environment
-   variables are restored while the lock is still held, preventing races.
+1. Inject environment-dependent inputs whenever the API supports them.
+2. Use an isolated child process for APIs whose contract is ambient discovery.
+3. Acquire `EnvLock` and then `CwdGuard` only for CWD-specific tests.
+4. Never mutate the harness process environment.
 
 ### `tracing_capture`
 
@@ -1967,30 +1893,25 @@ maintenance.
 
 Table: Scenario state groups and fields
 
-| Group              | Fields                                                                                                                                                                                                                                   | Purpose                                                                  |
-| :----------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------- |
-| CLI state          | `cli`, `cli_error`                                                                                                                                                                                                                       | Parsed CLI configuration and parse error capture.                        |
-| Manifest state     | `manifest`, `manifest_error`                                                                                                                                                                                                             | Parsed manifest and error capture.                                       |
-| IR state           | `build_graph`, `removed_action_id`, `generation_error`                                                                                                                                                                                   | Build graph, negative-test identifiers, generation errors.               |
-| Ninja state        | `ninja_content`, `ninja_error`                                                                                                                                                                                                           | Generated Ninja file content and errors.                                 |
-| Process state      | `run_status`, `run_error`, `command_stdout`, `command_stderr`, `temp_dir`, `workspace_path`, `path_guard`, `ninja_env_guard`                                                                                                             | Process execution results, temporary directories, and path/ninja guards. |
-| Stdlib state       | `stdlib_root`, `stdlib_output`, `stdlib_error`, `stdlib_state`, `stdlib_command`, `stdlib_policy`, `stdlib_path_override`, `stdlib_fetch_max_bytes`, `stdlib_command_max_output_bytes`, `stdlib_command_stream_max_bytes`, `stdlib_text` | Stdlib rendering, network policy, and size constraints.                  |
-| Localization state | `localization_lock`, `localization_guard`, `locale_config`, `locale_env`, `locale_cli_override`, `locale_system`, `resolved_locale`, `locale_message`                                                                                    | Scenario-level localizer overrides and resolution state.                 |
-| HTTP server state  | `http_server`, `stdlib_url`                                                                                                                                                                                                              | Test HTTP server fixture for fetch scenarios.                            |
-| Output state       | `output_mode`, `simulated_no_color`, `simulated_term`, `output_prefs`, `simulated_no_emoji`, `rendered_prefix`                                                                                                                           | Accessibility and output preference resolution.                          |
-| Environment state  | `env_vars`, `env_vars_forward`, `env_lock`, `original_cwd`                                                                                                                                                                               | Restoration snapshot, forwarding map, scenario lock, and CWD capture.    |
+| Group              | Fields                                                                                                                                                                                                                                   | Purpose                                                    |
+| :----------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------- |
+| CLI state          | `cli`, `cli_error`                                                                                                                                                                                                                       | Parsed CLI configuration and parse error capture.          |
+| Manifest state     | `manifest`, `manifest_error`                                                                                                                                                                                                             | Parsed manifest and error capture.                         |
+| IR state           | `build_graph`, `removed_action_id`, `generation_error`                                                                                                                                                                                   | Build graph, negative-test identifiers, generation errors. |
+| Ninja state        | `ninja_content`, `ninja_error`                                                                                                                                                                                                           | Generated Ninja file content and errors.                   |
+| Process state      | `run_status`, `run_error`, `command_stdout`, `command_stderr`, `temp_dir`, `workspace_path`                                                                                                                                              | Process results and temporary workspace paths.             |
+| Stdlib state       | `stdlib_root`, `stdlib_output`, `stdlib_error`, `stdlib_state`, `stdlib_command`, `stdlib_policy`, `stdlib_path_override`, `stdlib_fetch_max_bytes`, `stdlib_command_max_output_bytes`, `stdlib_command_stream_max_bytes`, `stdlib_text` | Stdlib rendering, network policy, and size constraints.    |
+| Localization state | `localization_lock`, `localization_guard`, `locale_config`, `locale_env`, `locale_cli_override`, `locale_system`, `resolved_locale`, `locale_message`                                                                                    | Scenario-level localizer overrides and resolution state.   |
+| HTTP server state  | `http_server`, `stdlib_url`                                                                                                                                                                                                              | Test HTTP server fixture for fetch scenarios.              |
+| Output state       | `output_mode`, `simulated_no_color`, `simulated_term`, `output_prefs`, `simulated_no_emoji`, `rendered_prefix`                                                                                                                           | Accessibility and output preference resolution.            |
+| Environment state  | `env_vars_forward`, `global_state_lock`                                                                                                                                                                                                  | Child environment map and the CWD-only scenario lock.      |
 
 ### Key `TestWorld` methods
 
-- `track_env_var(key, previous, new_value)` — record a variable for
-  restoration at scenario end and store `new_value` in `env_vars_forward` so
-  that `build_netsuke_command` can forward it to child processes without
-  re-reading the process environment.
-- `ensure_env_lock()` — acquire the scenario-scoped `EnvLock` on first
-  call; subsequent calls are no-ops. Also captures the current working
-  directory for later restoration.
-- `restore_environment_locked()` (unsafe, private) — called from `Drop` to
-  restore all tracked variables while the lock is still held.
+- `track_env_var(key, new_value)` — update `env_vars_forward` so
+  `build_netsuke_command` can configure the scenario's child process.
+- `ensure_global_state_lock()` — acquire the scenario-scoped CWD lock on first
+  use; subsequent calls are no-ops.
 
 ## Configuration merge architecture
 
@@ -2067,8 +1988,8 @@ Configuration merge helpers:
   root `--json` override to the discovered value.
 - `cli_overrides_from_matches(matches: &ArgMatches) -> OrthoValue` extracts
   CLI-supplied fields, stripping defaults and non-CLI sources.
-- `env_provider() -> Figment` returns the `NETSUKE_` prefixed Figment
-  environment provider.
+- `EnvironmentLayer` converts an injected snapshot of `NETSUKE_*` values into
+  the same nested Figment shape used by the ambient merge path.
 
 ### Environment lookup seams
 
@@ -2076,14 +1997,22 @@ Configuration merge helpers:
 early CLI configuration resolution; `src/cli/mod.rs` re-exports it as
 `ConfigEnvProvider` (and `StdEnvProvider` as `ConfigStdEnvProvider`), so
 external callers see only the `Config*` names below. The production
-`StdEnvProvider` adapter delegates to `std::env::var_os`; tests can inject
+`StdEnvProvider` adapter delegates to the process environment; tests can inject
 map-backed providers without mutating process-global state.
 
 ```rust
 pub trait EnvProvider {
     fn get(&self, key: &str) -> Option<std::ffi::OsString>;
+    fn entries(&self) -> Vec<(std::ffi::OsString, std::ffi::OsString)>;
 }
 ```
+
+`get` owns selector lookup, while `entries` supplies the complete snapshot for
+the layered `NETSUKE_*` merge. A selector-only provider may retain the empty
+default for `entries`. Full-merge adapters must return a stable owned snapshot
+so discovery and value merging observe one environment. Keep this port scoped
+to CLI configuration; runner, manifest, locale, and stdlib environment seams
+remain separate because their input and lifetime contracts differ.
 
 `explicit_config_path_with_env` is the crate-internal seam for explicit
 config-file selection. It evaluates the precedence chain in this order:
@@ -2095,11 +2024,16 @@ config-file selection. It evaluates the precedence chain in this order:
 environment value into `PathBuf`. Both full merging and early JSON resolution
 use the same injected selector and file-layer implementation.
 
-The public APIs `merge_with_config` and `resolve_merged_json` each accept two
-arguments. `resolve_merged_json_with_env` accepts three:
+The ambient public APIs `merge_with_config` and `resolve_merged_json` each
+accept two arguments. Their injected counterparts accept a `ConfigEnvProvider`:
 
 ```rust
 pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli>;
+pub fn merge_with_config_and_env(
+    cli: &Cli,
+    matches: &ArgMatches,
+    env: &impl EnvProvider,
+) -> OrthoResult<Cli>;
 pub fn resolve_merged_json(cli: &Cli, matches: &ArgMatches) -> OrthoResult<bool>;
 pub fn resolve_merged_json_with_env(
     cli: &Cli,
@@ -2192,12 +2126,9 @@ three helpers that launch the netsuke binary in a controlled environment:
   `assert_cmd::Command` with a sanitized environment. The helper:
   1. Calls `env_clear()` to strip the inherited environment for test
      isolation.
-  2. Forwards `PATH` (via `std::env::var_os`) **without** acquiring `EnvLock`
-     because the calling thread may already hold the lock via a
-     `NinjaEnvGuard` stored on the `TestWorld` — and `std::sync::Mutex` is
-     not reentrant. The direct read is safe: when a `NinjaEnvGuard` is
-     alive, it serializes all env mutations; when no guard is alive, the
-     `PATH` mutation from `prepend_dir_to_path` has already completed.
+  2. Uses a scenario-provided `PATH` when present; otherwise it captures the
+     host value through `mockable::DefaultEnv` and applies it only to the
+     child.
   3. Forwards all scenario-tracked environment variables from
      `world.env_vars_forward` (including `NETSUKE_NINJA` and any variables set
      by BDD steps) without reading the process environment, eliminating data
@@ -2210,10 +2141,10 @@ three helpers that launch the netsuke binary in a controlled environment:
 
 After `env_clear()`, only these variables are present in the spawned command:
 
-| Variable     | Source                   | Purpose                       |
-| ------------ | ------------------------ | ----------------------------- |
-| `PATH`       | Host `std::env::var_os`  | Locate ninja and subprocesses |
-| Scenario env | `world.env_vars_forward` | BDD-step-configured overrides |
+| Variable     | Source                       | Purpose                       |
+| ------------ | ---------------------------- | ----------------------------- |
+| `PATH`       | Scenario map or host adapter | Locate Ninja and subprocesses |
+| Scenario env | `world.env_vars_forward`     | BDD-step-configured overrides |
 
 `world.env_vars_forward` is a `HashMap<String, OsString>` containing the
 *current* values that BDD steps intend to pass to child processes, including
@@ -2221,10 +2152,6 @@ After `env_clear()`, only these variables are present in the spawned command:
 `env_vars_forward` and calls `cmd.env(key, value)` for each entry, so the child
 process receives exactly the variables that steps have configured without
 reading the process environment.
-
-The separate `world.env_vars` map is a **restoration snapshot**: keys are
-variables set during the scenario, and values are their *previous* values (for
-restoration when the scenario ends). It is not used by `build_netsuke_command`.
 
 ### `given_config_file_with_setting` step (`tests/bdd/steps/advanced_usage.rs`)
 
@@ -2295,19 +2222,16 @@ feature-file-based behavioural tests, not code-level unit or integration tests.
 ### Integration test helper
 
 `test_support::netsuke::run_netsuke_in(current_dir, args)` provides a simpler
-interface for integration tests outside the BDD framework. It sets `PATH` to an
-empty string (relying on the resolved binary path) but does **not** call
-`env_clear()`, so other environment variables (including `NETSUKE_NINJA` set via
-`override_ninja_env`) are inherited normally.
+interface for integration tests outside the BDD framework. It supplies an empty
+`PATH`, an isolated `HOME`, and an isolated `XDG_CONFIG_HOME`, while removing
+Netsuke's explicit configuration selectors.
 
 For tests that need **deterministic, isolated** child-process environments, use
 `test_support::netsuke::run_netsuke_in_with_env(current_dir, args, extra_env)`.
-Unlike `run_netsuke_in`, this variant calls `env_clear()` so the child inherits
-**only** the variables supplied in `extra_env`, plus two automatically
-forwarded variables: `PATH` (from the host `std::env::var_os`) and
-`NETSUKE_NINJA` (forwarded when an `override_ninja_env` guard is active in the
-current process). Use this helper for configuration-layering tests or any test
-that sets environment variables which could race with parallel test execution.
+Unlike `run_netsuke_in`, this variant calls `env_clear()` so the child receives
+only an empty `PATH`, isolated `HOME` and `XDG_CONFIG_HOME` values, plus the
+variables supplied in `extra_env`. Use it for configuration-layering tests or
+any scenario that requires a hermetic child environment.
 
 ## Digest rendering
 

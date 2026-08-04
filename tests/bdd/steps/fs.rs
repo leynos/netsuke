@@ -102,9 +102,6 @@ fn setup_environment_variables(
     root: &Utf8PathBuf,
     device_paths: &(Utf8PathBuf, Utf8PathBuf),
 ) {
-    // Acquire scenario-scoped lock before process-global env mutations
-    world.ensure_env_lock();
-
     let (block_path, char_path) = device_paths;
     let entries = [
         ("DIR_PATH", root.join("dir")),
@@ -117,12 +114,10 @@ fn setup_environment_variables(
     ];
     for (key, path) in entries {
         let new_val = path.as_std_path().as_os_str().to_owned();
-        let original = world.set_env_var(key, path.as_std_path().as_os_str());
-        world.track_env_var(key.to_owned(), original, Some(new_val));
+        world.track_env_var(key.to_owned(), Some(new_val));
     }
     let new_val = root.as_std_path().as_os_str().to_owned();
-    let original = world.set_env_var("WORKSPACE", root.as_std_path().as_os_str());
-    world.track_env_var("WORKSPACE".into(), original, Some(new_val));
+    world.track_env_var("WORKSPACE".into(), Some(new_val));
 }
 
 fn verify_missing_fixtures(handle: &Dir, root: &Utf8PathBuf) -> Result<()> {

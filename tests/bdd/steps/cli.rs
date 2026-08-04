@@ -5,6 +5,7 @@
 //! Steps store results in [`TestWorld`] for downstream assertions.
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
+use crate::bdd::helpers::config_environment::merge_with_world_env;
 use crate::bdd::helpers::parse_store::store_parse_outcome;
 use crate::bdd::helpers::tokens::build_tokens;
 use crate::bdd::types::{CliArgs, ErrorFragment, JobCount, PathString, TargetName, UrlString};
@@ -66,7 +67,7 @@ pub(super) fn apply_cli(world: &TestWorld, args: &CliArgs) {
         .map_err(|e| e.to_string())
         .and_then(|(parsed_cli, matches)| {
             // Apply config file discovery and merge
-            netsuke::cli::merge_with_config(&parsed_cli, &matches)
+            merge_with_world_env(world, &parsed_cli, &matches)
                 .map(normalize_cli)
                 .map_err(|e| e.to_string())
         });

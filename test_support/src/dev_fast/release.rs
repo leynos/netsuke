@@ -26,6 +26,10 @@ pub struct FakeRelease {
 impl FakeRelease {
     /// Build a release for `version` and publish it under the `v<version>` path
     /// the installer will request.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the release fixture cannot be published into the sandbox.
     pub fn publish(sandbox: &Sandbox, version: &str) -> Result<Self> {
         let directory = sandbox.home().join("releases");
         let root = format!("mold-{version}-x86_64-linux");
@@ -45,21 +49,28 @@ impl FakeRelease {
     }
 
     /// The artefact's file name, as it appears in a checksum file.
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.name
     }
 
     /// The artefact's real SHA-256 digest.
+    #[must_use]
     pub fn sha256(&self) -> &str {
         &self.sha256
     }
 
     /// The base URL to point the installer at. It appends `/v<version>/<name>`.
+    #[must_use]
     pub fn base_url(&self) -> String {
         format!("file://{}", self.directory)
     }
 
     /// Write a version pin naming this release, and return its path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the version pin cannot be written.
     pub fn write_version_pin(&self, sandbox: &Sandbox) -> Result<Utf8PathBuf> {
         let path = sandbox.home().join("MOLD_VERSION");
         fs::write(&path, format!("{}\n", self.version)).context("write test version pin")?;
@@ -69,18 +80,26 @@ impl FakeRelease {
     /// Write a checksum file recording `digest` for this artefact, and return
     /// its path. Pass the real [`sha256`](Self::sha256) for the success path, or
     /// any other value to exercise a mismatch.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the checksum fixture cannot be written.
     pub fn write_checksums(&self, sandbox: &Sandbox, digest: &str) -> Result<Utf8PathBuf> {
-        self.write_checksum_file(sandbox, &format!("{digest}  {}\n", self.name))
+        Self::write_checksum_file(sandbox, &format!("{digest}  {}\n", self.name))
     }
 
     /// Write a checksum file that is well-formed but does not mention this
     /// artefact, exercising the unlisted-artefact refusal.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the checksum fixture cannot be written.
     pub fn write_checksums_omitting_this_artefact(&self, sandbox: &Sandbox) -> Result<Utf8PathBuf> {
         let other = format!("{}  mold-0.0.0-x86_64-linux.tar.gz\n", self.sha256);
-        self.write_checksum_file(sandbox, &other)
+        Self::write_checksum_file(sandbox, &other)
     }
 
-    fn write_checksum_file(&self, sandbox: &Sandbox, contents: &str) -> Result<Utf8PathBuf> {
+    fn write_checksum_file(sandbox: &Sandbox, contents: &str) -> Result<Utf8PathBuf> {
         let path = sandbox.home().join("SHA256SUMS");
         fs::write(&path, contents).context("write test checksum file")?;
         Ok(path)

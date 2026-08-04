@@ -1,255 +1,22 @@
-//! Helpers for environment manipulation in process tests.
+//! Helpers for composing child-process environments in tests.
 //!
 //! Provides fixtures and utilities for managing `PATH` and writing minimal
 //! manifests.
 
-#![expect(
-    clippy::disallowed_methods,
-    reason = "process-backed test adapter; callers use injected environments unless exercising subprocess inheritance"
-)]
-
 use anyhow::{Context, Result};
-use mockable::{DefaultEnv, Env, MockEnv};
-use netsuke::runner::NINJA_ENV;
 use std::{
-    collections::HashMap,
     ffi::{OsStr, OsString},
     io::{self, Write},
     path::Path,
 };
 
-use crate::{
-    env_guard::{EnvGuard, StdEnv},
-    env_lock::EnvLock,
-    path_guard::PathGuard,
-};
-
-/// Alias for the real process environment.
-pub type SystemEnv = DefaultEnv;
-
-/// Construct the real process environment.
-///
-/// `mockable` 3.0 makes [`DefaultEnv`] a unit struct without a `new`
-/// constructor, so tests build it through this helper instead.
-#[must_use]
-pub fn system_env() -> SystemEnv {
-    DefaultEnv
-}
-
-/// Environment trait with mutation capabilities.
-pub trait EnvMut: Env {
-    /// Set `key` to `value` within the environment.
-    ///
-    /// # Safety
-    ///
-    /// Mutating global state is `unsafe` in Rust 2024. Callers must ensure the
-    /// operation is serialised and rolled back appropriately.
-    unsafe fn set_var(&self, key: &str, value: &OsStr);
-}
-
-impl EnvMut for DefaultEnv {
-    #[expect(
-        clippy::disallowed_methods,
-        reason = "test_support::env is the crate's process-environment boundary: these guards exist to set and restore real variables for subprocess and legacy in-process tests, which AGENTS.md sanctions"
-    )]
-    unsafe fn set_var(&self, key: &str, value: &OsStr) {
-        unsafe { std::env::set_var(key, value) };
-    }
-}
-
-impl EnvMut for MockEnv {
-    #[expect(
-        clippy::disallowed_methods,
-        reason = "test_support::env is the crate's process-environment boundary: these guards exist to set and restore real variables for subprocess and legacy in-process tests, which AGENTS.md sanctions"
-    )]
-    unsafe fn set_var(&self, key: &str, value: &OsStr) {
-        unsafe { std::env::set_var(key, value) };
-    }
-}
-
-/// Fixture: capture the original `PATH` via a mocked environment.
-///
-/// Returns a `MockEnv` that yields the current `PATH` when queried. Tests can
-/// modify the real environment while the mock continues to expose the initial
-/// value.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "test_support::env is the crate's process-environment boundary: these guards exist to set and restore real variables for subprocess and legacy in-process tests, which AGENTS.md sanctions"
-)]
-pub fn mocked_path_env() -> MockEnv {
-    let original = std::env::var("PATH").unwrap_or_default();
-    let mut env = MockEnv::new();
-    env.expect_raw()
-        .withf(|k| k == "PATH")
-        .returning(move |_| Ok(original.clone()));
-    env
-}
-
-/// Set an environment variable, returning its previous value.
-///
-/// The mutation is `unsafe` in Rust 2024 as it alters process state. The
-/// unsafety is scoped by acquiring [`EnvLock`].
-#[expect(
-    clippy::disallowed_methods,
-    reason = "test_support::env is the crate's process-environment boundary: these guards exist to set and restore real variables for subprocess and legacy in-process tests, which AGENTS.md sanctions"
-)]
-pub fn set_var(key: &str, value: &OsStr) -> Option<OsString> {
-    let _lock = EnvLock::acquire();
-    let previous = std::env::var_os(key);
-    // SAFETY: `EnvLock` serialises mutations.
-    unsafe { std::env::set_var(key, value) };
-    previous
-}
-
-/// Set an environment variable while the caller already holds [`EnvLock`].
-#[expect(
-    clippy::disallowed_methods,
-    reason = "test_support::env is the crate's process-environment boundary: these guards exist to set and restore real variables for subprocess and legacy in-process tests, which AGENTS.md sanctions"
-)]
-pub fn set_var_locked(lock: &EnvLock, key: &str, value: &OsStr) -> Option<OsString> {
-    let _ = lock;
-    let previous = std::env::var_os(key);
-    // SAFETY: Caller provided the scenario-held `EnvLock`.
-    unsafe { std::env::set_var(key, value) };
-    previous
-}
-
-/// Remove an environment variable while the caller already holds [`EnvLock`].
-pub fn remove_var_locked(lock: &EnvLock, key: &str) -> Option<OsString> {
-    let _ = lock;
-    let previous = std::env::var_os(key);
-    // SAFETY: Caller provided the scenario-held `EnvLock`.
-    unsafe { std::env::remove_var(key) };
-    previous
-}
-/// Remove an environment variable, returning its previous value.
-///
-/// The mutation is `unsafe` in Rust 2024 as it alters process state. The
-/// unsafety is scoped by acquiring [`EnvLock`].
-#[expect(
-    clippy::disallowed_methods,
-    reason = "test_support::env is the crate's process-environment boundary: these guards exist to set and restore real variables for subprocess and legacy in-process tests, which AGENTS.md sanctions"
-)]
-pub fn remove_var(key: &str) -> Option<OsString> {
-    let _lock = EnvLock::acquire();
-    let previous = std::env::var_os(key);
-    // SAFETY: `EnvLock` serialises mutations.
-    unsafe { std::env::remove_var(key) };
-    previous
-}
-
-/// Restore multiple environment variables under a single lock.
-///
-/// Each `key` is reset to its corresponding prior value or removed when
-/// `None`. Mutating process-wide state is `unsafe`; [`EnvLock`] serialises the
-/// operations to keep tests deterministic.
-///
-/// # Examples
-///
-/// ```
-/// use std::{collections::HashMap, ffi::OsStr};
-/// use test_support::env::{restore_many, set_var};
-///
-/// let mut snapshot = HashMap::new();
-/// snapshot.insert("HELLO".into(), set_var("HELLO", OsStr::new("world")));
-/// restore_many(snapshot);
-/// assert!(std::env::var("HELLO").is_err());
-/// ```
-pub fn restore_many(vars: HashMap<String, Option<OsString>>) {
-    if vars.is_empty() {
-        return;
-    }
-    let _lock = EnvLock::acquire();
-    // SAFETY: We hold EnvLock via _lock.
-    restore_many_locked(&_lock, vars);
-}
-
-/// Restore multiple environment variables without acquiring EnvLock.
-///
-/// This variant assumes the caller already holds [`EnvLock`]. Use this in
-/// cleanup paths where the lock is already held (e.g., in `Drop` implementations)
-/// to avoid double-locking.
-///
-/// # Safety
-///
-/// Caller must hold [`EnvLock`] for the duration of this call.
-pub fn restore_many_locked(lock: &EnvLock, vars: HashMap<String, Option<OsString>>) {
-    let _ = lock;
-    for (key, val) in vars {
-        if let Some(v) = val {
-            // SAFETY: Caller guarantees EnvLock is held.
-            unsafe { std::env::set_var(key, v) };
-        } else {
-            // SAFETY: Caller guarantees EnvLock is held.
-            unsafe { std::env::remove_var(key) };
-        }
-    }
-}
-
-/// Guard that restores an environment variable to its prior value on drop.
-#[derive(Debug)]
-pub struct VarGuard {
-    inner: EnvGuard,
-}
-
-/// Run `action` with `PATH` temporarily set to `value`, restoring on drop and
-/// serialising mutations with `EnvLock`.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "test_support::env is the crate's process-environment boundary: these guards exist to set and restore real variables for subprocess and legacy in-process tests, which AGENTS.md sanctions"
-)]
-pub fn with_isolated_path<T>(value: &OsStr, action: impl FnOnce() -> T) -> T {
-    let _lock = EnvLock::acquire();
-    let original = std::env::var_os("PATH");
-    // SAFETY: EnvLock serialises mutations to global process state.
-    unsafe { std::env::set_var("PATH", value) };
-
-    let output = action();
-
-    match original {
-        Some(orig) => unsafe { std::env::set_var("PATH", orig) },
-        None => unsafe { std::env::remove_var("PATH") },
-    }
-
-    output
-}
-
-impl VarGuard {
-    /// Set `key` to `value`, returning a guard that resets it on drop.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use std::ffi::OsStr;
-    /// use test_support::env::VarGuard;
-    ///
-    /// let _guard = VarGuard::set("HELLO", OsStr::new("world"));
-    /// assert_eq!(std::env::var("HELLO").expect("HELLO"), "world");
-    /// ```
-    pub fn set(key: &str, value: &OsStr) -> Self {
-        let previous = set_var(key, value);
-        Self {
-            inner: EnvGuard::new(key.to_string(), previous),
-        }
-    }
-
-    /// Remove `key`, returning a guard that restores the prior value.
-    pub fn unset(key: &str) -> Self {
-        let previous = remove_var(key);
-        Self {
-            inner: EnvGuard::new(key.to_string(), previous),
-        }
-    }
-
-    /// Access the captured original value.
-    pub fn original(self) -> Option<OsString> {
-        self.inner.into_original()
-    }
-}
-
 /// Write a minimal manifest to `file`.
 ///
 /// The manifest declares a single `hello` target that prints a greeting.
+///
+/// # Errors
+///
+/// Returns an error if the manifest cannot be written.
 pub fn write_manifest(file: &mut impl Write) -> io::Result<()> {
     writeln!(
         file,
@@ -262,91 +29,16 @@ pub fn write_manifest(file: &mut impl Write) -> io::Result<()> {
     )
 }
 
-/// Prepend `dir` to the real `PATH`, returning a guard that restores it.
+/// Compose a `PATH` value with `dir` prepended to the supplied prior value.
 ///
-/// Mutating `PATH` is `unsafe` in Rust 2024 because it alters process globals.
-/// `EnvLock` serialises access and `PathGuard` rolls back the change, keeping
-/// the unsafety scoped to a single test.
-pub fn prepend_dir_to_path(env: &impl EnvMut, dir: &Path) -> Result<PathGuard> {
-    let original = env.raw("PATH").ok();
-    let original_os = original.clone().map(OsString::from);
-    let mut paths: Vec<_> = original_os
-        .as_ref()
-        .map(|os| std::env::split_paths(os).collect())
-        .unwrap_or_default();
-    paths.insert(0, dir.to_path_buf());
-    let new_path = std::env::join_paths(&paths)
-        .with_context(|| format!("failed to join PATH entries with {}", dir.display()))?;
-    let _lock = EnvLock::acquire();
-    // SAFETY: `EnvLock` serialises mutations and the guard restores on drop.
-    unsafe { env.set_var("PATH", &new_path) };
-    Ok(PathGuard::new(original_os))
-}
-
-/// Guard that restores `NINJA_ENV` to its previous value and holds `EnvLock` for
-/// its entire lifetime to prevent parallel mutation races.
+/// # Errors
 ///
-/// Invariants (mirroring `PathGuard`):
-/// - `override_ninja_env` acquires `EnvLock` once and stores it in `_lock`.
-/// - `inner` is created with `lock_on_drop = false`, so it restores the value
-///   without attempting to re-lock.
-/// - Field order matters: `inner` drops before `_lock`, ensuring the restore
-///   runs while the lock is still held.
-pub struct NinjaEnvGuard {
-    inner: EnvGuard,
-    _lock: EnvLock,
-}
-
-impl std::fmt::Debug for NinjaEnvGuard {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("NinjaEnvGuard").finish_non_exhaustive()
+/// Returns an error if the path entries cannot be joined for the host platform.
+pub fn prepend_path_value(original: Option<&OsStr>, dir: &Path) -> Result<OsString> {
+    let mut paths = vec![dir.to_path_buf()];
+    if let Some(value) = original.filter(|value| !value.is_empty()) {
+        paths.extend(std::env::split_paths(value));
     }
-}
-
-/// Override the `NINJA_ENV` variable with `path`, returning a guard that resets it.
-///
-/// In Rust 2024 `std::env::set_var` is `unsafe` because it mutates process-global
-/// state. `EnvLock` serialises the mutation and the guard retains the lock for
-/// its entire lifetime, restoring the prior value on drop. Holding the lock
-/// prevents parallel tests from interleaving writes to `NINJA_ENV`.
-///
-/// # Examples
-///
-/// ```
-/// use netsuke::runner::NINJA_ENV;
-/// use test_support::env::{override_ninja_env, system_env};
-///
-/// let env = system_env();
-/// let path = std::env::temp_dir().join("ninja");
-/// let guard = override_ninja_env(&env, path.as_path());
-/// assert_eq!(
-///     std::env::var(NINJA_ENV).expect("NINJA_ENV"),
-///     path.to_string_lossy()
-/// );
-/// drop(guard);
-/// assert!(std::env::var(NINJA_ENV).is_err());
-/// ```
-pub fn override_ninja_env(env: &impl EnvMut, path: &Path) -> NinjaEnvGuard {
-    let lock = EnvLock::acquire();
-    let original = env.raw(NINJA_ENV).ok().map(OsString::from);
-    // SAFETY: `EnvLock` is held for the guard's lifetime; `with_env_and_lock`
-    // restores the original value on drop without re-locking, avoiding parallel
-    // races while the guard is alive.
-    unsafe { env.set_var(NINJA_ENV, path.as_os_str()) };
-    NinjaEnvGuard {
-        inner: EnvGuard::with_env_and_lock(NINJA_ENV, original, StdEnv, false),
-        _lock: lock,
-    }
-}
-
-impl NinjaEnvGuard {
-    /// Access the captured original value.
-    pub fn original(self) -> Option<OsString> {
-        self.inner.into_original()
-    }
-
-    /// Peek at the captured original value without consuming the guard.
-    pub fn original_ref(&self) -> Option<&OsString> {
-        self.inner.original_ref()
-    }
+    std::env::join_paths(paths)
+        .with_context(|| format!("failed to prepend {} to PATH", dir.display()))
 }

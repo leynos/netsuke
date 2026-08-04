@@ -41,8 +41,8 @@ pub struct NetsukeRun {
 /// Run `netsuke` in `current_dir` with the supplied args.
 ///
 /// The function clears `PATH` so tests don't accidentally execute a host
-/// dependency. Other process environment variables are **inherited**, so
-/// callers that set variables via `VarGuard` will see them forwarded.
+/// dependency. Other process environment variables are inherited, except for
+/// configuration selectors that this helper removes explicitly.
 ///
 /// # Errors
 ///
@@ -88,7 +88,12 @@ pub fn run_netsuke_in_with_env(
     extra_env: &[(&str, &str)],
 ) -> Result<NetsukeRun> {
     let mut cmd = assert_cmd::Command::new(netsuke_executable()?);
-    cmd.current_dir(current_dir).env_clear();
+    let isolated_config_home = current_dir.join(".config");
+    cmd.current_dir(current_dir)
+        .env_clear()
+        .env("PATH", "")
+        .env("HOME", current_dir)
+        .env("XDG_CONFIG_HOME", isolated_config_home);
     for &(key, value) in extra_env {
         cmd.env(key, value);
     }

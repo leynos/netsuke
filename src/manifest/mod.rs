@@ -237,6 +237,23 @@ pub fn from_path(path: impl AsRef<Path>) -> Result<NetsukeManifest> {
 pub fn from_path_with_policy(
     path: impl AsRef<Path>,
     policy: NetworkPolicy,
+    on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
+) -> Result<NetsukeManifest> {
+    from_path_with_policy_and_env(path, policy, &process_env_reader(), on_stage)
+}
+
+/// Load a manifest with explicit network policy and environment reader.
+///
+/// This adapter boundary lets callers supply deterministic manifest variables
+/// without mutating the process environment.
+///
+/// # Errors
+///
+/// Returns an error if the manifest cannot be read, rendered, or parsed.
+pub fn from_path_with_policy_and_env(
+    path: impl AsRef<Path>,
+    policy: NetworkPolicy,
+    env_reader: &EnvReader,
     mut on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
     notify_stage(&mut on_stage, ManifestLoadStage::ManifestIngestion);
@@ -258,7 +275,7 @@ pub fn from_path_with_policy(
         ManifestParse {
             name: &name,
             stdlib_config: Some(config),
-            env_reader: &process_env_reader(),
+            env_reader,
         },
         &mut on_stage,
     )
@@ -274,7 +291,7 @@ fn resolve_absolute_workspace_root(utf8_parent: &Utf8Path) -> Result<Utf8PathBuf
     let workspace_base = if utf8_parent.is_absolute() {
         utf8_parent.to_path_buf().into_std_path_buf()
     } else {
-        std_env::current_dir()
+        env::current_dir()
             .context(localization::message(keys::MANIFEST_RESOLVE_WORKSPACE_ROOT))?
             .join(utf8_parent.as_std_path())
     };

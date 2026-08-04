@@ -1,26 +1,16 @@
-//! Tests for scoped manipulation of `PATH` via `prepend_dir_to_path` and
-//! `PathGuard`.
+//! Tests for composing isolated child-process `PATH` values.
 
 use anyhow::{Context, Result, ensure};
-use mockable::Env;
 use rstest::rstest;
-use serial_test::serial;
 use std::ffi::OsStr;
-use test_support::env::{VarGuard, mocked_path_env, prepend_dir_to_path, system_env};
+use test_support::env::prepend_path_value;
 
 #[rstest]
-#[serial]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "pending migration under #493 (integration-binary migration)"
-)]
-fn prepend_dir_to_path_sets_and_restores() -> Result<()> {
-    let env = mocked_path_env();
-    let original = env.raw("PATH").context("mock PATH should be set")?;
+fn prepend_dir_to_path_preserves_existing_entries() -> Result<()> {
+    let original = std::env::join_paths(["one", "two"])?;
     let dir = tempfile::tempdir().context("create temp dir")?;
-    let guard = prepend_dir_to_path(&env, dir.path())?;
-    let after = std::env::var("PATH").context("read PATH after prepend")?;
-    let mut split_paths = std::env::split_paths(&after);
+    let composed = prepend_path_value(Some(&original), dir.path())?;
+    let mut split_paths = std::env::split_paths(&composed);
     let first = split_paths
         .next()
         .context("PATH should contain at least one entry after prepend")?;
@@ -30,28 +20,19 @@ fn prepend_dir_to_path_sets_and_restores() -> Result<()> {
         dir.path().display(),
         first.display()
     );
-    drop(guard);
-    let restored = std::env::var("PATH").context("read restored PATH")?;
+    let remaining = split_paths.collect::<Vec<_>>();
     ensure!(
-        restored == original,
-        "expected restored PATH to equal original value"
+        remaining == ["one", "two"].map(std::path::PathBuf::from),
+        "existing PATH entries should retain their order"
     );
     Ok(())
 }
 
 #[rstest]
-#[serial]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "pending migration under #493 (integration-binary migration)"
-)]
 fn prepend_dir_to_path_handles_empty_path() -> Result<()> {
-    let _path_guard = VarGuard::set("PATH", OsStr::new(""));
-    let env = system_env();
     let dir = tempfile::tempdir().context("create temp dir")?;
-    let guard = prepend_dir_to_path(&env, dir.path())?;
-    let after = std::env::var_os("PATH").context("read PATH after prepend")?;
-    let paths = std::env::split_paths(&after)
+    let composed = prepend_path_value(Some(OsStr::new("")), dir.path())?;
+    let paths = std::env::split_paths(&composed)
         .filter(|p| !p.as_os_str().is_empty())
         .collect::<Vec<_>>();
     ensure!(
@@ -59,37 +40,18 @@ fn prepend_dir_to_path_handles_empty_path() -> Result<()> {
         "expected PATH to contain only {}; got {paths:?}",
         dir.path().display()
     );
-    drop(guard);
-    ensure!(
-        std::env::var_os("PATH") == Some(std::ffi::OsString::new()),
-        "expected PATH to reset to empty after guard drop"
-    );
     Ok(())
 }
 
 #[rstest]
-#[serial]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "pending migration under #493 (integration-binary migration)"
-)]
 fn prepend_dir_to_path_handles_missing_path() -> Result<()> {
-    let _path_guard = VarGuard::unset("PATH");
-    let env = system_env();
     let dir = tempfile::tempdir().context("create temp dir")?;
-    let guard = prepend_dir_to_path(&env, dir.path())?;
-    let after = std::env::var_os("PATH")
-        .context("PATH should exist after prepend when original variable absent")?;
-    let paths: Vec<_> = std::env::split_paths(&after).collect();
+    let composed = prepend_path_value(None, dir.path())?;
+    let paths: Vec<_> = std::env::split_paths(&composed).collect();
     ensure!(
         paths == vec![dir.path().to_path_buf()],
         "expected PATH to contain only {}; got {paths:?}",
         dir.path().display()
-    );
-    drop(guard);
-    ensure!(
-        std::env::var_os("PATH").is_none(),
-        "expected PATH to be removed after guard drop"
     );
     Ok(())
 }

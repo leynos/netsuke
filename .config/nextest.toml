@@ -18,19 +18,3 @@
 # end-to-end tests shell out to real Ninja and can take tens of seconds. Warn
 # after 60s; terminate a test that has run for five warning periods (300s).
 slow-timeout = { period = "60s", terminate-after = 5 }
-
-[test-groups]
-# Mutual exclusion for the integration binaries that mutate process-global
-# environment state (`PATH`). Its tests are also marked `#[serial]`, which is
-# what serialises them under
-# the in-process runner used by the coverage workflow. nextest runs each test
-# in its own process, so this group is not load-bearing for those existing
-# tests; it exists so the serialisation contract is stated once for both
-# runners and is not silently lost when a future test in these binaries reaches
-# for genuinely shared state such as a fixed on-disk path. It is deliberately
-# scoped to one binary: every other test still runs fully in parallel.
-serial-env = { max-threads = 1 }
-
-[[profile.default.overrides]]
-filter = 'binary(env_path_tests)'
-test-group = 'serial-env'

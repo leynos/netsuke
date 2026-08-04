@@ -1,19 +1,14 @@
-//! Helpers for managing environment variable mutations in BDD tests.
+//! Helpers for composing child-process environments in BDD tests.
 //!
-//! Provides shared utilities for safely mutating process-global environment
-//! variables within BDD scenarios using the `EnvLock` serialization mechanism.
+//! Scenario variables are recorded in the world and applied only to spawned
+//! Netsuke processes.
 
 use crate::bdd::fixtures::TestWorld;
 use crate::bdd::types::EnvVarKey;
 use anyhow::{Result, ensure};
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 
-/// Mutate an environment variable under the scenario's `EnvLock`, track it for
-/// cleanup, and return `Ok(())`.
-///
-/// Acquires the scenario-scoped `EnvLock` via `world.ensure_env_lock()` to
-/// serialize all process-global mutations (environment variables and CWD),
-/// then performs the mutation and registers the key for cleanup at scenario end.
+/// Record an environment variable for the scenario's child processes.
 ///
 /// # Parameters
 ///
@@ -47,11 +42,7 @@ pub fn mutate_env_var(world: &TestWorld, key: EnvVarKey, new_value: Option<&str>
         );
     }
     let forward_value = new_value.map(OsString::from);
-    let original = new_value.map_or_else(
-        || world.remove_env_var(key.as_str()),
-        |value| world.set_env_var(key.as_str(), OsStr::new(value)),
-    );
-    world.track_env_var(key.into_string(), original, forward_value);
+    world.track_env_var(key.into_string(), forward_value);
     Ok(())
 }
 
@@ -73,19 +64,6 @@ mod tests {
         new_value: Option<&'static str>,
         expect_error: bool,
         expect_present: bool,
-    }
-
-    /// Read a variable back to confirm the mutation under test took effect.
-    ///
-    /// The expectation lives here rather than on the test because `rstest`
-    /// generates one function per case and the attribute does not survive that
-    /// expansion; a single narrow helper is tighter than a module-wide waiver.
-    #[expect(
-        clippy::disallowed_methods,
-        reason = "pending migration under #492 (rstest-bdd migration)"
-    )]
-    fn read_back(key: &str) -> Result<String, std::env::VarError> {
-        std::env::var(key)
     }
 
     #[rstest]
@@ -123,18 +101,20 @@ mod tests {
             assert!(result.is_ok(), "operation should succeed");
 
             if tc.expect_present {
+                let recorded = test_world.env_vars_forward.borrow();
                 assert_eq!(
-                    read_back(tc.key).ok().as_deref(),
+                    recorded.get(tc.key).and_then(|value| value.to_str()),
                     tc.new_value,
-                    "variable should be set to expected value"
+                    "variable should be recorded with the expected value"
                 );
+                drop(recorded);
                 // Cleanup
                 mutate_env_var(&test_world, EnvVarKey::new(tc.key), None)
                     .expect("cleanup should succeed");
             } else if !tc.key.is_empty() {
                 assert!(
-                    read_back(tc.key).is_err(),
-                    "variable should have been removed"
+                    !test_world.env_vars_forward.borrow().contains_key(tc.key),
+                    "variable should be absent from the child environment"
                 );
             }
         }

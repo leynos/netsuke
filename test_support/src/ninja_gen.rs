@@ -76,6 +76,7 @@ pub struct NinjaIntegrationCase {
 }
 
 /// Provide a temporary directory when Ninja is available, skipping otherwise.
+#[must_use]
 pub fn ninja_integration_setup() -> Option<TempDir> {
     ninja::ninja_integration_workspace().ok()
 }

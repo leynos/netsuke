@@ -3,6 +3,7 @@
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use anyhow::{Context, Result, anyhow, ensure};
 use camino::Utf8Path;
+use mockable::{DefaultEnv, Env};
 use netsuke::output_prefs;
 use netsuke::runner::{self, BuildTargets, NINJA_PROGRAM};
 use rstest_bdd_macros::{given, then, when};
@@ -11,9 +12,7 @@ use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 use test_support::{
     check_ninja::{self, ToolName},
-    ensure_manifest_exists,
-    env::{self, EnvMut},
-    fake_ninja,
+    ensure_manifest_exists, fake_ninja,
 };
 
 // ---------------------------------------------------------------------------
@@ -21,30 +20,22 @@ use test_support::{
 // ---------------------------------------------------------------------------
 
 /// Installs a test-specific ninja binary and updates the `PATH`.
-fn install_test_ninja(
-    world: &TestWorld,
-    env: &impl EnvMut,
-    dir: TempDir,
-    ninja_path: &Path,
-) -> Result<()> {
-    let guard = env::prepend_dir_to_path(env, dir.path())?;
-    *world.path_guard.borrow_mut() = Some(guard);
+fn install_test_ninja(world: &TestWorld, dir: TempDir, ninja_path: &Path) -> Result<()> {
     let ninja_str = ninja_path
         .to_str()
         .ok_or_else(|| anyhow!("ninja path is not valid UTF-8"))?
         .to_owned();
     world.ninja_content.set(ninja_str);
-    world.ninja_env_guard.borrow_mut().take();
-    let system_env = env::system_env();
-    let ninja_path_os = ninja_path.as_os_str().to_owned();
-    let ninja_guard = env::override_ninja_env(&system_env, ninja_path);
-    let previous = ninja_guard.original_ref().cloned();
-    *world.ninja_env_guard.borrow_mut() = Some(ninja_guard);
     world.track_env_var(
         netsuke::runner::NINJA_ENV.to_owned(),
-        previous,
-        Some(ninja_path_os),
+        Some(ninja_path.as_os_str().to_owned()),
     );
+    let process_env = DefaultEnv;
+    let host_path = process_env.os_string("PATH").unwrap_or_default();
+    let path = std::env::join_paths(
+        std::iter::once(dir.path().to_path_buf()).chain(std::env::split_paths(&host_path)),
+    )?;
+    world.track_env_var("PATH".to_owned(), Some(path));
     *world.temp_dir.borrow_mut() = Some(dir);
     Ok(())
 }
@@ -178,23 +169,20 @@ fn install_fake_ninja_step(world: &TestWorld, code: i32) -> Result<()> {
     let exit_code =
         u8::try_from(code).map_err(|_| anyhow!("exit code must be between 0 and 255"))?;
     let (dir, path) = fake_ninja(exit_code)?;
-    let env = env::mocked_path_env();
-    install_test_ninja(world, &env, dir, &path)
+    install_test_ninja(world, dir, &path)
 }
 
 #[given("a fake ninja executable that checks for the build file")]
 fn fake_ninja_check(world: &TestWorld) -> Result<()> {
     let (dir, path) = check_ninja::fake_ninja_check_build_file()?;
-    let env = env::mocked_path_env();
-    install_test_ninja(world, &env, dir, &path)
+    install_test_ninja(world, dir, &path)
 }
 
 #[cfg(unix)]
 #[given("a fake ninja executable that expects the clean tool")]
 fn fake_ninja_expects_clean(world: &TestWorld) -> Result<()> {
     let (dir, path) = check_ninja::fake_ninja_expect_tool(ToolName::new("clean"))?;
-    let env = env::mocked_path_env();
-    install_test_ninja(world, &env, dir, &path)
+    install_test_ninja(world, dir, &path)
 }
 
 #[cfg(unix)]
@@ -202,16 +190,14 @@ fn fake_ninja_expects_clean(world: &TestWorld) -> Result<()> {
 fn fake_ninja_expects_clean_with_jobs(world: &TestWorld, jobs: u32) -> Result<()> {
     let (dir, path) =
         check_ninja::fake_ninja_expect_tool_with_jobs(ToolName::new("clean"), Some(jobs), None)?;
-    let env = env::mocked_path_env();
-    install_test_ninja(world, &env, dir, &path)
+    install_test_ninja(world, dir, &path)
 }
 
 #[cfg(unix)]
 #[given("a fake ninja executable that expects the graph tool")]
 fn fake_ninja_expects_graph(world: &TestWorld) -> Result<()> {
     let (dir, path) = check_ninja::fake_ninja_expect_tool(ToolName::new("graph"))?;
-    let env = env::mocked_path_env();
-    install_test_ninja(world, &env, dir, &path)
+    install_test_ninja(world, dir, &path)
 }
 
 #[cfg(unix)]
@@ -219,16 +205,14 @@ fn fake_ninja_expects_graph(world: &TestWorld) -> Result<()> {
 fn fake_ninja_expects_graph_with_jobs(world: &TestWorld, jobs: u32) -> Result<()> {
     let (dir, path) =
         check_ninja::fake_ninja_expect_tool_with_jobs(ToolName::new("graph"), Some(jobs), None)?;
-    let env = env::mocked_path_env();
-    install_test_ninja(world, &env, dir, &path)
+    install_test_ninja(world, dir, &path)
 }
 
 #[given("no ninja executable is available")]
 fn no_ninja(world: &TestWorld) -> Result<()> {
     let dir = TempDir::new().context("create temp dir for missing ninja scenario")?;
     let path = dir.path().join("ninja");
-    let env = env::mocked_path_env();
-    install_test_ninja(world, &env, dir, &path)
+    install_test_ninja(world, dir, &path)
 }
 
 #[given("the CLI uses the temporary directory")]
@@ -290,9 +274,13 @@ fn run(world: &TestWorld) -> Result<()> {
 
 #[cfg(unix)]
 fn run_subcommand(world: &TestWorld) -> Result<()> {
+    let program = world.ninja_content.get().map_or_else(
+        || PathBuf::from(NINJA_PROGRAM),
+        |path| PathBuf::from(path.as_str()),
+    );
     let result = world
         .cli
-        .with_ref(|cli| runner::run(cli, output_prefs::resolve(None)))
+        .with_ref(|cli| runner::run_with_ninja_program(cli, output_prefs::resolve(None), &program))
         .ok_or_else(|| anyhow!("CLI configuration has not been initialised"))?
         .map_err(|e| format!("{e:#}"));
     record_result(world, result);

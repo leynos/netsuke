@@ -4,14 +4,10 @@ use anyhow::{Context, Result, bail, ensure};
 use netsuke::cli::{Cli, Commands};
 use netsuke::localization::{self, keys};
 use netsuke::output_prefs;
-use netsuke::runner::{BuildTargets, run, run_ninja, run_ninja_tool};
+use netsuke::runner::{BuildTargets, run, run_ninja, run_ninja_tool, run_with_ninja_program};
 use rstest::{fixture, rstest};
 use std::path::{Path, PathBuf};
-use test_support::{
-    check_ninja,
-    env::{NinjaEnvGuard, override_ninja_env, prepend_dir_to_path, system_env},
-    fake_ninja,
-};
+use test_support::{check_ninja, fake_ninja};
 
 #[path = "runner_cases/default_targets.rs"]
 mod default_targets;
@@ -38,11 +34,9 @@ fn generate_cli(manifest: &Path, directory: &Path, output: &Path) -> Cli {
 /// This is a re-export of `common::ninja_with_exit_code` so `rstest` can
 /// discover it in this integration test crate.
 ///
-/// Returns: (`tempfile::TempDir`, path to the ninja binary, `NinjaEnvGuard`)
+/// Returns the temporary directory and path to the fake Ninja binary.
 #[fixture]
-fn ninja_with_exit_code(
-    #[default(0u8)] exit_code: u8,
-) -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
+fn ninja_with_exit_code(#[default(0u8)] exit_code: u8) -> Result<(tempfile::TempDir, PathBuf)> {
     fixtures::ninja_with_exit_code(exit_code)
 }
 
@@ -53,32 +47,24 @@ fn ninja_with_exit_code(
 ///
 /// Returns: (tempdir holding ninja, `NINJA_ENV` guard)
 #[fixture]
-fn ninja_in_env() -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
+fn checking_ninja() -> Result<(tempfile::TempDir, PathBuf)> {
     let (ninja_dir, ninja_path) = check_ninja::fake_ninja_check_build_file()?;
-    let env = system_env();
-    let guard = override_ninja_env(&env, ninja_path.as_path());
-    Ok((ninja_dir, ninja_path, guard))
+    Ok((ninja_dir, ninja_path))
 }
 
 /// Shared setup for tests that rely on `NINJA_ENV`.
 ///
 /// Returns the fake ninja directory, temp project directory, constructed CLI,
 /// and the guard keeping `NINJA_ENV` set for the test duration.
-fn setup_ninja_env_test() -> Result<(
-    tempfile::TempDir,
-    PathBuf,
-    tempfile::TempDir,
-    Cli,
-    NinjaEnvGuard,
-)> {
-    let (ninja_dir, ninja_path, guard) = ninja_in_env()?;
+fn setup_ninja_env_test() -> Result<(tempfile::TempDir, PathBuf, tempfile::TempDir, Cli)> {
+    let (ninja_dir, ninja_path) = checking_ninja()?;
     let (temp, manifest_path) = create_test_manifest()?;
     let cli = Cli {
         file: manifest_path.clone(),
         directory: Some(temp.path().to_path_buf()),
         ..Cli::default()
     };
-    Ok((ninja_dir, ninja_path, temp, cli, guard))
+    Ok((ninja_dir, ninja_path, temp, cli))
 }
 
 #[test]
@@ -116,7 +102,7 @@ fn run_exits_with_manifest_error_on_invalid_version() -> Result<()> {
 
 /// Helper: test that a command fails when ninja exits with non-zero status.
 fn assert_ninja_failure_propagates(command: Option<Commands>) -> Result<()> {
-    let (_ninja_dir, _ninja_path, _guard) = ninja_with_exit_code(7)?;
+    let (_ninja_dir, ninja_path) = ninja_with_exit_code(7)?;
     let (temp, manifest_path) = create_test_manifest()?;
     let cli = Cli {
         file: manifest_path.clone(),
@@ -125,7 +111,7 @@ fn assert_ninja_failure_propagates(command: Option<Commands>) -> Result<()> {
         ..Cli::default()
     };
 
-    let Err(err) = run(&cli, output_prefs::resolve(None)) else {
+    let Err(err) = run_with_ninja_program(&cli, output_prefs::resolve(None), &ninja_path) else {
         bail!("expected run to fail when ninja exits non-zero");
     };
     let messages: Vec<String> = err
@@ -181,9 +167,10 @@ fn run_ninja_not_found() -> Result<()> {
 
 #[rstest]
 fn run_executes_ninja_without_persisting_file() -> Result<()> {
-    let (_ninja_dir, _ninja_path, temp, cli, _guard) = setup_ninja_env_test()?;
+    let (_ninja_dir, ninja_path, temp, cli) = setup_ninja_env_test()?;
 
-    run(&cli, output_prefs::resolve(None)).context("expected build to succeed")?;
+    run_with_ninja_program(&cli, output_prefs::resolve(None), &ninja_path)
+        .context("expected build to succeed")?;
 
     // Ensure no ninja file remains in project directory
     ensure!(
@@ -285,11 +272,6 @@ fn run_generate_subcommand_accepts_relative_manifest_path() -> Result<()> {
 #[test]
 fn run_respects_env_override_for_ninja() -> Result<()> {
     let (_temp_dir_env, ninja_env_path) = fake_ninja(0u8)?;
-    let (temp_dir_path, _ninja_path_on_path) = fake_ninja(1u8)?;
-    let env = system_env();
-    let _path_guard =
-        prepend_dir_to_path(&env, temp_dir_path.path()).context("prepend failing ninja to PATH")?;
-    let _env_guard = override_ninja_env(&env, &ninja_env_path);
     let (temp, manifest_path) = create_test_manifest()?;
     let cli = Cli {
         file: manifest_path.clone(),
@@ -297,16 +279,16 @@ fn run_respects_env_override_for_ninja() -> Result<()> {
         ..Cli::default()
     };
 
-    run(&cli, output_prefs::resolve(None))
-        .context("expected run to prefer NINJA_ENV over PATH entry")?;
+    run_with_ninja_program(&cli, output_prefs::resolve(None), &ninja_env_path)
+        .context("expected injected Ninja programme to be used")?;
     Ok(())
 }
 
 #[rstest]
 fn run_succeeds_with_checking_ninja_env() -> Result<()> {
-    let (_ninja_dir, ninja_path, _temp, cli, _guard) = setup_ninja_env_test()?;
+    let (_ninja_dir, ninja_path, _temp, cli) = setup_ninja_env_test()?;
 
-    run(&cli, output_prefs::resolve(None))
+    run_with_ninja_program(&cli, output_prefs::resolve(None), &ninja_path)
         .context("expected run to succeed using NINJA_ENV check binary")?;
     ensure!(ninja_path.exists(), "fake ninja should remain present");
     Ok(())

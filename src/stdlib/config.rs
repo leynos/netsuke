@@ -1,5 +1,11 @@
 //! Configuration types and defaults for wiring the stdlib into `MiniJinja`.
 
+use super::config_types::HomeDirectory;
+pub use super::config_types::{
+    DEFAULT_COMMAND_MAX_OUTPUT_BYTES, DEFAULT_COMMAND_MAX_STREAM_BYTES, DEFAULT_COMMAND_TEMP_DIR,
+    DEFAULT_FETCH_CACHE_DIR, DEFAULT_FETCH_MAX_RESPONSE_BYTES, DEFAULT_WHICH_CACHE_CAPACITY,
+    NetworkConfig,
+};
 use super::{command, network::NetworkPolicy, which::WORKSPACE_SKIP_DIRS};
 use crate::localization::{self, keys};
 use anyhow::{Context, anyhow, bail, ensure};
@@ -7,19 +13,6 @@ use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use indexmap::IndexSet;
 use std::{env, ffi::OsString, num::NonZeroUsize, sync::Arc};
-
-/// Default relative path for the fetch cache within the workspace.
-pub const DEFAULT_FETCH_CACHE_DIR: &str = ".netsuke/fetch";
-/// Default upper bound for network helper responses (8 MiB).
-pub const DEFAULT_FETCH_MAX_RESPONSE_BYTES: u64 = 8 * 1024 * 1024;
-/// Default upper bound for captured command output (1 MiB).
-pub const DEFAULT_COMMAND_MAX_OUTPUT_BYTES: u64 = 1024 * 1024;
-/// Default upper bound for streamed command output files (64 MiB).
-pub const DEFAULT_COMMAND_MAX_STREAM_BYTES: u64 = 64 * 1024 * 1024;
-/// Relative directory for command helper tempfiles.
-pub const DEFAULT_COMMAND_TEMP_DIR: &str = ".netsuke/tmp";
-/// Default capacity for the `which` resolver cache.
-pub const DEFAULT_WHICH_CACHE_CAPACITY: usize = 64;
 
 /// Configuration for registering Netsuke's standard library helpers.
 #[derive(Debug, Clone)]
@@ -34,6 +27,8 @@ pub struct StdlibConfig {
     which_cache_capacity: NonZeroUsize,
     workspace_skip_dirs: Vec<String>,
     path_override: Option<OsString>,
+    command_path_override: Option<OsString>,
+    home_directory: HomeDirectory,
 }
 
 impl StdlibConfig {
@@ -76,6 +71,8 @@ impl StdlibConfig {
                 .map(|dir| (*dir).to_owned())
                 .collect(),
             path_override: None,
+            command_path_override: None,
+            home_directory: HomeDirectory::Ambient,
         })
     }
 
@@ -247,6 +244,30 @@ impl StdlibConfig {
         self.path_override.as_ref()
     }
 
+    /// Override the `PATH` supplied to child processes run by command filters.
+    ///
+    /// This seam is intended for callers that need deterministic command
+    /// resolution without mutating the process-wide environment.
+    #[must_use]
+    pub fn with_command_path_override(mut self, path: impl Into<OsString>) -> Self {
+        self.command_path_override = Some(path.into());
+        self
+    }
+
+    /// Override home-directory discovery for the `expanduser` filter.
+    ///
+    /// `Some(path)` supplies a home directory; `None` models a host without
+    /// one. Without this override, registration uses the process environment.
+    #[must_use]
+    pub fn with_home_override(mut self, home: Option<String>) -> Self {
+        self.home_directory = home.map_or(HomeDirectory::Missing, HomeDirectory::Explicit);
+        self
+    }
+
+    pub(crate) const fn home_directory(&self) -> &HomeDirectory {
+        &self.home_directory
+    }
+
     /// The configured fetch cache directory relative to the workspace root.
     #[must_use]
     pub fn fetch_cache_relative(&self) -> &Utf8Path {
@@ -269,6 +290,7 @@ impl StdlibConfig {
             fetch_max_response_bytes,
             command_max_output_bytes,
             command_max_stream_bytes,
+            command_path_override,
             ..
         } = self;
 
@@ -280,12 +302,13 @@ impl StdlibConfig {
             max_response_bytes: fetch_max_response_bytes,
         };
 
-        let command = command::CommandConfig::new(
-            command_max_output_bytes,
-            command_max_stream_bytes,
-            command_root,
-            workspace_root_path.map(Arc::new),
-        );
+        let command = command::CommandConfig::new(command::CommandConfigInit {
+            max_capture_bytes: command_max_output_bytes,
+            max_stream_bytes: command_max_stream_bytes,
+            workspace_root: command_root,
+            workspace_root_path: workspace_root_path.map(Arc::new),
+            command_path_override,
+        });
 
         (network, command)
     }
@@ -363,19 +386,6 @@ impl StdlibConfig {
             .with_workspace_root_path(path)
             .context("workspace root must be absolute")
     }
-}
-
-/// Internal configuration passed to the network module for fetch cache initialisation.
-#[derive(Clone)]
-pub struct NetworkConfig {
-    /// Capability-scoped workspace root for network caches.
-    pub cache_root: Arc<Dir>,
-    /// Relative cache directory within the workspace.
-    pub cache_relative: Utf8PathBuf,
-    /// Network policy applied to fetch helpers.
-    pub policy: NetworkPolicy,
-    /// Maximum allowed size for HTTP responses.
-    pub max_response_bytes: u64,
 }
 
 #[cfg(test)]

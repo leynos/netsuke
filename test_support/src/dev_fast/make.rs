@@ -29,6 +29,7 @@ pub struct MakeInvocation {
 
 impl MakeInvocation {
     /// A run of `target` with no overrides.
+    #[must_use]
     pub fn new(target: &str) -> Self {
         Self {
             target: target.to_owned(),
