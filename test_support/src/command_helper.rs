@@ -7,6 +7,7 @@ use anyhow::{Context, Result, bail};
 
 use camino::Utf8PathBuf;
 use cap_std::fs_utf8::Dir;
+use mockable::{DefaultEnv, Env};
 
 const UPPERCASE_SOURCE: &str = concat!(
     "use std::io::{self, Read};\n",
@@ -134,12 +135,57 @@ pub fn compile_rust_helper(
     name: &str,
     source: &str,
 ) -> Result<Utf8PathBuf> {
+    compile_rust_helper_with_env(&DefaultEnv, dir, root, name, source)
+}
+
+/// Compile an arbitrary Rust helper using the compiler selected by an
+/// injected environment.
+///
+/// `RUSTC` is honoured when present, including absolute paths that are not
+/// discoverable through `PATH`. If it is absent, the conventional `rustc`
+/// command is used.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// # use camino::Utf8PathBuf;
+/// # use cap_std::{ambient_authority, fs_utf8::Dir};
+/// # use mockable::DefaultEnv;
+/// # use tempfile::tempdir;
+/// # use test_support::command_helper::compile_rust_helper_with_env;
+/// let temp = tempdir().expect("tempdir");
+/// let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+///     .expect("utf8 path");
+/// let dir = Dir::open_ambient_dir(&root, ambient_authority())
+///     .expect("open temp dir");
+/// let exe = compile_rust_helper_with_env(
+///     &DefaultEnv,
+///     &dir,
+///     &root,
+///     "cmd",
+///     "fn main() {}\n",
+/// )
+/// .expect("compile Rust helper");
+/// assert!(exe.as_std_path().exists());
+/// ```
+///
+/// # Errors
+///
+/// Returns an error if the source cannot be written or the selected compiler
+/// cannot compile it.
+pub fn compile_rust_helper_with_env(
+    env: &impl Env,
+    dir: &Dir,
+    root: &Utf8PathBuf,
+    name: &str,
+    source: &str,
+) -> Result<Utf8PathBuf> {
     dir.write(format!("{name}.rs"), source.as_bytes())
         .with_context(|| format!("write helper source {name}.rs"))?;
 
     let src_path = root.join(format!("{name}.rs"));
     let exe_path = root.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
-    let rustc = OsString::from("rustc");
+    let rustc = rust_compiler(env);
     let status = Command::new(&rustc)
         .arg(src_path.as_std_path())
         .arg("-o")
@@ -156,4 +202,40 @@ pub fn compile_rust_helper(
         bail!("failed to compile helper {name}: {status:?}");
     }
     Ok(exe_path)
+}
+
+fn rust_compiler(env: &impl Env) -> OsString {
+    env.os_string("RUSTC")
+        .unwrap_or_else(|| OsString::from("rustc"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rust_compiler;
+    use mockable::MockEnv;
+    use std::ffi::OsString;
+
+    #[test]
+    fn rust_compiler_honours_configured_path() {
+        let configured = OsString::from("/toolchain/bin/rustc");
+        let expected = configured.clone();
+        let mut env = MockEnv::new();
+        env.expect_os_string()
+            .withf(|key| key == "RUSTC")
+            .once()
+            .return_once(move |_| Some(configured));
+
+        assert_eq!(rust_compiler(&env), expected);
+    }
+
+    #[test]
+    fn rust_compiler_falls_back_to_path_lookup() {
+        let mut env = MockEnv::new();
+        env.expect_os_string()
+            .withf(|key| key == "RUSTC")
+            .once()
+            .return_once(|_| None);
+
+        assert_eq!(rust_compiler(&env), OsString::from("rustc"));
+    }
 }
