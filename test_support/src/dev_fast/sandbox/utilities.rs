@@ -85,6 +85,8 @@ pub(super) fn which(env: &impl Env, utility: &str) -> Result<Utf8PathBuf> {
 
 #[cfg(all(test, unix))]
 mod tests {
+    //! Unit tests for hermetic utility resolution.
+
     use super::*;
     use mockable::MockEnv;
 

@@ -16,7 +16,10 @@
 //! ```
 
 use anyhow::{Context, Result, bail};
-use std::{ffi::OsStr, path::{Component, Path, PathBuf}};
+use std::{
+    ffi::OsStr,
+    path::{Component, Path, PathBuf},
+};
 
 /// Write a minimal executable file named `name` inside `root`.
 ///
@@ -95,7 +98,10 @@ mod tests {
     #[case::dotted("ninja.cmd")]
     #[case::leading_dot(".hidden")]
     fn accepts_a_single_file_name(#[case] name: &str) {
-        assert!(single_file_name(name).is_ok(), "{name:?} should be accepted");
+        assert!(
+            single_file_name(name).is_ok(),
+            "{name:?} should be accepted"
+        );
     }
 
     #[rstest]
@@ -108,6 +114,9 @@ mod tests {
     #[case::dot_prefixed("./tool")]
     #[case::trailing_separator("tool/")]
     fn rejects_anything_else(#[case] name: &str) {
-        assert!(single_file_name(name).is_err(), "{name:?} should be rejected");
+        assert!(
+            single_file_name(name).is_err(),
+            "{name:?} should be rejected"
+        );
     }
 }

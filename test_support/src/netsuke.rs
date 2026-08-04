@@ -80,10 +80,6 @@ pub fn run_netsuke_in(current_dir: &Path, args: &[&str]) -> Result<NetsukeRun> {
 ///
 /// Returns an error when `netsuke` cannot be located or the process cannot be
 /// spawned.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "reads the inherited environment to build the subprocess invocation; assert_cmd subprocess isolation is the sanctioned exemption in AGENTS.md"
-)]
 pub fn run_netsuke_in_with_env(
     current_dir: &Path,
     args: &[&str],

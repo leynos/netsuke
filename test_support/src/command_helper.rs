@@ -67,6 +67,10 @@ struct RustHelperSource<'a> {
 ///     .expect("compile helper");
 /// assert!(exe.as_std_path().exists());
 /// ```
+///
+/// # Errors
+///
+/// Returns an error if the helper source cannot be written or compiled.
 pub fn compile_uppercase_helper(dir: &Dir, root: &Utf8PathBuf, name: &str) -> Result<Utf8PathBuf> {
     compile_rust_helper(dir, root, name, UPPERCASE_SOURCE)
 }
@@ -90,6 +94,10 @@ pub fn compile_uppercase_helper(dir: &Dir, root: &Utf8PathBuf, name: &str) -> Re
 ///     .expect("compile helper");
 /// assert!(exe.as_std_path().exists());
 /// ```
+///
+/// # Errors
+///
+/// Returns an error if the helper source cannot be written or compiled.
 pub fn compile_failure_helper(dir: &Dir, root: &Utf8PathBuf, name: &str) -> Result<Utf8PathBuf> {
     compile_rust_helper(dir, root, name, FAILURE_SOURCE)
 }
@@ -189,6 +197,8 @@ fn rust_compiler(env: &impl Env) -> OsString {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for compiler selection and helper compilation.
+
     use super::{RustHelperSource, compile_rust_helper_with_env, rust_compiler};
     #[cfg(unix)]
     use crate::exec::write_exec_with_content;

@@ -66,8 +66,6 @@ RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 VERUS_FLAGS ?=
 VERUS_INSTALL_FLAGS ?=
 WHITAKER ?= whitaker
-# `test_support` is excluded from the root workspace, so root-level cargo
-# invocations cannot reach it; the test and lint recipes target it explicitly.
 
 export PATH := $(HOME)/.cargo/bin:$(HOME)/.local/bin:$(HOME)/.bun/bin:$(PATH)
 
@@ -102,10 +100,10 @@ lint-clippy: ## Run rustdoc and Clippy with warnings denied
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) clippy $(CLIPPY_FLAGS)
 
 lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(WHITAKER) --all -- --all-targets --all-features
+	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(WHITAKER) --all --no-deps --package netsuke -- --all-targets --all-features
 	# Run from the crate directory as well so Whitaker loads the narrow
 	# `test_support::fs` exemption from test_support/dylint.toml.
-	cd test_support && RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(WHITAKER) --all -- --all-targets --all-features
+	cd test_support && DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(WHITAKER) --all --no-deps --package test_support -- --all-targets --all-features
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all

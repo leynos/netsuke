@@ -373,29 +373,30 @@ the capability policy. The behavioural step definitions, CLI integration tests,
 and shared workflow-reading helper that stage fixtures ambiently are scoped the
 same way. A crate-level entry is justified only when the ambient access lives
 in the crate root itself, where a path entry would be no narrower — that covers
-the Cargo build script and the enumerated integration-test crates.
+the Cargo build script and the enumerated integration-test crates. The
+`test_support` crate uses capability-backed fixture helpers and remains linted
+by Whitaker under its own narrow policy.
 
-`test_support` is excluded from the root Cargo workspace, so the root
-`dylint.toml` cannot reach it and `whitaker --all` at the repository root never
-lints it. `make lint-whitaker` therefore runs the suite a second time from
-`test_support/`, where `test_support/dylint.toml` supplies that crate's policy:
-a single `excluded_paths` entry for `test_support::fs`, the module wrapping the
-ambient fixture operations. Every other module routes through it — `exec`,
-`manifest`, and the crate-root regression tests directly, and `check_ninja` and
-`fake_ninja` via `exec::write_exec_with_content` — so a new direct `std::fs`
-call anywhere else in the crate still fails the lint.
+`test_support` is a workspace member, but the root Whitaker invocation selects
+only the `netsuke` package and disables Dylint dependency checks. It therefore
+compiles `test_support` as a dependency without applying the root
+`dylint.toml`. Its one sanctioned ambient boundary is configured per crate.
+Workspace membership makes Dylint discover the root configuration even when
+launched from `test_support/`, so the scoped recipe supplies the contents of
+`test_support/dylint.toml` explicitly through `DYLINT_TOML`. The second pass
+also uses `--package test_support` and `--no-deps`, because running from a
+member directory alone would otherwise check the parent workspace. That
+configuration names only `test_support::fs` in `excluded_paths`. The root
+`excluded_crates` must not contain `test_support`: every other module in the
+crate remains subject to the filesystem policy.
 
-Exceptions belong in `dylint.toml`, scoped as narrowly as the lint allows.
-Neither `#[allow(no_std_fs_operations)]` nor
-`#[expect(no_std_fs_operations, reason = "…")]` suppresses this lint in the
-Whitaker build this repository pins, so no in-source attribute is usable here
-(this repository also denies `clippy::allow_attributes`, so
-`#[allow(no_std_fs_operations)]` will not even compile). A `dylint.toml` entry
-is the only working mechanism: a narrowly scoped `excluded_paths` entry for a
-bounded module, or, where the ambient access lives at the crate root and a path
-entry would be no narrower, an `excluded_crates` entry. Prefer migrating to
-`cap_std` over adding an exclusion; reach for an exclusion only when the
-operation is irreducibly ambient.
+Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
+allows. The lint does honour in-source lint attributes, but this repository
+denies `clippy::allow_attributes`, so `#[allow(no_std_fs_operations)]` will not
+compile here; an in-source exemption must be a *temporary*, item-level
+`#[expect(no_std_fs_operations, reason = "…")]` that states the reason and the
+route back to compliance. Prefer migrating to `cap_std` over any of these;
+reach for an exclusion only when the operation is irreducibly ambient.
 
 To confirm the exclusions have not silently widened, add a temporary
 `std::fs::metadata` call to an unexcluded module — for example

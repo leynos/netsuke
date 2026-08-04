@@ -6,11 +6,13 @@
 //! violations without failing anything. These tests pin the two invariants that
 //! keep the boundary honest.
 //!
-//! First, `test_support` is excluded from the Cargo workspace, so a
-//! workspace-root `cargo dylint` cannot reach it. `make lint-whitaker`
-//! therefore runs the suite a second time from `test_support/`, against that
-//! crate's own `dylint.toml`. Without the second invocation the crate is
-//! unlinted while still appearing to be covered.
+//! First, `test_support` is a Cargo workspace member, but its sanctioned
+//! boundary is configured in its own `dylint.toml`. The root invocation
+//! therefore selects only the `netsuke` package and tells Dylint not to check
+//! dependencies, while `make lint-whitaker` runs the suite a second time from
+//! `test_support/`. Without that package boundary, the root policy would
+//! override the crate-specific exemption; without the second invocation, the
+//! crate would be unlinted.
 //!
 //! Second, every exemption must name a bounded module. A bare crate name in
 //! `excluded_paths`, or the application crate reappearing in `excluded_crates`,
@@ -129,8 +131,8 @@ fn lint_whitaker_also_runs_inside_test_support() -> Result<()> {
         invocations.len() == 2,
         concat!(
             "lint-whitaker should invoke Whitaker twice — once at the ",
-            "repository root and once inside test_support, which the ",
-            "workspace excludes — found {count}: {recipe:?}",
+            "repository root for netsuke and once inside test_support — ",
+            "found {count}: {recipe:?}",
         ),
         count = invocations.len(),
         recipe = recipe
@@ -151,6 +153,21 @@ fn lint_whitaker_also_runs_inside_test_support() -> Result<()> {
         recipe = recipe
     );
     ensure!(
+        scoped.first().is_some_and(|line| {
+            line.contains("DYLINT_TOML")
+                && line.contains("cat dylint.toml")
+                && line.contains("--package test_support")
+                && line.contains("--no-deps")
+        }),
+        concat!(
+            "the scoped Whitaker invocation must explicitly load ",
+            "test_support/dylint.toml and select only test_support after ",
+            "workspace membership changes Cargo's configuration and package ",
+            "roots; found {scoped:?}",
+        ),
+        scoped = format!("{scoped:?}")
+    );
+    ensure!(
         root.len() == 1,
         concat!(
             "exactly one lint-whitaker invocation should run from the ",
@@ -158,6 +175,17 @@ fn lint_whitaker_also_runs_inside_test_support() -> Result<()> {
         ),
         count = root.len(),
         recipe = recipe
+    );
+    ensure!(
+        root.first().is_some_and(|line| {
+            line.contains("--package netsuke") && line.contains("--no-deps")
+        }),
+        concat!(
+            "the root Whitaker invocation must select only netsuke and skip ",
+            "dependency checks so test_support loads its own dylint.toml; ",
+            "found {root:?}",
+        ),
+        root = format!("{root:?}")
     );
     Ok(())
 }

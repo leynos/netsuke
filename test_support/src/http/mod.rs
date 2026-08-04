@@ -319,6 +319,5 @@ fn take_duration_warnings() -> Vec<String> {
     DURATION_WARNINGS.with(|warnings| warnings.borrow_mut().drain(..).collect())
 }
 
-#[path = "http_tests.rs"]
 #[cfg(test)]
 mod tests;

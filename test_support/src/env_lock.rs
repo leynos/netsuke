@@ -65,6 +65,8 @@ impl Drop for EnvLock {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for reentrant and contended environment locking.
+
     use super::*;
     use std::{sync::mpsc, time::Duration};
 

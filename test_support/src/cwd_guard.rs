@@ -37,6 +37,13 @@ impl Drop for CwdGuard {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the working-directory guard.
+
+    use super::*;
+    use crate::env_lock::EnvLock;
+    use rstest::{fixture, rstest};
+    use std::io;
+
     #[fixture]
     fn env_lock() -> EnvLock {
         EnvLock::acquire()

@@ -39,7 +39,8 @@ fn search_workspace_returns_executable_and_skips_non_exec(
     #[from(workspace)] workspace_res: Result<TempWorkspace>,
 ) -> Result<()> {
     let workspace = workspace_res?;
-    let exec = write_exec(workspace.root(), "tool")?;
+    let exec = Utf8PathBuf::try_from(write_exec(workspace.root().as_std_path(), "tool")?)
+        .context("executable path should be UTF-8")?;
     let non_exec = workspace.root().join("tool2");
     test_fs::write(non_exec.as_std_path(), b"not exec").context("write non exec")?;
 
@@ -59,10 +60,12 @@ fn search_workspace_collects_all_matches(
     #[from(workspace)] workspace_res: Result<TempWorkspace>,
 ) -> Result<()> {
     let workspace = workspace_res?;
-    let first = write_exec(workspace.root(), "tool")?;
+    let first = Utf8PathBuf::try_from(write_exec(workspace.root().as_std_path(), "tool")?)
+        .context("first executable path should be UTF-8")?;
     let subdir = workspace.root().join("bin");
     test_fs::create_dir_all(subdir.as_std_path()).context("mkdir bin")?;
-    let second = write_exec(&subdir, "tool")?;
+    let second = Utf8PathBuf::try_from(write_exec(subdir.as_std_path(), "tool")?)
+        .context("second executable path should be UTF-8")?;
 
     let path_value = std::ffi::OsString::from(workspace.root().as_str());
     let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
@@ -85,7 +88,7 @@ fn search_workspace_skips_heavy_directories(
     let workspace = workspace_res?;
     let heavy = workspace.root().join("target");
     test_fs::create_dir_all(heavy.as_std_path()).context("mkdir target")?;
-    write_exec(&heavy, "tool")?;
+    write_exec(heavy.as_std_path(), "tool")?;
 
     let path_value = std::ffi::OsString::from(workspace.root().as_str());
     let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))

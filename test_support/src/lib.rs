@@ -144,14 +144,15 @@ mod tests {
     //! directory rooted under a path containing invalid UTF-8 bytes,
     //! confirming both stubs are created on OS-native paths.
     use super::{TempDir, check_ninja::fake_ninja_check_build_file_in, fake_ninja_in};
+    use crate::fs as test_fs;
     use anyhow::{Context, Result};
-    use std::{ffi::OsString, fs, os::unix::ffi::OsStringExt};
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
     #[test]
     fn fake_ninja_helpers_support_non_utf8_temp_directories() -> Result<()> {
         let parent = TempDir::new().context("create parent temporary directory")?;
         let non_utf8_root = parent.path().join(OsString::from_vec(b"tmp-\xff".to_vec()));
-        fs::create_dir(&non_utf8_root).context("create non-UTF-8 temporary directory")?;
+        test_fs::create_dir(&non_utf8_root).context("create non-UTF-8 temporary directory")?;
 
         let (_exit_dir, exit_script) = fake_ninja_in(0, &non_utf8_root)?;
         let (_check_dir, check_script) = fake_ninja_check_build_file_in(&non_utf8_root)?;

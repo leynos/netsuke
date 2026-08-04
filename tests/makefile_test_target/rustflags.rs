@@ -113,6 +113,16 @@ impl RustflagsCase {
         }
     }
 
+    const fn lint_whitaker_test_support() -> Self {
+        Self {
+            target: "lint-whitaker",
+            line_marker: "cd test_support",
+            warning_policy: WarningPolicy::Deny,
+            inheritance_policy: InheritancePolicy::Conditional,
+            polonius_policy: PoloniusPolicy::Enabled,
+        }
+    }
+
     const fn typecheck() -> Self {
         Self {
             target: "typecheck",
@@ -135,13 +145,14 @@ impl RustflagsCase {
 }
 
 /// Every `RUSTFLAGS`-setting recipe line under contract.
-const RUSTFLAGS_CASES: [RustflagsCase; 8] = [
+const RUSTFLAGS_CASES: [RustflagsCase; 9] = [
     RustflagsCase::test_nextest(),
     RustflagsCase::doctest(),
     RustflagsCase::binary_build(),
     RustflagsCase::lint_rustdoc(),
     RustflagsCase::lint_clippy(),
     RustflagsCase::lint_whitaker(),
+    RustflagsCase::lint_whitaker_test_support(),
     RustflagsCase::typecheck(),
     RustflagsCase::kani_full(),
 ];
@@ -260,6 +271,7 @@ fn unit_extracts_the_rustflags_assignment_from_a_recipe_line() {
 #[case(RustflagsCase::lint_rustdoc())]
 #[case(RustflagsCase::lint_clippy())]
 #[case(RustflagsCase::lint_whitaker())]
+#[case(RustflagsCase::lint_whitaker_test_support())]
 #[case(RustflagsCase::typecheck())]
 #[case(RustflagsCase::kani_full())]
 fn behavioural_rustflags_recipes_preserve_inherited_flags(
@@ -301,6 +313,7 @@ fn behavioural_rustflags_recipes_preserve_inherited_flags(
 #[case(RustflagsCase::lint_rustdoc())]
 #[case(RustflagsCase::lint_clippy())]
 #[case(RustflagsCase::lint_whitaker())]
+#[case(RustflagsCase::lint_whitaker_test_support())]
 #[case(RustflagsCase::typecheck())]
 #[case(RustflagsCase::kani_full())]
 fn behavioural_rustflags_recipes_are_well_formed_without_inherited_flags(

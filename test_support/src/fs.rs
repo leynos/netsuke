@@ -218,10 +218,10 @@ pub fn file_len(path: impl AsRef<Path>) -> io::Result<u64> {
 #[cfg(unix)]
 pub fn set_mode(path: impl AsRef<Path>, mode: u32) -> io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
-    let path = path.as_ref();
-    let mut permissions = fs::metadata(path)?.permissions();
+    let path_ref = path.as_ref();
+    let mut permissions = fs::metadata(path_ref)?.permissions();
     permissions.set_mode(mode);
-    fs::set_permissions(path, permissions)
+    fs::set_permissions(path_ref, permissions)
 }
 
 /// Return `true` when `path` is a regular file with any execute bit set.
@@ -286,7 +286,9 @@ mod tests {
         let file = temp.path().join("not-a-directory");
         write(&file, b"fixture")?;
 
-        let error = create_dir_all(&file).expect_err("an existing file is not a directory");
+        let Err(error) = create_dir_all(&file) else {
+            anyhow::bail!("an existing file should not be accepted as a directory");
+        };
         anyhow::ensure!(
             matches!(
                 error.kind(),
@@ -304,7 +306,10 @@ mod tests {
 
         create_dir_all(&nested)?;
 
-        anyhow::ensure!(nested.is_dir(), "recursive creation should produce a directory");
+        anyhow::ensure!(
+            nested.is_dir(),
+            "recursive creation should produce a directory"
+        );
         Ok(())
     }
 }

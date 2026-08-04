@@ -4,6 +4,18 @@
 
 mod documentation_examples;
 
+use anyhow::{Context, Result, ensure};
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs_utf8::Dir};
+use documentation_examples::{assert_success, documented_example, manifest_workspace};
+use rstest::rstest;
+use rustix::fs::{Dev, FileType, Mode, mknodat};
+use std::path::Path;
+use std::process::Command;
+use test_support::fs as test_fs;
+use test_support::netsuke::{NetsukeRun, run_netsuke_in_with_env};
+use test_support::{ninja::ninja_integration_workspace, write_exec, write_exec_with_content};
+
 #[expect(
     clippy::disallowed_methods,
     reason = "end-to-end adapter forwarding the host executable search path into an isolated child process"
@@ -16,7 +28,7 @@ fn executable_path(stub_directory: &Utf8Path) -> Result<String> {
 }
 
 fn write_stub(directory: &Utf8Path, name: &str, script: &str) -> Result<()> {
-    write_exec_with_content(directory, name, script)
+    write_exec_with_content(directory.as_std_path(), name, script)
         .with_context(|| format!("write {name} stub"))?;
     Ok(())
 }
@@ -358,7 +370,7 @@ fn stdlib_host_context_example_uses_controlled_process_state() -> Result<()> {
             "done\n"
         ),
     )?;
-    write_exec(&stub_directory, "guide-tool")?;
+    write_exec(stub_directory.as_std_path(), "guide-tool")?;
     let path = executable_path(&stub_directory)?;
     let run = run_netsuke_in_with_env(
         workspace.path(),

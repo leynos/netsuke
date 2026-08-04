@@ -175,6 +175,14 @@ fn find_existing_ancestor<'a>(
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for manifest fixture creation.
+
+    use super::*;
+    use anyhow::{Context, Result};
+    use camino::Utf8Path;
+    use std::io;
+    use tempfile::TempDir;
+
     #[test]
     fn existing_directory_manifest_path_is_rejected() -> Result<()> {
         let temp = TempDir::new().context("create temp dir")?;
@@ -226,16 +234,16 @@ mod tests {
         // Parent directory does not exist beforehand.
         let cli_file = Utf8Path::new("missing/subdir/manifest.yml");
         let expected_path = temp_path.join(cli_file);
-        assert!(
+        anyhow::ensure!(
             !fs::exists(&expected_path),
             "precondition: path should not exist"
         );
 
         let manifest_path =
             ensure_manifest_exists(temp_path, cli_file).context("create manifest when missing")?;
-        assert_eq!(manifest_path, expected_path);
-        assert!(fs::exists(&manifest_path), "manifest file should exist");
-        assert!(
+        anyhow::ensure!(manifest_path == expected_path, "manifest path should match");
+        anyhow::ensure!(fs::exists(&manifest_path), "manifest file should exist");
+        anyhow::ensure!(
             fs::exists(
                 manifest_path
                     .parent()
@@ -247,7 +255,7 @@ mod tests {
         // Sanity check that content was written, not an empty file.
         let contents =
             fs::read_to_string(manifest_path.as_std_path()).context("read manifest contents")?;
-        assert!(
+        anyhow::ensure!(
             contents.contains("netsuke_version:"),
             "unexpected manifest contents: {contents}"
         );
