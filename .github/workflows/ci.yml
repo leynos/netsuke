@@ -35,6 +35,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends gawk
+
+          # Ubuntu exposes awk through an alternatives symlink outside
+          # /usr/bin. The capability-backed sandbox probe deliberately cannot
+          # follow a symlink that escapes its containing directory, so expose
+          # the packaged binary as a regular executable on the job PATH.
+          test_shell_bin="${RUNNER_TEMP}/netsuke-test-bin"
+          mkdir --parents "${test_shell_bin}"
+          install --mode=0755 "$(command -v gawk)" "${test_shell_bin}/awk"
+          echo "${test_shell_bin}" >> "${GITHUB_PATH}"
+          export PATH="${test_shell_bin}:${PATH}"
+
           command -v awk
           awk --version
       - name: Setup Rust
