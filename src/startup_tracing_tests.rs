@@ -5,6 +5,7 @@
 
 use super::*;
 use anyhow::{Result, ensure};
+use rstest::rstest;
 use tracing_subscriber::{filter::LevelFilter, fmt, prelude::*, registry::Registry};
 
 /// Emit `event` through a subscriber writing to `writer`.
@@ -30,40 +31,6 @@ fn a_startup_warning_is_buffered_rather_than_written() -> Result<()> {
     ensure!(
         buffered.contains("locale fell back"),
         "the event must be recorded while buffering, got {buffered:?}"
-    );
-    Ok(())
-}
-
-/// Releasing empties the buffer, so nothing is written twice when later events
-/// pass straight through.
-#[test]
-fn releasing_empties_the_buffer() -> Result<()> {
-    let writer = StartupWriter::buffering();
-    emit_warning(&writer, "locale fell back");
-    ensure!(!writer.buffered().is_empty(), "expected a buffered event");
-
-    writer.release_to_stderr()?;
-
-    ensure!(
-        writer.buffered().is_empty(),
-        "the buffer must be emptied once released"
-    );
-    Ok(())
-}
-
-/// JSON mode drops what was buffered, so stderr carries only the diagnostic
-/// document.
-#[test]
-fn discarding_drops_the_buffer() -> Result<()> {
-    let writer = StartupWriter::buffering();
-    emit_warning(&writer, "locale fell back");
-    ensure!(!writer.buffered().is_empty(), "expected a buffered event");
-
-    writer.discard();
-
-    ensure!(
-        writer.buffered().is_empty(),
-        "discarding must drop what was buffered"
     );
     Ok(())
 }
@@ -204,33 +171,54 @@ fn repeated_overflow_marks_once_and_grows_no_further() -> Result<()> {
     Ok(())
 }
 
-/// Releasing after truncation empties the buffer and resumes write-through, so
-/// a truncated startup does not stay truncated for the rest of the run.
-#[test]
-fn releasing_after_truncation_empties_the_buffer() -> Result<()> {
-    let writer = StartupWriter::buffering();
-    write_raw(&writer, &vec![b'a'; MAX_BUFFERED_BYTES + 1])?;
-
-    writer.release_to_stderr()?;
-
-    ensure!(
-        writer.buffered().is_empty(),
-        "the buffer must be emptied once released"
-    );
-    Ok(())
+/// How the buffer was filled before settlement.
+#[derive(Clone, Copy)]
+enum Fill {
+    /// One ordinary event, well within the bound.
+    OneEvent,
+    /// Enough to overflow, so the buffer is truncated and marked.
+    PastTheBound,
 }
 
-/// Discarding after truncation drops everything, as it does untruncated.
-#[test]
-fn discarding_after_truncation_drops_the_buffer() -> Result<()> {
-    let writer = StartupWriter::buffering();
-    write_raw(&writer, &vec![b'a'; MAX_BUFFERED_BYTES + 1])?;
+/// Where settlement sends what was buffered.
+#[derive(Clone, Copy)]
+enum Settlement {
+    Release,
+    Discard,
+}
 
-    writer.discard();
+/// Settling empties the buffer, however it was filled and wherever it goes.
+///
+/// The four combinations share one shape: fill, settle, assert empty. Written
+/// out separately they differed only in which two calls they made, which is
+/// duplication rather than coverage. The truncated cases matter because a
+/// truncated buffer must not stay truncated for the rest of the run.
+#[rstest]
+#[case::release_after_one_event(Fill::OneEvent, Settlement::Release)]
+#[case::discard_after_one_event(Fill::OneEvent, Settlement::Discard)]
+#[case::release_after_truncation(Fill::PastTheBound, Settlement::Release)]
+#[case::discard_after_truncation(Fill::PastTheBound, Settlement::Discard)]
+fn settling_empties_the_buffer(#[case] fill: Fill, #[case] settlement: Settlement) -> Result<()> {
+    let writer = StartupWriter::buffering();
+    match fill {
+        Fill::OneEvent => emit_warning(&writer, "locale fell back"),
+        Fill::PastTheBound => {
+            write_raw(&writer, &vec![b'a'; MAX_BUFFERED_BYTES + 1])?;
+        }
+    }
+    ensure!(
+        !writer.buffered().is_empty(),
+        "the buffer must hold something before settlement"
+    );
+
+    match settlement {
+        Settlement::Release => writer.release_to_stderr()?,
+        Settlement::Discard => writer.discard(),
+    }
 
     ensure!(
         writer.buffered().is_empty(),
-        "discarding must drop a truncated buffer too"
+        "settling must leave the buffer empty"
     );
     Ok(())
 }
