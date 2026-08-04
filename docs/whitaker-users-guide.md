@@ -113,6 +113,16 @@ libraries = [
 ]
 ```
 
+> **Netsuke deviation from upstream — preserve when re-importing this guide.**
+> Netsuke does not pin the lint libraries and carries no
+> `[workspace.metadata.dylint]` block. It installs them at Whitaker HEAD
+> through `whitaker-installer`, deliberately, so the suite's improvements
+> arrive without a version bump. `WHITAKER_INSTALLER_VERSION` in
+> `.github/workflows/ci.yml` pins the installer binary, which is a different
+> artefact from the libraries this section pins — the installer's version says
+> nothing about which lints get staged. Adopting the form above would reverse a
+> standing decision; see "Quality gates" in `docs/developers-guide.md`.
+
 ### Rolling release downloads
 
 Whitaker publishes a `rolling` pre-release tag that is continuously updated and

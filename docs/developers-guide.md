@@ -155,11 +155,25 @@ cargo binstall --no-confirm --locked \
   "whitaker-installer@$WHITAKER_INSTALLER_VERSION"
 ```
 
-The pin covers the installer only. It does not pin the lint libraries: the
-installer stages those from the Whitaker repository's default branch at install
-time, keeping its own checkout under `~/.local/share/whitaker` and updating it
-with `git pull`. Lint behaviour therefore tracks Whitaker HEAD, not
-`WHITAKER_INSTALLER_VERSION`.
+`whitaker-installer` and the lint libraries are separate artefacts with
+separate versions. `WHITAKER_INSTALLER_VERSION` pins the installer — the tool
+that stages libraries — and nothing else. The installer keeps its own checkout
+of the Whitaker repository under `~/.local/share/whitaker`, updates it with
+`git pull`, and stages the libraries from its default branch. Lint behaviour
+therefore tracks Whitaker HEAD.
+
+**Running the lint libraries at HEAD is deliberate.** Netsuke follows the suite
+as it develops, so new lints and fixes arrive without a version bump here. Do
+not add a `[workspace.metadata.dylint]` block pinning `whitaker_suite` to a
+`tag` or `rev`. The [Whitaker user's guide](whitaker-users-guide.md) documents
+that form, and it is the right answer for a project wanting reproducible lint
+results, but adopting it here would reverse a standing decision rather than fix
+a defect.
+
+The cost is worth stating plainly: a change upstream can alter lint results
+between two runs with no change in this repository, and a local checkout that
+has not been restaged will disagree with CI, which stages fresh on every job.
+Restaging is what reconciles them.
 
 What the module-scoped exemptions in `dylint.toml` actually depend on is
 [Whitaker PR #315][whitaker-pr-315], which added the `excluded_paths` option,
