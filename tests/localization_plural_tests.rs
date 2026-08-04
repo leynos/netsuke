@@ -14,7 +14,7 @@ use netsuke::localization::{self, keys};
 use ortho_config::LocalizationArgs;
 use rstest::rstest;
 use test_support::fluent::normalize_fluent_isolates;
-use test_support::localizer::{LocaleLocalizer, locale_localizer};
+use test_support::localizer::locale_localizer;
 
 /// The number of catalogues this release ships.
 ///
@@ -22,11 +22,6 @@ use test_support::localizer::{LocaleLocalizer, locale_localizer};
 /// sweeps below assert they covered all of it rather than silently iterating a
 /// shortened registry.
 const EXPECTED_SHIPPED_LOCALE_COUNT: usize = 35;
-
-/// Acquire the localizer test lock and install `locale`.
-fn localizer_guards(locale: &str) -> Result<LocaleLocalizer> {
-    locale_localizer(locale).context("install the locale under test")
-}
 
 /// Counts chosen to select every CLDR cardinal category some shipped locale
 /// uses.
@@ -72,7 +67,7 @@ fn render_with_count(key: &str, count: i64) -> Option<String> {
 fn plural_selection_renders_for_every_locale_and_count() -> Result<()> {
     let mut covered = 0usize;
     for entry in SUPPORTED_LOCALES {
-        let _guards = localizer_guards(entry.tag())?;
+        let _guards = locale_localizer(entry.tag());
         for count in PLURAL_PROBE_COUNTS {
             let rendered =
                 render_with_count(keys::EXAMPLE_FILES_PROCESSED, count).with_context(|| {
@@ -116,7 +111,7 @@ fn plural_selection_renders_for_every_locale_and_count() -> Result<()> {
 /// selector ran.
 #[test]
 fn a_numeric_count_selects_a_different_variant_from_the_default() -> Result<()> {
-    let _guards = localizer_guards("en-US")?;
+    let _guards = locale_localizer("en-US");
 
     let singular = render_with_count(keys::EXAMPLE_FILES_PROCESSED, 1)
         .context("en-US must render for count 1")?;
@@ -135,7 +130,7 @@ fn a_numeric_count_selects_a_different_variant_from_the_default() -> Result<()> 
 /// `with_arg` and silently disabling every plural assertion above.
 #[test]
 fn a_stringified_count_falls_through_to_the_default_variant() -> Result<()> {
-    let _guards = localizer_guards("en-US")?;
+    let _guards = locale_localizer("en-US");
 
     let mut args: LocalizationArgs<'_> = LocalizationArgs::new();
     args.insert("count", FluentValue::from("1"));
@@ -229,7 +224,7 @@ fn every_locale_selects_a_declared_plural_branch() -> Result<()> {
             .find(|variant| variant.is_default)
             .map_or_else(|| "other".to_owned(), |variant| variant.category.clone());
 
-        let _guards = localizer_guards(entry.tag())?;
+        let _guards = locale_localizer(entry.tag());
         let mut selected: BTreeSet<String> = BTreeSet::new();
         for count in PLURAL_PROBE_COUNTS {
             let rendered = render_with_count(keys::EXAMPLE_FILES_PROCESSED, count)
@@ -277,7 +272,7 @@ fn example_files_processed_message_resolves(
     #[case] expected_verb: &str,
     #[case] expected_noun: &str,
 ) -> Result<()> {
-    let _guards = localizer_guards(locale)?;
+    let _guards = locale_localizer(locale);
 
     let message = localization::message(keys::EXAMPLE_FILES_PROCESSED)
         .with_arg("count", 5)
@@ -307,7 +302,7 @@ fn example_errors_found_message_resolves(
     #[case] locale: &str,
     #[case] expected_substring: &str,
 ) -> Result<()> {
-    let _guards = localizer_guards(locale)?;
+    let _guards = locale_localizer(locale);
 
     let message = localization::message(keys::EXAMPLE_ERRORS_FOUND)
         .with_arg("count", 3)

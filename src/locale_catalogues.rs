@@ -207,7 +207,9 @@ fn unique_language_catalogue(language: &str) -> Option<&'static LocaleCatalogue>
     matches.next().is_none().then_some(first)
 }
 
-fn tag_language(tag: &str) -> &str {
+/// The language subtag of `tag`, which is the whole tag when it carries no
+/// script or region.
+pub(crate) fn tag_language(tag: &str) -> &str {
     tag.split('-').next().unwrap_or(tag)
 }
 

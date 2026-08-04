@@ -363,8 +363,9 @@ the right variant rather than falling through to the first match.
 cargo build
 ```
 
-The compile-time audit verifies the tag lists agree and that the catalogue's
-keys and interpolation variables match the source.
+The compile-time audit verifies that the locale registry and Cargo.toml's
+metadata agree, and that the catalogue's keys and interpolation variables
+match the source.
 
 ### Step 5: Test the locale
 
@@ -373,7 +374,9 @@ make test
 cargo run -- --locale is --help
 ```
 
-Verify the output appears in Icelandic.
+`make test` also validates the tag against `EXPECTED_SHIPPED_TAGS`, the
+independent oracle in `tests/locale_registry_tests.rs`. Verify the output
+appears in Icelandic.
 
 ## 8. Right-to-left locales
 

@@ -1,6 +1,6 @@
 # Adnoddau lleoleiddio ar gyfer llinell orchymyn Netsuke.
 
-cli.about = Mae Netsuke yn crynhoi maniffestau YAML + Jinja yn gynlluniau adeiladu Ninja.
+cli.about = Mae Netsuke yn trosi maniffestau YAML + Jinja yn gynlluniau adeiladu Ninja.
 cli.long_about = Mae Netsuke yn trawsnewid maniffestau YAML + Jinja yn graffiau Ninja atgynhyrchadwy ac yn rhedeg Ninja gyda rhagosodiadau diogel.
 cli.usage = { $usage }
 

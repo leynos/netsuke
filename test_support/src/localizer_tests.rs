@@ -32,9 +32,16 @@ fn localizer_is_french() -> bool {
 /// The barrier makes the waiter demonstrably contended before the drop begins:
 /// the main thread holds the lock across it, so the waiter's `lock()` call is
 /// blocked, not merely late.
+///
+/// What the waiter sees is compared against the state captured *before* the
+/// guard was installed, not against "not French". Restoration means putting
+/// back whatever was there, and asserting a particular value instead would
+/// make this test fail for a reason of its own if the process default ever
+/// changed.
 #[test]
 fn the_lock_is_held_until_the_localizer_is_restored() {
-    let bundle = locale_localizer("fr").expect("install the French localizer");
+    let french_before = localizer_is_french();
+    let bundle = locale_localizer("fr");
     assert!(
         localizer_is_french(),
         "the fixture must install the French localizer"
@@ -72,8 +79,8 @@ fn the_lock_is_held_until_the_localizer_is_restored() {
 
     let observed_french = rx.recv().expect("the waiting thread reports what it saw");
     waiter.join().expect("the waiting thread completes");
-    assert!(
-        !observed_french,
+    assert_eq!(
+        observed_french, french_before,
         "a thread admitted after the drop must see the restored localizer, \
          not the one the guard installed"
     );
@@ -85,12 +92,14 @@ fn the_lock_is_held_until_the_localizer_is_restored() {
 /// reentrant, so acquiring a second fixture inside the first deadlocks.
 #[test]
 fn dropping_the_guard_restores_the_previous_localizer() {
+    let french_before = localizer_is_french();
     {
-        let _french = locale_localizer("fr").expect("install French");
+        let _french = locale_localizer("fr");
         assert!(localizer_is_french(), "the fixture installs French");
     }
-    assert!(
-        !localizer_is_french(),
+    assert_eq!(
+        localizer_is_french(),
+        french_before,
         "dropping the fixture restores the previous localizer"
     );
 }
@@ -112,7 +121,7 @@ fn the_lock_is_still_held_when_the_restore_begins() {
         .lock()
         .unwrap_or_else(PoisonError::into_inner) = None;
 
-    drop(locale_localizer("fr").expect("install the French localizer"));
+    drop(locale_localizer("fr"));
 
     let observed = *LOCK_HELD_AT_RESTORE
         .lock()

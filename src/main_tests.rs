@@ -63,6 +63,22 @@ impl locale_resolution::SystemLocale for NoSystemLocale {
 /// `startup_localizer` installs a process-global localizer, so the previous one
 /// is restored before returning.
 fn record_startup(locale: &str) -> Result<(StartupWriter, String)> {
+    let args: Vec<OsString> = ["netsuke", "--locale", locale]
+        .into_iter()
+        .map(OsString::from)
+        .collect();
+    record_startup_with(&args, &EmptyEnv)
+}
+
+/// Run the startup orchestration over `args` and `env`, recording what it says.
+///
+/// The general form behind [`record_startup`], for the tests that need the
+/// locale to arrive by a route other than `--locale`. Both share the lock and
+/// the restoration, which is the part that must not be reimplemented per test.
+fn record_startup_with<E: locale_resolution::EnvProvider>(
+    args: &[OsString],
+    env: &E,
+) -> Result<(StartupWriter, String)> {
     // `startup_localizer` writes the process-global localizer, so the shared
     // lock is held across installation and restoration. Without it another test
     // doing the same could capture this one's override as its "previous" and
@@ -75,13 +91,9 @@ fn record_startup(locale: &str) -> Result<(StartupWriter, String)> {
         .with(LevelFilter::WARN)
         .with(fmt::layer().with_writer(writer.clone()).with_ansi(false));
 
-    let args: Vec<OsString> = ["netsuke", "--locale", locale]
-        .into_iter()
-        .map(OsString::from)
-        .collect();
     let previous = localization::localizer();
     tracing::subscriber::with_default(subscriber, || {
-        drop(startup_localizer(&args, &EmptyEnv, &NoSystemLocale));
+        drop(startup_localizer(args, env, &NoSystemLocale));
     });
     localization::set_localizer(previous);
 
@@ -127,23 +139,9 @@ impl locale_resolution::EnvProvider for EnvWithLocale {
 /// is what distinguishes exercising the startup path from bypassing it.
 #[test]
 fn the_startup_path_resolves_the_locale_from_the_environment() -> Result<()> {
-    let writer = StartupWriter::buffering();
-    let subscriber = Registry::default()
-        .with(LevelFilter::WARN)
-        .with(fmt::layer().with_writer(writer.clone()).with_ansi(false));
-
     let args = vec![OsString::from("netsuke")];
-    let previous = localization::localizer();
-    tracing::subscriber::with_default(subscriber, || {
-        drop(startup_localizer(
-            &args,
-            &EnvWithLocale("is-IS"),
-            &NoSystemLocale,
-        ));
-    });
-    localization::set_localizer(previous);
+    let (_writer, recorded) = record_startup_with(&args, &EnvWithLocale("is-IS"))?;
 
-    let recorded = String::from_utf8_lossy(&writer.buffered()).into_owned();
     ensure!(
         recorded.contains("is-IS"),
         "the environment locale must reach the localizer, got {recorded:?}"

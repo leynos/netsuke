@@ -70,7 +70,7 @@ licence files. Installer packages do not have checksum sidecars in v0.1.0.
 Windows PowerShell help files are published beside each MSI as sidecar
 artefacts rather than embedded in the installer.
 
-To install the current source checkout with Cargo. The clone supplies both the
+Install the current source checkout with Cargo. The clone supplies both the
 pinned nightly toolchain and `RUSTFLAGS=-Zpolonius=next`, so neither is given
 here — unlike the registry install above, which runs outside a checkout:
 

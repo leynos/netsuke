@@ -218,15 +218,21 @@ fn a_supported_locale_warns_about_nothing() -> Result<()> {
     Ok(())
 }
 
-/// A differently spelled source locale is supported, not a fallback.
+/// A request that resolves within its own language is supported, not a
+/// fallback.
 ///
 /// `en-us` normalizes to `en-US` and resolves to the source catalogue, so
 /// warning about it would report a supported request as unsupported — and a
-/// warning that fires on correct input trains readers to ignore it.
+/// warning that fires on correct input trains readers to ignore it. Bare `en`
+/// is the same case reached by a different route: the language fallback policy
+/// sends it to `en-US` deliberately, and an English speaker who asked for
+/// English got English.
 #[rstest]
 #[case("en-US")]
 #[case("en-us")]
 #[case("EN-US")]
+#[case("en")]
+#[case("en-AU")]
 fn a_source_locale_spelling_warns_about_nothing(#[case] requested: &str) -> Result<()> {
     let (_, at_warn) = with_test_subscriber(LevelFilter::WARN, |captured| {
         let localizer = build_localizer(Some(requested));

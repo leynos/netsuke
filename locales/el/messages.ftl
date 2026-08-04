@@ -221,14 +221,14 @@ stdlib.fetch.action.open_cache_entry = άνοιγμα της καταχώρισ�
 
 # Διαγνωστικά του βοηθήματος εντολών.
 stdlib.command.location = εντολή «{ $command }» στο πρότυπο «{ $template }»
-stdlib.command.spawn_failed = Δεν ήταν δυνατή η εκκίνηση του { $location }: { $details }.
-stdlib.command.io_failed = Το { $location } απέτυχε: { $details }.
+stdlib.command.spawn_failed = Η { $location } δεν μπόρεσε να εκκινήσει: { $details }.
+stdlib.command.io_failed = Η { $location } απέτυχε: { $details }.
 stdlib.command.closed_input_early = Η είσοδος έκλεισε πριν ολοκληρωθεί η εγγραφή προς την εντολή.
-stdlib.command.broken_pipe = Διακοπή διοχέτευσης κατά την εκτέλεση του { $location }: { $details }.
-stdlib.command.terminated_by_signal = Το { $location } τερματίστηκε από σήμα.
-stdlib.command.exited_with_status = Το { $location } τερματίστηκε με κατάσταση { $status }.
-stdlib.command.output_limit_exceeded = Το { $location } υπερέβη το όριο { $mode } των { $limit } byte για { $stream }.
-stdlib.command.timeout = Το { $location } υπερέβη το χρονικό όριο των { $seconds } δευτερολέπτων.
+stdlib.command.broken_pipe = Διακοπή διοχέτευσης ενώ εκτελούνταν η { $location }: { $details }.
+stdlib.command.terminated_by_signal = Η { $location } τερματίστηκε από σήμα.
+stdlib.command.exited_with_status = Η { $location } τερματίστηκε με κατάσταση { $status }.
+stdlib.command.output_limit_exceeded = Η { $location } υπερέβη το όριο { $mode } των { $limit } byte για { $stream }.
+stdlib.command.timeout = Η { $location } υπερέβη το χρονικό όριο των { $seconds } δευτερολέπτων.
 stdlib.command.exit_status_suffix = (κατάσταση εξόδου { $status })
 stdlib.command.signal_suffix = (τερματίστηκε από σήμα)
 stdlib.command.shell.empty = Η εντολή κελύφους δεν πρέπει να είναι κενή.

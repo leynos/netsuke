@@ -378,7 +378,7 @@ graph.html.noscript.notice = Tha JavaScript à comas. Is e an dealbh teacsa gu h
 # Ro-leasachain bhrìgheil airson an às-chuir so-ruigsinnich.
 semantic.prefix.error = Mearachd:
 semantic.prefix.warning = Rabhadh:
-semantic.prefix.success = Shoirbhich leis:
+semantic.prefix.success = Soirbheas:
 semantic.prefix.info = Fiosrachadh:
 semantic.prefix.timing = Ùine:
 semantic.prefix.rendered = {"{"}symbol{"}"} {"{"}label{"}"}

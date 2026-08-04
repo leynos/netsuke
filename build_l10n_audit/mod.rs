@@ -79,12 +79,19 @@ fn source_catalogue_variables(root: &Path) -> Result<MessageVariables, Box<dyn E
     parse_catalogue_at(&catalogue_path_in(root, SOURCE_LOCALE))
 }
 
-/// Audit every registered locale, failing the build on the first problem.
+/// Audit every registered locale, reporting the comparison findings together.
 ///
 /// This is the audit's entry point, called from `build.rs`. It checks that
 /// `Cargo.toml`'s locale metadata matches the registry, then compares each
 /// catalogue against the keys `define_keys!` declares and against the English
 /// source's interpolation variables.
+///
+/// The two kinds of failure surface differently. A catalogue that disagrees
+/// with the source is a *finding*: every locale is compared and the findings
+/// are reported in one message, so a translator sees the whole list rather
+/// than fixing one key per build. Anything that stops the audit running at all
+/// — drifted metadata, an unreadable file, an unparseable key macro — aborts
+/// at the point it is met, because there is nothing further to compare.
 ///
 /// # Errors
 ///

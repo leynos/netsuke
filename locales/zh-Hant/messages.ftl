@@ -289,7 +289,7 @@ stdlib.path.action.open_directory = 開啟目錄
 stdlib.path.action.stat = 查詢資訊
 stdlib.path.action.read = 讀取
 stdlib.path.action.open_file = 開啟檔案
-stdlib.path.with_suffix.empty_separator = with_suffix 需要非空白的分隔字元。
+stdlib.path.with_suffix.empty_separator = with_suffix 需要非空的分隔字元。
 stdlib.path.relative_to.mismatch = { $path } 不是相對於 { $root } 的路徑。
 stdlib.path.expanduser.unsupported = 不支援針對特定使用者展開 ~。
 stdlib.path.expanduser.no_home = 無法展開 ~：未設定任何家目錄環境變數。
@@ -299,7 +299,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = 不支援的雜湊演算法「{ 
 
 # 集合輔助函式的診斷。
 stdlib.collections.flatten.expected_sequence = flatten 預期序列元素，卻發現 { $kind }。
-stdlib.collections.group_by.empty_attribute = group_by 需要非空白的屬性。
+stdlib.collections.group_by.empty_attribute = group_by 需要非空的屬性。
 stdlib.collections.group_by.unresolved = group_by 無法在型別為 { $kind } 的元素上解析「{ $attr }」。
 
 # 時間輔助函式的診斷。
@@ -322,7 +322,7 @@ stdlib.which.direct_not_found = [netsuke::jinja::which::not_found] 「{ $path }�
 stdlib.which.args_error = [netsuke::jinja::which::args] { $details }
 stdlib.which.path_preview.empty = <空白>
 stdlib.which.path_entry.non_utf8 = 第 { $index } 個 PATH 項目含有非 UTF-8 字元；Netsuke 需要 UTF-8 路徑。
-stdlib.which.command.empty = which 需要非空白的字串。
+stdlib.which.command.empty = which 需要非空的字串。
 stdlib.which.cwd_mode.invalid = cwd_mode 必須是「auto」、「always」或「never」，卻得到「{ $mode }」。
 stdlib.which.cwd.resolve_failed = 無法判定目前的目錄：{ $details }。
 stdlib.which.cwd.non_utf8 = 目前的目錄含有非 UTF-8 的部分。
@@ -350,7 +350,7 @@ status.task.progress_update = { $task }：{ $description }
 status.stage.manifest_ingestion = 正在讀取資訊清單檔案
 status.stage.initial_yaml_parsing = 正在剖析 YAML 文件
 status.stage.template_expansion = 正在展開範本指示詞
-status.stage.final_rendering = 正在還原序列化並算繪資訊清單的值
+status.stage.final_rendering = 正在反序列化並算繪資訊清單的值
 status.stage.ir_generation_validation = 正在建立並驗證相依性圖
 status.stage.ninja_synthesis = 正在合成 Ninja 建置計畫
 status.stage.ninja_synthesis_execute = 正在合成 Ninja 計畫並執行 { $tool }

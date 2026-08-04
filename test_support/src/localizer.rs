@@ -146,7 +146,6 @@ pub fn en_localizer() -> EnLocalizer {
 ///
 /// [`EnLocalizer`] covers the common case of pinning English. Catalogue sweeps
 /// need the same pairing for each locale in turn, which is what this provides.
-/// RAII bundle holding the localizer test lock and an installed locale.
 ///
 /// Obtained from [`locale_localizer`]. Dropping it restores the localizer that
 /// was installed beforehand and *then* releases the shared test lock, in that
@@ -162,8 +161,11 @@ pub struct LocaleLocalizer {
 
 /// Acquire the localizer test lock and install the localizer for `locale`.
 ///
-/// Fallible rather than panicking: a fixture arranges state, and arrangement
-/// can fail, so the caller decides what a poisoned lock means for its test.
+/// Infallible, like [`en_localizer`] and for the same reason: a poisoned lock
+/// is recovered from rather than reported, and building a localizer cannot
+/// fail — an unsupported tag resolves to the English source catalogue. There
+/// is no error for a caller to decide about, so returning a `Result` would
+/// only oblige every call site to unwrap one that is always `Ok`.
 ///
 /// Dropping the returned guard restores the previously installed localizer and
 /// releases the shared test lock, so locale-specific tests can run in sequence
@@ -175,19 +177,13 @@ pub struct LocaleLocalizer {
 /// use netsuke::localization::{self, keys};
 /// use test_support::localizer::locale_localizer;
 ///
-/// # fn main() -> anyhow::Result<()> {
-/// let guard = locale_localizer("fr")?;
+/// let guard = locale_localizer("fr");
 /// let rendered = localization::message(keys::CLI_ABOUT).to_string();
 /// assert!(rendered.contains("Netsuke"));
 /// drop(guard); // the previous localizer is restored here
-/// # Ok(())
-/// # }
 /// ```
-///
-/// # Errors
-///
-/// Returns an error when the localizer test lock is poisoned.
-pub fn locale_localizer(locale: &str) -> anyhow::Result<LocaleLocalizer> {
+#[must_use]
+pub fn locale_localizer(locale: &str) -> LocaleLocalizer {
     // Lock first, then install: the guard returned by
     // `set_localizer_for_tests` captures the localizer to restore, so it must
     // be created under the lock.
@@ -198,10 +194,10 @@ pub fn locale_localizer(locale: &str) -> anyhow::Result<LocaleLocalizer> {
     // that takes this lock, long after the original failure.
     let lock = localizer_test_lock().unwrap_or_else(PoisonError::into_inner);
     let localizer = cli_localization::build_localizer(Some(locale));
-    Ok(LocaleLocalizer {
+    LocaleLocalizer {
         _guard: RestoreProbe::new(localization::set_localizer_for_tests(Arc::from(localizer))),
         _lock: lock,
-    })
+    }
 }
 
 #[cfg(test)]

@@ -46,9 +46,13 @@ fn message_identifiers_are_collected() -> Result<()> {
 
 /// Comments carry translator context, including `$` examples, and must not
 /// contribute either identifiers or variables.
+///
+/// Both cases begin a line, which is what makes them comments. An indented
+/// `#` is a continuation instead, whatever it looks like; see
+/// [`an_indented_hash_line_continues_the_message`] and
+/// [`an_indented_line_before_any_message_contributes_nothing`].
 #[rstest]
 #[case("# a comment mentioning { $ghost }\nkey = value\n")]
-#[case("  # an indented comment with { $ghost }\nkey = value\n")]
 #[case("## a group comment { $ghost }\nkey = value\n")]
 fn comments_contribute_nothing(#[case] source: &str) -> Result<()> {
     let parsed = parse(source)?;
@@ -57,6 +61,25 @@ fn comments_contribute_nothing(#[case] source: &str) -> Result<()> {
     ensure!(
         variables_of(&parsed, "key")?.is_empty(),
         "a comment leaked a variable into the message"
+    );
+    Ok(())
+}
+
+/// An indented line with no message above it has nothing to continue.
+///
+/// It reaches the continuation branch rather than the comment branch — the
+/// parser tests indentation first — and is dropped for want of a message to
+/// attach to. The outcome matches a comment's, but the route does not, so it
+/// is asserted separately rather than filed among the comment cases where it
+/// would look like evidence the comment branch had run.
+#[test]
+fn an_indented_line_before_any_message_contributes_nothing() -> Result<()> {
+    let parsed = parse("  # an indented line with { $ghost }\nkey = value\n")?;
+    let ids: BTreeSet<&str> = parsed.keys().map(String::as_str).collect();
+    ensure!(ids == BTreeSet::from(["key"]), "got {ids:?}");
+    ensure!(
+        variables_of(&parsed, "key")?.is_empty(),
+        "an orphaned continuation leaked a variable into the next message"
     );
     Ok(())
 }

@@ -6,7 +6,7 @@
 //! rely on, and the guarantee that a translation is not simply a copy of the
 //! English source.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context, Result, ensure};
 use netsuke::locale_catalogues::{LocaleCatalogue, SOURCE_LOCALE, SUPPORTED_LOCALES, catalogue};
@@ -42,38 +42,47 @@ fn opens_select(value: &str) -> bool {
     value.ends_with("->")
 }
 
-/// Collect the CLDR categories a `select` expression declares.
+/// Collect the CLDR variants a `select` expression declares, and whether each
+/// carries the `*` default marker.
 ///
 /// The scan runs in two passes over one iterator: find the line defining
 /// `key`, then read variant lines until the closing brace. Only a `select`
 /// opens a variant block — a plain message with the same key yields the empty
-/// set rather than letting the scan run on and collect the categories of
+/// map rather than letting the scan run on and collect the categories of
 /// whichever `select` came next.
 ///
-/// Variant lines look like `[one] …` or `*[other] …`. Numeric selectors such
-/// as `[0]` are exact matches rather than CLDR categories, so they are skipped.
-fn plural_categories(text: &str, key: &str) -> BTreeSet<String> {
+/// Variant lines look like `[one] …` or `*[other] …`. The marker is recorded
+/// rather than trimmed away: Fluent falls back to the *starred* variant, so a
+/// catalogue offering a plain `[other]` has no default at all and must not
+/// pass for one. Numeric selectors such as `[0]` are exact matches rather than
+/// CLDR categories, so they are skipped.
+fn plural_variants(text: &str, key: &str) -> BTreeMap<String, bool> {
     let mut lines = text.lines().map(str::trim);
     let Some((_, value)) =
         lines.find_map(|trimmed| trimmed.split_once('=').filter(|(id, _)| id.trim() == key))
     else {
-        return BTreeSet::new();
+        return BTreeMap::new();
     };
     if !opens_select(value.trim()) {
-        return BTreeSet::new();
+        return BTreeMap::new();
     }
     lines
         .take_while(|trimmed| *trimmed != "}")
         .filter_map(|trimmed| {
+            let starred = trimmed.starts_with('*');
             let name = trimmed
                 .trim_start_matches('*')
                 .strip_prefix('[')?
                 .split(']')
                 .next()?;
-            (!name.chars().all(|ch| ch.is_ascii_digit())).then_some(name)
+            (!name.chars().all(|ch| ch.is_ascii_digit())).then(|| (name.to_owned(), starred))
         })
-        .map(str::to_owned)
         .collect()
+}
+
+/// The CLDR categories a `select` expression declares, marker aside.
+fn plural_categories(text: &str, key: &str) -> BTreeSet<String> {
+    plural_variants(text, key).into_keys().collect()
 }
 
 fn categories(names: &[&str]) -> BTreeSet<String> {
@@ -172,13 +181,17 @@ fn plural_examples_declare_the_language_categories() -> Result<()> {
 
 /// Every catalogue's plural example must offer the `other` default, which
 /// Fluent falls back to when no category matches.
+///
+/// The variant has to be starred. Fluent resolves the fallback by the marker,
+/// not by the name, so a plain `[other]` leaves the message with no default
+/// and is a parse error rather than a working catalogue.
 #[test]
 fn every_plural_example_offers_the_default_variant() {
     for entry in SUPPORTED_LOCALES {
-        let found = plural_categories(entry.resource(), PLURAL_EXAMPLE);
+        let found = plural_variants(entry.resource(), PLURAL_EXAMPLE);
         assert!(
-            found.contains("other"),
-            "{} must declare the default `other` variant",
+            found.get("other") == Some(&true),
+            "{} must declare the default `*[other]` variant, found {found:?}",
             entry.tag()
         );
     }

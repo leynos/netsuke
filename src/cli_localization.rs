@@ -97,6 +97,35 @@ fn build_layered_localizer(
     }
 }
 
+/// Whether resolution abandoned the requested language for the source one.
+///
+/// This is the case worth a warning: the user asked for a language Netsuke
+/// does not ship and got English instead. The two ways of landing on the
+/// source catalogue *without* leaving the requested language behind are ruled
+/// out first, because warning about either would fire on correct input, and a
+/// warning that fires on correct input trains readers to ignore it.
+///
+/// The tag is compared after normalization, since `en-us` parses to `en-US`;
+/// and the language is compared as well as the tag, since bare `en` — or a
+/// region English ships no catalogue for — resolves to the source catalogue
+/// through the fallback policy working as intended. The source language is
+/// read from the tag rather than written out, so moving the source locale
+/// cannot leave a stale `en` behind here.
+fn fell_back_from_another_language(
+    locale: &LanguageIdentifier,
+    catalogue: &LocaleCatalogue,
+) -> bool {
+    if catalogue.tag() != locales::SOURCE_LOCALE {
+        return false;
+    }
+    // `LanguageIdentifier`'s comparison against a string parses the string, so
+    // this is the normalized comparison without building one to throw away.
+    if *locale == locales::SOURCE_LOCALE {
+        return false;
+    }
+    locale.language.as_str() != locales::tag_language(locales::SOURCE_LOCALE)
+}
+
 /// Build a CLI localizer with an English fallback.
 ///
 /// `preferred_locale` is matched against the catalogue registry; unsupported or
@@ -120,11 +149,7 @@ pub fn build_localizer(preferred_locale: Option<&str>) -> Box<dyn Localizer> {
     };
 
     let catalogue = locales::resolve_catalogue(&locale);
-    // Compared after normalization: `en-us` parses to `en-US` and resolves to
-    // the source catalogue, so comparing the raw request would warn that a
-    // supported locale was unsupported.
-    let normalized = locale.to_string();
-    if catalogue.tag() == locales::SOURCE_LOCALE && normalized != locales::SOURCE_LOCALE {
+    if fell_back_from_another_language(&locale, catalogue) {
         // Asked for something specific and got English. That is the case a
         // user would report as a bug, so it has to be visible by default.
         tracing::warn!(

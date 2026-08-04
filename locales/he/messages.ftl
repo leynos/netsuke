@@ -21,7 +21,7 @@ cli.flag.color.help = מדיניות הפלט הצבעוני (auto, always, neve
 cli.flag.emoji.help = מדיניות האמוג׳י (auto, always, never).
 cli.flag.progress.help = מדיניות הצגת ההתקדמות (auto, always, never).
 cli.flag.accessibility.help = מדיניות הפלט הנגיש (auto, on, off).
-cli.flag.default_targets.help = יעדי הבנייה שברירת המחדל כאשר לא צוין יעד.
+cli.flag.default_targets.help = יעדי הבנייה המשמשים כברירת מחדל כאשר לא צוין יעד.
 
 # תיאורי פקודות המשנה.
 cli.subcommand.build.about = בניית היעדים המוגדרים במניפסט (ברירת מחדל).

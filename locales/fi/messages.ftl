@@ -384,8 +384,9 @@ semantic.prefix.timing = Ajoitus:
 semantic.prefix.rendered = {"{"}symbol{"}"} {"{"}label{"}"}
 
 # Monikkomuotojen esimerkkejä kääntäjille.
-# Suomi käyttää CLDR-luokkia `one` ja `other`; yksikkömuodossa substantiivi on
-# partitiivissa (”1 tiedosto”), monikossa niin ikään (”5 tiedostoa”).
+# Suomi käyttää CLDR-luokkia `one` ja `other`. Luokassa `one` substantiivi on
+# yksikön nominatiivissa (”1 tiedosto”), luokassa `other` yksikön
+# partitiivissa (”5 tiedostoa”).
 example.files_processed = { $count ->
     [one] Käsiteltiin { $count } tiedosto.
    *[other] Käsiteltiin { $count } tiedostoa.

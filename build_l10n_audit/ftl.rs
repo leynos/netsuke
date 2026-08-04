@@ -58,9 +58,13 @@ fn collect_variables(body: &str, into: &mut BTreeSet<String>) {
 
 /// Parse a catalogue into its message identifiers and interpolated variables.
 ///
+/// Takes the catalogue text rather than a path: reading is `read_source`'s
+/// job, which keeps this parser free of an ambient path and testable without
+/// staging files.
+///
 /// # Errors
 ///
-/// Returns an error if the file cannot be read or declares no messages.
+/// Returns an error if the catalogue declares no messages.
 pub(super) fn parse_catalogue(source: &str) -> Result<MessageVariables, Box<dyn Error>> {
     let mut messages = MessageVariables::new();
     let mut current: Option<String> = None;
