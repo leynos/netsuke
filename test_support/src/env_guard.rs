@@ -33,10 +33,18 @@ pub trait Environment {
 pub struct StdEnv;
 
 impl Environment for StdEnv {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the guard's whole purpose is to mutate and restore a real process variable; injecting here would leave nothing to guard"
+    )]
     unsafe fn set_var(&mut self, key: &str, value: &OsStr) {
         unsafe { std::env::set_var(key, value) };
     }
 
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the guard's whole purpose is to mutate and restore a real process variable; injecting here would leave nothing to guard"
+    )]
     unsafe fn remove_var(&mut self, key: &str) {
         unsafe { std::env::remove_var(key) };
     }
