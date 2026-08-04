@@ -31,6 +31,12 @@ jobs:
           # Full history so the deferred cs-coverage check step can reach
           # the pull request's merge base once the gate is wired in.
           fetch-depth: 0
+      - name: Install test shell dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends gawk
+          command -v awk
+          awk --version
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@4d696e72fff6db49f34302ccf119ba978f1032c9
         with:

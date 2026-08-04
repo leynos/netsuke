@@ -893,7 +893,10 @@ The fixtures live in `test_support::dev_fast`:
   real `mold` installed, a test could not then express "the tool is absent".
   Add to `SANDBOX_UTILITIES` when a script gains a dependency; a missing entry
   surfaces as a test failure rather than as a silent fallback to the
-  developer's own tools. Its `write_fake` is the domain helper described under
+  developer's own tools. Every allowlisted utility must also be provisioned on
+  CI's host `PATH`; `.github/workflows/ci.yml` installs GNU Awk through the
+  `gawk` package for the sandbox's `awk` entry. Its `write_fake` is the domain
+  helper described under
   [temporary executable test helpers](#temporary-executable-test-helpers): it
   composes `write_exec_with_content`, supplying the shebang so call sites carry
   only the behaviour being faked.
