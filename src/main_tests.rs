@@ -209,7 +209,13 @@ fn startup_installs_and_restores_the_global_localizer() -> Result<()> {
         .into_iter()
         .map(OsString::from)
         .collect();
+    // A guard, not a manual restore at the end: every `?` and `ensure!` below
+    // is an early exit, and a manual restore after them would be skipped on
+    // any of those paths, leaving the French localizer installed for whichever
+    // test runs next. Installing the current localizer over itself is a no-op
+    // that captures it as the guard's restore target.
     let previous = localization::localizer();
+    let restore = localization::set_localizer_for_tests(Arc::clone(&previous));
 
     // Two rendezvous: the first once the localizer is installed, the second
     // once the concurrent event has been emitted.
@@ -270,7 +276,9 @@ fn startup_installs_and_restores_the_global_localizer() -> Result<()> {
         "the concurrent thread's event must reach the shared writer, got {buffered:?}"
     );
 
-    localization::set_localizer(previous);
+    // Dropped explicitly so the final assertion observes the restored state;
+    // the guard would otherwise restore only after the assertion ran.
+    drop(restore);
     let after = localization::message(keys::CLI_ABOUT).to_string();
     ensure!(
         after == before,

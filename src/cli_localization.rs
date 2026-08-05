@@ -130,6 +130,30 @@ fn fell_back_from_another_language(
 ///
 /// `preferred_locale` is matched against the catalogue registry; unsupported or
 /// unparseable tags fall back to the English source catalogue.
+///
+/// # Examples
+///
+/// The returned localizer is self-contained — nothing global is installed —
+/// so lookups can be compared across independently built instances.
+///
+/// ```
+/// use netsuke::cli_localization::build_localizer;
+/// use netsuke::localization::keys;
+/// use ortho_config::Localizer;
+///
+/// // A shipped locale renders its own catalogue.
+/// let french = build_localizer(Some("fr"));
+/// let about = french.lookup(keys::CLI_ABOUT, None);
+/// assert!(about.is_some_and(|text| text.contains("manifestes")));
+///
+/// // An unsupported locale falls back to the English source rendering.
+/// let unsupported = build_localizer(Some("is-IS"));
+/// let source = build_localizer(Some("en-US"));
+/// assert_eq!(
+///     unsupported.lookup(keys::CLI_ABOUT, None),
+///     source.lookup(keys::CLI_ABOUT, None),
+/// );
+/// ```
 #[must_use]
 pub fn build_localizer(preferred_locale: Option<&str>) -> Box<dyn Localizer> {
     let fallback = build_en_localizer();

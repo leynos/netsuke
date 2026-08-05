@@ -212,11 +212,11 @@ stdlib.fetch.cache_write_failed = De cache voor ‘{ $url }’ kon niet worden g
 stdlib.fetch.response_limit_exceeded = Het antwoord van ‘{ $url }’ overschreed de limiet van { $limit } bytes.
 stdlib.fetch.cache_limit_exceeded = Het gecachete antwoord ‘{ $name }’ overschreed de limiet van { $limit } bytes.
 stdlib.fetch.io_failed = { $action } is mislukt voor { $path }: { $details }.
-stdlib.fetch.action.sync_cache = de fetch-cache synchroniseren
-stdlib.fetch.action.create_cache_dir = de map van de fetch-cache aanmaken
-stdlib.fetch.action.open_cache_dir = de map van de fetch-cache openen
-stdlib.fetch.action.stat_cache = het item in de fetch-cache opvragen
-stdlib.fetch.action.open_cache_entry = het item in de fetch-cache openen
+stdlib.fetch.action.sync_cache = synchroniseren van de fetch-cache
+stdlib.fetch.action.create_cache_dir = aanmaken van de fetch-cachemap
+stdlib.fetch.action.open_cache_dir = openen van de fetch-cachemap
+stdlib.fetch.action.stat_cache = opvragen van het item in de fetch-cache
+stdlib.fetch.action.open_cache_entry = openen van het item in de fetch-cache
 
 # Diagnostiek van de opdrachthelper.
 stdlib.command.location = opdracht ‘{ $command }’ in sjabloon ‘{ $template }’
@@ -286,10 +286,10 @@ stdlib.path.io.network_unreachable = netwerk onbereikbaar
 stdlib.path.io.host_unreachable = host onbereikbaar
 stdlib.path.io.other = I/O-fout
 stdlib.path.action.canonicalize = canoniseren
-stdlib.path.action.open_directory = map openen
+stdlib.path.action.open_directory = openen van de map
 stdlib.path.action.stat = opvragen
 stdlib.path.action.read = lezen
-stdlib.path.action.open_file = bestand openen
+stdlib.path.action.open_file = openen van het bestand
 stdlib.path.with_suffix.empty_separator = with_suffix vereist een scheidingsteken dat niet leeg is.
 stdlib.path.relative_to.mismatch = { $path } is niet relatief ten opzichte van { $root }.
 stdlib.path.expanduser.unsupported = Gebruikerspecifieke uitbreiding van ~ wordt niet ondersteund.
@@ -339,7 +339,7 @@ stdlib.register.resolve_dir = De huidige map kon niet worden bepaald voor de reg
 stdlib.register.dir_non_utf8 = De huidige map bevat delen die geen UTF-8 zijn: { $path }.
 
 # Statusrapportage voor de toegankelijke uitvoermodus.
-status.state.pending = in wachtrij
+status.state.pending = in de wachtrij
 status.state.running = bezig
 status.state.done = klaar
 status.state.failed = mislukt

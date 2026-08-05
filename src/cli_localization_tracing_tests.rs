@@ -97,9 +97,13 @@ fn a_malformed_catalogue_reports_its_tag_and_error() -> Result<()> {
         event.contains("fr"),
         "event must name the offending locale, got {event}"
     );
+    // The rendered error itself, not merely a field named `error`: the field
+    // name would match even if the value were empty, and the value is the part
+    // a reader debugs from. `failed to parse … resources for` is the
+    // `FluentLocalizerError::Parser` rendering.
     ensure!(
-        event.contains("error"),
-        "event must carry the parse error, got {event}"
+        event.contains("failed to parse") && event.contains("resources for fr"),
+        "event must carry the rendered parse error, got {event}"
     );
     Ok(())
 }

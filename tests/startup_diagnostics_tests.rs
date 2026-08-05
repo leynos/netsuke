@@ -13,6 +13,7 @@
 //! call sat after it.
 
 use anyhow::{Context, Result, ensure};
+use cap_std::{ambient_authority, fs::Dir};
 use rstest::rstest;
 use tempfile::TempDir;
 use test_support::netsuke::{NetsukeRun, run_netsuke_in_with_env};
@@ -98,6 +99,38 @@ fn json_mode_emits_only_the_diagnostic_document() -> Result<()> {
     );
     // Parsing the whole stream is the assertion: anything emitted beside the
     // document — before or after — makes it fail.
+    let parsed: serde_json::Value = serde_json::from_str(&stderr)
+        .with_context(|| format!("stderr must be exactly one JSON document, got: {stderr}"))?;
+    ensure!(
+        parsed.get("schema_version").is_some(),
+        "expected a diagnostic document, got: {parsed}"
+    );
+    Ok(())
+}
+
+/// JSON mode requested by configuration must settle the same way as `--json`.
+///
+/// The startup hint is read from the arguments alone, so with only `--locale`
+/// on the command line the mode is decided by the discovered project config.
+/// The run proceeds past the configuration merge and fails on the missing
+/// manifest, which is what leaves a diagnostic document to inspect; the
+/// buffered fallback warning must have been discarded rather than written
+/// beside it.
+#[test]
+fn config_file_json_emits_only_the_diagnostic_document() -> Result<()> {
+    let directory = TempDir::new().context("stage an empty working directory")?;
+    Dir::open_ambient_dir(directory.path(), ambient_authority())
+        .context("open the staged directory")?
+        .write(".netsuke.toml", "json = true\n")
+        .context("write the project config")?;
+
+    let output = run_netsuke_in_with_env(directory.path(), &["--locale", UNSUPPORTED_LOCALE], &[])?;
+    let stderr = stderr_of(&output);
+
+    ensure!(
+        !stderr.contains(FALLBACK_WARNING),
+        "config-driven JSON mode must not write the fallback warning to stderr, got: {stderr}"
+    );
     let parsed: serde_json::Value = serde_json::from_str(&stderr)
         .with_context(|| format!("stderr must be exactly one JSON document, got: {stderr}"))?;
     ensure!(

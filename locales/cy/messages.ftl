@@ -133,7 +133,7 @@ manifest.expression.eval_error = Methwyd â gwerthuso'r mynegiad { $name }.
 # Diagnosteg macros y maniffest.
 manifest.macro.signature_missing_identifier = Mae dynodydd ar goll o lofnod y macro.
 manifest.macro.signature_missing_params = Mae paramedrau ar goll o lofnod y macro.
-manifest.macro.compile_failed = Methwyd â chrynhoi'r macro { $name }.
+manifest.macro.compile_failed = Methwyd â throsi'r macro { $name }.
 manifest.macro.sequence_invalid = Rhaid diffinio macros fel map o enwau i dempledi.
 manifest.macro.register_failed = Methwyd â chofrestru macros y maniffest.
 manifest.macro.not_initialised = Nid yw amgylchedd y macros wedi'i baratoi.
