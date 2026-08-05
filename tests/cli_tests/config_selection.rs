@@ -242,5 +242,11 @@ fn config_flag_with_nonexistent_file_produces_error(
         message.contains("missing.toml"),
         "error should mention the missing explicit config path, got {message}"
     );
+    // Pin the stable diagnostic alongside the path so a generic I/O failure
+    // cannot satisfy this test.
+    ensure!(
+        message.contains("explicit configuration file not found"),
+        "error should name the explicit-config failure mode, got {message}"
+    );
     Ok(())
 }

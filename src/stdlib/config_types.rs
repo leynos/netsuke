@@ -31,7 +31,7 @@ pub(crate) enum HomeDirectory {
     Explicit(String),
 }
 
-/// Internal configuration passed to the network module for fetch cache initialisation.
+/// Internal configuration passed to the network module for fetch cache initialization.
 #[derive(Clone)]
 pub struct NetworkConfig {
     /// Capability-scoped workspace root for network caches.

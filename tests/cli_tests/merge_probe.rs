@@ -87,7 +87,17 @@ pub(super) fn merge_in_child(
         .current_dir(current_dir)
         .env_clear();
     let process_env = DefaultEnv;
-    for key in ["SystemRoot", "PATH", "TEMP", "TMP"] {
+    // `LD_LIBRARY_PATH` and `DYLD_FALLBACK_LIBRARY_PATH` are supplied by Cargo so
+    // the test binary can find its dynamic dependencies; clearing them would
+    // leave the re-executed worker unable to start on Linux and macOS.
+    for key in [
+        "SystemRoot",
+        "PATH",
+        "TEMP",
+        "TMP",
+        "LD_LIBRARY_PATH",
+        "DYLD_FALLBACK_LIBRARY_PATH",
+    ] {
         if let Some(value) = process_env.os_string(key) {
             command.env(key, value);
         }

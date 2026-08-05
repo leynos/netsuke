@@ -172,7 +172,7 @@ mod tests {
         let error = validate_macro(&env, "invalid-template", "missing_macro")
             .expect_err("template initialization should fail validation");
 
-        insta::assert_snapshot!(error.to_string(), @"undefined value: Failed to initialise macro environment.");
+        insta::assert_snapshot!(error.to_string(), @"undefined value: Failed to initialize macro environment.");
     }
 
     #[rstest]

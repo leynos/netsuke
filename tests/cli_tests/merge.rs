@@ -2,7 +2,7 @@
 //!
 //! These tests validate `OrthoConfig` layer precedence (defaults, file, env,
 //! CLI) and list-value appending.
-use super::merge_probe::merge_in_child;
+use super::merge_probe::{isolated_environment, merge_in_child};
 use anyhow::{Context, Result, ensure};
 use netsuke::cli::{CliConfig, ProgressPolicy};
 use ortho_config::{MergeComposer, sanitize_value};
@@ -25,14 +25,16 @@ where
     let temp_dir = tempfile::tempdir().context("create temporary config directory")?;
     let config_path = temp_dir.path().join("netsuke.toml");
     std::fs::write(&config_path, toml_content).context("write netsuke.toml")?;
-    let merged = merge_in_child(
-        cli_args,
+    // Seed the configuration sandbox so host XDG configuration cannot leak into
+    // the child; `_xdg_config_dirs` must outlive the child process.
+    let (_xdg_config_dirs, environment) = isolated_environment(
         temp_dir.path(),
         &[(
             OsString::from("NETSUKE_CONFIG"),
             config_path.into_os_string(),
         )],
     )?;
+    let merged = merge_in_child(cli_args, temp_dir.path(), &environment)?;
     f(merged)
 }
 
@@ -175,8 +177,9 @@ json = true
 "#;
     fs::write(&config_path, config).context("write netsuke.toml")?;
 
-    let merged = merge_in_child(
-        &["netsuke"],
+    // As in `with_config_file`, sandbox the child's configuration lookup so the
+    // precedence assertions cannot be perturbed by host XDG configuration.
+    let (_xdg_config_dirs, environment) = isolated_environment(
         temp_dir.path(),
         &[
             (
@@ -186,6 +189,7 @@ json = true
             (OsString::from("NETSUKE_JOBS"), OsString::from("4")),
         ],
     )?;
+    let merged = merge_in_child(&["netsuke"], temp_dir.path(), &environment)?;
     ensure!(
         merged.file.as_path() == Path::new("Configfile"),
         "config file should override the default manifest path",

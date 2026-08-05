@@ -162,16 +162,18 @@ fn renders_env_function_missing_var() -> Result<()> {
     match manifest::from_str_with_env(&yaml, &reader) {
         Ok(parsed) => bail!("expected missing env var to error, got manifest {parsed:?}"),
         Err(err) => {
+            // Assert the underlying cause first: the outer error type is an
+            // implementation detail, but a missing variable must always surface
+            // as a MiniJinja `UndefinedError` somewhere in the chain.
+            ensure!(
+                err.chain()
+                    .any(|source| format!("{source:?}").contains("UndefinedError")),
+                "unexpected error type or message: {err:?}"
+            );
             if let Some(manifest_err) = err.downcast_ref::<ManifestError>() {
                 ensure!(
                     matches!(manifest_err, ManifestError::Parse { .. }),
                     "expected ManifestError::Parse, got {manifest_err:?}"
-                );
-            } else {
-                ensure!(
-                    err.chain()
-                        .any(|source| format!("{source:?}").contains("UndefinedError")),
-                    "unexpected error type or message: {err:?}"
                 );
             }
             // The diagnostic deliberately omits the variable name: environment

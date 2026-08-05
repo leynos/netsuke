@@ -39,8 +39,34 @@ EXPECTED_CLIPPY_FLAGS = "--workspace --all-targets --all-features -- -D warnings
 
 
 def _load() -> dict[str, object]:
-    """Parse the workflow file."""
-    return yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    """Parse the workflow file, rejecting anything but a mapping root.
+
+    ``yaml.safe_load`` happily returns ``None`` for an empty document, or a
+    scalar or list for a malformed one. Without a runtime check the annotation
+    is a claim rather than a guarantee, and the failure surfaces later as an
+    opaque ``AttributeError`` far from the real cause.
+
+    GitHub Actions' ``on:`` trigger key is a YAML 1.1 boolean word, so PyYAML
+    hands it back as ``True``; it is restored to ``"on"`` so callers see a
+    uniformly string-keyed mapping.
+    """
+    match yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8")):
+        case dict() as document:
+            workflow = {
+                ("on" if key is True else key): value
+                for key, value in document.items()
+            }
+        case other:
+            raise AssertionError(
+                "the workflow must parse to a mapping, "
+                f"got {type(other).__name__}"
+            )
+    non_string_keys = sorted(repr(key) for key in workflow if not isinstance(key, str))
+    if non_string_keys:
+        raise AssertionError(
+            f"the workflow mapping must be string-keyed, got {non_string_keys}"
+        )
+    return workflow
 
 
 def _steps(workflow: dict[str, object]) -> list[dict[str, object]]:

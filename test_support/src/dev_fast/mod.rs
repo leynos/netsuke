@@ -38,9 +38,22 @@ pub use bench::{BASELINE_MTIME, BenchFixture, DEFAULT_SLUG, DEV_FAST_SLUG, write
 pub use cargo_log::{CargoInvocation, RecordingCargo, TargetState};
 pub use make::MakeInvocation;
 pub use release::FakeRelease;
+/// Resolve a genuine utility using an injected [`mockable::Env`].
+///
+/// This is the test seam for [`real_utility`]: `PATH` is read through the
+/// injected environment rather than the process environment, so `PATH`
+/// lookups can be exercised without touching ambient state. `current_dir`
+/// resolves relative `PATH` entries and `utility` names the executable to
+/// find.
+///
+/// # Errors
+///
+/// Returns an error if `utility` cannot be resolved from the supplied
+/// environment.
+pub use sandbox::real_utility_with_env;
 pub use sandbox::{
     DEV_FAST_CONFIG_PATH, PinOverrides, Sandbox, combined, dev_fast_config, pinned_mold_version,
-    pinned_toolchain, real_utility, real_utility_with_env,
+    pinned_toolchain, real_utility,
 };
 pub use scenario::{
     BuildScenario, InstallerFixture, InstallerScenario, TEST_MOLD_VERSION, WRONG_SHA256,

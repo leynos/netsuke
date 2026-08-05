@@ -5,9 +5,15 @@ use anyhow::{Result, bail};
 /// error. This mirrors the behaviour of the Cucumber step assertions so unit
 /// tests can guard the branching logic.
 ///
+/// # Returns
+///
+/// `Ok(output)` when `output` is `Some`; `output` takes precedence when both
+/// `output` and `error` are present.
+///
 /// # Errors
 ///
-/// Returns the reported standard-library error, or an error when neither value is present.
+/// Returns an error when `output` is absent. Any `error` text supplied is
+/// included in that error.
 pub fn stdlib_output_or_error<'a>(output: Option<&'a str>, error: Option<&str>) -> Result<&'a str> {
     match (output, error) {
         (Some(out), _) => Ok(out),

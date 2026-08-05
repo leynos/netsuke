@@ -87,6 +87,19 @@ fn write_fake_ninja_script_in_dir(
     Ok((dir, path))
 }
 
+/// Create a fake Ninja that validates the build file path, rooting the
+/// temporary directory beneath `parent` instead of at the top level.
+///
+/// This exists to support the non-UTF-8 parent-directory contract: the
+/// sibling public [`fake_ninja_check_build_file`] instead creates its own
+/// top-level [`TempDir`], whereas this variant nests the temporary directory
+/// inside `parent` via [`tempfile::Builder::tempdir_in`].
+///
+/// # Errors
+///
+/// Returns an error if the temporary directory cannot be created beneath
+/// `parent`, or if the fake script cannot be written or marked executable
+/// (both delegated to `write_fake_ninja_script_in_dir`).
 #[cfg(all(test, unix))]
 pub(crate) fn fake_ninja_check_build_file_in(
     parent: &std::path::Path,

@@ -70,17 +70,22 @@ fn single_file_name(name: &str) -> Result<()> {
 }
 
 /// Mark an existing file as executable by setting its Unix permission bits.
-#[cfg(unix)]
 ///
 /// # Errors
 ///
 /// Returns an error if executable permissions cannot be applied to the path.
+#[cfg(unix)]
 pub fn make_executable(path: &Path) -> Result<()> {
     crate::fs::set_mode(path, 0o755).context("chmod exec stub")?;
     Ok(())
 }
 
 /// No-op on non-Unix platforms, where executability is not a permission bit.
+///
+/// # Errors
+///
+/// Never returns an error; the fallible signature matches the Unix variant so
+/// callers need no platform-specific handling.
 #[cfg(not(unix))]
 pub fn make_executable(_path: &Path) -> Result<()> {
     Ok(())

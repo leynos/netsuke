@@ -23,8 +23,16 @@ fn run_netsuke(
     args: &[&str],
     ninja_env: Option<&Path>,
 ) -> Result<CommandOutput> {
-    let ninja = ninja_env.map(|path| path.to_string_lossy());
-    let run = match ninja.as_deref() {
+    // `NETSUKE_NINJA` is set as a string, so a lossy conversion would silently
+    // point the child at a different executable; fail loudly instead.
+    let ninja = ninja_env
+        .map(|path| {
+            path.to_str().with_context(|| {
+                format!("ninja override path is not valid UTF-8: {}", path.display())
+            })
+        })
+        .transpose()?;
+    let run = match ninja {
         Some(path) => run_netsuke_in_with_env(current_dir, args, &[("NETSUKE_NINJA", path)])?,
         None => run_netsuke_in(current_dir, args)?,
     };

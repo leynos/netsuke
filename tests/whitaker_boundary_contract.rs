@@ -117,6 +117,26 @@ fn exclusion_list(dylint_toml: &str, key: &str) -> Result<Vec<String>> {
         .collect()
 }
 
+/// Collect the package names selected by a Makefile recipe line.
+///
+/// Substring matching cannot tell `--package test_support` apart from
+/// `--package test_support-extra`, nor spot a second selection appended later,
+/// so the line is tokenized and whole arguments are compared. Both the
+/// separated and `--package=value` spellings are recognized, as is the `-p`
+/// short form.
+fn package_selections(line: &str) -> Vec<&str> {
+    let mut tokens = line.split_whitespace();
+    let mut packages = Vec::new();
+    while let Some(token) = tokens.next() {
+        if let Some(value) = token.strip_prefix("--package=") {
+            packages.push(value);
+        } else if token == "--package" || token == "-p" {
+            packages.extend(tokens.next());
+        }
+    }
+    packages
+}
+
 #[test]
 fn lint_whitaker_also_runs_inside_test_support() -> Result<()> {
     let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
@@ -155,12 +175,12 @@ fn lint_whitaker_also_runs_inside_test_support() -> Result<()> {
     ensure!(
         scoped.first().is_some_and(|line| {
             line.contains(r#"DYLINT_TOML="$$(cat dylint.toml)""#)
-                && line.contains("--package test_support")
+                && package_selections(line) == ["test_support"]
                 && line.contains("--no-deps")
         }),
         concat!(
             "the scoped Whitaker invocation must explicitly load ",
-            "test_support/dylint.toml and select only test_support after ",
+            "test_support/dylint.toml and select exactly test_support after ",
             "workspace membership changes Cargo's configuration and package ",
             "roots; found {scoped:?}",
         ),
@@ -177,10 +197,10 @@ fn lint_whitaker_also_runs_inside_test_support() -> Result<()> {
     );
     ensure!(
         root.first().is_some_and(|line| {
-            line.contains("--package netsuke-build") && line.contains("--no-deps")
+            package_selections(line) == ["netsuke-build"] && line.contains("--no-deps")
         }),
         concat!(
-            "the root Whitaker invocation must select only netsuke-build and skip ",
+            "the root Whitaker invocation must select exactly netsuke-build and skip ",
             "dependency checks so test_support loads its own dylint.toml; ",
             "found {root:?}",
         ),

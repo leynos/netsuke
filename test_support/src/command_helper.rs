@@ -211,8 +211,6 @@ mod tests {
     use mockable::MockEnv;
     use std::ffi::OsString;
     #[cfg(unix)]
-    use std::path::PathBuf;
-    #[cfg(unix)]
     use tempfile::tempdir;
 
     #[test]
@@ -268,8 +266,13 @@ mod tests {
             ),
         )
         .context("write configured compiler wrapper")?;
-        let marker = PathBuf::from(format!("{}.invoked", wrapper.display()));
-        let configured = wrapper.into_os_string();
+        // `write_exec_with_content` is a std::path boundary; convert once here so
+        // the sidecar marker stays in camino's UTF-8 domain like the rest of the
+        // helper.
+        let wrapper_path = Utf8PathBuf::from_path_buf(wrapper)
+            .map_err(|path| anyhow::anyhow!("compiler wrapper path is not UTF-8: {path:?}"))?;
+        let marker = Utf8PathBuf::from(format!("{wrapper_path}.invoked"));
+        let configured = OsString::from(wrapper_path.as_str());
         let mut env = MockEnv::new();
         env.expect_os_string()
             .withf(|key| key == "RUSTC")

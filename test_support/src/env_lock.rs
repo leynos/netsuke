@@ -238,6 +238,12 @@ mod tests {
         }
     }
 
+    /// Probes `ENV_LOCK` directly, so it requires per-test process isolation
+    /// (the suite runs under `cargo nextest`, which forks each test). Under a
+    /// thread-parallel runner it would race any other test touching the global
+    /// mutex. The poison flag is cleared before the state is asserted so a
+    /// failing assertion cannot leak process-global poisoning into whatever
+    /// else shares the process.
     #[test]
     fn env_lock_recovers_after_mutex_poisoning() {
         let poisoner = std::thread::spawn(|| {
@@ -246,15 +252,13 @@ mod tests {
         });
 
         assert!(poisoner.join().is_err(), "poisoning thread should panic");
-        assert!(
-            ENV_LOCK.is_poisoned(),
-            "the panic should poison the underlying mutex"
-        );
+        let was_poisoned = ENV_LOCK.is_poisoned();
+        ENV_LOCK.clear_poison();
+        assert!(was_poisoned, "the panic should poison the underlying mutex");
 
         let recovered_guard = EnvLock::acquire();
         assert_current_thread_lock_is_held("recovered EnvLock guard should hold ENV_LOCK");
         drop(recovered_guard);
-        ENV_LOCK.clear_poison();
         assert_current_thread_lock_is_released("recovered ENV_LOCK should be released normally");
     }
 }
