@@ -51,17 +51,25 @@ pub(super) const SHELL_ARGS: &[&str] = &["-c"];
 
 pub(super) const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// Pipe the child's standard input, output, and error streams.
+///
+/// Every command spawned here streams its input and captures both output
+/// streams, so this configuration is shared by all construction sites.
+fn configure_piped_stdio(command: &mut Command) {
+    command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+}
+
 pub(super) fn run_command(
     command: &str,
     input: &[u8],
     context: &CommandContext,
 ) -> Result<StdoutResult, CommandFailure> {
     let mut cmd = Command::new(SHELL);
-    cmd.args(SHELL_ARGS)
-        .arg(command)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    cmd.args(SHELL_ARGS).arg(command);
+    configure_piped_stdio(&mut cmd);
 
     run_child(cmd, input, context, CommandOperation::Shell)
 }
@@ -74,10 +82,8 @@ pub(super) fn run_program(
     context: &CommandContext,
 ) -> Result<StdoutResult, CommandFailure> {
     let mut cmd = Command::new(program);
-    cmd.args(args)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    cmd.args(args);
+    configure_piped_stdio(&mut cmd);
 
     run_child(cmd, input, context, CommandOperation::Program)
 }
