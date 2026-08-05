@@ -250,6 +250,23 @@ fn a_bracket_inside_a_table_string_does_not_end_the_table(#[case] body: &str) ->
     Ok(())
 }
 
+/// A nested array value can open a line with `[` inside a multiline array.
+///
+/// That line is a value, not the next table header, so the scan must continue
+/// past it rather than truncating the table above the key that follows.
+#[rstest]
+// A nested string array before the key.
+#[case("note = [\n[\"decoy\"],\n]\nlocales = [\"en-US\"]\n\n[features]\n")]
+// The same with the nested value unterminated by a comma, as a final element.
+#[case("note = [\n[\"decoy\"]\n]\nlocales = [\"en-US\"]\n\n[features]\n")]
+fn a_nested_array_value_does_not_end_the_table(#[case] body: &str) -> Result<()> {
+    let manifest = format!("{TABLE}{body}");
+    let found = metadata_locales(&manifest)
+        .ok_or_else(|| anyhow!("expected the locales key after the nested array to be found"))?;
+    ensure!(found == ["en-US"], "got {found:?}");
+    Ok(())
+}
+
 #[rstest]
 // No such table.
 #[case("[package]\nname = \"netsuke\"\n")]

@@ -54,7 +54,9 @@ macro both declares the supported tags and embeds each catalogue, so a tag
 without a catalogue on disk fails to compile. Everything downstream reads the
 registry rather than keeping its own list: the build-time audit, the
 `cargo:rerun-if-changed` directives, the packaging smoke test, and the tests —
-with one deliberate exception, described below.
+with two deliberate exceptions, described below: the `locales` array in
+`Cargo.toml`'s `[package.metadata.ortho_config]` table, and
+`EXPECTED_SHIPPED_TAGS` in `tests/locale_registry_tests.rs`.
 
 Two places name the locale list independently of the registry, for different
 reasons. `package.metadata.ortho_config.locales` in `Cargo.toml` duplicates it
@@ -68,8 +70,9 @@ agrees with itself.
 Adding a locale means creating `locales/<tag>/messages.ftl`, adding the tag to
 `define_locales!` in `src/locale_catalogues.rs`, adding it to that `Cargo.toml`
 array, and adding it to `EXPECTED_SHIPPED_TAGS`. When the language already
-ships a catalogue, it also means adding a `LANGUAGE_FALLBACKS` rule to say how
-the two variants divide the regions between them.
+ships one or more catalogues — currently `en`, `es`, `pt`, and `zh` — it also
+means extending its `LANGUAGE_FALLBACKS` rule so every relevant region and
+script, old and new, still resolves deterministically to exactly one variant.
 
 ### Fallback policy
 
@@ -82,13 +85,13 @@ own resolves in this order:
 
 Table 2: Deliberate per-language fallback rules
 
-| Language | Rule                                                                                |
-| -------- | ----------------------------------------------------------------------------------- |
-| `en`     | `en-US` for the bare tag and the United States; `en-GB` for every other region      |
-| `es`     | `es-ES` for the bare tag and Spain; `es-419` for every other region                 |
-| `pt`     | `pt-BR` for Brazil; `pt-PT` for the bare tag and every other region                 |
-| `zh`     | Script wins; otherwise `zh-Hans` for CN, SG and MY, and `zh-Hant` for TW, HK and MO |
-| `no`     | `nb`, the Bokmål catalogue                                                          |
+| Language | Rule                                                                                              |
+| -------- | ------------------------------------------------------------------------------------------------- |
+| `en`     | `en-US` for the bare tag and the United States; `en-GB` for every other region                    |
+| `es`     | `es-ES` for the bare tag and Spain; `es-419` for every other region                               |
+| `pt`     | `pt-BR` for Brazil; `pt-PT` for the bare tag and every other region                               |
+| `zh`     | Script wins; otherwise `zh-Hans` for the bare tag, CN, SG and MY, and `zh-Hant` for TW, HK and MO |
+| `no`     | `nb`, the Bokmål catalogue                                                                        |
 
 These rules exist so that variants which differ in substance stay distinct.
 `es-419` is not a synonym for `es-ES`, `pt-BR` is not a synonym for `pt-PT`, and
@@ -446,8 +449,11 @@ Netsuke validates every registered locale at compile time via
 - **Variable mismatches**: A message interpolating different variables from the
   English source — a dropped `{ $path }` or a stray `{ $name }`
 
-Each condition fails the build with an error naming the locale and the keys
-concerned.
+Catalogue findings — missing keys, orphaned keys, and variable mismatches —
+fail the build with an error naming the affected locale and the keys
+concerned. Metadata drift fails the build with a different message, one that
+prints the two disagreeing lists side by side: the registry's tags and
+`Cargo.toml`'s.
 
 ## 11. Testing translations
 

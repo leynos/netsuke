@@ -51,11 +51,46 @@ fn ortho_config_table(manifest: &str) -> Option<&str> {
 /// further header follows. Scanning `tail` alone is sound because the header
 /// match above already established that the header does not sit inside a
 /// multiline string, so the string state at the start of `tail` is "outside".
+///
+/// A candidate must also read as a header, not merely begin a line: inside a
+/// multiline array a nested value such as `["decoy"],` can open a line too,
+/// and taking it for a header would truncate the table above the keys that
+/// follow it. Scanning continues past such lines.
 fn table_end(tail: &str) -> usize {
     tail.match_indices("\n[")
         .map(|(newline, _)| newline.saturating_add(1))
-        .find(|bracket| begins_a_line(tail, *bracket))
+        .find(|bracket| {
+            begins_a_line(tail, *bracket)
+                && tail
+                    .get(*bracket..)
+                    .and_then(|rest| rest.lines().next())
+                    .is_some_and(is_table_header)
+        })
         .unwrap_or(tail.len())
+}
+
+/// Whether `line` declares a `[table]` or `[[array-of-tables]]` header.
+///
+/// A line-initial bracket is ambiguous in TOML: it may open a header, or a
+/// nested array value inside a multiline array. The two are told apart by
+/// content and tail. A header names a key from the bare-key alphabet and ends
+/// its line after the closing bracket, save for a comment; an array value
+/// carries quotes, commas, or a trailing comma, none of which a header line
+/// may. A lone element like `[123]` that is also a well-formed bare-key header
+/// stays ambiguous and is read as a header, which this manifest's metadata —
+/// string-valued throughout — cannot produce as a value.
+fn is_table_header(line: &str) -> bool {
+    let outer = line.strip_prefix('[').unwrap_or(line);
+    let body = outer.strip_prefix('[').unwrap_or(outer);
+    let Some((name, rest)) = body.split_once(']') else {
+        return false;
+    };
+    let named_bare = !name.trim().is_empty()
+        && name
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.' | ' ' | '\t'));
+    let trailing = rest.trim_start_matches(']').trim();
+    named_bare && (trailing.is_empty() || trailing.starts_with('#'))
 }
 
 /// The table text from the `locales` assignment onwards.

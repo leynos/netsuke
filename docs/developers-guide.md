@@ -90,6 +90,39 @@ diagnostics and progress. Only the second sees a configuration file's `locale`,
 because `--help` must render before Netsuke knows which configuration file to
 read.
 
+### Startup diagnostics buffering
+
+Locale resolution happens before the command line is parsed, so a fallback
+warning can be emitted before the effective diagnostic mode — human or JSON —
+is known, yet the JSON diagnostic document is also written to stderr: an
+eagerly emitted warning could corrupt it. `StartupWriter` in
+`src/startup_tracing.rs` closes that window. It implements
+`tracing_subscriber`'s `MakeWriter` and is installed by `init_tracing` in
+`src/main.rs` before locale resolution runs, so every startup event is held
+rather than written. The buffer is bounded at `MAX_BUFFERED_BYTES` (64 KiB): it
+keeps the earliest bytes, appends a truncation marker once if the bound is
+reached, and drops the remainder, so its size never depends on how much a run
+emits.
+
+`settle_startup_diagnostics` in `src/main.rs` decides where the buffer goes
+once the effective mode is known: human mode releases it to stderr, JSON mode
+discards it so stderr carries only the diagnostic document. In
+`run_with_args`, settlement happens after the JSON mode is resolved but before
+the configuration merge, so a human-mode warning still precedes any
+configuration processing. On the paths where `clap` calls `Error::exit` and
+never returns — `parse_cli_or_exit` — settlement happens first, because
+nothing after that call would otherwise run.
+
+Unit tests in `src/main_tests.rs` drive `startup_filter` and the real
+`startup_localizer` to check the buffered warning and the level it is gated
+by. `tests/startup_diagnostics_tests.rs` runs the built binary end to end,
+including the configuration-driven JSON path, because the behaviour under test
+spans the whole startup sequence and covers paths that terminate inside `clap`
+before returning to `run_with_args`.
+
+**Cross-references:** `docs/netsuke-design.md` §8.4, for the rationale behind
+buffering rather than gating output on the resolved mode.
+
 ### Adding or changing messages
 
 Every user-facing string is a Fluent message keyed from
