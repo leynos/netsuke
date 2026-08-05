@@ -259,35 +259,36 @@ mod tests {
             EnvironmentLayer::new(vec![(key, value)])
         }
 
-        #[test]
-        fn non_utf8_key_is_rejected_with_fixed_text() {
-            let error = layer(invalid_bytes(b"NETSUKE_"), OsString::from("value"))
-                .data()
-                .expect_err("a non-UTF-8 Netsuke key must be rejected");
+        #[rstest::rstest]
+        #[case::key(
+            invalid_bytes(b"NETSUKE_"),
+            OsString::from("value"),
+            NON_UTF8_KEY,
+            "a non-UTF-8 Netsuke key"
+        )]
+        #[case::value(
+            OsString::from("NETSUKE_CMDS__BUILD"),
+            invalid_bytes(b""),
+            NON_UTF8_VALUE,
+            "a non-UTF-8 Netsuke value"
+        )]
+        fn non_utf8_entries_are_rejected_with_fixed_text(
+            #[case] key: OsString,
+            #[case] value: OsString,
+            #[case] expected_message: &str,
+            #[case] case_description: &str,
+        ) {
+            let Err(error) = layer(key, value).data() else {
+                panic!("{case_description} must be rejected");
+            };
 
             assert!(
-                error.to_string().contains(NON_UTF8_KEY),
-                "expected the fixed key rejection text, got {error}"
+                error.to_string().contains(expected_message),
+                "expected the fixed rejection text for {case_description}, got {error}"
             );
             assert!(
                 !error.to_string().contains("s3cr3t-sentinel"),
-                "the rejected key must not appear in the error: {error}"
-            );
-        }
-
-        #[test]
-        fn non_utf8_value_is_rejected_with_fixed_text() {
-            let error = layer(OsString::from("NETSUKE_CMDS__BUILD"), invalid_bytes(b""))
-                .data()
-                .expect_err("a non-UTF-8 Netsuke value must be rejected");
-
-            assert!(
-                error.to_string().contains(NON_UTF8_VALUE),
-                "expected the fixed value rejection text, got {error}"
-            );
-            assert!(
-                !error.to_string().contains("s3cr3t-sentinel"),
-                "the rejected value must not appear in the error: {error}"
+                "the rejected input must not appear in the error for {case_description}: {error}"
             );
         }
 
