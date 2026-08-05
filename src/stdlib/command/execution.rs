@@ -15,6 +15,7 @@ use super::{
     pipes::{cleanup_readers, handle_stdin_result, join_reader, spawn_pipe_reader},
     result::{PipeOutcome, StdoutResult},
 };
+use tracing::field;
 use wait_timeout::ChildExt;
 
 #[cfg(windows)]
@@ -61,6 +62,34 @@ pub(super) fn run_program(
 }
 
 fn run_child(
+    command: Command,
+    input: &[u8],
+    context: &CommandContext,
+) -> Result<StdoutResult, CommandFailure> {
+    let span = tracing::trace_span!(
+        "stdlib.command.run",
+        outcome = field::Empty,
+        error_category = field::Empty,
+    );
+    let _guard = span.enter();
+    let result = run_child_inner(command, input, context);
+    match &result {
+        Ok(_) => {
+            span.record("outcome", "success");
+        }
+        Err(error) => {
+            span.record("outcome", "error");
+            span.record("error_category", error.category());
+            tracing::debug!(
+                error_category = error.category(),
+                "configured child process failed"
+            );
+        }
+    }
+    result
+}
+
+fn run_child_inner(
     mut command: Command,
     input: &[u8],
     context: &CommandContext,

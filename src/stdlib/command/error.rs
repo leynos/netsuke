@@ -49,6 +49,20 @@ pub(super) enum CommandFailure {
     Timeout(Duration),
 }
 
+impl CommandFailure {
+    /// Return the bounded category used for structured diagnostics.
+    pub(super) const fn category(&self) -> &'static str {
+        match self {
+            Self::Spawn(_) => "spawn",
+            Self::Io(_) => "io",
+            Self::BrokenPipe { .. } => "broken_pipe",
+            Self::Exit { .. } => "exit",
+            Self::OutputLimit { .. } => "output_limit",
+            Self::Timeout(_) => "timeout",
+        }
+    }
+}
+
 #[rustfmt::skip]
 impl From<io::Error> for CommandFailure { fn from(err: io::Error) -> Self { Self::Io(err) } }
 

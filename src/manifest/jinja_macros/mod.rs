@@ -92,11 +92,8 @@ pub(crate) fn register_macro(
         })?;
 
     validate_macro(env, &template_name, &name)?;
-    env.add_function(
-        name.clone(),
-        make_macro_fn(template_name.clone(), name.clone()),
-    );
     register_macro_import(env, &template_name, &name);
+    env.add_function(name.clone(), make_macro_fn(template_name, name));
     Ok(())
 }
 

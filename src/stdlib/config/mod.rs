@@ -1,5 +1,7 @@
 //! Configuration types and defaults for wiring the stdlib into `MiniJinja`.
 
+mod ambient;
+
 use super::config_types::HomeDirectory;
 pub use super::config_types::{
     DEFAULT_COMMAND_MAX_OUTPUT_BYTES, DEFAULT_COMMAND_MAX_STREAM_BYTES, DEFAULT_COMMAND_TEMP_DIR,
@@ -8,11 +10,11 @@ pub use super::config_types::{
 };
 use super::{command, network::NetworkPolicy, which::WORKSPACE_SKIP_DIRS};
 use crate::localization::{self, keys};
-use anyhow::{Context, anyhow, bail, ensure};
+use anyhow::{anyhow, bail, ensure};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
-use cap_std::{ambient_authority, fs_utf8::Dir};
+use cap_std::fs_utf8::Dir;
 use indexmap::IndexSet;
-use std::{env, ffi::OsString, num::NonZeroUsize, sync::Arc};
+use std::{ffi::OsString, num::NonZeroUsize, sync::Arc};
 
 /// Configuration for registering Netsuke's standard library helpers.
 #[derive(Debug, Clone)]
@@ -248,6 +250,22 @@ impl StdlibConfig {
     ///
     /// This seam is intended for callers that need deterministic command
     /// resolution without mutating the process-wide environment.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use minijinja::Environment;
+    /// use netsuke::stdlib::{self, StdlibConfig};
+    /// let tools = tempfile::tempdir().expect("create isolated tools directory");
+    /// let config = StdlibConfig::from_current_dir()
+    ///     .expect("open workspace")
+    ///     .with_command_path_override(tools.path().as_os_str());
+    /// let mut env = Environment::new();
+    /// stdlib::register_with_config(&mut env, config).expect("register stdlib");
+    /// // Command filters search only `tools`; this empty directory cannot
+    /// // resolve the platform grep utility.
+    /// assert!(env.render_str("{{ 'line' | grep('line') }}", ()).is_err());
+    /// ```
     #[must_use]
     pub fn with_command_path_override(mut self, path: impl Into<OsString>) -> Self {
         self.command_path_override = Some(path.into());
@@ -258,6 +276,32 @@ impl StdlibConfig {
     ///
     /// `Some(path)` supplies a home directory; `None` models a host without
     /// one. Without this override, registration uses the process environment.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use minijinja::{Environment, ErrorKind};
+    /// use netsuke::stdlib::{self, StdlibConfig};
+    /// let mut explicit_env = Environment::new();
+    /// let explicit = StdlibConfig::from_current_dir()
+    ///     .expect("open workspace")
+    ///     .with_home_override(Some("/srv/example".to_owned()));
+    /// stdlib::register_with_config(&mut explicit_env, explicit).expect("register stdlib");
+    /// let rendered = explicit_env
+    ///     .render_str("{{ '~/work' | expanduser }}", ())
+    ///     .expect("expand explicit home");
+    /// assert_eq!(rendered, "/srv/example/work");
+    ///
+    /// let mut missing_env = Environment::new();
+    /// let missing = StdlibConfig::from_current_dir()
+    ///     .expect("open workspace")
+    ///     .with_home_override(None);
+    /// stdlib::register_with_config(&mut missing_env, missing).expect("register stdlib");
+    /// let error = missing_env
+    ///     .render_str("{{ '~/work' | expanduser }}", ())
+    ///     .expect_err("missing home should reject expansion");
+    /// assert_eq!(error.kind(), ErrorKind::InvalidOperation);
+    /// ```
     #[must_use]
     pub fn with_home_override(mut self, home: Option<String>) -> Self {
         self.home_directory = home.map_or(HomeDirectory::Missing, HomeDirectory::Explicit);
@@ -351,43 +395,6 @@ impl StdlibConfig {
     }
 }
 
-impl StdlibConfig {
-    /// Construct a configuration rooted at the ambient current directory.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the workspace root cannot be opened with
-    /// capability-based I/O, when the current directory cannot be resolved,
-    /// or when the current directory contains non-UTF-8 components.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use netsuke::stdlib::StdlibConfig;
-    /// let config = StdlibConfig::from_current_dir().expect("open workspace at cwd");
-    /// // The configuration is rooted at the process working directory.
-    /// ```
-    pub fn from_current_dir() -> anyhow::Result<Self> {
-        let root = Dir::open_ambient_dir(".", ambient_authority()).context(
-            localization::message(keys::STDLIB_CONFIG_OPEN_WORKSPACE_ROOT),
-        )?;
-        let cwd =
-            env::current_dir().context(localization::message(keys::STDLIB_CONFIG_RESOLVE_CWD))?;
-        let path = Utf8PathBuf::from_path_buf(cwd).map_err(|path| {
-            anyhow!(
-                "{}",
-                localization::message(keys::STDLIB_CONFIG_CWD_NON_UTF8)
-                    .with_arg("path", path.display().to_string())
-            )
-        })?;
-        tracing::debug!(path = %path, "resolved stdlib workspace root from current directory");
-        Self::new(root)
-            .context("default fetch cache path should be valid")?
-            .with_workspace_root_path(path)
-            .context("workspace root must be absolute")
-    }
-}
-
 #[cfg(test)]
-#[path = "config_tests.rs"]
+#[path = "../config_tests.rs"]
 mod tests;

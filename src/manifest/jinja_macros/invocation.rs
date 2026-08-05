@@ -2,10 +2,22 @@
 
 use super::call_macro_value;
 use crate::localization::{self, keys};
+use metrics::{counter, describe_counter, describe_histogram, histogram};
 use minijinja::{
     AutoEscape, Captured, Environment, Error, ErrorKind, State,
     value::{Kwargs, Rest, Value},
 };
+use std::{sync::Once, time::Instant};
+use tracing::field;
+
+const MACRO_INVOCATIONS_TOTAL: &str = "netsuke_manifest_macro_invocations_total";
+const MACRO_INVOCATION_DURATION: &str = "netsuke_manifest_macro_invocation_duration_seconds";
+
+#[derive(Clone, Copy)]
+struct MacroReference<'a> {
+    template_name: &'a str,
+    macro_name: &'a str,
+}
 
 /// Build the global-function fallback used by compiled Jinja expressions.
 ///
@@ -17,22 +29,66 @@ pub(super) fn make_macro_fn(
     template_name: String,
     macro_name: String,
 ) -> impl Fn(&State, Rest<Value>, Kwargs) -> Result<Value, Error> {
+    describe_metrics();
     move |state, Rest(args), macro_kwargs| {
-        let (captured, macro_value) = capture_macro(state.env(), &template_name, &macro_name)?;
-        let maybe_kwargs = collect_kwargs(&macro_kwargs)?;
-        let rendered_value = call_macro_value(
-            captured.state(),
-            &macro_value,
-            args.as_slice(),
-            maybe_kwargs,
-        )?;
-        let rendered: String = rendered_value.into();
-        Ok(if matches!(state.auto_escape(), AutoEscape::None) {
-            Value::from(rendered)
-        } else {
-            Value::from_safe_string(rendered)
-        })
+        let span = tracing::trace_span!(
+            "manifest.macro.invoke",
+            outcome = field::Empty,
+            error_category = field::Empty,
+        );
+        let _guard = span.enter();
+        let started = Instant::now();
+        let reference = MacroReference {
+            template_name: &template_name,
+            macro_name: &macro_name,
+        };
+        let result = invoke_macro(state, args.as_slice(), &macro_kwargs, reference);
+        record_invocation(&span, &result, started);
+        result
     }
+}
+
+fn invoke_macro(
+    state: &State,
+    args: &[Value],
+    macro_kwargs: &Kwargs,
+    reference: MacroReference<'_>,
+) -> Result<Value, Error> {
+    let (captured, macro_value) =
+        capture_macro(state.env(), reference.template_name, reference.macro_name)?;
+    let maybe_kwargs = collect_kwargs(macro_kwargs)?;
+    let rendered_value = call_macro_value(captured.state(), &macro_value, args, maybe_kwargs)?;
+    let rendered: String = rendered_value.into();
+    Ok(if matches!(state.auto_escape(), AutoEscape::None) {
+        Value::from(rendered)
+    } else {
+        Value::from_safe_string(rendered)
+    })
+}
+
+fn describe_metrics() {
+    static DESCRIBE: Once = Once::new();
+    DESCRIBE.call_once(|| {
+        describe_counter!(
+            MACRO_INVOCATIONS_TOTAL,
+            "Counts manifest macro invocation outcomes labelled as success or error."
+        );
+        describe_histogram!(
+            MACRO_INVOCATION_DURATION,
+            "Measures manifest macro invocation duration in seconds."
+        );
+    });
+}
+
+fn record_invocation(span: &tracing::Span, result: &Result<Value, Error>, started: Instant) {
+    let outcome = if result.is_ok() { "success" } else { "error" };
+    span.record("outcome", outcome);
+    if let Err(error) = result {
+        span.record("error_category", format_args!("{:?}", error.kind()));
+        tracing::debug!(error_category = ?error.kind(), "manifest macro invocation failed");
+    }
+    counter!(MACRO_INVOCATIONS_TOTAL, "outcome" => outcome).increment(1);
+    histogram!(MACRO_INVOCATION_DURATION).record(started.elapsed());
 }
 
 /// Confirm that a compiled template exports the requested macro.

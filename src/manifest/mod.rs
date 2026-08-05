@@ -180,19 +180,29 @@ pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
 ///
 /// # Examples
 ///
-/// ```rust
-/// use netsuke::manifest::{EnvReader, from_str_with_env};
+/// ```
+/// use netsuke::{
+///     ast::Recipe,
+///     manifest::{EnvReadError, EnvReader, from_str_with_env},
+/// };
 /// use std::sync::Arc;
 ///
-/// let reader: EnvReader = Arc::new(|_| Ok(String::from("release")));
+/// let reader: EnvReader = Arc::new(|name| match name {
+///     "PROFILE" => Ok("release".to_owned()),
+///     _ => Err(EnvReadError::NotPresent),
+/// });
 /// let yaml = concat!(
-///     "netsuke_version: \"1.0.0\"\n",
+///     "netsuke_version: 1.0.0\n",
 ///     "targets:\n",
-///     "  - name: \"{{ env('PROFILE') }}\"\n",
-///     "    command: echo hi\n",
+///     "  - name: build\n",
+///     "    command: echo {{ env('PROFILE') }}\n",
 /// );
-/// let manifest = from_str_with_env(yaml, &reader).expect("parse");
-/// assert!(format!("{:?}", manifest.targets[0].name).contains("release"));
+/// let manifest = from_str_with_env(yaml, &reader).expect("parse manifest");
+///
+/// assert!(matches!(
+///     &manifest.targets[0].recipe,
+///     Recipe::Command { command } if command == "echo release"
+/// ));
 /// ```
 pub fn from_str_with_env(yaml: &str, env_reader: &EnvReader) -> Result<NetsukeManifest> {
     from_str_named(
@@ -250,6 +260,36 @@ pub fn from_path_with_policy(
 /// # Errors
 ///
 /// Returns an error if the manifest cannot be read, rendered, or parsed.
+///
+/// # Examples
+///
+/// ```
+/// use netsuke::{
+///     ast::Recipe,
+///     manifest::{EnvReadError, EnvReader, from_path_with_policy_and_env},
+///     stdlib::NetworkPolicy,
+/// };
+/// use std::{io::Write, sync::Arc};
+///
+/// let mut file = tempfile::NamedTempFile::new().expect("create manifest");
+/// write!(
+///     file,
+///     "netsuke_version: 1.0.0\ntargets:\n  - name: build\n    command: echo {{{{ env('PROFILE') }}}}\n"
+/// )
+/// .expect("write manifest");
+/// let reader: EnvReader = Arc::new(|name| match name {
+///     "PROFILE" => Ok("offline".to_owned()),
+///     _ => Err(EnvReadError::NotPresent),
+/// });
+/// let policy = NetworkPolicy::default().deny_all_hosts();
+/// let manifest = from_path_with_policy_and_env(file.path(), policy, &reader, None)
+///     .expect("load manifest without network access");
+///
+/// assert!(matches!(
+///     &manifest.targets[0].recipe,
+///     Recipe::Command { command } if command == "echo offline"
+/// ));
+/// ```
 pub fn from_path_with_policy_and_env(
     path: impl AsRef<Path>,
     policy: NetworkPolicy,
