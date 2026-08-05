@@ -1124,9 +1124,8 @@ Cargo home plus Kani support-file home.
   `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)"`.
   This preserves flags inherited from the caller and restores Polonius while
   denying warnings. nextest cannot execute doctests, so they need their own
-  pass. Note that the previous `cargo test --all-targets` invocation never ran
-  doctests either; the separate target is what makes a broken documentation
-  example fail the gate.
+  pass; the separate target is what makes a broken documentation example fail
+  the gate.
 
 If either pass fails, `make test` fails. Run the individual targets when
 iterating, but treat `make test` as the gate.
