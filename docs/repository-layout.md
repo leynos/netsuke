@@ -77,7 +77,7 @@ output and some leaf files so the long-lived structure remains visible.
   [translator guide](translators-guide.md).
 - `scripts/`: Shell and helper scripts used by quality gates, release help
   generation, packaging, and formal checks.
-- `src/`: Main Netsuke Rust crate source code.
+- `src/`: Main `netsuke-build` Rust package source code.
 - `src/cli/`: Command-line configuration, parsing, validation, and merge logic.
 - `src/ir/`: Intermediate representation generation, interpolation, graph, and
   cycle logic.
@@ -121,6 +121,14 @@ that users or operators need to understand,
 Place new production Rust modules under the `src/` subtree that owns the
 feature boundary. Use `test_support/` for reusable integration-test helpers and
 keep one-off fixtures close to the tests that consume them.
+
+The crates.io package is named `netsuke-build`, while its library and binary
+targets remain named `netsuke`. Keep command-line help, manual pages, release
+artefacts, and operating-system packages aligned with the `netsuke` target name
+rather than the Cargo package name.
+[ADR-007](adr-007-publish-as-netsuke-build.md) records the decision, and the
+[developer guide](developers-guide.md) describes how the build script, release
+packaging, and `cargo binstall` metadata honour it.
 
 Place feature files in `tests/features/` unless the behaviour depends on
 Unix-specific platform contracts, in which case use `tests/features_unix/`.

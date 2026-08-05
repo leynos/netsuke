@@ -38,7 +38,13 @@ fn required_catalogue_paths() -> Vec<String> {
 fn packaged_manifest_retains_build_script_sources() {
     let cargo_binary = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let publish_output = Command::new(&cargo_binary)
-        .args(["publish", "--dry-run", "--allow-dirty", "-p", "netsuke"])
+        .args([
+            "publish",
+            "--dry-run",
+            "--allow-dirty",
+            "-p",
+            "netsuke-build",
+        ])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
         .unwrap_or_else(|error| panic!("run cargo publish --dry-run: {error}"));
@@ -50,7 +56,7 @@ fn packaged_manifest_retains_build_script_sources() {
     );
 
     let list_output = Command::new(cargo_binary)
-        .args(["package", "--list", "--allow-dirty", "-p", "netsuke"])
+        .args(["package", "--list", "--allow-dirty", "-p", "netsuke-build"])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
         .unwrap_or_else(|error| panic!("run cargo package --list: {error}"));

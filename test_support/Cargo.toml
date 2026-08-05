@@ -17,7 +17,7 @@ sha2 = { version = "0.11", default-features = false, features = ["alloc"] }
 anyhow = "1"
 thiserror = "1"
 assert_cmd = "2.0.0"
-netsuke = { path = ".." }
+netsuke = { package = "netsuke-build", path = ".." }
 rstest = "0.26.1"
 
 [dev-dependencies]

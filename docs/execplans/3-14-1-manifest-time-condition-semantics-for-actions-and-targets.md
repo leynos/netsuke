@@ -496,7 +496,7 @@ exit status 0
 make nixie
 exit status 0
 
-cargo test -p netsuke manifest::expand
+cargo test -p netsuke-build manifest::expand
 29 passed; 0 failed
 
 make check-fmt

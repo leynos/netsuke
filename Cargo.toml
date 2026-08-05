@@ -1,5 +1,5 @@
 [package]
-name = "netsuke"
+name = "netsuke-build"
 version = "0.1.0"
 edition = "2024"
 include = [
@@ -19,6 +19,13 @@ homepage = "https://github.com/leynos/netsuke"
 repository = "https://github.com/leynos/netsuke"
 keywords = ["build", "ninja", "jinja", "yaml", "automation"]
 categories = ["command-line-utilities", "development-tools::build-utils"]
+
+[lib]
+name = "netsuke"
+
+[[bin]]
+name = "netsuke"
+path = "src/main.rs"
 
 [package.metadata.ortho_config]
 root_type = "netsuke::cli::CliConfig"
@@ -62,6 +69,38 @@ locales   = [
 
 [package.metadata.kani.flags]
 default-unwind = "6"
+
+# `cargo binstall` derives release asset names from the Cargo package name,
+# which is `netsuke-build`. Every release asset is named after the `netsuke`
+# binary instead, so the defaults would never match and `cargo binstall
+# netsuke-build` would fall back to a source build on the pinned nightly.
+#
+# Release assets are unarchived binaries (`pkg-fmt = "bin"`) whose names are
+# built by `.github/workflows/release.yml` and
+# `.github/actions/upload-release-assets`: the workflow artefact name, then
+# `__`, then the staging directory from `.github/release-staging.toml`
+# (`{bin_name}_{platform}_{arch}`), then `-`, then the staged file name.
+# `tests/binstall_metadata_tests.rs` holds these overrides to that contract.
+[package.metadata.binstall]
+pkg-fmt = "bin"
+
+[package.metadata.binstall.overrides.x86_64-unknown-linux-gnu]
+pkg-url = "{ repo }/releases/download/v{ version }/netsuke-linux-amd64__netsuke_linux_x86_64-netsuke"
+
+[package.metadata.binstall.overrides.aarch64-unknown-linux-gnu]
+pkg-url = "{ repo }/releases/download/v{ version }/netsuke-linux-arm64__netsuke_linux_aarch64-netsuke"
+
+[package.metadata.binstall.overrides.x86_64-apple-darwin]
+pkg-url = "{ repo }/releases/download/v{ version }/netsuke-macos-x86_64__netsuke_macos_x86_64-netsuke"
+
+[package.metadata.binstall.overrides.aarch64-apple-darwin]
+pkg-url = "{ repo }/releases/download/v{ version }/netsuke-macos-arm64__netsuke_macos_aarch64-netsuke"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-url = "{ repo }/releases/download/v{ version }/netsuke-windows-amd64__netsuke_windows_x86_64-netsuke.exe"
+
+[package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
+pkg-url = "{ repo }/releases/download/v{ version }/netsuke-windows-arm64__netsuke_windows_aarch64-netsuke.exe"
 
 [features]
 default = []

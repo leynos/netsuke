@@ -1141,7 +1141,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "netsuke"
+name = "netsuke-build"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -2082,7 +2082,7 @@ dependencies = [
  "camino",
  "cap-std",
  "mockable",
- "netsuke",
+ "netsuke-build",
  "proptest",
  "rstest",
  "sha2",

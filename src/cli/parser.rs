@@ -80,7 +80,7 @@ pub(super) fn validation_message(
 
 /// A modern, friendly build system that uses YAML and Jinja, powered by Ninja.
 #[derive(Debug, Parser, Serialize, Deserialize)]
-#[command(author, version, about, long_about = None)]
+#[command(name = "netsuke", author, version, about, long_about = None)]
 pub struct Cli {
     /// Path to the Netsuke manifest file to use.
     #[arg(

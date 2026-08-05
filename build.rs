@@ -145,8 +145,6 @@ fn emit_rerun_directives() {
     println!("cargo:rerun-if-changed=src/cli/parser.rs");
     println!("cargo:rerun-if-changed=src/cli/parsing.rs");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_VERSION");
-    println!("cargo:rerun-if-env-changed=CARGO_PKG_NAME");
-    println!("cargo:rerun-if-env-changed=CARGO_BIN_NAME");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_DESCRIPTION");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_AUTHORS");
     println!("cargo:rerun-if-env-changed=SOURCE_DATE_EPOCH");
@@ -167,7 +165,7 @@ fn emit_rerun_directives() {
 
 #[expect(
     clippy::disallowed_methods,
-    reason = "CARGO_BIN_NAME, CARGO_PKG_NAME, CARGO_PKG_VERSION and OUT_DIR are Cargo's own build-script inputs; they describe the crate being compiled and Cargo provides them only through the environment"
+    reason = "CARGO_PKG_VERSION and OUT_DIR are Cargo's own build-script inputs; they describe the crate being compiled and Cargo provides them only through the environment"
 )]
 fn generate_man_page(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let cmd = cli::Cli::command();
@@ -175,26 +173,24 @@ fn generate_man_page(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
         .get_bin_name()
         .unwrap_or_else(|| cmd.get_name())
         .to_owned();
-    let cargo_bin = env::var("CARGO_BIN_NAME")
-        .or_else(|_| env::var("CARGO_PKG_NAME"))
-        .unwrap_or_else(|_| name.clone());
-    if name != cargo_bin {
-        return Err(format!(
-            "CLI name {name} differs from Cargo bin/package name {cargo_bin}; packaging expects {cargo_bin}.1"
-        )
-        .into());
-    }
     let version = env::var("CARGO_PKG_VERSION").map_err(
         |_| "CARGO_PKG_VERSION must be set by Cargo; cannot render manual page without it.",
     )?;
     let man = Man::new(cmd)
         .section("1")
-        .source(format!("{cargo_bin} {version}"))
+        .source(format!("{name} {version}"))
         .date(manual_date());
     let mut buf = Vec::new();
     man.render(&mut buf)?;
-    let page_name = format!("{cargo_bin}.1");
-    write_man_page(&buf, out_dir, &page_name)?;
+    let page_name = format!("{name}.1");
+    let destination = write_man_page(&buf, out_dir, &page_name)?;
+    // Publish the destination so the crate's tests can assert the manual page
+    // contract (name, location, and `.TH` source) without re-deriving where the
+    // build script chose to write it.
+    println!(
+        "cargo:rustc-env=NETSUKE_GENERATED_MAN_PAGE={}",
+        destination.display()
+    );
     if let Some(extra_dir) = env::var_os("OUT_DIR") {
         let extra_dir_path = PathBuf::from(extra_dir);
         if let Err(err) = write_man_page(&buf, &extra_dir_path, &page_name) {

@@ -192,6 +192,44 @@ they are per-invocation arguments tagged `#[serde(skip)]` on
 would silently change the artefact destination — a footgun the design avoids by
 construction.
 
+## Package and target naming
+
+The crates.io package is `netsuke-build`; the library target, the binary
+target, and the command are all `netsuke`. The names diverge because `netsuke`
+is taken on crates.io. [ADR-007](adr-007-publish-as-netsuke-build.md) records
+the decision and [repository layout](repository-layout.md) states the rule.
+
+The practical consequence is that **no user-facing name may be derived from
+Cargo package metadata**. Derive from the command-line interface (CLI) name, or
+from the `bin-name` field that
+`leynos/shared-actions/.github/actions/export-cargo-metadata` reads out of
+`[[bin]]`:
+
+- `build.rs` names the manual page `<CLI name>.1` and stamps its `.TH` source
+  as `<CLI name> <version>`, taking the name from `Cli::command()`. It reads
+  neither `CARGO_PKG_NAME` nor `CARGO_BIN_NAME`. The build script publishes the
+  path it wrote through `cargo:rustc-env=NETSUKE_GENERATED_MAN_PAGE`, and
+  `tests/man_page_contract_tests.rs` asserts the file is `netsuke.1`, is staged
+  under `target/generated-man/<target>/<profile>/`, and carries a title that
+  never mentions `netsuke-build`.
+- Release packaging takes `bin-name` from the `metadata` job in
+  `.github/workflows/release.yml`, so `.github/release-staging.toml`, the
+  Debian and RPM payloads, the Windows Installer product, and the macOS
+  installer package all stay named `netsuke`.
+- `[package.metadata.binstall]` in `Cargo.toml` overrides `cargo binstall`'s
+  default asset resolution, which would otherwise look for `netsuke-build`
+  assets and fall back to a source build on the pinned nightly. The overrides
+  spell out one unarchived (`pkg-fmt = "bin"`) asset per released target;
+  `tests/binstall_metadata_tests.rs` rebuilds the expected names from
+  `.github/release-staging.toml` and checks the target set against the release
+  workflow matrix.
+
+Only the two registry installation commands name `netsuke-build`, and
+`tests/documentation_examples_tests.rs` pins both. When adding a release
+target, a packaging format, or an artefact name, update the `binstall`
+overrides and the artefact-name table in `tests/binstall_metadata_tests.rs`
+alongside the workflow.
+
 ## Toolchain and borrow checker
 
 Netsuke builds on the dated nightly toolchain pinned in `rust-toolchain.toml`
@@ -1170,6 +1208,12 @@ build-script sources, including the `build_l10n_audit/` modules, and rejects
 stale `ninja_env/` paths. It also asserts that every catalogue named by the
 locale registry ships in the package, so adding a locale cannot silently omit
 its `messages.ftl` from a release.
+
+`tests/man_page_contract_tests.rs` and `tests/binstall_metadata_tests.rs` guard
+the package-versus-target naming split described in
+[package and target naming](#package-and-target-naming). The first asserts the
+manual page `build.rs` generates, the second holds the `cargo binstall`
+overrides to the release staging configuration and workflow matrix.
 
 ### Temporary executable test helpers
 

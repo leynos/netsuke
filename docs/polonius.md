@@ -122,10 +122,10 @@ flag or avoid compiling the crate:
   coverage inherits the flag from the job environment.
 - **Registry installs**: the crates.io package excludes
   `rust-toolchain.toml` and `.cargo/config.toml`, and registry builds run
-  outside the checkout, so `cargo install netsuke` must select the pinned
+  outside the checkout, so `cargo install netsuke-build` must select the pinned
   nightly and pass the flag explicitly
-  (`RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke`). The
-  README and users' guide document the command and
+  (`RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke-build`).
+  The README and users' guide document the command and
   `tests/documentation_examples_tests.rs` pins it.
 - **cargo-mutants** (scheduled, informational) runs through the shared
   `mutation-cargo.yml` workflow, which controls its own environment; if those

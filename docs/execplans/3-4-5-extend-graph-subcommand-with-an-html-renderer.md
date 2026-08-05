@@ -560,7 +560,7 @@ will consume. No user-visible behaviour change. Pure scaffolding.
 
 6. **Stage A acceptance**:
 
-   - `cargo test -p netsuke graph_view::tests` passes.
+   - `cargo test -p netsuke-build graph_view::tests` passes.
    - The proptest covers at least 256 cases with shrinking and reports no
      failures over 60 seconds.
    - No public behaviour change visible to existing tests.

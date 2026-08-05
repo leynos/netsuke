@@ -8,7 +8,7 @@ minutes.
 Before beginning, ensure the following are available:
 
 - **Netsuke** installed — install a prebuilt release binary with
-  `cargo binstall netsuke` where
+  `cargo binstall netsuke-build` where
   [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) is
   available, install from source inside a repository checkout with
   `cargo install --path .` (which puts `netsuke` on `PATH` for the commands
