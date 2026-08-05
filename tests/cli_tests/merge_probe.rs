@@ -12,6 +12,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
+use tempfile::TempDir;
 use test_support::fs as test_fs;
 
 const ARGS_ENV: &str = "NETSUKE_TEST_MERGE_PROBE_ARGS";
@@ -27,20 +28,29 @@ struct ProbeResult {
 }
 
 /// Build the baseline environment for an isolated configuration probe.
+///
+/// # Errors
+///
+/// Returns an error if the empty system-configuration directory cannot be
+/// created.
 pub(super) fn isolated_environment(
     home: &Path,
     overrides: &[(OsString, OsString)],
-) -> Vec<(OsString, OsString)> {
+) -> Result<(TempDir, Vec<(OsString, OsString)>)> {
+    let xdg_config_dirs = tempfile::tempdir().context("create empty XDG_CONFIG_DIRS")?;
     let mut environment = vec![
         (OsString::from("HOME"), home.as_os_str().to_owned()),
         (
             OsString::from("XDG_CONFIG_HOME"),
             home.join(".config").into_os_string(),
         ),
-        (OsString::from("XDG_CONFIG_DIRS"), OsString::new()),
+        (
+            OsString::from("XDG_CONFIG_DIRS"),
+            xdg_config_dirs.path().as_os_str().to_owned(),
+        ),
     ];
     environment.extend_from_slice(overrides);
-    environment
+    Ok((xdg_config_dirs, environment))
 }
 
 /// Merge configuration in an isolated process with the supplied environment.

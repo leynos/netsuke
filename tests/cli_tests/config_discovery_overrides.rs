@@ -15,7 +15,7 @@ fn merge_in_project(
     project: &std::path::Path,
     extra_environment: &[(OsString, OsString)],
 ) -> Result<netsuke::cli::Cli> {
-    let environment = isolated_environment(project, extra_environment);
+    let (_xdg_config_dirs, environment) = isolated_environment(project, extra_environment)?;
     merge_in_child(args, project, &environment)
 }
 

@@ -60,7 +60,8 @@ impl ConfigTestHarness {
         args: &[&str],
         extra_environment: &[(OsString, OsString)],
     ) -> Result<netsuke::cli::Cli> {
-        let environment = isolated_environment(self.home.path(), extra_environment);
+        let (_xdg_config_dirs, environment) =
+            isolated_environment(self.home.path(), extra_environment)?;
         merge_in_child(args, self.project.path(), &environment)
     }
 }

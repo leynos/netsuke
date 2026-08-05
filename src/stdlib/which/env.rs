@@ -133,7 +133,7 @@ fn capture_common(
     let raw_path = path_override
         .map(OsString::from)
         .or_else(|| env.os_string("PATH"));
-    let entries = parse_path_entries(raw_path.clone(), &cwd)?;
+    let entries = parse_path_entries(raw_path.as_deref(), &cwd)?;
     Ok((cwd, raw_path, entries))
 }
 
@@ -143,15 +143,12 @@ enum PathEntry {
     CurrentDir,
 }
 
-fn parse_path_entries(
-    raw: Option<OsString>,
-    cwd: &Utf8Path,
-) -> Result<Vec<PathEntry>, ResolveError> {
+fn parse_path_entries(raw: Option<&OsStr>, cwd: &Utf8Path) -> Result<Vec<PathEntry>, ResolveError> {
     let mut entries = Vec::new();
     let Some(raw_value) = raw else {
         return Ok(entries);
     };
-    for (index, component) in std::env::split_paths(&raw_value).enumerate() {
+    for (index, component) in std::env::split_paths(raw_value).enumerate() {
         if component.as_os_str().is_empty() {
             entries.push(PathEntry::CurrentDir);
             continue;
@@ -252,5 +249,32 @@ mod tests {
             snapshot.resolved_dirs(CwdMode::Never),
             [Utf8Path::new("/configured/bin")]
         );
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    //! Windows-specific injected `PATH` and `PATHEXT` capture tests.
+
+    use super::*;
+    use mockable::MockEnv;
+
+    #[test]
+    fn capture_uses_injected_and_normalized_pathext() {
+        let mut env = MockEnv::new();
+        env.expect_os_string()
+            .withf(|key| key == "PATH")
+            .once()
+            .return_once(|_| Some(OsString::from(r"C:\configured\bin")));
+        env.expect_os_string()
+            .withf(|key| key == "PATHEXT")
+            .once()
+            .return_once(|_| Some(OsString::from(".EXE;exe; CMD ;.cmd")));
+
+        let snapshot =
+            EnvSnapshot::capture_with_env(Some(Utf8Path::new("C:/workspace")), None, &env)
+                .expect("injected PATH and PATHEXT should produce an environment snapshot");
+
+        assert_eq!(snapshot.pathext(), [".exe", ".cmd"]);
     }
 }

@@ -16,7 +16,7 @@ fn run_scope_scenario(
     home: &Path,
     overrides: &[(OsString, OsString)],
 ) -> Result<netsuke::cli::Cli> {
-    let environment = isolated_environment(home, overrides);
+    let (_xdg_config_dirs, environment) = isolated_environment(home, overrides)?;
     merge_in_child(&["netsuke"], project, &environment)
 }
 

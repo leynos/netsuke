@@ -12,9 +12,21 @@ use test_support::{
 };
 
 fn reader_yielding(result: Result<String, EnvReadError>) -> EnvReader {
-    Arc::new(move |_| result.clone())
+    Arc::new(move |key| {
+        if key == "PROFILE" {
+            result.clone()
+        } else {
+            Err(EnvReadError::NotPresent)
+        }
+    })
 }
 
+#[test]
+fn reader_yielding_rejects_unexpected_keys() {
+    let reader = reader_yielding(Ok(String::from("value")));
+
+    assert_eq!(reader("WRONG_KEY"), Err(EnvReadError::NotPresent));
+}
 fn rendered_command(value: Result<String, EnvReadError>) -> Result<String> {
     let yaml =
         manifest_yaml("targets:\n  - name: hello\n    command: \"echo {{ env('PROFILE') }}\"\n");

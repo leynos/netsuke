@@ -63,12 +63,14 @@ fn insert_nested(target: &mut Dict, components: &[String], value: Value) -> Resu
         return Ok(());
     };
     if tail.is_empty() {
-        if target
-            .get(head)
-            .is_some_and(|existing| matches!(existing, Value::Dict(..)))
-        {
+        if let Some(existing) = target.get(head) {
+            let conflict = if matches!(existing, Value::Dict(..)) {
+                "a nested configuration key"
+            } else {
+                "an existing scalar configuration key"
+            };
             return Err(format!(
-                "environment key `{}` conflicts with a nested configuration key",
+                "environment key `{}` conflicts with {conflict}",
                 components.join("__")
             ));
         }
@@ -92,6 +94,7 @@ mod tests {
     //! Unit tests for nested environment-layer construction and conflicts.
 
     use super::*;
+    use proptest::prelude::*;
 
     fn layer(entries: &[(&str, &str)]) -> EnvironmentLayer {
         EnvironmentLayer::new(
@@ -143,5 +146,76 @@ mod tests {
         .data()
         .expect_err("a nested key must conflict with a scalar parent");
         assert!(error.to_string().contains("nested configuration key"));
+    }
+
+    #[test]
+    fn provider_rejects_aliases_of_an_existing_scalar_key() {
+        let aliases = [
+            ("NETSUKE_CMDS__BUILD", "NETSUKE_CMDS____BUILD"),
+            ("netsuke_cmds__build", " NETSUKE_CMDS__ BUILD "),
+        ];
+
+        for (first, alias) in aliases {
+            let error = layer(&[(first, "first"), (alias, "second")])
+                .data()
+                .expect_err("normalized scalar aliases must conflict");
+            assert!(
+                error
+                    .to_string()
+                    .contains("existing scalar configuration key"),
+                "normalized alias conflict should identify an existing scalar: {error}"
+            );
+        }
+    }
+
+    fn component(name: &str, uppercase: bool, whitespace: &str) -> String {
+        let normalized_case = if uppercase {
+            name.to_ascii_uppercase()
+        } else {
+            name.to_ascii_lowercase()
+        };
+        format!("{whitespace}{normalized_case}{whitespace}")
+    }
+
+    proptest! {
+        #[test]
+        fn normalized_scalar_aliases_never_replace_existing_values(
+            prefix_uppercase in any::<bool>(),
+            cmds_uppercase in any::<bool>(),
+            build_uppercase in any::<bool>(),
+            whitespace in "[ \\t]{0,2}",
+            separator in prop::sample::select(vec!["__", "____", "______"]),
+            reverse_order in any::<bool>(),
+        ) {
+            let prefix = component("netsuke_", prefix_uppercase, "");
+            let cmds = component("cmds", cmds_uppercase, &whitespace);
+            let build = component("build", build_uppercase, &whitespace);
+            let canonical = String::from("NETSUKE_CMDS__BUILD");
+            let alias = format!("{whitespace}{prefix}{cmds}{separator}{build}{whitespace}");
+            let entries = if reverse_order {
+                [(alias.as_str(), "alias"), (canonical.as_str(), "canonical")]
+            } else {
+                [(canonical.as_str(), "canonical"), (alias.as_str(), "alias")]
+            };
+
+            prop_assert!(layer(&entries).data().is_err());
+        }
+
+        #[test]
+        fn scalar_and_nested_keys_conflict_in_either_order(reverse_order in any::<bool>()) {
+            let entries = if reverse_order {
+                [
+                    ("NETSUKE_CMDS__BUILD__TARGETS", "all"),
+                    ("NETSUKE_CMDS__BUILD", "scalar"),
+                ]
+            } else {
+                [
+                    ("NETSUKE_CMDS__BUILD", "scalar"),
+                    ("NETSUKE_CMDS__BUILD__TARGETS", "all"),
+                ]
+            };
+
+            prop_assert!(layer(&entries).data().is_err());
+        }
     }
 }
