@@ -710,11 +710,23 @@ fn behavioural_nextest_config_binds_the_env_binaries_to_the_serial_env_group() -
         .filter(|entry| entry.get("test-group").and_then(Value::as_str) == Some("serial-env"))
         .find_map(|entry| entry.get("filter").and_then(Value::as_str))
         .context("an override should assign the serial-env group with a filter")?;
-    for binary in ["manifest_env_tests", "ninja_env_tests", "env_path_tests"] {
-        ensure!(
-            filter.contains(&format!("binary({binary})")),
-            "the serial-env override should cover {binary}, found filter {filter:?}"
-        );
-    }
+    // Exact membership, not merely presence. Checking only that the expected
+    // binaries appear would let a third join the group unnoticed, silently
+    // serializing tests that need not be — and would leave the developers'
+    // guide's "exactly two" claim unenforced. Equally, a binary that stops
+    // mutating process state must leave, or the configuration outlives the
+    // constraint it describes; `manifest_env_tests` did exactly that when it
+    // moved to an injected reader.
+    let mut members: Vec<&str> = filter
+        .split("binary(")
+        .skip(1)
+        .filter_map(|rest| rest.split(')').next())
+        .collect();
+    members.sort_unstable();
+    ensure!(
+        members == ["env_path_tests", "ninja_env_tests"],
+        "serial-env should cover exactly the two PATH- and NINJA_ENV-mutating \
+         binaries; found {members:?} in filter {filter:?}"
+    );
     Ok(())
 }

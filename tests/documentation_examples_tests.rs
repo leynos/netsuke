@@ -23,6 +23,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-command-available-manifest",
     "guide-complete-manifest",
     "guide-crates-io-install",
+    "guide-env-reader-snippet",
     "guide-first-build-commands",
     "guide-first-build-manifest",
     "guide-foreach-manifest",
@@ -51,6 +52,26 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "stdlib-yaml-syntax-manifest",
 ];
 
+/// The guide's env-reader snippet must stay in step with the API it mirrors.
+///
+/// The snippet is Rust and is executed as the doctest on `from_str_with_env`;
+/// this pins the guide copy to the same entry points so the two cannot drift
+/// silently.
+#[test]
+fn env_reader_snippet_mirrors_the_doctest() -> Result<()> {
+    let example = documented_example("guide-env-reader-snippet")?;
+    ensure!(
+        example.language == "rust",
+        "the env-reader snippet should be a Rust fence"
+    );
+    for needle in ["from_str_with_env", "EnvReader", "env('PROFILE')"] {
+        ensure!(
+            example.body.contains(needle),
+            "the env-reader snippet should mention {needle}"
+        );
+    }
+    Ok(())
+}
 fn assert_default_edges_exist(ninja: &str, context: &str) -> Result<()> {
     for default in ninja
         .lines()

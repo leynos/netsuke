@@ -32,5 +32,5 @@ slow-timeout = { period = "60s", terminate-after = 5 }
 serial-env = { max-threads = 1 }
 
 [[profile.default.overrides]]
-filter = 'binary(manifest_env_tests) | binary(ninja_env_tests) | binary(env_path_tests)'
+filter = 'binary(ninja_env_tests) | binary(env_path_tests)'
 test-group = 'serial-env'

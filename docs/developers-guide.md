@@ -1137,10 +1137,11 @@ variables rather than reinterpreting one as the other.
 The runner is configured by `.config/nextest.toml` at the workspace root. It
 governs the non-doctest pass only, and deliberately stays small:
 
-- **`serial-env` test group** (`max-threads = 1`) covering exactly three
-  binaries: `manifest_env_tests`, `ninja_env_tests`, and `env_path_tests`.
-  These mutate process-global environment state — `PATH`, `NINJA_ENV`, and ad
-  hoc `NETSUKE_*` variables. Every other test remains fully parallel.
+- **`serial-env` test group** (`max-threads = 1`) covering exactly two
+  binaries: `ninja_env_tests` and `env_path_tests`. These mutate process-global
+  environment state — `PATH` and `NINJA_ENV`. Every other test remains fully
+  parallel. `manifest_env_tests` was a member until it moved to an injected
+  reader; it mutates nothing now, so it runs parallel with the rest.
 - **No blanket retries.** A test that fails intermittently is a defect to
   diagnose. Add a targeted override with a written rationale only when a
   genuine external-resource constraint requires one.
@@ -1154,8 +1155,13 @@ nextest runs each test in its own process, so environment and working-directory
 mutations cannot leak between tests the way they can under the threaded
 in-process harness. The `EnvLock`, `EnvVarGuard`, and `CwdGuard` utilities
 described in [Test isolation utilities](#test-isolation-utilities), and the
-`#[serial]` markers on the tests in the three binaries above, remain necessary
+`#[serial]` markers on the tests in the two binaries above, remain necessary
 because the coverage workflow still drives an in-process runner.
+
+They are needed only for binaries that still mutate process-global state. A
+binary migrated to an injected seam should leave the group and drop its
+`#[serial]` markers in the same change, so the configuration does not outlive
+the constraint it describes.
 
 The `serial-env` group is therefore not load-bearing for the tests that exist
 today; it states the serialization contract once so both runners agree, and so
@@ -1637,6 +1643,47 @@ localizer guard and records, at the instant restoration begins, whether the
 lock is still held; `try_lock` from the owning thread returns `WouldBlock`, so
 "blocked" means the bundle still holds it. Reverting the field order turns that
 assertion red deterministically.
+
+### Manifest `env()` reader
+
+The `env()` Jinja helper reads through an injected [`EnvReader`], a shared
+`Fn(&str) -> Result<String, VarError>`. `minijinja` requires registered
+functions to be `Send + Sync`, so the reader is an `Arc` captured by the
+registered closure rather than a borrowed parameter.
+
+`manifest::from_str` supplies `process_env_reader()`; `from_str_with_env` takes
+one explicitly, so a test can drive the **real registration path** — the same
+`Environment`, the same `add_function("env", ..)` call — without touching the
+process.
+
+#### Ownership and permitted call sites
+
+- The caller owns the reader. `from_str` constructs `process_env_reader()`
+  and `from_str_with_env` borrows the caller's reader; both pass it to
+  `from_str_named`, which receives it as `&EnvReader` and `Arc::clone`s it
+  into the registered closure, so the closure co-owns the `Arc` alongside the
+  caller. `from_str_named` remains the only place the `env()` function is
+  registered. In production nothing else constructs a reader; tests build
+  their own with `Arc::new`, which is the point of the seam.
+- `process_env_reader()` is the sole production supplier and the only place
+  `std::env::var` appears in the module.
+- The two test layers cover different things, and both are needed:
+  - **Integration tests use `from_str_with_env`.** Only they exercise
+    registration — that the reader actually reaches the `env()` function
+    Jinja calls. Covering the leaf mapper alone would leave that untested,
+    which is the gap the earlier process-mutating tests existed to fill.
+  - **Unit tests may call `env_var_with` directly** to cover error mapping.
+    `src/manifest/tests/env_function.rs` does so deliberately: the
+    present, absent, and non-UTF-8 branches are cheaper to drive at the leaf,
+    and the non-UTF-8 case is unreachable through a real environment without
+    platform-specific `OsString` surgery.
+
+#### Reader composition rules
+
+- One reader serves an entire parse. A manifest reading several variables
+  passes one reader consulted repeatedly, never a per-variable registry.
+- The reader answers by name only. It must not enumerate, and it must not
+  mutate.
 
 ### `EnvLock`
 
