@@ -169,17 +169,17 @@ fn renders_env_function_missing_var() -> Result<()> {
                 );
             } else {
                 ensure!(
-                    err.chain().any(|source| {
-                        format!("{source:?}").contains("UndefinedError")
-                            && source.to_string().contains(name)
-                    }),
+                    err.chain()
+                        .any(|source| format!("{source:?}").contains("UndefinedError")),
                     "unexpected error type or message: {err:?}"
                 );
             }
+            // The diagnostic deliberately omits the variable name: environment
+            // variable names routinely identify credentials.
             let msg = format!("{err:?}");
             ensure!(
-                msg.contains(name),
-                "missing env var name not present in message: {msg}"
+                !msg.contains(name),
+                "env var name must not be disclosed in the message: {msg}"
             );
             Ok(())
         }

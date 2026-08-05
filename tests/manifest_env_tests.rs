@@ -97,7 +97,7 @@ fn localized_lookup_failure(failure: EnvReadError) -> Result<String> {
     let message = error
         .chain()
         .map(ToString::to_string)
-        .find(|message| message.contains("PROFILE"))
+        .find(|message| message.contains("environment variable"))
         .context("lookup error should contain its localized environment diagnostic")?;
     Ok(normalize_fluent_isolates(&message))
 }
@@ -106,7 +106,7 @@ fn localized_lookup_failure(failure: EnvReadError) -> Result<String> {
 fn missing_lookup_diagnostic_snapshot(en_localizer: EnLocalizer) -> Result<()> {
     let _en = en_localizer;
     let message = localized_lookup_failure(EnvReadError::NotPresent)?;
-    insta::assert_snapshot!(message, @"undefined value: Required environment variable 'PROFILE' is not set. (in <string>:1)");
+    insta::assert_snapshot!(message, @"undefined value: A required environment variable is not set. (in <string>:1)");
     Ok(())
 }
 
@@ -114,6 +114,6 @@ fn missing_lookup_diagnostic_snapshot(en_localizer: EnLocalizer) -> Result<()> {
 fn non_unicode_lookup_diagnostic_snapshot(en_localizer: EnLocalizer) -> Result<()> {
     let _en = en_localizer;
     let message = localized_lookup_failure(EnvReadError::NotUnicode)?;
-    insta::assert_snapshot!(message, @"invalid operation: Environment variable 'PROFILE' contains invalid UTF-8. (in <string>:1)");
+    insta::assert_snapshot!(message, @"invalid operation: An environment variable contains invalid UTF-8. (in <string>:1)");
     Ok(())
 }

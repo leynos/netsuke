@@ -165,6 +165,9 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"], default-featu
 insta = { version = "1", features = ["yaml"] }
 assert_cmd = "2.0.0"
 predicates = "3"
+# Provides the DebuggingRecorder used to assert bounded telemetry without a
+# global recorder; constrained to the family that pairs with metrics 0.24.
+metrics-util = { version = "0.20", features = ["debugging"] }
 mockable = { version = "3.0", features = ["mock"] }
 serial_test = "3"
 mockall = "0.11"

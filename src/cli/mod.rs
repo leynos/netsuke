@@ -9,6 +9,7 @@ use ortho_config::OrthoError;
 use std::sync::Arc;
 
 pub mod config;
+mod constants;
 mod diag;
 mod discovery;
 mod environment;

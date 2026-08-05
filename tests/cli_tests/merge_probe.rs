@@ -127,10 +127,12 @@ fn merge_probe_worker() -> Result<()> {
     let localizer = Arc::from(netsuke::cli_localization::build_localizer(None));
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(args, &localizer)
         .context("parse CLI in merge probe")?;
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
+    let mut merged = netsuke::cli::merge_with_config(&cli, &matches)
         .context("merge configuration in probe")?
         .with_default_command();
-    let command = merged.command.clone();
+    // `Cli.command` is `#[serde(skip)]`, so it travels beside the CLI in
+    // `ProbeResult::command`; taking it avoids cloning the subcommand tree.
+    let command = merged.command.take();
     let encoded = serde_json::to_vec(&ProbeResult {
         cli: merged,
         command,

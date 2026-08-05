@@ -35,8 +35,6 @@ use super::environment::EnvironmentLayer;
 use super::parser::{BuildArgs, Cli, Commands};
 use super::validation_error;
 
-pub(super) const ENV_PREFIX: &str = "NETSUKE_";
-
 /// Merge discovered configuration layers over parsed CLI input.
 ///
 /// # Errors

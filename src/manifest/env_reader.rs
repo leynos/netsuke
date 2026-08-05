@@ -76,9 +76,11 @@ pub fn process_env_reader() -> EnvReader {
 
 /// Resolve `name` through `read_env`, mapping failures to Jinja errors.
 ///
-/// Failures are traced with only a bounded `failure_kind`. The variable name is
-/// deliberately omitted: it is manifest-controlled and unbounded, and both it
-/// and its value routinely name credentials.
+/// Failures are traced with only a bounded `failure_kind`, and the localized
+/// diagnostics carry fixed text. The variable name is deliberately absent from
+/// both: it is manifest-controlled and unbounded, and environment variable
+/// names routinely identify credentials. The Jinja error's template location
+/// tells the author which `env()` call failed.
 pub(super) fn env_var_with(
     name: &str,
     read_env: impl FnOnce(&str) -> Result<String, EnvReadError>,
@@ -89,18 +91,14 @@ pub(super) fn env_var_with(
             tracing::debug!(failure_kind = "not_present", "manifest env lookup failed");
             Err(Error::new(
                 ErrorKind::UndefinedError,
-                localization::message(keys::MANIFEST_ENV_MISSING)
-                    .with_arg("name", name)
-                    .to_string(),
+                localization::message(keys::MANIFEST_ENV_MISSING).to_string(),
             ))
         }
         Err(EnvReadError::NotUnicode) => {
             tracing::debug!(failure_kind = "not_unicode", "manifest env lookup failed");
             Err(Error::new(
                 ErrorKind::InvalidOperation,
-                localization::message(keys::MANIFEST_ENV_INVALID_UTF8)
-                    .with_arg("name", name)
-                    .to_string(),
+                localization::message(keys::MANIFEST_ENV_INVALID_UTF8).to_string(),
             ))
         }
     }
@@ -141,6 +139,29 @@ mod tests {
         assert!(
             !events.iter().any(|event| event.contains(SENTINEL)),
             "the variable name must not be logged: {events:?}"
+        );
+    }
+
+    /// The returned Jinja error must carry only the fixed localized text: a
+    /// credential-like variable name supplied by the manifest stays out of it.
+    #[rstest]
+    #[case::not_present(EnvReadError::NotPresent, ErrorKind::UndefinedError)]
+    #[case::not_unicode(EnvReadError::NotUnicode, ErrorKind::InvalidOperation)]
+    fn lookup_failures_omit_the_variable_name_from_the_error(
+        #[case] failure: EnvReadError,
+        #[case] expected_kind: ErrorKind,
+    ) {
+        let error =
+            env_var_with(SENTINEL, |_| Err(failure)).expect_err("the injected reader must fail");
+
+        assert_eq!(
+            error.kind(),
+            expected_kind,
+            "the Jinja error kind must be preserved"
+        );
+        assert!(
+            !error.to_string().contains(SENTINEL),
+            "the variable name must not reach the error: {error}"
         );
     }
 

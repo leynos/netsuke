@@ -5,7 +5,7 @@ use std::ffi::{OsStr, OsString};
 use ortho_config::figment::value::{Dict, Map, Value};
 use ortho_config::figment::{Error, Metadata, Profile, Provider};
 
-use super::merge::ENV_PREFIX;
+use super::constants::ENV_PREFIX;
 
 /// Fixed rejection text for a key that claims the Netsuke prefix but is not
 /// UTF-8. The raw key is never included: it is untrusted, unbounded, and may

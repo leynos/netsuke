@@ -1,6 +1,6 @@
 //! Safe invocation helpers for manifest-defined Jinja macros.
 
-use super::call_macro_value;
+use super::call::call_macro_value;
 use crate::localization::{self, keys};
 use metrics::{counter, describe_counter, describe_histogram, histogram};
 use minijinja::{
@@ -269,5 +269,40 @@ mod tests {
             normalize_fluent_isolates(&error.to_string()),
             "template not found: Failed to load macro template. (in <expression>:1)"
         );
+    }
+
+    proptest::proptest! {
+        /// Generated argument values must reach the macro output unchanged:
+        /// the positional argument binds the first parameter and the keyword
+        /// argument overrides the second parameter's default. Values are
+        /// identifier-like ASCII so the Jinja source built from them cannot
+        /// contain quoting or escape sequences.
+        #[test]
+        fn compiled_expression_forwards_generated_arguments(
+            positional in "[a-z][a-z0-9_]{0,11}",
+            keyword in "[a-z][a-z0-9_]{0,11}",
+        ) {
+            let mut env = Environment::new();
+            env.add_template(
+                "macro-template",
+                "{% macro pair(first='left', second='right') %}{{ first }}:{{ second }}{% endmacro %}",
+            )
+            .expect("macro fixture template should compile");
+            env.add_function(
+                "pair",
+                make_macro_fn("macro-template".to_owned(), "pair".to_owned()),
+            );
+
+            let source = format!("pair('{positional}', second='{keyword}')");
+            let expression = env
+                .compile_expression(&source)
+                .expect("macro expression should compile");
+            let rendered = expression
+                .eval(())
+                .expect("compiled expression should forward generated arguments")
+                .to_string();
+
+            proptest::prop_assert_eq!(rendered, format!("{positional}:{keyword}"));
+        }
     }
 }

@@ -83,6 +83,7 @@ mod tests {
     //! Unit tests for reentrant and contended environment locking.
 
     use super::*;
+    use proptest::prelude::{Just, Strategy, prop_oneof};
     use std::{sync::mpsc, time::Duration};
 
     fn assert_current_thread_lock_is_held(message: &str) {
@@ -173,6 +174,68 @@ mod tests {
             "contending thread should acquire the lock after release"
         );
         assert!(contender.join().is_ok(), "contending thread should finish");
+    }
+
+    /// One step of the generated transition sequence.
+    #[derive(Clone, Copy, Debug)]
+    enum LockOp {
+        Acquire,
+        /// Drop the guard at `selector`, clamped to the live range, covering
+        /// nested and out-of-order release; ignored while no guard is live.
+        Drop(usize),
+    }
+
+    fn assert_state_matches(live_guards: usize) {
+        ENV_LOCK_STATE.with(|lock_state| {
+            let state = lock_state.borrow();
+            assert_eq!(
+                state.depth, live_guards,
+                "thread-local depth must equal the number of live guards"
+            );
+            assert_eq!(
+                state.guard.is_some(),
+                live_guards > 0,
+                "the mutex guard must be held exactly while guards are live"
+            );
+        });
+    }
+
+    proptest::proptest! {
+        /// Any bounded interleaving of acquires and arbitrary-index drops
+        /// keeps the thread-local depth equal to the number of live guards,
+        /// and holds the underlying mutex exactly while that count is
+        /// non-zero.
+        #[test]
+        fn lock_state_tracks_any_acquire_and_drop_interleaving(
+            ops in proptest::collection::vec(
+                prop_oneof![
+                    Just(LockOp::Acquire),
+                    (0usize..8).prop_map(LockOp::Drop),
+                ],
+                1..24,
+            ),
+        ) {
+            let mut live: Vec<EnvLock> = Vec::new();
+            for op in ops {
+                match op {
+                    LockOp::Acquire => live.push(EnvLock::acquire()),
+                    LockOp::Drop(selector) => {
+                        if let Some(last) = live.len().checked_sub(1) {
+                            drop(live.remove(selector.min(last)));
+                        }
+                    }
+                }
+                assert_state_matches(live.len());
+            }
+
+            while let Some(guard) = live.pop() {
+                drop(guard);
+                assert_state_matches(live.len());
+            }
+            assert_current_thread_lock_is_released(
+                "dropping every generated guard must release the lock",
+            );
+        }
     }
 
     #[test]
