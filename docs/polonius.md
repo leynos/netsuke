@@ -113,7 +113,10 @@ flag or avoid compiling the crate:
   `-Zpolonius=next`. The coverage action's `cargo-llvm-cov` invocation inherits
   the flags exported by `setup-rust` and appends its instrumentation flags.
   Makefile recipes still append `POLONIUS_FLAGS` when they set ambient
-  `RUSTFLAGS`.
+  `RUSTFLAGS`. The per-workflow values, the `NETSUKE_RUST_TOOLCHAIN` policy and
+  the reason the contract test pins each action's exact revision are set out in
+  the developer guide under [Polonius CI shared-action
+  contract](developers-guide.md#polonius-ci-shared-action-contract).
 - **Registry installs**: the crates.io package excludes
   `rust-toolchain.toml` and `.cargo/config.toml`, and registry builds run
   outside the checkout, so `cargo install netsuke-build` must select the pinned
