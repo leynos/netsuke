@@ -1348,25 +1348,20 @@ writes that content and applies executable permissions only on Unix.
 `write_exec` is the minimal-script convenience wrapper;
 `write_exec_with_content` is the shared primitive for custom behaviour.
 
-The helpers take `&Utf8Path` and return `Utf8PathBuf`, matching the camino
-types used throughout Netsuke. Callers that already hold camino paths pass them
-directly. `tempfile::TempDir::path()` still yields an OS-native `&Path`, so
-callers convert at that boundary with `exec::utf8_path`, the single conversion
-point. `utf8_path` returns a `Result` rather than panicking: it names the
-offending path in the error (`path is not valid UTF-8: {path}`), and callers
-propagate it with their own context, as `fake_ninja` and
-`fake_ninja_check_build_file` do.
+The helpers take `&Path` and return `PathBuf`, the OS-native types that
+`tempfile::TempDir::path()` already yields. Because the helpers sit at the
+`tempfile`/OS boundary, there is no conversion step: callers pass the temporary
+directory's path straight through.
 
 ```rust
 let temp = TempDir::new()?;
-let root = exec::utf8_path(temp.path()).context("temporary directory")?;
-let stub = write_exec(root, "tool")?;
+let stub = write_exec(temp.path(), "tool")?;
 ```
 
-Because a camino path cannot represent a non-UTF-8 path, the fake-executable
-factories now fail on a temporary directory whose path is not valid UTF-8,
-rather than succeeding as they previously did. The `test_support` test
-`fake_ninja_helpers_reject_non_utf8_temp_directories` pins this behaviour.
+Because `write_exec` and `write_exec_with_content` operate on OS-native paths
+directly, the fake-executable factories accept a temporary directory whose path
+is not valid UTF-8. The `test_support` test
+`fake_ninja_helpers_support_non_utf8_temp_directories` pins this behaviour.
 
 ### User-facing documentation examples
 
@@ -2185,10 +2180,12 @@ Configuration merge helpers:
   `PathBuf`.
 - `explicit_config_path_with_env(cli, env) -> Option<PathBuf>` resolves explicit
   config selection from `--config` and `NETSUKE_CONFIG`.
-- `push_file_layers(cli, composer, errors) -> ()` pushes explicit or discovered
-  file layers onto a `MergeComposer`. Explicit load errors are pushed into
-  `errors`, and automatic discovery is not attempted after an explicit selector
-  fails.
+- `push_file_layers_with_env(cli, composer, errors, env) -> ()` pushes explicit
+  or discovered file layers onto a `MergeComposer`. The injected `env`
+  parameter follows the environment mandate: it supplies environment access
+  without requiring callers to mutate the process environment. Explicit load
+  errors are pushed into `errors`, and automatic discovery is not attempted
+  after an explicit selector fails.
 - `collect_diag_file_layers_with_env(cli, env)` reuses the same file-layer
   precedence for early JSON resolution.
 - `collect_file_layers(directory)` builds the fallback discovery layer chain,

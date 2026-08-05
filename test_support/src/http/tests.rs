@@ -56,7 +56,11 @@ struct DurationCase {
     key: &'static str,
     value: Option<&'static str>,
     expected: Duration,
-    expected_warning_value: Option<&'static str>,
+    /// Bounded parse-failure text expected in the warning, if it should warn.
+    ///
+    /// Deliberately not the offending value: the warning redacts it, so
+    /// asserting on a category is what keeps that redaction honest.
+    expected_warning_error: Option<&'static str>,
 }
 
 #[test]
@@ -102,19 +106,25 @@ fn from_env_clamps_zero_poll_interval() {
     key: ENV_HTTP_ACCEPT_TIMEOUT_MS,
     value: None,
     expected: Duration::from_secs(3),
-    expected_warning_value: None,
+    expected_warning_error: None,
 })]
 #[case::invalid(DurationCase {
     key: ENV_HTTP_ACCEPT_TIMEOUT_MS,
     value: Some("not-a-number"),
     expected: Duration::from_secs(3),
-    expected_warning_value: Some("not-a-number"),
+    expected_warning_error: Some("invalid digit"),
+})]
+#[case::empty(DurationCase {
+    key: ENV_HTTP_ACCEPT_TIMEOUT_MS,
+    value: Some(""),
+    expected: Duration::from_secs(3),
+    expected_warning_error: Some("cannot parse integer from empty string"),
 })]
 #[case::whitespace_padded(DurationCase {
     key: ENV_HTTP_READ_TIMEOUT_MS,
     value: Some("  2500  "),
     expected: Duration::from_millis(2500),
-    expected_warning_value: None,
+    expected_warning_error: None,
 })]
 fn duration_from_env_handles_input(
     empty_duration_warnings: EmptyDurationWarnings,
@@ -129,7 +139,7 @@ fn duration_from_env_handles_input(
 
     assert_eq!(duration, case.expected);
     let warnings = empty_duration_warnings.take();
-    if let Some(expected_value) = case.expected_warning_value {
+    if let Some(expected_error) = case.expected_warning_error {
         assert_eq!(warnings.len(), 1);
         let warning = warnings.first().map_or("", String::as_str);
         assert!(
@@ -137,9 +147,16 @@ fn duration_from_env_handles_input(
             "warning should mention the variable name"
         );
         assert!(
-            warning.contains(expected_value),
-            "warning should include the invalid value"
+            warning.contains(expected_error),
+            "warning should name the bounded parse failure, got {warning}"
         );
+        // The value is caller-controlled, so it must never reach the log.
+        if let Some(configured_value) = case.value.filter(|value| !value.is_empty()) {
+            assert!(
+                !warning.contains(configured_value),
+                "warning must redact the offending value, got {warning}"
+            );
+        }
     } else {
         assert!(
             warnings.is_empty(),
