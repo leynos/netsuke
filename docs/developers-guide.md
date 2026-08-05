@@ -2198,6 +2198,34 @@ only an empty `PATH`, isolated `HOME` and `XDG_CONFIG_HOME` values, plus the
 variables supplied in `extra_env`. Use it for configuration-layering tests or
 any scenario that requires a hermetic child environment.
 
+#### Locating the netsuke binary
+
+Both `run_netsuke_in` and `run_netsuke_in_with_env` depend on a private
+locator, `netsuke_executable()`, to find the built `netsuke` binary.
+`netsuke_executable()` converts `std::env::current_exe()` to a
+`camino::Utf8PathBuf` and delegates to `netsuke_executable_from`, which takes
+an injected `mockable::Env` — the same injectable-environment pattern used by
+`compile_rust_helper_with_env` in `command_helper.rs` — so the lookup logic is
+unit-testable with `MockEnv` rather than depending on the real process
+environment.
+
+The locator checks candidate paths in order:
+
+1. beside the test executable, using its directory with any trailing `deps`
+   component stripped;
+2. `CARGO_TARGET_DIR/<profile>/`, needed when Cargo's `build.build-dir`
+   configuration splits intermediate artefacts — where test executables run —
+   from the uplifted binary, which lands under the target directory;
+3. `CARGO_TARGET_DIR/<triple>/<profile>/`, for `--target` builds where the
+   profile directory nests under the target triple.
+
+Filesystem errors other than "not found" are surfaced rather than treated as
+a missing candidate. When every candidate misses, the resulting error lists
+all attempted paths.
+
+The locator's unit tests live in `test_support/src/netsuke.rs` and cover the
+primary lookup, both fallback paths, and the missing-binary case.
+
 ## Digest rendering
 
 `src/hex.rs` (`netsuke::hex`) is the single owner of lowercase hexadecimal

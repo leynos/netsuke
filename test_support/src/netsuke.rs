@@ -4,44 +4,79 @@
 //! `netsuke` executable and run it in a controlled working directory,
 //! capturing stdout/stderr for assertions.
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail};
+use camino::{Utf8Path, Utf8PathBuf};
 use mockable::{DefaultEnv, Env};
 use std::path::Path;
-use std::path::PathBuf;
 
 /// Locate the built `netsuke` executable for integration-style tests.
 ///
-/// Derive the path from the current test executable's target directory. When
-/// Cargo's `build.build-dir` splits intermediate artefacts from final ones,
-/// test executables run from the build dir while the uplifted binary lands
-/// under `CARGO_TARGET_DIR`, so fall back to that location.
-fn netsuke_executable() -> Result<PathBuf> {
-    let mut exe_dir = std::env::current_exe().context("locate current test executable")?;
-    exe_dir.pop();
-    if exe_dir.ends_with("deps") {
-        exe_dir.pop();
+/// Derive the primary path from the current test executable's directory, then
+/// fall back to `CARGO_TARGET_DIR` when Cargo's `build.build-dir` splits
+/// intermediate artefacts from final ones: test executables then run from the
+/// build dir while the uplifted binary lands under the target dir.
+fn netsuke_executable() -> Result<Utf8PathBuf> {
+    let raw_exe = std::env::current_exe().context("locate current test executable")?;
+    let current_exe = Utf8PathBuf::from_path_buf(raw_exe)
+        .map_err(|path| anyhow::anyhow!("test executable path {} is not UTF-8", path.display()))?;
+    netsuke_executable_from(&DefaultEnv, &current_exe)
+}
+
+/// Locate the `netsuke` binary from an injected environment and test path.
+///
+/// Candidates are checked in order:
+/// 1. beside the test executable (its directory, minus a trailing `deps`);
+/// 2. `CARGO_TARGET_DIR/<profile>/` for split `build.build-dir` layouts;
+/// 3. `CARGO_TARGET_DIR/<triple>/<profile>/` for `--target` builds, where the
+///    profile directory nests under the target triple.
+///
+/// Filesystem errors other than "not found" are surfaced rather than treated
+/// as a missing candidate.
+fn netsuke_executable_from(env: &impl Env, current_exe: &Utf8Path) -> Result<Utf8PathBuf> {
+    let mut exe_dir = current_exe
+        .parent()
+        .context("test executable should have a parent directory")?;
+    if exe_dir.file_name() == Some("deps") {
+        exe_dir = exe_dir
+            .parent()
+            .context("deps directory should have a parent")?;
     }
 
     let binary_name = format!("netsuke{}", std::env::consts::EXE_SUFFIX);
-    let path = exe_dir.join(&binary_name);
-    if path.is_file() {
-        return Ok(path);
-    }
-    if let (Some(target_dir), Some(profile)) = (
-        DefaultEnv.os_string("CARGO_TARGET_DIR"),
-        exe_dir.file_name(),
-    ) {
-        let fallback = Path::new(&target_dir).join(profile).join(&binary_name);
-        if fallback.is_file() {
-            return Ok(fallback);
+    let candidates = candidate_paths(env, exe_dir, &binary_name);
+    for candidate in &candidates {
+        let is_file = crate::fs::try_is_file(candidate)
+            .with_context(|| format!("inspect candidate netsuke binary at {candidate}"))?;
+        if is_file {
+            return Ok(candidate.clone());
         }
     }
-    ensure!(
-        path.is_file(),
-        "locate netsuke binary at {}",
-        path.display()
-    );
-    Ok(path)
+    let attempted = candidates
+        .iter()
+        .map(|candidate| candidate.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    bail!("locate netsuke binary; tried: {attempted}");
+}
+
+/// Build the ordered candidate paths for the `netsuke` binary.
+fn candidate_paths(env: &impl Env, exe_dir: &Utf8Path, binary_name: &str) -> Vec<Utf8PathBuf> {
+    let mut candidates = vec![exe_dir.join(binary_name)];
+    let (Some(target_dir), Some(profile)) = (env.string("CARGO_TARGET_DIR"), exe_dir.file_name())
+    else {
+        return candidates;
+    };
+    let target_root = Utf8PathBuf::from(target_dir);
+    candidates.push(target_root.join(profile).join(binary_name));
+    // `--target` builds nest the profile directory under the target triple in
+    // both the build dir and the target dir, so reinsert the component above
+    // the profile when one exists. For no-`--target` builds that component is
+    // the build-dir root, which never exists under the target dir, so the
+    // extra candidate is harmless.
+    if let Some(triple) = exe_dir.parent().and_then(Utf8Path::file_name) {
+        candidates.push(target_root.join(triple).join(profile).join(binary_name));
+    }
+    candidates
 }
 
 /// Captured output from a `netsuke` invocation.
@@ -67,7 +102,8 @@ pub struct NetsukeRun {
 /// spawned.
 pub fn run_netsuke_in(current_dir: &Path, args: &[&str]) -> Result<NetsukeRun> {
     let isolated_config_home = current_dir.join(".config");
-    let mut cmd = assert_cmd::Command::new(netsuke_executable()?);
+    let executable = netsuke_executable()?;
+    let mut cmd = assert_cmd::Command::new(executable.as_std_path());
     let output = cmd
         .current_dir(current_dir)
         .env("PATH", "")
@@ -102,7 +138,8 @@ pub fn run_netsuke_in_with_env(
     args: &[&str],
     extra_env: &[(&str, &str)],
 ) -> Result<NetsukeRun> {
-    let mut cmd = assert_cmd::Command::new(netsuke_executable()?);
+    let executable = netsuke_executable()?;
+    let mut cmd = assert_cmd::Command::new(executable.as_std_path());
     let isolated_config_home = current_dir.join(".config");
     let isolated_path = tempfile::tempdir().context("create isolated executable directory")?;
     cmd.current_dir(current_dir)
@@ -119,4 +156,117 @@ pub fn run_netsuke_in_with_env(
         stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
         success: output.status.success(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    //! Unit tests for the netsuke binary locator.
+
+    use super::netsuke_executable_from;
+    use anyhow::{Context, Result, ensure};
+    use camino::{Utf8Path, Utf8PathBuf};
+    use mockable::MockEnv;
+
+    fn utf8_root(temp: &tempfile::TempDir) -> Result<Utf8PathBuf> {
+        Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+            .map_err(|path| anyhow::anyhow!("temp dir {} is not UTF-8", path.display()))
+    }
+
+    fn binary_name() -> String {
+        format!("netsuke{}", std::env::consts::EXE_SUFFIX)
+    }
+
+    fn touch(path: &Utf8Path) -> Result<()> {
+        let parent = path.parent().context("path should have a parent")?;
+        crate::fs::create_dir_all(parent).with_context(|| format!("create {parent}"))?;
+        crate::fs::write(path, b"stub").with_context(|| format!("write {path}"))?;
+        Ok(())
+    }
+
+    fn env_with_target_dir(target_dir: Option<&Utf8Path>) -> MockEnv {
+        let mut env = MockEnv::new();
+        let value = target_dir.map(Utf8Path::to_string);
+        env.expect_string()
+            .withf(|key| key == "CARGO_TARGET_DIR")
+            .return_const(value);
+        env
+    }
+
+    #[test]
+    fn locates_binary_beside_the_test_executable() -> Result<()> {
+        let temp = tempfile::tempdir().context("create temp dir")?;
+        let root = utf8_root(&temp)?;
+        let exe = root.join("build/debug/deps/test-exe");
+        touch(&exe)?;
+        let binary = root.join("build/debug").join(binary_name());
+        touch(&binary)?;
+
+        let located = netsuke_executable_from(&env_with_target_dir(None), &exe)?;
+        ensure!(
+            located == binary,
+            "primary lookup should win; got {located}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn falls_back_to_cargo_target_dir_profile() -> Result<()> {
+        let temp = tempfile::tempdir().context("create temp dir")?;
+        let root = utf8_root(&temp)?;
+        let exe = root.join("build/debug/deps/test-exe");
+        touch(&exe)?;
+        let target_dir = root.join("target");
+        let binary = target_dir.join("debug").join(binary_name());
+        touch(&binary)?;
+
+        let located = netsuke_executable_from(&env_with_target_dir(Some(&target_dir)), &exe)?;
+        ensure!(
+            located == binary,
+            "profile fallback should resolve; got {located}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn falls_back_to_target_triple_directory() -> Result<()> {
+        let temp = tempfile::tempdir().context("create temp dir")?;
+        let root = utf8_root(&temp)?;
+        let exe = root.join("build/x86_64-unknown-linux-gnu/debug/deps/test-exe");
+        touch(&exe)?;
+        let target_dir = root.join("target");
+        let binary = target_dir
+            .join("x86_64-unknown-linux-gnu/debug")
+            .join(binary_name());
+        touch(&binary)?;
+
+        let located = netsuke_executable_from(&env_with_target_dir(Some(&target_dir)), &exe)?;
+        ensure!(
+            located == binary,
+            "triple fallback should resolve; got {located}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn reports_every_attempted_candidate_when_missing() -> Result<()> {
+        let temp = tempfile::tempdir().context("create temp dir")?;
+        let root = utf8_root(&temp)?;
+        let exe = root.join("build/debug/deps/test-exe");
+        touch(&exe)?;
+        let target_dir = root.join("target");
+
+        let error = netsuke_executable_from(&env_with_target_dir(Some(&target_dir)), &exe)
+            .expect_err("no candidate exists");
+        let message = error.to_string();
+        for expected in [
+            root.join("build/debug").join(binary_name()),
+            target_dir.join("debug").join(binary_name()),
+        ] {
+            ensure!(
+                message.contains(expected.as_str()),
+                "error should list attempted candidate {expected}; got: {message}"
+            );
+        }
+        Ok(())
+    }
 }

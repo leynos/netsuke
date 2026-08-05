@@ -117,6 +117,34 @@ pub fn is_dir(path: impl AsRef<Path>) -> bool {
     fs::metadata(path).is_ok_and(|metadata| metadata.is_dir())
 }
 
+/// Return `true` when `path` is a regular file, surfacing unexpected errors.
+///
+/// Unlike `Path::is_file`, an I/O failure other than `NotFound` is propagated
+/// rather than reported as `false`, so callers can distinguish "the file is
+/// absent" from "the file could not be inspected".
+///
+/// # Errors
+///
+/// Propagates the underlying metadata failure for any error other than
+/// `NotFound`.
+///
+/// # Examples
+///
+/// ```
+/// let dir = tempfile::tempdir().expect("create tempdir");
+/// let file = dir.path().join("file");
+/// test_support::fs::write(&file, "contents").expect("write file");
+/// assert!(test_support::fs::try_is_file(&file).expect("inspect file"));
+/// assert!(!test_support::fs::try_is_file(dir.path().join("absent")).expect("inspect absent"));
+/// ```
+pub fn try_is_file(path: impl AsRef<Path>) -> io::Result<bool> {
+    match fs::metadata(path) {
+        Ok(metadata) => Ok(metadata.is_file()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
 /// Copy `from` to `to`, returning the number of bytes copied.
 ///
 /// # Errors
