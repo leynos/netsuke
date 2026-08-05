@@ -80,7 +80,7 @@ clean: ## Remove build artefacts
 test: test-nextest doctest ## Run every Rust test with warnings treated as errors
 
 test-nextest: ## Run all non-doctest Rust tests through cargo-nextest
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) nextest run --all-targets --all-features $(NEXTEST_BUILD_JOBS)
+	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) nextest run --workspace --all-targets --all-features $(NEXTEST_BUILD_JOBS)
 
 doctest: ## Run doctests, which cargo-nextest cannot execute
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)
@@ -185,7 +185,7 @@ dev-build: dev-fast-check ## Build the debug binary with Cranelift and mold
 	RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) --config "$$DEV_FAST_CONFIG" build $(BUILD_JOBS) --bin $(APP)
 
 dev-test: dev-fast-check ## Run the nextest pass with Cranelift and mold
-	RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) --config "$$DEV_FAST_CONFIG" nextest run --all-targets --all-features $(NEXTEST_BUILD_JOBS)
+	RUSTUP_TOOLCHAIN=$(DEV_FAST_TOOLCHAIN) $(CARGO) --config "$$DEV_FAST_CONFIG" nextest run --workspace --all-targets --all-features $(NEXTEST_BUILD_JOBS)
 
 bench-build: dev-fast-check ## Time clean and incremental debug builds for both paths
 	@CARGO="$(CARGO)" scripts/bench-build.sh

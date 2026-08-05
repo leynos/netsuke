@@ -61,6 +61,10 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
         "test-nextest should enable all features, found {nextest_recipe:?}"
     );
     ensure!(
+        nextest_recipe.contains("--workspace"),
+        "test-nextest should cover the workspace, found {nextest_recipe:?}"
+    );
+    ensure!(
         nextest_recipe
             .contains(r#"RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)""#),
         "test-nextest should deny warnings and enable Polonius, found {nextest_recipe:?}"
@@ -91,23 +95,15 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
 #[path = "makefile_test_target/rustflags.rs"]
 mod rustflags;
 
-/// Returns the `[[profile.default.overrides]]` entries.
-fn profile_overrides(config: &Value) -> Option<&[Value]> {
+/// Returns every nextest profile override.
+fn all_profile_overrides(config: &Value) -> impl Iterator<Item = &Value> {
     config
-        .get("profile")?
-        .get("default")?
-        .get("overrides")?
-        .as_array()
-        .map(Vec::as_slice)
-}
-
-/// Returns the `max-threads` declared for a named test group.
-fn test_group_max_threads(config: &Value, group: &str) -> Option<i64> {
-    config
-        .get("test-groups")?
-        .get(group)?
-        .get("max-threads")?
-        .as_integer()
+        .get("profile")
+        .and_then(Value::as_table)
+        .into_iter()
+        .flat_map(toml::map::Map::values)
+        .filter_map(|profile| profile.get("overrides").and_then(Value::as_array))
+        .flatten()
 }
 
 #[test]
@@ -117,15 +113,15 @@ fn behavioural_nextest_config_does_not_serialize_environment_tests() -> Result<(
         .context("nextest configuration should be valid TOML")?;
 
     ensure!(
-        test_group_max_threads(&config, "serial-env").is_none(),
+        config
+            .get("test-groups")
+            .and_then(|groups| groups.get("serial-env"))
+            .is_none(),
         "environment tests use injected state and should not declare a serial-env test group"
     );
 
-    let has_serial_override = profile_overrides(&config).is_some_and(|overrides| {
-        overrides
-            .iter()
-            .any(|entry| entry.get("test-group").and_then(Value::as_str) == Some("serial-env"))
-    });
+    let has_serial_override = all_profile_overrides(&config)
+        .any(|entry| entry.get("test-group").and_then(Value::as_str) == Some("serial-env"));
     ensure!(
         !has_serial_override,
         "environment tests use injected state and should not have a serial-env override"

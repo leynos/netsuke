@@ -43,7 +43,13 @@ struct BuildTarget {
         name: "dev-test",
         // Mirrors `make test-nextest`, so the accelerated loop and the gate run
         // the same runner under the same `.config/nextest.toml`.
-        subcommand: &["nextest", "run", "--all-targets", "--all-features"],
+        subcommand: &[
+            "nextest",
+            "run",
+            "--workspace",
+            "--all-targets",
+            "--all-features",
+        ],
     }
 )]
 fn build_targets_select_the_pinned_toolchain_and_fragment(

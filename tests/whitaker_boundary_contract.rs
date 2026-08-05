@@ -154,8 +154,7 @@ fn lint_whitaker_also_runs_inside_test_support() -> Result<()> {
     );
     ensure!(
         scoped.first().is_some_and(|line| {
-            line.contains("DYLINT_TOML")
-                && line.contains("cat dylint.toml")
+            line.contains(r#"DYLINT_TOML="$$(cat dylint.toml)""#)
                 && line.contains("--package test_support")
                 && line.contains("--no-deps")
         }),

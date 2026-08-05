@@ -3,15 +3,18 @@
 use super::{read_repo_file, target_recipe};
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
-use rstest::rstest;
-use std::{collections::BTreeSet, process::Command};
+use std::collections::BTreeSet;
+#[cfg(unix)]
+use std::process::Command;
 
 /// The prefix introducing a quoted `RUSTFLAGS` assignment in a recipe.
 const RUSTFLAGS_PREFIX: &str = "RUSTFLAGS=\"";
 
 /// A value a caller might already have exported before invoking `make`.
+#[cfg(unix)]
 const CALLER_RUSTFLAGS: &str = "-C target-cpu=native";
 
+#[cfg(unix)]
 const DENY_WARNINGS: &str = "-D warnings";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -26,17 +29,6 @@ enum InheritancePolicy {
     Plain,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum PoloniusPolicy {
-    Enabled,
-    Disabled,
-}
-
-#[test]
-fn unit_polonius_policy_represents_both_states() {
-    assert_ne!(PoloniusPolicy::Enabled, PoloniusPolicy::Disabled);
-}
-
 /// A recipe line that overrides `RUSTFLAGS`, and the contract it must meet.
 #[derive(Clone, Copy, Debug)]
 struct RustflagsCase {
@@ -48,8 +40,6 @@ struct RustflagsCase {
     warning_policy: WarningPolicy,
     /// How the recipe handles a caller-supplied value.
     inheritance_policy: InheritancePolicy,
-    /// Whether the recipe enables the Polonius borrow checker.
-    polonius_policy: PoloniusPolicy,
 }
 
 impl RustflagsCase {
@@ -59,7 +49,6 @@ impl RustflagsCase {
             line_marker: "nextest run",
             warning_policy: WarningPolicy::Deny,
             inheritance_policy: InheritancePolicy::Conditional,
-            polonius_policy: PoloniusPolicy::Enabled,
         }
     }
 
@@ -69,7 +58,6 @@ impl RustflagsCase {
             line_marker: "--doc",
             warning_policy: WarningPolicy::Deny,
             inheritance_policy: InheritancePolicy::Conditional,
-            polonius_policy: PoloniusPolicy::Enabled,
         }
     }
 
@@ -79,7 +67,6 @@ impl RustflagsCase {
             line_marker: "build",
             warning_policy: WarningPolicy::Default,
             inheritance_policy: InheritancePolicy::Plain,
-            polonius_policy: PoloniusPolicy::Enabled,
         }
     }
 
@@ -89,7 +76,6 @@ impl RustflagsCase {
             line_marker: "doc --workspace",
             warning_policy: WarningPolicy::Deny,
             inheritance_policy: InheritancePolicy::Conditional,
-            polonius_policy: PoloniusPolicy::Enabled,
         }
     }
 
@@ -99,7 +85,6 @@ impl RustflagsCase {
             line_marker: "clippy",
             warning_policy: WarningPolicy::Deny,
             inheritance_policy: InheritancePolicy::Conditional,
-            polonius_policy: PoloniusPolicy::Enabled,
         }
     }
 
@@ -109,7 +94,6 @@ impl RustflagsCase {
             line_marker: "$(WHITAKER)",
             warning_policy: WarningPolicy::Deny,
             inheritance_policy: InheritancePolicy::Conditional,
-            polonius_policy: PoloniusPolicy::Enabled,
         }
     }
 
@@ -119,7 +103,6 @@ impl RustflagsCase {
             line_marker: "cd test_support",
             warning_policy: WarningPolicy::Deny,
             inheritance_policy: InheritancePolicy::Conditional,
-            polonius_policy: PoloniusPolicy::Enabled,
         }
     }
 
@@ -129,7 +112,6 @@ impl RustflagsCase {
             line_marker: "check",
             warning_policy: WarningPolicy::Deny,
             inheritance_policy: InheritancePolicy::Conditional,
-            polonius_policy: PoloniusPolicy::Enabled,
         }
     }
 
@@ -139,7 +121,6 @@ impl RustflagsCase {
             line_marker: "$(KANI)",
             warning_policy: WarningPolicy::Default,
             inheritance_policy: InheritancePolicy::Conditional,
-            polonius_policy: PoloniusPolicy::Enabled,
         }
     }
 }
@@ -210,13 +191,15 @@ fn shell_expression(makefile: &str, case: RustflagsCase) -> Result<String> {
     })?;
     let polonius = make_variable(makefile, "POLONIUS_FLAGS")
         .context("Makefile should define POLONIUS_FLAGS")?;
-    let resolved = assignment.replace("$(POLONIUS_FLAGS)", &polonius);
+    let resolved = assignment
+        .replace("$(POLONIUS_FLAGS)", &polonius)
+        .replace("$$", "$");
     ensure!(
         !resolved.contains("$("),
         "{}: RUSTFLAGS assignment {resolved:?} names a Make variable this test cannot resolve",
         case.target
     );
-    Ok(resolved.replace("$$", "$"))
+    Ok(resolved)
 }
 
 /// Expands `expression` in a shell, exporting `inherited` as `RUSTFLAGS`.
@@ -263,90 +246,90 @@ fn unit_extracts_the_rustflags_assignment_from_a_recipe_line() {
     assert_eq!(rustflags_assignment("\tcargo build"), None);
 }
 
+#[test]
+fn unit_rejects_escaped_shell_command_substitution() {
+    let makefile = concat!(
+        "POLONIUS_FLAGS ?= -Zpolonius=next\n",
+        "unsafe-recipe:\n",
+        "\tRUSTFLAGS=\"$$(date) $(POLONIUS_FLAGS)\" echo unsafe\n",
+    );
+    let case = RustflagsCase {
+        target: "unsafe-recipe",
+        line_marker: "echo unsafe",
+        warning_policy: WarningPolicy::Default,
+        inheritance_policy: InheritancePolicy::Conditional,
+    };
+
+    assert!(
+        shell_expression(makefile, case).is_err(),
+        "escaped shell command substitution should be rejected"
+    );
+}
+
 #[cfg(unix)]
-#[rstest]
-#[case(RustflagsCase::test_nextest())]
-#[case(RustflagsCase::doctest())]
-#[case(RustflagsCase::binary_build())]
-#[case(RustflagsCase::lint_rustdoc())]
-#[case(RustflagsCase::lint_clippy())]
-#[case(RustflagsCase::lint_whitaker())]
-#[case(RustflagsCase::lint_whitaker_test_support())]
-#[case(RustflagsCase::typecheck())]
-#[case(RustflagsCase::kani_full())]
-fn behavioural_rustflags_recipes_preserve_inherited_flags(
-    #[case] case: RustflagsCase,
-) -> Result<()> {
+#[test]
+fn behavioural_rustflags_recipes_preserve_inherited_flags() -> Result<()> {
     let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
     let polonius = make_variable(&makefile, "POLONIUS_FLAGS")
         .context("Makefile should define POLONIUS_FLAGS")?;
-    let expanded = expand(&shell_expression(&makefile, case)?, Some(CALLER_RUSTFLAGS))?;
+    for case in RUSTFLAGS_CASES {
+        let expanded = expand(&shell_expression(&makefile, case)?, Some(CALLER_RUSTFLAGS))?;
 
-    ensure!(
-        expanded.contains(CALLER_RUSTFLAGS),
-        "{} inherited-RUSTFLAGS contract should hold, expanded to {expanded:?}",
-        case.target
-    );
-    ensure!(
-        expanded.contains(&polonius) == (case.polonius_policy == PoloniusPolicy::Enabled),
-        "{} Polonius contract should hold for {polonius}, expanded to {expanded:?}",
-        case.target
-    );
-    ensure!(
-        expanded.contains(DENY_WARNINGS) == (case.warning_policy == WarningPolicy::Deny),
-        "{} should {}deny warnings, expanded to {expanded:?}",
-        case.target,
-        if case.warning_policy == WarningPolicy::Deny {
-            ""
-        } else {
-            "not "
-        }
-    );
+        ensure!(
+            expanded.contains(CALLER_RUSTFLAGS),
+            "{} inherited-RUSTFLAGS contract should hold, expanded to {expanded:?}",
+            case.target
+        );
+        ensure!(
+            expanded.contains(&polonius),
+            "{} should enable Polonius with {polonius}, expanded to {expanded:?}",
+            case.target
+        );
+        ensure!(
+            expanded.contains(DENY_WARNINGS) == (case.warning_policy == WarningPolicy::Deny),
+            "{} should {}deny warnings, expanded to {expanded:?}",
+            case.target,
+            if case.warning_policy == WarningPolicy::Deny {
+                ""
+            } else {
+                "not "
+            }
+        );
+    }
     Ok(())
 }
 
 #[cfg(unix)]
-#[rstest]
-#[case(RustflagsCase::test_nextest())]
-#[case(RustflagsCase::doctest())]
-#[case(RustflagsCase::binary_build())]
-#[case(RustflagsCase::lint_rustdoc())]
-#[case(RustflagsCase::lint_clippy())]
-#[case(RustflagsCase::lint_whitaker())]
-#[case(RustflagsCase::lint_whitaker_test_support())]
-#[case(RustflagsCase::typecheck())]
-#[case(RustflagsCase::kani_full())]
-fn behavioural_rustflags_recipes_are_well_formed_without_inherited_flags(
-    #[case] case: RustflagsCase,
-) -> Result<()> {
+#[test]
+fn behavioural_rustflags_recipes_are_well_formed_without_inherited_flags() -> Result<()> {
     let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
     let polonius = make_variable(&makefile, "POLONIUS_FLAGS")
         .context("Makefile should define POLONIUS_FLAGS")?;
-    let expression = shell_expression(&makefile, case)?;
-    let expanded = expand(&expression, None)?;
+    for case in RUSTFLAGS_CASES {
+        let expression = shell_expression(&makefile, case)?;
+        let expanded = expand(&expression, None)?;
 
-    ensure!(
-        expanded.contains(&polonius) == (case.polonius_policy == PoloniusPolicy::Enabled),
-        "{} Polonius contract should hold for {polonius}, expanded to {expanded:?}",
-        case.target
-    );
-    ensure!(
-        !expanded.contains(CALLER_RUSTFLAGS),
-        "{} should not invent flags the caller never set, expanded to {expanded:?}",
-        case.target
-    );
-    // `${VAR:+VAR }` contributes its separator only alongside a value, so an
-    // unset RUSTFLAGS must not leave a leading space. Recipes spelling the
-    // expansion `${VAR-}` tolerate one, so the case declares which contract
-    // applies. This is what separates the idiom from a bare `$RUSTFLAGS `
-    // prefix, which preserves the caller's flags but strands a separator.
-    if case.inheritance_policy == InheritancePolicy::Conditional {
         ensure!(
-            !expanded.starts_with(' '),
-            "{} should not emit a leading separator when RUSTFLAGS is unset, \
-             expanded to {expanded:?}",
+            expanded.contains(&polonius),
+            "{} should enable Polonius with {polonius}, expanded to {expanded:?}",
             case.target
         );
+        ensure!(
+            !expanded.contains(CALLER_RUSTFLAGS),
+            "{} should not invent flags the caller never set, expanded to {expanded:?}",
+            case.target
+        );
+        // `${VAR:+VAR }` contributes its separator only alongside a value, so
+        // an unset RUSTFLAGS must not leave a leading space. Recipes spelling
+        // `${VAR-}` tolerate one, so the case declares which contract applies.
+        if case.inheritance_policy == InheritancePolicy::Conditional {
+            ensure!(
+                !expanded.starts_with(' '),
+                "{} should not emit a leading separator when RUSTFLAGS is unset, \
+                 expanded to {expanded:?}",
+                case.target
+            );
+        }
     }
     Ok(())
 }
