@@ -421,6 +421,17 @@ therefore contain only the selected entries. Build-time branching remains the
 responsibility of the recipe command or script unless a separate future feature
 explicitly models runtime conditions.
 
+Conditional selection crosses the executable-discovery boundary only.
+`command_available(...)` drives the existing `which` resolver and converts a
+typed search miss into `false`; it does not drive the command-execution
+boundary used by `shell()`. Regression tests observe this separation through
+`StdlibState::is_impure()`: a minimal availability-only selection keeps the
+flag clear, while a shell-in-`when` control sets it. The flag also covers other
+impure helpers such as `grep()` and `fetch()`, so it is intentionally a broader
+assertion that no impure stdlib helper ran during selection, rather than a
+shell-specific invocation count. No new port or adapter is introduced for this
+test contract.
+
 ```yaml
 - foreach: glob('assets/svg/*.svg')
   when: item | basename != 'logo.svg'

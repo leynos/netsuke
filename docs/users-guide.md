@@ -408,10 +408,14 @@ netsuke_version: "1.0.0"
 actions:
   - name: test-fast
     command: "cargo nextest run"
+    deps:
+      - config/test-profile.toml
     when: command_available("cargo-nextest")
 
   - name: test-fast
     command: "cargo test"
+    deps:
+      - config/test-profile.toml
     when: not command_available("cargo-nextest")
 
 targets: []
@@ -419,6 +423,12 @@ targets: []
 defaults:
   - test-fast
 ```
+
+Netsuke evaluates both guards while loading the manifest, without running
+either recipe, so exactly one `test-fast` action enters the build graph. The
+selected action's `deps` become Ninja implicit dependencies: changes to
+`config/test-profile.toml` make the action stale, but the path is not appended
+to `cargo nextest run` or `cargo test` as a recipe argument.
 
 Both helpers accept:
 

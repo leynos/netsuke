@@ -192,6 +192,8 @@ invalid_codeblock_attributes        = "deny"
 unescaped_backticks                 = "deny"
 
 [dev-dependencies]
+googletest = "0.14"
+pretty_assertions = "1.4"
 rstest = "0.26.1"
 rstest-bdd = "0.5.0"
 rstest-bdd-macros = { version = "0.5.0", features = ["strict-compile-time-validation"] }

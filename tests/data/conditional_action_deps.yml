@@ -1,0 +1,32 @@
+netsuke_version: "1.0.0"
+actions:
+  - name: preferred-action
+    command: echo preferred
+    sources: preferred/action.src
+    deps: preferred/action.dep
+    order_only_deps: preferred/action.order
+    when: command_available("./.netsuke-missing/tool-3-14-5", cwd_mode="never")
+  - name: "fallback-{{ item }}"
+    command: "echo {{ item }}"
+    foreach:
+      - alpha
+      - beta
+    sources: "src/{{ item }}.in"
+    deps:
+      - "build/{{ item }}.o"
+      - shared/action.cfg
+    order_only_deps: "order/{{ item }}.stamp"
+    when: not command_available("./.netsuke-missing/tool-3-14-5", cwd_mode="never")
+targets:
+  - name: preferred-target
+    command: echo preferred
+    sources: preferred/target.src
+    deps: preferred/target.dep
+    order_only_deps: preferred/target.order
+    when: command_available("./.netsuke-missing/tool-3-14-5", cwd_mode="never")
+  - name: out/fallback
+    command: echo fallback
+    sources: src/target.in
+    deps: include/fallback.h
+    order_only_deps: order/target.stamp
+    when: not command_available("./.netsuke-missing/tool-3-14-5", cwd_mode="never")
