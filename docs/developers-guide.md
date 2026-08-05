@@ -378,7 +378,8 @@ the Cargo build script and the enumerated integration-test crates. The
 by Whitaker under its own narrow policy.
 
 `test_support` is a workspace member, but the root Whitaker invocation selects
-only the `netsuke` package and disables Dylint dependency checks. It therefore
+only the `netsuke-build` package (the Cargo package name behind the `netsuke`
+targets; see ADR-007) and disables Dylint dependency checks. It therefore
 compiles `test_support` as a dependency without applying the root
 `dylint.toml`. Its one sanctioned ambient boundary is configured per crate.
 Workspace membership makes Dylint discover the root configuration even when

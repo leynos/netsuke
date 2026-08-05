@@ -177,10 +177,10 @@ fn lint_whitaker_also_runs_inside_test_support() -> Result<()> {
     );
     ensure!(
         root.first().is_some_and(|line| {
-            line.contains("--package netsuke") && line.contains("--no-deps")
+            line.contains("--package netsuke-build") && line.contains("--no-deps")
         }),
         concat!(
-            "the root Whitaker invocation must select only netsuke and skip ",
+            "the root Whitaker invocation must select only netsuke-build and skip ",
             "dependency checks so test_support loads its own dylint.toml; ",
             "found {root:?}",
         ),

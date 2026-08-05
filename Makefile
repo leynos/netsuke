@@ -100,7 +100,7 @@ lint-clippy: ## Run rustdoc and Clippy with warnings denied
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) clippy $(CLIPPY_FLAGS)
 
 lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(WHITAKER) --all --no-deps --package netsuke -- --all-targets --all-features
+	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(WHITAKER) --all --no-deps --package netsuke-build -- --all-targets --all-features
 	# Run from the crate directory as well so Whitaker loads the narrow
 	# `test_support::fs` exemption from test_support/dylint.toml.
 	cd test_support && DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(WHITAKER) --all --no-deps --package test_support -- --all-targets --all-features
