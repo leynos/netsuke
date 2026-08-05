@@ -43,6 +43,9 @@ operator, user, and contributor references are easier to find.
   `command_available`.
 - [adr-006-adopt-polonius-nightly-toolchain.md](adr-006-adopt-polonius-nightly-toolchain.md):
   Pinned-nightly Polonius borrow-checker adoption decision record.
+- [adr-007-publish-as-netsuke-build.md](adr-007-publish-as-netsuke-build.md):
+  crates.io package rename decision record, and the package-versus-target
+  naming rule it establishes.
 
 ## User and operator guides
 

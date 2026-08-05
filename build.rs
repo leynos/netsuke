@@ -183,7 +183,14 @@ fn generate_man_page(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let mut buf = Vec::new();
     man.render(&mut buf)?;
     let page_name = format!("{name}.1");
-    write_man_page(&buf, out_dir, &page_name)?;
+    let destination = write_man_page(&buf, out_dir, &page_name)?;
+    // Publish the destination so the crate's tests can assert the manual page
+    // contract (name, location, and `.TH` source) without re-deriving where the
+    // build script chose to write it.
+    println!(
+        "cargo:rustc-env=NETSUKE_GENERATED_MAN_PAGE={}",
+        destination.display()
+    );
     if let Some(extra_dir) = env::var_os("OUT_DIR") {
         let extra_dir_path = PathBuf::from(extra_dir);
         if let Err(err) = write_man_page(&buf, &extra_dir_path, &page_name) {

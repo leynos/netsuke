@@ -126,6 +126,9 @@ The crates.io package is named `netsuke-build`, while its library and binary
 targets remain named `netsuke`. Keep command-line help, manual pages, release
 artefacts, and operating-system packages aligned with the `netsuke` target name
 rather than the Cargo package name.
+[ADR-007](adr-007-publish-as-netsuke-build.md) records the decision, and the
+[developer guide](developers-guide.md) describes how the build script, release
+packaging, and `cargo binstall` metadata honour it.
 
 Place feature files in `tests/features/` unless the behaviour depends on
 Unix-specific platform contracts, in which case use `tests/features_unix/`.
