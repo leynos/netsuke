@@ -16,55 +16,48 @@ use time::{OffsetDateTime, format_description::well_known::Iso8601};
 
 const FALLBACK_DATE: &str = "1970-01-01";
 
-// The build script recompiles these library modules as its own crate so that
-// `cli::Cli::command()` (used for man-page generation) can be constructed. Only
-// a small slice of each module's public API is reachable from this binary, so
-// the compiler reports the remainder as unused. Those items are not dead: their
-// real call sites live in the library crate and are covered by its tests, where
-// dead-code and unused-import analysis applies normally. Each shared module
-// therefore carries an `#[expect]` for exactly the lints it triggers here, in
-// preference to anchoring the symbols with artificial references.
-#[expect(
-    dead_code,
-    unused_imports,
-    reason = "shared library source; the unreached API is exercised by the library crate"
-)]
-#[path = "src/cli/mod.rs"]
-mod cli;
+// The build script recompiles a slice of the library as its own crate so that
+// `cli::Cli::command()` (used for man-page generation) can be constructed, and
+// so that the localization audit can read the declared key registry.
+//
+// The slice is named file by file rather than by pulling in `src/cli/mod.rs`,
+// because that would drag the whole `cli` subtree — configuration discovery,
+// merging, diagnostics, localised value parsing — into this crate, where none
+// of it is reachable. Recompiling only what is reachable keeps rustc's
+// unused-item analysis meaningful here instead of requiring module-wide
+// `#[expect(dead_code)]` suppressions that would also mask genuinely dead
+// library code.
+//
+// The library modules below are laid out to keep this slice small:
+// `src/cli/command.rs` holds definitions only, with runtime behaviour in
+// `src/cli/preferences.rs` and `src/cli/parser.rs`; matching logic is split out
+// of `src/host_pattern.rs` into `src/host_matching.rs`. Adding a dependency on
+// anything outside this slice will surface here as a compile error, which is
+// the intended signal.
+#[path = "src/cli"]
+mod cli {
+    //! The Clap schema slice of `src/cli`, mirroring `src/cli/mod.rs`.
+
+    #[path = "config.rs"]
+    pub mod config;
+    #[path = "validation.rs"]
+    mod validation;
+
+    #[path = "command.rs"]
+    mod command;
+
+    pub use command::Cli;
+    pub use config::{AccessibilityPolicy, ColourPolicy, EmojiPolicy, ProgressPolicy};
+}
 
 #[path = "src/cli_localization.rs"]
 mod cli_localization;
 
-#[expect(
-    dead_code,
-    reason = "shared library source; the unreached API is exercised by the library crate"
-)]
-#[path = "src/cli_l10n.rs"]
-mod cli_l10n;
-
-#[expect(
-    dead_code,
-    reason = "shared library source; the unreached API is exercised by the library crate"
-)]
 #[path = "src/host_pattern.rs"]
 mod host_pattern;
 
 #[path = "src/localization/mod.rs"]
 mod localization;
-
-#[expect(
-    dead_code,
-    reason = "shared library source; the unreached API is exercised by the library crate"
-)]
-#[path = "src/output_mode.rs"]
-mod output_mode;
-
-#[expect(
-    dead_code,
-    reason = "shared library source; the unreached API is exercised by the library crate"
-)]
-#[path = "src/theme.rs"]
-mod theme;
 
 mod build_l10n_audit;
 
@@ -122,11 +115,12 @@ fn write_man_page(data: &[u8], dir: &Path, page_name: &str) -> std::io::Result<P
 }
 
 fn emit_rerun_directives() {
-    println!("cargo:rerun-if-changed=src/cli/mod.rs");
+    // Only the modules this script actually compiles need to trigger a rerun.
+    println!("cargo:rerun-if-changed=src/cli/command.rs");
     println!("cargo:rerun-if-changed=src/cli/config.rs");
-    println!("cargo:rerun-if-changed=src/cli/merge.rs");
-    println!("cargo:rerun-if-changed=src/cli/parser.rs");
-    println!("cargo:rerun-if-changed=src/cli/parsing.rs");
+    println!("cargo:rerun-if-changed=src/cli/validation.rs");
+    println!("cargo:rerun-if-changed=src/host_pattern.rs");
+    println!("cargo:rerun-if-changed=src/cli_localization.rs");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_VERSION");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_NAME");
     println!("cargo:rerun-if-env-changed=CARGO_BIN_NAME");
