@@ -1614,6 +1614,22 @@ and immediately evaluates it; callers must use the shared manifest rendering
 helper so caller blocks retain their template context. This adapter belongs to
 manifest rendering and must not be reused as a general MiniJinja cache.
 
+The stdlib's `HomeDirectory` value keeps `expanduser` deterministic: the
+`Ambient` variant reads the process-backed home at the composition boundary,
+`Explicit` supplies a test or caller-selected value, and `Missing` makes a
+missing-home error observable. `path::register_filters` receives this value
+when it installs path filters; `collections::register_filters` installs the
+pure collection filters without environment state. Keep these registration
+functions as feature-local wiring points rather than calling them independently
+from manifest code.
+
+`CommandConfigInit` is the internal hand-off from `StdlibConfig` to command
+helpers. It carries the capability-scoped workspace root, output limits, and an
+optional `PATH` override. `CommandConfig::new` consumes the owned bundle, and
+the resulting configuration applies the override only when a child command is
+spawned; callers should configure this through `StdlibConfig` rather than
+constructing the internal value directly.
+
 The `test_support::dev_fast` sandbox reuses `mockable::Env` only while locating
 the host utilities it explicitly links into its hermetic `PATH`.
 `real_utility_with_env` is the test seam for that lookup; it is not a general
@@ -1953,7 +1969,7 @@ external callers see only the `Config*` names below. The production
 map-backed providers without mutating process-global state.
 
 ```rust
-pub trait EnvProvider {
+pub trait ConfigEnvProvider {
     fn get(&self, key: &str) -> Option<std::ffi::OsString>;
     fn entries(&self) -> Vec<(std::ffi::OsString, std::ffi::OsString)>;
 }
@@ -1984,20 +2000,20 @@ pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli>;
 pub fn merge_with_config_and_env(
     cli: &Cli,
     matches: &ArgMatches,
-    env: &impl EnvProvider,
+    env: &impl ConfigEnvProvider,
 ) -> OrthoResult<Cli>;
 pub fn resolve_merged_json(cli: &Cli, matches: &ArgMatches) -> OrthoResult<bool>;
 pub fn resolve_merged_json_with_env(
     cli: &Cli,
     matches: &ArgMatches,
-    env: &impl EnvProvider,
+    env: &impl ConfigEnvProvider,
 ) -> OrthoResult<bool>;
 ```
 
 The `cli` module re-exports this trait publicly as `ConfigEnvProvider` (and
-`StdEnvProvider` as `ConfigStdEnvProvider`) to avoid colliding with the
-unrelated `EnvProvider` in `locale_resolution`; crate-internal code uses the
-bare `EnvProvider` name.
+`StdEnvProvider` as `ConfigStdEnvProvider`) to keep the CLI seam distinct from
+the unrelated `LocaleEnvProvider` in `locale_resolution`; crate-internal code
+uses the bare `EnvProvider` name.
 
 Discovery tests that exercise OrthoConfig's `ConfigDiscovery` must run the
 ambient adapter in an isolated child configured with `env_clear()` followed by
@@ -2282,6 +2298,25 @@ yardstick for production cache keys.
 
 ## Manifest processing helpers
 
+### Template rendering and macro registration
+
+`manifest::jinja_macros::render_template` is the shared rendering boundary for
+manifest strings. It prepends the import declarations registered in the
+MiniJinja environment, then renders the caller's template and context. This
+keeps manifest-defined macros available to target, rule, and variable
+rendering, including caller-block context; use the higher-level
+`manifest::render_manifest` entry point unless a lower-level expression must be
+rendered directly.
+
+`register_manifest_macros` parses the manifest `macros` section and delegates
+each definition to `register_macro`. Registration validates the compiled
+template and installs both the import declaration used by `render_template`
+and the fallback function built by `make_macro_fn` for compiled expressions.
+`make_macro_fn` captures a macro reference and resolves it against the active
+MiniJinja state on each invocation, so it must not be treated as a reusable
+global template cache. Errors remain at the manifest boundary and retain their
+localized failure category.
+
 ### Expansion helpers
 
 #### expand_foreach
@@ -2349,6 +2384,14 @@ Both modules reuse only schema-version and generator metadata from the private
 `src/json_envelope.rs` module. Within process execution, `forward_stdout` is
 the single composition point for choosing status-aware or plain child-output
 draining, and its callers select either the terminal or a JSON-mode sink.
+
+`ExecutionContext` is the private dispatch context shared by build and clean
+handlers. `run_with_ninja_program` constructs it after resolving output mode
+and reporter settings, then passes the reporter, progress decision, and
+selected Ninja program through `dispatch::execute`. Handlers consume the
+context rather than resolving output or process configuration again; tests
+should inject the program through `run_with_ninja_program` when they need a
+deterministic child executable.
 
 ### Module: `runner::process::ninja_program`
 

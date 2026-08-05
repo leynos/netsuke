@@ -33,6 +33,25 @@ struct ProbeResult {
 ///
 /// Returns an error if the empty system-configuration directory cannot be
 /// created.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let project = tempfile::tempdir()?;
+/// let overrides = [(
+///     std::ffi::OsString::from("NETSUKE_EMOJI"),
+///     std::ffi::OsString::from("always"),
+/// )];
+/// let (xdg_config_dirs, environment) = isolated_environment(project.path(), &overrides)?;
+/// let merged = merge_in_child(&["netsuke"], project.path(), &environment)?;
+/// assert_eq!(merged.emoji, netsuke::cli::EmojiPolicy::Always);
+///
+/// // Keep `xdg_config_dirs` alive until the child has finished. The
+/// // XDG_CONFIG_DIRS value points into this directory; dropping it first
+/// // removes the directory that the child uses for configuration discovery.
+/// drop(xdg_config_dirs);
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 pub(super) fn isolated_environment(
     home: &Path,
     overrides: &[(OsString, OsString)],
