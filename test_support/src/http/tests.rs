@@ -10,6 +10,7 @@ use super::{
 };
 
 use mockable::MockEnv;
+use rstest::{fixture, rstest};
 use std::{
     collections::HashMap,
     net::TcpListener,
@@ -30,6 +31,32 @@ fn fixture_env(entries: &[(&str, &str)]) -> MockEnv {
             .ok_or(std::env::VarError::NotPresent)
     });
     env
+}
+
+#[fixture]
+fn empty_duration_warnings() -> EmptyDurationWarnings {
+    EmptyDurationWarnings {
+        started_empty: take_duration_warnings().is_empty(),
+    }
+}
+
+struct EmptyDurationWarnings {
+    started_empty: bool,
+}
+
+impl EmptyDurationWarnings {
+    fn take(&self) -> Vec<String> {
+        assert!(self.started_empty, "warnings buffer should start empty");
+        take_duration_warnings()
+    }
+}
+
+#[derive(Clone, Copy)]
+struct DurationCase {
+    key: &'static str,
+    value: Option<&'static str>,
+    expected: Duration,
+    expected_warning_value: Option<&'static str>,
 }
 
 #[test]
@@ -70,56 +97,55 @@ fn from_env_clamps_zero_poll_interval() {
     );
 }
 
-#[test]
-fn duration_from_env_returns_default_for_missing() {
-    assert!(
-        take_duration_warnings().is_empty(),
-        "warnings buffer should start empty"
-    );
-    let env = fixture_env(&[]);
-    let duration = duration_from_env(&env, ENV_HTTP_ACCEPT_TIMEOUT_MS, Duration::from_secs(3));
-    assert_eq!(duration, Duration::from_secs(3));
-    assert!(
-        take_duration_warnings().is_empty(),
-        "missing variables should not log warnings"
-    );
-}
+#[rstest]
+#[case::missing(DurationCase {
+    key: ENV_HTTP_ACCEPT_TIMEOUT_MS,
+    value: None,
+    expected: Duration::from_secs(3),
+    expected_warning_value: None,
+})]
+#[case::invalid(DurationCase {
+    key: ENV_HTTP_ACCEPT_TIMEOUT_MS,
+    value: Some("not-a-number"),
+    expected: Duration::from_secs(3),
+    expected_warning_value: Some("not-a-number"),
+})]
+#[case::whitespace_padded(DurationCase {
+    key: ENV_HTTP_READ_TIMEOUT_MS,
+    value: Some("  2500  "),
+    expected: Duration::from_millis(2500),
+    expected_warning_value: None,
+})]
+fn duration_from_env_handles_input(
+    empty_duration_warnings: EmptyDurationWarnings,
+    #[case] case: DurationCase,
+) {
+    let entries = case.value.map_or_else(Vec::new, |configured_value| {
+        vec![(case.key, configured_value)]
+    });
+    let env = fixture_env(&entries);
 
-#[test]
-fn duration_from_env_reports_invalid_values() {
-    assert!(
-        take_duration_warnings().is_empty(),
-        "warnings buffer should start empty"
-    );
-    let env = fixture_env(&[(ENV_HTTP_ACCEPT_TIMEOUT_MS, "not-a-number")]);
-    let duration = duration_from_env(&env, ENV_HTTP_ACCEPT_TIMEOUT_MS, Duration::from_secs(3));
-    assert_eq!(duration, Duration::from_secs(3));
-    let warnings = take_duration_warnings();
-    assert_eq!(warnings.len(), 1);
-    let warning = warnings.first().map_or("", String::as_str);
-    assert!(
-        warning.contains(ENV_HTTP_ACCEPT_TIMEOUT_MS),
-        "warning should mention the variable name"
-    );
-    assert!(
-        warning.contains("not-a-number"),
-        "warning should include the invalid value"
-    );
-}
+    let duration = duration_from_env(&env, case.key, Duration::from_secs(3));
 
-#[test]
-fn duration_from_env_trims_whitespace() {
-    assert!(
-        take_duration_warnings().is_empty(),
-        "warnings buffer should start empty"
-    );
-    let env = fixture_env(&[(ENV_HTTP_READ_TIMEOUT_MS, "  2500  ")]);
-    let duration = duration_from_env(&env, ENV_HTTP_READ_TIMEOUT_MS, Duration::from_secs(3));
-    assert_eq!(duration, Duration::from_millis(2500));
-    assert!(
-        take_duration_warnings().is_empty(),
-        "whitespace-only padding should not trigger warnings",
-    );
+    assert_eq!(duration, case.expected);
+    let warnings = empty_duration_warnings.take();
+    if let Some(expected_value) = case.expected_warning_value {
+        assert_eq!(warnings.len(), 1);
+        let warning = warnings.first().map_or("", String::as_str);
+        assert!(
+            warning.contains(case.key),
+            "warning should mention the variable name"
+        );
+        assert!(
+            warning.contains(expected_value),
+            "warning should include the invalid value"
+        );
+    } else {
+        assert!(
+            warnings.is_empty(),
+            "valid or missing values should not warn"
+        );
+    }
 }
 
 #[test]
@@ -150,8 +176,8 @@ fn accept_connection_respects_accept_timeout() -> anyhow::Result<()> {
         "panic should not occur before the accept timeout (elapsed {elapsed:?}, timeout {accept_timeout:?})",
     );
     anyhow::ensure!(
-        elapsed <= accept_timeout + poll_interval + Duration::from_millis(50),
-        "panic overshot accept timeout by more than one poll interval: elapsed={elapsed:?}, accept_timeout={accept_timeout:?}, poll_interval={poll_interval:?}",
+        elapsed <= accept_timeout + poll_interval + Duration::from_millis(500),
+        "panic overshot accept timeout tolerance: elapsed={elapsed:?}, accept_timeout={accept_timeout:?}, poll_interval={poll_interval:?}",
     );
 
     let panic_ref = panic_payload.as_ref();

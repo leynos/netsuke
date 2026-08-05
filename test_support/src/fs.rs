@@ -243,9 +243,23 @@ pub fn set_mode(path: impl AsRef<Path>, mode: u32) -> io::Result<()> {
 #[cfg(unix)]
 #[must_use]
 pub fn is_executable_file(path: impl AsRef<Path>) -> bool {
+    executable_file(path).unwrap_or(false)
+}
+
+/// Probe whether `path` is a regular file with any execute bit set.
+///
+/// Unlike [`is_executable_file`], this form preserves metadata errors so
+/// callers performing executable discovery can distinguish a missing candidate
+/// from an unreadable or otherwise invalid path.
+///
+/// # Errors
+///
+/// Propagates the underlying metadata failure.
+#[cfg(unix)]
+pub(crate) fn executable_file(path: impl AsRef<Path>) -> io::Result<bool> {
     use std::os::unix::fs::PermissionsExt;
-    fs::metadata(path)
-        .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+    let metadata = fs::metadata(path)?;
+    Ok(metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
 }
 
 /// Create a symbolic link at `link` pointing to `target` on Unix.

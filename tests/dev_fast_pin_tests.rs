@@ -25,7 +25,7 @@ fn utility_lookup_uses_the_injected_environment() {
         .withf(|key| key == "PATH")
         .returning(|_| Err(std::env::VarError::NotPresent));
 
-    let error = real_utility_with_env(&env, "sh")
+    let error = real_utility_with_env(&env, camino::Utf8Path::new("/workspace"), "sh")
         .expect_err("a missing injected PATH should prevent utility lookup");
     assert!(
         error.to_string().contains("read PATH"),

@@ -4,6 +4,8 @@
 //! synchronised, preventing interference between concurrently running tests.
 
 use std::cell::RefCell;
+use std::marker::PhantomData;
+use std::rc::Rc;
 use std::sync::{Mutex, MutexGuard};
 use std::{fmt, fmt::Formatter};
 
@@ -22,8 +24,19 @@ struct LockState {
 }
 
 /// RAII guard that holds the global environment lock.
+///
+/// The guard is thread-bound because its underlying mutex guard is stored in
+/// thread-local state. Moving it to another thread would leave the acquiring
+/// thread's lock depth and guard out of sync.
+///
+/// ```compile_fail
+/// use test_support::env_lock::EnvLock;
+///
+/// let guard = EnvLock::acquire();
+/// std::thread::spawn(move || drop(guard));
+/// ```
 pub struct EnvLock {
-    _private: (),
+    _not_send: PhantomData<Rc<()>>,
 }
 
 impl fmt::Debug for EnvLock {
@@ -47,7 +60,9 @@ impl EnvLock {
             }
             state_ref.depth += 1;
         });
-        Self { _private: () }
+        Self {
+            _not_send: PhantomData,
+        }
     }
 }
 
@@ -74,6 +89,11 @@ mod tests {
         assert!(ENV_LOCK.try_lock().is_err(), "{message}");
     }
 
+    /// Probe the mutex directly after a guard is released.
+    ///
+    /// This assertion is reliable only when each test runs in a separate
+    /// process, as cargo-nextest does. Under thread-parallel `cargo test`, an
+    /// unrelated test may legitimately acquire `ENV_LOCK` before this probe.
     fn assert_underlying_lock_is_released(message: &str) {
         let Ok(lock) = ENV_LOCK.try_lock() else {
             panic!("{message}");
@@ -155,5 +175,25 @@ mod tests {
             "contending thread should acquire the lock after release"
         );
         assert!(contender.join().is_ok(), "contending thread should finish");
+    }
+
+    #[test]
+    fn env_lock_recovers_after_mutex_poisoning() {
+        let poisoner = std::thread::spawn(|| {
+            let _guard = EnvLock::acquire();
+            panic!("poison ENV_LOCK deliberately");
+        });
+
+        assert!(poisoner.join().is_err(), "poisoning thread should panic");
+        assert!(
+            ENV_LOCK.is_poisoned(),
+            "the panic should poison the underlying mutex"
+        );
+
+        let recovered_guard = EnvLock::acquire();
+        assert_underlying_lock_is_held("recovered EnvLock guard should hold ENV_LOCK");
+        drop(recovered_guard);
+        ENV_LOCK.clear_poison();
+        assert_underlying_lock_is_released("recovered ENV_LOCK should be released normally");
     }
 }

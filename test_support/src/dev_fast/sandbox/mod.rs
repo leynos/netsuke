@@ -57,6 +57,16 @@ impl Sandbox {
     /// # Errors
     ///
     /// Returns an error if the sandbox cannot be created or its utilities cannot be resolved.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use mockable::DefaultEnv;
+    /// use test_support::dev_fast::Sandbox;
+    ///
+    /// let sandbox = Sandbox::with_env(&DefaultEnv).expect("create utility sandbox");
+    /// assert!(sandbox.bin().is_absolute());
+    /// ```
     pub fn with_env(env: &impl Env) -> Result<Self> {
         let temp = tempdir().context("create sandbox directory")?;
         let root = Utf8Path::from_path(temp.path())
@@ -95,7 +105,7 @@ impl Sandbox {
 
     fn link_utilities(&self, env: &impl Env) -> Result<()> {
         for utility in SANDBOX_UTILITIES {
-            let source = which(env, utility)
+            let source = which(env, &self.repo, utility)
                 .with_context(|| format!("locate `{utility}` for the sandbox"))?;
             fs::symlink(source.as_std_path(), self.bin().join(utility).as_std_path())
                 .with_context(|| format!("link `{utility}` into the sandbox"))?;
