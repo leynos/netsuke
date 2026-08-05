@@ -45,13 +45,21 @@ def _load() -> dict[str, object]:
 
 def _steps(workflow: dict[str, object]) -> list[dict[str, object]]:
     """Return the build-test job's steps."""
-    jobs = workflow.get("jobs")
-    assert isinstance(jobs, dict), "the workflow must declare a jobs mapping"
-    job = jobs.get("build-test")
-    assert isinstance(job, dict), "the workflow must declare a build-test job"
-    steps = job.get("steps")
-    assert isinstance(steps, list), "jobs.build-test.steps must be a list"
-    return steps
+    match workflow.get("jobs"):
+        case dict() as jobs:
+            pass
+        case _:
+            raise AssertionError("the workflow must declare a jobs mapping")
+    match jobs.get("build-test"):
+        case dict() as job:
+            pass
+        case _:
+            raise AssertionError("the workflow must declare a build-test job")
+    match job.get("steps"):
+        case list() as steps:
+            return steps
+        case _:
+            raise AssertionError("jobs.build-test.steps must be a list")
 
 
 def _step(name: str) -> dict[str, object]:
@@ -65,9 +73,11 @@ def _step(name: str) -> dict[str, object]:
 
 def _test_shell_script() -> str:
     """Return the run script of the test-shell dependency step."""
-    run = _step(TEST_SHELL_STEP).get("run")
-    assert isinstance(run, str), f"{TEST_SHELL_STEP} must declare a run script"
-    return run
+    match _step(TEST_SHELL_STEP).get("run"):
+        case str() as run:
+            return run
+        case _:
+            raise AssertionError(f"{TEST_SHELL_STEP} must declare a run script")
 
 
 def test_test_shell_step_installs_gawk() -> None:

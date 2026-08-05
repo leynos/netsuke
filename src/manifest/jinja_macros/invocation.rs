@@ -242,9 +242,9 @@ mod tests {
             .expect("compiled expression should forward keyword arguments")
             .to_string();
 
-        assert!(
-            rendered.contains("Ada"),
-            "keyword argument should override the default: {rendered}"
+        assert_eq!(
+            rendered, "Hello Ada",
+            "keyword argument should override the default"
         );
     }
 

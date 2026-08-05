@@ -33,26 +33,28 @@ fn provider_filters_prefixes_and_builds_nested_values() {
     assert!(!defaults.contains_key("ignored"));
 }
 
-#[test]
-fn provider_rejects_parent_scalar_before_nested_key() {
-    let error = layer(&[
-        ("NETSUKE_CMDS", "build"),
-        ("NETSUKE_CMDS__BUILD__TARGETS", "all"),
-    ])
-    .data()
-    .expect_err("a scalar parent must conflict with a nested key");
-    assert!(error.to_string().contains("scalar configuration key"));
-}
-
-#[test]
-fn provider_rejects_nested_key_before_parent_scalar() {
-    let error = layer(&[
-        ("NETSUKE_CMDS__BUILD__TARGETS", "all"),
-        ("NETSUKE_CMDS", "build"),
-    ])
-    .data()
-    .expect_err("a nested key must conflict with a scalar parent");
-    assert!(error.to_string().contains("nested configuration key"));
+/// The conflict message names the kind of the entry already present, so each
+/// ordering pins a different fragment.
+#[rstest::rstest]
+#[case::scalar_before_nested(
+    [("NETSUKE_CMDS", "build"), ("NETSUKE_CMDS__BUILD__TARGETS", "all")],
+    "scalar configuration key"
+)]
+#[case::nested_before_scalar(
+    [("NETSUKE_CMDS__BUILD__TARGETS", "all"), ("NETSUKE_CMDS", "build")],
+    "nested configuration key"
+)]
+fn provider_rejects_scalar_and_nested_key_conflicts(
+    #[case] entries: [(&str, &str); 2],
+    #[case] expected_fragment: &str,
+) {
+    let error = layer(&entries)
+        .data()
+        .expect_err("a scalar parent and a nested key must conflict in either order");
+    assert!(
+        error.to_string().contains(expected_fragment),
+        "expected the conflict to name the existing {expected_fragment}, got {error}"
+    );
 }
 
 #[test]
