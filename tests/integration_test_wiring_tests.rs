@@ -48,12 +48,12 @@ fn orphaned_module_trees(tests_dir: &Dir, sources: &[String]) -> Result<Vec<Stri
         }
 
         let conventional_declaration = format!("mod {name};");
-        let explicit_path = format!("\"{name}/mod.rs\"");
+        let explicit_path_attribute = format!("#[path = \"{name}/mod.rs\"]");
         let is_wired = sources.iter().any(|source| {
-            source
-                .lines()
-                .any(|line| line.trim() == conventional_declaration)
-                || source.contains(&explicit_path)
+            source.lines().any(|line| {
+                let trimmed_line = line.trim();
+                trimmed_line == conventional_declaration || trimmed_line == explicit_path_attribute
+            })
         });
         if !is_wired {
             orphaned.push(name);
@@ -80,7 +80,7 @@ fn module_trees_are_wired_to_cargo_test_targets() -> Result<()> {
 }
 
 #[test]
-fn orphaned_module_tree_is_reported() -> Result<()> {
+fn orphaned_and_commented_module_trees_are_reported() -> Result<()> {
     let temp = tempfile::tempdir().context("create integration-test fixture")?;
     let tests_path = Utf8Path::from_path(temp.path()).context("fixture path is not valid UTF-8")?;
     let tests_dir = Dir::open_ambient_dir(tests_path, ambient_authority())
@@ -98,15 +98,27 @@ fn orphaned_module_tree_is_reported() -> Result<()> {
         .write("orphaned/mod.rs", "//! Orphaned fixture.\n")
         .context("write orphaned module root")?;
     tests_dir
+        .create_dir("commented")
+        .context("create commented module tree")?;
+    tests_dir
+        .write("commented/mod.rs", "//! Commented fixture.\n")
+        .context("write commented module root")?;
+    tests_dir
         .write("wired_tests.rs", "mod wired;\n")
         .context("write wired integration-test target")?;
+    tests_dir
+        .write(
+            "commented_tests.rs",
+            "// #[path = \"commented/mod.rs\"]\n// mod commented;\n",
+        )
+        .context("write commented integration-test target")?;
 
     let sources = integration_test_sources(&tests_dir)?;
     let orphaned = orphaned_module_trees(&tests_dir, &sources)?;
 
     ensure!(
-        orphaned == ["orphaned"],
-        "expected only the orphaned fixture to be reported, got {orphaned:?}"
+        orphaned == ["commented", "orphaned"],
+        "expected commented and orphaned fixtures to be reported, got {orphaned:?}"
     );
     Ok(())
 }
