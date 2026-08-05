@@ -285,11 +285,10 @@ references, clone keys only on insertion, and build error context lazily.
   ```
 
 - The runner is configured by `.config/nextest.toml` at the repository root.
-  Its scope and no-blanket-retry policy are documented under "Test execution"
-  in `docs/developers-guide.md`. Environment-dependent tests use injected
+  Its scope and no-blanket-retry policy are documented under "Test execution" in
+  `docs/developers-guide.md`. Environment-dependent tests use injected
   providers or isolated child processes; there is no serialized environment
-  test group.
-  Do not add retries to hide a flaky test; fix the test.
+  test group. Do not add retries to hide a flaky test; fix the test.
 - Use `rstest` fixtures for shared setup.
 - Replace duplicated tests with `#[rstest(...)]` parameterized cases.
 - Prefer `mockall` for ad hoc mocks/stubs.

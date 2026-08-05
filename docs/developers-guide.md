@@ -106,16 +106,16 @@ emits.
 
 `settle_startup_diagnostics` in `src/main.rs` decides where the buffer goes
 once the effective mode is known: human mode releases it to stderr, JSON mode
-discards it so stderr carries only the diagnostic document. In
-`run_with_args`, settlement happens after the JSON mode is resolved but before
-the configuration merge, so a human-mode warning still precedes any
-configuration processing. On the paths where `clap` calls `Error::exit` and
-never returns — `parse_cli_or_exit` — settlement happens first, because
-nothing after that call would otherwise run.
+discards it so stderr carries only the diagnostic document. In `run_with_args`,
+settlement happens after the JSON mode is resolved but before the configuration
+merge, so a human-mode warning still precedes any configuration processing. On
+the paths where `clap` calls `Error::exit` and never returns —
+`parse_cli_or_exit` — settlement happens first, because nothing after that call
+would otherwise run.
 
 Unit tests in `src/main_tests.rs` drive `startup_filter` and the real
-`startup_localizer` to check the buffered warning and the level it is gated
-by. `tests/startup_diagnostics_tests.rs` runs the built binary end to end,
+`startup_localizer` to check the buffered warning and the level it is gated by.
+`tests/startup_diagnostics_tests.rs` runs the built binary end to end,
 including the configuration-driven JSON path, because the behaviour under test
 spans the whole startup sequence and covers paths that terminate inside `clap`
 before returning to `run_with_args`.
@@ -753,11 +753,11 @@ and `-Clink-arg=-fuse-ld=mold`.
   described below. Run the ordinary gates before proposing a change;
   `make dev-test` is a faster inner-loop proxy, not a substitute.
 - **`RUSTFLAGS`.** `make test-nextest`, `make doctest`, `make typecheck`, and
-  the rustdoc stage of `make lint` append `-D warnings` and
-  `$(POLONIUS_FLAGS)` to any flags inherited from the caller. An externally set
-  `RUSTFLAGS` overrides the `[target.*]` `rustflags` in a Cargo configuration
-  file, so the `dev-*` targets deliberately do not set it. Exporting
-  `RUSTFLAGS` in the shell silently disables `mold` for these targets.
+  the rustdoc stage of `make lint` append `-D warnings` and `$(POLONIUS_FLAGS)`
+  to any flags inherited from the caller. An externally set `RUSTFLAGS`
+  overrides the `[target.*]` `rustflags` in a Cargo configuration file, so the
+  `dev-*` targets deliberately do not set it. Exporting `RUSTFLAGS` in the
+  shell silently disables `mold` for these targets.
 - **Release and packaging.** `make release` and everything under
   `.github/workflows/build-and-package.yml` use the release profile, the LLVM
   backend, and the platform linker. Cranelift is applied to the `dev` profile
@@ -776,14 +776,13 @@ and `-Clink-arg=-fuse-ld=mold`.
   `make test-nextest`, not of `make test`: it runs the same
   `cargo nextest run --workspace --all-targets --all-features`, and so is
   governed by the same [`.config/nextest.toml`](#nextest-configuration). It
-  omits the
-  `doctest` pass, because `cargo test --doc` is a separate and comparatively
-  quick runner; run `make test` before proposing a change. The acceleration is
-  applied through `RUSTUP_TOOLCHAIN` and `cargo --config`, both Cargo-level
-  rather than runner-level, which is why they compose with nextest unchanged.
-  Note the target uses `NEXTEST_BUILD_JOBS`, not `BUILD_JOBS`: nextest reserves
-  `-j` for test concurrency, so a Cargo-shaped `-j` would silently become a
-  thread count.
+  omits the `doctest` pass, because `cargo test --doc` is a separate and
+  comparatively quick runner; run `make test` before proposing a change. The
+  acceleration is applied through `RUSTUP_TOOLCHAIN` and `cargo --config`, both
+  Cargo-level rather than runner-level, which is why they compose with nextest
+  unchanged. Note the target uses `NEXTEST_BUILD_JOBS`, not `BUILD_JOBS`:
+  nextest reserves `-j` for test concurrency, so a Cargo-shaped `-j` would
+  silently become a thread count.
 - **rust-analyzer.** No rust-analyzer configuration is committed, so the
   language server uses the repository toolchain and the default backend. Opting
   rust-analyzer into Cranelift is a personal, machine-local choice; it needs a
@@ -879,12 +878,11 @@ The fixtures live in `test_support::dev_fast`:
   passes — pinned `mold` on the install prefix, a `rustup` reporting the
   Cranelift component, and a `RecordingCargo` installed — and is shared by the
   Make-target and benchmark suites. `BuildScenario::run(target)` returns the
-  single Cargo invocation a target must produce. The scenario is shared by
-  both suites so each can inspect that invocation without relying on
-  process-global state.
-  `InstallerScenario` is a sandbox with a published `FakeRelease` and a usable
-  `rustup`, letting a test concentrate on the linker half of the installer; the
-  installer and checksum suites share it. The module also exports
+  single Cargo invocation a target must produce. The scenario is shared by both
+  suites so each can inspect that invocation without relying on process-global
+  state. `InstallerScenario` is a sandbox with a published `FakeRelease` and a
+  usable `rustup`, letting a test concentrate on the linker half of the
+  installer; the installer and checksum suites share it. The module also exports
   `TEST_MOLD_VERSION`, deliberately not a real `mold` version so a test that
   accidentally reaches the network fails rather than silently succeeding
   against an upstream artefact, and `WRONG_SHA256`. `InstallerFixture` groups
@@ -900,8 +898,8 @@ behalf what counts as correct.
 
 Assert on the shape of a timing cell, never on a duration. Reuse the sandbox
 for any future target with the same shape. These tests spawn children with a
-bespoke environment rather than mutating the parent's, which is what keeps
-them safe to run in parallel.
+bespoke environment rather than mutating the parent's, which is what keeps them
+safe to run in parallel.
 
 Three invariants carry property coverage rather than fixed examples, because
 each ranges over inputs an enumerated list tends to under-sample:
@@ -925,9 +923,9 @@ Prefer a model that predicts an outcome over a table that restates one. Where
 an invariant lives in a shell script, the cost is a process per case, so keep
 the corpus small and the strategy structural.
 
-`test_support` is a workspace member, so `make test` (whose nextest command
-uses `--workspace`), rustdoc, Clippy, and Whitaker visit its unit tests and
-library code. Keep fixture tests beside the fixture when they exercise a local
+`test_support` is a workspace member, so `make test` (whose nextest command uses
+`--workspace`), rustdoc, Clippy, and Whitaker visit its unit tests and library
+code. Keep fixture tests beside the fixture when they exercise a local
 invariant; use the `tests/dev_fast_*.rs` integration crates when the assertion
 spans the application-facing sandbox or Makefile contract.
 
@@ -1121,11 +1119,10 @@ Cargo home plus Kani support-file home.
   any `RUSTFLAGS` inherited from the caller). This runs every unit, integration,
   `rstest`, and `rstest-bdd` test.
 - `make doctest` — `cargo test --workspace --doc --all-features`, with
-  `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)"`.
-  This preserves flags inherited from the caller and restores Polonius while
-  denying warnings. nextest cannot execute doctests, so they need their own
-  pass; the separate target is what makes a broken documentation example fail
-  the gate.
+  `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)"`. This
+  preserves flags inherited from the caller and restores Polonius while denying
+  warnings. nextest cannot execute doctests, so they need their own pass; the
+  separate target is what makes a broken documentation example fail the gate.
 
 If either pass fails, `make test` fails. Run the individual targets when
 iterating, but treat `make test` as the gate.
@@ -1150,13 +1147,12 @@ governs the non-doctest pass only, and deliberately stays small:
   warning periods) so a hung test surfaces without failing the legitimately
   slow documentation end-to-end suites, which shell out to real Ninja.
 
-
 ### How this relates to the isolation utilities
 
 nextest runs each test in its own process, but the codebase does not rely on
 that isolation for environment safety. Tests pass environment values through
-explicit configuration seams or configure a child with `env_clear()` followed
-by `Command::env`. `EnvLock` and `CwdGuard` remain only for the few tests that
+explicit configuration seams or configure a child with `env_clear()` followed by
+`Command::env`. `EnvLock` and `CwdGuard` remain only for the few tests that
 exercise process working-directory behaviour, because the in-process coverage
 runner shares that state.
 
@@ -1206,9 +1202,9 @@ build-script sources, including the `build_l10n_audit/` modules, and rejects
 stale `ninja_env/` paths. It also asserts that every catalogue named by the
 locale registry ships in the package, so adding a locale cannot silently omit
 its `messages.ftl` from a release. Package `include` patterns are anchored to
-the crate root so similarly named files below local caches cannot leak into
-the archive. The smoke test also confirms that `.uv-cache/` and the
-workspace-only `test_support/` crate are absent from the netsuke package.
+the crate root so similarly named files below local caches cannot leak into the
+archive. The smoke test also confirms that `.uv-cache/` and the workspace-only
+`test_support/` crate are absent from the netsuke package.
 
 `tests/man_page_contract_tests.rs` and `tests/binstall_metadata_tests.rs` guard
 the package-versus-target naming split described in
@@ -1598,8 +1594,8 @@ the values in `clippy.toml`.
 Dylint resolves configuration differently. A workspace member discovers the
 workspace-root configuration, so `test_support` needs the separate Whitaker
 invocation and `DYLINT_TOML` override described in
-[Quality gates](#quality-gates) to load its narrow
-`test_support/dylint.toml` boundary policy.
+[Quality gates](#quality-gates) to load its narrow `test_support/dylint.toml`
+boundary policy.
 
 ### Environment and template ports
 
@@ -1760,7 +1756,6 @@ std::env::set_current_dir(temp.path())?;
 Acquire `EnvLock` and then `CwdGuard` so Rust drops them in reverse declaration
 order: `CwdGuard` restores the CWD first, and `EnvLock` releases second.
 
-
 ### Injected and child-process environments
 
 `mutate_env_var` in `tests/bdd/helpers/env_mutation.rs` is the canonical way to
@@ -1795,17 +1790,16 @@ is confined to the child.
 
 ### `tracing_capture`
 
-Production tracing has one process-wide subscriber, installed by
-`init_tracing` in `src/main.rs` with a reloadable filter starting at `WARN`.
-Events are written through `StartupWriter`, which buffers startup tracing
-until the effective diagnostic mode is known — no startup tracing reaches
-stdout. The buffer is bounded (64 KiB), with a truncation policy documented
-in the "Startup diagnostics buffering" subsection above.
-`settle_startup_diagnostics` then releases the buffer to stderr in human
-mode, or discards it in JSON mode. Once the mode is resolved,
-`set_tracing_filter` adjusts the level to the one `startup_filter` chooses
-for the mode, with a fallback filter on the paths where resolution itself
-fails. No library module installs a global subscriber.
+Production tracing has one process-wide subscriber, installed by `init_tracing`
+in `src/main.rs` with a reloadable filter starting at `WARN`. Events are
+written through `StartupWriter`, which buffers startup tracing until the
+effective diagnostic mode is known — no startup tracing reaches stdout. The
+buffer is bounded (64 KiB), with a truncation policy documented in the "Startup
+diagnostics buffering" subsection above. `settle_startup_diagnostics` then
+releases the buffer to stderr in human mode, or discards it in JSON mode. Once
+the mode is resolved, `set_tracing_filter` adjusts the level to the one
+`startup_filter` chooses for the mode, with a fallback filter on the paths
+where resolution itself fails. No library module installs a global subscriber.
 
 Tests use a separate capture boundary:
 
@@ -2310,8 +2304,8 @@ rendered directly.
 
 `register_manifest_macros` parses the manifest `macros` section and delegates
 each definition to `register_macro`. Registration validates the compiled
-template and installs both the import declaration used by `render_template`
-and the fallback function built by `make_macro_fn` for compiled expressions.
+template and installs both the import declaration used by `render_template` and
+the fallback function built by `make_macro_fn` for compiled expressions.
 `make_macro_fn` captures a macro reference and resolves it against the active
 MiniJinja state on each invocation, so it must not be treated as a reusable
 global template cache. Errors remain at the manifest boundary and retain their

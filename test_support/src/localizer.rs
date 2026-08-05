@@ -51,7 +51,7 @@ pub struct RestoreProbe {
 }
 
 impl RestoreProbe {
-    fn new(guard: LocalizerGuard) -> Self {
+    const fn new(guard: LocalizerGuard) -> Self {
         Self { _guard: guard }
     }
 }

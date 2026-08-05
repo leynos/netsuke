@@ -73,6 +73,11 @@ fn packaged_manifest_retains_build_script_sources() {
         .map(str::trim)
         .collect::<BTreeSet<_>>();
 
+    assert_required_paths_present(&packaged_paths);
+    assert_forbidden_roots_absent(&packaged_paths);
+}
+
+fn assert_required_paths_present(packaged_paths: &BTreeSet<&str>) {
     for required_path in REQUIRED_PACKAGED_FILES {
         assert!(
             packaged_paths.contains(required_path),
@@ -86,7 +91,9 @@ fn packaged_manifest_retains_build_script_sources() {
             "packaged manifest should contain `{required_path}`"
         );
     }
+}
 
+fn assert_forbidden_roots_absent(packaged_paths: &BTreeSet<&str>) {
     for forbidden_root in FORBIDDEN_PACKAGED_ROOTS {
         assert!(
             packaged_paths.iter().all(|path| {

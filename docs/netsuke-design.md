@@ -2462,11 +2462,11 @@ configuration merge, `startup_localizer` (`src/main.rs`) resolves the locale
 used for help and clap errors, with the precedence `--locale` ->
 `NETSUKE_LOCALE` -> system locale -> `en-US`; configuration cannot take part
 here because it has not been read yet. After the merge, `configure_runtime`
-resolves the locale again, this time for runtime diagnostics and progress,
-and this phase can honour a configuration file's `locale` setting. System
-locale strings are normalized by stripping encoding suffixes (such as
-`.UTF-8`), removing variant suffixes (such as `@latin`), and replacing
-underscores with hyphens before validation.
+resolves the locale again, this time for runtime diagnostics and progress, and
+this phase can honour a configuration file's `locale` setting. System locale
+strings are normalized by stripping encoding suffixes (such as `.UTF-8`),
+removing variant suffixes (such as `@latin`), and replacing underscores with
+hyphens before validation.
 
 Startup diagnostics are buffered rather than written. The locale is resolved
 before the command line is parsed, so a fallback can be reported before the

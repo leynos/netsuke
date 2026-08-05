@@ -317,10 +317,10 @@ future compatibility when numeric argument support is added.
 
 ## 7. Adding a new locale
 
-A locale tag need not introduce a whole new language; it can also be a
-region or script variant of a language Netsuke already ships, such as
-`pt-BR` alongside `pt-PT`, since the registry resolves by tag rather than by
-language. To add support for a new locale tag (for example Icelandic, `is`):
+A locale tag need not introduce a whole new language; it can also be a region
+or script variant of a language Netsuke already ships, such as `pt-BR` alongside
+`pt-PT`, since the registry resolves by tag rather than by language. To add
+support for a new locale tag (for example Icelandic, `is`):
 
 ### Step 1: Start from the source catalogue
 
@@ -371,8 +371,8 @@ cargo build
 ```
 
 The compile-time audit verifies that the locale registry and Cargo.toml's
-metadata agree, and that the catalogue's keys and interpolation variables
-match the source.
+metadata agree, and that the catalogue's keys and interpolation variables match
+the source.
 
 ### Step 5: Test the locale
 
@@ -451,10 +451,9 @@ Netsuke validates every registered locale at compile time via
   English source — a dropped `{ $path }` or a stray `{ $name }`
 
 Catalogue findings — missing keys, orphaned keys, and variable mismatches —
-fail the build with an error naming the affected locale and the keys
-concerned. Metadata drift fails the build with a different message, one that
-prints the two disagreeing lists side by side: the registry's tags and
-`Cargo.toml`'s.
+fail the build with an error naming the affected locale and the keys concerned.
+Metadata drift fails the build with a different message, one that prints the
+two disagreeing lists side by side: the registry's tags and `Cargo.toml`'s.
 
 ## 11. Testing translations
 
