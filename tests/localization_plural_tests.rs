@@ -36,12 +36,21 @@ const PLURAL_PROBE_COUNTS: [i64; 9] = [0, 1, 2, 3, 5, 6, 11, 21, 100];
 ///
 /// Arabic and Hebrew name small quantities as words rather than digits — "one
 /// file", and a dual form for two — and Arabic's `zero` variant reads "no files
-/// were processed". Omitting the numeral there is correct translation, not a
-/// dropped interpolation, so these are listed rather than excused by a weaker
-/// assertion: the sweep below requires the numeral everywhere else, and
-/// requires its *absence* here, so a regression in either direction fails.
-const NUMERAL_OMITTED_BY_IDIOM: [(&str, i64); 5] =
-    [("ar", 0), ("ar", 1), ("ar", 2), ("he", 1), ("he", 2)];
+/// were processed". Hindi overrides count zero with an exact `[0]` variant
+/// reading "no files were processed", since its CLDR `one` category would
+/// otherwise render "0 फ़ाइल". Omitting the numeral there is correct
+/// translation, not a dropped interpolation, so these are listed rather than
+/// excused by a weaker assertion: the sweep below requires the numeral
+/// everywhere else, and requires its *absence* here, so a regression in either
+/// direction fails.
+const NUMERAL_OMITTED_BY_IDIOM: [(&str, i64); 6] = [
+    ("ar", 0),
+    ("ar", 1),
+    ("ar", 2),
+    ("he", 1),
+    ("he", 2),
+    ("hi", 0),
+];
 
 /// Render `key` with a numeric `count`, as Fluent's plural selector requires.
 ///
@@ -157,6 +166,11 @@ struct DeclaredVariant {
 }
 
 /// The variants a catalogue's `key` declares.
+///
+/// Exact numeric variants such as `[0]` are declared branches too: Fluent
+/// selects an exact match ahead of any plural category, so leaving them out
+/// would make the oracle below reject the very rendering the catalogue asks
+/// for at that count.
 fn declared_variants(resource: &str, key: &str) -> Vec<DeclaredVariant> {
     let mut lines = resource.lines().map(str::trim);
     let opened = lines
@@ -173,7 +187,7 @@ fn declared_variants(resource: &str, key: &str) -> Vec<DeclaredVariant> {
                 .trim_start_matches('*')
                 .strip_prefix('[')?
                 .split_once(']')?;
-            (!name.chars().all(|ch| ch.is_ascii_digit())).then(|| DeclaredVariant {
+            Some(DeclaredVariant {
                 category: name.to_owned(),
                 template: text.trim().to_owned(),
                 is_default,
