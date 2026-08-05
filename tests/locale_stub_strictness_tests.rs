@@ -55,3 +55,69 @@ fn repeated_declaration_is_idempotent() {
         .with_var("X", "second");
     assert_eq!(env.var("X").as_deref(), Some("second"));
 }
+
+mod properties {
+    //! Property coverage for the builder's declaration semantics.
+    //!
+    //! The fixed cases above check single interleavings of `with_var` and
+    //! `allowing`; this states the invariant they are instances of — the last
+    //! declaration for a key wins — over arbitrary declaration sequences.
+
+    use super::{EnvProvider, StubEnv};
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+    use std::collections::HashMap;
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    #[derive(Debug, Clone)]
+    enum Declaration {
+        Allow(String),
+        Set(String, String),
+    }
+
+    /// Three keys only, so generated sequences redeclare the same key often
+    /// enough for ordering to matter; a wide key space would almost never
+    /// produce the collisions the invariant is about.
+    fn declaration() -> impl Strategy<Value = Declaration> {
+        prop_oneof![
+            "[ABC]".prop_map(Declaration::Allow),
+            ("[ABC]", "[a-z]{1,4}").prop_map(|(key, value)| Declaration::Set(key, value)),
+        ]
+    }
+
+    proptest! {
+        /// Every key answers per its last declaration; undeclared keys panic.
+        ///
+        /// The model is a plain last-write-wins map, independent of the
+        /// stub's split `values`/`allowed` representation, so a bookkeeping
+        /// slip between the two collections fails here rather than agreeing
+        /// with itself.
+        #[test]
+        fn the_last_declaration_wins_over_any_sequence(
+            declarations in vec(declaration(), 0..8)
+        ) {
+            let mut model: HashMap<String, Option<String>> = HashMap::new();
+            let mut stub = StubEnv::strict();
+            for declaration in &declarations {
+                match declaration {
+                    Declaration::Allow(key) => {
+                        model.insert(key.clone(), None);
+                        stub = stub.allowing(key.clone());
+                    }
+                    Declaration::Set(key, value) => {
+                        model.insert(key.clone(), Some(value.clone()));
+                        stub = stub.with_var(key.clone(), value.clone());
+                    }
+                }
+            }
+            for key in ["A", "B", "C"] {
+                if let Some(expected) = model.get(key) {
+                    prop_assert_eq!(stub.var(key), expected.clone());
+                } else {
+                    let read = catch_unwind(AssertUnwindSafe(|| stub.var(key)));
+                    prop_assert!(read.is_err(), "undeclared {} should panic", key);
+                }
+            }
+        }
+    }
+}
