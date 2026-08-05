@@ -255,8 +255,13 @@ fn assert_release_installation_contract() -> Result<()> {
     );
     ensure!(readme_release.body == expected_release, "README drifted");
     ensure!(guide_release.body == expected_release, "user guide drifted");
+    // Derive version literals from the crate version so docs contracts track
+    // release bumps instead of drifting behind them.
     let expected_release_details = [
-        "https://github.com/leynos/netsuke/releases/tag/v0.1.0",
+        concat!(
+            "https://github.com/leynos/netsuke/releases/tag/v",
+            env!("CARGO_PKG_VERSION")
+        ),
         "Debian (`.deb`) and RPM (`.rpm`)",
         "Installer package (`.pkg`)",
         "Windows Installer (`.msi`)",
@@ -269,7 +274,8 @@ fn assert_release_installation_contract() -> Result<()> {
         for expected in expected_release_details {
             ensure!(
                 document.contains(expected),
-                "{path} should document v0.1.0 release detail: {expected}"
+                "{path} should document v{} release detail: {expected}",
+                env!("CARGO_PKG_VERSION")
             );
         }
     }
@@ -295,7 +301,11 @@ fn assert_windows_setup_examples() -> Result<()> {
     let windows_help_install = documented_example("guide-windows-help-install")?;
     let windows_help_fragments = [
         "Import-Module",
-        "$moduleDirectory = Join-Path $moduleRoot 'Netsuke\\0.1.0'",
+        concat!(
+            "$moduleDirectory = Join-Path $moduleRoot 'Netsuke\\",
+            env!("CARGO_PKG_VERSION"),
+            "'"
+        ),
         "Import-Module (Join-Path $moduleDirectory 'Netsuke.psd1')",
         "*windows-$architecture*",
     ];

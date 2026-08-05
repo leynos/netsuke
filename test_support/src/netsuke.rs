@@ -5,20 +5,37 @@
 //! capturing stdout/stderr for assertions.
 
 use anyhow::{Context, Result, ensure};
+use mockable::{DefaultEnv, Env};
 use std::path::Path;
 use std::path::PathBuf;
 
 /// Locate the built `netsuke` executable for integration-style tests.
 ///
-/// Derive the path from the current test executable's target directory.
+/// Derive the path from the current test executable's target directory. When
+/// Cargo's `build.build-dir` splits intermediate artefacts from final ones,
+/// test executables run from the build dir while the uplifted binary lands
+/// under `CARGO_TARGET_DIR`, so fall back to that location.
 fn netsuke_executable() -> Result<PathBuf> {
-    let mut target_dir = std::env::current_exe().context("locate current test executable")?;
-    target_dir.pop();
-    if target_dir.ends_with("deps") {
-        target_dir.pop();
+    let mut exe_dir = std::env::current_exe().context("locate current test executable")?;
+    exe_dir.pop();
+    if exe_dir.ends_with("deps") {
+        exe_dir.pop();
     }
 
-    let path = target_dir.join(format!("netsuke{}", std::env::consts::EXE_SUFFIX));
+    let binary_name = format!("netsuke{}", std::env::consts::EXE_SUFFIX);
+    let path = exe_dir.join(&binary_name);
+    if path.is_file() {
+        return Ok(path);
+    }
+    if let (Some(target_dir), Some(profile)) = (
+        DefaultEnv.os_string("CARGO_TARGET_DIR"),
+        exe_dir.file_name(),
+    ) {
+        let fallback = Path::new(&target_dir).join(profile).join(&binary_name);
+        if fallback.is_file() {
+            return Ok(fallback);
+        }
+    }
     ensure!(
         path.is_file(),
         "locate netsuke binary at {}",

@@ -20,12 +20,15 @@ fn parse_json_value(document: &str) -> Result<Value> {
 }
 
 /// Builds insta [`Settings`] pointing at the `src/snapshots/diagnostic_json` directory.
+///
+/// The generator version is redacted so snapshots survive version bumps.
 fn snapshot_settings() -> Settings {
     let mut settings = Settings::new();
     settings.set_snapshot_path(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/src/snapshots/diagnostic_json"
     ));
+    settings.add_filter(r#""version": "[^"]+""#, r#""version": "[version]""#);
     settings
 }
 
