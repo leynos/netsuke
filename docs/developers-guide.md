@@ -1699,11 +1699,11 @@ process.
 
 - The caller owns the reader. `from_str` constructs `process_env_reader()`
   and `from_str_with_env` borrows the caller's reader; both pass it to
-  `from_str_named`, which receives it as `&EnvReader` and `Arc::clone`s it
-  into the registered closure, so the closure co-owns the `Arc` alongside the
-  caller. `from_str_named` remains the only place the `env()` function is
-  registered. In production nothing else constructs a reader; tests build
-  their own with `Arc::new`, which is the point of the seam.
+  `from_str_named`, which receives it as `&EnvReader` and `Arc::clone`s it into
+  the registered closure, so the closure co-owns the `Arc` alongside the caller.
+  `from_str_named` remains the only place the `env()` function is registered.
+  In production nothing else constructs a reader; tests build their own with
+  `Arc::new`, which is the point of the seam.
 - `process_env_reader()` is the sole production supplier and the only place
   `std::env::var` appears in the module.
 - The two test layers cover different things, and both are needed:

@@ -6,11 +6,9 @@
 //! needs platform-specific `OsString` surgery, and the AGENTS.md testing
 //! mandate forbids in-process mutation regardless.
 
-use crate::manifest::env_var_with;
+use crate::manifest::{EnvReadError, env_var_with};
 use minijinja::ErrorKind;
 use rstest::rstest;
-use std::env::VarError;
-use std::ffi::OsString;
 
 #[test]
 fn present_variable_yields_its_value() {
@@ -26,13 +24,13 @@ fn empty_value_is_returned_rather_than_treated_as_missing() {
 }
 
 #[rstest]
-#[case::missing(VarError::NotPresent, ErrorKind::UndefinedError)]
-#[case::non_utf8(VarError::NotUnicode(OsString::from("x")), ErrorKind::InvalidOperation)]
+#[case::missing(EnvReadError::NotPresent, ErrorKind::UndefinedError)]
+#[case::non_utf8(EnvReadError::NotUnicode, ErrorKind::InvalidOperation)]
 fn failures_map_to_the_documented_jinja_error_kind(
-    #[case] var_error: VarError,
+    #[case] read_error: EnvReadError,
     #[case] expected: ErrorKind,
 ) {
-    let err = env_var_with("FOO", |_| Err(var_error)).expect_err("should fail");
+    let err = env_var_with("FOO", |_| Err(read_error)).expect_err("should fail");
     assert_eq!(err.kind(), expected);
 }
 
@@ -43,24 +41,25 @@ fn failures_map_to_the_documented_jinja_error_kind(
 /// them onto one kind would misdirect whoever reads the failure.
 #[test]
 fn the_two_failure_kinds_are_distinct() {
-    let missing = env_var_with("FOO", |_| Err(VarError::NotPresent)).expect_err("missing");
-    let non_utf8 = env_var_with("FOO", |_| Err(VarError::NotUnicode(OsString::from("x"))))
-        .expect_err("non-UTF-8");
+    let missing = env_var_with("FOO", |_| Err(EnvReadError::NotPresent)).expect_err("missing");
+    let non_utf8 = env_var_with("FOO", |_| Err(EnvReadError::NotUnicode)).expect_err("non-UTF-8");
     assert_ne!(missing.kind(), non_utf8.kind());
 }
 
-/// The variable name reaches the seam unaltered, and appears in the message.
+/// The variable name reaches the seam unaltered but stays out of the message:
+/// environment variable names routinely identify credentials, so the
+/// diagnostic carries fixed text and the template location instead.
 #[test]
-fn the_requested_name_is_used_and_reported() {
+fn the_requested_name_is_used_but_not_reported() {
     let mut observed = None;
     let err = env_var_with("NETSUKE_SOME_VAR", |key| {
         observed = Some(key.to_owned());
-        Err(VarError::NotPresent)
+        Err(EnvReadError::NotPresent)
     })
     .expect_err("should fail");
     assert_eq!(observed.as_deref(), Some("NETSUKE_SOME_VAR"));
     assert!(
-        err.to_string().contains("NETSUKE_SOME_VAR"),
-        "the error should name the variable, got {err}"
+        !err.to_string().contains("NETSUKE_SOME_VAR"),
+        "the error must not name the variable, got {err}"
     );
 }
