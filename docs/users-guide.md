@@ -468,9 +468,6 @@ assert!(format!("{:?}", manifest.targets[0].name).contains("release"));
 
 This snippet mirrors the executable doctest on `from_str_with_env` in the API
 documentation, rather than the YAML-only examples elsewhere in this guide.
-Contributors extending this seam should also read the developers' guide's
-[Manifest `env()` reader](developers-guide.md#manifest-env-reader) section,
-which covers the ownership boundary and composition rules.
 
 ## Use the template standard library
 
