@@ -197,8 +197,16 @@ fn which_filter_skips_heavy_directories() -> Result<()> {
     let target = root.join("target");
     fs::create_dir_all(&target)?;
     write_tool(&target, &ToolName::from("helper"))?;
+    // Root the resolver at the fixture workspace; otherwise the lookup searches
+    // the process working directory, `target/helper` is never a candidate, and
+    // the `not_found` assertion below would hold regardless of the skip policy.
+    let config = StdlibConfig::new(
+        Dir::open_ambient_dir(&root, ambient_authority()).context("open workspace")?,
+    )?
+    .with_workspace_root_path(root)?;
     let path = PathEnv::new(&[])?;
-    let (env, _state) = fallible::stdlib_env_with_path(path.into_inner())?;
+    let (env, _state) =
+        fallible::stdlib_env_with_config(config.with_path_override(path.into_inner()))?;
     let err = env
         .render_str("{{ 'helper' | which }}", context! {})
         .err()
