@@ -85,20 +85,18 @@ mod tests {
     use super::*;
     use std::{sync::mpsc, time::Duration};
 
-    fn assert_underlying_lock_is_held(message: &str) {
-        assert!(ENV_LOCK.try_lock().is_err(), "{message}");
+    fn assert_current_thread_lock_is_held(message: &str) {
+        ENV_LOCK_STATE.with(|lock_state| {
+            let state = lock_state.borrow();
+            assert!(state.depth > 0 && state.guard.is_some(), "{message}");
+        });
     }
 
-    /// Probe the mutex directly after a guard is released.
-    ///
-    /// This assertion is reliable only when each test runs in a separate
-    /// process, as cargo-nextest does. Under thread-parallel `cargo test`, an
-    /// unrelated test may legitimately acquire `ENV_LOCK` before this probe.
-    fn assert_underlying_lock_is_released(message: &str) {
-        let Ok(lock) = ENV_LOCK.try_lock() else {
-            panic!("{message}");
-        };
-        drop(lock);
+    fn assert_current_thread_lock_is_released(message: &str) {
+        ENV_LOCK_STATE.with(|lock_state| {
+            let state = lock_state.borrow();
+            assert!(state.depth == 0 && state.guard.is_none(), "{message}");
+        });
     }
 
     #[test]
@@ -111,17 +109,17 @@ mod tests {
         let outer = EnvLock::acquire();
         {
             let _inner = EnvLock::acquire();
-            assert_underlying_lock_is_held(
+            assert_current_thread_lock_is_held(
                 "ENV_LOCK should remain locked while nested EnvLock guards are alive",
             );
         }
 
-        assert_underlying_lock_is_held(
+        assert_current_thread_lock_is_held(
             "ENV_LOCK should remain locked until the outer EnvLock guard is dropped",
         );
 
         drop(outer);
-        assert_underlying_lock_is_released(
+        assert_current_thread_lock_is_released(
             "ENV_LOCK should be unlocked after final EnvLock guard is dropped",
         );
     }
@@ -132,12 +130,12 @@ mod tests {
         let inner = EnvLock::acquire();
 
         drop(outer);
-        assert_underlying_lock_is_held(
+        assert_current_thread_lock_is_held(
             "ENV_LOCK should remain locked while an inner EnvLock guard is alive",
         );
 
         drop(inner);
-        assert_underlying_lock_is_released(
+        assert_current_thread_lock_is_released(
             "ENV_LOCK should be unlocked after the final out-of-order guard drops",
         );
     }
@@ -191,9 +189,9 @@ mod tests {
         );
 
         let recovered_guard = EnvLock::acquire();
-        assert_underlying_lock_is_held("recovered EnvLock guard should hold ENV_LOCK");
+        assert_current_thread_lock_is_held("recovered EnvLock guard should hold ENV_LOCK");
         drop(recovered_guard);
         ENV_LOCK.clear_poison();
-        assert_underlying_lock_is_released("recovered ENV_LOCK should be released normally");
+        assert_current_thread_lock_is_released("recovered ENV_LOCK should be released normally");
     }
 }

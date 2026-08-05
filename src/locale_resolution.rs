@@ -16,7 +16,7 @@ pub const NETSUKE_LOCALE_ENV: &str = "NETSUKE_LOCALE";
 pub const NETSUKE_JSON_ENV: &str = "NETSUKE_JSON";
 
 /// Read-only environment access used for locale resolution.
-pub trait EnvProvider {
+pub trait LocaleEnvProvider {
     /// Fetch the environment variable value for `key`.
     fn var(&self, key: &str) -> Option<String>;
 }
@@ -27,9 +27,9 @@ pub struct SystemEnv;
 
 #[expect(
     clippy::disallowed_methods,
-    reason = "composition root: SystemEnv is the process-backed adapter behind the EnvProvider seam"
+    reason = "composition root: SystemEnv is the process-backed adapter behind the LocaleEnvProvider seam"
 )]
-impl EnvProvider for SystemEnv {
+impl LocaleEnvProvider for SystemEnv {
     fn var(&self, key: &str) -> Option<String> {
         std::env::var(key).ok()
     }
@@ -100,11 +100,13 @@ fn select_locale<'a>(candidates: impl IntoIterator<Item = Option<&'a str>>) -> O
 /// # Examples
 ///
 /// ```rust
-/// use netsuke::locale_resolution::{resolve_startup_locale, EnvProvider, SystemLocale};
+/// use netsuke::locale_resolution::{
+///     LocaleEnvProvider, SystemLocale, resolve_startup_locale,
+/// };
 /// use std::ffi::OsString;
 ///
 /// struct StubEnv(Option<String>);
-/// impl EnvProvider for StubEnv {
+/// impl LocaleEnvProvider for StubEnv {
 ///     fn var(&self, key: &str) -> Option<String> {
 ///         (key == "NETSUKE_LOCALE").then(|| self.0.clone()).flatten()
 ///     }
@@ -132,7 +134,7 @@ fn select_locale<'a>(candidates: impl IntoIterator<Item = Option<&'a str>>) -> O
 #[must_use]
 pub fn resolve_startup_locale(
     args: &[OsString],
-    env: &impl EnvProvider,
+    env: &impl LocaleEnvProvider,
     system: &impl SystemLocale,
 ) -> Option<String> {
     let cli_hint = cli::locale_hint_from_args(args);
@@ -151,7 +153,7 @@ pub fn resolve_startup_locale(
 /// merged runtime configuration, configuration files are not considered here
 /// because this helper is used before config discovery and loading succeed.
 #[must_use]
-pub fn resolve_startup_json(args: &[OsString], env: &impl EnvProvider) -> bool {
+pub fn resolve_startup_json(args: &[OsString], env: &impl LocaleEnvProvider) -> bool {
     cli::json_hint_from_args(args).unwrap_or_else(|| {
         env.var(NETSUKE_JSON_ENV)
             .as_deref()

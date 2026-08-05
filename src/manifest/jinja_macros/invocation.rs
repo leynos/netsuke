@@ -147,8 +147,8 @@ fn collect_kwargs(macro_kwargs: &Kwargs) -> Result<Option<Kwargs>, Error> {
 mod tests {
     //! Snapshots for localized macro-invocation failures.
 
-    use super::validate_macro;
-    use minijinja::{Environment, UndefinedBehavior};
+    use super::{make_macro_fn, validate_macro};
+    use minijinja::{Environment, ErrorKind, UndefinedBehavior};
     use rstest::rstest;
     use test_support::{EnLocalizer, en_localizer, fluent::normalize_fluent_isolates};
 
@@ -190,6 +190,52 @@ mod tests {
         insta::assert_snapshot!(
             normalize_fluent_isolates(&error.to_string()),
             @"invalid operation: Macro missing_macro is missing."
+        );
+    }
+
+    #[test]
+    fn compiled_expression_invokes_macro_fallback() {
+        let mut env = Environment::new();
+        env.add_template(
+            "macro-template",
+            "{% macro greet(name) %}Hello {{ name }}{% endmacro %}",
+        )
+        .expect("macro fixture template should compile");
+        env.add_function(
+            "greet",
+            make_macro_fn("macro-template".to_owned(), "greet".to_owned()),
+        );
+
+        let expression = env
+            .compile_expression("greet('Ada')")
+            .expect("macro expression should compile");
+        let rendered = expression
+            .eval(())
+            .expect("compiled expression should invoke the macro fallback");
+
+        assert_eq!(rendered.to_string(), "Hello Ada");
+    }
+
+    #[rstest]
+    fn compiled_expression_reports_missing_fallback_template(en_localizer: EnLocalizer) {
+        let _en = en_localizer;
+        let mut env = Environment::new();
+        env.add_function(
+            "missing_macro",
+            make_macro_fn("missing-template".to_owned(), "missing_macro".to_owned()),
+        );
+
+        let expression = env
+            .compile_expression("missing_macro()")
+            .expect("macro expression should compile");
+        let error = expression
+            .eval(())
+            .expect_err("fallback invocation should reject a missing template");
+
+        assert_eq!(error.kind(), ErrorKind::TemplateNotFound);
+        assert_eq!(
+            normalize_fluent_isolates(&error.to_string()),
+            "template not found: Failed to load macro template. (in <expression>:1)"
         );
     }
 }

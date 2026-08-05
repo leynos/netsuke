@@ -3,7 +3,7 @@
 //! These helpers implement the locale-resolution traits so tests can inject
 //! deterministic environment and system locales.
 
-use netsuke::locale_resolution::{self, EnvProvider, SystemLocale};
+use netsuke::locale_resolution::{self, LocaleEnvProvider, SystemLocale};
 
 /// Stub environment provider for locale resolution.
 #[derive(Debug, Default, Clone)]
@@ -21,7 +21,7 @@ impl StubEnv {
     }
 }
 
-impl EnvProvider for StubEnv {
+impl LocaleEnvProvider for StubEnv {
     fn var(&self, key: &str) -> Option<String> {
         if key == locale_resolution::NETSUKE_LOCALE_ENV {
             return self.locale.clone();

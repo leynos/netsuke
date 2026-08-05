@@ -95,3 +95,21 @@ pub(super) fn env_var_with(
         )),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    //! Direct tests for the process-backed environment adapter.
+
+    use super::*;
+
+    #[test]
+    fn process_reader_matches_default_environment_adapter() {
+        let expected = DefaultEnv.raw("PATH").map_err(EnvReadError::from);
+        let actual = process_env_reader()("PATH");
+
+        assert_eq!(
+            actual, expected,
+            "process reader should delegate to DefaultEnv"
+        );
+    }
+}

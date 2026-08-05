@@ -65,6 +65,11 @@ impl CommandConfig {
         }
     }
 
+    /// Report whether child commands receive an explicit `PATH` override.
+    pub(super) const fn has_command_path_override(&self) -> bool {
+        self.command_path_override.is_some()
+    }
+
     /// Create a scoped tempfile for the supplied label beneath the configured
     /// relative directory. Callers must flush before persisting with
     /// `NamedTempFile::into_temp_path()`.

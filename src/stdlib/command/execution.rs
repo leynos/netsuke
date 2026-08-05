@@ -3,9 +3,9 @@
 use std::{
     io::{self, Write},
     process::{Child, Command, ExitStatus, Stdio},
-    sync::Arc,
+    sync::{Arc, Once},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use super::{
@@ -15,8 +15,29 @@ use super::{
     pipes::{cleanup_readers, handle_stdin_result, join_reader, spawn_pipe_reader},
     result::{PipeOutcome, StdoutResult},
 };
+use metrics::{counter, describe_counter, describe_histogram, histogram};
 use tracing::field;
 use wait_timeout::ChildExt;
+
+const COMMAND_EXECUTIONS_TOTAL: &str = "netsuke_stdlib_command_executions_total";
+const COMMAND_EXECUTION_DURATION: &str = "netsuke_stdlib_command_execution_duration_seconds";
+
+#[derive(Clone, Copy)]
+enum CommandOperation {
+    Shell,
+    #[cfg(windows)]
+    Program,
+}
+
+impl CommandOperation {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Shell => "shell",
+            #[cfg(windows)]
+            Self::Program => "program",
+        }
+    }
+}
 
 #[cfg(windows)]
 pub(super) const SHELL: &str = "cmd";
@@ -42,7 +63,7 @@ pub(super) fn run_command(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    run_child(cmd, input, context)
+    run_child(cmd, input, context, CommandOperation::Shell)
 }
 
 #[cfg(windows)]
@@ -58,24 +79,30 @@ pub(super) fn run_program(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    run_child(cmd, input, context)
+    run_child(cmd, input, context, CommandOperation::Program)
 }
 
 fn run_child(
     command: Command,
     input: &[u8],
     context: &CommandContext,
+    operation: CommandOperation,
 ) -> Result<StdoutResult, CommandFailure> {
+    describe_metrics();
     let span = tracing::trace_span!(
         "stdlib.command.run",
+        operation = operation.as_str(),
+        has_path_override = context.config().has_command_path_override(),
         outcome = field::Empty,
         error_category = field::Empty,
     );
     let _guard = span.enter();
+    let started = Instant::now();
     let result = run_child_inner(command, input, context);
-    match &result {
+    let outcome = match &result {
         Ok(_) => {
             span.record("outcome", "success");
+            "success"
         }
         Err(error) => {
             span.record("outcome", "error");
@@ -84,9 +111,35 @@ fn run_child(
                 error_category = error.category(),
                 "configured child process failed"
             );
+            "error"
         }
-    }
+    };
+    counter!(
+        COMMAND_EXECUTIONS_TOTAL,
+        "operation" => operation.as_str(),
+        "outcome" => outcome,
+    )
+    .increment(1);
+    histogram!(
+        COMMAND_EXECUTION_DURATION,
+        "operation" => operation.as_str(),
+    )
+    .record(started.elapsed());
     result
+}
+
+fn describe_metrics() {
+    static DESCRIBE: Once = Once::new();
+    DESCRIBE.call_once(|| {
+        describe_counter!(
+            COMMAND_EXECUTIONS_TOTAL,
+            "Counts configured child command outcomes by bounded operation and outcome."
+        );
+        describe_histogram!(
+            COMMAND_EXECUTION_DURATION,
+            "Measures configured child command execution duration in seconds by bounded operation."
+        );
+    });
 }
 
 fn run_child_inner(
