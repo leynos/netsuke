@@ -1735,17 +1735,17 @@ Do **not** call `std::env::set_var` directly in BDD steps — use
 
 ### `tracing_capture`
 
-Production tracing has one process-wide subscriber, installed by `init_tracing`
-in `src/main.rs` with a reloadable filter initially set to `OFF`. Early
-configuration resolution therefore cannot write selector events before the
-effective JSON mode is known. On success, `resolve_json_mode_or_exit` calls
-`set_tracing_filter` with the resolved mode: JSON stays `OFF`, while human mode
-enables `TRACE` for `--verbose` or `ERROR` otherwise. Full human-mode merging
-repeats discovery after the filter is enabled, so its selector events remain
-available. If early resolution fails, human mode enables its fallback filter
-and replays resolution to retain bounded failure diagnostics; JSON mode leaves
-the filter off and discards them. No library module installs a global
-subscriber.
+Production tracing has one process-wide subscriber, installed by
+`init_tracing` in `src/main.rs` with a reloadable filter starting at `WARN`.
+Events are written through `StartupWriter`, which buffers startup tracing
+until the effective diagnostic mode is known — no startup tracing reaches
+stdout. The buffer is bounded (64 KiB), with a truncation policy documented
+in the "Startup diagnostics buffering" subsection above.
+`settle_startup_diagnostics` then releases the buffer to stderr in human
+mode, or discards it in JSON mode. Once the mode is resolved,
+`set_tracing_filter` adjusts the level to the one `startup_filter` chooses
+for the mode, with a fallback filter on the paths where resolution itself
+fails. No library module installs a global subscriber.
 
 Tests use a separate capture boundary:
 

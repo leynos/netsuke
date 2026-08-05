@@ -2453,11 +2453,16 @@ output: each invocation emits one versioned result document on success or one
 versioned diagnostic document on failure.
 
 CLI help and clap errors are localized via Fluent resources; locale resolution
-is handled in `src/locale_resolution.rs` with the precedence `--locale` ->
-`NETSUKE_LOCALE` -> configuration `locale` -> system default. System locale
-strings are normalized by stripping encoding suffixes (such as `.UTF-8`),
-removing variant suffixes (such as `@latin`), and replacing underscores with
-hyphens before validation.
+is handled in `src/locale_resolution.rs` in two phases. Before the
+configuration merge, `startup_localizer` (`src/main.rs`) resolves the locale
+used for help and clap errors, with the precedence `--locale` ->
+`NETSUKE_LOCALE` -> system locale -> `en-US`; configuration cannot take part
+here because it has not been read yet. After the merge, `configure_runtime`
+resolves the locale again, this time for runtime diagnostics and progress,
+and this phase can honour a configuration file's `locale` setting. System
+locale strings are normalized by stripping encoding suffixes (such as
+`.UTF-8`), removing variant suffixes (such as `@latin`), and replacing
+underscores with hyphens before validation.
 
 Startup diagnostics are buffered rather than written. The locale is resolved
 before the command line is parsed, so a fallback can be reported before the
