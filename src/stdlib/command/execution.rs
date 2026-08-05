@@ -62,16 +62,55 @@ fn configure_piped_stdio(command: &mut Command) {
         .stderr(Stdio::piped());
 }
 
+/// Everything a configured child needs beyond its own argument list.
+///
+/// Grouping these keeps [`run_configured_command`] to the program, the one
+/// varying step, and this bundle.
+#[derive(Clone, Copy)]
+struct ChildInvocation<'a> {
+    input: &'a [u8],
+    context: &'a CommandContext,
+    operation: CommandOperation,
+}
+
+/// Build and run a child process, leaving only argument choice to the caller.
+///
+/// Every entry point constructs a `Command`, applies its arguments, pipes the
+/// standard streams, and hands the result to [`run_child`]. Only the second step
+/// differs between them, so `configure_args` is the sole variation point.
+fn run_configured_command(
+    program: &str,
+    configure_args: impl FnOnce(&mut Command),
+    invocation: ChildInvocation<'_>,
+) -> Result<StdoutResult, CommandFailure> {
+    let mut cmd = Command::new(program);
+    configure_args(&mut cmd);
+    configure_piped_stdio(&mut cmd);
+
+    run_child(
+        cmd,
+        invocation.input,
+        invocation.context,
+        invocation.operation,
+    )
+}
+
 pub(super) fn run_command(
     command: &str,
     input: &[u8],
     context: &CommandContext,
 ) -> Result<StdoutResult, CommandFailure> {
-    let mut cmd = Command::new(SHELL);
-    cmd.args(SHELL_ARGS).arg(command);
-    configure_piped_stdio(&mut cmd);
-
-    run_child(cmd, input, context, CommandOperation::Shell)
+    run_configured_command(
+        SHELL,
+        |cmd| {
+            cmd.args(SHELL_ARGS).arg(command);
+        },
+        ChildInvocation {
+            input,
+            context,
+            operation: CommandOperation::Shell,
+        },
+    )
 }
 
 #[cfg(windows)]
@@ -81,11 +120,17 @@ pub(super) fn run_program(
     input: &[u8],
     context: &CommandContext,
 ) -> Result<StdoutResult, CommandFailure> {
-    let mut cmd = Command::new(program);
-    cmd.args(args);
-    configure_piped_stdio(&mut cmd);
-
-    run_child(cmd, input, context, CommandOperation::Program)
+    run_configured_command(
+        program,
+        |cmd| {
+            cmd.args(args);
+        },
+        ChildInvocation {
+            input,
+            context,
+            operation: CommandOperation::Program,
+        },
+    )
 }
 
 fn run_child(
