@@ -274,6 +274,11 @@ fn a_nested_array_value_does_not_end_the_table(#[case] body: &str) -> Result<()>
 #[case("[package.metadata.ortho_config]\nroot_type = \"x\"\n")]
 // The key appears only after the table has ended.
 #[case("[package.metadata.ortho_config]\nroot_type = \"x\"\n\n[other]\nlocales = [\"en-US\"]\n")]
+// A quoted key names a table as legally as a bare one, so a quoted header
+// ends the table too; reading past it would return the next table's keys.
+#[case("[package.metadata.ortho_config]\n[\"release metadata\"]\nlocales = [\"en-US\"]\n")]
+// The same, quoting one segment of a dotted header.
+#[case("[package.metadata.ortho_config]\n[tool.\"release metadata\"]\nlocales = [\"en-US\"]\n")]
 // An unterminated array.
 #[case("[package.metadata.ortho_config]\nlocales = [\"en-US\",\n")]
 fn absent_or_unterminated_keys_yield_none(#[case] manifest: &str) -> Result<()> {

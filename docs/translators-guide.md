@@ -54,9 +54,9 @@ macro both declares the supported tags and embeds each catalogue, so a tag
 without a catalogue on disk fails to compile. Everything downstream reads the
 registry rather than keeping its own list: the build-time audit, the
 `cargo:rerun-if-changed` directives, the packaging smoke test, and the tests —
-with two deliberate exceptions, described below: the `locales` array in
-`Cargo.toml`'s `[package.metadata.ortho_config]` table, and
-`EXPECTED_SHIPPED_TAGS` in `tests/locale_registry_tests.rs`.
+with two deliberate exceptions: the `locales` array in `Cargo.toml`'s
+`[package.metadata.ortho_config]` table, and `EXPECTED_SHIPPED_TAGS` in
+`tests/locale_registry_tests.rs`, both described below.
 
 Two places name the locale list independently of the registry, for different
 reasons. `package.metadata.ortho_config.locales` in `Cargo.toml` duplicates it
@@ -283,8 +283,9 @@ every shipped locale, so dropping Polish `few` or Welsh `two` fails the suite
 rather than quietly losing a form. That test carries the same table, and a
 second test fails if any registry locale is missing from it.
 
-The categories are the ones `intl_pluralrules` implements, which is what Fluent
-selects with; they can lag a newer CLDR release.
+The categories are the ones the `intl_pluralrules` crate implements — the
+plural-rules engine Fluent consults when selecting a variant — and they can lag
+a newer CLDR release.
 
 CLDR also gives French, Spanish, Italian, and Portuguese a `many` category, at
 million-scale values and in compact-number forms. That is a property of CLDR,

@@ -52,45 +52,110 @@ fn ortho_config_table(manifest: &str) -> Option<&str> {
 /// match above already established that the header does not sit inside a
 /// multiline string, so the string state at the start of `tail` is "outside".
 ///
-/// A candidate must also read as a header, not merely begin a line: inside a
+/// A candidate must also be a header, not merely begin a line: inside a
 /// multiline array a nested value such as `["decoy"],` can open a line too,
 /// and taking it for a header would truncate the table above the keys that
 /// follow it. Scanning continues past such lines.
 fn table_end(tail: &str) -> usize {
     tail.match_indices("\n[")
         .map(|(newline, _)| newline.saturating_add(1))
-        .find(|bracket| {
-            begins_a_line(tail, *bracket)
-                && tail
-                    .get(*bracket..)
-                    .and_then(|rest| rest.lines().next())
-                    .is_some_and(is_table_header)
-        })
+        .find(|bracket| header_starts_at(tail, *bracket))
         .unwrap_or(tail.len())
+}
+
+/// Whether a table header begins at `start` within `tail`.
+///
+/// Three rules, each excluding one impostor. The bracket must begin a line
+/// outside any string, or it is content. Its position must sit at array depth
+/// zero, or it is a nested value inside a multiline array — quoted headers
+/// such as `["release metadata"]` and quoted array elements are lexically
+/// identical, so only the surrounding context can tell them apart. And its
+/// line must read as a header, or it is malformed input no rule should match.
+fn header_starts_at(tail: &str, start: usize) -> bool {
+    begins_a_line(tail, start)
+        && tail
+            .get(..start)
+            .is_some_and(|before| scan_prefix(before).array_depth == 0)
+        && tail
+            .get(start..)
+            .and_then(|rest| rest.lines().next())
+            .is_some_and(is_table_header)
 }
 
 /// Whether `line` declares a `[table]` or `[[array-of-tables]]` header.
 ///
-/// A line-initial bracket is ambiguous in TOML: it may open a header, or a
-/// nested array value inside a multiline array. The two are told apart by
-/// content and tail. A header names a key from the bare-key alphabet and ends
-/// its line after the closing bracket, save for a comment; an array value
-/// carries quotes, commas, or a trailing comma, none of which a header line
-/// may. A lone element like `[123]` that is also a well-formed bare-key header
-/// stays ambiguous and is read as a header, which this manifest's metadata —
-/// string-valued throughout — cannot produce as a value.
+/// The bracket content must read as a TOML key — dotted segments, each bare
+/// or quoted — and the line must end after the closing bracket, save for a
+/// comment. Array context is the caller's job: at depth zero a well-formed
+/// key in brackets cannot be a value, since bare words are not TOML values
+/// and a top-level line cannot open with one.
 fn is_table_header(line: &str) -> bool {
     let outer = line.strip_prefix('[').unwrap_or(line);
     let body = outer.strip_prefix('[').unwrap_or(outer);
-    let Some((name, rest)) = body.split_once(']') else {
+    let Some((name, rest)) = split_header_name(body) else {
         return false;
     };
-    let named_bare = !name.trim().is_empty()
-        && name
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.' | ' ' | '\t'));
     let trailing = rest.trim_start_matches(']').trim();
-    named_bare && (trailing.is_empty() || trailing.starts_with('#'))
+    header_names_a_key(name) && (trailing.is_empty() || trailing.starts_with('#'))
+}
+
+/// Split the header body at its closing bracket, honouring quoted segments.
+///
+/// A `]` inside a quoted segment is key content, so the split lands on the
+/// first closing bracket outside quotes. `None` means the line never closes
+/// its bracket, which no header does.
+fn split_header_name(body: &str) -> Option<(&str, &str)> {
+    let mut quote: Option<char> = None;
+    for (index, ch) in body.char_indices() {
+        match quote {
+            Some(open) if ch == open => quote = None,
+            Some(_) => {}
+            None => match ch {
+                '"' | '\'' => quote = Some(ch),
+                ']' => return Some((body.get(..index)?, body.get(index..)?)),
+                _ => {}
+            },
+        }
+    }
+    None
+}
+
+/// Whether `name` reads as a TOML key: dotted segments, bare or quoted.
+///
+/// Bare segments draw on the bare-key alphabet; quoted segments accept any
+/// content up to their closing quote. An escaped quote inside a basic-string
+/// segment is read as the close, which rejects the line — no header in this
+/// parser's domain carries one, and rejection fails safe toward "not a
+/// header", leaving the table longer rather than truncated.
+fn header_names_a_key(name: &str) -> bool {
+    let mut rest = name.trim();
+    if rest.is_empty() {
+        return false;
+    }
+    loop {
+        let Some(after) = key_segment_after(rest) else {
+            return false;
+        };
+        rest = after.trim_start();
+        let Some(next) = rest.strip_prefix('.') else {
+            return rest.is_empty();
+        };
+        rest = next.trim_start();
+    }
+}
+
+/// Consume one key segment at the head of `rest`, returning what follows.
+fn key_segment_after(rest: &str) -> Option<&str> {
+    if let Some(quote) = rest.chars().next().filter(|ch| matches!(ch, '"' | '\'')) {
+        let inner = rest.get(1..)?;
+        let end = inner.find(quote)?;
+        inner.get(end.saturating_add(1)..)
+    } else {
+        let end = rest
+            .find(|ch: char| !(ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_')))
+            .unwrap_or(rest.len());
+        (end > 0).then(|| rest.get(end..)).flatten()
+    }
 }
 
 /// The table text from the `locales` assignment onwards.
@@ -126,32 +191,86 @@ fn begins_a_line(table: &str, start: usize) -> bool {
 /// The two TOML multiline string delimiters.
 const MULTILINE_DELIMITERS: [&str; 2] = ["\"\"\"", "'''"];
 
+/// Lexical state at the end of a scanned prefix.
+struct ScanState {
+    /// The multiline string delimiter still open, if any.
+    open: Option<&'static str>,
+    /// Array brackets opened outside strings and comments and not yet closed.
+    ///
+    /// Table headers self-balance on their own line, so a non-zero depth
+    /// means the position lies inside a multiline array value, where a
+    /// line-initial bracket is a value rather than a header.
+    array_depth: usize,
+}
+
 /// Whether `prefix` ends inside a multiline string.
-///
-/// Each delimiter toggles the state, and the two quote styles are tracked
-/// separately because neither terminates the other. Single-line strings need no
-/// handling: they cannot span the newline that must precede a line-initial
-/// match.
 fn inside_multiline_string(prefix: &str) -> bool {
-    let mut open: Option<&str> = None;
+    scan_prefix(prefix).open.is_some()
+}
+
+/// Scan `prefix`, tracking strings, comments, and array brackets.
+///
+/// Each multiline delimiter toggles the string state, and the two quote
+/// styles are tracked separately because neither terminates the other.
+/// Single-line strings are tracked so their contents cannot toggle anything;
+/// comments are skipped outside strings for the same reason. Brackets are
+/// counted only outside strings and comments, and the count saturates rather
+/// than underflows on the `]` that closes a header's own bracket.
+fn scan_prefix(prefix: &str) -> ScanState {
+    let mut state = ScanState {
+        open: None,
+        array_depth: 0,
+    };
     let mut single: Option<char> = None;
     let mut escaped = false;
+    let mut in_comment = false;
     let mut chars = prefix.char_indices();
     while let Some((index, ch)) = chars.next() {
+        if in_comment {
+            in_comment = ch != '\n';
+            continue;
+        }
         if single.is_some() {
             (single, escaped) = step_single_line(single, escaped, ch);
             continue;
         }
-        let Some(found) = multiline_delimiter_at(prefix, index, open) else {
-            single = open.is_none().then(|| single_line_opener(ch)).flatten();
+        if let Some(found) = multiline_delimiter_at(prefix, index, state.open) {
+            state.open = toggled(state.open, found);
+            // Skip the delimiter's remaining two characters.
+            chars.next();
+            chars.next();
             continue;
-        };
-        open = if open.is_some() { None } else { Some(found) };
-        // Skip the delimiter's remaining two characters.
-        chars.next();
-        chars.next();
+        }
+        if state.open.is_some() {
+            continue;
+        }
+        (in_comment, single) = step_plain(&mut state, ch);
     }
-    open.is_some()
+    state
+}
+
+/// The multiline state after a delimiter is read: closed if open, else opened.
+const fn toggled(open: Option<&'static str>, found: &'static str) -> Option<&'static str> {
+    if open.is_some() { None } else { Some(found) }
+}
+
+/// Advance the scan by one plain character, outside strings and comments.
+///
+/// Returns the new comment flag and single-line string opener; the array
+/// depth is adjusted in place.
+const fn step_plain(state: &mut ScanState, ch: char) -> (bool, Option<char>) {
+    match ch {
+        '#' => (true, None),
+        '[' => {
+            state.array_depth = state.array_depth.saturating_add(1);
+            (false, None)
+        }
+        ']' => {
+            state.array_depth = state.array_depth.saturating_sub(1);
+            (false, None)
+        }
+        _ => (false, single_line_opener(ch)),
+    }
 }
 
 /// Advance a single-line string scan by one character.
