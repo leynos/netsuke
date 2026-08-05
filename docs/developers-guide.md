@@ -296,7 +296,7 @@ configuration does and does not cover.
 `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)"`. This
 denies warnings, enables Polonius, and preserves any `RUSTFLAGS` supplied by
 the caller. It then runs workspace-wide
-`cargo clippy --all-targets --all-features` and the
+`cargo clippy --workspace --all-targets --all-features` and the
 [Whitaker](whitaker-users-guide.md) Dylint suite
 (`whitaker --all -- --all-targets --all-features`). Install Whitaker through
 the standalone installer described in the
