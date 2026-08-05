@@ -316,11 +316,18 @@ fn a_tab_indented_line_is_not_a_continuation() -> Result<()> {
 /// the audit *less* likely to complain, so it would have failed silently.
 #[test]
 fn an_indented_hash_line_continues_the_message() -> Result<()> {
-    let parsed = parse("a.key = first { $one }\n    #{ $two } still the pattern\n")?;
+    let parsed =
+        parse("a.key = first { $one }\n    #{ $two } still the pattern\nother = second\n")?;
     let found = variables_of(&parsed, "a.key")?;
     ensure!(
         found == ["one", "two"],
         "expected both variables, got {found:?}"
+    );
+    // The continuation must not swallow the next entry: `other` starts a new
+    // message of its own, with nothing inherited from the pattern above.
+    ensure!(
+        variables_of(&parsed, "other")?.is_empty(),
+        "the next entry must start a fresh message with no variables"
     );
     Ok(())
 }
