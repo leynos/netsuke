@@ -49,8 +49,25 @@ mod cli_l10n;
 #[path = "src/host_pattern.rs"]
 mod host_pattern;
 
+/// The locale registry, shared with the library crate.
+///
+/// Both `localization` and the audit reach the registry through
+/// `crate::locale_catalogues`, so it is declared at this crate's root under
+/// that name. It is public because `localization` re-exports it, and a private
+/// module cannot be re-exported from a public path. The build script itself
+/// reads `SUPPORTED_LOCALES` to emit one `rerun-if-changed` directive per
+/// catalogue.
+#[path = "src/locale_catalogues.rs"]
+pub mod locale_catalogues;
+
+/// Message rendering, shared with the library crate.
+///
+/// Exposed as `crate::localization`, which `cli`, `cli_l10n`, and
+/// `host_pattern` reach for `localization::keys` when building the clap
+/// command for man-page generation. Public so its `locales` re-export stays
+/// reachable at `crate::localization::locales`.
 #[path = "src/localization/mod.rs"]
-mod localization;
+pub mod localization;
 
 #[expect(
     dead_code,
@@ -136,8 +153,16 @@ fn emit_rerun_directives() {
     println!("cargo:rerun-if-env-changed=TARGET");
     println!("cargo:rerun-if-env-changed=PROFILE");
     println!("cargo:rerun-if-changed=src/localization/keys.rs");
-    println!("cargo:rerun-if-changed=locales/en-US/messages.ftl");
-    println!("cargo:rerun-if-changed=locales/es-ES/messages.ftl");
+    println!("cargo:rerun-if-changed=src/locale_catalogues.rs");
+    println!("cargo:rerun-if-changed=Cargo.toml");
+    // The locale registry owns the catalogue list, so the rerun directives are
+    // derived from it rather than repeated by hand.
+    for entry in locale_catalogues::SUPPORTED_LOCALES {
+        println!(
+            "cargo:rerun-if-changed={}",
+            build_l10n_audit::catalogue_path(entry.tag()).display()
+        );
+    }
 }
 
 #[expect(

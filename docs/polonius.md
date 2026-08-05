@@ -82,9 +82,13 @@ Scanner suspects that turned out not to be NLL residue:
   needs no Polonius caveat.
 - `src/cli/merge.rs` — clones construct the resolved `Cli` from borrowed
   layers; owned construction of a new value, not clone-modify-writeback.
-- `build_l10n_audit.rs` — `find_matching_brace` and `find_raw_string_end`
-  return byte offsets into source text; the index is the result (a data id),
-  not a borrow dodge.
+- `build_l10n_audit/` — the audit is split by input kind: `keys.rs` reads the
+  `define_keys!` macro, `scanner.rs` holds the byte-level scanner it drives,
+  `ftl.rs` parses catalogues, `metadata.rs` reads the Cargo metadata, and
+  `compare.rs` holds the comparison rules. The scanner works in byte positions
+  into borrowed source text — `find_matching_brace` in `keys.rs` and
+  `find_raw_string_end` in `scanner.rs` both return byte offsets. The index is
+  the result (a data id), not a borrow dodge.
 - Test-suite `drop()` calls (environment guards, HTTP fixture teardown) are
   semantic Drop effects, not borrow appeasement.
 

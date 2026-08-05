@@ -8,6 +8,12 @@
 
 pub mod keys;
 
+/// The locale registry, which lives at the crate root so that it depends on
+/// nothing: this module reaches `cli_localization` to build the default
+/// localizer, and `cli_localization` reads the registry. Keeping the registry
+/// here would close that loop into a cycle.
+pub use crate::locale_catalogues as locales;
+
 use ortho_config::{LocalizationArgs, Localizer};
 use std::fmt;
 use std::sync::{Arc, OnceLock, RwLock};

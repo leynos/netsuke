@@ -9,7 +9,7 @@ include = [
     "README.md",
     "LICENSE",
     "build.rs",
-    "build_l10n_audit.rs",
+    "build_l10n_audit/**",
 ]
 license = "ISC"
 readme = "README.md"
@@ -22,7 +22,43 @@ categories = ["command-line-utilities", "development-tools::build-utils"]
 
 [package.metadata.ortho_config]
 root_type = "netsuke::cli::CliConfig"
-locales   = ["en-US", "es-ES"]
+locales   = [
+    "ar",
+    "cs",
+    "cy",
+    "da",
+    "de",
+    "el",
+    "en-GB",
+    "en-US",
+    "es-419",
+    "es-ES",
+    "fa",
+    "fi",
+    "fr",
+    "gd",
+    "he",
+    "hi",
+    "hu",
+    "id",
+    "it",
+    "ja",
+    "ko",
+    "nb",
+    "nl",
+    "pl",
+    "pt-BR",
+    "pt-PT",
+    "ro",
+    "ru",
+    "sv",
+    "th",
+    "tr",
+    "uk",
+    "vi",
+    "zh-Hans",
+    "zh-Hant",
+]
 
 [package.metadata.kani.flags]
 default-unwind = "6"
@@ -172,6 +208,11 @@ strip-ansi-escapes = "0.2"
 toml = "0.8"
 serde_yaml = "0.9"
 proptest = "1.11.0"
+# Plural-selection tests must pass numeric arguments to Fluent. `ortho_config`
+# exposes `LocalizationArgs` as a map of `FluentValue`, but does not re-export
+# the value type, so the tests need `fluent-bundle` directly. Constrained to
+# the version `ortho_config` resolves, or the `FluentValue` types would differ.
+fluent-bundle = "0.16.0"
 
 # Target-specific dev-deps
 [target.'cfg(unix)'.dev-dependencies]

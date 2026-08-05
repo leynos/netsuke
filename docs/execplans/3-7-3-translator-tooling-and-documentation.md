@@ -8,6 +8,13 @@ Status: DONE
 
 No `PLANS.md` file exists in this repository.
 
+> **Superseded in part.** This plan records the state of localization when it
+> was executed, when Netsuke shipped two catalogues. Issue #466 replaced that
+> arrangement with a registry model: `src/locale_catalogues.rs` declares every
+> shipped tag and embeds its catalogue, and Netsuke now ships 35 of them. The
+> references below have been corrected to name the current modules and model,
+> but the plan's sequencing and decisions are left as executed.
+
 ## Purpose / big picture
 
 Roadmap item 3.7.3 requires providing translator tooling and documentation
@@ -16,8 +23,11 @@ localization smoke tests cover at least one secondary locale.
 
 The existing infrastructure already includes:
 
-- Fluent localization with en-US and es-ES locales (318 messages each)
-- Compile-time key audit (`build_l10n_audit.rs`) validating key parity
+- Fluent localization, at the time of this plan covering en-US and es-ES
+  (now 35 catalogues, declared by the registry in `src/locale_catalogues.rs`)
+- A build-time audit (`build_l10n_audit/`) validating that every catalogue
+  declares exactly the keys `define_keys!` declares, and that each shared
+  message interpolates the same Fluent variables as the `en-US` source
 - Localization smoke tests in `tests/localization_tests.rs` confirming es-ES
   resolves Spanish and fr-FR falls back to English
 
@@ -100,11 +110,14 @@ Success is observable by:
 ## Decision log
 
 - Decision: Documentation-first approach without automated variable audit.
-  Rationale: The existing compile-time key audit in `build_l10n_audit.rs`
-  already validates key parity. Adding automated variable consistency checking
-  would expand scope significantly. Manual variable documentation in the
-  translator guide is sufficient for this milestone. Date/Author: 2026-01-31
-  (Plan)
+  Rationale: The existing build-time key audit in `build_l10n_audit/` already
+  validates key parity. Adding automated variable consistency checking would
+  expand scope significantly. Manual variable documentation in the translator
+  guide is sufficient for this milestone. Date/Author: 2026-01-31 (Plan)
+
+  Superseded: the audit now also validates Fluent interpolation-variable parity
+  against `en-US`, which this decision had left out of scope. The original
+  scoping stands as recorded; the contract it describes has since widened.
 
 - Decision: Keep plural form examples as documentation, despite selection not
   working. Rationale: The FTL syntax is valid and demonstrates correct Fluent
@@ -137,11 +150,13 @@ numeric types for proper plural form support.
 
 Localization is implemented via:
 
-- `locales/en-US/messages.ftl` - English source messages (318 keys)
-- `locales/es-ES/messages.ftl` - Spanish translations (318 keys)
+- `locales/en-US/messages.ftl` - English source messages
+- `locales/es-ES/messages.ftl` - Spanish translations
+  (one catalogue per registry tag; 35 in the current tree)
 - `src/localization/keys.rs` - Compile-time key constants via `define_keys!`
 - `src/cli_localization.rs` - Builds Fluent localizers with fallback chains
-- `build_l10n_audit.rs` - Compile-time audit ensuring key parity
+- `build_l10n_audit/` - Build-time audit ensuring key parity and Fluent
+  interpolation-variable parity against `en-US`
 
 Message keys use hierarchical dot-notation (e.g., `cli.flag.file.help`,
 `stdlib.fetch.url_invalid`) organized by domain:
@@ -318,4 +333,4 @@ No new dependencies required. Uses existing:
 | `tests/localization_tests.rs` | Add plural tests            |
 | `docs/users-guide.md`         | Add guide reference         |
 | `docs/roadmap.md`             | Mark 3.7.3 done             |
-| `build_l10n_audit.rs`         | Existing audit (no changes) |
+| `build_l10n_audit/`           | Existing audit (no changes) |

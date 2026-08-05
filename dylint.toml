@@ -50,6 +50,14 @@ excluded_paths = [
     # each workflow contract crate. The crates themselves stay under policy.
     "workflow_ci::common",
     "workflow_release::common",
+
+    # The build script's parsers, included by path so `cargo test` can reach
+    # them (build scripts are not test targets). Each reads a file Cargo hands
+    # it through `build_script_build`, which is excluded below for the same
+    # reason; these entries cover the copies compiled into the test crates.
+    "build_l10n_keys_tests::keys",
+    "build_l10n_parser_tests::ftl",
+    "build_l10n_audit_rules_tests::ftl",
 ]
 
 # Whole crates whose ambient filesystem access lives in the crate root, so a
@@ -70,6 +78,11 @@ excluded_paths = [
 # `test_support::fs` boundary module rather than exempting the whole crate.
 excluded_crates = [
     "build_script_build",
+    # Stages the audit's inputs into a TempDir and runs the real audit over
+    # them and over CARGO_MANIFEST_DIR. Both roots are ambient by
+    # construction, and the audit modules it includes by path read files the
+    # build script hands them the same way.
+    "build_l10n_audit_tests",
     "advanced_usage_tests",
     "assert_cmd_tests",
     "manifest_glob_tests",

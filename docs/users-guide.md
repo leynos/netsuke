@@ -70,7 +70,7 @@ licence files. Installer packages do not have checksum sidecars in v0.1.0.
 Windows PowerShell help files are published beside each MSI as sidecar
 artefacts rather than embedded in the installer.
 
-To install the current source checkout with Cargo. The clone supplies both the
+Install the current source checkout with Cargo. The clone supplies both the
 pinned nightly toolchain and `RUSTFLAGS=-Zpolonius=next`, so neither is given
 here — unlike the registry install above, which runs outside a checkout:
 
@@ -493,6 +493,69 @@ Important global options include:
 Run `netsuke --help` or `netsuke <command> --help` for the complete current
 surface.
 
+### Choose a language with `--locale`
+
+Netsuke's help text, validation errors, progress labels, and runtime
+diagnostics are translated. The locale is chosen by the first source that
+yields a valid BCP 47 tag, and which sources are available depends on when the
+message is rendered.
+
+Help, usage, and command-line validation errors are produced before any
+configuration file is read, so they use the `--locale` flag, then
+`NETSUKE_LOCALE`, then the system default, then `en-US`. Diagnostics, progress,
+and status output are rendered after the configuration merge, so they consult
+the configuration file's `locale` setting as well, between `NETSUKE_LOCALE` and
+the system default.
+
+System values are normalized first, so `en_GB.UTF-8` is understood as `en-GB`.
+
+Table 1: Locales Netsuke ships
+
+| Tag      | Language                 | Tag       | Language              |
+| -------- | ------------------------ | --------- | --------------------- |
+| `ar`     | Arabic                   | `it`      | Italian               |
+| `cs`     | Czech                    | `ja`      | Japanese              |
+| `cy`     | Welsh                    | `ko`      | Korean                |
+| `da`     | Danish                   | `nb`      | Norwegian Bokmål      |
+| `de`     | German                   | `nl`      | Dutch                 |
+| `el`     | Greek                    | `pl`      | Polish                |
+| `en-GB`  | English (United Kingdom) | `pt-BR`   | Portuguese (Brazil)   |
+| `en-US`  | English (United States)  | `pt-PT`   | Portuguese (Portugal) |
+| `es-419` | Spanish (Latin America)  | `ro`      | Romanian              |
+| `es-ES`  | Spanish (Spain)          | `ru`      | Russian               |
+| `fa`     | Persian                  | `sv`      | Swedish               |
+| `fi`     | Finnish                  | `th`      | Thai                  |
+| `fr`     | French                   | `tr`      | Turkish               |
+| `gd`     | Scottish Gaelic          | `uk`      | Ukrainian             |
+| `he`     | Hebrew                   | `vi`      | Vietnamese            |
+| `hi`     | Hindi                    | `zh-Hans` | Chinese (Simplified)  |
+| `hu`     | Hungarian                | `zh-Hant` | Chinese (Traditional) |
+| `id`     | Indonesian               |           |                       |
+
+`en-US` is the source locale. Any message a translation has not yet covered
+falls back to the English text rather than disappearing.
+
+A requested tag resolves by these rules, in order:
+
+1. The exact tag, if a catalogue carries it.
+2. A script or region rule for that language. Bare `es` and `es-ES` use
+   `es-ES`, and every other Spanish region uses `es-419`; bare `pt` and every
+   Portuguese region except Brazil use `pt-PT`; Chinese resolves by script, with
+   `zh-CN`, `zh-SG`, and `zh-MY` taking Simplified and `zh-TW`, `zh-HK`, and
+   `zh-MO` taking Traditional; English outside the United States uses `en-GB`;
+   and `no` resolves to `nb`.
+3. The only catalogue for that language, so `fr-CA` uses `fr` and `de-AT`
+   uses `de`.
+4. `en-US`, for anything still unmatched.
+
+Regional and script variants that differ in substance are never merged: asking
+for `pt-BR` never yields European Portuguese, and asking for `zh-TW` never
+yields Simplified Chinese.
+
+Manual pages and PowerShell help shipped in releases are generated in `en-US`
+only. Translated copy reaches users through the running binary, which embeds
+every catalogue.
+
 ### Anchor a project with `--directory`
 
 `--directory` changes manifest lookup, project configuration discovery and
@@ -603,8 +666,13 @@ Common environment equivalents include:
 - `NETSUKE_EMOJI=never`
 - `NETSUKE_PROGRESS=never`
 - `NETSUKE_ACCESSIBILITY=on`
+- `NETSUKE_LOCALE=en-US`
 - `NETSUKE_DEFAULT_TARGETS__0=hello.txt`
 - `NETSUKE_NINJA=/opt/ninja/bin/ninja`
+
+`NETSUKE_LOCALE` selects the interface language; see
+[Choose a language with `--locale`](#choose-a-language-with---locale) for how
+it combines with the flag and the system default.
 
 `NETSUKE_NINJA` overrides the Ninja executable used by `build` and `clean`.
 Leave it unset to use `ninja` from `PATH`, or set another executable name or an

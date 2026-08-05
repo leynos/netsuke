@@ -55,8 +55,9 @@ operator, user, and contributor references are easier to find.
   template standard-library reference with executable YAML and Jinja examples.
 - [ortho-config-users-guide.md](ortho-config-users-guide.md): Configuration
   system guide and precedence reference.
-- [translators-guide.md](translators-guide.md): Localization workflow and
-  translation guidance.
+- [translators-guide.md](translators-guide.md): Localization workflow,
+  translation guidance, the locale registry that owns the supported-tag list,
+  and the fallback policy that keeps regional and script variants distinct.
 
 ## Contributor guidance
 

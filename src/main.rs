@@ -35,6 +35,28 @@ impl DiagMode {
     }
 }
 
+#[path = "startup_tracing.rs"]
+mod startup_tracing;
+
+use startup_tracing::StartupWriter;
+
+/// Send buffered startup diagnostics where `mode` says they belong.
+///
+/// Human mode releases them to stderr; JSON mode drops them, so the diagnostic
+/// document is the only thing on that stream.
+fn settle_startup_diagnostics(writer: &StartupWriter, mode: DiagMode) {
+    if mode.is_json() {
+        writer.discard();
+    } else if let Err(err) = writer.release_to_stderr() {
+        // Nothing better to do: the channel for reporting this is the one that
+        // just failed.
+        drop(writeln!(
+            io::stderr(),
+            "failed to flush startup diagnostics: {err}"
+        ));
+    }
+}
+
 fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().collect();
     let env = locale_resolution::SystemEnv;
@@ -48,20 +70,31 @@ fn run_with_args(
     system_locale: &impl locale_resolution::SystemLocale,
 ) -> ExitCode {
     let json_hint = locale_resolution::resolve_startup_json(&args, env);
+    // Recorded at `WARN` but written to a buffer, not to stderr. `json_hint` is
+    // only a hint — configuration can still turn JSON on — and the JSON
+    // diagnostic goes to stderr, so an event emitted now could corrupt it.
+    // Buffering keeps the locale fallback report without taking that risk.
+    let startup_writer = StartupWriter::buffering();
+    init_tracing(LevelFilter::WARN, startup_writer.clone());
     let localizer = startup_localizer(&args, env, system_locale);
     let startup_mode = DiagMode::from_json_enabled(json_hint);
-    let (parsed_cli, matches) = match parse_cli_or_exit(args, &localizer, startup_mode) {
-        Ok(parsed) => parsed,
-        Err(code) => return code,
-    };
-    // Install the subscriber disabled until the effective JSON mode is known.
-    // Human-mode config merging repeats discovery after the filter is enabled.
-    init_tracing();
+    let (parsed_cli, matches) =
+        match parse_cli_or_exit(args, &localizer, startup_mode, &startup_writer) {
+            Ok(parsed) => parsed,
+            // The buffer was settled inside, before the branch that exits.
+            Err(code) => return code,
+        };
 
     let mode = match resolve_json_mode_or_exit(&parsed_cli, &matches, startup_mode) {
         Ok(mode) => mode,
-        Err(code) => return code,
+        Err(code) => {
+            settle_startup_diagnostics(&startup_writer, startup_mode);
+            return code;
+        }
     };
+    // The effective mode is known here, before configuration is merged, so the
+    // startup warning reaches the user ahead of any configuration processing.
+    settle_startup_diagnostics(&startup_writer, mode);
     let merged_cli = match merge_cli_or_exit(&parsed_cli, &matches, mode) {
         Ok(merged) => merged,
         Err(code) => return code,
@@ -87,30 +120,36 @@ static TRACING_FILTER: OnceLock<reload::Handle<LevelFilter, Registry>> = OnceLoc
 ///
 /// JSON mode silences tracing entirely so stderr carries only the diagnostic
 /// document. `--verbose` selects `TRACE` because the `NETSUKE_CONFIG` lookup is
-/// traced at that level; otherwise only errors surface.
+/// traced at that level.
+///
+/// Otherwise `WARN`: a run that falls back to English, or loads a catalogue
+/// that fails to parse, reports it at that level, and `ERROR` would leave both
+/// silent — which is the condition a user would report as a bug.
 const fn startup_filter(mode: DiagMode, verbose: bool) -> LevelFilter {
     if mode.is_json() {
         LevelFilter::OFF
     } else if verbose {
         LevelFilter::TRACE
     } else {
-        LevelFilter::ERROR
+        LevelFilter::WARN
     }
 }
 
-/// Install the process-wide subscriber with a disabled reloadable level filter.
+/// Install the process-wide subscriber with a reloadable level filter set to
+/// `initial`.
 ///
 /// Only the first call installs; later calls are ignored so exactly one global
 /// subscriber exists, and the level is adjusted through [`set_tracing_filter`]
-/// rather than by installing a second subscriber. Starting disabled suppresses
-/// discovery events until configuration-backed JSON mode has been resolved.
-fn init_tracing() {
-    let (filter, handle) = reload::Layer::new(LevelFilter::OFF);
+/// rather than by installing a second subscriber. Events go to `writer`, which
+/// buffers until the effective mode is known and then releases to stderr or
+/// discards — never to stdout, so a JSON document is never interleaved.
+fn init_tracing(initial: LevelFilter, writer: StartupWriter) {
+    let (filter, handle) = reload::Layer::new(initial);
     if Registry::default()
         .with(filter)
         .with(
             fmt::layer()
-                .with_writer(io::stderr)
+                .with_writer(writer)
                 // Colour only a terminal; piped or redirected logs stay plain so
                 // they remain greppable and free of escape sequences.
                 .with_ansi(io::stderr().is_terminal()),
@@ -144,10 +183,16 @@ fn parse_cli_or_exit(
     args: Vec<OsString>,
     localizer: &Arc<dyn Localizer>,
     mode: DiagMode,
+    startup_writer: &StartupWriter,
 ) -> Result<(cli::Cli, ArgMatches), ExitCode> {
     match cli::parse_with_localizer_from(args, localizer) {
         Ok(parsed) => Ok(parsed),
         Err(err) => {
+            // Every arm below terminates the process or returns, and
+            // `Error::exit` never returns, so the buffered startup
+            // diagnostics have to be settled here. Configuration is never
+            // read on these paths, so `mode` is the effective mode.
+            settle_startup_diagnostics(startup_writer, mode);
             if matches!(
                 err.kind(),
                 ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
@@ -213,11 +258,14 @@ fn configure_runtime(
     system_locale: &impl locale_resolution::SystemLocale,
     mode: DiagMode,
 ) {
+    // Raised before the localizer is built, so a fallback warning is both
+    // visible in a normal run and suppressed in JSON mode, where stderr
+    // carries the diagnostic document.
+    set_tracing_filter(startup_filter(mode, merged_cli.verbose));
+
     let runtime_locale = locale_resolution::resolve_runtime_locale(merged_cli, system_locale);
     let runtime_localizer = Arc::from(cli_localization::build_localizer(runtime_locale.as_deref()));
     localization::set_localizer(Arc::clone(&runtime_localizer));
-
-    set_tracing_filter(startup_filter(mode, merged_cli.verbose));
 }
 
 fn handle_runner_error(
@@ -257,3 +305,7 @@ fn render_runtime_error_json(err: &anyhow::Error) -> serde_json::Result<String> 
     }
     diagnostic_json::render_error_json(err.as_ref())
 }
+
+#[cfg(test)]
+#[path = "main_tests.rs"]
+mod tests;

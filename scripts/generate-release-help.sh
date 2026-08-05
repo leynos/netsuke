@@ -9,6 +9,10 @@
 set -euo pipefail
 
 fallback_date="1970-01-01"
+# Release help artefacts are generated in the source locale only. The binary
+# embeds every catalogue and translates at run time, so a translated manual
+# page would add per-locale release assets without adding reach. This is the
+# policy stated in the users' guide; change both together.
 locale="en-US"
 build_id="${RELEASE_HELP_BUILD_ID:-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}}"
 correlation_id="${RELEASE_HELP_CORRELATION_ID:-${build_id}-release-help}"

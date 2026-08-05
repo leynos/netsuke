@@ -2,12 +2,15 @@
 
 use std::sync::{Arc, MutexGuard};
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use rstest::rstest;
 use test_support::localizer_test_lock;
 
 use netsuke::cli_localization;
+use netsuke::locale_catalogues::SUPPORTED_LOCALES;
 use netsuke::localization::{self, LocalizerGuard, keys};
+use ortho_config::{FluentLocalizer, LanguageIdentifier};
+use std::str::FromStr;
 use test_support::fluent::normalize_fluent_isolates;
 
 /// Guard pair holding both the test lock and the localizer override.
@@ -55,9 +58,137 @@ fn which_message(command: &str) -> String {
         .to_string()
 }
 
+/// The number of catalogues this release ships.
+///
+/// `tests/locale_registry_tests.rs` pins the exact tag set; this count is what
+/// lets the sweeps below assert they covered all of it rather than silently
+/// iterating a shortened registry.
+const EXPECTED_SHIPPED_LOCALE_COUNT: usize = 35;
+/// Every catalogue must parse on its own, with no English underneath it.
+///
+/// `build_localizer` layers the requested locale over the English source, so a
+/// catalogue that fails to parse still renders — in English, with the same
+/// arguments interpolated. That is indistinguishable from a working
+/// translation at the rendering level, which is why the sweep below cannot
+/// catch it. Building each resource directly with the defaults disabled can.
+#[test]
+fn every_catalogue_parses_without_the_english_fallback() -> Result<()> {
+    for entry in SUPPORTED_LOCALES {
+        let locale = LanguageIdentifier::from_str(entry.tag())
+            .with_context(|| format!("locale {} is not a valid BCP 47 tag", entry.tag()))?;
+        let built = FluentLocalizer::builder(locale)
+            .with_consumer_resources([entry.resource()])
+            .disable_defaults()
+            .try_build();
+        if let Err(err) = built {
+            bail!(
+                "locale {} has a catalogue that does not parse: {err}",
+                entry.tag()
+            );
+        }
+    }
+    Ok(())
+}
+/// Every registered locale must render a message and interpolate its
+/// arguments. This is a rendering sweep, not a parse check: see
+/// `every_catalogue_parses_without_the_english_fallback` for the latter.
+#[test]
+fn every_locale_renders_and_interpolates() -> Result<()> {
+    let mut covered = 0usize;
+    for entry in SUPPORTED_LOCALES {
+        let _guards = localizer_guards(entry.tag())?;
+        let message = normalize_fluent_isolates(&which_message("cc"));
+        ensure!(
+            !message.trim().is_empty(),
+            "locale {} rendered an empty message",
+            entry.tag()
+        );
+        ensure!(
+            message.contains("cc") && message.contains('0'),
+            "locale {} did not interpolate its arguments, got: {message}",
+            entry.tag()
+        );
+        ensure!(
+            !message.contains(keys::STDLIB_WHICH_NOT_FOUND),
+            "locale {} rendered the key identifier instead of a message: {message}",
+            entry.tag()
+        );
+        covered += 1;
+    }
+    ensure!(
+        covered == EXPECTED_SHIPPED_LOCALE_COUNT,
+        "the sweep covered {covered} locales, expected {EXPECTED_SHIPPED_LOCALE_COUNT}"
+    );
+    Ok(())
+}
+
+/// Non-Latin catalogues must reach the terminal with their own script intact.
+#[rstest]
+#[case("ja", '\u{3040}', '\u{30FF}')]
+#[case("ko", '\u{AC00}', '\u{D7A3}')]
+#[case("ru", '\u{0400}', '\u{04FF}')]
+#[case("el", '\u{0370}', '\u{03FF}')]
+#[case("th", '\u{0E00}', '\u{0E7F}')]
+#[case("hi", '\u{0900}', '\u{097F}')]
+#[case("zh-Hans", '\u{4E00}', '\u{9FFF}')]
+fn non_latin_locales_render_their_own_script(
+    #[case] locale: &str,
+    #[case] first: char,
+    #[case] last: char,
+) -> Result<()> {
+    let _guards = localizer_guards(locale)?;
+
+    let message = localization::message(keys::MANIFEST_PARSE).to_string();
+    ensure!(
+        message.chars().any(|ch| (first..=last).contains(&ch)),
+        "expected {locale} to render characters in {first:?}..={last:?}, got: {message}"
+    );
+    Ok(())
+}
+
+/// Right-to-left locales must render right-to-left text, and a message that
+/// opens with a Latin token must still carry the mark that pins the
+/// paragraph's direction.
+#[rstest]
+#[case("ar", '\u{0600}', '\u{06FF}')]
+#[case("fa", '\u{0600}', '\u{06FF}')]
+#[case("he", '\u{0590}', '\u{05FF}')]
+fn rtl_locales_render_and_keep_direction_marks(
+    #[case] locale: &str,
+    #[case] first: char,
+    #[case] last: char,
+) -> Result<()> {
+    let _guards = localizer_guards(locale)?;
+
+    let message = localization::message(keys::MANIFEST_PARSE).to_string();
+    ensure!(
+        message.chars().any(|ch| (first..=last).contains(&ch)),
+        "expected {locale} to render its own script, got: {message}"
+    );
+
+    let label = localization::message(keys::MANIFEST_YAML_LABEL).to_string();
+    ensure!(
+        label.starts_with('\u{200F}'),
+        "expected {locale} to keep the right-to-left mark on a Latin-initial \
+         message, got: {label:?}"
+    );
+    Ok(())
+}
+
 #[rstest]
 #[case("es-ES", "no encontrado")]
-#[case("fr-FR", "not found")]
+// Icelandic ships no catalogue, so the English source copy renders.
+#[case("is-IS", "not found")]
+// A tag that will not parse at all takes the same path.
+#[case("not a locale", "not found")]
+#[case("", "not found")]
+// A region with no catalogue of its own reaches its language's copy.
+#[case("de-AT", "nicht gefunden")]
+// A Latin American region reaches es-419 rather than Spain's catalogue.
+#[case("es-MX", "no se encontró")]
+// Script and region variants stay apart at run time, not just in resolution.
+#[case("zh-TW", "找不到")]
+#[case("zh-CN", "未找到")]
 fn localisation_resolves_expected_message(
     #[case] locale: &str,
     #[case] expected_substring: &str,
@@ -71,68 +202,6 @@ fn localisation_resolves_expected_message(
     );
     Ok(())
 }
-
-/// Verify that the example plural form messages are resolvable and interpolate
-/// the count variable. Note: CLDR plural selection requires numeric `FluentValue`
-/// types, but the current API passes strings, so only the default `[other]`
-/// variant is selected. These tests verify the messages resolve and interpolate
-/// correctly regardless of which variant is chosen.
-#[rstest]
-#[case("en-US", "Processed", "files.")]
-#[case("es-ES", "procesaron", "archivos.")]
-fn example_files_processed_message_resolves(
-    #[case] locale: &str,
-    #[case] expected_verb: &str,
-    #[case] expected_noun: &str,
-) -> Result<()> {
-    let _guards = localizer_guards(locale)?;
-
-    let message = localization::message(keys::EXAMPLE_FILES_PROCESSED)
-        .with_arg("count", 5)
-        .to_string();
-
-    ensure!(
-        message.contains(expected_verb),
-        "expected message for locale {locale} to contain {expected_verb:?}, got: {message}"
-    );
-    ensure!(
-        message.contains(expected_noun),
-        "expected message for locale {locale} to contain {expected_noun:?}, got: {message}"
-    );
-    // Verify the count variable was interpolated (appears somewhere in the message)
-    ensure!(
-        message.contains('5'),
-        "expected count variable to be interpolated, got: {message}"
-    );
-    Ok(())
-}
-
-/// Verify that the example `errors_found` message resolves and interpolates correctly.
-#[rstest]
-#[case("en-US", "errors found.")]
-#[case("es-ES", "encontraron")]
-fn example_errors_found_message_resolves(
-    #[case] locale: &str,
-    #[case] expected_substring: &str,
-) -> Result<()> {
-    let _guards = localizer_guards(locale)?;
-
-    let message = localization::message(keys::EXAMPLE_ERRORS_FOUND)
-        .with_arg("count", 3)
-        .to_string();
-
-    ensure!(
-        message.contains(expected_substring),
-        "expected message for locale {locale} to contain {expected_substring:?}, got: {message}"
-    );
-    // Verify the count variable was interpolated
-    ensure!(
-        message.contains('3'),
-        "expected count variable to be interpolated, got: {message}"
-    );
-    Ok(())
-}
-
 #[rstest]
 fn variable_interpolation_works_correctly() -> Result<()> {
     let _guards = localizer_guards("en-US")?;

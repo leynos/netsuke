@@ -4,19 +4,32 @@
 //! build-script sources remain in its manifest, where an omission would
 //! otherwise fail only during release.
 
+use netsuke::locale_catalogues::SUPPORTED_LOCALES;
 use std::collections::BTreeSet;
 use std::env;
 use std::path::Path;
 use std::process::Command;
 
-const REQUIRED_PACKAGED_FILES: [&str; 5] = [
-    "build_l10n_audit.rs",
+const REQUIRED_PACKAGED_FILES: [&str; 9] = [
+    "build_l10n_audit/mod.rs",
+    "build_l10n_audit/compare.rs",
+    "build_l10n_audit/ftl.rs",
+    "build_l10n_audit/keys.rs",
+    "build_l10n_audit/scanner.rs",
+    "build_l10n_audit/byte_index.rs",
+    "build_l10n_audit/metadata.rs",
     "build.rs",
     "src/localization/keys.rs",
-    "locales/en-US/messages.ftl",
-    "locales/es-ES/messages.ftl",
 ];
 
+/// Every catalogue named by the locale registry must ship in the package;
+/// omitting one would break the build-time audit for downstream builds.
+fn required_catalogue_paths() -> Vec<String> {
+    SUPPORTED_LOCALES
+        .iter()
+        .map(|entry| format!("locales/{}/messages.ftl", entry.tag()))
+        .collect()
+}
 #[test]
 #[expect(
     clippy::disallowed_methods,
@@ -57,6 +70,13 @@ fn packaged_manifest_retains_build_script_sources() {
     for required_path in REQUIRED_PACKAGED_FILES {
         assert!(
             packaged_paths.contains(required_path),
+            "packaged manifest should contain `{required_path}`"
+        );
+    }
+
+    for required_path in required_catalogue_paths() {
+        assert!(
+            packaged_paths.contains(required_path.as_str()),
             "packaged manifest should contain `{required_path}`"
         );
     }

@@ -1432,6 +1432,7 @@ dependencies = [
  "clap",
  "clap_mangen",
  "digest 0.11.3",
+ "fluent-bundle",
  "glob",
  "indexmap",
  "indicatif",

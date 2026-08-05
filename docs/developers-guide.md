@@ -26,6 +26,122 @@ as the durable architecture record.
 
 [adr-003-cli]: adr-003-agent-consistent-human-first-cli.md
 
+## Localization
+
+`src/locale_catalogues.rs` is the authoritative registry of shipped catalogues.
+It sits at the crate root, not under `localization/`, because `localization`
+builds its default localizer through `cli_localization`, and `cli_localization`
+reads the registry; a registry inside `localization` would close that into a
+module cycle. `localization::locales` re-exports it, so the older path still
+resolves for callers. `define_locales!` declares the tags and embeds
+`locales/<tag>/messages.ftl` for each, so a tag without a catalogue on disk
+fails to compile. Read the registry rather than writing a separate locale list;
+the build audit, the `rerun-if-changed` directives, and the packaging smoke
+test all do. `tests/locale_registry_tests.rs` is the deliberate exception: its
+`EXPECTED_SHIPPED_TAGS` constant writes out every shipped tag by hand rather
+than reading the registry, and asserts the registry matches it. A test that
+reads the registry could only confirm the registry agrees with itself, so this
+list stands as an independent oracle — adding or dropping a catalogue has to be
+a conscious edit to it as well as to the registry.
+
+`Cargo.toml`'s `package.metadata.ortho_config.locales` is the one unavoidable
+duplicate, because Cargo metadata cannot call into Rust. The build audit
+compares it against the registry and fails on drift.
+
+Adding a locale therefore means: create `locales/<tag>/messages.ftl` with every
+declared key translated, add the tag to `define_locales!`, add it to the
+`package.metadata.ortho_config.locales` array, and add it to
+`EXPECTED_SHIPPED_TAGS` in `tests/locale_registry_tests.rs`. If the language
+already ships a catalogue, add a `LANGUAGE_FALLBACKS` rule too, so the new tag
+and the existing one resolve as intended rather than one of them capturing the
+other.
+
+Each omission is caught, but not all by the same gate. A missing catalogue file
+fails compilation, because `define_locales!` embeds it with `include_str!`. A
+missing `Cargo.toml` entry fails the build-time audit. A missing
+`EXPECTED_SHIPPED_TAGS` entry fails `make test` rather than the build, since
+the oracle is a test: that is the cost of its independence, and the reason to
+run the suite before assuming a locale is wired up. The `LANGUAGE_FALLBACKS`
+rule is the exception with no gate at all — it is a judgement about which
+variants are interchangeable, and nothing can infer it.
+
+Table 1: The locale API surface
+
+| Item                                     | Purpose                                                                                       |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `locales::SUPPORTED_LOCALES`             | Every shipped catalogue, ordered by tag                                                       |
+| `locales::catalogue(tag)`                | Exact lookup; `None` when the tag ships no catalogue                                          |
+| `locales::resolve_catalogue(identifier)` | Exact match, then the fallback rules, then the sole catalogue for that language, then `en-US` |
+| `locales::source_catalogue()`            | The `en-US` catalogue every locale falls back to                                              |
+| `cli_localization::build_localizer(tag)` | The runtime entry point: resolves, then layers over `en-US`                                   |
+
+Selection matches the exact BCP 47 tag first. A tag with no catalogue resolves
+through the per-language rules in `LANGUAGE_FALLBACKS`, then the sole catalogue
+for that language, then `en-US`. The rules keep variants that differ in
+substance apart — `es-419` from `es-ES`, `pt-BR` from `pt-PT`, `zh-Hans` from
+`zh-Hant` — so a new locale whose language already ships a catalogue needs a
+rule rather than the unique-language step. The
+[translator guide](translators-guide.md) states the same policy for
+translators, and the users' guide lists the tags.
+
+Netsuke resolves the locale twice: `startup_localizer` before the configuration
+merge, for help and usage errors, and `configure_runtime` afterwards, for
+diagnostics and progress. Only the second sees a configuration file's `locale`,
+because `--help` must render before Netsuke knows which configuration file to
+read.
+
+### Startup diagnostics buffering
+
+Locale resolution happens before the command line is parsed, so a fallback
+warning can be emitted before the effective diagnostic mode — human or JSON —
+is known, yet the JSON diagnostic document is also written to stderr: an
+eagerly emitted warning could corrupt it. `StartupWriter` in
+`src/startup_tracing.rs` closes that window. It implements
+`tracing_subscriber`'s `MakeWriter` and is installed by `init_tracing` in
+`src/main.rs` before locale resolution runs, so every startup event is held
+rather than written. The buffer is bounded at `MAX_BUFFERED_BYTES` (64 KiB): it
+keeps the earliest bytes, appends a truncation marker once if the bound is
+reached, and drops the remainder, so its size never depends on how much a run
+emits.
+
+`settle_startup_diagnostics` in `src/main.rs` decides where the buffer goes
+once the effective mode is known: human mode releases it to stderr, JSON mode
+discards it so stderr carries only the diagnostic document. In
+`run_with_args`, settlement happens after the JSON mode is resolved but before
+the configuration merge, so a human-mode warning still precedes any
+configuration processing. On the paths where `clap` calls `Error::exit` and
+never returns — `parse_cli_or_exit` — settlement happens first, because
+nothing after that call would otherwise run.
+
+Unit tests in `src/main_tests.rs` drive `startup_filter` and the real
+`startup_localizer` to check the buffered warning and the level it is gated
+by. `tests/startup_diagnostics_tests.rs` runs the built binary end to end,
+including the configuration-driven JSON path, because the behaviour under test
+spans the whole startup sequence and covers paths that terminate inside `clap`
+before returning to `run_with_args`.
+
+**Cross-references:** `docs/netsuke-design.md` §8.4, for the rationale behind
+buffering rather than gating output on the resolved mode.
+
+### Adding or changing messages
+
+Every user-facing string is a Fluent message keyed from
+`src/localization/keys.rs`. Adding one means adding the constant, adding the
+message to all 35 catalogues, and keeping its `{ $variables }` identical across
+them: the build audit rejects a missing key, an orphaned key, or a variable set
+that differs from `en-US`. The audit lives in `build_l10n_audit/`, split into
+`keys.rs` and `scanner.rs` (the `define_keys!` scanner, with `byte_index.rs`
+for its byte-position bookkeeping), `ftl.rs` (catalogues), `metadata.rs` (the
+Cargo metadata), and `compare.rs` (the rules). Because build scripts are not
+test targets, those modules are included by path from four test files:
+`tests/build_l10n_keys_tests.rs` exercises the `define_keys!` scanner
+(`keys.rs`, `scanner.rs`, `byte_index.rs`); `tests/build_l10n_parser_tests.rs`
+exercises the catalogue and metadata parsers (`ftl.rs`, `metadata.rs`);
+`tests/build_l10n_audit_rules_tests.rs` exercises the comparison rules
+(`compare.rs`, alongside `ftl.rs`); and `tests/build_l10n_audit_tests.rs` runs
+the orchestration end to end, both over the checked-in tree and over
+deliberately corrupted copies of it.
+
 ## Graph view projection and renderer adapters
 
 The `graph` subcommand renders the build dependency graph in-process. Its
@@ -647,7 +763,7 @@ and `-Clink-arg=-fuse-ld=mold`.
 
 ### Testing the tooling
 
-Five suites cover the tooling's observable behaviour. All are hermetic — no
+Six suites cover the tooling's observable behaviour. All are hermetic — no
 network, and no real `mold`, `rustup`, or Cargo — so they run as part of
 `make test` on any Linux host.
 
@@ -1050,8 +1166,10 @@ the configured Dependabot directory patterns.
 `tests/packaging_smoke_tests.rs` runs `cargo publish --dry-run` to verify the
 packaged crate builds successfully for release. It then uses
 `cargo package --list` to confirm that the packaged manifest retains
-build-script sources, including `build_l10n_audit.rs`, and rejects stale
-`ninja_env/` paths.
+build-script sources, including the `build_l10n_audit/` modules, and rejects
+stale `ninja_env/` paths. It also asserts that every catalogue named by the
+locale registry ships in the package, so adding a locale cannot silently omit
+its `messages.ftl` from a release.
 
 ### Temporary executable test helpers
 
@@ -1455,6 +1573,27 @@ Three dispositions are in use:
 Scope an expectation as tightly as the site allows — a function where one call
 is involved, a module only where the whole file is pending migration.
 
+### `LocaleLocalizer`
+
+`test_support::localizer::locale_localizer` installs a test locale under
+`LOCALIZER_TEST_LOCK`, the same lock the `en_localizer` fixture uses, so tests
+that mutate the process-global localizer run in sequence rather than racing.
+
+Dropping the returned `LocaleLocalizer` restores the previously installed
+localizer and *then* releases the lock, in that order. The ordering is the
+field declaration order, since Rust drops fields in the order they are
+declared, and it is the whole point of the type: releasing first would admit
+another test into the window between the two, where its localizer would be
+installed and then overwritten by the restore.
+
+That ordering has no behavioural signature under normal scheduling — a waiting
+thread almost never lands inside a window a few instructions wide — so a
+contention test cannot detect the wrong order. `RestoreProbe` wraps the
+localizer guard and records, at the instant restoration begins, whether the
+lock is still held; `try_lock` from the owning thread returns `WouldBlock`, so
+"blocked" means the bundle still holds it. Reverting the field order turns that
+assertion red deterministically.
+
 ### `EnvLock`
 
 `test_support::env_lock::EnvLock` is a global mutex that serializes all
@@ -1596,17 +1735,17 @@ Do **not** call `std::env::set_var` directly in BDD steps — use
 
 ### `tracing_capture`
 
-Production tracing has one process-wide subscriber, installed by `init_tracing`
-in `src/main.rs` with a reloadable filter initially set to `OFF`. Early
-configuration resolution therefore cannot write selector events before the
-effective JSON mode is known. On success, `resolve_json_mode_or_exit` calls
-`set_tracing_filter` with the resolved mode: JSON stays `OFF`, while human mode
-enables `TRACE` for `--verbose` or `ERROR` otherwise. Full human-mode merging
-repeats discovery after the filter is enabled, so its selector events remain
-available. If early resolution fails, human mode enables its fallback filter
-and replays resolution to retain bounded failure diagnostics; JSON mode leaves
-the filter off and discards them. No library module installs a global
-subscriber.
+Production tracing has one process-wide subscriber, installed by
+`init_tracing` in `src/main.rs` with a reloadable filter starting at `WARN`.
+Events are written through `StartupWriter`, which buffers startup tracing
+until the effective diagnostic mode is known — no startup tracing reaches
+stdout. The buffer is bounded (64 KiB), with a truncation policy documented
+in the "Startup diagnostics buffering" subsection above.
+`settle_startup_diagnostics` then releases the buffer to stderr in human
+mode, or discards it in JSON mode. Once the mode is resolved,
+`set_tracing_filter` adjusts the level to the one `startup_filter` chooses
+for the mode, with a fallback filter on the paths where resolution itself
+fails. No library module installs a global subscriber.
 
 Tests use a separate capture boundary:
 
