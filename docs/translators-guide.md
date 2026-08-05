@@ -313,7 +313,10 @@ future compatibility when numeric argument support is added.
 
 ## 7. Adding a new locale
 
-To add support for a new language (for example Icelandic, `is`):
+A locale tag need not introduce a whole new language; it can also be a
+region or script variant of a language Netsuke already ships, such as
+`pt-BR` alongside `pt-PT`, since the registry resolves by tag rather than by
+language. To add support for a new locale tag (for example Icelandic, `is`):
 
 ### Step 1: Start from the source catalogue
 

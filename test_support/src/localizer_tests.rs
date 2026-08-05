@@ -68,7 +68,7 @@ fn the_lock_is_held_until_the_localizer_is_restored() {
         matches!(
             LOCALIZER_TEST_LOCK
                 .get()
-                .expect("the lock is initialised by the fixture")
+                .expect("the lock is initialized by the fixture")
                 .try_lock(),
             Err(TryLockError::WouldBlock)
         ),

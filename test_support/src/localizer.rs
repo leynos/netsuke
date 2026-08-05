@@ -59,9 +59,12 @@ impl Drop for RestoreProbe {
             // `WouldBlock`: `std::sync::Mutex` is not reentrant. So "blocked"
             // means the guard bundle still holds the lock, and "acquired"
             // means the lock was released before the restore — the fault.
-            let held = LOCALIZER_TEST_LOCK
-                .get()
-                .is_some_and(|lock| lock.try_lock().is_err());
+            // Only `WouldBlock` is evidence of that: a poisoned result means
+            // the lock was acquirable, so counting it as held would mask the
+            // very release-before-restore fault this probe exists to catch.
+            let held = LOCALIZER_TEST_LOCK.get().is_some_and(|lock| {
+                matches!(lock.try_lock(), Err(std::sync::TryLockError::WouldBlock))
+            });
             let mut slot = LOCK_HELD_AT_RESTORE
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner);
