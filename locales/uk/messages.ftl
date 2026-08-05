@@ -220,12 +220,12 @@ stdlib.fetch.action.open_cache_entry = відкриття запису кешу 
 
 # Діагностика помічника для команд.
 stdlib.command.location = команда «{ $command }» у шаблоні «{ $template }»
-stdlib.command.spawn_failed = Не вдалося запустити { $location }: { $details }.
-stdlib.command.io_failed = Збій { $location }: { $details }.
+stdlib.command.spawn_failed = { $location } не запустилася: { $details }.
+stdlib.command.io_failed = { $location } зазнала збою: { $details }.
 stdlib.command.closed_input_early = Введення закрилося до завершення запису в команду.
-stdlib.command.broken_pipe = Розірваний канал під час виконання { $location }: { $details }.
-stdlib.command.terminated_by_signal = { $location } завершено сигналом.
-stdlib.command.exited_with_status = { $location } завершено з кодом { $status }.
+stdlib.command.broken_pipe = Розірвано канал, поки виконувалася { $location }: { $details }.
+stdlib.command.terminated_by_signal = { $location } завершена сигналом.
+stdlib.command.exited_with_status = { $location } завершилася з кодом { $status }.
 stdlib.command.output_limit_exceeded = { $location } перевищила обмеження режиму «{ $mode }» у { $limit } байтів для { $stream }.
 stdlib.command.timeout = { $location } перевищила граничний час у { $seconds } с.
 stdlib.command.exit_status_suffix = (код завершення { $status })
