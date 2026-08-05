@@ -16,6 +16,11 @@ pub const NETSUKE_LOCALE_ENV: &str = "NETSUKE_LOCALE";
 pub const NETSUKE_JSON_ENV: &str = "NETSUKE_JSON";
 
 /// Read-only environment access used for locale resolution.
+///
+/// This abstracts locale environment lookup used during startup resolution.
+/// Production code uses [`SystemEnv`]. Tests can supply an in-memory
+/// implementation such as `StubEnv` instead of mutating process-global
+/// environment state.
 pub trait LocaleEnvProvider {
     /// Fetch the environment variable value for `key`.
     fn var(&self, key: &str) -> Option<String>;

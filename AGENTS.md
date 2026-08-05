@@ -170,6 +170,7 @@ references, clone keys only on insertion, and build error context lazily.
     ```sh
     RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zpolonius=next" \
     RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo doc --workspace --no-deps
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zpolonius=next" \
     cargo clippy --workspace --all-targets --all-features -- -D warnings
     whitaker --all -- --all-targets --all-features
     ```
