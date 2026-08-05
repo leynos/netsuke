@@ -102,19 +102,39 @@ fn is_table_header(line: &str) -> bool {
 /// Split the header body at its closing bracket, honouring quoted segments.
 ///
 /// A `]` inside a quoted segment is key content, so the split lands on the
-/// first closing bracket outside quotes. `None` means the line never closes
-/// its bracket, which no header does.
+/// first closing bracket outside quotes, with escapes honoured inside basic
+/// strings. `None` means the line never closes its bracket, which no header
+/// does.
 fn split_header_name(body: &str) -> Option<(&str, &str)> {
-    let mut quote: Option<char> = None;
-    for (index, ch) in body.char_indices() {
-        match quote {
-            Some(open) if ch == open => quote = None,
-            Some(_) => {}
-            None => match ch {
-                '"' | '\'' => quote = Some(ch),
-                ']' => return Some((body.get(..index)?, body.get(index..)?)),
-                _ => {}
-            },
+    let mut index = 0;
+    while let Some(ch) = body.get(index..)?.chars().next() {
+        match ch {
+            '"' | '\'' => {
+                let inner = body.get(index.saturating_add(1)..)?;
+                let close = closing_quote_at(inner, ch)?;
+                index = index.saturating_add(close).saturating_add(2);
+            }
+            ']' => return Some((body.get(..index)?, body.get(index..)?)),
+            _ => index = index.saturating_add(ch.len_utf8()),
+        }
+    }
+    None
+}
+
+/// The byte offset of the quote closing a segment opened with `quote`.
+///
+/// A backslash escapes the next character in a basic (double-quoted) string,
+/// so `\"` is content rather than the close; a literal (single-quoted) string
+/// takes its contents verbatim. This mirrors `step_single_line`.
+fn closing_quote_at(inner: &str, quote: char) -> Option<usize> {
+    let mut escaped = false;
+    for (index, ch) in inner.char_indices() {
+        if escaped {
+            escaped = false;
+        } else if ch == '\\' && quote == '"' {
+            escaped = true;
+        } else if ch == quote {
+            return Some(index);
         }
     }
     None
@@ -123,10 +143,8 @@ fn split_header_name(body: &str) -> Option<(&str, &str)> {
 /// Whether `name` reads as a TOML key: dotted segments, bare or quoted.
 ///
 /// Bare segments draw on the bare-key alphabet; quoted segments accept any
-/// content up to their closing quote. An escaped quote inside a basic-string
-/// segment is read as the close, which rejects the line — no header in this
-/// parser's domain carries one, and rejection fails safe toward "not a
-/// header", leaving the table longer rather than truncated.
+/// content up to their closing quote, with `\"` inside a basic string read as
+/// content rather than the close.
 fn header_names_a_key(name: &str) -> bool {
     let mut rest = name.trim();
     if rest.is_empty() {
@@ -148,7 +166,7 @@ fn header_names_a_key(name: &str) -> bool {
 fn key_segment_after(rest: &str) -> Option<&str> {
     if let Some(quote) = rest.chars().next().filter(|ch| matches!(ch, '"' | '\'')) {
         let inner = rest.get(1..)?;
-        let end = inner.find(quote)?;
+        let end = closing_quote_at(inner, quote)?;
         inner.get(end.saturating_add(1)..)
     } else {
         let end = rest

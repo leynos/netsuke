@@ -279,6 +279,9 @@ fn a_nested_array_value_does_not_end_the_table(#[case] body: &str) -> Result<()>
 #[case("[package.metadata.ortho_config]\n[\"release metadata\"]\nlocales = [\"en-US\"]\n")]
 // The same, quoting one segment of a dotted header.
 #[case("[package.metadata.ortho_config]\n[tool.\"release metadata\"]\nlocales = [\"en-US\"]\n")]
+// A quoted header whose key contains an escaped quote: the escape is content,
+// not the close, so this header too must end the table above its locales.
+#[case("[package.metadata.ortho_config]\n[\"a\\\"b\"]\nlocales = [\"en-US\"]\n")]
 // An unterminated array.
 #[case("[package.metadata.ortho_config]\nlocales = [\"en-US\",\n")]
 fn absent_or_unterminated_keys_yield_none(#[case] manifest: &str) -> Result<()> {
