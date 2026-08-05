@@ -24,3 +24,6 @@ rstest = "0.26.1"
 tracing = "0.1"
 
 [dev-dependencies]
+# Only this crate's own unit tests capture tracing events; the published test
+# surface emits them but never installs a subscriber.
+tracing-subscriber = "0.3"

@@ -1,11 +1,19 @@
 //! Figment provider for explicitly supplied Netsuke environment values.
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 
 use ortho_config::figment::value::{Dict, Map, Value};
 use ortho_config::figment::{Error, Metadata, Profile, Provider};
 
 use super::merge::ENV_PREFIX;
+
+/// Fixed rejection text for a key that claims the Netsuke prefix but is not
+/// UTF-8. The raw key is never included: it is untrusted, unbounded, and may
+/// carry secrets.
+const NON_UTF8_KEY: &str = "non-UTF-8 environment key";
+/// Fixed rejection text for a non-UTF-8 value. The raw value is never
+/// included, for the same reasons.
+const NON_UTF8_VALUE: &str = "non-UTF-8 environment value";
 
 /// Environment layer backed by an owned, injected snapshot.
 pub(super) struct EnvironmentLayer {
@@ -26,7 +34,11 @@ impl Provider for EnvironmentLayer {
     fn data(&self) -> Result<Map<Profile, Dict>, Error> {
         let mut values = Dict::new();
         for (key, value) in &self.entries {
-            let key_text = key.to_string_lossy();
+            let key_text = match decode_key(key) {
+                KeyDecode::Decoded(text) => text,
+                KeyDecode::Unrelated => continue,
+                KeyDecode::Invalid => return Err(reject(NON_UTF8_KEY, "non_utf8_key")),
+            };
             let Some(stripped) = strip_prefix_uncased(key_text.trim(), ENV_PREFIX) else {
                 continue;
             };
@@ -39,7 +51,10 @@ impl Provider for EnvironmentLayer {
             if components.is_empty() {
                 continue;
             }
-            let parsed = match value.to_string_lossy().parse::<Value>() {
+            let Some(value_text) = value.to_str() else {
+                return Err(reject(NON_UTF8_VALUE, "non_utf8_value"));
+            };
+            let parsed = match value_text.parse::<Value>() {
                 Ok(parsed) => parsed,
                 Err(never) => match never {},
             };
@@ -49,6 +64,55 @@ impl Provider for EnvironmentLayer {
         profiles.insert(Profile::Default, values);
         Ok(profiles)
     }
+}
+
+/// Outcome of decoding an environment key.
+///
+/// This is not a `Result`: `figment::Error` is large enough that returning it
+/// from a small helper trips `clippy::result_large_err`, and the caller is the
+/// natural place to build the error anyway.
+enum KeyDecode<'a> {
+    /// Valid UTF-8; the ordinary prefix filter decides whether it is ours.
+    Decoded(&'a str),
+    /// Not UTF-8 and not addressed to this layer, so it is skipped.
+    Unrelated,
+    /// Claims the Netsuke prefix but is not UTF-8, so it must be rejected.
+    Invalid,
+}
+
+/// Decode `key` strictly, distinguishing configuration from unrelated noise.
+///
+/// The snapshot is the whole process environment, so unrelated variables may
+/// legitimately hold non-UTF-8 data and must not fail the load. An entry
+/// claiming the Netsuke prefix is configuration this layer owns, so a non-UTF-8
+/// key there is an error rather than something to coerce.
+fn decode_key(key: &OsStr) -> KeyDecode<'_> {
+    match key.to_str() {
+        Some(text) => KeyDecode::Decoded(text),
+        None if claims_config_prefix(key) => KeyDecode::Invalid,
+        None => KeyDecode::Unrelated,
+    }
+}
+
+/// Build the rejection error, recording only the bounded `failure_kind`.
+///
+/// Neither the offending key nor its value reaches the log or the error: both
+/// are untrusted and may carry secrets.
+fn reject(message: &'static str, failure_kind: &'static str) -> Error {
+    tracing::warn!(failure_kind, "rejected non-UTF-8 injected configuration");
+    Error::from(message.to_owned())
+}
+
+/// Report whether `key` claims the Netsuke configuration prefix.
+///
+/// The prefix is ASCII, so it can be recognised from the encoded bytes without
+/// first committing to a UTF-8 decode. This is only consulted for keys that
+/// failed a strict decode; valid UTF-8 keys take the ordinary path unchanged.
+fn claims_config_prefix(key: &OsStr) -> bool {
+    key.as_encoded_bytes()
+        .trim_ascii_start()
+        .get(..ENV_PREFIX.len())
+        .is_some_and(|candidate| candidate.eq_ignore_ascii_case(ENV_PREFIX.as_bytes()))
 }
 
 fn strip_prefix_uncased<'a>(value: &'a str, prefix: &str) -> Option<&'a str> {
@@ -164,6 +228,109 @@ mod tests {
                     .to_string()
                     .contains("existing scalar configuration key"),
                 "normalized alias conflict should identify an existing scalar: {error}"
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    mod non_utf8 {
+        //! Strict-decode tests for injected configuration.
+        //!
+        //! Invalid UTF-8 keys and values only exist as `OsString` on Unix,
+        //! where `OsStringExt::from_vec` accepts arbitrary bytes.
+
+        use super::super::*;
+        use crate::test_tracing_capture::with_test_subscriber;
+        use std::os::unix::ffi::OsStringExt;
+        use tracing_subscriber::filter::LevelFilter;
+
+        /// Stands in for a secret smuggled through the environment; it must
+        /// never reach an error message or a log line.
+        const SENTINEL: &[u8] = b"s3cr3t-sentinel";
+
+        fn invalid_bytes(prefix: &[u8]) -> OsString {
+            let mut bytes = prefix.to_vec();
+            bytes.extend_from_slice(SENTINEL);
+            bytes.push(0xFF);
+            OsString::from_vec(bytes)
+        }
+
+        fn layer(key: OsString, value: OsString) -> EnvironmentLayer {
+            EnvironmentLayer::new(vec![(key, value)])
+        }
+
+        #[test]
+        fn non_utf8_key_is_rejected_with_fixed_text() {
+            let error = layer(invalid_bytes(b"NETSUKE_"), OsString::from("value"))
+                .data()
+                .expect_err("a non-UTF-8 Netsuke key must be rejected");
+
+            assert!(
+                error.to_string().contains(NON_UTF8_KEY),
+                "expected the fixed key rejection text, got {error}"
+            );
+            assert!(
+                !error.to_string().contains("s3cr3t-sentinel"),
+                "the rejected key must not appear in the error: {error}"
+            );
+        }
+
+        #[test]
+        fn non_utf8_value_is_rejected_with_fixed_text() {
+            let error = layer(OsString::from("NETSUKE_CMDS__BUILD"), invalid_bytes(b""))
+                .data()
+                .expect_err("a non-UTF-8 Netsuke value must be rejected");
+
+            assert!(
+                error.to_string().contains(NON_UTF8_VALUE),
+                "expected the fixed value rejection text, got {error}"
+            );
+            assert!(
+                !error.to_string().contains("s3cr3t-sentinel"),
+                "the rejected value must not appear in the error: {error}"
+            );
+        }
+
+        #[test]
+        fn unrelated_non_utf8_entries_are_skipped() {
+            let data = layer(invalid_bytes(b"UNRELATED_"), invalid_bytes(b""))
+                .data()
+                .expect("an unrelated non-UTF-8 entry must not fail the load");
+
+            assert!(
+                data.get(&Profile::Default).is_some_and(Dict::is_empty),
+                "an unrelated entry should contribute no configuration"
+            );
+        }
+
+        #[rstest::rstest]
+        #[case::key(invalid_bytes(b"NETSUKE_"), OsString::from("value"), "non_utf8_key")]
+        #[case::value(
+            OsString::from("NETSUKE_CMDS__BUILD"),
+            invalid_bytes(b""),
+            "non_utf8_value"
+        )]
+        fn rejection_warns_with_only_a_bounded_failure_kind(
+            #[case] key: OsString,
+            #[case] value: OsString,
+            #[case] failure_kind: &str,
+        ) {
+            let events = with_test_subscriber(LevelFilter::WARN, |captured| {
+                layer(key, value)
+                    .data()
+                    .expect_err("the invalid entry must be rejected");
+                captured.snapshot()
+            });
+
+            assert!(
+                events.iter().any(|event| event
+                    .contains("rejected non-UTF-8 injected configuration")
+                    && event.contains(&format!("failure_kind=\"{failure_kind}\""))),
+                "expected a bounded rejection warning in {events:?}"
+            );
+            assert!(
+                !events.iter().any(|event| event.contains("s3cr3t-sentinel")),
+                "the rejected input must not be logged: {events:?}"
             );
         }
     }

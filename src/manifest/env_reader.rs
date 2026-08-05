@@ -75,24 +75,34 @@ pub fn process_env_reader() -> EnvReader {
 }
 
 /// Resolve `name` through `read_env`, mapping failures to Jinja errors.
+///
+/// Failures are traced with only a bounded `failure_kind`. The variable name is
+/// deliberately omitted: it is manifest-controlled and unbounded, and both it
+/// and its value routinely name credentials.
 pub(super) fn env_var_with(
     name: &str,
     read_env: impl FnOnce(&str) -> Result<String, EnvReadError>,
 ) -> Result<String, Error> {
     match read_env(name) {
         Ok(value) => Ok(value),
-        Err(EnvReadError::NotPresent) => Err(Error::new(
-            ErrorKind::UndefinedError,
-            localization::message(keys::MANIFEST_ENV_MISSING)
-                .with_arg("name", name)
-                .to_string(),
-        )),
-        Err(EnvReadError::NotUnicode) => Err(Error::new(
-            ErrorKind::InvalidOperation,
-            localization::message(keys::MANIFEST_ENV_INVALID_UTF8)
-                .with_arg("name", name)
-                .to_string(),
-        )),
+        Err(EnvReadError::NotPresent) => {
+            tracing::debug!(failure_kind = "not_present", "manifest env lookup failed");
+            Err(Error::new(
+                ErrorKind::UndefinedError,
+                localization::message(keys::MANIFEST_ENV_MISSING)
+                    .with_arg("name", name)
+                    .to_string(),
+            ))
+        }
+        Err(EnvReadError::NotUnicode) => {
+            tracing::debug!(failure_kind = "not_unicode", "manifest env lookup failed");
+            Err(Error::new(
+                ErrorKind::InvalidOperation,
+                localization::message(keys::MANIFEST_ENV_INVALID_UTF8)
+                    .with_arg("name", name)
+                    .to_string(),
+            ))
+        }
     }
 }
 
@@ -101,6 +111,38 @@ mod tests {
     //! Direct tests for the process-backed environment adapter.
 
     use super::*;
+    use crate::test_tracing_capture::with_test_subscriber;
+    use rstest::rstest;
+    use tracing_subscriber::filter::LevelFilter;
+
+    /// Stands in for a credential named by a manifest; neither the variable
+    /// name nor its value may reach a log line.
+    const SENTINEL: &str = "s3cr3t-sentinel";
+
+    #[rstest]
+    #[case::not_present(EnvReadError::NotPresent, "not_present")]
+    #[case::not_unicode(EnvReadError::NotUnicode, "not_unicode")]
+    fn lookup_failures_trace_only_a_bounded_failure_kind(
+        #[case] failure: EnvReadError,
+        #[case] failure_kind: &str,
+    ) {
+        let events = with_test_subscriber(LevelFilter::DEBUG, |captured| {
+            env_var_with(SENTINEL, |_| Err(failure)).expect_err("the injected reader must fail");
+            captured.snapshot()
+        });
+
+        assert!(
+            events
+                .iter()
+                .any(|event| event.contains("manifest env lookup failed")
+                    && event.contains(&format!("failure_kind=\"{failure_kind}\""))),
+            "expected a bounded lookup-failure event in {events:?}"
+        );
+        assert!(
+            !events.iter().any(|event| event.contains(SENTINEL)),
+            "the variable name must not be logged: {events:?}"
+        );
+    }
 
     #[test]
     fn process_reader_matches_default_environment_adapter() {

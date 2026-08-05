@@ -216,6 +216,38 @@ mod tests {
         assert_eq!(rendered.to_string(), "Hello Ada");
     }
 
+    /// Keyword arguments must survive [`collect_kwargs`] and override the
+    /// macro's default. Caller blocks are deliberately not covered here:
+    /// compiled expressions support neither imports nor caller-block context,
+    /// so that path is exercised through `render_template` in
+    /// `crate::manifest::tests::macros::register_macro_handles_arguments`.
+    #[test]
+    fn compiled_expression_passes_keyword_arguments_over_defaults() {
+        let mut env = Environment::new();
+        env.add_template(
+            "macro-template",
+            "{% macro greet(name='World') %}Hello {{ name }}{% endmacro %}",
+        )
+        .expect("macro fixture template should compile");
+        env.add_function(
+            "greet",
+            make_macro_fn("macro-template".to_owned(), "greet".to_owned()),
+        );
+
+        let expression = env
+            .compile_expression("greet(name='Ada')")
+            .expect("macro expression should compile");
+        let rendered = expression
+            .eval(())
+            .expect("compiled expression should forward keyword arguments")
+            .to_string();
+
+        assert!(
+            rendered.contains("Ada"),
+            "keyword argument should override the default: {rendered}"
+        );
+    }
+
     #[rstest]
     fn compiled_expression_reports_missing_fallback_template(en_localizer: EnLocalizer) {
         let _en = en_localizer;

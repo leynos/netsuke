@@ -99,6 +99,11 @@ pub fn real_utility_with_env(
 /// Resolve a utility against the supplied `PATH`, before the sandbox replaces
 /// it. Executability is part of the match because some installations place
 /// non-executable shell fragments beside real tools.
+///
+/// Failures are traced with only a bounded `failure_kind`. The utility name,
+/// `PATH`, and candidate paths are all omitted: they are high-cardinality and
+/// disclose the host layout. The returned error still carries them, because a
+/// developer reading a failed run needs to know which candidate broke.
 pub(super) fn which(env: &impl Env, current_dir: &Utf8Path, utility: &str) -> Result<Utf8PathBuf> {
     let path = env.raw("PATH").context("read PATH")?;
     for directory in std::env::split_paths(std::ffi::OsStr::new(&path)) {
@@ -116,11 +121,16 @@ pub(super) fn which(env: &impl Env, current_dir: &Utf8Path, utility: &str) -> Re
             Ok(false) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => {
+                tracing::debug!(
+                    failure_kind = "candidate_metadata",
+                    "sandbox utility candidate inspection failed"
+                );
                 return Err(error)
                     .with_context(|| format!("inspect utility candidate `{candidate}`"));
             }
         }
     }
+    tracing::debug!(outcome = "not_found", "sandbox utility lookup failed");
     bail!("`{utility}` not found on PATH")
 }
 
@@ -129,9 +139,76 @@ mod tests {
     //! Unit tests for hermetic utility resolution.
 
     use super::*;
+    use crate::tracing_capture::with_test_subscriber;
     use mockable::MockEnv;
     use proptest::prelude::*;
     use proptest::test_runner::TestCaseError;
+    use tracing_subscriber::filter::LevelFilter;
+
+    /// Stands in for a secret embedded in a host path; it must never reach a
+    /// log line, even though the returned error may name the candidate.
+    const SENTINEL: &str = "s3cr3t-sentinel";
+
+    #[test]
+    fn unresolved_utility_traces_only_a_bounded_outcome() -> Result<()> {
+        let temp = tempfile::tempdir().context("create empty PATH fixture")?;
+        let empty = temp.path().join(SENTINEL);
+        fs::create_dir(&empty).context("create empty binary directory")?;
+        let path = empty.to_string_lossy().into_owned();
+        let mut env = MockEnv::new();
+        env.expect_raw().return_once(move |_| Ok(path));
+        let current_dir =
+            Utf8Path::from_path(temp.path()).context("temporary path is not UTF-8")?;
+
+        let events = with_test_subscriber(LevelFilter::DEBUG, |captured| {
+            which(&env, current_dir, SENTINEL).expect_err("the empty PATH has no utility");
+            captured.snapshot()
+        });
+
+        anyhow::ensure!(
+            events.iter().any(|event| {
+                event.contains("sandbox utility lookup failed")
+                    && event.contains("outcome=\"not_found\"")
+            }),
+            "expected a bounded lookup-failure event in {events:?}"
+        );
+        anyhow::ensure!(
+            !events.iter().any(|event| event.contains(SENTINEL)),
+            "the utility name and PATH must not be logged: {events:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn candidate_metadata_failure_traces_only_a_bounded_failure_kind() -> Result<()> {
+        let temp = tempfile::tempdir().context("create invalid PATH fixture")?;
+        let not_a_directory = temp.path().join(SENTINEL);
+        fs::write(&not_a_directory, "contents").context("write invalid PATH entry")?;
+        let path = not_a_directory.to_string_lossy().into_owned();
+        let mut env = MockEnv::new();
+        env.expect_raw().return_once(move |_| Ok(path));
+        let current_dir =
+            Utf8Path::from_path(temp.path()).context("temporary path is not UTF-8")?;
+
+        let events = with_test_subscriber(LevelFilter::DEBUG, |captured| {
+            which(&env, current_dir, "tool")
+                .expect_err("a non-directory PATH entry should fail inspection");
+            captured.snapshot()
+        });
+
+        anyhow::ensure!(
+            events.iter().any(|event| {
+                event.contains("sandbox utility candidate inspection failed")
+                    && event.contains("failure_kind=\"candidate_metadata\"")
+            }),
+            "expected a bounded candidate-failure event in {events:?}"
+        );
+        anyhow::ensure!(
+            !events.iter().any(|event| event.contains(SENTINEL)),
+            "the candidate path must not be logged: {events:?}"
+        );
+        Ok(())
+    }
 
     #[test]
     fn relative_path_entries_resolve_to_absolute_executables() -> Result<()> {
