@@ -6,6 +6,7 @@
 //! `__NETSUKE_INS_PLACEHOLDER__`/`__NETSUKE_OUTS_PLACEHOLDER__` when absent
 //! so that [`crate::ir::cmd_interpolate`] can substitute them later.
 use super::ManifestValue;
+use super::jinja_macros::render_template;
 use crate::ast::{NetsukeManifest, Recipe, StringOrList, Target, Vars};
 use crate::ir::{INS_TOKEN, OUTS_TOKEN};
 use anyhow::{Context, Result};
@@ -101,7 +102,7 @@ fn render_str_with(
     ctx: &impl serde::Serialize,
     what: impl FnOnce() -> String,
 ) -> Result<String> {
-    env.render_str(tpl, ctx).with_context(what)
+    render_template(env, tpl, ctx).with_context(what)
 }
 
 /// Clones the supplied template context (`Vars`) and guarantees `ins` and `outs`

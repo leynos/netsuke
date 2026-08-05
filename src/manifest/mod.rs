@@ -23,17 +23,10 @@ use crate::{
     localization::{self, keys},
     stdlib::{NetworkPolicy, StdlibConfig},
 };
-use anyhow::{Context, Result, anyhow};
-use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::{ambient_authority, fs_utf8::Dir};
+use anyhow::{Context, Result};
 use minijinja::{Environment, UndefinedBehavior, value::Value};
 use serde::de::Error as _;
-use std::sync::Arc;
-
-use env_reader::env_var_with;
-pub use env_reader::{EnvReader, process_env_reader};
-use std::env as std_env;
-use std::path::Path;
+use std::{path::Path, sync::Arc};
 
 mod diagnostics;
 mod expand;
@@ -50,12 +43,14 @@ pub type ManifestMap = serde_json::Map<String, ManifestValue>;
 pub use diagnostics::{
     ManifestError, ManifestName, ManifestSource, map_data_error, map_yaml_error,
 };
+pub use env_reader::{EnvReadError, EnvReader, process_env_reader};
 pub use glob::glob_paths;
 
 pub(crate) use expand::expand_foreach;
 pub use render::render_manifest;
 
-use self::jinja_macros::register_manifest_macros;
+use self::{env_reader::env_var_with, jinja_macros::register_manifest_macros};
+use workspace::open_manifest_workspace;
 
 /// Stages in the manifest-loading sub-pipeline.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -184,19 +179,29 @@ pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
 ///
 /// # Examples
 ///
-/// ```rust
-/// use netsuke::manifest::{EnvReader, from_str_with_env};
+/// ```
+/// use netsuke::{
+///     ast::Recipe,
+///     manifest::{EnvReadError, EnvReader, from_str_with_env},
+/// };
 /// use std::sync::Arc;
 ///
-/// let reader: EnvReader = Arc::new(|_| Ok(String::from("release")));
+/// let reader: EnvReader = Arc::new(|name| match name {
+///     "PROFILE" => Ok("release".to_owned()),
+///     _ => Err(EnvReadError::NotPresent),
+/// });
 /// let yaml = concat!(
-///     "netsuke_version: \"1.0.0\"\n",
+///     "netsuke_version: 1.0.0\n",
 ///     "targets:\n",
-///     "  - name: \"{{ env('PROFILE') }}\"\n",
-///     "    command: echo hi\n",
+///     "  - name: build\n",
+///     "    command: echo {{ env('PROFILE') }}\n",
 /// );
-/// let manifest = from_str_with_env(yaml, &reader).expect("parse");
-/// assert!(format!("{:?}", manifest.targets[0].name).contains("release"));
+/// let manifest = from_str_with_env(yaml, &reader).expect("parse manifest");
+///
+/// assert!(matches!(
+///     &manifest.targets[0].recipe,
+///     Recipe::Command { command } if command == "echo release"
+/// ));
 /// ```
 pub fn from_str_with_env(yaml: &str, env_reader: &EnvReader) -> Result<NetsukeManifest> {
     from_str_named(
@@ -241,6 +246,53 @@ pub fn from_path(path: impl AsRef<Path>) -> Result<NetsukeManifest> {
 pub fn from_path_with_policy(
     path: impl AsRef<Path>,
     policy: NetworkPolicy,
+    on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
+) -> Result<NetsukeManifest> {
+    from_path_with_policy_and_env(path, policy, &process_env_reader(), on_stage)
+}
+
+/// Load a manifest with explicit network policy and environment reader.
+///
+/// This adapter boundary lets callers supply deterministic manifest variables
+/// without mutating the process environment.
+///
+/// # Errors
+///
+/// Returns an error if the manifest cannot be read, rendered, or parsed.
+///
+/// # Examples
+///
+/// ```
+/// use netsuke::{
+///     ast::Recipe,
+///     manifest::{EnvReadError, EnvReader, from_path_with_policy_and_env},
+///     stdlib::NetworkPolicy,
+/// };
+/// use std::{io::Write, sync::Arc};
+///
+/// let mut file = tempfile::NamedTempFile::new().expect("create manifest");
+/// write!(
+///     file,
+///     "netsuke_version: 1.0.0\ntargets:\n  - name: build\n    command: echo {{{{ env('PROFILE') }}}}\n"
+/// )
+/// .expect("write manifest");
+/// let reader: EnvReader = Arc::new(|name| match name {
+///     "PROFILE" => Ok("offline".to_owned()),
+///     _ => Err(EnvReadError::NotPresent),
+/// });
+/// let policy = NetworkPolicy::default().deny_all_hosts();
+/// let manifest = from_path_with_policy_and_env(file.path(), policy, &reader, None)
+///     .expect("load manifest without network access");
+///
+/// assert!(matches!(
+///     &manifest.targets[0].recipe,
+///     Recipe::Command { command } if command == "echo offline"
+/// ));
+/// ```
+pub fn from_path_with_policy_and_env(
+    path: impl AsRef<Path>,
+    policy: NetworkPolicy,
+    env_reader: &EnvReader,
     mut on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
     notify_stage(&mut on_stage, ManifestLoadStage::ManifestIngestion);
@@ -262,91 +314,14 @@ pub fn from_path_with_policy(
         ManifestParse {
             name: &name,
             stdlib_config: Some(config),
-            env_reader: &process_env_reader(),
+            env_reader,
         },
         &mut on_stage,
     )
 }
 
 mod env_reader;
+mod workspace;
 
 #[cfg(test)]
 mod tests;
-
-/// Resolve a potentially relative manifest parent path to an absolute UTF-8 workspace root.
-fn resolve_absolute_workspace_root(utf8_parent: &Utf8Path) -> Result<Utf8PathBuf> {
-    let workspace_base = if utf8_parent.is_absolute() {
-        utf8_parent.to_path_buf().into_std_path_buf()
-    } else {
-        std_env::current_dir()
-            .context(localization::message(keys::MANIFEST_RESOLVE_WORKSPACE_ROOT))?
-            .join(utf8_parent.as_std_path())
-    };
-    Utf8PathBuf::from_path_buf(workspace_base).map_err(|invalid| {
-        anyhow!(
-            "{}",
-            localization::message(keys::MANIFEST_WORKSPACE_NON_UTF8)
-                .with_arg("path", invalid.display().to_string())
-        )
-    })
-}
-
-/// A manifest's workspace opened for capability-based access.
-#[derive(Debug)]
-struct ManifestWorkspace {
-    /// Capability-scoped handle on the workspace root.
-    dir: Dir,
-    /// Absolute UTF-8 path of the workspace root.
-    root: Utf8PathBuf,
-    /// Manifest file name relative to the workspace root.
-    manifest_file: String,
-}
-
-/// Open the directory containing `path` as a capability-scoped workspace.
-fn open_manifest_workspace(path: &Path) -> Result<ManifestWorkspace> {
-    let parent = match path.parent() {
-        Some(parent) if !parent.as_os_str().is_empty() => parent,
-        _ => Path::new("."),
-    };
-    let manifest_file = match path.file_name() {
-        None => {
-            return Err(anyhow!(
-                "{}",
-                localization::message(keys::MANIFEST_PATH_MISSING_NAME)
-                    .with_arg("path", path.display().to_string())
-            ));
-        }
-        Some(name) => name.to_str().map(str::to_owned).ok_or_else(|| {
-            anyhow!(
-                "{}",
-                localization::message(keys::MANIFEST_PATH_NON_UTF8)
-                    .with_arg("manifest", path.display().to_string())
-                    .with_arg("path", path.display().to_string())
-            )
-        })?,
-    };
-    let utf8_parent = Utf8Path::from_path(parent).ok_or_else(|| {
-        anyhow!(
-            "{}",
-            localization::message(keys::MANIFEST_PATH_NON_UTF8)
-                .with_arg("manifest", &manifest_file)
-                .with_arg("path", path.display().to_string())
-        )
-    })?;
-    let root = resolve_absolute_workspace_root(utf8_parent)?;
-    tracing::debug!(workspace = %root, manifest = %manifest_file, "opening manifest workspace directory");
-    let dir = Dir::open_ambient_dir(root.as_path(), ambient_authority())
-        .inspect_err(|err| {
-            tracing::warn!(workspace = %root, manifest = %manifest_file, error = %err, "failed to open manifest workspace directory");
-        })
-        .with_context(|| {
-            localization::message(keys::MANIFEST_OPEN_WORKSPACE_FAILED)
-                .with_arg("workspace", root.as_str())
-                .with_arg("manifest", &manifest_file)
-        })?;
-    Ok(ManifestWorkspace {
-        dir,
-        root,
-        manifest_file,
-    })
-}

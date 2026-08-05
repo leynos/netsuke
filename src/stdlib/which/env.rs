@@ -5,6 +5,7 @@ use std::ffi::{OsStr, OsString};
 use camino::{Utf8Path, Utf8PathBuf};
 #[cfg(windows)]
 use indexmap::IndexSet;
+use mockable::{DefaultEnv, Env};
 
 use crate::localization::{self, keys};
 
@@ -21,35 +22,65 @@ pub(super) struct EnvSnapshot {
 }
 
 impl EnvSnapshot {
-    #[expect(
-        clippy::disallowed_methods,
-        reason = "composition root: PATH and PATHEXT capture is the which resolver's ambient boundary; injection is tracked in the environment meta issue"
-    )]
     pub(super) fn capture(
         cwd_override: Option<&Utf8Path>,
         path_override: Option<&OsStr>,
     ) -> Result<Self, ResolveError> {
-        let cwd = if let Some(override_cwd) = cwd_override {
-            override_cwd.to_path_buf()
-        } else {
-            current_dir_utf8()?
-        };
-        let raw_path = path_override
-            .map(OsString::from)
-            .or_else(|| std::env::var_os("PATH"));
-        let entries = parse_path_entries(raw_path.clone(), &cwd)?;
+        Self::capture_with_env(cwd_override, path_override, &DefaultEnv)
+    }
+
+    pub(super) fn capture_with_env(
+        cwd_override: Option<&Utf8Path>,
+        path_override: Option<&OsStr>,
+        env: &impl Env,
+    ) -> Result<Self, ResolveError> {
         #[cfg(windows)]
-        let raw_pathext = std::env::var_os("PATHEXT");
-        #[cfg(windows)]
-        let pathext = parse_pathext(raw_pathext.as_deref());
+        return Self::capture_impl(cwd_override, path_override, env, None);
         #[cfg(not(windows))]
-        let raw_pathext = None;
+        Self::capture_impl(cwd_override, path_override, env)
+    }
+
+    #[cfg(windows)]
+    pub(super) fn capture_with_pathext(
+        cwd_override: Option<&Utf8Path>,
+        path_override: Option<&OsStr>,
+        pathext_override: Option<&OsStr>,
+    ) -> Result<Self, ResolveError> {
+        Self::capture_impl(cwd_override, path_override, &DefaultEnv, pathext_override)
+    }
+
+    #[cfg(not(windows))]
+    fn capture_impl(
+        cwd_override: Option<&Utf8Path>,
+        path_override: Option<&OsStr>,
+        env: &impl Env,
+    ) -> Result<Self, ResolveError> {
+        let (cwd, raw_path, entries) = capture_common(cwd_override, path_override, env)?;
+        Ok(Self {
+            cwd,
+            raw_path,
+            raw_pathext: None,
+            entries,
+        })
+    }
+
+    #[cfg(windows)]
+    fn capture_impl(
+        cwd_override: Option<&Utf8Path>,
+        path_override: Option<&OsStr>,
+        env: &impl Env,
+        pathext_override: Option<&OsStr>,
+    ) -> Result<Self, ResolveError> {
+        let (cwd, raw_path, entries) = capture_common(cwd_override, path_override, env)?;
+        let raw_pathext = pathext_override
+            .map(OsString::from)
+            .or_else(|| env.os_string("PATHEXT"));
+        let pathext = parse_pathext(raw_pathext.as_deref());
         Ok(Self {
             cwd,
             raw_path,
             raw_pathext,
             entries,
-            #[cfg(windows)]
             pathext,
         })
     }
@@ -89,21 +120,35 @@ impl EnvSnapshot {
     }
 }
 
+fn capture_common(
+    cwd_override: Option<&Utf8Path>,
+    path_override: Option<&OsStr>,
+    env: &impl Env,
+) -> Result<(Utf8PathBuf, Option<OsString>, Vec<PathEntry>), ResolveError> {
+    let cwd = if let Some(override_cwd) = cwd_override {
+        override_cwd.to_path_buf()
+    } else {
+        current_dir_utf8()?
+    };
+    let raw_path = path_override
+        .map(OsString::from)
+        .or_else(|| env.os_string("PATH"));
+    let entries = parse_path_entries(raw_path.as_deref(), &cwd)?;
+    Ok((cwd, raw_path, entries))
+}
+
 #[derive(Clone, Debug)]
 enum PathEntry {
     Dir(Utf8PathBuf),
     CurrentDir,
 }
 
-fn parse_path_entries(
-    raw: Option<OsString>,
-    cwd: &Utf8Path,
-) -> Result<Vec<PathEntry>, ResolveError> {
+fn parse_path_entries(raw: Option<&OsStr>, cwd: &Utf8Path) -> Result<Vec<PathEntry>, ResolveError> {
     let mut entries = Vec::new();
     let Some(raw_value) = raw else {
         return Ok(entries);
     };
-    for (index, component) in std::env::split_paths(&raw_value).enumerate() {
+    for (index, component) in std::env::split_paths(raw_value).enumerate() {
         if component.as_os_str().is_empty() {
             entries.push(PathEntry::CurrentDir);
             continue;
@@ -176,4 +221,60 @@ pub(super) fn candidate_paths(
         paths.push(Utf8PathBuf::from(candidate));
     }
     paths
+}
+
+#[cfg(all(test, not(windows)))]
+mod tests {
+    //! Unit tests for injected executable-search environment capture.
+
+    use super::*;
+    use mockable::MockEnv;
+
+    #[test]
+    fn capture_uses_the_injected_path_provider() {
+        let cwd = Utf8Path::new("/workspace");
+        let configured = OsString::from("/configured/bin");
+        let expected = configured.clone();
+        let mut env = MockEnv::new();
+        env.expect_os_string()
+            .withf(|key| key == "PATH")
+            .once()
+            .return_once(move |_| Some(configured));
+
+        let snapshot = EnvSnapshot::capture_with_env(Some(cwd), None, &env)
+            .expect("injected PATH should produce an environment snapshot");
+
+        assert_eq!(snapshot.raw_path, Some(expected));
+        assert_eq!(
+            snapshot.resolved_dirs(CwdMode::Never),
+            [Utf8Path::new("/configured/bin")]
+        );
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    //! Windows-specific injected `PATH` and `PATHEXT` capture tests.
+
+    use super::*;
+    use mockable::MockEnv;
+
+    #[test]
+    fn capture_uses_injected_and_normalized_pathext() {
+        let mut env = MockEnv::new();
+        env.expect_os_string()
+            .withf(|key| key == "PATH")
+            .once()
+            .return_once(|_| Some(OsString::from(r"C:\configured\bin")));
+        env.expect_os_string()
+            .withf(|key| key == "PATHEXT")
+            .once()
+            .return_once(|_| Some(OsString::from(".EXE;exe; CMD ;.cmd")));
+
+        let snapshot =
+            EnvSnapshot::capture_with_env(Some(Utf8Path::new("C:/workspace")), None, &env)
+                .expect("injected PATH and PATHEXT should produce an environment snapshot");
+
+        assert_eq!(snapshot.pathext(), [".exe", ".cmd"]);
+    }
 }

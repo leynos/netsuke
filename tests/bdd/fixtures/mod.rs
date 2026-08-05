@@ -19,10 +19,15 @@ use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::MutexGuard;
-use test_support::PathGuard;
-use test_support::env::{NinjaEnvGuard, restore_many_locked};
+use test_support::CwdGuard;
 use test_support::env_lock::EnvLock;
 use test_support::http::HttpServer;
+
+#[derive(Debug)]
+struct GlobalStateGuard {
+    env_lock: EnvLock,
+    cwd_guard: CwdGuard,
+}
 
 /// Combined test world for all BDD scenarios.
 ///
@@ -69,10 +74,6 @@ pub struct TestWorld {
     pub temp_dir: RefCell<Option<tempfile::TempDir>>,
     /// Explicit workspace path created by `empty_workspace_at_path` for `-C` flag tests.
     pub workspace_path: RefCell<Option<PathBuf>>,
-    /// Guard that restores `PATH` after each scenario (non-Clone).
-    pub path_guard: RefCell<Option<PathGuard>>,
-    /// Guard that overrides `NINJA_ENV` for deterministic Ninja resolution (non-Clone).
-    pub ninja_env_guard: RefCell<Option<NinjaEnvGuard>>,
 
     // Stdlib state (Clone)
     /// Root directory for stdlib scenarios.
@@ -139,51 +140,37 @@ pub struct TestWorld {
     pub rendered_prefix: Slot<String>,
 
     // Environment state
-    /// Snapshot of pre-scenario values for environment variables that were overridden.
-    pub env_vars: RefCell<HashMap<String, Option<OsString>>>,
-    /// Values to forward to child netsuke processes for scenario-tracked variables.
+    /// Values supplied to child Netsuke processes for scenario-tracked variables.
     pub env_vars_forward: RefCell<HashMap<String, OsString>>,
-    /// Scenario-scoped guard that serialises environment mutations when needed.
-    pub env_lock: RefCell<Option<EnvLock>>,
-    /// Original working directory before any scenario-level chdir.
-    pub original_cwd: RefCell<Option<PathBuf>>,
+    /// Scenario-scoped lock for the few remaining process-global CWD operations.
+    global_state_lock: RefCell<Option<GlobalStateGuard>>,
 }
 
 impl TestWorld {
-    /// Acquire the scenario environment lock and capture the starting CWD.
-    pub fn ensure_env_lock(&self) {
-        if self.env_lock.borrow().is_some() {
-            return;
+    /// Acquire the scenario lock before changing the process working directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the current working directory cannot be captured.
+    pub fn ensure_global_state_lock(&self) -> std::io::Result<()> {
+        if self.global_state_lock.borrow().is_none() {
+            let env_lock = EnvLock::acquire();
+            let cwd_guard = CwdGuard::acquire()?;
+            *self.global_state_lock.borrow_mut() = Some(GlobalStateGuard {
+                env_lock,
+                cwd_guard,
+            });
         }
-        let lock = EnvLock::acquire();
-        let cwd = std::env::current_dir().ok();
-        *self.original_cwd.borrow_mut() = cwd;
-        *self.env_lock.borrow_mut() = Some(lock);
+        Ok(())
     }
 
-    /// Track an environment variable for later restoration.
-    pub fn track_env_var(
-        &self,
-        key: String,
-        previous: Option<OsString>,
-        forward_value: Option<OsString>,
-    ) {
+    /// Set or remove a variable in the child-process environment specification.
+    pub fn track_env_var(&self, key: String, forward_value: Option<OsString>) {
         if let Some(value) = forward_value {
-            self.env_vars_forward
-                .borrow_mut()
-                .insert(key.clone(), value);
+            self.env_vars_forward.borrow_mut().insert(key, value);
+        } else {
+            self.env_vars_forward.borrow_mut().remove(&key);
         }
-        self.env_vars.borrow_mut().entry(key).or_insert(previous);
-    }
-
-    /// Restore any environment variables overridden during the scenario.
-    unsafe fn restore_environment_locked(&self) {
-        let vars = std::mem::take(&mut *self.env_vars.borrow_mut());
-        if !vars.is_empty() {
-            // SAFETY: The caller holds EnvLock.
-            unsafe { restore_many_locked(vars) };
-        }
-        self.env_vars_forward.borrow_mut().clear();
     }
 
     /// Shut down the active HTTP server fixture.
@@ -209,17 +196,17 @@ impl TestWorld {
 impl Drop for TestWorld {
     fn drop(&mut self) {
         self.shutdown_http_server();
-        self.ninja_env_guard.borrow_mut().take();
         self.localization_guard.borrow_mut().take();
         self.localization_lock.borrow_mut().take();
-        if self.env_lock.borrow().is_some() {
-            if let Some(original_cwd) = self.original_cwd.borrow_mut().take() {
-                drop(std::env::set_current_dir(original_cwd));
-            }
-            // SAFETY: EnvLock is still held.
-            unsafe { self.restore_environment_locked() };
+        self.env_vars_forward.borrow_mut().clear();
+        if let Some(GlobalStateGuard {
+            env_lock,
+            cwd_guard,
+        }) = self.global_state_lock.borrow_mut().take()
+        {
+            drop(cwd_guard);
+            drop(env_lock);
         }
-        self.env_lock.borrow_mut().take();
         self.stdlib_text.clear();
     }
 }

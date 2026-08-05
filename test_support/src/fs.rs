@@ -218,10 +218,10 @@ pub fn file_len(path: impl AsRef<Path>) -> io::Result<u64> {
 #[cfg(unix)]
 pub fn set_mode(path: impl AsRef<Path>, mode: u32) -> io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
-    let path = path.as_ref();
-    let mut permissions = fs::metadata(path)?.permissions();
+    let path_ref = path.as_ref();
+    let mut permissions = fs::metadata(path_ref)?.permissions();
     permissions.set_mode(mode);
-    fs::set_permissions(path, permissions)
+    fs::set_permissions(path_ref, permissions)
 }
 
 /// Return `true` when `path` is a regular file with any execute bit set.
@@ -243,9 +243,23 @@ pub fn set_mode(path: impl AsRef<Path>, mode: u32) -> io::Result<()> {
 #[cfg(unix)]
 #[must_use]
 pub fn is_executable_file(path: impl AsRef<Path>) -> bool {
+    executable_file(path).unwrap_or(false)
+}
+
+/// Probe whether `path` is a regular file with any execute bit set.
+///
+/// Unlike [`is_executable_file`], this form preserves metadata errors so
+/// callers performing executable discovery can distinguish a missing candidate
+/// from an unreadable or otherwise invalid path.
+///
+/// # Errors
+///
+/// Propagates the underlying metadata failure.
+#[cfg(unix)]
+pub(crate) fn executable_file(path: impl AsRef<Path>) -> io::Result<bool> {
     use std::os::unix::fs::PermissionsExt;
-    fs::metadata(path)
-        .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+    let metadata = fs::metadata(path)?;
+    Ok(metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
 }
 
 /// Create a symbolic link at `link` pointing to `target` on Unix.
@@ -265,4 +279,51 @@ pub fn is_executable_file(path: impl AsRef<Path>) -> bool {
 #[cfg(unix)]
 pub fn symlink(target: impl AsRef<Path>, link: impl AsRef<Path>) -> io::Result<()> {
     std::os::unix::fs::symlink(target, link)
+}
+
+#[cfg(test)]
+mod tests {
+    //! Coverage for directory creation at existing-path boundaries.
+
+    use super::{create_dir_all, write};
+    use std::io;
+
+    #[test]
+    fn create_dir_all_accepts_an_existing_directory() -> io::Result<()> {
+        let temp = tempfile::tempdir()?;
+        create_dir_all(temp.path())
+    }
+
+    #[test]
+    fn create_dir_all_rejects_an_existing_file() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let file = temp.path().join("not-a-directory");
+        write(&file, b"fixture")?;
+
+        let Err(error) = create_dir_all(&file) else {
+            anyhow::bail!("an existing file should not be accepted as a directory");
+        };
+        anyhow::ensure!(
+            matches!(
+                error.kind(),
+                io::ErrorKind::AlreadyExists | io::ErrorKind::NotADirectory
+            ),
+            "existing file should report a directory conflict, got {error:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn create_dir_all_creates_missing_parent_directories() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let nested = temp.path().join("one").join("two");
+
+        create_dir_all(&nested)?;
+
+        anyhow::ensure!(
+            nested.is_dir(),
+            "recursive creation should produce a directory"
+        );
+        Ok(())
+    }
 }

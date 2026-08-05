@@ -31,6 +31,10 @@ impl RecordingCargo {
     /// directly observable: the clean pass sees `absent`, because the harness
     /// removed the directory, and the incremental pass that follows sees
     /// `present`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the Cargo logger cannot be installed in the sandbox.
     pub fn install(sandbox: &Sandbox) -> Result<Self> {
         let log = sandbox.home().join("cargo-invocations.log");
         let body = format!(
@@ -67,6 +71,7 @@ impl RecordingCargo {
     }
 
     /// The fake's path, for passing as the `CARGO` Make variable.
+    #[must_use]
     pub fn executable(&self) -> &Utf8Path {
         &self.executable
     }
@@ -77,6 +82,10 @@ impl RecordingCargo {
     /// as an empty list so a test can assert on that directly. Any other read
     /// failure is propagated: a permission or I/O error must not masquerade as
     /// "cargo did not run", which is exactly the conclusion some tests draw.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the invocation log cannot be read or parsed.
     pub fn invocations(&self) -> Result<Vec<CargoInvocation>> {
         let text = match fs::read_to_string(&self.log) {
             Ok(text) => text,
@@ -92,6 +101,10 @@ impl RecordingCargo {
     }
 
     /// The single recorded invocation, or an error naming how many there were.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error unless the log contains exactly one valid invocation.
     pub fn sole_invocation(&self) -> Result<CargoInvocation> {
         let mut invocations = self.invocations()?;
         match invocations.len() {
@@ -180,11 +193,13 @@ impl CargoInvocation {
     /// The arguments Cargo received. Recorded via `"$*"`, so an argument
     /// containing whitespace would be split; none of the `dev-fast` recipes
     /// pass one.
+    #[must_use]
     pub fn arguments(&self) -> &[String] {
         &self.arguments
     }
 
     /// `RUSTUP_TOOLCHAIN` as seen by the invocation, empty when unset.
+    #[must_use]
     pub fn toolchain(&self) -> &str {
         &self.toolchain
     }
@@ -193,6 +208,7 @@ impl CargoInvocation {
     ///
     /// Contiguity matters: it distinguishes `--config <fragment>` from the same
     /// two values appearing far apart for unrelated reasons.
+    #[must_use]
     pub fn contains_sequence(&self, sequence: &[&str]) -> bool {
         if sequence.is_empty() || sequence.len() > self.arguments.len() {
             return false;
@@ -203,6 +219,7 @@ impl CargoInvocation {
     }
 
     /// Whether `directory` is the first entry on the invocation's `PATH`.
+    #[must_use]
     pub fn path_starts_with(&self, directory: &Utf8Path) -> bool {
         self.path
             .split(':')
@@ -211,17 +228,20 @@ impl CargoInvocation {
     }
 
     /// The recorded `PATH`, for failure messages.
+    #[must_use]
     pub fn path(&self) -> &str {
         &self.path
     }
 
     /// The `CARGO_TARGET_DIR` the invocation was given, empty when unset.
+    #[must_use]
     pub fn target_dir(&self) -> &str {
         &self.target_dir
     }
 
     /// Whether the target directory existed when the invocation started.
-    pub fn target_state(&self) -> TargetState {
+    #[must_use]
+    pub const fn target_state(&self) -> TargetState {
         self.target_state
     }
 
@@ -229,7 +249,8 @@ impl CargoInvocation {
     /// A benchmark touches that file between a variant's two passes, so the
     /// value distinguishes the pass that ran before the touch from the one
     /// after it.
-    pub fn touch_mtime(&self) -> Option<i64> {
+    #[must_use]
+    pub const fn touch_mtime(&self) -> Option<i64> {
         self.touch_mtime
     }
 }

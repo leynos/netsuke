@@ -11,10 +11,9 @@ use serde_json::Value;
 use std::collections::BTreeSet;
 use std::path::Path;
 use test_support::check_ninja;
-use test_support::env::{override_ninja_env, system_env};
 use test_support::fluent::normalize_fluent_isolates;
 use test_support::fs as test_fs;
-use test_support::netsuke::{NetsukeRun, run_netsuke_in};
+use test_support::netsuke::{NetsukeRun, run_netsuke_in, run_netsuke_in_with_env};
 
 const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-accessible-output",
@@ -98,8 +97,10 @@ fn assert_generates_valid_ninja(run: &NetsukeRun, context: &str) -> Result<()> {
 
 fn run_with_fake_ninja(workspace: &Path, args: &[&str]) -> Result<NetsukeRun> {
     let (_ninja_dir, ninja_path) = check_ninja::fake_ninja_check_build_file()?;
-    let _guard = override_ninja_env(&system_env(), &ninja_path);
-    run_netsuke_in(workspace, args)
+    let ninja = ninja_path
+        .to_str()
+        .context("fake Ninja path should be valid UTF-8")?;
+    run_netsuke_in_with_env(workspace, args, &[(netsuke::runner::NINJA_ENV, ninja)])
 }
 
 #[test]

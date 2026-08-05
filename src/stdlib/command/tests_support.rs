@@ -7,7 +7,7 @@ use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use tempfile::tempdir;
 
-use super::CommandConfig;
+use super::{CommandConfig, CommandConfigInit};
 use crate::stdlib::{DEFAULT_COMMAND_MAX_OUTPUT_BYTES, DEFAULT_COMMAND_MAX_STREAM_BYTES};
 
 /// Build a [`CommandConfig`] rooted at a fresh temporary workspace using the
@@ -19,11 +19,12 @@ pub(super) fn test_command_config() -> Result<(tempfile::TempDir, CommandConfig)
         .map_err(|path| anyhow!("temp workspace should be valid UTF-8: {path:?}"))?;
     let dir =
         Dir::open_ambient_dir(&path, ambient_authority()).context("open temp workspace dir")?;
-    let config = CommandConfig::new(
-        DEFAULT_COMMAND_MAX_OUTPUT_BYTES,
-        DEFAULT_COMMAND_MAX_STREAM_BYTES,
-        Arc::new(dir),
-        Some(Arc::new(path)),
-    );
+    let config = CommandConfig::new(CommandConfigInit {
+        max_capture_bytes: DEFAULT_COMMAND_MAX_OUTPUT_BYTES,
+        max_stream_bytes: DEFAULT_COMMAND_MAX_STREAM_BYTES,
+        workspace_root: Arc::new(dir),
+        workspace_root_path: Some(Arc::new(path)),
+        command_path_override: None,
+    });
     Ok((temp, config))
 }

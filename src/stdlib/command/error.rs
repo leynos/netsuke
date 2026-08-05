@@ -49,6 +49,20 @@ pub(super) enum CommandFailure {
     Timeout(Duration),
 }
 
+impl CommandFailure {
+    /// Return the bounded category used for structured diagnostics.
+    pub(super) const fn category(&self) -> &'static str {
+        match self {
+            Self::Spawn(_) => "spawn",
+            Self::Io(_) => "io",
+            Self::BrokenPipe { .. } => "broken_pipe",
+            Self::Exit { .. } => "exit",
+            Self::OutputLimit { .. } => "output_limit",
+            Self::Timeout(_) => "timeout",
+        }
+    }
+}
+
 #[rustfmt::skip]
 impl From<io::Error> for CommandFailure { fn from(err: io::Error) -> Self { Self::Io(err) } }
 
@@ -216,6 +230,50 @@ mod tests {
     //! Unit tests for command failure rendering and localization.
     use super::*;
     use crate::localization::{self, keys};
+
+    /// `category()` supplies the bounded `error_category` label on the command
+    /// execution span and counter, so every variant must map to a stable,
+    /// low-cardinality string. Constructing each variant here also means a new
+    /// variant fails to compile until it is given a category.
+    #[test]
+    fn every_failure_variant_reports_its_bounded_category() {
+        let variants = [
+            (CommandFailure::Spawn(io::Error::other("spawn")), "spawn"),
+            (CommandFailure::Io(io::Error::other("io")), "io"),
+            (
+                CommandFailure::BrokenPipe {
+                    source: io::Error::new(io::ErrorKind::BrokenPipe, "pipe closed"),
+                    status: Some(1),
+                    stderr: Vec::new(),
+                },
+                "broken_pipe",
+            ),
+            (
+                CommandFailure::Exit {
+                    status: Some(2),
+                    stderr: Vec::new(),
+                },
+                "exit",
+            ),
+            (
+                CommandFailure::OutputLimit {
+                    stream: OutputStream::Stdout,
+                    mode: OutputMode::Capture,
+                    limit: 1024,
+                },
+                "output_limit",
+            ),
+            (CommandFailure::Timeout(Duration::from_secs(5)), "timeout"),
+        ];
+
+        for (failure, expected) in variants {
+            assert_eq!(
+                failure.category(),
+                expected,
+                "unexpected category for {failure:?}"
+            );
+        }
+    }
 
     #[test]
     fn spawn_errors_include_source() {

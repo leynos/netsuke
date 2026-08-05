@@ -4,6 +4,10 @@ use anyhow::{Result, bail};
 /// Extract the stdlib output when present, otherwise surface an informative
 /// error. This mirrors the behaviour of the Cucumber step assertions so unit
 /// tests can guard the branching logic.
+///
+/// # Errors
+///
+/// Returns the reported standard-library error, or an error when neither value is present.
 pub fn stdlib_output_or_error<'a>(output: Option<&'a str>, error: Option<&str>) -> Result<&'a str> {
     match (output, error) {
         (Some(out), _) => Ok(out),
@@ -21,18 +25,15 @@ mod tests {
     #[test]
     fn returns_output_when_present() {
         let result = stdlib_output_or_error(Some("value"), None);
-        assert!(result.is_ok());
-        assert_eq!(
-            result.expect("expected stdlib_output_or_error to return output"),
-            "value"
-        );
+        assert_eq!(result.ok(), Some("value"));
     }
 
     #[test]
     fn surfaces_stdlib_error_when_output_missing() {
-        let err =
-            stdlib_output_or_error(None, Some("boom")).expect_err("should propagate stdlib error");
-        let msg = err.to_string();
+        let result = stdlib_output_or_error(None, Some("boom"));
+        let msg = result
+            .err()
+            .map_or_else(String::new, |error| error.to_string());
         assert!(
             msg.contains("expected stdlib output; stdlib error present: boom"),
             "message was {msg}"
@@ -41,8 +42,10 @@ mod tests {
 
     #[test]
     fn reports_missing_output_when_both_absent() {
-        let err = stdlib_output_or_error(None, None)
-            .expect_err("should fail when neither output nor error present");
-        assert_eq!(err.to_string(), "expected stdlib output");
+        let result = stdlib_output_or_error(None, None);
+        assert_eq!(
+            result.err().map(|error| error.to_string()).as_deref(),
+            Some("expected stdlib output")
+        );
     }
 }

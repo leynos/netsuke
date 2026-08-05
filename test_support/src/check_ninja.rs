@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
-use crate::exec::{utf8_path, write_exec_with_content};
+use crate::exec::write_exec_with_content;
 
 /// Represents a Ninja tool name (e.g., "clean", "compdb").
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -12,15 +12,25 @@ pub struct ToolName(&'static str);
 
 impl ToolName {
     /// Create a new tool name.
+    #[must_use]
     pub const fn new(name: &'static str) -> Self {
         Self(name)
     }
 
     /// Get the tool name as a string slice.
-    pub fn as_str(&self) -> &str {
+    #[must_use]
+    pub const fn as_str(&self) -> &str {
         self.0
     }
 }
+
+const COMPILE_TIME_TOOL_NAME: ToolName = ToolName::new("compdb");
+const COMPILE_TIME_TOOL_NAME_TEXT: &str = COMPILE_TIME_TOOL_NAME.as_str();
+
+const _: () = assert!(
+    COMPILE_TIME_TOOL_NAME_TEXT.len() == "compdb".len(),
+    "ToolName::new and ToolName::as_str must remain const-evaluable"
+);
 
 impl From<&'static str> for ToolName {
     fn from(name: &'static str) -> Self {
@@ -48,11 +58,11 @@ impl ShellFlag {
         var_name: "dir",
     };
 
-    fn flag(&self) -> &str {
+    const fn flag(&self) -> &str {
         self.flag
     }
 
-    fn var_name(&self) -> &str {
+    const fn var_name(&self) -> &str {
         self.var_name
     }
 }
@@ -64,19 +74,49 @@ impl ShellFlag {
 /// both so callers keep the directory alive for the script's lifetime.
 fn write_fake_ninja_script(script: &str, context: &str) -> Result<(TempDir, PathBuf)> {
     let dir = TempDir::new().with_context(|| format!("{context}: create temp dir"))?;
-    let path = {
-        let root =
-            utf8_path(dir.path()).with_context(|| format!("{context}: temporary directory"))?;
-        write_exec_with_content(root, "ninja", script)
-            .with_context(|| format!("{context}: write script"))?
-    };
-    Ok((dir, path.into_std_path_buf()))
+    write_fake_ninja_script_in_dir(script, context, dir)
+}
+
+fn write_fake_ninja_script_in_dir(
+    script: &str,
+    context: &str,
+    dir: TempDir,
+) -> Result<(TempDir, PathBuf)> {
+    let path = write_exec_with_content(dir.path(), "ninja", script)
+        .with_context(|| format!("{context}: write script"))?;
+    Ok((dir, path))
+}
+
+#[cfg(all(test, unix))]
+pub(crate) fn fake_ninja_check_build_file_in(
+    parent: &std::path::Path,
+) -> Result<(TempDir, PathBuf)> {
+    let dir = tempfile::Builder::new()
+        .prefix("netsuke-check-ninja-")
+        .tempdir_in(parent)
+        .context("fake_ninja_check_build_file: create temp dir")?;
+    write_fake_ninja_script_in_dir(
+        concat!(
+            "#!/bin/sh\n",
+            "if [ \"$1\" = \"-f\" ] && [ ! -f \"$2\" ]; then\n",
+            "  echo \"missing build file: $2\" >&2\n",
+            "  exit 1\n",
+            "fi\n",
+            "exit 0\n",
+        ),
+        "fake_ninja_check_build_file",
+        dir,
+    )
 }
 
 /// Create a fake Ninja that validates the build file path provided via `-f`.
 ///
 /// The script exits with status `1` if the file is missing or not a regular
 /// file, otherwise `0`.
+///
+/// # Errors
+///
+/// Returns an error if the temporary directory or fake executable cannot be created.
 pub fn fake_ninja_check_build_file() -> Result<(TempDir, PathBuf)> {
     write_fake_ninja_script(
         concat!(
@@ -110,6 +150,10 @@ pub fn fake_ninja_check_build_file() -> Result<(TempDir, PathBuf)> {
 /// // ninja_path will succeed only when invoked with `-t clean`
 /// ```
 #[cfg(unix)]
+///
+/// # Errors
+///
+/// Returns an error if the temporary directory or fake executable cannot be created.
 pub fn fake_ninja_expect_tool(expected_tool: ToolName) -> Result<(TempDir, PathBuf)> {
     fake_ninja_expect_tool_with_jobs(expected_tool, None, None)
 }
@@ -126,7 +170,7 @@ fn shell_single_quote(value: &str) -> String {
 
 /// Builds all three shell script snippets for validating an optional flag.
 ///
-/// Returns a tuple of (init, loop_check, validation) strings for the given flag.
+/// Returns a tuple of (init, `loop_check`, validation) strings for the given flag.
 #[cfg(unix)]
 fn build_flag_validation(shell_flag: ShellFlag, expected_value: &str) -> (String, String, String) {
     let flag = shell_flag.flag();
@@ -244,6 +288,10 @@ fn build_tool_validation_script(
 /// // ninja_path will succeed only when invoked with `-t clean -j 4 -C /path/to/build`
 /// ```
 #[cfg(unix)]
+///
+/// # Errors
+///
+/// Returns an error if the temporary directory or fake executable cannot be created.
 pub fn fake_ninja_expect_tool_with_jobs(
     expected_tool: ToolName,
     expected_jobs: Option<u32>,
@@ -303,7 +351,10 @@ mod tests {
             .status()
             .context("execute fake ninja")?;
 
-        assert_eq!(status.success(), should_succeed, "{description}");
+        anyhow::ensure!(
+            status.success() == should_succeed,
+            "unexpected fake Ninja result for {description}"
+        );
 
         Ok(())
     }

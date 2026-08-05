@@ -38,6 +38,14 @@ const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG";
 pub trait EnvProvider {
     /// Return the value of `key`, or `None` when the key is unset.
     fn get(&self, key: &str) -> Option<OsString>;
+
+    /// Return all values available to the configuration environment layer.
+    ///
+    /// Providers concerned only with selector lookup may retain the empty
+    /// default. Full merge providers override this method.
+    fn entries(&self) -> Vec<(OsString, OsString)> {
+        Vec::new()
+    }
 }
 
 /// Environment provider backed by [`std::env::var_os`].
@@ -52,14 +60,10 @@ impl EnvProvider for StdEnvProvider {
     fn get(&self, key: &str) -> Option<OsString> {
         std::env::var_os(key)
     }
-}
 
-pub(crate) fn push_file_layers(
-    cli: &Cli,
-    composer: &mut MergeComposer,
-    errors: &mut Vec<Arc<ortho_config::OrthoError>>,
-) {
-    push_file_layers_with_env(cli, composer, errors, &StdEnvProvider);
+    fn entries(&self) -> Vec<(OsString, OsString)> {
+        std::env::vars_os().collect()
+    }
 }
 
 /// Load configuration layers with environment access supplied by `env`.

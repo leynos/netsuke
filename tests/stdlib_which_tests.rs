@@ -8,7 +8,6 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, context};
 use netsuke::stdlib::{self, StdlibConfig};
 use rstest::{fixture, rstest};
-use test_support::{env::VarGuard, env_lock::EnvLock};
 
 struct StdlibWorkspace {
     _temp: tempfile::TempDir,
@@ -21,15 +20,6 @@ fn stdlib_env(root: &Utf8Path, path_override: OsString) -> Result<Environment<'s
     let config = StdlibConfig::new(workspace)?
         .with_workspace_root_path(root.to_path_buf())?
         .with_path_override(path_override);
-    let mut env = Environment::new();
-    stdlib::register_with_config(&mut env, config)?;
-    Ok(env)
-}
-
-fn stdlib_env_from_process(root: &Utf8Path) -> Result<Environment<'static>> {
-    let workspace = Dir::open_ambient_dir(root, ambient_authority())
-        .with_context(|| format!("open workspace {root}"))?;
-    let config = StdlibConfig::new(workspace)?.with_workspace_root_path(root.to_path_buf())?;
     let mut env = Environment::new();
     stdlib::register_with_config(&mut env, config)?;
     Ok(env)
@@ -264,13 +254,11 @@ fn command_available_uses_workspace_fallback_when_path_is_empty(
 fn command_available_fresh_bypasses_cached_success(
     stdlib_workspace: Result<StdlibWorkspace>,
 ) -> Result<()> {
-    let _lock = EnvLock::acquire();
     let workspace_fixture = stdlib_workspace?;
     let bin = workspace_fixture.root.join("bin");
     let tool = write_tool(&bin, "cached-helper")?;
     let path = path_override(std::slice::from_ref(&bin))?;
-    let _path_guard = VarGuard::set("PATH", path.as_os_str());
-    let env = stdlib_env_from_process(&workspace_fixture.root)?;
+    let env = stdlib_env(&workspace_fixture.root, path)?;
 
     let first = env.render_str("{{ command_available('cached-helper') }}", context! {})?;
     std::fs::remove_file(tool.as_std_path()).with_context(|| format!("remove {tool}"))?;

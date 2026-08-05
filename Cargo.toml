@@ -3,13 +3,13 @@ name = "netsuke-build"
 version = "0.1.0"
 edition = "2024"
 include = [
-    "src/**",
-    "locales/**",
-    "Cargo.toml",
-    "README.md",
-    "LICENSE",
-    "build.rs",
-    "build_l10n_audit/**",
+    "/src/**",
+    "/locales/**",
+    "/Cargo.toml",
+    "/README.md",
+    "/LICENSE",
+    "/build.rs",
+    "/build_l10n_audit/**",
 ]
 license = "ISC"
 readme = "README.md"
@@ -70,6 +70,9 @@ locales   = [
 [package.metadata.kani.flags]
 default-unwind = "6"
 
+[lints]
+workspace = true
+
 # `cargo binstall` derives release asset names from the Cargo package name,
 # which is `netsuke-build`. Every release asset is named after the `netsuke`
 # binary instead, so the defaults would never match and `cargo binstall
@@ -127,8 +130,10 @@ itertools = "0.12"
 indexmap = { version = "2.5", features = ["serde"] }
 lru = "0.18"
 glob = "0.3.3"
+hashbrown = "0.17.1"
 walkdir = "2.5"
 metrics = "0.24.6"
+mockable = "3.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
 serde_json = { version = "1", features = ["preserve_order"] }
@@ -152,8 +157,41 @@ serde_json = { version = "1", features = ["preserve_order"] }
 thiserror = "1"
 time = { version = "0.3.44", features = ["formatting"] }
 tracing = "0.1"
+[dev-dependencies]
+rstest = "0.26.1"
+rstest-bdd = "0.5.0"
+rstest-bdd-macros = { version = "0.5.0", features = ["strict-compile-time-validation"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"], default-features = false }
+insta = { version = "1", features = ["yaml"] }
+assert_cmd = "2.0.0"
+predicates = "3"
+# Provides the DebuggingRecorder used to assert bounded telemetry without a
+# global recorder; constrained to the family that pairs with metrics 0.24.
+metrics-util = { version = "0.20", features = ["debugging"] }
+mockable = { version = "3.0", features = ["mock"] }
+serial_test = "3"
+mockall = "0.11"
+camino = "1.2.0"
+test_support = { path = "test_support" }
+strip-ansi-escapes = "0.2"
+toml = "0.8"
+serde_yaml = "0.9"
+proptest = "1.11.0"
+# Plural-selection tests must pass numeric arguments to Fluent. `ortho_config`
+# exposes `LocalizationArgs` as a map of `FluentValue`, but does not re-export
+# the value type, so the tests need `fluent-bundle` directly. Constrained to
+# the version `ortho_config` resolves, or the `FluentValue` types would differ.
+fluent-bundle = "0.16.0"
 
-[lints.clippy]
+# Target-specific dev-deps
+[target.'cfg(unix)'.dev-dependencies]
+# Used only to construct FIFOs and device nodes in tests.
+rustix = { version = "1.0.8", features = ["fs"] }
+
+[workspace]
+members = ["test_support"]
+
+[workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 
 # 1. hygiene
@@ -161,8 +199,10 @@ allow_attributes                    = "deny"
 allow_attributes_without_reason     = "deny"
 blanket_clippy_restriction_lints    = "deny"
 cognitive_complexity                = "deny"
+disallowed_methods                  = "deny"
 needless_pass_by_value              = "deny"
 implicit_hasher                     = "deny"
+missing_assert_message              = "deny"
 
 # 2. debugging leftovers
 dbg_macro                           = "deny"
@@ -215,13 +255,14 @@ missing_panics_doc                  = "deny"
 error_impl_error                    = "deny"
 result_large_err                    = "deny"
 
-[lints.rust]
+[workspace.lints.rust]
 unknown_lints                       = "deny"
 renamed_and_removed_lints           = "deny"
+unsafe_code                         = "forbid"
 missing_docs                        = "deny"
 unexpected_cfgs                     = { level = "warn", check-cfg = ["cfg(kani)", "cfg(dylint_lib, values(any()))"] }
 
-[lints.rustdoc]
+[workspace.lints.rustdoc]
 missing_crate_level_docs            = "deny"
 broken_intra_doc_links              = "deny"
 private_intra_doc_links             = "deny"
@@ -229,41 +270,3 @@ bare_urls                           = "deny"
 invalid_html_tags                   = "deny"
 invalid_codeblock_attributes        = "deny"
 unescaped_backticks                 = "deny"
-
-[dev-dependencies]
-rstest = "0.26.1"
-rstest-bdd = "0.5.0"
-rstest-bdd-macros = { version = "0.5.0", features = ["strict-compile-time-validation"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"], default-features = false }
-insta = { version = "1", features = ["yaml"] }
-assert_cmd = "2.0.0"
-predicates = "3"
-mockable = { version = "3.0", features = ["mock"] }
-serial_test = "3"
-mockall = "0.11"
-camino = "1.2.0"
-test_support = { path = "test_support" }
-strip-ansi-escapes = "0.2"
-toml = "0.8"
-serde_yaml = "0.9"
-proptest = "1.11.0"
-# Plural-selection tests must pass numeric arguments to Fluent. `ortho_config`
-# exposes `LocalizationArgs` as a map of `FluentValue`, but does not re-export
-# the value type, so the tests need `fluent-bundle` directly. Constrained to
-# the version `ortho_config` resolves, or the `FluentValue` types would differ.
-fluent-bundle = "0.16.0"
-
-# Target-specific dev-deps
-[target.'cfg(unix)'.dev-dependencies]
-# Used only to construct FIFOs and device nodes in tests.
-rustix = { version = "1.0.8", features = ["fs"] }
-
-[workspace]
-# `test_support` is a path dependency that Cargo would otherwise auto-include as a
-# member. It stays excluded so its gate coverage is decided deliberately rather
-# than inherited; folding it into the workspace is tracked separately. Because
-# the exclusion also puts the crate out of reach of workspace-root cargo
-# invocations, `make lint-whitaker` runs the Whitaker suite a second time
-# against `test_support/dylint.toml`, and `make test-nextest` and `make doctest`
-# each run a second time against `$(TEST_SUPPORT_MANIFEST)`.
-exclude = ["test_support"]

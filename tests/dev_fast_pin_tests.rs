@@ -12,10 +12,26 @@
 #![cfg(all(unix, target_os = "linux"))]
 
 use anyhow::{Result, ensure};
+use mockable::MockEnv;
 use rstest::rstest;
 use test_support::dev_fast::{
-    PinOverrides, Sandbox, combined, pinned_mold_version, pinned_toolchain,
+    PinOverrides, Sandbox, combined, pinned_mold_version, pinned_toolchain, real_utility_with_env,
 };
+
+#[test]
+fn utility_lookup_uses_the_injected_environment() {
+    let mut env = MockEnv::new();
+    env.expect_raw()
+        .withf(|key| key == "PATH")
+        .returning(|_| Err(std::env::VarError::NotPresent));
+
+    let error = real_utility_with_env(&env, camino::Utf8Path::new("/workspace"), "sh")
+        .expect_err("a missing injected PATH should prevent utility lookup");
+    assert!(
+        error.to_string().contains("read PATH"),
+        "lookup should preserve PATH context, got {error:?}"
+    );
+}
 
 /// Run without the pin-file variables, the check must still find the committed
 /// pins by locating the repository from the script's own path.

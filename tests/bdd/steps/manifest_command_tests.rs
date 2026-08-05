@@ -7,9 +7,9 @@
 
 use super::*;
 use anyhow::ensure;
+use mockable::{DefaultEnv, Env};
 use rstest::fixture;
 use std::ffi::{OsStr, OsString};
-use test_support::env::VarGuard;
 
 fn env_value<'a>(cmd: &'a assert_cmd::Command, key: &str) -> Option<&'a OsStr> {
     cmd.get_envs()
@@ -33,7 +33,6 @@ fn world_env_vars_with_value_are_applied(prepared_world: Result<TestWorld>) -> R
     // will be forwarded to the child command, not read from process env.
     world.track_env_var(
         "NETSUKE_TEST_FLAG".to_owned(),
-        None,
         Some(OsString::from("enabled")),
     );
 
@@ -52,9 +51,6 @@ fn world_env_vars_with_value_are_applied(prepared_world: Result<TestWorld>) -> R
 fn host_env_vars_are_not_inherited(prepared_world: Result<TestWorld>) -> Result<()> {
     let world = prepared_world?;
 
-    // Set a host env var that should NOT be inherited (not tracked in world.env_vars)
-    let _guard = VarGuard::set("NETSUKE_HOST_VAR", OsStr::new("should-not-inherit"));
-
     let cmd = build_netsuke_command(&world, &["--help"]).expect("build command");
 
     // Command should NOT contain the host env var because env_clear() was called
@@ -67,18 +63,16 @@ fn host_env_vars_are_not_inherited(prepared_world: Result<TestWorld>) -> Result<
 }
 
 #[rstest::rstest]
-fn host_path_is_forwarded_and_netsuke_executable_is_used(
+fn scenario_path_override_is_forwarded_and_netsuke_executable_is_used(
     prepared_world: Result<TestWorld>,
 ) -> Result<()> {
     let world = prepared_world?;
 
-    // Simulate a different netsuke early in PATH
-    let _guard = VarGuard::set("PATH", OsStr::new("/fake/bin"));
+    world.track_env_var("PATH".to_owned(), Some(OsString::from("/fake/bin")));
 
     let cmd = build_netsuke_command(&world, &["--version"]).expect("build command");
 
-    // PATH in the command should match what was in the environment when
-    // build_netsuke_command was called, forwarded explicitly after env_clear().
+    // The scenario-provided PATH is forwarded explicitly after env_clear().
     let path_val =
         env_value(&cmd, "PATH").expect("PATH should be explicitly forwarded to the command");
     ensure!(
@@ -94,6 +88,25 @@ fn host_path_is_forwarded_and_netsuke_executable_is_used(
         "expected program to be {:?}, got {:?}",
         exe,
         cmd.get_program()
+    );
+    Ok(())
+}
+
+#[rstest::rstest]
+fn host_path_is_forwarded_when_the_scenario_has_no_override(
+    prepared_world: Result<TestWorld>,
+) -> Result<()> {
+    let world = prepared_world?;
+    let expected = DefaultEnv
+        .os_string("PATH")
+        .expect("the test host should provide PATH");
+
+    let cmd = build_netsuke_command(&world, &["--version"]).expect("build command");
+
+    let actual = env_value(&cmd, "PATH").expect("host PATH should be forwarded after env_clear");
+    ensure!(
+        actual == expected,
+        "expected host PATH {expected:?}, got {actual:?}"
     );
     Ok(())
 }

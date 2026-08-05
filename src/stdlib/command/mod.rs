@@ -55,7 +55,7 @@ mod result;
 mod tests_support;
 
 pub(super) use super::value_from_bytes;
-pub(crate) use config::CommandConfig;
+pub(crate) use config::{CommandConfig, CommandConfigInit};
 
 use std::sync::{
     Arc,

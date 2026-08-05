@@ -31,7 +31,7 @@ fn the_startup_filter_matches_the_mode(
 /// An environment that reports nothing, so `--locale` decides the outcome.
 struct EmptyEnv;
 
-impl locale_resolution::EnvProvider for EmptyEnv {
+impl locale_resolution::LocaleEnvProvider for EmptyEnv {
     fn var(&self, _key: &str) -> Option<String> {
         None
     }
@@ -75,7 +75,7 @@ fn record_startup(locale: &str) -> Result<(StartupWriter, String)> {
 /// The general form behind [`record_startup`], for the tests that need the
 /// locale to arrive by a route other than `--locale`. Both share the lock and
 /// the restoration, which is the part that must not be reimplemented per test.
-fn record_startup_with<E: locale_resolution::EnvProvider>(
+fn record_startup_with<E: locale_resolution::LocaleEnvProvider>(
     args: &[OsString],
     env: &E,
 ) -> Result<(StartupWriter, String)> {
@@ -125,7 +125,7 @@ fn an_unsupported_startup_locale_is_recorded_before_parsing() -> Result<()> {
 /// An environment reporting `NETSUKE_LOCALE`.
 struct EnvWithLocale(&'static str);
 
-impl locale_resolution::EnvProvider for EnvWithLocale {
+impl locale_resolution::LocaleEnvProvider for EnvWithLocale {
     fn var(&self, key: &str) -> Option<String> {
         (key == "NETSUKE_LOCALE").then(|| self.0.to_owned())
     }

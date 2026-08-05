@@ -8,8 +8,9 @@ use minijinja::{Environment, Error, ErrorKind};
 
 use super::{fs_utils, hash_utils, path_utils};
 use crate::localization::{self, keys};
+use crate::stdlib::config_types::HomeDirectory;
 
-pub(crate) fn register_filters(env: &mut Environment<'_>) {
+pub(crate) fn register_filters(env: &mut Environment<'_>, home_directory: HomeDirectory) {
     env.add_filter("basename", |raw: String| -> Result<String, Error> {
         Ok(path_utils::basename(Utf8Path::new(&raw)))
     });
@@ -38,8 +39,8 @@ pub(crate) fn register_filters(env: &mut Environment<'_>) {
     env.add_filter("realpath", |raw: String| -> Result<String, Error> {
         path_utils::canonicalize_any(Utf8Path::new(&raw)).map(camino::Utf8PathBuf::into_string)
     });
-    env.add_filter("expanduser", |raw: String| -> Result<String, Error> {
-        path_utils::expanduser(&raw)
+    env.add_filter("expanduser", move |raw: String| -> Result<String, Error> {
+        path_utils::expanduser(&raw, &home_directory)
     });
     env.add_filter("size", |raw: String| -> Result<u64, Error> {
         fs_utils::file_size(Utf8Path::new(&raw))

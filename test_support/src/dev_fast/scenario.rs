@@ -43,6 +43,7 @@ pub struct InstallerFixture {
 
 impl InstallerFixture {
     /// Environment overrides for a direct `install-dev-fast.sh` invocation.
+    #[must_use]
     pub fn script_env(&self) -> Vec<(&'static str, String)> {
         vec![
             ("MOLD_VERSION_FILE", self.version_pin.to_string()),
@@ -61,6 +62,10 @@ pub struct InstallerScenario {
 impl InstallerScenario {
     /// Publish a release and make the Cranelift toolchain appear installed, so
     /// only the linker half of the installer is under test.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the installer scenario cannot be prepared.
     pub fn prepare() -> Result<Self> {
         let sandbox = Sandbox::new()?;
         sandbox.write_rustup(&pinned_toolchain()?, true)?;
@@ -69,21 +74,28 @@ impl InstallerScenario {
     }
 
     /// The sandbox the scenario runs in.
-    pub fn sandbox(&self) -> &Sandbox {
+    #[must_use]
+    pub const fn sandbox(&self) -> &Sandbox {
         &self.sandbox
     }
 
     /// The published release under test.
-    pub fn release(&self) -> &FakeRelease {
+    #[must_use]
+    pub const fn release(&self) -> &FakeRelease {
         &self.release
     }
 
     /// Where a successful install lands the linker.
+    #[must_use]
     pub fn installed_mold(&self) -> Utf8PathBuf {
         self.sandbox.prefix().join("bin/mold")
     }
 
     /// Installer inputs verified against `checksums`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the installer fixture cannot be assembled.
     pub fn fixture(&self, checksums: Utf8PathBuf) -> Result<InstallerFixture> {
         Ok(InstallerFixture {
             version_pin: self.release.write_version_pin(&self.sandbox)?,
@@ -93,6 +105,10 @@ impl InstallerScenario {
     }
 
     /// Inputs recording the release's real digest, so verification passes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the matching checksum fixture cannot be written.
     pub fn with_matching_checksum(&self) -> Result<InstallerFixture> {
         self.fixture(
             self.release
@@ -109,6 +125,10 @@ pub struct BuildScenario {
 
 impl BuildScenario {
     /// Stage a sandbox in which `dev-fast-check` passes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the build scenario cannot be prepared.
     pub fn prepare() -> Result<Self> {
         let sandbox = Sandbox::new()?;
         sandbox.write_mold(&sandbox.prefix().join("bin"), &pinned_mold_version()?)?;
@@ -118,16 +138,19 @@ impl BuildScenario {
     }
 
     /// The sandbox the scenario runs in.
-    pub fn sandbox(&self) -> &Sandbox {
+    #[must_use]
+    pub const fn sandbox(&self) -> &Sandbox {
         &self.sandbox
     }
 
     /// The recording Cargo standing in for the real one.
-    pub fn cargo(&self) -> &RecordingCargo {
+    #[must_use]
+    pub const fn cargo(&self) -> &RecordingCargo {
         &self.cargo
     }
 
     /// The install prefix's `bin`, which the `dev-*` recipes lead `PATH` with.
+    #[must_use]
     pub fn prefix_bin(&self) -> Utf8PathBuf {
         self.sandbox.prefix().join("bin")
     }
@@ -135,61 +158,10 @@ impl BuildScenario {
     /// Run `target`, pointing `CARGO` at the recording fake, and return the
     /// single invocation it must have produced.
     ///
-    /// Use [`run_all`](Self::run_all) for a target that invokes Cargo more than
-    /// once, such as `dev-test`'s root and `test_support` passes.
+    /// # Errors
     ///
-    /// # Examples
-    ///
-    /// ```rust,no_run
-    /// use anyhow::Result;
-    /// use test_support::dev_fast::BuildScenario;
-    ///
-    /// fn run() -> Result<()> {
-    ///     let scenario = BuildScenario::prepare()?;
-    ///     let invocation = scenario.run("dev-build")?;
-    ///     assert!(invocation.contains_sequence(&["build", "--bin", "netsuke"]));
-    ///     assert!(!invocation.toolchain().is_empty());
-    ///     Ok(())
-    /// }
-    /// ```
+    /// Returns an error if the target fails or its Cargo invocation cannot be read.
     pub fn run(&self, target: &str) -> Result<CargoInvocation> {
-        self.run_recording(target)?;
-        self.cargo.sole_invocation()
-    }
-
-    /// Run `target` and return every invocation it produced, in order.
-    ///
-    /// Use this instead of [`run`](Self::run) when the target invokes Cargo
-    /// more than once — `dev-test`, for example, runs a root pass and then a
-    /// `test_support` pass, and `run` would fail rather than pick one.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,no_run
-    /// use anyhow::Result;
-    /// use test_support::dev_fast::BuildScenario;
-    ///
-    /// fn run() -> Result<()> {
-    ///     let scenario = BuildScenario::prepare()?;
-    ///     let invocations = scenario.run_all("dev-test")?;
-    ///     assert_eq!(invocations.len(), 2);
-    ///     for invocation in &invocations {
-    ///         assert!(invocation.contains_sequence(&["nextest", "run"]));
-    ///     }
-    ///     Ok(())
-    /// }
-    /// ```
-    pub fn run_all(&self, target: &str) -> Result<Vec<CargoInvocation>> {
-        self.run_recording(target)?;
-        let invocations = self.cargo.invocations()?;
-        ensure!(
-            !invocations.is_empty(),
-            "make {target} should invoke cargo at least once"
-        );
-        Ok(invocations)
-    }
-
-    fn run_recording(&self, target: &str) -> Result<()> {
         let invocation = MakeInvocation::new(target).variable("CARGO", self.cargo.executable());
         let output = self.sandbox.run_make(&invocation)?;
         ensure!(
@@ -197,6 +169,6 @@ impl BuildScenario {
             "make {target} should succeed, got `{}`",
             combined(&output)
         );
-        Ok(())
+        self.cargo.sole_invocation()
     }
 }

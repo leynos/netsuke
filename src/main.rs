@@ -66,7 +66,7 @@ fn main() -> ExitCode {
 
 fn run_with_args(
     args: Vec<OsString>,
-    env: &impl locale_resolution::EnvProvider,
+    env: &impl locale_resolution::LocaleEnvProvider,
     system_locale: &impl locale_resolution::SystemLocale,
 ) -> ExitCode {
     let json_hint = locale_resolution::resolve_startup_json(&args, env);
@@ -170,7 +170,7 @@ fn set_tracing_filter(level: LevelFilter) {
 
 fn startup_localizer(
     args: &[OsString],
-    env: &impl locale_resolution::EnvProvider,
+    env: &impl locale_resolution::LocaleEnvProvider,
     system_locale: &impl locale_resolution::SystemLocale,
 ) -> Arc<dyn Localizer> {
     let startup_locale = locale_resolution::resolve_startup_locale(args, env, system_locale);

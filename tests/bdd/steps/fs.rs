@@ -97,18 +97,11 @@ fn create_device_with_fallback(config: DeviceConfig<'_>) -> Result<Utf8PathBuf> 
     Ok(fallback)
 }
 
-#[expect(
-    clippy::disallowed_methods,
-    reason = "pending migration under #492 (rstest-bdd migration)"
-)]
 fn setup_environment_variables(
     world: &TestWorld,
     root: &Utf8PathBuf,
     device_paths: &(Utf8PathBuf, Utf8PathBuf),
 ) {
-    // Acquire scenario-scoped lock before process-global env mutations
-    world.ensure_env_lock();
-
     let (block_path, char_path) = device_paths;
     let entries = [
         ("DIR_PATH", root.join("dir")),
@@ -121,20 +114,10 @@ fn setup_environment_variables(
     ];
     for (key, path) in entries {
         let new_val = path.as_std_path().as_os_str().to_owned();
-        let original = std::env::var_os(key);
-        // SAFETY: EnvLock (held via world.env_lock) serialises mutations
-        unsafe {
-            std::env::set_var(key, path.as_std_path().as_os_str());
-        }
-        world.track_env_var(key.to_owned(), original, Some(new_val));
+        world.track_env_var(key.to_owned(), Some(new_val));
     }
     let new_val = root.as_std_path().as_os_str().to_owned();
-    let original = std::env::var_os("WORKSPACE");
-    // SAFETY: EnvLock (held via world.env_lock) serialises mutations
-    unsafe {
-        std::env::set_var("WORKSPACE", root.as_std_path().as_os_str());
-    }
-    world.track_env_var("WORKSPACE".into(), original, Some(new_val));
+    world.track_env_var("WORKSPACE".into(), Some(new_val));
 }
 
 fn verify_missing_fixtures(handle: &Dir, root: &Utf8PathBuf) -> Result<()> {

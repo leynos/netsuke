@@ -7,6 +7,7 @@ use anyhow::{Context, Result, bail};
 
 use camino::Utf8PathBuf;
 use cap_std::fs_utf8::Dir;
+use mockable::{DefaultEnv, Env};
 
 const UPPERCASE_SOURCE: &str = concat!(
     "use std::io::{self, Read};\n",
@@ -37,6 +38,15 @@ const LARGE_OUTPUT_SOURCE: &str = concat!(
     "}\n",
 );
 
+/// Source inputs for one helper compilation.
+///
+/// This private request keeps compiler selection inside this module while
+/// avoiding a wider public API solely for test injection.
+#[derive(Clone, Copy)]
+struct RustHelperSource<'a> {
+    name: &'a str,
+    source: &'a str,
+}
 /// Compile a helper binary that converts stdin to upper case and return the
 /// executable path.
 ///
@@ -57,6 +67,10 @@ const LARGE_OUTPUT_SOURCE: &str = concat!(
 ///     .expect("compile helper");
 /// assert!(exe.as_std_path().exists());
 /// ```
+///
+/// # Errors
+///
+/// Returns an error if the helper source cannot be written or compiled.
 pub fn compile_uppercase_helper(dir: &Dir, root: &Utf8PathBuf, name: &str) -> Result<Utf8PathBuf> {
     compile_rust_helper(dir, root, name, UPPERCASE_SOURCE)
 }
@@ -80,11 +94,19 @@ pub fn compile_uppercase_helper(dir: &Dir, root: &Utf8PathBuf, name: &str) -> Re
 ///     .expect("compile helper");
 /// assert!(exe.as_std_path().exists());
 /// ```
+///
+/// # Errors
+///
+/// Returns an error if the helper source cannot be written or compiled.
 pub fn compile_failure_helper(dir: &Dir, root: &Utf8PathBuf, name: &str) -> Result<Utf8PathBuf> {
     compile_rust_helper(dir, root, name, FAILURE_SOURCE)
 }
 
 /// Compile a helper that writes a sizeable payload to stdout.
+///
+/// # Errors
+///
+/// Returns an error if the helper source cannot be written or compiled.
 pub fn compile_large_output_helper(
     dir: &Dir,
     root: &Utf8PathBuf,
@@ -98,6 +120,9 @@ pub fn compile_large_output_helper(
 /// Writes `{name}.rs` into `dir`, invokes the toolchain, and returns the
 /// executable path, which remains valid whilst `dir`'s backing directory
 /// exists.
+///
+/// The compiler is selected from `RUSTC` through [`mockable::DefaultEnv`]. If
+/// `RUSTC` is absent, the conventional `rustc` command is used.
 ///
 /// # Examples
 ///
@@ -117,34 +142,158 @@ pub fn compile_large_output_helper(
 ///     "cmd",
 ///     "fn main() {}\n",
 /// )
-/// .expect("compile helper");
+/// .expect("compile Rust helper");
 /// assert!(exe.as_std_path().exists());
 /// ```
-#[expect(
-    clippy::disallowed_methods,
-    reason = "reads the inherited environment to invoke rustc for a helper binary; the compiler must see the real toolchain"
-)]
+///
+/// # Errors
+///
+/// Returns an error if the source cannot be written or the selected compiler
+/// cannot compile it.
 pub fn compile_rust_helper(
     dir: &Dir,
     root: &Utf8PathBuf,
     name: &str,
     source: &str,
 ) -> Result<Utf8PathBuf> {
+    compile_rust_helper_with_env(&DefaultEnv, dir, root, RustHelperSource { name, source })
+}
+
+fn compile_rust_helper_with_env(
+    env: &impl Env,
+    dir: &Dir,
+    root: &Utf8PathBuf,
+    helper: RustHelperSource<'_>,
+) -> Result<Utf8PathBuf> {
+    let RustHelperSource { name, source } = helper;
     dir.write(format!("{name}.rs"), source.as_bytes())
         .with_context(|| format!("write helper source {name}.rs"))?;
 
     let src_path = root.join(format!("{name}.rs"));
     let exe_path = root.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
-    let rustc = std::env::var_os("RUSTC").unwrap_or_else(|| OsString::from("rustc"));
+    let rustc = rust_compiler(env);
     let status = Command::new(&rustc)
         .arg(src_path.as_std_path())
         .arg("-o")
         .arg(exe_path.as_std_path())
         .status()
-        .with_context(|| format!("invoke {rustc:?} to compile helper {name}"))?;
+        .with_context(|| {
+            format!(
+                "invoke {} to compile helper {name}",
+                rustc.to_string_lossy()
+            )
+        })?;
 
     if !status.success() {
         bail!("failed to compile helper {name}: {status:?}");
     }
     Ok(exe_path)
+}
+
+fn rust_compiler(env: &impl Env) -> OsString {
+    env.os_string("RUSTC")
+        .unwrap_or_else(|| OsString::from("rustc"))
+}
+
+#[cfg(test)]
+mod tests {
+    //! Unit tests for compiler selection and helper compilation.
+
+    use super::{RustHelperSource, compile_rust_helper_with_env, rust_compiler};
+    #[cfg(unix)]
+    use crate::exec::write_exec_with_content;
+    #[cfg(unix)]
+    use anyhow::{Context, Result, ensure};
+    #[cfg(unix)]
+    use camino::Utf8PathBuf;
+    #[cfg(unix)]
+    use cap_std::{ambient_authority, fs_utf8::Dir};
+    use mockable::MockEnv;
+    use std::ffi::OsString;
+    #[cfg(unix)]
+    use std::path::PathBuf;
+    #[cfg(unix)]
+    use tempfile::tempdir;
+
+    #[test]
+    fn rust_compiler_honours_configured_path() {
+        let configured = OsString::from("/toolchain/bin/rustc");
+        let expected = configured.clone();
+        let mut env = MockEnv::new();
+        env.expect_os_string()
+            .withf(|key| key == "RUSTC")
+            .once()
+            .return_once(move |_| Some(configured));
+
+        assert_eq!(rust_compiler(&env), expected);
+    }
+
+    #[test]
+    fn rust_compiler_falls_back_to_path_lookup() {
+        let mut env = MockEnv::new();
+        env.expect_os_string()
+            .withf(|key| key == "RUSTC")
+            .once()
+            .return_once(|_| None);
+
+        assert_eq!(rust_compiler(&env), OsString::from("rustc"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn compile_helper_invokes_configured_absolute_wrapper() -> Result<()> {
+        let temp = tempdir().context("create compiler wrapper directory")?;
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+            .map_err(|path| anyhow::anyhow!("compiler wrapper path is not UTF-8: {path:?}"))?;
+        let dir = Dir::open_ambient_dir(&root, ambient_authority())
+            .context("open compiler wrapper directory")?;
+        let wrapper = write_exec_with_content(
+            temp.path(),
+            "configured-rustc",
+            concat!(
+                "#!/bin/sh\n",
+                "set -eu\n",
+                "output=\n",
+                "while [ \"$#\" -gt 0 ]; do\n",
+                "    if [ \"$1\" = \"-o\" ]; then\n",
+                "        shift\n",
+                "        output=$1\n",
+                "        break\n",
+                "    fi\n",
+                "    shift\n",
+                "done\n",
+                "test -n \"$output\"\n",
+                ": > \"$output\"\n",
+                "printf invoked > \"$0.invoked\"\n",
+            ),
+        )
+        .context("write configured compiler wrapper")?;
+        let marker = PathBuf::from(format!("{}.invoked", wrapper.display()));
+        let configured = wrapper.into_os_string();
+        let mut env = MockEnv::new();
+        env.expect_os_string()
+            .withf(|key| key == "RUSTC")
+            .once()
+            .return_once(move |_| Some(configured));
+
+        let executable = compile_rust_helper_with_env(
+            &env,
+            &dir,
+            &root,
+            RustHelperSource {
+                name: "probe",
+                source: "fn main() {}\n",
+            },
+        )?;
+
+        ensure!(
+            marker.exists(),
+            "configured compiler wrapper was not invoked"
+        );
+        ensure!(
+            executable.as_std_path().exists(),
+            "configured compiler wrapper did not create the requested output"
+        );
+        Ok(())
+    }
 }

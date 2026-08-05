@@ -9,15 +9,25 @@ use super::ManifestValue;
 use crate::ast::MacroDefinition;
 use crate::localization::{self, keys};
 use anyhow::{Context, Result};
-use minijinja::{
-    Environment, Error, State,
-    value::{Kwargs, Value},
-};
-use std::sync::Arc;
+use metrics::{counter, describe_counter, describe_histogram, histogram};
+use minijinja::{Environment, Error};
+use serde::Serialize;
+use std::{sync::Once, time::Instant};
+use tracing::field;
 
-mod cache;
+const TEMPLATE_RENDERS_TOTAL: &str = "netsuke_manifest_template_renders_total";
+const TEMPLATE_RENDER_DURATION: &str = "netsuke_manifest_template_render_duration_seconds";
 
-use cache::{MacroCache, make_macro_fn};
+mod call;
+mod invocation;
+
+// Only the manifest test suite reaches the helper through the parent path;
+// `invocation` imports it from the sibling module directly.
+#[cfg(test)]
+pub(crate) use call::call_macro_value;
+use invocation::{make_macro_fn, validate_macro};
+
+const MACRO_IMPORTS_GLOBAL: &str = "__netsuke_manifest_macro_imports";
 
 /// Extract the macro identifier from a signature string.
 ///
@@ -68,12 +78,6 @@ pub(crate) fn parse_macro_name(signature: &str) -> Result<String> {
 /// with the extracted macro name. The template name is synthesised using the
 /// provided index to ensure uniqueness.
 ///
-/// # Lifetimes
-///
-/// The macro cache stores compiled template state for the lifetime of the
-/// process, so the environment must be `'static`. Callers that hold a shorter
-/// lived [`Environment`] should clone the macro body rather than caching it.
-///
 /// # Errors
 ///
 /// Returns an error if the macro signature is invalid or template compilation
@@ -95,9 +99,9 @@ pub(crate) fn register_macro(
             localization::message(keys::MANIFEST_MACRO_COMPILE_FAILED).with_arg("name", &name)
         })?;
 
-    let cache = Arc::new(MacroCache::new(template_name, name.clone()));
-    cache.prepare(env)?;
-    env.add_function(name, make_macro_fn(cache));
+    validate_macro(env, &template_name, &name)?;
+    register_macro_import(env, &template_name, &name);
+    env.add_function(name.clone(), make_macro_fn(template_name, name));
     Ok(())
 }
 
@@ -131,44 +135,83 @@ pub(crate) fn register_manifest_macros(
     Ok(())
 }
 
-/// Invoke a `MiniJinja` value with optional keyword arguments.
+/// Render a manifest template with all registered manifest macros imported.
 ///
-/// `MiniJinja` encodes keyword arguments by appending a [`Kwargs`] value to the
-/// positional slice. This helper hides that convention so callers can pass the
-/// keyword collection explicitly.
+/// Imports place macro values in the active template state, which preserves
+/// Jinja caller-block context without raw pointers or extended lifetimes.
 ///
-/// # Examples
-///
-/// ```rust,ignore
-/// use minijinja::{Environment, value::{Kwargs, Value}};
-/// use netsuke::manifest::jinja_macros::call_macro_value;
-///
-/// let mut env = Environment::new();
-/// env.add_template(
-///     "macro",
-///     "{% macro greet(name='friend') %}hi {{ name }}{% endmacro %}",
-/// )
-/// .unwrap();
-/// let template = env.get_template("macro").unwrap();
-/// let captured = template.render_captured(()).unwrap();
-/// let value = captured.state().lookup("greet").unwrap();
-/// let kwargs = Kwargs::from_iter([(String::from("name"), Value::from("Ada"))]);
-/// let rendered = call_macro_value(captured.state(), &value, &[], Some(kwargs)).unwrap();
-/// assert_eq!(rendered.to_string(), "hi Ada");
-/// ```
-pub(crate) fn call_macro_value(
-    state: &State,
-    macro_value: &Value,
-    positional: &[Value],
-    kwargs: Option<Kwargs>,
-) -> Result<Value, Error> {
-    kwargs.map_or_else(
-        || macro_value.call(state, positional),
-        |macro_kwargs| {
-            let mut call_args = Vec::with_capacity(positional.len() + 1);
-            call_args.extend_from_slice(positional);
-            call_args.push(Value::from(macro_kwargs));
-            macro_value.call(state, call_args.as_slice())
-        },
+/// Renders are traced and metered with bounded data only: the outcome, whether
+/// macro imports were present, and — on failure — the `MiniJinja` error kind.
+/// Template text, macro names, and context values never reach telemetry.
+pub(crate) fn render_template(
+    env: &Environment,
+    template: &str,
+    context: &impl Serialize,
+) -> Result<String, Error> {
+    describe_render_metrics();
+    let imports = macro_imports(env);
+    let has_macro_imports = imports.is_some();
+    let span = tracing::trace_span!(
+        "manifest.template.render",
+        outcome = field::Empty,
+        has_macro_imports,
+        error_category = field::Empty,
+    );
+    let _guard = span.enter();
+    let started = Instant::now();
+    let result = imports.map_or_else(
+        || env.render_str(template, context),
+        |import_block| env.render_str(&[import_block.as_str(), template].concat(), context),
+    );
+    record_render(&span, &result, has_macro_imports, started);
+    result
+}
+
+fn describe_render_metrics() {
+    static DESCRIBE: Once = Once::new();
+    DESCRIBE.call_once(|| {
+        describe_counter!(
+            TEMPLATE_RENDERS_TOTAL,
+            "Counts manifest template renders by bounded outcome and macro-import presence."
+        );
+        describe_histogram!(
+            TEMPLATE_RENDER_DURATION,
+            "Measures manifest template rendering duration in seconds."
+        );
+    });
+}
+
+fn record_render(
+    span: &tracing::Span,
+    result: &Result<String, Error>,
+    has_macro_imports: bool,
+    started: Instant,
+) {
+    let outcome = if result.is_ok() { "success" } else { "error" };
+    span.record("outcome", outcome);
+    if let Err(error) = result {
+        span.record("error_category", format_args!("{:?}", error.kind()));
+        tracing::debug!(error_category = ?error.kind(), "manifest template render failed");
+    }
+    counter!(
+        TEMPLATE_RENDERS_TOTAL,
+        "outcome" => outcome,
+        "has_macro_imports" => if has_macro_imports { "true" } else { "false" },
     )
+    .increment(1);
+    histogram!(TEMPLATE_RENDER_DURATION).record(started.elapsed());
+}
+
+fn register_macro_import(env: &mut Environment<'static>, template_name: &str, macro_name: &str) {
+    let existing = macro_imports(env).unwrap_or_default();
+    let import = format!("{{% from '{template_name}' import {macro_name} %}}");
+    env.add_global(MACRO_IMPORTS_GLOBAL, [existing, import].concat());
+}
+
+fn macro_imports(env: &Environment) -> Option<String> {
+    env.globals().find_map(|(name, value)| {
+        (name == MACRO_IMPORTS_GLOBAL)
+            .then(|| value.as_str().map(str::to_owned))
+            .flatten()
+    })
 }

@@ -10,8 +10,6 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, context};
 use netsuke::stdlib::{self, StdlibConfig, StdlibState};
 
-pub(crate) use test_support::{EnvVarGuard, env_lock::EnvLock};
-
 pub(crate) type Workspace = (tempfile::TempDir, Utf8PathBuf);
 
 pub(crate) mod fallible {
@@ -52,6 +50,24 @@ pub(crate) mod fallible {
 
     pub(crate) fn stdlib_env_with_state() -> Result<(Environment<'static>, StdlibState)> {
         stdlib_env_with_config(StdlibConfig::from_current_dir()?)
+    }
+
+    pub(crate) fn stdlib_env_with_path(
+        path: std::ffi::OsString,
+    ) -> Result<(Environment<'static>, StdlibState)> {
+        stdlib_env_with_config(StdlibConfig::from_current_dir()?.with_path_override(path))
+    }
+
+    pub(crate) fn stdlib_env_with_home(
+        root: &camino::Utf8Path,
+        home: Option<String>,
+    ) -> Result<Environment<'static>> {
+        let dir = Dir::open_ambient_dir(root, ambient_authority())
+            .context("open filter workspace for home override")?;
+        let config = StdlibConfig::new(dir)?
+            .with_workspace_root_path(root)?
+            .with_home_override(home);
+        stdlib_env_with_config(config).map(|(env, _)| env)
     }
 
     pub(crate) fn stdlib_env() -> Result<Environment<'static>> {

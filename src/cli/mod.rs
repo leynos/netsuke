@@ -9,8 +9,10 @@ use ortho_config::OrthoError;
 use std::sync::Arc;
 
 pub mod config;
+mod constants;
 mod diag;
 mod discovery;
+mod environment;
 mod merge;
 mod parser;
 mod parsing;
@@ -21,7 +23,7 @@ pub(crate) mod test_support;
 pub use config::{AccessibilityPolicy, CliConfig, ColourPolicy, EmojiPolicy, ProgressPolicy};
 pub use diag::{resolve_merged_json, resolve_merged_json_with_env};
 pub use discovery::{EnvProvider as ConfigEnvProvider, StdEnvProvider as ConfigStdEnvProvider};
-pub use merge::merge_with_config;
+pub use merge::{merge_with_config, merge_with_config_and_env};
 pub use parser::{
     BuildArgs, Cli, Commands, GraphArgs, json_hint_from_args, locale_hint_from_args,
     parse_with_localizer_from,

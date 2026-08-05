@@ -72,10 +72,10 @@ excluded_paths = [
 # Add a new entry here only when the ambient I/O really is at the crate root;
 # otherwise add a path above, and prefer migrating to `cap_std` over either.
 #
-# `test_support` is deliberately absent. It is excluded from the workspace, so
-# this file cannot reach it; `make lint-whitaker` lints it separately against
-# `test_support/dylint.toml`, which narrows its exemption to the single
-# `test_support::fs` boundary module rather than exempting the whole crate.
+# `test_support` is deliberately absent. It is a workspace member, but its
+# sanctioned ambient boundary is configured in `test_support/dylint.toml` and
+# loaded by the crate-scoped `make lint-whitaker` pass. That configuration
+# narrows the exemption to `test_support::fs` rather than exempting the crate.
 excluded_crates = [
     "build_script_build",
     # Stages the audit's inputs into a TempDir and runs the real audit over

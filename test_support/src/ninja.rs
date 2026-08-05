@@ -27,8 +27,8 @@ pub enum NinjaWorkspaceError {
 /// Best-effort cleanup of a child process that has timed out. Attempts to kill the process and
 /// wait for it to exit, ignoring any errors.
 fn cleanup_timed_out_child(child: &mut std::process::Child) {
-    let _ = child.kill();
-    let _ = child.wait();
+    drop(child.kill());
+    drop(child.wait());
 }
 
 fn probe_ninja() -> Result<(), NinjaWorkspaceError> {
@@ -66,6 +66,10 @@ fn probe_ninja() -> Result<(), NinjaWorkspaceError> {
 
 /// Ensure Ninja is available and return a temporary directory for integration
 /// tests. Callers should skip their scenario when this returns `Err`.
+///
+/// # Errors
+///
+/// Returns an error if Ninja is unavailable or the integration workspace cannot be created.
 pub fn ninja_integration_workspace() -> Result<TempDir, NinjaWorkspaceError> {
     probe_ninja()?;
     tempdir().map_err(NinjaWorkspaceError::Workspace)

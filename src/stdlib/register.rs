@@ -93,7 +93,7 @@ pub fn register_with_config(
 ) -> anyhow::Result<StdlibState> {
     let state = StdlibState::default();
     register_file_tests(env);
-    path::register_filters(env);
+    path::register_filters(env, config.home_directory().clone());
     collections::register_filters(env);
     let which_cache_capacity = config.which_cache_capacity();
     let which_skip_dirs = WorkspaceSkipList::from_names(config.workspace_skip_dirs());

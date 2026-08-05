@@ -7,6 +7,7 @@ use std::io;
 use tempfile::NamedTempFile;
 
 /// Prefix the provided manifest body with the standard Netsuke version header.
+#[must_use]
 pub fn manifest_yaml(body: &str) -> String {
     format!("netsuke_version: 1.0.0\n{body}")
 }
@@ -43,10 +44,7 @@ pub fn ensure_manifest_exists(temp_dir: &Utf8Path, cli_file: &Utf8Path) -> io::R
     if fs::is_dir(&manifest_path) {
         return Err(io::Error::new(
             io::ErrorKind::IsADirectory,
-            format!(
-                "Manifest path points to a directory, expected a file: {}",
-                manifest_path
-            ),
+            format!("Manifest path points to a directory, expected a file: {manifest_path}"),
         ));
     }
 
@@ -68,7 +66,7 @@ fn resolve_manifest_path(temp_dir: &Utf8Path, cli_file: &Utf8Path) -> io::Result
     if manifest_path.file_name().is_none() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("Manifest path must include a file name: {}", manifest_path),
+            format!("Manifest path must include a file name: {manifest_path}"),
         ));
     }
 
@@ -87,10 +85,7 @@ fn create_temp_file(dest_dir: &Utf8Path, manifest_path: &Utf8Path) -> io::Result
     NamedTempFile::new_in(dest_dir.as_std_path()).map_err(|e| {
         io::Error::new(
             e.kind(),
-            format!(
-                "Failed to create temporary manifest file for {}: {e}",
-                manifest_path
-            ),
+            format!("Failed to create temporary manifest file for {manifest_path}: {e}"),
         )
     })
 }
@@ -99,7 +94,7 @@ fn write_manifest_content(file: &mut NamedTempFile, manifest_path: &Utf8Path) ->
     crate::env::write_manifest(file).map_err(|e| {
         io::Error::new(
             e.kind(),
-            format!("Failed to write manifest content to {}: {e}", manifest_path),
+            format!("Failed to write manifest content to {manifest_path}: {e}"),
         )
     })
 }
@@ -131,8 +126,7 @@ fn ensure_parent_directory(manifest_path: &Utf8Path, dest_dir: &Utf8Path) -> io:
         return Err(io::Error::new(
             io::ErrorKind::AlreadyExists,
             format!(
-                "Failed to create manifest parent directory for {}: parent path exists and is not a directory",
-                manifest_path,
+                "Failed to create manifest parent directory for {manifest_path}: parent path exists and is not a directory",
             ),
         ));
     }
@@ -141,28 +135,21 @@ fn ensure_parent_directory(manifest_path: &Utf8Path, dest_dir: &Utf8Path) -> io:
 
     let relative = dest_dir.strip_prefix(base).map_err(|_| {
         io::Error::other(format!(
-            "Failed to derive relative path for {} from ancestor {}",
-            dest_dir, base,
+            "Failed to derive relative path for {dest_dir} from ancestor {base}",
         ))
     })?;
 
     let dir = fs_utf8::Dir::open_ambient_dir(base, ambient_authority()).map_err(|e| {
         io::Error::new(
             e.kind(),
-            format!(
-                "Failed to open ancestor directory {} for {}: {e}",
-                base, manifest_path,
-            ),
+            format!("Failed to open ancestor directory {base} for {manifest_path}: {e}"),
         )
     })?;
 
     dir.create_dir_all(relative).map_err(|e| {
         io::Error::new(
             e.kind(),
-            format!(
-                "Failed to create manifest parent directory for {}: {e}",
-                manifest_path,
-            ),
+            format!("Failed to create manifest parent directory for {manifest_path}: {e}"),
         )
     })
 }
@@ -180,8 +167,7 @@ fn find_existing_ancestor<'a>(
             io::Error::new(
                 io::ErrorKind::NotFound,
                 format!(
-                    "Failed to locate an existing ancestor for manifest directory {}",
-                    manifest_path,
+                    "Failed to locate an existing ancestor for manifest directory {manifest_path}",
                 ),
             )
         })
@@ -205,14 +191,15 @@ mod tests {
         let dir = temp.path().join("dir");
         fs::create_dir(&dir).context("create directory placeholder")?;
 
-        let err = ensure_manifest_exists(temp_path, Utf8Path::new("dir"))
-            .expect_err("existing directory should be rejected");
-        assert_eq!(err.kind(), io::ErrorKind::IsADirectory);
+        let Err(err) = ensure_manifest_exists(temp_path, Utf8Path::new("dir")) else {
+            anyhow::bail!("existing directory should be rejected");
+        };
+        anyhow::ensure!(err.kind() == io::ErrorKind::IsADirectory);
         let msg = err.to_string();
         let dir_str = dir
             .to_str()
             .ok_or_else(|| anyhow::anyhow!("dir path is not valid UTF-8"))?;
-        assert!(msg.contains(dir_str), "message: {msg}");
+        anyhow::ensure!(msg.contains(dir_str), "message: {msg}");
         Ok(())
     }
 
@@ -225,14 +212,16 @@ mod tests {
         fs::write(&parent, b"file").context("write placeholder parent file")?;
         let manifest = parent.join("manifest.yml");
 
-        let err = ensure_manifest_exists(temp_path, Utf8Path::new("parent/manifest.yml"))
-            .expect_err("non-directory parent should error");
-        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
+        let Err(err) = ensure_manifest_exists(temp_path, Utf8Path::new("parent/manifest.yml"))
+        else {
+            anyhow::bail!("non-directory parent should error");
+        };
+        anyhow::ensure!(err.kind() == io::ErrorKind::AlreadyExists);
         let msg = err.to_string();
         let manifest_str = manifest
             .to_str()
             .ok_or_else(|| anyhow::anyhow!("manifest path is not valid UTF-8"))?;
-        assert!(msg.contains(manifest_str), "message: {msg}");
+        anyhow::ensure!(msg.contains(manifest_str), "message: {msg}");
         Ok(())
     }
 
@@ -245,16 +234,16 @@ mod tests {
         // Parent directory does not exist beforehand.
         let cli_file = Utf8Path::new("missing/subdir/manifest.yml");
         let expected_path = temp_path.join(cli_file);
-        assert!(
+        anyhow::ensure!(
             !fs::exists(&expected_path),
             "precondition: path should not exist"
         );
 
         let manifest_path =
             ensure_manifest_exists(temp_path, cli_file).context("create manifest when missing")?;
-        assert_eq!(manifest_path, expected_path);
-        assert!(fs::exists(&manifest_path), "manifest file should exist");
-        assert!(
+        anyhow::ensure!(manifest_path == expected_path, "manifest path should match");
+        anyhow::ensure!(fs::exists(&manifest_path), "manifest file should exist");
+        anyhow::ensure!(
             fs::exists(
                 manifest_path
                     .parent()
@@ -266,7 +255,7 @@ mod tests {
         // Sanity check that content was written, not an empty file.
         let contents =
             fs::read_to_string(manifest_path.as_std_path()).context("read manifest contents")?;
-        assert!(
+        anyhow::ensure!(
             contents.contains("netsuke_version:"),
             "unexpected manifest contents: {contents}"
         );

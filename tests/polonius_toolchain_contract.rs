@@ -3,10 +3,9 @@
 //! The tree only borrow-checks under `-Zpolonius=next` on the dated nightly
 //! pinned in `rust-toolchain.toml` (see ADR-006 and docs/polonius.md). An
 //! inherited `RUSTFLAGS` environment variable overrides the
-//! `.cargo/config.toml` `build.rustflags` table, so every Makefile recipe
-//! that sets `RUSTFLAGS` and every workflow that presets it must re-state
-//! the flag. These tests fail when any layer drops the pin or the flag, so
-//! a regression cannot reach CI as a confusing borrow-check error.
+//! `.cargo/config.toml` `build.rustflags` table, so Makefile recipes that
+//! compile borrow-checked targets and workflows that preset it must re-state
+//! the flag. These tests fail when any layer drops the required policy.
 
 #[path = "support/makefile.rs"]
 mod makefile;
@@ -88,13 +87,16 @@ fn makefile_declares_the_polonius_flags_variable() -> Result<()> {
 }
 
 #[rstest]
-#[case::test_nextest("test-nextest")]
-#[case::doctest("doctest")]
-#[case::typecheck("typecheck")]
-#[case::lint_clippy("lint-clippy")]
-#[case::lint_whitaker("lint-whitaker")]
-#[case::build_binary("target/%/$(APP)")]
-fn rustflags_setting_recipes_restate_polonius(#[case] target: &str) -> Result<()> {
+#[case::test_nextest("test-nextest", true)]
+#[case::doctest("doctest", true)]
+#[case::typecheck("typecheck", true)]
+#[case::lint_clippy("lint-clippy", true)]
+#[case::lint_whitaker("lint-whitaker", true)]
+#[case::build_binary("target/%/$(APP)", true)]
+fn rustflags_setting_recipes_apply_polonius_policy(
+    #[case] target: &str,
+    #[case] expects_polonius: bool,
+) -> Result<()> {
     let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
     let recipe = target_recipe(&makefile, target)
         .with_context(|| format!("the Makefile should declare a {target} target"))?;
@@ -107,9 +109,10 @@ fn rustflags_setting_recipes_restate_polonius(#[case] target: &str) -> Result<()
         "{target} should set RUSTFLAGS, found {recipe:?}"
     );
     for line in rustflags_lines {
+        let contains_polonius = line.contains(POLONIUS_VAR) || line.contains(POLONIUS_FLAG);
         ensure!(
-            line.contains(POLONIUS_VAR),
-            "{target} sets RUSTFLAGS without {POLONIUS_VAR}: {line:?}"
+            contains_polonius == expects_polonius,
+            "{target} has the wrong Polonius policy in {line:?}"
         );
     }
     Ok(())

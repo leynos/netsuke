@@ -31,6 +31,23 @@ jobs:
           # Full history so the deferred cs-coverage check step can reach
           # the pull request's merge base once the gate is wired in.
           fetch-depth: 0
+      - name: Install test shell dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends gawk
+
+          # Ubuntu exposes awk through an alternatives symlink outside
+          # /usr/bin. The capability-backed sandbox probe deliberately cannot
+          # follow a symlink that escapes its containing directory, so expose
+          # the packaged binary as a regular executable on the job PATH.
+          test_shell_bin="${RUNNER_TEMP}/netsuke-test-bin"
+          mkdir --parents "${test_shell_bin}"
+          install --mode=0755 "$(command -v gawk)" "${test_shell_bin}/awk"
+          echo "${test_shell_bin}" >> "${GITHUB_PATH}"
+          export PATH="${test_shell_bin}:${PATH}"
+
+          command -v awk
+          awk --version
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@4d696e72fff6db49f34302ccf119ba978f1032c9
         with:

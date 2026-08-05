@@ -1028,18 +1028,18 @@ the template environment. These functions will be implemented in safe Rust,
 providing a secure bridge to the underlying system.
 
 - `env(var_name: &str, default: Option<String>) -> Result<String, Error>`: A
-  function that reads an environment variable through an injected
-  `EnvReader` — an `Arc`'d `Fn(&str) -> Result<String, VarError>` — rather
-  than the process environment directly. `manifest::from_str` supplies the
-  process-backed `process_env_reader()`, and `manifest::from_str_with_env`
-  lets a caller supply its own, so evaluation need not touch the process
-  environment; ownership sits with the caller, and `from_str_named` clones
-  the reader into the single `env()` registration site. This allows build
-  configurations to be influenced by the external environment (e.g., `PATH`,
-  `CC`). It returns an error if the variable is undefined and no `default` is
-  provided, or if the variable contains invalid UTF-8. The `default` argument
-  is planned; the current implementation only accepts the variable name. The
-  planned manifest-level `env` block in
+  function that reads an environment variable through an injected `EnvReader` —
+  an `Arc`'d `Fn(&str) -> Result<String, VarError>` — rather than the process
+  environment directly. `manifest::from_str` supplies the process-backed
+  `process_env_reader()`, and `manifest::from_str_with_env` lets a caller
+  supply its own, so evaluation need not touch the process environment;
+  ownership sits with the caller, and `from_str_named` clones the reader into
+  the single `env()` registration site. This allows build configurations to be
+  influenced by the external environment (e.g., `PATH`, `CC`). It returns an
+  error if the variable is undefined and no `default` is provided, or if the
+  variable contains invalid UTF-8. The `default` argument is planned; the
+  current implementation only accepts the variable name. The planned
+  manifest-level `env` block in
   [§2.6](#26-planned-recipe-ergonomics-and-execution-feedback) controls the
   environment Netsuke applies when actions run.
 
@@ -2462,11 +2462,11 @@ configuration merge, `startup_localizer` (`src/main.rs`) resolves the locale
 used for help and clap errors, with the precedence `--locale` ->
 `NETSUKE_LOCALE` -> system locale -> `en-US`; configuration cannot take part
 here because it has not been read yet. After the merge, `configure_runtime`
-resolves the locale again, this time for runtime diagnostics and progress,
-and this phase can honour a configuration file's `locale` setting. System
-locale strings are normalized by stripping encoding suffixes (such as
-`.UTF-8`), removing variant suffixes (such as `@latin`), and replacing
-underscores with hyphens before validation.
+resolves the locale again, this time for runtime diagnostics and progress, and
+this phase can honour a configuration file's `locale` setting. System locale
+strings are normalized by stripping encoding suffixes (such as `.UTF-8`),
+removing variant suffixes (such as `@latin`), and replacing underscores with
+hyphens before validation.
 
 Startup diagnostics are buffered rather than written. The locale is resolved
 before the command line is parsed, so a fallback can be reported before the

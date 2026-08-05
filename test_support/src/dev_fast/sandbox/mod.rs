@@ -2,8 +2,9 @@
 //!
 //! See the parent module for why the sandbox is built from nothing rather
 //! than by prepending fakes to the ambient `PATH`.
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
+use mockable::{DefaultEnv, Env};
 use std::io::ErrorKind;
 use std::process::{Command, Output};
 use tempfile::{TempDir, tempdir};
@@ -12,35 +13,9 @@ use super::MakeInvocation;
 use crate::exec::write_exec_with_content;
 use crate::fs;
 
-/// Utilities the scripts and `make` legitimately need. Kept explicit so a new
-/// dependency surfaces as a test failure rather than silently resolving to
-/// whatever the developer happens to have installed.
-const SANDBOX_UTILITIES: &[&str] = &[
-    "awk",
-    "bash",
-    "cat",
-    "chmod",
-    "cp",
-    "curl",
-    "dirname",
-    "env",
-    "grep",
-    "gzip",
-    "ln",
-    "make",
-    "mkdir",
-    "mktemp",
-    "rm",
-    "rmdir",
-    "sed",
-    "sh",
-    "sha256sum",
-    "stat",
-    "tar",
-    "touch",
-    "tr",
-    "uname",
-];
+mod utilities;
+use utilities::{SANDBOX_UTILITIES, which};
+pub use utilities::{real_utility, real_utility_with_env};
 
 /// Whether a script run supplies the pin-file environment overrides.
 ///
@@ -65,44 +40,74 @@ pub struct Sandbox {
 
 impl Sandbox {
     /// Build a sandbox and populate it with the utility allowlist.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the sandbox cannot be created or populated.
     pub fn new() -> Result<Self> {
+        Self::with_env(&DefaultEnv)
+    }
+
+    /// Build a sandbox using `env` to resolve the utility allowlist.
+    ///
+    /// This seam is limited to locating the real tools copied into the
+    /// sandbox; child processes still receive only the explicit environment
+    /// assembled when commands are constructed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the sandbox cannot be created or its utilities cannot be resolved.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use mockable::DefaultEnv;
+    /// use test_support::dev_fast::Sandbox;
+    ///
+    /// let sandbox = Sandbox::with_env(&DefaultEnv).expect("create utility sandbox");
+    /// assert!(sandbox.bin().is_absolute());
+    /// ```
+    pub fn with_env(env: &impl Env) -> Result<Self> {
         let temp = tempdir().context("create sandbox directory")?;
         let root = Utf8Path::from_path(temp.path())
             .context("sandbox path must be UTF-8")?
             .to_path_buf();
-        let repo = std::env::current_dir().context("resolve repository root")?;
-        let repo = Utf8PathBuf::try_from(repo).context("repository root must be UTF-8")?;
+        let repo_path = std::env::current_dir().context("resolve repository root")?;
+        let repo = Utf8PathBuf::try_from(repo_path).context("repository root must be UTF-8")?;
         let sandbox = Self {
             _temp: temp,
             root,
             repo,
         };
-        fs::create_dir_all(sandbox.bin()).context("create sandbox bin")?;
-        fs::create_dir_all(sandbox.home()).context("create sandbox home")?;
-        sandbox.link_utilities()?;
+        fs::create_dir_all(sandbox.bin().as_std_path()).context("create sandbox bin")?;
+        fs::create_dir_all(sandbox.home().as_std_path()).context("create sandbox home")?;
+        sandbox.link_utilities(env)?;
         Ok(sandbox)
     }
 
     /// The only directory on the sandbox `PATH`.
+    #[must_use]
     pub fn bin(&self) -> Utf8PathBuf {
         self.root.join("bin")
     }
 
     /// A `HOME` inside the sandbox, isolating the Makefile's `PATH` export.
+    #[must_use]
     pub fn home(&self) -> Utf8PathBuf {
         self.root.join("home")
     }
 
     /// An install prefix that starts out empty; `DEV_FAST_PREFIX` points here.
+    #[must_use]
     pub fn prefix(&self) -> Utf8PathBuf {
         self.root.join("prefix")
     }
 
-    fn link_utilities(&self) -> Result<()> {
+    fn link_utilities(&self, env: &impl Env) -> Result<()> {
         for utility in SANDBOX_UTILITIES {
-            let source =
-                which(utility).with_context(|| format!("locate `{utility}` for the sandbox"))?;
-            fs::symlink(&source, self.bin().join(utility))
+            let source = which(env, &self.repo, utility)
+                .with_context(|| format!("locate `{utility}` for the sandbox"))?;
+            fs::symlink(source.as_std_path(), self.bin().join(utility).as_std_path())
                 .with_context(|| format!("link `{utility}` into the sandbox"))?;
         }
         Ok(())
@@ -112,24 +117,33 @@ impl Sandbox {
     ///
     /// `body` is a shell fragment without a shebang; this adds one, so call
     /// sites stay focused on the behaviour they are faking.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the fake executable cannot be written.
     pub fn write_fake(&self, dir: &Utf8Path, name: &str, body: &str) -> Result<Utf8PathBuf> {
-        fs::create_dir_all(dir).with_context(|| format!("create {dir}"))?;
+        fs::create_dir_all(dir.as_std_path()).with_context(|| format!("create {dir}"))?;
         // Unlink first. The utility allowlist symlinks real binaries into this
         // directory, and writing to a symlink follows it — faking a utility
         // that is already linked would otherwise truncate the host's copy of
         // it. Only file permissions have stood between that and a broken
         // system.
         let target = dir.join(name);
-        match fs::remove_file(&target) {
+        match fs::remove_file(target.as_std_path()) {
             Ok(()) => {}
             Err(error) if error.kind() == ErrorKind::NotFound => {}
             Err(error) => return Err(error).with_context(|| format!("replace {target}")),
         }
         let script = format!("#!/bin/sh\n{body}\n");
-        write_exec_with_content(dir, name, &script)
+        let path = write_exec_with_content(dir.as_std_path(), name, &script)?;
+        Utf8PathBuf::try_from(path).context("fake executable path must be UTF-8")
     }
 
     /// A `mold` reporting the given version, formatted as the real one does.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the fake Mold executable cannot be written.
     pub fn write_mold(&self, dir: &Utf8Path, version: &str) -> Result<Utf8PathBuf> {
         self.write_fake(
             dir,
@@ -144,6 +158,10 @@ impl Sandbox {
     /// Every invocation is appended to [`rustup_log`](Self::rustup_log), so a
     /// test can assert which toolchain commands the installer actually issued
     /// rather than inferring them from its diagnostics.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the fake rustup executable cannot be written.
     pub fn write_rustup(&self, toolchain: &str, has_cranelift: bool) -> Result<Utf8PathBuf> {
         let component = if has_cranelift {
             "rustc-codegen-cranelift-x86_64-unknown-linux-gnu"
@@ -167,6 +185,7 @@ impl Sandbox {
     }
 
     /// Where [`write_rustup`](Self::write_rustup) records its invocations.
+    #[must_use]
     pub fn rustup_log(&self) -> Utf8PathBuf {
         self.home().join("rustup-invocations.log")
     }
@@ -175,9 +194,13 @@ impl Sandbox {
     ///
     /// A log that was never created means `rustup` was never called. Any other
     /// read failure is propagated rather than reported as "it did not run".
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the rustup invocation log cannot be read.
     pub fn rustup_invocations(&self) -> Result<Vec<String>> {
         let log = self.rustup_log();
-        match fs::read_to_string(&log) {
+        match fs::read_to_string(log.as_std_path()) {
             Ok(text) => Ok(text.lines().map(str::to_owned).collect()),
             Err(error) if error.kind() == ErrorKind::NotFound => Ok(Vec::new()),
             Err(error) => Err(error).with_context(|| format!("read {log}")),
@@ -197,6 +220,10 @@ impl Sandbox {
     /// Run a `scripts/` entry point directly, with the sandbox as the entire
     /// environment plus the given overrides. Use where a test must vary inputs
     /// the Makefile does not expose as variables.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the requested script cannot be executed.
     pub fn script(&self, name: &str, env: &[(&str, String)]) -> Result<Output> {
         self.script_with(name, PinOverrides::Supplied, env)
     }
@@ -206,6 +233,10 @@ impl Sandbox {
     ///
     /// Omitting them is how a test proves the scripts fall back to the
     /// committed pins rather than depending on the caller to pass every path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the requested script cannot be executed.
     pub fn script_with(
         &self,
         name: &str,
@@ -233,6 +264,10 @@ impl Sandbox {
 
     /// Run a Make target with the sandbox as the entire environment and no
     /// overrides beyond the sandbox's own install prefix.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if Make cannot be executed for the target.
     pub fn make(&self, target: &str) -> Result<Output> {
         self.run_make(&MakeInvocation::new(target))
     }
@@ -240,6 +275,10 @@ impl Sandbox {
     /// Run a described Make invocation with the sandbox as the entire
     /// environment. The sandbox's install prefix is applied first, so an
     /// invocation may still override it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if Make cannot be executed for the invocation.
     pub fn run_make(&self, invocation: &MakeInvocation) -> Result<Output> {
         let mut command = self.base_command(&self.bin().join("make"));
         command
@@ -260,45 +299,9 @@ impl Sandbox {
     }
 }
 
-/// The genuine binary behind a sandboxed utility name.
-///
-/// A fake that must delegate to the real tool — one that intercepts a single
-/// invocation and passes the rest through — needs an absolute path to it,
-/// because `PATH` inside the sandbox names the fake.
-pub fn real_utility(utility: &str) -> Result<Utf8PathBuf> {
-    which(utility)
-}
-
-/// Resolve a utility against the ambient `PATH`, before it is replaced.
-///
-/// Executability is part of the match, not an afterthought: `uv` installs a
-/// sourceable `env` shell fragment into `~/.local/bin`, so a plain file probe
-/// selects a non-executable file and every sandboxed `env` invocation then
-/// fails with a permission error.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "resolves a tool through the real PATH, which is what the sandbox under test must observe"
-)]
-fn which(utility: &str) -> Result<Utf8PathBuf> {
-    let path = std::env::var_os("PATH").context("read PATH")?;
-    for dir in std::env::split_paths(&path) {
-        let Ok(dir) = Utf8PathBuf::try_from(dir) else {
-            continue;
-        };
-        let candidate = dir.join(utility);
-        if is_executable_file(&candidate) {
-            return Ok(candidate);
-        }
-    }
-    bail!("`{utility}` not found on PATH")
-}
-
-fn is_executable_file(path: &Utf8Path) -> bool {
-    fs::is_executable_file(path)
-}
-
 /// Combined stdout and stderr, for asserting on diagnostics regardless of the
 /// stream a given message went to.
+#[must_use]
 pub fn combined(output: &Output) -> String {
     format!(
         "{}{}",
@@ -321,11 +324,19 @@ pub const DEV_FAST_CONFIG_PATH: &str = "tools/dev-fast/config.toml";
 
 /// The committed Cargo fragment's contents, so a test can assert on what the
 /// `dev-*` recipes actually apply rather than only on the path they pass.
+///
+/// # Errors
+///
+/// Returns an error if the checked-in dev-fast configuration cannot be read.
 pub fn dev_fast_config() -> Result<String> {
     fs::read_to_string(DEV_FAST_CONFIG_PATH).with_context(|| format!("read {DEV_FAST_CONFIG_PATH}"))
 }
 
 /// The repository's pinned mold release tag.
+///
+/// # Errors
+///
+/// Returns an error if the pinned Mold version cannot be read.
 pub fn pinned_mold_version() -> Result<String> {
     read_pin("tools/mold/VERSION")
 }
@@ -334,6 +345,10 @@ pub fn pinned_mold_version() -> Result<String> {
 ///
 /// dev-fast deliberately shares it rather than pinning a second nightly, so the
 /// accelerated loop and the gates borrow-check identically under Polonius.
+///
+/// # Errors
+///
+/// Returns an error if the pinned Rust toolchain cannot be read.
 pub fn pinned_toolchain() -> Result<String> {
     let contents = read_pin("rust-toolchain.toml")?;
     contents

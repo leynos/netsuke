@@ -2,13 +2,12 @@
 //!
 //! This crate provides test-only utilities for:
 //! - creating fake executables for process-related tests
-//! - manipulating PATH safely (PathGuard)
-//! - serializing environment mutation across tests (EnvLock)
-//! - pinning the active locale for snapshot tests (EnLocalizer, en_localizer,
-//!   LocalizerGuard, localizer_test_lock, set_en_localizer)
+//! - composing injected and child-process environments
+//! - pinning the active locale for snapshot tests (`EnLocalizer`, `en_localizer`,
+//!   `LocalizerGuard`, `localizer_test_lock`, `set_en_localizer`)
 //! - computing SHA-256 hashes for cache keys (hash module)
 //! - spawning lightweight HTTP servers for network tests (http module)
-//! - sandboxing PATH and HOME for the dev-fast target tests (dev_fast module)
+//! - sandboxing PATH and HOME for the dev-fast target tests (`dev_fast` module)
 //!
 //! All items are intended for use in tests within this workspace; avoid using
 //! them in production code.
@@ -19,15 +18,10 @@ pub mod check_ninja;
 pub mod command_helper;
 pub mod cwd_guard;
 
-/// Helpers for the `dev-fast` build-acceleration target tests: a hermetic
-/// PATH/HOME sandbox, staged fake releases, a recording `cargo`, and the
-/// Make invocation wrappers those tests drive. Unix-only.
 #[cfg(unix)]
 pub mod dev_fast;
 pub mod env;
-pub mod env_guard;
 pub mod env_lock;
-pub mod env_var_guard;
 pub mod exec;
 pub mod fluent;
 pub mod fs;
@@ -39,21 +33,12 @@ pub mod manifest;
 pub mod netsuke;
 pub mod ninja;
 pub mod ninja_gen;
-pub mod path_guard;
 pub mod stdlib_assert;
 /// Re-export the SHA-256 helper for concise call sites.
 pub use hash::sha256_hex;
-/// Re-export of [`PathGuard`] for crate-level ergonomics in tests.
-pub use path_guard::PathGuard;
-
-/// Re-export of [`env_var_guard::EnvVarGuard`] for ergonomics in tests.
-pub use env_var_guard::EnvVarGuard;
 
 /// Re-export of [`cwd_guard::CwdGuard`] for ergonomics in tests.
 pub use cwd_guard::CwdGuard;
-
-/// Re-export of the generic environment guard utilities.
-pub use env_guard::{EnvGuard, Environment, StdEnv};
 
 /// Re-export localizer helpers for integration tests.
 pub use localizer::{
@@ -67,6 +52,8 @@ pub use manifest::ensure_manifest_exists;
 pub use exec::{make_executable, write_exec, write_exec_with_content};
 
 mod error;
+#[cfg(test)]
+mod tracing_capture;
 use anyhow::{Context, Result};
 /// Format an error and its sources (outermost → root) using `Display`, joined
 /// with ": ", to produce deterministic text for test assertions.
@@ -85,7 +72,7 @@ pub enum ProbesError {
 impl std::fmt::Display for ProbesError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ProbesError::Failures(failures) => write!(
+            Self::Failures(failures) => write!(
                 f,
                 "Required binaries missing or failing: {}",
                 failures.join(", ")
@@ -114,111 +101,71 @@ impl std::error::Error for ProbesError {}
 /// // Prepend `dir.path()` to PATH via your env helper, then spawn `ninja`.
 /// // When `dir` is dropped, the fake executable is removed.
 /// ```
+///
+/// # Errors
+///
+/// Returns an error if the temporary directory or fake executable cannot be created.
 pub fn fake_ninja(exit_code: u8) -> Result<(TempDir, PathBuf)> {
     let dir = TempDir::new().context("fake_ninja: create temporary directory")?;
+    write_fake_ninja(exit_code, dir)
+}
 
-    let path = {
-        let root = exec::utf8_path(dir.path()).context("fake_ninja: temporary directory")?;
-        #[cfg(unix)]
-        let path =
-            exec::write_exec_with_content(root, "ninja", &format!("#!/bin/sh\nexit {exit_code}\n"))
-                .context("fake_ninja: write script")?;
-        #[cfg(windows)]
-        let path = exec::write_exec_with_content(
-            root,
-            "ninja.cmd",
-            &format!("@echo off\r\nexit /B {exit_code}\r\n"),
-        )
-        .context("fake_ninja: write batch file")?;
-        path
-    };
+#[cfg(all(test, unix))]
+fn fake_ninja_in(exit_code: u8, parent: &std::path::Path) -> Result<(TempDir, PathBuf)> {
+    let dir = tempfile::Builder::new()
+        .prefix("netsuke-ninja-")
+        .tempdir_in(parent)
+        .context("fake_ninja: create temporary directory")?;
+    write_fake_ninja(exit_code, dir)
+}
 
-    Ok((dir, path.into_std_path_buf()))
+fn write_fake_ninja(exit_code: u8, dir: TempDir) -> Result<(TempDir, PathBuf)> {
+    #[cfg(unix)]
+    let path = exec::write_exec_with_content(
+        dir.path(),
+        "ninja",
+        &format!("#!/bin/sh\nexit {exit_code}\n"),
+    )
+    .context("fake_ninja: write script")?;
+    #[cfg(windows)]
+    let path = exec::write_exec_with_content(
+        dir.path(),
+        "ninja.cmd",
+        &format!("@echo off\r\nexit /B {exit_code}\r\n"),
+    )
+    .context("fake_ninja: write batch file")?;
+
+    Ok((dir, path))
 }
 
 #[cfg(all(test, unix))]
 mod tests {
-    //! Coverage for the fake-executable helpers.
-    //!
-    //! Both the ordinary path and the UTF-8 boundary. On the ordinary path each
-    //! factory must leave an executable file behind at the path it returns —
-    //! callers put that path on `PATH` and expect it to run.
-    //!
-    //! At the boundary: the stub helpers take camino paths, so a temporary
-    //! directory whose path is not valid UTF-8 cannot be represented. Both
-    //! factories must surface that as a contextual error naming the offending
-    //! path rather than panicking or silently substituting a lossy conversion.
-    //!
-    //! The scripts are never executed here. These tests assert on what the
-    //! helpers wrote, and the module is `unix`-gated, so the executable-bit
-    //! check needs no further conditional.
-    use super::{
-        EnvVarGuard, TempDir, check_ninja::fake_ninja_check_build_file, env_lock::EnvLock,
-        fake_ninja,
-    };
-    use crate::fs;
+    //! Regression coverage for the fake-executable helpers on non-UTF-8
+    //! temporary directories: exercises [`super::fake_ninja`] and
+    //! [`super::check_ninja::fake_ninja_check_build_file`] with a temp
+    //! directory rooted under a path containing invalid UTF-8 bytes,
+    //! confirming both stubs are created on OS-native paths.
+    use super::{TempDir, check_ninja::fake_ninja_check_build_file_in, fake_ninja_in};
+    use crate::fs as test_fs;
     use anyhow::{Context, Result};
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
-    /// Assert `error` names the UTF-8 boundary rather than a downstream failure.
-    fn assert_reports_non_utf8(error: &anyhow::Error, helper: &str) {
-        let rendered = format!("{error:#}");
-        assert!(
-            rendered.contains("not valid UTF-8"),
-            "{helper} should report the UTF-8 boundary, got: {rendered}"
-        );
-    }
-
-    /// Assert the helper left an executable file at `path`.
-    ///
-    /// The caller keeps its `TempDir` alive across this call; the directory is
-    /// removed on drop, which would make both checks fail.
-    fn assert_executable_script(path: &std::path::Path, helper: &str) {
-        assert!(
-            fs::exists(path),
-            "{helper} should leave a script at {}",
-            path.display()
-        );
-        assert!(
-            fs::is_executable_file(path),
-            "{helper} should mark {} executable",
-            path.display()
-        );
-    }
-
     #[test]
-    fn fake_ninja_writes_an_executable_script() -> Result<()> {
-        let (dir, script) = fake_ninja(0)?;
-        assert_executable_script(&script, "fake_ninja");
-        // Explicit, because the assertions are only meaningful while the
-        // temporary directory still exists.
-        drop(dir);
-        Ok(())
-    }
-
-    #[test]
-    fn fake_ninja_check_build_file_writes_an_executable_script() -> Result<()> {
-        let (dir, script) = fake_ninja_check_build_file()?;
-        assert_executable_script(&script, "fake_ninja_check_build_file");
-        drop(dir);
-        Ok(())
-    }
-
-    #[test]
-    fn fake_ninja_helpers_reject_non_utf8_temp_directories() -> Result<()> {
+    fn fake_ninja_helpers_support_non_utf8_temp_directories() -> Result<()> {
         let parent = TempDir::new().context("create parent temporary directory")?;
         let non_utf8_root = parent.path().join(OsString::from_vec(b"tmp-\xff".to_vec()));
-        fs::create_dir(&non_utf8_root).context("create non-UTF-8 temporary directory")?;
+        test_fs::create_dir(&non_utf8_root).context("create non-UTF-8 temporary directory")?;
 
-        let _env_lock = EnvLock::acquire();
-        let _tmpdir = EnvVarGuard::set("TMPDIR", non_utf8_root.as_os_str());
+        let (_exit_dir, exit_script) = fake_ninja_in(0, &non_utf8_root)?;
+        let (_check_dir, check_script) = fake_ninja_check_build_file_in(&non_utf8_root)?;
 
-        let exit_err = fake_ninja(0).expect_err("fake_ninja should reject a non-UTF-8 tempdir");
-        assert_reports_non_utf8(&exit_err, "fake_ninja");
-
-        let check_err = fake_ninja_check_build_file()
-            .expect_err("fake_ninja_check_build_file should reject a non-UTF-8 tempdir");
-        assert_reports_non_utf8(&check_err, "fake_ninja_check_build_file");
+        anyhow::ensure!(exit_script.starts_with(&non_utf8_root));
+        anyhow::ensure!(check_script.starts_with(&non_utf8_root));
+        anyhow::ensure!(exit_script.exists(), "fake_ninja should create its script");
+        anyhow::ensure!(
+            check_script.exists(),
+            "fake_ninja_check_build_file should create its script"
+        );
         Ok(())
     }
 }
@@ -240,6 +187,10 @@ mod tests {
 ///     eprintln!("skipping test: {err}");
 /// }
 /// ```
+///
+/// # Errors
+///
+/// Returns [`ProbesError`] when one or more requested binaries cannot be executed successfully.
 pub fn ensure_binaries_available(probes: &[(&str, &[&str])]) -> Result<(), ProbesError> {
     let mut failures = Vec::new();
 

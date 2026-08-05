@@ -1,63 +1,49 @@
-# Test isolation with `NETSUKE_NINJA`
+# Test isolation for Ninja selection
 
-Netsuke resolves the Ninja binary from the `NETSUKE_NINJA` environment variable
-before falling back to `ninja` on `PATH`. Tests should override `NETSUKE_NINJA`
-instead of mutating `PATH` so they can execute in parallel without stepping on
-each other's environment.
+Netsuke resolves its production Ninja binary from `NETSUKE_NINJA` before
+falling back to `ninja` on `PATH`. Tests must not mutate either variable in the
+harness process. Choose the isolation seam that matches the boundary under test.
 
-## Why prefer `NETSUKE_NINJA`
+## In-process runner tests
 
-- Mutating `PATH` is global and risks races when tests run concurrently.
-- `override_ninja_env` scopes changes via an `EnvGuard`, restoring the previous
-  value even if the test fails.
-- Keeping `PATH` untouched avoids coupling to the developer's shell setup.
-- `override_ninja_env` also holds a process-wide lock for the guard's lifetime,
-  preventing parallel tests from interleaving `NETSUKE_NINJA` mutations.
-
-## Fixture pattern
-
-Use a fixture to create a fake Ninja executable and point `NETSUKE_NINJA` at
-it. The fixture keeps the temporary directory alive for the test duration and
-automatically restores the environment on drop.
+Call `runner::run_with_ninja_program` with the fake executable path. This
+exercises command dispatch and Ninja invocation without changing global state:
 
 ```rust
-use rstest::fixture;
-use test_support::env::{NinjaEnvGuard, SystemEnv, override_ninja_env};
+use netsuke::runner;
 use test_support::fake_ninja;
 
-#[fixture]
-fn ninja_in_env() -> anyhow::Result<(tempfile::TempDir, NinjaEnvGuard)> {
-    let (ninja_dir, ninja_path) = fake_ninja(0)?;
-    let env = SystemEnv::new();
-    let guard = override_ninja_env(&env, ninja_path.as_path());
-    Ok((ninja_dir, guard))
-}
+let (_ninja_dir, ninja_path) = fake_ninja(0)?;
+runner::run_with_ninja_program(&cli, output_prefs, &ninja_path)?;
+# Ok::<(), anyhow::Error>(())
 ```
 
-Inject the fixture into tests that need a controlled Ninja binary:
+Keep the returned temporary directory alive until the runner finishes.
+
+## End-to-end tests
+
+End-to-end tests may set `NETSUKE_NINJA` or `PATH` on the spawned command.
+Clear the inherited environment first, then add only the values required by the
+scenario:
 
 ```rust
-#[rstest]
-fn run_build_uses_fake_ninja(
-    (_, _guard): (tempfile::TempDir, NinjaEnvGuard),
-) {
-    // run the command-line interface (CLI) here; the guard restores
-    // NETSUKE_NINJA on drop
-}
+let mut command = assert_cmd::Command::new(netsuke_executable);
+command
+    .env_clear()
+    .env("HOME", isolated_home)
+    .env("PATH", controlled_path)
+    .env("NETSUKE_NINJA", ninja_path);
 ```
 
-## Dos and don'ts
+This preserves the production precedence rule while confining all mutation to
+the child process. BDD steps use `mutate_env_var` to populate
+`TestWorld::env_vars_forward`; `build_netsuke_command` applies that map after
+calling `env_clear()`.
 
-- Do keep the guard alive until after the CLI invocation so `NETSUKE_NINJA`
-  stays set.
-- Do avoid explicit `drop` calls for `PathBuf` values; they do not own external
-  resources.
-- Don't add `#[serial]` purely to protect `PATH` mutations; prefer the fixture
-  above to keep tests parallel-friendly.
+## Rules
 
-## Precedence over `PATH`
-
-`NETSUKE_NINJA` should override any `ninja` found on `PATH`. When asserting
-this in tests, place a failing fake Ninja on `PATH` with `prepend_dir_to_path`
-and set `NETSUKE_NINJA` to a working fake Ninja via `override_ninja_env`. The
-test should pass only if `NETSUKE_NINJA` is respected.
+- Do inject the Ninja programme path for in-process runner tests.
+- Do use `Command::env` for child-process integration tests.
+- Do keep `PATH` and `HOME` explicit in hermetic subprocess environments.
+- Do not call `std::env::set_var` or `std::env::remove_var` in a test harness.
+- Do not serialize tests to make process-environment mutation appear safe.

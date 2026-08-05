@@ -31,76 +31,60 @@ const TEST_MOLD_VERSION: &str = "9.9.9";
 struct BuildTarget {
     name: &'static str,
     subcommand: &'static [&'static str],
-    /// How many Cargo invocations the recipe must produce.
-    ///
-    /// Pinned per target rather than merely "at least one": `dev-test` runs the
-    /// root pass and then `test_support`, and dropping either would otherwise
-    /// leave the per-invocation checks below trivially satisfied by whichever
-    /// pass survived.
-    invocations: usize,
 }
 
 #[rstest]
 #[case::dev_build(BuildTarget {
     name: "dev-build",
     subcommand: &["build", "--bin", "netsuke"],
-    invocations: 1,
 })]
 #[case::dev_test(
     BuildTarget {
         name: "dev-test",
         // Mirrors `make test-nextest`, so the accelerated loop and the gate run
         // the same runner under the same `.config/nextest.toml`.
-        subcommand: &["nextest", "run", "--all-targets", "--all-features"],
-        invocations: 2,
+        subcommand: &[
+            "nextest",
+            "run",
+            "--workspace",
+            "--all-targets",
+            "--all-features",
+        ],
     }
 )]
 fn build_targets_select_the_pinned_toolchain_and_fragment(
     #[case] target: BuildTarget,
 ) -> Result<()> {
     let scenario = BuildScenario::prepare()?;
-    let invocations = scenario.run_all(target.name)?;
+    let invocation = scenario.run(target.name)?;
     ensure!(
-        invocations.len() == target.invocations,
-        "`{}` should invoke cargo {} time(s), recorded {}",
+        invocation.toolchain() == pinned_toolchain()?,
+        "`{}` should select the pinned nightly, got `{}`",
         target.name,
-        target.invocations,
-        invocations.len()
+        invocation.toolchain()
     );
-
-    // Every invocation, not just the first: `dev-test` runs the root pass and
-    // then `test_support`, and the toolchain, fragment, and PATH contract has
-    // to hold for both.
-    for invocation in invocations {
-        ensure!(
-            invocation.toolchain() == pinned_toolchain()?,
-            "`{}` should select the pinned nightly, got `{}`",
-            target.name,
-            invocation.toolchain()
-        );
-        ensure!(
-            invocation.contains_sequence(&["--config", DEV_FAST_CONFIG_PATH]),
-            "`{}` should pass the fragment, got `{:?}`",
-            target.name,
-            invocation.arguments()
-        );
-        ensure!(
-            invocation.contains_sequence(target.subcommand),
-            "`{}` should run `{:?}`, got `{:?}`",
-            target.name,
-            target.subcommand,
-            invocation.arguments()
-        );
-        // The linker is resolved by PATH order, so leading the prefix is the
-        // whole mechanism by which the pinned mold, and not a system one, gets
-        // used.
-        ensure!(
-            invocation.path_starts_with(&scenario.prefix_bin()),
-            "`{}` should lead PATH with the install prefix, got `{}`",
-            target.name,
-            invocation.path()
-        );
-    }
+    ensure!(
+        invocation.contains_sequence(&["--config", DEV_FAST_CONFIG_PATH]),
+        "`{}` should pass the fragment, got `{:?}`",
+        target.name,
+        invocation.arguments()
+    );
+    ensure!(
+        invocation.contains_sequence(target.subcommand),
+        "`{}` should run `{:?}`, got `{:?}`",
+        target.name,
+        target.subcommand,
+        invocation.arguments()
+    );
+    // The linker is resolved by PATH order, so leading the prefix is the
+    // whole mechanism by which the pinned mold, and not a system one, gets
+    // used.
+    ensure!(
+        invocation.path_starts_with(&scenario.prefix_bin()),
+        "`{}` should lead PATH with the install prefix, got `{}`",
+        target.name,
+        invocation.path()
+    );
     Ok(())
 }
 

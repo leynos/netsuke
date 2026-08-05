@@ -1,26 +1,17 @@
-//! Tests for scoped manipulation of `PATH` via `prepend_dir_to_path` and
-//! `PathGuard`.
+//! Tests for composing isolated child-process `PATH` values.
 
 use anyhow::{Context, Result, ensure};
-use mockable::Env;
+use proptest::prelude::*;
 use rstest::rstest;
-use serial_test::serial;
-use std::ffi::OsStr;
-use test_support::env::{VarGuard, mocked_path_env, prepend_dir_to_path, system_env};
+use std::{ffi::OsStr, path::PathBuf};
+use test_support::env::prepend_path_value;
 
 #[rstest]
-#[serial]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "pending migration under #493 (integration-binary migration)"
-)]
-fn prepend_dir_to_path_sets_and_restores() -> Result<()> {
-    let env = mocked_path_env();
-    let original = env.raw("PATH").context("mock PATH should be set")?;
+fn prepend_dir_to_path_preserves_existing_entries() -> Result<()> {
+    let original = std::env::join_paths(["one", "two"])?;
     let dir = tempfile::tempdir().context("create temp dir")?;
-    let guard = prepend_dir_to_path(&env, dir.path())?;
-    let after = std::env::var("PATH").context("read PATH after prepend")?;
-    let mut split_paths = std::env::split_paths(&after);
+    let composed = prepend_path_value(Some(&original), dir.path())?;
+    let mut split_paths = std::env::split_paths(&composed);
     let first = split_paths
         .next()
         .context("PATH should contain at least one entry after prepend")?;
@@ -30,66 +21,56 @@ fn prepend_dir_to_path_sets_and_restores() -> Result<()> {
         dir.path().display(),
         first.display()
     );
-    drop(guard);
-    let restored = std::env::var("PATH").context("read restored PATH")?;
+    let remaining = split_paths.collect::<Vec<_>>();
     ensure!(
-        restored == original,
-        "expected restored PATH to equal original value"
+        remaining == ["one", "two"].map(std::path::PathBuf::from),
+        "existing PATH entries should retain their order"
     );
     Ok(())
 }
 
 #[rstest]
-#[serial]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "pending migration under #493 (integration-binary migration)"
-)]
 fn prepend_dir_to_path_handles_empty_path() -> Result<()> {
-    let _path_guard = VarGuard::set("PATH", OsStr::new(""));
-    let env = system_env();
     let dir = tempfile::tempdir().context("create temp dir")?;
-    let guard = prepend_dir_to_path(&env, dir.path())?;
-    let after = std::env::var_os("PATH").context("read PATH after prepend")?;
-    let paths = std::env::split_paths(&after)
-        .filter(|p| !p.as_os_str().is_empty())
-        .collect::<Vec<_>>();
+    let composed = prepend_path_value(Some(OsStr::new("")), dir.path())?;
+    let paths = std::env::split_paths(&composed).collect::<Vec<_>>();
     ensure!(
         paths == vec![dir.path().to_path_buf()],
         "expected PATH to contain only {}; got {paths:?}",
         dir.path().display()
-    );
-    drop(guard);
-    ensure!(
-        std::env::var_os("PATH") == Some(std::ffi::OsString::new()),
-        "expected PATH to reset to empty after guard drop"
     );
     Ok(())
 }
 
 #[rstest]
-#[serial]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "pending migration under #493 (integration-binary migration)"
-)]
 fn prepend_dir_to_path_handles_missing_path() -> Result<()> {
-    let _path_guard = VarGuard::unset("PATH");
-    let env = system_env();
     let dir = tempfile::tempdir().context("create temp dir")?;
-    let guard = prepend_dir_to_path(&env, dir.path())?;
-    let after = std::env::var_os("PATH")
-        .context("PATH should exist after prepend when original variable absent")?;
-    let paths: Vec<_> = std::env::split_paths(&after).collect();
+    let composed = prepend_path_value(None, dir.path())?;
+    let paths: Vec<_> = std::env::split_paths(&composed).collect();
     ensure!(
         paths == vec![dir.path().to_path_buf()],
         "expected PATH to contain only {}; got {paths:?}",
         dir.path().display()
     );
-    drop(guard);
-    ensure!(
-        std::env::var_os("PATH").is_none(),
-        "expected PATH to be removed after guard drop"
-    );
     Ok(())
+}
+
+proptest! {
+    #[test]
+    fn prepend_dir_to_path_preserves_every_generated_entry(
+        entries in prop::collection::vec("[A-Za-z0-9._-]{1,8}", 0..16),
+    ) {
+        let original = std::env::join_paths(&entries)
+            .expect("generated PATH entries should be joinable");
+        let dir = tempfile::tempdir().expect("create property-test temp dir");
+
+        let composed = prepend_path_value(Some(&original), dir.path())
+            .expect("prepend generated PATH entries");
+        let actual = std::env::split_paths(&composed).collect::<Vec<_>>();
+        let expected = std::iter::once(dir.path().to_path_buf())
+            .chain(entries.into_iter().map(PathBuf::from))
+            .collect::<Vec<_>>();
+
+        prop_assert_eq!(actual, expected);
+    }
 }

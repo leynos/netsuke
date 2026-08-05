@@ -8,19 +8,15 @@ use anyhow::{anyhow, ensure, Context, Result};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::context;
+use mockable::{DefaultEnv, Env};
 use rstest::{fixture, rstest};
 use std::ffi::OsString;
 use std::fs;
 use tempfile::tempdir;
 use test_support::command_helper::compile_rust_helper;
+use test_support::env::prepend_path_value;
 
 use super::{StdlibConfig, fallible, streaming_match_payload};
-use super::super::support::{EnvLock, EnvVarGuard};
-
-#[fixture]
-fn env_lock() -> EnvLock {
-    EnvLock::acquire()
-}
 
 const GREP_STUB: &str = concat!(
     "use std::io::{self, Read};\n",
@@ -81,15 +77,11 @@ impl WindowsSetupContext {
     }
 }
 
-#[expect(
-    clippy::disallowed_methods,
-    reason = "the test must read the inherited Windows PATH so it can prepend its temporary helper directory: the code under test resolves commands through the real process environment, so an injected value would not be consulted; pending migration under #493 (integration-binary migration)"
-)]
 fn windows_command_setup(
     ctx: WindowsSetupContext,
     helper_name: &str,
     helper_source: &str,
-) -> Result<(tempfile::TempDir, EnvVarGuard, Utf8PathBuf)> {
+) -> Result<(tempfile::TempDir, OsString, Utf8PathBuf)> {
     let temp = tempdir().context(ctx.tempdir)?;
     let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
         .map_err(|path| anyhow!("{}: {path:?}", ctx.root))?;
@@ -97,18 +89,15 @@ fn windows_command_setup(
     let helper = compile_rust_helper(&dir, &root, helper_name, helper_source)
         .context(ctx.compile)?;
 
-    let mut path_value = OsString::from(root.as_str());
-    path_value.push(";");
-    path_value.push(std::env::var_os("PATH").unwrap_or_default());
-    let path_guard = EnvVarGuard::set("PATH", &path_value);
+    let process_env = DefaultEnv;
+    let path_value = prepend_path_value(process_env.os_string("PATH").as_deref(), root.as_std_path())?;
 
-    Ok((temp, path_guard, helper))
+    Ok((temp, path_value, helper))
 }
 
 #[rstest]
-fn grep_on_windows_bypasses_shell(env_lock: EnvLock) -> Result<()> {
-    let _lock = env_lock;
-    let (_temp, _path, _helper) = windows_command_setup(
+fn grep_on_windows_bypasses_shell() -> Result<()> {
+    let (_temp, path, _helper) = windows_command_setup(
         WindowsSetupContext::new(
             "create windows grep tempdir",
             "windows grep root is not valid UTF-8",
@@ -119,7 +108,8 @@ fn grep_on_windows_bypasses_shell(env_lock: EnvLock) -> Result<()> {
         GREP_STUB,
     )?;
 
-    let (mut env, mut state) = fallible::stdlib_env_with_state()?;
+    let config = StdlibConfig::from_current_dir()?.with_command_path_override(path);
+    let (mut env, mut state) = fallible::stdlib_env_with_config(config)?;
     state.reset_impure();
     fallible::register_template(
         &mut env,
@@ -140,9 +130,8 @@ line2
 }
 
 #[rstest]
-fn grep_streams_large_output_on_windows(env_lock: EnvLock) -> Result<()> {
-    let _lock = env_lock;
-    let (_temp, _path, _helper) = windows_command_setup(
+fn grep_streams_large_output_on_windows() -> Result<()> {
+    let (_temp, path, _helper) = windows_command_setup(
         WindowsSetupContext::new(
             "create windows grep stream tempdir",
             "windows grep root is not valid UTF-8",
@@ -155,7 +144,8 @@ fn grep_streams_large_output_on_windows(env_lock: EnvLock) -> Result<()> {
 
     let config = StdlibConfig::from_current_dir()?
         .with_command_max_output_bytes(512)?
-        .with_command_max_stream_bytes(200_000)?;
+        .with_command_max_stream_bytes(200_000)?
+        .with_command_path_override(path);
     let (mut env, mut state) = fallible::stdlib_env_with_config(config)?;
     state.reset_impure();
     fallible::register_template(
@@ -188,9 +178,8 @@ fn grep_streams_large_output_on_windows(env_lock: EnvLock) -> Result<()> {
 }
 
 #[rstest]
-fn shell_preserves_cmd_meta_characters(env_lock: EnvLock) -> Result<()> {
-    let _lock = env_lock;
-    let (_temp, _path, exe) = windows_command_setup(
+fn shell_preserves_cmd_meta_characters() -> Result<()> {
+    let (_temp, path, exe) = windows_command_setup(
         WindowsSetupContext::new(
             "create windows shell tempdir",
             "windows shell root is not valid UTF-8",
@@ -202,7 +191,8 @@ fn shell_preserves_cmd_meta_characters(env_lock: EnvLock) -> Result<()> {
     )?;
 
     let command = format!("\"{}\" \"literal %%^!\"", exe);
-    let (mut env, mut state) = fallible::stdlib_env_with_state()?;
+    let config = StdlibConfig::from_current_dir()?.with_command_path_override(path);
+    let (mut env, mut state) = fallible::stdlib_env_with_config(config)?;
     state.reset_impure();
     fallible::register_template(&mut env, "shell_meta", "{{ '' | shell(cmd) }}")?;
     let template = env
