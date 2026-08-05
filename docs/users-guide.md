@@ -432,6 +432,46 @@ Both helpers accept:
 The `env(name)` function reads one required environment variable. v0.1.0 does
 not accept a default argument; an absent or non-Unicode value is an error.
 
+
+### Inject the environment reader for tests and embedding
+
+`env()` does not read `std::env::var` directly. Manifest parsing goes through
+an injectable `EnvReader` seam, so callers that need deterministic `env()`
+results — test suites and programs embedding Netsuke as a library — can supply
+their own reader instead of mutating the process environment.
+
+- `netsuke::manifest::from_str` parses a manifest using the live process
+  environment.
+- `netsuke::manifest::from_str_with_env` takes an explicit `EnvReader`,
+  letting the caller control every value `env()` returns.
+- `netsuke::manifest::process_env_reader` builds the process-backed reader
+  that `from_str` uses by default.
+
+A missing variable still fails the parse with a Jinja "undefined" error, and a
+non-Unicode value still fails with an "invalid operation" error; only the
+source of the values changes.
+
+```rust
+use netsuke::manifest::{EnvReader, from_str_with_env};
+use std::sync::Arc;
+
+let reader: EnvReader = Arc::new(|_| Ok(String::from("release")));
+let yaml = concat!(
+    "netsuke_version: \"1.0.0\"\n",
+    "targets:\n",
+    "  - name: \"{{ env('PROFILE') }}\"\n",
+    "    command: echo hi\n",
+);
+let manifest = from_str_with_env(yaml, &reader).expect("parse");
+assert!(format!("{:?}", manifest.targets[0].name).contains("release"));
+```
+
+This snippet mirrors the executable doctest on `from_str_with_env` in the API
+documentation, rather than the YAML-only examples elsewhere in this guide.
+Contributors extending this seam should also read the developers' guide's
+[Manifest `env()` reader](developers-guide.md#manifest-env-reader) section,
+which covers the ownership boundary and composition rules.
+
 ## Use the template standard library
 
 Netsuke registers focused path, collection, command, network, and time helpers
