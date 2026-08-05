@@ -432,7 +432,6 @@ Both helpers accept:
 The `env(name)` function reads one required environment variable. v0.1.0 does
 not accept a default argument; an absent or non-Unicode value is an error.
 
-
 ### Inject the environment reader for tests and embedding
 
 `env()` does not read `std::env::var` directly. Manifest parsing goes through
@@ -450,6 +449,8 @@ their own reader instead of mutating the process environment.
 A missing variable still fails the parse with a Jinja "undefined" error, and a
 non-Unicode value still fails with an "invalid operation" error; only the
 source of the values changes.
+
+<!-- tested-example: guide-env-reader-snippet -->
 
 ```rust
 use netsuke::manifest::{EnvReader, from_str_with_env};
