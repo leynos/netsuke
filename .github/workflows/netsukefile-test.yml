@@ -24,7 +24,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@4d696e72fff6db49f34302ccf119ba978f1032c9
+        uses: leynos/shared-actions/.github/actions/setup-rust@2f90d1041ea108148be0620e3bbcc1fa80ac03e4
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
       - name: Show rustc version
