@@ -234,6 +234,22 @@ fn a_multiline_string_decoy_does_not_displace_the_table(#[case] preamble: &str) 
     Ok(())
 }
 
+/// A multiline string *inside* the table body can contain a line beginning
+/// with `[`. That line is content, not the next table header, so it must not
+/// end the table early and hide a `locales` key declared after it.
+#[rstest]
+// A header-shaped line inside a multiline basic string, before the key.
+#[case("note = \"\"\"\n[not.a.header]\n\"\"\"\nlocales = [\"en-US\"]\n\n[features]\n")]
+// The same, in a multiline literal string.
+#[case("note = '''\n[not.a.header]\n'''\nlocales = [\"en-US\"]\n\n[features]\n")]
+fn a_bracket_inside_a_table_string_does_not_end_the_table(#[case] body: &str) -> Result<()> {
+    let manifest = format!("{TABLE}{body}");
+    let found = metadata_locales(&manifest)
+        .ok_or_else(|| anyhow!("expected the locales key inside the table to be found"))?;
+    ensure!(found == ["en-US"], "got {found:?}");
+    Ok(())
+}
+
 #[rstest]
 // No such table.
 #[case("[package]\nname = \"netsuke\"\n")]

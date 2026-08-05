@@ -30,14 +30,18 @@ fn is_continuation(line: &str, trimmed: &str) -> bool {
     !trimmed.is_empty() && line.starts_with(' ')
 }
 
-fn message_identifier(trimmed: &str) -> Option<&str> {
-    let (id_raw, _) = trimmed.split_once('=')?;
+/// Split a declaration line into its message identifier and value.
+///
+/// Returns both halves of the one `split_once` so the caller never has to
+/// split the line a second time to reach the value.
+fn message_identifier(trimmed: &str) -> Option<(&str, &str)> {
+    let (id_raw, value) = trimmed.split_once('=')?;
     let id = id_raw.trim();
     let starts_identifier = id
         .chars()
         .next()
         .is_some_and(|first| first.is_ascii_alphabetic());
-    starts_identifier.then_some(id)
+    starts_identifier.then_some((id, value))
 }
 
 /// Collect `$variable` references from a message body.
@@ -106,12 +110,11 @@ fn append_continuation(messages: &mut MessageVariables, current: Option<&str>, t
 }
 
 /// Begin a new message, returning its identifier when the line declares one.
+///
+/// The caller's loop has already skipped blank lines, so the line is known to
+/// be non-empty here.
 fn start_message(messages: &mut MessageVariables, trimmed: &str) -> Option<String> {
-    if trimmed.is_empty() {
-        return None;
-    }
-    let id = message_identifier(trimmed)?;
-    let value = trimmed.split_once('=').map(|(_, value)| value)?;
+    let (id, value) = message_identifier(trimmed)?;
     let variables = messages.entry(id.to_owned()).or_default();
     collect_variables(value, variables);
     Some(id.to_owned())

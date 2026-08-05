@@ -11,7 +11,7 @@
 //! the audit reads the registry through `crate::locale_catalogues`.
 
 use anyhow::{Result, bail, ensure};
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
@@ -69,6 +69,11 @@ fn stage_audit_inputs(destination: &Path) -> Result<()> {
 }
 
 /// A staged copy of the audit inputs, ready to be perturbed.
+///
+/// Fallible, per house style: staging is arrangement, so its failures are
+/// propagated for the test body to surface with `?` rather than panicking
+/// inside the fixture.
+#[fixture]
 fn staged_tree() -> Result<TempDir> {
     let staged = TempDir::new()?;
     stage_audit_inputs(staged.path())?;
@@ -78,9 +83,11 @@ fn staged_tree() -> Result<TempDir> {
 /// The staged copy must itself pass, or the mutation cases below would prove
 /// nothing: a failure could mean the staging was incomplete rather than that
 /// the mutation was detected.
-#[test]
-fn the_staged_copy_reproduces_a_passing_audit() -> Result<()> {
-    let staged = staged_tree()?;
+#[rstest]
+fn the_staged_copy_reproduces_a_passing_audit(
+    #[from(staged_tree)] staged_tree_res: Result<TempDir>,
+) -> Result<()> {
+    let staged = staged_tree_res?;
     if let Err(error) = audit_localization_keys_in(staged.path()) {
         bail!("staged inputs must reproduce a passing audit: {error}");
     }
@@ -139,10 +146,11 @@ fn the_staged_copy_reproduces_a_passing_audit() -> Result<()> {
     Ok(())
 })]
 fn the_audit_rejects_a_drifting_tree(
+    #[from(staged_tree)] staged_tree_res: Result<TempDir>,
     #[case] expected: &str,
     #[case] mutate: &dyn Fn(&Path) -> Result<()>,
 ) -> Result<()> {
-    let staged = staged_tree()?;
+    let staged = staged_tree_res?;
     mutate(staged.path())?;
 
     let message = match audit_localization_keys_in(staged.path()) {

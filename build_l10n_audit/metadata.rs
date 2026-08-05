@@ -32,7 +32,9 @@ pub(super) fn parse_metadata_locales(manifest: &str) -> Option<Vec<&str>> {
 /// The header is matched only where it begins a line, so a commented-out or
 /// quoted mention of the table earlier in the manifest does not capture the
 /// search and return the text above the real table. The table ends at the next
-/// table header, which is the next `[` at the start of a line.
+/// table header — the next `[` beginning a line — judged by the same rule as
+/// the header itself, so a `[` inside a multiline string is content rather
+/// than a boundary and cannot truncate the table early.
 fn ortho_config_table(manifest: &str) -> Option<&str> {
     const HEADER: &str = "[package.metadata.ortho_config]";
     let start = manifest
@@ -40,7 +42,20 @@ fn ortho_config_table(manifest: &str) -> Option<&str> {
         .find(|(start, _)| begins_a_line(manifest, *start))
         .map(|(start, _)| start)?;
     let tail = manifest.get(start.saturating_add(HEADER.len())..)?;
-    Some(tail.split("\n[").next().unwrap_or(tail))
+    tail.get(..table_end(tail))
+}
+
+/// Where the table body ends within `tail`.
+///
+/// This is the offset of the next table header, or the whole length when no
+/// further header follows. Scanning `tail` alone is sound because the header
+/// match above already established that the header does not sit inside a
+/// multiline string, so the string state at the start of `tail` is "outside".
+fn table_end(tail: &str) -> usize {
+    tail.match_indices("\n[")
+        .map(|(newline, _)| newline.saturating_add(1))
+        .find(|bracket| begins_a_line(tail, *bracket))
+        .unwrap_or(tail.len())
 }
 
 /// The table text from the `locales` assignment onwards.
