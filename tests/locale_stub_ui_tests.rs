@@ -14,16 +14,31 @@
 //! flags — and the fixtures are compiled directly with the workspace `rustc`
 //! against that rlib.
 
+use rstest::{fixture, rstest};
 use std::{
     io,
     path::{Path, PathBuf},
     process::{Command, Output},
 };
 
-#[test]
-fn stub_env_default_does_not_compile() -> io::Result<()> {
-    let support = TestSupportRlib::build()?;
-    let output = support.compile("tests/ui/stub_env_default_compile_fail.rs")?;
+/// One `test_support` build shared by both tests.
+///
+/// Built once: the two tests run in parallel, so independent builds would
+/// contend on Cargo's target-directory lock and repeat completed work.
+#[fixture]
+#[once]
+fn test_support_rlib() -> TestSupportRlib {
+    #[expect(
+        clippy::expect_used,
+        reason = "a once fixture cannot return Result; a build failure must abort the suite here"
+    )]
+    let rlib = TestSupportRlib::build().expect("test_support should build");
+    rlib
+}
+
+#[rstest]
+fn stub_env_default_does_not_compile(test_support_rlib: &TestSupportRlib) -> io::Result<()> {
+    let output = test_support_rlib.compile("tests/ui/stub_env_default_compile_fail.rs")?;
 
     if output.status.success() {
         return Err(io::Error::other("StubEnv::default() should not compile"));
@@ -43,10 +58,11 @@ fn stub_env_default_does_not_compile() -> io::Result<()> {
 /// This is the control for the compile-fail case: it fails if the `--extern`
 /// or `-L dependency` wiring breaks, which would otherwise make the rejection
 /// above pass for the wrong reason.
-#[test]
-fn stub_env_builders_compile_under_the_same_harness() -> io::Result<()> {
-    let support = TestSupportRlib::build()?;
-    let output = support.compile("tests/ui/stub_env_strict_compile_pass.rs")?;
+#[rstest]
+fn stub_env_builders_compile_under_the_same_harness(
+    test_support_rlib: &TestSupportRlib,
+) -> io::Result<()> {
+    let output = test_support_rlib.compile("tests/ui/stub_env_strict_compile_pass.rs")?;
 
     if !output.status.success() {
         return Err(io::Error::other(format!(

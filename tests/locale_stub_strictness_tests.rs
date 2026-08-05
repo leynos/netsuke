@@ -114,7 +114,15 @@ mod properties {
                 if let Some(expected) = model.get(key) {
                     prop_assert_eq!(stub.var(key), expected.clone());
                 } else {
+                    // Silence the default panic hook around the probe: each
+                    // undeclared read otherwise prints its full panic message,
+                    // and 256 cases times three keys of that buries any
+                    // genuine failure output. The hook is process-wide, so it
+                    // is restored immediately rather than left installed.
+                    let prior = std::panic::take_hook();
+                    std::panic::set_hook(Box::new(|_| {}));
                     let read = catch_unwind(AssertUnwindSafe(|| stub.var(key)));
+                    std::panic::set_hook(prior);
                     prop_assert!(read.is_err(), "undeclared {} should panic", key);
                 }
             }
