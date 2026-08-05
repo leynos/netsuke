@@ -41,7 +41,7 @@ Netsuke currently requires:
 
 ### Installation
 
-Netsuke v0.1.0 is available from crates.io. Where
+Netsuke v0.1.0-beta1 is available from crates.io. Where
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) is available,
 prefer it: it fetches a prebuilt release binary and avoids the toolchain
 requirement below.
@@ -64,7 +64,7 @@ RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke-build
 ```
 
 Pre-built installers are available from the
-[v0.1.0 GitHub release](https://github.com/leynos/netsuke/releases/tag/v0.1.0):
+[v0.1.0-beta1 GitHub release](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta1):
 
 | Platform | Architectures                        | Packages                         |
 | -------- | ------------------------------------ | -------------------------------- |
@@ -77,8 +77,9 @@ as a dependency. Ninja must be installed separately when using the macOS or
 Windows installer. The Windows MSI installs to `C:\Program Files\netsuke` and
 does not update `PATH`. SHA-256 checksum files accompany standalone binaries
 and staged help and licence files. Installer packages do not have checksum
-sidecars in v0.1.0. See the [user's guide](docs/users-guide.md#install-netsuke)
-for platform-specific commands and Windows setup.
+sidecars in v0.1.0-beta1. See the
+[user's guide](docs/users-guide.md#install-netsuke) for platform-specific
+commands and Windows setup.
 
 To install the current source checkout with Cargo:
 
@@ -145,16 +146,16 @@ The core build-system compiler is implemented:
 - unit, behavioural, integration, property, snapshot, and initial Kani
   verification coverage.
 
-The v0.1.0 release provides packages for Linux, macOS, and Windows, including
-platform help artefacts. It is the first public release of this work.
+The v0.1.0-beta1 release provides packages for Linux, macOS, and Windows,
+including platform help artefacts. It is the first public release of this work.
 
 ______________________________________________________________________
 
-## v0.1.0 status
+## v0.1.0-beta1 status
 
-v0.1.0 is a useful preview for early adopters, not a declaration that Netsuke
-is finished or that every interface is stable. The compiler pipeline and
-ordinary local-build workflow are substantial; the command-line interface,
+v0.1.0-beta1 is a useful preview for early adopters, not a declaration that
+Netsuke is finished or that every interface is stable. The compiler pipeline
+and ordinary local-build workflow are substantial; the command-line interface,
 configuration vocabulary, and advanced recipe model are still evolving.
 
 Pin the Netsuke version in automation and expect some command names, flags,
