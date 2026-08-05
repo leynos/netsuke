@@ -149,34 +149,69 @@ mod tests {
     /// log line, even though the returned error may name the candidate.
     const SENTINEL: &str = "s3cr3t-sentinel";
 
+    /// Resolve `utility` against `path` and return the DEBUG events emitted.
+    ///
+    /// The lookup is required to fail: these are the diagnostic paths, and a
+    /// fixture that accidentally resolved would assert nothing.
+    fn captured_lookup_failure(
+        temp: &tempfile::TempDir,
+        path: String,
+        utility: &str,
+    ) -> Result<Vec<String>> {
+        let mut env = MockEnv::new();
+        env.expect_raw().return_once(move |_| Ok(path));
+        let current_dir =
+            Utf8Path::from_path(temp.path()).context("temporary path is not UTF-8")?;
+
+        with_test_subscriber(LevelFilter::DEBUG, |captured| {
+            let outcome = which(&env, current_dir, utility);
+            anyhow::ensure!(
+                outcome.is_err(),
+                "the fixture lookup must fail so the diagnostic path is exercised"
+            );
+            Ok(captured.snapshot())
+        })
+    }
+
+    /// Assert that `events` carries the expected bounded diagnostic and nothing
+    /// more revealing than that.
+    ///
+    /// `privacy_context` names what the caller's fixture put at risk, so a
+    /// leak reports which input escaped.
+    fn assert_bounded_event(
+        events: &[String],
+        message: &str,
+        bounded_field: &str,
+        privacy_context: &str,
+    ) -> Result<()> {
+        anyhow::ensure!(
+            events
+                .iter()
+                .any(|event| event.contains(message) && event.contains(bounded_field)),
+            "expected an event containing {message:?} and {bounded_field:?} in {events:?}"
+        );
+        anyhow::ensure!(
+            !events.iter().any(|event| event.contains(SENTINEL)),
+            "{privacy_context}: {events:?}"
+        );
+        Ok(())
+    }
+
     #[test]
     fn unresolved_utility_traces_only_a_bounded_outcome() -> Result<()> {
         let temp = tempfile::tempdir().context("create empty PATH fixture")?;
         let empty = temp.path().join(SENTINEL);
         fs::create_dir(&empty).context("create empty binary directory")?;
         let path = empty.to_string_lossy().into_owned();
-        let mut env = MockEnv::new();
-        env.expect_raw().return_once(move |_| Ok(path));
-        let current_dir =
-            Utf8Path::from_path(temp.path()).context("temporary path is not UTF-8")?;
 
-        let events = with_test_subscriber(LevelFilter::DEBUG, |captured| {
-            which(&env, current_dir, SENTINEL).expect_err("the empty PATH has no utility");
-            captured.snapshot()
-        });
+        let events = captured_lookup_failure(&temp, path, SENTINEL)?;
 
-        anyhow::ensure!(
-            events.iter().any(|event| {
-                event.contains("sandbox utility lookup failed")
-                    && event.contains("outcome=\"not_found\"")
-            }),
-            "expected a bounded lookup-failure event in {events:?}"
-        );
-        anyhow::ensure!(
-            !events.iter().any(|event| event.contains(SENTINEL)),
-            "the utility name and PATH must not be logged: {events:?}"
-        );
-        Ok(())
+        assert_bounded_event(
+            &events,
+            "sandbox utility lookup failed",
+            "outcome=\"not_found\"",
+            "the utility name and PATH must not be logged",
+        )
     }
 
     #[test]
@@ -185,29 +220,15 @@ mod tests {
         let not_a_directory = temp.path().join(SENTINEL);
         fs::write(&not_a_directory, "contents").context("write invalid PATH entry")?;
         let path = not_a_directory.to_string_lossy().into_owned();
-        let mut env = MockEnv::new();
-        env.expect_raw().return_once(move |_| Ok(path));
-        let current_dir =
-            Utf8Path::from_path(temp.path()).context("temporary path is not UTF-8")?;
 
-        let events = with_test_subscriber(LevelFilter::DEBUG, |captured| {
-            which(&env, current_dir, "tool")
-                .expect_err("a non-directory PATH entry should fail inspection");
-            captured.snapshot()
-        });
+        let events = captured_lookup_failure(&temp, path, "tool")?;
 
-        anyhow::ensure!(
-            events.iter().any(|event| {
-                event.contains("sandbox utility candidate inspection failed")
-                    && event.contains("failure_kind=\"candidate_metadata\"")
-            }),
-            "expected a bounded candidate-failure event in {events:?}"
-        );
-        anyhow::ensure!(
-            !events.iter().any(|event| event.contains(SENTINEL)),
-            "the candidate path must not be logged: {events:?}"
-        );
-        Ok(())
+        assert_bounded_event(
+            &events,
+            "sandbox utility candidate inspection failed",
+            "failure_kind=\"candidate_metadata\"",
+            "the candidate path must not be logged",
+        )
     }
 
     #[test]
