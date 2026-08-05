@@ -168,6 +168,7 @@ references, clone keys only on insertion, and build error context lazily.
   - `make lint` executes:
 
     ```sh
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zpolonius=next" \
     RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo doc --workspace --no-deps
     cargo clippy --workspace --all-targets --all-features -- -D warnings
     whitaker --all -- --all-targets --all-features
@@ -181,8 +182,10 @@ references, clone keys only on insertion, and build error context lazily.
   - `make test` executes:
 
     ```sh
-    RUSTFLAGS="-D warnings -Zpolonius=next" cargo nextest run --all-targets --all-features
-    RUSTFLAGS="-D warnings" cargo test --workspace --doc --all-features
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zpolonius=next" \
+    cargo nextest run --workspace --all-targets --all-features
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zpolonius=next" \
+    cargo test --workspace --doc --all-features
     ```
 
     running every unit, integration, and behavioural test through
@@ -281,8 +284,10 @@ references, clone keys only on insertion, and build error context lazily.
   ```
 
 - The runner is configured by `.config/nextest.toml` at the repository root.
-  Its scope, the narrow `serial-env` test group, and the no-blanket-retry
-  policy are documented under "Test execution" in `docs/developers-guide.md`.
+  Its scope and no-blanket-retry policy are documented under "Test execution"
+  in `docs/developers-guide.md`. Environment-dependent tests use injected
+  providers or isolated child processes; there is no serialized environment
+  test group.
   Do not add retries to hide a flaky test; fix the test.
 - Use `rstest` fixtures for shared setup.
 - Replace duplicated tests with `#[rstest(...)]` parameterized cases.

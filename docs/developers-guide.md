@@ -774,8 +774,9 @@ and `-Clink-arg=-fuse-ld=mold`.
   Kani's own toolchain and the LLVM backend. The same applies to Verus.
 - **Test runner.** `make dev-test` is the accelerated counterpart of
   `make test-nextest`, not of `make test`: it runs the same
-  `cargo nextest run --all-targets --all-features`, and so is governed by the
-  same [`.config/nextest.toml`](#nextest-configuration). It omits the
+  `cargo nextest run --workspace --all-targets --all-features`, and so is
+  governed by the same [`.config/nextest.toml`](#nextest-configuration). It
+  omits the
   `doctest` pass, because `cargo test --doc` is a separate and comparatively
   quick runner; run `make test` before proposing a change. The acceleration is
   applied through `RUSTUP_TOOLCHAIN` and `cargo --config`, both Cargo-level
@@ -878,9 +879,9 @@ The fixtures live in `test_support::dev_fast`:
   passes — pinned `mold` on the install prefix, a `rustup` reporting the
   Cranelift component, and a `RecordingCargo` installed — and is shared by the
   Make-target and benchmark suites. `BuildScenario::run(target)` returns the
-  single Cargo invocation a target must produce; `run_all(target)` returns
-  every invocation in order, for targets that invoke Cargo more than once, such
-  as `dev-test`, which runs the root pass and then `test_support`.
+  single Cargo invocation a target must produce. The scenario is shared by
+  both suites so each can inspect that invocation without relying on
+  process-global state.
   `InstallerScenario` is a sandbox with a published `FakeRelease` and a usable
   `rustup`, letting a test concentrate on the linker half of the installer; the
   installer and checksum suites share it. The module also exports
@@ -898,9 +899,9 @@ constructors stay free of assertions, so a scenario cannot decide on a caller's
 behalf what counts as correct.
 
 Assert on the shape of a timing cell, never on a duration. Reuse the sandbox
-for any future target with the same shape, and do not reach for `PathGuard`:
-these tests spawn children with a bespoke environment rather than mutating the
-parent's, which is what keeps them safe to run in parallel.
+for any future target with the same shape. These tests spawn children with a
+bespoke environment rather than mutating the parent's, which is what keeps
+them safe to run in parallel.
 
 Three invariants carry property coverage rather than fixed examples, because
 each ranges over inputs an enumerated list tends to under-sample:
@@ -924,11 +925,11 @@ Prefer a model that predicts an outcome over a table that restates one. Where
 an invariant lives in a shell script, the cost is a process per case, so keep
 the corpus small and the strategy structural.
 
-`test_support` is a workspace member, so `make test`, rustdoc, Clippy, and
-Whitaker visit its unit tests and library code. Keep fixture tests beside the
-fixture when they exercise a local invariant; use the `tests/dev_fast_*.rs`
-integration crates when the assertion spans the application-facing sandbox or
-Makefile contract.
+`test_support` is a workspace member, so `make test` (whose nextest command
+uses `--workspace`), rustdoc, Clippy, and Whitaker visit its unit tests and
+library code. Keep fixture tests beside the fixture when they exercise a local
+invariant; use the `tests/dev_fast_*.rs` integration crates when the assertion
+spans the application-facing sandbox or Makefile contract.
 
 ### Benchmark evidence
 
@@ -1113,7 +1114,7 @@ Cargo home plus Kani support-file home.
 `make test` is the canonical entry point and composes two passes:
 
 - `make test-nextest` —
-  `cargo nextest run --all-targets --all-features`, with
+  `cargo nextest run --workspace --all-targets --all-features`, with
   `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)"` (the
     Makefile re-states the Polonius flag because a set `RUSTFLAGS` overrides
     `.cargo/config.toml`, and the `$${RUSTFLAGS:+$$RUSTFLAGS }` prefix preserves
@@ -1444,11 +1445,12 @@ targets:
 ## Test isolation utilities
 
 Environment variable mutations and working-directory changes are process-global
-side effects that can cause data races when tests run in parallel. The
-`test_support` crate and test fixtures provide resource acquisition is
-initialization (RAII)-based utilities to serialize and safely restore these
-mutations. For locale-sensitive snapshot tests, use the `EnLocalizer` RAII
-pattern documented in the
+side effects that can cause data races when tests run in parallel. Tests inject
+environment readers where the API supports them, and configure child processes
+with `env_clear()` followed by `Command::env` where ambient discovery is part
+of the contract. `CwdGuard` is the RAII utility for restoring a process working
+directory after the few tests that exercise it. For locale-sensitive snapshot
+tests, use the `EnLocalizer` scoped pattern documented in the
 [snapshot testing guide](snapshot-testing-in-netsuke-using-insta.md#locale-pinned-snapshot-tests).
 
 `src/snapshot_test_support.rs` owns output-oriented unit-test fixtures;
