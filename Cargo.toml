@@ -26,6 +26,7 @@ name = "netsuke"
 [[bin]]
 name = "netsuke"
 path = "src/main.rs"
+
 [package.metadata.ortho_config]
 root_type = "netsuke::cli::CliConfig"
 locales   = [
