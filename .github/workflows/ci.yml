@@ -45,7 +45,7 @@ jobs:
           command -v awk
           awk --version
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@2f90d1041ea108148be0620e3bbcc1fa80ac03e4
+        uses: leynos/shared-actions/.github/actions/setup-rust@8add2d99854a5b77548eae98cca59202e68fefc8
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           components: rustfmt, clippy
@@ -105,7 +105,7 @@ jobs:
       - name: Test
         run: make test
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@2f90d1041ea108148be0620e3bbcc1fa80ac03e4
+        uses: leynos/shared-actions/.github/actions/generate-coverage@8add2d99854a5b77548eae98cca59202e68fefc8
         with:
           output-path: lcov.info
           format: lcov
@@ -116,7 +116,7 @@ jobs:
         if: env.CS_ACCESS_TOKEN != '' && github.event_name == 'pull_request'
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@2f90d1041ea108148be0620e3bbcc1fa80ac03e4
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@8add2d99854a5b77548eae98cca59202e68fefc8
         with:
           format: lcov
           mode: check
@@ -140,7 +140,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@2f90d1041ea108148be0620e3bbcc1fa80ac03e4
+        uses: leynos/shared-actions/.github/actions/setup-rust@8add2d99854a5b77548eae98cca59202e68fefc8
         with:
           toolchain: stable
       - name: Install uv
