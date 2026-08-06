@@ -304,6 +304,7 @@ fn resolve_direct_appends_pathext(workspace: Result<TempWorkspace>) -> Result<()
         raw_pathext: Some(".bat".into()),
         entries: vec![],
         pathext: vec![".bat".into()],
+        raw_workspace_switch: Err(std::env::VarError::NotPresent),
     };
 
     let matches = resolve_direct(".\\tools\\gradlew", &snapshot, &WhichOptions::default())?;

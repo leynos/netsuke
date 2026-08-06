@@ -19,6 +19,13 @@ pub(super) struct EnvSnapshot {
     entries: Vec<PathEntry>,
     #[cfg(windows)]
     pathext: Vec<String>,
+    /// The raw `NETSUKE_WHICH_WORKSPACE` reading taken at capture.
+    ///
+    /// Stored as data rather than a decision so the cache fingerprint can
+    /// hash it — two resolutions differing only in this switch must not
+    /// share a cache entry — and so `env` depends only on the leaf
+    /// `workspace_switch` module rather than calling into `lookup`.
+    raw_workspace_switch: Result<String, std::env::VarError>,
 }
 
 impl EnvSnapshot {
@@ -56,11 +63,13 @@ impl EnvSnapshot {
         env: &impl Env,
     ) -> Result<Self, ResolveError> {
         let (cwd, raw_path, entries) = capture_common(cwd_override, path_override, env)?;
+        let raw_workspace_switch = env.raw(super::workspace_switch::WORKSPACE_FALLBACK_ENV);
         Ok(Self {
             cwd,
             raw_path,
             raw_pathext: None,
             entries,
+            raw_workspace_switch,
         })
     }
 
@@ -76,12 +85,14 @@ impl EnvSnapshot {
             .map(OsString::from)
             .or_else(|| env.os_string("PATHEXT"));
         let pathext = parse_pathext(raw_pathext.as_deref());
+        let raw_workspace_switch = env.raw(super::workspace_switch::WORKSPACE_FALLBACK_ENV);
         Ok(Self {
             cwd,
             raw_path,
             raw_pathext,
             entries,
             pathext,
+            raw_workspace_switch,
         })
     }
 
@@ -117,6 +128,36 @@ impl EnvSnapshot {
     #[cfg(windows)]
     pub(super) fn pathext(&self) -> &[String] {
         &self.pathext
+    }
+
+    /// Whether the workspace fallback is enabled for this snapshot.
+    ///
+    /// Classified on demand from the captured raw value; the non-UTF-8
+    /// warning therefore fires when a search consults the switch, which is
+    /// where the diagnostic is actionable.
+    pub(super) fn workspace_fallback_enabled(&self) -> bool {
+        super::workspace_switch::workspace_fallback_enabled_with(|_| {
+            self.raw_workspace_switch.clone()
+        })
+    }
+
+    /// Replace the captured switch reading, for cache-key tests.
+    #[cfg(test)]
+    pub(super) fn with_workspace_switch(mut self, raw: Result<String, std::env::VarError>) -> Self {
+        self.raw_workspace_switch = raw;
+        self
+    }
+
+    /// The switch reading in the shape the cache fingerprint hashes.
+    ///
+    /// `VarError` is not `Hash`, so the three states are flattened to a
+    /// discriminant plus the value when present.
+    pub(super) const fn workspace_switch_fingerprint(&self) -> (u8, Option<&str>) {
+        match &self.raw_workspace_switch {
+            Ok(value) => (0, Some(value.as_str())),
+            Err(std::env::VarError::NotPresent) => (1, None),
+            Err(std::env::VarError::NotUnicode(_)) => (2, None),
+        }
     }
 }
 
@@ -240,6 +281,12 @@ mod tests {
             .withf(|key| key == "PATH")
             .once()
             .return_once(move |_| Some(configured));
+        // Capture also reads the workspace switch through the same provider;
+        // pinning the key keeps that read observable rather than wildcarded.
+        env.expect_raw()
+            .withf(|key| key == super::super::workspace_switch::WORKSPACE_FALLBACK_ENV)
+            .once()
+            .return_const(Err(std::env::VarError::NotPresent));
 
         let snapshot = EnvSnapshot::capture_with_env(Some(cwd), None, &env)
             .expect("injected PATH should produce an environment snapshot");
