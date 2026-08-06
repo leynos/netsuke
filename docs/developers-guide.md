@@ -2420,12 +2420,14 @@ platform-selection logic of its own.
 
 - The ladders are `pub(super)` and owned by `stdlib::path`. They are not a
   general home-directory utility: callers elsewhere use `expanduser`.
-- `expanduser` resolves the home through the injected `HomeDirectory` value:
-  `Explicit` and `Missing` never touch the environment, and `Ambient` calls
-  `home_from_env`, whose process-backed `read_env` closure is the module's
-  one remaining ambient read — the composition root carrying the sanctioned
-  site-level expectation. Tests call the ladders directly with their own
-  reader.
+- `expanduser` resolves the home through the injected `HomeDirectory` value
+  and an injected `read_env` reader: `Explicit` and `Missing` never touch the
+  environment, and `Ambient` drives `home_from_env` with whatever reader the
+  caller supplied. The composition root lives at the registration boundary —
+  filter registration in `stdlib::path::filters` captures the process-backed
+  reader once, carrying the sanctioned site-level expectation — so
+  `path_utils` holds no process access at all. Tests inject their own reader,
+  covering the `Ambient` path without touching the process environment.
 
 #### Ladder composition rules
 

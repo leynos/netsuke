@@ -1,7 +1,7 @@
 //! Path utilities backing stdlib filters for UTF-8 paths: basename/dirname, `with_suffix`,
 //! `relative_to`, canonicalize/realpath, and expanduser with Windows HOME fallbacks. Uses cap-std
 //! directory handles and consistent error mapping for template errors.
-use std::{env, io};
+use std::io;
 
 use cap_std::{ambient_authority, fs_utf8::Dir};
 
@@ -113,7 +113,14 @@ pub(super) fn is_user_specific_expansion(stripped: &str) -> bool {
     )
 }
 
-pub(super) fn expanduser(raw: &str, home_directory: &HomeDirectory) -> Result<String, Error> {
+pub(super) fn expanduser<F>(
+    raw: &str,
+    home_directory: &HomeDirectory,
+    read_env: F,
+) -> Result<String, Error>
+where
+    F: Fn(&str) -> Option<String>,
+{
     if let Some(stripped) = raw.strip_prefix('~') {
         if is_user_specific_expansion(stripped) {
             return Err(Error::new(
@@ -121,7 +128,7 @@ pub(super) fn expanduser(raw: &str, home_directory: &HomeDirectory) -> Result<St
                 localization::message(keys::STDLIB_PATH_EXPANDUSER_UNSUPPORTED).to_string(),
             ));
         }
-        let home = resolve_home(home_directory)?;
+        let home = resolve_home(home_directory, read_env)?;
         Ok(format!("{home}{stripped}"))
     } else {
         Ok(raw.to_owned())
@@ -134,9 +141,12 @@ pub(super) fn normalise_parent(parent: Option<&Utf8Path>) -> Utf8PathBuf {
         .map_or_else(|| Utf8PathBuf::from("."), Utf8Path::to_path_buf)
 }
 
-fn resolve_home(home_directory: &HomeDirectory) -> Result<String, Error> {
+fn resolve_home<F>(home_directory: &HomeDirectory, read_env: F) -> Result<String, Error>
+where
+    F: Fn(&str) -> Option<String>,
+{
     let home = match home_directory {
-        HomeDirectory::Ambient => home_from_env(),
+        HomeDirectory::Ambient => home_from_env(read_env),
         HomeDirectory::Missing => None,
         HomeDirectory::Explicit(home) => Some(home.clone()),
     };
@@ -157,19 +167,17 @@ fn current_dir_utf8() -> Result<Utf8PathBuf, io::Error> {
     dir.canonicalize(Utf8Path::new("."))
 }
 
-/// Select the platform ladder and drive it with the process-backed reader.
+/// Select the platform ladder and drive it with the injected reader.
 ///
 /// Only the *selection* is platform-gated; neither ladder holds
 /// platform-specific logic, which is what keeps both reachable from any host.
-/// The closure below is the module's composition root: the one remaining
-/// ambient environment read, consulted only when [`HomeDirectory::Ambient`]
-/// asks for it.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "composition root: the process-backed reader that drives the injected home ladders when `HomeDirectory::Ambient` is selected"
-)]
-fn home_from_env() -> Option<String> {
-    let read_env = |key: &str| env::var(key).ok();
+/// The reader is injected all the way from the filter-registration boundary,
+/// so this module holds no process access of its own: whoever registers the
+/// `expanduser` filter decides what [`HomeDirectory::Ambient`] consults.
+fn home_from_env<F>(read_env: F) -> Option<String>
+where
+    F: Fn(&str) -> Option<String>,
+{
     #[cfg(windows)]
     {
         windows_home_from(read_env)

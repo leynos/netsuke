@@ -24,12 +24,13 @@ use rstest::rstest;
 
 mod expanduser_behaviour {
     //! `expanduser` resolves the home through the injected [`HomeDirectory`]
-    //! value the filter registration supplies, so its behaviour is testable
-    //! here without touching the process environment. Every branch below is
-    //! drivable that way: `Explicit` supplies a home, `Missing` models a host
-    //! without one, and the branches that never consult the home source take
-    //! `Missing` to prove they do not. The `Ambient` variant is exactly the
-    //! composition-root read these tests exist to avoid, so no case uses it.
+    //! value and `read_env` reader the filter registration supplies, so its
+    //! behaviour is testable here without touching the process environment.
+    //! Every branch below is drivable that way: `Explicit` supplies a home,
+    //! `Missing` models a host without one, and `Ambient` walks the platform
+    //! ladder through the injected reader — the isolation the seam exists to
+    //! provide. Cases whose branch never consults the environment pass
+    //! `|_| None` to prove they do not.
 
     use super::super::path_utils::expanduser;
     use super::HomeDirectory;
@@ -40,8 +41,27 @@ mod expanduser_behaviour {
     #[case::tilde_with_path("~/notes", "/home/a/notes")]
     fn expands_against_the_resolved_home(#[case] raw: &str, #[case] expected: &str) {
         let home = HomeDirectory::Explicit("/home/a".to_owned());
-        let expanded = expanduser(raw, &home).expect("expansion should succeed");
+        let expanded = expanduser(raw, &home, |_| None).expect("expansion should succeed");
         assert_eq!(expanded, expected);
+    }
+
+    /// `Ambient` resolves through the injected reader, not process state:
+    /// a reader supplying HOME drives the expansion without any process
+    /// environment involvement.
+    #[test]
+    fn ambient_resolves_through_the_injected_reader() {
+        let read_env = |key: &str| (key == "HOME").then(|| "/injected/home".to_owned());
+        let expanded = expanduser("~/x", &HomeDirectory::Ambient, read_env)
+            .expect("the injected reader should supply the home");
+        assert_eq!(expanded, "/injected/home/x");
+    }
+
+    /// `Ambient` with a reader that finds nothing is the no-home error.
+    #[test]
+    fn ambient_with_an_empty_reader_is_an_error() {
+        let error = expanduser("~/x", &HomeDirectory::Ambient, |_| None)
+            .expect_err("an empty reader should leave no home");
+        assert_eq!(error.kind(), minijinja::ErrorKind::InvalidOperation);
     }
 
     /// A path without a leading `~` passes through unchanged, and the home
@@ -49,7 +69,7 @@ mod expanduser_behaviour {
     /// error.
     #[test]
     fn a_non_tilde_path_passes_through() {
-        let expanded = expanduser("/etc/hosts", &HomeDirectory::Missing)
+        let expanded = expanduser("/etc/hosts", &HomeDirectory::Missing, |_| None)
             .expect("a non-tilde path should pass through");
         assert_eq!(expanded, "/etc/hosts");
     }
@@ -57,7 +77,7 @@ mod expanduser_behaviour {
     /// Named-user expansion is rejected before the home source is consulted.
     #[test]
     fn named_user_forms_are_rejected() {
-        let error = expanduser("~alice/notes", &HomeDirectory::Missing)
+        let error = expanduser("~alice/notes", &HomeDirectory::Missing, |_| None)
             .expect_err("~alice should be rejected");
         assert_eq!(error.kind(), minijinja::ErrorKind::InvalidOperation);
     }
@@ -65,8 +85,8 @@ mod expanduser_behaviour {
     /// A tilde with no resolvable home is an error, not a passthrough.
     #[test]
     fn a_missing_home_is_an_error() {
-        let error =
-            expanduser("~/notes", &HomeDirectory::Missing).expect_err("no home should be an error");
+        let error = expanduser("~/notes", &HomeDirectory::Missing, |_| None)
+            .expect_err("no home should be an error");
         assert_eq!(error.kind(), minijinja::ErrorKind::InvalidOperation);
     }
 }
