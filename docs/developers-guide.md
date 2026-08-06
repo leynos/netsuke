@@ -221,16 +221,20 @@ from the `bin-name` field that
   Debian and RPM payloads, the Windows Installer product, and the macOS
   installer package all stay named `netsuke`.
 - `[package.metadata.binstall]` in `Cargo.toml` overrides `cargo binstall`'s
-  default asset resolution, which would otherwise look for `netsuke-build`
-  assets and fall back to a source build on the pinned nightly. A single
-  template resolves a `{ name }-{ version }-{ target }.tar.gz` archive
-  (`pkg-fmt = "tgz"`) for every released target. `stage-release-artefacts`
-  stages each target's archive, plus a `.sha256` sidecar, per
-  `[common.binstall]` in `.github/release-staging.toml`, and the "Hoist
-  cargo-binstall archives" step in `.github/workflows/release.yml` runs
-  `scripts/hoist_binstall_archives.py`, which validates that every target's
-  archive and checksum are present before moving them to the release root for
-  upload. `tests/binstall_metadata_tests.rs` and
+  default asset resolution, whose patterns place the target before the version
+  and so match no released asset, leaving a fall back to a source build on the
+  pinned nightly. A single template resolves a
+  `{ name }-{ version }-{ target }.tar.gz` archive (`pkg-fmt = "tgz"`) for
+  every released target, named after the Cargo package rather than the binary.
+  `stage-release-artefacts` stages each target's archive, plus a `.sha256`
+  sidecar, per `[common.binstall]` in `.github/release-staging.toml`, and the
+  "Hoist cargo-binstall archives" step in `.github/workflows/release.yml` runs
+  `scripts/hoist_binstall_archives.py` under a pinned Python 3.13 installed by
+  `setup-uv`. The script validates that every target's archive and checksum
+  are present, are regular files rather than symlinks, and have a free
+  destination before moving them to the release root for upload; the read-only
+  discovery and validation half lives in `scripts/hoist_binstall_discovery.py`.
+  `tests/binstall_metadata_tests.rs` and
   `tests/workflow_contracts/hoist_binstall_archives_test.py` hold this
   contract.
 

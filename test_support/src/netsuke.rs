@@ -318,15 +318,15 @@ mod tests {
         let exe = root.join("build/debug/deps/test-exe");
         touch(&exe)?;
         let target_dir = root.join("target");
-        let present: Vec<usize> = (0..3).filter(|slot| presence & (1 << slot) != 0).collect();
-        for &slot in &present {
-            let dir = candidate_dirs.get(slot).context("slot in range")?;
-            touch(&root.join(dir).join(binary_name()))?;
+        for (slot, dir) in candidate_dirs.iter().enumerate() {
+            if presence & (1 << slot) != 0 {
+                touch(&root.join(dir).join(binary_name()))?;
+            }
         }
 
         let located = netsuke_executable_from(&env_with_target_dir(Some(&target_dir)), &exe);
-        match present.first() {
-            Some(&winner) => {
+        match (0..candidate_dirs.len()).find(|slot| presence & (1 << slot) != 0) {
+            Some(winner) => {
                 let dir = candidate_dirs.get(winner).context("winner in range")?;
                 let expected = root.join(dir).join(binary_name());
                 let resolved = located

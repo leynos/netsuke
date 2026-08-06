@@ -6,12 +6,24 @@
 //! stay a child module of `fs`.
 
 use super::{create_dir_all, try_is_file, write};
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use std::io;
 
+/// Temporary workspace for the filesystem helper tests.
+///
+/// The fixture returns a `Result` so tests propagate setup failures with `?`
+/// instead of panicking; the `TempDir` keeps the directory alive for the
+/// duration of the test body, and each test invocation gets its own.
+type TempDir = io::Result<tempfile::TempDir>;
+
+#[fixture]
+fn temp_dir() -> TempDir {
+    tempfile::tempdir()
+}
+
 #[rstest]
-fn try_is_file_reports_a_regular_file_as_a_file() -> anyhow::Result<()> {
-    let temp = tempfile::tempdir()?;
+fn try_is_file_reports_a_regular_file_as_a_file(temp_dir: TempDir) -> anyhow::Result<()> {
+    let temp = temp_dir?;
     let file = temp.path().join("regular-file");
     write(&file, b"fixture")?;
 
@@ -23,8 +35,8 @@ fn try_is_file_reports_a_regular_file_as_a_file() -> anyhow::Result<()> {
 }
 
 #[rstest]
-fn try_is_file_reports_an_absent_path_as_not_a_file() -> anyhow::Result<()> {
-    let temp = tempfile::tempdir()?;
+fn try_is_file_reports_an_absent_path_as_not_a_file(temp_dir: TempDir) -> anyhow::Result<()> {
+    let temp = temp_dir?;
 
     anyhow::ensure!(
         !try_is_file(temp.path().join("absent"))?,
@@ -34,8 +46,8 @@ fn try_is_file_reports_an_absent_path_as_not_a_file() -> anyhow::Result<()> {
 }
 
 #[rstest]
-fn try_is_file_reports_a_directory_as_not_a_file() -> anyhow::Result<()> {
-    let temp = tempfile::tempdir()?;
+fn try_is_file_reports_a_directory_as_not_a_file(temp_dir: TempDir) -> anyhow::Result<()> {
+    let temp = temp_dir?;
 
     anyhow::ensure!(
         !try_is_file(temp.path())?,
@@ -45,8 +57,8 @@ fn try_is_file_reports_a_directory_as_not_a_file() -> anyhow::Result<()> {
 }
 
 #[rstest]
-fn try_is_file_propagates_errors_other_than_not_found() -> anyhow::Result<()> {
-    let temp = tempfile::tempdir()?;
+fn try_is_file_propagates_errors_other_than_not_found(temp_dir: TempDir) -> anyhow::Result<()> {
+    let temp = temp_dir?;
     let file = temp.path().join("regular-file");
     write(&file, b"fixture")?;
 
@@ -61,14 +73,14 @@ fn try_is_file_propagates_errors_other_than_not_found() -> anyhow::Result<()> {
 }
 
 #[rstest]
-fn create_dir_all_accepts_an_existing_directory() -> io::Result<()> {
-    let temp = tempfile::tempdir()?;
+fn create_dir_all_accepts_an_existing_directory(temp_dir: TempDir) -> io::Result<()> {
+    let temp = temp_dir?;
     create_dir_all(temp.path())
 }
 
 #[rstest]
-fn create_dir_all_rejects_an_existing_file() -> anyhow::Result<()> {
-    let temp = tempfile::tempdir()?;
+fn create_dir_all_rejects_an_existing_file(temp_dir: TempDir) -> anyhow::Result<()> {
+    let temp = temp_dir?;
     let file = temp.path().join("not-a-directory");
     write(&file, b"fixture")?;
 
@@ -86,8 +98,8 @@ fn create_dir_all_rejects_an_existing_file() -> anyhow::Result<()> {
 }
 
 #[rstest]
-fn create_dir_all_creates_missing_parent_directories() -> anyhow::Result<()> {
-    let temp = tempfile::tempdir()?;
+fn create_dir_all_creates_missing_parent_directories(temp_dir: TempDir) -> anyhow::Result<()> {
+    let temp = temp_dir?;
     let nested = temp.path().join("one").join("two");
 
     create_dir_all(&nested)?;

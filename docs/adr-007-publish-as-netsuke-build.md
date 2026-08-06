@@ -48,12 +48,13 @@ Publish as `netsuke-build`, and keep every user-facing name as `netsuke`.
   `bin-name` Cargo metadata field, which resolves to `netsuke`.
 - Add a `[package.metadata.binstall]` template so
   `cargo binstall netsuke-build` resolves the release assets, which are named
-  after the binary. A single `pkg-url` template interpolating
-  `{ name }-{ version }-{ target }.tar.gz` (`pkg-fmt = "tgz"`) covers every
-  released target because `stage-release-artefacts` names each target's
-  archive to the same shape. Without the template `cargo binstall` would look
-  for `netsuke-build`-prefixed assets, fail to find any, and fall back to a
-  source build that needs the pinned nightly and the Polonius flag — the very
+  after the Cargo package rather than the binary. A single `pkg-url` template
+  interpolating `{ name }-{ version }-{ target }.tar.gz` (`pkg-fmt = "tgz"`)
+  covers every released target because `stage-release-artefacts` names each
+  target's archive to the same shape. Without the template `cargo binstall`
+  would probe its default asset-name patterns, which place the target before
+  the version, fail to find any matching asset, and fall back to a source
+  build that needs the pinned nightly and the Polonius flag — the very
   fallback the documented command exists to avoid.
 - Update the crates.io installation guidance in the README, the users' guide,
   and the quickstart to install `netsuke-build`.

@@ -21,6 +21,7 @@ import os
 import shutil
 import sys
 from pathlib import Path
+from unittest import mock
 
 import pytest
 import yaml
@@ -187,6 +188,26 @@ def test_expected_names_reject_an_empty_target_table(tmp_path: Path) -> None:
     manifest.write_text('[package]\nname = "pkg"\n', encoding="utf-8")
 
     with pytest.raises(ValueError, match="defines no release targets"):
+        hoist_mod.expected_archive_names(staging, manifest, "1.0.0")
+
+
+def test_expected_names_reject_duplicate_target_triples(tmp_path: Path) -> None:
+    """Two entries sharing a triple are rejected before anything moves.
+
+    A repeated triple would derive the same archive name twice, so the same
+    staged file would be claimed and moved twice; the second move would fail
+    on the already-relocated source and roll back an otherwise valid release.
+    """
+    staging = tmp_path / "staging.toml"
+    staging.write_text(
+        '[targets.linux]\ntarget = "x86_64-unknown-linux-gnu"\n'
+        '[targets.linux-again]\ntarget = "x86_64-unknown-linux-gnu"\n',
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "Cargo.toml"
+    manifest.write_text('[package]\nname = "pkg"\n', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="duplicate release targets"):
         hoist_mod.expected_archive_names(staging, manifest, "1.0.0")
 
 
@@ -389,6 +410,34 @@ def test_release_workflow_invokes_the_hoist_script() -> None:
     )
 
 
+def test_release_workflow_pins_the_hoist_interpreter() -> None:
+    """The hoist must run under a pinned Python, not the runner's default.
+
+    The script relies on `BaseExceptionGroup`, which needs Python 3.11 or
+    later, so the release job installs the interpreter the repository's Python
+    tooling targets rather than trusting whatever `python3` the runner ships.
+    """
+    workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["release"]["steps"]
+    hoist_index = next(
+        index
+        for index, step in enumerate(steps)
+        if "hoist_binstall_archives.py" in step.get("run", "")
+    )
+    assert "--python 3.13" in steps[hoist_index]["run"], (
+        "the hoist step must pin the interpreter version it runs under"
+    )
+    setup_index = next(
+        index for index, step in enumerate(steps) if "setup-uv" in step.get("uses", "")
+    )
+    assert setup_index < hoist_index, (
+        "the interpreter must be installed before the hoist step runs"
+    )
+    assert steps[setup_index]["with"]["python-version"] == "3.13", (
+        "the installed interpreter must match the version the hoist step pins"
+    )
+
+
 def test_release_workflow_hoists_before_uploading() -> None:
     """The hoist step must precede the asset upload in the release job."""
     workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
@@ -440,9 +489,40 @@ def test_hoist_rejects_a_directory_at_the_destination(
     )
 
 
+@pytest.mark.parametrize("linked_suffix", ["", ".sha256"])
+def test_hoist_rejects_a_symlinked_staged_asset(
+    workspace: dict[str, Path],
+    capsys: pytest.CaptureFixture[str],
+    linked_suffix: str,
+) -> None:
+    """A symlink standing in for either staged file fails validation.
+
+    Moving a symlink would publish a broken link rather than the archive it
+    points at, so both halves of the pair must be regular files.
+    """
+    stage_pair(workspace["dist"], "netsuke-linux-amd64/s1", EXPECTED_NAMES[1])
+    nested = workspace["dist"] / "netsuke-macos-arm64/s2"
+    nested.mkdir(parents=True)
+    real = workspace["dist"] / "real-payload"
+    real.write_bytes(b"payload")
+    linked_name = f"{EXPECTED_NAMES[0]}{linked_suffix}"
+    (nested / linked_name).symlink_to(real)
+    if linked_suffix:
+        (nested / EXPECTED_NAMES[0]).write_bytes(b"archive")
+    else:
+        (nested / f"{EXPECTED_NAMES[0]}.sha256").write_text("sum", encoding="utf-8")
+
+    assert run_hoist(workspace) == 1, f"a symlink at {linked_name} must fail validation"
+    captured = capsys.readouterr()
+    expected = "checksum sidecar absent" if linked_suffix else "not a regular file"
+    assert expected in captured.err, (
+        f"stderr must reject the symlinked asset; got {captured.err}"
+    )
+    assert_nothing_moved(workspace["dist"], EXPECTED_NAMES)
+
+
 def test_hoist_rolls_back_completed_moves_when_a_move_fails(
     workspace: dict[str, Path],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A mid-phase move failure restores every file, and a rerun succeeds."""
     stage_pair(workspace["dist"], "netsuke-linux-amd64/s1", EXPECTED_NAMES[1])
@@ -462,10 +542,13 @@ def test_hoist_rolls_back_completed_moves_when_a_move_fails(
             raise OSError(msg)
         return real_move(src, dst)
 
-    monkeypatch.setattr(hoist_mod.shutil, "move", failing_move)
-    with pytest.raises(OSError, match="injected move failure"):
+    # The patch is scoped to the failing run so the retry below exercises the
+    # real `shutil.move`, proving the rollback left a rerunnable tree.
+    with (
+        mock.patch.object(hoist_mod.shutil, "move", failing_move),
+        pytest.raises(OSError, match="injected move failure"),
+    ):
         run_hoist(workspace)
-    monkeypatch.undo()
 
     for name, nested in sources.items():
         assert not (workspace["dist"] / name).exists(), (
@@ -590,7 +673,9 @@ def build_generated_workspace(root: Path, case: GeneratedHoistCase) -> dict[str,
     return {"staging": staging, "manifest": manifest, "dist": dist}
 
 
-def stage_generated_target(dist: Path, case: GeneratedHoistCase, index: int) -> list[Path]:
+def stage_generated_target(
+    dist: Path, case: GeneratedHoistCase, index: int
+) -> list[Path]:
     """Stage one target in its generated state below ``dist``.
 
     Parameters
@@ -697,7 +782,9 @@ def test_hoist_invariants_hold_for_generated_layouts(
     case: GeneratedHoistCase,
 ) -> None:
     """All-or-none and name-derivation invariants hold across generated cases."""
-    workspace = build_generated_workspace(tmp_path_factory.mktemp("hoist-property"), case)
+    workspace = build_generated_workspace(
+        tmp_path_factory.mktemp("hoist-property"), case
+    )
     staged_paths = [
         path
         for index in range(len(case.targets_and_states))
@@ -709,8 +796,6 @@ def test_hoist_invariants_hold_for_generated_layouts(
     )
 
     if case.expects_failure:
-        assert_invalid_generated_outcome(
-            workspace["dist"], case, staged_paths, status
-        )
+        assert_invalid_generated_outcome(workspace["dist"], case, staged_paths, status)
     else:
         assert_valid_generated_outcome(workspace["dist"], case, status)
