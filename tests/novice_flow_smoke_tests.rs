@@ -1,8 +1,10 @@
 //! Smoke tests for newcomer-facing CLI flows.
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use rstest::rstest;
 use std::path::Path;
+#[cfg(unix)]
+use std::path::PathBuf;
 use tempfile::{TempDir, tempdir};
 use test_support::check_ninja;
 use test_support::fluent::normalize_fluent_isolates;
@@ -58,6 +60,32 @@ fn assert_contains_all(haystack: &str, fragments: &[&str], label: &str) -> Resul
             "expected {label} to contain '{fragment}', got:\n{haystack}"
         );
     }
+    Ok(())
+}
+
+/// A non-UTF-8 override must fail loudly rather than being mangled.
+///
+/// `NETSUKE_NINJA` is forwarded to the child as a string, so a lossy conversion
+/// would silently point it at a different executable. Unix-only: constructing a
+/// non-UTF-8 path requires POSIX byte semantics.
+#[cfg(unix)]
+#[test]
+fn non_utf8_ninja_override_is_rejected() -> Result<()> {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let workspace = setup_minimal_workspace("novice smoke non-UTF-8 ninja")?;
+    let non_utf8 = PathBuf::from(OsString::from_vec(b"ninja-\xff".to_vec()));
+
+    let Err(error) = run_netsuke(workspace.path(), &[], Some(non_utf8.as_path())) else {
+        bail!("a non-UTF-8 ninja override should not be accepted")
+    };
+
+    let message = format!("{error:?}");
+    ensure!(
+        message.contains("not valid UTF-8"),
+        "error should name the non-UTF-8 override, got {message}"
+    );
     Ok(())
 }
 

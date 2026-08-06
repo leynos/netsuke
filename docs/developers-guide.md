@@ -2623,6 +2623,78 @@ MiniJinja state on each invocation, so it must not be treated as a reusable
 global template cache. Errors remain at the manifest boundary and retain their
 localized failure category.
 
+### Manifest telemetry: template render and macro invocation
+
+`src/manifest/jinja_macros/telemetry.rs` instruments the two boundaries above
+with `tracing` spans and `metrics` counters/histograms, kept out of the
+evaluation code so `render_template` and the macro-invocation callback stay
+plain queries. See [ADR-009](adr-009-bounded-redacted-manifest-telemetry.md)
+for the decision to separate observability from evaluation this way, and for
+the alternatives it rejected.
+
+There are two independent boundaries, because template rendering and macro
+invocation are different operations with different failure shapes:
+
+- **Template render.** `render_template` composes
+  `telemetry::instrument_template_render` around the render. It opens the
+  `manifest.template.render` span, increments the
+  `netsuke_manifest_template_renders_total` counter, and records the
+  `netsuke_manifest_template_render_duration_seconds` histogram.
+- **Macro invocation.** `make_macro_fn`'s compiled-expression fallback
+  composes `telemetry::instrument_macro_invocation` around the invocation. It
+  opens the `manifest.macro.invoke` span, increments the
+  `netsuke_manifest_macro_invocations_total` counter, and records the
+  `netsuke_manifest_macro_invocation_duration_seconds` histogram.
+
+Macros reached through a template import run inside the render call and never
+reach `make_macro_fn`, so they are metered at the render boundary only; the
+macro-invocation counter covers the compiled-expression fallback. The test
+`imported_macro_render_does_not_emit_invocation_metrics` in
+`src/manifest/tests/macro_invocation_telemetry.rs` pins this split.
+
+The label and field vocabulary is bounded by construction, never echoing
+manifest content into a span or a metric dimension:
+
+- `outcome` is always `"success"` or `"error"`.
+- The render boundary adds `has_macro_imports`, `"true"` or `"false"`,
+  distinguishing the import-prefixed render path from the plain one without
+  revealing which macros a manifest defines.
+- On failure, both boundaries add `error_category`, the `Debug` form of
+  `minijinja::ErrorKind` — never the error's `Display` text, which can embed
+  manifest content.
+
+**Redaction rule.** Template text, macro names, macro arguments, context
+values, and environment variable names must never reach telemetry. Manifest
+content is caller-controlled and unbounded, so recording it in a metric label
+would make the metric series unbounded, and recording it in a span or event
+risks leaking secrets — environment variable names routinely identify
+credentials. This mirrors the redaction rule `env_var_with` already applies to
+`env()` lookup failures; see [Manifest `env()` reader](#manifest-env-reader).
+
+`describe_macro_metrics` and `describe_render_metrics` register each metric's
+description exactly once, guarded by `std::sync::Once`.
+`describe_macro_metrics` runs when `make_macro_fn` builds a macro's
+registration, not on each invocation, so the guard never sits on the invocation
+hot path. `describe_render_metrics` runs at the top of every `render_template`
+call; the `Once` guard still limits the actual `describe_counter!`/
+`describe_histogram!` calls to the first render.
+
+Per `AGENTS.md`, this module emits through `metrics` and `tracing` but must not
+install a global recorder or subscriber; only the application does that, at
+startup. Tests follow the same rule: `src/manifest/tests/macros_telemetry.rs`
+(the render boundary) and `src/manifest/tests/macro_invocation_telemetry.rs`
+(the macro-invocation boundary) each drive a local
+`metrics_util::debugging::DebuggingRecorder` through
+`metrics::with_local_recorder`, and capture tracing events with the workspace's
+`with_test_subscriber` helper (see [`tracing_capture`](#tracing_capture)), so
+neither test touches process-wide state. Extend `macros_telemetry.rs` for
+render-boundary coverage and `macro_invocation_telemetry.rs` for
+invocation-boundary coverage. The latter also runs a proptest,
+`macro_telemetry_stays_bounded_for_arbitrary_macros`, which asserts the
+redaction contract holds for arbitrary generated macro names, arguments, and
+undefined-variable names, not just the fixed sentinel cases used by the other
+tests.
+
 ### Expansion helpers
 
 #### expand_foreach

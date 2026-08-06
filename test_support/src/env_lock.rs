@@ -98,10 +98,6 @@ mod tests {
         })
     }
 
-    fn assert_current_thread_lock_is_held(message: &str) {
-        assert!(current_thread_lock_is_held(), "{message}");
-    }
-
     fn assert_current_thread_lock_is_released(message: &str) {
         ENV_LOCK_STATE.with(|lock_state| {
             let state = lock_state.borrow();
@@ -116,19 +112,25 @@ mod tests {
             let _inner = EnvLock::acquire();
         }
 
+        // Observations are captured while the guards live and asserted only once
+        // they are released: a failing assertion under a live guard would drop it
+        // mid-unwind and poison `ENV_LOCK`, burying the real cause.
         let outer = EnvLock::acquire();
-        {
+        let held_with_nested = {
             let _inner = EnvLock::acquire();
-            assert_current_thread_lock_is_held(
-                "ENV_LOCK should remain locked while nested EnvLock guards are alive",
-            );
-        }
-
-        assert_current_thread_lock_is_held(
-            "ENV_LOCK should remain locked until the outer EnvLock guard is dropped",
-        );
+            current_thread_lock_is_held()
+        };
+        let held_after_nested_drop = current_thread_lock_is_held();
 
         drop(outer);
+        assert!(
+            held_with_nested,
+            "ENV_LOCK should remain locked while nested EnvLock guards are alive"
+        );
+        assert!(
+            held_after_nested_drop,
+            "ENV_LOCK should remain locked until the outer EnvLock guard is dropped"
+        );
         assert_current_thread_lock_is_released(
             "ENV_LOCK should be unlocked after final EnvLock guard is dropped",
         );
@@ -140,11 +142,13 @@ mod tests {
         let inner = EnvLock::acquire();
 
         drop(outer);
-        assert_current_thread_lock_is_held(
-            "ENV_LOCK should remain locked while an inner EnvLock guard is alive",
-        );
+        let held_with_inner_alive = current_thread_lock_is_held();
 
         drop(inner);
+        assert!(
+            held_with_inner_alive,
+            "ENV_LOCK should remain locked while an inner EnvLock guard is alive"
+        );
         assert_current_thread_lock_is_released(
             "ENV_LOCK should be unlocked after the final out-of-order guard drops",
         );

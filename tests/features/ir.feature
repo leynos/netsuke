@@ -17,6 +17,16 @@ Feature: BuildGraph
     Then the graph has 2 actions
     And the graph has 2 targets
 
+  Scenario: IR compilation reads the scenario environment
+    Given the environment variable "NETSUKE_TEST_IR_ENV" is set to "from-env"
+    When the manifest file "tests/data/ir_env.yml" is compiled to IR
+    Then the graph target "out/from-env" has inputs "src/from-env.c"
+
+  Scenario: IR compilation fails when a manifest variable is unset
+    Given the environment variable "NETSUKE_TEST_IR_ENV" is unset
+    When the manifest file "tests/data/ir_env.yml" is compiled to IR
+    Then IR generation fails
+
   Scenario: Rule not found during IR generation
     When the manifest file "tests/data/missing_rule.yml" is compiled to IR
     Then IR generation fails
