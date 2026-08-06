@@ -143,7 +143,6 @@ pub(crate) fn render_template(
     template: &str,
     context: &impl Serialize,
 ) -> Result<String, Error> {
-    telemetry::describe_render_metrics();
     let imports = macro_imports(env);
     let has_macro_imports = imports.is_some();
     telemetry::instrument_template_render(has_macro_imports, || {

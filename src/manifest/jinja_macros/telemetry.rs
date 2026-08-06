@@ -40,7 +40,12 @@ pub(super) fn describe_macro_metrics() {
 }
 
 /// Register the template-render metric descriptions exactly once.
-pub(super) fn describe_render_metrics() {
+///
+/// Called from the instrumentation wrapper rather than from `render_template`,
+/// so rendering never reaches for the metric registry itself. The macro
+/// counterpart is registered when a macro is registered, which is setup rather
+/// than evaluation, so it has a natural home outside the query.
+fn describe_render_metrics() {
     static DESCRIBE: Once = Once::new();
     DESCRIBE.call_once(|| {
         describe_counter!(
@@ -89,6 +94,7 @@ pub(super) fn instrument_template_render<T>(
     has_macro_imports: bool,
     render: impl FnOnce() -> Result<T, Error>,
 ) -> Result<T, Error> {
+    describe_render_metrics();
     let span = tracing::trace_span!(
         "manifest.template.render",
         outcome = field::Empty,
