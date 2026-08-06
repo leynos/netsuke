@@ -76,10 +76,10 @@ fn stub_env_builders_compile_under_the_same_harness(
     Ok(())
 }
 
-/// The `test_support` rlib and the deps directory holding its dependencies.
+/// The `test_support` rlib and the directories holding its dependencies.
 struct TestSupportRlib {
     rlib: PathBuf,
-    deps_dir: PathBuf,
+    deps_dirs: Vec<PathBuf>,
 }
 
 impl TestSupportRlib {
@@ -108,18 +108,23 @@ impl TestSupportRlib {
             .filter_map(test_support_rlib_in_message)
             .next_back()
             .ok_or_else(|| io::Error::other("cargo reported no test_support rlib artefact"))?;
-        // Cargo uplifts the top-level package's rlib out of `deps/` into the
-        // profile directory, so the rlib's own parent is not where the
-        // dependency rlibs live.
-        let parent = rlib
-            .parent()
-            .ok_or_else(|| io::Error::other("the rlib path should have a parent"))?;
-        let deps_dir = if parent.file_name() == Some(std::ffi::OsStr::new("deps")) {
-            parent.to_path_buf()
-        } else {
-            parent.join("deps")
-        };
-        Ok(Self { rlib, deps_dir })
+        // Dependency rlibs do not necessarily sit beside the uplifted
+        // `test_support` rlib: Cargo's `build.build-dir` setting splits
+        // intermediate artefacts (where dependencies live) from final ones.
+        // Every compiler-artifact message names its rlib's real location, so
+        // collect each artefact's parent directory for `-L dependency=`.
+        let mut deps_dirs: Vec<PathBuf> = Vec::new();
+        for parent in stdout.lines().flat_map(rlib_parents_in_message) {
+            if !deps_dirs.contains(&parent) {
+                deps_dirs.push(parent);
+            }
+        }
+        if deps_dirs.is_empty() {
+            return Err(io::Error::other(
+                "cargo reported no rlib artefacts to derive dependency dirs from",
+            ));
+        }
+        Ok(Self { rlib, deps_dirs })
     }
 
     /// Type-check `source` against the rlib without linking a binary.
@@ -135,12 +140,42 @@ impl TestSupportRlib {
             .arg(manifest_dir().join(source))
             .arg("--extern")
             .arg(format!("test_support={}", self.rlib.display()))
-            .arg("-L")
-            .arg(format!("dependency={}", self.deps_dir.display()))
+            .args(self.deps_dirs.iter().flat_map(|dir| {
+                [
+                    std::ffi::OsString::from("-L"),
+                    format!("dependency={}", dir.display()).into(),
+                ]
+            }))
             .arg("-o")
             .arg(output_dir.path().join("stub-env-ui.rmeta"))
             .output()
     }
+}
+
+/// Extract the parent directories of every rlib in one Cargo JSON message.
+fn rlib_parents_in_message(line: &str) -> Vec<PathBuf> {
+    let Ok(message) = serde_json::from_str::<serde_json::Value>(line) else {
+        return Vec::new();
+    };
+    if message
+        .get("reason")
+        .is_none_or(|reason| reason != "compiler-artifact")
+    {
+        return Vec::new();
+    }
+    message
+        .get("filenames")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(serde_json::Value::as_str)
+        .filter(|filename| {
+            Path::new(filename)
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("rlib"))
+        })
+        .filter_map(|filename| Path::new(filename).parent().map(Path::to_path_buf))
+        .collect()
 }
 
 /// Extract the `test_support` rlib path from one Cargo JSON message, if any.

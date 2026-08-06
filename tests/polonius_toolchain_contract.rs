@@ -22,15 +22,10 @@ use toml::Value as TomlValue;
 
 const POLONIUS_FLAG: &str = "-Zpolonius=next";
 const POLONIUS_VAR: &str = "$(POLONIUS_FLAGS)";
-const SETUP_RUST_ACTION: &str = concat!(
-    "leynos/shared-actions/.github/actions/setup-rust@",
-    "2f90d1041ea108148be0620e3bbcc1fa80ac03e4"
-);
-const RUST_BUILD_RELEASE_ACTION: &str = concat!(
-    "leynos/shared-actions/.github/actions/rust-build-release@",
-    "2f90d1041ea108148be0620e3bbcc1fa80ac03e4"
-);
+const SETUP_RUST_ACTION: &str = "leynos/shared-actions/.github/actions/setup-rust";
+const RUST_BUILD_RELEASE_ACTION: &str = "leynos/shared-actions/.github/actions/rust-build-release";
 const WARNINGS_POLONIUS_RUSTFLAGS: &str = "-D warnings -Zpolonius=next";
+const SHARED_ACTIONS_MARKER: &str = "leynos/shared-actions/";
 
 /// Describes one workflow's shared-action and toolchain contract.
 struct WorkflowExpectation {
@@ -69,6 +64,64 @@ const PACKAGING_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     rustflags: POLONIUS_FLAG,
     pins_toolchain_env: false,
 };
+
+/// Every workflow under the shared-action toolchain contract.
+const WORKFLOW_EXPECTATIONS: [WorkflowExpectation; 4] = [
+    CI_WORKFLOW,
+    NETSUKEFILE_WORKFLOW,
+    COVERAGE_WORKFLOW,
+    PACKAGING_WORKFLOW,
+];
+
+/// Extracts every shared-actions commit pin from workflow `contents`.
+fn shared_action_pins(contents: &str) -> Vec<String> {
+    contents
+        .split(SHARED_ACTIONS_MARKER)
+        .skip(1)
+        .filter_map(|piece| piece.split_once('@'))
+        .map(|(_action, rest)| {
+            rest.chars()
+                .take_while(char::is_ascii_hexdigit)
+                .collect::<String>()
+        })
+        .collect()
+}
+
+/// Returns the single shared-actions commit SHA the checked workflows pin.
+///
+/// The SHA's value is owned by the workflow files (and the pin-bump process
+/// that updates them); this contract derives it rather than restating it, so
+/// a complete bump stays green while a partial bump — some workflows moved,
+/// others left behind — fails on the disagreement.
+fn shared_actions_sha() -> Result<String> {
+    let mut shas = std::collections::BTreeSet::new();
+    for expectation in WORKFLOW_EXPECTATIONS {
+        let contents = read_repo_file(Utf8Path::new(expectation.path))?;
+        let pins = shared_action_pins(&contents);
+        ensure!(
+            !pins.is_empty(),
+            "{} should pin at least one shared action",
+            expectation.path
+        );
+        shas.extend(pins);
+    }
+    ensure!(
+        shas.len() == 1,
+        "the checked workflows disagree on the shared-actions pin: {shas:?}"
+    );
+    let sha = shas
+        .into_iter()
+        .next()
+        .context("one shared-actions pin should remain")?;
+    ensure!(
+        sha.len() == 40
+            && sha
+                .chars()
+                .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
+        "the shared-actions pin should be a 40-character lowercase commit SHA, found {sha:?}"
+    );
+    Ok(sha)
+}
 
 /// Returns the dated nightly channel pinned in `rust-toolchain.toml`.
 ///
@@ -147,10 +200,11 @@ fn workflows_pass_polonius_rustflags_to_shared_actions(
     let WorkflowExpectation {
         path,
         job,
-        action: expected_action,
+        action,
         rustflags: expected_rustflags,
         pins_toolchain_env,
     } = expectation;
+    let expected_action = &format!("{action}@{}", shared_actions_sha()?);
     let workflow: YamlValue = serde_yaml::from_str(&read_repo_file(Utf8Path::new(path))?)
         .with_context(|| format!("parse {path}"))?;
     ensure!(
@@ -165,7 +219,7 @@ fn workflows_pass_polonius_rustflags_to_shared_actions(
         .with_context(|| format!("{path} job {job} should declare steps"))?;
     let shared_action = steps
         .iter()
-        .find(|step| yaml_str(step, &["uses"]) == Some(expected_action))
+        .find(|step| yaml_str(step, &["uses"]) == Some(expected_action.as_str()))
         .with_context(|| format!("{path} job {job} should use {expected_action}"))?;
     let rustflags = yaml_str(shared_action, &["with", "rustflags"])
         .with_context(|| format!("{path} {expected_action} should pass rustflags"))?;
