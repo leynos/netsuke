@@ -283,12 +283,31 @@ def hoist(dist_dir: Path, staging_config: Path, manifest: Path, version: str) ->
     return 0
 
 
+def _rollback_completed_moves(completed: list[tuple[Path, Path]]) -> None:
+    """Restore completed moves to their original paths, in reverse order.
+
+    Parameters
+    ----------
+    completed
+        The ``(source, destination)`` pairs of every finished move.
+
+    Raises
+    ------
+    OSError
+        If restoring any file fails; the caller decides how to combine this
+        with the failure that triggered the rollback.
+    """
+    for source, destination in reversed(completed):
+        shutil.move(destination, source)
+
+
 def _move_all(dist_dir: Path, located: list[StagedArchive]) -> None:
     """Move every validated pair to the dist root, all-or-nothing.
 
-    Completed moves are recorded so that a failure part-way through restores
-    every already-moved file to its original nested path before the failure
-    propagates; the release root never retains a partial asset set.
+    This function orchestrates the transaction: it performs the forward
+    moves, recording each, and on any failure delegates restoration to
+    :func:`_rollback_completed_moves` before re-raising, so the release root
+    never retains a partial asset set.
 
     Parameters
     ----------
@@ -314,8 +333,7 @@ def _move_all(dist_dir: Path, located: list[StagedArchive]) -> None:
                 completed.append((source, destination))
     except BaseException as failure:
         try:
-            for source, destination in reversed(completed):
-                shutil.move(destination, source)
+            _rollback_completed_moves(completed)
         except BaseException as rollback_failure:
             raise BaseExceptionGroup(
                 "hoist move failed and rollback could not restore every file",
