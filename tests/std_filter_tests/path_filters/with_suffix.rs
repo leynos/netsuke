@@ -3,15 +3,23 @@
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::ErrorKind;
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use serde_json::json;
 
-use super::{FilterErrorTest, fallible, test_filter_error, with_filter_env};
+use super::{FilterErrorTest, Workspace, fallible, test_filter_error, with_filter_env};
+
+/// Yield a fresh, isolated filter workspace.
+///
+/// rstest invokes this per test case, so each test owns its own `TempDir` and
+/// no fixture state leaks between them.
+#[fixture]
+fn workspace() -> Result<Workspace> {
+    fallible::filter_workspace()
+}
 
 #[rstest]
-fn with_suffix_filter() -> Result<()> {
-    let workspace = fallible::filter_workspace()?;
-    with_filter_env(workspace, |root, env| {
+fn with_suffix_filter(workspace: Result<Workspace>) -> Result<()> {
+    with_filter_env(workspace?, |root, env| {
         let file = root.join("file.tar.gz");
         Dir::open_ambient_dir(root, ambient_authority())
             .context("open workspace root")?
@@ -51,9 +59,8 @@ fn with_suffix_filter() -> Result<()> {
 }
 
 #[rstest]
-fn with_suffix_filter_without_separator() -> Result<()> {
-    let workspace = fallible::filter_workspace()?;
-    with_filter_env(workspace, |root, env| {
+fn with_suffix_filter_without_separator(workspace: Result<Workspace>) -> Result<()> {
+    with_filter_env(workspace?, |root, env| {
         let file = root.join("file");
         let output = fallible::render(
             env,
@@ -72,10 +79,9 @@ fn with_suffix_filter_without_separator() -> Result<()> {
 }
 
 #[rstest]
-fn with_suffix_filter_empty_separator() -> Result<()> {
-    let workspace = fallible::filter_workspace()?;
+fn with_suffix_filter_empty_separator(workspace: Result<Workspace>) -> Result<()> {
     test_filter_error(
-        workspace,
+        workspace?,
         FilterErrorTest {
             name: "suffix_empty_sep",
             template: "{{ path | with_suffix('.log', 1, '') }}",
@@ -90,9 +96,8 @@ fn with_suffix_filter_empty_separator() -> Result<()> {
 }
 
 #[rstest]
-fn with_suffix_filter_excessive_count() -> Result<()> {
-    let workspace = fallible::filter_workspace()?;
-    with_filter_env(workspace, |root, env| {
+fn with_suffix_filter_excessive_count(workspace: Result<Workspace>) -> Result<()> {
+    with_filter_env(workspace?, |root, env| {
         let file = root.join("file.tar.gz");
         let output = fallible::render(
             env,
