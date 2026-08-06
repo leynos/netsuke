@@ -53,6 +53,7 @@ extend-ignore-re = [
     "\\bartifact-name\\b",
     "\\bartifact-suffix\\b",
     "\\brust-analyzer\\b",
+    "`[^`\\n]+`",
     "mis-grouping",
 ]
 
