@@ -256,11 +256,17 @@ mod tests {
     /// thread-parallel runner it would race any other test touching the global
     /// mutex.
     ///
-    /// Every assertion here is made with no guard live and the poison flag
-    /// already cleared, so a failure cannot leave process-global poisoning
-    /// behind: clearing the flag covers the deliberate poisoning, and capturing
-    /// the held state before dropping the guard covers the unwind path, where a
-    /// panic would otherwise drop the `MutexGuard` and poison the mutex afresh.
+    /// No assertion here can leave process-global poisoning behind, though the
+    /// reason differs either side of `ENV_LOCK.clear_poison()`:
+    ///
+    /// - The `join` assertion runs before the flag is cleared, so `ENV_LOCK` is
+    ///   still poisoned at that point — deliberately, since that is the state
+    ///   under test. It is safe regardless: the poisoned guard belonged to the
+    ///   spawned thread, and this thread holds no `EnvLock`, so a failure has no
+    ///   live guard to drop.
+    /// - The later assertions run once the flag is cleared, and the held state is
+    ///   captured before its guard is dropped, so an unwinding assertion cannot
+    ///   drop a live `MutexGuard` and poison the mutex afresh.
     #[test]
     fn env_lock_recovers_after_mutex_poisoning() {
         let poisoner = std::thread::spawn(|| {

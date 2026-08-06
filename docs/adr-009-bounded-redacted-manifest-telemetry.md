@@ -18,7 +18,7 @@ needed for these paths, two risks had to be weighed against each other:
 - Manifest content — template text, macro names, macro arguments, and context
   values — is caller-controlled and unbounded. Recording it directly in a
   metric label produces unbounded cardinality in the metric series, and
-  recording it in a trace risks leaking secrets, because environment variable
+  recording it in a trace risks leaking secrets because environment variable
   names routinely identify credentials (`src/manifest/env_reader.rs` already
   applies this rule to `env()` lookup failures).
 - Interleaving spans and metric emission with the evaluation logic in
@@ -49,8 +49,8 @@ separate from evaluation, with two distinct instrumentation boundaries:
   `netsuke_manifest_macro_invocation_duration_seconds` histogram.
 
 Macros reached through a template import are metered only at the render
-boundary; the macro-invocation counter covers the compiled-expression fallback
-only, because imports evaluate inside the render call and never reach
+boundary; the macro-invocation counter covers only the compiled-expression
+fallback because imports evaluate inside the render call and never reach
 `make_macro_fn`. `macro_invocation_telemetry.rs`'s
 `imported_macro_render_does_not_emit_invocation_metrics` test pins this split.
 
