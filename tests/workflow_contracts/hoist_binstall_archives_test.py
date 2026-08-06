@@ -84,8 +84,7 @@ def workspace(tmp_path: Path) -> dict[str, Path]:
 
 def stage_pair(
     dist: Path,
-    artefact: str,
-    staging_dir: str,
+    nested_dir: str,
     name: str,
     *,
     with_sidecar: bool = True,
@@ -96,16 +95,15 @@ def stage_pair(
     ----------
     dist
         Dist root to stage below.
-    artefact
-        Workflow-artefact directory name (first nesting level).
-    staging_dir
-        Staging directory name (second nesting level).
+    nested_dir
+        Relative ``<artefact>/<staging-dir>`` directory to stage into,
+        mirroring the two nesting levels the release workflow downloads.
     name
         Archive file name to create.
     with_sidecar
         Whether to create the matching ``.sha256`` sidecar.
     """
-    nested = dist / artefact / staging_dir
+    nested = dist / nested_dir
     nested.mkdir(parents=True, exist_ok=True)
     (nested / name).write_bytes(f"archive:{name}".encode())
     if with_sidecar:
@@ -192,8 +190,8 @@ def test_hoist_moves_every_archive_and_sidecar_to_the_root(
     workspace: dict[str, Path],
 ) -> None:
     """The happy path relocates both files of every pair, preserving content."""
-    stage_pair(workspace["dist"], "netsuke-linux-amd64", "s1", EXPECTED_NAMES[1])
-    stage_pair(workspace["dist"], "netsuke-macos-arm64", "s2", EXPECTED_NAMES[0])
+    stage_pair(workspace["dist"], "netsuke-linux-amd64/s1", EXPECTED_NAMES[1])
+    stage_pair(workspace["dist"], "netsuke-macos-arm64/s2", EXPECTED_NAMES[0])
 
     assert run_hoist(workspace) == 0, "hoist should succeed when all pairs staged"
     for name in EXPECTED_NAMES:
@@ -240,8 +238,7 @@ def test_hoist_moves_nothing_for_every_failing_state_combination(
             continue
         stage_pair(
             workspace["dist"],
-            artefact,
-            "s",
+            f"{artefact}/s",
             name,
             with_sidecar=state != "missing-sidecar",
         )
@@ -261,7 +258,7 @@ def test_hoist_failure_names_the_missing_target(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """A missing target's archive name appears verbatim in the error."""
-    stage_pair(workspace["dist"], "netsuke-linux-amd64", "s1", EXPECTED_NAMES[1])
+    stage_pair(workspace["dist"], "netsuke-linux-amd64/s1", EXPECTED_NAMES[1])
 
     assert run_hoist(workspace) == 1, "a missing target must fail the hoist"
     captured = capsys.readouterr()
@@ -277,11 +274,10 @@ def test_hoist_fails_when_a_checksum_sidecar_is_absent(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """An archive without its .sha256 sidecar fails validation untouched."""
-    stage_pair(workspace["dist"], "netsuke-linux-amd64", "s1", EXPECTED_NAMES[1])
+    stage_pair(workspace["dist"], "netsuke-linux-amd64/s1", EXPECTED_NAMES[1])
     stage_pair(
         workspace["dist"],
-        "netsuke-macos-arm64",
-        "s2",
+        "netsuke-macos-arm64/s2",
         EXPECTED_NAMES[0],
         with_sidecar=False,
     )
@@ -299,9 +295,9 @@ def test_hoist_rejects_duplicate_archive_candidates(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Two nested copies of one archive are ambiguous; nothing moves."""
-    stage_pair(workspace["dist"], "netsuke-linux-amd64", "s1", EXPECTED_NAMES[1])
-    stage_pair(workspace["dist"], "netsuke-linux-amd64-copy", "s1", EXPECTED_NAMES[1])
-    stage_pair(workspace["dist"], "netsuke-macos-arm64", "s2", EXPECTED_NAMES[0])
+    stage_pair(workspace["dist"], "netsuke-linux-amd64/s1", EXPECTED_NAMES[1])
+    stage_pair(workspace["dist"], "netsuke-linux-amd64-copy/s1", EXPECTED_NAMES[1])
+    stage_pair(workspace["dist"], "netsuke-macos-arm64/s2", EXPECTED_NAMES[0])
 
     assert run_hoist(workspace) == 1, "duplicate candidates must fail the hoist"
     captured = capsys.readouterr()
@@ -316,8 +312,8 @@ def test_hoist_rejects_an_occupied_destination(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """A same-named file already at the dist root blocks the move."""
-    stage_pair(workspace["dist"], "netsuke-linux-amd64", "s1", EXPECTED_NAMES[1])
-    stage_pair(workspace["dist"], "netsuke-macos-arm64", "s2", EXPECTED_NAMES[0])
+    stage_pair(workspace["dist"], "netsuke-linux-amd64/s1", EXPECTED_NAMES[1])
+    stage_pair(workspace["dist"], "netsuke-macos-arm64/s2", EXPECTED_NAMES[0])
     (workspace["dist"] / EXPECTED_NAMES[0]).write_bytes(b"impostor")
 
     assert run_hoist(workspace) == 1, "a destination collision must fail the hoist"
@@ -352,8 +348,8 @@ def test_main_runs_the_hoist_from_cli_arguments(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """The CLI entry point used by release.yml wires arguments to the hoist."""
-    stage_pair(workspace["dist"], "netsuke-linux-amd64", "s1", EXPECTED_NAMES[1])
-    stage_pair(workspace["dist"], "netsuke-macos-arm64", "s2", EXPECTED_NAMES[0])
+    stage_pair(workspace["dist"], "netsuke-linux-amd64/s1", EXPECTED_NAMES[1])
+    stage_pair(workspace["dist"], "netsuke-macos-arm64/s2", EXPECTED_NAMES[0])
 
     status = hoist_mod.main(
         [
