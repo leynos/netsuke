@@ -2822,12 +2822,14 @@ empty prior value is treated the same way; empty entries inside a non-empty
 value survive composition. It returns an error when an entry contains the
 platform path separator, which `std::env::join_paths` itself reports.
 
-Nothing in this seam reads or writes the process `PATH`. On Unix the program
-is still resolved by the parent: callers pass an explicit program path
-(`NinjaBuildRequest.program`/`NinjaToolRequest.program`) rather than a bare
-name, so injecting a directory does not make Ninja itself resolve to a fake.
-What the injected `PATH` governs is the environment Ninja's own child commands
-see when it shells out.
+Nothing in this seam reads or writes the process `PATH`. The guarantee that
+an injected `PATH` cannot select Ninja itself holds only when
+`NinjaBuildRequest.program`/`NinjaToolRequest.program` is an absolute or
+otherwise resolved path: `program` is handed to `Command::new` as given, so a
+bare relative name such as `ninja` is looked up in the child's `PATH` on
+Unix, injected directories included. Callers therefore pass resolved paths,
+and what the injected `PATH` then governs is the environment Ninja's own
+child commands see when it shells out.
 
 The explicit request APIs compose on top of `CommandEnv`: `NinjaBuildRequest`/
 `NinjaToolRequest` carry an `env: &CommandEnv` field alongside the program, CLI

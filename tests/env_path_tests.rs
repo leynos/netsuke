@@ -58,18 +58,20 @@ fn prepend_dir_to_path_collapses_valueless_starts(#[case] existing: Option<&OsSt
     Ok(())
 }
 
-/// A directory containing the path-list separator cannot be joined.
+/// A directory that `PATH` cannot represent is rejected.
 ///
-/// `join_paths` rejects entries carrying the separator — `:` on Unix, `"` on
-/// Windows (which quotes entries containing `;`) — because the joined string
-/// could not be split back into the same entries. The constant is selected by
-/// `cfg!` so the case exercises the real rejection on both hosts.
+/// The unrepresentable character differs by platform: Unix rejects `:`
+/// because entries cannot be quoted, whereas Windows can represent `;` by
+/// quoting the entry and instead rejects `"`, the quoting character itself.
+/// `join_paths` reports both, because the joined string could not be split
+/// back into the same entries. The constant is selected by `cfg!` so the
+/// case exercises each host's real rejection.
 #[rstest]
-fn a_directory_containing_the_separator_is_rejected() -> Result<()> {
+fn an_unrepresentable_entry_is_rejected() -> Result<()> {
     const BAD_DIR: &str = if cfg!(windows) { "bad\"dir" } else { "bad:dir" };
     ensure!(
         prepend_path_value(Some(OsStr::new("/usr/bin")), std::path::Path::new(BAD_DIR)).is_err(),
-        "an entry containing the separator should be an error"
+        "an unrepresentable entry should be an error"
     );
     Ok(())
 }
@@ -180,12 +182,17 @@ fn composed_path_reaches_the_spawned_process() -> Result<()> {
     })
     .context("run the probe")?;
 
-    let observed = test_fs::read_to_string(dir.path().join("ninja.observed"))
+    // Compared as raw bytes: a valid Unix PATH may contain non-UTF-8, and a
+    // lossy string round trip would fail before propagation was checked.
+    let observed_bytes = test_fs::read(dir.path().join("ninja.observed"))
         .context("probe should have recorded the PATH it saw")?;
+    let observed = {
+        use std::os::unix::ffi::OsStringExt;
+        std::ffi::OsString::from_vec(observed_bytes)
+    };
     ensure!(
-        observed == composed.to_string_lossy(),
-        "child PATH should equal the composed value;\n  saw:      {observed}\n  expected: {}",
-        composed.to_string_lossy()
+        observed == composed,
+        "child PATH should equal the composed value;\n  saw:      {observed:?}\n  expected: {composed:?}"
     );
     ensure!(
         std::env::var_os("PATH") == parent_before,
