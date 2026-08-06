@@ -89,12 +89,24 @@ impl TestSupportRlib {
     /// with the same Polonius flags as the rest of the suite — the property
     /// trybuild could not preserve.
     fn build() -> io::Result<Self> {
-        let output = Command::new(cargo())
+        Self::build_with(&[])
+    }
+
+    /// Build `test_support` with additional environment variables applied.
+    ///
+    /// The split-layout regression test uses this to force Cargo's
+    /// `build.build-dir` into a separate directory.
+    fn build_with(env: &[(&str, &Path)]) -> io::Result<Self> {
+        let mut command = Command::new(cargo());
+        command
             .arg("build")
             .arg("--manifest-path")
             .arg(manifest_dir().join("test_support/Cargo.toml"))
-            .arg("--message-format=json")
-            .output()?;
+            .arg("--message-format=json");
+        for (key, value) in env {
+            command.env(key, value);
+        }
+        let output = command.output()?;
         if !output.status.success() {
             return Err(io::Error::other(format!(
                 "building test_support failed:\n{}",
@@ -152,18 +164,18 @@ impl TestSupportRlib {
     }
 }
 
-/// Extract the parent directories of every rlib in one Cargo JSON message.
-fn rlib_parents_in_message(line: &str) -> Vec<PathBuf> {
-    let Ok(message) = serde_json::from_str::<serde_json::Value>(line) else {
-        return Vec::new();
-    };
-    if message
-        .get("reason")
-        .is_none_or(|reason| reason != "compiler-artifact")
-    {
-        return Vec::new();
+/// Extract a compiler-artifact message's target name and rlib paths.
+///
+/// Returns `None` for lines that are not valid JSON, not compiler-artifact
+/// messages, or that lack a target name; the rlib list may be empty for
+/// artefacts that emit no rlib.
+fn compiler_artifact_rlibs(line: &str) -> Option<(String, Vec<PathBuf>)> {
+    let message: serde_json::Value = serde_json::from_str(line).ok()?;
+    if message.get("reason")? != "compiler-artifact" {
+        return None;
     }
-    message
+    let name = message.get("target")?.get("name")?.as_str()?.to_owned();
+    let rlibs = message
         .get("filenames")
         .and_then(serde_json::Value::as_array)
         .into_iter()
@@ -174,30 +186,29 @@ fn rlib_parents_in_message(line: &str) -> Vec<PathBuf> {
                 .extension()
                 .is_some_and(|extension| extension.eq_ignore_ascii_case("rlib"))
         })
-        .filter_map(|filename| Path::new(filename).parent().map(Path::to_path_buf))
-        .collect()
+        .map(PathBuf::from)
+        .collect();
+    Some((name, rlibs))
+}
+
+/// Extract the parent directories of every rlib in one Cargo JSON message.
+fn rlib_parents_in_message(line: &str) -> Vec<PathBuf> {
+    compiler_artifact_rlibs(line)
+        .map(|(_name, rlibs)| {
+            rlibs
+                .iter()
+                .filter_map(|rlib| rlib.parent().map(Path::to_path_buf))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Extract the `test_support` rlib path from one Cargo JSON message, if any.
 fn test_support_rlib_in_message(line: &str) -> Option<PathBuf> {
-    let message: serde_json::Value = serde_json::from_str(line).ok()?;
-    if message.get("reason")? != "compiler-artifact"
-        || message.get("target")?.get("name")? != "test_support"
-    {
-        return None;
-    }
-    message
-        .get("filenames")?
-        .as_array()?
-        .iter()
-        .filter_map(|filename| filename.as_str())
-        .filter(|filename| {
-            Path::new(filename)
-                .extension()
-                .is_some_and(|extension| extension.eq_ignore_ascii_case("rlib"))
-        })
-        .map(PathBuf::from)
-        .next_back()
+    let (name, rlibs) = compiler_artifact_rlibs(line)?;
+    (name == "test_support")
+        .then(|| rlibs.into_iter().next_back())
+        .flatten()
 }
 
 fn manifest_dir() -> PathBuf {
@@ -222,4 +233,90 @@ fn rustc() -> PathBuf {
 
 fn stderr(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
+}
+
+/// A synthetic Cargo message with two rlibs in different directories,
+/// mirroring a split `build.build-dir` layout.
+const SPLIT_LAYOUT_MESSAGE: &str = r#"{"reason":"compiler-artifact","target":{"name":"anyhow"},"filenames":["/build/debug/deps/libanyhow-1.rlib","/target/debug/libanyhow-1.rlib"]}"#;
+
+#[rstest]
+fn parser_collects_every_rlib_directory_from_a_message() {
+    let parents = rlib_parents_in_message(SPLIT_LAYOUT_MESSAGE);
+    assert_eq!(
+        parents,
+        vec![
+            PathBuf::from("/build/debug/deps"),
+            PathBuf::from("/target/debug"),
+        ],
+        "both rlib directories should be collected in message order"
+    );
+}
+
+#[rstest]
+#[case::malformed_json("not json at all")]
+#[case::other_reason(r#"{"reason":"build-script-executed","target":{"name":"anyhow"}}"#)]
+#[case::missing_target(r#"{"reason":"compiler-artifact","filenames":["/a/lib.rlib"]}"#)]
+fn parser_ignores_non_artifact_messages(#[case] line: &str) {
+    assert!(
+        rlib_parents_in_message(line).is_empty(),
+        "non-artifact input should yield no directories: {line:?}"
+    );
+    assert!(
+        test_support_rlib_in_message(line).is_none(),
+        "non-artifact input should yield no test_support rlib: {line:?}"
+    );
+}
+
+#[rstest]
+fn parser_selects_the_test_support_rlib_by_target_name() {
+    let message = r#"{"reason":"compiler-artifact","target":{"name":"test_support"},"filenames":["/deps/libtest_support-1.rlib","/final/libtest_support.rlib"]}"#;
+    assert_eq!(
+        test_support_rlib_in_message(message),
+        Some(PathBuf::from("/final/libtest_support.rlib")),
+        "the last-listed rlib should win, matching Cargo's uplift ordering"
+    );
+    assert!(
+        test_support_rlib_in_message(SPLIT_LAYOUT_MESSAGE).is_none(),
+        "other targets' artefacts should not be mistaken for test_support"
+    );
+}
+
+/// Forcing a split `build.build-dir` must still yield a working harness:
+/// the dependency rlibs land apart from the uplifted `test_support` rlib, so
+/// the collected `-L dependency=` set has to span the split for the control
+/// fixture to compile. This pins the regression where a single derived
+/// directory missed the dependencies entirely.
+#[rstest]
+fn harness_compiles_under_a_split_build_dir() -> io::Result<()> {
+    // Both roots are private to this test: sharing the ambient target dir
+    // with the concurrently building `#[once]` fixture races on the
+    // uplifted rlibs and fails with version-skew errors (E0460).
+    let target_dir = tempfile::tempdir()?;
+    let build_dir = tempfile::tempdir()?;
+    let harness = TestSupportRlib::build_with(&[
+        ("CARGO_TARGET_DIR", target_dir.path()),
+        ("CARGO_BUILD_BUILD_DIR", build_dir.path()),
+    ])?;
+
+    let spans_split_dir = harness
+        .deps_dirs
+        .iter()
+        .any(|dir| dir.starts_with(build_dir.path()));
+    if !spans_split_dir {
+        return Err(io::Error::other(format!(
+            "the dependency directories should include the split build dir {}; found {:?}",
+            build_dir.path().display(),
+            harness.deps_dirs,
+        )));
+    }
+
+    let output = harness.compile("tests/ui/stub_env_strict_compile_pass.rs")?;
+    if !output.status.success() {
+        return Err(io::Error::other(format!(
+            "the control fixture should compile under a split build dir:
+{}",
+            stderr(&output),
+        )));
+    }
+    Ok(())
 }

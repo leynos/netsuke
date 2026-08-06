@@ -12,6 +12,8 @@
 
 #[path = "support/makefile.rs"]
 mod makefile;
+#[path = "support/shared_actions.rs"]
+pub mod shared_actions;
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
@@ -25,7 +27,6 @@ const POLONIUS_VAR: &str = "$(POLONIUS_FLAGS)";
 const SETUP_RUST_ACTION: &str = "leynos/shared-actions/.github/actions/setup-rust";
 const RUST_BUILD_RELEASE_ACTION: &str = "leynos/shared-actions/.github/actions/rust-build-release";
 const WARNINGS_POLONIUS_RUSTFLAGS: &str = "-D warnings -Zpolonius=next";
-const SHARED_ACTIONS_MARKER: &str = "leynos/shared-actions/";
 
 /// Describes one workflow's shared-action and toolchain contract.
 struct WorkflowExpectation {
@@ -73,54 +74,26 @@ const WORKFLOW_EXPECTATIONS: [WorkflowExpectation; 4] = [
     PACKAGING_WORKFLOW,
 ];
 
-/// Extracts every shared-actions commit pin from workflow `contents`.
-fn shared_action_pins(contents: &str) -> Vec<String> {
-    contents
-        .split(SHARED_ACTIONS_MARKER)
-        .skip(1)
-        .filter_map(|piece| piece.split_once('@'))
-        .map(|(_action, rest)| {
-            rest.chars()
-                .take_while(char::is_ascii_hexdigit)
-                .collect::<String>()
-        })
-        .collect()
-}
-
 /// Returns the single shared-actions commit SHA the checked workflows pin.
 ///
 /// The SHA's value is owned by the workflow files (and the pin-bump process
 /// that updates them); this contract derives it rather than restating it, so
 /// a complete bump stays green while a partial bump — some workflows moved,
-/// others left behind — fails on the disagreement.
+/// others left behind — fails on the disagreement. The broader shape-only
+/// sweep across every workflow lives in `workflow_shared_actions_pins`.
 fn shared_actions_sha() -> Result<String> {
-    let mut shas = std::collections::BTreeSet::new();
+    let mut refs = Vec::new();
     for expectation in WORKFLOW_EXPECTATIONS {
         let contents = read_repo_file(Utf8Path::new(expectation.path))?;
-        let pins = shared_action_pins(&contents);
+        let extracted = shared_actions::extract_shared_actions_uses(&contents);
         ensure!(
-            !pins.is_empty(),
+            !extracted.is_empty(),
             "{} should pin at least one shared action",
             expectation.path
         );
-        shas.extend(pins);
+        refs.extend(extracted);
     }
-    ensure!(
-        shas.len() == 1,
-        "the checked workflows disagree on the shared-actions pin: {shas:?}"
-    );
-    let sha = shas
-        .into_iter()
-        .next()
-        .context("one shared-actions pin should remain")?;
-    ensure!(
-        sha.len() == 40
-            && sha
-                .chars()
-                .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
-        "the shared-actions pin should be a 40-character lowercase commit SHA, found {sha:?}"
-    );
-    Ok(sha)
+    shared_actions::consistent_pin(&refs)
 }
 
 /// Returns the dated nightly channel pinned in `rust-toolchain.toml`.

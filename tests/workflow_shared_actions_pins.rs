@@ -1,17 +1,22 @@
 //! Verify shared-actions references are pinned to a full commit SHA.
 //!
 //! Dependabot owns the SHA value for each `leynos/shared-actions` action
-//! reference and bumps callers one at a time, so this test does not assert
+//! reference and bumps callers one at a time, so this sweep does not assert
 //! that every reference shares an identical pin. It only asserts the shape
 //! of each reference: the correct `.github/actions/<name>` path, pinned to a
 //! 40-character lowercase-hex commit SHA rather than a mutable branch or tag
-//! such as `main`.
+//! such as `main`. The stricter agreement check — deriving one pin the
+//! toolchain-contract workflows must share — lives in
+//! `polonius_toolchain_contract`; both consume the parsing helpers in
+//! `tests/support/shared_actions.rs`.
+
+#[path = "support/shared_actions.rs"]
+pub mod shared_actions;
 
 use anyhow::{Context, Result, ensure};
+use shared_actions::{extract_shared_actions_uses, split_shared_action_ref};
 use std::fs;
 use std::path::{Path, PathBuf};
-
-const SHARED_ACTIONS_MARKER: &str = "leynos/shared-actions/.github/actions/";
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -26,32 +31,11 @@ fn read_workflow(path: &Path) -> Result<String> {
         .with_context(|| format!("workflow file {} should be readable", path.display()))
 }
 
-fn extract_shared_actions_uses(contents: &str) -> Vec<String> {
-    contents
-        .lines()
-        .filter_map(|line| {
-            let start = line.find(SHARED_ACTIONS_MARKER)?;
-            let rest = line.get(start..)?;
-            let token = rest.split_whitespace().next()?;
-            (!token.is_empty()).then(|| token.to_owned())
-        })
-        .collect()
-}
-
 /// Returns true when `reference` is `leynos/shared-actions/.github/actions/<name>`
 /// pinned to a full 40-character lowercase-hex commit SHA.
 fn is_pinned_shared_action_ref(reference: &str) -> bool {
-    let Some(rest) = reference.strip_prefix(SHARED_ACTIONS_MARKER) else {
-        return false;
-    };
-    let Some((name, pin)) = rest.split_once('@') else {
-        return false;
-    };
-    !name.is_empty()
-        && pin.len() == 40
-        && pin
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+    split_shared_action_ref(reference)
+        .is_some_and(|(name, pin)| !name.is_empty() && shared_actions::is_commit_sha_pin(pin))
 }
 
 #[test]
