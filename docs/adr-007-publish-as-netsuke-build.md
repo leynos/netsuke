@@ -50,7 +50,7 @@ Publish as `netsuke-build`, and keep every user-facing name as `netsuke`.
   `cargo binstall netsuke-build` resolves the release assets, which are named
   after the binary. A single `pkg-url` template interpolating
   `{ name }-{ version }-{ target }.tar.gz` (`pkg-fmt = "tgz"`) covers every
-  released target, because `stage-release-artefacts` names each target's
+  released target because `stage-release-artefacts` names each target's
   archive to the same shape. Without the template `cargo binstall` would look
   for `netsuke-build`-prefixed assets, fail to find any, and fall back to a
   source build that needs the pinned nightly and the Polonius flag — the very

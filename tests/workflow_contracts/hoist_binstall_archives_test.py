@@ -17,11 +17,14 @@ from __future__ import annotations
 
 import itertools
 import os
+import shutil
 import sys
 from pathlib import Path
 
 import pytest
 import yaml
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -401,3 +404,185 @@ def test_release_workflow_hoists_before_uploading() -> None:
         "the hoist must run before upload_assets so only validated, hoisted "
         "archives are published"
     )
+
+
+@pytest.mark.parametrize("colliding_suffix", ["", ".sha256"])
+def test_hoist_rejects_a_directory_at_the_destination(
+    workspace: dict[str, Path],
+    capsys: pytest.CaptureFixture[str],
+    colliding_suffix: str,
+) -> None:
+    """A directory occupying either destination is a collision, not a target."""
+    stage_pair(workspace["dist"], "netsuke-linux-amd64/s1", EXPECTED_NAMES[1])
+    stage_pair(workspace["dist"], "netsuke-macos-arm64/s2", EXPECTED_NAMES[0])
+    blocking = workspace["dist"] / f"{EXPECTED_NAMES[0]}{colliding_suffix}"
+    blocking.mkdir()
+
+    assert run_hoist(workspace) == 1, (
+        f"a directory at {blocking.name} must fail validation"
+    )
+    captured = capsys.readouterr()
+    assert "destination already occupied" in captured.err, (
+        "stderr must report the directory collision"
+    )
+    assert blocking.is_dir(), "the blocking directory must be left untouched"
+    for nested_dir, name in (
+        ("netsuke-linux-amd64/s1", EXPECTED_NAMES[1]),
+        ("netsuke-macos-arm64/s2", EXPECTED_NAMES[0]),
+    ):
+        staged = workspace["dist"] / nested_dir / name
+        assert staged.is_file(), (
+            f"staged archive {name} must stay in place on a collision"
+        )
+    assert not (workspace["dist"] / EXPECTED_NAMES[1]).exists(), (
+        "no valid pair may move while any destination is occupied"
+    )
+
+
+def test_hoist_rolls_back_completed_moves_when_a_move_fails(
+    workspace: dict[str, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A mid-phase move failure restores every file, and a rerun succeeds."""
+    stage_pair(workspace["dist"], "netsuke-linux-amd64/s1", EXPECTED_NAMES[1])
+    stage_pair(workspace["dist"], "netsuke-macos-arm64/s2", EXPECTED_NAMES[0])
+    sources = {
+        EXPECTED_NAMES[0]: workspace["dist"] / "netsuke-macos-arm64/s2",
+        EXPECTED_NAMES[1]: workspace["dist"] / "netsuke-linux-amd64/s1",
+    }
+
+    real_move = shutil.move
+    calls = {"count": 0}
+
+    def failing_move(src, dst):  # noqa: ANN001, ANN202 - shutil.move signature
+        calls["count"] += 1
+        if calls["count"] == 3:
+            msg = "injected move failure"
+            raise OSError(msg)
+        return real_move(src, dst)
+
+    monkeypatch.setattr(hoist_mod.shutil, "move", failing_move)
+    with pytest.raises(OSError, match="injected move failure"):
+        run_hoist(workspace)
+    monkeypatch.undo()
+
+    for name, nested in sources.items():
+        assert not (workspace["dist"] / name).exists(), (
+            f"{name} must not remain at the release root after rollback"
+        )
+        assert not (workspace["dist"] / f"{name}.sha256").exists(), (
+            f"{name}.sha256 must not remain at the release root after rollback"
+        )
+        restored = nested / name
+        assert restored.is_file(), f"{name} must return to its nested path"
+        assert restored.read_bytes() == f"archive:{name}".encode(), (
+            f"{name} must keep its original content through the rollback"
+        )
+        sidecar = nested / f"{name}.sha256"
+        assert sidecar.is_file(), f"{name}.sha256 must return to its nested path"
+        assert sidecar.read_text(encoding="utf-8") == f"checksum:{name}", (
+            f"{name}.sha256 must keep its original content through the rollback"
+        )
+
+    assert run_hoist(workspace) == 0, "a rerun after the fault clears must succeed"
+    for name in EXPECTED_NAMES:
+        assert (workspace["dist"] / name).is_file(), (
+            f"{name} must reach the release root on the retry"
+        )
+        assert (workspace["dist"] / name).read_bytes() == (
+            f"archive:{name}".encode()
+        ), f"{name} content must survive the retry"
+
+
+TARGET_POOL = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+    "riscv64gc-unknown-linux-gnu",
+]
+STATE_POOL = ["ok", "missing-archive", "missing-sidecar", "duplicate", "collision"]
+
+
+@settings(
+    max_examples=25,
+    deadline=None,
+    derandomize=True,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+@given(
+    package=st.from_regex(r"[a-z][a-z0-9-]{0,12}", fullmatch=True),
+    version=st.from_regex(r"[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}", fullmatch=True),
+    targets_and_states=st.lists(
+        st.tuples(st.sampled_from(TARGET_POOL), st.sampled_from(STATE_POOL)),
+        min_size=1,
+        max_size=4,
+        unique_by=lambda pair: pair[0],
+    ),
+    layout_seed=st.integers(min_value=0, max_value=7),
+)
+def test_hoist_invariants_hold_for_generated_layouts(
+    tmp_path_factory: pytest.TempPathFactory,
+    package: str,
+    version: str,
+    targets_and_states: list[tuple[str, str]],
+    layout_seed: int,
+) -> None:
+    """All-or-none and name-derivation invariants hold across generated cases."""
+    root = tmp_path_factory.mktemp("hoist-property")
+    staging = root / "staging.toml"
+    staging.write_text(
+        "".join(
+            f'[targets.t{index}]\ntarget = "{target}"\n'
+            for index, (target, _state) in enumerate(targets_and_states)
+        ),
+        encoding="utf-8",
+    )
+    manifest = root / "Cargo.toml"
+    manifest.write_text(f'[package]\nname = "{package}"\n', encoding="utf-8")
+    dist = root / "dist"
+    dist.mkdir()
+
+    staged_paths: list[Path] = []
+    for index, (target, state) in enumerate(targets_and_states):
+        name = f"{package}-{version}-{target}.tar.gz"
+        nested = dist / f"artefact-{index}" / f"stage-{(index + layout_seed) % 3}"
+        if state != "missing-archive":
+            nested.mkdir(parents=True, exist_ok=True)
+            (nested / name).write_bytes(f"archive:{name}".encode())
+            staged_paths.append(nested / name)
+            if state != "missing-sidecar":
+                (nested / f"{name}.sha256").write_text("c", encoding="utf-8")
+                staged_paths.append(nested / f"{name}.sha256")
+        if state == "duplicate":
+            other = dist / f"artefact-{index}-dup" / "stage"
+            other.mkdir(parents=True)
+            (other / name).write_bytes(b"dup")
+            staged_paths.append(other / name)
+        if state == "collision":
+            (dist / name).write_bytes(b"occupied")
+
+    expected_failure = any(state != "ok" for _target, state in targets_and_states)
+    status = hoist_mod.hoist(dist, staging, manifest, version)
+
+    if expected_failure:
+        assert status == 1, "any invalid target state must fail validation"
+        for staged in staged_paths:
+            assert staged.exists(), (
+                f"invalid sets must leave staged file {staged} unchanged"
+            )
+        for target, state in targets_and_states:
+            if state == "collision":
+                occupied = dist / f"{package}-{version}-{target}.tar.gz"
+                assert occupied.read_bytes() == b"occupied", (
+                    "pre-existing destination entries must be untouched"
+                )
+    else:
+        assert status == 0, "a complete, unique, collision-free set must succeed"
+        for target, _state in targets_and_states:
+            name = f"{package}-{version}-{target}.tar.gz"
+            assert (dist / name).is_file(), (
+                f"{name} must be derived from the generated inputs and hoisted"
+            )
+            assert (dist / f"{name}.sha256").is_file(), (
+                f"{name}.sha256 must accompany its archive at the root"
+            )

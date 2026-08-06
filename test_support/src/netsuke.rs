@@ -166,10 +166,25 @@ mod tests {
     use anyhow::{Context, Result, ensure};
     use camino::{Utf8Path, Utf8PathBuf};
     use mockable::MockEnv;
+    use rstest::{fixture, rstest};
 
     fn utf8_root(temp: &tempfile::TempDir) -> Result<Utf8PathBuf> {
         Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
             .map_err(|path| anyhow::anyhow!("temp dir {} is not UTF-8", path.display()))
+    }
+
+    /// Temporary workspace for staging locator layouts.
+    ///
+    /// The fixture returns a `Result` so tests propagate setup failures with
+    /// `?` instead of panicking; the `TempDir` half keeps the directory
+    /// alive for the test body.
+    type TempRoot = Result<(tempfile::TempDir, Utf8PathBuf)>;
+
+    #[fixture]
+    fn temp_root() -> TempRoot {
+        let temp = tempfile::tempdir().context("create temp dir")?;
+        let root = utf8_root(&temp)?;
+        Ok((temp, root))
     }
 
     fn binary_name() -> String {
@@ -192,66 +207,78 @@ mod tests {
         env
     }
 
-    /// Stage a locator scenario and assert the resolved binary path.
+    /// One locator layout scenario, with paths relative to the temp root.
+    struct LocatorScenario {
+        exe_rel: &'static str,
+        target_dir_rel: Option<&'static str>,
+        binary_dir_rel: &'static str,
+        message: &'static str,
+    }
+
+    impl LocatorScenario {
+        const fn new(
+            exe_rel: &'static str,
+            target_dir_rel: Option<&'static str>,
+            binary_dir_rel: &'static str,
+            message: &'static str,
+        ) -> Self {
+            Self {
+                exe_rel,
+                target_dir_rel,
+                binary_dir_rel,
+                message,
+            }
+        }
+    }
+
+    /// Stage `scenario` under `root` and assert the resolved binary path.
     ///
-    /// Creates the temporary root, touches the test executable at `exe_rel`
-    /// and the expected binary at `binary_rel`, configures the mock
-    /// environment with `target_dir_rel` when supplied (all three paths are
-    /// relative to the root), and asserts that the locator resolves the
-    /// expected binary, retaining `message` in the diagnostic.
-    fn assert_locates(
-        exe_rel: &str,
-        target_dir_rel: Option<&str>,
-        binary_rel: &str,
-        message: &str,
-    ) -> Result<()> {
-        let temp = tempfile::tempdir().context("create temp dir")?;
-        let root = utf8_root(&temp)?;
-        let exe = root.join(exe_rel);
+    /// Touches the test executable and the expected binary, configures the
+    /// mock environment with the scenario's target dir when supplied (all
+    /// paths are relative to `root`), and asserts that the locator resolves
+    /// the expected binary, retaining the scenario's message.
+    fn assert_locates(root: &Utf8Path, scenario: &LocatorScenario) -> Result<()> {
+        let exe = root.join(scenario.exe_rel);
         touch(&exe)?;
-        let binary = root.join(binary_rel);
+        let binary = root.join(scenario.binary_dir_rel).join(binary_name());
         touch(&binary)?;
-        let target_dir = target_dir_rel.map(|rel| root.join(rel));
+        let target_dir = scenario.target_dir_rel.map(|rel| root.join(rel));
 
         let located = netsuke_executable_from(&env_with_target_dir(target_dir.as_deref()), &exe)?;
-        ensure!(located == binary, "{message}; got {located}");
+        ensure!(located == binary, "{}; got {located}", scenario.message);
         Ok(())
     }
 
-    #[test]
-    fn locates_binary_beside_the_test_executable() -> Result<()> {
-        assert_locates(
-            "build/debug/deps/test-exe",
-            None,
-            &format!("build/debug/{}", binary_name()),
-            "primary lookup should win",
-        )
+    #[rstest]
+    #[case::primary(LocatorScenario::new(
+        "build/debug/deps/test-exe",
+        None,
+        "build/debug",
+        "primary lookup should win"
+    ))]
+    #[case::profile_fallback(LocatorScenario::new(
+        "build/debug/deps/test-exe",
+        Some("target"),
+        "target/debug",
+        "profile fallback should resolve"
+    ))]
+    #[case::triple_fallback(LocatorScenario::new(
+        "build/x86_64-unknown-linux-gnu/debug/deps/test-exe",
+        Some("target"),
+        "target/x86_64-unknown-linux-gnu/debug",
+        "triple fallback should resolve"
+    ))]
+    fn resolves_each_candidate_layout(
+        temp_root: TempRoot,
+        #[case] scenario: LocatorScenario,
+    ) -> Result<()> {
+        let (_temp, root) = temp_root?;
+        assert_locates(&root, &scenario)
     }
 
-    #[test]
-    fn falls_back_to_cargo_target_dir_profile() -> Result<()> {
-        assert_locates(
-            "build/debug/deps/test-exe",
-            Some("target"),
-            &format!("target/debug/{}", binary_name()),
-            "profile fallback should resolve",
-        )
-    }
-
-    #[test]
-    fn falls_back_to_target_triple_directory() -> Result<()> {
-        assert_locates(
-            "build/x86_64-unknown-linux-gnu/debug/deps/test-exe",
-            Some("target"),
-            &format!("target/x86_64-unknown-linux-gnu/debug/{}", binary_name()),
-            "triple fallback should resolve",
-        )
-    }
-
-    #[test]
-    fn prefers_the_primary_candidate_when_fallback_also_exists() -> Result<()> {
-        let temp = tempfile::tempdir().context("create temp dir")?;
-        let root = utf8_root(&temp)?;
+    #[rstest]
+    fn prefers_the_primary_candidate_when_fallback_also_exists(temp_root: TempRoot) -> Result<()> {
+        let (_temp, root) = temp_root?;
         let exe = root.join("build/debug/deps/test-exe");
         touch(&exe)?;
         let primary = root.join("build/debug").join(binary_name());
@@ -270,40 +297,49 @@ mod tests {
 
     /// Exhaustively covers every presence combination of the three
     /// candidates: the first present candidate in declaration order must win,
-    /// and the empty combination must error. This pins the precedence
-    /// invariant rather than sampling isolated layouts.
-    #[test]
-    fn first_present_candidate_wins_for_every_presence_combination() -> Result<()> {
+    /// and the empty combination must error. The eight cases enumerate the
+    /// full presence mask, pinning the precedence invariant rather than
+    /// sampling isolated layouts.
+    #[rstest]
+    #[case::none_present(0b000)]
+    #[case::primary_only(0b001)]
+    #[case::profile_only(0b010)]
+    #[case::primary_and_profile(0b011)]
+    #[case::triple_only(0b100)]
+    #[case::primary_and_triple(0b101)]
+    #[case::profile_and_triple(0b110)]
+    #[case::all_present(0b111)]
+    fn first_present_candidate_wins_for_every_presence_combination(
+        temp_root: TempRoot,
+        #[case] presence: u8,
+    ) -> Result<()> {
         let candidate_dirs = ["build/debug", "target/debug", "target/build/debug"];
-        for presence in 0_u8..8 {
-            let temp = tempfile::tempdir().context("create temp dir")?;
-            let root = utf8_root(&temp)?;
-            let exe = root.join("build/debug/deps/test-exe");
-            touch(&exe)?;
-            let target_dir = root.join("target");
-            let present: Vec<usize> = (0..3).filter(|slot| presence & (1 << slot) != 0).collect();
-            for &slot in &present {
-                let dir = candidate_dirs.get(slot).context("slot in range")?;
-                touch(&root.join(dir).join(binary_name()))?;
-            }
+        let (_temp, root) = temp_root?;
+        let exe = root.join("build/debug/deps/test-exe");
+        touch(&exe)?;
+        let target_dir = root.join("target");
+        let present: Vec<usize> = (0..3).filter(|slot| presence & (1 << slot) != 0).collect();
+        for &slot in &present {
+            let dir = candidate_dirs.get(slot).context("slot in range")?;
+            touch(&root.join(dir).join(binary_name()))?;
+        }
 
-            let located = netsuke_executable_from(&env_with_target_dir(Some(&target_dir)), &exe);
-            match present.first() {
-                Some(&winner) => {
-                    let dir = candidate_dirs.get(winner).context("winner in range")?;
-                    let expected = root.join(dir).join(binary_name());
-                    let resolved = located
-                        .with_context(|| format!("combination {presence:#05b} should resolve"))?;
-                    ensure!(
-                        resolved == expected,
-                        "combination {presence:#05b} should pick candidate {winner}; got {resolved}"
-                    );
-                }
-                None => ensure!(
-                    located.is_err(),
-                    "combination {presence:#05b} has no binary and should error"
-                ),
+        let located = netsuke_executable_from(&env_with_target_dir(Some(&target_dir)), &exe);
+        match present.first() {
+            Some(&winner) => {
+                let dir = candidate_dirs.get(winner).context("winner in range")?;
+                let expected = root.join(dir).join(binary_name());
+                let resolved = located
+                    .with_context(|| format!("combination {presence:#05b} should resolve"))?;
+                ensure!(
+                    resolved == expected,
+                    "combination {presence:#05b} should pick candidate {winner}; got {resolved}"
+                );
             }
+            None => ensure!(
+                located.is_err(),
+                "combination {presence:#05b} has no binary and should error"
+            ),
         }
         Ok(())
     }
@@ -311,10 +347,9 @@ mod tests {
     /// A candidate that cannot be inspected (traversal through a regular
     /// file) must surface the filesystem error rather than fall through to
     /// later candidates.
-    #[test]
-    fn surfaces_filesystem_errors_from_candidate_probes() -> Result<()> {
-        let temp = tempfile::tempdir().context("create temp dir")?;
-        let root = utf8_root(&temp)?;
+    #[rstest]
+    fn surfaces_filesystem_errors_from_candidate_probes(temp_root: TempRoot) -> Result<()> {
+        let (_temp, root) = temp_root?;
         // `build` is a regular file, so the first candidate `build/netsuke`
         // traverses through it and fails with an error other than NotFound.
         // The executable path itself never needs to exist for the probe.
@@ -333,10 +368,9 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn reports_every_attempted_candidate_when_missing() -> Result<()> {
-        let temp = tempfile::tempdir().context("create temp dir")?;
-        let root = utf8_root(&temp)?;
+    #[rstest]
+    fn reports_every_attempted_candidate_when_missing(temp_root: TempRoot) -> Result<()> {
+        let (_temp, root) = temp_root?;
         let exe = root.join("build/debug/deps/test-exe");
         touch(&exe)?;
         let target_dir = root.join("target");
