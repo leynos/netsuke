@@ -12,6 +12,8 @@
 
 #[path = "support/makefile.rs"]
 mod makefile;
+#[path = "support/shared_actions.rs"]
+pub mod shared_actions;
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
@@ -22,14 +24,8 @@ use toml::Value as TomlValue;
 
 const POLONIUS_FLAG: &str = "-Zpolonius=next";
 const POLONIUS_VAR: &str = "$(POLONIUS_FLAGS)";
-const SETUP_RUST_ACTION: &str = concat!(
-    "leynos/shared-actions/.github/actions/setup-rust@",
-    "2f90d1041ea108148be0620e3bbcc1fa80ac03e4"
-);
-const RUST_BUILD_RELEASE_ACTION: &str = concat!(
-    "leynos/shared-actions/.github/actions/rust-build-release@",
-    "2f90d1041ea108148be0620e3bbcc1fa80ac03e4"
-);
+const SETUP_RUST_ACTION: &str = "leynos/shared-actions/.github/actions/setup-rust";
+const RUST_BUILD_RELEASE_ACTION: &str = "leynos/shared-actions/.github/actions/rust-build-release";
 const WARNINGS_POLONIUS_RUSTFLAGS: &str = "-D warnings -Zpolonius=next";
 
 /// Describes one workflow's shared-action and toolchain contract.
@@ -69,6 +65,39 @@ const PACKAGING_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     rustflags: POLONIUS_FLAG,
     pins_toolchain_env: false,
 };
+
+/// Every workflow under the shared-action toolchain contract.
+const WORKFLOW_EXPECTATIONS: [WorkflowExpectation; 4] = [
+    CI_WORKFLOW,
+    NETSUKEFILE_WORKFLOW,
+    COVERAGE_WORKFLOW,
+    PACKAGING_WORKFLOW,
+];
+
+/// Returns the single shared-actions commit SHA the checked workflows pin.
+///
+/// The SHA's value is owned by the workflow files (and the pin-bump process
+/// that updates them); this contract derives it rather than restating it, so
+/// a complete bump stays green while a partial bump — some workflows moved,
+/// others left behind — fails on the disagreement. The broader shape-only
+/// sweep across every workflow lives in `workflow_shared_actions_pins`.
+fn shared_actions_sha() -> Result<String> {
+    let mut refs = Vec::new();
+    for expectation in WORKFLOW_EXPECTATIONS {
+        let contents = read_repo_file(Utf8Path::new(expectation.path))?;
+        let extracted =
+            shared_actions::extract_shared_actions_uses(&contents).with_context(|| {
+                format!("extract shared-action references from {}", expectation.path)
+            })?;
+        ensure!(
+            !extracted.is_empty(),
+            "{} should pin at least one shared action",
+            expectation.path
+        );
+        refs.extend(extracted);
+    }
+    shared_actions::consistent_pin(&refs)
+}
 
 /// Returns the dated nightly channel pinned in `rust-toolchain.toml`.
 ///
@@ -147,10 +176,11 @@ fn workflows_pass_polonius_rustflags_to_shared_actions(
     let WorkflowExpectation {
         path,
         job,
-        action: expected_action,
+        action,
         rustflags: expected_rustflags,
         pins_toolchain_env,
     } = expectation;
+    let expected_action = &format!("{action}@{}", shared_actions_sha()?);
     let workflow: YamlValue = serde_yaml::from_str(&read_repo_file(Utf8Path::new(path))?)
         .with_context(|| format!("parse {path}"))?;
     ensure!(
@@ -165,7 +195,7 @@ fn workflows_pass_polonius_rustflags_to_shared_actions(
         .with_context(|| format!("{path} job {job} should declare steps"))?;
     let shared_action = steps
         .iter()
-        .find(|step| yaml_str(step, &["uses"]) == Some(expected_action))
+        .find(|step| yaml_str(step, &["uses"]) == Some(expected_action.as_str()))
         .with_context(|| format!("{path} job {job} should use {expected_action}"))?;
     let rustflags = yaml_str(shared_action, &["with", "rustflags"])
         .with_context(|| format!("{path} {expected_action} should pass rustflags"))?;

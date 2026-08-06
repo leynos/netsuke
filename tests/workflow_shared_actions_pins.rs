@@ -1,17 +1,22 @@
 //! Verify shared-actions references are pinned to a full commit SHA.
 //!
 //! Dependabot owns the SHA value for each `leynos/shared-actions` action
-//! reference and bumps callers one at a time, so this test does not assert
+//! reference and bumps callers one at a time, so this sweep does not assert
 //! that every reference shares an identical pin. It only asserts the shape
 //! of each reference: the correct `.github/actions/<name>` path, pinned to a
 //! 40-character lowercase-hex commit SHA rather than a mutable branch or tag
-//! such as `main`.
+//! such as `main`. The stricter agreement check — deriving one pin the
+//! toolchain-contract workflows must share — lives in
+//! `polonius_toolchain_contract`; both consume the parsing helpers in
+//! `tests/support/shared_actions.rs`.
+
+#[path = "support/shared_actions.rs"]
+pub mod shared_actions;
 
 use anyhow::{Context, Result, ensure};
+use shared_actions::{consistent_pin, extract_shared_actions_uses, split_shared_action_ref};
 use std::fs;
 use std::path::{Path, PathBuf};
-
-const SHARED_ACTIONS_MARKER: &str = "leynos/shared-actions/.github/actions/";
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -26,50 +31,74 @@ fn read_workflow(path: &Path) -> Result<String> {
         .with_context(|| format!("workflow file {} should be readable", path.display()))
 }
 
-fn extract_shared_actions_uses(contents: &str) -> Vec<String> {
-    contents
-        .lines()
-        .filter_map(|line| {
-            let start = line.find(SHARED_ACTIONS_MARKER)?;
-            let rest = line.get(start..)?;
-            let token = rest.split_whitespace().next()?;
-            (!token.is_empty()).then(|| token.to_owned())
-        })
-        .collect()
-}
-
 /// Returns true when `reference` is `leynos/shared-actions/.github/actions/<name>`
 /// pinned to a full 40-character lowercase-hex commit SHA.
 fn is_pinned_shared_action_ref(reference: &str) -> bool {
-    let Some(rest) = reference.strip_prefix(SHARED_ACTIONS_MARKER) else {
-        return false;
-    };
-    let Some((name, pin)) = rest.split_once('@') else {
-        return false;
-    };
-    !name.is_empty()
-        && pin.len() == 40
-        && pin
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+    split_shared_action_ref(reference)
+        .is_some_and(|(name, pin)| !name.is_empty() && shared_actions::is_commit_sha_pin(pin))
 }
 
 #[test]
-fn unit_extracts_uses_from_workflow_lines() {
+fn unit_extracts_uses_from_workflow_yaml() -> Result<()> {
     let sample = r"
-      - uses: leynos/shared-actions/.github/actions/setup-rust@0123456789abcdef0123456789abcdef01234567
-      - uses: leynos/shared-actions/.github/actions/generate-coverage@0123456789abcdef0123456789abcdef01234567
-    ";
+- uses: leynos/shared-actions/.github/actions/setup-rust@0123456789abcdef0123456789abcdef01234567
+- uses: leynos/shared-actions/.github/actions/generate-coverage@0123456789abcdef0123456789abcdef01234567
+";
 
-    let uses = extract_shared_actions_uses(sample);
+    let uses = extract_shared_actions_uses(sample)?;
 
-    assert_eq!(
-        uses,
-        vec![
+    ensure!(
+        uses == vec![
             "leynos/shared-actions/.github/actions/setup-rust@0123456789abcdef0123456789abcdef01234567",
             "leynos/shared-actions/.github/actions/generate-coverage@0123456789abcdef0123456789abcdef01234567",
-        ]
+        ],
+        "both nested uses values should be extracted, got {uses:?}"
     );
+    Ok(())
+}
+
+#[test]
+fn unit_normalizes_quoted_uses_values() -> Result<()> {
+    let sample = concat!(
+        "steps:\n",
+        "  - uses: \"leynos/shared-actions/.github/actions/setup-rust@",
+        "0123456789abcdef0123456789abcdef01234567\"\n",
+        "  - uses: 'leynos/shared-actions/.github/actions/generate-coverage@",
+        "0123456789abcdef0123456789abcdef01234567'\n",
+    );
+
+    let uses = extract_shared_actions_uses(sample)?;
+
+    ensure!(
+        uses.len() == 2,
+        "quoted uses values should extract, got {uses:?}"
+    );
+    for reference in &uses {
+        ensure!(
+            is_pinned_shared_action_ref(reference),
+            "quoted values should normalize to bare references: {reference:?}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn unit_ignores_shared_action_tokens_in_comments() -> Result<()> {
+    let sample = concat!(
+        "steps:\n",
+        "  # uses: leynos/shared-actions/.github/actions/setup-rust@main\n",
+        "  - run: echo hello\n",
+        "  - uses: actions/checkout@0123456789abcdef0123456789abcdef01234567",
+        " # leynos/shared-actions/.github/actions/setup-rust@main\n",
+    );
+
+    let uses = extract_shared_actions_uses(sample)?;
+
+    ensure!(
+        uses.is_empty(),
+        "commented-out or comment-embedded tokens should not extract: {uses:?}"
+    );
+    Ok(())
 }
 
 #[test]
@@ -99,7 +128,11 @@ fn behavioural_shared_actions_pins_are_full_commit_shas() -> Result<()> {
         if path.extension().and_then(|ext| ext.to_str()) != Some("yml") {
             continue;
         }
-        refs.extend(extract_shared_actions_uses(&read_workflow(&path)?));
+        let contents = read_workflow(&path)?;
+        refs.extend(
+            extract_shared_actions_uses(&contents)
+                .with_context(|| format!("extract references from {}", path.display()))?,
+        );
     }
 
     ensure!(
@@ -113,4 +146,80 @@ fn behavioural_shared_actions_pins_are_full_commit_shas() -> Result<()> {
         );
     }
     Ok(())
+}
+
+const VALID_REF_A: &str =
+    "leynos/shared-actions/.github/actions/setup-rust@0123456789abcdef0123456789abcdef01234567";
+
+/// Build a full reference for `pin` on an arbitrary action name.
+fn reference_with_pin(pin: &str) -> String {
+    format!("leynos/shared-actions/.github/actions/rust-build-release@{pin}")
+}
+
+#[test]
+fn unit_consistent_pin_accepts_agreeing_references() -> Result<()> {
+    let refs = vec![
+        VALID_REF_A.to_owned(),
+        reference_with_pin("0123456789abcdef0123456789abcdef01234567"),
+    ];
+    let pin = consistent_pin(&refs)?;
+    ensure!(
+        pin == "0123456789abcdef0123456789abcdef01234567",
+        "agreeing references should yield their shared pin, got {pin:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn unit_consistent_pin_rejects_an_empty_reference_list() {
+    let error = consistent_pin(&[]).expect_err("no references should reject");
+    assert!(
+        error.to_string().contains("at least one"),
+        "the empty-list rejection should say so; got {error:?}"
+    );
+}
+
+#[test]
+fn unit_consistent_pin_rejects_malformed_references() {
+    for reference in [
+        "leynos/shared-actions/.github/actions/setup-rust", // no pin separator
+        "actions/checkout@0123456789abcdef0123456789abcdef01234567", // wrong prefix
+    ] {
+        let error = consistent_pin(&[reference.to_owned()])
+            .expect_err("a malformed reference should reject");
+        assert!(
+            error.to_string().contains("malformed"),
+            "{reference:?} should be reported as malformed; got {error:?}"
+        );
+    }
+}
+
+#[test]
+fn unit_consistent_pin_rejects_non_sha_pins() {
+    for pin in [
+        "main",
+        "v1.2.3",
+        "0123456789ABCDEF0123456789ABCDEF01234567",
+        "abc123",
+    ] {
+        let error =
+            consistent_pin(&[reference_with_pin(pin)]).expect_err("a non-SHA pin should reject");
+        assert!(
+            error.to_string().contains("40-hex commit SHA"),
+            "pin {pin:?} should be rejected for its shape; got {error:?}"
+        );
+    }
+}
+
+#[test]
+fn unit_consistent_pin_rejects_disagreeing_shas() {
+    let refs = vec![
+        VALID_REF_A.to_owned(),
+        reference_with_pin("fedcba9876543210fedcba9876543210fedcba98"),
+    ];
+    let error = consistent_pin(&refs).expect_err("disagreeing pins should reject");
+    assert!(
+        error.to_string().contains("disagree"),
+        "the disagreement rejection should say so; got {error:?}"
+    );
 }
