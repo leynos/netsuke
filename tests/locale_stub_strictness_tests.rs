@@ -66,8 +66,10 @@ mod properties {
     use super::{LocaleEnvProvider, StubEnv};
     use proptest::collection::vec;
     use proptest::prelude::*;
+    use std::cell::Cell;
     use std::collections::HashMap;
     use std::panic::{AssertUnwindSafe, catch_unwind};
+    use std::sync::Once;
 
     #[derive(Debug, Clone)]
     enum Declaration {
@@ -83,6 +85,42 @@ mod properties {
             "[ABC]".prop_map(Declaration::Allow),
             ("[ABC]", "[a-z]{1,4}").prop_map(|(key, value)| Declaration::Set(key, value)),
         ]
+    }
+
+    thread_local! {
+        static SILENCED: Cell<bool> = const { Cell::new(false) };
+    }
+
+    /// Install the gated hook exactly once, wrapping whatever hook was
+    /// current when the first probe ran.
+    fn install_gated_hook() {
+        let prior = std::panic::take_hook();
+        let gated = move |info: &std::panic::PanicHookInfo<'_>| {
+            if SILENCED.with(Cell::get) {
+                return;
+            }
+            prior(info);
+        };
+        std::panic::set_hook(Box::new(gated));
+    }
+
+    /// Run `probe` with the default panic hook silenced for this thread only.
+    ///
+    /// Each undeclared read otherwise prints its full panic message, and 256
+    /// cases times three keys of that buries any genuine failure output. The
+    /// hook is process-wide, so instead of swapping it around each probe —
+    /// which under the threaded in-process coverage runner could eat another
+    /// test's panic or race the restore — a wrapper is installed once and
+    /// consults a thread-local flag, leaving every other thread's panics on
+    /// the prior hook.
+    fn silenced<T>(probe: impl FnOnce() -> T) -> T {
+        static INSTALL: Once = Once::new();
+        INSTALL.call_once(install_gated_hook);
+
+        SILENCED.with(|flag| flag.set(true));
+        let result = probe();
+        SILENCED.with(|flag| flag.set(false));
+        result
     }
 
     proptest! {
@@ -114,24 +152,7 @@ mod properties {
                 if let Some(expected) = model.get(key) {
                     prop_assert_eq!(stub.var(key), expected.clone());
                 } else {
-                    // Silence the default panic hook around the probe: each
-                    // undeclared read otherwise prints its full panic message,
-                    // and 256 cases times three keys of that buries any
-                    // genuine failure output. The hook is process-wide, so
-                    // the swap is serialized behind a lock — nextest runs
-                    // each test in its own process, but the in-process
-                    // runner used for coverage runs tests as threads, and an
-                    // unsynchronized take/set pair could strand the no-op
-                    // hook installed for another thread's probe.
-                    let read = {
-                        static HOOK_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-                        let _guard = HOOK_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-                        let prior = std::panic::take_hook();
-                        std::panic::set_hook(Box::new(|_| {}));
-                        let read = catch_unwind(AssertUnwindSafe(|| stub.var(key)));
-                        std::panic::set_hook(prior);
-                        read
-                    };
+                    let read = silenced(|| catch_unwind(AssertUnwindSafe(|| stub.var(key))));
                     prop_assert!(read.is_err(), "undeclared {} should panic", key);
                 }
             }
