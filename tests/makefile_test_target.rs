@@ -94,6 +94,8 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
 
 #[path = "makefile_test_target/rustflags.rs"]
 mod rustflags;
+#[path = "makefile_test_target/rustflags_polonius_tests.rs"]
+mod rustflags_polonius_tests;
 
 /// Returns every nextest profile override.
 fn all_profile_overrides(config: &Value) -> impl Iterator<Item = &Value> {

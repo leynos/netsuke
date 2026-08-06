@@ -1,4 +1,19 @@
 //! Contract model for Makefile recipes that set `RUSTFLAGS`.
+//!
+//! Each recipe line that assigns `RUSTFLAGS` is described by a
+//! [`RustflagsCase`] naming its target, the substring selecting the line, and
+//! the warning and inheritance contracts it must uphold. The module extracts
+//! the double-quoted assignment from the recipe, resolves the
+//! `$(POLONIUS_FLAGS)` Make variable, and (on Unix) expands the result in a
+//! real shell — without running the recipe's command — so the tests assert
+//! what Cargo would actually receive: inherited caller flags preserved,
+//! Polonius enabled, and `-D warnings` applied exactly where the contract
+//! says. A completeness test walks the Makefile and fails when any
+//! `RUSTFLAGS`-setting line lacks a case, so new recipes join the contract or
+//! break the build. The parent `makefile_test_target` module supplies the
+//! repository-file and recipe-lookup helpers; the sibling
+//! `rustflags_polonius_tests` module covers the `POLONIUS_FLAGS` resolution
+//! guard directly.
 
 use super::{read_repo_file, target_recipe};
 use anyhow::{Context, Result, ensure};
@@ -154,7 +169,7 @@ const RUSTFLAGS_CASES: [RustflagsCase; 9] = [
 /// Every assertion built on the resolved value uses `contains`, which an
 /// empty string satisfies vacuously, so an empty definition would silently
 /// void the Polonius contract rather than fail it.
-fn polonius_flags(makefile: &str) -> Result<String> {
+pub(crate) fn polonius_flags(makefile: &str) -> Result<String> {
     let value = make_variable(makefile, "POLONIUS_FLAGS")
         .context("Makefile should define POLONIUS_FLAGS")?;
     ensure!(
