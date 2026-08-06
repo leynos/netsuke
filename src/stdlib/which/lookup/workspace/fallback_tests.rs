@@ -7,13 +7,8 @@
 //! AGENTS.md testing mandate in-process mutation is not available regardless.
 
 use super::{WORKSPACE_FALLBACK_ENV, workspace_fallback_enabled_with};
-use rstest::rstest;
-
-/// The exact warning `workspace_fallback_enabled_with` emits for a non-UTF-8
-/// value. Asserted verbatim: without it the test passes even when the message
-/// is replaced wholesale, which is precisely what happened before.
-const NOT_UNICODE_WARNING: &str = "workspace fallback disabled because env var is not valid UTF-8";
 use crate::test_tracing_capture::with_test_subscriber;
+use rstest::rstest;
 use std::env::VarError;
 use std::ffi::OsString;
 use tracing::level_filters::LevelFilter;
@@ -77,14 +72,14 @@ fn the_documented_variable_name_is_consulted() {
     assert_eq!(observed.as_deref(), Some(WORKSPACE_FALLBACK_ENV));
 }
 
-/// The non-UTF-8 branch must warn, not merely disable the fallback.
+/// The classifier is pure: classification must emit no events.
 ///
-/// Silently switching workspace search off would leave a user whose `PATHEXT`-
-/// style variable is mis-encoded with commands mysteriously unresolved and no
-/// indication why. The boolean assertion alone would not notice the warning
-/// being deleted.
+/// The non-UTF-8 diagnostic fires once at the capture boundary —
+/// `EnvSnapshot::capture_with_env` calls `warn_if_not_unicode` after the raw
+/// read; see the capture-level test in `env.rs` — so the classifier itself
+/// must stay silent however often the switch is consulted.
 #[test]
-fn non_utf8_value_warns_before_disabling() {
+fn non_utf8_classification_is_silent() {
     let err = VarError::NotUnicode(OsString::from("ignored"));
     let (enabled, events) = with_test_subscriber(LevelFilter::WARN, |captured| {
         let enabled = workspace_fallback_enabled_with(|_| Err(err));
@@ -92,25 +87,9 @@ fn non_utf8_value_warns_before_disabling() {
     });
 
     assert!(!enabled, "a non-UTF-8 value must disable the fallback");
-    // The subscriber admits WARN and above, so the level is asserted by the
-    // filter rather than by a string prefix; requiring exactly one event keeps
-    // that as strict as the previous `starts_with("WARN")` check.
-    assert_eq!(
-        events.len(),
-        1,
-        "expected exactly one warning, got {events:?}"
-    );
     assert!(
-        events.iter().any(|event| {
-            event.contains(WORKSPACE_FALLBACK_ENV) && event.contains(NOT_UNICODE_WARNING)
-        }),
-        concat!(
-            "expected a warning naming {} and carrying {:?}, ",
-            "got {:?}"
-        ),
-        WORKSPACE_FALLBACK_ENV,
-        NOT_UNICODE_WARNING,
-        events
+        events.is_empty(),
+        "the pure classifier must emit no events, got {events:?}"
     );
 }
 

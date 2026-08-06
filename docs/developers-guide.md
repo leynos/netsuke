@@ -2265,6 +2265,27 @@ Selected file-load errors and malformed `NETSUKE_JSON` values are returned to
 the caller. Accepted environment values are `true`, `false`, `1`, and `0`. An
 explicit root `--json` flag bypasses environment parsing.
 
+#### Workspace fallback switch seam
+
+`src/stdlib/which/workspace_switch.rs` is a leaf module holding the
+`NETSUKE_WHICH_WORKSPACE` name and the pure classifier
+`workspace_fallback_enabled_with`. The raw reading is captured by
+`EnvSnapshot::capture` through the injected `mockable::Env` provider and
+stored as snapshot data; the enable/disable decision is derived from that
+snapshot on demand. The cache fingerprint hashes the reading, so two
+resolutions differing only in this switch never share a cache entry. The
+non-UTF-8 diagnostic fires once at capture, where `warn_if_not_unicode` runs
+immediately after the raw read; the classifier itself emits nothing. See
+[ADR-008](adr-008-environment-seam-taxonomy.md) for the seam taxonomy.
+
+#### Ninja program resolver seam
+
+`resolve_ninja_program_utf8_with` in `src/runner/process/ninja_program.rs`
+takes `&impl mockable::Env`, with `mockable::DefaultEnv` as the production
+adapter supplied by the ambient `resolve_ninja_program_utf8` wrapper. The unit
+tests inject a `MockEnv` that pins the `NETSUKE_NINJA` key, so every override
+branch runs without process mutation.
+
 ### Configuration discovery module layout
 
 `src/cli/discovery.rs` attaches several small `#[path = "..."]` modules that
