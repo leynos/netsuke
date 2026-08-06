@@ -590,7 +590,7 @@ directory, resolved from `HOME` then `USERPROFILE` on POSIX hosts, and from
 `HOME`, `USERPROFILE`, the `HOMEDRIVE`/`HOMEPATH` pair, then `HOMESHARE` on
 Windows. The Windows pair counts only when both halves are non-empty; an
 incomplete pair falls through to `HOMESHARE`. Named-user forms such as
-`~alice` are unsupported, and when no home directory resolves at all the
+`~alice` are unsupported, and when no home directory resolves at all, the
 filter fails rather than passing the `~` through silently.
 
 ## Use the command-line interface
