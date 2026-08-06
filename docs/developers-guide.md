@@ -222,17 +222,28 @@ from the `bin-name` field that
   installer package all stay named `netsuke`.
 - `[package.metadata.binstall]` in `Cargo.toml` overrides `cargo binstall`'s
   default asset resolution, which would otherwise look for `netsuke-build`
-  assets and fall back to a source build on the pinned nightly. The overrides
-  spell out one unarchived (`pkg-fmt = "bin"`) asset per released target;
-  `tests/binstall_metadata_tests.rs` rebuilds the expected names from
-  `.github/release-staging.toml` and checks the target set against the release
-  workflow matrix.
+  assets and fall back to a source build on the pinned nightly. A single
+  template resolves a `{ name }-{ version }-{ target }.tar.gz` archive
+  (`pkg-fmt = "tgz"`) for every released target. `stage-release-artefacts`
+  stages each target's archive, plus a `.sha256` sidecar, per
+  `[common.binstall]` in `.github/release-staging.toml`, and the "Hoist
+  cargo-binstall archives" step in `.github/workflows/release.yml` runs
+  `scripts/hoist_binstall_archives.py`, which validates that every target's
+  archive and checksum are present before moving them to the release root for
+  upload. `tests/binstall_metadata_tests.rs` and
+  `tests/workflow_contracts/hoist_binstall_archives_test.py` hold this
+  contract.
 
 Only the two registry installation commands name `netsuke-build`, and
-`tests/documentation_examples_tests.rs` pins both. When adding a release
-target, a packaging format, or an artefact name, update the `binstall`
-overrides and the artefact-name table in `tests/binstall_metadata_tests.rs`
-alongside the workflow.
+`tests/documentation_installation_tests.rs` pins both. When adding a release
+target, a packaging format, or an artefact name, add the target to
+`.github/release-staging.toml`'s `[targets.*]` table and to the release
+workflow's target matrices; the single `pkg-url` template in `Cargo.toml`
+(`{ name }-{ version }-{ target }.tar.gz`) resolves new targets automatically,
+with no per-target edit. `tests/binstall_metadata_tests.rs` and
+`tests/workflow_contracts/hoist_binstall_archives_test.py` hold that contract,
+and fail if per-target overrides reappear or the staged and expected archive
+names diverge.
 
 ## Toolchain and borrow checker
 

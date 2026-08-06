@@ -46,11 +46,15 @@ Publish as `netsuke-build`, and keep every user-facing name as `netsuke`.
 - Keep `.github/release-staging.toml`, the `linux-packages`, `windows-package`,
   and `macos-package` steps, and the release help tooling driven by the
   `bin-name` Cargo metadata field, which resolves to `netsuke`.
-- Add `[package.metadata.binstall]` overrides so `cargo binstall netsuke-build`
-  resolves the release assets, which are named after the binary. Without them
-  `cargo binstall` would look for `netsuke-build`-prefixed assets, fail to find
-  any, and fall back to a source build that needs the pinned nightly and the
-  Polonius flag — the very fallback the documented command exists to avoid.
+- Add a `[package.metadata.binstall]` template so
+  `cargo binstall netsuke-build` resolves the release assets, which are named
+  after the binary. A single `pkg-url` template interpolating
+  `{ name }-{ version }-{ target }.tar.gz` (`pkg-fmt = "tgz"`) covers every
+  released target, because `stage-release-artefacts` names each target's
+  archive to the same shape. Without the template `cargo binstall` would look
+  for `netsuke-build`-prefixed assets, fail to find any, and fall back to a
+  source build that needs the pinned nightly and the Polonius flag — the very
+  fallback the documented command exists to avoid.
 - Update the crates.io installation guidance in the README, the users' guide,
   and the quickstart to install `netsuke-build`.
 
@@ -76,12 +80,14 @@ Publish as `netsuke-build`, and keep every user-facing name as `netsuke`.
 - `tests/man_page_contract_tests.rs` pins the manual page's name, staging
   location, and `.TH` source against the CLI name, and asserts the package name
   never reaches the title. `tests/binstall_metadata_tests.rs` pins the
-  `binstall` overrides to `.github/release-staging.toml` and to the release
-  workflow's target matrix.
-- The `binstall` overrides encode release asset names. Changing
+  `pkg-url` template to `.github/release-staging.toml`'s `[common.binstall]`
+  archive-naming contract and to the release workflow's target matrix, and
+  `tests/workflow_contracts/hoist_binstall_archives_test.py` pins the hoist
+  script that stages those archives to the release root.
+- The `pkg-url` template encodes the staged archive name's shape. Changing
   `staging_dir_template`, `bin_name`, or the workflow artefact names without
-  updating the overrides breaks `cargo binstall`; the contract test fails first
-  for the parts it can derive.
+  keeping the staged archive name in step with the template breaks `cargo
+  binstall`; the contract tests fail first for the parts they can derive.
 - Documentation and contract tests refer to `netsuke-build` only for registry
   installation. Everywhere else — prose, examples, help output, packaging — the
   project remains Netsuke.

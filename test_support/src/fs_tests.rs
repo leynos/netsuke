@@ -6,9 +6,10 @@
 //! stay a child module of `fs`.
 
 use super::{create_dir_all, try_is_file, write};
+use rstest::rstest;
 use std::io;
 
-#[test]
+#[rstest]
 fn try_is_file_reports_a_regular_file_as_a_file() -> anyhow::Result<()> {
     let temp = tempfile::tempdir()?;
     let file = temp.path().join("regular-file");
@@ -21,7 +22,7 @@ fn try_is_file_reports_a_regular_file_as_a_file() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[test]
+#[rstest]
 fn try_is_file_reports_an_absent_path_as_not_a_file() -> anyhow::Result<()> {
     let temp = tempfile::tempdir()?;
 
@@ -32,7 +33,7 @@ fn try_is_file_reports_an_absent_path_as_not_a_file() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[test]
+#[rstest]
 fn try_is_file_reports_a_directory_as_not_a_file() -> anyhow::Result<()> {
     let temp = tempfile::tempdir()?;
 
@@ -43,7 +44,7 @@ fn try_is_file_reports_a_directory_as_not_a_file() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[test]
+#[rstest]
 fn try_is_file_propagates_errors_other_than_not_found() -> anyhow::Result<()> {
     let temp = tempfile::tempdir()?;
     let file = temp.path().join("regular-file");
@@ -59,13 +60,13 @@ fn try_is_file_propagates_errors_other_than_not_found() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[test]
+#[rstest]
 fn create_dir_all_accepts_an_existing_directory() -> io::Result<()> {
     let temp = tempfile::tempdir()?;
     create_dir_all(temp.path())
 }
 
-#[test]
+#[rstest]
 fn create_dir_all_rejects_an_existing_file() -> anyhow::Result<()> {
     let temp = tempfile::tempdir()?;
     let file = temp.path().join("not-a-directory");
@@ -84,7 +85,7 @@ fn create_dir_all_rejects_an_existing_file() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[test]
+#[rstest]
 fn create_dir_all_creates_missing_parent_directories() -> anyhow::Result<()> {
     let temp = tempfile::tempdir()?;
     let nested = temp.path().join("one").join("two");
