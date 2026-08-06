@@ -2,12 +2,11 @@
 //!
 //! The precedence ladders are covered exhaustively at their injected-reader
 //! seam (`src/stdlib/path/home_tests.rs`); these cases prove the *registered
-//! filter* — the template-visible boundary — behaves per contract. Only the
-//! branches that consult no environment run here: driving the ladder through
-//! the filter would require mutating the process environment, which the
-//! AGENTS.md testing mandate forbids, and the registration is a closure over
-//! the `HomeDirectory` value whose `Ambient` ladders those tests already
-//! exercise.
+//! filter* — the template-visible boundary — behaves per contract. The
+//! successful `~/...` cases run against a home configured through
+//! `with_home_override`, so no test consults or mutates the process
+//! environment, which the AGENTS.md testing mandate forbids; the `Ambient`
+//! ladders behind the same registration closure are the seam tests' concern.
 
 use anyhow::{Context, Result, anyhow, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -40,6 +39,39 @@ fn stdlib_env(root: &Utf8Path) -> Result<Environment<'static>> {
 
 fn render(env: &Environment<'static>, template: &str) -> Result<String, minijinja::Error> {
     env.render_str(template, context! {})
+}
+
+/// A tilde path renders to the configured home through the registered filter.
+///
+/// This is the end-to-end success path at the template-visible boundary: the
+/// home comes from `with_home_override`, so the ladder consults no ambient
+/// environment, and the assertion covers the full route — template, filter
+/// registration, `expanduser`, and home resolution.
+#[rstest]
+#[case::bare_tilde("{{ '~' | expanduser }}", "")]
+#[case::tilde_subpath("{{ '~/notes/todo.txt' | expanduser }}", "/notes/todo.txt")]
+fn a_tilde_path_expands_against_the_configured_home(
+    stdlib_workspace: Result<StdlibWorkspace>,
+    #[case] template: &str,
+    #[case] suffix: &str,
+) -> Result<()> {
+    let workspace = stdlib_workspace?;
+    let home = workspace.root.join("home/dweller");
+    let dir = Dir::open_ambient_dir(&workspace.root, ambient_authority())
+        .with_context(|| format!("open workspace {}", workspace.root))?;
+    let config = StdlibConfig::new(dir)?
+        .with_workspace_root_path(workspace.root.clone())?
+        .with_home_override(Some(home.to_string()));
+    let mut env = Environment::new();
+    stdlib::register_with_config(&mut env, config)?;
+
+    let rendered = render(&env, template).context("a tilde path should render")?;
+    let expected = format!("{home}{suffix}");
+    ensure!(
+        rendered == expected,
+        "expected {expected:?}, got {rendered:?}"
+    );
+    Ok(())
 }
 
 /// A path without a leading tilde passes through the filter unchanged.

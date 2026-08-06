@@ -1218,6 +1218,13 @@ Implementation notes:
 - `expanduser` mirrors shell semantics by inspecting `HOME`, `USERPROFILE`,
   and on Windows the `HOMEDRIVE`/`HOMEPATH` or `HOMESHARE` fallbacks.
   Platform-specific forms such as `~user` remain unsupported.
+- The sole process-environment read for home resolution lives at the
+  registration boundary: `register_expanduser` in `stdlib::path::filters`
+  captures a process-backed reader closure once and injects it into the pure
+  resolution ladders in `path_utils`. Those ladders never touch the ambient
+  environment directly; they only consult whatever reader they are given.
+  Tests supply their own readers, exercising the ladders without reaching the
+  process environment.
 - `with_suffix` removes dotted suffix segments (default `n = 1`) before
   appending the provided suffix.
 

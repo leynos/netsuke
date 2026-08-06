@@ -2440,8 +2440,12 @@ platform-selection logic of its own.
   build, which `-D warnings` rejects; gating them to the platform alone makes
   the Windows ladder untestable on the CI host.
 - The ladders report what the environment says. An empty value is passed
-  through rather than treated as unset, and interpreting that is `expanduser`'s
-  concern, not theirs.
+  through rather than treated as unset for the single-variable readings
+  (`HOME`, `USERPROFILE`, `HOMESHARE`), and interpreting that is
+  `expanduser`'s concern, not theirs. The `HOMEDRIVE`/`HOMEPATH` pair is the
+  exception: it counts only when both halves are non-empty, since a bare
+  drive or a bare relative path is not a home directory; an incomplete pair
+  falls through to `HOMESHARE`.
 
 ### Configuration discovery module layout
 
