@@ -8,7 +8,7 @@
 use anyhow::{Context, Result, ensure};
 use netsuke::runner::CommandEnv;
 use proptest::prelude::*;
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use std::{
     ffi::{OsStr, OsString},
     path::PathBuf,
@@ -133,9 +133,12 @@ fn composed_values_reach_the_command_environment_verbatim() -> Result<()> {
 /// Fixture for the child-probe tests: a fake Ninja recording one value.
 ///
 /// Shared by every subprocess case so each states only what it configures
-/// and what the child must have seen.
+/// (via `#[with("...")]`) and what the child must have seen.
 #[cfg(unix)]
-fn probe_fixture(script_line: &str) -> Result<(tempfile::TempDir, PathBuf, PathBuf)> {
+#[fixture]
+fn probe_fixture(
+    #[default("printf '%s' \"$PATH\" > \"$0.observed\"")] script_line: &str,
+) -> Result<(tempfile::TempDir, PathBuf, PathBuf)> {
     use test_support::fs as test_fs;
 
     let dir = tempfile::tempdir().context("create temp dir")?;
@@ -174,11 +177,13 @@ fn observed_value(dir: &tempfile::TempDir) -> Result<std::ffi::OsString> {
     clippy::disallowed_methods,
     reason = "the parent's real PATH is both the base for the composed value and the subject of the closing assertion that spawning left it unchanged, so it must be observed directly"
 )]
-fn composed_path_reaches_the_spawned_process() -> Result<()> {
+fn composed_path_reaches_the_spawned_process(
+    probe_fixture: Result<(tempfile::TempDir, PathBuf, PathBuf)>,
+) -> Result<()> {
     use netsuke::cli::Cli;
     use netsuke::runner::{BuildTargets, NinjaBuildRequest, run_ninja_with};
     use std::path::Path;
-    let (dir, probe, build_file) = probe_fixture("printf '%s' \"$PATH\" > \"$0.observed\"")?;
+    let (dir, probe, build_file) = probe_fixture?;
     let parent_before = std::env::var_os("PATH");
     let composed = prepend_path_value(parent_before.as_deref(), Path::new("/injected/marker"))
         .context("compose PATH")?;
@@ -216,18 +221,28 @@ fn composed_path_reaches_the_spawned_process() -> Result<()> {
 /// test here, since they only ever assert on variables that were set.
 #[cfg(unix)]
 #[rstest]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "the parent's real PATH is the value the child must inherit, so it must be observed directly for the comparison"
-)]
-fn unoverridden_parent_variables_are_inherited() -> Result<()> {
+fn unoverridden_parent_variables_are_inherited(
+    #[from(probe_fixture)] baseline: Result<(tempfile::TempDir, PathBuf, PathBuf)>,
+    probe_fixture: Result<(tempfile::TempDir, PathBuf, PathBuf)>,
+) -> Result<()> {
     use netsuke::cli::Cli;
     use netsuke::runner::{BuildTargets, NinjaBuildRequest, run_ninja_with};
 
-    let (dir, probe, build_file) = probe_fixture("printf '%s' \"$PATH\" > \"$0.observed\"")?;
+    // Baseline: the probe spawned directly, outside `CommandEnv`, records
+    // the PATH a plainly inherited child sees. Comparing child against child
+    // keeps the parent's environment unread while still failing an
+    // `env_clear`-based implementation, whose run below would record an
+    // empty PATH where this one records the real value.
+    let (baseline_dir, baseline_probe, _) = baseline?;
+    let status = std::process::Command::new(&baseline_probe)
+        .status()
+        .context("run the baseline probe")?;
+    ensure!(status.success(), "the baseline probe should exit cleanly");
+    let inherited = observed_value(&baseline_dir)?;
+
+    let (dir, probe, build_file) = probe_fixture?;
     let cli = Cli::default();
     let targets = BuildTargets::default();
-    let parent_path = std::env::var_os("PATH").context("the test host should have a PATH")?;
 
     // The override touches only an unrelated marker; PATH is not configured.
     run_ninja_with(&NinjaBuildRequest {
@@ -241,8 +256,8 @@ fn unoverridden_parent_variables_are_inherited() -> Result<()> {
 
     let observed = observed_value(&dir)?;
     ensure!(
-        observed == parent_path,
-        "an un-overridden PATH should be inherited from the parent;\n  saw:      {observed:?}\n  expected: {parent_path:?}"
+        observed == inherited,
+        "an un-overridden PATH should be inherited from the parent;\n  saw:      {observed:?}\n  expected: {inherited:?}"
     );
     Ok(())
 }
@@ -255,12 +270,17 @@ fn unoverridden_parent_variables_are_inherited() -> Result<()> {
 /// asked about: an arbitrary variable, and the tool-request path carrying it.
 #[cfg(unix)]
 #[rstest]
-fn general_overrides_reach_the_spawned_tool_process() -> Result<()> {
+fn general_overrides_reach_the_spawned_tool_process(
+    #[with("printf '%s' \"$NETSUKE_PROBE_MARKER\" > \"$0.observed\"")] probe_fixture: Result<(
+        tempfile::TempDir,
+        PathBuf,
+        PathBuf,
+    )>,
+) -> Result<()> {
     use netsuke::cli::Cli;
     use netsuke::runner::{NinjaToolRequest, run_ninja_tool_with};
 
-    let (dir, probe, build_file) =
-        probe_fixture("printf '%s' \"$NETSUKE_PROBE_MARKER\" > \"$0.observed\"")?;
+    let (dir, probe, build_file) = probe_fixture?;
     let cli = Cli::default();
 
     run_ninja_tool_with(&NinjaToolRequest {
