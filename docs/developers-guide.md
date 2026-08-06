@@ -1472,6 +1472,14 @@ is not obvious from the name:
   `ensure_manifest_exists` uses it both to reject a directory where a manifest
   file is expected, and to accept a destination directory that is already
   present.
+- `try_is_file(path) -> io::Result<bool>` is the fallible counterpart to the
+  boolean predicates: `Ok(true)` when the path is a regular file, `Ok(false)`
+  when it is absent (`NotFound` is folded into the boolean result), and
+  `Err` for any other metadata failure, so callers can distinguish absence
+  from inaccessibility. The binary locator in `test_support/src/netsuke.rs`
+  (`netsuke_executable_from`, see
+  [Locating the netsuke binary](#locating-the-netsuke-binary)) relies on it to
+  surface unexpected filesystem errors while probing candidate paths.
 - `is_executable_file(path) -> bool` (Unix only) is `true` when the path is a
   regular file with any execute bit set, and `false` for an absent or
   unreadable path. It is the inverse of `set_mode`, and exists for probing a
@@ -2220,8 +2228,9 @@ The locator checks candidate paths in order:
    profile directory nests under the target triple.
 
 Filesystem errors other than "not found" are surfaced rather than treated as
-a missing candidate. When every candidate misses, the resulting error lists
-all attempted paths.
+a missing candidate, via the [`test_support::fs`](#test_supportfs) wrapper
+`try_is_file`. When every candidate misses, the resulting error lists all
+attempted paths.
 
 The locator's unit tests live in `test_support/src/netsuke.rs` and cover the
 primary lookup, both fallback paths, and the missing-binary case.

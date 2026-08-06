@@ -103,7 +103,7 @@ pub struct NetsukeRun {
 pub fn run_netsuke_in(current_dir: &Path, args: &[&str]) -> Result<NetsukeRun> {
     let isolated_config_home = current_dir.join(".config");
     let executable = netsuke_executable()?;
-    let mut cmd = assert_cmd::Command::new(executable.as_std_path());
+    let mut cmd = assert_cmd::Command::new(executable);
     let output = cmd
         .current_dir(current_dir)
         .env("PATH", "")
@@ -139,7 +139,7 @@ pub fn run_netsuke_in_with_env(
     extra_env: &[(&str, &str)],
 ) -> Result<NetsukeRun> {
     let executable = netsuke_executable()?;
-    let mut cmd = assert_cmd::Command::new(executable.as_std_path());
+    let mut cmd = assert_cmd::Command::new(executable);
     let isolated_config_home = current_dir.join(".config");
     let isolated_path = tempfile::tempdir().context("create isolated executable directory")?;
     cmd.current_dir(current_dir)
@@ -249,6 +249,26 @@ mod tests {
     }
 
     #[test]
+    fn prefers_the_primary_candidate_when_fallback_also_exists() -> Result<()> {
+        let temp = tempfile::tempdir().context("create temp dir")?;
+        let root = utf8_root(&temp)?;
+        let exe = root.join("build/debug/deps/test-exe");
+        touch(&exe)?;
+        let primary = root.join("build/debug").join(binary_name());
+        touch(&primary)?;
+        let target_dir = root.join("target");
+        let fallback = target_dir.join("debug").join(binary_name());
+        touch(&fallback)?;
+
+        let located = netsuke_executable_from(&env_with_target_dir(Some(&target_dir)), &exe)?;
+        ensure!(
+            located == primary,
+            "the primary candidate should win over the fallback; got {located}"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn reports_every_attempted_candidate_when_missing() -> Result<()> {
         let temp = tempfile::tempdir().context("create temp dir")?;
         let root = utf8_root(&temp)?;
@@ -262,6 +282,7 @@ mod tests {
         for expected in [
             root.join("build/debug").join(binary_name()),
             target_dir.join("debug").join(binary_name()),
+            target_dir.join("build/debug").join(binary_name()),
         ] {
             ensure!(
                 message.contains(expected.as_str()),
