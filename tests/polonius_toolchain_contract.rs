@@ -22,14 +22,11 @@ use toml::Value as TomlValue;
 
 const POLONIUS_FLAG: &str = "-Zpolonius=next";
 const POLONIUS_VAR: &str = "$(POLONIUS_FLAGS)";
-const SETUP_RUST_ACTION: &str = concat!(
-    "leynos/shared-actions/.github/actions/setup-rust@",
-    "8add2d99854a5b77548eae98cca59202e68fefc8"
-);
-const RUST_BUILD_RELEASE_ACTION: &str = concat!(
-    "leynos/shared-actions/.github/actions/rust-build-release@",
-    "8add2d99854a5b77548eae98cca59202e68fefc8"
-);
+// The action paths end at the `@` deliberately: the ref behind it is owned
+// by Dependabot, which bumps workflow pins but cannot update tests, so the
+// contract asserts which action carries the flags and never which revision.
+const SETUP_RUST_ACTION: &str = "leynos/shared-actions/.github/actions/setup-rust@";
+const RUST_BUILD_RELEASE_ACTION: &str = "leynos/shared-actions/.github/actions/rust-build-release@";
 const WARNINGS_POLONIUS_RUSTFLAGS: &str = "-D warnings -Zpolonius=next";
 
 /// Describes one workflow's shared-action and toolchain contract.
@@ -165,8 +162,10 @@ fn workflows_pass_polonius_rustflags_to_shared_actions(
         .with_context(|| format!("{path} job {job} should declare steps"))?;
     let shared_action = steps
         .iter()
-        .find(|step| yaml_str(step, &["uses"]) == Some(expected_action))
-        .with_context(|| format!("{path} job {job} should use {expected_action}"))?;
+        .find(|step| {
+            yaml_str(step, &["uses"]).is_some_and(|uses| uses.starts_with(expected_action))
+        })
+        .with_context(|| format!("{path} job {job} should use {expected_action}<ref>"))?;
     let rustflags = yaml_str(shared_action, &["with", "rustflags"])
         .with_context(|| format!("{path} {expected_action} should pass rustflags"))?;
     ensure!(

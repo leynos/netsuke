@@ -294,9 +294,8 @@ independently edited pin would let the two disagree.
 [`tests/polonius_toolchain_contract.rs`](../tests/polonius_toolchain_contract.rs)
 enforces all four callers. For each one it asserts:
 
-- the job uses the expected shared-action reference — path *and* pinned
-  revision (see "Workflow pins and Dependabot" below for why the exact
-  revision is asserted here);
+- the job uses the expected shared action, matched by path with the revision
+  deliberately ignored (see "Workflow pins and Dependabot" below);
 - the `with.rustflags` value matches the table above in full, not merely that
   it contains `-Zpolonius=next`, so a dropped `-D warnings` is caught too;
 - the job declares no `env.RUSTFLAGS`;
@@ -520,28 +519,25 @@ shared-action revision: the caller would keep working across any upstream bump,
 so pinning the SHA in a test buys nothing and costs a manual edit per bump.
 `tests/workflow_contracts/mutation_testing_test.py` is the canonical example.
 
-#### Exception: the Polonius shared-action contract
+#### The Polonius shared-action contract is also shape-only
 
 The four workflows described under [Polonius CI shared-action
-contract](#polonius-ci-shared-action-contract) do depend on a specific
-revision. The `rustflags` input they rely on was introduced at a known commit
-in `leynos/shared-actions`. A revision that predates it does not fail the run —
-an unrecognized `with:` key on a composite action is a warning, not an error —
-it simply never exports the flag, so the build fails later as a borrow-check
-error rather than as a configuration error.
+contract](#polonius-ci-shared-action-contract) rely on the `rustflags` input,
+which was introduced at a known commit in `leynos/shared-actions`. A revision
+that predates it does not fail the run — an unrecognized `with:` key on a
+composite action is a warning, not an error — it simply never exports the
+flag, so the build fails later as a borrow-check error rather than as a
+configuration error.
 
-`tests/polonius_toolchain_contract.rs` therefore asserts each of those
-workflows' exact shared-action path *and* pinned revision, held in the
-`SETUP_RUST_ACTION` and `RUST_BUILD_RELEASE_ACTION` constants. A Dependabot
-bump of these four references is expected to fail the test until someone
-updates the constants, and that failure is the point: it forces a human to
-confirm the new revision still implements the `rustflags` input contract before
-the bump lands. Restrict this exception to callers with a genuine
-revision-level dependency; everywhere else, the shape-only policy applies.
-
-If a workflow's behaviour does not depend on a feature from a particular commit
-onwards, do not assert its SHA — express any advisory note as a comment or a
-changelog entry instead.
+Even so, `tests/polonius_toolchain_contract.rs` matches those workflows'
+shared-action references by path alone; the `SETUP_RUST_ACTION` and
+`RUST_BUILD_RELEASE_ACTION` constants end at the `@`. The revision behind it
+is owned by Dependabot, which bumps workflow pins but cannot edit tests, so a
+pinned-revision assertion turns every routine bump into a broken main. The
+regression the pin assertion used to guard against — a revision losing the
+`rustflags` input — is instead caught by the borrow-check failure described
+above, one step later but unambiguously. Do not assert shared-action SHAs in
+tests; express any advisory note as a comment or a changelog entry instead.
 
 ## Mutation-testing workflow contract tests
 
