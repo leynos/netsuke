@@ -76,9 +76,10 @@ fn set_cli_override(world: &TestWorld, locale: &str) {
 
 #[when("the startup locale is resolved for {args:string}")]
 fn resolve_startup_locale(world: &TestWorld, args: &str) {
-    let env = StubEnv {
-        locale: world.locale_env.get(),
-    };
+    let env = world
+        .locale_env
+        .get()
+        .map_or_else(StubEnv::without_locale, StubEnv::with_locale);
     let system = StubSystemLocale {
         locale: world.locale_system.get(),
     };

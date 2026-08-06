@@ -59,7 +59,7 @@ fn resolve_startup_locale_uses_env_then_system() -> Result<()> {
         "expected env locale to win, got {resolved:?}"
     );
 
-    let env_fallback = StubEnv::default();
+    let env_fallback = StubEnv::without_locale();
     let resolved_fallback = resolve_startup_locale(&args, &env_fallback, &system);
     ensure!(
         resolved_fallback.as_deref() == Some("es-ES"),

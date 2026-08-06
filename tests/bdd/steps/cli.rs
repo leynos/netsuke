@@ -34,9 +34,10 @@ use test_support::locale_stubs::{StubEnv, StubSystemLocale};
 /// Tests that do not explicitly set up configuration or environment variables
 /// may be affected by ambient host configuration.
 pub(super) fn apply_cli(world: &TestWorld, args: &CliArgs) {
-    let env = StubEnv {
-        locale: world.locale_env.get(),
-    };
+    let env = world
+        .locale_env
+        .get()
+        .map_or_else(StubEnv::without_locale, StubEnv::with_locale);
     let system = StubSystemLocale {
         locale: world.locale_system.get(),
     };

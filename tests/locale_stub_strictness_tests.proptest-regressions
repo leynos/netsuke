@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+# Recorded while mutation-testing the property (allowing's value clear was
+# disabled to prove the test detects it), not from a defect in StubEnv.
+cc 04881a9256003f8215b73836a16209c1713861db70e59925b4d1ca3ea1cebec3 # shrinks to declarations = [Set("A", "a"), Allow("A")]
