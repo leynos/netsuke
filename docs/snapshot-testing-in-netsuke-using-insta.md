@@ -283,15 +283,17 @@ unredacted, that field changes on every version bump and would churn every
 diagnostic-JSON snapshot — this is exactly what happened on the v0.1.0-beta1
 bump.
 
-The shared `snapshot_settings()` helper in `src/diagnostic_json_tests.rs`
-adds an insta filter that rewrites the generator's version to `[version]`.
-The filter anchors on the preceding `"name": "netsuke"` line, so it redacts
-only the generator block's version; any other field named `version`
-elsewhere in a diagnostic document remains visible in snapshot diffs.
+The shared `diagnostic_json_snapshot_settings()` helper in
+`src/snapshot_test_support.rs` adds an insta filter that rewrites the
+generator's version to `[version]`. The filter anchors on the enclosing
+`"generator"` object and its `"name": "netsuke"` line, so it redacts only
+the generator block's version; any other field named `version` elsewhere in
+a diagnostic document remains visible in snapshot diffs.
+`src/diagnostic_json_tests.rs` imports the helper.
 
-New diagnostic-JSON snapshot tests must bind through this shared
-`snapshot_settings()` helper rather than asserting raw output, so the
-redaction is applied consistently.
+New diagnostic-JSON snapshot tests, in any module, must bind through
+`snapshot_test_support::diagnostic_json_snapshot_settings()` rather than
+asserting raw output, so the redaction is applied consistently.
 
 `schema_version` and the generator name are deliberately excluded from this
 redaction: they are asserted structurally in dedicated tests, separate from

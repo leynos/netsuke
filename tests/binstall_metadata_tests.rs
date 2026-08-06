@@ -17,6 +17,7 @@ use test_support::fs as test_fs;
 const CARGO_MANIFEST: &str = "Cargo.toml";
 const STAGING_CONFIG: &str = ".github/release-staging.toml";
 const RELEASE_WORKFLOW: &str = ".github/workflows/release.yml";
+const HOIST_SCRIPT: &str = "scripts/hoist_binstall_archives.py";
 
 /// The asset-name template the staging action uses when `archive_name` is not
 /// overridden. The binstall `pkg-url` in `Cargo.toml` must resolve to the
@@ -147,10 +148,22 @@ fn release_workflow_builds_and_hoists_every_staged_target() -> Result<()> {
             target.target
         );
     }
+    // The hoist logic lives in a script so its behaviour (archive selection,
+    // checksum validation, and movement of both files) is exercised by
+    // `tests/workflow_contracts/hoist_binstall_archives_test.py`; this
+    // contract pins the workflow wiring to that script.
     ensure!(
-        workflow.contains("Hoist cargo-binstall archives"),
-        "{RELEASE_WORKFLOW} should hoist binstall archives to the release root \
-         so the pkg-url template in {CARGO_MANIFEST} resolves them"
+        test_fs::exists(HOIST_SCRIPT),
+        "{HOIST_SCRIPT} should exist; the release workflow invokes it"
+    );
+    ensure!(
+        workflow.contains(HOIST_SCRIPT),
+        "{RELEASE_WORKFLOW} should invoke {HOIST_SCRIPT} to validate and hoist \
+         binstall archives so the pkg-url template in {CARGO_MANIFEST} resolves them"
+    );
+    ensure!(
+        workflow.contains("--version '${{ needs.metadata.outputs.version }}'"),
+        "{RELEASE_WORKFLOW} should pass the resolved release version to {HOIST_SCRIPT}"
     );
     Ok(())
 }

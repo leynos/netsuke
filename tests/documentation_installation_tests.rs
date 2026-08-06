@@ -37,6 +37,7 @@ fn registry_install_examples_pin_toolchain_and_polonius() -> Result<()> {
     // are exempt.
     let mut registry_install_ids = Vec::new();
     for example in load_documented_examples()? {
+        let mut example_matches = false;
         for line in example.body.lines() {
             if !line.contains("install netsuke-build") || line.contains("binstall") {
                 continue;
@@ -51,7 +52,10 @@ fn registry_install_examples_pin_toolchain_and_polonius() -> Result<()> {
                 "{id} must pass the Polonius borrow-checker flag: {line}",
                 id = example.id
             );
-            registry_install_ids.push(example.id.clone());
+            example_matches = true;
+        }
+        if example_matches {
+            registry_install_ids.push(example.id);
         }
     }
     ensure!(

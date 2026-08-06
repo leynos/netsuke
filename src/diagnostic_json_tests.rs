@@ -7,35 +7,52 @@ use crate::manifest;
 use crate::runner::RunnerError;
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
-use insta::{Settings, assert_snapshot};
+use insta::assert_snapshot;
 use proptest::prelude::*;
 use rstest::rstest;
 use serde_json::{Map, Value};
 use std::path::PathBuf;
 use test_support::{EnLocalizer, en_localizer};
 
+use crate::snapshot_test_support::diagnostic_json_snapshot_settings as snapshot_settings;
+
 /// Parses a JSON string into a [`serde_json::Value`].
 fn parse_json_value(document: &str) -> Result<Value> {
     serde_json::from_str(document).context("parse diagnostics JSON")
 }
 
-/// Builds insta [`Settings`] pointing at the `src/snapshots/diagnostic_json` directory.
-///
-/// The generator version is redacted so snapshots survive version bumps. The
-/// filter anchors on the preceding `"name": "netsuke"` line so only the
-/// generator's version is redacted; any other `version` field stays
-/// detectable in snapshot diffs.
-fn snapshot_settings() -> Settings {
-    let mut settings = Settings::new();
-    settings.set_snapshot_path(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/src/snapshots/diagnostic_json"
-    ));
-    settings.add_filter(
-        r#"("name": "netsuke",\s*\n\s*"version": ")[^"]+(")"#,
-        r"${1}[version]${2}",
+/// The redaction filter must touch only the generator's version: a `version`
+/// field elsewhere in a rendered document has to stay visible in snapshot
+/// diffs, so drift in other versioned content remains detectable.
+#[rstest]
+fn snapshot_filter_preserves_versions_outside_the_generator_block() {
+    let rendered = concat!(
+        "{\n",
+        "  \"generator\": {\n",
+        "    \"name\": \"netsuke\",\n",
+        "    \"version\": \"9.9.9\"\n",
+        "  },\n",
+        "  \"tool\": {\n",
+        "    \"name\": \"netsuke\",\n",
+        "    \"version\": \"1.2.3\"\n",
+        "  }\n",
+        "}"
     );
-    settings
+
+    snapshot_settings().bind(|| {
+        assert_snapshot!(rendered, @r#"
+        {
+          "generator": {
+            "name": "netsuke",
+            "version": "[version]"
+          },
+          "tool": {
+            "name": "netsuke",
+            "version": "1.2.3"
+          }
+        }
+        "#);
+    });
 }
 
 /// Extracts the first diagnostic object from the top-level `diagnostics` array.

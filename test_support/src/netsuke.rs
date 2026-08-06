@@ -268,6 +268,71 @@ mod tests {
         Ok(())
     }
 
+    /// Exhaustively covers every presence combination of the three
+    /// candidates: the first present candidate in declaration order must win,
+    /// and the empty combination must error. This pins the precedence
+    /// invariant rather than sampling isolated layouts.
+    #[test]
+    fn first_present_candidate_wins_for_every_presence_combination() -> Result<()> {
+        let candidate_dirs = ["build/debug", "target/debug", "target/build/debug"];
+        for presence in 0_u8..8 {
+            let temp = tempfile::tempdir().context("create temp dir")?;
+            let root = utf8_root(&temp)?;
+            let exe = root.join("build/debug/deps/test-exe");
+            touch(&exe)?;
+            let target_dir = root.join("target");
+            let present: Vec<usize> = (0..3).filter(|slot| presence & (1 << slot) != 0).collect();
+            for &slot in &present {
+                let dir = candidate_dirs.get(slot).context("slot in range")?;
+                touch(&root.join(dir).join(binary_name()))?;
+            }
+
+            let located = netsuke_executable_from(&env_with_target_dir(Some(&target_dir)), &exe);
+            match present.first() {
+                Some(&winner) => {
+                    let dir = candidate_dirs.get(winner).context("winner in range")?;
+                    let expected = root.join(dir).join(binary_name());
+                    let resolved = located
+                        .with_context(|| format!("combination {presence:#05b} should resolve"))?;
+                    ensure!(
+                        resolved == expected,
+                        "combination {presence:#05b} should pick candidate {winner}; got {resolved}"
+                    );
+                }
+                None => ensure!(
+                    located.is_err(),
+                    "combination {presence:#05b} has no binary and should error"
+                ),
+            }
+        }
+        Ok(())
+    }
+
+    /// A candidate that cannot be inspected (traversal through a regular
+    /// file) must surface the filesystem error rather than fall through to
+    /// later candidates.
+    #[test]
+    fn surfaces_filesystem_errors_from_candidate_probes() -> Result<()> {
+        let temp = tempfile::tempdir().context("create temp dir")?;
+        let root = utf8_root(&temp)?;
+        // `build` is a regular file, so the first candidate `build/netsuke`
+        // traverses through it and fails with an error other than NotFound.
+        // The executable path itself never needs to exist for the probe.
+        let blocker = root.join("build");
+        touch(&blocker)?;
+        let exe = blocker.join("test-exe");
+
+        let error = netsuke_executable_from(&env_with_target_dir(None), &exe)
+            .expect_err("probing through a regular file should fail");
+        ensure!(
+            error
+                .to_string()
+                .contains("inspect candidate netsuke binary"),
+            "unexpected error: {error:?}"
+        );
+        Ok(())
+    }
+
     #[test]
     fn reports_every_attempted_candidate_when_missing() -> Result<()> {
         let temp = tempfile::tempdir().context("create temp dir")?;

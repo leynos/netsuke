@@ -318,6 +318,17 @@ mod tests {
     use std::io;
 
     #[test]
+    fn try_is_file_reports_an_absent_path_as_not_a_file() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+
+        anyhow::ensure!(
+            !try_is_file(temp.path().join("absent"))?,
+            "an absent path should fold NotFound into false"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn try_is_file_reports_a_directory_as_not_a_file() -> anyhow::Result<()> {
         let temp = tempfile::tempdir()?;
 
