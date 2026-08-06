@@ -2406,6 +2406,41 @@ The full normalization contract, which the property tests in
   `parse_pathext(None)` and `parse_pathext(Some(";  ;"))` both yield
   `DEFAULT_PATHEXT`.
 
+### Home-directory resolution ladders
+
+`stdlib::path::path_utils` resolves the user's home through two precedence
+ladders — POSIX (`HOME`, then `USERPROFILE`) and Windows (those two, then the
+`HOMEDRIVE`/`HOMEPATH` pair, then `HOMESHARE`). Both take an injected
+`read_env` closure. `home_from_env` selects between them by platform; each
+helper is itself gated `#[cfg(any(windows, test))]` or its inverse, so it
+compiles for its own platform *and* under `test`, and neither holds
+platform-selection logic of its own.
+
+#### Ladder ownership and call sites
+
+- The ladders are `pub(super)` and owned by `stdlib::path`. They are not a
+  general home-directory utility: callers elsewhere use `expanduser`.
+- `expanduser` resolves the home through the injected `HomeDirectory` value:
+  `Explicit` and `Missing` never touch the environment, and `Ambient` calls
+  `home_from_env`, whose process-backed `read_env` closure is the module's
+  one remaining ambient read — the composition root carrying the sanctioned
+  site-level expectation. Tests call the ladders directly with their own
+  reader.
+
+#### Ladder composition rules
+
+- Extract each ladder free of platform *selection logic*, leaving that to
+  `home_from_env`, so both stay reachable from any host. The helpers are still
+  `cfg`-gated — see the next rule — but only for whether they compile, never
+  for which one applies.
+- Gate the extracted helpers `#[cfg(any(windows, test))]` and its inverse.
+  Compiling them unconditionally leaves the inapplicable one dead in a release
+  build, which `-D warnings` rejects; gating them to the platform alone makes
+  the Windows ladder untestable on the CI host.
+- The ladders report what the environment says. An empty value is passed
+  through rather than treated as unset, and interpreting that is `expanduser`'s
+  concern, not theirs.
+
 ### Configuration discovery module layout
 
 `src/cli/discovery.rs` attaches several small `#[path = "..."]` modules that

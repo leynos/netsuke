@@ -157,28 +157,88 @@ fn current_dir_utf8() -> Result<Utf8PathBuf, io::Error> {
     dir.canonicalize(Utf8Path::new("."))
 }
 
-#[cfg(windows)]
+/// Select the platform ladder and drive it with the process-backed reader.
+///
+/// Only the *selection* is platform-gated; neither ladder holds
+/// platform-specific logic, which is what keeps both reachable from any host.
+/// The closure below is the module's composition root: the one remaining
+/// ambient environment read, consulted only when [`HomeDirectory::Ambient`]
+/// asks for it.
 #[expect(
     clippy::disallowed_methods,
-    reason = "composition root: home resolution is the path stdlib's ambient boundary; the injected ladders are tracked in the environment meta issue"
+    reason = "composition root: the process-backed reader that drives the injected home ladders when `HomeDirectory::Ambient` is selected"
 )]
 fn home_from_env() -> Option<String> {
-    env::var("HOME")
-        .or_else(|_| env::var("USERPROFILE"))
-        .ok()
-        .or_else(
-            || match (env::var("HOMEDRIVE").ok(), env::var("HOMEPATH").ok()) {
-                (Some(drive), Some(path)) if !path.is_empty() => Some(format!("{drive}{path}")),
-                _ => env::var("HOMESHARE").ok(),
-            },
-        )
+    let read_env = |key: &str| env::var(key).ok();
+    #[cfg(windows)]
+    {
+        windows_home_from(read_env)
+    }
+    #[cfg(not(windows))]
+    {
+        posix_home_from(read_env)
+    }
 }
 
-#[cfg(not(windows))]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "composition root: home resolution is the path stdlib's ambient boundary; the injected ladders are tracked in the environment meta issue"
-)]
-fn home_from_env() -> Option<String> {
-    env::var("HOME").or_else(|_| env::var("USERPROFILE")).ok()
+/// Resolve the home directory using the POSIX precedence ladder.
+///
+/// Free of platform gating in its *logic*; the `cfg` attribute controls only
+/// whether it is compiled, and the platform selection lives in
+/// [`home_from_env`].
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let env = |key: &str| (key == "HOME").then(|| String::from("/home/a"));
+/// assert_eq!(posix_home_from(env).as_deref(), Some("/home/a"));
+/// ```
+#[cfg(any(not(windows), test))]
+pub(super) fn posix_home_from<F>(read_env: F) -> Option<String>
+where
+    F: Fn(&str) -> Option<String>,
+{
+    read_env("HOME").or_else(|| read_env("USERPROFILE"))
+}
+
+/// Resolve the home directory using the Windows precedence ladder.
+///
+/// `HOME` and `USERPROFILE` first, then the `HOMEDRIVE`/`HOMEPATH` pair, and
+/// finally `HOMESHARE`. An empty `HOMEPATH` is treated as unset, because
+/// joining it to `HOMEDRIVE` would yield a bare drive letter rather than a home
+/// directory.
+///
+/// Compiled on Windows and under `test`. Gated to `#[cfg(windows)]` alone this
+/// ladder could not be exercised from the Unix CI host, and it is the more
+/// intricate of the two; compiled unconditionally it would be dead code in a
+/// Unix release build, which `-D warnings` rejects.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// // The drive and path pair combine when HOMEPATH is non-empty.
+/// let env = |key: &str| match key {
+///     "HOMEDRIVE" => Some(String::from("C:")),
+///     "HOMEPATH" => Some(String::from("\\me")),
+///     _ => None,
+/// };
+/// assert_eq!(windows_home_from(env).as_deref(), Some("C:\\me"));
+/// ```
+#[cfg(any(windows, test))]
+pub(super) fn windows_home_from<F>(read_env: F) -> Option<String>
+where
+    F: Fn(&str) -> Option<String>,
+{
+    read_env("HOME")
+        .or_else(|| read_env("USERPROFILE"))
+        .or_else(|| match (read_env("HOMEDRIVE"), read_env("HOMEPATH")) {
+            // Both halves must be non-empty. An empty HOMEDRIVE would yield a
+            // bare `\me`, which names a path on the current drive rather than
+            // a home directory; an empty HOMEPATH would yield a bare `C:`,
+            // which names a drive. Either way the pair is incomplete, so fall
+            // through to HOMESHARE.
+            (Some(drive), Some(path)) if !drive.is_empty() && !path.is_empty() => {
+                Some(format!("{drive}{path}"))
+            }
+            _ => read_env("HOMESHARE"),
+        })
 }
