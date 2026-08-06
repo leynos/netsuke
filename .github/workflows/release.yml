@@ -236,6 +236,16 @@ jobs:
         with:
           path: dist
           pattern: ${{ needs.metadata.outputs.repo_name }}-*
+      - name: Hoist cargo-binstall archives to the release root
+        shell: bash
+        # Validates that every target listed in release-staging.toml staged
+        # its archive and checksum sidecar, then moves the pairs to dist/ so
+        # they upload under the plain names the binstall metadata resolves.
+        # A missing target or sidecar fails the release with the names listed.
+        run: |
+          set -euo pipefail
+          python3 scripts/hoist_binstall_archives.py \
+            --version '${{ needs.metadata.outputs.version }}'
       - id: upload_assets
         name: Upload artefacts to release
         uses: >-

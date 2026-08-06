@@ -4,6 +4,13 @@ dist_dir = "dist"
 checksum_algorithm = "sha256"
 staging_dir_template = "{bin_name}_{platform}_{arch}"
 
+# Stage a `{package_name}-{version}-{target}.tar.gz` archive (plus `.sha256`
+# sidecar) for every target. `release.yml` hoists these to the release root so
+# the `[package.metadata.binstall]` template in Cargo.toml resolves them;
+# `tests/binstall_metadata_tests.rs` holds the three files to that contract.
+[common.binstall]
+enabled = true
+
 [[common.artefacts]]
 source = "target/{target}/release/{bin_name}{bin_ext}"
 output = "binary_path"
