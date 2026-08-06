@@ -2672,12 +2672,13 @@ credentials. This mirrors the redaction rule `env_var_with` already applies to
 `env()` lookup failures; see [Manifest `env()` reader](#manifest-env-reader).
 
 `describe_macro_metrics` and `describe_render_metrics` register each metric's
-description exactly once, guarded by `std::sync::Once`.
-`describe_macro_metrics` runs when `make_macro_fn` builds a macro's
-registration, not on each invocation, so the guard never sits on the invocation
-hot path. `describe_render_metrics` runs at the top of every `render_template`
-call; the `Once` guard still limits the actual `describe_counter!`/
-`describe_histogram!` calls to the first render.
+description exactly once, guarded by `std::sync::Once`. Neither is called from a
+query function: `describe_macro_metrics` runs when `make_macro_fn` builds a
+macro's registration, which is setup rather than evaluation, so the guard never
+sits on the invocation hot path; `describe_render_metrics` runs inside
+`instrument_template_render`, so `render_template` names only the
+instrumentation boundary it composes with and never reaches for the metric
+registry itself.
 
 Per `AGENTS.md`, this module emits through `metrics` and `tracing` but must not
 install a global recorder or subscriber; only the application does that, at
