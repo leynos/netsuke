@@ -43,7 +43,7 @@ fn compose_requests<'a>(parts: &Parts<'a>) -> (NinjaBuildRequest<'a>, NinjaToolR
     (build, tool)
 }
 
-fn main() {
+fn main() -> io::Result<()> {
     // The builder surface composes without touching the process environment.
     let env = CommandEnv::inherit()
         .with_var("NINJA_STATUS", "[%f/%t] ")
@@ -62,9 +62,11 @@ fn main() {
     };
     let (build, tool) = compose_requests(&parts);
 
-    // Reference the explicit entry points by signature; calling them would
-    // spawn a process, which a compile-only fixture must not do.
-    let _run: fn(&NinjaBuildRequest<'_>) -> io::Result<()> = run_ninja_with;
-    let _run_tool: fn(&NinjaToolRequest<'_>) -> io::Result<()> = run_ninja_tool_with;
-    let _ = (build, tool);
+    // Genuine calls to the explicit entry points. The harness compiles this
+    // fixture with --emit=metadata and never runs it, so no process spawns;
+    // what is proven is that an embedder can drive both boundaries with the
+    // requests composed above.
+    run_ninja_with(&build)?;
+    run_ninja_tool_with(&tool)?;
+    Ok(())
 }
