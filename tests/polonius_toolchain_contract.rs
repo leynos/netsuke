@@ -24,11 +24,11 @@ const POLONIUS_FLAG: &str = "-Zpolonius=next";
 const POLONIUS_VAR: &str = "$(POLONIUS_FLAGS)";
 const SETUP_RUST_ACTION: &str = concat!(
     "leynos/shared-actions/.github/actions/setup-rust@",
-    "2f90d1041ea108148be0620e3bbcc1fa80ac03e4"
+    "8add2d99854a5b77548eae98cca59202e68fefc8"
 );
 const RUST_BUILD_RELEASE_ACTION: &str = concat!(
     "leynos/shared-actions/.github/actions/rust-build-release@",
-    "2f90d1041ea108148be0620e3bbcc1fa80ac03e4"
+    "8add2d99854a5b77548eae98cca59202e68fefc8"
 );
 const WARNINGS_POLONIUS_RUSTFLAGS: &str = "-D warnings -Zpolonius=next";
 
