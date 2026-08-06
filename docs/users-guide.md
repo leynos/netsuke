@@ -716,6 +716,7 @@ Common environment equivalents include:
 - `NETSUKE_LOCALE=en-US`
 - `NETSUKE_DEFAULT_TARGETS__0=hello.txt`
 - `NETSUKE_NINJA=/opt/ninja/bin/ninja`
+- `NETSUKE_WHICH_WORKSPACE=0`
 
 `NETSUKE_LOCALE` selects the interface language; see
 [Choose a language with `--locale`](#choose-a-language-with---locale) for how
@@ -724,6 +725,13 @@ it combines with the flag and the system default.
 `NETSUKE_NINJA` overrides the Ninja executable used by `build` and `clean`.
 Leave it unset to use `ninja` from `PATH`, or set another executable name or an
 absolute path. Empty and non-UTF-8 values fall back to the default.
+
+`NETSUKE_WHICH_WORKSPACE` switches off the `which()` workspace-tree fallback
+search that runs when a command is not found on `PATH`. Set it to `0`,
+`false`, or `off` (case-insensitively) to disable the fallback; any other
+value, or leaving it unset, keeps the fallback enabled. A non-Unicode value
+also disables the fallback and is treated as an explicit opt-out, emitting a
+warning.
 
 The CLI and configuration use the same policy values. `auto` follows terminal
 and environment detection. `always` or `never` makes colour, emoji, or progress
