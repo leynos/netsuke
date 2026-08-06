@@ -1757,6 +1757,10 @@ boundary policy.
 
 ### Environment and template ports
 
+The seams described in this section follow one of three sanctioned shapes,
+chosen by call-site count and `Send + Sync` requirements; see
+[ADR-008](adr-008-environment-seam-taxonomy.md) for the taxonomy.
+
 `manifest::EnvReader` owns environment lookup for the manifest `env()` helper.
 Production constructs the process-backed adapter at the manifest loading
 boundary; tests pass an `Arc`-backed reader directly. The port is only for
