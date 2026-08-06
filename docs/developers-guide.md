@@ -1691,6 +1691,45 @@ lock is still held; `try_lock` from the owning thread returns `WouldBlock`, so
 "blocked" means the bundle still holds it. Reverting the field order turns that
 assertion red deterministically.
 
+### `StubEnv` strictness
+
+`test_support::locale_stubs::StubEnv` is the environment-variable test double
+used by locale-resolution tests. It answers only the keys a test declares, and
+**panics**, naming the key, on any other read. The permissive alternative —
+returning `None` for anything unrecognized — hides exactly the regression a
+test double should catch: if the code under test starts reading a differently
+named variable, through a rename, a typo, or a new precedence rung, a
+permissive stub answers `None` and the test still passes, asserting nothing
+about the new read. Recognize the panic message, `"which the test did not
+declare"`, when a test starts failing after a rename; it means the test's
+declarations need updating, not that the stub is broken.
+
+Three distinct states are representable for a key: **declared with a value**
+(`with_var`), **declared but unset** (`allowing`, which reports `None`), and
+**undeclared** (any other key, which panics). The middle case matters because
+an unset variable is a legitimate scenario to exercise, and it must be
+distinguishable from a variable the test never expected to be read at all.
+`StubEnv::with_locale` and `StubEnv::without_locale` are the common
+constructors for `NETSUKE_LOCALE`; `strict()` starts from nothing declared.
+
+Declaring the same key twice is well-defined: the most recent declaration
+wins, in either order. `allowing` after `with_var` clears the value; `with_var`
+after `allowing` restores one. Were `allowing` merely to append to the
+permitted-keys list rather than clearing the stored value, it would read as
+declaring the key unset while still answering with the earlier value.
+
+`Default` is deliberately **not** implemented for `StubEnv`. On a strict stub,
+"default" would have to mean "deny every read", so `StubEnv::default()` would
+compile and then panic at run time for the common "no locale set" case;
+requiring `StubEnv::without_locale()` instead makes that intent explicit at
+compile time. This refusal is itself a tested contract:
+`tests/locale_stub_ui_tests.rs` compiles a fixture calling
+`StubEnv::default()` directly with `rustc` and asserts the compile fails with
+`E0599` naming the missing `default` item, guarding against the constraint
+regressing to a doc-comment promise. `tests/locale_stub_strictness_tests.rs`
+covers the panic, the trichotomy, and the last-declaration-wins rule with
+both example-based and property tests.
+
 ### Manifest `env()` reader
 
 The `env()` Jinja helper reads through an injected [`EnvReader`], a shared

@@ -117,12 +117,21 @@ mod properties {
                     // Silence the default panic hook around the probe: each
                     // undeclared read otherwise prints its full panic message,
                     // and 256 cases times three keys of that buries any
-                    // genuine failure output. The hook is process-wide, so it
-                    // is restored immediately rather than left installed.
-                    let prior = std::panic::take_hook();
-                    std::panic::set_hook(Box::new(|_| {}));
-                    let read = catch_unwind(AssertUnwindSafe(|| stub.var(key)));
-                    std::panic::set_hook(prior);
+                    // genuine failure output. The hook is process-wide, so
+                    // the swap is serialized behind a lock — nextest runs
+                    // each test in its own process, but the in-process
+                    // runner used for coverage runs tests as threads, and an
+                    // unsynchronized take/set pair could strand the no-op
+                    // hook installed for another thread's probe.
+                    let read = {
+                        static HOOK_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+                        let _guard = HOOK_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                        let prior = std::panic::take_hook();
+                        std::panic::set_hook(Box::new(|_| {}));
+                        let read = catch_unwind(AssertUnwindSafe(|| stub.var(key)));
+                        std::panic::set_hook(prior);
+                        read
+                    };
                     prop_assert!(read.is_err(), "undeclared {} should panic", key);
                 }
             }

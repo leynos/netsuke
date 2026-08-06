@@ -46,8 +46,11 @@ fn stub_env_default_does_not_compile(test_support_rlib: &TestSupportRlib) -> io:
     let stderr = stderr(&output);
     if !stderr.contains("E0599") || !stderr.contains("`default`") {
         return Err(io::Error::other(format!(
-            "the rejection should be the missing `default` item, \
-             not a harness fault:\n{stderr}",
+            concat!(
+                "the rejection should be the missing `default` item, ",
+                "not a harness fault:\n{}",
+            ),
+            stderr
         )));
     }
     Ok(())
