@@ -102,7 +102,7 @@ the conflict in `Decision Log` before proceeding.
   of truth for testing strategy.
 
 - Observation: behavioural tests are discovered via `scenarios!` in
-  `tests/bdd_tests.rs`; there are currently no `hand-written` `#[scenario]`
+  `tests/bdd_tests.rs`; there are currently no handwritten `#[scenario]`
   functions in the suite entry point. Evidence: `tests/bdd_tests.rs` contains
   `scenarios!("tests/features", ...)` and
   `scenarios!("tests/features_unix", ...)`. Impact: scenario return-type
