@@ -479,7 +479,6 @@ assert!(format!("{:?}", manifest.targets[0].name).contains("release"));
 This snippet mirrors the executable doctest on `from_str_with_env` in the API
 documentation, rather than the YAML-only examples elsewhere in this guide.
 
-
 ### Drive Ninja with an explicit environment when embedding
 
 Programs embedding Netsuke as a library can invoke Ninja without touching
