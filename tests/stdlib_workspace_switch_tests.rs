@@ -6,6 +6,11 @@
 //! answer. The variable reaches the child through `Command::env`, never by
 //! mutating this process (#493), which is why the boundary test is a
 //! subprocess test.
+//!
+//! Unix-gated at the crate level: the probe is a shell script, so on other
+//! hosts every helper here would be dead code under -D warnings.
+
+#![cfg(unix)]
 
 use anyhow::{Context, Result, ensure};
 use test_support::fs as test_fs;
@@ -50,7 +55,6 @@ fn probe_verdict(temp: &tempfile::TempDir, switch: Option<&str>) -> Result<Strin
     test_fs::read_to_string(temp.path().join("out.ninja")).context("read generated ninja")
 }
 
-#[cfg(unix)]
 #[test]
 fn the_switch_gates_the_workspace_fallback_end_to_end() -> Result<()> {
     let temp = probe_workspace()?;

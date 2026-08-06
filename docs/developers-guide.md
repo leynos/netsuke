@@ -1569,9 +1569,9 @@ is not obvious from the name:
   present.
 - `try_is_file(path) -> io::Result<bool>` is the fallible counterpart to the
   boolean predicates: `Ok(true)` when the path is a regular file, `Ok(false)`
-  when it is absent (`NotFound` is folded into the boolean result), and
-  `Err` for any other metadata failure, so callers can distinguish absence
-  from inaccessibility. The binary locator in `test_support/src/netsuke.rs`
+  when it is absent (`NotFound` is folded into the boolean result), and `Err`
+  for any other metadata failure, so callers can distinguish absence from
+  inaccessibility. The binary locator in `test_support/src/netsuke.rs`
   (`netsuke_executable_from`, see
   [Locating the netsuke binary](#locating-the-netsuke-binary)) relies on it to
   surface unexpected filesystem errors while probing candidate paths.
@@ -2423,8 +2423,8 @@ any scenario that requires a hermetic child environment.
 
 #### Locating the netsuke binary
 
-Both `run_netsuke_in` and `run_netsuke_in_with_env` depend on a private
-locator, `netsuke_executable()`, to find the built `netsuke` binary.
+Both `run_netsuke_in` and `run_netsuke_in_with_env` depend on a private locator,
+`netsuke_executable()`, to find the built `netsuke` binary.
 `netsuke_executable()` converts `std::env::current_exe()` to a
 `camino::Utf8PathBuf` and delegates to `netsuke_executable_from`, which takes
 an injected `mockable::Env` — the same injectable-environment pattern used by
@@ -2442,8 +2442,8 @@ The locator checks candidate paths in order:
 3. `CARGO_TARGET_DIR/<triple>/<profile>/`, for `--target` builds where the
    profile directory nests under the target triple.
 
-Filesystem errors other than "not found" are surfaced rather than treated as
-a missing candidate, via the [`test_support::fs`](#test_supportfs) wrapper
+Filesystem errors other than "not found" are surfaced rather than treated as a
+missing candidate, via the [`test_support::fs`](#test_supportfs) wrapper
 `try_is_file`. When every candidate misses, the resulting error lists all
 attempted paths.
 

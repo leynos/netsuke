@@ -28,3 +28,10 @@ Feature: Clean subcommand execution
     And the CLI uses the temporary directory
     When the clean process is run
     Then the command should succeed
+
+  Scenario: Clean respects combined directory and file flags
+    Given a fake ninja executable that expects the clean tool
+    And the CLI is parsed with "-C work --file custom.yml clean"
+    And the CLI uses the temporary directory
+    When the clean process is run
+    Then the command should succeed

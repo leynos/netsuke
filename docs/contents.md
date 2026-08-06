@@ -48,8 +48,7 @@ operator, user, and contributor references are easier to find.
   naming rule it establishes.
 - [adr-008-environment-seam-taxonomy.md](adr-008-environment-seam-taxonomy.md):
   Environment seam taxonomy decision record: three sanctioned shapes for
-  injecting environment-dependent input instead of reading the process
-  directly.
+  injecting environment-dependent input instead of reading the process directly.
 
 ## User and operator guides
 
