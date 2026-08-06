@@ -479,6 +479,21 @@ assert!(format!("{:?}", manifest.targets[0].name).contains("release"));
 This snippet mirrors the executable doctest on `from_str_with_env` in the API
 documentation, rather than the YAML-only examples elsewhere in this guide.
 
+
+### Drive Ninja with an explicit environment when embedding
+
+Programs embedding Netsuke as a library can invoke Ninja without touching
+their own process environment. `netsuke::runner::CommandEnv` carries child
+environment overrides as data — `inherit()` changes nothing, `with_var` and
+`with_path` set variables for the spawned command only — and the explicit
+request forms `run_ninja_with` and `run_ninja_tool_with` accept a request
+naming the program, build file, targets or tool, and that environment. The
+convenience wrappers `run_ninja` and `run_ninja_tool` behave identically
+with an inherited environment. Overrides are additive: variables not named
+are inherited from the embedding process, and the injected `PATH` governs
+what commands Ninja launches will see — supply an absolute program path,
+since a relative name is resolved in the child's `PATH`.
+
 ## Use the template standard library
 
 Netsuke registers focused path, collection, command, network, and time helpers

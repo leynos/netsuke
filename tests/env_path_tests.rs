@@ -130,6 +130,32 @@ fn composed_values_reach_the_command_environment_verbatim() -> Result<()> {
     Ok(())
 }
 
+/// Fixture for the child-probe tests: a fake Ninja recording one value.
+///
+/// Shared by every subprocess case so each states only what it configures
+/// and what the child must have seen.
+#[cfg(unix)]
+fn probe_fixture(script_line: &str) -> Result<(tempfile::TempDir, PathBuf, PathBuf)> {
+    use test_support::fs as test_fs;
+
+    let dir = tempfile::tempdir().context("create temp dir")?;
+    let probe = dir.path().join("ninja");
+    test_fs::write(&probe, format!("#!/bin/sh\n{script_line}\nexit 0\n")).context("write probe")?;
+    test_fs::set_mode(&probe, 0o755).context("chmod probe")?;
+    let build_file = dir.path().join("build.ninja");
+    test_fs::write(&build_file, "rule noop\n  command = true\n").context("write build file")?;
+    Ok((dir, probe, build_file))
+}
+
+/// The value the probe recorded, as raw bytes.
+#[cfg(unix)]
+fn observed_value(dir: &tempfile::TempDir) -> Result<std::ffi::OsString> {
+    use std::os::unix::ffi::OsStringExt;
+    let bytes = test_support::fs::read(dir.path().join("ninja.observed"))
+        .context("probe should have recorded the value it saw")?;
+    Ok(std::ffi::OsString::from_vec(bytes))
+}
+
 /// A composed `PATH` reaches the spawned process, and the parent keeps its own.
 ///
 /// This is the end-to-end proof that injection works: the stand-in Ninja prints
@@ -152,24 +178,10 @@ fn composed_path_reaches_the_spawned_process() -> Result<()> {
     use netsuke::cli::Cli;
     use netsuke::runner::{BuildTargets, NinjaBuildRequest, run_ninja_with};
     use std::path::Path;
-    use test_support::fs as test_fs;
-
-    let dir = tempfile::tempdir().context("create temp dir")?;
-    let probe = dir.path().join("ninja");
-    // Ignores its arguments and records the PATH it inherited.
-    test_fs::write(
-        &probe,
-        "#!/bin/sh\nprintf '%s' \"$PATH\" > \"$0.observed\"\nexit 0\n",
-    )
-    .context("write probe")?;
-    test_fs::set_mode(&probe, 0o755).context("chmod probe")?;
-
+    let (dir, probe, build_file) = probe_fixture("printf '%s' \"$PATH\" > \"$0.observed\"")?;
     let parent_before = std::env::var_os("PATH");
     let composed = prepend_path_value(parent_before.as_deref(), Path::new("/injected/marker"))
         .context("compose PATH")?;
-
-    let build_file = dir.path().join("build.ninja");
-    test_fs::write(&build_file, "rule noop\n  command = true\n").context("write build file")?;
     let cli = Cli::default();
     let targets = BuildTargets::default();
 
@@ -184,12 +196,7 @@ fn composed_path_reaches_the_spawned_process() -> Result<()> {
 
     // Compared as raw bytes: a valid Unix PATH may contain non-UTF-8, and a
     // lossy string round trip would fail before propagation was checked.
-    let observed_bytes = test_fs::read(dir.path().join("ninja.observed"))
-        .context("probe should have recorded the PATH it saw")?;
-    let observed = {
-        use std::os::unix::ffi::OsStringExt;
-        std::ffi::OsString::from_vec(observed_bytes)
-    };
+    let observed = observed_value(&dir)?;
     ensure!(
         observed == composed,
         "child PATH should equal the composed value;\n  saw:      {observed:?}\n  expected: {composed:?}"
@@ -197,6 +204,45 @@ fn composed_path_reaches_the_spawned_process() -> Result<()> {
     ensure!(
         std::env::var_os("PATH") == parent_before,
         "spawning with an injected PATH must leave the parent unchanged"
+    );
+    Ok(())
+}
+
+/// Un-overridden parent variables are inherited by the spawned process.
+///
+/// The override mechanism is deliberately additive: `apply` sets only the
+/// configured variables and never clears the child's environment. Without
+/// this case an `env_clear`-based implementation would pass every other
+/// test here, since they only ever assert on variables that were set.
+#[cfg(unix)]
+#[rstest]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the parent's real PATH is the value the child must inherit, so it must be observed directly for the comparison"
+)]
+fn unoverridden_parent_variables_are_inherited() -> Result<()> {
+    use netsuke::cli::Cli;
+    use netsuke::runner::{BuildTargets, NinjaBuildRequest, run_ninja_with};
+
+    let (dir, probe, build_file) = probe_fixture("printf '%s' \"$PATH\" > \"$0.observed\"")?;
+    let cli = Cli::default();
+    let targets = BuildTargets::default();
+    let parent_path = std::env::var_os("PATH").context("the test host should have a PATH")?;
+
+    // The override touches only an unrelated marker; PATH is not configured.
+    run_ninja_with(&NinjaBuildRequest {
+        program: probe.as_path(),
+        cli: &cli,
+        build_file: build_file.as_path(),
+        targets: &targets,
+        env: &CommandEnv::inherit().with_var("NETSUKE_PROBE_MARKER", "sentinel"),
+    })
+    .context("run the probe")?;
+
+    let observed = observed_value(&dir)?;
+    ensure!(
+        observed == parent_path,
+        "an un-overridden PATH should be inherited from the parent;\n  saw:      {observed:?}\n  expected: {parent_path:?}"
     );
     Ok(())
 }
@@ -212,20 +258,9 @@ fn composed_path_reaches_the_spawned_process() -> Result<()> {
 fn general_overrides_reach_the_spawned_tool_process() -> Result<()> {
     use netsuke::cli::Cli;
     use netsuke::runner::{NinjaToolRequest, run_ninja_tool_with};
-    use test_support::fs as test_fs;
 
-    let dir = tempfile::tempdir().context("create temp dir")?;
-    let probe = dir.path().join("ninja");
-    // Ignores its arguments and records the marker variable it inherited.
-    test_fs::write(
-        &probe,
-        "#!/bin/sh\nprintf '%s' \"$NETSUKE_PROBE_MARKER\" > \"$0.observed\"\nexit 0\n",
-    )
-    .context("write probe")?;
-    test_fs::set_mode(&probe, 0o755).context("chmod probe")?;
-
-    let build_file = dir.path().join("build.ninja");
-    test_fs::write(&build_file, "rule noop\n  command = true\n").context("write build file")?;
+    let (dir, probe, build_file) =
+        probe_fixture("printf '%s' \"$NETSUKE_PROBE_MARKER\" > \"$0.observed\"")?;
     let cli = Cli::default();
 
     run_ninja_tool_with(&NinjaToolRequest {
@@ -237,10 +272,9 @@ fn general_overrides_reach_the_spawned_tool_process() -> Result<()> {
     })
     .context("run the probe")?;
 
-    let observed = test_fs::read_to_string(dir.path().join("ninja.observed"))
-        .context("probe should have recorded the marker it saw")?;
+    let observed = observed_value(&dir)?;
     ensure!(
-        observed == "sentinel",
+        observed.as_os_str() == std::ffi::OsStr::new("sentinel"),
         "the child should see the injected variable, saw {observed:?}"
     );
     Ok(())
