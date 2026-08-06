@@ -4,10 +4,10 @@
 //! build-script sources remain in its manifest, where an omission would
 //! otherwise fail only during release.
 
+use camino::Utf8Path;
 use netsuke::locale_catalogues::SUPPORTED_LOCALES;
 use std::collections::BTreeSet;
 use std::env;
-use std::path::Path;
 use std::process::Command;
 
 const REQUIRED_PACKAGED_FILES: [&str; 9] = [
@@ -97,11 +97,14 @@ fn assert_forbidden_roots_absent(packaged_paths: &BTreeSet<&str>) {
     for forbidden_root in FORBIDDEN_PACKAGED_ROOTS {
         // Name the offending entry: knowing only the forbidden root leaves the
         // reader grepping the packaged manifest by hand.
+        // `cargo package --list` emits UTF-8 relative paths, so camino applies
+        // here as it does elsewhere in the project, and comparing whole
+        // components keeps neighbours such as `test_support-extra` allowed.
         let offender = packaged_paths.iter().find(|path| {
-            Path::new(path)
+            Utf8Path::new(path)
                 .components()
                 .next()
-                .is_some_and(|component| component.as_os_str() == forbidden_root)
+                .is_some_and(|component| component.as_str() == forbidden_root)
         });
         assert!(
             offender.is_none(),
@@ -111,9 +114,9 @@ fn assert_forbidden_roots_absent(packaged_paths: &BTreeSet<&str>) {
     }
 
     assert!(
-        packaged_paths.iter().all(|path| Path::new(path)
+        packaged_paths.iter().all(|path| Utf8Path::new(path)
             .components()
-            .all(|component| { component.as_os_str() != "ninja_env" })),
+            .all(|component| { component.as_str() != "ninja_env" })),
         "packaged manifest should not contain stale `ninja_env` paths"
     );
 }

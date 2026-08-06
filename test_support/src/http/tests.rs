@@ -61,6 +61,12 @@ struct DurationCase {
     /// Deliberately not the offending value: the warning redacts it, so
     /// asserting on a category is what keeps that redaction honest.
     expected_warning_error: Option<&'static str>,
+    /// Byte length the warning should report for the redacted value.
+    ///
+    /// Measured after trimming, matching the call site. This is the one piece of
+    /// shape the redaction still surfaces, so pinning it stops the length going
+    /// missing — or turning back into the value — unnoticed.
+    expected_warning_len: Option<usize>,
 }
 
 #[test]
@@ -107,24 +113,28 @@ fn from_env_clamps_zero_poll_interval() {
     value: None,
     expected: Duration::from_secs(3),
     expected_warning_error: None,
+    expected_warning_len: None,
 })]
 #[case::invalid(DurationCase {
     key: ENV_HTTP_ACCEPT_TIMEOUT_MS,
     value: Some("not-a-number"),
     expected: Duration::from_secs(3),
     expected_warning_error: Some("invalid digit"),
+    expected_warning_len: Some("not-a-number".len()),
 })]
 #[case::empty(DurationCase {
     key: ENV_HTTP_ACCEPT_TIMEOUT_MS,
     value: Some(""),
     expected: Duration::from_secs(3),
     expected_warning_error: Some("cannot parse integer from empty string"),
+    expected_warning_len: Some(0),
 })]
 #[case::whitespace_padded(DurationCase {
     key: ENV_HTTP_READ_TIMEOUT_MS,
     value: Some("  2500  "),
     expected: Duration::from_millis(2500),
     expected_warning_error: None,
+    expected_warning_len: None,
 })]
 fn duration_from_env_handles_input(
     empty_duration_warnings: EmptyDurationWarnings,
@@ -150,6 +160,12 @@ fn duration_from_env_handles_input(
             warning.contains(expected_error),
             "warning should name the bounded parse failure, got {warning}"
         );
+        if let Some(expected_len) = case.expected_warning_len {
+            assert!(
+                warning.contains(&format!("{expected_len} bytes")),
+                "warning should report the redacted value's byte length, got {warning}"
+            );
+        }
         // The value is caller-controlled, so it must never reach the log.
         if let Some(configured_value) = case.value.filter(|value| !value.is_empty()) {
             assert!(
@@ -162,6 +178,48 @@ fn duration_from_env_handles_input(
             warnings.is_empty(),
             "valid or missing values should not warn"
         );
+    }
+}
+
+proptest::proptest! {
+    /// The redaction must hold for any value a caller might export, not just
+    /// the table's sentinels.
+    ///
+    /// Asserting the whole rendered warning against a message rebuilt from
+    /// bounded parts is stronger than a "does not contain the value" check: it
+    /// leaves the value nowhere to hide, and it cannot be fooled by a generated
+    /// value that happens to be a substring of the template itself — `bytes`,
+    /// for instance, would satisfy a naive `!contains` assertion.
+    #[test]
+    fn invalid_duration_warnings_are_composed_only_of_bounded_parts(
+        raw in r"[^0-9\s][^\s]{0,24}",
+    ) {
+        let trimmed = raw.trim();
+        // A leading `+` still parses as u64, so filter rather than assume the
+        // strategy only yields rejects.
+        proptest::prop_assume!(trimmed.parse::<u64>().is_err());
+        let parse_error = trimmed
+            .parse::<u64>()
+            .expect_err("guarded by the assumption above");
+
+        // Drain any residue so this case observes only the warning it caused.
+        drop(take_duration_warnings());
+        let env = fixture_env(&[(ENV_HTTP_ACCEPT_TIMEOUT_MS, raw.as_str())]);
+        let default = Duration::from_secs(3);
+
+        let duration = duration_from_env(&env, ENV_HTTP_ACCEPT_TIMEOUT_MS, default);
+
+        proptest::prop_assert_eq!(duration, default);
+        let warnings = take_duration_warnings();
+        proptest::prop_assert_eq!(warnings.len(), 1);
+        // The variable name is a crate constant, the parse error is one of
+        // `ParseIntError`'s fixed messages, and the length is a number: an exact
+        // match therefore proves no caller-supplied byte reached the log.
+        let expected = format!(
+            "ignoring invalid {ENV_HTTP_ACCEPT_TIMEOUT_MS}: {parse_error} (value redacted, {} bytes)",
+            trimmed.len()
+        );
+        proptest::prop_assert_eq!(warnings.first().cloned().unwrap_or_default(), expected);
     }
 }
 

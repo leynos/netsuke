@@ -165,6 +165,87 @@ fn failed_macro_invocation_records_error_telemetry_without_macro_details(
     Ok(())
 }
 
+/// Collect every `outcome` label recorded against the invocation counter.
+///
+/// Used to prove the label set stays bounded rather than echoing manifest
+/// content into a metric dimension, which would make the series unbounded.
+fn outcome_labels(snapshot: &Snapshot) -> Vec<String> {
+    snapshot
+        .iter()
+        .filter(|(key, _unit, _description, _value)| {
+            key.kind() == MetricKind::Counter && key.key().name() == INVOCATIONS_TOTAL
+        })
+        .flat_map(|(key, _unit, _description, _value)| {
+            key.key()
+                .labels()
+                .filter(|label| label.key() == "outcome")
+                .map(|label| label.value().to_owned())
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+proptest::proptest! {
+    /// The bounded-telemetry contract must hold for any macro a manifest can
+    /// define, not just the fixed sentinels above.
+    ///
+    /// Generated identifiers carry a `zq` prefix so an incidental substring
+    /// match cannot be mistaken for a leak: a bare generated name of `a` would
+    /// otherwise "appear" in every event that contains the letter.
+    #[test]
+    fn macro_telemetry_stays_bounded_for_arbitrary_macros(
+        name_suffix in "[a-z][a-z0-9_]{0,10}",
+        arg_suffix in "[a-zA-Z0-9 ._/-]{0,20}",
+        undefined_suffix in "[a-z][a-z0-9_]{0,10}",
+    ) {
+        let macro_name = format!("zqmacro_{name_suffix}");
+        let undefined = format!("zqundef_{undefined_suffix}");
+        let argument = format!("zqarg_{arg_suffix}");
+
+        let mut env = Environment::new();
+        env.set_undefined_behavior(UndefinedBehavior::Strict);
+        // The body reads an undefined name, so evaluation fails inside the macro
+        // and exercises the error path with caller-controlled identifiers.
+        let definition = MacroDefinition {
+            signature: format!("{macro_name}(supplied)"),
+            body: format!("{{{{ supplied }}}} {{{{ {undefined} }}}}"),
+        };
+        register_macro(&mut env, &definition, 0)
+            .map_err(|error| proptest::test_runner::TestCaseError::fail(error.to_string()))?;
+
+        let ((result, events), snapshot) = recorded(|| {
+            with_test_subscriber(LevelFilter::DEBUG, |captured| {
+                let result = eval_expression(&env, &format!("{macro_name}('{argument}')"));
+                (result, captured.snapshot())
+            })
+        });
+
+        proptest::prop_assert!(
+            result.is_err(),
+            "an undefined lookup inside the macro should fail the invocation"
+        );
+        proptest::prop_assert_eq!(counter_value(&snapshot, "error"), Some(1));
+        proptest::prop_assert_eq!(duration_sample_count(&snapshot), 1);
+        // Metric dimensions must stay drawn from the fixed outcome vocabulary.
+        for label in outcome_labels(&snapshot) {
+            proptest::prop_assert!(
+                label == "success" || label == "error",
+                "outcome label must stay bounded, got {}",
+                label
+            );
+        }
+        for event in &events {
+            proptest::prop_assert!(
+                !event.contains(&macro_name)
+                    && !event.contains(&undefined)
+                    && !event.contains(&argument),
+                "manifest-controlled data must not reach telemetry: {}",
+                event
+            );
+        }
+    }
+}
+
 /// The imported-macro path is metered at the render boundary, so a template
 /// render must not also emit macro-invocation metrics. This pins the boundary
 /// split that keeps the two counters independently meaningful.
