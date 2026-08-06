@@ -4,7 +4,7 @@
 //! test passing while restoring exactly the permissive behaviour the stub was
 //! made strict to remove.
 
-use netsuke::locale_resolution::EnvProvider;
+use netsuke::locale_resolution::LocaleEnvProvider;
 use test_support::locale_stubs::StubEnv;
 
 #[test]
@@ -63,7 +63,7 @@ mod properties {
     //! `allowing`; this states the invariant they are instances of — the last
     //! declaration for a key wins — over arbitrary declaration sequences.
 
-    use super::{EnvProvider, StubEnv};
+    use super::{LocaleEnvProvider, StubEnv};
     use proptest::collection::vec;
     use proptest::prelude::*;
     use std::collections::HashMap;

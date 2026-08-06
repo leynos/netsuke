@@ -33,7 +33,7 @@ impl StubEnv {
     /// # Examples
     ///
     /// ```rust,should_panic
-    /// use netsuke::locale_resolution::EnvProvider;
+    /// use netsuke::locale_resolution::LocaleEnvProvider;
     /// use test_support::locale_stubs::StubEnv;
     ///
     /// // Nothing is declared, so any read is a programming error.
@@ -52,7 +52,7 @@ impl StubEnv {
     /// # Examples
     ///
     /// ```rust
-    /// use netsuke::locale_resolution::EnvProvider;
+    /// use netsuke::locale_resolution::LocaleEnvProvider;
     /// use test_support::locale_stubs::StubEnv;
     ///
     /// let env = StubEnv::with_locale("es-ES");
@@ -71,7 +71,7 @@ impl StubEnv {
     /// # Examples
     ///
     /// ```rust
-    /// use netsuke::locale_resolution::EnvProvider;
+    /// use netsuke::locale_resolution::LocaleEnvProvider;
     /// use test_support::locale_stubs::StubEnv;
     ///
     /// // Declared, so the read is permitted; unset, so it reports `None`.
@@ -90,7 +90,7 @@ impl StubEnv {
     /// # Examples
     ///
     /// ```rust
-    /// use netsuke::locale_resolution::EnvProvider;
+    /// use netsuke::locale_resolution::LocaleEnvProvider;
     /// use test_support::locale_stubs::StubEnv;
     ///
     /// let env = StubEnv::strict().allowing("X").with_var("X", "set");
@@ -98,11 +98,11 @@ impl StubEnv {
     /// ```
     #[must_use]
     pub fn with_var(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        let key = key.into();
-        if !self.allowed.iter().any(|allowed| allowed == &key) {
-            self.allowed.push(key.clone());
+        let name = key.into();
+        if !self.allowed.iter().any(|allowed| allowed == &name) {
+            self.allowed.push(name.clone());
         }
-        self.values.insert(key, value.into());
+        self.values.insert(name, value.into());
         self
     }
 
@@ -119,7 +119,7 @@ impl StubEnv {
     /// # Examples
     ///
     /// ```rust
-    /// use netsuke::locale_resolution::EnvProvider;
+    /// use netsuke::locale_resolution::LocaleEnvProvider;
     /// use test_support::locale_stubs::StubEnv;
     ///
     /// let env = StubEnv::strict().with_var("X", "set").allowing("X");
@@ -127,10 +127,10 @@ impl StubEnv {
     /// ```
     #[must_use]
     pub fn allowing(mut self, key: impl Into<String>) -> Self {
-        let key = key.into();
-        self.values.remove(&key);
-        if !self.allowed.iter().any(|allowed| allowed == &key) {
-            self.allowed.push(key);
+        let name = key.into();
+        self.values.remove(&name);
+        if !self.allowed.iter().any(|allowed| allowed == &name) {
+            self.allowed.push(name);
         }
         self
     }
