@@ -153,6 +153,18 @@ jobs:
         shell: bash
         run: rm -rf dist/.man dist/nfpm.yaml
 
+      - name: Derive the numeric MSI version
+        if: inputs.platform == 'windows'
+        id: msi_version
+        shell: bash
+        # MSI ProductVersion accepts only numeric major.minor.build, so the
+        # windows-package action rejects pre-release identifiers such as
+        # 0.1.0-beta1. The suffix is stripped for the installer alone; every
+        # other artefact keeps the full crate version.
+        run: |
+          version="${{ inputs.version }}"
+          echo "value=${version%%-*}" >> "$GITHUB_OUTPUT"
+
       - name: Build Windows installer package
         if: inputs.platform == 'windows'
         id: package_windows
@@ -164,7 +176,7 @@ jobs:
           application-path: ${{ steps.stage_paths.outputs.binary_path }}
           license-rtf-path: ${{ steps.stage_paths.outputs.license_path }}
           architecture: ${{ inputs['msi-arch'] }}
-          version: ${{ inputs.version }}
+          version: ${{ steps.msi_version.outputs.value }}
           output-basename: ${{ inputs['bin-name'] }}
           output-directory: dist
           license-plaintext-path: LICENSE
