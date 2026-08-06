@@ -259,6 +259,61 @@ double lookups, unconditional key clones, or id indirection, and do not pad new
 code with defensive clones that only NLL required. When a borrow-centric form
 fails to compile, consult the migration notes before restructuring.
 
+### Polonius CI shared-action contract
+
+GitHub Actions jobs do not read `.cargo/config.toml` for every build they
+launch, and the shared Rust setup actions export their own `RUSTFLAGS`. The
+Polonius flags therefore travel as *action inputs*, not as job environment
+variables: each affected workflow passes them through the relevant shared
+action's `with.rustflags` input, and none of them may set a job-level
+`env.RUSTFLAGS`. A job-level override would win over the action's exported
+value and silently drop the flag, so the tree would fail to borrow-check with a
+confusing `E0499` rather than an obvious configuration error.
+
+Four workflows carry the contract:
+
+| Workflow | Job | Shared action | `with.rustflags` |
+| --- | --- | --- | --- |
+| [`ci.yml`](../.github/workflows/ci.yml) | `build-test` | `setup-rust` | `-D warnings -Zpolonius=next` |
+| [`coverage-main.yml`](../.github/workflows/coverage-main.yml) | `coverage-upload` | `setup-rust` | `-D warnings -Zpolonius=next` |
+| [`netsukefile-test.yml`](../.github/workflows/netsukefile-test.yml) | `netsukefile` | `setup-rust` | `-Zpolonius=next` |
+| [`build-and-package.yml`](../.github/workflows/build-and-package.yml) | `build` | `rust-build-release` | `-Zpolonius=next` |
+
+CI and coverage add `-D warnings` because those jobs gate on a warning-free
+build; the Netsukefile and packaging jobs carry the Polonius flag alone, so a
+new upstream warning cannot break a release build. The coverage action's
+`cargo-llvm-cov` invocation inherits the flags `setup-rust` exports and appends
+its own instrumentation flags.
+
+`NETSUKE_RUST_TOOLCHAIN` follows a separate rule. CI and Netsukefile pin it to
+the channel in `rust-toolchain.toml` so those jobs provision the dated nightly
+explicitly; coverage and packaging must leave it unset, because they select
+their toolchain through the action's own `toolchain` input and a second,
+independently edited pin would let the two disagree.
+
+[`tests/polonius_toolchain_contract.rs`](../tests/polonius_toolchain_contract.rs)
+enforces all four callers. For each one it asserts:
+
+- the job uses the expected shared-action reference — path *and* pinned
+  revision (see "Workflow pins and Dependabot" below for why the exact
+  revision is asserted here);
+- the `with.rustflags` value matches the table above in full, not merely that
+  it contains `-Zpolonius=next`, so a dropped `-D warnings` is caught too;
+- the job declares no `env.RUSTFLAGS`;
+- the `NETSUKE_RUST_TOOLCHAIN` policy above — pinned to the
+  `rust-toolchain.toml` channel for CI and Netsukefile, absent for coverage and
+  packaging.
+
+Run it with:
+
+```bash
+cargo nextest run --test polonius_toolchain_contract
+```
+
+Keep this section and the [Polonius migration notes](polonius.md) in step: both
+describe the same contract, and the notes list every remaining harness that
+must propagate the flag.
+
 ## Quality gates
 
 Run these commands before finalizing any change:
@@ -431,10 +486,17 @@ the test fails until a human edits the pinned constant to match. That defeats
 the purpose of automated dependency updates and turns a routine bump into a
 manual chore.
 
-Contract tests may still verify the *shape* of a reusable-workflow caller. They
-must not verify the specific SHA value.
+The default, therefore, is shape-only: contract tests verify the *shape* of a
+shared-action caller and not the specific SHA value. This covers both forms of
+call into `shared-actions` — a step that `uses:` a composite action with a
+`with:` block, and a job that `uses:` a reusable workflow. The one sanctioned
+departure is a caller whose behaviour depends on a feature the shared action
+gained at a known revision; the Polonius exception below is the only current
+instance. The bullets that follow state the default; they do not apply to a
+caller covered by that exception.
 
-- Do assert the workflow references the correct reusable workflow path.
+- Do assert the caller references the correct shared-action or
+  reusable-workflow path.
 - Do assert the ref is pinned to a full 40-character commit SHA, not a
   mutable branch such as `main` or `rolling`.
 - Do assert the expected `on:` triggers, least-privilege `permissions:`, and
@@ -453,9 +515,33 @@ def test_uses_pinned_full_sha(caller_step):
     assert SHA_RE.match(ref), f"expected a 40-hex commit SHA, got {ref!r}"
 ```
 
-If a workflow's behaviour genuinely depends on a feature only present from a
-particular commit onwards, express that as a comment or a changelog note, not
-as a test assertion on the SHA string.
+The policy above governs callers whose behaviour does not depend on a specific
+shared-action revision: the caller would keep working across any upstream bump,
+so pinning the SHA in a test buys nothing and costs a manual edit per bump.
+`tests/workflow_contracts/mutation_testing_test.py` is the canonical example.
+
+#### Exception: the Polonius shared-action contract
+
+The four workflows described under [Polonius CI shared-action
+contract](#polonius-ci-shared-action-contract) do depend on a specific
+revision. The `rustflags` input they rely on was introduced at a known commit
+in `leynos/shared-actions`. A revision that predates it does not fail the run —
+an unrecognized `with:` key on a composite action is a warning, not an error —
+it simply never exports the flag, so the build fails later as a borrow-check
+error rather than as a configuration error.
+
+`tests/polonius_toolchain_contract.rs` therefore asserts each of those
+workflows' exact shared-action path *and* pinned revision, held in the
+`SETUP_RUST_ACTION` and `RUST_BUILD_RELEASE_ACTION` constants. A Dependabot
+bump of these four references is expected to fail the test until someone
+updates the constants, and that failure is the point: it forces a human to
+confirm the new revision still implements the `rustflags` input contract before
+the bump lands. Restrict this exception to callers with a genuine
+revision-level dependency; everywhere else, the shape-only policy applies.
+
+If a workflow's behaviour does not depend on a feature from a particular commit
+onwards, do not assert its SHA — express any advisory note as a comment or a
+changelog entry instead.
 
 ## Mutation-testing workflow contract tests
 
