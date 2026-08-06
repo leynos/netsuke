@@ -28,14 +28,14 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@2f90d1041ea108148be0620e3bbcc1fa80ac03e4
+        uses: leynos/shared-actions/.github/actions/setup-rust@8add2d99854a5b77548eae98cca59202e68fefc8
         with:
           # Match rust-toolchain.toml: the tree needs -Zpolonius=next (see
           # docs/adr-006-adopt-polonius-nightly-toolchain.md).
           toolchain: nightly-2026-06-25
           components: rustfmt, clippy
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@2f90d1041ea108148be0620e3bbcc1fa80ac03e4
+        uses: leynos/shared-actions/.github/actions/generate-coverage@8add2d99854a5b77548eae98cca59202e68fefc8
         with:
           output-path: lcov.info
           format: lcov
@@ -44,7 +44,7 @@ jobs:
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         if: env.CS_ACCESS_TOKEN != ''
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@2f90d1041ea108148be0620e3bbcc1fa80ac03e4
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@8add2d99854a5b77548eae98cca59202e68fefc8
         with:
           format: lcov
           access-token: ${{ env.CS_ACCESS_TOKEN }}
