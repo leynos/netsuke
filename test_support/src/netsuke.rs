@@ -192,59 +192,60 @@ mod tests {
         env
     }
 
-    #[test]
-    fn locates_binary_beside_the_test_executable() -> Result<()> {
+    /// Stage a locator scenario and assert the resolved binary path.
+    ///
+    /// Creates the temporary root, touches the test executable at `exe_rel`
+    /// and the expected binary at `binary_rel`, configures the mock
+    /// environment with `target_dir_rel` when supplied (all three paths are
+    /// relative to the root), and asserts that the locator resolves the
+    /// expected binary, retaining `message` in the diagnostic.
+    fn assert_locates(
+        exe_rel: &str,
+        target_dir_rel: Option<&str>,
+        binary_rel: &str,
+        message: &str,
+    ) -> Result<()> {
         let temp = tempfile::tempdir().context("create temp dir")?;
         let root = utf8_root(&temp)?;
-        let exe = root.join("build/debug/deps/test-exe");
+        let exe = root.join(exe_rel);
         touch(&exe)?;
-        let binary = root.join("build/debug").join(binary_name());
+        let binary = root.join(binary_rel);
         touch(&binary)?;
+        let target_dir = target_dir_rel.map(|rel| root.join(rel));
 
-        let located = netsuke_executable_from(&env_with_target_dir(None), &exe)?;
-        ensure!(
-            located == binary,
-            "primary lookup should win; got {located}"
-        );
+        let located = netsuke_executable_from(&env_with_target_dir(target_dir.as_deref()), &exe)?;
+        ensure!(located == binary, "{message}; got {located}");
         Ok(())
+    }
+
+    #[test]
+    fn locates_binary_beside_the_test_executable() -> Result<()> {
+        assert_locates(
+            "build/debug/deps/test-exe",
+            None,
+            &format!("build/debug/{}", binary_name()),
+            "primary lookup should win",
+        )
     }
 
     #[test]
     fn falls_back_to_cargo_target_dir_profile() -> Result<()> {
-        let temp = tempfile::tempdir().context("create temp dir")?;
-        let root = utf8_root(&temp)?;
-        let exe = root.join("build/debug/deps/test-exe");
-        touch(&exe)?;
-        let target_dir = root.join("target");
-        let binary = target_dir.join("debug").join(binary_name());
-        touch(&binary)?;
-
-        let located = netsuke_executable_from(&env_with_target_dir(Some(&target_dir)), &exe)?;
-        ensure!(
-            located == binary,
-            "profile fallback should resolve; got {located}"
-        );
-        Ok(())
+        assert_locates(
+            "build/debug/deps/test-exe",
+            Some("target"),
+            &format!("target/debug/{}", binary_name()),
+            "profile fallback should resolve",
+        )
     }
 
     #[test]
     fn falls_back_to_target_triple_directory() -> Result<()> {
-        let temp = tempfile::tempdir().context("create temp dir")?;
-        let root = utf8_root(&temp)?;
-        let exe = root.join("build/x86_64-unknown-linux-gnu/debug/deps/test-exe");
-        touch(&exe)?;
-        let target_dir = root.join("target");
-        let binary = target_dir
-            .join("x86_64-unknown-linux-gnu/debug")
-            .join(binary_name());
-        touch(&binary)?;
-
-        let located = netsuke_executable_from(&env_with_target_dir(Some(&target_dir)), &exe)?;
-        ensure!(
-            located == binary,
-            "triple fallback should resolve; got {located}"
-        );
-        Ok(())
+        assert_locates(
+            "build/x86_64-unknown-linux-gnu/debug/deps/test-exe",
+            Some("target"),
+            &format!("target/x86_64-unknown-linux-gnu/debug/{}", binary_name()),
+            "triple fallback should resolve",
+        )
     }
 
     #[test]
