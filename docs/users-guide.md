@@ -406,6 +406,24 @@ defaults:
 `which(name, **kwargs)` returns an executable path and fails when the command
 is absent. The same helper is also available as a filter.
 
+On Windows, a name without an extension is matched against the effective
+`PATHEXT`, the same list the shell uses — so `which('cargo')` finds
+`cargo.exe` provided `.exe` is among those entries. A custom `PATHEXT` may
+legitimately omit it, in which case it is not a candidate.
+
+`PATHEXT` falls back to the built-in list only when it is unset or when no
+entry survives normalization — that is, every entry is empty or whitespace.
+Any other value is used as given, however unusual. The built-in list, in
+order:
+
+`.com`, `.exe`, `.bat`, `.cmd`, `.vbs`, `.vbe`, `.js`, `.jse`, `.wsf`,
+`.wsh`, `.msc`
+
+The fallback exists because an empty effective list would match nothing and
+report every command missing. Entries are matched case-insensitively and
+tried in the order the list gives them. A name that already carries an
+extension is used as written.
+
 `command_available(name, **kwargs)` returns a boolean and is better for
 complementary branches:
 

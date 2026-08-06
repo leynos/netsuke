@@ -3,7 +3,7 @@
 use std::ffi::{OsStr, OsString};
 
 use camino::{Utf8Path, Utf8PathBuf};
-#[cfg(windows)]
+#[cfg(any(windows, test))]
 use indexmap::IndexSet;
 use mockable::{DefaultEnv, Env};
 
@@ -239,17 +239,48 @@ fn parse_path_entries(raw: Option<&OsStr>, cwd: &Utf8Path) -> Result<Vec<PathEnt
     Ok(entries)
 }
 
-#[cfg(windows)]
+/// Extensions Windows treats as executable when `PATHEXT` is unset or empty.
+///
+/// Compiled on Windows and under `test`, alongside [`parse_pathext`], which
+/// falls back to it.
+#[cfg(any(windows, test))]
 pub(super) const DEFAULT_PATHEXT: &[&str] = &[
     ".com", ".exe", ".bat", ".cmd", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh", ".msc",
 ];
 
-#[cfg(windows)]
-fn parse_pathext(raw: Option<&OsStr>) -> Vec<String> {
+/// Own the built-in list so the fallback has a single construction site.
+///
+/// The entries are already lowercase and dot-prefixed, so they need no further
+/// normalization.
+#[cfg(any(windows, test))]
+fn default_pathext() -> Vec<String> {
+    DEFAULT_PATHEXT.iter().copied().map(String::from).collect()
+}
+
+/// Normalize a raw `PATHEXT` value into lowercase, dot-prefixed extensions.
+///
+/// Pure string handling, consulted only by the Windows snapshot but compiled
+/// on Windows *and* under `test`. Gated to `#[cfg(windows)]` alone, its
+/// normalization — lowercasing, inserting missing leading dots, trimming,
+/// de-duplicating, and falling back to the built-in list when the value yields
+/// nothing — could not be exercised from the Unix CI host at all, so every rule
+/// it implements went unverified on the platform where the suite actually runs.
+/// Compiled unconditionally it would instead be dead code in a Unix release
+/// build, which `-D warnings` rejects.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// // Values are lowercased, given a leading dot, and de-duplicated.
+/// assert_eq!(parse_pathext(Some(OsStr::new("COM;.com"))), vec![".com"]);
+/// ```
+#[cfg(any(windows, test))]
+pub(super) fn parse_pathext(raw: Option<&OsStr>) -> Vec<String> {
     let mut dedup = IndexSet::new();
-    let source = raw
-        .map(|value| value.to_string_lossy().into_owned())
-        .unwrap_or_else(|| DEFAULT_PATHEXT.join(";"));
+    let source = raw.map_or_else(
+        || DEFAULT_PATHEXT.join(";"),
+        |value| value.to_string_lossy().into_owned(),
+    );
     for segment in source.split(';') {
         let trimmed = segment.trim();
         if trimmed.is_empty() {
@@ -262,7 +293,7 @@ fn parse_pathext(raw: Option<&OsStr>) -> Vec<String> {
         dedup.insert(normalised);
     }
     if dedup.is_empty() {
-        DEFAULT_PATHEXT.iter().map(|ext| ext.to_string()).collect()
+        default_pathext()
     } else {
         dedup.into_iter().collect()
     }
