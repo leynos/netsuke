@@ -65,6 +65,14 @@ licence. Ninja must be installed separately when using the macOS or Windows
 installer. The Windows MSI installs to `C:\Program Files\netsuke` and does not
 update `PATH`.
 
+The MSI installer supports pre-release SemVer versions such as
+`0.1.0-beta1`: the pre-release suffix cannot be represented in an MSI
+product version, so the installer carries the numeric release triple
+(`0.1.0`) while the full version remains in the package and release names.
+Because successive pre-releases share that numeric version, installing a
+later pre-release MSI replaces the existing installation for that version
+series rather than installing alongside it.
+
 SHA-256 checksum files accompany standalone binaries and staged help and
 licence files. Installer packages do not have checksum sidecars in
 v0.1.0-beta1. Windows PowerShell help files are published beside each MSI as
