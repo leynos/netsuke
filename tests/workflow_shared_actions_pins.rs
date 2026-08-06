@@ -14,7 +14,7 @@
 pub mod shared_actions;
 
 use anyhow::{Context, Result, ensure};
-use shared_actions::{extract_shared_actions_uses, split_shared_action_ref};
+use shared_actions::{consistent_pin, extract_shared_actions_uses, split_shared_action_ref};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -97,4 +97,80 @@ fn behavioural_shared_actions_pins_are_full_commit_shas() -> Result<()> {
         );
     }
     Ok(())
+}
+
+const VALID_REF_A: &str =
+    "leynos/shared-actions/.github/actions/setup-rust@0123456789abcdef0123456789abcdef01234567";
+
+/// Build a full reference for `pin` on an arbitrary action name.
+fn reference_with_pin(pin: &str) -> String {
+    format!("leynos/shared-actions/.github/actions/rust-build-release@{pin}")
+}
+
+#[test]
+fn unit_consistent_pin_accepts_agreeing_references() -> Result<()> {
+    let refs = vec![
+        VALID_REF_A.to_owned(),
+        reference_with_pin("0123456789abcdef0123456789abcdef01234567"),
+    ];
+    let pin = consistent_pin(&refs)?;
+    ensure!(
+        pin == "0123456789abcdef0123456789abcdef01234567",
+        "agreeing references should yield their shared pin, got {pin:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn unit_consistent_pin_rejects_an_empty_reference_list() {
+    let error = consistent_pin(&[]).expect_err("no references should reject");
+    assert!(
+        error.to_string().contains("at least one"),
+        "the empty-list rejection should say so; got {error:?}"
+    );
+}
+
+#[test]
+fn unit_consistent_pin_rejects_malformed_references() {
+    for reference in [
+        "leynos/shared-actions/.github/actions/setup-rust", // no pin separator
+        "actions/checkout@0123456789abcdef0123456789abcdef01234567", // wrong prefix
+    ] {
+        let error = consistent_pin(&[reference.to_owned()])
+            .expect_err("a malformed reference should reject");
+        assert!(
+            error.to_string().contains("malformed"),
+            "{reference:?} should be reported as malformed; got {error:?}"
+        );
+    }
+}
+
+#[test]
+fn unit_consistent_pin_rejects_non_sha_pins() {
+    for pin in [
+        "main",
+        "v1.2.3",
+        "0123456789ABCDEF0123456789ABCDEF01234567",
+        "abc123",
+    ] {
+        let error =
+            consistent_pin(&[reference_with_pin(pin)]).expect_err("a non-SHA pin should reject");
+        assert!(
+            error.to_string().contains("40-hex commit SHA"),
+            "pin {pin:?} should be rejected for its shape; got {error:?}"
+        );
+    }
+}
+
+#[test]
+fn unit_consistent_pin_rejects_disagreeing_shas() {
+    let refs = vec![
+        VALID_REF_A.to_owned(),
+        reference_with_pin("fedcba9876543210fedcba9876543210fedcba98"),
+    ];
+    let error = consistent_pin(&refs).expect_err("disagreeing pins should reject");
+    assert!(
+        error.to_string().contains("disagree"),
+        "the disagreement rejection should say so; got {error:?}"
+    );
 }
