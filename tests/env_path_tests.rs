@@ -1,9 +1,18 @@
 //! Tests for composing isolated child-process `PATH` values.
+//!
+//! Composition is pure (`test_support::env::prepend_path_value`) and the
+//! runner applies the result as data via `CommandEnv`, so nothing here
+//! mutates the parent process: no test carries `#[serial]` and none needs
+//! `EnvLock`.
 
 use anyhow::{Context, Result, ensure};
+use netsuke::runner::CommandEnv;
 use proptest::prelude::*;
 use rstest::rstest;
-use std::{ffi::OsStr, path::PathBuf};
+use std::{
+    ffi::{OsStr, OsString},
+    path::PathBuf,
+};
 use test_support::env::prepend_path_value;
 
 #[rstest]
@@ -55,6 +64,187 @@ fn prepend_dir_to_path_handles_missing_path() -> Result<()> {
     Ok(())
 }
 
+/// A directory containing the path-list separator cannot be joined.
+///
+/// `join_paths` rejects entries carrying the separator — `:` on Unix, `"` on
+/// Windows (which quotes entries containing `;`) — because the joined string
+/// could not be split back into the same entries. The constant is selected by
+/// `cfg!` so the case exercises the real rejection on both hosts.
+#[rstest]
+fn a_directory_containing_the_separator_is_rejected() -> Result<()> {
+    const BAD_DIR: &str = if cfg!(windows) { "bad\"dir" } else { "bad:dir" };
+    ensure!(
+        prepend_path_value(Some(OsStr::new("/usr/bin")), std::path::Path::new(BAD_DIR)).is_err(),
+        "an entry containing the separator should be an error"
+    );
+    Ok(())
+}
+
+/// Composing must neither read nor write the process `PATH`.
+#[rstest]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the assertion under test is precisely that the real process PATH is untouched, so it must be observed directly rather than through an injected seam"
+)]
+fn composition_leaves_the_parent_path_unchanged() -> Result<()> {
+    let before = std::env::var_os("PATH");
+    let composed = prepend_path_value(Some(OsStr::new("/seeded")), std::path::Path::new("/fake"))
+        .context("compose PATH")?;
+    let env = CommandEnv::inherit().with_path(&composed);
+    ensure!(
+        env.get("PATH") == Some(composed.as_os_str()),
+        "the composed value should reach the command environment"
+    );
+    ensure!(
+        std::env::var_os("PATH") == before,
+        "composing a PATH must not alter the parent process"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn later_overrides_replace_earlier_ones_for_the_same_key() -> Result<()> {
+    let env = CommandEnv::inherit()
+        .with_path("/first")
+        .with_path("/second");
+    ensure!(
+        env.get("PATH") == Some(OsStr::new("/second")),
+        "the later override should win, got {:?}",
+        env.get("PATH")
+    );
+    Ok(())
+}
+
+#[rstest]
+fn inherit_carries_no_overrides() {
+    assert!(CommandEnv::inherit().is_empty());
+}
+
+/// A composed value round-trips through `CommandEnv` unaltered.
+#[rstest]
+fn composed_values_reach_the_command_environment_verbatim() -> Result<()> {
+    let dir = tempfile::tempdir().context("create temp dir")?;
+    let composed =
+        prepend_path_value(Some(OsStr::new("/usr/bin")), dir.path()).context("compose PATH")?;
+    let env = CommandEnv::inherit().with_path(&composed);
+    ensure!(
+        env.get("PATH").map(OsString::from) == Some(composed),
+        "the command environment should carry the composed value verbatim"
+    );
+    Ok(())
+}
+
+/// A composed `PATH` reaches the spawned process, and the parent keeps its own.
+///
+/// This is the end-to-end proof that injection works: the stand-in Ninja prints
+/// the `PATH` it was given, so the assertion is on what the *child* actually
+/// saw rather than on what was configured for it.
+///
+/// Note what this does and does not show. `Command::env` sets the child's
+/// environment; on Unix the program itself is still resolved by the parent's
+/// `PATH`, so injecting a directory does not make a bare `ninja` name resolve
+/// to a fake. That is why callers pass an explicit program path. What the
+/// injected `PATH` governs is the environment Ninja itself runs build commands
+/// under, which is the thing tests need to control.
+#[cfg(unix)]
+#[rstest]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the parent's real PATH is both the base for the composed value and the subject of the closing assertion that spawning left it unchanged, so it must be observed directly"
+)]
+fn composed_path_reaches_the_spawned_process() -> Result<()> {
+    use netsuke::cli::Cli;
+    use netsuke::runner::{BuildTargets, NinjaBuildRequest, run_ninja_with};
+    use std::path::Path;
+    use test_support::fs as test_fs;
+
+    let dir = tempfile::tempdir().context("create temp dir")?;
+    let probe = dir.path().join("ninja");
+    // Ignores its arguments and records the PATH it inherited.
+    test_fs::write(
+        &probe,
+        "#!/bin/sh\nprintf '%s' \"$PATH\" > \"$0.observed\"\nexit 0\n",
+    )
+    .context("write probe")?;
+    test_fs::set_mode(&probe, 0o755).context("chmod probe")?;
+
+    let parent_before = std::env::var_os("PATH");
+    let composed = prepend_path_value(parent_before.as_deref(), Path::new("/injected/marker"))
+        .context("compose PATH")?;
+
+    let build_file = dir.path().join("build.ninja");
+    test_fs::write(&build_file, "rule noop\n  command = true\n").context("write build file")?;
+    let cli = Cli::default();
+    let targets = BuildTargets::default();
+
+    run_ninja_with(&NinjaBuildRequest {
+        program: probe.as_path(),
+        cli: &cli,
+        build_file: build_file.as_path(),
+        targets: &targets,
+        env: &CommandEnv::inherit().with_path(&composed),
+    })
+    .context("run the probe")?;
+
+    let observed = test_fs::read_to_string(dir.path().join("ninja.observed"))
+        .context("probe should have recorded the PATH it saw")?;
+    ensure!(
+        observed == composed.to_string_lossy(),
+        "child PATH should equal the composed value;\n  saw:      {observed}\n  expected: {}",
+        composed.to_string_lossy()
+    );
+    ensure!(
+        std::env::var_os("PATH") == parent_before,
+        "spawning with an injected PATH must leave the parent unchanged"
+    );
+    Ok(())
+}
+
+/// A general (non-`PATH`) override reaches the child through the tool boundary.
+///
+/// `PATH` gets its own composition helper, so it is the variable every other
+/// test exercises; this one pins the plain `with_var` route and the
+/// `NinjaToolRequest` boundary, proving both halves of the seam the review
+/// asked about: an arbitrary variable, and the tool-request path carrying it.
+#[cfg(unix)]
+#[rstest]
+fn general_overrides_reach_the_spawned_tool_process() -> Result<()> {
+    use netsuke::cli::Cli;
+    use netsuke::runner::{NinjaToolRequest, run_ninja_tool_with};
+    use test_support::fs as test_fs;
+
+    let dir = tempfile::tempdir().context("create temp dir")?;
+    let probe = dir.path().join("ninja");
+    // Ignores its arguments and records the marker variable it inherited.
+    test_fs::write(
+        &probe,
+        "#!/bin/sh\nprintf '%s' \"$NETSUKE_PROBE_MARKER\" > \"$0.observed\"\nexit 0\n",
+    )
+    .context("write probe")?;
+    test_fs::set_mode(&probe, 0o755).context("chmod probe")?;
+
+    let build_file = dir.path().join("build.ninja");
+    test_fs::write(&build_file, "rule noop\n  command = true\n").context("write build file")?;
+    let cli = Cli::default();
+
+    run_ninja_tool_with(&NinjaToolRequest {
+        program: probe.as_path(),
+        cli: &cli,
+        build_file: build_file.as_path(),
+        tool: "clean",
+        env: &CommandEnv::inherit().with_var("NETSUKE_PROBE_MARKER", "sentinel"),
+    })
+    .context("run the probe")?;
+
+    let observed = test_fs::read_to_string(dir.path().join("ninja.observed"))
+        .context("probe should have recorded the marker it saw")?;
+    ensure!(
+        observed == "sentinel",
+        "the child should see the injected variable, saw {observed:?}"
+    );
+    Ok(())
+}
+
 proptest! {
     #[test]
     fn prepend_dir_to_path_preserves_every_generated_entry(
@@ -72,5 +262,92 @@ proptest! {
             .collect::<Vec<_>>();
 
         prop_assert_eq!(actual, expected);
+    }
+}
+
+mod properties {
+    //! Property coverage for `CommandEnv` and `PATH` composition.
+    //!
+    //! The fixed cases above name specific behaviours; these state the
+    //! invariants they are instances of, over inputs nobody would write down:
+    //! arbitrary entry lists including empty entries, and arbitrary override
+    //! sequences with repeated keys.
+
+    use netsuke::runner::CommandEnv;
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+    use std::collections::HashMap;
+    use std::ffi::{OsStr, OsString};
+    use std::path::{Path, PathBuf};
+    use test_support::env::prepend_path_value;
+
+    /// One `PATH` entry: separator-free on every platform, possibly empty.
+    ///
+    /// Empty entries are generated deliberately — they are meaningful on Unix
+    /// (the current directory) and must survive composition when they sit
+    /// inside a non-empty value.
+    fn entry() -> impl Strategy<Value = String> {
+        prop_oneof![
+            1 => Just(String::new()),
+            4 => "[A-Za-z0-9_./-]{1,8}",
+        ]
+    }
+
+    proptest! {
+        /// Composition prepends `dir` and preserves the existing entries and
+        /// their order exactly; an absent value yields only `dir`, and — by
+        /// `prepend_path_value`'s contract — so does a wholly empty one.
+        ///
+        /// The expectation splits the *input* value rather than echoing the
+        /// generated list, because `join_paths` cannot distinguish an empty
+        /// list from one empty entry — that ambiguity belongs to the `PATH`
+        /// representation, and the helper's contract is over the value it
+        /// receives. A dropped or reordered entry still cannot agree with
+        /// itself, since input and output are split independently.
+        #[test]
+        fn composition_prepends_and_preserves_order(
+            existing in prop::option::of(vec(entry(), 0..6)),
+            dir in "[A-Za-z0-9_./-]{1,8}",
+        ) {
+            let joined = existing
+                .as_ref()
+                .map(|parts| std::env::join_paths(parts).expect("separator-free entries join"));
+            let composed = prepend_path_value(joined.as_deref(), Path::new(&dir))
+                .expect("separator-free inputs compose");
+
+            let mut expected = vec![PathBuf::from(&dir)];
+            if let Some(value) = joined.as_deref().filter(|value| !value.is_empty()) {
+                expected.extend(std::env::split_paths(value));
+            }
+            let found: Vec<PathBuf> = std::env::split_paths(&composed).collect();
+            prop_assert_eq!(found, expected);
+        }
+
+        /// `get` answers per the last override for each key, and `is_empty`
+        /// holds exactly when no override was ever set.
+        ///
+        /// The model is a plain last-write-wins map, independent of the
+        /// implementation's in-place-update vector, so a bookkeeping slip
+        /// between lookup and storage fails here.
+        #[test]
+        fn overrides_resolve_to_their_last_declaration(
+            ops in vec(("[AB]", "[a-z]{0,4}"), 0..8)
+        ) {
+            let mut model: HashMap<String, String> = HashMap::new();
+            let mut env = CommandEnv::inherit();
+            for (key, value) in &ops {
+                model.insert(key.clone(), value.clone());
+                env = env.with_var(key, value);
+            }
+            prop_assert_eq!(env.is_empty(), model.is_empty());
+            for key in ["A", "B", "C"] {
+                let expected = model.get(key).map(|value| OsString::from(value.clone()));
+                prop_assert_eq!(
+                    env.get(key),
+                    expected.as_deref().map(OsStr::new),
+                    "key {}", key
+                );
+            }
+        }
     }
 }

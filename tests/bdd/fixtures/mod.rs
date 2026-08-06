@@ -11,6 +11,7 @@ use netsuke::cli::Cli;
 use netsuke::localization::LocalizerGuard;
 use netsuke::output_mode::OutputMode;
 use netsuke::output_prefs::OutputPrefs;
+use netsuke::runner::CommandEnv;
 use netsuke::stdlib::{NetworkPolicy, StdlibState as NetsukeStdlibState};
 use rstest::fixture;
 use rstest_bdd::Slot;
@@ -74,6 +75,12 @@ pub struct TestWorld {
     pub temp_dir: RefCell<Option<tempfile::TempDir>>,
     /// Explicit workspace path created by `empty_workspace_at_path` for `-C` flag tests.
     pub workspace_path: RefCell<Option<PathBuf>>,
+    /// Environment applied to spawned Ninja commands.
+    ///
+    /// Carries the composed `PATH` seen by processes the spawned Ninja
+    /// itself launches; it plays no part in selecting the fake Ninja
+    /// binary, which is passed explicitly as `NinjaBuildRequest.program`.
+    pub command_env: RefCell<CommandEnv>,
 
     // Stdlib state (Clone)
     /// Root directory for stdlib scenarios.

@@ -99,7 +99,9 @@ for unit tests.
   `tests/bdd/fixtures.rs` (or similar) and is backed by `Arc<Mutex<...>>` when
   interior mutability is required.
 - Provide `#[rstest::fixture]` constructors for shared resources:
-  - Temporary workspace plus `PathGuard` handling for PATH edits.
+  - Temporary workspace plus explicit command-environment composition: the
+    child's `PATH` is composed as data and carried on the world rather than
+    edited on the parent process.
   - HTTP server guard that mirrors `start_http_server`/`shutdown_http_server`
     semantics.
   - CLI/manifest/ninja contexts seeded with sensible defaults.

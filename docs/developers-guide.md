@@ -2113,7 +2113,7 @@ Table: Scenario state groups and fields
 | Manifest state     | `manifest`, `manifest_error`                                                                                                                                                                                                             | Parsed manifest and error capture.                         |
 | IR state           | `build_graph`, `removed_action_id`, `generation_error`                                                                                                                                                                                   | Build graph, negative-test identifiers, generation errors. |
 | Ninja state        | `ninja_content`, `ninja_error`                                                                                                                                                                                                           | Generated Ninja file content and errors.                   |
-| Process state      | `run_status`, `run_error`, `command_stdout`, `command_stderr`, `temp_dir`, `workspace_path`                                                                                                                                              | Process results and temporary workspace paths.             |
+| Process state      | `run_status`, `run_error`, `command_stdout`, `command_stderr`, `temp_dir`, `workspace_path`, `command_env`                                                                                                                               | Process results, workspace paths, child environment.       |
 | Stdlib state       | `stdlib_root`, `stdlib_output`, `stdlib_error`, `stdlib_state`, `stdlib_command`, `stdlib_policy`, `stdlib_path_override`, `stdlib_fetch_max_bytes`, `stdlib_command_max_output_bytes`, `stdlib_command_stream_max_bytes`, `stdlib_text` | Stdlib rendering, network policy, and size constraints.    |
 | Localization state | `localization_lock`, `localization_guard`, `locale_config`, `locale_env`, `locale_cli_override`, `locale_system`, `resolved_locale`, `locale_message`                                                                                    | Scenario-level localizer overrides and resolution state.   |
 | HTTP server state  | `http_server`, `stdlib_url`                                                                                                                                                                                                              | Test HTTP server fixture for fetch scenarios.              |
@@ -2793,6 +2793,49 @@ constructed by `BuildTargets::new` and read through `as_slice`. It exposes no
 `is_empty`: the accessor existed but had no callers anywhere in the
 workspace, so it was removed; call `as_slice().is_empty()` where that
 question needs asking.
+
+### Module: `runner::process::command_env`
+
+`src/runner/process/command_env.rs` composes the environment applied to a
+spawned Ninja command as data, rather than by mutating the parent process.
+
+`CommandEnv` carries overrides as a list of key/value pairs:
+
+- `CommandEnv::inherit()` sets no overrides, which is production behaviour:
+  the child receives the parent's environment unchanged.
+- `with_var(key, value)` and the `with_path(path)` convenience it is built on
+  are last-write-wins per key, so composing an environment twice for the same
+  key cannot leave it carrying two values.
+- `get(key)` reports only what this `CommandEnv` overrides, never the
+  parent's value, so `None` means "inherited", not "unset".
+- `apply` writes each override onto the `Command` with `Command::env`,
+  deliberately additive rather than `env_clear`: Ninja needs the ambient
+  environment to function, and clearing it would make a test environment
+  diverge from production in ways unrelated to what the test is pinning.
+
+`PATH` values are composed with `test_support::env::prepend_path_value`, a
+pure function that places a directory ahead of an explicitly supplied prior
+value. It takes the starting value rather than reading the process, so the
+result depends only on its inputs. An absent prior value yields just the new
+directory, and — by the helper's contract, which its tests pin — a wholly
+empty prior value is treated the same way; empty entries inside a non-empty
+value survive composition. It returns an error when an entry contains the
+platform path separator, which `std::env::join_paths` itself reports.
+
+Nothing in this seam reads or writes the process `PATH`. On Unix the program
+is still resolved by the parent: callers pass an explicit program path
+(`NinjaBuildRequest.program`/`NinjaToolRequest.program`) rather than a bare
+name, so injecting a directory does not make Ninja itself resolve to a fake.
+What the injected `PATH` governs is the environment Ninja's own child commands
+see when it shells out.
+
+The explicit request APIs compose on top of `CommandEnv`: `NinjaBuildRequest`/
+`NinjaToolRequest` carry an `env: &CommandEnv` field alongside the program, CLI
+settings, and build file, and are consumed by `run_ninja_with`/
+`run_ninja_tool_with`. The convenience wrappers `run_ninja`/`run_ninja_tool`
+call these with `CommandEnv::inherit()`, reproducing production behaviour;
+tests reach for `run_ninja_with`/`run_ninja_tool_with` directly to supply a
+`CommandEnv` built with `with_path` instead.
 
 ## IR cycle detection
 
