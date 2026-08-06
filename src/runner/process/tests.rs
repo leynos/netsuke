@@ -1,28 +1,43 @@
 //! Unit and property tests for Ninja process helpers.
 
-use super::super::NINJA_PROGRAM;
+use super::super::{NINJA_ENV, NINJA_PROGRAM};
 use super::*;
 use camino::Utf8PathBuf;
+use mockable::MockEnv;
 use proptest::prelude::*;
 use std::ffi::OsString;
 #[cfg(unix)]
 use std::path::PathBuf;
 
+/// A `MockEnv` answering exactly one `os_string` read of `NETSUKE_NINJA`.
+///
+/// The key expectation is part of the contract (#488): a resolver that reads
+/// any other variable, or reads more than once, fails these tests rather than
+/// silently consulting something else.
+fn ninja_env(value: Option<OsString>) -> MockEnv {
+    let mut env = MockEnv::new();
+    env.expect_os_string()
+        .times(1)
+        .withf(|key| key == NINJA_ENV)
+        .return_const(value);
+    env
+}
+
 #[test]
 fn resolve_ninja_program_utf8_prefers_env_override() {
-    let resolved = resolve_ninja_program_utf8_with(|_| Some(OsString::from("/opt/ninja")));
+    let resolved = resolve_ninja_program_utf8_with(&ninja_env(Some(OsString::from("/opt/ninja"))));
     assert_eq!(resolved, Utf8PathBuf::from("/opt/ninja"));
 }
 
 #[test]
 fn resolve_ninja_program_utf8_defaults_without_override() {
-    let resolved = resolve_ninja_program_utf8_with(|_| None);
+    let resolved = resolve_ninja_program_utf8_with(&ninja_env(None));
     assert_eq!(resolved, Utf8PathBuf::from(NINJA_PROGRAM));
 }
 
 #[test]
 fn resolve_ninja_program_utf8_defaults_for_empty_override() {
-    let resolved = resolve_ninja_program_utf8_with(|_| Some(OsString::new()));
+    let resolved = resolve_ninja_program_utf8_with(&ninja_env(Some(OsString::new())));
     assert_eq!(resolved, Utf8PathBuf::from(NINJA_PROGRAM));
 }
 
@@ -31,10 +46,17 @@ fn resolve_ninja_program_utf8_defaults_for_empty_override() {
 fn resolve_ninja_program_utf8_ignores_invalid_utf8_override() {
     use std::os::unix::ffi::OsStringExt;
 
-    let resolved = resolve_ninja_program_utf8_with(|_| {
-        Some(OsString::from_vec(vec![0xff, b'n', b'i', b'n', b'j', b'a']))
-    });
+    let resolved = resolve_ninja_program_utf8_with(&ninja_env(Some(OsString::from_vec(vec![
+        0xff, b'n', b'i', b'n', b'j', b'a',
+    ]))));
     assert_eq!(resolved, Utf8PathBuf::from(NINJA_PROGRAM));
+}
+
+/// The platform-path variant shares the UTF-8 resolution and conversion.
+#[test]
+fn resolve_ninja_program_with_converts_the_resolved_path() {
+    let resolved = resolve_ninja_program_with(&ninja_env(Some(OsString::from("/opt/ninja"))));
+    assert_eq!(resolved, std::path::PathBuf::from("/opt/ninja"));
 }
 
 proptest! {
@@ -48,7 +70,7 @@ proptest! {
             _ => Utf8PathBuf::from(NINJA_PROGRAM),
         };
 
-        let resolved = resolve_ninja_program_utf8_with(|_| env_value.clone());
+        let resolved = resolve_ninja_program_utf8_with(&ninja_env(env_value));
 
         prop_assert_eq!(resolved, expected);
     }
@@ -102,7 +124,7 @@ proptest! {
                 .unwrap_or_else(|_| Utf8PathBuf::from(NINJA_PROGRAM))
         };
 
-        let resolved = resolve_ninja_program_utf8_with(|_| Some(env_value.clone()));
+        let resolved = resolve_ninja_program_utf8_with(&ninja_env(Some(env_value)));
 
         prop_assert_eq!(resolved, expected);
     }
