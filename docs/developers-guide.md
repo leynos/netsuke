@@ -2827,9 +2827,11 @@ an injected `PATH` cannot select Ninja itself holds only when
 `NinjaBuildRequest.program`/`NinjaToolRequest.program` is an absolute or
 otherwise resolved path: `program` is handed to `Command::new` as given, so a
 bare relative name such as `ninja` is looked up in the child's `PATH` on
-Unix, injected directories included. Callers therefore pass resolved paths,
-and what the injected `PATH` then governs is the environment Ninja's own
-child commands see when it shells out.
+Unix, injected directories included. Callers that must not let the injected
+`PATH` select the executable therefore pass an absolute or otherwise resolved
+program path; when that isolation does not matter, a relative name resolving
+through the child `PATH` is acceptable. What the injected `PATH` always
+governs is the environment Ninja's own child commands see when it shells out.
 
 The explicit request APIs compose on top of `CommandEnv`: `NinjaBuildRequest`/
 `NinjaToolRequest` carry an `env: &CommandEnv` field alongside the program, CLI

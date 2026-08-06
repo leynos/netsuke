@@ -63,10 +63,11 @@ impl CommandEnv {
     ///
     /// ```rust
     /// use netsuke::runner::CommandEnv;
-    /// use std::ffi::OsStr;
     ///
-    /// let env = CommandEnv::inherit().with_path("/opt/bin:/usr/bin");
-    /// assert_eq!(env.get("PATH"), Some(OsStr::new("/opt/bin:/usr/bin")));
+    /// let composed = std::env::join_paths(["/opt/bin", "/usr/bin"])
+    ///     .expect("separator-free entries always join");
+    /// let env = CommandEnv::inherit().with_path(&composed);
+    /// assert_eq!(env.get("PATH"), Some(composed.as_os_str()));
     /// // The parent is untouched: only the spawned command sees this.
     /// assert!(!env.is_empty());
     /// ```
