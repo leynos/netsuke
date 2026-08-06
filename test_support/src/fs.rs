@@ -117,6 +117,34 @@ pub fn is_dir(path: impl AsRef<Path>) -> bool {
     fs::metadata(path).is_ok_and(|metadata| metadata.is_dir())
 }
 
+/// Return `true` when `path` is a regular file, surfacing unexpected errors.
+///
+/// Unlike `Path::is_file`, an I/O failure other than `NotFound` is propagated
+/// rather than reported as `false`, so callers can distinguish "the file is
+/// absent" from "the file could not be inspected".
+///
+/// # Errors
+///
+/// Propagates the underlying metadata failure for any error other than
+/// `NotFound`.
+///
+/// # Examples
+///
+/// ```
+/// let dir = tempfile::tempdir().expect("create tempdir");
+/// let file = dir.path().join("file");
+/// test_support::fs::write(&file, "contents").expect("write file");
+/// assert!(test_support::fs::try_is_file(&file).expect("inspect file"));
+/// assert!(!test_support::fs::try_is_file(dir.path().join("absent")).expect("inspect absent"));
+/// ```
+pub fn try_is_file(path: impl AsRef<Path>) -> io::Result<bool> {
+    match fs::metadata(path) {
+        Ok(metadata) => Ok(metadata.is_file()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
 /// Copy `from` to `to`, returning the number of bytes copied.
 ///
 /// # Errors
@@ -283,10 +311,38 @@ pub fn symlink(target: impl AsRef<Path>, link: impl AsRef<Path>) -> io::Result<(
 
 #[cfg(test)]
 mod tests {
-    //! Coverage for directory creation at existing-path boundaries.
+    //! Coverage for directory creation at existing-path boundaries and the
+    //! `try_is_file` error contract.
 
-    use super::{create_dir_all, write};
+    use super::{create_dir_all, try_is_file, write};
     use std::io;
+
+    #[test]
+    fn try_is_file_reports_a_directory_as_not_a_file() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+
+        anyhow::ensure!(
+            !try_is_file(temp.path())?,
+            "a directory should not be reported as a regular file"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn try_is_file_propagates_errors_other_than_not_found() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let file = temp.path().join("regular-file");
+        write(&file, b"fixture")?;
+
+        let Err(error) = try_is_file(file.join("child")) else {
+            anyhow::bail!("traversing through a regular file should fail");
+        };
+        anyhow::ensure!(
+            error.kind() != io::ErrorKind::NotFound,
+            "traversal through a file should not be reported as absence, got {error:?}"
+        );
+        Ok(())
+    }
 
     #[test]
     fn create_dir_all_accepts_an_existing_directory() -> io::Result<()> {
