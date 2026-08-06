@@ -38,23 +38,17 @@ fn prepend_dir_to_path_preserves_existing_entries() -> Result<()> {
     Ok(())
 }
 
+/// Empty and absent starting values both yield only the new directory.
+///
+/// One parameterized case rather than two twins: the contract under test is
+/// identical — a valueless start contributes nothing — and only the spelling
+/// of "valueless" differs.
 #[rstest]
-fn prepend_dir_to_path_handles_empty_path() -> Result<()> {
+#[case::empty(Some(OsStr::new("")))]
+#[case::missing(None)]
+fn prepend_dir_to_path_collapses_valueless_starts(#[case] existing: Option<&OsStr>) -> Result<()> {
     let dir = tempfile::tempdir().context("create temp dir")?;
-    let composed = prepend_path_value(Some(OsStr::new("")), dir.path())?;
-    let paths = std::env::split_paths(&composed).collect::<Vec<_>>();
-    ensure!(
-        paths == vec![dir.path().to_path_buf()],
-        "expected PATH to contain only {}; got {paths:?}",
-        dir.path().display()
-    );
-    Ok(())
-}
-
-#[rstest]
-fn prepend_dir_to_path_handles_missing_path() -> Result<()> {
-    let dir = tempfile::tempdir().context("create temp dir")?;
-    let composed = prepend_path_value(None, dir.path())?;
+    let composed = prepend_path_value(existing, dir.path())?;
     let paths: Vec<_> = std::env::split_paths(&composed).collect();
     ensure!(
         paths == vec![dir.path().to_path_buf()],

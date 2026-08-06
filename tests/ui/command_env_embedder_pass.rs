@@ -15,27 +15,30 @@ use netsuke::runner::{
     run_ninja_with,
 };
 
-/// An embedder can construct both request bundles around one `CommandEnv`.
-fn compose_requests<'a>(
+/// The pieces an embedder would hold before building requests.
+struct Parts<'a> {
     program: &'a Path,
     cli: &'a Cli,
     build_file: &'a Path,
     targets: &'a BuildTargets<'a>,
     env: &'a CommandEnv,
-) -> (NinjaBuildRequest<'a>, NinjaToolRequest<'a>) {
+}
+
+/// An embedder can construct both request bundles around one `CommandEnv`.
+fn compose_requests<'a>(parts: &Parts<'a>) -> (NinjaBuildRequest<'a>, NinjaToolRequest<'a>) {
     let build = NinjaBuildRequest {
-        program,
-        cli,
-        build_file,
-        targets,
-        env,
+        program: parts.program,
+        cli: parts.cli,
+        build_file: parts.build_file,
+        targets: parts.targets,
+        env: parts.env,
     };
     let tool = NinjaToolRequest {
-        program,
-        cli,
-        build_file,
+        program: parts.program,
+        cli: parts.cli,
+        build_file: parts.build_file,
         tool: "clean",
-        env,
+        env: parts.env,
     };
     (build, tool)
 }
@@ -50,13 +53,14 @@ fn main() {
 
     let cli = Cli::default();
     let targets = BuildTargets::default();
-    let (build, tool) = compose_requests(
-        Path::new("ninja"),
-        &cli,
-        Path::new("build.ninja"),
-        &targets,
-        &env,
-    );
+    let parts = Parts {
+        program: Path::new("ninja"),
+        cli: &cli,
+        build_file: Path::new("build.ninja"),
+        targets: &targets,
+        env: &env,
+    };
+    let (build, tool) = compose_requests(&parts);
 
     // Reference the explicit entry points by signature; calling them would
     // spawn a process, which a compile-only fixture must not do.
