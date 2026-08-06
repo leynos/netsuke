@@ -487,13 +487,16 @@ the purpose of automated dependency updates and turns a routine bump into a
 manual chore.
 
 The default, therefore, is shape-only: contract tests verify the *shape* of a
-reusable-workflow caller and not the specific SHA value. The one sanctioned
+shared-action caller and not the specific SHA value. This covers both forms of
+call into `shared-actions` — a step that `uses:` a composite action with a
+`with:` block, and a job that `uses:` a reusable workflow. The one sanctioned
 departure is a caller whose behaviour depends on a feature the shared action
 gained at a known revision; the Polonius exception below is the only current
 instance. The bullets that follow state the default; they do not apply to a
 caller covered by that exception.
 
-- Do assert the workflow references the correct reusable workflow path.
+- Do assert the caller references the correct shared-action or
+  reusable-workflow path.
 - Do assert the ref is pinned to a full 40-character commit SHA, not a
   mutable branch such as `main` or `rolling`.
 - Do assert the expected `on:` triggers, least-privilege `permissions:`, and
