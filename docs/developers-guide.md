@@ -295,8 +295,9 @@ independently edited pin would let the two disagree.
 enforces all four callers. For each one it asserts:
 
 - the job uses the expected shared-action reference — path *and* pinned
-  revision (see "Workflow pins and Dependabot" below for why the exact
-  revision is asserted here);
+  revision, the latter derived from the checked workflows themselves rather
+  than restated in the test (see "Workflow pins and Dependabot" below for why
+  the revision is asserted here);
 - the `with.rustflags` value matches the table above in full, not merely that
   it contains `-Zpolonius=next`, so a dropped `-D warnings` is caught too;
 - the job declares no `env.RUSTFLAGS`;
@@ -530,14 +531,22 @@ an unrecognized `with:` key on a composite action is a warning, not an error —
 it simply never exports the flag, so the build fails later as a borrow-check
 error rather than as a configuration error.
 
-`tests/polonius_toolchain_contract.rs` therefore asserts each of those
-workflows' exact shared-action path *and* pinned revision, held in the
-`SETUP_RUST_ACTION` and `RUST_BUILD_RELEASE_ACTION` constants. A Dependabot
-bump of these four references is expected to fail the test until someone
-updates the constants, and that failure is the point: it forces a human to
-confirm the new revision still implements the `rustflags` input contract before
-the bump lands. Restrict this exception to callers with a genuine
-revision-level dependency; everywhere else, the shape-only policy applies.
+`tests/polonius_toolchain_contract.rs` therefore requires the four workflows'
+shared-action references to agree, rather than restating the expected pin as a
+constant. It extracts every `leynos/shared-actions` reference from the checked
+workflows with the shared YAML-parsing helper in
+`tests/support/shared_actions.rs`, validates that each is a full
+40-character lowercase-hex commit SHA, and derives the pin the workflows must
+share from that set. A complete bump — Dependabot's or a manual one — moves
+every reference together and passes with no test edit. A partial bump, where
+some workflows move and others are left behind, fails on the disagreement
+between references: the same failure that previously broke `main` when a bump
+missed the hand-maintained constants this contract used to hold. The
+revision-level dependency on the `rustflags` input is now protected by that
+agreement requirement together with `shared-actions`' own contract tests
+upstream, rather than by a constant edited by hand here. Restrict this
+exception to callers with a genuine revision-level dependency; everywhere
+else, the shape-only policy applies.
 
 If a workflow's behaviour does not depend on a feature from a particular commit
 onwards, do not assert its SHA — express any advisory note as a comment or a
@@ -1815,6 +1824,29 @@ compile time. This refusal is itself a tested contract:
 regressing to a doc-comment promise. `tests/locale_stub_strictness_tests.rs`
 covers the panic, the trichotomy, and the last-declaration-wins rule with
 both example-based and property tests.
+
+#### Locale-stub UI harness and split build directories
+
+`tests/locale_stub_ui_tests.rs` builds `test_support` with `cargo build
+--message-format=json` and parses the resulting Cargo JSON messages rather
+than assuming its dependencies sit beside the uplifted `test_support` rlib.
+For every `compiler-artifact` message it records the parent directory of each
+rlib the message names, and passes the whole set to `rustc` as `-L
+dependency=` directories when compiling the UI fixtures. This keeps the
+harness correct when Cargo's `build.build-dir` setting splits intermediate
+artefacts — where dependency rlibs live — from the final, uplifted ones;
+deriving the directories from what Cargo actually reports, rather than from a
+single assumed location, means the harness does not need to special-case that
+split.
+
+`harness_compiles_under_a_split_build_dir` is the regression test for this:
+it forces a split layout with its own private `CARGO_TARGET_DIR` and
+`CARGO_BUILD_BUILD_DIR` roots, confirms the collected dependency directories
+span the split, and then compiles a fixture against them. The roots are
+private to the test rather than the ambient target directory because the
+`#[once]` `test_support_rlib` fixture builds concurrently in the other test;
+sharing a target directory between the two races on the uplifted rlibs and
+fails with version-skew errors (`E0460`).
 
 ### Manifest `env()` reader
 

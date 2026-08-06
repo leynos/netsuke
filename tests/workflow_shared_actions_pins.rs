@@ -39,21 +39,66 @@ fn is_pinned_shared_action_ref(reference: &str) -> bool {
 }
 
 #[test]
-fn unit_extracts_uses_from_workflow_lines() {
+fn unit_extracts_uses_from_workflow_yaml() -> Result<()> {
     let sample = r"
-      - uses: leynos/shared-actions/.github/actions/setup-rust@0123456789abcdef0123456789abcdef01234567
-      - uses: leynos/shared-actions/.github/actions/generate-coverage@0123456789abcdef0123456789abcdef01234567
-    ";
+- uses: leynos/shared-actions/.github/actions/setup-rust@0123456789abcdef0123456789abcdef01234567
+- uses: leynos/shared-actions/.github/actions/generate-coverage@0123456789abcdef0123456789abcdef01234567
+";
 
-    let uses = extract_shared_actions_uses(sample);
+    let uses = extract_shared_actions_uses(sample)?;
 
-    assert_eq!(
-        uses,
-        vec![
+    ensure!(
+        uses == vec![
             "leynos/shared-actions/.github/actions/setup-rust@0123456789abcdef0123456789abcdef01234567",
             "leynos/shared-actions/.github/actions/generate-coverage@0123456789abcdef0123456789abcdef01234567",
-        ]
+        ],
+        "both nested uses values should be extracted, got {uses:?}"
     );
+    Ok(())
+}
+
+#[test]
+fn unit_normalizes_quoted_uses_values() -> Result<()> {
+    let sample = concat!(
+        "steps:\n",
+        "  - uses: \"leynos/shared-actions/.github/actions/setup-rust@",
+        "0123456789abcdef0123456789abcdef01234567\"\n",
+        "  - uses: 'leynos/shared-actions/.github/actions/generate-coverage@",
+        "0123456789abcdef0123456789abcdef01234567'\n",
+    );
+
+    let uses = extract_shared_actions_uses(sample)?;
+
+    ensure!(
+        uses.len() == 2,
+        "quoted uses values should extract, got {uses:?}"
+    );
+    for reference in &uses {
+        ensure!(
+            is_pinned_shared_action_ref(reference),
+            "quoted values should normalize to bare references: {reference:?}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn unit_ignores_shared_action_tokens_in_comments() -> Result<()> {
+    let sample = concat!(
+        "steps:\n",
+        "  # uses: leynos/shared-actions/.github/actions/setup-rust@main\n",
+        "  - run: echo hello\n",
+        "  - uses: actions/checkout@0123456789abcdef0123456789abcdef01234567",
+        " # leynos/shared-actions/.github/actions/setup-rust@main\n",
+    );
+
+    let uses = extract_shared_actions_uses(sample)?;
+
+    ensure!(
+        uses.is_empty(),
+        "commented-out or comment-embedded tokens should not extract: {uses:?}"
+    );
+    Ok(())
 }
 
 #[test]
@@ -83,7 +128,11 @@ fn behavioural_shared_actions_pins_are_full_commit_shas() -> Result<()> {
         if path.extension().and_then(|ext| ext.to_str()) != Some("yml") {
             continue;
         }
-        refs.extend(extract_shared_actions_uses(&read_workflow(&path)?));
+        let contents = read_workflow(&path)?;
+        refs.extend(
+            extract_shared_actions_uses(&contents)
+                .with_context(|| format!("extract references from {}", path.display()))?,
+        );
     }
 
     ensure!(

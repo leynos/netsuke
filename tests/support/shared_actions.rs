@@ -9,26 +9,58 @@
 //! complete bump needs no test edit.
 
 use anyhow::{Context, Result, ensure};
+use serde_yaml::Value as YamlValue;
 use std::collections::BTreeSet;
 
 /// Path prefix common to every shared-actions action reference.
 pub const SHARED_ACTIONS_MARKER: &str = "leynos/shared-actions/.github/actions/";
 
-/// Extracts every shared-actions `uses:` token from workflow `contents`.
+/// Extracts every shared-actions `uses:` reference from workflow YAML.
 ///
-/// Each returned token is the full reference, for example
-/// `leynos/shared-actions/.github/actions/setup-rust@<sha>`.
-#[must_use]
-pub fn extract_shared_actions_uses(contents: &str) -> Vec<String> {
-    contents
-        .lines()
-        .filter_map(|line| {
-            let start = line.find(SHARED_ACTIONS_MARKER)?;
-            let rest = line.get(start..)?;
-            let token = rest.split_whitespace().next()?;
-            (!token.is_empty()).then(|| token.to_owned())
-        })
-        .collect()
+/// The workflow is parsed as YAML and only scalar `uses:` values are
+/// considered, so quoted references normalize to their unquoted form and
+/// commented-out lines or lookalike tokens inside comments and other strings
+/// never leak into the result. Each returned reference is the full value,
+/// for example `leynos/shared-actions/.github/actions/setup-rust@<sha>`.
+///
+/// # Errors
+///
+/// Fails when `contents` is not valid YAML.
+pub fn extract_shared_actions_uses(contents: &str) -> Result<Vec<String>> {
+    let document: YamlValue = serde_yaml::from_str(contents).context("parse workflow YAML")?;
+    let mut uses = Vec::new();
+    collect_uses(&document, &mut uses);
+    Ok(uses)
+}
+
+/// Returns the shared-actions reference held by a `uses:` mapping entry.
+fn shared_action_use<'a>(key: &YamlValue, entry: &'a YamlValue) -> Option<&'a str> {
+    if key.as_str() != Some("uses") {
+        return None;
+    }
+    entry
+        .as_str()
+        .filter(|reference| reference.starts_with(SHARED_ACTIONS_MARKER))
+}
+
+/// Walks `value` collecting shared-actions references from `uses:` scalars.
+fn collect_uses(value: &YamlValue, out: &mut Vec<String>) {
+    match value {
+        YamlValue::Mapping(mapping) => {
+            for (key, entry) in mapping {
+                if let Some(reference) = shared_action_use(key, entry) {
+                    out.push(reference.to_owned());
+                }
+                collect_uses(entry, out);
+            }
+        }
+        YamlValue::Sequence(sequence) => {
+            for entry in sequence {
+                collect_uses(entry, out);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Splits a shared-actions reference into its action name and pin.

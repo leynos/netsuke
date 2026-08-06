@@ -14,6 +14,7 @@
 //! flags — and the fixtures are compiled directly with the workspace `rustc`
 //! against that rlib.
 
+use camino::{Utf8Path, Utf8PathBuf};
 use rstest::{fixture, rstest};
 use std::{
     io,
@@ -78,8 +79,8 @@ fn stub_env_builders_compile_under_the_same_harness(
 
 /// The `test_support` rlib and the directories holding its dependencies.
 struct TestSupportRlib {
-    rlib: PathBuf,
-    deps_dirs: Vec<PathBuf>,
+    rlib: Utf8PathBuf,
+    deps_dirs: Vec<Utf8PathBuf>,
 }
 
 impl TestSupportRlib {
@@ -125,7 +126,7 @@ impl TestSupportRlib {
         // intermediate artefacts (where dependencies live) from final ones.
         // Every compiler-artifact message names its rlib's real location, so
         // collect each artefact's parent directory for `-L dependency=`.
-        let mut deps_dirs: Vec<PathBuf> = Vec::new();
+        let mut deps_dirs: Vec<Utf8PathBuf> = Vec::new();
         for parent in stdout.lines().flat_map(rlib_parents_in_message) {
             if !deps_dirs.contains(&parent) {
                 deps_dirs.push(parent);
@@ -151,13 +152,12 @@ impl TestSupportRlib {
             .arg("--emit=metadata")
             .arg(manifest_dir().join(source))
             .arg("--extern")
-            .arg(format!("test_support={}", self.rlib.display()))
-            .args(self.deps_dirs.iter().flat_map(|dir| {
-                [
-                    std::ffi::OsString::from("-L"),
-                    format!("dependency={}", dir.display()).into(),
-                ]
-            }))
+            .arg(format!("test_support={}", self.rlib))
+            .args(
+                self.deps_dirs
+                    .iter()
+                    .flat_map(|dir| [String::from("-L"), format!("dependency={dir}")]),
+            )
             .arg("-o")
             .arg(output_dir.path().join("stub-env-ui.rmeta"))
             .output()
@@ -169,7 +169,7 @@ impl TestSupportRlib {
 /// Returns `None` for lines that are not valid JSON, not compiler-artifact
 /// messages, or that lack a target name; the rlib list may be empty for
 /// artefacts that emit no rlib.
-fn compiler_artifact_rlibs(line: &str) -> Option<(String, Vec<PathBuf>)> {
+fn compiler_artifact_rlibs(line: &str) -> Option<(String, Vec<Utf8PathBuf>)> {
     let message: serde_json::Value = serde_json::from_str(line).ok()?;
     if message.get("reason")? != "compiler-artifact" {
         return None;
@@ -182,37 +182,37 @@ fn compiler_artifact_rlibs(line: &str) -> Option<(String, Vec<PathBuf>)> {
         .flatten()
         .filter_map(serde_json::Value::as_str)
         .filter(|filename| {
-            Path::new(filename)
+            Utf8Path::new(filename)
                 .extension()
                 .is_some_and(|extension| extension.eq_ignore_ascii_case("rlib"))
         })
-        .map(PathBuf::from)
+        .map(Utf8PathBuf::from)
         .collect();
     Some((name, rlibs))
 }
 
 /// Extract the parent directories of every rlib in one Cargo JSON message.
-fn rlib_parents_in_message(line: &str) -> Vec<PathBuf> {
+fn rlib_parents_in_message(line: &str) -> Vec<Utf8PathBuf> {
     compiler_artifact_rlibs(line)
         .map(|(_name, rlibs)| {
             rlibs
                 .iter()
-                .filter_map(|rlib| rlib.parent().map(Path::to_path_buf))
+                .filter_map(|rlib| rlib.parent().map(Utf8Path::to_path_buf))
                 .collect()
         })
         .unwrap_or_default()
 }
 
 /// Extract the `test_support` rlib path from one Cargo JSON message, if any.
-fn test_support_rlib_in_message(line: &str) -> Option<PathBuf> {
+fn test_support_rlib_in_message(line: &str) -> Option<Utf8PathBuf> {
     let (name, rlibs) = compiler_artifact_rlibs(line)?;
     (name == "test_support")
         .then(|| rlibs.into_iter().next_back())
         .flatten()
 }
 
-fn manifest_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+fn manifest_dir() -> Utf8PathBuf {
+    Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
 #[expect(
@@ -245,8 +245,8 @@ fn parser_collects_every_rlib_directory_from_a_message() {
     assert_eq!(
         parents,
         vec![
-            PathBuf::from("/build/debug/deps"),
-            PathBuf::from("/target/debug"),
+            Utf8PathBuf::from("/build/debug/deps"),
+            Utf8PathBuf::from("/target/debug"),
         ],
         "both rlib directories should be collected in message order"
     );
@@ -272,7 +272,7 @@ fn parser_selects_the_test_support_rlib_by_target_name() {
     let message = r#"{"reason":"compiler-artifact","target":{"name":"test_support"},"filenames":["/deps/libtest_support-1.rlib","/final/libtest_support.rlib"]}"#;
     assert_eq!(
         test_support_rlib_in_message(message),
-        Some(PathBuf::from("/final/libtest_support.rlib")),
+        Some(Utf8PathBuf::from("/final/libtest_support.rlib")),
         "the last-listed rlib should win, matching Cargo's uplift ordering"
     );
     assert!(

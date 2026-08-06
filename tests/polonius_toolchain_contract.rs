@@ -85,7 +85,10 @@ fn shared_actions_sha() -> Result<String> {
     let mut refs = Vec::new();
     for expectation in WORKFLOW_EXPECTATIONS {
         let contents = read_repo_file(Utf8Path::new(expectation.path))?;
-        let extracted = shared_actions::extract_shared_actions_uses(&contents);
+        let extracted =
+            shared_actions::extract_shared_actions_uses(&contents).with_context(|| {
+                format!("extract shared-action references from {}", expectation.path)
+            })?;
         ensure!(
             !extracted.is_empty(),
             "{} should pin at least one shared action",
