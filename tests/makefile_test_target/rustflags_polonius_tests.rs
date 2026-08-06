@@ -46,30 +46,25 @@ fn polonius_flags_accepts_only_non_empty_definitions(
 }
 
 #[rstest]
-fn polonius_flags_names_the_missing_variable() {
-    let error = polonius_flags("A ?= b\n").expect_err("missing definition should fail");
+#[case::missing_variable("A ?= b\n", "should define POLONIUS_FLAGS")]
+#[case::empty_value("POLONIUS_FLAGS ?=  \n", "should not be empty")]
+fn polonius_flags_names_the_rejection_cause(#[case] makefile: &str, #[case] expected: &str) {
+    let error = polonius_flags(makefile).expect_err("definition should be rejected");
     assert!(
-        error.to_string().contains("should define POLONIUS_FLAGS"),
-        "missing definition should report the expected message; got {error:?}"
-    );
-}
-
-#[rstest]
-fn polonius_flags_names_the_empty_value() {
-    let error = polonius_flags("POLONIUS_FLAGS ?=  \n").expect_err("empty definition should fail");
-    assert!(
-        error.to_string().contains("should not be empty"),
-        "empty definition should report the expected message; got {error:?}"
+        error.to_string().contains(expected),
+        "rejection of {makefile:?} should report {expected:?}; got {error:?}"
     );
 }
 
 /// Strategy for the `POLONIUS_FLAGS` value slot: absent, whitespace-only, or
-/// a non-empty flag-like token.
+/// a non-empty flag-like token that may be padded with whitespace, so the
+/// property also pins the trimming the resolver owes its callers.
 fn arb_polonius_value() -> impl Strategy<Value = Option<String>> {
     prop_oneof![
         Just(None),
         "[ \t]{0,4}".prop_map(Some),
-        "[-A-Za-z0-9=+.]{1,24}".prop_map(Some),
+        ("[ \t]{0,4}", "[-A-Za-z0-9=+.]{1,24}", "[ \t]{0,4}")
+            .prop_map(|(prefix, flag, suffix)| Some(format!("{prefix}{flag}{suffix}"))),
     ]
 }
 
