@@ -74,7 +74,7 @@ fn stdlib_env(workspace: &ToolWorkspace, pathext: &str) -> Result<Environment<'s
     let dir = Dir::open_ambient_dir(&workspace.root, ambient_authority())
         .with_context(|| format!("open workspace {}", workspace.root))?;
     let config = StdlibConfig::new(dir)?
-        .with_workspace_root_path(workspace.root.clone())?
+        .with_workspace_root_path(&workspace.root)?
         .with_path_override(OsString::from(workspace.bin.as_str()))
         .with_pathext_override(OsString::from(pathext));
     let mut env = Environment::new();
