@@ -39,6 +39,13 @@
   of truth for the compiler contract
   ([#465](https://github.com/leynos/netsuke/issues/465))
 
+### Removed
+
+- Remove `runner::BuildTargets::is_empty`, which had no callers anywhere in
+  the workspace. Library consumers who need the same answer can call
+  `BuildTargets::as_slice().is_empty()`
+  ([#75](https://github.com/leynos/netsuke/issues/75))
+
 ## [0.1.0] - 2026-07-28
 
 _Initial release._
