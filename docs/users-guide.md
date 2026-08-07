@@ -493,6 +493,57 @@ are inherited from the embedding process, and the injected `PATH` governs
 what commands Ninja launches will see — supply an absolute program path,
 since a relative name is resolved in the child's `PATH`.
 
+The request itself is a named type: `netsuke::runner::NinjaBuildRequest` for a
+build and `netsuke::runner::NinjaToolRequest` for `ninja -t <tool>`. Both
+borrow their fields, so one `CommandEnv` and one `Cli` can serve several
+invocations.
+
+<!-- tested-example: guide-ninja-request-snippet -->
+
+```rust
+use netsuke::cli::Cli;
+use netsuke::runner::{
+    BuildTargets, CommandEnv, NinjaBuildRequest, NinjaToolRequest, run_ninja_tool_with,
+    run_ninja_with,
+};
+use std::path::Path;
+
+let cli = Cli::default();
+let targets = BuildTargets::default();
+// `with_path` replaces the child's `PATH` outright, so compose the whole
+// value first. The embedding process is never modified.
+let path = std::env::join_paths(["/opt/toolchain/bin", "/usr/bin"])
+    .expect("separator-free entries always join");
+let env = CommandEnv::inherit()
+    .with_var("NINJA_STATUS", "[%f/%t] ")
+    .with_path(&path);
+
+let build = NinjaBuildRequest {
+    program: Path::new("/usr/bin/ninja"),
+    cli: &cli,
+    build_file: Path::new("build.ninja"),
+    targets: &targets,
+    env: &env,
+};
+let clean = NinjaToolRequest {
+    program: Path::new("/usr/bin/ninja"),
+    cli: &cli,
+    build_file: Path::new("build.ninja"),
+    tool: "clean",
+    env: &env,
+};
+
+if std::env::var_os("NETSUKE_GUIDE_RUN").is_some() {
+    run_ninja_with(&build).expect("run ninja");
+    run_ninja_tool_with(&clean).expect("run ninja -t clean");
+}
+```
+
+These types are additive: `run_ninja` and `run_ninja_tool` keep their existing
+signatures and behaviour, so an existing embedder needs no change. Each release
+records such additions in [`CHANGELOG.md`](../CHANGELOG.md), which is where
+Netsuke signposts library-surface changes ahead of 1.0.
+
 ## Use the template standard library
 
 Netsuke registers focused path, collection, command, network, and time helpers

@@ -2806,8 +2806,22 @@ spawned Ninja command as data, rather than by mutating the parent process.
 - `with_var(key, value)` and the `with_path(path)` convenience it is built on
   are last-write-wins per key, so composing an environment twice for the same
   key cannot leave it carrying two values.
+- "The same key" follows the target's own rule, via the module-private
+  `env_names_eq`: exact on Unix, where `Path` and `PATH` are two different
+  variables, and ASCII case-insensitive on Windows, where they are one. Match
+  Unix's rule on Windows and a `CommandEnv` would hold two entries the child
+  collapses into one, with `std` rather than the last `with_var` call choosing
+  the survivor; match Windows's rule on Unix and naming `Path` would silently
+  rewrite `PATH`. Replacement keeps the casing first recorded, as the
+  platform's own environment block does.
 - `get(key)` reports only what this `CommandEnv` overrides, never the
-  parent's value, so `None` means "inherited", not "unset".
+  parent's value, so `None` means "inherited", not "unset". It matches keys by
+  the same rule, so a lookup answers with the value the child would receive.
+- `Debug` is implemented by hand rather than derived, and prints only
+  `override_count` and `path_overridden`. Override names and values may hold
+  secrets, and a `CommandEnv` reaches a log by any route that formats a struct
+  containing one — not only through the runner's own logging — so the derived
+  form would defeat the redaction contract the span fields keep.
 - `apply` writes each override onto the `Command` with `Command::env`,
   deliberately additive rather than `env_clear`: Ninja needs the ambient
   environment to function, and clearing it would make a test environment
@@ -2818,8 +2832,10 @@ The `ninja_subprocess` span and its spawn/exit events carry
 `Command` rather than from `CommandEnv`, so an environment-caused failure is
 diagnosable from the logs alone. Both fields are bounded and carry no variable
 name or value: override names and values may hold secrets, and a count plus a
-`PATH` flag is the most that can be logged safely. Production runs use
-`CommandEnv::inherit()`, so they report `0` and `false`.
+`PATH` flag is the most that can be logged safely. The flag uses the same
+target-aware name comparison, so a Unix variable merely named `Path` does not
+raise it. Production runs use `CommandEnv::inherit()`, so they report `0` and
+`false`.
 
 `PATH` values are composed with `test_support::env::prepend_path_value`, a
 pure function that places a directory ahead of an explicitly supplied prior
@@ -2849,7 +2865,14 @@ settings, and build file, and are consumed by `run_ninja_with`/
 `run_ninja_tool_with`. The convenience wrappers `run_ninja`/`run_ninja_tool`
 call these with `CommandEnv::inherit()`, reproducing production behaviour;
 tests reach for `run_ninja_with`/`run_ninja_tool_with` directly to supply a
-`CommandEnv` built with `with_path` instead.
+`CommandEnv` built with `with_path` instead. Section 6.1 of the
+[design document](netsuke-design.md) records the same architecture from the
+process-management side.
+
+Property coverage for this seam lives in `tests/env_path_property_tests.rs`,
+which Cargo builds as its own integration-test target; Proptest therefore
+persists its failing seeds to `env_path_property_tests.proptest-regressions`
+beside it. The named cases sit in `tests/env_path_tests.rs`.
 
 ## IR cycle detection
 

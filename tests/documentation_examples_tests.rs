@@ -29,6 +29,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-json-command",
     "guide-json-output",
     "guide-macro-manifest",
+    "guide-ninja-request-snippet",
     "guide-output-streams",
     "guide-project-anchor",
     "guide-project-config",
@@ -71,6 +72,33 @@ fn env_reader_snippet_mirrors_the_doctest() -> Result<()> {
     }
     Ok(())
 }
+/// The guide's Ninja-request snippet must name the API it documents.
+///
+/// The snippet is the only place the guide constructs the request bundles, so
+/// pinning the identifiers keeps it from drifting into prose about types the
+/// crate no longer exports.
+#[test]
+fn ninja_request_snippet_names_both_request_types() -> Result<()> {
+    let example = documented_example("guide-ninja-request-snippet")?;
+    ensure!(
+        example.language == "rust",
+        "the Ninja-request snippet should be a Rust fence"
+    );
+    for needle in [
+        "NinjaBuildRequest",
+        "NinjaToolRequest",
+        "run_ninja_with",
+        "run_ninja_tool_with",
+        "CommandEnv::inherit",
+    ] {
+        ensure!(
+            example.body.contains(needle),
+            "the Ninja-request snippet should mention {needle}"
+        );
+    }
+    Ok(())
+}
+
 fn assert_default_edges_exist(ninja: &str, context: &str) -> Result<()> {
     for default in ninja
         .lines()
