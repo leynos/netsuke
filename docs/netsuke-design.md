@@ -2889,11 +2889,12 @@ macOS releases execute the shared action twice: once on an Intel runner and
 again on Apple Silicon. The same composite action interprets the TOML
 configuration, emits checksums, and exposes artefact metadata via JSON outputs
 before feeding the resulting paths into the `macos-package` action. Embedding
-the PEP 723 metadata keeps Cyclopts discoverable without a repository-level
-`pyproject.toml`, maintaining the existing approach where uv resolves
-dependencies on demand. Python linting still lives in the top-level
-`ruff.toml`, so the dedicated staging scripts remain self-contained whilst the
-broader helper suite stays consistently linted.
+the PEP 723 metadata keeps Cyclopts discoverable without the staging scripts
+declaring build dependencies, maintaining the existing approach where uv
+resolves dependencies on demand. Python linting lives in the top-level
+`pyproject.toml`, which carries only `[tool.*]` tables — no `[project]` and no
+`[build-system]` — so the repository publishes a Rust crate rather than a
+Python distribution whilst the helper suite stays consistently linted.
 
 Each job uploads its products as workflow artefacts, and the final release job
 downloads every file, filters out unrelated downloads, and prefixes asset names
