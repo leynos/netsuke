@@ -1244,15 +1244,36 @@ Semantics honour platform conventions while enforcing predictable behaviour:
 - Canonicalization happens after discovery and only when requested so that
   manifests can balance reproducibility against host-specific absolute paths.
 
+The resolver reads `PATH` and `PATHEXT` through an injected `mockable::Env`
+provider rather than straight from the process. `EnvSnapshot::capture` is the
+production entry point and binds `mockable::DefaultEnv`; `capture_with_env`
+takes the provider explicitly so tests drive a whole capture with a `MockEnv`;
+and `capture_with_pathext` additionally shadows `PATHEXT`. That last helper is
+defined on every platform — off Windows the override is accepted and discarded,
+because nothing there consults the extension list — so the resolver keeps a
+single capture entry point instead of forking on the target.
+
+Both overrides arrive as configuration rather than as ambient state.
+`StdlibConfig::with_path_override` and `StdlibConfig::with_pathext_override`
+are copied into `WhichConfig`, which `WhichResolver::new` consumes whole; the
+resolver takes the configuration rather than its individual fields so that
+adding a further environment seam does not lengthen the constructor again.
+Pinning both is what allows a behavioural test to drive `which` and
+`command_available` over a temporary directory with a chosen extension list
+without mutating the process environment.
+
 The resolver keeps a small LRU cache keyed by the command, a fingerprint of
-`PATH`/`PATHEXT`, the working directory, and the cache-relevant options (`all`,
-`canonical`, `cwd_mode`). Entries are validated once at insertion; cache reads
-no longer re-probe executability, keeping the hot path lean. Because `fresh`
-only controls bypass behaviour, it is stripped from the cache key so fresh
-lookups still repopulate the cache for subsequent calls. The fingerprint means
-environment changes invalidate keys without cloning large strings, and the
-helper remains pure because all inputs still derive from the manifest or
-process environment. Callers can request a bypass with `fresh=true` when they
+`PATH`/`PATHEXT`, the working directory, the captured `NETSUKE_WHICH_WORKSPACE`
+state, and the cache-relevant options (`all`, `canonical`, `cwd_mode`).
+Including the workspace switch keeps a fallback hit cached while the search was
+enabled from answering a resolution made with it disabled. Entries are
+validated once at insertion; cache reads no longer re-probe executability,
+keeping the hot path lean. Because `fresh` only controls bypass behaviour, it is
+stripped from the cache key so fresh lookups still repopulate the cache for
+subsequent calls. The fingerprint means environment changes invalidate keys
+without cloning large strings, and the helper remains pure because all inputs
+still derive from the manifest, the stdlib configuration, or the captured
+environment. Callers can request a bypass with `fresh=true` when they
 need to observe recent toolchain changes during a long session.
 
 Cache capacity defaults to 64 entries, covering typical PATH sizes without
@@ -1330,8 +1351,8 @@ sequenceDiagram
     participant "SearchWorkspace" as "search_workspace()"
 
     "Caller"->>"WhichResolver": "resolve(command, options)"
-    "WhichResolver"->>"EnvSnapshot": "capture(cwd_override)"
-    "EnvSnapshot"-->>"WhichResolver": "EnvSnapshot { cwd, raw_path }"
+    "WhichResolver"->>"EnvSnapshot": "capture_with_pathext(cwd_override, path_override, pathext_override)"
+    "EnvSnapshot"-->>"WhichResolver": "EnvSnapshot { cwd, raw_path, raw_pathext }"
     "WhichResolver"->>"Lookup": "lookup(env, command, options)"
     "Lookup"->>"Lookup": "search PATH directories for matches"
     alt "matches found"
@@ -1380,6 +1401,8 @@ classDiagram
         +workspace_root_path() -> OptionalPath
         +workspace_skip_dirs() -> StringList
         +which_cache_capacity() -> NonZeroUsize
+        +with_path_override(path: OsString) -> StdlibConfig
+        +with_pathext_override(pathext: OsString) -> StdlibConfig
     }
 
     class Environment {
@@ -1393,15 +1416,30 @@ classDiagram
     class WhichResolver {
         -cache: LruCache
         -cwd_override: OptionalPath
+        -path_override: OptionalOsString
+        -pathext_override: OptionalOsString
         -workspace_skips: WorkspaceSkipList
-        +new(cwd_override: OptionalPath, skips: WorkspaceSkipList, cache_capacity: NonZeroUsize) -> Result
+        +new(config: WhichConfig) -> WhichResolver
         +resolve(command: String, options: WhichOptions) -> Result
     }
 
     class EnvSnapshot {
         +cwd: Utf8PathBuf
         +raw_path: OptionalString
-        +capture(cwd_override: OptionalPath) -> Result
+        +raw_pathext: OptionalOsString
+        +capture(cwd: OptionalPath, path: OptionalOsStr) -> Result
+        +capture_with_env(cwd: OptionalPath, path: OptionalOsStr, env: Env) -> Result
+        +capture_with_pathext(cwd: OptionalPath, path: OptionalOsStr, pathext: OptionalOsStr) -> Result
+    }
+
+    class Env {
+        <<interface>>
+        +os_string(key: String) -> OptionalOsString
+        +raw(key: String) -> Result
+    }
+
+    class DefaultEnv {
+        +os_string(key: String) -> OptionalOsString
     }
 
     class WhichOptions {
@@ -1412,7 +1450,11 @@ classDiagram
     }
 
     class WhichConfig {
-        +new(cwd_override: OptionalPath, skips: WorkspaceSkipList, cache_capacity: NonZeroUsize) -> WhichConfig
+        +cwd_override: OptionalPath
+        +path_override: OptionalOsString
+        +pathext_override: OptionalOsString
+        +new(cwd: OptionalPath, path: OptionalOsString, skips: WorkspaceSkipList, capacity: NonZeroUsize) -> WhichConfig
+        +with_pathext_override(pathext: OptionalOsString) -> WhichConfig
     }
 
     class WorkspaceSkipList {
@@ -1428,9 +1470,12 @@ classDiagram
 
     Environment --> StdlibConfig : uses
     Environment --> WhichModule : calls register
+    StdlibConfig --> WhichConfig : copies PATH and PATHEXT overrides
     StdlibConfig --> WhichModule : provides workspace_root_path, skip dirs, cache capacity
-    WhichModule --> WhichResolver : constructs via new(cwd_override, skips, cache_capacity)
-    WhichResolver --> EnvSnapshot : calls capture(cwd_override)
+    WhichModule --> WhichResolver : constructs via new(config)
+    WhichResolver --> EnvSnapshot : calls capture_with_pathext(cwd, path, pathext)
+    EnvSnapshot --> Env : reads PATH and PATHEXT through the provider
+    DefaultEnv ..|> Env : production adapter bound by capture
     WhichResolver --> WhichOptions : reads lookup options
     WhichResolver --> WorkspaceSkipList : reads traversal filters
     WhichOptions --> CwdMode : uses cwd_mode
@@ -1465,14 +1510,17 @@ sequenceDiagram
     participant WhichResolver
     participant Cache
     participant EnvSnapshot
+    participant Env as "mockable::Env (DefaultEnv in production)"
     participant Lookup
     participant Workspace
 
     Caller->>WhichResolver: resolve(command, options)
     activate WhichResolver
 
-    WhichResolver->>EnvSnapshot: capture(cwd_override)
+    WhichResolver->>EnvSnapshot: capture_with_pathext(cwd_override, path_override, pathext_override)
     activate EnvSnapshot
+    EnvSnapshot->>Env: os_string("PATH"), os_string("PATHEXT")
+    Env-->>EnvSnapshot: values (overrides shadow the provider)
     EnvSnapshot-->>WhichResolver: env snapshot
     deactivate EnvSnapshot
 
