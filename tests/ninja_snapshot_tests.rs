@@ -131,6 +131,53 @@ fn conditional_manifest_ninja_snapshot() -> Result<()> {
 }
 
 #[test]
+fn command_available_manifest_ninja_snapshot() -> Result<()> {
+    // `cwd_mode="never"` plus a command name guaranteed absent keeps the
+    // expansion deterministic without any real binary on PATH.
+    let manifest_yaml = r#"
+        netsuke_version: "1.0.0"
+        actions:
+          - name: preferred-action
+            command: echo preferred
+            when: command_available("netsuke-command-that-should-not-exist", cwd_mode="never")
+          - name: fallback-action
+            command: echo fallback
+            when: not command_available("netsuke-command-that-should-not-exist", cwd_mode="never")
+        rules:
+          - name: touch
+            command: "touch $out"
+        targets:
+          - name: out/result
+            sources: in/source
+            rule: touch
+    "#;
+
+    let manifest = manifest::from_str(manifest_yaml)?;
+    let ir = BuildGraph::from_manifest(&manifest)?;
+    let ninja_content = ninja_gen::generate(&ir)?;
+
+    ensure!(
+        ninja_content.contains("fallback"),
+        "expected fallback action in Ninja output:\n{ninja_content}"
+    );
+    ensure!(
+        !ninja_content.contains("preferred"),
+        "preferred action guarded by an absent command should not appear:\n{ninja_content}"
+    );
+
+    let mut settings = Settings::new();
+    settings.set_snapshot_path(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/snapshots/ninja"
+    ));
+    settings.bind(|| {
+        assert_snapshot!("command_available_manifest_ninja", ninja_content);
+    });
+
+    Ok(())
+}
+
+#[test]
 fn implicit_deps_manifest_ninja_snapshot() -> Result<()> {
     let manifest_yaml = std::fs::read_to_string("tests/data/implicit_deps.yml")
         .context("read tests/data/implicit_deps.yml")?;

@@ -1,0 +1,14 @@
+---
+source: tests/ninja_snapshot_tests.rs
+assertion_line: 174
+expression: ninja_content
+---
+rule 001cc863ffad2333bb5b4a22fde35146827965e79233821681254065519a1ce2
+  command = touch out/result
+
+rule e8c3bab461990fead7f11b007334dcd68b89db712472c5a294c69609dd7302b5
+  command = echo fallback
+
+build fallback-action: e8c3bab461990fead7f11b007334dcd68b89db712472c5a294c69609dd7302b5
+
+build out/result: 001cc863ffad2333bb5b4a22fde35146827965e79233821681254065519a1ce2 in/source
