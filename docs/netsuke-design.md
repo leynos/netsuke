@@ -2087,36 +2087,68 @@ securely.
 
 ### 6.1 Invoking Ninja
 
-Netsuke will use Rust's standard library `std::process::Command` API to
-configure and spawn the `ninja` process.[^24] This provides fine-grained
-control over the child process's execution environment.
+Netsuke uses Rust's standard library `std::process::Command` API to configure
+and spawn the `ninja` process.[^24] This provides fine-grained control over the
+child process's execution environment.
 
-The command construction will follow this pattern:
+Every invocation is described by a borrowed request bundle rather than a long
+parameter list: `NinjaBuildRequest` for a build and `NinjaToolRequest` for
+`ninja -t <tool>`. Each names the resolved program, the parsed CLI settings,
+the generated build file, the targets or tool, and a `&CommandEnv` describing
+the child's environment. `run_ninja_with` and `run_ninja_tool_with` consume
+these; the convenience wrappers `run_ninja` and `run_ninja_tool` call them with
+`CommandEnv::inherit()`, which is production behaviour.
 
-1. A new `Command` is created via `Command::new("ninja")`. Netsuke will assume
-   `ninja` is available in the system's `PATH`.
+The command construction follows this pattern:
 
-2. Arguments passed to Netsuke's own CLI will be translated and forwarded to
-   Ninja. For example, a `Netsuke build my_target` command would result in
-   `Command::new("ninja").arg("my_target")`. Flags like `-j` for parallelism
-   will also be passed through.[^8]
+1. A new `Command` is created via `Command::new(request.program)`. The program
+   is *resolved before* the request is built — from the `ninja` default, from
+   the `NETSUKE_NINJA` override, or from a path an embedder supplies — and is
+   handed to `Command::new` exactly as given. A bare relative name such as
+   `ninja` is therefore looked up in the *child's* `PATH`, so a caller that
+   must not let an injected `PATH` choose the executable passes an absolute or
+   otherwise resolved path.
 
-3. The working directory for the Ninja process will be set using
-   `.current_dir()`. When the user supplies a `-C` flag, Netsuke canonicalizes
-   the path and applies it via `current_dir` rather than forwarding the flag to
-   Ninja.
+2. Arguments passed to Netsuke's own CLI are translated and forwarded to Ninja.
+   For example, a `netsuke build my_target` command results in
+   `Command::new(program).arg("my_target")`. Flags like `-j` for parallelism
+   are also passed through.[^8]
 
-4. Standard I/O streams (`stdin`, `stdout`, `stderr`) will be configured using
+3. The working directory for the Ninja process is set using `.current_dir()`.
+   When the user supplies a `-C` flag, Netsuke canonicalizes the path and
+   applies it via `current_dir` rather than forwarding the flag to Ninja.
+
+4. The request's `CommandEnv` is applied. Overrides are **additive**: each pair
+   is written with `Command::env` and nothing is cleared, because Ninja needs
+   the ambient environment to function and `env_clear` would make a test
+   environment diverge from production in ways unrelated to what the test
+   pins. `CommandEnv::inherit()` sets nothing at all, so production spawns
+   exactly the environment Netsuke itself received. This is the only supported
+   way to vary a child's environment: Netsuke never mutates its own process
+   environment to influence a subprocess.
+
+5. Standard I/O streams (`stdin`, `stdout`, `stderr`) are configured using
    `.stdout(Stdio::piped())` and `.stderr(Stdio::piped())`.[^24] This allows
-   Netsuke to capture the real-time output from Ninja, which can then be
-   streamed to the user's console, potentially with additional formatting or
-   status updates from Netsuke itself.
+   Netsuke to capture the real-time output from Ninja, which is then streamed
+   to the user's console, potentially with additional formatting or status
+   updates from Netsuke itself.
 
-In the initial implementation a small helper wraps `Command::new` to forward the
-`-j` and `-C` flags and any explicit build targets. Standard output and error
-are piped and written back to Netsuke's own streams so users see Ninja's
-messages in order. A non-zero exit status or failure to spawn the process is
-reported as an `io::Error` for the CLI to surface.
+Standard output and error are piped and written back to Netsuke's own streams
+so users see Ninja's messages in order. A non-zero exit status or failure to
+spawn the process is reported as an `io::Error` for the CLI to surface.
+
+The `ninja_subprocess` span and its spawn and exit events carry
+`env_override_count` and `path_overridden`, derived from the prepared
+`Command`, so an environment-caused failure is diagnosable from the logs alone.
+Neither field names a variable or discloses a value, because overrides may
+carry secrets; `CommandEnv`'s own `Debug` output honours the same contract.
+Whether an override *is* `PATH` follows the target's naming rules — exact on
+Unix, where `Path` is a different variable, and case-insensitive on Windows,
+where it is not — and `CommandEnv` replaces same-key overrides by the same
+rule, so its view of the environment always matches the child's.
+
+The developers' guide documents the module layout and the `PATH` composition
+helper under "Module: `runner::process::command_env`".
 
 ### 6.2 The Criticality of Shell Escaping
 

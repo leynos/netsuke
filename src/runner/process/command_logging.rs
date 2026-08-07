@@ -4,9 +4,11 @@
 //! for operators, while also attaching stable tracing fields for tools that
 //! consume structured diagnostics.
 
+use super::command_env::env_names_eq;
 use super::redaction::{CommandArg, redact_sensitive_args};
 use camino::Utf8PathBuf;
 use std::{
+    ffi::OsStr,
     io,
     path::PathBuf,
     process::{Command, ExitStatus},
@@ -22,6 +24,30 @@ pub(super) struct CommandLogContext {
     pub(super) program_display: String,
     redacted_command: String,
     arg_count: usize,
+    env_override_count: usize,
+    is_path_overridden: bool,
+}
+
+/// Summarize the command's environment overrides without disclosing them.
+///
+/// Diagnosing a Ninja failure caused by an injected environment needs to know
+/// that overrides were applied and whether `PATH` was among them. Names and
+/// values may carry secrets, so only a bounded count and a `PATH` flag are
+/// derived; neither is user-controlled cardinality in a log field.
+///
+/// The `PATH` test uses [`env_names_eq`], so the flag answers the question an
+/// operator is actually asking — "was the variable the child resolves programs
+/// from overridden?" — under the target's own naming rules. Folding case
+/// unconditionally would flag a Unix variable merely named `Path`, which is an
+/// unrelated variable there.
+fn summarize_env_overrides(cmd: &Command) -> (usize, bool) {
+    let mut count = 0usize;
+    let mut is_path_overridden = false;
+    for (key, _) in cmd.get_envs() {
+        count += 1;
+        is_path_overridden |= env_names_eq(key, OsStr::new("PATH"));
+    }
+    (count, is_path_overridden)
 }
 
 impl CommandLogContext {
@@ -44,19 +70,22 @@ impl CommandLogContext {
         let arg_count = redacted_args.len();
         let arg_strings: Vec<&str> = redacted_args.iter().map(CommandArg::as_str).collect();
         let redacted_command = format!("{} {}", program_display, arg_strings.join(" "));
+        let (env_override_count, is_path_overridden) = summarize_env_overrides(cmd);
 
         Self {
             program_display,
             redacted_command,
             arg_count,
+            env_override_count,
+            is_path_overridden,
         }
     }
 }
 
 /// Records the structured event emitted immediately before spawning Ninja.
 ///
-/// Includes the operation, executable, argument count, and stderr suppression
-/// metadata.
+/// Includes the operation, executable, argument count, environment-override
+/// summary, and stderr suppression metadata.
 pub(super) fn log_command_execution(
     context: &CommandLogContext,
     operation: &str,
@@ -66,6 +95,8 @@ pub(super) fn log_command_execution(
         operation,
         ninja_program = %context.program_display,
         arg_count = context.arg_count,
+        env_override_count = context.env_override_count,
+        path_overridden = context.is_path_overridden,
         suppress_stderr,
         "Executing command: {}",
         context.redacted_command,
@@ -84,6 +115,8 @@ pub(super) fn log_command_spawn_failure(
     warn!(
         operation,
         ninja_program = %context.program_display,
+        env_override_count = context.env_override_count,
+        path_overridden = context.is_path_overridden,
         suppress_stderr,
         failure_category = "spawn",
         error.kind = ?err.kind(),
@@ -105,6 +138,8 @@ pub(super) fn log_command_exit_failure(
     warn!(
         operation,
         ninja_program = %context.program_display,
+        env_override_count = context.env_override_count,
+        path_overridden = context.is_path_overridden,
         suppress_stderr,
         failure_category = "exit_status",
         %status,
@@ -115,7 +150,8 @@ pub(super) fn log_command_exit_failure(
 /// Creates the `ninja_subprocess` tracing span with stable invocation fields.
 ///
 /// The initially empty `failure_category` field is populated only when the
-/// subprocess fails.
+/// subprocess fails. `env_override_count` and `path_overridden` summarize the
+/// injected environment without naming any variable.
 pub(super) fn command_span(
     context: &CommandLogContext,
     operation: &str,
@@ -126,6 +162,8 @@ pub(super) fn command_span(
         operation,
         ninja_program = %context.program_display,
         arg_count = context.arg_count,
+        env_override_count = context.env_override_count,
+        path_overridden = context.is_path_overridden,
         suppress_stderr,
         failure_category = field::Empty,
     )
@@ -136,6 +174,74 @@ mod tests {
     //! Unit tests for command-log context construction.
 
     use super::*;
+    use crate::runner::CommandEnv;
+    use rstest::rstest;
+
+    /// The override summary counts overrides and flags `PATH` without naming
+    /// or valuing any variable, so the fields stay safe to log.
+    #[rstest]
+    #[case(CommandEnv::inherit(), 0, false)]
+    #[case(CommandEnv::inherit().with_var("NINJA_STATUS", "[%f/%t] "), 1, false)]
+    #[case(CommandEnv::inherit().with_path("/opt/toolchain/bin"), 1, true)]
+    #[case(
+        CommandEnv::inherit()
+            .with_var("NINJA_STATUS", "[%f/%t] ")
+            .with_path("/opt/toolchain/bin"),
+        2,
+        true
+    )]
+    fn from_command_summarizes_env_overrides(
+        #[case] env: CommandEnv,
+        #[case] expected_count: usize,
+        #[case] expected_path_overridden: bool,
+    ) {
+        let mut cmd = Command::new("ninja");
+        env.apply(&mut cmd);
+
+        let context = CommandLogContext::from_command(&cmd);
+
+        assert_eq!(context.env_override_count, expected_count);
+        assert_eq!(context.is_path_overridden, expected_path_overridden);
+    }
+
+    /// A Unix variable named `Path` is not `PATH`, and must not raise the flag.
+    ///
+    /// Kept separate from the table above because the expectation is
+    /// target-specific: the same input is a genuine `PATH` override on Windows.
+    #[cfg(unix)]
+    #[test]
+    fn mixed_case_path_is_not_a_path_override_on_unix() {
+        let mut cmd = Command::new("ninja");
+        CommandEnv::inherit()
+            .with_var("Path", "/mixed/case")
+            .apply(&mut cmd);
+
+        let context = CommandLogContext::from_command(&cmd);
+
+        assert_eq!(context.env_override_count, 1);
+        assert!(
+            !context.is_path_overridden,
+            "a Unix variable named `Path` is not `PATH`"
+        );
+    }
+
+    /// On Windows the same variable *is* `PATH`, so the flag must rise.
+    #[cfg(windows)]
+    #[test]
+    fn mixed_case_path_is_a_path_override_on_windows() {
+        let mut cmd = Command::new("ninja");
+        CommandEnv::inherit()
+            .with_var("Path", "C:\\mixed")
+            .apply(&mut cmd);
+
+        let context = CommandLogContext::from_command(&cmd);
+
+        assert_eq!(context.env_override_count, 1);
+        assert!(
+            context.is_path_overridden,
+            "Windows resolves `Path` and `PATH` to one variable"
+        );
+    }
 
     #[cfg(unix)]
     #[test]

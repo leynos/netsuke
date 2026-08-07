@@ -31,6 +31,11 @@ pub fn write_manifest(file: &mut impl Write) -> io::Result<()> {
 
 /// Compose a `PATH` value with `dir` prepended to the supplied prior value.
 ///
+/// An empty prior value collapses exactly like an absent one: both compose
+/// to `dir` alone. Preserving an empty entry would reintroduce the implicit
+/// current-directory lookup that an empty `PATH` element denotes, which is
+/// never wanted in the isolated environments these tests compose.
+///
 /// # Errors
 ///
 /// Returns an error if the path entries cannot be joined for the host platform.

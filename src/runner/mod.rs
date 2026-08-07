@@ -46,7 +46,10 @@ mod path_helpers;
 mod process;
 #[cfg(doctest)]
 pub use process::doc;
-pub use process::{run_ninja, run_ninja_tool};
+pub use process::{
+    CommandEnv, NinjaBuildRequest, NinjaToolRequest, run_ninja, run_ninja_tool,
+    run_ninja_tool_with, run_ninja_with,
+};
 
 use path_helpers::{ensure_manifest_exists_or_error, resolve_manifest_path, resolve_output_path};
 
@@ -227,6 +230,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> 
                 cli,
                 build_file: build_path,
                 targets: &targets,
+                env: &CommandEnv::inherit(),
             },
             &mut on_task_progress,
         )
@@ -287,6 +291,7 @@ fn handle_ninja_tool(
                 cli,
                 build_file: build_path,
                 tool: tool.name,
+                env: &CommandEnv::inherit(),
             },
             &mut on_task_progress,
         )

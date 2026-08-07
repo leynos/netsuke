@@ -5,14 +5,16 @@ use anyhow::{Context, Result, anyhow, ensure};
 use camino::Utf8Path;
 use mockable::{DefaultEnv, Env};
 use netsuke::output_prefs;
-use netsuke::runner::{self, BuildTargets, NINJA_PROGRAM};
+use netsuke::runner::{self, BuildTargets, CommandEnv, NINJA_PROGRAM};
 use rstest_bdd_macros::{given, then, when};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 use test_support::{
     check_ninja::{self, ToolName},
-    ensure_manifest_exists, fake_ninja,
+    ensure_manifest_exists,
+    env::prepend_path_value,
+    fake_ninja,
 };
 
 // ---------------------------------------------------------------------------
@@ -20,6 +22,12 @@ use test_support::{
 // ---------------------------------------------------------------------------
 
 /// Installs a test-specific ninja binary and updates the `PATH`.
+///
+/// The composed `PATH` is what processes *Ninja itself launches* will see; it
+/// does not select the Ninja binary. `run` passes `world.ninja_content` as the
+/// explicit `NinjaBuildRequest.program`, so program selection bypasses the
+/// child `PATH` entirely. `NETSUKE_NINJA` is a third, separate concern, kept
+/// in `env_vars_forward` for spawned CLI binaries, never set on this process.
 fn install_test_ninja(world: &TestWorld, dir: TempDir, ninja_path: &Path) -> Result<()> {
     let ninja_str = ninja_path
         .to_str()
@@ -32,9 +40,8 @@ fn install_test_ninja(world: &TestWorld, dir: TempDir, ninja_path: &Path) -> Res
     );
     let process_env = DefaultEnv;
     let host_path = process_env.os_string("PATH").unwrap_or_default();
-    let path = std::env::join_paths(
-        std::iter::once(dir.path().to_path_buf()).chain(std::env::split_paths(&host_path)),
-    )?;
+    let path = prepend_path_value(Some(host_path.as_os_str()), dir.path())?;
+    *world.command_env.borrow_mut() = CommandEnv::inherit().with_path(&path);
     world.track_env_var("PATH".to_owned(), Some(path));
     *world.temp_dir.borrow_mut() = Some(dir);
     Ok(())
@@ -265,7 +272,15 @@ fn run(world: &TestWorld) -> Result<()> {
     let targets = BuildTargets::default();
     let result = world
         .cli
-        .with_ref(|cli| runner::run_ninja(program, cli, Path::new("build.ninja"), &targets))
+        .with_ref(|cli| {
+            runner::run_ninja_with(&runner::NinjaBuildRequest {
+                program,
+                cli,
+                build_file: Path::new("build.ninja"),
+                targets: &targets,
+                env: &world.command_env.borrow(),
+            })
+        })
         .ok_or_else(|| anyhow!("CLI configuration has not been initialised"))?
         .map_err(|e| e.to_string());
     record_result(world, result);

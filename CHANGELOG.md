@@ -10,6 +10,18 @@
   `pt-BR`, `pt-PT`, `ro`, `ru`, `sv`, `th`, `tr`, `uk`, `vi`, `zh-Hans` or
   `zh-Hant`, with `en-US` remaining the source and fallback locale
   ([#466](https://github.com/leynos/netsuke/issues/466))
+- Add [docs/v0-1-0-migration-guide.md](docs/v0-1-0-migration-guide.md)
+  signposting the child-environment API additions, and recording that every
+  Rust API surface outside the Netsukefile format and the graph export is
+  private in intent and unstable.
+- Export `runner::CommandEnv` together with the `runner::NinjaBuildRequest` and
+  `runner::NinjaToolRequest` bundles and the `runner::run_ninja_with` and
+  `runner::run_ninja_tool_with` entry points, so an embedder can set the
+  environment of the spawned Ninja process — `PATH` included — without
+  mutating its own. Overrides are additive and `CommandEnv::inherit()`
+  reproduces the existing behaviour, so `run_ninja` and `run_ninja_tool` keep
+  their signatures and no embedder needs to change
+  ([#490](https://github.com/leynos/netsuke/issues/490))
 
 ### Changed
 

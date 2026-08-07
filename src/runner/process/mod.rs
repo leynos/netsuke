@@ -3,11 +3,10 @@
 
 use super::BuildTargets;
 use crate::cli::Cli;
-use camino::Utf8PathBuf;
 use std::{
-    io::{self, BufReader, ErrorKind},
+    io::{self, BufReader},
     path::Path,
-    process::{Child, Command, ExitStatus, Stdio},
+    process::{Child, Command, ExitStatus},
     thread,
 };
 use tracing::{debug, warn};
@@ -32,7 +31,14 @@ pub use ninja_program::resolve_ninja_program;
 pub use ninja_program::resolve_ninja_program_utf8;
 #[cfg(test)]
 use ninja_program::{resolve_ninja_program_utf8_with, resolve_ninja_program_with};
+
+mod command_env;
+mod configure;
+mod request;
+pub use command_env::CommandEnv;
+use configure::{configure_ninja_build_command, configure_ninja_tool_command};
 pub use paths::*;
+pub use request::{NinjaBuildRequest, NinjaToolRequest};
 use streaming::{ForwardStats, forward_child_output, forward_child_output_with_ninja_status};
 
 /// Callback contract for task-progress updates from parsed Ninja status lines.
@@ -61,57 +67,6 @@ pub mod doc {
         create_temp_ninja_file, resolve_ninja_program, resolve_ninja_program_utf8,
         write_ninja_file, write_text_file_utf8,
     };
-}
-
-/// Configure the base Ninja command with working directory, job count, and build file.
-///
-/// Sets up stdout/stderr pipes for streaming. Callers append targets or tool
-/// flags after this function returns.
-fn configure_ninja_base(cmd: &mut Command, cli: &Cli, build_file: &Path) -> io::Result<()> {
-    if let Some(dir) = &cli.directory {
-        let canonical = canonicalize_utf8_path(dir.as_path())?;
-        cmd.current_dir(canonical.as_std_path());
-    }
-    if let Some(jobs) = cli.jobs {
-        cmd.arg("-j").arg(jobs.to_string());
-    }
-    let build_file_path = canonicalize_utf8_path(build_file).or_else(|_| {
-        Utf8PathBuf::from_path_buf(build_file.to_path_buf()).map_err(|_| {
-            io::Error::new(
-                ErrorKind::InvalidData,
-                format!(
-                    "build file path {} is not valid UTF-8",
-                    build_file.display()
-                ),
-            )
-        })
-    })?;
-    cmd.arg("-f").arg(build_file_path.as_std_path());
-    cmd.stdout(Stdio::piped());
-    cmd.stderr(Stdio::piped());
-    Ok(())
-}
-
-fn configure_ninja_build_command(
-    cmd: &mut Command,
-    cli: &Cli,
-    build_file: &Path,
-    targets: &BuildTargets<'_>,
-) -> io::Result<()> {
-    configure_ninja_base(cmd, cli, build_file)?;
-    cmd.args(targets.as_slice());
-    Ok(())
-}
-
-fn configure_ninja_tool_command(
-    cmd: &mut Command,
-    cli: &Cli,
-    build_file: &Path,
-    tool: &str,
-) -> io::Result<()> {
-    configure_ninja_base(cmd, cli, build_file)?;
-    cmd.arg("-t").arg(tool);
-    Ok(())
 }
 
 fn check_exit_status_with_context(
@@ -147,23 +102,6 @@ fn run_command_and_stream_with_context(
     let status = spawn_and_stream_output(child, status_observer, suppress_stderr)?;
     check_exit_status_with_context(status, &context, operation, suppress_stderr)
 }
-/// Borrowed parameter bundle for `ninja` build execution helpers.
-#[derive(Clone, Copy)]
-pub(crate) struct NinjaBuildRequest<'a> {
-    pub(crate) program: &'a Path,
-    pub(crate) cli: &'a Cli,
-    pub(crate) build_file: &'a Path,
-    pub(crate) targets: &'a BuildTargets<'a>,
-}
-
-/// Borrowed parameter bundle for `ninja -t` tool execution helpers.
-#[derive(Clone, Copy)]
-pub(crate) struct NinjaToolRequest<'a> {
-    pub(crate) program: &'a Path,
-    pub(crate) cli: &'a Cli,
-    pub(crate) build_file: &'a Path,
-    pub(crate) tool: &'a str,
-}
 
 /// Invoke the Ninja executable with the provided CLI settings.
 ///
@@ -181,13 +119,53 @@ pub fn run_ninja(
     build_file: &Path,
     targets: &BuildTargets<'_>,
 ) -> io::Result<()> {
-    let request = NinjaBuildRequest {
+    run_ninja_with(&NinjaBuildRequest {
         program,
         cli,
         build_file,
         targets,
-    };
-    run_ninja_build_internal(request, None)
+        env: &CommandEnv::inherit(),
+    })
+}
+
+/// Invoke Ninja with an explicit child-process environment.
+///
+/// Unlike [`run_ninja`], the caller supplies the environment applied to the
+/// spawned command. Tests use this to place a fake Ninja on the child's `PATH`
+/// without mutating the parent process, which would race every other test in
+/// the same binary.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use netsuke::cli::Cli;
+/// use netsuke::runner::{BuildTargets, CommandEnv, NinjaBuildRequest, run_ninja_with};
+/// use std::path::Path;
+///
+/// let cli = Cli::default();
+/// let targets = BuildTargets::default();
+/// // `inherit()` reproduces `run_ninja`; `with_path` replaces the child's
+/// // `PATH` outright rather than prepending, so compose the whole value
+/// // first. Either way the parent process is untouched.
+/// let path = std::env::join_paths(["/opt/toolchain/bin", "/usr/bin"])
+///     .expect("separator-free entries always join");
+/// let env = CommandEnv::inherit().with_path(&path);
+/// run_ninja_with(&NinjaBuildRequest {
+///     program: Path::new("ninja"),
+///     cli: &cli,
+///     build_file: Path::new("build.ninja"),
+///     targets: &targets,
+///     env: &env,
+/// })?;
+/// # Ok::<(), std::io::Error>(())
+/// ```
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
+/// streams are unavailable, or when Ninja reports a non-zero exit status.
+pub fn run_ninja_with(request: &NinjaBuildRequest<'_>) -> io::Result<()> {
+    run_ninja_build_internal(*request, None)
 }
 
 /// Invoke a Ninja tool (e.g., `ninja -t clean`) with the provided CLI settings.
@@ -201,13 +179,41 @@ pub fn run_ninja(
 /// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
 /// streams are unavailable, or when Ninja reports a non-zero exit status.
 pub fn run_ninja_tool(program: &Path, cli: &Cli, build_file: &Path, tool: &str) -> io::Result<()> {
-    let request = NinjaToolRequest {
+    run_ninja_tool_with(&NinjaToolRequest {
         program,
         cli,
         build_file,
         tool,
-    };
-    run_ninja_tool_internal(request, None)
+        env: &CommandEnv::inherit(),
+    })
+}
+
+/// Invoke a Ninja tool with an explicit child-process environment.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use netsuke::cli::Cli;
+/// use netsuke::runner::{CommandEnv, NinjaToolRequest, run_ninja_tool_with};
+/// use std::path::Path;
+///
+/// let cli = Cli::default();
+/// run_ninja_tool_with(&NinjaToolRequest {
+///     program: Path::new("ninja"),
+///     cli: &cli,
+///     build_file: Path::new("build.ninja"),
+///     tool: "clean",
+///     env: &CommandEnv::inherit(),
+/// })?;
+/// # Ok::<(), std::io::Error>(())
+/// ```
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
+/// streams are unavailable, or when Ninja reports a non-zero exit status.
+pub fn run_ninja_tool_with(request: &NinjaToolRequest<'_>) -> io::Result<()> {
+    run_ninja_tool_internal(*request, None)
 }
 
 struct NinjaInternalRequest<'request, 'observer> {
@@ -241,7 +247,7 @@ fn run_ninja_build_internal(
             status_observer,
             operation: "build",
         },
-        |cmd| configure_ninja_build_command(cmd, request.cli, request.build_file, request.targets),
+        |cmd| configure_ninja_build_command(cmd, &request),
     )
 }
 
@@ -256,7 +262,7 @@ fn run_ninja_tool_internal(
             status_observer,
             operation: request.tool,
         },
-        |cmd| configure_ninja_tool_command(cmd, request.cli, request.build_file, request.tool),
+        |cmd| configure_ninja_tool_command(cmd, &request),
     )
 }
 

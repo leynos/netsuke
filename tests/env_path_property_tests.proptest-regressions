@@ -1,0 +1,12 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+# Recorded while developing the property on the pre-rebuild branch (PR #497):
+# the first model echoed the generated list, which join_paths cannot
+# distinguish from one empty entry. Not a defect in prepend_path_value; kept
+# because the shrunken case (an empty entry list) still pins the helper's
+# empty-value contract.
+cc 590c7d083897c6630afc9f5f306e5e0134d0cbdb1943546708c367ad260a1a6e # shrinks to existing = Some([]), dir = "A"

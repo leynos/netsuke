@@ -1291,9 +1291,11 @@ Netsuke uses a mixed strategy:
 - Behavioural test discovery is defined in `tests/bdd_tests.rs`.
 - Dependabot configuration lives in `.github/dependabot.yml`, with coverage
   tests in `tests/dependabot_config_tests.rs`.
-- **Property-based tests** use `proptest` and live in `*_tests.rs` modules
-  adjacent to the code under test, included via
-  `#[cfg(test)] #[path = "..."] mod ...;` declarations.
+- **Property-based tests** use `proptest` and take two shapes: some live in
+  `*_tests.rs` modules adjacent to the code under test, included via
+  `#[cfg(test)] #[path = "..."] mod ...;` declarations; others are standalone
+  files directly under `tests/`, each its own Cargo integration-test target
+  with its `.proptest-regressions` seed file kept beside it.
 
 The Dependabot integration tests parse the checked-in configuration and verify
 that repository dependency manifests remain covered as the tree changes. They
@@ -2108,7 +2110,7 @@ Table: Scenario state groups and fields
 | Manifest state     | `manifest`, `manifest_error`                                                                                                                                                                                                             | Parsed manifest and error capture.                         |
 | IR state           | `build_graph`, `removed_action_id`, `generation_error`                                                                                                                                                                                   | Build graph, negative-test identifiers, generation errors. |
 | Ninja state        | `ninja_content`, `ninja_error`                                                                                                                                                                                                           | Generated Ninja file content and errors.                   |
-| Process state      | `run_status`, `run_error`, `command_stdout`, `command_stderr`, `temp_dir`, `workspace_path`                                                                                                                                              | Process results and temporary workspace paths.             |
+| Process state      | `run_status`, `run_error`, `command_stdout`, `command_stderr`, `temp_dir`, `workspace_path`, `command_env`                                                                                                                               | Process results, workspace paths, child environment.       |
 | Stdlib state       | `stdlib_root`, `stdlib_output`, `stdlib_error`, `stdlib_state`, `stdlib_command`, `stdlib_policy`, `stdlib_path_override`, `stdlib_fetch_max_bytes`, `stdlib_command_max_output_bytes`, `stdlib_command_stream_max_bytes`, `stdlib_text` | Stdlib rendering, network policy, and size constraints.    |
 | Localization state | `localization_lock`, `localization_guard`, `locale_config`, `locale_env`, `locale_cli_override`, `locale_system`, `resolved_locale`, `locale_message`                                                                                    | Scenario-level localizer overrides and resolution state.   |
 | HTTP server state  | `http_server`, `stdlib_url`                                                                                                                                                                                                              | Test HTTP server fixture for fetch scenarios.              |
@@ -2943,6 +2945,86 @@ constructed by `BuildTargets::new` and read through `as_slice`. It exposes no
 `is_empty`: the accessor existed but had no callers anywhere in the
 workspace, so it was removed; call `as_slice().is_empty()` where that
 question needs asking.
+
+### Module: `runner::process::command_env`
+
+`src/runner/process/command_env.rs` composes the environment applied to a
+spawned Ninja command as data, rather than by mutating the parent process.
+
+`CommandEnv` carries overrides as a list of key/value pairs:
+
+- `CommandEnv::inherit()` sets no overrides, which is production behaviour:
+  the child receives the parent's environment unchanged.
+- `with_var(key, value)` and the `with_path(path)` convenience it is built on
+  are last-write-wins per key, so composing an environment twice for the same
+  key cannot leave it carrying two values.
+- "The same key" follows the target's own rule, via the module-private
+  `env_names_eq`: exact on Unix, where `Path` and `PATH` are two different
+  variables, and ASCII case-insensitive on Windows, where they are one. Match
+  Unix's rule on Windows and a `CommandEnv` would hold two entries the child
+  collapses into one, with `std` rather than the last `with_var` call choosing
+  the survivor; match Windows's rule on Unix and naming `Path` would silently
+  rewrite `PATH`. Replacement keeps the casing first recorded, as the
+  platform's own environment block does.
+- `get(key)` reports only what this `CommandEnv` overrides, never the
+  parent's value, so `None` means "inherited", not "unset". It matches keys by
+  the same rule, so a lookup answers with the value the child would receive.
+- `Debug` is implemented by hand rather than derived, and prints only
+  `override_count` and `path_overridden`. Override names and values may hold
+  secrets, and a `CommandEnv` reaches a log by any route that formats a struct
+  containing one — not only through the runner's own logging — so the derived
+  form would defeat the redaction contract the span fields keep.
+- `apply` writes each override onto the `Command` with `Command::env`,
+  deliberately additive rather than `env_clear`: Ninja needs the ambient
+  environment to function, and clearing it would make a test environment
+  diverge from production in ways unrelated to what the test is pinning.
+
+The `ninja_subprocess` span and its spawn/exit events carry
+`env_override_count` and `path_overridden`, derived from the prepared
+`Command` rather than from `CommandEnv`, so an environment-caused failure is
+diagnosable from the logs alone. Both fields are bounded and carry no variable
+name or value: override names and values may hold secrets, and a count plus a
+`PATH` flag is the most that can be logged safely. The flag uses the same
+target-aware name comparison, so a Unix variable merely named `Path` does not
+raise it. Production runs use `CommandEnv::inherit()`, so they report `0` and
+`false`.
+
+`PATH` values are composed with `test_support::env::prepend_path_value`, a
+pure function that places a directory ahead of an explicitly supplied prior
+value. It takes the starting value rather than reading the process, so the
+result depends only on its inputs. An absent prior value yields just the new
+directory, and — by the helper's contract, which its tests pin — a wholly
+empty prior value is treated the same way; empty entries inside a non-empty
+value survive composition. It returns an error when an entry cannot be
+represented in a `PATH`, which `std::env::join_paths` itself reports: Unix
+rejects an entry containing `:` because entries cannot be quoted, whereas
+Windows can quote `;` and instead rejects the quoting character `"`.
+
+Nothing in this seam reads or writes the process `PATH`. The guarantee that
+an injected `PATH` cannot select Ninja itself holds only when
+`NinjaBuildRequest.program`/`NinjaToolRequest.program` is an absolute or
+otherwise resolved path: `program` is handed to `Command::new` as given, so a
+bare relative name such as `ninja` is looked up in the child's `PATH` on
+Unix, injected directories included. Callers that must not let the injected
+`PATH` select the executable therefore pass an absolute or otherwise resolved
+program path; when that isolation does not matter, a relative name resolving
+through the child `PATH` is acceptable. What the injected `PATH` always
+governs is the environment Ninja's own child commands see when it shells out.
+
+The explicit request APIs compose on top of `CommandEnv`: `NinjaBuildRequest`/
+`NinjaToolRequest` carry an `env: &CommandEnv` field alongside the program, CLI
+settings, and build file, and are consumed by `run_ninja_with`/
+`run_ninja_tool_with`. The convenience wrappers `run_ninja`/`run_ninja_tool`
+call these with `CommandEnv::inherit()`, reproducing production behaviour;
+tests reach for `run_ninja_with`/`run_ninja_tool_with` directly to supply a
+`CommandEnv` built with `with_path` instead. Section 6.1 of the
+[design document](netsuke-design.md) records the same architecture from the
+process-management side.
+
+Property coverage for this seam lives in `tests/env_path_property_tests.rs`,
+which Cargo builds as its own integration-test target; Proptest therefore
+persists its failing seeds to `env_path_property_tests.proptest-regressions`
+beside it. The named cases sit in `tests/env_path_tests.rs`.
 
 ## IR cycle detection
 
