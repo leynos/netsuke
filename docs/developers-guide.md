@@ -2329,9 +2329,9 @@ platform `PathBuf` independently of `resolve_ninja_program_utf8_with`.
 
 #### `which` environment capture
 
-`EnvSnapshot::capture` (`stdlib::which::env`) reads `PATH` and `PATHEXT`
-through an injected `mockable::Env` provider rather than straight from the
-process:
+`EnvSnapshot::capture` (`stdlib::which::env`) reads `PATH` on every
+platform, and `PATHEXT` on Windows only, through an injected
+`mockable::Env` provider rather than straight from the process:
 
 - `capture` is the production entry point. It delegates to `capture_with_env`
   with `mockable::DefaultEnv`, so it is the single site that binds the

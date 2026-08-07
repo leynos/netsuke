@@ -33,6 +33,7 @@ struct ToolWorkspace {
     _temp: tempfile::TempDir,
     root: Utf8PathBuf,
     bin: Utf8PathBuf,
+    dir: Dir,
 }
 
 impl ToolWorkspace {
@@ -43,7 +44,8 @@ impl ToolWorkspace {
     /// caller to pass a stem that already carries one.
     fn write_tool(&self, filename: &str) -> Result<Utf8PathBuf> {
         let path = self.bin.join(filename);
-        std::fs::write(path.as_std_path(), b"@echo off\r\n")
+        self.dir
+            .write(format!("bin/{filename}"), b"@echo off\r\n")
             .with_context(|| format!("write stub tool {path}"))?;
         Ok(path)
     }
@@ -54,12 +56,16 @@ fn tool_workspace() -> Result<ToolWorkspace> {
     let temp = tempfile::tempdir().context("create temp workspace")?;
     let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
         .map_err(|path| anyhow!("temp path should be UTF-8: {path:?}"))?;
+    let dir = Dir::open_ambient_dir(&root, ambient_authority())
+        .with_context(|| format!("open workspace {root}"))?;
     let bin = root.join("bin");
-    std::fs::create_dir(bin.as_std_path()).with_context(|| format!("create {bin}"))?;
+    dir.create_dir("bin")
+        .with_context(|| format!("create {bin}"))?;
     Ok(ToolWorkspace {
         _temp: temp,
         root,
         bin,
+        dir,
     })
 }
 
