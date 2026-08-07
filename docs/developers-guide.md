@@ -2361,6 +2361,12 @@ and `command_available` over a temporary directory with a chosen extension
 list; see `tests/stdlib_which_pathext_tests.rs`, which is gated to Windows
 because `PATHEXT` governs resolution only there.
 
+That gating has a cost worth stating: CI runs `make test` on `ubuntu-latest`
+only, so a `#[cfg(windows)]` test does not gate a merge. Keep host-independent
+rules — normalization, the fallback — in the `#[cfg(any(windows, test))]` unit
+tests that the Linux suite executes, and reserve the Windows-gated suite for
+behaviour that genuinely cannot run elsewhere.
+
 #### `PATHEXT` normalization
 
 `stdlib::which::env::parse_pathext` turns a raw `PATHEXT` value into lowercase,

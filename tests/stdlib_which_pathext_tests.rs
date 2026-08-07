@@ -8,6 +8,15 @@
 //!
 //! `PATHEXT` arrives through `StdlibConfig::with_pathext_override`, so no test
 //! touches the process environment.
+//!
+//! Be aware of the reach of this file: `PATHEXT` governs resolution only on
+//! Windows, and `.github/workflows/ci.yml` runs `make test` on
+//! `ubuntu-latest` alone, so nothing here executes on a merge today. It gates
+//! for contributors developing on Windows, and would gate for everyone were a
+//! Windows job added. The rules that must hold on every host — normalization
+//! and the fallback — stay covered on Linux by
+//! `src/stdlib/which/pathext_tests.rs`, which is why those tests call
+//! `parse_pathext` directly rather than being folded into this suite.
 #![cfg(windows)]
 
 use std::ffi::OsString;
