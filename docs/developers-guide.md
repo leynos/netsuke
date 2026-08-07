@@ -2411,9 +2411,11 @@ The full normalization contract, which the property tests in
 `stdlib::path::path_utils` resolves the user's home through two precedence
 ladders — POSIX (`HOME`, then `USERPROFILE`) and Windows (those two, then the
 `HOMEDRIVE`/`HOMEPATH` pair, then `HOMESHARE`). Both take an injected
-`read_env` closure. `home_from_env` selects between them by platform and is
-the sole platform-selection point; neither helper carries a `cfg` gate of its
-own, so both compile — and are tested — on every host.
+`read_env` closure. `home_from_env` remains the sole platform-*selection*
+point, and each ladder is gated to its own platform plus `test`
+(`posix_home_from` is `#[cfg(any(not(windows), test))]`, `windows_home_from`
+is `#[cfg(any(windows, test))]`), so a release build compiles only the ladder
+it uses while the `test` arm keeps both reachable from any host.
 
 #### Ladder ownership and call sites
 
@@ -2430,15 +2432,19 @@ own, so both compile — and are tested — on every host.
 
 #### Ladder composition rules
 
-- Extract each ladder free of platform *selection logic*, leaving that to
-  `home_from_env`, so both stay reachable from any host. Leave the helpers
-  ungated: a `cfg` on each one buys nothing but complexity now that neither
-  decides which ladder applies.
-- Keep `home_from_env` naming both ladders — it binds them as a
-  `(posix, windows)` pair of function pointers before the platform gate picks
-  one. That reference is what keeps the inapplicable ladder from being dead
-  code in a release build, which `-D warnings` would reject; the gate itself
-  still compiles away, so the selection costs nothing at run time.
+- Keep each ladder free of platform *selection logic*, leaving that to
+  `home_from_env`. Gating decides only whether a ladder compiles, never which
+  one applies — that separation is what lets the `test` arm expose both
+  ladders to the CI host.
+- Gate each ladder `#[cfg(any(windows, test))]` or its inverse, and have
+  `home_from_env` name only the ladder it selects. Compiling both
+  unconditionally would leave the inapplicable one dead in a release build,
+  which `-D warnings` rejects; the previous workaround — binding both as a
+  `(posix, windows)` function-pointer pair so the unused one counted as
+  referenced — was an artificial dead-code anchor and has been removed.
+  Bounded constants used by only one ladder (`HOME_SOURCE_DRIVE_PATH` and
+  `HOME_SOURCE_HOMESHARE`, both Windows-only) carry the same gate as the
+  ladder that reads them.
 - The ladders report what the environment says. An empty value is passed
   through rather than treated as unset for the single-variable readings
   (`HOME`, `USERPROFILE`, `HOMESHARE`), and interpreting that is
@@ -2473,6 +2479,18 @@ Table: Home-resolution telemetry fields.
 - `homeshare` — `HOMESHARE`.
 - `explicit` — a configured `HomeDirectory::Explicit` value.
 - `missing` — no source supplied a home.
+
+`resolve_home` also increments a counter,
+`netsuke_stdlib_expanduser_home_total`, described once per process via a
+`Once`-guarded `describe_counter!`, matching the pattern in
+`stdlib::which::cache`. It carries two labels, both drawn from closed sets so
+the series count is fixed by the code, never by the environment: `outcome` is
+`found` or `home_unavailable`; `source` is the same bounded label set listed
+above. It increments exactly once per resolution whatever the outcome, so the
+counter totals resolutions rather than events — the failure path emits a
+second *debug event* but no second sample. Both the success and failure cases
+are pinned by tests in `src/stdlib/path/home_tests.rs`, which capture samples
+through a local `metrics_util` `DebuggingRecorder` rather than the global one.
 
 The events carry no paths and no environment values: neither the resolved
 home, nor a variable's contents, nor the expanded result. Adding a rung means

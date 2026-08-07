@@ -1,11 +1,12 @@
 //! Path utilities backing stdlib filters for UTF-8 paths: basename/dirname, `with_suffix`,
 //! `relative_to`, canonicalize/realpath, and expanduser with Windows HOME fallbacks. Uses cap-std
 //! directory handles and consistent error mapping for template errors.
-use std::io;
+use std::{io, sync::Once};
 
 use cap_std::{ambient_authority, fs_utf8::Dir};
 
 use camino::{Utf8Path, Utf8PathBuf};
+use metrics::{counter, describe_counter};
 use minijinja::{Error, ErrorKind};
 
 use super::fs_utils::{ParentDir, open_parent_dir};
@@ -145,12 +146,14 @@ pub(super) fn normalise_parent(parent: Option<&Utf8Path>) -> Utf8PathBuf {
 ///
 /// This is the telemetry boundary for home resolution: the ladders stay pure
 /// and merely *return* their bounded source label, and this function is the
-/// only place that emits an event. Only the label is recorded — never the
-/// resolved home, an environment value, or a variable's contents.
+/// only place that emits an event or increments a counter. Only the label is
+/// recorded — never the resolved home, an environment value, or a variable's
+/// contents.
 fn resolve_home<F>(home_directory: &HomeDirectory, read_env: F) -> Result<String, Error>
 where
     F: Fn(&str) -> Option<String>,
 {
+    describe_home_metrics();
     let resolved = match home_directory {
         HomeDirectory::Ambient => home_from_env(read_env),
         HomeDirectory::Missing => None,
@@ -159,12 +162,26 @@ where
     let source = resolved
         .as_ref()
         .map_or(HOME_SOURCE_MISSING, |(_, source)| *source);
+    let outcome = if resolved.is_some() {
+        HOME_OUTCOME_FOUND
+    } else {
+        HOME_OUTCOME_UNAVAILABLE
+    };
     tracing::debug!(
         event = EXPANDUSER_HOME_EVENT,
         source,
         found = resolved.is_some(),
         "resolved the home directory for expanduser",
     );
+    // Exactly one increment per resolution, whatever the outcome, so the
+    // counter totals resolutions rather than events: the failure path below
+    // adds a second *event* but no second sample.
+    counter!(
+        EXPANDUSER_HOME_TOTAL,
+        "outcome" => outcome,
+        "source" => source,
+    )
+    .increment(1);
     resolved.map(|(home, _)| home).ok_or_else(|| {
         tracing::debug!(
             event = EXPANDUSER_HOME_EVENT,
@@ -191,16 +208,44 @@ fn current_dir_utf8() -> Result<Utf8PathBuf, io::Error> {
 /// The `event` field naming every home-resolution telemetry event.
 pub(super) const EXPANDUSER_HOME_EVENT: &str = "stdlib.expanduser.home";
 
+/// Counts home resolutions by bounded `outcome` and `source`.
+///
+/// Both labels are drawn from the closed sets below, so the series count is
+/// fixed by the code rather than by anything the environment supplies.
+pub(super) const EXPANDUSER_HOME_TOTAL: &str = "netsuke_stdlib_expanduser_home_total";
+
+/// The bounded `outcome` recorded when a source supplied a home.
+pub(super) const HOME_OUTCOME_FOUND: &str = "found";
+
 /// The bounded `outcome` recorded when no source supplied a home.
 pub(super) const HOME_OUTCOME_UNAVAILABLE: &str = "home_unavailable";
+
+/// Describe the home-resolution counter once per process.
+fn describe_home_metrics() {
+    static DESCRIBE: Once = Once::new();
+    DESCRIBE.call_once(|| {
+        describe_counter!(
+            EXPANDUSER_HOME_TOTAL,
+            "Counts expanduser home resolutions labelled by outcome (found or \
+             home_unavailable) and by the bounded source that supplied the home."
+        );
+    });
+}
 
 /// `HOME` supplied the home directory.
 pub(super) const HOME_SOURCE_HOME: &str = "home";
 /// `USERPROFILE` supplied the home directory.
 pub(super) const HOME_SOURCE_USERPROFILE: &str = "userprofile";
 /// The `HOMEDRIVE`/`HOMEPATH` pair supplied the home directory.
+///
+/// Gated with [`windows_home_from`], its only reader: the rungs it labels
+/// exist solely on that ladder.
+#[cfg(any(windows, test))]
 pub(super) const HOME_SOURCE_DRIVE_PATH: &str = "drive_path";
 /// `HOMESHARE` supplied the home directory.
+///
+/// Gated with [`windows_home_from`], its only reader.
+#[cfg(any(windows, test))]
 pub(super) const HOME_SOURCE_HOMESHARE: &str = "homeshare";
 /// A configured [`HomeDirectory::Explicit`] value supplied the home directory.
 pub(super) const HOME_SOURCE_EXPLICIT: &str = "explicit";
@@ -213,13 +258,13 @@ pub(super) const HOME_SOURCE_MISSING: &str = "missing";
 /// recorded as telemetry without ever exposing a path or an environment value.
 pub(super) type HomeSource = (String, &'static str);
 
-/// A home-directory precedence ladder driven by an injected reader.
-type HomeLadder<F> = fn(F) -> Option<HomeSource>;
-
 /// Select the platform ladder and drive it with the injected reader.
 ///
-/// Only the *selection* is platform-gated; neither ladder holds
-/// platform-specific logic, which is what keeps both reachable from any host.
+/// This is the module's only platform selection, and it names just the ladder
+/// it selects. Each ladder is gated to its own platform plus `test`, so a
+/// release build compiles exactly one of them and the other is absent rather
+/// than dead — no reference exists solely to keep the compiler quiet.
+///
 /// The reader is injected all the way from the filter-registration boundary,
 /// so this module holds no process access of its own: whoever registers the
 /// `expanduser` filter decides what [`HomeDirectory::Ambient`] consults.
@@ -227,17 +272,13 @@ fn home_from_env<F>(read_env: F) -> Option<HomeSource>
 where
     F: Fn(&str) -> Option<String>,
 {
-    // Naming both ladders here is what lets each one compile unconditionally:
-    // the ladders themselves need no `cfg` gate, so the only platform
-    // selection in the module is the one below. Order: POSIX, then Windows.
-    let ladders: (HomeLadder<F>, HomeLadder<F>) = (posix_home_from, windows_home_from);
     #[cfg(windows)]
     {
-        (ladders.1)(read_env)
+        windows_home_from(read_env)
     }
     #[cfg(not(windows))]
     {
-        (ladders.0)(read_env)
+        posix_home_from(read_env)
     }
 }
 
@@ -246,8 +287,9 @@ where
 /// Returns the home alongside the bounded label naming the rung that supplied
 /// it, so the caller can report the source without inspecting any value.
 ///
-/// Compiled on every host and free of platform gating; the platform selection
-/// lives solely in [`home_from_env`].
+/// Holds no platform-selection logic of its own — that lives solely in
+/// [`home_from_env`] — so the `test` arm of the gate below makes it reachable
+/// from any host.
 ///
 /// # Examples
 ///
@@ -255,6 +297,7 @@ where
 /// let env = |key: &str| (key == "HOME").then(|| String::from("/home/a"));
 /// assert_eq!(posix_home_from(env), Some((String::from("/home/a"), "home")));
 /// ```
+#[cfg(any(not(windows), test))]
 pub(super) fn posix_home_from<F>(read_env: F) -> Option<HomeSource>
 where
     F: Fn(&str) -> Option<String>,
@@ -274,9 +317,10 @@ where
 /// Returns the home alongside the bounded label naming the rung that supplied
 /// it, so the caller can report the source without inspecting any value.
 ///
-/// Compiled on every host and free of platform gating; the platform selection
-/// lives solely in [`home_from_env`]. Keeping it unconditional is what lets the
-/// Unix CI host exercise this ladder, the more intricate of the two.
+/// Holds no platform-selection logic of its own — that lives solely in
+/// [`home_from_env`] — so the `test` arm of the gate below makes it reachable
+/// from any host. That arm is what lets the Unix CI host exercise this ladder,
+/// the more intricate of the two.
 ///
 /// # Examples
 ///
@@ -292,6 +336,7 @@ where
 ///     Some((String::from("C:\\me"), "drive_path")),
 /// );
 /// ```
+#[cfg(any(windows, test))]
 pub(super) fn windows_home_from<F>(read_env: F) -> Option<HomeSource>
 where
     F: Fn(&str) -> Option<String>,

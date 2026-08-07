@@ -11,12 +11,14 @@
 //! filter-level suite in `tests/std_filter_tests` is dark pending #520.
 //!
 //! Both ladders are driven through their `read_env` closure, so nothing here
-//! mutates the process environment and the cases run concurrently. Neither
-//! helper carries a `cfg` gate: they hold no platform-specific selection logic
-//! themselves — `home_from_env` picks between them — so both compile and are
-//! exercised on every host. That matters most for the Windows ladder, the more
-//! intricate of the two, which would otherwise be unreachable from the Unix CI
-//! host.
+//! mutates the process environment and the cases run concurrently. Each helper
+//! is gated to its own platform *plus* `test`, so both are in scope for this
+//! module on every host while a release build compiles only the one it uses.
+//! That `test` arm matters most for the Windows ladder, the more intricate of
+//! the two, which would otherwise be unreachable from the Unix CI host.
+//!
+//! The bounded counter `resolve_home` increments is covered separately, in
+//! `home_metrics_tests`.
 
 use super::path_utils::{HomeSource, posix_home_from, windows_home_from};
 use crate::stdlib::config_types::HomeDirectory;
