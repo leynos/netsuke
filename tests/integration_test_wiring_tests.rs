@@ -1,10 +1,82 @@
 //! Contract tests that keep integration-test module trees wired to Cargo targets.
 
+use std::{collections::BTreeSet, process::Command};
+
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use proptest::prelude::*;
 use rstest::rstest;
+
+/// The names of the `tests/*.rs` files Cargo should turn into test targets.
+fn top_level_test_sources(tests_dir: &Dir) -> Result<BTreeSet<String>> {
+    let mut names = BTreeSet::new();
+    for entry_result in tests_dir
+        .read_dir(".")
+        .context("read integration-test directory")?
+    {
+        let directory_entry = entry_result.context("read integration-test directory entry")?;
+        let name = directory_entry
+            .file_name()
+            .context("read integration-test entry name")?;
+        if Utf8Path::new(&name).extension() == Some("rs") {
+            names.insert(name);
+        }
+    }
+    Ok(names)
+}
+
+/// The `tests/*.rs` sources Cargo actually reports as integration-test targets.
+fn cargo_discovered_test_targets(
+    manifest_path: &Utf8Path,
+    tests_dir: &Utf8Path,
+) -> Result<BTreeSet<String>> {
+    // `env!("CARGO")` is the cargo that built this test, so the metadata comes
+    // from the same toolchain rather than whichever cargo is first on PATH.
+    let output = Command::new(env!("CARGO"))
+        .args(["metadata", "--no-deps", "--format-version", "1"])
+        .arg("--manifest-path")
+        .arg(manifest_path.as_str())
+        .output()
+        .context("run cargo metadata")?;
+    ensure!(
+        output.status.success(),
+        "cargo metadata failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let metadata: serde_json::Value =
+        serde_json::from_slice(&output.stdout).context("parse cargo metadata output")?;
+    let package = metadata
+        .get("packages")
+        .and_then(serde_json::Value::as_array)
+        .context("cargo metadata should list packages")?
+        .iter()
+        .find(|package| {
+            package
+                .get("manifest_path")
+                .and_then(serde_json::Value::as_str)
+                == Some(manifest_path.as_str())
+        })
+        .context("cargo metadata should list this package")?;
+
+    let discovered = package
+        .get("targets")
+        .and_then(serde_json::Value::as_array)
+        .context("package metadata should list targets")?
+        .iter()
+        .filter(|target| {
+            target
+                .get("kind")
+                .and_then(serde_json::Value::as_array)
+                .is_some_and(|kinds| kinds.iter().any(|kind| kind == "test"))
+        })
+        .filter_map(|target| target.get("src_path").and_then(serde_json::Value::as_str))
+        .filter_map(|path| Utf8Path::new(path).strip_prefix(tests_dir).ok())
+        .map(ToString::to_string)
+        .collect();
+    Ok(discovered)
+}
 
 fn integration_test_sources(tests_dir: &Dir) -> Result<Vec<String>> {
     let mut sources = Vec::new();
@@ -87,6 +159,48 @@ fn module_trees_are_wired_to_cargo_test_targets() -> Result<()> {
         orphaned.is_empty(),
         "tests/*/mod.rs trees must be declared by a Cargo-discovered tests/*.rs target; orphaned: {}",
         orphaned.join(", ")
+    );
+    Ok(())
+}
+
+/// Cargo's target list must account for every top-level `tests/*.rs` source.
+///
+/// The sibling guards read declaration text out of the sources and so can only
+/// police what the sources say. This one asks Cargo what it actually resolved,
+/// covering the manifest instead: a partial `[[test]]` list under
+/// `autotests = false`, or a target whose `path` points outside `tests/`, both
+/// leave the sources untouched and are invisible to any amount of scanning.
+///
+/// It does *not* catch #520. A tree carrying its own `mod.rs` and no top-level
+/// source contributes to neither set, so the equality still holds;
+/// `module_trees_are_wired_to_cargo_test_targets` owns that direction. The two
+/// together close the loop — that one from the tree upwards, this one from
+/// Cargo's manifest view downwards.
+///
+/// The assertion is a set equality both ways. A missing entry is a source Cargo
+/// never compiles; an extra one is a target resolving outside `tests/`, which
+/// would put the sibling guards' path assumptions wrong.
+///
+/// `cargo metadata --no-deps` neither builds nor uses the network; the call
+/// costs roughly 20ms.
+#[test]
+fn cargo_discovers_every_top_level_integration_test_source() -> Result<()> {
+    let manifest_dir = Utf8Path::new(env!("CARGO_MANIFEST_DIR"));
+    let manifest_path = manifest_dir.join("Cargo.toml");
+    let tests_path = manifest_dir.join("tests");
+    let tests_dir = Dir::open_ambient_dir(&tests_path, ambient_authority())
+        .context("open integration-test directory")?;
+
+    let on_disk = top_level_test_sources(&tests_dir)?;
+    let discovered = cargo_discovered_test_targets(&manifest_path, &tests_path)?;
+
+    ensure!(
+        discovered == on_disk,
+        "Cargo's integration-test targets must match tests/*.rs exactly; \
+         on disk but not built by Cargo: {:?}; built by Cargo but not a \
+         top-level tests/*.rs: {:?}",
+        on_disk.difference(&discovered).collect::<Vec<_>>(),
+        discovered.difference(&on_disk).collect::<Vec<_>>()
     );
     Ok(())
 }
