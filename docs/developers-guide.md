@@ -2339,8 +2339,10 @@ process:
 - `capture_with_env` takes `&impl mockable::Env`, so tests drive the whole
   capture with a `MockEnv` without mutating process-global state.
 - An optional `path_override` parameter shadows `PATH` while leaving `PATHEXT`
-  to the provider. On Windows, `capture_with_pathext` additionally accepts an
-  explicit `PATHEXT` override.
+  to the provider. `capture_with_pathext` additionally shadows `PATHEXT`; it is
+  defined on every platform so the resolver has one capture entry point, and
+  the override is accepted and discarded off Windows, where nothing consults
+  the extension list.
 - `capture_common` owns the shared working-directory and `PATH` handling, so
   the platform-specific `capture_impl` variants differ only in how they obtain
   `PATHEXT`.
@@ -2348,6 +2350,16 @@ process:
 Keep the ambient read at that boundary. Adding a `std::env` call elsewhere in
 `env.rs` would put it back where no test can reach it, and the module is where
 the clippy `disallowed-methods` gate would then fire.
+
+Both overrides reach the snapshot from configuration rather than from the
+process: `StdlibConfig::with_path_override` and
+`StdlibConfig::with_pathext_override` are copied into `WhichConfig`, which
+`WhichResolver::new` consumes whole — the resolver takes the configuration
+rather than its fields so a new environment seam does not lengthen the
+signature again. Pinning both is what lets a behavioural test drive `which`
+and `command_available` over a temporary directory with a chosen extension
+list; see `tests/stdlib_which_pathext_tests.rs`, which is gated to Windows
+because `PATHEXT` governs resolution only there.
 
 #### `PATHEXT` normalization
 

@@ -85,6 +85,10 @@ impl EnvSnapshot {
         Self::capture_impl(cwd_override, path_override, env)
     }
 
+    /// Capture with an explicit `PATHEXT`, shadowing the process value.
+    ///
+    /// Defined on every platform so the resolver has one capture entry point:
+    /// the caller need not fork on the target to pass an override through.
     #[cfg(windows)]
     pub(super) fn capture_with_pathext(
         cwd_override: Option<&Utf8Path>,
@@ -92,6 +96,20 @@ impl EnvSnapshot {
         pathext_override: Option<&OsStr>,
     ) -> Result<Self, ResolveError> {
         Self::capture_impl(cwd_override, path_override, &DefaultEnv, pathext_override)
+    }
+
+    /// Capture ignoring the supplied `PATHEXT`.
+    ///
+    /// `PATHEXT` has no meaning outside Windows — nothing consults the
+    /// snapshot's extension list there — so the override is accepted and
+    /// discarded rather than forcing every caller to gate on the target.
+    #[cfg(not(windows))]
+    pub(super) fn capture_with_pathext(
+        cwd_override: Option<&Utf8Path>,
+        path_override: Option<&OsStr>,
+        _pathext_override: Option<&OsStr>,
+    ) -> Result<Self, ResolveError> {
+        Self::capture(cwd_override, path_override)
     }
 
     #[cfg(not(windows))]
