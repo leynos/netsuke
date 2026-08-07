@@ -1944,9 +1944,11 @@ it forces a split layout with its own private `CARGO_TARGET_DIR` and
 `CARGO_BUILD_BUILD_DIR` roots, confirms the collected dependency directories
 span the split, and then compiles a fixture against them. The roots are
 private to the test rather than the ambient target directory because the
-`#[once]` `test_support_rlib` fixture builds concurrently in the other test;
-sharing a target directory between the two races on the uplifted rlibs and
-fails with version-skew errors (`E0460`).
+`#[once]` `test_support_rlib` fixture builds concurrently for
+`stub_env_default_does_not_compile` and
+`stub_env_builders_compile_under_the_same_harness`. Sharing a target
+directory would make `harness_compiles_under_a_split_build_dir` race that
+build on the uplifted rlibs and fail with version-skew errors (`E0460`).
 
 ### Manifest `env()` reader
 
