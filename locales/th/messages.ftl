@@ -113,6 +113,7 @@ manifest.yaml.hint.escape = โปรดหลีกอักขระแบ็�
 manifest.env.missing = ยังไม่ได้ตั้งค่าตัวแปรสภาพแวดล้อมที่จำเป็น
 manifest.env.invalid_utf8 = ตัวแปรสภาพแวดล้อมมี UTF-8 ที่ไม่ถูกต้อง
 manifest.vars.not_object = `vars` ของไฟล์รายการต้องเป็นการจับคู่หรือวัตถุ
+manifest.vars.reserved_name = คีย์ `vars` '{ $name }' ของมานิเฟสต์ถูกสงวนไว้สำหรับฟังก์ชันช่วยเทมเพลตในตัว โปรดเปลี่ยนชื่อตัวแปร
 manifest.read_failed = อ่านไฟล์รายการที่ { $path } ไม่สำเร็จ
 manifest.resolve_workspace_root = ระบุรากของพื้นที่ทำงานไม่สำเร็จ
 manifest.workspace_non_utf8 = เส้นทางรากของพื้นที่ทำงาน “{ $path }” ไม่ใช่ UTF-8 ที่ถูกต้อง

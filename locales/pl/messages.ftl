@@ -113,6 +113,7 @@ manifest.yaml.hint.escape = Poprzedź ukośniki odwrotne znakiem ucieczki albo u
 manifest.env.missing = Wymagana zmienna środowiskowa nie jest ustawiona.
 manifest.env.invalid_utf8 = Zmienna środowiskowa zawiera nieprawidłowy UTF-8.
 manifest.vars.not_object = Pole `vars` manifestu musi być odwzorowaniem lub obiektem.
+manifest.vars.reserved_name = Klucz `vars` '{ $name }' w manifeście jest zarezerwowany dla wbudowanej funkcji pomocniczej szablonów; zmień nazwę zmiennej.
 manifest.read_failed = Nie udało się odczytać manifestu z { $path }.
 manifest.resolve_workspace_root = Nie udało się ustalić katalogu głównego obszaru roboczego.
 manifest.workspace_non_utf8 = Ścieżka główna obszaru roboczego „{ $path }” nie jest prawidłowym UTF-8.

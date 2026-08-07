@@ -112,6 +112,7 @@ manifest.yaml.hint.escape = 请转义反斜杠，或删除无效的转义序列�
 manifest.env.missing = 未设置必需的环境变量。
 manifest.env.invalid_utf8 = 环境变量包含无效的 UTF-8。
 manifest.vars.not_object = 清单的 `vars` 必须是映射或对象。
+manifest.vars.reserved_name = 清单的 `vars` 键 '{ $name }' 已保留给内置模板辅助函数；请重命名该变量。
 manifest.read_failed = 无法读取 { $path } 处的清单。
 manifest.resolve_workspace_root = 无法确定工作区根目录。
 manifest.workspace_non_utf8 = 工作区根路径“{ $path }”不是有效的 UTF-8。

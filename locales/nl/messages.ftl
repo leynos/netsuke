@@ -113,6 +113,7 @@ manifest.yaml.hint.escape = Escape de backslashes of verwijder ongeldige escaper
 manifest.env.missing = Een vereiste omgevingsvariabele is niet ingesteld.
 manifest.env.invalid_utf8 = Een omgevingsvariabele bevat ongeldige UTF-8.
 manifest.vars.not_object = De `vars` van het manifest moet een toewijzing of object zijn.
+manifest.vars.reserved_name = De `vars`-sleutel '{ $name }' in het manifest is gereserveerd voor een ingebouwde sjabloonfunctie; hernoem de variabele.
 manifest.read_failed = Het manifest in { $path } kon niet worden gelezen.
 manifest.resolve_workspace_root = De hoofdmap van de werkruimte kon niet worden bepaald.
 manifest.workspace_non_utf8 = Het hoofdpad van de werkruimte ‘{ $path }’ is geen geldige UTF-8.

@@ -113,6 +113,7 @@ manifest.yaml.hint.escape = Escape backslashes or remove invalid escape sequence
 manifest.env.missing = A required environment variable is not set.
 manifest.env.invalid_utf8 = An environment variable contains invalid UTF-8.
 manifest.vars.not_object = Manifest `vars` must be a map/object.
+manifest.vars.reserved_name = Manifest `vars` key '{ $name }' is reserved for a built-in template helper; rename the variable.
 manifest.read_failed = Failed to read manifest at { $path }.
 manifest.resolve_workspace_root = Failed to resolve workspace root.
 manifest.workspace_non_utf8 = Workspace root path '{ $path }' is not valid UTF-8.

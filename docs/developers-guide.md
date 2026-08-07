@@ -2686,6 +2686,43 @@ yardstick for production cache keys.
 
 ## Manifest processing helpers
 
+### Variable registration
+
+`register_manifest_vars` runs inside `from_str_named` immediately after the
+stdlib is installed in the MiniJinja environment and before
+`register_manifest_macros` and `expand_foreach`. Registering the manifest's
+`vars` first is what makes those variables visible to macro bodies, to
+`foreach` and `when` expressions, and to every string field rendered later by
+`render_manifest`.
+
+The helper is a no-op when the manifest omits `vars`. When the key is present
+it must deserialize to a JSON object; a list or a scalar produces a localized
+`ManifestError::Parse` carrying the `manifest.vars.not_object` message, so the
+failure reaches the user in their own language rather than as a raw serde
+diagnostic. A YAML mapping with non-string or composite keys cannot reach this
+check at all: `ManifestValue` is `serde_json::Value`, whose object variant only
+admits string keys, so such a mapping fails earlier, inside
+`serde_saphyr::from_str`, and surfaces as the YAML parse diagnostic rather than
+the `vars` one.
+
+`register_manifest_vars` also rejects a key that collides with `env` or
+`glob`, the two helper functions the manifest loader registers directly (the
+`RESERVED_VAR_NAMES` constant), with the localized
+`manifest.vars.reserved_name` message. This check is necessary because
+MiniJinja keeps functions and global variables in a single namespace —
+`Environment::add_function` is implemented as `add_global` — so a `vars` entry
+named `env` or `glob` would otherwise silently replace the helper. The
+collision check runs before any entry is installed with
+`Environment::add_global`, so a rejected manifest never leaves the environment
+half-populated. Stdlib functions registered separately via `stdlib::register`
+are not currently guarded against this collision.
+
+The map is borrowed rather than cloned. Only the key is copied, because
+`add_global` stores the name as a `Cow<'source, str>` that cannot borrow from
+the caller's document; values are handed to `Value::from_serialize` by
+reference. Keep that shape when editing the helper — cloning the whole object
+reintroduces a deep copy of every nested value on each manifest parse.
+
 ### Template rendering and macro registration
 
 `manifest::jinja_macros::render_template` is the shared rendering boundary for

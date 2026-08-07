@@ -13,10 +13,14 @@
 //! [`ManifestSource`] so callers pass domain-specific types instead of raw
 //! strings.
 //!
-//! The optional `vars` section must deserialize into a JSON object with string
-//! keys. YAML manifests that use non-string keys (for example integers) now
-//! fail with a [`ManifestError::Parse`] diagnostic, matching the Jinja context
-//! semantics and preventing ambiguous variable lookup.
+//! The optional `vars` section must deserialize into a JSON object; a list or
+//! scalar is rejected with the localized `manifest.vars.not_object` diagnostic.
+//! YAML mappings with non-string or composite keys cannot be represented as
+//! JSON at all, so they fail earlier, during the initial `serde_saphyr` parse,
+//! with the YAML parse diagnostic. Keys colliding with the built-in `env` and
+//! `glob` helpers are rejected with the localized `manifest.vars.reserved_name`
+//! diagnostic, since `MiniJinja` keeps functions and global variables in a
+//! single namespace.
 
 use crate::{
     ast::NetsukeManifest,
@@ -123,23 +127,7 @@ fn from_str_named(
         None => crate::stdlib::register(&mut jinja),
     }?;
 
-    if let Some(vars_value) = doc.get("vars") {
-        let vars = vars_value
-            .as_object()
-            .cloned()
-            .ok_or_else(|| ManifestError::Parse {
-                source: map_data_error(
-                    serde_json::Error::custom(
-                        localization::message(keys::MANIFEST_VARS_NOT_OBJECT).to_string(),
-                    ),
-                    name,
-                ),
-                message: localization::message(keys::MANIFEST_PARSE),
-            })?;
-        for (key, value) in vars {
-            jinja.add_global(key, Value::from_serialize(value));
-        }
-    }
+    register_manifest_vars(&doc, &mut jinja, name)?;
 
     notify_stage(on_stage, ManifestLoadStage::TemplateExpansion);
     register_manifest_macros(&doc, &mut jinja)?;
@@ -154,6 +142,67 @@ fn from_str_named(
         })?;
 
     render_manifest(manifest, &jinja)
+}
+
+/// Names the manifest loader registers as Jinja helper functions.
+///
+/// `MiniJinja` keeps functions and global variables in a single namespace, so a
+/// `vars` entry using one of these names would silently replace the helper and
+/// break every template that calls it.
+const RESERVED_VAR_NAMES: [&str; 2] = ["env", "glob"];
+
+/// Build a [`ManifestError::Parse`] carrying a localized structural diagnostic.
+fn manifest_structure_error(
+    detail: &localization::LocalizedMessage,
+    name: &ManifestName,
+) -> ManifestError {
+    ManifestError::Parse {
+        source: map_data_error(serde_json::Error::custom(detail.to_string()), name),
+        message: localization::message(keys::MANIFEST_PARSE),
+    }
+}
+
+/// Expose the manifest's `vars` section as Jinja globals.
+///
+/// The optional `vars` value must be a JSON object; each entry becomes a global
+/// available to every template expression evaluated for this manifest. For
+/// example, given `vars: {greeting: hi}`, a target command of
+/// `"echo {{ greeting }}"` renders to `echo hi`.
+///
+/// # Errors
+///
+/// Returns [`ManifestError::Parse`] when `vars` is present but is not an
+/// object (for example a list or a scalar), or when a key collides with one of
+/// the [`RESERVED_VAR_NAMES`] helper functions.
+fn register_manifest_vars(
+    doc: &ManifestValue,
+    jinja: &mut Environment<'_>,
+    name: &ManifestName,
+) -> Result<(), ManifestError> {
+    let Some(vars_value) = doc.get("vars") else {
+        return Ok(());
+    };
+    // Borrow the map rather than cloning it: only the key needs to be owned,
+    // because `add_global` stores a `Cow<'source, str>` that cannot borrow from
+    // the caller's document.
+    let vars = vars_value.as_object().ok_or_else(|| {
+        manifest_structure_error(&localization::message(keys::MANIFEST_VARS_NOT_OBJECT), name)
+    })?;
+    // Reject collisions before registering anything, so a rejected manifest
+    // never leaves the environment half-populated.
+    if let Some(reserved) = vars
+        .keys()
+        .find(|key| RESERVED_VAR_NAMES.contains(&key.as_str()))
+    {
+        return Err(manifest_structure_error(
+            &localization::message(keys::MANIFEST_VARS_RESERVED_NAME).with_arg("name", reserved),
+            name,
+        ));
+    }
+    for (key, value) in vars {
+        jinja.add_global(key.clone(), Value::from_serialize(value));
+    }
+    Ok(())
 }
 
 /// Parse a manifest string using Jinja for value templating.

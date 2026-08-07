@@ -113,6 +113,7 @@ manifest.yaml.hint.escape = Aplicați escape barelor oblice inverse sau elimina�
 manifest.env.missing = O variabilă de mediu obligatorie nu este setată.
 manifest.env.invalid_utf8 = O variabilă de mediu conține UTF-8 nevalid.
 manifest.vars.not_object = Câmpul `vars` al manifestului trebuie să fie o mapare sau un obiect.
+manifest.vars.reserved_name = Cheia `vars` '{ $name }' din manifest este rezervată pentru o funcție ajutătoare de șabloane integrată; redenumiți variabila.
 manifest.read_failed = Manifestul din { $path } nu a putut fi citit.
 manifest.resolve_workspace_root = Rădăcina spațiului de lucru nu a putut fi determinată.
 manifest.workspace_non_utf8 = Calea rădăcină a spațiului de lucru „{ $path }” nu este UTF-8 valid.

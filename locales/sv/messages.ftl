@@ -113,6 +113,7 @@ manifest.yaml.hint.escape = Escapa omvända snedstreck eller ta bort ogiltiga es
 manifest.env.missing = En obligatorisk miljövariabel är inte satt.
 manifest.env.invalid_utf8 = En miljövariabel innehåller ogiltig UTF-8.
 manifest.vars.not_object = Manifestets `vars` måste vara en mappning eller ett objekt.
+manifest.vars.reserved_name = Manifestets `vars`-nyckel '{ $name }' är reserverad för en inbyggd mallhjälpare; byt namn på variabeln.
 manifest.read_failed = Manifestet i { $path } kunde inte läsas.
 manifest.resolve_workspace_root = Arbetsytans rot kunde inte fastställas.
 manifest.workspace_non_utf8 = Arbetsytans rotsökväg ”{ $path }” är inte giltig UTF-8.

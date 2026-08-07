@@ -113,6 +113,7 @@ manifest.yaml.hint.escape = Escape-elje a fordított perjeleket, vagy távolíts
 manifest.env.missing = Egy kötelező környezeti változó nincs beállítva.
 manifest.env.invalid_utf8 = Egy környezeti változó érvénytelen UTF-8 kódolást tartalmaz.
 manifest.vars.not_object = A jegyzék `vars` mezőjének leképezésnek vagy objektumnak kell lennie.
+manifest.vars.reserved_name = A manifest `vars` kulcsa, '{ $name }', egy beépített sablonsegéd számára fenntartott; nevezze át a változót.
 manifest.read_failed = A jegyzéket nem sikerült beolvasni innen: { $path }.
 manifest.resolve_workspace_root = A munkaterület gyökerét nem sikerült meghatározni.
 manifest.workspace_non_utf8 = A munkaterület gyökérútvonala („{ $path }”) nem érvényes UTF-8.

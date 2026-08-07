@@ -100,6 +100,7 @@ define_keys! {
     MANIFEST_ENV_MISSING => "manifest.env.missing",
     MANIFEST_ENV_INVALID_UTF8 => "manifest.env.invalid_utf8",
     MANIFEST_VARS_NOT_OBJECT => "manifest.vars.not_object",
+    MANIFEST_VARS_RESERVED_NAME => "manifest.vars.reserved_name",
     MANIFEST_READ_FAILED => "manifest.read_failed",
     MANIFEST_RESOLVE_WORKSPACE_ROOT => "manifest.resolve_workspace_root",
     MANIFEST_WORKSPACE_NON_UTF8 => "manifest.workspace_non_utf8",

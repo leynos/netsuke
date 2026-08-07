@@ -113,6 +113,7 @@ manifest.yaml.hint.escape = هرّب الشرطات المائلة العكسي�
 manifest.env.missing = متغيّر بيئة مطلوب غير مضبوط.
 manifest.env.invalid_utf8 = يتضمّن متغيّر بيئة ترميز UTF-8 غير صالح.
 manifest.vars.not_object = يجب أن يكون `vars` في ملف البيانات تخطيطًا أو كائنًا.
+manifest.vars.reserved_name = يُعدّ مفتاح `vars` المسمّى '{ $name }' في ملف البيانات محجوزًا لدالة قوالب مدمجة؛ أعد تسمية المتغيّر.
 manifest.read_failed = تعذّرت قراءة ملف البيانات من { $path }.
 manifest.resolve_workspace_root = تعذّر تحديد جذر مساحة العمل.
 manifest.workspace_non_utf8 = مسار جذر مساحة العمل «{ $path }» ليس UTF-8 صالحًا.

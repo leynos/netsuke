@@ -1,0 +1,5 @@
+---
+source: src/manifest/tests/vars_reserved_diagnostic.rs
+expression: rendered
+---
+Manifest parse failed.: Manifest structure error in Netsukefile: Manifest `vars` key 'glob' is reserved for a built-in template helper; rename the variable.: Manifest `vars` key 'glob' is reserved for a built-in template helper; rename the variable.

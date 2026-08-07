@@ -56,6 +56,11 @@
   converts; `to_paths` stays at the manifest-to-IR boundary, since only
   lowering treats these manifest strings as filesystem paths
   ([#73](https://github.com/leynos/netsuke/issues/73))
+- Reject manifest `vars` keys named `env` or `glob` at parse time, since
+  MiniJinja shares one namespace for template functions and global
+  variables and such a key would otherwise silently shadow the built-in
+  helper; manifests that previously used either name as a variable now fail
+  to parse ([#79](https://github.com/leynos/netsuke/issues/79))
 
 ### Removed
 

@@ -139,6 +139,57 @@ fn vars_section_must_be_object() -> Result<()> {
     Ok(())
 }
 
+/// A `vars` key matching a built-in helper would silently replace it, because
+/// `MiniJinja` stores functions and globals in one namespace.
+#[rstest]
+#[case::env("env")]
+#[case::glob("glob")]
+fn vars_section_rejects_reserved_helper_names(#[case] reserved: &str) -> Result<()> {
+    let yaml = format!(
+        r#"
+        netsuke_version: "1.0.0"
+        vars:
+          {reserved}: shadowed
+          greeting: hi
+        targets:
+          - name: hello
+            command: "echo hi"
+    "#
+    );
+    let err = parse_manifest(&yaml)
+        .err()
+        .context("reserved vars key should be rejected")?;
+    let chain = display_error_chain(err.as_ref());
+    let expected = localization::message(keys::MANIFEST_VARS_RESERVED_NAME)
+        .with_arg("name", reserved)
+        .to_string();
+    ensure!(
+        chain.contains(&expected),
+        "unexpected error message: {chain}"
+    );
+    Ok(())
+}
+
+/// Non-reserved variables must keep working alongside the built-in helpers.
+#[rstest]
+fn vars_section_allows_non_reserved_names() -> Result<()> {
+    let yaml = r#"
+        netsuke_version: "1.0.0"
+        vars:
+          greeting: hi
+        targets:
+          - name: hello
+            command: "echo {{ greeting }}"
+    "#;
+    let manifest = parse_manifest(yaml)?;
+    let first = manifest.targets.first().context("expected one target")?;
+    let Recipe::Command { command } = &first.recipe else {
+        bail!("expected a command recipe, got {:?}", first.recipe);
+    };
+    ensure!(command == "echo hi", "unexpected command: {command}");
+    Ok(())
+}
+
 #[test]
 fn empty_lists_and_maps() -> Result<()> {
     {

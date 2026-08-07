@@ -113,6 +113,7 @@ manifest.yaml.hint.escape = Lakukan escape pada garis miring terbalik atau hapus
 manifest.env.missing = Variabel lingkungan wajib belum disetel.
 manifest.env.invalid_utf8 = Variabel lingkungan memuat UTF-8 yang tidak sah.
 manifest.vars.not_object = `vars` pada manifes harus berupa pemetaan atau objek.
+manifest.vars.reserved_name = Kunci `vars` '{ $name }' pada manifes dicadangkan untuk fungsi bantu templat bawaan; ganti nama variabel tersebut.
 manifest.read_failed = Manifes di { $path } tidak dapat dibaca.
 manifest.resolve_workspace_root = Akar ruang kerja tidak dapat ditentukan.
 manifest.workspace_non_utf8 = Jalur akar ruang kerja "{ $path }" bukan UTF-8 yang sah.

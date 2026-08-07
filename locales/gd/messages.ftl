@@ -113,6 +113,7 @@ manifest.yaml.hint.escape = Teich na slaisean-cùil no thoir air falbh na sreath
 manifest.env.missing = Chan eil caochladair àrainneachd riatanach air a shuidheachadh.
 manifest.env.invalid_utf8 = Tha UTF-8 mì-dhligheach ann an caochladair àrainneachd.
 manifest.vars.not_object = Feumaidh `vars` an fhoirm-liosta a bhith na mhapadh no na oibseact.
+manifest.vars.reserved_name = Tha an iuchair `vars` '{ $name }' sa mhanifest glèidhte do chuidiche teamplaid na broinn; thoir ainm ùr air a' chaochladair.
 manifest.read_failed = Cha b' urrainnear am foirm-liosta a leughadh o { $path }.
 manifest.resolve_workspace_root = Cha b' urrainnear freumh an raoin-obrach a dhearbhadh.
 manifest.workspace_non_utf8 = Chan eil slighe freumh an raoin-obrach “{ $path }” na UTF-8 dhligheach.
