@@ -384,6 +384,15 @@ Matching is case-sensitive. `*` and `?` do not cross directory separators; use
 are returned. The [quick-start guide](quickstart.md) shows a complete runnable
 example.
 
+Patterns may be absolute or relative to the working directory, including
+parent-relative patterns such as `glob('../shared/*.h')`. Expansion is scoped
+to the pattern's longest literal directory prefix — the text up to the first
+`*`, `?`, `[` or `{`, trimmed back to the last separator, so `src/` for
+`src/**/*.c`. If that prefix does not exist, or names something that is not a
+directory, the call returns an empty list rather than failing. A symbolic
+link whose target resolves outside that literal prefix is skipped rather than
+reported as an error.
+
 ### Define reusable macros
 
 Macros return rendered text and can accept default arguments:
@@ -1035,6 +1044,10 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
 - `script` uses `/bin/sh -e` in v0.1.0-beta1.
 - `shell`, `grep`, `fetch`, filesystem helpers, and ordinary recipes interact
   with the host.
+- `glob` restricts its filesystem metadata access to a capability handle
+  scoped to the pattern's literal directory prefix, so it cannot inspect
+  anything outside the subtree the pattern can match; the pattern match walk
+  itself still uses ambient filesystem access.
 - `raw` template output and handwritten shell fragments remain the manifest
   author's responsibility.
 - Literal shell dollar expressions currently require Ninja-aware escaping,
