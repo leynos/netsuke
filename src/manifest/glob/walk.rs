@@ -6,7 +6,10 @@
 //! [`cap_std::fs::Dir`] handle. To honour least privilege, that handle is
 //! opened at the pattern's longest literal directory prefix (for example
 //! `src/` for `src/**/*.c`) rather than at the filesystem root, so the
-//! capability covers only the subtree the pattern can actually match.
+//! capability covers only the subtree the pattern can actually match. A
+//! symbolic link whose target escapes that subtree is therefore unreadable
+//! through the capability; such a match is skipped rather than failing the
+//! expansion.
 
 use super::{GlobEntryResult, GlobErrorContext, GlobErrorType, GlobPattern, create_glob_error};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -42,7 +45,32 @@ impl GlobRoot {
     }
 
     /// Fetch metadata for a matched path via the capability-scoped handle.
-    fn metadata(&self, path: &Utf8Path) -> io::Result<cap_std::fs::Metadata> {
+    ///
+    /// Returns `Ok(None)` when the entry is a symbolic link that cannot be
+    /// resolved through the capability — because its target lies outside the
+    /// literal prefix, or because it dangles. Such an entry names no file
+    /// reachable within the capability, so it is skipped rather than aborting
+    /// the whole expansion.
+    pub(super) fn metadata(&self, path: &Utf8Path) -> io::Result<Option<cap_std::fs::Metadata>> {
+        let relative = self.relativise(path)?;
+        match self.dir.metadata(relative) {
+            Ok(metadata) => Ok(Some(metadata)),
+            Err(err) => {
+                if self
+                    .dir
+                    .symlink_metadata(relative)
+                    .is_ok_and(|link| link.is_symlink())
+                {
+                    Ok(None)
+                } else {
+                    Err(err)
+                }
+            }
+        }
+    }
+
+    /// Rebase a matched path onto the capability prefix.
+    fn relativise<'a>(&self, path: &'a Utf8Path) -> io::Result<&'a Utf8Path> {
         let relative = if self.prefix == "." {
             path
         } else {
@@ -56,11 +84,11 @@ impl GlobRoot {
                 )
             })?
         };
-        if relative.as_str().is_empty() {
-            self.dir.metadata(Utf8Path::new("."))
+        Ok(if relative.as_str().is_empty() {
+            Utf8Path::new(".")
         } else {
-            self.dir.metadata(relative)
-        }
+            relative
+        })
     }
 }
 
@@ -137,7 +165,7 @@ pub(super) fn process_glob_entry(
             let metadata = root
                 .metadata(&utf_path)
                 .map_err(|err| create_io_error(pattern, pattern.raw().len(), err.to_string()))?;
-            if !metadata.is_file() {
+            if !metadata.is_some_and(|found| found.is_file()) {
                 return Ok(None);
             }
             Ok(Some(utf_path.as_str().replace('\\', "/")))
