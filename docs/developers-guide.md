@@ -1297,6 +1297,20 @@ Netsuke uses a mixed strategy:
   files directly under `tests/`, each its own Cargo integration-test target
   with its `.proptest-regressions` seed file kept beside it.
 
+Cargo discovers integration-test binaries only from Rust files directly below
+`tests/`. Module trees rooted at `tests/*/mod.rs` must therefore be declared by
+at least one top-level integration-test source, either with `mod name;` or an
+explicit `#[path = "name/mod.rs"]` attribute. The narrowly scoped discovery
+helpers in `tests/integration_test_wiring_tests.rs` own this structural check;
+reuse them only for the immediate integration-test tree rather than as a
+general Rust source parser.
+
+The `std_filter_tests` target owns its command fixtures within
+`tests/std_filter_tests/command_filters/`. `CommandFixture` provides the
+capability-scoped temporary workspace, while `ShellCase` groups each
+parameterized shell scenario. Keep both private to that test feature; shared
+integration-test facilities belong in `test_support` instead.
+
 The Dependabot integration tests parse the checked-in configuration and verify
 that repository dependency manifests remain covered as the tree changes. They
 assert the Cargo and GitHub Actions update policies, the configured schedules,
@@ -1927,9 +1941,11 @@ it forces a split layout with its own private `CARGO_TARGET_DIR` and
 `CARGO_BUILD_BUILD_DIR` roots, confirms the collected dependency directories
 span the split, and then compiles a fixture against them. The roots are
 private to the test rather than the ambient target directory because the
-`#[once]` `test_support_rlib` fixture builds concurrently in the other test;
-sharing a target directory between the two races on the uplifted rlibs and
-fails with version-skew errors (`E0460`).
+`#[once]` `test_support_rlib` fixture builds concurrently for
+`stub_env_default_does_not_compile` and
+`stub_env_builders_compile_under_the_same_harness`. Sharing a target
+directory would make `harness_compiles_under_a_split_build_dir` race that
+build on the uplifted rlibs and fail with version-skew errors (`E0460`).
 
 ### Manifest `env()` reader
 

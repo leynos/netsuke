@@ -1,17 +1,20 @@
 //! Path filter tests for the standard filter library.
 //!
-//! Tests for path manipulation filters including dirname, relative_to,
-//! with_suffix, realpath, and expanduser. Each test validates filter
+//! Tests for path manipulation filters including `dirname`, `relative_to`,
+//! `with_suffix`, `realpath`, and `expanduser`. Each test validates filter
 //! behaviour with various inputs and error conditions.
 
-use anyhow::{anyhow, bail, ensure, Context, Result};
-use camino::{Utf8Path, Utf8PathBuf};
+use anyhow::{Context, Result, anyhow, bail, ensure};
+use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, ErrorKind};
 use rstest::rstest;
 use serde_json::{Value, json};
 
 use super::support::{Workspace, fallible};
+
+#[path = "path_filters/with_suffix.rs"]
+mod with_suffix;
 
 /// Helper for standard filter environment setup
 fn setup_filter_env() -> Result<Environment<'static>> {
@@ -39,16 +42,6 @@ struct TemplateErrorSpec<'a> {
     expectation: TemplateErrorExpectation<'a>,
 }
 
-/// Specification for a filter success test case.
-struct FilterSuccessSpec<'a> {
-    /// Template name for registration.
-    name: &'static str,
-    /// Template source code.
-    template: &'static str,
-    /// Path value to pass to the template.
-    path: &'a Utf8PathBuf,
-}
-
 /// Helper for error testing with custom template
 fn assert_template_error(env: &mut Environment<'_>, spec: TemplateErrorSpec<'_>) -> Result<()> {
     fallible::register_template(env, spec.name, spec.template)?;
@@ -63,9 +56,7 @@ fn assert_template_error(env: &mut Environment<'_>, spec: TemplateErrorSpec<'_>)
     } = spec;
     let TemplateErrorExpectation { kind, contains } = expectation;
     let err = match template.render(context) {
-        Ok(output) => bail!(
-            "expected template '{name}' to fail but rendered {output}"
-        ),
+        Ok(output) => bail!("expected template '{name}' to fail but rendered {output}"),
         Err(err) => err,
     };
     ensure!(
@@ -111,38 +102,6 @@ where
     })
 }
 
-fn assert_filter_success_with_env<F>(
-    filter_workspace: Workspace,
-    home_value: Option<&str>,
-    spec: FilterSuccessSpec<'_>,
-    expected: F,
-) -> Result<()>
-where
-    F: FnOnce(&Utf8Path) -> String,
-{
-    let (_temp, root) = filter_workspace;
-    let home = home_value.map(|value| {
-        if value.is_empty() {
-            root.as_str()
-        } else {
-            value
-        }
-    });
-    let mut env = fallible::stdlib_env_with_home(&root, home.map(str::to_owned))?;
-    let FilterSuccessSpec {
-        name,
-        template,
-        path,
-    } = spec;
-    let result = fallible::render(&mut env, name, template, path)?;
-    let expected_value = expected(&root);
-    ensure!(
-        result == expected_value,
-        "expected '{expected_value}' but rendered {result}"
-    );
-    Ok(())
-}
-
 /// Test data for filter error tests
 struct FilterErrorTest {
     name: &'static str,
@@ -171,26 +130,30 @@ fn test_filter_error(filter_workspace: Workspace, test: FilterErrorTest) -> Resu
     } = test;
 
     if let Some(EnvironmentSetup::SetHome) = env_setup {
-        return assert_filter_error_with_env(filter_workspace, Some(""), move |_root| TemplateErrorSpec {
-            name,
-            template,
-            context: context.clone(),
-            expectation: TemplateErrorExpectation {
-                kind: error_kind,
-                contains: error_contains,
-            },
+        return assert_filter_error_with_env(filter_workspace, Some(""), move |_root| {
+            TemplateErrorSpec {
+                name,
+                template,
+                context: context.clone(),
+                expectation: TemplateErrorExpectation {
+                    kind: error_kind,
+                    contains: error_contains,
+                },
+            }
         });
     }
 
     if let Some(EnvironmentSetup::RemoveHome) = env_setup {
-        return assert_filter_error_with_env(filter_workspace, None, move |_root| TemplateErrorSpec {
-            name,
-            template,
-            context: context.clone(),
-            expectation: TemplateErrorExpectation {
-                kind: error_kind,
-                contains: error_contains,
-            },
+        return assert_filter_error_with_env(filter_workspace, None, move |_root| {
+            TemplateErrorSpec {
+                name,
+                template,
+                context: context.clone(),
+                expectation: TemplateErrorExpectation {
+                    kind: error_kind,
+                    contains: error_contains,
+                },
+            }
         });
     }
 
@@ -225,8 +188,8 @@ fn dirname_filter() -> Result<()> {
 fn relative_to_filter() -> Result<()> {
     let workspace = fallible::filter_workspace()?;
     with_filter_env(workspace, |root, env| {
-        let dir = Dir::open_ambient_dir(root, ambient_authority())
-            .context("open workspace root")?;
+        let dir =
+            Dir::open_ambient_dir(root, ambient_authority()).context("open workspace root")?;
         dir.create_dir_all("nested")
             .context("create nested directory")?;
         dir.write("nested/file.txt", b"data")
@@ -239,7 +202,10 @@ fn relative_to_filter() -> Result<()> {
             &nested,
         )
         .context("render relative_to filter")?;
-        ensure!(output == "file.txt", "expected 'file.txt' but rendered {output}");
+        ensure!(
+            output == "file.txt",
+            "expected 'file.txt' but rendered {output}"
+        );
         Ok(())
     })?;
     Ok(())
@@ -262,108 +228,6 @@ fn relative_to_filter_outside_root() -> Result<()> {
             env_setup: None,
         },
     )
-}
-
-#[rstest]
-fn with_suffix_filter() -> Result<()> {
-    let workspace = fallible::filter_workspace()?;
-    with_filter_env(workspace, |root, env| {
-        let file = root.join("file.tar.gz");
-        Dir::open_ambient_dir(root, ambient_authority())
-            .context("open workspace root")?
-            .write("file.tar.gz", b"data")
-            .context("write archive fixture")?;
-        let first = fallible::render(env, "suffix", "{{ path | with_suffix('.log') }}", &file)
-            .context("render with_suffix(.log)")?;
-        ensure!(
-            first == root.join("file.tar.log").as_str(),
-            "expected '.log' suffix to replace final component but rendered {first}"
-        );
-        let second = fallible::render(
-            env,
-            "suffix_alt",
-            "{{ path | with_suffix('.zip', 2) }}",
-            &file,
-        )
-        .context("render with_suffix(.zip, 2)")?;
-        ensure!(
-            second == root.join("file.zip").as_str(),
-            "expected two extensions to be replaced but rendered {second}"
-        );
-        let third = fallible::render(
-            env,
-            "suffix_count_zero",
-            "{{ path | with_suffix('.bak', 0) }}",
-            &file,
-        )
-        .context("render with_suffix(.bak, 0)")?;
-        ensure!(
-            third == root.join("file.tar.gz.bak").as_str(),
-            "expected zero count to append suffix but rendered {third}"
-        );
-        Ok(())
-    })?;
-    Ok(())
-}
-
-#[rstest]
-fn with_suffix_filter_without_separator() -> Result<()> {
-    let workspace = fallible::filter_workspace()?;
-    with_filter_env(workspace, |root, env| {
-        let file = root.join("file");
-        let output = fallible::render(
-            env,
-            "suffix_plain",
-            "{{ path | with_suffix('.log') }}",
-            &file,
-        )
-        .context("render with_suffix on filename without separator")?;
-        ensure!(
-            output == root.join("file.log").as_str(),
-            "expected '.log' to be appended but rendered {output}"
-        );
-        Ok(())
-    })?;
-    Ok(())
-}
-
-#[rstest]
-fn with_suffix_filter_empty_separator() -> Result<()> {
-    let workspace = fallible::filter_workspace()?;
-    test_filter_error(
-        workspace,
-        FilterErrorTest {
-            name: "suffix_empty_sep",
-            template: "{{ path | with_suffix('.log', 1, '') }}",
-            context: json!({
-                "path": "file.tar.gz",
-            }),
-            error_kind: ErrorKind::InvalidOperation,
-            error_contains: "non-empty separator",
-            env_setup: None,
-        },
-    )
-}
-
-#[rstest]
-fn with_suffix_filter_excessive_count() -> Result<()> {
-    let workspace = fallible::filter_workspace()?;
-    with_filter_env(workspace, |root, env| {
-        let file = root.join("file.tar.gz");
-        let output = fallible::render(
-            env,
-            "suffix_excessive",
-            "{{ path | with_suffix('.bak', 5) }}",
-            &file,
-        )
-        .context("render with_suffix(.bak, 5)")?;
-        ensure!(
-            output == root.join("file.bak").as_str(),
-            "expected excessive count to collapse extensions but rendered {output}"
-        );
-        Ok(())
-    })?;
-    Ok(())
 }
 
 #[cfg(unix)]
@@ -428,29 +292,16 @@ fn realpath_filter_root_path() -> Result<()> {
 }
 
 #[rstest]
-fn expanduser_filter() -> Result<()> {
-    let workspace = fallible::filter_workspace()?;
-    let path = Utf8PathBuf::from("~/workspace");
-    assert_filter_success_with_env(
-        workspace,
-        Some(""),
-        FilterSuccessSpec {
-            name: "expanduser",
-            template: "{{ path | expanduser }}",
-            path: &path,
-        },
-        |root| root.join("workspace").as_str().to_owned(),
-    )
-}
-
-#[rstest]
 fn expanduser_filter_non_tilde_path() -> Result<()> {
     let workspace = fallible::filter_workspace()?;
     with_filter_env(workspace, |root, env| {
         let file = root.join("file");
         let output = fallible::render(env, "expanduser_plain", "{{ path | expanduser }}", &file)
             .context("render expanduser on non-tilde path")?;
-        ensure!(output == file.as_str(), "expected path to remain unchanged but rendered {output}");
+        ensure!(
+            output == file.as_str(),
+            "expected path to remain unchanged but rendered {output}"
+        );
         Ok(())
     })?;
     Ok(())
@@ -486,7 +337,7 @@ fn expanduser_filter_user_specific() -> Result<()> {
                 "path": "~otheruser/workspace",
             }),
             error_kind: ErrorKind::InvalidOperation,
-            error_contains: "user-specific ~ expansion is unsupported",
+            error_contains: "User-specific ~ expansion is unsupported",
             env_setup: Some(EnvironmentSetup::SetHome),
         },
     )

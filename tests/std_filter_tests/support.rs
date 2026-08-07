@@ -6,22 +6,15 @@
 //! isolated workspace used by each test.
 
 use camino::Utf8PathBuf;
-use cap_std::{ambient_authority, fs_utf8::Dir};
-use minijinja::{Environment, context};
-use netsuke::stdlib::{self, StdlibConfig, StdlibState};
+use netsuke::stdlib;
 
 pub(crate) type Workspace = (tempfile::TempDir, Utf8PathBuf);
 
 pub(crate) mod fallible {
-    //! Fallible variants of the `support` helpers, returning `anyhow::Result`
-    //! instead of panicking on setup failure.
-    //!
-    //! The parent module re-exports these functions so most call sites reach
-    //! them via `support::*`; keeping them namespaced here separates the
-    //! error-propagating implementations from the workspace types they
-    //! operate on.
+    //! Fallible fixture builders that preserve setup diagnostics for callers.
+
     use super::{Workspace, stdlib};
-    use anyhow::{anyhow, Context, Result};
+    use anyhow::{Context, Result, anyhow};
     use camino::Utf8PathBuf;
     use cap_std::{ambient_authority, fs_utf8::Dir};
     use minijinja::{Environment, context};
@@ -80,7 +73,8 @@ pub(crate) mod fallible {
             .map_err(|path| anyhow!("workspace path is not valid UTF-8: {path:?}"))?;
         let dir = Dir::open_ambient_dir(&root, ambient_authority())
             .context("open filter workspace directory")?;
-        dir.write("file", b"data").context("write fixture file 'file'")?;
+        dir.write("file", b"data")
+            .context("write fixture file 'file'")?;
         #[cfg(unix)]
         dir.symlink("file", "link")
             .context("create fixture symlink")?;
@@ -100,20 +94,13 @@ pub(crate) mod fallible {
     ) -> Result<String> {
         env.add_template(name, template)
             .with_context(|| format!("register template '{name}'"))?;
-        let template = env
+        let registered_template = env
             .get_template(name)
             .with_context(|| format!("fetch template '{name}'"))?;
-        template
+        registered_template
             .render(context!(path => path.as_str()))
             .with_context(|| format!("render template '{name}'"))
     }
 }
 
-pub(crate) use fallible::{
-    filter_workspace,
-    register_template,
-    render,
-    stdlib_env,
-    stdlib_env_with_config,
-    stdlib_env_with_state,
-};
+pub(crate) use fallible::filter_workspace;

@@ -231,6 +231,14 @@ mod tests {
     use super::*;
     use crate::localization::{self, keys};
 
+    /// Assert `failure` renders for `command` as `expected`; callers keep their
+    /// own failure construction and localized message assembly.
+    fn assert_command_error_message(failure: CommandFailure, command: &str, expected: &str) {
+        let err = command_error(failure, "template.html", command);
+        assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+        assert_eq!(err.to_string(), format!("invalid operation: {expected}"));
+    }
+
     /// `category()` supplies the bounded `error_category` label on the command
     /// execution span and counter, so every variant must map to a stable,
     /// low-cardinality string. Constructing each variant here also means a new
@@ -277,18 +285,16 @@ mod tests {
 
     #[test]
     fn spawn_errors_include_source() {
-        let err = command_error(
-            CommandFailure::Spawn(io::Error::new(io::ErrorKind::NotFound, "command not found")),
-            "template.html",
-            "missing_cmd",
-        );
-        assert_eq!(err.kind(), ErrorKind::InvalidOperation);
         let location = CommandLocation::new("template.html", "missing_cmd").describe();
         let expected = localization::message(keys::COMMAND_SPAWN_FAILED)
             .with_arg("location", location)
             .with_arg("details", "command not found")
             .to_string();
-        assert_eq!(err.to_string(), format!("invalid operation: {expected}"));
+        assert_command_error_message(
+            CommandFailure::Spawn(io::Error::new(io::ErrorKind::NotFound, "command not found")),
+            "missing_cmd",
+            &expected,
+        );
     }
 
     #[test]
@@ -378,17 +384,15 @@ mod tests {
 
     #[test]
     fn timeout_errors_report_duration() {
-        let err = command_error(
-            CommandFailure::Timeout(Duration::from_secs(3)),
-            "template.html",
-            "sleep",
-        );
-        assert_eq!(err.kind(), ErrorKind::InvalidOperation);
         let location = CommandLocation::new("template.html", "sleep").describe();
         let expected = localization::message(keys::COMMAND_TIMEOUT)
             .with_arg("location", location)
             .with_arg("seconds", 3.0)
             .to_string();
-        assert_eq!(err.to_string(), format!("invalid operation: {expected}"));
+        assert_command_error_message(
+            CommandFailure::Timeout(Duration::from_secs(3)),
+            "sleep",
+            &expected,
+        );
     }
 }

@@ -4,10 +4,11 @@
 //! These tests exercise the filters end-to-end through a configured template
 //! environment to ensure we keep parity between unit expectations and rendered
 //! output, especially across error handling scenarios.
-use anyhow::{bail, ensure, Context, Result};
-use minijinja::{context, value::Value, ErrorKind};
+use anyhow::{Context, Result, bail, ensure};
+use minijinja::{ErrorKind, context, value::Value};
 use rstest::rstest;
 use serde::Serialize;
+use test_support::fluent::normalize_fluent_isolates;
 
 use super::support::fallible;
 
@@ -15,9 +16,7 @@ use super::support::fallible;
 fn uniq_removes_duplicate_strings() -> Result<()> {
     let mut env = fallible::stdlib_env()?;
     fallible::register_template(&mut env, "uniq", "{{ values | uniq | join(',') }}")?;
-    let template = env
-        .get_template("uniq")
-        .context("fetch template 'uniq'")?;
+    let template = env.get_template("uniq").context("fetch template 'uniq'")?;
     let output = template
         .render(context!(values => vec!["a", "a", "b", "b", "c"]))
         .context("render template 'uniq'")?;
@@ -68,9 +67,7 @@ fn flatten_flattens_deeply_nested_lists() -> Result<()> {
 fn flatten_errors_on_scalar_items() -> Result<()> {
     let env = fallible::stdlib_env()?;
     let err = match env.render_str("{{ [[1], 2] | flatten }}", context! {}) {
-        Ok(output) => bail!(
-            "expected flatten to reject scalar items but rendered {output}"
-        ),
+        Ok(output) => bail!("expected flatten to reject scalar items but rendered {output}"),
         Err(err) => err,
     };
     ensure!(
@@ -79,7 +76,7 @@ fn flatten_errors_on_scalar_items() -> Result<()> {
         err.kind()
     );
     ensure!(
-        err.to_string().contains("flatten expected sequence items"),
+        normalize_fluent_isolates(&err.to_string()).contains("Flatten expected sequence items"),
         "error should describe the invalid item: {err}"
     );
     Ok(())
@@ -128,7 +125,10 @@ fn group_by_reads_mapping_entries() -> Result<()> {
     let output = env
         .render_str(template, context!(values => values))
         .context("render group_by on mapping items")?;
-    ensure!(output == "2", "expected two 'tool' items but rendered {output}");
+    ensure!(
+        output == "2",
+        "expected two 'tool' items but rendered {output}"
+    );
     Ok(())
 }
 
@@ -140,7 +140,10 @@ fn group_by_preserves_insertion_order() -> Result<()> {
     let output = env
         .render_str(template, context!(values => values))
         .context("render group_by preserves order")?;
-    ensure!(output == "1,2", "expected '1,2' ordering but rendered {output}");
+    ensure!(
+        output == "1,2",
+        "expected '1,2' ordering but rendered {output}"
+    );
     Ok(())
 }
 
@@ -167,7 +170,10 @@ fn group_by_supports_non_string_keys() -> Result<()> {
     let output = env
         .render_str(template, context!(values => values))
         .context("render group_by with non-string keys")?;
-    ensure!(output == "2", "expected two entries with key 1 but rendered {output}");
+    ensure!(
+        output == "2",
+        "expected two entries with key 1 but rendered {output}"
+    );
     Ok(())
 }
 
@@ -190,9 +196,7 @@ fn group_by_errors_for_invalid_attributes(
         context!(values => vec![Item { class: "a", name: "alpha" }]),
     );
     let err = match result {
-        Ok(output) => bail!(
-            "expected group_by to fail ({description}), but rendered {output}"
-        ),
+        Ok(output) => bail!("expected group_by to fail ({description}), but rendered {output}"),
         Err(err) => err,
     };
     ensure!(
