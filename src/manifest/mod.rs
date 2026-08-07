@@ -30,6 +30,11 @@ use std::{path::Path, sync::Arc};
 
 mod diagnostics;
 mod expand;
+// `glob_paths` is the module's only boundary: every other item, including the
+// `GlobEntryResult` alias, stays module-private. Denying `unreachable_pub`
+// here turns a widened `pub` inside the private module into a build failure,
+// so the boundary cannot regress silently.
+#[deny(unreachable_pub)]
 mod glob;
 mod hints;
 mod jinja_macros;

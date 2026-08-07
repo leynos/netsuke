@@ -16,7 +16,7 @@ use normalize::force_literal_escapes;
 
 #[derive(Debug, Clone)]
 /// A glob pattern and its normalised representation.
-pub struct GlobPattern {
+struct GlobPattern {
     raw: String,
     normalized: String,
 }
@@ -28,7 +28,7 @@ impl GlobPattern {
         clippy::missing_const_for_fn,
         reason = "const String::as_str() not available on all MSRV targets"
     )]
-    pub fn raw(&self) -> &str {
+    fn raw(&self) -> &str {
         self.raw.as_str()
     }
 
@@ -38,7 +38,7 @@ impl GlobPattern {
         clippy::missing_const_for_fn,
         reason = "const String::as_str() not available on all MSRV targets"
     )]
-    pub fn normalized(&self) -> &str {
+    fn normalized(&self) -> &str {
         self.normalized.as_str()
     }
 
@@ -47,7 +47,7 @@ impl GlobPattern {
     /// # Errors
     ///
     /// Returns an error when brace validation fails.
-    pub fn new(raw: &str) -> std::result::Result<Self, Error> {
+    fn new(raw: &str) -> std::result::Result<Self, Error> {
         validate_brace_matching(raw)?;
 
         #[cfg(unix)]
@@ -69,15 +69,20 @@ impl GlobPattern {
 ///
 /// Internal to the glob module: only [`glob_paths`] and the `walk` submodule
 /// consume it, so it is deliberately not part of the public API surface.
-/// The alias has no public path — this rejection is enforced at compile
-/// time:
+///
+/// Two compile-time guards keep it that way. `#[deny(unreachable_pub)]` on the
+/// `mod glob;` declaration in [`crate::manifest`] rejects any attempt to widen
+/// this alias — or any other item here — to `pub`, because nothing inside the
+/// private module is reachable from the crate root. The doctest below then
+/// pins the outcome from a downstream crate's point of view: no path through
+/// [`crate::manifest`] names the alias.
 ///
 /// ```compile_fail,E0603
 /// use netsuke::manifest::glob::GlobEntryResult;
 /// ```
 ///
-/// while the re-exported entry point remains reachable (the control for the
-/// rejection above — it fails instead if the harness wiring breaks):
+/// The re-exported entry point remains reachable — the control for the
+/// rejection above, which fails instead if the doctest harness wiring breaks:
 ///
 /// ```
 /// use netsuke::manifest::glob_paths;
