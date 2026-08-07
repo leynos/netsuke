@@ -2813,6 +2813,14 @@ spawned Ninja command as data, rather than by mutating the parent process.
   environment to function, and clearing it would make a test environment
   diverge from production in ways unrelated to what the test is pinning.
 
+The `ninja_subprocess` span and its spawn/exit events carry
+`env_override_count` and `path_overridden`, derived from the prepared
+`Command` rather than from `CommandEnv`, so an environment-caused failure is
+diagnosable from the logs alone. Both fields are bounded and carry no variable
+name or value: override names and values may hold secrets, and a count plus a
+`PATH` flag is the most that can be logged safely. Production runs use
+`CommandEnv::inherit()`, so they report `0` and `false`.
+
 `PATH` values are composed with `test_support::env::prepend_path_value`, a
 pure function that places a directory ahead of an explicitly supplied prior
 value. It takes the starting value rather than reading the process, so the
