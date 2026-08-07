@@ -117,7 +117,7 @@ fn hash_filter_legacy_algorithms_disabled() -> Result<()> {
         err.kind()
     );
     ensure!(
-        err.to_string().contains("enable feature 'legacy-digests'"),
+        normalize_fluent_isolates(&err.to_string()).contains("enable feature 'legacy-digests'"),
         "error should mention legacy feature: {err}"
     );
     Ok(())
