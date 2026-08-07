@@ -105,7 +105,7 @@ def main(
 
     Raises
     ------
-    rollout.NetworkUnavailableError
+    NetworkUnavailableError
         If the authority is unavailable and no tracked fallback is valid.
     """
     destination = output if output is not None else repository / "typos.toml"

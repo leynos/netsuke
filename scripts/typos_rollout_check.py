@@ -8,20 +8,27 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
-from pathlib import Path
+import dataclasses as dc
 import re
-import subprocess
-from typing import Sequence
+
+# The only subprocess this module runs is `git ls-files` on the repository
+# under check, with no shell and no caller-supplied argument beyond that
+# path.
+import subprocess  # noqa: S404 -- audited: fixed argv, no shell, see _tracked
+import typing as typ
+from pathlib import Path
 
 import generate_typos_config as generator
-import typos_rollout as rollout
 
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
+    import typos_rollout as rollout
 
 POLICY_PATHS = frozenset({Path(".typos-oxendict-base.toml"), Path("typos.local.toml")})
 
 
-@dataclass(frozen=True)
+@dc.dataclass(frozen=True)
 class PhraseFinding:
     """Describe one prohibited phrase in tracked text.
 
@@ -64,8 +71,11 @@ def _tracked(repository: Path) -> tuple[Path, ...]:
     subprocess.CalledProcessError
         If Git cannot list the repository's tracked paths.
     """
-    raw = subprocess.run(
-        ["git", "-C", str(repository), "ls-files", "-z"],
+    raw = subprocess.run(  # noqa: S603 -- argv is fixed; only `repository` varies
+        # `git` is resolved through PATH deliberately: the check must use the
+        # same Git the developer or CI runner invokes, and pinning an absolute
+        # path would break across the platforms this repository supports.
+        ["git", "-C", str(repository), "ls-files", "-z"],  # noqa: S607
         check=True,
         capture_output=True,
         text=True,
@@ -208,7 +218,7 @@ def check_phrase_corrections(
     )
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv: cabc.Sequence[str] | None = None) -> int:
     """Check one repository and report prohibited phrases.
 
     Parameters

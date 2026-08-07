@@ -22,7 +22,10 @@ from pathlib import Path
 import yaml
 
 WORKFLOW_PATH = (
-    Path(__file__).resolve().parents[2] / ".github" / "workflows" / "mutation-testing.yml"
+    Path(__file__).resolve().parents[2]
+    / ".github"
+    / "workflows"
+    / "mutation-testing.yml"
 )
 
 EXPECTED_USES_PATH = "leynos/shared-actions/.github/workflows/mutation-cargo.yml"

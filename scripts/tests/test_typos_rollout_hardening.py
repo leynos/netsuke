@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import importlib
 import json
-import types
+import typing as typ
 import urllib.error
 import urllib.request
 from pathlib import Path
 
 import pytest
-
 from typos_rollout_test_support import dictionary_text as _dictionary_text
+
+if typ.TYPE_CHECKING:
+    import types
 
 SCRIPT_DIRECTORY = Path(__file__).resolve().parents[1]
 
@@ -99,13 +101,11 @@ def test_changed_etag_overrides_unchanged_date(
     modified = "Fri, 10 Jul 2026 08:00:00 GMT"
     cache.write_text(_dictionary_text("original"), encoding="utf-8")
     metadata.write_text(
-        json.dumps(
-            {
-                "etag": '"estate-v1"',
-                "last_modified": modified,
-                "source": source,
-            }
-        ),
+        json.dumps({
+            "etag": '"estate-v1"',
+            "last_modified": modified,
+            "source": source,
+        }),
         encoding="utf-8",
     )
 
@@ -233,7 +233,8 @@ def test_http_status_and_persistence_errors_propagate(
 
     def denied(*_args: object, **_kwargs: object) -> None:
         """Model denied persistence at the atomic-write boundary."""
-        raise PermissionError("cache is read-only")
+        message = "cache is read-only"
+        raise PermissionError(message)
 
     monkeypatch.setattr(cache_module, "atomic_write", denied)
     with pytest.raises(PermissionError, match="cache is read-only"):
@@ -324,13 +325,15 @@ def test_atomic_write_cleans_temporary_file_after_failure(
         def write(self, content: bytes) -> None:
             """Write bytes unless this case models a write failure."""
             if failure_stage == "write":
-                raise OSError("write failure")
+                message = "write failure"
+                raise OSError(message)
             temporary.write_bytes(content)
 
         def __exit__(self, *_args: object) -> None:
             """Close unless this case models a close failure."""
             if failure_stage == "close":
-                raise OSError("close failure")
+                message = "close failure"
+                raise OSError(message)
 
     monkeypatch.setattr(
         cache_module.tempfile,
@@ -341,7 +344,8 @@ def test_atomic_write_cleans_temporary_file_after_failure(
 
         def fail_replace(_path: Path, _destination: Path) -> None:
             """Model an atomic replacement failure."""
-            raise OSError("replace failure")
+            message = "replace failure"
+            raise OSError(message)
 
         monkeypatch.setattr(cache_module.pathlib.Path, "replace", fail_replace)
 

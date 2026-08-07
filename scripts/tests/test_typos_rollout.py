@@ -9,7 +9,6 @@ import typing as typ
 from pathlib import Path
 
 import pytest
-
 from typos_rollout_test_support import dictionary_text as _dictionary_text
 
 if typ.TYPE_CHECKING:
@@ -59,7 +58,8 @@ def test_https_failure_reuses_valid_tracked_config(
 
     def unavailable(*_args: object, **_kwargs: object) -> None:
         """Model an unavailable HTTPS authority."""
-        raise rollout.NetworkUnavailableError("offline")
+        message = "offline"
+        raise rollout.NetworkUnavailableError(message)
 
     monkeypatch.setattr(rollout, "refresh_base", unavailable)
 

@@ -9,14 +9,13 @@ import tomllib
 import typing as typ
 import urllib.error
 import urllib.request
-from pathlib import Path
 
 import pytest
-
 from typos_rollout_test_support import dictionary_text as _dictionary_text
 
 if typ.TYPE_CHECKING:
     import types
+    from pathlib import Path
 
 
 def test_local_refresh_keeps_a_newer_cache(

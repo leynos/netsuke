@@ -17,8 +17,10 @@ from __future__ import annotations
 
 import itertools
 import os
-from pathlib import Path
+import typing as typ
 
+# conftest.py inserts scripts/ onto sys.path before this module is imported.
+import hoist_binstall_archives as hoist_mod
 import pytest
 from conftest import (
     EXPECTED_NAMES,
@@ -28,8 +30,8 @@ from conftest import (
     stage_pair,
 )
 
-# conftest.py inserts scripts/ onto sys.path before this module is imported.
-import hoist_binstall_archives as hoist_mod
+if typ.TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_expected_names_derive_from_staging_and_manifest(
@@ -360,18 +362,16 @@ def test_main_runs_the_hoist_from_cli_arguments(
     stage_pair(workspace["dist"], "netsuke-linux-amd64/s1", EXPECTED_NAMES[1])
     stage_pair(workspace["dist"], "netsuke-macos-arm64/s2", EXPECTED_NAMES[0])
 
-    status = hoist_mod.main(
-        [
-            "--version",
-            VERSION,
-            "--dist-dir",
-            str(workspace["dist"]),
-            "--staging-config",
-            str(workspace["staging"]),
-            "--manifest",
-            str(workspace["manifest"]),
-        ]
-    )
+    status = hoist_mod.main([
+        "--version",
+        VERSION,
+        "--dist-dir",
+        str(workspace["dist"]),
+        "--staging-config",
+        str(workspace["staging"]),
+        "--manifest",
+        str(workspace["manifest"]),
+    ])
     assert status == 0, "the CLI must exit 0 on a fully staged dist"
     captured = capsys.readouterr()
     assert "Hoisted 2 archive/sidecar pairs" in captured.out, (

@@ -1,12 +1,14 @@
 """Test exact phrase-policy enforcement."""
 
 import importlib
-from pathlib import Path
-import subprocess
+
+# Fixtures build throwaway Git repositories under `tmp_path`; every argv is
+# a literal and no shell is involved.
+import subprocess  # noqa: S404 -- audited: fixed argv, no shell, tmp_path only
 import types
+from pathlib import Path
 
 import pytest
-
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 PROHIBITED = "hand" + "-written"
@@ -33,8 +35,10 @@ def initialize(path: Path, files: dict[str, str]) -> None:
         target = path / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
-    subprocess.run(["git", "init", "--quiet"], cwd=path, check=True)
-    subprocess.run(["git", "add", "."], cwd=path, check=True)
+    # `git` is resolved through PATH so the fixture uses the same Git the
+    # developer or CI runner invokes.
+    subprocess.run(["git", "init", "--quiet"], cwd=path, check=True)  # noqa: S607
+    subprocess.run(["git", "add", "."], cwd=path, check=True)  # noqa: S607
 
 
 def test_checker_boundaries_ignores_exclusions(
