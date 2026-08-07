@@ -12,7 +12,10 @@ accepted = []
 
 [patterns]
 # The tokenizer splits the valid hyphenated prefix in `mis-grouping`.
+# Inline code spans quote identifiers verbatim (e.g. tokio's `flavor`
+# attribute argument), so they are not en-GB prose and must stay exempt.
 ignore = ["mis-grouping",
+  "`[^`\\n]+`",
   "(?m)^            dist/\\$\\{\\{ inputs\\['bin-name'\\] \\}\\}-\\$\\{\\{ inputs\\.version \\}\\}-\\$\\{\\{ inputs\\['artifact-suffix'\\] \\}\\}\\.pkg$",
   "(?m)^          ARCHIVE_SUFFIX: \\$\\{\\{ inputs\\['artifact-suffix'\\] \\}\\}$",
   "(?m)^          name: \\$\\{\\{ inputs\\['artifact-name'\\] \\}\\}$",

@@ -1646,6 +1646,60 @@ linted, and documented as such. A helper earns a place here only when more than
 one contract test needs the same reading or parsing behaviour. Nothing in it
 runs Make, runs Cargo, or writes anything.
 
+### The Makefile `RUSTFLAGS` contract tests
+
+`tests/makefile_test_target.rs` is the crate root for the Makefile contract
+tests. It includes `tests/support/makefile.rs` for the capability-scoped read
+and recipe-lookup helpers, pins the `make test` runner contract, and declares
+two child modules that together own the `RUSTFLAGS` contract:
+
+- `tests/makefile_test_target/rustflags.rs` models every recipe line that
+  assigns `RUSTFLAGS` as a `RustflagsCase` — the Make target, the substring
+  selecting the line, and the warning and inheritance policies the line must
+  uphold.
+- `tests/makefile_test_target/rustflags_polonius_tests.rs` covers the
+  `POLONIUS_FLAGS` resolution guard directly, against synthetic Makefile text.
+
+The tests assert on what a shell would produce, not on recipe text. For each
+case, `rustflags.rs` extracts the double-quoted assignment, resolves
+`$(POLONIUS_FLAGS)`, reduces Make's `$$` escape to the single `$` the shell
+receives, and — on Unix only — expands the resulting expression with
+`printf '%s'` under `sh`. Only the assignment is expanded; the command the
+recipe would run is never executed, so no test here invokes Cargo, Kani,
+nextest, or Dylint. Expansion needs a shell, so the behavioural tests and the
+policy fields they read are gated on `#[cfg(unix)]`; the parsing tests are not.
+Two guards keep the model honest: `shell_expression` refuses an expression
+still naming an unresolved Make variable or embedding a shell command
+substitution, and a completeness test walks the Makefile and fails when a line
+sets `RUSTFLAGS` without a matching case, so a new recipe joins the contract or
+breaks the build.
+
+`polonius_flags(makefile) -> Result<String>` is the crate-visible resolver both
+modules share. It reads the `POLONIUS_FLAGS` variable and rejects two states:
+
+- **Missing** — no `POLONIUS_FLAGS ?= …` or `POLONIUS_FLAGS = …` line, reported
+  as "Makefile should define POLONIUS_FLAGS".
+- **Empty after trimming** — a definition whose value is blank or whitespace
+  only, reported as "POLONIUS_FLAGS should not be empty".
+
+The rejection matters because every assertion built on the resolved value uses
+`contains`, which an empty needle satisfies vacuously. Returning an empty string
+would silently void the Polonius contract instead of failing it. On success the
+resolver returns the trimmed value, and a bounded proptest in
+`rustflags_polonius_tests` pins that acceptance invariant: resolution succeeds
+exactly when a definition exists whose value is non-empty after trimming, and
+the resolved text is the trimmed value. Its generator emits absent,
+whitespace-only, and whitespace-padded flag tokens, so an untrimmed return fails
+the property rather than slipping past.
+
+Because `rustflags.rs` and `rustflags_polonius_tests.rs` are children of the
+`makefile_test_target` test binary rather than files under `tests/`, Cargo does
+not compile them as separate targets. The root declares them, and they reach the
+shared helpers through `use super::{read_repo_file, target_recipe}`. Keep this
+shape for further Makefile contract work: general parsing helpers belong in
+`tests/support/makefile.rs` once a second contract test needs them, whereas
+model types such as `RustflagsCase` stay private to the contract they describe.
+
 ### `EnLocalizer` field ordering
 
 `EnLocalizer` (`test_support/src/localizer.rs`) holds both the localizer
