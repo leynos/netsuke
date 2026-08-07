@@ -86,11 +86,16 @@ mod tests {
     use proptest::prelude::{Just, Strategy, prop_oneof};
     use std::{sync::mpsc, time::Duration};
 
-    fn assert_current_thread_lock_is_held(message: &str) {
+    /// Read the thread-local lock state without asserting.
+    ///
+    /// Callers holding a live [`EnvLock`] need this: asserting while the guard
+    /// is alive would drop it during unwind, and dropping a `MutexGuard` while
+    /// panicking poisons the mutex.
+    fn current_thread_lock_is_held() -> bool {
         ENV_LOCK_STATE.with(|lock_state| {
             let state = lock_state.borrow();
-            assert!(state.depth > 0 && state.guard.is_some(), "{message}");
-        });
+            state.depth > 0 && state.guard.is_some()
+        })
     }
 
     fn assert_current_thread_lock_is_released(message: &str) {
@@ -107,19 +112,25 @@ mod tests {
             let _inner = EnvLock::acquire();
         }
 
+        // Observations are captured while the guards live and asserted only once
+        // they are released: a failing assertion under a live guard would drop it
+        // mid-unwind and poison `ENV_LOCK`, burying the real cause.
         let outer = EnvLock::acquire();
-        {
+        let held_with_nested = {
             let _inner = EnvLock::acquire();
-            assert_current_thread_lock_is_held(
-                "ENV_LOCK should remain locked while nested EnvLock guards are alive",
-            );
-        }
-
-        assert_current_thread_lock_is_held(
-            "ENV_LOCK should remain locked until the outer EnvLock guard is dropped",
-        );
+            current_thread_lock_is_held()
+        };
+        let held_after_nested_drop = current_thread_lock_is_held();
 
         drop(outer);
+        assert!(
+            held_with_nested,
+            "ENV_LOCK should remain locked while nested EnvLock guards are alive"
+        );
+        assert!(
+            held_after_nested_drop,
+            "ENV_LOCK should remain locked until the outer EnvLock guard is dropped"
+        );
         assert_current_thread_lock_is_released(
             "ENV_LOCK should be unlocked after final EnvLock guard is dropped",
         );
@@ -131,11 +142,13 @@ mod tests {
         let inner = EnvLock::acquire();
 
         drop(outer);
-        assert_current_thread_lock_is_held(
-            "ENV_LOCK should remain locked while an inner EnvLock guard is alive",
-        );
+        let held_with_inner_alive = current_thread_lock_is_held();
 
         drop(inner);
+        assert!(
+            held_with_inner_alive,
+            "ENV_LOCK should remain locked while an inner EnvLock guard is alive"
+        );
         assert_current_thread_lock_is_released(
             "ENV_LOCK should be unlocked after the final out-of-order guard drops",
         );
@@ -238,6 +251,22 @@ mod tests {
         }
     }
 
+    /// Probes `ENV_LOCK` directly, so it requires per-test process isolation
+    /// (the suite runs under `cargo nextest`, which forks each test). Under a
+    /// thread-parallel runner it would race any other test touching the global
+    /// mutex.
+    ///
+    /// No assertion here can leave process-global poisoning behind, though the
+    /// reason differs either side of `ENV_LOCK.clear_poison()`:
+    ///
+    /// - The `join` assertion runs before the flag is cleared, so `ENV_LOCK` is
+    ///   still poisoned at that point — deliberately, since that is the state
+    ///   under test. It is safe regardless: the poisoned guard belonged to the
+    ///   spawned thread, and this thread holds no `EnvLock`, so a failure has no
+    ///   live guard to drop.
+    /// - The later assertions run once the flag is cleared, and the held state is
+    ///   captured before its guard is dropped, so an unwinding assertion cannot
+    ///   drop a live `MutexGuard` and poison the mutex afresh.
     #[test]
     fn env_lock_recovers_after_mutex_poisoning() {
         let poisoner = std::thread::spawn(|| {
@@ -246,15 +275,17 @@ mod tests {
         });
 
         assert!(poisoner.join().is_err(), "poisoning thread should panic");
-        assert!(
-            ENV_LOCK.is_poisoned(),
-            "the panic should poison the underlying mutex"
-        );
+        let was_poisoned = ENV_LOCK.is_poisoned();
+        ENV_LOCK.clear_poison();
+        assert!(was_poisoned, "the panic should poison the underlying mutex");
 
         let recovered_guard = EnvLock::acquire();
-        assert_current_thread_lock_is_held("recovered EnvLock guard should hold ENV_LOCK");
+        let held_while_live = current_thread_lock_is_held();
         drop(recovered_guard);
-        ENV_LOCK.clear_poison();
+        assert!(
+            held_while_live,
+            "recovered EnvLock guard should hold ENV_LOCK"
+        );
         assert_current_thread_lock_is_released("recovered ENV_LOCK should be released normally");
     }
 }

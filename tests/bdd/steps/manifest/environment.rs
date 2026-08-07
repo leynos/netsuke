@@ -6,7 +6,10 @@ use netsuke::manifest;
 
 use crate::bdd::fixtures::TestWorld;
 
-pub(super) fn manifest_env_reader(world: &TestWorld) -> manifest::EnvReader {
+/// Build a [`manifest::EnvReader`] backed by the scenario's forwarded
+/// environment so manifest and IR steps read scenario values rather than the
+/// host environment.
+pub(crate) fn manifest_env_reader(world: &TestWorld) -> manifest::EnvReader {
     let values = world.env_vars_forward.borrow().clone();
     Arc::new(move |key| {
         values

@@ -290,22 +290,36 @@ fn duration_from_env(env: &impl Env, var: &str, default: Duration) -> Duration {
         match trimmed.parse::<u64>() {
             Ok(ms) => Duration::from_millis(ms),
             Err(err) => {
-                log_duration_parse_error(var, value.as_str(), &err);
+                log_duration_parse_error(var, trimmed.len(), &err);
                 default
             }
         }
     })
 }
 
-fn log_duration_parse_error(var: &str, value: &str, err: &dyn fmt::Display) {
+/// Report an unparsable duration override without echoing its value.
+///
+/// The value is redacted: an environment variable's contents are outside this
+/// crate's control, and logging them verbatim would put whatever the caller
+/// exported into the log. `err` already names the bounded parse failure, and
+/// `value_len` distinguishes an empty override from a malformed one, which is
+/// all the diagnosis this fixture needs.
+fn log_duration_parse_error(var: &str, value_len: usize, err: &dyn fmt::Display) {
     #[cfg(test)]
     {
-        record_duration_warning(format!("ignoring invalid {var}='{value}': {err}"));
+        record_duration_warning(format!(
+            "ignoring invalid {var}: {err} (value redacted, {value_len} bytes)"
+        ));
     }
 
     #[cfg(not(test))]
     {
-        tracing::warn!(variable = var, value, error = %err, "ignoring invalid fixture duration");
+        tracing::warn!(
+            variable = var,
+            value_len,
+            error = %err,
+            "ignoring invalid fixture duration"
+        );
     }
 }
 

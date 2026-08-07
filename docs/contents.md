@@ -49,6 +49,9 @@ operator, user, and contributor references are easier to find.
 - [adr-008-environment-seam-taxonomy.md](adr-008-environment-seam-taxonomy.md):
   Environment seam taxonomy decision record: three sanctioned shapes for
   injecting environment-dependent input instead of reading the process directly.
+- [adr-009-bounded-redacted-manifest-telemetry.md](adr-009-bounded-redacted-manifest-telemetry.md):
+  Manifest telemetry decision record, separating observability from evaluation
+  and bounding and redacting the emitted metrics and spans.
 
 ## User and operator guides
 

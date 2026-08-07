@@ -1348,25 +1348,20 @@ writes that content and applies executable permissions only on Unix.
 `write_exec` is the minimal-script convenience wrapper;
 `write_exec_with_content` is the shared primitive for custom behaviour.
 
-The helpers take `&Utf8Path` and return `Utf8PathBuf`, matching the camino
-types used throughout Netsuke. Callers that already hold camino paths pass them
-directly. `tempfile::TempDir::path()` still yields an OS-native `&Path`, so
-callers convert at that boundary with `exec::utf8_path`, the single conversion
-point. `utf8_path` returns a `Result` rather than panicking: it names the
-offending path in the error (`path is not valid UTF-8: {path}`), and callers
-propagate it with their own context, as `fake_ninja` and
-`fake_ninja_check_build_file` do.
+The helpers take `&Path` and return `PathBuf`, the OS-native types that
+`tempfile::TempDir::path()` already yields. Because the helpers sit at the
+`tempfile`/OS boundary, there is no conversion step: callers pass the temporary
+directory's path straight through.
 
 ```rust
 let temp = TempDir::new()?;
-let root = exec::utf8_path(temp.path()).context("temporary directory")?;
-let stub = write_exec(root, "tool")?;
+let stub = write_exec(temp.path(), "tool")?;
 ```
 
-Because a camino path cannot represent a non-UTF-8 path, the fake-executable
-factories now fail on a temporary directory whose path is not valid UTF-8,
-rather than succeeding as they previously did. The `test_support` test
-`fake_ninja_helpers_reject_non_utf8_temp_directories` pins this behaviour.
+Because `write_exec` and `write_exec_with_content` operate on OS-native paths
+directly, the fake-executable factories accept a temporary directory whose path
+is not valid UTF-8. The `test_support` test
+`fake_ninja_helpers_support_non_utf8_temp_directories` pins this behaviour.
 
 ### User-facing documentation examples
 
@@ -2185,10 +2180,12 @@ Configuration merge helpers:
   `PathBuf`.
 - `explicit_config_path_with_env(cli, env) -> Option<PathBuf>` resolves explicit
   config selection from `--config` and `NETSUKE_CONFIG`.
-- `push_file_layers(cli, composer, errors) -> ()` pushes explicit or discovered
-  file layers onto a `MergeComposer`. Explicit load errors are pushed into
-  `errors`, and automatic discovery is not attempted after an explicit selector
-  fails.
+- `push_file_layers_with_env(cli, composer, errors, env) -> ()` pushes explicit
+  or discovered file layers onto a `MergeComposer`. The injected `env`
+  parameter follows the environment mandate: it supplies environment access
+  without requiring callers to mutate the process environment. Explicit load
+  errors are pushed into `errors`, and automatic discovery is not attempted
+  after an explicit selector fails.
 - `collect_diag_file_layers_with_env(cli, env)` reuses the same file-layer
   precedence for early JSON resolution.
 - `collect_file_layers(directory)` builds the fallback discovery layer chain,
@@ -2705,6 +2702,79 @@ the fallback function built by `make_macro_fn` for compiled expressions.
 MiniJinja state on each invocation, so it must not be treated as a reusable
 global template cache. Errors remain at the manifest boundary and retain their
 localized failure category.
+
+### Manifest telemetry: template render and macro invocation
+
+`src/manifest/jinja_macros/telemetry.rs` instruments the two boundaries above
+with `tracing` spans and `metrics` counters/histograms, kept out of the
+evaluation code so `render_template` and the macro-invocation callback stay
+plain queries. See [ADR-009](adr-009-bounded-redacted-manifest-telemetry.md)
+for the decision to separate observability from evaluation this way, and for
+the alternatives it rejected.
+
+There are two independent boundaries, because template rendering and macro
+invocation are different operations with different failure shapes:
+
+- **Template render.** `render_template` composes
+  `telemetry::instrument_template_render` around the render. It opens the
+  `manifest.template.render` span, increments the
+  `netsuke_manifest_template_renders_total` counter, and records the
+  `netsuke_manifest_template_render_duration_seconds` histogram.
+- **Macro invocation.** `make_macro_fn`'s compiled-expression fallback
+  composes `telemetry::instrument_macro_invocation` around the invocation. It
+  opens the `manifest.macro.invoke` span, increments the
+  `netsuke_manifest_macro_invocations_total` counter, and records the
+  `netsuke_manifest_macro_invocation_duration_seconds` histogram.
+
+Macros reached through a template import run inside the render call and never
+reach `make_macro_fn`, so they are metered at the render boundary only; the
+macro-invocation counter covers the compiled-expression fallback. The test
+`imported_macro_render_does_not_emit_invocation_metrics` in
+`src/manifest/tests/macro_invocation_telemetry.rs` pins this split.
+
+The label and field vocabulary is bounded by construction, never echoing
+manifest content into a span or a metric dimension:
+
+- `outcome` is always `"success"` or `"error"`.
+- The render boundary adds `has_macro_imports`, `"true"` or `"false"`,
+  distinguishing the import-prefixed render path from the plain one without
+  revealing which macros a manifest defines.
+- On failure, both boundaries add `error_category`, the `Debug` form of
+  `minijinja::ErrorKind` — never the error's `Display` text, which can embed
+  manifest content.
+
+**Redaction rule.** Template text, macro names, macro arguments, context
+values, and environment variable names must never reach telemetry. Manifest
+content is caller-controlled and unbounded, so recording it in a metric label
+would make the metric series unbounded, and recording it in a span or event
+risks leaking secrets — environment variable names routinely identify
+credentials. This mirrors the redaction rule `env_var_with` already applies to
+`env()` lookup failures; see [Manifest `env()` reader](#manifest-env-reader).
+
+`describe_macro_metrics` and `describe_render_metrics` register each metric's
+description exactly once, guarded by `std::sync::Once`. Neither is called from a
+query function: `describe_macro_metrics` runs when `make_macro_fn` builds a
+macro's registration, which is setup rather than evaluation, so the guard never
+sits on the invocation hot path; `describe_render_metrics` runs inside
+`instrument_template_render`, so `render_template` names only the
+instrumentation boundary it composes with and never reaches for the metric
+registry itself.
+
+Per `AGENTS.md`, this module emits through `metrics` and `tracing` but must not
+install a global recorder or subscriber; only the application does that, at
+startup. Tests follow the same rule: `src/manifest/tests/macros_telemetry.rs`
+(the render boundary) and `src/manifest/tests/macro_invocation_telemetry.rs`
+(the macro-invocation boundary) each drive a local
+`metrics_util::debugging::DebuggingRecorder` through
+`metrics::with_local_recorder`, and capture tracing events with the workspace's
+`with_test_subscriber` helper (see [`tracing_capture`](#tracing_capture)), so
+neither test touches process-wide state. Extend `macros_telemetry.rs` for
+render-boundary coverage and `macro_invocation_telemetry.rs` for
+invocation-boundary coverage. The latter also runs a proptest,
+`macro_telemetry_stays_bounded_for_arbitrary_macros`, which asserts the
+redaction contract holds for arbitrary generated macro names, arguments, and
+undefined-variable names, not just the fixed sentinel cases used by the other
+tests.
 
 ### Expansion helpers
 

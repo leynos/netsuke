@@ -1029,6 +1029,14 @@ do not depend on the lifetime of the manifest parsing state. This preserves
 MiniJinja's argument handling, including keyword parameters and `caller`
 support, while allowing later macros to override earlier ones.
 
+Template rendering and macro invocation are each wrapped in a bounded, redacted
+telemetry boundary, kept separate from evaluation so manifest content never
+reaches a span or a metric label.
+[ADR-009](adr-009-bounded-redacted-manifest-telemetry.md) records this
+decision; see the
+[developer's guide](developers-guide.md#manifest-telemetry-template-render-and-macro-invocation)
+for the metric names, bounded label vocabulary, and redaction rules.
+
 ### 4.4 Essential Custom Functions
 
 To transform `minijinja` from a general-purpose templating engine into a

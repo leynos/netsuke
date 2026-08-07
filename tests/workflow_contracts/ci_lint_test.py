@@ -38,9 +38,59 @@ TEST_SHELL_STEP = "Install test shell dependencies"
 EXPECTED_CLIPPY_FLAGS = "--workspace --all-targets --all-features -- -D warnings"
 
 
+class _WorkflowLoader(yaml.SafeLoader):
+    """Loader that resolves booleans the YAML 1.2 way.
+
+    PyYAML implements YAML 1.1, where ``on``, ``yes``, and ``off`` are boolean
+    words. That silently turns GitHub Actions' ``on:`` trigger key into
+    ``True``. Mapping ``True`` back to ``"on"`` after the fact would conflate it
+    with a literal ``yes:`` or ``true:`` key, so the resolver is narrowed to
+    YAML 1.2's ``true``/``false`` instead and ``on`` simply stays a string.
+    """
+
+
+# Drop the inherited YAML 1.1 bool resolver, then reinstate the 1.2 word set.
+_WorkflowLoader.yaml_implicit_resolvers = {
+    initial: [
+        (tag, regexp)
+        for tag, regexp in resolvers
+        if tag != "tag:yaml.org,2002:bool"
+    ]
+    for initial, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+_WorkflowLoader.add_implicit_resolver(
+    "tag:yaml.org,2002:bool",
+    re.compile(r"^(?:true|True|TRUE|false|False|FALSE)$"),
+    list("tTfF"),
+)
+
+
 def _load() -> dict[str, object]:
-    """Parse the workflow file."""
-    return yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    """Parse the workflow file, rejecting anything but a mapping root.
+
+    ``yaml.safe_load`` happily returns ``None`` for an empty document, or a
+    scalar or list for a malformed one. Without a runtime check the annotation
+    is a claim rather than a guarantee, and the failure surfaces later as an
+    opaque ``AttributeError`` far from the real cause.
+    """
+    # `yaml.load` is safe here: `_WorkflowLoader` derives from `SafeLoader`, so
+    # it constructs no arbitrary Python objects.
+    match yaml.load(
+        WORKFLOW_PATH.read_text(encoding="utf-8"), Loader=_WorkflowLoader
+    ):
+        case dict() as workflow:
+            pass
+        case other:
+            raise AssertionError(
+                "the workflow must parse to a mapping, "
+                f"got {type(other).__name__}"
+            )
+    non_string_keys = sorted(repr(key) for key in workflow if not isinstance(key, str))
+    if non_string_keys:
+        raise AssertionError(
+            f"the workflow mapping must be string-keyed, got {non_string_keys}"
+        )
+    return workflow
 
 
 def _steps(workflow: dict[str, object]) -> list[dict[str, object]]:

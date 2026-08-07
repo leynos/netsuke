@@ -79,9 +79,33 @@ impl EnvSnapshot {
         path_override: Option<&OsStr>,
         env: &impl Env,
     ) -> Result<Self, ResolveError> {
-        #[cfg(windows)]
-        return Self::capture_impl(cwd_override, path_override, env, None);
-        #[cfg(not(windows))]
+        Self::capture_for_platform(cwd_override, path_override, env)
+    }
+
+    /// Capture a snapshot without a `PATHEXT` override on Windows.
+    ///
+    /// Windows threads a `PATHEXT` override that the other platforms have no
+    /// concept of, so the two `capture_impl` arities diverge. Isolating the
+    /// divergence in a pair of wrappers keeps `capture_with_env` free of a
+    /// `cfg`-gated bare `return`, which reads as dead code on either target.
+    #[cfg(windows)]
+    fn capture_for_platform(
+        cwd_override: Option<&Utf8Path>,
+        path_override: Option<&OsStr>,
+        env: &impl Env,
+    ) -> Result<Self, ResolveError> {
+        Self::capture_impl(cwd_override, path_override, env, None)
+    }
+
+    /// Capture a snapshot on platforms without `PATHEXT` semantics.
+    ///
+    /// See the Windows counterpart for why this wrapper exists.
+    #[cfg(not(windows))]
+    fn capture_for_platform(
+        cwd_override: Option<&Utf8Path>,
+        path_override: Option<&OsStr>,
+        env: &impl Env,
+    ) -> Result<Self, ResolveError> {
         Self::capture_impl(cwd_override, path_override, env)
     }
 

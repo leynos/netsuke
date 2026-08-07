@@ -1,0 +1,9 @@
+netsuke_version: "1.0.0"
+# The target name and one input are derived from an environment variable so IR
+# compilation can only produce the asserted graph when the scenario environment
+# reaches the manifest parser. A host-environment read would leave the variable
+# undefined and fail generation instead.
+targets:
+  - name: "out/{{ env('NETSUKE_TEST_IR_ENV') }}"
+    sources: "src/{{ env('NETSUKE_TEST_IR_ENV') }}.c"
+    command: "cc -o $out $in"

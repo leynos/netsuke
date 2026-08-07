@@ -1,8 +1,15 @@
 //! Smoke tests for newcomer-facing CLI flows.
 
+// `bail!` is reached only from the Unix-only non-UTF-8 test, so the import is
+// gated alongside `PathBuf`; left unconditional it would be an unused import on
+// other targets, which `-D warnings` turns into a build failure.
+#[cfg(unix)]
+use anyhow::bail;
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
 use std::path::Path;
+#[cfg(unix)]
+use std::path::PathBuf;
 use tempfile::{TempDir, tempdir};
 use test_support::check_ninja;
 use test_support::fluent::normalize_fluent_isolates;
@@ -23,8 +30,16 @@ fn run_netsuke(
     args: &[&str],
     ninja_env: Option<&Path>,
 ) -> Result<CommandOutput> {
-    let ninja = ninja_env.map(|path| path.to_string_lossy());
-    let run = match ninja.as_deref() {
+    // `NETSUKE_NINJA` is set as a string, so a lossy conversion would silently
+    // point the child at a different executable; fail loudly instead.
+    let ninja = ninja_env
+        .map(|path| {
+            path.to_str().with_context(|| {
+                format!("ninja override path is not valid UTF-8: {}", path.display())
+            })
+        })
+        .transpose()?;
+    let run = match ninja {
         Some(path) => run_netsuke_in_with_env(current_dir, args, &[("NETSUKE_NINJA", path)])?,
         None => run_netsuke_in(current_dir, args)?,
     };
@@ -50,6 +65,32 @@ fn assert_contains_all(haystack: &str, fragments: &[&str], label: &str) -> Resul
             "expected {label} to contain '{fragment}', got:\n{haystack}"
         );
     }
+    Ok(())
+}
+
+/// A non-UTF-8 override must fail loudly rather than being mangled.
+///
+/// `NETSUKE_NINJA` is forwarded to the child as a string, so a lossy conversion
+/// would silently point it at a different executable. Unix-only: constructing a
+/// non-UTF-8 path requires POSIX byte semantics.
+#[cfg(unix)]
+#[test]
+fn non_utf8_ninja_override_is_rejected() -> Result<()> {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let workspace = setup_minimal_workspace("novice smoke non-UTF-8 ninja")?;
+    let non_utf8 = PathBuf::from(OsString::from_vec(b"ninja-\xff".to_vec()));
+
+    let Err(error) = run_netsuke(workspace.path(), &[], Some(non_utf8.as_path())) else {
+        bail!("a non-UTF-8 ninja override should not be accepted")
+    };
+
+    let message = format!("{error:?}");
+    ensure!(
+        message.contains("not valid UTF-8"),
+        "error should name the non-UTF-8 override, got {message}"
+    );
     Ok(())
 }
 

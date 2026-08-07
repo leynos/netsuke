@@ -9,17 +9,12 @@ use super::ManifestValue;
 use crate::ast::MacroDefinition;
 use crate::localization::{self, keys};
 use anyhow::{Context, Result};
-use metrics::{counter, describe_counter, describe_histogram, histogram};
 use minijinja::{Environment, Error};
 use serde::Serialize;
-use std::{sync::Once, time::Instant};
-use tracing::field;
-
-const TEMPLATE_RENDERS_TOTAL: &str = "netsuke_manifest_template_renders_total";
-const TEMPLATE_RENDER_DURATION: &str = "netsuke_manifest_template_render_duration_seconds";
 
 mod call;
 mod invocation;
+mod telemetry;
 
 // Only the manifest test suite reaches the helper through the parent path;
 // `invocation` imports it from the sibling module directly.
@@ -148,58 +143,14 @@ pub(crate) fn render_template(
     template: &str,
     context: &impl Serialize,
 ) -> Result<String, Error> {
-    describe_render_metrics();
     let imports = macro_imports(env);
     let has_macro_imports = imports.is_some();
-    let span = tracing::trace_span!(
-        "manifest.template.render",
-        outcome = field::Empty,
-        has_macro_imports,
-        error_category = field::Empty,
-    );
-    let _guard = span.enter();
-    let started = Instant::now();
-    let result = imports.map_or_else(
-        || env.render_str(template, context),
-        |import_block| env.render_str(&[import_block.as_str(), template].concat(), context),
-    );
-    record_render(&span, &result, has_macro_imports, started);
-    result
-}
-
-fn describe_render_metrics() {
-    static DESCRIBE: Once = Once::new();
-    DESCRIBE.call_once(|| {
-        describe_counter!(
-            TEMPLATE_RENDERS_TOTAL,
-            "Counts manifest template renders by bounded outcome and macro-import presence."
-        );
-        describe_histogram!(
-            TEMPLATE_RENDER_DURATION,
-            "Measures manifest template rendering duration in seconds."
-        );
-    });
-}
-
-fn record_render(
-    span: &tracing::Span,
-    result: &Result<String, Error>,
-    has_macro_imports: bool,
-    started: Instant,
-) {
-    let outcome = if result.is_ok() { "success" } else { "error" };
-    span.record("outcome", outcome);
-    if let Err(error) = result {
-        span.record("error_category", format_args!("{:?}", error.kind()));
-        tracing::debug!(error_category = ?error.kind(), "manifest template render failed");
-    }
-    counter!(
-        TEMPLATE_RENDERS_TOTAL,
-        "outcome" => outcome,
-        "has_macro_imports" => if has_macro_imports { "true" } else { "false" },
-    )
-    .increment(1);
-    histogram!(TEMPLATE_RENDER_DURATION).record(started.elapsed());
+    telemetry::instrument_template_render(has_macro_imports, || {
+        imports.map_or_else(
+            || env.render_str(template, context),
+            |import_block| env.render_str(&[import_block.as_str(), template].concat(), context),
+        )
+    })
 }
 
 fn register_macro_import(env: &mut Environment<'static>, template_name: &str, macro_name: &str) {

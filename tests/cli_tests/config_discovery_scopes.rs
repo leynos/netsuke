@@ -36,7 +36,10 @@ jobs = 8
     )
     .context("write project .netsuke.toml")?;
 
-    let merged = run_scope_scenario(temp_dir.path(), temp_dir.path(), &[])?;
+    // Keep home separate from the project directory so the assertions below can
+    // only pass through project-scope discovery.
+    let home_dir = tempdir().context("create temporary home directory")?;
+    let merged = run_scope_scenario(temp_dir.path(), home_dir.path(), &[])?;
 
     ensure!(
         merged.emoji == EmojiPolicy::Always,

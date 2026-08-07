@@ -54,6 +54,12 @@ use path_helpers::{ensure_manifest_exists_or_error, resolve_manifest_path, resol
 struct ExecutionContext<'a> {
     reporter: &'a dyn StatusReporter,
     progress_enabled: bool,
+    /// Resolved Ninja executable, passed unchanged to [`std::process::Command::new`].
+    ///
+    /// UTF-8 conversion is confined to `NETSUKE_NINJA` resolution
+    /// (`process::resolve_ninja_program`); this field must stay a native
+    /// [`Path`] and must not be converted to a `String`, so that non-UTF-8
+    /// executable paths on platforms that allow them remain usable.
     ninja_program: &'a Path,
 }
 

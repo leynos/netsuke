@@ -5,7 +5,7 @@
 //! - `helpers.rs` - Typed assertion utilities and target accessor functions
 //! - `targets.rs` - Target-specific assertion steps
 
-mod environment;
+pub(super) mod environment;
 mod helpers;
 mod targets;
 

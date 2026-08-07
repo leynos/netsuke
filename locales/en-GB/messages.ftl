@@ -139,7 +139,7 @@ manifest.macro.register_failed = Failed to register manifest macros.
 manifest.macro.not_initialised = Macro environment is not initialised.
 manifest.macro.caller_invalid = Macro caller must be a string.
 manifest.macro.template_load_failed = Failed to load macro template.
-manifest.macro.init_failed = Failed to initialise macro environment.
+manifest.macro.init_failed = Failed to initialize macro environment.
 manifest.macro.missing = Macro { $name } is missing.
 
 # Manifest glob errors.

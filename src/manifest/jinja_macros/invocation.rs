@@ -1,17 +1,12 @@
 //! Safe invocation helpers for manifest-defined Jinja macros.
 
 use super::call::call_macro_value;
+use super::telemetry;
 use crate::localization::{self, keys};
-use metrics::{counter, describe_counter, describe_histogram, histogram};
 use minijinja::{
     AutoEscape, Captured, Environment, Error, ErrorKind, State,
     value::{Kwargs, Rest, Value},
 };
-use std::{sync::Once, time::Instant};
-use tracing::field;
-
-const MACRO_INVOCATIONS_TOTAL: &str = "netsuke_manifest_macro_invocations_total";
-const MACRO_INVOCATION_DURATION: &str = "netsuke_manifest_macro_invocation_duration_seconds";
 
 #[derive(Clone, Copy)]
 struct MacroReference<'a> {
@@ -25,26 +20,23 @@ struct MacroReference<'a> {
 /// which is the path that supports Jinja call blocks. Compiled expressions do
 /// not support imports, so this fallback creates a short-lived captured state
 /// for each expression call instead of extending its lifetime unsafely.
+///
+/// Evaluation stays in [`invoke_macro`]; the callback only composes it with the
+/// instrumentation boundary in [`telemetry`], so the query itself carries no
+/// timing or metric concerns.
 pub(super) fn make_macro_fn(
     template_name: String,
     macro_name: String,
 ) -> impl Fn(&State, Rest<Value>, Kwargs) -> Result<Value, Error> {
-    describe_metrics();
+    telemetry::describe_macro_metrics();
     move |state, Rest(args), macro_kwargs| {
-        let span = tracing::trace_span!(
-            "manifest.macro.invoke",
-            outcome = field::Empty,
-            error_category = field::Empty,
-        );
-        let _guard = span.enter();
-        let started = Instant::now();
         let reference = MacroReference {
             template_name: &template_name,
             macro_name: &macro_name,
         };
-        let result = invoke_macro(state, args.as_slice(), &macro_kwargs, reference);
-        record_invocation(&span, &result, started);
-        result
+        telemetry::instrument_macro_invocation(|| {
+            invoke_macro(state, args.as_slice(), &macro_kwargs, reference)
+        })
     }
 }
 
@@ -64,31 +56,6 @@ fn invoke_macro(
     } else {
         Value::from_safe_string(rendered)
     })
-}
-
-fn describe_metrics() {
-    static DESCRIBE: Once = Once::new();
-    DESCRIBE.call_once(|| {
-        describe_counter!(
-            MACRO_INVOCATIONS_TOTAL,
-            "Counts manifest macro invocation outcomes labelled as success or error."
-        );
-        describe_histogram!(
-            MACRO_INVOCATION_DURATION,
-            "Measures manifest macro invocation duration in seconds."
-        );
-    });
-}
-
-fn record_invocation(span: &tracing::Span, result: &Result<Value, Error>, started: Instant) {
-    let outcome = if result.is_ok() { "success" } else { "error" };
-    span.record("outcome", outcome);
-    if let Err(error) = result {
-        span.record("error_category", format_args!("{:?}", error.kind()));
-        tracing::debug!(error_category = ?error.kind(), "manifest macro invocation failed");
-    }
-    counter!(MACRO_INVOCATIONS_TOTAL, "outcome" => outcome).increment(1);
-    histogram!(MACRO_INVOCATION_DURATION).record(started.elapsed());
 }
 
 /// Confirm that a compiled template exports the requested macro.
@@ -172,7 +139,7 @@ mod tests {
         let error = validate_macro(&env, "invalid-template", "missing_macro")
             .expect_err("template initialization should fail validation");
 
-        insta::assert_snapshot!(error.to_string(), @"undefined value: Failed to initialise macro environment.");
+        insta::assert_snapshot!(error.to_string(), @"undefined value: Failed to initialize macro environment.");
     }
 
     #[rstest]
