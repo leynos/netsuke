@@ -1,6 +1,7 @@
 //! Unit tests for Netsuke manifest AST deserialization.
 
 use anyhow::{Context, Result, bail, ensure};
+use camino::Utf8PathBuf;
 use netsuke::localization::keys;
 use netsuke::{ast::*, localization, manifest};
 use rstest::rstest;
@@ -629,4 +630,56 @@ fn parse_example_manifests(#[case] file: &str, #[case] first_target: &str) -> Re
 fn invalid_manifests_fail(#[case] file: &str) {
     let path = format!("tests/data/{file}");
     assert!(manifest::from_path(&path).is_err());
+}
+
+#[rstest]
+#[case(StringOrList::Empty, &[])]
+#[case(StringOrList::String("a.c".into()), &["a.c"])]
+#[case(StringOrList::List(Vec::new()), &[])]
+#[case(StringOrList::List(vec!["a.c".into(), "b.c".into()]), &["a.c", "b.c"])]
+fn string_or_list_to_paths(#[case] value: StringOrList, #[case] expected: &[&str]) {
+    let expected_paths: Vec<Utf8PathBuf> = expected.iter().map(Utf8PathBuf::from).collect();
+    assert_eq!(
+        value.to_paths(),
+        expected_paths,
+        "to_paths mismatch for {value:?}"
+    );
+}
+
+#[rstest]
+#[case(StringOrList::Empty, &[])]
+#[case(StringOrList::String("cc".into()), &["cc"])]
+#[case(StringOrList::List(vec!["cc".into(), "ld".into()]), &["cc", "ld"])]
+fn string_or_list_to_string_vec(#[case] value: StringOrList, #[case] expected: &[&str]) {
+    assert_eq!(
+        value.to_string_vec(),
+        expected,
+        "to_string_vec mismatch for {value:?}"
+    );
+}
+
+#[rstest]
+#[case(StringOrList::Empty, None)]
+#[case(StringOrList::String("cc".into()), Some("cc"))]
+#[case(StringOrList::List(vec!["cc".into()]), Some("cc"))]
+#[case(StringOrList::List(Vec::new()), None)]
+#[case(StringOrList::List(vec!["cc".into(), "ld".into()]), None)]
+fn string_or_list_as_single(#[case] value: StringOrList, #[case] expected: Option<&str>) {
+    assert_eq!(
+        value.as_single(),
+        expected,
+        "as_single mismatch for {value:?}"
+    );
+}
+
+#[rstest]
+#[case(StringOrList::Empty, &[])]
+#[case(StringOrList::String("hello".into()), &[5])]
+#[case(StringOrList::List(vec!["a".into(), "abc".into()]), &[1, 3])]
+fn string_or_list_map_each(#[case] value: StringOrList, #[case] expected: &[usize]) {
+    assert_eq!(
+        value.map_each(str::len),
+        expected,
+        "map_each mismatch for {value:?}"
+    );
 }

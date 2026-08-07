@@ -29,6 +29,7 @@
 //! assert_eq!(manifest.targets.len(), 1);
 //! ```
 
+use camino::Utf8PathBuf;
 use semver::Version;
 use serde::{Deserialize, Serialize, de::Deserializer};
 use std::collections::HashMap;
@@ -266,4 +267,102 @@ pub enum StringOrList {
     String(String),
     /// A list of string items.
     List(Vec<String>),
+}
+
+impl StringOrList {
+    /// Apply `f` to each contained string, collecting the results.
+    ///
+    /// `Empty` yields an empty vector, `String` a single-element vector, and
+    /// `List` one element per item.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::ast::StringOrList;
+    ///
+    /// let single = StringOrList::String("hello".into());
+    /// assert_eq!(single.map_each(str::len), vec![5]);
+    /// assert!(StringOrList::Empty.map_each(str::len).is_empty());
+    /// ```
+    #[must_use]
+    pub fn map_each<T, F>(&self, f: F) -> Vec<T>
+    where
+        F: Fn(&str) -> T,
+    {
+        match self {
+            Self::Empty => Vec::new(),
+            Self::String(s) => vec![f(s)],
+            // Indexed iteration keeps the Kani harnesses in
+            // `crate::ir::from_manifest_verification` tractable; an iterator
+            // chain here defeats their loop unwinding bounds.
+            Self::List(v) => {
+                let mut mapped = Vec::with_capacity(v.len());
+                let mut index = 0;
+                while let Some(value) = v.get(index) {
+                    mapped.push(f(value));
+                    index += 1;
+                }
+                mapped
+            }
+        }
+    }
+
+    /// Convert the contained strings into UTF-8 paths.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use camino::Utf8PathBuf;
+    /// use netsuke::ast::StringOrList;
+    ///
+    /// let sources = StringOrList::List(vec!["a.c".into(), "b.c".into()]);
+    /// assert_eq!(
+    ///     sources.to_paths(),
+    ///     vec![Utf8PathBuf::from("a.c"), Utf8PathBuf::from("b.c")],
+    /// );
+    /// ```
+    #[must_use]
+    pub fn to_paths(&self) -> Vec<Utf8PathBuf> {
+        self.map_each(|s| Utf8PathBuf::from(s))
+    }
+
+    /// Collect the contained strings into owned `String`s.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::ast::StringOrList;
+    ///
+    /// let rule = StringOrList::String("cc".into());
+    /// assert_eq!(rule.to_string_vec(), vec!["cc".to_owned()]);
+    /// ```
+    #[must_use]
+    pub fn to_string_vec(&self) -> Vec<String> {
+        self.map_each(str::to_owned)
+    }
+
+    /// Return the sole contained string, if exactly one is present.
+    ///
+    /// A `String` value or a one-element `List` yields `Some`; anything else
+    /// yields `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::ast::StringOrList;
+    ///
+    /// assert_eq!(StringOrList::String("cc".into()).as_single(), Some("cc"));
+    /// assert_eq!(
+    ///     StringOrList::List(vec!["a".into(), "b".into()]).as_single(),
+    ///     None,
+    /// );
+    /// ```
+    #[must_use]
+    pub fn as_single(&self) -> Option<&str> {
+        match self {
+            Self::String(s) => Some(s),
+            Self::List(v) if v.len() == 1 => v.first().map(String::as_str),
+            _ => None,
+        }
+    }
 }

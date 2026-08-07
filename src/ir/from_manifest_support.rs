@@ -138,52 +138,15 @@ fn add_debug_arg<T: ?Sized>(
     message
 }
 
-fn map_string_or_list<T, F>(sol: &StringOrList, f: F) -> Vec<T>
-where
-    F: Fn(&str) -> T,
-{
-    match sol {
-        StringOrList::Empty => Vec::new(),
-        StringOrList::String(s) => vec![f(s)],
-        StringOrList::List(v) => {
-            let mut mapped = Vec::new();
-            let mut index = 0;
-            while index < v.len() {
-                if let Some(value) = v.get(index) {
-                    mapped.push(f(value));
-                }
-                index += 1;
-            }
-            mapped
-        }
-    }
-}
-
-pub(super) fn to_paths(sol: &StringOrList) -> Vec<Utf8PathBuf> {
-    map_string_or_list(sol, |s| Utf8PathBuf::from(s))
-}
-
-fn to_string_vec(sol: &StringOrList) -> Vec<String> {
-    map_string_or_list(sol, str::to_owned)
-}
-
-fn extract_single(sol: &StringOrList) -> Option<&str> {
-    match sol {
-        StringOrList::String(s) => Some(s),
-        StringOrList::List(v) if v.len() == 1 => v.first().map(String::as_str),
-        _ => None,
-    }
-}
-
 /// Resolve a target rule selector into its single rule template.
 pub(super) fn resolve_rule(
     rule: &StringOrList,
     rule_map: &IrHashMap<String, Arc<Rule>>,
     target_name: &str,
 ) -> Result<Arc<Rule>, IrGenError> {
-    extract_single(rule).map_or_else(
+    rule.as_single().map_or_else(
         || {
-            let mut rules = to_string_vec(rule);
+            let mut rules = rule.to_string_vec();
             if rules.is_empty() {
                 Err(empty_rule_error(target_name))
             } else {
