@@ -197,7 +197,7 @@ fn env_fingerprint(env: &EnvSnapshot) -> u64 {
     // The workspace switch is an environment input like PATH: a fallback hit
     // cached while the switch was on must not answer a resolution made with
     // it off, and vice versa.
-    env.workspace_switch_fingerprint().hash(&mut hasher);
+    env.workspace_switch().hash(&mut hasher);
     hasher.finish()
 }
 
@@ -206,6 +206,7 @@ mod tests {
     //! Unit tests for the which resolver cache: key derivation, capacity
     //! bounds, and skip-list handling during resolution.
     use super::*;
+    use crate::stdlib::which::workspace_switch::WorkspaceSwitch;
     use anyhow::{Result, anyhow, ensure};
     use camino::Utf8PathBuf;
     use rstest::rstest;
@@ -277,7 +278,7 @@ mod tests {
     /// A fallback hit cached while `NETSUKE_WHICH_WORKSPACE` left the search
     /// enabled would otherwise answer a resolution made with it disabled —
     /// cross-toggle cache poisoning. The snapshots here differ only in the
-    /// captured raw switch value, so key inequality proves the fingerprint
+    /// captured switch state, so key inequality proves the fingerprint
     /// covers it.
     #[test]
     fn cache_key_differs_when_workspace_switch_differs() -> Result<()> {
@@ -288,10 +289,8 @@ mod tests {
         let options = WhichOptions::default();
         let skips = WorkspaceSkipList::default();
 
-        let enabled = base
-            .clone()
-            .with_workspace_switch(Err(std::env::VarError::NotPresent));
-        let disabled = base.with_workspace_switch(Ok(String::from("0")));
+        let enabled = base.clone().with_workspace_switch(WorkspaceSwitch::Absent);
+        let disabled = base.with_workspace_switch(WorkspaceSwitch::Value(String::from("0")));
         ensure!(
             enabled.workspace_fallback_enabled() && !disabled.workspace_fallback_enabled(),
             "the fixtures should sit on opposite sides of the switch"

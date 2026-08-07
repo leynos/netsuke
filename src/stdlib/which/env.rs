@@ -9,7 +9,45 @@ use mockable::{DefaultEnv, Env};
 
 use crate::localization::{self, keys};
 
-use super::{options::CwdMode, resolve_error::ResolveError};
+use super::{
+    options::CwdMode,
+    resolve_error::ResolveError,
+    workspace_switch::{WORKSPACE_FALLBACK_ENV, WorkspaceSwitch},
+};
+
+/// Translate a platform reading of the switch into its domain state.
+///
+/// The conversion lives here, in the adapter that performs the read, so
+/// `workspace_switch` never names `std::env::VarError`. It is the single
+/// place the platform error crosses into the resolver's own vocabulary.
+impl From<Result<String, std::env::VarError>> for WorkspaceSwitch {
+    fn from(raw: Result<String, std::env::VarError>) -> Self {
+        match raw {
+            Ok(value) => Self::Value(value),
+            Err(std::env::VarError::NotPresent) => Self::Absent,
+            Err(std::env::VarError::NotUnicode(_)) => Self::NotUnicode,
+        }
+    }
+}
+
+/// Read and translate the workspace switch, warning about a mis-encoded value.
+///
+/// Both capture variants funnel through here so the diagnostic fires exactly
+/// once per capture, at the boundary where the ambient read happens, rather
+/// than on every consultation of the switch. Silently switching workspace
+/// search off would leave a user whose variable is mis-encoded with commands
+/// mysteriously unresolved and no indication why. Only the variable's name is
+/// logged; its value never is.
+fn capture_workspace_switch(env: &impl Env) -> WorkspaceSwitch {
+    let switch = WorkspaceSwitch::from(env.raw(WORKSPACE_FALLBACK_ENV));
+    if matches!(switch, WorkspaceSwitch::NotUnicode) {
+        tracing::warn!(
+            env = WORKSPACE_FALLBACK_ENV,
+            "workspace fallback disabled because env var is not valid UTF-8",
+        );
+    }
+    switch
+}
 
 #[derive(Clone, Debug)]
 pub(super) struct EnvSnapshot {
@@ -19,13 +57,13 @@ pub(super) struct EnvSnapshot {
     entries: Vec<PathEntry>,
     #[cfg(windows)]
     pathext: Vec<String>,
-    /// The raw `NETSUKE_WHICH_WORKSPACE` reading taken at capture.
+    /// The `NETSUKE_WHICH_WORKSPACE` state captured for this snapshot.
     ///
     /// Stored as data rather than a decision so the cache fingerprint can
     /// hash it — two resolutions differing only in this switch must not
     /// share a cache entry — and so `env` depends only on the leaf
     /// `workspace_switch` module rather than calling into `lookup`.
-    raw_workspace_switch: Result<String, std::env::VarError>,
+    workspace_switch: WorkspaceSwitch,
 }
 
 impl EnvSnapshot {
@@ -63,14 +101,13 @@ impl EnvSnapshot {
         env: &impl Env,
     ) -> Result<Self, ResolveError> {
         let (cwd, raw_path, entries) = capture_common(cwd_override, path_override, env)?;
-        let raw_workspace_switch = env.raw(super::workspace_switch::WORKSPACE_FALLBACK_ENV);
-        super::workspace_switch::warn_if_not_unicode(&raw_workspace_switch);
+        let workspace_switch = capture_workspace_switch(env);
         Ok(Self {
             cwd,
             raw_path,
             raw_pathext: None,
             entries,
-            raw_workspace_switch,
+            workspace_switch,
         })
     }
 
@@ -86,15 +123,14 @@ impl EnvSnapshot {
             .map(OsString::from)
             .or_else(|| env.os_string("PATHEXT"));
         let pathext = parse_pathext(raw_pathext.as_deref());
-        let raw_workspace_switch = env.raw(super::workspace_switch::WORKSPACE_FALLBACK_ENV);
-        super::workspace_switch::warn_if_not_unicode(&raw_workspace_switch);
+        let workspace_switch = capture_workspace_switch(env);
         Ok(Self {
             cwd,
             raw_path,
             raw_pathext,
             entries,
             pathext,
-            raw_workspace_switch,
+            workspace_switch,
         })
     }
 
@@ -134,32 +170,23 @@ impl EnvSnapshot {
 
     /// Whether the workspace fallback is enabled for this snapshot.
     ///
-    /// Classified on demand from the captured raw value by the pure
-    /// classifier; the non-UTF-8 warning has already fired once at capture,
-    /// so repeated consultations of the switch stay silent.
+    /// Decided on demand from the captured state; the non-UTF-8 warning has
+    /// already fired once at capture, so repeated consultations of the switch
+    /// stay silent.
     pub(super) fn workspace_fallback_enabled(&self) -> bool {
-        super::workspace_switch::workspace_fallback_enabled_with(|_| {
-            self.raw_workspace_switch.clone()
-        })
+        self.workspace_switch.enabled()
     }
 
-    /// Replace the captured switch reading, for cache-key tests.
+    /// Replace the captured switch state, for cache-key tests.
     #[cfg(test)]
-    pub(super) fn with_workspace_switch(mut self, raw: Result<String, std::env::VarError>) -> Self {
-        self.raw_workspace_switch = raw;
+    pub(super) fn with_workspace_switch(mut self, switch: WorkspaceSwitch) -> Self {
+        self.workspace_switch = switch;
         self
     }
 
-    /// The switch reading in the shape the cache fingerprint hashes.
-    ///
-    /// `VarError` is not `Hash`, so the three states are flattened to a
-    /// discriminant plus the value when present.
-    pub(super) const fn workspace_switch_fingerprint(&self) -> (u8, Option<&str>) {
-        match &self.raw_workspace_switch {
-            Ok(value) => (0, Some(value.as_str())),
-            Err(std::env::VarError::NotPresent) => (1, None),
-            Err(std::env::VarError::NotUnicode(_)) => (2, None),
-        }
+    /// The captured switch state, as the cache fingerprint hashes it.
+    pub(super) const fn workspace_switch(&self) -> &WorkspaceSwitch {
+        &self.workspace_switch
     }
 }
 
@@ -267,126 +294,9 @@ pub(super) fn candidate_paths(
 }
 
 #[cfg(all(test, not(windows)))]
-mod tests {
-    //! Unit tests for injected executable-search environment capture.
-
-    use super::*;
-    use crate::test_tracing_capture::with_test_subscriber;
-    use mockable::MockEnv;
-    use tracing::level_filters::LevelFilter;
-
-    /// The exact warning capture emits for a non-UTF-8 switch value. Asserted
-    /// verbatim: without it the test passes even when the message is replaced
-    /// wholesale, which is precisely what happened before.
-    const NOT_UNICODE_WARNING: &str =
-        "workspace fallback disabled because env var is not valid UTF-8";
-
-    #[test]
-    fn capture_uses_the_injected_path_provider() {
-        let cwd = Utf8Path::new("/workspace");
-        let configured = OsString::from("/configured/bin");
-        let expected = configured.clone();
-        let mut env = MockEnv::new();
-        env.expect_os_string()
-            .withf(|key| key == "PATH")
-            .once()
-            .return_once(move |_| Some(configured));
-        // Capture also reads the workspace switch through the same provider;
-        // pinning the key keeps that read observable rather than wildcarded.
-        env.expect_raw()
-            .withf(|key| key == super::super::workspace_switch::WORKSPACE_FALLBACK_ENV)
-            .once()
-            .return_const(Err(std::env::VarError::NotPresent));
-
-        let snapshot = EnvSnapshot::capture_with_env(Some(cwd), None, &env)
-            .expect("injected PATH should produce an environment snapshot");
-
-        assert_eq!(snapshot.raw_path, Some(expected));
-        assert_eq!(
-            snapshot.resolved_dirs(CwdMode::Never),
-            [Utf8Path::new("/configured/bin")]
-        );
-    }
-
-    /// A non-UTF-8 switch value must warn exactly once, at capture.
-    ///
-    /// The classifier is pure, so the diagnostic lives at the boundary where
-    /// the ambient reading is taken; consulting the switch afterwards adds
-    /// nothing. Silently switching workspace search off would leave a user
-    /// whose variable is mis-encoded with commands mysteriously unresolved
-    /// and no indication why.
-    #[test]
-    fn capture_warns_once_for_a_non_utf8_workspace_switch() {
-        let mut env = MockEnv::new();
-        env.expect_os_string()
-            .withf(|key| key == "PATH")
-            .once()
-            .return_once(|_| Some(OsString::from("/configured/bin")));
-        env.expect_raw()
-            .withf(|key| key == super::super::workspace_switch::WORKSPACE_FALLBACK_ENV)
-            .once()
-            .return_const(Err(std::env::VarError::NotUnicode(OsString::from(
-                "ignored",
-            ))));
-
-        let (enabled, events) = with_test_subscriber(LevelFilter::WARN, |captured| {
-            let snapshot =
-                EnvSnapshot::capture_with_env(Some(Utf8Path::new("/workspace")), None, &env)
-                    .expect("a non-UTF-8 switch value should not fail capture");
-            (snapshot.workspace_fallback_enabled(), captured.snapshot())
-        });
-
-        assert!(!enabled, "a non-UTF-8 value must disable the fallback");
-        // The subscriber admits WARN and above, so the level is asserted by
-        // the filter; requiring exactly one event proves the warning fires at
-        // capture and is not repeated when the switch is consulted.
-        assert_eq!(
-            events.len(),
-            1,
-            "expected exactly one warning, got {events:?}"
-        );
-        assert!(
-            events.iter().any(|event| {
-                event.contains(super::super::workspace_switch::WORKSPACE_FALLBACK_ENV)
-                    && event.contains(NOT_UNICODE_WARNING)
-            }),
-            "expected a warning naming {} and carrying {:?}, got {:?}",
-            super::super::workspace_switch::WORKSPACE_FALLBACK_ENV,
-            NOT_UNICODE_WARNING,
-            events
-        );
-    }
-}
+#[path = "env_tests.rs"]
+mod tests;
 
 #[cfg(all(test, windows))]
-mod windows_tests {
-    //! Windows-specific injected `PATH` and `PATHEXT` capture tests.
-
-    use super::*;
-    use mockable::MockEnv;
-
-    #[test]
-    fn capture_uses_injected_and_normalized_pathext() {
-        let mut env = MockEnv::new();
-        env.expect_os_string()
-            .withf(|key| key == "PATH")
-            .once()
-            .return_once(|_| Some(OsString::from(r"C:\configured\bin")));
-        env.expect_os_string()
-            .withf(|key| key == "PATHEXT")
-            .once()
-            .return_once(|_| Some(OsString::from(".EXE;exe; CMD ;.cmd")));
-        // Capture also reads the workspace switch through the same provider;
-        // pinning the key keeps that read observable rather than wildcarded.
-        env.expect_raw()
-            .withf(|key| key == super::super::workspace_switch::WORKSPACE_FALLBACK_ENV)
-            .once()
-            .return_const(Err(std::env::VarError::NotPresent));
-
-        let snapshot =
-            EnvSnapshot::capture_with_env(Some(Utf8Path::new("C:/workspace")), None, &env)
-                .expect("injected PATH and PATHEXT should produce an environment snapshot");
-
-        assert_eq!(snapshot.pathext(), [".exe", ".cmd"]);
-    }
-}
+#[path = "env_windows_tests.rs"]
+mod windows_tests;

@@ -1,12 +1,16 @@
 //! Tests for the workspace fallback environment switch.
 //!
-//! These drive `workspace_fallback_enabled_with` directly rather than setting
+//! These construct [`WorkspaceSwitch`] states directly rather than setting
 //! `NETSUKE_WHICH_WORKSPACE`, so they mutate nothing and run concurrently. The
 //! non-UTF-8 branch is reachable only this way: fabricating such a value in the
 //! live environment needs platform-specific `OsString` surgery, and under the
 //! AGENTS.md testing mandate in-process mutation is not available regardless.
+//!
+//! The translation from a platform reading is exercised here too, even though
+//! the `From` implementation lives with the adapter in `env`, because the
+//! mapping is what pins these three states to the environment they model.
 
-use super::{WORKSPACE_FALLBACK_ENV, workspace_fallback_enabled_with};
+use super::{WORKSPACE_FALLBACK_ENV, WorkspaceSwitch};
 use crate::test_tracing_capture::with_test_subscriber;
 use rstest::rstest;
 use std::env::VarError;
@@ -23,7 +27,7 @@ use tracing::level_filters::LevelFilter;
 #[case("OFF")]
 fn disabling_values_switch_the_fallback_off(#[case] value: &str) {
     assert!(
-        !workspace_fallback_enabled_with(|_| Ok(value.to_owned())),
+        !WorkspaceSwitch::Value(value.to_owned()).enabled(),
         "{value:?} should disable the workspace fallback"
     );
 }
@@ -39,7 +43,7 @@ fn disabling_values_switch_the_fallback_off(#[case] value: &str) {
 #[case("no")]
 fn other_values_leave_the_fallback_on(#[case] value: &str) {
     assert!(
-        workspace_fallback_enabled_with(|_| Ok(value.to_owned())),
+        WorkspaceSwitch::Value(value.to_owned()).enabled(),
         "{value:?} should leave the workspace fallback enabled"
     );
 }
@@ -47,49 +51,60 @@ fn other_values_leave_the_fallback_on(#[case] value: &str) {
 #[test]
 fn absent_variable_leaves_the_fallback_on() {
     assert!(
-        workspace_fallback_enabled_with(|_| Err(VarError::NotPresent)),
+        WorkspaceSwitch::Absent.enabled(),
         "the fallback is opt-out, so an unset variable must leave it enabled"
     );
 }
 
 #[test]
 fn non_utf8_value_switches_the_fallback_off() {
-    let err = VarError::NotUnicode(OsString::from("ignored"));
     assert!(
-        !workspace_fallback_enabled_with(|_| Err(err)),
+        !WorkspaceSwitch::NotUnicode.enabled(),
         "a non-UTF-8 value must disable the fallback rather than be treated as absent"
     );
 }
 
-/// The seam must consult the documented variable, not some other name.
-#[test]
-fn the_documented_variable_name_is_consulted() {
-    let mut observed = None;
-    let _ = workspace_fallback_enabled_with(|key| {
-        observed = Some(key.to_owned());
-        Err(VarError::NotPresent)
-    });
-    assert_eq!(observed.as_deref(), Some(WORKSPACE_FALLBACK_ENV));
+/// The adapter maps each platform reading onto the state that models it.
+#[rstest]
+#[case(Ok(String::from("off")), WorkspaceSwitch::Value(String::from("off")))]
+#[case(Err(VarError::NotPresent), WorkspaceSwitch::Absent)]
+#[case(
+    Err(VarError::NotUnicode(OsString::from("ignored"))),
+    WorkspaceSwitch::NotUnicode
+)]
+fn readings_translate_to_switch_states(
+    #[case] raw: Result<String, VarError>,
+    #[case] expected: WorkspaceSwitch,
+) {
+    assert_eq!(WorkspaceSwitch::from(raw), expected);
 }
 
-/// The classifier is pure: classification must emit no events.
+/// The seam must name the documented variable, not some other one.
+///
+/// That the capture boundary actually asks for this key is pinned separately
+/// by the `MockEnv` expectations in the `env` capture tests.
+#[test]
+fn the_documented_variable_name_is_used() {
+    assert_eq!(WORKSPACE_FALLBACK_ENV, "NETSUKE_WHICH_WORKSPACE");
+}
+
+/// The decision is pure: consulting the switch must emit no events.
 ///
 /// The non-UTF-8 diagnostic fires once at the capture boundary —
-/// `EnvSnapshot::capture_with_env` calls `warn_if_not_unicode` after the raw
-/// read; see the capture-level test in `env.rs` — so the classifier itself
-/// must stay silent however often the switch is consulted.
+/// `EnvSnapshot::capture_with_env` warns immediately after the raw read; see
+/// the capture-level test in `env.rs` — so the state itself must stay silent
+/// however often it is consulted.
 #[test]
 fn non_utf8_classification_is_silent() {
-    let err = VarError::NotUnicode(OsString::from("ignored"));
     let (enabled, events) = with_test_subscriber(LevelFilter::WARN, |captured| {
-        let enabled = workspace_fallback_enabled_with(|_| Err(err));
+        let enabled = WorkspaceSwitch::NotUnicode.enabled();
         (enabled, captured.snapshot())
     });
 
     assert!(!enabled, "a non-UTF-8 value must disable the fallback");
     assert!(
         events.is_empty(),
-        "the pure classifier must emit no events, got {events:?}"
+        "consulting the switch must emit no events, got {events:?}"
     );
 }
 
@@ -100,9 +115,8 @@ mod properties {
     //! classification rule over arbitrary values, using an independent model
     //! rather than re-deriving the implementation's own `matches!`.
 
-    use super::{WORKSPACE_FALLBACK_ENV, workspace_fallback_enabled_with};
+    use super::WorkspaceSwitch;
     use proptest::prelude::*;
-    use std::env::VarError;
 
     /// The rule, written independently: exactly three values disable it, and
     /// case is ignored. Deliberately a set lookup rather than the same
@@ -143,7 +157,7 @@ mod properties {
         fn classification_matches_the_model(value in "\\PC{0,12}") {
             let expected = model_says_enabled(&value);
             let diagnostic = format!("value {value:?}");
-            let enabled = workspace_fallback_enabled_with(move |_| Ok(value));
+            let enabled = WorkspaceSwitch::Value(value).enabled();
             prop_assert_eq!(enabled, expected, "{}", diagnostic);
         }
 
@@ -155,10 +169,7 @@ mod properties {
         #[test]
         fn case_variants_disable(value in case_variant()) {
             let diagnostic = format!("{value:?} should disable the fallback");
-            prop_assert!(
-                !workspace_fallback_enabled_with(move |_| Ok(value)),
-                "{}", diagnostic
-            );
+            prop_assert!(!WorkspaceSwitch::Value(value).enabled(), "{}", diagnostic);
         }
 
         /// Anything outside the disabling set enables it.
@@ -167,33 +178,17 @@ mod properties {
             "must not be a disabling spelling",
             |v: &String| !matches!(v.to_ascii_lowercase().as_str(), "0" | "false" | "off"),
         )) {
-            prop_assert!(workspace_fallback_enabled_with(move |_| Ok(value)));
-        }
-
-        /// The variable name asked for is always the documented one.
-        #[test]
-        fn the_queried_key_is_stable(value in "\\PC{0,8}") {
-            let mut seen = None;
-            let seen_slot = &mut seen;
-            let _ = workspace_fallback_enabled_with(move |key| {
-                *seen_slot = Some(key.to_owned());
-                Ok(value)
-            });
-            prop_assert_eq!(seen.as_deref(), Some(WORKSPACE_FALLBACK_ENV));
+            prop_assert!(WorkspaceSwitch::Value(value).enabled());
         }
     }
 
     /// An absent variable enables the fallback; a non-UTF-8 one disables it.
     ///
-    /// Fixed rather than generated: both are single states, and `VarError`
-    /// has no other inhabitants to explore.
+    /// Fixed rather than generated: both are single states with no payload to
+    /// explore.
     #[test]
-    fn error_variants_are_classified() {
-        assert!(workspace_fallback_enabled_with(|_| Err(
-            VarError::NotPresent
-        )));
-        assert!(!workspace_fallback_enabled_with(|_| Err(
-            VarError::NotUnicode(std::ffi::OsString::from("x"))
-        )));
+    fn error_states_are_classified() {
+        assert!(WorkspaceSwitch::Absent.enabled());
+        assert!(!WorkspaceSwitch::NotUnicode.enabled());
     }
 }

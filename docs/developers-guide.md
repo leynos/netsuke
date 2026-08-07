@@ -2268,14 +2268,20 @@ explicit root `--json` flag bypasses environment parsing.
 #### Workspace fallback switch seam
 
 `src/stdlib/which/workspace_switch.rs` is a leaf module holding the
-`NETSUKE_WHICH_WORKSPACE` name and the pure classifier
-`workspace_fallback_enabled_with`. The raw reading is captured by
-`EnvSnapshot::capture` through the injected `mockable::Env` provider and
-stored as snapshot data; the enable/disable decision is derived from that
-snapshot on demand. The cache fingerprint hashes the reading, so two
-resolutions differing only in this switch never share a cache entry. The
-non-UTF-8 diagnostic fires once at capture, where `warn_if_not_unicode` runs
-immediately after the raw read; the classifier itself emits nothing. See
+`NETSUKE_WHICH_WORKSPACE` name and the domain state `WorkspaceSwitch`
+(`Value`, `Absent`, `NotUnicode`) with its `enabled()` decision. The variable
+is read by `EnvSnapshot::capture` through the injected `mockable::Env`
+provider and stored as snapshot data; the enable/disable decision is derived
+from that snapshot on demand. The cache fingerprint hashes the state —
+`WorkspaceSwitch` derives `Hash` for exactly that purpose — so two resolutions
+differing only in this switch never share a cache entry.
+
+The adapter owns everything platform-specific. `env.rs` holds the
+`From<Result<String, std::env::VarError>>` conversion, the single point at
+which the platform error becomes a domain state, and emits the non-UTF-8
+warning once per capture immediately after the read. Only the variable's name
+is logged, never its value. The leaf module therefore names neither `VarError`
+nor `tracing`, and consulting the switch afterwards is silent. See
 [ADR-008](adr-008-environment-seam-taxonomy.md) for the seam taxonomy.
 
 #### Ninja program resolver seam

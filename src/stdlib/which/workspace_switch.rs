@@ -1,65 +1,64 @@
 //! The `NETSUKE_WHICH_WORKSPACE` opt-out switch for the workspace fallback.
 //!
 //! A leaf module by design: `env::EnvSnapshot::capture` reads the variable at
-//! the resolver's ambient boundary and stores the raw result as snapshot
-//! data, and `lookup::workspace` classifies that data when deciding whether
-//! to search. Placing the name and the pure classifier here keeps both
-//! consumers pointing downward — the earlier arrangement had `env` calling
-//! back into `lookup::workspace`, a module cycle.
-
-use std::env;
+//! the resolver's ambient boundary, translates the reading into
+//! [`WorkspaceSwitch`], and stores that as snapshot data; `lookup::workspace`
+//! asks the stored state whether to search. Placing the name and the domain
+//! state here keeps both consumers pointing downward — the earlier
+//! arrangement had `env` calling back into `lookup::workspace`, a module
+//! cycle.
+//!
+//! The state is deliberately infrastructure-free: it names no
+//! `std::env::VarError` and emits no diagnostics. Translating the platform
+//! reading and warning about a mis-encoded value both belong to the adapter
+//! that performs the read, so `env` owns the `From` conversion and the
+//! non-UTF-8 warning.
 
 /// The variable a user sets to switch the workspace fallback off.
 pub(super) const WORKSPACE_FALLBACK_ENV: &str = "NETSUKE_WHICH_WORKSPACE";
 
-/// Decide whether the workspace fallback is enabled, reading through `read_env`.
+/// The workspace switch as captured, in domain terms.
 ///
-/// This is the pure decision function; it owns no composition root and emits
-/// no diagnostics. The process-backed value is captured by
-/// `EnvSnapshot::capture` alongside the resolver's other ambient reads, and
-/// the decision is derived from the snapshot; the non-UTF-8 warning fires
-/// once at capture via [`warn_if_not_unicode`]. Keeping the seam pure means
-/// the three outcomes — an explicit value, an absent variable, and a
-/// non-UTF-8 value — can each be exercised without mutating the process
-/// environment. The non-UTF-8 branch is otherwise unreachable from a test,
-/// because constructing such a value requires platform-specific `OsString`
-/// surgery on the live environment.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// // A disabling value switches the fallback off, case-insensitively.
-/// assert!(!workspace_fallback_enabled_with(|_| Ok("OFF".to_owned())));
-/// // The switch is opt-out, so an unset variable leaves it enabled.
-/// assert!(workspace_fallback_enabled_with(|_| Err(env::VarError::NotPresent)));
-/// ```
-pub(super) fn workspace_fallback_enabled_with<F>(read_env: F) -> bool
-where
-    F: FnOnce(&str) -> Result<String, env::VarError>,
-{
-    match read_env(WORKSPACE_FALLBACK_ENV) {
-        Ok(value) => {
-            let normalised = value.to_ascii_lowercase();
-            !matches!(normalised.as_str(), "0" | "false" | "off")
-        }
-        Err(env::VarError::NotPresent) => true,
-        Err(env::VarError::NotUnicode(_)) => false,
-    }
+/// Three states rather than a bare `bool` because the cache fingerprint must
+/// distinguish them — two resolutions differing only in this switch must not
+/// share a cache entry — and because the adapter reports the non-UTF-8 case
+/// to the user. `Hash` is derived, so the fingerprint hashes the state
+/// directly instead of flattening a non-`Hash` platform error.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(super) enum WorkspaceSwitch {
+    /// The variable was set to this value.
+    Value(String),
+    /// The variable was not set at all.
+    Absent,
+    /// The variable was set to a value that is not valid UTF-8.
+    NotUnicode,
 }
 
-/// Warn when a captured switch reading is not valid UTF-8.
-///
-/// Called by `EnvSnapshot::capture_impl` immediately after the raw reading is
-/// taken, so the diagnostic fires exactly once per capture rather than on
-/// every classification. Silently switching workspace search off would leave
-/// a user whose variable is mis-encoded with commands mysteriously unresolved
-/// and no indication why.
-pub(super) fn warn_if_not_unicode(raw: &Result<String, env::VarError>) {
-    if matches!(raw, Err(env::VarError::NotUnicode(_))) {
-        tracing::warn!(
-            env = WORKSPACE_FALLBACK_ENV,
-            "workspace fallback disabled because env var is not valid UTF-8",
-        );
+impl WorkspaceSwitch {
+    /// Whether this state leaves the workspace fallback enabled.
+    ///
+    /// The switch is opt-out: an absent variable leaves the search on. A
+    /// mis-encoded value switches it off rather than being treated as absent,
+    /// because the user plainly meant to set something and guessing at the
+    /// intent would be worse than declining to search.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// // A disabling value switches the fallback off, case-insensitively.
+    /// assert!(!WorkspaceSwitch::Value("OFF".to_owned()).enabled());
+    /// // The switch is opt-out, so an unset variable leaves it enabled.
+    /// assert!(WorkspaceSwitch::Absent.enabled());
+    /// ```
+    pub(super) fn enabled(&self) -> bool {
+        match self {
+            Self::Value(value) => {
+                let normalised = value.to_ascii_lowercase();
+                !matches!(normalised.as_str(), "0" | "false" | "off")
+            }
+            Self::Absent => true,
+            Self::NotUnicode => false,
+        }
     }
 }
 

@@ -35,20 +35,23 @@ whether it is expected to grow:
    The module owns a private function that takes an
    `FnOnce(&str) -> Result<String, env::VarError>` (or the equivalent
    `OsString`-typed form) instead of calling `std::env::var` itself. Examples:
-   `workspace_fallback_enabled_with` in `src/stdlib/which/workspace_switch.rs`
-   (the `NETSUKE_WHICH_WORKSPACE` opt-out switch), and the `resolve_with`
-   variants in `output_mode.rs` and `output_prefs.rs` described earlier in the
-   developer guide. A related but distinct pattern injects a resolved *value*
-   rather than a closure: the `stdlib::path` home-directory resolver's
-   `HomeDirectory` enum (`Ambient`/`Missing`/`Explicit`) lets a caller supply
-   the home directory directly, so the process-reading `home_from_env` ladder in
-   `src/stdlib/path/path_utils.rs` remains a directly annotated composition
-   root rather than gaining its own `_with` closure parameter.
+   the `resolve_with` variants in `output_mode.rs` and `output_prefs.rs`
+   described earlier in the developer guide. A related but distinct pattern
+   injects a resolved *value* rather than a closure: the `stdlib::path`
+   home-directory resolver's `HomeDirectory` enum (`Ambient`/`Missing`/
+   `Explicit`) lets a caller supply the home directory directly, so the
+   process-reading `home_from_env` ladder in `src/stdlib/path/path_utils.rs`
+   remains a directly annotated composition root rather than gaining its own
+   `_with` closure parameter.
 - **The `mockable::Env` trait**, for a boundary mocked across many tests or
    expected to grow further inputs. `resolve_ninja_program_utf8_with` in
    `src/runner/process/ninja_program.rs` takes `&impl Env`; production supplies
    `mockable::DefaultEnv`, and tests supply `mockable::MockEnv` for every
    resolution branch without mutating the process (#488).
+   `stdlib::which::env::EnvSnapshot::capture_with_env` takes the same
+   `&impl Env` and reads `PATH`, `PATHEXT`, and `NETSUKE_WHICH_WORKSPACE`
+   through it, so one provider covers every ambient input the resolver has
+   (#487).
 - **`EnvReader` `Arc` closures**, for a boundary whose registration point
    requires `Send + Sync`. The manifest `env()` Jinja helper
    (`src/manifest/env_reader.rs`) reads through an injected `EnvReader`, a
@@ -68,22 +71,24 @@ reader" section for the `EnvReader` shape specifically.
 ### `EnvSnapshot` ownership
 
 `stdlib::which::env::EnvSnapshot::capture` is the resolver's single ambient
-boundary: it captures `PATH`, `PATHEXT`, and the raw `NETSUKE_WHICH_WORKSPACE`
-reading as *data*, in one place, rather than letting each downstream decision
+boundary: it captures `PATH`, `PATHEXT`, and the `NETSUKE_WHICH_WORKSPACE`
+switch as *data*, in one place, rather than letting each downstream decision
 read the process independently. Absence and malformed-UTF-8 outcomes are
 stored, not resolved, at capture time.
 
-Decisions are derived downstream from that captured data.
-`workspace_fallback_enabled()` classifies the stored `NETSUKE_WHICH_WORKSPACE`
-reading on demand, and `workspace_switch.rs`
-(`workspace_fallback_enabled_with`) is a leaf module: it is called by `env` and
-by `lookup::workspace`, and it does not call back into either, so there is no
-environment-to-lookup cycle.
+Capture is also the only place the platform's `std::env::VarError` is spoken.
+It translates the reading into the `WorkspaceSwitch` domain state (`Value`,
+`Absent`, `NotUnicode`) and emits the non-UTF-8 warning there, so the policy
+behind the boundary carries neither the platform error type nor a logging
+dependency. `workspace_switch.rs` holds only the variable name and that state,
+making it a leaf module: it is used by `env` and by `lookup::workspace`, and it
+calls back into neither, so there is no environment-to-lookup cycle.
 
 The which-resolver cache fingerprint (`stdlib::which::cache::env_fingerprint`)
 hashes every input the snapshot captured — `raw_path`, `raw_pathext`, and the
-workspace switch's fingerprint-shaped projection — so two resolutions that
-differ only in one captured environment input cannot share a cache entry.
+`WorkspaceSwitch` state, which derives `Hash` precisely so it can be hashed
+directly — so two resolutions that differ only in one captured environment
+input cannot share a cache entry.
 
 ### Explicit child-environment composition
 
@@ -157,7 +162,7 @@ resolution entirely rather than setting the variable for a child to read.
 
 - **A single shared `Env` trait for every boundary.** Rejected: forcing
   `mockable::Env` (or an equivalent trait object) on single-variable,
-  single-caller sites such as `workspace_fallback_enabled_with` would add
+  single-caller sites such as `output_mode.rs`'s `resolve_with` would add
   indirection with no matching test-surface benefit, and would blur the "one
   variable or one precedence ladder" ownership rule this ADR reaffirms.
 - **Reading the parent process's environment for child-process tests.**
@@ -172,7 +177,7 @@ resolution entirely rather than setting the variable for a child to read.
 
 ## Implementation references
 
-- Closure seam:
+- Workspace switch state:
   [`src/stdlib/which/workspace_switch.rs`](../src/stdlib/which/workspace_switch.rs)
 - `EnvSnapshot`: [`src/stdlib/which/env.rs`](../src/stdlib/which/env.rs)
 - Cache fingerprint: [`src/stdlib/which/cache.rs`](../src/stdlib/which/cache.rs)
