@@ -11,12 +11,12 @@
 //! filter-level suite in `tests/std_filter_tests` is dark pending #520.
 //!
 //! Both ladders are driven through their `read_env` closure, so nothing here
-//! mutates the process environment and the cases run concurrently. The Windows
-//! ladder is the reason each helper is gated `#[cfg(any(windows, test))]`
-//! rather than by platform alone: behind `#[cfg(windows)]` it could not be
-//! exercised from the Unix CI host at all, and it is the more intricate of the
-//! two. The helpers hold no platform-specific selection logic themselves —
-//! `home_from_env` picks between them — so both are reachable from any host.
+//! mutates the process environment and the cases run concurrently. Neither
+//! helper carries a `cfg` gate: they hold no platform-specific selection logic
+//! themselves — `home_from_env` picks between them — so both compile and are
+//! exercised on every host. That matters most for the Windows ladder, the more
+//! intricate of the two, which would otherwise be unreachable from the Unix CI
+//! host.
 
 use super::path_utils::{posix_home_from, windows_home_from};
 use crate::stdlib::config_types::HomeDirectory;

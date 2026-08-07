@@ -2411,10 +2411,9 @@ The full normalization contract, which the property tests in
 `stdlib::path::path_utils` resolves the user's home through two precedence
 ladders — POSIX (`HOME`, then `USERPROFILE`) and Windows (those two, then the
 `HOMEDRIVE`/`HOMEPATH` pair, then `HOMESHARE`). Both take an injected
-`read_env` closure. `home_from_env` selects between them by platform; each
-helper is itself gated `#[cfg(any(windows, test))]` or its inverse, so it
-compiles for its own platform *and* under `test`, and neither holds
-platform-selection logic of its own.
+`read_env` closure. `home_from_env` selects between them by platform and is
+the sole platform-selection point; neither helper carries a `cfg` gate of its
+own, so both compile — and are tested — on every host.
 
 #### Ladder ownership and call sites
 
@@ -2432,13 +2431,14 @@ platform-selection logic of its own.
 #### Ladder composition rules
 
 - Extract each ladder free of platform *selection logic*, leaving that to
-  `home_from_env`, so both stay reachable from any host. The helpers are still
-  `cfg`-gated — see the next rule — but only for whether they compile, never
-  for which one applies.
-- Gate the extracted helpers `#[cfg(any(windows, test))]` and its inverse.
-  Compiling them unconditionally leaves the inapplicable one dead in a release
-  build, which `-D warnings` rejects; gating them to the platform alone makes
-  the Windows ladder untestable on the CI host.
+  `home_from_env`, so both stay reachable from any host. Leave the helpers
+  ungated: a `cfg` on each one buys nothing but complexity now that neither
+  decides which ladder applies.
+- Keep `home_from_env` naming both ladders — it binds them as a
+  `(posix, windows)` pair of function pointers before the platform gate picks
+  one. That reference is what keeps the inapplicable ladder from being dead
+  code in a release build, which `-D warnings` would reject; the gate itself
+  still compiles away, so the selection costs nothing at run time.
 - The ladders report what the environment says. An empty value is passed
   through rather than treated as unset for the single-variable readings
   (`HOME`, `USERPROFILE`, `HOMESHARE`), and interpreting that is

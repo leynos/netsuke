@@ -167,6 +167,9 @@ fn current_dir_utf8() -> Result<Utf8PathBuf, io::Error> {
     dir.canonicalize(Utf8Path::new("."))
 }
 
+/// A home-directory precedence ladder driven by an injected reader.
+type HomeLadder<F> = fn(F) -> Option<String>;
+
 /// Select the platform ladder and drive it with the injected reader.
 ///
 /// Only the *selection* is platform-gated; neither ladder holds
@@ -178,21 +181,24 @@ fn home_from_env<F>(read_env: F) -> Option<String>
 where
     F: Fn(&str) -> Option<String>,
 {
+    // Naming both ladders here is what lets each one compile unconditionally:
+    // the ladders themselves need no `cfg` gate, so the only platform
+    // selection in the module is the one below. Order: POSIX, then Windows.
+    let ladders: (HomeLadder<F>, HomeLadder<F>) = (posix_home_from, windows_home_from);
     #[cfg(windows)]
     {
-        windows_home_from(read_env)
+        (ladders.1)(read_env)
     }
     #[cfg(not(windows))]
     {
-        posix_home_from(read_env)
+        (ladders.0)(read_env)
     }
 }
 
 /// Resolve the home directory using the POSIX precedence ladder.
 ///
-/// Free of platform gating in its *logic*; the `cfg` attribute controls only
-/// whether it is compiled, and the platform selection lives in
-/// [`home_from_env`].
+/// Compiled on every host and free of platform gating; the platform selection
+/// lives solely in [`home_from_env`].
 ///
 /// # Examples
 ///
@@ -200,7 +206,6 @@ where
 /// let env = |key: &str| (key == "HOME").then(|| String::from("/home/a"));
 /// assert_eq!(posix_home_from(env).as_deref(), Some("/home/a"));
 /// ```
-#[cfg(any(not(windows), test))]
 pub(super) fn posix_home_from<F>(read_env: F) -> Option<String>
 where
     F: Fn(&str) -> Option<String>,
@@ -215,10 +220,9 @@ where
 /// joining it to `HOMEDRIVE` would yield a bare drive letter rather than a home
 /// directory.
 ///
-/// Compiled on Windows and under `test`. Gated to `#[cfg(windows)]` alone this
-/// ladder could not be exercised from the Unix CI host, and it is the more
-/// intricate of the two; compiled unconditionally it would be dead code in a
-/// Unix release build, which `-D warnings` rejects.
+/// Compiled on every host and free of platform gating; the platform selection
+/// lives solely in [`home_from_env`]. Keeping it unconditional is what lets the
+/// Unix CI host exercise this ladder, the more intricate of the two.
 ///
 /// # Examples
 ///
@@ -231,7 +235,6 @@ where
 /// };
 /// assert_eq!(windows_home_from(env).as_deref(), Some("C:\\me"));
 /// ```
-#[cfg(any(windows, test))]
 pub(super) fn windows_home_from<F>(read_env: F) -> Option<String>
 where
     F: Fn(&str) -> Option<String>,
