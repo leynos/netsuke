@@ -10,6 +10,7 @@
 //! parent's environment exactly as before.
 
 use std::ffi::{OsStr, OsString};
+use std::fmt;
 use std::process::Command;
 
 /// Whether two environment variable names denote the same variable.
@@ -56,9 +57,25 @@ pub(super) fn env_names_eq(left: &OsStr, right: &OsStr) -> bool {
 /// let env = CommandEnv::inherit().with_var("PATH", "/fake/bin");
 /// assert!(!env.is_empty());
 /// ```
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Default, Clone, PartialEq, Eq)]
 pub struct CommandEnv {
     vars: Vec<(OsString, OsString)>,
+}
+
+/// Redacted `Debug` output: a shape, never a payload.
+///
+/// Overrides are arbitrary environment variables, so both names and values may
+/// carry secrets. The same contract the `ninja_subprocess` span honours applies
+/// here — a bounded count plus a `PATH` flag is the most that can be disclosed
+/// — because a `CommandEnv` reaches logs by any route that formats a struct
+/// containing one with `{:?}`, not only through the runner's own logging.
+impl fmt::Debug for CommandEnv {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CommandEnv")
+            .field("override_count", &self.vars.len())
+            .field("path_overridden", &self.is_path_overridden())
+            .finish_non_exhaustive()
+    }
 }
 
 impl CommandEnv {
@@ -144,6 +161,15 @@ impl CommandEnv {
             .map(|(_, value)| value.as_os_str())
     }
 
+    /// Whether `PATH` is among the overrides, for the redacted `Debug` shape.
+    ///
+    /// Kept private: callers wanting this fact for diagnostics read the
+    /// `path_overridden` span field, which is derived from the prepared
+    /// `Command` and therefore reflects what will actually be spawned.
+    fn is_path_overridden(&self) -> bool {
+        self.get("PATH").is_some()
+    }
+
     /// Apply the overrides to `cmd`.
     ///
     /// Deliberately additive rather than using `env_clear`: Ninja needs the
@@ -159,7 +185,7 @@ impl CommandEnv {
 
 #[cfg(test)]
 mod tests {
-    //! Unit tests for target-aware override replacement.
+    //! Unit tests for override replacement and redacted diagnostics.
 
     use super::*;
 
@@ -192,5 +218,45 @@ mod tests {
 
         assert_eq!(env.get("Path"), Some(OsStr::new("new")));
         assert_eq!(env.get("PATH"), Some(OsStr::new("new")));
+    }
+
+    /// `Debug` discloses the shape of the overrides and nothing of their
+    /// contents, so formatting a struct that holds a `CommandEnv` cannot leak
+    /// a secret into a log.
+    #[test]
+    fn debug_redacts_override_names_and_values() {
+        let env = CommandEnv::inherit()
+            .with_var("NETSUKE_API_TOKEN", "s3cr3t-value")
+            .with_path("/opt/toolchain/bin");
+
+        let rendered = format!("{env:?}");
+
+        assert!(
+            !rendered.contains("NETSUKE_API_TOKEN"),
+            "an override name leaked into Debug output: {rendered}"
+        );
+        assert!(
+            !rendered.contains("s3cr3t-value"),
+            "an override value leaked into Debug output: {rendered}"
+        );
+        assert!(
+            !rendered.contains("/opt/toolchain/bin"),
+            "a PATH value leaked into Debug output: {rendered}"
+        );
+        assert!(
+            rendered.contains("override_count: 2") && rendered.contains("path_overridden: true"),
+            "Debug output should still summarize the overrides: {rendered}"
+        );
+    }
+
+    /// An inherited environment reports the empty shape production always has.
+    #[test]
+    fn debug_reports_the_inherited_shape() {
+        let rendered = format!("{:?}", CommandEnv::inherit());
+
+        assert!(
+            rendered.contains("override_count: 0") && rendered.contains("path_overridden: false"),
+            "unexpected Debug output: {rendered}"
+        );
     }
 }
