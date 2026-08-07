@@ -2327,6 +2327,86 @@ platform-path form through `resolve_ninja_program`, which itself calls the
 UTF-8 resolver and converts its result, so no production path constructs a
 platform `PathBuf` independently of `resolve_ninja_program_utf8_with`.
 
+#### `which` environment capture
+
+`EnvSnapshot::capture` (`stdlib::which::env`) reads `PATH` on every
+platform, and `PATHEXT` on Windows only, through an injected
+`mockable::Env` provider rather than straight from the process:
+
+- `capture` is the production entry point. It delegates to `capture_with_env`
+  with `mockable::DefaultEnv`, so it is the single site that binds the
+  resolver's lookups to the live process environment.
+- `capture_with_env` takes `&impl mockable::Env`, so tests drive the whole
+  capture with a `MockEnv` without mutating process-global state.
+- An optional `path_override` parameter shadows `PATH` while leaving `PATHEXT`
+  to the provider. `capture_with_pathext` additionally shadows `PATHEXT`; it is
+  defined on every platform so the resolver has one capture entry point, and
+  the override is accepted and discarded off Windows, where nothing consults
+  the extension list.
+- `capture_common` owns the shared working-directory and `PATH` handling, so
+  the platform-specific `capture_impl` variants differ only in how they obtain
+  `PATHEXT`.
+
+Keep the ambient read at that boundary. Adding a `std::env` call elsewhere in
+`env.rs` would put it back where no test can reach it, and the module is where
+the clippy `disallowed-methods` gate would then fire.
+
+Both overrides reach the snapshot from configuration rather than from the
+process: `StdlibConfig::with_path_override` and
+`StdlibConfig::with_pathext_override` are copied into `WhichConfig`, which
+`WhichResolver::new` consumes whole — the resolver takes the configuration
+rather than its fields so a new environment seam does not lengthen the
+signature again. Pinning both is what lets a behavioural test drive `which`
+and `command_available` over a temporary directory with a chosen extension
+list; see `tests/stdlib_which_pathext_tests.rs`, which is gated to Windows
+because `PATHEXT` governs resolution only there.
+
+That gating has a cost worth stating: CI runs `make test` on `ubuntu-latest`
+only, so a `#[cfg(windows)]` test does not gate a merge. Keep host-independent
+rules — normalization, the fallback — in the `#[cfg(any(windows, test))]` unit
+tests that the Linux suite executes, and reserve the Windows-gated suite for
+behaviour that genuinely cannot run elsewhere.
+
+#### `PATHEXT` normalization
+
+`stdlib::which::env::parse_pathext` turns a raw `PATHEXT` value into lowercase,
+dot-prefixed extensions. It is pure string handling, consulted only by the
+Windows snapshot, and compiled under `#[cfg(any(windows, test))]`.
+
+Ownership and permitted call sites:
+
+- Owned by `stdlib::which::env` and `pub(super)`. The Windows
+  `EnvSnapshot::capture_impl` is its only production caller.
+- `DEFAULT_PATHEXT` is the single source of the built-in fallback and shares
+  the same gating.
+
+Composition rules:
+
+- Gate platform-only pure logic `#[cfg(any(windows, test))]` rather than
+  `#[cfg(windows)]`. The latter hides it from the CI host, so its rules go
+  unverified *and* unlinted. Compiling it unconditionally would instead leave
+  it dead in a Unix release build, which `-D warnings` rejects.
+- A value yielding no usable extension falls back to the built-in list. An
+  empty result would mean Windows treats nothing as executable, so `which`
+  would report every command missing.
+
+The full normalization contract, which the property tests in
+`src/stdlib/which/pathext_tests.rs` pin:
+
+- **Split on `;`.** That is the `PATHEXT` separator on Windows, and unlike
+  `PATH` it is not the platform path-list separator, so `split_paths` is the
+  wrong tool here.
+- **Trim whitespace** from each segment, then discard the segment if nothing
+  remains. `".COM; .EXE"` and `".COM;.EXE"` are the same list.
+- **Lowercase, then dot-prefix.** Comparison is case-insensitive, and a
+  segment written without its dot (`COM`) means the same extension as `.com`.
+- **First occurrence wins.** De-duplication is by the *normalized* form, so
+  `.EXE;.exe` yields one entry, positioned where the first appeared. Order is
+  significant: it is the order `which` tries extensions in.
+- **Fall back when nothing usable remains**, including for an absent value —
+  `parse_pathext(None)` and `parse_pathext(Some(";  ;"))` both yield
+  `DEFAULT_PATHEXT`.
+
 ### Configuration discovery module layout
 
 `src/cli/discovery.rs` attaches several small `#[path = "..."]` modules that

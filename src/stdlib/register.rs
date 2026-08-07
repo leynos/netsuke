@@ -102,7 +102,8 @@ pub fn register_with_config(
         .map(|path| Arc::new(path.to_path_buf()));
     let which_path = config.path_override().cloned();
     let which_config =
-        WhichConfig::new(which_cwd, which_path, which_skip_dirs, which_cache_capacity);
+        WhichConfig::new(which_cwd, which_path, which_skip_dirs, which_cache_capacity)
+            .with_pathext_override(config.pathext_override().cloned());
     which::register(env, which_config);
     let impure = state.impure_flag();
     let (network_config, command_config) = config.into_components();

@@ -1,6 +1,7 @@
 //! Configuration types and defaults for wiring the stdlib into `MiniJinja`.
 
 mod ambient;
+mod which;
 
 use super::config_types::HomeDirectory;
 pub use super::config_types::{
@@ -13,7 +14,6 @@ use crate::localization::{self, keys};
 use anyhow::{anyhow, bail, ensure};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::Dir;
-use indexmap::IndexSet;
 use std::{ffi::OsString, num::NonZeroUsize, sync::Arc};
 
 /// Configuration for registering Netsuke's standard library helpers.
@@ -29,6 +29,7 @@ pub struct StdlibConfig {
     which_cache_capacity: NonZeroUsize,
     workspace_skip_dirs: Vec<String>,
     path_override: Option<OsString>,
+    pathext_override: Option<OsString>,
     command_path_override: Option<OsString>,
     home_directory: HomeDirectory,
 }
@@ -73,6 +74,7 @@ impl StdlibConfig {
                 .map(|dir| (*dir).to_owned())
                 .collect(),
             path_override: None,
+            pathext_override: None,
             command_path_override: None,
             home_directory: HomeDirectory::Ambient,
         })
@@ -164,88 +166,6 @@ impl StdlibConfig {
         Ok(self)
     }
 
-    /// Override the cache capacity for the `which` resolver.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when `capacity` is zero.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use cap_std::{ambient_authority, fs_utf8::Dir};
-    /// # use netsuke::stdlib::StdlibConfig;
-    /// let dir = Dir::open_ambient_dir(".", ambient_authority())
-    ///     .expect("open ambient workspace");
-    /// let _config = StdlibConfig::new(dir)
-    ///     .expect("construct stdlib config")
-    ///     .with_which_cache_capacity(128)
-    ///     .expect("set which cache capacity");
-    /// // Config can now be passed to stdlib registration with a larger cache.
-    /// ```
-    pub fn with_which_cache_capacity(mut self, capacity: usize) -> anyhow::Result<Self> {
-        let non_zero_capacity = NonZeroUsize::new(capacity).ok_or_else(|| {
-            anyhow!(
-                "{}",
-                localization::message(keys::STDLIB_WHICH_CACHE_CAPACITY_POSITIVE)
-            )
-        })?;
-        self.which_cache_capacity = non_zero_capacity;
-        Ok(self)
-    }
-    /// Override the workspace directories skipped by the `which` fallback
-    /// search to avoid expensive scans.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when any entry is empty, navigates (for example `..`),
-    /// or contains path separators, because skip entries operate on directory
-    /// basenames.
-    pub fn with_workspace_skip_dirs<I, S>(mut self, dirs: I) -> anyhow::Result<Self>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<str>,
-    {
-        let mut validated = IndexSet::new();
-        for dir in dirs {
-            let candidate = dir.as_ref().trim();
-            ensure!(
-                !candidate.is_empty(),
-                "{}",
-                localization::message(keys::STDLIB_SKIP_DIR_EMPTY)
-            );
-            ensure!(
-                !matches!(candidate, "." | ".."),
-                "{}",
-                localization::message(keys::STDLIB_SKIP_DIR_NAVIGATION)
-            );
-            ensure!(
-                !candidate.contains(['/', '\\']),
-                "{}",
-                localization::message(keys::STDLIB_SKIP_DIR_SEPARATOR)
-            );
-            validated.insert(candidate.to_owned());
-        }
-        self.workspace_skip_dirs = validated.into_iter().collect();
-        Ok(self)
-    }
-
-    /// Override the `PATH` environment variable for `which` lookups.
-    ///
-    /// When set, the stdlib will use the provided path string instead of
-    /// reading `PATH` from the process environment. This allows test isolation
-    /// without mutating global state.
-    #[must_use]
-    pub fn with_path_override(mut self, path: impl Into<OsString>) -> Self {
-        self.path_override = Some(path.into());
-        self
-    }
-
-    /// Return the configured PATH override, if any.
-    pub(crate) const fn path_override(&self) -> Option<&OsString> {
-        self.path_override.as_ref()
-    }
-
     /// Override the `PATH` supplied to child processes run by command filters.
     ///
     /// This seam is intended for callers that need deterministic command
@@ -318,12 +238,6 @@ impl StdlibConfig {
         &self.fetch_cache_relative
     }
 
-    /// Directories skipped during `which` workspace fallback scans.
-    #[must_use]
-    pub fn workspace_skip_dirs(&self) -> &[String] {
-        &self.workspace_skip_dirs
-    }
-
     /// Consume the configuration and expose component modules with owned state.
     pub(crate) fn into_components(self) -> (NetworkConfig, command::CommandConfig) {
         let Self {
@@ -388,10 +302,6 @@ impl StdlibConfig {
 
     pub(crate) fn workspace_root_path(&self) -> Option<&Utf8Path> {
         self.workspace_root_path.as_deref()
-    }
-
-    pub(crate) const fn which_cache_capacity(&self) -> NonZeroUsize {
-        self.which_cache_capacity
     }
 }
 

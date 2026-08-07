@@ -33,6 +33,7 @@ const NOT_FOUND_CODE: &str = "netsuke::jinja::which::not_found";
 pub(crate) struct WhichConfig {
     pub(crate) cwd_override: Option<Arc<Utf8PathBuf>>,
     pub(crate) path_override: Option<OsString>,
+    pub(crate) pathext_override: Option<OsString>,
     pub(crate) workspace_skips: WorkspaceSkipList,
     pub(crate) cache_capacity: NonZeroUsize,
 }
@@ -47,19 +48,26 @@ impl WhichConfig {
         Self {
             cwd_override,
             path_override,
+            pathext_override: None,
             workspace_skips,
             cache_capacity,
         }
     }
+
+    /// Shadow `PATHEXT` for the resolver this configuration builds.
+    ///
+    /// Kept off [`Self::new`] because the override is rare: only callers that
+    /// deliberately pin the extension list supply one, and every other call
+    /// site would otherwise pass `None`.
+    #[must_use]
+    pub(crate) fn with_pathext_override(mut self, pathext: Option<OsString>) -> Self {
+        self.pathext_override = pathext;
+        self
+    }
 }
 
 pub(crate) fn register(env: &mut Environment<'_>, config: WhichConfig) {
-    let resolver = Arc::new(WhichResolver::new(
-        config.cwd_override,
-        config.path_override,
-        config.workspace_skips,
-        config.cache_capacity,
-    ));
+    let resolver = Arc::new(WhichResolver::new(config));
     {
         let filter_resolver = Arc::clone(&resolver);
         env.add_filter("which", move |value: Value, kwargs: Kwargs| {
@@ -312,6 +320,8 @@ pub(super) fn format_path_for_output(path: &Utf8Path) -> String {
     }
 }
 
+#[cfg(test)]
+mod pathext_tests;
 #[cfg(test)]
 mod tests {
     //! Unit tests for the which module facade, covering the command

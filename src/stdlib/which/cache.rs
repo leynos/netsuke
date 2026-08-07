@@ -4,7 +4,6 @@ use std::{
     collections::hash_map::DefaultHasher,
     ffi::OsString,
     hash::{Hash, Hasher},
-    num::NonZeroUsize,
     sync::{Arc, Mutex, MutexGuard, Once},
 };
 
@@ -14,6 +13,7 @@ use metrics::{counter, describe_counter};
 use tracing::field;
 
 use super::{
+    WhichConfig,
     env::EnvSnapshot,
     lookup::{WorkspaceSkipList, lookup},
     options::WhichOptions,
@@ -28,21 +28,31 @@ pub(crate) struct WhichResolver {
     cache: Arc<Mutex<LruCache<CacheKey, CacheEntry>>>,
     cwd_override: Option<Arc<Utf8PathBuf>>,
     path_override: Option<OsString>,
+    pathext_override: Option<OsString>,
     workspace_skips: WorkspaceSkipList,
 }
 
 impl WhichResolver {
-    pub(crate) fn new(
-        cwd_override: Option<Arc<Utf8PathBuf>>,
-        path_override: Option<OsString>,
-        workspace_skips: WorkspaceSkipList,
-        cache_capacity: NonZeroUsize,
-    ) -> Self {
+    /// Build a resolver from its configuration.
+    ///
+    /// Takes the whole [`WhichConfig`] rather than its fields individually:
+    /// the overrides travel together, and threading each one as a separate
+    /// argument grows the signature every time a new environment seam is
+    /// added.
+    pub(crate) fn new(config: WhichConfig) -> Self {
         describe_metrics();
+        let WhichConfig {
+            cwd_override,
+            path_override,
+            pathext_override,
+            workspace_skips,
+            cache_capacity,
+        } = config;
         Self {
             cache: Arc::new(Mutex::new(LruCache::new(cache_capacity))),
             cwd_override,
             path_override,
+            pathext_override,
             workspace_skips,
         }
     }
@@ -59,9 +69,10 @@ impl WhichResolver {
             error_category = field::Empty,
         );
         let _guard = span.enter();
-        let env = match EnvSnapshot::capture(
+        let env = match EnvSnapshot::capture_with_pathext(
             self.cwd_override.as_deref().map(Utf8PathBuf::as_path),
             self.path_override.as_deref(),
+            self.pathext_override.as_deref(),
         ) {
             Ok(env) => env,
             Err(err) => {
@@ -225,12 +236,12 @@ mod tests {
 
     #[rstest]
     fn cache_capacity_bounds_entries() {
-        let resolver = WhichResolver::new(
+        let resolver = WhichResolver::new(WhichConfig::new(
             None,
             None,
             WorkspaceSkipList::default(),
             NonZeroUsize::new(1).expect("non-zero cache capacity"),
-        );
+        ));
 
         let first_key = cache_key_for("first");
         let first_path = Utf8PathBuf::from("/bin/first");
@@ -318,12 +329,12 @@ mod tests {
         let capacity = NonZeroUsize::new(64).expect("non-zero cache capacity");
         // Use path_override to set empty PATH instead of mutating global env
         let empty_path = Some(std::ffi::OsString::new());
-        let resolver = WhichResolver::new(
+        let resolver = WhichResolver::new(WhichConfig::new(
             Some(Arc::new(cwd.clone())),
             empty_path.clone(),
             WorkspaceSkipList::default(),
             capacity,
-        );
+        ));
         let options = WhichOptions::default();
         let err = resolver
             .resolve("tool", &options)
@@ -331,12 +342,12 @@ mod tests {
 
         ensure!(matches!(err, ResolveError::NotFound { .. }));
 
-        let resolver_custom = WhichResolver::new(
+        let resolver_custom = WhichResolver::new(WhichConfig::new(
             Some(Arc::new(cwd.clone())),
             empty_path,
             WorkspaceSkipList::from_names([".git"]),
             capacity,
-        );
+        ));
         let matches = resolver_custom.resolve("tool", &options)?;
         ensure!(
             matches == vec![target.join("tool")],
