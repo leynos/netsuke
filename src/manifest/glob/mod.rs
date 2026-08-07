@@ -69,6 +69,20 @@ impl GlobPattern {
 ///
 /// Internal to the glob module: only [`glob_paths`] and the `walk` submodule
 /// consume it, so it is deliberately not part of the public API surface.
+/// The alias has no public path — this rejection is enforced at compile
+/// time:
+///
+/// ```compile_fail,E0603
+/// use netsuke::manifest::glob::GlobEntryResult;
+/// ```
+///
+/// while the re-exported entry point remains reachable (the control for the
+/// rejection above — it fails instead if the harness wiring breaks):
+///
+/// ```
+/// use netsuke::manifest::glob_paths;
+/// let _: fn(&str) -> _ = glob_paths;
+/// ```
 type GlobEntryResult = std::result::Result<std::path::PathBuf, glob::GlobError>;
 
 /// Expand a glob pattern and collect the matching UTF-8 file paths.
