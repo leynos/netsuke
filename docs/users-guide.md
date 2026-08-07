@@ -279,6 +279,13 @@ The top-level fields are:
 `defaults` entries are literal names in v0.1.0-beta1; Jinja expressions are not
 rendered in this field.
 
+`vars` keys named `env` or `glob` are rejected because those names identify
+built-in template helpers (see
+[Discover files with `glob`](#discover-files-with-glob) and
+[Select optional tools](#select-optional-tools)). Rather than silently
+shadowing the helper, the manifest fails to parse and the error names the
+offending key.
+
 ### Rules and recipes
 
 A rule or target must provide exactly one recipe:
@@ -306,7 +313,8 @@ A target supports these fields:
   v0.1.0-beta1.
 - `order_only_deps`: ordering dependencies. Their changes do not rebuild the
   dependent target.
-- `vars`: values that override global variables for this target.
+- `vars`: values that override global variables for this target. The `env`
+  and `glob` restriction above applies here too.
 - `phony`: marks a logical target that does not represent a file.
 - `always`: forces the recipe to run whenever the target is requested.
 
