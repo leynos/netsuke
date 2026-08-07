@@ -113,6 +113,7 @@ manifest.yaml.hint.escape = בצעו מילוט ללוכסנים אחוריים 
 manifest.env.missing = משתנה סביבה נדרש אינו מוגדר.
 manifest.env.invalid_utf8 = משתנה סביבה מכיל UTF-8 לא תקין.
 manifest.vars.not_object = השדה `vars` של המניפסט חייב להיות מיפוי או אובייקט.
+manifest.vars.reserved_name = מפתח `vars` בשם '{ $name }' במניפסט שמור לפונקציית עזר מובנית של תבניות; שנה את שם המשתנה.
 manifest.read_failed = לא ניתן היה לקרוא את המניפסט מ‑{ $path }.
 manifest.resolve_workspace_root = לא ניתן היה לקבוע את שורש סביבת העבודה.
 manifest.workspace_non_utf8 = נתיב השורש של סביבת העבודה „{ $path }” אינו UTF-8 תקין.

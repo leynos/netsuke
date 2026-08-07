@@ -113,6 +113,7 @@ manifest.yaml.hint.escape = Екрануйте зворотні скісні р�
 manifest.env.missing = Обов’язкову змінну середовища не задано.
 manifest.env.invalid_utf8 = Змінна середовища містить некоректний UTF-8.
 manifest.vars.not_object = Поле `vars` маніфесту має бути відображенням або об’єктом.
+manifest.vars.reserved_name = Ключ `vars` '{ $name }' у маніфесті зарезервовано для вбудованої допоміжної функції шаблонів; перейменуйте змінну.
 manifest.read_failed = Не вдалося прочитати маніфест за шляхом { $path }.
 manifest.resolve_workspace_root = Не вдалося визначити корінь робочої області.
 manifest.workspace_non_utf8 = Кореневий шлях робочої області «{ $path }» не є коректним UTF-8.

@@ -113,6 +113,7 @@ manifest.yaml.hint.escape = 逆斜線をエスケープするか、無効なエ�
 manifest.env.missing = 必須の環境変数が設定されていません。
 manifest.env.invalid_utf8 = 環境変数に無効な UTF-8 が含まれています。
 manifest.vars.not_object = マニフェストの `vars` はマップまたはオブジェクトでなければなりません。
+manifest.vars.reserved_name = マニフェストの `vars` キー '{ $name }' は組み込みのテンプレートヘルパー用に予約されています。変数名を変更してください。
 manifest.read_failed = { $path } のマニフェストを読み取れませんでした。
 manifest.resolve_workspace_root = ワークスペースのルートを特定できませんでした。
 manifest.workspace_non_utf8 = ワークスペースのルートパス「{ $path }」は有効な UTF-8 ではありません。

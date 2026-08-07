@@ -113,6 +113,7 @@ manifest.yaml.hint.escape = ممیزهای وارونه را بگریزانید 
 manifest.env.missing = یک متغیر محیطی الزامی تنظیم نشده است.
 manifest.env.invalid_utf8 = یک متغیر محیطی دربردارندهٔ UTF-8 نامعتبر است.
 manifest.vars.not_object = ‏`vars` در مانیفست باید نگاشت یا شیء باشد.
+manifest.vars.reserved_name = کلید `vars` با نام '{ $name }' در مانیفست برای یک کمک‌کننده داخلی قالب رزرو شده است؛ نام متغیر را تغییر دهید.
 manifest.read_failed = خواندن مانیفست از { $path } ممکن نشد.
 manifest.resolve_workspace_root = تعیین ریشهٔ فضای کاری ممکن نشد.
 manifest.workspace_non_utf8 = مسیر ریشهٔ فضای کاری «{ $path }» ‏UTF-8 معتبر نیست.

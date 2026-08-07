@@ -113,6 +113,7 @@ manifest.yaml.hint.escape = 역슬래시를 이스케이프하거나 잘못된 �
 manifest.env.missing = 필수 환경 변수가 설정되지 않았습니다.
 manifest.env.invalid_utf8 = 환경 변수에 잘못된 UTF-8이 들어 있습니다.
 manifest.vars.not_object = 매니페스트의 `vars`는 매핑이나 객체여야 합니다.
+manifest.vars.reserved_name = 매니페스트의 `vars` 키 '{ $name }'은(는) 내장 템플릿 헬퍼용으로 예약되어 있습니다. 변수 이름을 바꾸십시오.
 manifest.read_failed = { $path }의 매니페스트를 읽지 못했습니다.
 manifest.resolve_workspace_root = 작업 공간의 루트를 확인하지 못했습니다.
 manifest.workspace_non_utf8 = 작업 공간의 루트 경로 '{ $path }'은(는) 올바른 UTF-8이 아닙니다.

@@ -113,6 +113,7 @@ manifest.yaml.hint.escape = Maskieren Sie Backslashes oder entfernen Sie ungült
 manifest.env.missing = Eine erforderliche Umgebungsvariable ist nicht gesetzt.
 manifest.env.invalid_utf8 = Eine Umgebungsvariable enthält ungültiges UTF-8.
 manifest.vars.not_object = `vars` im Manifest muss eine Zuordnung bzw. ein Objekt sein.
+manifest.vars.reserved_name = Der `vars`-Schlüssel '{ $name }' im Manifest ist für eine integrierte Vorlagenfunktion reserviert; benennen Sie die Variable um.
 manifest.read_failed = Das Manifest unter { $path } konnte nicht gelesen werden.
 manifest.resolve_workspace_root = Das Wurzelverzeichnis des Arbeitsbereichs konnte nicht ermittelt werden.
 manifest.workspace_non_utf8 = Der Wurzelpfad des Arbeitsbereichs „{ $path }“ ist kein gültiges UTF-8.

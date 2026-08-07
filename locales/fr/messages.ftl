@@ -114,6 +114,7 @@ manifest.yaml.hint.escape = Échappez les barres obliques inverses ou supprimez 
 manifest.env.missing = Une variable d'environnement requise n'est pas définie.
 manifest.env.invalid_utf8 = Une variable d'environnement contient de l'UTF-8 non valide.
 manifest.vars.not_object = `vars` du manifeste doit être une table ou un objet.
+manifest.vars.reserved_name = La clé `vars` '{ $name }' du manifeste est réservée à une fonction utilitaire de gabarit intégrée ; renommez la variable.
 manifest.read_failed = Impossible de lire le manifeste depuis { $path }.
 manifest.resolve_workspace_root = Impossible de résoudre la racine de l'espace de travail.
 manifest.workspace_non_utf8 = Le chemin racine de l'espace de travail « { $path } » n'est pas de l'UTF-8 valide.

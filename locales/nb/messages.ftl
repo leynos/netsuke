@@ -113,6 +113,7 @@ manifest.yaml.hint.escape = Escape omvendte skråstreker, eller fjern ugyldige e
 manifest.env.missing = En påkrevd miljøvariabel er ikke satt.
 manifest.env.invalid_utf8 = En miljøvariabel inneholder ugyldig UTF-8.
 manifest.vars.not_object = `vars` i manifestet må være en tilordning eller et objekt.
+manifest.vars.reserved_name = Manifestets `vars`-nøkkel '{ $name }' er reservert for en innebygd malhjelper; gi variabelen et nytt navn.
 manifest.read_failed = Manifestet i { $path } kunne ikke leses.
 manifest.resolve_workspace_root = Roten til arbeidsområdet kunne ikke bestemmes.
 manifest.workspace_non_utf8 = Rotstien til arbeidsområdet «{ $path }» er ikke gyldig UTF-8.

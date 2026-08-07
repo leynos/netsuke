@@ -113,6 +113,7 @@ manifest.yaml.hint.escape = Ters eğik çizgileri kaçırın ya da geçersiz ka�
 manifest.env.missing = Gerekli bir ortam değişkeni ayarlanmamış.
 manifest.env.invalid_utf8 = Bir ortam değişkeni geçersiz UTF-8 içeriyor.
 manifest.vars.not_object = Bildirimin `vars` alanı bir eşleme ya da nesne olmalıdır.
+manifest.vars.reserved_name = Manifestteki `vars` anahtarı '{ $name }' yerleşik bir şablon yardımcı işlevi için ayrılmıştır; değişkeni yeniden adlandırın.
 manifest.read_failed = { $path } konumundaki bildirim okunamadı.
 manifest.resolve_workspace_root = Çalışma alanının kökü belirlenemedi.
 manifest.workspace_non_utf8 = "{ $path }" çalışma alanı kök yolu geçerli UTF-8 değil.

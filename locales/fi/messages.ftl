@@ -113,6 +113,7 @@ manifest.yaml.hint.escape = Suojaa kenoviivat tai poista virheelliset ohjausmerk
 manifest.env.missing = Vaadittua ympäristömuuttujaa ei ole asetettu.
 manifest.env.invalid_utf8 = Ympäristömuuttuja sisältää virheellistä UTF-8:aa.
 manifest.vars.not_object = Manifestin `vars` on oltava kuvaus tai objekti.
+manifest.vars.reserved_name = Manifestin `vars`-avain '{ $name }' on varattu sisäänrakennetulle mallineapufunktiolle; nimeä muuttuja uudelleen.
 manifest.read_failed = Manifestia ei voitu lukea polusta { $path }.
 manifest.resolve_workspace_root = Työtilan juurta ei voitu selvittää.
 manifest.workspace_non_utf8 = Työtilan juuripolku ”{ $path }” ei ole kelvollista UTF-8:aa.

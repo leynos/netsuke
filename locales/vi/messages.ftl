@@ -113,6 +113,7 @@ manifest.yaml.hint.escape = Hãy thoát dấu gạch chéo ngược hoặc bỏ 
 manifest.env.missing = Một biến môi trường bắt buộc chưa được đặt.
 manifest.env.invalid_utf8 = Một biến môi trường chứa UTF-8 không hợp lệ.
 manifest.vars.not_object = Trường `vars` của tệp kê khai phải là ánh xạ hoặc đối tượng.
+manifest.vars.reserved_name = Khóa `vars` '{ $name }' của tệp kê khai được dành riêng cho hàm trợ giúp mẫu tích hợp; hãy đổi tên biến.
 manifest.read_failed = Không đọc được tệp kê khai tại { $path }.
 manifest.resolve_workspace_root = Không xác định được gốc của không gian làm việc.
 manifest.workspace_non_utf8 = Đường dẫn gốc của không gian làm việc “{ $path }” không phải UTF-8 hợp lệ.

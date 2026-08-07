@@ -114,6 +114,7 @@ manifest.yaml.hint.escape = Escape as barras invertidas ou remova as sequências
 manifest.env.missing = Uma variável de ambiente obrigatória não está definida.
 manifest.env.invalid_utf8 = Uma variável de ambiente contém UTF-8 inválido.
 manifest.vars.not_object = `vars` do manifesto deve ser um mapa ou objeto.
+manifest.vars.reserved_name = A chave `vars` '{ $name }' do manifesto está reservada para uma função auxiliar de modelo integrada; renomeie a variável.
 manifest.read_failed = Não foi possível ler o manifesto em { $path }.
 manifest.resolve_workspace_root = Não foi possível resolver a raiz do workspace.
 manifest.workspace_non_utf8 = O caminho da raiz do workspace "{ $path }" não é UTF-8 válido.
