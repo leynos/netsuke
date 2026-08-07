@@ -1,6 +1,11 @@
 //! Smoke tests for newcomer-facing CLI flows.
 
-use anyhow::{Context, Result, bail, ensure};
+// `bail!` is reached only from the Unix-only non-UTF-8 test, so the import is
+// gated alongside `PathBuf`; left unconditional it would be an unused import on
+// other targets, which `-D warnings` turns into a build failure.
+#[cfg(unix)]
+use anyhow::bail;
+use anyhow::{Context, Result, ensure};
 use rstest::rstest;
 use std::path::Path;
 #[cfg(unix)]
