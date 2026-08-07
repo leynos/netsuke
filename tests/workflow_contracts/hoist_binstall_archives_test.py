@@ -449,6 +449,21 @@ def test_release_workflow_pins_the_hoist_interpreter() -> None:
     )
 
 
+def test_release_workflow_disables_the_uv_cache() -> None:
+    """The privileged release job must not restore a uv cache.
+
+    The hoist script is stdlib-only and runs with ``--no-project``, so a
+    restored cache buys nothing while adding a supply-chain input to a job
+    holding ``contents: write``.
+    """
+    workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["release"]["steps"]
+    setup = next(step for step in steps if "setup-uv" in step.get("uses", ""))
+    assert setup["with"]["enable-cache"] is False, (
+        "setup-uv in the release job must set enable-cache: false"
+    )
+
+
 def test_release_workflow_hoists_before_uploading() -> None:
     """The hoist step must precede the asset upload in the release job."""
     workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
@@ -498,6 +513,34 @@ def test_hoist_rejects_a_directory_at_the_destination(
     assert not (workspace["dist"] / EXPECTED_NAMES[1]).exists(), (
         "no valid pair may move while any destination is occupied"
     )
+
+
+@pytest.mark.parametrize("colliding_suffix", ["", ".sha256"])
+def test_hoist_rejects_a_dangling_symlink_at_the_destination(
+    workspace: dict[str, Path],
+    capsys: pytest.CaptureFixture[str],
+    colliding_suffix: str,
+) -> None:
+    """A dangling symlink occupying either destination is still a collision.
+
+    ``exists()`` would report the dangling link as absent and let the move
+    silently follow it; the ``lstat`` probe must treat any entry, including a
+    link to nowhere, as occupying the destination.
+    """
+    stage_pair(workspace["dist"], "netsuke-linux-amd64/s1", EXPECTED_NAMES[1])
+    stage_pair(workspace["dist"], "netsuke-macos-arm64/s2", EXPECTED_NAMES[0])
+    blocking = workspace["dist"] / f"{EXPECTED_NAMES[0]}{colliding_suffix}"
+    blocking.symlink_to(workspace["dist"] / "points-at-nothing")
+
+    assert run_hoist(workspace) == 1, (
+        f"a dangling symlink at {blocking.name} must fail validation"
+    )
+    captured = capsys.readouterr()
+    assert "destination already occupied" in captured.err, (
+        "stderr must report the dangling-symlink collision"
+    )
+    assert blocking.is_symlink(), "the blocking symlink must be left untouched"
+    assert_nothing_moved(workspace["dist"], EXPECTED_NAMES)
 
 
 @pytest.mark.parametrize("linked_suffix", ["", ".sha256"])
