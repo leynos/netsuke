@@ -12,42 +12,33 @@ import urllib.request
 import typos_rollout_http
 
 # This module is the facade over the cache and HTTP halves of the rollout, so
-# the names its callers and tests reach for are re-exported here by name.
+# the names its callers and tests reach for are re-exported here. The redundant
+# `X as X` aliases mark the ones this module does not itself use as deliberate
+# re-exports rather than dead imports.
 from typos_rollout_cache import RefreshResult
 from typos_rollout_cache import atomic_write as _atomic_write
 from typos_rollout_http import (
-    InsecureSourceError,
-    NetworkUnavailableError,
+    InsecureSourceError as InsecureSourceError,
+)
+from typos_rollout_http import (
+    NetworkUnavailableError as NetworkUnavailableError,
+)
+from typos_rollout_http import (
     RefreshOptions,
-    _read_metadata,
-    _remote_is_not_newer,
+)
+from typos_rollout_http import (
+    _read_metadata as _read_metadata,
+)
+from typos_rollout_http import (
+    _remote_is_not_newer as _remote_is_not_newer,
 )
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
     import pathlib
 
-__all__ = [
-    "Dictionary",
-    "InsecureSourceError",
-    "NetworkUnavailableError",
-    "RefreshOptions",
-    "RefreshResult",
-    # Private helpers of the HTTP half that the refresh tests exercise through
-    # this facade; listed so they read as a deliberate re-export.
-    "_read_metadata",
-    "_remote_is_not_newer",
-    "generate_word_mappings",
-    "load_dictionary",
-    "merge_dictionaries",
-    "refresh_base",
-    "render_typos_config",
-    "write_config",
-]
-
-# Snapshot of the transport entry point as imported. `refresh_base` compares the
-# live attribute against this to detect a caller that has replaced it, so the
-# value must be captured once at import time rather than re-imported by name.
+# Snapshot of the transport entry point as imported: `refresh_base` compares the
+# live attribute against this to detect a caller that has replaced it.
 _DEFAULT_URLOPEN: cabc.Callable[..., object] = urllib.request.urlopen  # noqa: S310
 
 SCHEMA_VERSION = 1
@@ -393,12 +384,11 @@ def refresh_base(
         If dictionary validation fails.
     """
     selected_options = options
-    # S310 is suppressed on both references below: neither opens a URL. They
-    # compare and forward the transport entry point, and every URL that reaches
-    # it has already been constrained to HTTPS by `typos_rollout_http`.
+    # Existing focused tests patch this legacy boundary; production retains the
+    # HTTPS-only opener when the standard function is unchanged. S310 is
+    # suppressed on both references: neither opens a URL, and every URL that
+    # reaches the opener is constrained to HTTPS by `typos_rollout_http`.
     if options.opener is None and urllib.request.urlopen is not _DEFAULT_URLOPEN:  # noqa: S310
-        # Existing focused tests patch this legacy boundary; production retains
-        # the HTTPS-only opener when the standard function is unchanged.
         selected_options = dc.replace(options, opener=urllib.request.urlopen)  # noqa: S310
     return typos_rollout_http.refresh_base(
         source,

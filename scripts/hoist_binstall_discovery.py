@@ -301,6 +301,6 @@ def locate_archives(
         match _resolve_archive(dist_dir, staged, name):
             case StagedArchive() as archive:
                 located.append(archive)
-            case str(problem):
+            case str() as problem:
                 missing.append(problem)
     return located, missing

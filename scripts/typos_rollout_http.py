@@ -206,13 +206,6 @@ class _HttpsRedirectHandler(urllib.request.HTTPRedirectHandler):
         contract without making transport-library parameters part of this
         helper's domain-facing interface.
 
-        Parameters
-        ----------
-        request
-            The request that produced the redirect response.
-        *redirect
-            The standard library's ``(fp, code, msg, headers, newurl)`` tail.
-
         Returns
         -------
         urllib.request.Request | None
@@ -249,9 +242,7 @@ def _https_request(
     if urllib.parse.urlsplit(source).scheme != "https":
         message = f"shared dictionary URL must use HTTPS: {source}"
         raise InsecureSourceError(message)
-    # The scheme audit S310 asks for is the guard immediately above, and
-    # `_HttpsRedirectHandler` re-applies it to every redirect target.
-    return urllib.request.Request(source, headers=dict(headers))  # noqa: S310
+    return urllib.request.Request(source, headers=dict(headers))  # noqa: S310 -- HTTPS guarded above, and redirects are re-checked by _HttpsRedirectHandler
 
 
 def _write_remote_cache(

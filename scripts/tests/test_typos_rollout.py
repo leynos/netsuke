@@ -206,6 +206,6 @@ def test_render_and_write_are_deterministic_valid_toml(
     assert tomllib.loads(first)["default"]["locale"] == "en-gb", (
         "rendered locale was not en-gb"
     )
-    assert list(output.parent.glob(".typos.toml.*")) == [], (
+    assert not list(output.parent.glob(".typos.toml.*")), (
         "atomic write left a temporary file"
     )
