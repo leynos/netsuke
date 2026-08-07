@@ -4,6 +4,7 @@ use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use proptest::prelude::*;
+use rstest::rstest;
 
 fn integration_test_sources(tests_dir: &Dir) -> Result<Vec<String>> {
     let mut sources = Vec::new();
@@ -48,12 +49,22 @@ fn orphaned_module_trees(tests_dir: &Dir, sources: &[String]) -> Result<Vec<Stri
             continue;
         }
 
-        let conventional_declaration = format!("mod {name};");
+        // A declaration wires the tree whatever visibility it carries. Matching
+        // whole trimmed lines keeps commented-out declarations excluded, which a
+        // prefix or substring test would not.
+        let conventional_declarations = [
+            format!("mod {name};"),
+            format!("pub mod {name};"),
+            format!("pub(crate) mod {name};"),
+        ];
         let explicit_path_attribute = format!("#[path = \"{name}/mod.rs\"]");
         let is_wired = sources.iter().any(|source| {
             source.lines().any(|line| {
                 let trimmed_line = line.trim();
-                trimmed_line == conventional_declaration || trimmed_line == explicit_path_attribute
+                trimmed_line == explicit_path_attribute
+                    || conventional_declarations
+                        .iter()
+                        .any(|declaration| trimmed_line == declaration)
             })
         });
         if !is_wired {
@@ -124,6 +135,48 @@ fn orphaned_and_commented_module_trees_are_reported() -> Result<()> {
     Ok(())
 }
 
+/// A visibility qualifier does not change whether a declaration wires a tree.
+///
+/// The commented cases pin the other half of the rule: the guard matches whole
+/// trimmed lines, so prefixing a declaration with `//` must still leave the
+/// tree orphaned no matter which visibility it carries.
+#[rstest]
+#[case::plain("mod wired;", true)]
+#[case::public("pub mod wired;", true)]
+#[case::crate_visible("pub(crate) mod wired;", true)]
+#[case::path_attribute("#[path = \"wired/mod.rs\"]\nmod wired_alias;", true)]
+#[case::commented_plain("// mod wired;", false)]
+#[case::commented_public("// pub mod wired;", false)]
+#[case::commented_crate_visible("// pub(crate) mod wired;", false)]
+fn visibility_qualified_declarations_wire_module_trees(
+    #[case] declaration: &str,
+    #[case] expect_wired: bool,
+) -> Result<()> {
+    let temp = tempfile::tempdir().context("create visibility fixture")?;
+    let tests_path = Utf8Path::from_path(temp.path()).context("fixture path is not valid UTF-8")?;
+    let tests_dir = Dir::open_ambient_dir(tests_path, ambient_authority())
+        .context("open visibility fixture")?;
+    tests_dir
+        .create_dir("wired")
+        .context("create wired module tree")?;
+    tests_dir
+        .write("wired/mod.rs", "//! Wired fixture.\n")
+        .context("write wired module root")?;
+    tests_dir
+        .write("wired_tests.rs", format!("{declaration}\n"))
+        .context("write integration-test target")?;
+
+    let sources = integration_test_sources(&tests_dir)?;
+    let orphaned = orphaned_module_trees(&tests_dir, &sources)?;
+
+    ensure!(
+        orphaned.is_empty() == expect_wired,
+        "declaration {declaration:?} should {}wire the tree, got orphaned {orphaned:?}",
+        if expect_wired { "" } else { "not " }
+    );
+    Ok(())
+}
+
 /// How a generated module tree is declared by the generated test target.
 ///
 /// `orphaned_module_trees` claims a universal property: a tree is excluded from
@@ -133,6 +186,8 @@ fn orphaned_and_commented_module_trees_are_reported() -> Result<()> {
 #[derive(Debug, Clone, Copy)]
 enum Declaration {
     Conventional,
+    PubConventional,
+    PubCrateConventional,
     PathAttribute,
     CommentedConventional,
     CommentedPath,
@@ -142,7 +197,13 @@ enum Declaration {
 impl Declaration {
     /// Whether this form should keep the tree out of the orphan list.
     const fn wires(self) -> bool {
-        matches!(self, Self::Conventional | Self::PathAttribute)
+        matches!(
+            self,
+            Self::Conventional
+                | Self::PubConventional
+                | Self::PubCrateConventional
+                | Self::PathAttribute
+        )
     }
 
     /// Render this declaration for `name`, indented by `indent`.
@@ -154,6 +215,8 @@ impl Declaration {
     fn render(self, name: &str, indent: &str) -> String {
         match self {
             Self::Conventional => format!("{indent}mod {name};\n"),
+            Self::PubConventional => format!("{indent}pub mod {name};\n"),
+            Self::PubCrateConventional => format!("{indent}pub(crate) mod {name};\n"),
             Self::PathAttribute => {
                 format!("{indent}#[path = \"{name}/mod.rs\"]\n{indent}mod {name}_tree;\n")
             }
@@ -171,6 +234,8 @@ type ModuleTreeSpec = (String, Declaration, String);
 fn module_tree_specs() -> impl Strategy<Value = Vec<ModuleTreeSpec>> {
     let declaration_strategy = prop_oneof![
         Just(Declaration::Conventional),
+        Just(Declaration::PubConventional),
+        Just(Declaration::PubCrateConventional),
         Just(Declaration::PathAttribute),
         Just(Declaration::CommentedConventional),
         Just(Declaration::CommentedPath),
