@@ -2451,8 +2451,12 @@ own, so both compile — and are tested — on every host.
 
 The ladders stay pure: each *returns* the resolved home paired with a bounded
 `&'static str` label naming the rung that supplied it, and emits nothing.
-`resolve_home` is the sole telemetry boundary, emitting a single
-`tracing::debug!` event per resolution with these fields:
+`resolve_home` is the sole telemetry boundary, emitting a
+`tracing::debug!` event for every resolution, plus an additional
+`tracing::debug!` failure event when no home was available, with these
+fields:
+
+Table: Home-resolution telemetry fields.
 
 | Field | Meaning |
 | --- | --- |
