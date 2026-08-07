@@ -94,8 +94,9 @@ def expected_archive_names(
     Raises
     ------
     ValueError
-        If the staging configuration defines no release targets, or defines
-        the same target triple more than once.
+        If the staging configuration omits the ``[targets]`` table or
+        defines no release targets, or defines the same target triple more
+        than once.
     OSError
         If either configuration file cannot be read.
     tomllib.TOMLDecodeError
@@ -103,7 +104,7 @@ def expected_archive_names(
     """
     config = tomllib.loads(staging_config.read_text(encoding="utf-8"))
     package = tomllib.loads(manifest.read_text(encoding="utf-8"))["package"]["name"]
-    targets = [entry["target"] for entry in config["targets"].values()]
+    targets = [entry["target"] for entry in config.get("targets", {}).values()]
     _validate_targets(staging_config, targets)
     return [f"{package}-{version}-{target}.tar.gz" for target in sorted(targets)]
 
@@ -297,9 +298,9 @@ def locate_archives(
     located: list[StagedArchive] = []
     missing: list[str] = []
     for name in names:
-        resolved = _resolve_archive(dist_dir, staged, name)
-        if isinstance(resolved, StagedArchive):
-            located.append(resolved)
-        else:
-            missing.append(resolved)
+        match _resolve_archive(dist_dir, staged, name):
+            case StagedArchive() as archive:
+                located.append(archive)
+            case str(problem):
+                missing.append(problem)
     return located, missing

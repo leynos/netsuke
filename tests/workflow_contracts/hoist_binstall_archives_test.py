@@ -180,10 +180,21 @@ def test_expected_names_track_alternative_inputs(tmp_path: Path) -> None:
     )
 
 
-def test_expected_names_reject_an_empty_target_table(tmp_path: Path) -> None:
-    """A staging config without targets is a configuration error."""
+@pytest.mark.parametrize(
+    "staging_content",
+    ["[targets]\n", ""],
+    ids=["empty-table", "missing-table"],
+)
+def test_expected_names_reject_an_empty_target_table(
+    tmp_path: Path, staging_content: str
+) -> None:
+    """A staging config without targets is a configuration error.
+
+    An omitted ``[targets]`` table reports the same named contract failure
+    as an empty one, rather than a bare ``KeyError``.
+    """
     staging = tmp_path / "staging.toml"
-    staging.write_text("[targets]\n", encoding="utf-8")
+    staging.write_text(staging_content, encoding="utf-8")
     manifest = tmp_path / "Cargo.toml"
     manifest.write_text('[package]\nname = "pkg"\n', encoding="utf-8")
 

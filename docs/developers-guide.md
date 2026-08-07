@@ -222,7 +222,7 @@ from the `bin-name` field that
   installer package all stay named `netsuke`.
 - `[package.metadata.binstall]` in `Cargo.toml` overrides `cargo binstall`'s
   default asset resolution, whose patterns place the target before the version
-  and so match no released asset, leaving a fall back to a source build on the
+  and so match no released asset, leaving a fallback to a source build on the
   pinned nightly. A single template resolves a
   `{ name }-{ version }-{ target }.tar.gz` archive (`pkg-fmt = "tgz"`) for
   every released target, named after the Cargo package rather than the binary.
