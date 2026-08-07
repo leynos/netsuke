@@ -80,8 +80,12 @@ def test_oxford_adverb_suffix_is_generated(
     _, _, rollout, _ = rollout_modules
     mappings = rollout.generate_word_mappings(rollout.Dictionary(stems=("recogn",)))
 
-    assert mappings["recognizably"] == "recognizably"
-    assert mappings["recognisably"] == "recognizably"
+    assert mappings["recognizably"] == "recognizably", (
+        "the Oxford adverb was not accepted as written"
+    )
+    assert mappings["recognisably"] == "recognizably", (
+        "the plain-British adverb was not corrected to the Oxford form"
+    )
 
 
 def test_changed_etag_overrides_unchanged_date(
@@ -121,8 +125,10 @@ def test_changed_etag_overrides_unchanged_date(
         ),
     )
 
-    assert result.status == "refreshed"
-    assert rollout.load_dictionary(cache).stems == ("replacement",)
+    assert result.status == "refreshed", "a changed ETag did not refresh the cache"
+    assert rollout.load_dictionary(cache).stems == ("replacement",), (
+        "the refreshed cache does not hold the replacement dictionary"
+    )
 
 
 @pytest.mark.parametrize(
@@ -175,7 +181,9 @@ def test_default_refresh_uses_guarded_https_opener(
 
         def open(self, request: object, *, timeout: float) -> ValidResponse:
             """Return a valid response after recording the guarded call."""
-            assert timeout == pytest.approx(30.0)
+            assert timeout == pytest.approx(30.0), (
+                "the guarded opener was called without the 30s timeout"
+            )
             requests.append(request)
             return ValidResponse()
 
@@ -189,8 +197,12 @@ def test_default_refresh_uses_guarded_https_opener(
         ),
     )
 
-    assert result.status == "refreshed"
-    assert len(requests) == 1
+    assert result.status == "refreshed", (
+        "the guarded opener did not produce a refreshed cache"
+    )
+    assert len(requests) == 1, (
+        "production refresh did not route exactly one request through the opener"
+    )
 
 
 def test_http_status_and_persistence_errors_propagate(
@@ -229,7 +241,7 @@ def test_http_status_and_persistence_errors_propagate(
                 opener=missing,
             ),
         )
-    assert raised.value is not_found
+    assert raised.value is not_found, "the transport error was not propagated unchanged"
 
     def denied(*_args: object, **_kwargs: object) -> None:
         """Model denied persistence at the atomic-write boundary."""
@@ -293,7 +305,7 @@ def test_generator_propagates_non_connectivity_failures(
             source="https://example.test/base",
         )
 
-    assert raised.value is error
+    assert raised.value is error, "the refresh failure was not propagated unchanged"
 
 
 @pytest.mark.parametrize("failure_stage", ["write", "close", "replace"])
@@ -352,4 +364,4 @@ def test_atomic_write_cleans_temporary_file_after_failure(
     with pytest.raises(OSError, match=f"{failure_stage} failure"):
         cache_module.atomic_write(tmp_path / "typos.toml", b"content")
 
-    assert not temporary.exists()
+    assert not temporary.exists(), "the temporary file survived the failure"

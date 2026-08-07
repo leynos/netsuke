@@ -35,10 +35,8 @@ def initialize(path: Path, files: dict[str, str]) -> None:
         target = path / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
-    # `git` is resolved through PATH so the fixture uses the same Git the
-    # developer or CI runner invokes.
-    subprocess.run(["git", "init", "--quiet"], cwd=path, check=True)  # noqa: S607
-    subprocess.run(["git", "add", "."], cwd=path, check=True)  # noqa: S607
+    subprocess.run(["git", "init", "--quiet"], cwd=path, check=True)  # noqa: S607 -- PATH git is intended
+    subprocess.run(["git", "add", "."], cwd=path, check=True)  # noqa: S607 -- PATH git is intended
 
 
 def test_checker_boundaries_ignores_exclusions(

@@ -99,16 +99,18 @@ def test_test_shell_step_copies_gawk_to_a_regular_awk_executable() -> None:
     the destination must be a regular executable file.
     """
     script = _test_shell_script()
-    assert 'install --mode=0755 "$(command -v gawk)"' in script, (
-        f"{TEST_SHELL_STEP} must copy $(command -v gawk) as a regular "
-        f"executable, got:\n{script}"
+    # One assertion over the whole fragment set, so a failure names every
+    # missing piece at once rather than stopping at the first.
+    required = (
+        'test_shell_bin="${RUNNER_TEMP}/netsuke-test-bin"',
+        'install --mode=0755 "$(command -v gawk)"',
+        '"${test_shell_bin}/awk"',
     )
-    assert '"${test_shell_bin}/awk"' in script, (
-        f"{TEST_SHELL_STEP} must install the copy as awk, got:\n{script}"
-    )
-    assert 'test_shell_bin="${RUNNER_TEMP}/netsuke-test-bin"' in script, (
-        f"{TEST_SHELL_STEP} must stage the copy in "
-        f"${{RUNNER_TEMP}}/netsuke-test-bin, got:\n{script}"
+    absent = [fragment for fragment in required if fragment not in script]
+    assert not absent, (
+        f"{TEST_SHELL_STEP} must copy $(command -v gawk) into "
+        f"${{RUNNER_TEMP}}/netsuke-test-bin as a regular awk executable; "
+        f"missing {absent}, got:\n{script}"
     )
 
 

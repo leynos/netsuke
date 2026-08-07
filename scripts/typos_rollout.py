@@ -385,11 +385,10 @@ def refresh_base(
     """
     selected_options = options
     # Existing focused tests patch this legacy boundary; production retains the
-    # HTTPS-only opener when the standard function is unchanged. S310 is
-    # suppressed on both references: neither opens a URL, and every URL that
-    # reaches the opener is constrained to HTTPS by `typos_rollout_http`.
+    # HTTPS-only opener when the standard function is unchanged.
     if options.opener is None and urllib.request.urlopen is not _DEFAULT_URLOPEN:  # noqa: S310
-        selected_options = dc.replace(options, opener=urllib.request.urlopen)  # noqa: S310
+        opener = urllib.request.urlopen  # noqa: S310 -- forwarded, never opened
+        selected_options = dc.replace(options, opener=opener)
     return typos_rollout_http.refresh_base(
         source,
         cache,

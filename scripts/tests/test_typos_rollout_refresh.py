@@ -50,8 +50,12 @@ def test_local_refresh_keeps_a_newer_cache(
         ),
     )
 
-    assert result.status == "current"
-    assert rollout.load_dictionary(cache).stems == ("newer",)
+    assert result.status == "current", (
+        "an older local authority replaced the newer cache"
+    )
+    assert rollout.load_dictionary(cache).stems == ("newer",), (
+        "the newer cached dictionary was overwritten"
+    )
 
 
 def test_offline_refresh_requires_and_reuses_valid_cache(
@@ -83,7 +87,9 @@ def test_offline_refresh_requires_and_reuses_valid_cache(
         ),
     )
 
-    assert result.status == "offline-cache"
+    assert result.status == "offline-cache", (
+        "offline refresh did not reuse the valid cache"
+    )
 
 
 def test_local_refresh_switches_authority_and_records_metadata(
@@ -116,11 +122,13 @@ def test_local_refresh_switches_authority_and_records_metadata(
         ),
     )
 
-    assert result.status == "refreshed"
-    assert rollout.load_dictionary(cache).stems == ("second",)
+    assert result.status == "refreshed", "switching authority did not refresh the cache"
+    assert rollout.load_dictionary(cache).stems == ("second",), (
+        "the refreshed cache does not hold the second dictionary"
+    )
     assert json.loads(metadata.read_text(encoding="utf-8"))["source"] == str(
         second.resolve()
-    )
+    ), "the recorded metadata does not name the second authority"
 
 
 def test_http_refresh_scopes_validators_and_preserves_newer_cache(
@@ -156,7 +164,9 @@ def test_http_refresh_scopes_validators_and_preserves_newer_cache(
 
     def open_response(request: urllib.request.Request, *, timeout: float) -> Response:
         """Capture the request passed to the network boundary."""
-        assert timeout == pytest.approx(30.0)
+        assert timeout == pytest.approx(30.0), (
+            "the network boundary was called without the 30s timeout"
+        )
         requests.append(request)
         return Response()
 
@@ -184,12 +194,24 @@ def test_http_refresh_scopes_validators_and_preserves_newer_cache(
         ),
     )
 
-    assert first.status == "refreshed"
-    assert second.status == "current"
-    assert requests[1].get_header("If-none-match") == '"estate-v1"'
-    assert replacement.status == "refreshed"
-    assert requests[2].get_header("If-none-match") is None
-    assert requests[2].get_header("If-modified-since") is None
+    assert first.status == "refreshed", (
+        "the first remote refresh did not fetch the dictionary"
+    )
+    assert second.status == "current", (
+        "the conditional request did not report the cache as current"
+    )
+    assert requests[1].get_header("If-none-match") == '"estate-v1"', (
+        "the conditional request omitted the stored ETag"
+    )
+    assert replacement.status == "refreshed", (
+        "switching authority did not refetch the dictionary"
+    )
+    assert requests[2].get_header("If-none-match") is None, (
+        "the request for a new authority reused the stored ETag"
+    )
+    assert requests[2].get_header("If-modified-since") is None, (
+        "the request for a new authority reused the stored Last-Modified"
+    )
 
 
 def test_remote_failure_reuses_only_a_valid_stale_cache(
@@ -227,7 +249,9 @@ def test_remote_failure_reuses_only_a_valid_stale_cache(
         ),
     )
 
-    assert result.status == "stale-cache"
+    assert result.status == "stale-cache", (
+        "an authority failure did not fall back to the stale cache"
+    )
 
 
 def test_remote_refresh_rejects_insecure_and_invalid_content(
@@ -278,7 +302,7 @@ def test_remote_refresh_rejects_insecure_and_invalid_content(
                 metadata=metadata,
             ),
         )
-    assert not cache.exists()
+    assert not cache.exists(), "invalid remote content was persisted to the cache"
 
 
 def test_metadata_reader_handles_invalid_and_non_object_json(
@@ -290,9 +314,13 @@ def test_metadata_reader_handles_invalid_and_non_object_json(
     metadata = tmp_path / "cache.json"
 
     metadata.write_text("not-json", encoding="utf-8")
-    assert rollout._read_metadata(metadata) == {}
+    assert rollout._read_metadata(metadata) == {}, (
+        "malformed metadata JSON was not ignored"
+    )
     metadata.write_text("[]", encoding="utf-8")
-    assert rollout._read_metadata(metadata) == {}
+    assert rollout._read_metadata(metadata) == {}, (
+        "non-object metadata JSON was not ignored"
+    )
 
 
 def test_http_error_translation_handles_not_modified_and_stale_cache(
@@ -311,7 +339,9 @@ def test_http_error_translation_handles_not_modified_and_stale_cache(
         "https://example.test/base", 503, "unavailable", headers, None
     )
 
-    assert rollout._http_error_result(cache, not_modified).status == "current"
+    assert rollout._http_error_result(cache, not_modified).status == "current", (
+        "a 304 response did not report the cache as current"
+    )
     with pytest.raises(urllib.error.HTTPError):
         rollout._http_error_result(cache, unavailable)
     cache.unlink()
@@ -328,8 +358,10 @@ def test_remote_freshness_uses_dates_and_falls_back_on_invalid_values(
     assert rollout._remote_is_not_newer(
         {"last_modified": "Fri, 10 Jul 2026 08:00:00 GMT"},
         {"Last-Modified": "Fri, 10 Jul 2026 07:00:00 GMT"},
-    )
+    ), "an older remote Last-Modified was treated as newer"
     assert rollout._remote_is_not_newer(
         {"last_modified": "invalid"}, {"Last-Modified": "invalid"}
+    ), "matching invalid dates were not treated as unchanged"
+    assert not rollout._remote_is_not_newer({}, {"Last-Modified": "invalid"}), (
+        "a missing stored date was not treated as stale"
     )
-    assert not rollout._remote_is_not_newer({}, {"Last-Modified": "invalid"})

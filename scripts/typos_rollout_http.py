@@ -18,8 +18,8 @@ from collections import abc as cabc
 
 import typos_rollout_cache
 
-ContentValidator = cabc.Callable[[bytes], None]
-Opener = cabc.Callable[..., typos_rollout_cache.RemoteResponse]
+type ContentValidator = cabc.Callable[[bytes], None]
+type Opener = cabc.Callable[..., typos_rollout_cache.RemoteResponse]
 HTTP_NOT_MODIFIED = 304
 
 
