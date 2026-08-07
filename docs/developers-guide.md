@@ -2378,8 +2378,8 @@ The full normalization contract, which the property tests in
 - **Split on `;`.** That is the `PATHEXT` separator on Windows, and unlike
   `PATH` it is not the platform path-list separator, so `split_paths` is the
   wrong tool here.
-- **Trim ASCII whitespace** from each segment, then discard the segment if
-  nothing remains. `".COM; .EXE"` and `".COM;.EXE"` are the same list.
+- **Trim whitespace** from each segment, then discard the segment if nothing
+  remains. `".COM; .EXE"` and `".COM;.EXE"` are the same list.
 - **Lowercase, then dot-prefix.** Comparison is case-insensitive, and a
   segment written without its dot (`COM`) means the same extension as `.com`.
 - **First occurrence wins.** De-duplication is by the *normalized* form, so
