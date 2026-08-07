@@ -11,10 +11,12 @@ Netsuke is intended to be used as a command-line build tool. The only
 surfaces it commits to are the Netsukefile manifest format and the graph
 export. Everything else — the Rust API described below included — is
 private in intent and unstable in practice: it may change shape, or vanish,
-in any release of the beta series without a deprecation period. Depend on it
-only if you are prepared to follow those changes.
+in any release of the beta series without a deprecation period. Reliance
+on it is conditional on tracking those changes.
 
 ## At-a-glance changes
+
+Table: v0.1.0 child-environment API additions and their impact
 
 | Area | Impact | Where to read more |
 | --- | --- | --- |

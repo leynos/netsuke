@@ -1291,9 +1291,11 @@ Netsuke uses a mixed strategy:
 - Behavioural test discovery is defined in `tests/bdd_tests.rs`.
 - Dependabot configuration lives in `.github/dependabot.yml`, with coverage
   tests in `tests/dependabot_config_tests.rs`.
-- **Property-based tests** use `proptest` and live in `*_tests.rs` modules
-  adjacent to the code under test, included via
-  `#[cfg(test)] #[path = "..."] mod ...;` declarations.
+- **Property-based tests** use `proptest` and take two shapes: some live in
+  `*_tests.rs` modules adjacent to the code under test, included via
+  `#[cfg(test)] #[path = "..."] mod ...;` declarations; others are standalone
+  files directly under `tests/`, each its own Cargo integration-test target
+  with its `.proptest-regressions` seed file kept beside it.
 
 The Dependabot integration tests parse the checked-in configuration and verify
 that repository dependency manifests remain covered as the tree changes. They
