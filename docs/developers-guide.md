@@ -2691,6 +2691,43 @@ paths:
 4. Let `run_command_and_stream_with_context` handle span creation, execution
    logging, failure logging, and exit-status enforcement via context helpers.
 
+### Module: `runner::process::redaction`
+
+`src/runner/process/redaction.rs` owns the argument-redaction boundary that
+`command_logging` consumes. `CommandArg` is a newtype over a single
+command-line argument string; it gives the redaction helpers a dedicated type
+to operate on instead of passing bare `String` values around.
+
+`CommandArg` carries no redaction guarantee of its own. The same type holds
+both the raw arguments read from `Command::get_args` and the values returned
+by the redaction helpers, and `as_str` is available on either. The invariant
+is therefore a discipline on the call site, not a property of the type:
+logging paths must render only what `redact_argument` or
+`redact_sensitive_args` returned. `CommandLogContext::from_command` is the
+one place that observes this, redacting the collected arguments before it
+builds `redacted_command`.
+
+An argument is treated as sensitive when it is a `key=value` pair whose
+trimmed key case-insensitively matches `password`, `token`, `secret`,
+`api_key`, `apikey`, `auth`, or `authorization`. Matching arguments keep the
+key and replace the value with `***REDACTED***`; positional arguments with no
+`=` are passed through unchanged, so a path such as `secrets.yml` is not
+mangled. Widen the keyword list rather than adding a second redaction path if
+new sensitive arguments appear.
+
+The module's doc examples are marked `ignore`. `CommandArg` and the helpers
+are crate-private, and the `cfg(doctest)` re-export in `runner::process::doc`
+is compiled out of the library that doctests link against, so no doctest can
+import them. Behaviour is covered by the unit tests in the module instead.
+
+### Module: `runner` target selection
+
+`BuildTargets<'a>` is a borrowing newtype over the requested target list,
+constructed by `BuildTargets::new` and read through `as_slice`. It exposes no
+`is_empty`: the accessor existed but had no callers anywhere in the
+workspace, so it was removed; call `as_slice().is_empty()` where that
+question needs asking.
+
 ## IR cycle detection
 
 ### Module: `ir::cycle`
