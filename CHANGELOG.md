@@ -40,8 +40,9 @@
   ([#465](https://github.com/leynos/netsuke/issues/465))
 - Move the `StringOrList` conversion helpers out of
   `src/ir/from_manifest_support.rs` and onto the type itself as `map_each`,
-  `to_paths`, `to_string_vec` and `as_single`, so the behaviour lives with the
-  data it converts
+  `to_string_vec` and `as_single`, so the behaviour lives with the data it
+  converts; `to_paths` stays at the manifest-to-IR boundary, since only
+  lowering treats these manifest strings as filesystem paths
   ([#73](https://github.com/leynos/netsuke/issues/73))
 
 ### Removed

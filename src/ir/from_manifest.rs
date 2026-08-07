@@ -25,7 +25,7 @@ mod support;
 use support::find_duplicates;
 use support::{
     ActionBindings, duplicate_output_error, get_target_display_name, insert_edge_for_outputs,
-    register_action, resolve_rule,
+    register_action, resolve_rule, to_paths,
 };
 
 impl BuildGraph {
@@ -70,9 +70,9 @@ impl BuildGraph {
         rule_map: &IrHashMap<String, Arc<Rule>>,
     ) -> Result<(), IrGenError> {
         for target in manifest.actions.iter().chain(&manifest.targets) {
-            let outputs = target.name.to_paths();
-            let inputs = target.sources.to_paths();
-            let implicit_deps = target.deps.to_paths();
+            let outputs = to_paths(&target.name);
+            let inputs = to_paths(&target.sources);
+            let implicit_deps = to_paths(&target.deps);
             tracing::debug!(
                 target = ?target.name,
                 implicit_deps_count = implicit_deps.len(),
@@ -116,7 +116,7 @@ impl BuildGraph {
                 implicit_deps,
                 explicit_outputs: outputs,
                 implicit_outputs: Vec::new(),
-                order_only_deps: target.order_only_deps.to_paths(),
+                order_only_deps: to_paths(&target.order_only_deps),
                 phony: target.phony,
                 always: target.always,
             };

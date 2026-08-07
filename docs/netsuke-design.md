@@ -791,6 +791,15 @@ pub enum StringOrList {
 flexibility for users to specify single sources, dependencies, and rule names
 as a simple string and multiple as a list, enhancing user-friendliness.*
 
+`StringOrList` owns the conversions that only need to know its own shape:
+`map_each` applies a function to every contained string, and `to_string_vec`
+and `as_single` build on it. Path conversion deliberately does not live here.
+The AST models the manifest's surface syntax, in which `sources`, `deps` and
+`order_only_deps` are plain strings; only manifest-to-IR lowering decides they
+name files on disk, so `src/ir/from_manifest_support.rs::to_paths` performs
+that interpretation at the boundary. Keeping `camino` out of `src/ast.rs`
+stops filesystem concerns leaking into the domain model.
+
 #### Example Manifest and AST
 
 The following minimal Netsukefile shows how the derived structures behave when

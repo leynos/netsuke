@@ -138,6 +138,20 @@ fn add_debug_arg<T: ?Sized>(
     message
 }
 
+/// Interpret a manifest string selector as a list of build-graph paths.
+///
+/// Path conversion lives at the manifest-to-IR boundary rather than on
+/// [`StringOrList`]: the AST models the manifest's surface syntax, in which
+/// these fields are plain strings, and only lowering decides that they name
+/// files on disk. The per-item mapping itself is [`StringOrList::map_each`],
+/// so no traversal logic is duplicated here.
+pub(super) fn to_paths(sol: &StringOrList) -> Vec<Utf8PathBuf> {
+    // The closure is not redundant: `Utf8PathBuf::from` is generic over its
+    // `From` impls, so passing it directly binds one concrete lifetime rather
+    // than the higher-ranked `Fn(&str)` bound `map_each` requires.
+    sol.map_each(|s| Utf8PathBuf::from(s))
+}
+
 /// Resolve a target rule selector into its single rule template.
 pub(super) fn resolve_rule(
     rule: &StringOrList,

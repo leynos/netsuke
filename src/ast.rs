@@ -29,7 +29,6 @@
 //! assert_eq!(manifest.targets.len(), 1);
 //! ```
 
-use camino::Utf8PathBuf;
 use semver::Version;
 use serde::{Deserialize, Serialize, de::Deserializer};
 use std::collections::HashMap;
@@ -305,25 +304,6 @@ impl StringOrList {
                 mapped
             }
         }
-    }
-
-    /// Convert the contained strings into UTF-8 paths.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use camino::Utf8PathBuf;
-    /// use netsuke::ast::StringOrList;
-    ///
-    /// let sources = StringOrList::List(vec!["a.c".into(), "b.c".into()]);
-    /// assert_eq!(
-    ///     sources.to_paths(),
-    ///     vec![Utf8PathBuf::from("a.c"), Utf8PathBuf::from("b.c")],
-    /// );
-    /// ```
-    #[must_use]
-    pub fn to_paths(&self) -> Vec<Utf8PathBuf> {
-        self.map_each(|s| Utf8PathBuf::from(s))
     }
 
     /// Collect the contained strings into owned `String`s.
