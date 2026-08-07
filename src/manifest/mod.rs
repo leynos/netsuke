@@ -159,23 +159,24 @@ fn register_manifest_vars(
     let Some(vars_value) = doc.get("vars") else {
         return Ok(());
     };
-    let vars = vars_value
-        .as_object()
-        .cloned()
-        .ok_or_else(|| ManifestError::Parse {
-            source: map_data_error(
-                serde_json::Error::custom(
-                    localization::message(keys::MANIFEST_VARS_NOT_OBJECT).to_string(),
-                ),
-                name,
+    // Borrow the map rather than cloning it: only the key needs to be owned,
+    // because `add_global` stores a `Cow<'source, str>` that cannot borrow from
+    // the caller's document.
+    let vars = vars_value.as_object().ok_or_else(|| ManifestError::Parse {
+        source: map_data_error(
+            serde_json::Error::custom(
+                localization::message(keys::MANIFEST_VARS_NOT_OBJECT).to_string(),
             ),
-            message: localization::message(keys::MANIFEST_PARSE),
-        })?;
+            name,
+        ),
+        message: localization::message(keys::MANIFEST_PARSE),
+    })?;
     for (key, value) in vars {
-        jinja.add_global(key, Value::from_serialize(value));
+        jinja.add_global(key.clone(), Value::from_serialize(value));
     }
     Ok(())
 }
+
 /// Parse a manifest string using Jinja for value templating.
 ///
 /// The input YAML must be valid on its own. Jinja expressions are evaluated
