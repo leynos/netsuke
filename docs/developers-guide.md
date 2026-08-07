@@ -2819,8 +2819,10 @@ value. It takes the starting value rather than reading the process, so the
 result depends only on its inputs. An absent prior value yields just the new
 directory, and — by the helper's contract, which its tests pin — a wholly
 empty prior value is treated the same way; empty entries inside a non-empty
-value survive composition. It returns an error when an entry contains the
-platform path separator, which `std::env::join_paths` itself reports.
+value survive composition. It returns an error when an entry cannot be
+represented in a `PATH`, which `std::env::join_paths` itself reports: Unix
+rejects an entry containing `:` because entries cannot be quoted, whereas
+Windows can quote `;` and instead rejects the quoting character `"`.
 
 Nothing in this seam reads or writes the process `PATH`. The guarantee that
 an injected `PATH` cannot select Ninja itself holds only when

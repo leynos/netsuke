@@ -144,9 +144,12 @@ pub fn run_ninja(
 ///
 /// let cli = Cli::default();
 /// let targets = BuildTargets::default();
-/// // `inherit()` reproduces `run_ninja`; `with_path` puts a directory ahead of
-/// // the child's `PATH` without touching the parent process.
-/// let env = CommandEnv::inherit().with_path("/opt/toolchain/bin");
+/// // `inherit()` reproduces `run_ninja`; `with_path` replaces the child's
+/// // `PATH` outright rather than prepending, so compose the whole value
+/// // first. Either way the parent process is untouched.
+/// let path = std::env::join_paths(["/opt/toolchain/bin", "/usr/bin"])
+///     .expect("separator-free entries always join");
+/// let env = CommandEnv::inherit().with_path(&path);
 /// run_ninja_with(&NinjaBuildRequest {
 ///     program: Path::new("ninja"),
 ///     cli: &cli,
