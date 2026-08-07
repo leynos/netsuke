@@ -2684,6 +2684,30 @@ yardstick for production cache keys.
 
 ## Manifest processing helpers
 
+### Variable registration
+
+`register_manifest_vars` runs inside `from_str_named` immediately after the
+stdlib is installed in the MiniJinja environment and before
+`register_manifest_macros` and `expand_foreach`. Registering the manifest's
+`vars` first is what makes those variables visible to macro bodies, to
+`foreach` and `when` expressions, and to every string field rendered later by
+`render_manifest`.
+
+The helper is a no-op when the manifest omits `vars`. When the key is present
+it must be a JSON object with string keys; a list, a scalar, or non-string keys
+produce a localized `ManifestError::Parse` carrying the
+`manifest.vars.not_object` message, so the failure reaches the user in their
+own language rather than as a raw serde diagnostic. Each entry is installed
+with `Environment::add_global`, which means a manifest variable shadows nothing
+in the stdlib but is available to every template expression evaluated for that
+manifest.
+
+The map is borrowed rather than cloned. Only the key is copied, because
+`add_global` stores the name as a `Cow<'source, str>` that cannot borrow from
+the caller's document; values are handed to `Value::from_serialize` by
+reference. Keep that shape when editing the helper — cloning the whole object
+reintroduces a deep copy of every nested value on each manifest parse.
+
 ### Template rendering and macro registration
 
 `manifest::jinja_macros::render_template` is the shared rendering boundary for
