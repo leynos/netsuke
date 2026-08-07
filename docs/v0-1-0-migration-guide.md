@@ -1,9 +1,18 @@
-# Migrating to v0.2.0
+# Migrating to v0.1.0
 
-This guide signposts the embedding API additions arriving in the next
-minor release: the injectable child environment (`CommandEnv`) and the
-named Ninja request types. Existing embedders compile unchanged; every
-addition is opt-in.
+This guide signposts the child-environment additions arriving in the v0.1.0
+beta series: the injectable child environment (`CommandEnv`) and the named
+Ninja request types. Existing callers compile unchanged; every addition is
+opt-in.
+
+## Netsuke is a build tool, not a library
+
+Netsuke is intended to be used as a command-line build tool. The only
+surfaces it commits to are the Netsukefile manifest format and the graph
+export. Everything else — the Rust API described below included — is
+private in intent and unstable in practice: it may change shape, or vanish,
+in any release of the beta series without a deprecation period. Depend on it
+only if you are prepared to follow those changes.
 
 ## At-a-glance changes
 
@@ -13,11 +22,11 @@ addition is opt-in.
 | Child environment | New opt-in `netsuke::runner::CommandEnv` carries additive variable overrides and an injected `PATH` for Ninja child processes. | [Users' guide](users-guide.md) |
 | Request types | New `netsuke::runner::NinjaBuildRequest` and `netsuke::runner::NinjaToolRequest` name the program, build file, and targets or tool for the `*_with` run functions. | [Users' guide](users-guide.md) |
 
-## Nothing to change for existing embedders
+## Nothing to change for existing callers
 
 The convenience wrappers keep their signatures and their behaviour: the
-child inherits the embedding process's environment, and Ninja is resolved
-exactly as before. No embedder needs to change to adopt this release.
+child inherits the calling process's environment, and Ninja is resolved
+exactly as before. No caller needs to change to adopt this release.
 
 ## Opting into an explicit child environment
 
@@ -36,7 +45,7 @@ must stay isolated from the injected `PATH`.
 
 Both request types borrow their fields, so one `CommandEnv` and one `Cli`
 can serve several invocations. Worked examples live in the users' guide's
-"Embedding the Ninja runner" section.
+"Drive Ninja with an explicit environment" section.
 
 ## Diagnostics
 

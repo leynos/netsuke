@@ -441,12 +441,13 @@ Both helpers accept:
 The `env(name)` function reads one required environment variable. v0.1.0-beta1
 does not accept a default argument; an absent or non-Unicode value is an error.
 
-### Inject the environment reader for tests and embedding
+
+### Inject the environment reader for tests
 
 `env()` does not read `std::env::var` directly. Manifest parsing goes through
 an injectable `EnvReader` seam, so callers that need deterministic `env()`
-results — test suites and programs embedding Netsuke as a library — can supply
-their own reader instead of mutating the process environment.
+results — test suites, and any program driving Netsuke's unstable Rust API —
+can supply their own reader instead of mutating the process environment.
 
 - `netsuke::manifest::from_str` parses a manifest using the live process
   environment.
@@ -479,10 +480,17 @@ assert!(format!("{:?}", manifest.targets[0].name).contains("release"));
 This snippet mirrors the executable doctest on `from_str_with_env` in the API
 documentation, rather than the YAML-only examples elsewhere in this guide.
 
-### Drive Ninja with an explicit environment when embedding
 
-Programs embedding Netsuke as a library can invoke Ninja without touching
-their own process environment. `netsuke::runner::CommandEnv` carries child
+### Drive Ninja with an explicit environment
+
+Netsuke is a build tool, not a library: the Netsukefile format and the graph
+export are the only surfaces it commits to, and every Rust API named in this
+section is private in intent and unstable, liable to change or disappear in
+any beta release. It is documented here for the benefit of anyone who calls
+it anyway, with that caveat understood.
+
+A program calling Netsuke's Rust API can invoke Ninja without touching
+its own process environment. `netsuke::runner::CommandEnv` carries child
 environment overrides as data — `inherit()` changes nothing, `with_var` and
 `with_path` set variables for the spawned command only — and the explicit
 request forms `run_ninja_with` and `run_ninja_tool_with` accept a request
@@ -498,7 +506,7 @@ the injected `PATH`.
 The request itself is a named type: `netsuke::runner::NinjaBuildRequest` for a
 build and `netsuke::runner::NinjaToolRequest` for `ninja -t <tool>`. Both
 borrow their fields, so one `CommandEnv` and one `Cli` can serve several
-invocations. The [v0.2.0 migration guide](v0-2-0-migration-guide.md)
+invocations. The [v0.1.0 migration guide](v0-1-0-migration-guide.md)
 summarizes these additions and confirms the wrappers are unchanged.
 
 <!-- tested-example: guide-ninja-request-snippet -->
@@ -543,9 +551,123 @@ if std::env::var_os("NETSUKE_GUIDE_RUN").is_some() {
 ```
 
 These types are additive: `run_ninja` and `run_ninja_tool` keep their existing
-signatures and behaviour, so an existing embedder needs no change. Each release
+signatures and behaviour, so an existing caller needs no change. Each release
 records such additions in [`CHANGELOG.md`](../CHANGELOG.md), which is where
-Netsuke signposts library-surface changes ahead of 1.0.
+Netsuke signposts Rust API changes — with no stability promise attached to
+them ahead of 1.0.
+
+### Inject the environment reader for tests
+
+`env()` does not read `std::env::var` directly. Manifest parsing goes through
+an injectable `EnvReader` seam, so callers that need deterministic `env()`
+results — test suites, and any program driving Netsuke's unstable Rust API —
+can supply their own reader instead of mutating the process environment.
+
+- `netsuke::manifest::from_str` parses a manifest using the live process
+  environment.
+- `netsuke::manifest::from_str_with_env` takes an explicit `EnvReader`,
+  letting the caller control every value `env()` returns.
+- `netsuke::manifest::process_env_reader` builds the process-backed reader
+  that `from_str` uses by default.
+
+A missing variable still fails the parse with a Jinja "undefined" error, and a
+non-Unicode value still fails with an "invalid operation" error; only the
+source of the values changes.
+
+<!-- tested-example: guide-env-reader-snippet -->
+
+```rust
+use netsuke::manifest::{EnvReader, from_str_with_env};
+use std::sync::Arc;
+
+let reader: EnvReader = Arc::new(|_| Ok(String::from("release")));
+let yaml = concat!(
+    "netsuke_version: \"1.0.0\"\n",
+    "targets:\n",
+    "  - name: \"{{ env('PROFILE') }}\"\n",
+    "    command: echo hi\n",
+);
+let manifest = from_str_with_env(yaml, &reader).expect("parse");
+assert!(format!("{:?}", manifest.targets[0].name).contains("release"));
+```
+
+This snippet mirrors the executable doctest on `from_str_with_env` in the API
+documentation, rather than the YAML-only examples elsewhere in this guide.
+
+### Drive Ninja with an explicit environment
+
+Netsuke is a build tool, not a library: the Netsukefile format and the graph
+export are the only surfaces it commits to, and every Rust API named in this
+section is private in intent and unstable, liable to change or disappear in
+any beta release. It is documented here for the benefit of anyone who calls
+it anyway, with that caveat understood.
+
+A program calling Netsuke's Rust API can invoke Ninja without touching
+its own process environment. `netsuke::runner::CommandEnv` carries child
+environment overrides as data — `inherit()` changes nothing, `with_var` and
+`with_path` set variables for the spawned command only — and the explicit
+request forms `run_ninja_with` and `run_ninja_tool_with` accept a request
+naming the program, build file, targets or tool, and that environment. The
+convenience wrappers `run_ninja` and `run_ninja_tool` behave identically
+with an inherited environment. Overrides are additive: variables not named
+are inherited from the embedding process, and the injected `PATH` governs
+what commands Ninja launches will see. Relative program names remain valid
+and resolve through that child `PATH`; supply an absolute or otherwise
+resolved `program` only when executable selection must stay isolated from
+the injected `PATH`.
+
+The request itself is a named type: `netsuke::runner::NinjaBuildRequest` for a
+build and `netsuke::runner::NinjaToolRequest` for `ninja -t <tool>`. Both
+borrow their fields, so one `CommandEnv` and one `Cli` can serve several
+invocations. The [v0.1.0 migration guide](v0-1-0-migration-guide.md)
+summarizes these additions and confirms the wrappers are unchanged.
+
+<!-- tested-example: guide-ninja-request-snippet -->
+
+```rust
+use netsuke::cli::Cli;
+use netsuke::runner::{
+    BuildTargets, CommandEnv, NinjaBuildRequest, NinjaToolRequest, run_ninja_tool_with,
+    run_ninja_with,
+};
+use std::path::Path;
+
+let cli = Cli::default();
+let targets = BuildTargets::default();
+// `with_path` replaces the child's `PATH` outright, so compose the whole
+// value first. The embedding process is never modified.
+let path = std::env::join_paths(["/opt/toolchain/bin", "/usr/bin"])
+    .expect("separator-free entries always join");
+let env = CommandEnv::inherit()
+    .with_var("NINJA_STATUS", "[%f/%t] ")
+    .with_path(&path);
+
+let build = NinjaBuildRequest {
+    program: Path::new("/usr/bin/ninja"),
+    cli: &cli,
+    build_file: Path::new("build.ninja"),
+    targets: &targets,
+    env: &env,
+};
+let clean = NinjaToolRequest {
+    program: Path::new("/usr/bin/ninja"),
+    cli: &cli,
+    build_file: Path::new("build.ninja"),
+    tool: "clean",
+    env: &env,
+};
+
+if std::env::var_os("NETSUKE_GUIDE_RUN").is_some() {
+    run_ninja_with(&build).expect("run ninja");
+    run_ninja_tool_with(&clean).expect("run ninja -t clean");
+}
+```
+
+These types are additive: `run_ninja` and `run_ninja_tool` keep their existing
+signatures and behaviour, so an existing caller needs no change. Each release
+records such additions in [`CHANGELOG.md`](../CHANGELOG.md), which is where
+Netsuke signposts Rust API changes — with no stability promise attached to
+them ahead of 1.0.
 
 ## Use the template standard library
 
