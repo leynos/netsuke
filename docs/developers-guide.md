@@ -1320,8 +1320,18 @@ archive. The smoke test also confirms that `.uv-cache/` and the workspace-only
 `tests/man_page_contract_tests.rs` and `tests/binstall_metadata_tests.rs` guard
 the package-versus-target naming split described in
 [package and target naming](#package-and-target-naming). The first asserts the
-manual page `build.rs` generates, the second holds the `cargo binstall`
-overrides to the release staging configuration and workflow matrix.
+manual page `build.rs` generates; the second pins the single
+`[package.metadata.binstall]` `pkg-url` template against the release staging
+configuration and the workflow target matrix, and fails if per-target
+overrides reappear.
+
+The hoist step that makes that template resolvable is covered by
+`tests/workflow_contracts/hoist_binstall_archives_test.py`, which combines
+example-based cases with Hypothesis property tests over generated target sets
+and staging states. Run it with `make test-workflow-contracts`; the target
+provisions `pytest`, `pyyaml`, and `hypothesis` through `uv run --with`, so
+`uv` is the only prerequisite and no virtual environment needs creating by
+hand.
 
 ### Temporary executable test helpers
 

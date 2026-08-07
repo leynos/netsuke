@@ -578,6 +578,52 @@ def test_hoist_rolls_back_completed_moves_when_a_move_fails(
         ), f"{name} content must survive the retry"
 
 
+def test_hoist_surfaces_both_errors_when_the_rollback_also_fails(
+    workspace: dict[str, Path],
+) -> None:
+    """A failed rollback reports its own error alongside the original.
+
+    Losing the move failure to the rollback failure would leave an operator
+    with no way to tell why the release aborted, so both must survive.
+    """
+    stage_pair(workspace["dist"], "netsuke-linux-amd64/s1", EXPECTED_NAMES[1])
+    stage_pair(workspace["dist"], "netsuke-macos-arm64/s2", EXPECTED_NAMES[0])
+
+    real_move = shutil.move
+    calls = {"count": 0}
+
+    def failing_move(src, dst):  # noqa: ANN001, ANN202 - shutil.move signature
+        calls["count"] += 1
+        # Calls 1 and 2 relocate the first pair; call 3 aborts the forward
+        # phase; call 4 is the first restoration attempt and fails too.
+        if calls["count"] == 3:
+            msg = "injected move failure"
+            raise OSError(msg)
+        if calls["count"] > 3:
+            msg = "injected rollback failure"
+            raise OSError(msg)
+        return real_move(src, dst)
+
+    with (
+        mock.patch.object(hoist_mod.shutil, "move", failing_move),
+        pytest.raises(BaseExceptionGroup) as raised,
+    ):
+        run_hoist(workspace)
+
+    group = raised.value
+    assert "rollback could not restore every file" in str(group), (
+        f"the group must explain that the rollback failed; got {group}"
+    )
+    assert sorted(str(error) for error in group.exceptions) == [
+        "injected move failure",
+        "injected rollback failure",
+    ], f"both failures must survive in the group; got {group.exceptions}"
+    assert (workspace["dist"] / EXPECTED_NAMES[0]).is_file(), (
+        "an unrestorable pair must be left where it landed, not silently "
+        "discarded, so the operator can inspect the release root"
+    )
+
+
 TARGET_POOL = [
     "x86_64-unknown-linux-gnu",
     "aarch64-apple-darwin",
