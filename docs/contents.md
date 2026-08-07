@@ -54,6 +54,8 @@ operator, user, and contributor references are easier to find.
 
 - [quickstart.md](quickstart.md): First-run walkthrough for building with
   Netsuke.
+- [v0-2-0-migration-guide.md](v0-2-0-migration-guide.md): Migration notes for
+  the v0.2.0 embedding API additions.
 - [users-guide.md](users-guide.md): End-user reference for authoring and
   running Netsuke manifests, including executable discovery and
   `command_available` branch selection.

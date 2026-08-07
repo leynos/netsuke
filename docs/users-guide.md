@@ -490,13 +490,16 @@ naming the program, build file, targets or tool, and that environment. The
 convenience wrappers `run_ninja` and `run_ninja_tool` behave identically
 with an inherited environment. Overrides are additive: variables not named
 are inherited from the embedding process, and the injected `PATH` governs
-what commands Ninja launches will see — supply an absolute program path,
-since a relative name is resolved in the child's `PATH`.
+what commands Ninja launches will see. Relative program names remain valid
+and resolve through that child `PATH`; supply an absolute or otherwise
+resolved `program` only when executable selection must stay isolated from
+the injected `PATH`.
 
 The request itself is a named type: `netsuke::runner::NinjaBuildRequest` for a
 build and `netsuke::runner::NinjaToolRequest` for `ninja -t <tool>`. Both
 borrow their fields, so one `CommandEnv` and one `Cli` can serve several
-invocations.
+invocations. The [v0.2.0 migration guide](v0-2-0-migration-guide.md)
+summarizes these additions and confirms the wrappers are unchanged.
 
 <!-- tested-example: guide-ninja-request-snippet -->
 
