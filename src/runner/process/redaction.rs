@@ -4,8 +4,14 @@
 /// A single command-line argument passed to a spawned process.
 ///
 /// Wrapping the raw `String` gives the redaction helpers a dedicated type to
-/// operate on, so call sites cannot accidentally log an unredacted argument
-/// where a redacted one is expected.
+/// operate on. The type does not record whether the text is raw or redacted,
+/// so it offers no guarantee on its own: logging call sites must consume only
+/// the values returned by [`redact_argument`] or [`redact_sensitive_args`].
+///
+/// The example is `ignore`d because `CommandArg` is crate-private; the
+/// `cfg(doctest)` re-export in `runner::process::doc` is compiled out of the
+/// library that doctests link against, so no doctest can import it. Behaviour
+/// is covered by the unit tests in this module instead.
 ///
 /// # Examples
 /// ```ignore
@@ -107,6 +113,16 @@ mod tests {
     //! Unit tests for sensitive environment variable redaction.
 
     use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case("token=abc")]
+    #[case("")]
+    #[case("  spaced  ")]
+    fn command_arg_borrows_the_wrapped_text(#[case] raw: &str) {
+        let arg = CommandArg::new(String::from(raw));
+        assert_eq!(arg.as_str(), raw);
+    }
 
     #[test]
     fn is_sensitive_arg_only_flags_known_keys() {
