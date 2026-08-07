@@ -18,6 +18,7 @@ mod env;
 mod lookup;
 mod options;
 mod resolve_error;
+mod workspace_switch;
 pub(crate) use lookup::{WORKSPACE_SKIP_DIRS, WorkspaceSkipList};
 
 pub(crate) use cache::WhichResolver;

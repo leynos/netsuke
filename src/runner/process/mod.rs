@@ -31,7 +31,7 @@ pub use ninja_program::resolve_ninja_program;
 #[cfg(doctest)]
 pub use ninja_program::resolve_ninja_program_utf8;
 #[cfg(test)]
-use ninja_program::resolve_ninja_program_utf8_with;
+use ninja_program::{resolve_ninja_program_utf8_with, resolve_ninja_program_with};
 pub use paths::*;
 use streaming::{ForwardStats, forward_child_output, forward_child_output_with_ninja_status};
 

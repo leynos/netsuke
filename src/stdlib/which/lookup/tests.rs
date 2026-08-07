@@ -286,6 +286,7 @@ fn direct_path_not_executable_raises_direct_not_found(
 #[cfg(windows)]
 #[rstest]
 fn resolve_direct_appends_pathext(workspace: Result<TempWorkspace>) -> Result<()> {
+    use crate::stdlib::which::workspace_switch::WorkspaceSwitch;
     use test_support::exec::make_executable;
 
     let env = workspace?;
@@ -304,6 +305,7 @@ fn resolve_direct_appends_pathext(workspace: Result<TempWorkspace>) -> Result<()
         raw_pathext: Some(".bat".into()),
         entries: vec![],
         pathext: vec![".bat".into()],
+        workspace_switch: WorkspaceSwitch::Absent,
     };
 
     let matches = resolve_direct(".\\tools\\gradlew", &snapshot, &WhichOptions::default())?;

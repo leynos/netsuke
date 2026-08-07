@@ -1594,9 +1594,9 @@ is not obvious from the name:
   present.
 - `try_is_file(path) -> io::Result<bool>` is the fallible counterpart to the
   boolean predicates: `Ok(true)` when the path is a regular file, `Ok(false)`
-  when it is absent (`NotFound` is folded into the boolean result), and
-  `Err` for any other metadata failure, so callers can distinguish absence
-  from inaccessibility. The binary locator in `test_support/src/netsuke.rs`
+  when it is absent (`NotFound` is folded into the boolean result), and `Err`
+  for any other metadata failure, so callers can distinguish absence from
+  inaccessibility. The binary locator in `test_support/src/netsuke.rs`
   (`netsuke_executable_from`, see
   [Locating the netsuke binary](#locating-the-netsuke-binary)) relies on it to
   surface unexpected filesystem errors while probing candidate paths.
@@ -1781,6 +1781,13 @@ invocation and `DYLINT_TOML` override described in
 boundary policy.
 
 ### Environment and template ports
+
+The seams described in this section follow one of three sanctioned shapes —
+narrow closures, `mockable::Env`, or `EnvReader` — chosen by call-site count,
+expected growth, and `Send + Sync` registration requirements: use
+`mockable::Env` when a boundary is expected to acquire more inputs, even
+before its call-site count grows. See
+[ADR-008](adr-008-environment-seam-taxonomy.md) for the taxonomy.
 
 `manifest::EnvReader` owns environment lookup for the manifest `env()` helper.
 Production constructs the process-backed adapter at the manifest loading
@@ -2286,6 +2293,40 @@ Selected file-load errors and malformed `NETSUKE_JSON` values are returned to
 the caller. Accepted environment values are `true`, `false`, `1`, and `0`. An
 explicit root `--json` flag bypasses environment parsing.
 
+#### Workspace fallback switch seam
+
+`src/stdlib/which/workspace_switch.rs` is a leaf module holding the
+`NETSUKE_WHICH_WORKSPACE` name and the domain state `WorkspaceSwitch`
+(`Value`, `Absent`, `NotUnicode`) with its `enabled()` decision. The variable
+is read by `EnvSnapshot::capture` through the injected `mockable::Env`
+provider and stored as snapshot data; the enable/disable decision is derived
+from that snapshot on demand. The cache fingerprint hashes the state —
+`WorkspaceSwitch` derives `Hash` for exactly that purpose — so two resolutions
+differing only in this switch never share a cache entry.
+
+The adapter owns everything platform-specific. `env.rs` holds the
+`From<Result<String, std::env::VarError>>` conversion, the single point at
+which the platform error becomes a domain state, and emits the non-UTF-8
+warning once per capture immediately after the read. Only the variable's name
+is logged, never its value. The leaf module therefore names neither `VarError`
+nor `tracing`, and consulting the switch afterwards is silent. See
+[ADR-008](adr-008-environment-seam-taxonomy.md) for the seam taxonomy.
+
+#### Ninja program resolver seam
+
+`resolve_ninja_program_utf8_with` in `src/runner/process/ninja_program.rs`
+takes `&impl mockable::Env`, with `mockable::DefaultEnv` as the production
+adapter supplied by the ambient `resolve_ninja_program_utf8` wrapper. The unit
+tests inject a `MockEnv` that pins the `NETSUKE_NINJA` key, so every override
+branch runs without process mutation.
+
+`resolve_ninja_program_with`, in the same module, takes the identical `&impl
+mockable::Env` seam and converts the UTF-8 result into a general platform
+`PathBuf`. It is compiled only under `#[cfg(test)]`: production reaches the
+platform-path form through `resolve_ninja_program`, which itself calls the
+UTF-8 resolver and converts its result, so no production path constructs a
+platform `PathBuf` independently of `resolve_ninja_program_utf8_with`.
+
 ### Configuration discovery module layout
 
 `src/cli/discovery.rs` attaches several small `#[path = "..."]` modules that
@@ -2444,8 +2485,8 @@ any scenario that requires a hermetic child environment.
 
 #### Locating the netsuke binary
 
-Both `run_netsuke_in` and `run_netsuke_in_with_env` depend on a private
-locator, `netsuke_executable()`, to find the built `netsuke` binary.
+Both `run_netsuke_in` and `run_netsuke_in_with_env` depend on a private locator,
+`netsuke_executable()`, to find the built `netsuke` binary.
 `netsuke_executable()` converts `std::env::current_exe()` to a
 `camino::Utf8PathBuf` and delegates to `netsuke_executable_from`, which takes
 an injected `mockable::Env` — the same injectable-environment pattern used by
@@ -2463,8 +2504,8 @@ The locator checks candidate paths in order:
 3. `CARGO_TARGET_DIR/<triple>/<profile>/`, for `--target` builds where the
    profile directory nests under the target triple.
 
-Filesystem errors other than "not found" are surfaced rather than treated as
-a missing candidate, via the [`test_support::fs`](#test_supportfs) wrapper
+Filesystem errors other than "not found" are surfaced rather than treated as a
+missing candidate, via the [`test_support::fs`](#test_supportfs) wrapper
 `try_is_file`. When every candidate misses, the resulting error lists all
 attempted paths.
 

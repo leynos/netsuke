@@ -3,23 +3,26 @@
 //! This module owns selection between `NETSUKE_NINJA` and the default program.
 //! Process construction consumes only its resolved paths; other adapters must
 //! not read or interpret the override independently.
+//!
+//! The environment reaches the resolver through [`mockable::Env`] (#488):
+//! production supplies [`mockable::DefaultEnv`], the crate's one explicit
+//! process-environment adapter for this boundary, and tests supply
+//! `mockable::MockEnv` so every branch runs without process mutation.
 
 use super::super::{NINJA_ENV, NINJA_PROGRAM};
 use camino::Utf8PathBuf;
-use std::{env, ffi::OsString, path::PathBuf};
+use mockable::Env;
+use std::path::PathBuf;
 use tracing::debug;
 
-/// Resolves Ninja with an injectable environment reader for testability.
+/// Resolves Ninja with an injectable environment for testability.
 ///
 /// This variant avoids mutating the process environment when testing
 /// resolution behaviour. It selects a non-empty UTF-8 `NETSUKE_NINJA`
 /// override, falls back to [`NINJA_PROGRAM`] when the override is unset,
 /// empty, or non-UTF-8, and emits resolution diagnostics at this boundary.
-pub(super) fn resolve_ninja_program_utf8_with<F>(mut read_env: F) -> Utf8PathBuf
-where
-    F: FnMut(&str) -> Option<OsString>,
-{
-    read_env(NINJA_ENV).map_or_else(
+pub(super) fn resolve_ninja_program_utf8_with(env: &impl Env) -> Utf8PathBuf {
+    env.os_string(NINJA_ENV).map_or_else(
         || {
             debug!(
                 ninja_program = NINJA_PROGRAM,
@@ -62,14 +65,19 @@ where
     )
 }
 
+/// Resolve Ninja as a general platform path with an injectable environment.
+///
+/// Compiled for tests only: production reaches the platform-path form through
+/// [`resolve_ninja_program`], which shares the UTF-8 resolution below.
+#[cfg(test)]
+pub(super) fn resolve_ninja_program_with(env: &impl Env) -> PathBuf {
+    resolve_ninja_program_utf8_with(env).into()
+}
+
 /// Resolve the configured Ninja executable as a UTF-8 path.
 #[must_use]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "composition root: supplies the process environment to the ninja program resolver seam"
-)]
 pub fn resolve_ninja_program_utf8() -> Utf8PathBuf {
-    resolve_ninja_program_utf8_with(|key| env::var_os(key))
+    resolve_ninja_program_utf8_with(&mockable::DefaultEnv)
 }
 
 /// Resolve the configured Ninja executable as a general platform path.

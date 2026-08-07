@@ -1,9 +1,6 @@
 //! Workspace fallback search helpers for the `which` resolver.
 
-use std::{
-    env,
-    hash::{Hash, Hasher},
-};
+use std::hash::{Hash, Hasher};
 
 use camino::Utf8PathBuf;
 use indexmap::IndexSet;
@@ -23,8 +20,6 @@ use windows::search_workspace as platform_search_workspace;
 pub(super) const WORKSPACE_MAX_DEPTH: usize = 6;
 pub(crate) const WORKSPACE_SKIP_DIRS: &[&str] =
     &[".git", "target", "node_modules", "dist", "build"];
-
-const WORKSPACE_FALLBACK_ENV: &str = "NETSUKE_WHICH_WORKSPACE";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct WorkspaceSkipList {
@@ -81,9 +76,9 @@ pub(super) fn search_workspace(
     collect_all: bool,
     skip_dirs: &WorkspaceSkipList,
 ) -> Result<Vec<Utf8PathBuf>, ResolveError> {
-    if !workspace_fallback_enabled() {
+    if !env.workspace_fallback_enabled() {
         tracing::debug!(
-            env = WORKSPACE_FALLBACK_ENV,
+            env = crate::stdlib::which::workspace_switch::WORKSPACE_FALLBACK_ENV,
             "workspace which fallback disabled via env override",
         );
         return Ok(Vec::new());
@@ -104,27 +99,6 @@ pub(super) fn should_visit_entry(entry: &walkdir::DirEntry, skip_dirs: &Workspac
     }
     let name = entry.file_name().to_string_lossy();
     !skip_dirs.contains(&name)
-}
-
-#[expect(
-    clippy::disallowed_methods,
-    reason = "composition root: supplies the process environment to the workspace fallback seam"
-)]
-fn workspace_fallback_enabled() -> bool {
-    match env::var(WORKSPACE_FALLBACK_ENV) {
-        Ok(value) => {
-            let normalised = value.to_ascii_lowercase();
-            !matches!(normalised.as_str(), "0" | "false" | "off")
-        }
-        Err(env::VarError::NotPresent) => true,
-        Err(env::VarError::NotUnicode(_)) => {
-            tracing::warn!(
-                env = WORKSPACE_FALLBACK_ENV,
-                "workspace fallback disabled because env var is not valid UTF-8",
-            );
-            false
-        }
-    }
 }
 
 /// Convert a walkdir item to an entry, propagating traversal errors as

@@ -194,6 +194,10 @@ fn env_fingerprint(env: &EnvSnapshot) -> u64 {
     let mut hasher = DefaultHasher::new();
     env.raw_path.hash(&mut hasher);
     env.raw_pathext.hash(&mut hasher);
+    // The workspace switch is an environment input like PATH: a fallback hit
+    // cached while the switch was on must not answer a resolution made with
+    // it off, and vice versa.
+    env.workspace_switch().hash(&mut hasher);
     hasher.finish()
 }
 
@@ -202,6 +206,7 @@ mod tests {
     //! Unit tests for the which resolver cache: key derivation, capacity
     //! bounds, and skip-list handling during resolution.
     use super::*;
+    use crate::stdlib::which::workspace_switch::WorkspaceSwitch;
     use anyhow::{Result, anyhow, ensure};
     use camino::Utf8PathBuf;
     use rstest::rstest;
@@ -265,6 +270,38 @@ mod tests {
         );
 
         ensure!(key_a != key_b, "skip lists must influence cache key");
+        Ok(())
+    }
+
+    /// Differing workspace-switch readings must not share a cache entry.
+    ///
+    /// A fallback hit cached while `NETSUKE_WHICH_WORKSPACE` left the search
+    /// enabled would otherwise answer a resolution made with it disabled —
+    /// cross-toggle cache poisoning. The snapshots here differ only in the
+    /// captured switch state, so key inequality proves the fingerprint
+    /// covers it.
+    #[test]
+    fn cache_key_differs_when_workspace_switch_differs() -> Result<()> {
+        let temp = TempDir::new()?;
+        let cwd = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+            .map_err(|path| anyhow!("temp path should be utf8: {path:?}"))?;
+        let base = EnvSnapshot::capture(Some(cwd.as_path()), Some(std::ffi::OsStr::new("")))?;
+        let options = WhichOptions::default();
+        let skips = WorkspaceSkipList::default();
+
+        let enabled = base.clone().with_workspace_switch(WorkspaceSwitch::Absent);
+        let disabled = base.with_workspace_switch(WorkspaceSwitch::Value(String::from("0")));
+        ensure!(
+            enabled.workspace_fallback_enabled() && !disabled.workspace_fallback_enabled(),
+            "the fixtures should sit on opposite sides of the switch"
+        );
+
+        let key_enabled = CacheKey::new("tool", &enabled, &options, &skips);
+        let key_disabled = CacheKey::new("tool", &disabled, &options, &skips);
+        ensure!(
+            key_enabled != key_disabled,
+            "the workspace switch must influence the cache key"
+        );
         Ok(())
     }
 

@@ -9,7 +9,45 @@ use mockable::{DefaultEnv, Env};
 
 use crate::localization::{self, keys};
 
-use super::{options::CwdMode, resolve_error::ResolveError};
+use super::{
+    options::CwdMode,
+    resolve_error::ResolveError,
+    workspace_switch::{WORKSPACE_FALLBACK_ENV, WorkspaceSwitch},
+};
+
+/// Translate a platform reading of the switch into its domain state.
+///
+/// The conversion lives here, in the adapter that performs the read, so
+/// `workspace_switch` never names `std::env::VarError`. It is the single
+/// place the platform error crosses into the resolver's own vocabulary.
+impl From<Result<String, std::env::VarError>> for WorkspaceSwitch {
+    fn from(raw: Result<String, std::env::VarError>) -> Self {
+        match raw {
+            Ok(value) => Self::Value(value),
+            Err(std::env::VarError::NotPresent) => Self::Absent,
+            Err(std::env::VarError::NotUnicode(_)) => Self::NotUnicode,
+        }
+    }
+}
+
+/// Read and translate the workspace switch, warning about a mis-encoded value.
+///
+/// Both capture variants funnel through here so the diagnostic fires exactly
+/// once per capture, at the boundary where the ambient read happens, rather
+/// than on every consultation of the switch. Silently switching workspace
+/// search off would leave a user whose variable is mis-encoded with commands
+/// mysteriously unresolved and no indication why. Only the variable's name is
+/// logged; its value never is.
+fn capture_workspace_switch(env: &impl Env) -> WorkspaceSwitch {
+    let switch = WorkspaceSwitch::from(env.raw(WORKSPACE_FALLBACK_ENV));
+    if matches!(switch, WorkspaceSwitch::NotUnicode) {
+        tracing::warn!(
+            env = WORKSPACE_FALLBACK_ENV,
+            "workspace fallback disabled because env var is not valid UTF-8",
+        );
+    }
+    switch
+}
 
 #[derive(Clone, Debug)]
 pub(super) struct EnvSnapshot {
@@ -19,6 +57,13 @@ pub(super) struct EnvSnapshot {
     entries: Vec<PathEntry>,
     #[cfg(windows)]
     pathext: Vec<String>,
+    /// The `NETSUKE_WHICH_WORKSPACE` state captured for this snapshot.
+    ///
+    /// Stored as data rather than a decision so the cache fingerprint can
+    /// hash it — two resolutions differing only in this switch must not
+    /// share a cache entry — and so `env` depends only on the leaf
+    /// `workspace_switch` module rather than calling into `lookup`.
+    workspace_switch: WorkspaceSwitch,
 }
 
 impl EnvSnapshot {
@@ -56,11 +101,13 @@ impl EnvSnapshot {
         env: &impl Env,
     ) -> Result<Self, ResolveError> {
         let (cwd, raw_path, entries) = capture_common(cwd_override, path_override, env)?;
+        let workspace_switch = capture_workspace_switch(env);
         Ok(Self {
             cwd,
             raw_path,
             raw_pathext: None,
             entries,
+            workspace_switch,
         })
     }
 
@@ -76,12 +123,14 @@ impl EnvSnapshot {
             .map(OsString::from)
             .or_else(|| env.os_string("PATHEXT"));
         let pathext = parse_pathext(raw_pathext.as_deref());
+        let workspace_switch = capture_workspace_switch(env);
         Ok(Self {
             cwd,
             raw_path,
             raw_pathext,
             entries,
             pathext,
+            workspace_switch,
         })
     }
 
@@ -117,6 +166,27 @@ impl EnvSnapshot {
     #[cfg(windows)]
     pub(super) fn pathext(&self) -> &[String] {
         &self.pathext
+    }
+
+    /// Whether the workspace fallback is enabled for this snapshot.
+    ///
+    /// Decided on demand from the captured state; the non-UTF-8 warning has
+    /// already fired once at capture, so repeated consultations of the switch
+    /// stay silent.
+    pub(super) fn workspace_fallback_enabled(&self) -> bool {
+        self.workspace_switch.enabled()
+    }
+
+    /// Replace the captured switch state, for cache-key tests.
+    #[cfg(test)]
+    pub(super) fn with_workspace_switch(mut self, switch: WorkspaceSwitch) -> Self {
+        self.workspace_switch = switch;
+        self
+    }
+
+    /// The captured switch state, as the cache fingerprint hashes it.
+    pub(super) const fn workspace_switch(&self) -> &WorkspaceSwitch {
+        &self.workspace_switch
     }
 }
 
@@ -224,57 +294,9 @@ pub(super) fn candidate_paths(
 }
 
 #[cfg(all(test, not(windows)))]
-mod tests {
-    //! Unit tests for injected executable-search environment capture.
-
-    use super::*;
-    use mockable::MockEnv;
-
-    #[test]
-    fn capture_uses_the_injected_path_provider() {
-        let cwd = Utf8Path::new("/workspace");
-        let configured = OsString::from("/configured/bin");
-        let expected = configured.clone();
-        let mut env = MockEnv::new();
-        env.expect_os_string()
-            .withf(|key| key == "PATH")
-            .once()
-            .return_once(move |_| Some(configured));
-
-        let snapshot = EnvSnapshot::capture_with_env(Some(cwd), None, &env)
-            .expect("injected PATH should produce an environment snapshot");
-
-        assert_eq!(snapshot.raw_path, Some(expected));
-        assert_eq!(
-            snapshot.resolved_dirs(CwdMode::Never),
-            [Utf8Path::new("/configured/bin")]
-        );
-    }
-}
+#[path = "env_tests.rs"]
+mod tests;
 
 #[cfg(all(test, windows))]
-mod windows_tests {
-    //! Windows-specific injected `PATH` and `PATHEXT` capture tests.
-
-    use super::*;
-    use mockable::MockEnv;
-
-    #[test]
-    fn capture_uses_injected_and_normalized_pathext() {
-        let mut env = MockEnv::new();
-        env.expect_os_string()
-            .withf(|key| key == "PATH")
-            .once()
-            .return_once(|_| Some(OsString::from(r"C:\configured\bin")));
-        env.expect_os_string()
-            .withf(|key| key == "PATHEXT")
-            .once()
-            .return_once(|_| Some(OsString::from(".EXE;exe; CMD ;.cmd")));
-
-        let snapshot =
-            EnvSnapshot::capture_with_env(Some(Utf8Path::new("C:/workspace")), None, &env)
-                .expect("injected PATH and PATHEXT should produce an environment snapshot");
-
-        assert_eq!(snapshot.pathext(), [".exe", ".cmd"]);
-    }
-}
+#[path = "env_windows_tests.rs"]
+mod windows_tests;
