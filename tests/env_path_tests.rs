@@ -4,6 +4,9 @@
 //! runner applies the result as data via `CommandEnv`, so nothing here
 //! mutates the parent process: no test carries `#[serial]` and none needs
 //! `EnvLock`.
+//!
+//! These are the named cases; the invariants they instantiate live in
+//! `env_path_property_tests.rs`, which Cargo builds as its own target.
 
 use anyhow::{Context, Result, ensure};
 use netsuke::runner::CommandEnv;
@@ -320,6 +323,3 @@ proptest! {
         prop_assert_eq!(actual, expected);
     }
 }
-
-#[path = "env_path_property_tests.rs"]
-mod properties;

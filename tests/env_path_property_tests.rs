@@ -1,24 +1,20 @@
 //! Property coverage for `CommandEnv` and `PATH` composition.
 //!
 //! Split from `env_path_tests.rs` to keep that file within the 400-line
-//! ceiling; included from there via `#[path]`, so the fixed cases and the
-//! invariants they are instances of still ship as one test binary. These
-//! properties cover inputs nobody would write down: arbitrary entry lists
-//! including empty entries, and arbitrary override sequences with repeated
-//! keys.
-
-//! Property coverage for `CommandEnv` and `PATH` composition.
+//! ceiling. `env_path_tests.rs` names specific behaviours; these state the
+//! invariants those cases are instances of, over inputs nobody would write
+//! down: arbitrary entry lists including empty entries, and arbitrary
+//! override sequences with repeated keys.
 //!
-//! The fixed cases above name specific behaviours; these state the
-//! invariants they are instances of, over inputs nobody would write down:
-//! arbitrary entry lists including empty entries, and arbitrary override
-//! sequences with repeated keys.
+//! Cargo builds this file as its own integration-test target, so Proptest
+//! persists failing seeds beside it, in
+//! `env_path_property_tests.proptest-regressions`.
 
 use netsuke::runner::CommandEnv;
 use proptest::collection::vec;
 use proptest::prelude::*;
 use std::collections::HashMap;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use test_support::env::prepend_path_value;
 
@@ -76,18 +72,16 @@ proptest! {
     ) {
         let mut model: HashMap<String, String> = HashMap::new();
         let mut env = CommandEnv::inherit();
-        for (key, value) in &ops {
-            model.insert(key.clone(), value.clone());
-            env = env.with_var(key, value);
+        for (key, value) in ops {
+            // Borrow for the override, then hand ownership to the model: the
+            // pair is needed once by each and never simultaneously.
+            env = env.with_var(&key, &value);
+            model.insert(key, value);
         }
         prop_assert_eq!(env.is_empty(), model.is_empty());
         for key in ["A", "B", "C"] {
-            let expected = model.get(key).map(|value| OsString::from(value.clone()));
-            prop_assert_eq!(
-                env.get(key),
-                expected.as_deref().map(OsStr::new),
-                "key {}", key
-            );
+            let expected = model.get(key).map(|value| OsStr::new(value.as_str()));
+            prop_assert_eq!(env.get(key), expected, "key {}", key);
         }
     }
 }
