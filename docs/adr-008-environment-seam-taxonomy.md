@@ -84,11 +84,12 @@ dependency. `workspace_switch.rs` holds only the variable name and that state,
 making it a leaf module: it is used by `env` and by `lookup::workspace`, and it
 calls back into neither, so there is no environment-to-lookup cycle.
 
-The which-resolver cache fingerprint (`stdlib::which::cache::env_fingerprint`)
-hashes every input the snapshot captured — `raw_path`, `raw_pathext`, and the
-`WorkspaceSwitch` state, which derives `Hash` precisely so it can be hashed
-directly — so two resolutions that differ only in one captured environment
-input cannot share a cache entry.
+The which-resolver `CacheKey` incorporates every input the snapshot captured,
+though not uniformly: `cwd` is stored directly as its own field, while
+`stdlib::which::cache::env_fingerprint` hashes `raw_path`, `raw_pathext`, and
+the `WorkspaceSwitch` state, which derives `Hash` precisely so it can be
+hashed directly. Either way, two resolutions that differ only in one captured
+environment input cannot share a cache entry.
 
 ### Explicit child-environment composition
 

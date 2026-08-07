@@ -1757,8 +1757,11 @@ boundary policy.
 
 ### Environment and template ports
 
-The seams described in this section follow one of three sanctioned shapes,
-chosen by call-site count and `Send + Sync` requirements; see
+The seams described in this section follow one of three sanctioned shapes —
+narrow closures, `mockable::Env`, or `EnvReader` — chosen by call-site count,
+expected growth, and `Send + Sync` registration requirements: use
+`mockable::Env` when a boundary is expected to acquire more inputs, even
+before its call-site count grows. See
 [ADR-008](adr-008-environment-seam-taxonomy.md) for the taxonomy.
 
 `manifest::EnvReader` owns environment lookup for the manifest `env()` helper.
@@ -2291,6 +2294,13 @@ takes `&impl mockable::Env`, with `mockable::DefaultEnv` as the production
 adapter supplied by the ambient `resolve_ninja_program_utf8` wrapper. The unit
 tests inject a `MockEnv` that pins the `NETSUKE_NINJA` key, so every override
 branch runs without process mutation.
+
+`resolve_ninja_program_with`, in the same module, takes the identical `&impl
+mockable::Env` seam and converts the UTF-8 result into a general platform
+`PathBuf`. It is compiled only under `#[cfg(test)]`: production reaches the
+platform-path form through `resolve_ninja_program`, which itself calls the
+UTF-8 resolver and converts its result, so no production path constructs a
+platform `PathBuf` independently of `resolve_ninja_program_utf8_with`.
 
 ### Configuration discovery module layout
 
