@@ -4,9 +4,11 @@
 //! for operators, while also attaching stable tracing fields for tools that
 //! consume structured diagnostics.
 
+use super::command_env::env_names_eq;
 use super::redaction::{CommandArg, redact_sensitive_args};
 use camino::Utf8PathBuf;
 use std::{
+    ffi::OsStr,
     io,
     path::PathBuf,
     process::{Command, ExitStatus},
@@ -32,12 +34,18 @@ pub(super) struct CommandLogContext {
 /// that overrides were applied and whether `PATH` was among them. Names and
 /// values may carry secrets, so only a bounded count and a `PATH` flag are
 /// derived; neither is user-controlled cardinality in a log field.
+///
+/// The `PATH` test uses [`env_names_eq`], so the flag answers the question an
+/// operator is actually asking — "was the variable the child resolves programs
+/// from overridden?" — under the target's own naming rules. Folding case
+/// unconditionally would flag a Unix variable merely named `Path`, which is an
+/// unrelated variable there.
 fn summarize_env_overrides(cmd: &Command) -> (usize, bool) {
     let mut count = 0usize;
     let mut is_path_overridden = false;
     for (key, _) in cmd.get_envs() {
         count += 1;
-        is_path_overridden |= key.eq_ignore_ascii_case("PATH");
+        is_path_overridden |= env_names_eq(key, OsStr::new("PATH"));
     }
     (count, is_path_overridden)
 }
@@ -194,6 +202,45 @@ mod tests {
 
         assert_eq!(context.env_override_count, expected_count);
         assert_eq!(context.is_path_overridden, expected_path_overridden);
+    }
+
+    /// A Unix variable named `Path` is not `PATH`, and must not raise the flag.
+    ///
+    /// Kept separate from the table above because the expectation is
+    /// target-specific: the same input is a genuine `PATH` override on Windows.
+    #[cfg(unix)]
+    #[test]
+    fn mixed_case_path_is_not_a_path_override_on_unix() {
+        let mut cmd = Command::new("ninja");
+        CommandEnv::inherit()
+            .with_var("Path", "/mixed/case")
+            .apply(&mut cmd);
+
+        let context = CommandLogContext::from_command(&cmd);
+
+        assert_eq!(context.env_override_count, 1);
+        assert!(
+            !context.is_path_overridden,
+            "a Unix variable named `Path` is not `PATH`"
+        );
+    }
+
+    /// On Windows the same variable *is* `PATH`, so the flag must rise.
+    #[cfg(windows)]
+    #[test]
+    fn mixed_case_path_is_a_path_override_on_windows() {
+        let mut cmd = Command::new("ninja");
+        CommandEnv::inherit()
+            .with_var("Path", "C:\\mixed")
+            .apply(&mut cmd);
+
+        let context = CommandLogContext::from_command(&cmd);
+
+        assert_eq!(context.env_override_count, 1);
+        assert!(
+            context.is_path_overridden,
+            "Windows resolves `Path` and `PATH` to one variable"
+        );
     }
 
     #[cfg(unix)]

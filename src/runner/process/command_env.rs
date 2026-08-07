@@ -12,6 +12,33 @@
 use std::ffi::{OsStr, OsString};
 use std::process::Command;
 
+/// Whether two environment variable names denote the same variable.
+///
+/// The answer is a property of the target platform, not a stylistic choice.
+/// Unix environment names are case-sensitive, so `Path` and `PATH` are two
+/// different variables and must not be conflated. Windows resolves names
+/// case-insensitively, so treating them as distinct would let a `CommandEnv`
+/// hold two entries the child process would collapse into one — with the
+/// surviving value chosen by `std`, not by the last `with_var` call.
+///
+/// Windows case folding is approximated with ASCII folding. Environment names
+/// outside ASCII are vanishingly rare and the full `CompareStringOrdinal`
+/// mapping is not reachable from safe `std`; the approximation is exact for
+/// every name Netsuke composes or documents.
+#[cfg(windows)]
+pub(super) fn env_names_eq(left: &OsStr, right: &OsStr) -> bool {
+    left.eq_ignore_ascii_case(right)
+}
+
+/// Whether two environment variable names denote the same variable.
+///
+/// See the Windows counterpart for why this is target-specific: Unix
+/// environment names are case-sensitive, so the comparison is exact.
+#[cfg(not(windows))]
+pub(super) fn env_names_eq(left: &OsStr, right: &OsStr) -> bool {
+    left == right
+}
+
 /// Environment values applied to a spawned command.
 ///
 /// An empty set means "inherit the parent environment", which is production
@@ -44,12 +71,20 @@ impl CommandEnv {
     /// Override `key` with `value` for the spawned command.
     ///
     /// A later call for the same key replaces the earlier one, so a composed
-    /// environment cannot end up carrying two values for one variable.
+    /// environment cannot end up carrying two values for one variable. "The
+    /// same key" follows the target's own rule — exact on Unix, ASCII
+    /// case-insensitive on Windows — so the set of overrides here always
+    /// matches the set the child process will see. Replacement keeps the
+    /// casing first recorded, as the platform's own environment block does.
     #[must_use]
     pub fn with_var(mut self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>) -> Self {
         let name = key.as_ref().to_os_string();
         let setting = value.as_ref().to_os_string();
-        if let Some(existing) = self.vars.iter_mut().find(|(existing, _)| *existing == name) {
+        if let Some(existing) = self
+            .vars
+            .iter_mut()
+            .find(|(existing, _)| env_names_eq(existing, &name))
+        {
             existing.1 = setting;
         } else {
             self.vars.push((name, setting));
@@ -85,7 +120,9 @@ impl CommandEnv {
     /// Look up a configured override, for assertions and composition.
     ///
     /// Reports only what this `CommandEnv` overrides — never the parent's
-    /// value — so `None` means "inherited", not "unset".
+    /// value — so `None` means "inherited", not "unset". Keys are matched by
+    /// the target's own rule, so a lookup answers with the value the child
+    /// would actually receive.
     ///
     /// # Examples
     ///
@@ -103,7 +140,7 @@ impl CommandEnv {
         let wanted = key.as_ref();
         self.vars
             .iter()
-            .find(|(name, _)| name == wanted)
+            .find(|(name, _)| env_names_eq(name, wanted))
             .map(|(_, value)| value.as_os_str())
     }
 
@@ -117,5 +154,43 @@ impl CommandEnv {
         for (key, value) in &self.vars {
             cmd.env(key, value);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Unit tests for target-aware override replacement.
+
+    use super::*;
+
+    /// On Unix, `Path` and `PATH` are separate variables and stay separate.
+    ///
+    /// Folding them together here would silently rewrite one variable when the
+    /// caller named the other, and `get` would then report a value the child
+    /// never receives.
+    #[cfg(unix)]
+    #[test]
+    fn differently_cased_keys_are_distinct_variables() {
+        let env = CommandEnv::inherit()
+            .with_var("Path", "/mixed")
+            .with_path("/upper");
+
+        assert_eq!(env.get("Path"), Some(OsStr::new("/mixed")));
+        assert_eq!(env.get("PATH"), Some(OsStr::new("/upper")));
+    }
+
+    /// On Windows, `Path` and `PATH` are one variable, so the later call wins.
+    ///
+    /// Storing both would leave `get` answering with a value `std` discards
+    /// when it builds the child's environment block.
+    #[cfg(windows)]
+    #[test]
+    fn differently_cased_keys_denote_one_variable() {
+        let env = CommandEnv::inherit()
+            .with_var("Path", "old")
+            .with_path("new");
+
+        assert_eq!(env.get("Path"), Some(OsStr::new("new")));
+        assert_eq!(env.get("PATH"), Some(OsStr::new("new")));
     }
 }
