@@ -60,7 +60,7 @@ fn a_tilde_path_expands_against_the_configured_home(
     let dir = Dir::open_ambient_dir(&workspace.root, ambient_authority())
         .with_context(|| format!("open workspace {}", workspace.root))?;
     let config = StdlibConfig::new(dir)?
-        .with_workspace_root_path(workspace.root.clone())?
+        .with_workspace_root_path(&workspace.root)?
         .with_home_override(Some(home.to_string()));
     let mut env = Environment::new();
     stdlib::register_with_config(&mut env, config)?;
