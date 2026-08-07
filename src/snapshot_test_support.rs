@@ -35,6 +35,23 @@ pub(crate) fn snapshot_settings(subdir: &str) -> Settings {
     settings
 }
 
+/// Build snapshot settings for diagnostic-JSON documents.
+///
+/// Extends [`snapshot_settings`] with a redaction filter for the generator's
+/// version, so snapshots survive version bumps. The filter anchors on the
+/// enclosing `"generator"` object and its `"name": "netsuke"` line; any other
+/// `version` field in a rendered document stays visible in snapshot diffs.
+/// Diagnostic-JSON snapshot tests in any module must bind through this helper
+/// so the redaction is applied consistently.
+pub(crate) fn diagnostic_json_snapshot_settings() -> Settings {
+    let mut settings = snapshot_settings("diagnostic_json");
+    settings.add_filter(
+        r#"("generator": \{\s*\n\s*"name": "netsuke",\s*\n\s*"version": ")[^"]+(")"#,
+        r"${1}[version]${2}",
+    );
+    settings
+}
+
 /// Resolve explicit-theme preferences for deterministic snapshot tests.
 pub(crate) fn theme_prefs(theme: ThemePreference) -> OutputPrefs {
     resolve_from_theme_with(

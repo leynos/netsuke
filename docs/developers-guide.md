@@ -221,18 +221,33 @@ from the `bin-name` field that
   Debian and RPM payloads, the Windows Installer product, and the macOS
   installer package all stay named `netsuke`.
 - `[package.metadata.binstall]` in `Cargo.toml` overrides `cargo binstall`'s
-  default asset resolution, which would otherwise look for `netsuke-build`
-  assets and fall back to a source build on the pinned nightly. The overrides
-  spell out one unarchived (`pkg-fmt = "bin"`) asset per released target;
-  `tests/binstall_metadata_tests.rs` rebuilds the expected names from
-  `.github/release-staging.toml` and checks the target set against the release
-  workflow matrix.
+  default asset resolution, whose patterns place the target before the version
+  and so match no released asset, leaving a fallback to a source build on the
+  pinned nightly. A single template resolves a
+  `{ name }-{ version }-{ target }.tar.gz` archive (`pkg-fmt = "tgz"`) for
+  every released target, named after the Cargo package rather than the binary.
+  `stage-release-artefacts` stages each target's archive, plus a `.sha256`
+  sidecar, per `[common.binstall]` in `.github/release-staging.toml`, and the
+  "Hoist cargo-binstall archives" step in `.github/workflows/release.yml` runs
+  `scripts/hoist_binstall_archives.py` under a pinned Python 3.13 installed by
+  `setup-uv`. The script validates that every target's archive and checksum
+  are present, are regular files rather than symlinks, and have a free
+  destination before moving them to the release root for upload; the read-only
+  discovery and validation half lives in `scripts/hoist_binstall_discovery.py`.
+  `tests/binstall_metadata_tests.rs` and
+  `tests/workflow_contracts/hoist_binstall_archives_test.py` hold this
+  contract.
 
 Only the two registry installation commands name `netsuke-build`, and
-`tests/documentation_examples_tests.rs` pins both. When adding a release
-target, a packaging format, or an artefact name, update the `binstall`
-overrides and the artefact-name table in `tests/binstall_metadata_tests.rs`
-alongside the workflow.
+`tests/documentation_installation_tests.rs` pins both. When adding a release
+target, a packaging format, or an artefact name, add the target to
+`.github/release-staging.toml`'s `[targets.*]` table and to the release
+workflow's target matrices; the single `pkg-url` template in `Cargo.toml`
+(`{ name }-{ version }-{ target }.tar.gz`) resolves new targets automatically,
+with no per-target edit. `tests/binstall_metadata_tests.rs` and
+`tests/workflow_contracts/hoist_binstall_archives_test.py` hold that contract,
+and fail if per-target overrides reappear or the staged and expected archive
+names diverge.
 
 ## Toolchain and borrow checker
 
@@ -1305,8 +1320,18 @@ archive. The smoke test also confirms that `.uv-cache/` and the workspace-only
 `tests/man_page_contract_tests.rs` and `tests/binstall_metadata_tests.rs` guard
 the package-versus-target naming split described in
 [package and target naming](#package-and-target-naming). The first asserts the
-manual page `build.rs` generates, the second holds the `cargo binstall`
-overrides to the release staging configuration and workflow matrix.
+manual page `build.rs` generates; the second pins the single
+`[package.metadata.binstall]` `pkg-url` template against the release staging
+configuration and the workflow target matrix, and fails if per-target
+overrides reappear.
+
+The hoist step that makes that template resolvable is covered by
+`tests/workflow_contracts/hoist_binstall_archives_test.py`, which combines
+example-based cases with Hypothesis property tests over generated target sets
+and staging states. Run it with `make test-workflow-contracts`; the target
+provisions `pytest`, `pyyaml`, and `hypothesis` through `uv run --with`, so
+`uv` is the only prerequisite and no virtual environment needs creating by
+hand.
 
 ### Temporary executable test helpers
 
