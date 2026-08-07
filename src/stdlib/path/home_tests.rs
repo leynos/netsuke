@@ -18,9 +18,14 @@
 //! intricate of the two, which would otherwise be unreachable from the Unix CI
 //! host.
 
-use super::path_utils::{posix_home_from, windows_home_from};
+use super::path_utils::{HomeSource, posix_home_from, windows_home_from};
 use crate::stdlib::config_types::HomeDirectory;
 use rstest::rstest;
+
+/// Borrow a resolution as `(home, source)` so cases can be written as literals.
+fn as_pair(resolved: Option<&HomeSource>) -> Option<(&str, &str)> {
+    resolved.map(|(home, source)| (home.as_str(), *source))
+}
 
 mod expanduser_behaviour {
     //! `expanduser` resolves the home through the injected [`HomeDirectory`]
@@ -34,7 +39,9 @@ mod expanduser_behaviour {
 
     use super::super::path_utils::expanduser;
     use super::HomeDirectory;
+    use crate::test_tracing_capture::with_test_subscriber;
     use rstest::rstest;
+    use tracing_subscriber::filter::LevelFilter;
 
     #[rstest]
     #[case::tilde_alone("~", "/home/a")]
@@ -62,6 +69,52 @@ mod expanduser_behaviour {
         let error = expanduser("~/x", &HomeDirectory::Ambient, |_| None)
             .expect_err("an empty reader should leave no home");
         assert_eq!(error.kind(), minijinja::ErrorKind::InvalidOperation);
+    }
+
+    /// Capture the home-resolution events emitted by one `expanduser` call.
+    fn events_for(
+        raw: &str,
+        home: &HomeDirectory,
+        read_env: impl Fn(&str) -> Option<String>,
+    ) -> Vec<String> {
+        with_test_subscriber(LevelFilter::DEBUG, |captured| {
+            drop(expanduser(raw, home, read_env));
+            captured.snapshot()
+        })
+        .into_iter()
+        .filter(|event| event.contains("stdlib.expanduser.home"))
+        .collect()
+    }
+
+    /// A successful ambient resolution reports the rung that supplied the home,
+    /// and nothing else: no path, no environment value.
+    #[test]
+    fn resolution_reports_its_bounded_source() {
+        let read_env = |key: &str| (key == "USERPROFILE").then(|| "/injected/home".to_owned());
+        let events = events_for("~/x", &HomeDirectory::Ambient, read_env);
+        let event = events.first().expect("one home-resolution event");
+        assert!(
+            event.contains("source=\"userprofile\"") && event.contains("found=true"),
+            "the event should name the rung and the outcome: {event}"
+        );
+        assert!(
+            !events.iter().any(|other| other.contains("/injected/home")),
+            "no event may carry the resolved home: {events:?}"
+        );
+    }
+
+    /// A resolution that finds nothing records the bounded failure category
+    /// alongside the `missing` source.
+    #[test]
+    fn an_unresolvable_home_reports_a_bounded_outcome() {
+        let events = events_for("~/x", &HomeDirectory::Missing, |_| None);
+        assert!(
+            events.iter().any(|event| {
+                event.contains("outcome=\"home_unavailable\"")
+                    && event.contains("source=\"missing\"")
+            }),
+            "the failure event should carry the bounded outcome: {events:?}"
+        );
     }
 
     /// A path without a leading `~` passes through unchanged, and the home
@@ -101,33 +154,44 @@ fn env_of<'a>(pairs: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String
     }
 }
 
+/// Each case pins the resolved home *and* the bounded label naming the rung
+/// that supplied it, since the label is what home-resolution telemetry reports.
 #[rstest]
-#[case::home_wins(&[("HOME", "/home/a"), ("USERPROFILE", "/users/b")], Some("/home/a"))]
-#[case::falls_back_to_userprofile(&[("USERPROFILE", "/users/b")], Some("/users/b"))]
+#[case::home_wins(&[("HOME", "/home/a"), ("USERPROFILE", "/users/b")], Some(("/home/a", "home")))]
+#[case::falls_back_to_userprofile(&[("USERPROFILE", "/users/b")], Some(("/users/b", "userprofile")))]
 #[case::nothing_set(&[], None)]
 // An empty value is passed through rather than treated as unset: the ladder
 // reports what the environment says, and `expanduser` decides what an empty
 // home means. Pinned so the behaviour cannot drift silently.
-#[case::empty_home_is_passed_through(&[("HOME", "")], Some(""))]
-#[case::empty_userprofile_is_passed_through(&[("USERPROFILE", "")], Some(""))]
-fn posix_ladder(#[case] pairs: &[(&str, &str)], #[case] expected: Option<&str>) {
-    assert_eq!(posix_home_from(env_of(pairs)).as_deref(), expected);
+#[case::empty_home_is_passed_through(&[("HOME", "")], Some(("", "home")))]
+#[case::empty_userprofile_is_passed_through(&[("USERPROFILE", "")], Some(("", "userprofile")))]
+fn posix_ladder(#[case] pairs: &[(&str, &str)], #[case] expected: Option<(&str, &str)>) {
+    let resolved = posix_home_from(env_of(pairs));
+    assert_eq!(as_pair(resolved.as_ref()), expected);
 }
 
+/// As above: every Windows rung is pinned by both value and source label.
 #[rstest]
 #[case::home_wins(
     &[("HOME", "H:\\home"), ("USERPROFILE", "U:\\users"), ("HOMEDRIVE", "C:"), ("HOMEPATH", "\\me")],
-    Some("H:\\home")
+    Some(("H:\\home", "home"))
 )]
 #[case::userprofile_before_the_pair(
     &[("USERPROFILE", "U:\\users"), ("HOMEDRIVE", "C:"), ("HOMEPATH", "\\me")],
-    Some("U:\\users")
+    Some(("U:\\users", "userprofile"))
 )]
-#[case::drive_and_path_pair(&[("HOMEDRIVE", "C:"), ("HOMEPATH", "\\me")], Some("C:\\me"))]
-#[case::homeshare_last(&[("HOMESHARE", "\\\\server\\share")], Some("\\\\server\\share"))]
+#[case::drive_and_path_pair(
+    &[("HOMEDRIVE", "C:"), ("HOMEPATH", "\\me")],
+    Some(("C:\\me", "drive_path"))
+)]
+#[case::homeshare_last(
+    &[("HOMESHARE", "\\\\server\\share")],
+    Some(("\\\\server\\share", "homeshare"))
+)]
 #[case::nothing_set(&[], None)]
-fn windows_ladder(#[case] pairs: &[(&str, &str)], #[case] expected: Option<&str>) {
-    assert_eq!(windows_home_from(env_of(pairs)).as_deref(), expected);
+fn windows_ladder(#[case] pairs: &[(&str, &str)], #[case] expected: Option<(&str, &str)>) {
+    let resolved = windows_home_from(env_of(pairs));
+    assert_eq!(as_pair(resolved.as_ref()), expected);
 }
 
 /// An incomplete `HOMEDRIVE`/`HOMEPATH` pair must not be combined.
@@ -138,14 +202,14 @@ fn windows_ladder(#[case] pairs: &[(&str, &str)], #[case] expected: Option<&str>
 #[rstest]
 #[case::falls_through_to_homeshare(
     &[("HOMEDRIVE", "C:"), ("HOMEPATH", ""), ("HOMESHARE", "\\\\server\\share")],
-    Some("\\\\server\\share")
+    Some(("\\\\server\\share", "homeshare"))
 )]
 #[case::no_homeshare_yields_none(&[("HOMEDRIVE", "C:"), ("HOMEPATH", "")], None)]
 // An empty HOMEDRIVE is equally incomplete: combining it would yield a bare
 // `\me`, naming a path on the current drive rather than a home directory.
 #[case::empty_homedrive_falls_through_to_homeshare(
     &[("HOMEDRIVE", ""), ("HOMEPATH", "\\me"), ("HOMESHARE", "\\\\server\\share")],
-    Some("\\\\server\\share")
+    Some(("\\\\server\\share", "homeshare"))
 )]
 #[case::empty_homedrive_without_homeshare_yields_none(
     &[("HOMEDRIVE", ""), ("HOMEPATH", "\\me")],
@@ -154,9 +218,10 @@ fn windows_ladder(#[case] pairs: &[(&str, &str)], #[case] expected: Option<&str>
 #[case::both_halves_empty_yields_none(&[("HOMEDRIVE", ""), ("HOMEPATH", "")], None)]
 fn windows_incomplete_drive_pair_is_treated_as_unset(
     #[case] pairs: &[(&str, &str)],
-    #[case] expected: Option<&str>,
+    #[case] expected: Option<(&str, &str)>,
 ) {
-    assert_eq!(windows_home_from(env_of(pairs)).as_deref(), expected);
+    let resolved = windows_home_from(env_of(pairs));
+    assert_eq!(as_pair(resolved.as_ref()), expected);
 }
 
 /// A `HOMEDRIVE` without `HOMEPATH` is incomplete and must not be used alone.
@@ -214,14 +279,16 @@ mod properties {
             homepath in option::of(value()),
             homeshare in option::of(value()),
         ) {
-            let expected = home.clone().or_else(|| userprofile.clone()).or_else(|| {
-                match (&homedrive, &homepath) {
-                    (Some(drive), Some(path)) if !drive.is_empty() && !path.is_empty() => {
-                        Some(format!("{drive}{path}"))
+            let expected = home.clone().map(|value| (value, "home"))
+                .or_else(|| userprofile.clone().map(|value| (value, "userprofile")))
+                .or_else(|| {
+                    match (&homedrive, &homepath) {
+                        (Some(drive), Some(path)) if !drive.is_empty() && !path.is_empty() => {
+                            Some((format!("{drive}{path}"), "drive_path"))
+                        }
+                        _ => homeshare.clone().map(|value| (value, "homeshare")),
                     }
-                    _ => homeshare.clone(),
-                }
-            });
+                });
             let pairs = [
                 ("HOME", &home),
                 ("USERPROFILE", &userprofile),
@@ -245,7 +312,8 @@ mod properties {
             homepath in option::of(value()),
             homeshare in option::of(value()),
         ) {
-            let expected = home.clone().or_else(|| userprofile.clone());
+            let expected = home.clone().map(|value| (value, "home"))
+                .or_else(|| userprofile.clone().map(|value| (value, "userprofile")));
             let all = [
                 ("HOME", &home),
                 ("USERPROFILE", &userprofile),

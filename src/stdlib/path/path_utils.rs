@@ -141,16 +141,37 @@ pub(super) fn normalise_parent(parent: Option<&Utf8Path>) -> Utf8PathBuf {
         .map_or_else(|| Utf8PathBuf::from("."), Utf8Path::to_path_buf)
 }
 
+/// Resolve the home and report which source supplied it.
+///
+/// This is the telemetry boundary for home resolution: the ladders stay pure
+/// and merely *return* their bounded source label, and this function is the
+/// only place that emits an event. Only the label is recorded — never the
+/// resolved home, an environment value, or a variable's contents.
 fn resolve_home<F>(home_directory: &HomeDirectory, read_env: F) -> Result<String, Error>
 where
     F: Fn(&str) -> Option<String>,
 {
-    let home = match home_directory {
+    let resolved = match home_directory {
         HomeDirectory::Ambient => home_from_env(read_env),
         HomeDirectory::Missing => None,
-        HomeDirectory::Explicit(home) => Some(home.clone()),
+        HomeDirectory::Explicit(home) => Some((home.clone(), HOME_SOURCE_EXPLICIT)),
     };
-    home.ok_or_else(|| {
+    let source = resolved
+        .as_ref()
+        .map_or(HOME_SOURCE_MISSING, |(_, source)| *source);
+    tracing::debug!(
+        event = EXPANDUSER_HOME_EVENT,
+        source,
+        found = resolved.is_some(),
+        "resolved the home directory for expanduser",
+    );
+    resolved.map(|(home, _)| home).ok_or_else(|| {
+        tracing::debug!(
+            event = EXPANDUSER_HOME_EVENT,
+            source,
+            outcome = HOME_OUTCOME_UNAVAILABLE,
+            "expanduser found no home directory",
+        );
         Error::new(
             ErrorKind::InvalidOperation,
             localization::message(keys::STDLIB_PATH_EXPANDUSER_NO_HOME).to_string(),
@@ -167,8 +188,33 @@ fn current_dir_utf8() -> Result<Utf8PathBuf, io::Error> {
     dir.canonicalize(Utf8Path::new("."))
 }
 
+/// The `event` field naming every home-resolution telemetry event.
+pub(super) const EXPANDUSER_HOME_EVENT: &str = "stdlib.expanduser.home";
+
+/// The bounded `outcome` recorded when no source supplied a home.
+pub(super) const HOME_OUTCOME_UNAVAILABLE: &str = "home_unavailable";
+
+/// `HOME` supplied the home directory.
+pub(super) const HOME_SOURCE_HOME: &str = "home";
+/// `USERPROFILE` supplied the home directory.
+pub(super) const HOME_SOURCE_USERPROFILE: &str = "userprofile";
+/// The `HOMEDRIVE`/`HOMEPATH` pair supplied the home directory.
+pub(super) const HOME_SOURCE_DRIVE_PATH: &str = "drive_path";
+/// `HOMESHARE` supplied the home directory.
+pub(super) const HOME_SOURCE_HOMESHARE: &str = "homeshare";
+/// A configured [`HomeDirectory::Explicit`] value supplied the home directory.
+pub(super) const HOME_SOURCE_EXPLICIT: &str = "explicit";
+/// No source supplied a home directory.
+pub(super) const HOME_SOURCE_MISSING: &str = "missing";
+
+/// A resolved home paired with the bounded label naming what supplied it.
+///
+/// The label is a `&'static str` drawn from the closed set above, so it can be
+/// recorded as telemetry without ever exposing a path or an environment value.
+pub(super) type HomeSource = (String, &'static str);
+
 /// A home-directory precedence ladder driven by an injected reader.
-type HomeLadder<F> = fn(F) -> Option<String>;
+type HomeLadder<F> = fn(F) -> Option<HomeSource>;
 
 /// Select the platform ladder and drive it with the injected reader.
 ///
@@ -177,7 +223,7 @@ type HomeLadder<F> = fn(F) -> Option<String>;
 /// The reader is injected all the way from the filter-registration boundary,
 /// so this module holds no process access of its own: whoever registers the
 /// `expanduser` filter decides what [`HomeDirectory::Ambient`] consults.
-fn home_from_env<F>(read_env: F) -> Option<String>
+fn home_from_env<F>(read_env: F) -> Option<HomeSource>
 where
     F: Fn(&str) -> Option<String>,
 {
@@ -197,6 +243,9 @@ where
 
 /// Resolve the home directory using the POSIX precedence ladder.
 ///
+/// Returns the home alongside the bounded label naming the rung that supplied
+/// it, so the caller can report the source without inspecting any value.
+///
 /// Compiled on every host and free of platform gating; the platform selection
 /// lives solely in [`home_from_env`].
 ///
@@ -204,13 +253,15 @@ where
 ///
 /// ```rust,ignore
 /// let env = |key: &str| (key == "HOME").then(|| String::from("/home/a"));
-/// assert_eq!(posix_home_from(env).as_deref(), Some("/home/a"));
+/// assert_eq!(posix_home_from(env), Some((String::from("/home/a"), "home")));
 /// ```
-pub(super) fn posix_home_from<F>(read_env: F) -> Option<String>
+pub(super) fn posix_home_from<F>(read_env: F) -> Option<HomeSource>
 where
     F: Fn(&str) -> Option<String>,
 {
-    read_env("HOME").or_else(|| read_env("USERPROFILE"))
+    read_env("HOME")
+        .map(|home| (home, HOME_SOURCE_HOME))
+        .or_else(|| read_env("USERPROFILE").map(|home| (home, HOME_SOURCE_USERPROFILE)))
 }
 
 /// Resolve the home directory using the Windows precedence ladder.
@@ -219,6 +270,9 @@ where
 /// finally `HOMESHARE`. An empty `HOMEPATH` is treated as unset, because
 /// joining it to `HOMEDRIVE` would yield a bare drive letter rather than a home
 /// directory.
+///
+/// Returns the home alongside the bounded label naming the rung that supplied
+/// it, so the caller can report the source without inspecting any value.
 ///
 /// Compiled on every host and free of platform gating; the platform selection
 /// lives solely in [`home_from_env`]. Keeping it unconditional is what lets the
@@ -233,14 +287,18 @@ where
 ///     "HOMEPATH" => Some(String::from("\\me")),
 ///     _ => None,
 /// };
-/// assert_eq!(windows_home_from(env).as_deref(), Some("C:\\me"));
+/// assert_eq!(
+///     windows_home_from(env),
+///     Some((String::from("C:\\me"), "drive_path")),
+/// );
 /// ```
-pub(super) fn windows_home_from<F>(read_env: F) -> Option<String>
+pub(super) fn windows_home_from<F>(read_env: F) -> Option<HomeSource>
 where
     F: Fn(&str) -> Option<String>,
 {
     read_env("HOME")
-        .or_else(|| read_env("USERPROFILE"))
+        .map(|home| (home, HOME_SOURCE_HOME))
+        .or_else(|| read_env("USERPROFILE").map(|home| (home, HOME_SOURCE_USERPROFILE)))
         .or_else(|| match (read_env("HOMEDRIVE"), read_env("HOMEPATH")) {
             // Both halves must be non-empty. An empty HOMEDRIVE would yield a
             // bare `\me`, which names a path on the current drive rather than
@@ -248,8 +306,8 @@ where
             // which names a drive. Either way the pair is incomplete, so fall
             // through to HOMESHARE.
             (Some(drive), Some(path)) if !drive.is_empty() && !path.is_empty() => {
-                Some(format!("{drive}{path}"))
+                Some((format!("{drive}{path}"), HOME_SOURCE_DRIVE_PATH))
             }
-            _ => read_env("HOMESHARE"),
+            _ => read_env("HOMESHARE").map(|home| (home, HOME_SOURCE_HOMESHARE)),
         })
 }

@@ -2447,6 +2447,34 @@ own, so both compile — and are tested — on every host.
   drive or a bare relative path is not a home directory; an incomplete pair
   falls through to `HOMESHARE`.
 
+#### Home-resolution telemetry
+
+The ladders stay pure: each *returns* the resolved home paired with a bounded
+`&'static str` label naming the rung that supplied it, and emits nothing.
+`resolve_home` is the sole telemetry boundary, emitting a single
+`tracing::debug!` event per resolution with these fields:
+
+| Field | Meaning |
+| --- | --- |
+| `event` | Always `stdlib.expanduser.home`, so the events are filterable. |
+| `source` | The bounded label naming what supplied the home. |
+| `found` | Whether a home was resolved at all. |
+| `outcome` | Present only on the failure event: `home_unavailable`. |
+
+`source` is drawn from a closed set and is never derived from a value:
+
+- `home` — `HOME`.
+- `userprofile` — `USERPROFILE`.
+- `drive_path` — the `HOMEDRIVE`/`HOMEPATH` pair, both halves non-empty.
+- `homeshare` — `HOMESHARE`.
+- `explicit` — a configured `HomeDirectory::Explicit` value.
+- `missing` — no source supplied a home.
+
+The events carry no paths and no environment values: neither the resolved
+home, nor a variable's contents, nor the expanded result. Adding a rung means
+adding a label to the closed set above and pinning it in the ladder tests, not
+recording the value that distinguished it.
+
 ### Configuration discovery module layout
 
 `src/cli/discovery.rs` attaches several small `#[path = "..."]` modules that
