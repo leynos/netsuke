@@ -32,8 +32,10 @@ mod diagnostics;
 mod expand;
 // `glob_paths` is the module's only boundary: every other item, including the
 // `GlobEntryResult` alias, stays module-private. Denying `unreachable_pub`
-// here turns a widened `pub` inside the private module into a build failure,
-// so the boundary cannot regress silently.
+// here rejects `pub` items that are still unreachable from the crate root, so
+// the boundary cannot regress silently. The `glob_paths` re-export below makes
+// that one item genuinely reachable and therefore exempt; anything else
+// widened to `pub` fails the build.
 #[deny(unreachable_pub)]
 mod glob;
 mod hints;

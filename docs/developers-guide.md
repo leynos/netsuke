@@ -1545,10 +1545,11 @@ it names a `glob` crate type that callers should never have to depend on.
 
 Two compile-time guards hold that boundary:
 
-- `#[deny(unreachable_pub)]` on the `mod glob;` declaration. Because the module
-  is private, widening any item inside it to `pub` makes that item unreachable
-  from the crate root and fails the build. This is what catches an accidental
-  `pub type GlobEntryResult`.
+- `#[deny(unreachable_pub)]` on the `mod glob;` declaration. The lint rejects
+  `pub` items that are still unreachable from the crate root, which is what
+  catches an accidental `pub type GlobEntryResult`. `glob_paths` is exempt only
+  because `src/manifest/mod.rs` deliberately re-exports it, making it genuinely
+  reachable; every item here that is not re-exported stays guarded.
 - A `compile_fail,E0603` doctest on `GlobEntryResult`, paired with a passing
   doctest that imports `netsuke::manifest::glob_paths`. Together these pin the
   downstream view: the alias has no public path, while the entry point does.

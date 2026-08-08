@@ -71,11 +71,13 @@ impl GlobPattern {
 /// consume it, so it is deliberately not part of the public API surface.
 ///
 /// Two compile-time guards keep it that way. `#[deny(unreachable_pub)]` on the
-/// `mod glob;` declaration in [`crate::manifest`] rejects any attempt to widen
-/// this alias — or any other item here — to `pub`, because nothing inside the
-/// private module is reachable from the crate root. The doctest below then
-/// pins the outcome from a downstream crate's point of view: no path through
-/// [`crate::manifest`] names the alias.
+/// `mod glob;` declaration in [`crate::manifest`] rejects `pub` items that are
+/// still unreachable from the crate root, so widening this alias to `pub`
+/// fails the build. [`glob_paths`] is exempt only because it is deliberately
+/// re-exported by [`crate::manifest`], which makes it genuinely reachable;
+/// every item here that is not re-exported stays guarded. The doctest below
+/// then pins the outcome from a downstream crate's point of view: no path
+/// through [`crate::manifest`] names the alias.
 ///
 /// ```compile_fail,E0603
 /// use netsuke::manifest::glob::GlobEntryResult;
