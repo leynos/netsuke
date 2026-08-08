@@ -123,7 +123,19 @@ split the same input identically.
   `{{ 'input-link' | realpath }}`.
 - `path | expanduser` is host-observing because it reads the home-directory
   environment. It expands `~` and `~/...`; named-user forms such as `~alice`
-  are unsupported. For example, `{{ '~/cache' | expanduser }}`.
+  are unsupported. The filter tries a platform-specific ladder of variables
+  and uses the first one that resolves, treating an empty value as set (not
+  skipped) except in the `HOMEDRIVE`/`HOMEPATH` case noted below:
+  - POSIX hosts: `HOME`, then `USERPROFILE`.
+  - Windows hosts: `HOME`, then `USERPROFILE`, then `HOMEDRIVE` joined with
+    `HOMEPATH`, then `HOMESHARE`. The joined pair is used only when both
+    halves are non-empty because an empty `HOMEPATH` would yield a bare
+    drive letter (`C:`) and an empty `HOMEDRIVE` would yield a
+    current-drive path (`\me`); an incomplete pair falls through to
+    `HOMESHARE`.
+  - If none of these resolve, the filter fails with an error.
+
+  For example, `{{ '~/cache' | expanduser }}`.
 
 ## Read and identify files
 

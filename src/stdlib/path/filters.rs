@@ -10,6 +10,23 @@ use super::{fs_utils, hash_utils, path_utils};
 use crate::localization::{self, keys};
 use crate::stdlib::config_types::HomeDirectory;
 
+/// Register the `expanduser` filter.
+///
+/// Composition root: the one sanctioned ambient environment read. The
+/// process-backed reader is captured here, at the registration boundary, and
+/// injected into `expanduser`, so `path_utils` holds no process access and
+/// `HomeDirectory::Ambient` consults whatever reader registration supplies.
+fn register_expanduser(env: &mut Environment<'_>, home_directory: HomeDirectory) {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "composition root: registration captures the process-backed reader once and injects it into the home ladders"
+    )]
+    let read_env = |key: &str| std::env::var(key).ok();
+    env.add_filter("expanduser", move |raw: String| -> Result<String, Error> {
+        path_utils::expanduser(&raw, &home_directory, read_env)
+    });
+}
+
 pub(crate) fn register_filters(env: &mut Environment<'_>, home_directory: HomeDirectory) {
     env.add_filter("basename", |raw: String| -> Result<String, Error> {
         Ok(path_utils::basename(Utf8Path::new(&raw)))
@@ -39,9 +56,7 @@ pub(crate) fn register_filters(env: &mut Environment<'_>, home_directory: HomeDi
     env.add_filter("realpath", |raw: String| -> Result<String, Error> {
         path_utils::canonicalize_any(Utf8Path::new(&raw)).map(camino::Utf8PathBuf::into_string)
     });
-    env.add_filter("expanduser", move |raw: String| -> Result<String, Error> {
-        path_utils::expanduser(&raw, &home_directory)
-    });
+    register_expanduser(env, home_directory);
     env.add_filter("size", |raw: String| -> Result<u64, Error> {
         fs_utils::file_size(Utf8Path::new(&raw))
     });

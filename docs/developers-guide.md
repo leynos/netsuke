@@ -2422,6 +2422,97 @@ The full normalization contract, which the property tests in
   `parse_pathext(None)` and `parse_pathext(Some(";  ;"))` both yield
   `DEFAULT_PATHEXT`.
 
+### Home-directory resolution ladders
+
+`stdlib::path::path_utils` resolves the user's home through two precedence
+ladders — POSIX (`HOME`, then `USERPROFILE`) and Windows (those two, then the
+`HOMEDRIVE`/`HOMEPATH` pair, then `HOMESHARE`). Both take an injected
+`read_env` closure. `home_from_env` remains the sole platform-*selection*
+point, and each ladder is gated to its own platform plus `test`
+(`posix_home_from` is `#[cfg(any(not(windows), test))]`, `windows_home_from`
+is `#[cfg(any(windows, test))]`), so a release build compiles only the ladder
+it uses while the `test` arm keeps both reachable from any host.
+
+#### Ladder ownership and call sites
+
+- The ladders are `pub(super)` and owned by `stdlib::path`. They are not a
+  general home-directory utility: callers elsewhere use `expanduser`.
+- `expanduser` resolves the home through the injected `HomeDirectory` value
+  and an injected `read_env` reader: `Explicit` and `Missing` never touch the
+  environment, and `Ambient` drives `home_from_env` with whatever reader the
+  caller supplied. The composition root lives at the registration boundary —
+  filter registration in `stdlib::path::filters` captures the process-backed
+  reader once, carrying the sanctioned site-level expectation — so
+  `path_utils` holds no process access at all. Tests inject their own reader,
+  covering the `Ambient` path without touching the process environment.
+
+#### Ladder composition rules
+
+- Keep each ladder free of platform *selection logic*, leaving that to
+  `home_from_env`. Gating decides only whether a ladder compiles, never which
+  one applies — that separation is what lets the `test` arm expose both
+  ladders to the CI host.
+- Gate each ladder `#[cfg(any(windows, test))]` or its inverse, and have
+  `home_from_env` name only the ladder it selects. Compiling both
+  unconditionally would leave the inapplicable one dead in a release build,
+  which `-D warnings` rejects; the previous workaround — binding both as a
+  `(posix, windows)` function-pointer pair so the unused one counted as
+  referenced — was an artificial dead-code anchor and has been removed.
+  Bounded constants used by only one ladder (`HOME_SOURCE_DRIVE_PATH` and
+  `HOME_SOURCE_HOMESHARE`, both Windows-only) carry the same gate as the
+  ladder that reads them.
+- The ladders report what the environment says. An empty value is passed
+  through rather than treated as unset for the single-variable readings
+  (`HOME`, `USERPROFILE`, `HOMESHARE`), and interpreting that is
+  `expanduser`'s concern, not theirs. The `HOMEDRIVE`/`HOMEPATH` pair is the
+  exception: it counts only when both halves are non-empty, since a bare
+  drive or a bare relative path is not a home directory; an incomplete pair
+  falls through to `HOMESHARE`.
+
+#### Home-resolution telemetry
+
+The ladders stay pure: each *returns* the resolved home paired with a bounded
+`&'static str` label naming the rung that supplied it, and emits nothing.
+`resolve_home` is the sole telemetry boundary, emitting a
+`tracing::debug!` event for every resolution, plus an additional
+`tracing::debug!` failure event when no home was available, with these
+fields:
+
+Table: Home-resolution telemetry fields.
+
+| Field | Meaning |
+| --- | --- |
+| `event` | Always `stdlib.expanduser.home`, so the events are filterable. |
+| `source` | The bounded label naming what supplied the home. |
+| `found` | Whether a home was resolved at all. |
+| `outcome` | Present only on the failure event: `home_unavailable`. |
+
+`source` is drawn from a closed set and is never derived from a value:
+
+- `home` — `HOME`.
+- `userprofile` — `USERPROFILE`.
+- `drive_path` — the `HOMEDRIVE`/`HOMEPATH` pair, both halves non-empty.
+- `homeshare` — `HOMESHARE`.
+- `explicit` — a configured `HomeDirectory::Explicit` value.
+- `missing` — no source supplied a home.
+
+`resolve_home` also increments a counter,
+`netsuke_stdlib_expanduser_home_total`, described once per process via a
+`Once`-guarded `describe_counter!`, matching the pattern in
+`stdlib::which::cache`. It carries two labels, both drawn from closed sets so
+the series count is fixed by the code, never by the environment: `outcome` is
+`found` or `home_unavailable`; `source` is the same bounded label set listed
+above. It increments exactly once per resolution whatever the outcome, so the
+counter totals resolutions rather than events — the failure path emits a
+second *debug event* but no second sample. Both the success and failure cases
+are pinned by tests in `src/stdlib/path/home_tests.rs`, which capture samples
+through a local `metrics_util` `DebuggingRecorder` rather than the global one.
+
+The events carry no paths and no environment values: neither the resolved
+home, nor a variable's contents, nor the expanded result. Adding a rung means
+adding a label to the closed set above and pinning it in the ladder tests, not
+recording the value that distinguished it.
+
 ### Configuration discovery module layout
 
 `src/cli/discovery.rs` attaches several small `#[path = "..."]` modules that

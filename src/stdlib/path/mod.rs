@@ -7,5 +7,10 @@ mod fs_utils;
 mod hash_utils;
 mod path_utils;
 
+#[cfg(test)]
+mod home_metrics_tests;
+#[cfg(test)]
+mod home_tests;
+
 pub(crate) use filters::register_filters;
 pub(crate) use fs_utils::file_type_matches;

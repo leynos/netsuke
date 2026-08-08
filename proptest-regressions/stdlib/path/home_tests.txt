@@ -1,0 +1,10 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+# Recorded while mutation-testing the property (the HOMEDRIVE emptiness
+# check was disabled to prove the test detects it), not from a defect in
+# the ladder itself.
+cc be405399e1c660af7820653ee114f838dcaba6702e5fe1b47efc3a0a4953002c # shrinks to home = None, userprofile = None, homedrive = Some(""), homepath = Some("a"), homeshare = None
