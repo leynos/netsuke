@@ -389,9 +389,10 @@ parent-relative patterns such as `glob('../shared/*.h')`. Expansion is scoped
 to the pattern's longest literal directory prefix — the text up to the first
 `*`, `?`, `[` or `{`, trimmed back to the last separator, so `src/` for
 `src/**/*.c`. If that prefix does not exist, or names something that is not a
-directory, the call returns an empty list rather than failing. A symbolic
-link whose target resolves outside that literal prefix is skipped rather than
-reported as an error.
+directory, the call returns an empty list rather than failing. A match is
+skipped rather than reported as an error when the metadata lookup fails
+because a symbolic link — the match itself or a directory reached on the way
+to it — resolves outside that prefix or dangles.
 
 ### Define reusable macros
 

@@ -1,6 +1,7 @@
 //! Utilities for normalising and validating manifest glob patterns.
 use minijinja::Error;
 
+mod diagnostics;
 mod errors;
 mod normalize;
 mod validate;
@@ -134,7 +135,8 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     })?
     else {
         // The pattern's literal directory prefix does not exist, so the
-        // pattern cannot match anything.
+        // pattern cannot match anything. `open_root_dir` has already recorded
+        // the outcome.
         return Ok(Vec::new());
     };
 
@@ -155,6 +157,7 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
             paths.push(p);
         }
     }
+    diagnostics::record_expansion_matched(&pattern_state, paths.len());
     Ok(paths)
 }
 
