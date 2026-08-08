@@ -1569,6 +1569,34 @@ targets:
     command: "cargo clippy --manifest-path {{ item }}/Cargo.toml"
 ```
 
+## Manifest glob module boundary
+
+Glob expansion lives in `src/manifest/glob/`, and `glob_paths` is its only
+boundary. `src/manifest/mod.rs` declares `mod glob;` privately and re-exports
+just that function, so nothing else in the module — `GlobPattern`, the error
+helpers in `glob/errors.rs`, the `walk` submodule, or the `GlobEntryResult`
+alias — is reachable from the crate root. `GlobEntryResult` in particular
+stays private to `manifest::glob`: only `glob_paths` and `walk` consume it, and
+it names a `glob` crate type that callers should never have to depend on.
+
+Two compile-time guards hold that boundary:
+
+- `#[deny(unreachable_pub)]` on the `mod glob;` declaration. The lint rejects
+  `pub` items that are still unreachable from the crate root, which is what
+  catches an accidental `pub type GlobEntryResult`. `glob_paths` is exempt only
+  because `src/manifest/mod.rs` deliberately re-exports it, making it genuinely
+  reachable; every item here that is not re-exported stays guarded.
+- A `compile_fail,E0603` doctest on `GlobEntryResult`, paired with a passing
+  doctest that imports `netsuke::manifest::glob_paths`. Together these pin the
+  downstream view: the alias has no public path, while the entry point does.
+  The passing doctest is the control — if the harness wiring breaks, it fails
+  rather than letting the rejection pass vacuously.
+
+When adding to this module, keep new items private, or `pub(super)` when a
+sibling submodule needs them; widen the boundary only by adding a deliberate
+re-export in `src/manifest/mod.rs`. The comments in the source are supporting
+detail for these rules, not a substitute for them.
+
 ## Test isolation utilities
 
 Environment variable mutations and working-directory changes are process-global
