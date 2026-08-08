@@ -14,6 +14,11 @@ __pycache__/
 .coverage
 .uv-cache/
 .uv-tools/
+# pyproject.toml declares no [project] table, so the repository is not a uv
+# project; a stray `uv run` without --no-project would otherwise leave these
+# behind.
+.venv/
+uv.lock
 .pytest_cache/
 .typos-oxendict-base.json
 .typos-oxendict-base.toml

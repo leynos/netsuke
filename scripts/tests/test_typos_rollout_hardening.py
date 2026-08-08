@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import importlib
 import json
-import types
+import typing as typ
 import urllib.error
 import urllib.request
 from pathlib import Path
 
 import pytest
-
 from typos_rollout_test_support import dictionary_text as _dictionary_text
+
+if typ.TYPE_CHECKING:
+    import types
 
 SCRIPT_DIRECTORY = Path(__file__).resolve().parents[1]
 
@@ -78,8 +80,12 @@ def test_oxford_adverb_suffix_is_generated(
     _, _, rollout, _ = rollout_modules
     mappings = rollout.generate_word_mappings(rollout.Dictionary(stems=("recogn",)))
 
-    assert mappings["recognizably"] == "recognizably"
-    assert mappings["recognisably"] == "recognizably"
+    assert mappings["recognizably"] == "recognizably", (
+        "the Oxford adverb was not accepted as written"
+    )
+    assert mappings["recognisably"] == "recognizably", (
+        "the plain-British adverb was not corrected to the Oxford form"
+    )
 
 
 def test_changed_etag_overrides_unchanged_date(
@@ -99,13 +105,11 @@ def test_changed_etag_overrides_unchanged_date(
     modified = "Fri, 10 Jul 2026 08:00:00 GMT"
     cache.write_text(_dictionary_text("original"), encoding="utf-8")
     metadata.write_text(
-        json.dumps(
-            {
-                "etag": '"estate-v1"',
-                "last_modified": modified,
-                "source": source,
-            }
-        ),
+        json.dumps({
+            "etag": '"estate-v1"',
+            "last_modified": modified,
+            "source": source,
+        }),
         encoding="utf-8",
     )
 
@@ -121,8 +125,10 @@ def test_changed_etag_overrides_unchanged_date(
         ),
     )
 
-    assert result.status == "refreshed"
-    assert rollout.load_dictionary(cache).stems == ("replacement",)
+    assert result.status == "refreshed", "a changed ETag did not refresh the cache"
+    assert rollout.load_dictionary(cache).stems == ("replacement",), (
+        "the refreshed cache does not hold the replacement dictionary"
+    )
 
 
 @pytest.mark.parametrize(
@@ -175,7 +181,9 @@ def test_default_refresh_uses_guarded_https_opener(
 
         def open(self, request: object, *, timeout: float) -> ValidResponse:
             """Return a valid response after recording the guarded call."""
-            assert timeout == pytest.approx(30.0)
+            assert timeout == pytest.approx(30.0), (
+                "the guarded opener was called without the 30s timeout"
+            )
             requests.append(request)
             return ValidResponse()
 
@@ -189,8 +197,12 @@ def test_default_refresh_uses_guarded_https_opener(
         ),
     )
 
-    assert result.status == "refreshed"
-    assert len(requests) == 1
+    assert result.status == "refreshed", (
+        "the guarded opener did not produce a refreshed cache"
+    )
+    assert len(requests) == 1, (
+        "production refresh did not route exactly one request through the opener"
+    )
 
 
 def test_http_status_and_persistence_errors_propagate(
@@ -229,11 +241,12 @@ def test_http_status_and_persistence_errors_propagate(
                 opener=missing,
             ),
         )
-    assert raised.value is not_found
+    assert raised.value is not_found, "the transport error was not propagated unchanged"
 
     def denied(*_args: object, **_kwargs: object) -> None:
         """Model denied persistence at the atomic-write boundary."""
-        raise PermissionError("cache is read-only")
+        message = "cache is read-only"
+        raise PermissionError(message)
 
     monkeypatch.setattr(cache_module, "atomic_write", denied)
     with pytest.raises(PermissionError, match="cache is read-only"):
@@ -292,7 +305,7 @@ def test_generator_propagates_non_connectivity_failures(
             source="https://example.test/base",
         )
 
-    assert raised.value is error
+    assert raised.value is error, "the refresh failure was not propagated unchanged"
 
 
 @pytest.mark.parametrize("failure_stage", ["write", "close", "replace"])
@@ -324,13 +337,15 @@ def test_atomic_write_cleans_temporary_file_after_failure(
         def write(self, content: bytes) -> None:
             """Write bytes unless this case models a write failure."""
             if failure_stage == "write":
-                raise OSError("write failure")
+                message = "write failure"
+                raise OSError(message)
             temporary.write_bytes(content)
 
         def __exit__(self, *_args: object) -> None:
             """Close unless this case models a close failure."""
             if failure_stage == "close":
-                raise OSError("close failure")
+                message = "close failure"
+                raise OSError(message)
 
     monkeypatch.setattr(
         cache_module.tempfile,
@@ -341,11 +356,12 @@ def test_atomic_write_cleans_temporary_file_after_failure(
 
         def fail_replace(_path: Path, _destination: Path) -> None:
             """Model an atomic replacement failure."""
-            raise OSError("replace failure")
+            message = "replace failure"
+            raise OSError(message)
 
         monkeypatch.setattr(cache_module.pathlib.Path, "replace", fail_replace)
 
     with pytest.raises(OSError, match=f"{failure_stage} failure"):
         cache_module.atomic_write(tmp_path / "typos.toml", b"content")
 
-    assert not temporary.exists()
+    assert not temporary.exists(), "the temporary file survived the failure"

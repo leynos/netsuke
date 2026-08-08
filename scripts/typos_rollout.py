@@ -4,31 +4,42 @@ from __future__ import annotations
 
 import dataclasses as dc
 import json
-import pathlib
 import tomllib
 import typing as typ
 import urllib.error
-import urllib.parse
 import urllib.request
 
-import typos_rollout_cache
 import typos_rollout_http
+
+# This module is the facade over the cache and HTTP halves of the rollout, so
+# the names its callers and tests reach for are re-exported here. The redundant
+# `X as X` aliases mark the ones this module does not itself use as deliberate
+# re-exports rather than dead imports.
+from typos_rollout_cache import RefreshResult
+from typos_rollout_cache import atomic_write as _atomic_write
+from typos_rollout_http import (
+    InsecureSourceError as InsecureSourceError,
+)
+from typos_rollout_http import (
+    NetworkUnavailableError as NetworkUnavailableError,
+)
+from typos_rollout_http import (
+    RefreshOptions,
+)
+from typos_rollout_http import (
+    _read_metadata as _read_metadata,
+)
+from typos_rollout_http import (
+    _remote_is_not_newer as _remote_is_not_newer,
+)
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
+    import pathlib
 
-RefreshResult = typos_rollout_cache.RefreshResult
-RefreshOptions = typos_rollout_http.RefreshOptions
-_CacheTargets = typos_rollout_cache.CacheTargets
-_RemoteResponse = typos_rollout_cache.RemoteResponse
-NetworkUnavailableError = typos_rollout_http.NetworkUnavailableError
-InsecureSourceError = typos_rollout_http.InsecureSourceError
-_HttpsRedirectHandler = typos_rollout_http._HttpsRedirectHandler
-_HTTPS_OPENER = typos_rollout_http._HTTPS_OPENER
-_read_metadata = typos_rollout_http._read_metadata
-_remote_is_not_newer = typos_rollout_http._remote_is_not_newer
-_atomic_write = typos_rollout_cache.atomic_write
-_DEFAULT_URLOPEN = urllib.request.urlopen
+# Snapshot of the transport entry point as imported: `refresh_base` compares the
+# live attribute against this to detect a caller that has replaced it.
+_DEFAULT_URLOPEN: cabc.Callable[..., object] = urllib.request.urlopen  # noqa: S310
 
 SCHEMA_VERSION = 1
 HTTP_NOT_MODIFIED = 304
@@ -373,10 +384,11 @@ def refresh_base(
         If dictionary validation fails.
     """
     selected_options = options
-    if options.opener is None and urllib.request.urlopen is not _DEFAULT_URLOPEN:
-        # Existing focused tests patch this legacy boundary; production retains
-        # the HTTPS-only opener when the standard function is unchanged.
-        selected_options = dc.replace(options, opener=urllib.request.urlopen)
+    # Existing focused tests patch this legacy boundary; production retains the
+    # HTTPS-only opener when the standard function is unchanged.
+    if options.opener is None and urllib.request.urlopen is not _DEFAULT_URLOPEN:  # noqa: S310
+        opener = urllib.request.urlopen  # noqa: S310 -- forwarded, never opened
+        selected_options = dc.replace(options, opener=opener)
     return typos_rollout_http.refresh_base(
         source,
         cache,

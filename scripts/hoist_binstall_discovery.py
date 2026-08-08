@@ -14,14 +14,14 @@ complete before the first move begins.
 
 from __future__ import annotations
 
+import dataclasses as dc
 import os
 import stat
 import tomllib
-from dataclasses import dataclass
 from pathlib import Path
 
 
-@dataclass(frozen=True)
+@dc.dataclass(frozen=True)
 class StagedArchive:
     """One expected archive with its resolved staging locations.
 
@@ -301,6 +301,6 @@ def locate_archives(
         match _resolve_archive(dist_dir, staged, name):
             case StagedArchive() as archive:
                 located.append(archive)
-            case str(problem):
+            case str() as problem:
                 missing.append(problem)
     return located, missing

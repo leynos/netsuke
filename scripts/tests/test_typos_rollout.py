@@ -9,7 +9,6 @@ import typing as typ
 from pathlib import Path
 
 import pytest
-
 from typos_rollout_test_support import dictionary_text as _dictionary_text
 
 if typ.TYPE_CHECKING:
@@ -59,7 +58,8 @@ def test_https_failure_reuses_valid_tracked_config(
 
     def unavailable(*_args: object, **_kwargs: object) -> None:
         """Model an unavailable HTTPS authority."""
-        raise rollout.NetworkUnavailableError("offline")
+        message = "offline"
+        raise rollout.NetworkUnavailableError(message)
 
     monkeypatch.setattr(rollout, "refresh_base", unavailable)
 
@@ -206,6 +206,6 @@ def test_render_and_write_are_deterministic_valid_toml(
     assert tomllib.loads(first)["default"]["locale"] == "en-gb", (
         "rendered locale was not en-gb"
     )
-    assert list(output.parent.glob(".typos.toml.*")) == [], (
+    assert not list(output.parent.glob(".typos.toml.*")), (
         "atomic write left a temporary file"
     )

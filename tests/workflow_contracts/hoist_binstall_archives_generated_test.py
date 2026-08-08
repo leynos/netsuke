@@ -12,14 +12,18 @@ Run via ``make test-workflow-contracts``.
 from __future__ import annotations
 
 import dataclasses
-from pathlib import Path
-
-import pytest
-from hypothesis import HealthCheck, given, settings
-from hypothesis import strategies as st
+import operator
+import typing as typ
 
 # conftest.py inserts scripts/ onto sys.path before this module is imported.
 import hoist_binstall_archives as hoist_mod
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
+
+if typ.TYPE_CHECKING:
+    from pathlib import Path
+
+    import pytest
 
 TARGET_POOL = [
     "x86_64-unknown-linux-gnu",
@@ -80,7 +84,7 @@ GENERATED_CASES = st.builds(
         st.tuples(st.sampled_from(TARGET_POOL), st.sampled_from(STATE_POOL)),
         min_size=1,
         max_size=4,
-        unique_by=lambda pair: pair[0],
+        unique_by=operator.itemgetter(0),
     ).map(tuple),
     layout_seed=st.integers(min_value=0, max_value=7),
 )

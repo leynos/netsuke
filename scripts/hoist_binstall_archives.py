@@ -77,7 +77,7 @@ def hoist(dist_dir: Path, staging_config: Path, manifest: Path, version: str) ->
     OSError
         If the dist tree cannot be traversed, an asset cannot be probed, or
         a validated move fails (after completed moves are rolled back).
-    ExceptionGroup
+    BaseExceptionGroup
         If a move fails and the rollback also cannot restore every file.
     """
     names = expected_archive_names(staging_config, manifest, version)
@@ -133,7 +133,7 @@ def _move_all(dist_dir: Path, located: list[StagedArchive]) -> None:
     ------
     OSError
         The original move failure, after a successful rollback.
-    ExceptionGroup
+    BaseExceptionGroup
         The original failure together with the rollback failure, when the
         rollback itself could not restore every file.
     """
@@ -148,10 +148,15 @@ def _move_all(dist_dir: Path, located: list[StagedArchive]) -> None:
         try:
             _rollback_completed_moves(completed)
         except BaseException as rollback_failure:
-            raise BaseExceptionGroup(
-                "hoist move failed and rollback could not restore every file",
-                [failure, rollback_failure],
-            ) from None
+            msg = "hoist move failed and rollback could not restore every file"
+            # Chain from the rollback failure rather than the original move
+            # failure: the rollback is why a plain re-raise is not enough. Both
+            # exceptions are carried by the group regardless, and naming a cause
+            # suppresses the implicit context that would otherwise repeat one of
+            # them above the group.
+            raise BaseExceptionGroup(msg, [failure, rollback_failure]) from (
+                rollback_failure
+            )
         raise
 
 

@@ -12,14 +12,16 @@ Run via ``make test-workflow-contracts``.
 from __future__ import annotations
 
 import shutil
-from pathlib import Path
+import typing as typ
 from unittest import mock
-
-import pytest
-from conftest import EXPECTED_NAMES, run_hoist, stage_pair
 
 # conftest.py inserts scripts/ onto sys.path before this module is imported.
 import hoist_binstall_archives as hoist_mod
+import pytest
+from conftest import EXPECTED_NAMES, run_hoist, stage_pair
+
+if typ.TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_hoist_rolls_back_completed_moves_when_a_move_fails(
