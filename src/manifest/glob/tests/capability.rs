@@ -159,23 +159,37 @@ fn glob_paths_matches_parent_relative_patterns() -> Result<()> {
 
 /// A symbolic link pointing out of the literal prefix is unreadable through
 /// the capability. It names no file the expansion can offer, so it is skipped
-/// rather than aborting the whole traversal.
+/// rather than aborting the whole traversal — whether the link is the match's
+/// final component or an intermediate directory it is reached through.
 #[cfg(unix)]
-#[test]
-fn glob_paths_skips_symlinks_escaping_the_prefix() -> Result<()> {
+#[rstest]
+#[case::final_component("src/*.c", "escaped.c", "../vendor/escaped.c", "real.c")]
+#[case::intermediate_directory("src/*/*.c", "link", "../vendor", "real/real.c")]
+fn glob_paths_skips_symlinks_escaping_the_prefix(
+    #[case] pattern_tail: &str,
+    #[case] link_name: &str,
+    #[case] link_target: &str,
+    #[case] kept: &str,
+) -> Result<()> {
     let temp = tempdir()?;
     let src = temp.path().join("src");
     let vendor = temp.path().join("vendor");
     test_fs::create_dir(&src)?;
     test_fs::create_dir(&vendor)?;
     test_fs::write(vendor.join("escaped.c"), "escaped")?;
-    test_fs::write(src.join("real.c"), "real")?;
-    test_fs::symlink("../vendor/escaped.c", src.join("escaped.c"))?;
+    if let Some(parent) = std::path::Path::new(kept)
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+    {
+        test_fs::create_dir_all(src.join(parent))?;
+    }
+    test_fs::write(src.join(kept), "kept")?;
+    test_fs::symlink(link_target, src.join(link_name))?;
 
-    let pattern = format!("{}/src/*.c", temp.path().display());
+    let pattern = format!("{}/{pattern_tail}", temp.path().display());
     let results = glob_paths(&pattern).context("an escaping symlink must not abort the walk")?;
     ensure!(
-        results.iter().any(|p| p.ends_with("/src/real.c")),
+        results.iter().any(|p| p.ends_with(kept)),
         "valid matches should be preserved: {results:?}"
     );
     ensure!(

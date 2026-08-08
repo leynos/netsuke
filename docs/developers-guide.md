@@ -1560,6 +1560,29 @@ sibling submodule needs them; widen the boundary only by adding a deliberate
 re-export in `src/manifest/mod.rs`. The comments in the source are supporting
 detail for these rules, not a substitute for them.
 
+### Glob expansion observability
+
+`src/manifest/glob/diagnostics.rs` records two outcomes of the
+capability-scoped walk that are expected rather than erroneous, so neither
+reaches the top-level diagnostics: a literal prefix that names no directory,
+and a match dropped because a symbolic link cannot be resolved through the
+capability. Recording both here keeps a degraded expansion visible without
+having to reproduce it.
+
+- **Metrics** — `netsuke_manifest_glob_expansions_total`, labelled
+  `outcome` (`matched`, `unopenable_prefix`), and
+  `netsuke_manifest_glob_entries_skipped_total`, labelled `reason`
+  (`unreachable_symlink`, `not_a_file`). Labels carry only these closed sets,
+  never the pattern or a path, in line with the low-cardinality rule in
+  `AGENTS.md`.
+- **Tracing** — events carry the pattern, which manifest authors already see
+  quoted back in glob error messages, and, for a skipped entry, only its path
+  relative to the literal prefix. The absolute path is never logged: the
+  relative one reveals nothing beyond the subtree the pattern itself named.
+  This differs from the stricter `path_hash` convention used for
+  configuration discovery, where the paths are not ones the user named in the
+  first place.
+
 ## Test isolation utilities
 
 Environment variable mutations and working-directory changes are process-global

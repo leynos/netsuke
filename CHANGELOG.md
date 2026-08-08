@@ -42,8 +42,9 @@
   literal directory prefix rather than at the filesystem root or the working
   directory, so glob expansion holds only the authority its pattern can reach;
   a pattern whose literal prefix is missing or names something other than a
-  directory now expands to no matches, and a match that is a symbolic link
-  resolving outside that prefix is skipped rather than failing the expansion
+  directory now expands to no matches, and a match reached through a symbolic
+  link — the match itself or an intermediate directory — that resolves
+  outside that prefix or dangles is skipped rather than failing the expansion
   ([#173](https://github.com/leynos/netsuke/issues/173))
 
 ### Fixed

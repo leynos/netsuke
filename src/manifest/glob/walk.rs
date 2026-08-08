@@ -11,7 +11,9 @@
 //! through the capability; such a match is skipped rather than failing the
 //! expansion.
 
-use super::{GlobEntryResult, GlobErrorContext, GlobErrorType, GlobPattern, create_glob_error};
+use super::{
+    GlobEntryResult, GlobErrorContext, GlobErrorType, GlobPattern, create_glob_error, diagnostics,
+};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs::Dir};
 use minijinja::Error;
@@ -46,31 +48,49 @@ impl GlobRoot {
 
     /// Fetch metadata for a matched path via the capability-scoped handle.
     ///
-    /// Returns `Ok(None)` when the entry is a symbolic link that cannot be
-    /// resolved through the capability — because its target lies outside the
-    /// literal prefix, or because it dangles. Such an entry names no file
-    /// reachable within the capability, so it is skipped rather than aborting
-    /// the whole expansion.
+    /// Returns `Ok(None)` when the lookup fails and some component of the
+    /// match is a symbolic link — whether the final component or an
+    /// intermediate directory. Such a link either escapes the literal prefix
+    /// or dangles, so it names no file reachable within the capability and is
+    /// skipped rather than aborting the whole expansion. Every other failure
+    /// (a genuine permission error on a link-free path, say) still propagates.
     pub(super) fn metadata(&self, path: &Utf8Path) -> io::Result<Option<cap_std::fs::Metadata>> {
         let relative = self.relativise(path)?;
         match self.dir.metadata(relative) {
             Ok(metadata) => Ok(Some(metadata)),
-            Err(err) => {
-                if self
-                    .dir
-                    .symlink_metadata(relative)
-                    .is_ok_and(|link| link.is_symlink())
-                {
-                    Ok(None)
-                } else {
-                    Err(err)
-                }
+            Err(_) if self.traverses_symlink(relative) => {
+                diagnostics::record_unreachable_symlink(relative);
+                Ok(None)
             }
+            Err(err) => Err(err),
         }
     }
 
+    /// Report whether any component of `relative` is a symbolic link.
+    ///
+    /// Walks the ancestors from the capability root outwards, inspecting each
+    /// with `symlink_metadata` so the component itself is not followed. This
+    /// is what distinguishes a link that cannot be resolved through the
+    /// capability from an ordinary lookup failure: resolution stops at the
+    /// first component that is a link, so an escaping intermediate directory
+    /// is found before its unreadable descendants are.
+    fn traverses_symlink(&self, relative: &Utf8Path) -> bool {
+        let mut ancestor = Utf8PathBuf::new();
+        for component in relative.components() {
+            ancestor.push(component);
+            match self.dir.symlink_metadata(&ancestor) {
+                Ok(metadata) if metadata.is_symlink() => return true,
+                Ok(_) => {}
+                // This component cannot be inspected at all, so no link has
+                // been found and the caller's error stands.
+                Err(_) => return false,
+            }
+        }
+        false
+    }
+
     /// Rebase a matched path onto the capability prefix.
-    fn relativise<'a>(&self, path: &'a Utf8Path) -> io::Result<&'a Utf8Path> {
+    pub(super) fn relativise<'a>(&self, path: &'a Utf8Path) -> io::Result<&'a Utf8Path> {
         let relative = if self.prefix == "." {
             path
         } else {
@@ -122,16 +142,37 @@ pub(super) fn open_root_dir(pattern: &GlobPattern) -> io::Result<Option<GlobRoot
             dir,
             prefix: Utf8PathBuf::from(prefix),
         })),
-        Err(err)
-            if matches!(
-                err.kind(),
-                io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
-            ) =>
-        {
+        Err(err) if prefix_is_unopenable(&err) => {
+            diagnostics::record_unopenable_prefix(pattern, prefix);
             Ok(None)
         }
         Err(err) => Err(err),
     }
+}
+
+/// Report whether `err` means the literal prefix names no usable directory.
+///
+/// A missing path and a non-directory path both mean the pattern can match
+/// nothing. On Windows `cap_primitives` signals the latter by constructing a
+/// raw `ERROR_DIRECTORY`, so the raw code is matched alongside the portable
+/// [`io::ErrorKind`]s rather than relying on the standard library's mapping of
+/// that code. Every other failure — a genuine permission error, say — is left
+/// to propagate.
+fn prefix_is_unopenable(err: &io::Error) -> bool {
+    if matches!(
+        err.kind(),
+        io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
+    ) {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        /// `ERROR_DIRECTORY`: the path is not a directory.
+        const ERROR_DIRECTORY: i32 = 267;
+        return err.raw_os_error() == Some(ERROR_DIRECTORY);
+    }
+    #[cfg(not(windows))]
+    false
 }
 
 fn create_io_error(pattern: &GlobPattern, position: usize, detail: String) -> Error {
@@ -153,23 +194,32 @@ pub(super) fn process_glob_entry(
     pattern: &GlobPattern,
     root: &GlobRoot,
 ) -> std::result::Result<Option<String>, Error> {
-    match entry {
-        Ok(path) => {
-            let utf_path = Utf8PathBuf::try_from(path).map_err(|_| {
-                create_io_error(
-                    pattern,
-                    pattern.raw().len(),
-                    "glob matched a non-UTF-8 path".to_owned(),
-                )
-            })?;
-            let metadata = root
-                .metadata(&utf_path)
-                .map_err(|err| create_io_error(pattern, pattern.raw().len(), err.to_string()))?;
-            if !metadata.is_some_and(|found| found.is_file()) {
-                return Ok(None);
-            }
-            Ok(Some(utf_path.as_str().replace('\\', "/")))
-        }
-        Err(e) => Err(create_io_error(pattern, 0, e.to_string())),
+    let path = entry.map_err(|e| create_io_error(pattern, 0, e.to_string()))?;
+    let utf_path = Utf8PathBuf::try_from(path).map_err(|_| {
+        create_io_error(
+            pattern,
+            pattern.raw().len(),
+            "glob matched a non-UTF-8 path".to_owned(),
+        )
+    })?;
+    let keep = names_a_file(root, &utf_path)
+        .map_err(|err| create_io_error(pattern, pattern.raw().len(), err.to_string()))?;
+    if !keep {
+        return Ok(None);
     }
+    Ok(Some(utf_path.as_str().replace('\\', "/")))
+}
+
+/// Report whether a match names a regular file reachable through the
+/// capability, recording why it was dropped when it does not.
+fn names_a_file(root: &GlobRoot, path: &Utf8Path) -> io::Result<bool> {
+    // An unreachable match has already been recorded as skipped.
+    let Some(metadata) = root.metadata(path)? else {
+        return Ok(false);
+    };
+    if metadata.is_file() {
+        return Ok(true);
+    }
+    diagnostics::record_not_a_file();
+    Ok(false)
 }
