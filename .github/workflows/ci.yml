@@ -52,7 +52,7 @@ jobs:
           # Preserve warnings-as-errors and Polonius through toolchain setup.
           rustflags: -D warnings -Zpolonius=next
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        uses: taiki-e/install-action@1beb33eee6d086258184383af9a538940be190ed  # v2.85.6
         with:
           tool: nextest@${{ env.NEXTEST_VERSION }}
       - name: Show rustc version
@@ -85,7 +85,7 @@ jobs:
       - name: Lint
         run: make lint
       - name: Setup uv
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
         with:
           python-version: '3.13'
           enable-cache: true
@@ -144,7 +144,7 @@ jobs:
         with:
           toolchain: stable
       - name: Install uv
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990  # v8.3.2
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9  # v9.0.0
       - name: Cache Kani tools
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
