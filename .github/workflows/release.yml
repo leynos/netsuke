@@ -241,8 +241,8 @@ jobs:
         # repository's Python tooling targets, rather than whichever `python3`
         # the runner image happens to ship. The script relies on
         # `BaseExceptionGroup`, which needs Python 3.11 or later.
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
-        # v8.3.2
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        # v9.0.0
         with:
           python-version: '3.13'
           # The hoist script is stdlib-only and runs with --no-project, so a
