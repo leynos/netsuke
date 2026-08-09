@@ -102,8 +102,8 @@ fn render_string_or_list(value: &mut StringOrList, env: &Environment, ctx: &Vars
 /// A scalar command renders as today; each entry of a list command is
 /// rendered independently so `{{ ins }}`/`{{ outs }}` expand per entry during
 /// IR interpolation. The `what` label is computed once and shared by every
-/// entry, so a rendering failure names the recipe stage rather than the list
-/// position.
+/// entry. A scalar failure names the recipe stage alone; a list failure also
+/// names the one-based position of the entry that failed to render.
 fn render_recipe_string_or_list(
     value: &mut StringOrList,
     env: &Environment,
@@ -111,15 +111,17 @@ fn render_recipe_string_or_list(
     what: impl FnOnce() -> String,
 ) -> Result<()> {
     let label = what();
-    let render_entry = |entry: &mut String| -> Result<()> {
-        *entry = render_recipe_str_with(env, entry, ctx, || label.clone())?;
+    let render_entry = |entry: &mut String, position: Option<usize>| -> Result<()> {
+        *entry = render_recipe_str_with(env, entry, ctx, || {
+            position.map_or_else(|| label.clone(), |index| format!("{label} entry {index}"))
+        })?;
         Ok(())
     };
     match value {
-        StringOrList::String(s) => render_entry(s)?,
+        StringOrList::String(s) => render_entry(s, None)?,
         StringOrList::List(list) => {
-            for item in list {
-                render_entry(item)?;
+            for (index, item) in list.iter_mut().enumerate() {
+                render_entry(item, Some(index + 1))?;
             }
         }
         StringOrList::Empty => {}
@@ -318,6 +320,35 @@ mod tests {
         anyhow::ensure!(
             command.to_string_vec() == ["echo 2", crate::ir::INS_TOKEN, crate::ir::OUTS_TOKEN],
             "unexpected rendered command list: {command:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn command_list_render_failure_names_the_failing_entry() -> Result<()> {
+        let env = Environment::new();
+        let manifest = NetsukeManifest {
+            netsuke_version: Version::parse("1.0.0")?,
+            vars: Vars::new(),
+            macros: Vec::new(),
+            rules: vec![Rule {
+                name: "check".into(),
+                recipe: Recipe::Command {
+                    command: StringOrList::List(vec!["echo ok".into(), "echo {{ 1 + }}".into()]),
+                },
+                description: None,
+            }],
+            actions: Vec::new(),
+            targets: Vec::new(),
+            defaults: Vec::new(),
+        };
+        let error = render_manifest(manifest, &env)
+            .err()
+            .context("expected the malformed entry to fail rendering")?;
+        let report = format!("{error:#}");
+        anyhow::ensure!(
+            report.contains("render rule command entry 2"),
+            "error should name the failing list position, got: {report}"
         );
         Ok(())
     }

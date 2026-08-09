@@ -150,7 +150,7 @@ manifest.glob.invalid_pattern = Motif glob non valide « { $pattern } » : { $de
 manifest.glob.unknown_pattern_error = erreur de motif inconnue.
 manifest.glob.io_failed = Échec du glob pour « { $pattern } » : { $detail }.
 manifest.glob.unknown_io_error = erreur d'E/S inconnue.
-manifest.command_list_empty = The 'command' field must not be empty: provide a command string or a non-empty list.
+manifest.command_list_empty = Le champ « command » ne doit pas être vide : indiquez une chaîne de commande ou une liste non vide.
 
 # Erreurs de la représentation intermédiaire.
 ir.rule_not_found = La règle « { $rule } » référencée par la cible « { $target } » est introuvable.

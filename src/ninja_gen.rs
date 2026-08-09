@@ -281,19 +281,14 @@ impl NamedAction<'_> {
         Err(fmt::Error)
     }
 
+    /// Reject a command recipe that carries no entries.
+    ///
+    /// Deserialization rejects empty command recipes, so reaching here means an
+    /// earlier stage constructed one directly. `Display::to_string` turns the
+    /// returned error into a panic, so the fault still surfaces loudly without
+    /// a hand-rolled debug-only panic.
     #[cold]
-    #[expect(
-        clippy::panic_in_result_fn,
-        reason = "debug builds intentionally panic to expose empty command recipes"
-    )]
-    #[expect(
-        clippy::manual_assert,
-        reason = "debug-only guard escalates to panic for visibility"
-    )]
-    fn reject_empty_command_recipe() -> fmt::Result {
-        if cfg!(debug_assertions) {
-            panic!("empty command recipes are rejected while deserializing the manifest");
-        }
+    const fn reject_empty_command_recipe() -> fmt::Result {
         Err(fmt::Error)
     }
 }

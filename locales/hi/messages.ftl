@@ -149,7 +149,7 @@ manifest.glob.invalid_pattern = अमान्य glob प्रतिरूप
 manifest.glob.unknown_pattern_error = अज्ञात प्रतिरूप त्रुटि।
 manifest.glob.io_failed = “{ $pattern }” के लिए glob विफल रहा: { $detail }।
 manifest.glob.unknown_io_error = अज्ञात इनपुट/आउटपुट त्रुटि।
-manifest.command_list_empty = The 'command' field must not be empty: provide a command string or a non-empty list.
+manifest.command_list_empty = “command” फ़ील्ड रिक्त नहीं होना चाहिए: कोई कमांड स्ट्रिंग या ग़ैर-रिक्त सूची दें।
 
 # मध्यवर्ती निरूपण की त्रुटियाँ।
 ir.rule_not_found = लक्ष्य “{ $target }” जिस नियम “{ $rule }” का संदर्भ देता है वह नहीं मिला।

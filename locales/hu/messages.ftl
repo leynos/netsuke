@@ -149,7 +149,7 @@ manifest.glob.invalid_pattern = Érvénytelen glob-minta („{ $pattern }”): {
 manifest.glob.unknown_pattern_error = ismeretlen mintahiba.
 manifest.glob.io_failed = A glob sikertelen ehhez: „{ $pattern }”: { $detail }.
 manifest.glob.unknown_io_error = ismeretlen be- és kiviteli hiba.
-manifest.command_list_empty = The 'command' field must not be empty: provide a command string or a non-empty list.
+manifest.command_list_empty = A „command” mező nem lehet üres: adjon meg egy parancs-karakterláncot vagy egy nem üres listát.
 
 # A köztes ábrázolás hibái.
 ir.rule_not_found = A(z) „{ $target }” cél által hivatkozott „{ $rule }” szabály nem található.

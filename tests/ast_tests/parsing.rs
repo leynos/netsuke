@@ -37,7 +37,7 @@ targets:
 
     if let Recipe::Command { command } = &first.recipe {
         ensure!(
-            command.as_single() == Some("echo hi"),
+            *command == StringOrList::String("echo hi".into()),
             "unexpected command: {command:?}"
         );
     } else {
@@ -190,7 +190,7 @@ fn vars_section_allows_non_reserved_names() -> Result<()> {
         bail!("expected a command recipe, got {:?}", first.recipe);
     };
     ensure!(
-        command.as_single() == Some("echo hi"),
+        *command == StringOrList::String("echo hi".into()),
         "unexpected command: {command:?}"
     );
     Ok(())

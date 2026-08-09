@@ -149,7 +149,7 @@ manifest.glob.invalid_pattern = الگوی glob نامعتبر «{ $pattern }»:
 manifest.glob.unknown_pattern_error = خطای الگوی ناشناخته.
 manifest.glob.io_failed = ‏glob برای «{ $pattern }» ناکام ماند: { $detail }.
 manifest.glob.unknown_io_error = خطای ورودی/خروجی ناشناخته.
-manifest.command_list_empty = ‏The 'command' field must not be empty: provide a command string or a non-empty list.
+manifest.command_list_empty = فیلد «command» نباید خالی باشد: یک رشتهٔ فرمان یا فهرستی ناتهی ارائه دهید.
 
 # خطاهای بازنمایی میانی.
 ir.rule_not_found = قاعدهٔ «{ $rule }» که هدف «{ $target }» به آن ارجاع می‌دهد یافت نشد.

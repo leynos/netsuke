@@ -299,8 +299,9 @@ Rules may also provide `description`, text used for Ninja's progress display.
 A `command` list runs its entries in declaration order and stops at the first
 non-zero exit, so entries share the fail-fast behaviour of a handwritten
 `&&` chain. All entries run in one shell process, so working directory,
-environment, and exit-code state set by an earlier entry carry into later
-entries, exactly as they do for `script`. An empty command list is rejected
+environment, and shell variables set by an earlier entry carry into later
+entries, exactly as they do for `script`. Each later entry starts only when
+the preceding entry exits with status zero. An empty command list is rejected
 when the manifest is parsed.
 
 <!-- tested-example: guide-command-list -->
@@ -1088,9 +1089,11 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   may retain the original input so invalid patterns can be explained.
 - `raw` template output and handwritten shell fragments remain the manifest
   author's responsibility.
-- Each `command` list entry is joined into a single shell chain; a later entry
-  inherits the working directory, environment, and shell variables left by an
-  earlier entry and runs even if the earlier entry only partially succeeded.
+- Each `command` list entry is joined into a single shell chain; a later
+  entry inherits the working directory, environment, and shell variables
+  left by an earlier entry, and runs only when that earlier entry exits with
+  status zero. A failed entry may still leave side effects behind before it
+  halts the chain.
 - Literal shell dollar expressions currently require Ninja-aware escaping,
   such as `$$PATH`.
 

@@ -149,7 +149,7 @@ manifest.glob.invalid_pattern = نمط glob غير صالح «{ $pattern }»: { 
 manifest.glob.unknown_pattern_error = خطأ نمط غير معروف.
 manifest.glob.io_failed = فشل glob للنمط «{ $pattern }»: { $detail }.
 manifest.glob.unknown_io_error = خطأ إدخال/إخراج غير معروف.
-manifest.command_list_empty = ‏The 'command' field must not be empty: provide a command string or a non-empty list.
+manifest.command_list_empty = حقل «command» يجب ألا يكون فارغًا: قدِّم سلسلة أمر أو قائمة غير فارغة.
 
 # أخطاء التمثيل الوسيط.
 ir.rule_not_found = تعذّر العثور على القاعدة «{ $rule }» التي يشير إليها الهدف «{ $target }».

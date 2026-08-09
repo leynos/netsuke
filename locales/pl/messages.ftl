@@ -149,7 +149,7 @@ manifest.glob.invalid_pattern = Nieprawidłowy wzorzec glob „{ $pattern }”: 
 manifest.glob.unknown_pattern_error = nieznany błąd wzorca.
 manifest.glob.io_failed = Wzorzec glob „{ $pattern }” zawiódł: { $detail }.
 manifest.glob.unknown_io_error = nieznany błąd wejścia/wyjścia.
-manifest.command_list_empty = The 'command' field must not be empty: provide a command string or a non-empty list.
+manifest.command_list_empty = Pole „command” nie może być puste: podaj łańcuch polecenia lub niepustą listę.
 
 # Błędy reprezentacji pośredniej.
 ir.rule_not_found = Nie znaleziono reguły „{ $rule }”, do której odwołuje się cel „{ $target }”.
