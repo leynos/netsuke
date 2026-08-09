@@ -56,6 +56,11 @@ fn render_rule(rule: &mut crate::ast::Rule, env: &Environment, vars: &Vars) -> R
 
 fn render_target(target: &mut Target, env: &Environment) -> Result<()> {
     render_vars(&mut target.vars, env)?;
+    if let Some(desc) = &mut target.description {
+        *desc = render_str_with(env, desc, &target.vars, || {
+            "render target description".into()
+        })?;
+    }
     render_string_or_list(&mut target.name, env, &target.vars)?;
     render_string_or_list(&mut target.sources, env, &target.vars)?;
     render_string_or_list(&mut target.deps, env, &target.vars)?;
@@ -210,6 +215,7 @@ mod tests {
             vars: target_vars,
             phony: false,
             always: false,
+            description: Some("{{ message }}".into()),
         };
 
         let rule = Rule {
@@ -275,6 +281,11 @@ mod tests {
 
     fn assert_rendered_target(target: &Target) {
         assert_eq!(expect_var(&target.vars, "message"), "hello world");
+        assert_eq!(
+            target.description.as_deref(),
+            Some("hello world"),
+            "target description should be rendered through the target vars"
+        );
         assert_eq!(expect_string(&target.name, "target name"), "hello world!");
         assert_eq!(
             expect_list(&target.sources, "target sources"),

@@ -251,6 +251,16 @@ pub struct Target {
     /// Force the recipe to run even if the outputs are up to date.
     #[serde(default)]
     pub always: bool,
+
+    /// Optional human-friendly summary of the public operation this target
+    /// performs.
+    ///
+    /// Unlike [`Rule::description`], which explains work while Ninja executes
+    /// a recipe, a target description is discovery metadata for humans: it is
+    /// surfaced by `netsuke help targets` and never replaces a referenced rule
+    /// description in Ninja progress output.
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 /// A helper for fields that accept either a single string or a list of

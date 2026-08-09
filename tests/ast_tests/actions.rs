@@ -71,6 +71,29 @@ fn actions_behaviour(
 }
 
 #[test]
+fn action_carries_description_and_stays_phony() -> Result<()> {
+    let yaml = r#"
+        netsuke_version: "1.0.0"
+        actions:
+          - name: lint
+            description: "Run rustdoc, Clippy, and Whitaker"
+            command: "cargo clippy"
+        targets:
+          - name: done
+            command: "true"
+    "#;
+    let manifest = parse_manifest(yaml)?;
+    let action = manifest.actions.first().context("expected action entry")?;
+    ensure!(
+        action.description.as_deref() == Some("Run rustdoc, Clippy, and Whitaker"),
+        "unexpected action description: {:?}",
+        action.description
+    );
+    ensure!(action.phony, "actions should stay phony with a description");
+    Ok(())
+}
+
+#[test]
 fn multiple_actions_are_marked_phony() -> Result<()> {
     let yaml = r#"
         netsuke_version: "1.0.0"
