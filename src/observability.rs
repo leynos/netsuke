@@ -90,10 +90,49 @@ mod tests {
     //! Regression coverage for bounded configuration observability.
 
     use super::*;
+    use metrics::{SharedString, Unit};
     use metrics_util::{
-        MetricKind,
+        CompositeKey, MetricKind,
         debugging::{DebugValue, DebuggingRecorder},
     };
+
+    type SnapshotEntry = (CompositeKey, Option<Unit>, Option<SharedString>, DebugValue);
+
+    fn assert_one_counter_record(snapshot: &[SnapshotEntry], phase: &str, outcome: &str) {
+        assert_eq!(
+            snapshot
+                .iter()
+                .filter(|entry| is_counter_record(entry, phase, outcome))
+                .count(),
+            1,
+            "expected one configuration-load counter record for phase {phase} and outcome {outcome}",
+        );
+    }
+
+    fn is_counter_record(entry: &SnapshotEntry, phase: &str, outcome: &str) -> bool {
+        entry.0.kind() == MetricKind::Counter
+            && entry.0.key().name() == CONFIG_LOAD_COUNTER
+            && has_label(entry, phase)
+            && has_label(entry, outcome)
+            && matches!(entry.3, DebugValue::Counter(1))
+    }
+
+    fn has_label(entry: &SnapshotEntry, value: &str) -> bool {
+        entry.0.key().labels().any(|label| label.value() == value)
+    }
+
+    fn count_single_sample_duration_records(snapshot: &[SnapshotEntry]) -> usize {
+        snapshot
+            .iter()
+            .filter(|entry| is_single_sample_duration_record(entry))
+            .count()
+    }
+
+    fn is_single_sample_duration_record(entry: &SnapshotEntry) -> bool {
+        entry.0.kind() == MetricKind::Histogram
+            && entry.0.key().name() == CONFIG_LOAD_DURATION
+            && matches!(entry.3, DebugValue::Histogram(ref values) if values.len() == 1)
+    }
 
     #[test]
     fn classifies_config_errors_without_exposing_details() {
@@ -126,33 +165,8 @@ mod tests {
         });
 
         let snapshot = snapshotter.snapshot().into_vec();
-        assert!(snapshot.iter().any(|(key, _, _, value)| {
-            key.kind() == MetricKind::Counter
-                && key.key().name() == CONFIG_LOAD_COUNTER
-                && key
-                    .key()
-                    .labels()
-                    .any(|label| label.value() == DIAG_MODE_PHASE)
-                && key.key().labels().any(|label| label.value() == "success")
-                && matches!(value, DebugValue::Counter(1))
-        }));
-        assert!(snapshot.iter().any(|(key, _, _, value)| {
-            key.kind() == MetricKind::Counter
-                && key.key().name() == CONFIG_LOAD_COUNTER
-                && key.key().labels().any(|label| label.value() == MERGE_PHASE)
-                && key.key().labels().any(|label| label.value() == "failure")
-                && matches!(value, DebugValue::Counter(1))
-        }));
-        assert_eq!(
-            snapshot
-                .iter()
-                .filter(|(key, _, _, value)| {
-                    key.kind() == MetricKind::Histogram
-                        && key.key().name() == CONFIG_LOAD_DURATION
-                        && matches!(value, DebugValue::Histogram(values) if values.len() == 1)
-                })
-                .count(),
-            2
-        );
+        assert_one_counter_record(&snapshot, DIAG_MODE_PHASE, "success");
+        assert_one_counter_record(&snapshot, MERGE_PHASE, "failure");
+        assert_eq!(count_single_sample_duration_records(&snapshot), 2);
     }
 }
