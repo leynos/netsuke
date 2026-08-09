@@ -1,0 +1,11 @@
+---
+source: tests/ninja_snapshot_tests.rs
+expression: ninja_content
+---
+rule 2ba9145cfe6f2224b0cbcf527eea1371cf3cc742c8790e332ddfb7ba0c51e3da
+  command = echo check-fmt && echo lint && echo test
+  description = Run the required checks sequentially
+
+build aggregate: 2ba9145cfe6f2224b0cbcf527eea1371cf3cc742c8790e332ddfb7ba0c51e3da
+
+build done: 2ba9145cfe6f2224b0cbcf527eea1371cf3cc742c8790e332ddfb7ba0c51e3da

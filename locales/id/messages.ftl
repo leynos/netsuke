@@ -149,6 +149,7 @@ manifest.glob.invalid_pattern = Pola glob tidak sah "{ $pattern }": { $detail }.
 manifest.glob.unknown_pattern_error = galat pola yang tidak dikenal.
 manifest.glob.io_failed = Glob gagal untuk "{ $pattern }": { $detail }.
 manifest.glob.unknown_io_error = galat masukan/keluaran yang tidak dikenal.
+manifest.command_list_empty = The 'command' field must not be empty: provide a command string or a non-empty list.
 
 # Galat representasi antara.
 ir.rule_not_found = Aturan "{ $rule }" yang dirujuk target "{ $target }" tidak ditemukan.

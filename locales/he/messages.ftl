@@ -149,6 +149,7 @@ manifest.glob.invalid_pattern = תבנית glob לא תקינה „{ $pattern }�
 manifest.glob.unknown_pattern_error = שגיאת תבנית לא ידועה.
 manifest.glob.io_failed = ‏glob נכשל עבור „{ $pattern }”: { $detail }.
 manifest.glob.unknown_io_error = שגיאת קלט/פלט לא ידועה.
+manifest.command_list_empty = ‏The 'command' field must not be empty: provide a command string or a non-empty list.
 
 # שגיאות הייצוג הביניימי.
 ir.rule_not_found = הכלל „{ $rule }” שאליו מפנה היעד „{ $target }” לא נמצא.

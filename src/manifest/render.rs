@@ -41,7 +41,7 @@ fn render_rule(rule: &mut crate::ast::Rule, env: &Environment, vars: &Vars) -> R
     }
     match &mut rule.recipe {
         Recipe::Command { command } => {
-            *command = render_recipe_str_with(env, command, vars, || "render rule command".into())?;
+            render_recipe_string_or_list(command, env, vars, || "render rule command".into())?;
         }
         Recipe::Script { script } => {
             *script = render_str_with(env, script, vars, || "render rule script".into())?;
@@ -59,7 +59,7 @@ fn render_target(target: &mut Target, env: &Environment) -> Result<()> {
     render_string_or_list(&mut target.order_only_deps, env, &target.vars)?;
     match &mut target.recipe {
         Recipe::Command { command } => {
-            *command = render_recipe_str_with(env, command, &target.vars, || {
+            render_recipe_string_or_list(command, env, &target.vars, || {
                 "render target command".into()
             })?;
         }
@@ -89,6 +89,37 @@ fn render_string_or_list(value: &mut StringOrList, env: &Environment, ctx: &Vars
         StringOrList::List(list) => {
             for item in list {
                 *item = render_str_with(env, item, ctx, || "render list value".into())?;
+            }
+        }
+        StringOrList::Empty => {}
+    }
+    Ok(())
+}
+
+/// Render a recipe `command` field, injecting the `ins`/`outs` placeholders
+/// for every entry.
+///
+/// A scalar command renders as today; each entry of a list command is
+/// rendered independently so `{{ ins }}`/`{{ outs }}` expand per entry during
+/// IR interpolation. The `what` label is computed once and shared by every
+/// entry, so a rendering failure names the recipe stage rather than the list
+/// position.
+fn render_recipe_string_or_list(
+    value: &mut StringOrList,
+    env: &Environment,
+    ctx: &Vars,
+    what: impl FnOnce() -> String,
+) -> Result<()> {
+    let label = what();
+    let render_entry = |entry: &mut String| -> Result<()> {
+        *entry = render_recipe_str_with(env, entry, ctx, || label.clone())?;
+        Ok(())
+    };
+    match value {
+        StringOrList::String(s) => render_entry(s)?,
+        StringOrList::List(list) => {
+            for item in list {
+                render_entry(item)?;
             }
         }
         StringOrList::Empty => {}
@@ -212,7 +243,10 @@ mod tests {
     #[expect(clippy::panic, reason = "panic for clearer test failures")]
     fn expect_command(recipe: &Recipe, label: impl std::fmt::Display) -> &str {
         match recipe {
-            Recipe::Command { command } => command,
+            Recipe::Command { command } => match command {
+                StringOrList::String(item) => item,
+                other => panic!("expected {label} command as a scalar, got {other:?}"),
+            },
             other => panic!("expected {label} command recipe, got {other:?}"),
         }
     }
@@ -234,7 +268,7 @@ mod tests {
     fn assert_rendered_rule(rule: &Rule) {
         assert_eq!(rule.description.as_deref(), Some("2"));
         match &rule.recipe {
-            Recipe::Command { command } => assert_eq!(command, "4"),
+            Recipe::Command { command } => assert_eq!(command.as_single(), Some("4")),
             other => panic!("expected command recipe, got {other:?}"),
         }
     }
@@ -251,6 +285,40 @@ mod tests {
         assert_rendered_target(rendered_target);
         let rendered_rule = rendered.rules.first().context("rendered rule missing")?;
         assert_rendered_rule(rendered_rule);
+        Ok(())
+    }
+
+    #[test]
+    fn command_list_renders_each_entry_with_ins_outs_placeholders() -> Result<()> {
+        let env = Environment::new();
+        let manifest = NetsukeManifest {
+            netsuke_version: Version::parse("1.0.0")?,
+            vars: Vars::new(),
+            macros: Vec::new(),
+            rules: vec![Rule {
+                name: "check".into(),
+                recipe: Recipe::Command {
+                    command: StringOrList::List(vec![
+                        "echo {{ 1 + 1 }}".into(),
+                        "{{ ins }}".into(),
+                        "{{ outs }}".into(),
+                    ]),
+                },
+                description: None,
+            }],
+            actions: Vec::new(),
+            targets: Vec::new(),
+            defaults: Vec::new(),
+        };
+        let rendered = render_manifest(manifest, &env)?;
+        let rule = rendered.rules.first().context("rendered rule missing")?;
+        let Recipe::Command { command } = &rule.recipe else {
+            anyhow::bail!("expected command recipe, got {:?}", rule.recipe);
+        };
+        anyhow::ensure!(
+            command.to_string_vec() == ["echo 2", crate::ir::INS_TOKEN, crate::ir::OUTS_TOKEN],
+            "unexpected rendered command list: {command:?}"
+        );
         Ok(())
     }
 }

@@ -149,6 +149,7 @@ manifest.glob.invalid_pattern = Patrwm glob annilys ‘{ $pattern }’: { $detai
 manifest.glob.unknown_pattern_error = gwall patrwm anhysbys.
 manifest.glob.io_failed = Methodd glob ar gyfer ‘{ $pattern }’: { $detail }.
 manifest.glob.unknown_io_error = gwall mewnbwn/allbwn anhysbys.
+manifest.command_list_empty = The 'command' field must not be empty: provide a command string or a non-empty list.
 
 # Gwallau'r cynrychioliad canolradd.
 ir.rule_not_found = Ni chafwyd hyd i'r rheol ‘{ $rule }’ y cyfeirir ati gan y targed ‘{ $target }’.

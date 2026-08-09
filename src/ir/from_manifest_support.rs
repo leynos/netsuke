@@ -31,7 +31,27 @@ pub(super) fn register_action(
 ) -> Result<String, IrGenError> {
     let resolved_recipe = match recipe {
         Recipe::Command { command } => {
-            let interpolated = interpolate_command(&command, bindings.inputs, bindings.outputs)?;
+            let interpolated = match command {
+                StringOrList::String(cmd) => StringOrList::String(interpolate_command(
+                    &cmd,
+                    bindings.inputs,
+                    bindings.outputs,
+                )?),
+                StringOrList::List(items) => {
+                    let mut rendered = Vec::with_capacity(items.len());
+                    for item in items {
+                        rendered.push(interpolate_command(
+                            &item,
+                            bindings.inputs,
+                            bindings.outputs,
+                        )?);
+                    }
+                    StringOrList::List(rendered)
+                }
+                // An empty command list cannot deserialize (the manifest
+                // parser rejects it), so nothing needs interpolating here.
+                StringOrList::Empty => StringOrList::Empty,
+            };
             Recipe::Command {
                 command: interpolated,
             }

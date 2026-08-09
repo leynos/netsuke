@@ -131,6 +131,36 @@ fn conditional_manifest_ninja_snapshot() -> Result<()> {
 }
 
 #[test]
+fn multi_command_manifest_ninja_snapshot() -> Result<()> {
+    let manifest_yaml = std::fs::read_to_string("tests/data/multi_command.yml")
+        .context("read tests/data/multi_command.yml")?;
+
+    let manifest = manifest::from_str(&manifest_yaml)?;
+    let ir = BuildGraph::from_manifest(&manifest)?;
+    let ninja_content = ninja_gen::generate(&ir)?;
+
+    ensure!(
+        ninja_content.contains("echo check-fmt && echo lint && echo test"),
+        "expected the command list joined into a fail-fast chain:\n{ninja_content}"
+    );
+    ensure!(
+        ninja_content.contains("build done:") && ninja_content.contains("build aggregate:"),
+        "the multi-command rule should be referenced by both a target and an action:\n{ninja_content}"
+    );
+
+    let mut settings = Settings::new();
+    settings.set_snapshot_path(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/snapshots/ninja"
+    ));
+    settings.bind(|| {
+        assert_snapshot!("multi_command_manifest_ninja", ninja_content);
+    });
+
+    Ok(())
+}
+
+#[test]
 fn implicit_deps_manifest_ninja_snapshot() -> Result<()> {
     let manifest_yaml = std::fs::read_to_string("tests/data/implicit_deps.yml")
         .context("read tests/data/implicit_deps.yml")?;

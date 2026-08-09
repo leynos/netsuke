@@ -149,6 +149,7 @@ manifest.glob.invalid_pattern = Tipar glob nevalid „{ $pattern }”: { $detail
 manifest.glob.unknown_pattern_error = eroare de tipar necunoscută.
 manifest.glob.io_failed = Glob a eșuat pentru „{ $pattern }”: { $detail }.
 manifest.glob.unknown_io_error = eroare de intrare/ieșire necunoscută.
+manifest.command_list_empty = The 'command' field must not be empty: provide a command string or a non-empty list.
 
 # Erori ale reprezentării intermediare.
 ir.rule_not_found = Regula „{ $rule }” la care face referire ținta „{ $target }” nu a fost găsită.

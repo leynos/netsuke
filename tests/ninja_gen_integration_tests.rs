@@ -7,7 +7,7 @@
 use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use netsuke::ast::Recipe;
+use netsuke::ast::{Recipe, StringOrList};
 use netsuke::ir::{Action, BuildEdge, BuildGraph};
 use netsuke::ninja_gen::{NinjaGenError, generate, generate_into};
 use rstest::{fixture, rstest};
@@ -190,6 +190,74 @@ fn ninja_integration_tests(
             );
         }
     }
+    Ok(())
+}
+
+#[rstest]
+fn command_list_fails_fast_at_first_nonzero_exit(
+    ninja_integration_setup: Option<TempDir>,
+) -> Result<()> {
+    let Some(dir) = ninja_integration_setup else {
+        return Ok(());
+    };
+    let dir_path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
+        .map_err(|path| anyhow::anyhow!("temp dir path {:?} is not UTF-8", path))?;
+
+    let action = Action {
+        recipe: Recipe::Command {
+            command: StringOrList::List(vec![
+                "echo one > first.txt".into(),
+                "false".into(),
+                "echo never > last.txt".into(),
+            ]),
+        },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    };
+    let edge = BuildEdge {
+        action_id: "chain".into(),
+        inputs: Vec::new(),
+        implicit_deps: Vec::new(),
+        explicit_outputs: vec![Utf8PathBuf::from("out")],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: false,
+        always: false,
+    };
+    let mut graph = BuildGraph::default();
+    graph.actions.insert("chain".into(), action);
+    graph.targets.insert(Utf8PathBuf::from("out"), edge);
+    graph.default_targets.push(Utf8PathBuf::from("out"));
+
+    let ninja = generate(&graph)?;
+    let handle = Dir::open_ambient_dir(&dir_path, ambient_authority())
+        .with_context(|| format!("open ambient dir for temp workspace at {dir_path}"))?;
+    handle
+        .write("build.ninja", ninja.as_bytes())
+        .context("write ninja build file")?;
+    let output = Command::new("ninja")
+        .arg("out")
+        .current_dir(dir_path.as_std_path())
+        .output()
+        .context("invoke ninja")?;
+    ensure!(
+        !output.status.success(),
+        "command chain should fail when an entry exits non-zero"
+    );
+    let first = handle
+        .read_to_string("first.txt")
+        .context("first entry should have run and written first.txt")?;
+    ensure!(
+        first.trim() == "one",
+        "first entry should have written its output, got '{first}'"
+    );
+    ensure!(
+        !handle.try_exists("last.txt").context("check last.txt")?,
+        "fail-fast chain should skip entries after the first non-zero exit"
+    );
     Ok(())
 }
 

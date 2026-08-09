@@ -149,6 +149,7 @@ manifest.glob.invalid_pattern = Некоректний шаблон glob «{ $pa
 manifest.glob.unknown_pattern_error = невідома помилка шаблону.
 manifest.glob.io_failed = Збій glob для «{ $pattern }»: { $detail }.
 manifest.glob.unknown_io_error = невідома помилка вводу-виводу.
+manifest.command_list_empty = The 'command' field must not be empty: provide a command string or a non-empty list.
 
 # Помилки проміжного подання.
 ir.rule_not_found = Правило «{ $rule }», на яке посилається ціль «{ $target }», не знайдено.

@@ -149,6 +149,7 @@ manifest.glob.invalid_pattern = Ungültiges Glob-Muster „{ $pattern }“: { $d
 manifest.glob.unknown_pattern_error = unbekannter Musterfehler.
 manifest.glob.io_failed = Glob für „{ $pattern }“ fehlgeschlagen: { $detail }.
 manifest.glob.unknown_io_error = unbekannter E/A-Fehler.
+manifest.command_list_empty = The 'command' field must not be empty: provide a command string or a non-empty list.
 
 # Fehler der Zwischendarstellung.
 ir.rule_not_found = Die vom Ziel „{ $target }“ referenzierte Regel „{ $rule }“ wurde nicht gefunden.

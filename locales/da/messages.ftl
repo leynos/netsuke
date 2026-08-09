@@ -149,6 +149,7 @@ manifest.glob.invalid_pattern = Ugyldigt glob-mønster "{ $pattern }": { $detail
 manifest.glob.unknown_pattern_error = ukendt mønsterfejl.
 manifest.glob.io_failed = Glob mislykkedes for "{ $pattern }": { $detail }.
 manifest.glob.unknown_io_error = ukendt I/O-fejl.
+manifest.command_list_empty = The 'command' field must not be empty: provide a command string or a non-empty list.
 
 # Fejl i den interne repræsentation.
 ir.rule_not_found = Reglen "{ $rule }", som målet "{ $target }" henviser til, blev ikke fundet.

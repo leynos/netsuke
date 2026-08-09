@@ -6,7 +6,7 @@
 //! generated Ninja file is written by the runner and `generate` command for
 //! downstream execution by the Ninja build system.
 
-use crate::ast::Recipe;
+use crate::ast::{Recipe, StringOrList};
 use crate::ir::{BuildEdge, BuildGraph};
 use crate::localization::{self, LocalizedMessage, keys};
 use camino::Utf8PathBuf;
@@ -215,8 +215,13 @@ impl NamedAction<'_> {
     fn write_recipe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.action.recipe {
             Recipe::Command { command } => {
-                Self::assert_shell_command(command);
-                writeln!(f, "  command = {command}")
+                let command_line = match command {
+                    StringOrList::String(cmd) => cmd.clone(),
+                    StringOrList::List(items) => items.iter().map(String::as_str).join(" && "),
+                    StringOrList::Empty => return Self::reject_empty_command_recipe(),
+                };
+                Self::assert_shell_command(&command_line);
+                writeln!(f, "  command = {command_line}")
             }
             Recipe::Script { script } => Self::write_script_command(f, script),
             Recipe::Rule { .. } => Self::reject_rule_recipe(),
@@ -266,6 +271,22 @@ impl NamedAction<'_> {
         }
         Err(fmt::Error)
     }
+
+    #[cold]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "debug builds intentionally panic to expose empty command recipes"
+    )]
+    #[expect(
+        clippy::manual_assert,
+        reason = "debug-only guard escalates to panic for visibility"
+    )]
+    fn reject_empty_command_recipe() -> fmt::Result {
+        if cfg!(debug_assertions) {
+            panic!("empty command recipes are rejected while deserializing the manifest");
+        }
+        Err(fmt::Error)
+    }
 }
 
 impl Display for NamedAction<'_> {
@@ -307,94 +328,5 @@ impl Display for DisplayEdge<'_> {
 #[path = "ninja_gen_property_tests.rs"]
 mod property_tests;
 #[cfg(test)]
-mod tests {
-    //! Unit tests for Ninja file generation and rule synthesis.
-    use super::*;
-    use crate::ir::{Action, BuildEdge, BuildGraph};
-    use anyhow::{Result, ensure};
-    use rstest::rstest;
-    #[rstest]
-    fn generate_simple_ninja() -> Result<()> {
-        let action = Action {
-            recipe: Recipe::Command {
-                command: "echo hi".into(),
-            },
-            description: None,
-            depfile: None,
-            deps_format: None,
-            pool: None,
-            restat: false,
-        };
-        let edge = BuildEdge {
-            action_id: "a".into(),
-            inputs: vec![Utf8PathBuf::from("in")],
-            implicit_deps: Vec::new(),
-            explicit_outputs: vec![Utf8PathBuf::from("out")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-        };
-        let mut graph = BuildGraph::default();
-        graph.actions.insert("a".into(), action);
-        graph.targets.insert(Utf8PathBuf::from("out"), edge);
-        graph.default_targets.push(Utf8PathBuf::from("out"));
-
-        let ninja = generate(&graph)?;
-        let expected = concat!(
-            "rule a\n",
-            "  command = echo hi\n\n",
-            "build out: a in\n\n",
-            "default out\n"
-        );
-        ensure!(
-            ninja == expected,
-            "expected Ninja manifest:\n{expected}\nactual:\n{ninja}"
-        );
-        Ok(())
-    }
-
-    #[rstest]
-    fn generate_script_ninja_round_trips() -> Result<()> {
-        let script = "echo 'a b' && echo \"$HOME\" && printf %s \"`whoami`\"\n# line";
-        let action = Action {
-            recipe: Recipe::Script {
-                script: script.into(),
-            },
-            description: None,
-            depfile: None,
-            deps_format: None,
-            pool: None,
-            restat: false,
-        };
-        let edge = BuildEdge {
-            action_id: "a".into(),
-            inputs: Vec::new(),
-            implicit_deps: Vec::new(),
-            explicit_outputs: vec![Utf8PathBuf::from("out")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-        };
-        let mut graph = BuildGraph::default();
-        graph.actions.insert("a".into(), action);
-        graph.targets.insert(Utf8PathBuf::from("out"), edge);
-
-        let ninja = generate(&graph)?;
-        ensure!(ninja.contains("rule a"));
-        ensure!(ninja.contains("command = /bin/sh -e -c"));
-        ensure!(ninja.contains("echo '\"'\"'a b'\"'\"'"));
-        ensure!(ninja.contains("\\\"\\$HOME\\\""));
-        ensure!(ninja.contains("\\`whoami\\`"));
-        ensure!(ninja.contains("printf %b"));
-        ensure!(ninja.contains("\\n# line' | /bin/sh -e"));
-        Ok(())
-    }
-
-    #[test]
-    fn assert_shell_command_tolerates_complex_syntax() {
-        let command = r#"/bin/sh -c "echo 'nested quotes' && echo \"double\" && (echo subshell)""#;
-        NamedAction::assert_shell_command(command);
-    }
-}
+#[path = "ninja_gen_tests.rs"]
+mod tests;

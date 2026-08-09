@@ -149,6 +149,7 @@ manifest.glob.invalid_pattern = Geçersiz glob deseni "{ $pattern }": { $detail 
 manifest.glob.unknown_pattern_error = bilinmeyen desen hatası.
 manifest.glob.io_failed = "{ $pattern }" için glob başarısız oldu: { $detail }.
 manifest.glob.unknown_io_error = bilinmeyen G/Ç hatası.
+manifest.command_list_empty = The 'command' field must not be empty: provide a command string or a non-empty list.
 
 # Ara gösterim hataları.
 ir.rule_not_found = "{ $target }" hedefinin başvurduğu "{ $rule }" kuralı bulunamadı.

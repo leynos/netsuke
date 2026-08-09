@@ -100,6 +100,25 @@ fn string_or_list_variants() -> Result<()> {
 }
 
 #[rstest]
+#[case("cc", StringOrList::String("cc".into()))]
+#[case("", StringOrList::String(String::new()))]
+fn string_or_list_from_str(#[case] value: &str, #[case] expected: StringOrList) {
+    assert_eq!(StringOrList::from(value), expected);
+}
+
+#[rstest]
+fn string_or_list_from_string_and_vec() {
+    assert_eq!(
+        StringOrList::from("cc".to_owned()),
+        StringOrList::String("cc".into())
+    );
+    assert_eq!(
+        StringOrList::from(vec!["a".to_owned(), "b".to_owned()]),
+        StringOrList::List(vec!["a".into(), "b".into()])
+    );
+}
+
+#[rstest]
 #[case(StringOrList::Empty, &[])]
 #[case(StringOrList::String("cc".into()), &["cc"])]
 #[case(StringOrList::List(vec!["cc".into(), "ld".into()]), &["cc", "ld"])]

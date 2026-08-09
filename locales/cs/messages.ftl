@@ -149,6 +149,7 @@ manifest.glob.invalid_pattern = Neplatný vzor glob „{ $pattern }“: { $detai
 manifest.glob.unknown_pattern_error = neznámá chyba vzoru.
 manifest.glob.io_failed = Glob selhal pro „{ $pattern }“: { $detail }.
 manifest.glob.unknown_io_error = neznámá vstupně-výstupní chyba.
+manifest.command_list_empty = The 'command' field must not be empty: provide a command string or a non-empty list.
 
 # Chyby mezikódu.
 ir.rule_not_found = Pravidlo „{ $rule }“, na které odkazuje cíl „{ $target }“, nebylo nalezeno.

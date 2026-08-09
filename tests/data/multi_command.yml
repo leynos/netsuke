@@ -1,0 +1,14 @@
+netsuke_version: "1.0.0"
+rules:
+  - name: comprehensive-check
+    description: Run the required checks sequentially
+    command:
+      - echo check-fmt
+      - echo lint
+      - echo test
+targets:
+  - name: done
+    rule: comprehensive-check
+actions:
+  - name: aggregate
+    rule: comprehensive-check

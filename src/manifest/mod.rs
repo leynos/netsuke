@@ -260,7 +260,7 @@ pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
 ///
 /// assert!(matches!(
 ///     &manifest.targets[0].recipe,
-///     Recipe::Command { command } if command == "echo release"
+///     Recipe::Command { command } if command.as_single() == Some("echo release")
 /// ));
 /// ```
 pub fn from_str_with_env(yaml: &str, env_reader: &EnvReader) -> Result<NetsukeManifest> {
@@ -346,7 +346,7 @@ pub fn from_path_with_policy(
 ///
 /// assert!(matches!(
 ///     &manifest.targets[0].recipe,
-///     Recipe::Command { command } if command == "echo offline"
+///     Recipe::Command { command } if command.as_single() == Some("echo offline")
 /// ));
 /// ```
 pub fn from_path_with_policy_and_env(

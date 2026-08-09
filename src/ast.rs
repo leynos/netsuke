@@ -29,6 +29,7 @@
 //! assert_eq!(manifest.targets.len(), 1);
 //! ```
 
+use crate::localization::{self, keys};
 use semver::Version;
 use serde::{Deserialize, Serialize, de::Deserializer};
 use std::collections::HashMap;
@@ -141,10 +142,11 @@ pub struct Rule {
 /// determines the variant.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum Recipe {
-    /// A single shell command.
+    /// A shell command, given as a scalar or an ordered list executed by a
+    /// fail-fast shell chain.
     Command {
         /// Shell command executed verbatim by Ninja.
-        command: String,
+        command: StringOrList,
     },
     /// An embedded multi-line script.
     Script {
@@ -161,7 +163,7 @@ pub enum Recipe {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawRecipe {
-    command: Option<String>,
+    command: Option<StringOrList>,
     script: Option<String>,
     rule: Option<StringOrList>,
 }
@@ -178,7 +180,14 @@ impl<'de> Deserialize<'de> for Recipe {
             rule: rule_field,
         } = raw;
         match (command_field, script_field, rule_field) {
-            (Some(command), None, None) => Ok(Self::Command { command }),
+            (Some(command), None, None) => match command {
+                empty if empty.is_empty_content() => Err(serde::de::Error::custom(
+                    localization::message(keys::MANIFEST_COMMAND_LIST_EMPTY).to_string(),
+                )),
+                command_value => Ok(Self::Command {
+                    command: command_value,
+                }),
+            },
             (None, Some(script), None) => Ok(Self::Script { script }),
             (None, None, Some(rule)) => Ok(Self::Rule { rule }),
             (None, None, None) => Err(serde::de::Error::custom(
@@ -344,5 +353,46 @@ impl StringOrList {
             Self::List(v) if v.len() == 1 => v.first().map(String::as_str),
             _ => None,
         }
+    }
+
+    /// Whether the value carries no string content.
+    ///
+    /// `Empty` and an empty `List` both yield `true`; a `String` (even an
+    /// empty string) and a non-empty `List` yield `false`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::ast::StringOrList;
+    ///
+    /// assert!(StringOrList::Empty.is_empty_content());
+    /// assert!(StringOrList::List(Vec::new()).is_empty_content());
+    /// assert!(!StringOrList::String(String::new()).is_empty_content());
+    /// ```
+    #[must_use]
+    pub const fn is_empty_content(&self) -> bool {
+        match self {
+            Self::Empty => true,
+            Self::String(_) => false,
+            Self::List(v) => v.is_empty(),
+        }
+    }
+}
+
+impl From<&str> for StringOrList {
+    fn from(value: &str) -> Self {
+        Self::String(value.to_owned())
+    }
+}
+
+impl From<String> for StringOrList {
+    fn from(value: String) -> Self {
+        Self::String(value)
+    }
+}
+
+impl From<Vec<String>> for StringOrList {
+    fn from(value: Vec<String>) -> Self {
+        Self::List(value)
     }
 }

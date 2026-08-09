@@ -149,6 +149,7 @@ manifest.glob.invalid_pattern = Pàtran glob mì-dhligheach “{ $pattern }”: 
 manifest.glob.unknown_pattern_error = mearachd phàtrain neo-aithnichte.
 manifest.glob.io_failed = Dh'fhàillig glob airson “{ $pattern }”: { $detail }.
 manifest.glob.unknown_io_error = mearachd ion-chuir/às-chuir neo-aithnichte.
+manifest.command_list_empty = The 'command' field must not be empty: provide a command string or a non-empty list.
 
 # Mearachdan an riochdachaidh mheadhanaich.
 ir.rule_not_found = Cha deach an riaghailt “{ $rule }” air a bheil an targaid “{ $target }” a' toirt iomradh a lorg.

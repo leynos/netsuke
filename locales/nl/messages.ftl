@@ -149,6 +149,7 @@ manifest.glob.invalid_pattern = Ongeldig glob-patroon ‘{ $pattern }’: { $det
 manifest.glob.unknown_pattern_error = onbekende patroonfout.
 manifest.glob.io_failed = Glob is mislukt voor ‘{ $pattern }’: { $detail }.
 manifest.glob.unknown_io_error = onbekende I/O-fout.
+manifest.command_list_empty = The 'command' field must not be empty: provide a command string or a non-empty list.
 
 # Fouten in de tussenrepresentatie.
 ir.rule_not_found = De regel ‘{ $rule }’ waarnaar doel ‘{ $target }’ verwijst, is niet gevonden.

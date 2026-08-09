@@ -149,6 +149,7 @@ manifest.glob.invalid_pattern = Invalid glob pattern '{ $pattern }': { $detail }
 manifest.glob.unknown_pattern_error = unknown pattern error.
 manifest.glob.io_failed = Glob failed for '{ $pattern }': { $detail }.
 manifest.glob.unknown_io_error = unknown I/O error.
+manifest.command_list_empty = The 'command' field must not be empty: provide a command string or a non-empty list.
 
 # IR errors.
 ir.rule_not_found = Rule '{ $rule }' referenced by target '{ $target }' was not found.
