@@ -28,6 +28,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-first-build-commands",
     "guide-first-build-manifest",
     "guide-foreach-manifest",
+    "guide-help-targets",
     "guide-json-command",
     "guide-json-output",
     "guide-macro-manifest",
@@ -288,6 +289,22 @@ fn directory_and_utility_command_examples_run() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn help_targets_example_lists_described_targets() -> Result<()> {
+    let example = documented_example("guide-help-targets")?;
+    ensure!(
+        example.body == "netsuke help targets\n",
+        "help targets example drifted"
+    );
+    let workspace = manifest_workspace("guide-first-build-manifest")?;
+    let run = run_netsuke_in(workspace.path(), &["help", "targets"])?;
+    assert_success(&run, "help targets example")?;
+    ensure!(
+        normalize_fluent_isolates(&run.stdout).contains("Targets:"),
+        "help targets should print the Targets section"
+    );
+    Ok(())
+}
 #[test]
 fn project_configuration_example_is_accepted() -> Result<()> {
     let example = documented_example("guide-project-config")?;
