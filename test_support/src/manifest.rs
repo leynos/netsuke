@@ -99,8 +99,12 @@ fn write_manifest_content(file: &mut NamedTempFile, manifest_path: &Utf8Path) ->
     })
 }
 
+/// Persist a staged manifest without overwriting an existing target.
+///
+/// A concurrently created target is tolerated because it already fulfils the
+/// manifest-exists contract.
 fn persist_manifest_file(file: NamedTempFile, manifest_path: &Utf8Path) -> io::Result<()> {
-    match file.persist(manifest_path.as_std_path()) {
+    match file.persist_noclobber(manifest_path.as_std_path()) {
         Ok(_) => Ok(()),
         Err(e) if e.error.kind() == io::ErrorKind::AlreadyExists => Ok(()),
         Err(e) => Err(io::Error::new(
@@ -180,7 +184,7 @@ mod tests {
     use super::*;
     use anyhow::{Context, Result};
     use camino::Utf8Path;
-    use std::io;
+    use std::io::{self, Write};
     use tempfile::TempDir;
 
     #[test]
@@ -258,6 +262,33 @@ mod tests {
         anyhow::ensure!(
             contents.contains("netsuke_version:"),
             "unexpected manifest contents: {contents}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn persisting_manifest_tolerates_existing_file_without_overwriting() -> Result<()> {
+        let temp = TempDir::new().context("create temp dir")?;
+        let temp_path = Utf8Path::from_path(temp.path())
+            .ok_or_else(|| anyhow::anyhow!("temp path is not valid UTF-8"))?;
+        let manifest_path = temp_path.join("manifest.yml");
+        let existing_contents = b"existing manifest contents";
+        fs::write(manifest_path.as_std_path(), existing_contents)
+            .context("create existing manifest")?;
+
+        let mut staged_file = NamedTempFile::new_in(temp.path()).context("stage manifest")?;
+        staged_file
+            .write_all(b"replacement manifest contents")
+            .context("write staged manifest")?;
+
+        persist_manifest_file(staged_file, &manifest_path)
+            .context("persist staged manifest without overwriting")?;
+
+        let contents =
+            fs::read(manifest_path.as_std_path()).context("read existing manifest contents")?;
+        anyhow::ensure!(
+            contents == existing_contents,
+            "manifest contents changed: {contents:?}"
         );
         Ok(())
     }
