@@ -87,6 +87,8 @@ fn describe_config_metrics() {
 
 #[cfg(test)]
 mod tests {
+    //! Regression coverage for bounded configuration observability.
+
     use super::*;
     use metrics_util::{
         MetricKind,
