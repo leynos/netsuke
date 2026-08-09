@@ -9,6 +9,8 @@ Netsuke turns a readable `Netsukefile` into a validated, static Ninja build
 graph. It keeps the dynamic work in a higher-level manifest and leaves fast,
 incremental execution to [Ninja](https://ninja-build.org/).
 
+Website: <https://df12.studio/netsuke>
+
 ______________________________________________________________________
 
 ## Why Netsuke?
