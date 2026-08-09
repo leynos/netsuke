@@ -2963,7 +2963,8 @@ Instruments emitted by `record_config_load_metrics`:
   configuration-load failure rate.
 - `netsuke_config_load_duration_seconds` — a histogram recording the
   wall-clock duration of the configuration-load phase in seconds (one sample
-  per startup). Suggested operator bucket boundaries: `0.001, 0.005, 0.01,
+  per startup that reaches configuration resolution). Suggested operator bucket
+  boundaries: `0.001, 0.005, 0.01,
   0.05, 0.1, 0.5, 1.0` seconds; configuration loading is expected to complete
   in single-digit milliseconds, so buckets above one second exist only to
   catch pathological filesystem or environment stalls.
