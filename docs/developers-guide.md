@@ -3235,8 +3235,9 @@ All command events share these structured fields:
 
 - `operation`: caller-provided operation label such as `"build"` or tool name.
 - `ninja_program`: command program after UTF-8 normalization.
-- `suppress_stderr`: derived from `cli.json`, true when JSON output suppresses
-  direct child-process streams.
+- `suppress_stderr`: bool derived from the `StderrMode` policy via
+  `stderr_mode.is_suppress()`, true when the policy suppresses direct
+  child-process streams.
 
 Phase-specific fields supplement that shared set. The informational execution
 event includes `arg_count`. Spawn- and exit-failure events instead set
@@ -3259,9 +3260,13 @@ paths:
 1. Create `Command` with `Command::new(request.program)`.
 2. Pass it into a closure that applies operation-specific configuration.
 3. Call `run_command_and_stream_with_context` with optional status observer,
-   `cli.json` as `suppress_stderr`, and the chosen `operation`.
+   the request's `stderr_mode` policy, and the chosen `operation`.
 4. Let `run_command_and_stream_with_context` handle span creation, execution
    logging, failure logging, and exit-status enforcement via context helpers.
+
+The runner derives the policy from CLI state with `StderrMode::from_cli(cli)`
+when it builds the request; the process layer consumes the request's field and
+never reads `cli.json` itself.
 
 ### Module: `runner::process::redaction`
 
@@ -3366,9 +3371,9 @@ through the child `PATH` is acceptable. What the injected `PATH` always
 governs is the environment Ninja's own child commands see when it shells out.
 
 The explicit request APIs compose on top of `CommandEnv`: `NinjaBuildRequest`/
-`NinjaToolRequest` carry an `env: &CommandEnv` field alongside the program, CLI
-settings, and build file, and are consumed by `run_ninja_with`/
-`run_ninja_tool_with`. The convenience wrappers `run_ninja`/`run_ninja_tool`
+`NinjaToolRequest` carry `env: &CommandEnv` and `stderr_mode: StderrMode`
+fields alongside the program, CLI settings, and build file, and are consumed
+by `run_ninja_with`/`run_ninja_tool_with`. The convenience wrappers `run_ninja`/`run_ninja_tool`
 call these with `CommandEnv::inherit()`, reproducing production behaviour;
 tests reach for `run_ninja_with`/`run_ninja_tool_with` directly to supply a
 `CommandEnv` built with `with_path` instead. Section 6.1 of the

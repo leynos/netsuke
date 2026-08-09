@@ -47,7 +47,7 @@ mod process;
 #[cfg(doctest)]
 pub use process::doc;
 pub use process::{
-    CommandEnv, NinjaBuildRequest, NinjaToolRequest, run_ninja, run_ninja_tool,
+    CommandEnv, NinjaBuildRequest, NinjaToolRequest, StderrMode, run_ninja, run_ninja_tool,
     run_ninja_tool_with, run_ninja_with,
 };
 
@@ -231,6 +231,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> 
                 build_file: build_path,
                 targets: &targets,
                 env: &CommandEnv::inherit(),
+                stderr_mode: StderrMode::from_cli(cli),
             },
             &mut on_task_progress,
         )
@@ -292,6 +293,7 @@ fn handle_ninja_tool(
                 build_file: build_path,
                 tool: tool.name,
                 env: &CommandEnv::inherit(),
+                stderr_mode: StderrMode::from_cli(cli),
             },
             &mut on_task_progress,
         )

@@ -1,6 +1,7 @@
 //! Forward Ninja output while preserving bounded command-list attribution.
 
 use super::{
+    StderrMode,
     child_exit::{finalize_streaming, terminate_child},
     failure_attribution::{
         CommandListFailure, NinjaFailureOutputTail, forward_stderr_with_attribution,
@@ -60,7 +61,7 @@ where
 pub(super) fn spawn_and_stream_output(
     mut child: Child,
     status_observer: Option<StatusObserver<'_>>,
-    suppress_stderr: bool,
+    stderr_mode: StderrMode,
     captures_ninja_failure_output: bool,
 ) -> io::Result<(ExitStatus, Option<CommandListFailure>)> {
     let Some(stdout) = child.stdout.take() else {
@@ -72,37 +73,37 @@ pub(super) fn spawn_and_stream_output(
         return Err(io::Error::other("child process missing stderr pipe"));
     };
 
-    let err_handle = thread::spawn(move || {
+    let err_handle = thread::spawn(move || match stderr_mode {
         // Avoid a long-lived stderr lock: status observers invoked while
         // draining stdout may emit task updates to stderr, and that path must
         // not block behind stderr forwarding. In JSON diagnostics mode we still
         // drain child stderr, but discard it to keep stderr machine-readable.
-        if suppress_stderr {
-            forward_stderr_with_attribution(BufReader::new(stderr), io::sink())
-        } else {
-            forward_stderr_with_attribution(BufReader::new(stderr), io::stderr())
-        }
+        StderrMode::Suppress => forward_stderr_with_attribution(BufReader::new(stderr), io::sink()),
+        StderrMode::Forward => forward_stderr_with_attribution(BufReader::new(stderr), io::stderr()),
     });
 
     // Intentionally drain stdout on the main thread when `status_observer` is
     // present so forwarding and callback-driven status updates keep a stable
     // ordering; moving this elsewhere can regress output timing/interleaving.
-    let (stdout_stats, stdout_failure) = if suppress_stderr {
-        let mut output = io::sink();
-        forward_stdout(
-            stdout,
-            &mut output,
-            status_observer,
-            captures_ninja_failure_output,
-        )
-    } else {
-        let mut output = io::stdout().lock();
-        forward_stdout(
-            stdout,
-            &mut output,
-            status_observer,
-            captures_ninja_failure_output,
-        )
+    let (stdout_stats, stdout_failure) = match stderr_mode {
+        StderrMode::Suppress => {
+            let mut output = io::sink();
+            forward_stdout(
+                stdout,
+                &mut output,
+                status_observer,
+                captures_ninja_failure_output,
+            )
+        }
+        StderrMode::Forward => {
+            let mut output = io::stdout().lock();
+            forward_stdout(
+                stdout,
+                &mut output,
+                status_observer,
+                captures_ninja_failure_output,
+            )
+        }
     };
 
     // Capture the wait result without `?` so the stderr forwarding thread is

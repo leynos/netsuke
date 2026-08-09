@@ -35,15 +35,17 @@ use output_forwarding::{StatusObserver, spawn_and_stream_output};
 mod command_env;
 mod configure;
 mod request;
+mod stderr_mode;
 pub use command_env::CommandEnv;
 use configure::{configure_ninja_build_command, configure_ninja_tool_command};
 pub use paths::*;
 pub use request::{NinjaBuildRequest, NinjaToolRequest};
+pub use stderr_mode::StderrMode;
 
 /// Per-invocation process settings passed only from Ninja setup to execution.
 struct CommandExecutionContext<'a, Clock> {
     operation: &'a str,
-    suppress_stderr: bool,
+    stderr_mode: StderrMode,
     captures_ninja_failure_output: bool,
     clock: &'a Clock,
 }
@@ -74,29 +76,24 @@ fn run_command_and_stream_with_context<Clock: MonotonicClock>(
     execution: &CommandExecutionContext<'_, Clock>,
 ) -> io::Result<()> {
     let context = CommandLogContext::from_command(&cmd);
-    let span = command_span(&context, execution.operation, execution.suppress_stderr);
+    let span = command_span(&context, execution.operation, execution.stderr_mode);
     let _entered = span.enter();
 
-    log_command_execution(&context, execution.operation, execution.suppress_stderr);
+    log_command_execution(&context, execution.operation, execution.stderr_mode);
     let started_at = execution.clock.now();
     let child = cmd.spawn().inspect_err(|err| {
         tracing::Span::current().record("failure_category", "spawn");
-        log_command_spawn_failure(
-            &context,
-            execution.operation,
-            execution.suppress_stderr,
-            err,
-        );
+        log_command_spawn_failure(&context, execution.operation, execution.stderr_mode, err);
     })?;
     let (status, command_list_failure) = spawn_and_stream_output(
         child,
         status_observer,
-        execution.suppress_stderr,
+        execution.stderr_mode,
         execution.captures_ninja_failure_output,
     )?;
     let failure_context = ExitFailureContext {
         operation: execution.operation,
-        suppress_stderr: execution.suppress_stderr,
+        stderr_mode: execution.stderr_mode,
         command_list_failure: command_list_failure.as_ref(),
         clock: execution.clock,
         started_at,
@@ -126,6 +123,7 @@ pub fn run_ninja(
         build_file,
         targets,
         env: &CommandEnv::inherit(),
+        stderr_mode: StderrMode::from_cli(cli),
     })
 }
 
@@ -140,7 +138,9 @@ pub fn run_ninja(
 ///
 /// ```rust,no_run
 /// use netsuke::cli::Cli;
-/// use netsuke::runner::{BuildTargets, CommandEnv, NinjaBuildRequest, run_ninja_with};
+/// use netsuke::runner::{
+///     BuildTargets, CommandEnv, NinjaBuildRequest, StderrMode, run_ninja_with,
+/// };
 /// use std::path::Path;
 ///
 /// let cli = Cli::default();
@@ -157,6 +157,7 @@ pub fn run_ninja(
 ///     build_file: Path::new("build.ninja"),
 ///     targets: &targets,
 ///     env: &env,
+///     stderr_mode: StderrMode::from_cli(&cli),
 /// })?;
 /// # Ok::<(), std::io::Error>(())
 /// ```
@@ -193,6 +194,7 @@ pub fn run_ninja_tool(program: &Path, cli: &Cli, build_file: &Path, tool: &str) 
         build_file,
         tool,
         env: &CommandEnv::inherit(),
+        stderr_mode: StderrMode::from_cli(cli),
     })
 }
 
@@ -202,7 +204,7 @@ pub fn run_ninja_tool(program: &Path, cli: &Cli, build_file: &Path, tool: &str) 
 ///
 /// ```rust,no_run
 /// use netsuke::cli::Cli;
-/// use netsuke::runner::{CommandEnv, NinjaToolRequest, run_ninja_tool_with};
+/// use netsuke::runner::{CommandEnv, NinjaToolRequest, StderrMode, run_ninja_tool_with};
 /// use std::path::Path;
 ///
 /// let cli = Cli::default();
@@ -212,6 +214,7 @@ pub fn run_ninja_tool(program: &Path, cli: &Cli, build_file: &Path, tool: &str) 
 ///     build_file: Path::new("build.ninja"),
 ///     tool: "clean",
 ///     env: &CommandEnv::inherit(),
+///     stderr_mode: StderrMode::from_cli(&cli),
 /// })?;
 /// # Ok::<(), std::io::Error>(())
 /// ```
@@ -226,7 +229,7 @@ pub fn run_ninja_tool_with(request: &NinjaToolRequest<'_>) -> io::Result<()> {
 
 struct NinjaInternalRequest<'request, 'observer> {
     program: &'request Path,
-    cli: &'request Cli,
+    stderr_mode: StderrMode,
     status_observer: Option<StatusObserver<'observer>>,
     operation: &'request str,
     captures_ninja_failure_output: bool,
@@ -245,7 +248,7 @@ where
     configure(&mut cmd)?;
     let execution = CommandExecutionContext {
         operation: request.operation,
-        suppress_stderr: request.cli.json,
+        stderr_mode: request.stderr_mode,
         captures_ninja_failure_output: request.captures_ninja_failure_output,
         clock,
     };
@@ -259,7 +262,7 @@ fn run_ninja_build_internal(
     run_ninja_internal(
         NinjaInternalRequest {
             program: request.program,
-            cli: request.cli,
+            stderr_mode: request.stderr_mode,
             status_observer,
             operation: "build",
             captures_ninja_failure_output: true,
@@ -277,7 +280,7 @@ fn run_ninja_tool_internal(
     run_ninja_internal(
         NinjaInternalRequest {
             program: request.program,
-            cli: request.cli,
+            stderr_mode: request.stderr_mode,
             status_observer,
             operation: request.tool,
             captures_ninja_failure_output: false,
@@ -312,3 +315,4 @@ pub(crate) fn run_ninja_tool_with_status(
 ) -> io::Result<()> {
     run_ninja_tool_internal(request, Some(status_observer), &StdMonotonicClock)
 }
+

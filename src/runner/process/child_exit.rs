@@ -9,6 +9,7 @@ use std::{
 };
 
 use super::{
+    StderrMode,
     command_list_telemetry,
     command_logging::{CommandLogContext, log_command_exit_failure},
     failure_attribution::CommandListFailure,
@@ -19,7 +20,7 @@ use super::{
 #[derive(Clone, Copy)]
 pub(super) struct ExitFailureContext<'failure, 'clock, Clock> {
     pub(super) operation: &'failure str,
-    pub(super) suppress_stderr: bool,
+    pub(super) stderr_mode: StderrMode,
     pub(super) command_list_failure: Option<&'failure CommandListFailure>,
     pub(super) clock: &'clock Clock,
     pub(super) started_at: Instant,
@@ -38,7 +39,7 @@ pub(super) fn check_exit_status_with_context<Clock: MonotonicClock>(
         log_command_exit_failure(
             context,
             failure_context.operation,
-            failure_context.suppress_stderr,
+            failure_context.stderr_mode,
             status,
         );
         if let Some(failure) = failure_context.command_list_failure {

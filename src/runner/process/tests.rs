@@ -165,7 +165,7 @@ fn command_list_failure_duration_uses_the_injected_monotonic_clock() {
 
     let execution = CommandExecutionContext {
         operation: "build",
-        suppress_stderr: true,
+        stderr_mode: StderrMode::Suppress,
         captures_ninja_failure_output: false,
         clock: &clock,
     };
@@ -211,7 +211,7 @@ fn large_stdout_cannot_supply_command_list_attribution() -> anyhow::Result<()> {
         .stderr(Stdio::piped());
     let execution = CommandExecutionContext {
         operation: "build",
-        suppress_stderr: true,
+        stderr_mode: StderrMode::Suppress,
         // Only a Ninja build can relay a subcommand's stderr through stdout.
         // An arbitrary command's large stdout must be forwarded untouched.
         captures_ninja_failure_output: false,
