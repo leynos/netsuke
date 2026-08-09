@@ -66,7 +66,7 @@ nfpms:
   - id: netsuke-packages
     package_name: netsuke
     vendor: "Netsuke"
-    homepage: "https://github.com/leynos/netsuke"
+    homepage: "https://df12.studio/netsuke"
     maintainer: "Payton McIntosh <pmcintosh@df12.net>"
     description: "Friendly build system that compiles structured manifests into a Ninja build graph"
     license: ISC
@@ -122,7 +122,7 @@ hooks:
           version: "${VERSION}"
           origin: "local/${BIN}"
           comment: "Netsuke build system"
-          www: "https://github.com/leynos/netsuke"
+          www: "https://df12.studio/netsuke"
           maintainer: "Payton McIntosh <pmcintosh@df12.net>"
           arch: "${ABI}"
           desc: "Friendly build system that compiles structured manifests into a Ninja build graph."
