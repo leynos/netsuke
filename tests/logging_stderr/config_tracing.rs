@@ -231,6 +231,10 @@ fn invalid_config_traces_without_parser_text() -> Result<()> {
         "stderr should classify the parse failure: {joined}"
     );
     ensure!(
+        joined.contains("resolved config path") && joined.contains("selector=\"cli_flag\""),
+        "verbose stderr should replay the cached selector decision: {joined}"
+    );
+    ensure!(
         !joined.contains("invalid parser secret"),
         "diagnostics must not echo the parser input: {joined}"
     );
