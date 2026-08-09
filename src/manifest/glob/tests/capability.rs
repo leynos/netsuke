@@ -64,6 +64,58 @@ fn open_root_dir_declines_unopenable_prefix(
     Ok(())
 }
 
+/// Restores a directory's mode so the temporary tree can still be removed.
+#[cfg(unix)]
+struct ModeGuard(std::path::PathBuf);
+
+#[cfg(unix)]
+impl Drop for ModeGuard {
+    fn drop(&mut self) {
+        if let Err(err) = test_fs::set_mode(&self.0, 0o755) {
+            tracing::warn!(
+                "failed to restore mode on {path}: {err}",
+                path = self.0.display()
+            );
+        }
+    }
+}
+
+/// A prefix that exists but cannot be opened is a genuine failure, not an
+/// empty match set: only a missing or non-directory prefix short-circuits, so
+/// anything else must reach the caller as an error.
+#[cfg(unix)]
+#[test]
+fn open_root_dir_propagates_an_unreadable_prefix() -> Result<()> {
+    let temp = tempdir()?;
+    let locked = temp.path().join("locked");
+    test_fs::create_dir(&locked)?;
+    test_fs::create_dir(locked.join("inner"))?;
+    test_fs::write(locked.join("inner").join("in.txt"), "in")?;
+    test_fs::set_mode(&locked, 0o000)?;
+    let _restore = ModeGuard(locked.clone());
+
+    let pattern = GlobPattern::new(&format!("{}/inner/*.txt", locked.display()))?;
+    let Err(err) = open_root_dir(&pattern) else {
+        // A privileged user bypasses the mode, so there is nothing to observe.
+        tracing::warn!("skipping: the mode-000 prefix stayed readable");
+        return Ok(());
+    };
+    ensure!(
+        err.kind() == std::io::ErrorKind::PermissionDenied,
+        "unexpected error kind {kind:?}",
+        kind = err.kind()
+    );
+
+    let expansion = glob_paths(pattern.raw())
+        .expect_err("an unreadable prefix must fail the expansion, not silently match nothing");
+    ensure!(
+        expansion.kind() == ErrorKind::InvalidOperation,
+        "unexpected error kind {kind:?}",
+        kind = expansion.kind()
+    );
+    Ok(())
+}
+
 #[rstest]
 fn open_root_dir_scopes_capability_to_literal_prefix(scoped_tree: Result<TempDir>) -> Result<()> {
     // The capability must be opened at the pattern's literal prefix, not at

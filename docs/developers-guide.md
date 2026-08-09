@@ -1601,6 +1601,42 @@ sibling submodule needs them; widen the boundary only by adding a deliberate
 re-export in `src/manifest/mod.rs`. The comments in the source are supporting
 detail for these rules, not a substitute for them.
 
+### Capability scope
+
+The metadata check that filters directories out of a glob's results goes
+through a `cap_std::fs::Dir` handle rather than a raw filesystem call.
+`walk::open_root_dir` opens that handle at the pattern's longest literal
+directory prefix, computed by `walk::literal_dir_prefix`: the pattern text up
+to the first `*`, `?`, `[`, or `{`, trimmed back to the last path separator.
+For `src/**/*.c` that prefix is `src/`.
+
+- **`GlobRoot` couples the handle with the prefix.** Matches arrive from the
+  `glob` crate's walker as absolute paths, so `GlobRoot::relativise` rebases
+  each one onto the prefix before the metadata lookup. A path that does not
+  start with the prefix is rejected outright rather than resolved through a
+  wider capability.
+- **No literal directory component falls back to the working directory.** A
+  pattern such as `*.c` yields a prefix of `.`. `walk::prefix_is_unopenable`
+  treats a missing prefix, and a prefix that names something other than a
+  directory, as no capability at all; `glob_paths` then returns an empty
+  match set rather than an error. Any other failure to open the prefix
+  propagates.
+- **`walk::is_unresolvable_link` governs which failed lookups are skipped
+  rather than fatal.** Only `io::ErrorKind::PermissionDenied` (an escape from
+  the capability's tree, or a genuine permission failure the capability
+  cannot distinguish from one) and `io::ErrorKind::NotFound` (a dangling
+  link) count, and only when some component of the matched path is actually
+  a symbolic link. A `FilesystemLoop` is a broken tree rather than an absent
+  file, so it propagates instead of being skipped.
+- **The boundary that remains.** The match walk itself is the `glob` crate's,
+  and that crate traverses the filesystem ambiently. Only the metadata check
+  is capability-scoped, so narrowing the capability's opening point narrows
+  what the metadata check can resolve, not what the walk itself can see on
+  disk.
+
+[ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) records the
+decision to scope the capability this way and the alternatives it rejected.
+
 ### Glob expansion observability
 
 `src/manifest/glob/diagnostics.rs` records two outcomes of the

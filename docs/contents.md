@@ -52,6 +52,9 @@ operator, user, and contributor references are easier to find.
 - [adr-009-bounded-redacted-manifest-telemetry.md](adr-009-bounded-redacted-manifest-telemetry.md):
   Manifest telemetry decision record, separating observability from evaluation
   and bounding and redacting the emitted metrics and spans.
+- [adr-010-scope-glob-capability-to-literal-prefix.md](adr-010-scope-glob-capability-to-literal-prefix.md):
+  Glob capability-scoping decision record, opening the metadata capability at
+  a pattern's literal directory prefix instead of an ambient root.
 
 ## User and operator guides
 
