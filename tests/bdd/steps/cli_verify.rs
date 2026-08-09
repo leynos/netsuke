@@ -52,27 +52,14 @@ impl ExpectedCommand {
     }
 }
 
-pub(super) fn verify_help_topic(world: &TestWorld, expected: &HelpTopic) -> Result<()> {
+pub(super) fn verify_help_topic(world: &TestWorld, expected: Option<&HelpTopic>) -> Result<()> {
     let command = get_command(world)?;
     let Commands::Help(args) = &command else {
         bail!("expected help command, got {command:?}");
     };
     ensure!(
-        args.topic.as_ref() == Some(expected),
+        args.topic.as_ref() == expected,
         "expected help topic {expected:?}, got {:?}",
-        args.topic
-    );
-    Ok(())
-}
-
-pub(super) fn verify_help_has_no_topic(world: &TestWorld) -> Result<()> {
-    let command = get_command(world)?;
-    let Commands::Help(args) = &command else {
-        bail!("expected help command, got {command:?}");
-    };
-    ensure!(
-        args.topic.is_none(),
-        "expected bare help command, got topic {:?}",
         args.topic
     );
     Ok(())
