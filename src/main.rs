@@ -20,6 +20,16 @@ use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{Registry, fmt, reload};
 
+use anyhow::Context;
+use metrics_exporter_prometheus::PrometheusBuilder;
+
+//! Application entry point.
+//!
+//! Parses command-line arguments and delegates execution to [`runner::run`].
+//! It also installs optional Prometheus metrics and records configuration-load
+//! outcomes and latency during startup.
+};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DiagMode {
     Human,
