@@ -101,12 +101,20 @@ fn write_manifest_content(file: &mut NamedTempFile, manifest_path: &Utf8Path) ->
 
 /// Persist a staged manifest without overwriting an existing target.
 ///
-/// A concurrently created target is tolerated because it already fulfils the
-/// manifest-exists contract.
+/// A concurrently created non-directory target is tolerated because it already
+/// fulfils the manifest-exists contract.
 fn persist_manifest_file(file: NamedTempFile, manifest_path: &Utf8Path) -> io::Result<()> {
     match file.persist_noclobber(manifest_path.as_std_path()) {
         Ok(_) => Ok(()),
-        Err(e) if e.error.kind() == io::ErrorKind::AlreadyExists => Ok(()),
+        Err(e) if e.error.kind() == io::ErrorKind::AlreadyExists && fs::is_dir(manifest_path) => {
+            Err(io::Error::new(
+                io::ErrorKind::IsADirectory,
+                format!("Manifest path points to a directory, expected a file: {manifest_path}"),
+            ))
+        }
+        Err(e) if e.error.kind() == io::ErrorKind::AlreadyExists && fs::exists(manifest_path) => {
+            Ok(())
+        }
         Err(e) => Err(io::Error::new(
             e.error.kind(),
             format!(
@@ -183,19 +191,31 @@ mod tests {
 
     use super::*;
     use anyhow::{Context, Result};
-    use camino::Utf8Path;
+    use camino::{Utf8Path, Utf8PathBuf};
+    use rstest::{fixture, rstest};
     use std::io::{self, Write};
     use tempfile::TempDir;
 
-    #[test]
-    fn existing_directory_manifest_path_is_rejected() -> Result<()> {
+    type TempManifestWorkspace = Result<(TempDir, Utf8PathBuf)>;
+
+    #[fixture]
+    fn temp_manifest_workspace() -> TempManifestWorkspace {
         let temp = TempDir::new().context("create temp dir")?;
         let temp_path = Utf8Path::from_path(temp.path())
-            .ok_or_else(|| anyhow::anyhow!("temp path is not valid UTF-8"))?;
+            .ok_or_else(|| anyhow::anyhow!("temp path is not valid UTF-8"))?
+            .to_owned();
+        Ok((temp, temp_path))
+    }
+
+    #[rstest]
+    fn existing_directory_manifest_path_is_rejected(
+        temp_manifest_workspace: TempManifestWorkspace,
+    ) -> Result<()> {
+        let (temp, temp_path) = temp_manifest_workspace?;
         let dir = temp.path().join("dir");
         fs::create_dir(&dir).context("create directory placeholder")?;
 
-        let Err(err) = ensure_manifest_exists(temp_path, Utf8Path::new("dir")) else {
+        let Err(err) = ensure_manifest_exists(&temp_path, Utf8Path::new("dir")) else {
             anyhow::bail!("existing directory should be rejected");
         };
         anyhow::ensure!(err.kind() == io::ErrorKind::IsADirectory);
@@ -207,16 +227,16 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn read_only_parent_reports_target_path() -> Result<()> {
-        let temp = TempDir::new().context("create temp dir")?;
-        let temp_path = Utf8Path::from_path(temp.path())
-            .ok_or_else(|| anyhow::anyhow!("temp path is not valid UTF-8"))?;
+    #[rstest]
+    fn read_only_parent_reports_target_path(
+        temp_manifest_workspace: TempManifestWorkspace,
+    ) -> Result<()> {
+        let (temp, temp_path) = temp_manifest_workspace?;
         let parent = temp.path().join("parent");
         fs::write(&parent, b"file").context("write placeholder parent file")?;
         let manifest = parent.join("manifest.yml");
 
-        let Err(err) = ensure_manifest_exists(temp_path, Utf8Path::new("parent/manifest.yml"))
+        let Err(err) = ensure_manifest_exists(&temp_path, Utf8Path::new("parent/manifest.yml"))
         else {
             anyhow::bail!("non-directory parent should error");
         };
@@ -229,11 +249,11 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn creates_missing_parent_directory_and_manifest() -> Result<()> {
-        let temp = TempDir::new().context("create temp dir")?;
-        let temp_path = Utf8Path::from_path(temp.path())
-            .ok_or_else(|| anyhow::anyhow!("temp path is not valid UTF-8"))?;
+    #[rstest]
+    fn creates_missing_parent_directory_and_manifest(
+        temp_manifest_workspace: TempManifestWorkspace,
+    ) -> Result<()> {
+        let (_temp, temp_path) = temp_manifest_workspace?;
 
         // Parent directory does not exist beforehand.
         let cli_file = Utf8Path::new("missing/subdir/manifest.yml");
@@ -244,7 +264,7 @@ mod tests {
         );
 
         let manifest_path =
-            ensure_manifest_exists(temp_path, cli_file).context("create manifest when missing")?;
+            ensure_manifest_exists(&temp_path, cli_file).context("create manifest when missing")?;
         anyhow::ensure!(manifest_path == expected_path, "manifest path should match");
         anyhow::ensure!(fs::exists(&manifest_path), "manifest file should exist");
         anyhow::ensure!(
@@ -266,11 +286,11 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn persisting_manifest_tolerates_existing_file_without_overwriting() -> Result<()> {
-        let temp = TempDir::new().context("create temp dir")?;
-        let temp_path = Utf8Path::from_path(temp.path())
-            .ok_or_else(|| anyhow::anyhow!("temp path is not valid UTF-8"))?;
+    #[rstest]
+    fn persisting_manifest_tolerates_existing_file_without_overwriting(
+        temp_manifest_workspace: TempManifestWorkspace,
+    ) -> Result<()> {
+        let (temp, temp_path) = temp_manifest_workspace?;
         let manifest_path = temp_path.join("manifest.yml");
         let existing_contents = b"existing manifest contents";
         fs::write(manifest_path.as_std_path(), existing_contents)
@@ -289,6 +309,26 @@ mod tests {
         anyhow::ensure!(
             contents == existing_contents,
             "manifest contents changed: {contents:?}"
+        );
+        Ok(())
+    }
+
+    #[rstest]
+    fn persisting_manifest_rejects_existing_directory(
+        temp_manifest_workspace: TempManifestWorkspace,
+    ) -> Result<()> {
+        let (temp, temp_path) = temp_manifest_workspace?;
+        let manifest_path = temp_path.join("manifest.yml");
+        fs::create_dir(manifest_path.as_std_path()).context("create manifest directory")?;
+        let staged_file = NamedTempFile::new_in(temp.path()).context("stage manifest")?;
+
+        let Err(err) = persist_manifest_file(staged_file, &manifest_path) else {
+            anyhow::bail!("directory target should be rejected");
+        };
+        anyhow::ensure!(err.kind() == io::ErrorKind::IsADirectory);
+        anyhow::ensure!(
+            err.to_string().contains(manifest_path.as_str()),
+            "message: {err}"
         );
         Ok(())
     }
