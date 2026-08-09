@@ -245,14 +245,19 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
 
 - `name`: A unique string identifier for the rule.
 
-- `command`: A single command string to be executed. It may include the
-  placeholders `{{ ins }}` and `{{ outs }}` to represent input and output
-  files. Netsuke expands these placeholders to space-separated lists of file
-  paths quoted for POSIX `/bin/sh` using the
-  [`shell-quote`](https://docs.rs/shell-quote/latest/shell_quote/) crate (Sh
-  mode) before hashing the action. The IR stores the fully expanded command;
-  Ninja executes this text verbatim. After interpolation, the command must be
-  parsable by [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode).
+- `command`: A command string, or a non-empty ordered list of command strings,
+  to be executed. Each entry may include the placeholders `{{ ins }}` and
+  `{{ outs }}` to represent input and output files. Netsuke expands these
+  placeholders to space-separated lists of file paths quoted for POSIX
+  `/bin/sh` using the [`shell-quote`](https://docs.rs/shell-quote/latest/shell_quote/)
+  crate (Sh mode) before hashing the action. The IR stores the fully expanded
+  command; Ninja executes this text verbatim. After interpolation, the
+  command must be parsable by [shlex](https://docs.rs/shlex/latest/shlex/)
+  (POSIX mode). A list command is emitted as a single fail-fast `&&` chain,
+  so entries run in declaration order and the chain stops at the first
+  non-zero exit; all entries share one shell process, carrying working
+  directory, environment, and exit-code state forward like a `script` block.
+  An empty command list is rejected during manifest deserialization.
   Automatic shell escaping applies only where the schema has enough structure
   to identify argument boundaries. Plain command strings remain shell text;
   authors should use structured recipes or explicit quoting helpers for
@@ -711,7 +716,7 @@ pub struct Rule {
 /// A union of execution styles for both rules and targets.
 #[serde(untagged)]
 pub enum Recipe {
-    Command { command: String },
+    Command { command: StringOrList },
     Script { script: String },
     Rule { rule: StringOrList },
     // FUTURE: planned Recipe::Exec extension; not present in src/ast.rs yet.

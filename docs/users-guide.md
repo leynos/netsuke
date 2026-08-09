@@ -290,11 +290,40 @@ offending key.
 
 A rule or target must provide exactly one recipe:
 
-- `command`: one shell command.
+- `command`: one shell command, or an ordered list of commands.
 - `script`: a multi-line POSIX shell script.
 - `rule`: the name of another rule to use.
 
 Rules may also provide `description`, text used for Ninja's progress display.
+
+A `command` list runs its entries in declaration order and stops at the first
+non-zero exit, so entries share the fail-fast behaviour of a handwritten
+`&&` chain. All entries run in one shell process, so working directory,
+environment, and exit-code state set by an earlier entry carry into later
+entries, exactly as they do for `script`. An empty command list is rejected
+when the manifest is parsed.
+
+<!-- tested-example: guide-command-list -->
+
+```yaml
+netsuke_version: "1.0.0"
+
+rules:
+  - name: comprehensive-check
+    description: Run the required checks sequentially
+    command:
+      - echo "check-fmt"
+      - echo "lint"
+      - echo "test"
+
+targets:
+  - name: done
+    rule: comprehensive-check
+```
+
+Prefer a `command` list for a short, ordered sequence of distinct commands.
+Prefer `script` when the logic needs multi-line structure or shell
+constructs such as loops, conditionals, or variable assignment.
 
 The v0.1.0-beta1 `script` implementation invokes `/bin/sh -e`; it is not
 currently a portable PowerShell abstraction. Prefer `command` or
@@ -1059,6 +1088,9 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   may retain the original input so invalid patterns can be explained.
 - `raw` template output and handwritten shell fragments remain the manifest
   author's responsibility.
+- Each `command` list entry is joined into a single shell chain; a later entry
+  inherits the working directory, environment, and shell variables left by an
+  earlier entry and runs even if the earlier entry only partially succeeded.
 - Literal shell dollar expressions currently require Ninja-aware escaping,
   such as `$$PATH`.
 
