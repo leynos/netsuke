@@ -15,8 +15,14 @@ pub fn manifest_yaml(body: &str) -> String {
 /// Resolve `cli_file` relative to `temp_dir` and ensure it exists.
 ///
 /// When `cli_file` is relative, it is joined with `temp_dir` and the returned
-/// path is absolute and UTF‑8. If the resulting path does not exist, a minimal
-/// manifest is written to that location.
+/// path is absolute and UTF‑8. If the resulting path already names a
+/// non-directory target, that path is returned without modifying its contents.
+/// If another actor creates a non-directory target after the initial existence
+/// check but before persistence, that target is likewise returned unchanged.
+/// Directory targets return an [`io::ErrorKind::IsADirectory`] error. When a
+/// manifest must be created, staging occurs atomically in the target directory.
+/// These guarantees describe the controlled implementation ordering and do not
+/// establish behaviour for every filesystem or scheduler.
 ///
 /// # Errors
 ///
