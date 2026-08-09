@@ -10,7 +10,7 @@ use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use crate::bdd::helpers::assertions::normalize_fluent_isolates;
 use crate::bdd::types::{ErrorFragment, JobCount, PathString, TargetName, UrlString};
 use anyhow::{Context, Result, bail, ensure};
-use netsuke::cli::Commands;
+use netsuke::cli::{Commands, HelpTopic};
 use std::path::PathBuf;
 
 /// Expected CLI command variants for verification.
@@ -20,6 +20,7 @@ pub(super) enum ExpectedCommand {
     Clean,
     Graph,
     Generate,
+    Help,
 }
 
 impl ExpectedCommand {
@@ -35,6 +36,7 @@ impl ExpectedCommand {
                 | (Self::Clean, Commands::Clean)
                 | (Self::Graph, Commands::Graph(_))
                 | (Self::Generate, Commands::Generate { .. })
+                | (Self::Help, Commands::Help(_))
         )
     }
 
@@ -45,8 +47,35 @@ impl ExpectedCommand {
             Self::Clean => "clean",
             Self::Graph => "graph",
             Self::Generate => "generate",
+            Self::Help => "help",
         }
     }
+}
+
+pub(super) fn verify_help_topic(world: &TestWorld, expected: &HelpTopic) -> Result<()> {
+    let command = get_command(world)?;
+    let Commands::Help(args) = &command else {
+        bail!("expected help command, got {command:?}");
+    };
+    ensure!(
+        args.topic.as_ref() == Some(expected),
+        "expected help topic {expected:?}, got {:?}",
+        args.topic
+    );
+    Ok(())
+}
+
+pub(super) fn verify_help_has_no_topic(world: &TestWorld) -> Result<()> {
+    let command = get_command(world)?;
+    let Commands::Help(args) = &command else {
+        bail!("expected help command, got {command:?}");
+    };
+    ensure!(
+        args.topic.is_none(),
+        "expected bare help command, got topic {:?}",
+        args.topic
+    );
+    Ok(())
 }
 
 pub(super) fn verify_command(world: &TestWorld, expected: ExpectedCommand) -> Result<()> {

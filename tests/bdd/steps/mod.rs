@@ -25,6 +25,7 @@ mod configuration_preferences;
 mod documentation_examples;
 #[cfg(unix)]
 mod fs;
+mod help_targets;
 mod ir;
 mod json_diagnostics;
 mod locale_resolution;
