@@ -35,6 +35,13 @@ fn scoped_tree() -> Result<TempDir> {
 #[case("/*.txt", "/")]
 #[case("src/a.txt", "src/")]
 #[case("src/{a,b}/*.c", "src/")]
+// A bracketed literal escape names a character, not a wildcard, so the scan
+// steps over it and keeps the directories beyond it in the prefix.
+#[case("src/[*]x/generated/*.c", "src/[*]x/generated/")]
+#[case("[[]dir/*.c", "[[]dir/")]
+// A genuine character class is a wildcard and still stops the scan.
+#[case("src/[ab]x/*.c", "src/")]
+#[case("src/[a]x/*.c", "src/")]
 fn literal_dir_prefix_stops_at_first_metacharacter(#[case] pattern: &str, #[case] expected: &str) {
     assert_eq!(literal_dir_prefix(pattern), expected, "pattern {pattern}");
 }
@@ -64,18 +71,51 @@ fn open_root_dir_declines_unopenable_prefix(
     Ok(())
 }
 
+/// A directory whose name contains a glob metacharacter is still a literal
+/// directory, so the capability reaches into it rather than stopping at its
+/// parent — and the prefix is unescaped before it meets the filesystem.
+#[cfg(unix)]
+#[test]
+fn open_root_dir_scopes_past_an_escaped_metacharacter() -> Result<()> {
+    let temp = tempdir()?;
+    let odd = temp.path().join("*x");
+    test_fs::create_dir(&odd)?;
+    test_fs::write(odd.join("in.txt"), "in")?;
+    test_fs::write(temp.path().join("out.txt"), "out")?;
+
+    let pattern = GlobPattern::new(&format!(r"{}/\*x/*.txt", temp.path().display()))?;
+    let root = open_root_dir(&pattern)
+        .context("open capability root")?
+        .ok_or_else(|| anyhow!("the escaped directory exists, so a root was expected"))?;
+
+    let expected_prefix = Utf8PathBuf::try_from(odd)?;
+    ensure!(
+        root.prefix() == expected_prefix,
+        "capability should reach the escaped directory, got {prefix}",
+        prefix = root.prefix()
+    );
+    ensure!(
+        root.dir().metadata("in.txt").is_ok(),
+        "the escaped directory's contents must be reachable"
+    );
+
+    let results = glob_paths(pattern.raw())?;
+    ensure!(
+        results.iter().all(|p| p.ends_with("in.txt")) && results.len() == 1,
+        "expected only the file inside the escaped directory: {results:?}"
+    );
+    Ok(())
+}
+
 /// Restores a directory's mode so the temporary tree can still be removed.
 #[cfg(unix)]
-struct ModeGuard(std::path::PathBuf);
+struct ModeGuard(Utf8PathBuf);
 
 #[cfg(unix)]
 impl Drop for ModeGuard {
     fn drop(&mut self) {
         if let Err(err) = test_fs::set_mode(&self.0, 0o755) {
-            tracing::warn!(
-                "failed to restore mode on {path}: {err}",
-                path = self.0.display()
-            );
+            tracing::warn!("failed to restore mode on {path}: {err}", path = self.0);
         }
     }
 }
@@ -92,7 +132,7 @@ fn open_root_dir_propagates_an_unreadable_prefix() -> Result<()> {
     test_fs::create_dir(locked.join("inner"))?;
     test_fs::write(locked.join("inner").join("in.txt"), "in")?;
     test_fs::set_mode(&locked, 0o000)?;
-    let _restore = ModeGuard(locked.clone());
+    let _restore = ModeGuard(Utf8PathBuf::try_from(locked.clone())?);
 
     let pattern = GlobPattern::new(&format!("{}/inner/*.txt", locked.display()))?;
     let Err(err) = open_root_dir(&pattern) else {
@@ -144,8 +184,8 @@ fn open_root_dir_scopes_capability_to_literal_prefix(scoped_tree: Result<TempDir
     Ok(())
 }
 
-/// The matched paths the walker yields are absolute, so they only resolve
-/// through the scoped handle once relativised against the prefix.
+/// The walker yields matches rooted the way the pattern was, so they only
+/// resolve through the scoped handle once relativised against the prefix.
 #[rstest]
 fn glob_root_relativises_matches_against_the_prefix(scoped_tree: Result<TempDir>) -> Result<()> {
     let temp = scoped_tree?;

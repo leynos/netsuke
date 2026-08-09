@@ -1,4 +1,28 @@
-//! Utilities for normalising and validating manifest glob patterns.
+//! Filesystem glob expansion for manifest templates.
+//!
+//! [`glob_paths`] is the module's only boundary: `manifest` re-exports it as
+//! the `glob()` Jinja helper and nothing else here is reachable from the crate
+//! root. It takes a raw pattern, expands it, and returns the matching file
+//! paths in the order the `glob` crate yields them, with directories filtered
+//! out.
+//!
+//! The work is split across four private submodules:
+//!
+//! - `validate` rejects unbalanced braces before any filesystem access.
+//! - `normalize` maps separators onto the platform's and, on Unix, rewrites
+//!   backslash escapes into the bracket classes the `glob` crate understands.
+//!   [`GlobPattern`] pairs the caller's text with that normalised form.
+//! - `walk` owns the filesystem side: it computes the pattern's literal
+//!   directory prefix, opens a capability-scoped `cap_std` handle there, and
+//!   runs the metadata check that filters each match.
+//! - `diagnostics` records the two outcomes that are expected rather than
+//!   erroneous — an unopenable prefix and a match no capability can reach.
+//!
+//! Matching itself belongs to the `glob` crate, which traverses the filesystem
+//! ambiently; only the metadata check is capability-scoped. `walk`'s module
+//! documentation and
+//! [ADR-010](https://github.com/leynos/netsuke/blob/main/docs/adr-010-scope-glob-capability-to-literal-prefix.md)
+//! describe that boundary and why it remains.
 use minijinja::Error;
 
 mod diagnostics;

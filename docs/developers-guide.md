@@ -1610,11 +1610,22 @@ directory prefix, computed by `walk::literal_dir_prefix`: the pattern text up
 to the first `*`, `?`, `[`, or `{`, trimmed back to the last path separator.
 For `src/**/*.c` that prefix is `src/`.
 
-- **`GlobRoot` couples the handle with the prefix.** Matches arrive from the
-  `glob` crate's walker as absolute paths, so `GlobRoot::relativise` rebases
-  each one onto the prefix before the metadata lookup. A path that does not
-  start with the prefix is rejected outright rather than resolved through a
-  wider capability.
+- **Bracketed literal escapes do not stop the scan.** The `[*]`, `[?]`,
+  `[[]`, `[]]`, `[{]`, and `[}]` forms that `normalize::force_literal_escapes`
+  produces from `\*`, `\?`, and the like name a literal character rather than
+  a wildcard, so `src/[*]x/generated/*.c` reaches `src/[*]x/generated/`, not
+  `src/`. A genuine character class such as `[ab]` is still a wildcard and
+  still stops the scan. The resulting prefix is still pattern text, so
+  `walk::unescape_literal_escapes` resolves it to the path it names
+  (`src/[*]x/` becomes the directory `src/*x/`) before the capability is
+  opened and before any match is stripped of it.
+- **`GlobRoot` couples the handle with the prefix.** Matches keep the
+  pattern's own rooting as they arrive from the `glob` crate's walker — an
+  absolute pattern yields absolute matches, while a parent-relative pattern
+  such as `../*.txt` yields matches like `../out.txt` — so
+  `GlobRoot::relativise` rebases each one onto the prefix before the
+  metadata lookup. A path that does not start with the prefix is rejected
+  outright rather than resolved through a wider capability.
 - **No literal directory component falls back to the working directory.** A
   pattern such as `*.c` yields a prefix of `.`. `walk::prefix_is_unopenable`
   treats a missing prefix, and a prefix that names something other than a

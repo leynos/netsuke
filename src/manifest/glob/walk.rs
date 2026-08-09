@@ -10,6 +10,12 @@
 //! symbolic link whose target escapes that subtree is therefore unreadable
 //! through the capability; such a match is skipped rather than failing the
 //! expansion.
+//!
+//! The prefix is pattern text, so it is unescaped before it meets the
+//! filesystem: a directory the pattern names as `[*]x` is the directory `*x`
+//! on disk. Matches keep whatever rooting the pattern had — absolute for an
+//! absolute pattern, `../…` for a parent-relative one — so each is rebased
+//! onto the prefix before its metadata lookup.
 
 use super::{
     GlobEntryResult, GlobErrorContext, GlobErrorType, GlobPattern, create_glob_error, diagnostics,
@@ -76,20 +82,39 @@ impl GlobRoot {
 
     /// Report whether any component of `relative` is a symbolic link.
     ///
-    /// Walks the ancestors from the capability root outwards, inspecting each
-    /// with `symlink_metadata` so the component itself is not followed. This
-    /// is what distinguishes a link that cannot be resolved through the
-    /// capability from an ordinary lookup failure: resolution stops at the
-    /// first component that is a link, so an escaping intermediate directory
-    /// is found before its unreadable descendants are.
+    /// `symlink_metadata` does not follow its final component, so the match
+    /// itself can be settled in one lookup. That is the common case — a link
+    /// named directly by the pattern — and it is tried first so the ancestor
+    /// walk, which costs one lookup per directory, is only paid for when an
+    /// intermediate component is the culprit.
     fn traverses_symlink(&self, relative: &Utf8Path) -> bool {
+        if self
+            .dir
+            .symlink_metadata(relative)
+            .is_ok_and(|link| link.is_symlink())
+        {
+            return true;
+        }
+        self.ancestor_is_symlink(relative)
+    }
+
+    /// Report whether a directory on the way to `relative` is a symbolic link.
+    ///
+    /// Walks from the capability root outwards, inspecting each ancestor
+    /// without following it. The final component is skipped because
+    /// [`Self::traverses_symlink`] has already settled it.
+    fn ancestor_is_symlink(&self, relative: &Utf8Path) -> bool {
         let mut ancestor = Utf8PathBuf::new();
-        for component in relative.components() {
+        let mut components = relative.components().peekable();
+        while let Some(component) = components.next() {
+            if components.peek().is_none() {
+                break;
+            }
             ancestor.push(component);
             match self.dir.symlink_metadata(&ancestor) {
                 Ok(metadata) if metadata.is_symlink() => return true,
                 Ok(_) => {}
-                // This component cannot be inspected at all, so no link has
+                // This ancestor cannot be inspected at all, so no link has
                 // been found and the caller's error stands.
                 Err(_) => return false,
             }
@@ -134,16 +159,69 @@ fn is_unresolvable_link(err: &io::Error) -> bool {
     )
 }
 
+/// Characters [`super::normalize::force_literal_escapes`] wraps in a bracket
+/// class to force a literal match.
+const LITERAL_ESCAPES: [char; 6] = ['[', ']', '*', '?', '{', '}'];
+
+/// The character a bracketed literal escape at the start of `rest` stands for,
+/// paired with the escape's byte length.
+///
+/// Recognises exactly the six forms `force_literal_escapes` emits — `[*]`,
+/// `[?]`, `[[]`, `[]]`, `[{]`, `[}]` — and nothing else. A genuine character
+/// class such as `[ab]` is a wildcard and yields `None`, as does a
+/// single-character class like `[a]`, which is treated conservatively even
+/// though it matches only one character.
+fn literal_escape(rest: &str) -> Option<(char, usize)> {
+    let mut chars = rest.chars();
+    if chars.next()? != '[' {
+        return None;
+    }
+    let escaped = chars.next()?;
+    if chars.next()? != ']' || !LITERAL_ESCAPES.contains(&escaped) {
+        return None;
+    }
+    Some((
+        escaped,
+        '['.len_utf8() + escaped.len_utf8() + ']'.len_utf8(),
+    ))
+}
+
+/// Byte offset of the first character that makes `normalized` a wildcard.
+///
+/// A bracketed literal escape is a literal character rather than a
+/// metacharacter, so the scan steps over it instead of stopping there.
+fn first_metacharacter(normalized: &str) -> usize {
+    let mut idx = 0;
+    while let Some(rest) = normalized.get(idx..) {
+        let Some(next) = rest.chars().next() else {
+            break;
+        };
+        if next == '[' {
+            match literal_escape(rest) {
+                Some((_, len)) => idx += len,
+                None => return idx,
+            }
+        } else if matches!(next, '*' | '?' | '{') {
+            return idx;
+        } else {
+            idx += next.len_utf8();
+        }
+    }
+    normalized.len()
+}
+
 /// Longest literal directory prefix of a normalised pattern.
 ///
 /// Scans up to the first glob metacharacter (`*`, `?`, `[`, `{`) and trims
 /// back to the last path separator, yielding the deepest directory that the
-/// pattern names literally. Returns `.` when the pattern has no literal
-/// directory component.
+/// pattern names literally. Bracketed literal escapes are stepped over, so
+/// `src/[*]x/generated/*.c` reaches `src/[*]x/generated/` rather than stopping
+/// at `src/`. Returns `.` when the pattern has no literal directory component.
+///
+/// The result is still pattern text: [`unescape_literal_escapes`] turns it
+/// into the filesystem path it names.
 pub(super) fn literal_dir_prefix(normalized: &str) -> &str {
-    let meta_idx = normalized
-        .find(['*', '?', '[', '{'])
-        .unwrap_or(normalized.len());
+    let meta_idx = first_metacharacter(normalized);
     let literal = normalized.get(..meta_idx).unwrap_or_default();
     // Keep the trailing separator so absolute roots stay absolute ("/").
     literal
@@ -152,20 +230,43 @@ pub(super) fn literal_dir_prefix(normalized: &str) -> &str {
         .unwrap_or(".")
 }
 
+/// Resolve bracketed literal escapes to the characters they stand for.
+///
+/// The prefix names a directory to open, so `src/[*]x/` has to become the
+/// path `src/*x/` before it reaches the filesystem — and before a match is
+/// stripped of it, since the walker yields real paths.
+pub(super) fn unescape_literal_escapes(prefix: &str) -> String {
+    let mut out = String::with_capacity(prefix.len());
+    let mut idx = 0;
+    while let Some(rest) = prefix.get(idx..) {
+        let Some(next) = rest.chars().next() else {
+            break;
+        };
+        if let Some((escaped, len)) = literal_escape(rest) {
+            out.push(escaped);
+            idx += len;
+        } else {
+            out.push(next);
+            idx += next.len_utf8();
+        }
+    }
+    out
+}
+
 /// Open the directory used as the capability root for the glob.
 ///
 /// Returns `Ok(None)` when the literal prefix does not exist (or is not a
 /// directory); the pattern can match nothing in that case, mirroring the
 /// empty result the matcher would produce.
 pub(super) fn open_root_dir(pattern: &GlobPattern) -> io::Result<Option<GlobRoot>> {
-    let prefix = literal_dir_prefix(pattern.normalized());
-    match Dir::open_ambient_dir(prefix, ambient_authority()) {
+    let prefix = unescape_literal_escapes(literal_dir_prefix(pattern.normalized()));
+    match Dir::open_ambient_dir(&prefix, ambient_authority()) {
         Ok(dir) => Ok(Some(GlobRoot {
             dir,
             prefix: Utf8PathBuf::from(prefix),
         })),
         Err(err) if prefix_is_unopenable(&err) => {
-            diagnostics::record_unopenable_prefix(pattern, prefix);
+            diagnostics::record_unopenable_prefix(pattern, &prefix);
             Ok(None)
         }
         Err(err) => Err(err),

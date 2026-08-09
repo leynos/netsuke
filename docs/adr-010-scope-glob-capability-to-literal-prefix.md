@@ -38,7 +38,9 @@ prefix instead of at a fixed root:
   deepest directory the pattern names without wildcards. For `src/**/*.c`
   this is `src/`. A pattern with no literal directory component, such as
   `*.c`, yields `.`, keeping the working-directory scope for patterns that
-  cannot narrow it.
+  cannot narrow it. The scan steps over bracketed literal escapes such as
+  `[*]`, so `src/[*]x/generated/*.c` reaches `src/[*]x/generated/` rather
+  than stopping at the first `[`.
 - **`GlobRoot` couples the handle and the prefix.** `walk::open_root_dir`
   opens a `cap_std::fs::Dir` at the literal prefix using
   `Dir::open_ambient_dir` and wraps it, together with the prefix, in a
