@@ -3648,6 +3648,45 @@ the Proptest suite keep the `Utf8PathBuf` instantiation tied to production.
 
 **Cross-references:** `docs/netsuke-design.md` §5.3.
 
+## Configuration observability
+
+`src/observability.rs` owns the application-level instrumentation for the two
+configuration-loading boundaries in `src/main.rs`. Keep configuration loading
+itself as a plain query: compose this instrumentation only at the CLI
+composition root. Other subsystem boundaries retain their local telemetry
+modules and must not add unbounded configuration detail to these series.
+
+The bounded metric contract is:
+
+- Counter `config_load_total` records exactly one outcome for each logical
+  configuration-load phase. Its `phase` label is `diag_mode` for early
+  diagnostic-mode resolution or `merge` for the full configuration merge. Its
+  `outcome` label is `success` or `failure`.
+- Histogram `config_load_duration_seconds` records one duration for each of
+  those phases and carries only the same bounded `phase` label.
+
+`init_metrics()` installs the process-wide
+`metrics_util::debugging::DebuggingRecorder` after tracing starts. This
+recorder is intentionally application-owned; tests must use
+`metrics::with_local_recorder` with a local recorder instead.
+`emit_metrics_snapshot()` drains and logs the aggregate snapshot only when the
+parsed CLI enables verbose output, immediately before `run_with_args` returns.
+
+The debugging recorder preserves raw histogram observations rather than
+aggregating them into buckets. Netsuke configures no custom buckets; a future
+exporter may choose its own bucket policy without changing this metric name or
+label contract.
+
+Human-readable `configuration load failed` events include three structured
+fields:
+
+- `operation`: `diag_mode_resolution` or `config_merge`.
+- `error_category`: `io`, `parse`, or `validation`.
+- `error`: the actionable rendered source error.
+
+The first two fields remain deliberately low-cardinality. Do not add paths,
+configuration values, or error text as metric labels.
+
 ## Documentation upkeep
 
 When test strategy or behavioural test usage changes, update this file in the
