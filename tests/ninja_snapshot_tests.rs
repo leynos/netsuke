@@ -140,7 +140,7 @@ fn multi_command_manifest_ninja_snapshot() -> Result<()> {
     let ninja_content = ninja_gen::generate(&ir)?;
 
     ensure!(
-        ninja_content.contains("echo check-fmt && echo lint && echo test"),
+        ninja_content.contains("{ echo check-fmt; } && { echo lint; } && { echo test; }"),
         "expected the command list joined into a fail-fast chain:\n{ninja_content}"
     );
     ensure!(

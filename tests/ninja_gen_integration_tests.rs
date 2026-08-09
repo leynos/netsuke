@@ -262,6 +262,137 @@ fn command_list_fails_fast_at_first_nonzero_exit(
 }
 
 #[rstest]
+fn command_list_entry_control_flow_cannot_mask_an_earlier_failure(
+    ninja_integration_setup: Option<TempDir>,
+) -> Result<()> {
+    let Some(dir) = ninja_integration_setup else {
+        return Ok(());
+    };
+    let dir_path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
+        .map_err(|path| anyhow::anyhow!("temp dir path {:?} is not UTF-8", path))?;
+
+    // Without per-entry isolation, the second entry's `||` would join the
+    // raw chain as `false && false || echo recovered > recovered.txt`, which
+    // POSIX evaluates as `(false && false) || echo ...`, running the echo and
+    // reporting success despite the first entry failing.
+    let action = Action {
+        recipe: Recipe::Command {
+            command: StringOrList::List(vec![
+                "false".into(),
+                "false || echo recovered > recovered.txt".into(),
+            ]),
+        },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    };
+    let edge = BuildEdge {
+        action_id: "chain".into(),
+        inputs: Vec::new(),
+        implicit_deps: Vec::new(),
+        explicit_outputs: vec![Utf8PathBuf::from("out")],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: false,
+        always: false,
+    };
+    let mut graph = BuildGraph::default();
+    graph.actions.insert("chain".into(), action);
+    graph.targets.insert(Utf8PathBuf::from("out"), edge);
+    graph.default_targets.push(Utf8PathBuf::from("out"));
+
+    let ninja = generate(&graph)?;
+    let handle = Dir::open_ambient_dir(&dir_path, ambient_authority())
+        .with_context(|| format!("open ambient dir for temp workspace at {dir_path}"))?;
+    handle
+        .write("build.ninja", ninja.as_bytes())
+        .context("write ninja build file")?;
+    let output = Command::new("ninja")
+        .arg("out")
+        .current_dir(dir_path.as_std_path())
+        .output()
+        .context("invoke ninja")?;
+    ensure!(
+        !output.status.success(),
+        "the first entry's failure must not be masked by a later '||': {output:?}"
+    );
+    ensure!(
+        !handle
+            .try_exists("recovered.txt")
+            .context("check recovered.txt")?,
+        "the second entry should not run after the first entry fails"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn command_list_entries_share_one_shell_process(
+    ninja_integration_setup: Option<TempDir>,
+) -> Result<()> {
+    let Some(dir) = ninja_integration_setup else {
+        return Ok(());
+    };
+    let dir_path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
+        .map_err(|path| anyhow::anyhow!("temp dir path {:?} is not UTF-8", path))?;
+
+    let action = Action {
+        recipe: Recipe::Command {
+            // `$$` escapes Ninja's variable expansion so the shell sees a
+            // literal `$NETSUKE_SHARED` written by the first entry.
+            command: StringOrList::List(vec![
+                "export NETSUKE_SHARED=yes".into(),
+                "test \"$$NETSUKE_SHARED\" = yes && echo ok > shared.txt".into(),
+            ]),
+        },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    };
+    let edge = BuildEdge {
+        action_id: "chain".into(),
+        inputs: Vec::new(),
+        implicit_deps: Vec::new(),
+        explicit_outputs: vec![Utf8PathBuf::from("out")],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: false,
+        always: false,
+    };
+    let mut graph = BuildGraph::default();
+    graph.actions.insert("chain".into(), action);
+    graph.targets.insert(Utf8PathBuf::from("out"), edge);
+    graph.default_targets.push(Utf8PathBuf::from("out"));
+
+    let ninja = generate(&graph)?;
+    let handle = Dir::open_ambient_dir(&dir_path, ambient_authority())
+        .with_context(|| format!("open ambient dir for temp workspace at {dir_path}"))?;
+    handle
+        .write("build.ninja", ninja.as_bytes())
+        .context("write ninja build file")?;
+    let output = Command::new("ninja")
+        .arg("out")
+        .current_dir(dir_path.as_std_path())
+        .output()
+        .context("invoke ninja")?;
+    ensure!(
+        output.status.success(),
+        "command chain should succeed when every entry succeeds: {output:?}"
+    );
+    let shared = handle
+        .read_to_string("shared.txt")
+        .context("later entries should see the environment set by an earlier entry")?;
+    ensure!(
+        shared.trim() == "ok",
+        "unexpected shared.txt content: {shared}"
+    );
+    Ok(())
+}
+
+#[rstest]
 fn errors_when_action_missing() -> Result<()> {
     let mut graph = BuildGraph::default();
     let edge = BuildEdge {

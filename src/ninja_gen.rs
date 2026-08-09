@@ -217,7 +217,16 @@ impl NamedAction<'_> {
             Recipe::Command { command } => {
                 let command_line = match command {
                     StringOrList::String(cmd) => cmd.clone(),
-                    StringOrList::List(items) => items.iter().map(String::as_str).join(" && "),
+                    // Brace groups keep each entry a distinct shell unit so its
+                    // own `||`, `;`, or `&` cannot escape the entry boundary
+                    // and mask an earlier failure. Braces run in the current
+                    // shell (unlike `( ... )`), so working directory,
+                    // environment, and variables set by one entry still carry
+                    // into the next, and the `&&` chain stays fail-fast.
+                    StringOrList::List(items) => items
+                        .iter()
+                        .map(|item| format!("{{ {item}; }}"))
+                        .join(" && "),
                     StringOrList::Empty => return Self::reject_empty_command_recipe(),
                 };
                 Self::assert_shell_command(&command_line);
