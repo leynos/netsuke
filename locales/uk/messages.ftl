@@ -32,6 +32,13 @@ cli.subcommand.graph.about = Вивести граф залежностей зб
 cli.subcommand.graph.long_about = Перетворити розібраний маніфест Netsuke на канонічний граф збирання та записати його у форматі Graphviz DOT або, з параметром `--html`, як самостійну сторінку HTML. Використайте `--output <ФАЙЛ>`, щоб записати у файл; `-` виводить у стандартний потік.
 cli.subcommand.generate.about = Створити маніфест Ninja, не запускаючи Ninja.
 cli.subcommand.generate.long_about = Записати створений маніфест Ninja у стандартний потік виводу або у файл, вибраний параметром `--output`.
+cli.subcommand.help.about = Друкує довідку верхнього рівня або довідку для вказаної теми.
+cli.subcommand.help.long_about = Без теми це відповідає `--help`. Використовуйте `help targets`, щоб надрукувати каталог цілей і дій для вибраного файлу.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = Дії:
+cli.help.targets_heading = Цілі:
+cli.help.default_marker = за замовчуванням
 
 # Текст довідки для параметрів підкоманди build.
 cli.subcommand.build.flag.targets.help = Цілі для збирання (якщо не вказано, беруться типові цілі маніфесту).
@@ -368,6 +375,7 @@ status.tool.clean = Очищення
 status.tool.graph = Граф
 status.tool.graph_html = Граф (HTML)
 status.tool.generate = Генерація
+status.tool.help_targets = Довідка цілей
 
 # Рядки HTML-подання графа.
 graph.html.title = Граф збирання Netsuke

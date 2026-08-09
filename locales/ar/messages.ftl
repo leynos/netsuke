@@ -32,6 +32,13 @@ cli.subcommand.graph.about = إخراج رسم اعتماديات البناء. 
 cli.subcommand.graph.long_about = إسقاط ملف بيانات Netsuke بعد تحليله إلى رسم بناء قياسي وكتابته بصيغة Graphviz DOT، أو صفحة HTML مكتفية بذاتها عند استخدام `--html`. استخدم `--output <ملف>` للكتابة إلى ملف؛ و`-` يكتب إلى المخرج القياسي.
 cli.subcommand.generate.about = توليد ملف بيانات Ninja دون تنفيذ Ninja.
 cli.subcommand.generate.long_about = كتابة ملف بيانات Ninja المولَّد إلى المخرج القياسي أو إلى ملف يُختار بـ `--output`.
+cli.subcommand.help.about = اطبع التعليمات العامة، أو التعليمات لموضوع محدد.
+cli.subcommand.help.long_about = بدون موضوع، يطابق هذا `--help`. استخدم `help targets` لطباعة كتالوج الأهداف والإجراءات للملف المحدد.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = الإجراءات:
+cli.help.targets_heading = الأهداف:
+cli.help.default_marker = الافتراضي
 
 # نص المساعدة لخيارات الأمر الفرعي build.
 cli.subcommand.build.flag.targets.help = الأهداف المطلوب بناؤها (تُستخدم افتراضيات ملف البيانات عند الإغفال).
@@ -368,6 +375,7 @@ status.tool.clean = التنظيف
 status.tool.graph = الرسم
 status.tool.graph_html = الرسم (HTML)
 status.tool.generate = التوليد
+status.tool.help_targets = مساعدة الأهداف
 
 # نصوص عرض الرسم بصيغة HTML.
 graph.html.title = رسم بناء Netsuke

@@ -130,6 +130,7 @@ enum Subcommand {
     Clean,
     Graph,
     Generate,
+    Help,
 }
 
 impl Subcommand {
@@ -139,6 +140,7 @@ impl Subcommand {
             "clean" => Some(Self::Clean),
             "graph" => Some(Self::Graph),
             "generate" => Some(Self::Generate),
+            "help" => Some(Self::Help),
             _ => None,
         }
     }
@@ -150,7 +152,7 @@ fn flag_help_key(arg_id: &str, subcommand: Option<Subcommand>) -> Option<&'stati
         Some(Subcommand::Build) => build_flag_help_key(arg_id),
         Some(Subcommand::Graph) => graph_flag_help_key(arg_id),
         Some(Subcommand::Generate) => generate_flag_help_key(arg_id),
-        Some(Subcommand::Clean) => None,
+        Some(Subcommand::Clean | Subcommand::Help) => None,
     }
 }
 
@@ -205,6 +207,7 @@ const fn subcommand_about_key(subcommand: Subcommand) -> &'static str {
         Subcommand::Clean => keys::CLI_SUBCOMMAND_CLEAN_ABOUT,
         Subcommand::Graph => keys::CLI_SUBCOMMAND_GRAPH_ABOUT,
         Subcommand::Generate => keys::CLI_SUBCOMMAND_GENERATE_ABOUT,
+        Subcommand::Help => keys::CLI_SUBCOMMAND_HELP_ABOUT,
     }
 }
 
@@ -214,6 +217,7 @@ const fn subcommand_long_about_key(subcommand: Subcommand) -> &'static str {
         Subcommand::Clean => keys::CLI_SUBCOMMAND_CLEAN_LONG_ABOUT,
         Subcommand::Graph => keys::CLI_SUBCOMMAND_GRAPH_LONG_ABOUT,
         Subcommand::Generate => keys::CLI_SUBCOMMAND_GENERATE_LONG_ABOUT,
+        Subcommand::Help => keys::CLI_SUBCOMMAND_HELP_LONG_ABOUT,
     }
 }
 

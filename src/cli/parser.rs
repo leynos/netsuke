@@ -34,6 +34,25 @@ pub use crate::cli_l10n::{json_hint_from_args, locale_hint_from_args};
 use crate::host_pattern::HostPattern;
 use crate::theme::ThemePreference;
 
+
+//! Clap-facing parser types and localisation helpers.
+//!
+//! This module owns the runtime-visible [`Cli`] struct and all associated
+//! Clap definitions ([`BuildArgs`], [`Commands`]).  It also provides
+//! [`parse_with_localizer_from`], which localises the Clap command, installs
+//! localisation-aware [`LocalizedValueParser`] instances for every typed
+//! argument, and returns `(Cli, ArgMatches)` for downstream processing.
+//!
+//! **Pipeline position:** parsing layer.
+//!
+//! - Receives raw `OsStr` arguments from the process entry point.
+//! - Delegates value validation to [`super::parsing`] helpers.
+//! - Returns a `Cli`/`ArgMatches` pair consumed by [`super::merge`].
+//!
+//! [`LocalizedValueParser`]: self::LocalizedValueParser
+};
+pub use crate::cli_l10n::{json_hint_from_args, locale_hint_from_args};
+
 #[derive(Clone)]
 struct LocalizedValueParser<F> {
     localizer: Arc<dyn Localizer>,
@@ -79,7 +98,14 @@ pub(super) fn validation_message(
 
 /// A modern, friendly build system that uses YAML and Jinja, powered by Ninja.
 #[derive(Debug, Parser, Serialize, Deserialize)]
-#[command(name = "netsuke", author, version, about, long_about = None)]
+#[command(
+    name = "netsuke",
+    author,
+    version,
+    about,
+    long_about = None,
+    disable_help_subcommand = true
+)]
 pub struct Cli {
     /// Path to the Netsuke manifest file to use.
     #[arg(
@@ -297,6 +323,12 @@ pub enum Commands {
         #[arg(long, value_name = "FILE")]
         output: Option<PathBuf>,
     },
+
+    /// Print the top-level help, or the help for a named topic.
+    ///
+    /// With no topic this matches `--help`. `help targets` renders the
+    /// target and action catalogue for the selected manifest.
+    Help(HelpArgs),
 }
 
 /// Parse CLI arguments with localized clap output.

@@ -32,6 +32,13 @@ cli.subcommand.graph.about = Tulosta koonnin riippuvuusgraafi. Oletusmuoto on DO
 cli.subcommand.graph.long_about = Muunna luettu Netsuke-manifesti kanoniseksi koontigraafiksi ja kirjoita se Graphviz DOT -muodossa tai `--html`-valitsimella itsenäisenä HTML-sivuna. Kirjoita tiedostoon valitsimella `--output <TIEDOSTO>`; `-` kirjoittaa vakiotulosteeseen.
 cli.subcommand.generate.about = Luo Ninja-manifesti suorittamatta Ninjaa.
 cli.subcommand.generate.long_about = Kirjoita luotu Ninja-manifesti vakiotulosteeseen tai valitsimella `--output` valittuun tiedostoon.
+cli.subcommand.help.about = Tulosta ylimmän tason ohje tai nimetyn aiheen ohje.
+cli.subcommand.help.long_about = Ilman aihetta tämä vastaa `--help`-komentoa. Käytä `help targets` tulostaaksesi valitun tiedoston kohde- ja toimintaluettelon.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = Toiminnot:
+cli.help.targets_heading = Kohteet:
+cli.help.default_marker = oletus
 
 # build-alikomennon valitsimien ohjeteksti.
 cli.subcommand.build.flag.targets.help = Koostettavat kohteet (jos puuttuu, käytetään manifestin oletuskohteita).
@@ -368,6 +375,7 @@ status.tool.clean = Siivous
 status.tool.graph = Graafi
 status.tool.graph_html = Graafi (HTML)
 status.tool.generate = Luonti
+status.tool.help_targets = Kohdeohje
 
 # Graafin HTML-hahmonnuksen tekstit.
 graph.html.title = Netsuken koontigraafi

@@ -32,6 +32,13 @@ cli.subcommand.graph.about = Εξαγωγή του γραφήματος εξαρ
 cli.subcommand.graph.long_about = Προβολή του αναλυμένου δηλωτικού Netsuke σε κανονικό γράφημα δόμησης και εγγραφή του ως Graphviz DOT ή, με την επιλογή `--html`, ως αυτοτελής σελίδα HTML. Χρησιμοποιήστε `--output <ΑΡΧΕΙΟ>` για εγγραφή σε αρχείο· το `-` γράφει στην τυπική έξοδο.
 cli.subcommand.generate.about = Δημιουργία του δηλωτικού Ninja χωρίς εκτέλεση του Ninja.
 cli.subcommand.generate.long_about = Εγγραφή του παραγόμενου δηλωτικού Ninja στην τυπική έξοδο ή σε αρχείο που επιλέγεται με `--output`.
+cli.subcommand.help.about = Εκτυπώνει τη βοήθεια ανώτατου επιπέδου ή τη βοήθεια για ένα ονομασμένο θέμα.
+cli.subcommand.help.long_about = Χωρίς θέμα, αυτό ταιριάζει με το `--help`. Χρησιμοποιήστε το `help targets` για να εκτυπώσετε τον κατάλογο στόχων και ενεργειών για το επιλεγμένο αρχείο.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = Ενέργειες:
+cli.help.targets_heading = Στόχοι:
+cli.help.default_marker = προεπιλογή
 
 # Κείμενο βοήθειας για τις επιλογές της υποεντολής build.
 cli.subcommand.build.flag.targets.help = Στόχοι προς δόμηση (αν παραλειφθούν, χρησιμοποιούνται οι προεπιλογές του δηλωτικού).
@@ -369,6 +376,7 @@ status.tool.clean = Καθαρισμός
 status.tool.graph = Γράφημα
 status.tool.graph_html = Γράφημα (HTML)
 status.tool.generate = Δημιουργία
+status.tool.help_targets = Βοήθεια στόχων
 
 # Κείμενα της απόδοσης του γραφήματος σε HTML.
 graph.html.title = Γράφημα δόμησης του Netsuke

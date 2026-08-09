@@ -32,6 +32,13 @@ cli.subcommand.graph.about = Emit the build dependency graph. Default format is 
 cli.subcommand.graph.long_about = Project the parsed Netsuke manifest into a canonical build graph and write it as Graphviz DOT, or as a self-contained HTML page with `--html`. Use `--output <FILE>` to write to a file; `-` writes to stdout.
 cli.subcommand.generate.about = Generate the Ninja manifest without running Ninja.
 cli.subcommand.generate.long_about = Write the generated Ninja manifest to stdout, or to a file selected with `--output`.
+cli.subcommand.help.about = Print the top-level help, or the help for a named topic.
+cli.subcommand.help.long_about = With no topic this matches `--help`. Use `help targets` to print the target and action catalogue for the selected manifest.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = Actions:
+cli.help.targets_heading = Targets:
+cli.help.default_marker = default
 
 # Build subcommand flag help text.
 cli.subcommand.build.flag.targets.help = Targets to build (uses manifest defaults if omitted).
@@ -368,6 +375,7 @@ status.tool.clean = Clean
 status.tool.graph = Graph
 status.tool.graph_html = Graph (HTML)
 status.tool.generate = Generate
+status.tool.help_targets = Help targets
 
 # Graph HTML renderer strings.
 graph.html.title = Netsuke build graph

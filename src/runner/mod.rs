@@ -40,6 +40,7 @@ pub const NINJA_PROGRAM: &str = "ninja";
 pub const NINJA_ENV: &str = "NETSUKE_NINJA";
 
 mod graph;
+mod help;
 mod path_helpers;
 mod process;
 #[cfg(doctest)]

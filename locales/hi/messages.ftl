@@ -32,6 +32,13 @@ cli.subcommand.graph.about = बिल्ड की निर्भरता ग
 cli.subcommand.graph.long_about = विश्लेषित Netsuke मैनिफ़ेस्ट को मानक बिल्ड ग्राफ़ में प्रक्षिप्त करें और उसे Graphviz DOT के रूप में लिखें, अथवा `--html` के साथ स्वतः पूर्ण HTML पृष्ठ के रूप में। फ़ाइल में लिखने हेतु `--output <फ़ाइल>` का प्रयोग करें; `-` मानक निर्गम पर लिखता है।
 cli.subcommand.generate.about = Ninja चलाए बिना Ninja मैनिफ़ेस्ट बनाएँ।
 cli.subcommand.generate.long_about = बनाया गया Ninja मैनिफ़ेस्ट मानक निर्गम पर लिखें, अथवा `--output` से चुनी गई फ़ाइल में।
+cli.subcommand.help.about = शीर्ष-स्तरीय सहायता, या किसी नामित विषय की सहायता प्रिंट करें।
+cli.subcommand.help.long_about = बिना विषय के यह `--help` से मेल खाता है। चयनित मैनिफेस्ट के लिए लक्ष्य और क्रिया सूची प्रिंट करने हेतु `help targets` का उपयोग करें।
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = क्रियाएँ:
+cli.help.targets_heading = लक्ष्य:
+cli.help.default_marker = डिफ़ॉल्ट
 
 # build उपआदेश के विकल्पों का सहायता पाठ।
 cli.subcommand.build.flag.targets.help = बनाए जाने वाले लक्ष्य (न बताए जाने पर मैनिफ़ेस्ट के डिफ़ॉल्ट लिए जाते हैं)।
@@ -368,6 +375,7 @@ status.tool.clean = सफ़ाई
 status.tool.graph = ग्राफ़
 status.tool.graph_html = ग्राफ़ (HTML)
 status.tool.generate = उत्पादन
+status.tool.help_targets = लक्ष्य सहायता
 
 # ग्राफ़ के HTML प्रस्तुतीकरण के पाठ।
 graph.html.title = Netsuke का बिल्ड ग्राफ़

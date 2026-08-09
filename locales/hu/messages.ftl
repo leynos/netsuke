@@ -32,6 +32,13 @@ cli.subcommand.graph.about = Az építési függőségi gráf kiírása. Az alap
 cli.subcommand.graph.long_about = A beolvasott Netsuke-jegyzék kanonikus építési gráffá alakítása és kiírása Graphviz DOT formátumban, illetve a `--html` kapcsolóval önálló HTML-oldalként. Fájlba íráshoz használja az `--output <FÁJL>` kapcsolót; a `-` a szabványos kimenetre ír.
 cli.subcommand.generate.about = A Ninja-jegyzék előállítása a Ninja futtatása nélkül.
 cli.subcommand.generate.long_about = Az előállított Ninja-jegyzék kiírása a szabványos kimenetre vagy az `--output` kapcsolóval megadott fájlba.
+cli.subcommand.help.about = Kiírja a felső szintű súgót, vagy a megnevezett téma súgóját.
+cli.subcommand.help.long_about = Téma nélkül ez a `--help`-nek felel meg. A `help targets` paranccsal nyomtathatja ki a kiválasztott fájl cél- és műveletkatalógusát.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = Műveletek:
+cli.help.targets_heading = Célok:
+cli.help.default_marker = alapértelmezett
 
 # A build alparancs kapcsolóinak súgószövege.
 cli.subcommand.build.flag.targets.help = Az építendő célok (elhagyásuk esetén a jegyzék alapértelmezett céljai).
@@ -368,6 +375,7 @@ status.tool.clean = Tisztítás
 status.tool.graph = Gráf
 status.tool.graph_html = Gráf (HTML)
 status.tool.generate = Előállítás
+status.tool.help_targets = Célsúgó
 
 # A gráf HTML-megjelenítésének szövegei.
 graph.html.title = Netsuke építési gráf

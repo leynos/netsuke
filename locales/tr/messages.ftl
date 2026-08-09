@@ -32,6 +32,13 @@ cli.subcommand.graph.about = Derleme bağımlılık çizgesini yaz. Varsayılan 
 cli.subcommand.graph.long_about = Ayrıştırılan Netsuke bildirimini kurallı bir derleme çizgesine dönüştür ve Graphviz DOT olarak ya da `--html` ile kendi kendine yeten bir HTML sayfası olarak yaz. Dosyaya yazmak için `--output <DOSYA>` kullanın; `-` standart çıktıya yazar.
 cli.subcommand.generate.about = Ninja'yı çalıştırmadan Ninja bildirimini üret.
 cli.subcommand.generate.long_about = Üretilen Ninja bildirimini standart çıktıya ya da `--output` ile seçilen dosyaya yaz.
+cli.subcommand.help.about = Üst düzey yardımı veya adlandırılmış bir konunun yardımını yazdırır.
+cli.subcommand.help.long_about = Konu olmadan bu, `--help` ile aynıdır. Seçilen dosya için hedef ve eylem kataloğunu yazdırmak üzere `help targets` komutunu kullanın.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = Eylemler:
+cli.help.targets_heading = Hedefler:
+cli.help.default_marker = varsayılan
 
 # build alt komutunun seçenekleri için yardım metni.
 cli.subcommand.build.flag.targets.help = Derlenecek hedefler (belirtilmezse bildirimdeki varsayılanlar kullanılır).
@@ -368,6 +375,7 @@ status.tool.clean = Temizleme
 status.tool.graph = Çizge
 status.tool.graph_html = Çizge (HTML)
 status.tool.generate = Üretme
+status.tool.help_targets = Hedef yardımı
 
 # Çizgenin HTML gösterimindeki metinler.
 graph.html.title = Netsuke derleme çizgesi

@@ -32,6 +32,13 @@ cli.subcommand.graph.about = 빌드 의존성 그래프를 출력합니다. 기�
 cli.subcommand.graph.long_about = 해석한 Netsuke 매니페스트를 정규 빌드 그래프로 투영해 Graphviz DOT으로, 또는 `--html`을 지정하면 자체 완결형 HTML 페이지로 씁니다. 파일로 쓰려면 `--output <파일>`을 사용하고, `-`는 표준 출력으로 씁니다.
 cli.subcommand.generate.about = Ninja를 실행하지 않고 Ninja 매니페스트를 생성합니다.
 cli.subcommand.generate.long_about = 생성한 Ninja 매니페스트를 표준 출력이나 `--output`으로 고른 파일에 씁니다.
+cli.subcommand.help.about = 최상위 도움말 또는 지정된 주제에 대한 도움말을 출력합니다.
+cli.subcommand.help.long_about = 주제가 없으면 `--help`와 동일합니다. 선택한 파일의 대상 및 작업 카탈로그를 출력하려면 `help targets`를 사용하세요.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = 작업:
+cli.help.targets_heading = 대상:
+cli.help.default_marker = 기본값
 
 # build 하위 명령 옵션의 도움말.
 cli.subcommand.build.flag.targets.help = 빌드할 대상입니다(생략하면 매니페스트의 기본값을 사용).
@@ -368,6 +375,7 @@ status.tool.clean = 정리
 status.tool.graph = 그래프
 status.tool.graph_html = 그래프(HTML)
 status.tool.generate = 생성
+status.tool.help_targets = 대상 도움말
 
 # 그래프 HTML 렌더러의 문구.
 graph.html.title = Netsuke 빌드 그래프

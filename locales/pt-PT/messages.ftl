@@ -32,6 +32,13 @@ cli.subcommand.graph.about = Emitir o grafo de dependências de compilação. O 
 cli.subcommand.graph.long_about = Projetar o manifesto do Netsuke analisado num grafo de compilação canónico e escrevê-lo como Graphviz DOT, ou como página HTML autónoma com `--html`. Use `--output <FICHEIRO>` para escrever num ficheiro; `-` escreve no stdout.
 cli.subcommand.generate.about = Gerar o manifesto Ninja sem executar o Ninja.
 cli.subcommand.generate.long_about = Escrever o manifesto Ninja gerado no stdout ou num ficheiro escolhido com `--output`.
+cli.subcommand.help.about = Imprime a ajuda de nível superior ou a ajuda de um tópico nomeado.
+cli.subcommand.help.long_about = Sem tópico, isto corresponde a `--help`. Use `help targets` para imprimir o catálogo de alvos e acções do ficheiro selecionado.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = Acções:
+cli.help.targets_heading = Alvos:
+cli.help.default_marker = predefinição
 
 # Texto de ajuda das opções do subcomando build.
 cli.subcommand.build.flag.targets.help = Alvos a compilar (se omitido, usa os predefinidos do manifesto).
@@ -369,6 +376,7 @@ status.tool.clean = Limpeza
 status.tool.graph = Grafo
 status.tool.graph_html = Grafo (HTML)
 status.tool.generate = Geração
+status.tool.help_targets = Ajuda de alvos
 
 # Cadeias do representador HTML do grafo.
 graph.html.title = Grafo de compilação do Netsuke

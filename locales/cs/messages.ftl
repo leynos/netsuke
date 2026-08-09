@@ -32,6 +32,13 @@ cli.subcommand.graph.about = Vypsat graf závislostí sestavení. Výchozí form
 cli.subcommand.graph.long_about = Převést načtený manifest Netsuke na kanonický graf sestavení a zapsat jej jako Graphviz DOT, případně s přepínačem `--html` jako samostatnou stránku HTML. Zápis do souboru zajistí `--output <SOUBOR>`; `-` zapisuje na standardní výstup.
 cli.subcommand.generate.about = Vytvořit manifest Ninja bez spuštění Ninji.
 cli.subcommand.generate.long_about = Zapsat vytvořený manifest Ninja na standardní výstup nebo do souboru zvoleného přepínačem `--output`.
+cli.subcommand.help.about = Vytiskne nápovědu na nejvyšší úrovni, nebo nápovědu pro pojmenované téma.
+cli.subcommand.help.long_about = Bez tématu odpovídá příkazu `--help`. Pomocí `help targets` vytisknete katalog cílů a akcí pro vybraný soubor.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = Akce:
+cli.help.targets_heading = Cíle:
+cli.help.default_marker = výchozí
 
 # Text nápovědy přepínačů podpříkazu build.
 cli.subcommand.build.flag.targets.help = Cíle k sestavení (při vynechání se použijí výchozí cíle z manifestu).
@@ -368,6 +375,7 @@ status.tool.clean = Vyčištění
 status.tool.graph = Graf
 status.tool.graph_html = Graf (HTML)
 status.tool.generate = Generování
+status.tool.help_targets = Nápověda cílů
 
 # Texty vykreslování grafu do HTML.
 graph.html.title = Graf sestavení Netsuke

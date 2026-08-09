@@ -32,6 +32,13 @@ cli.subcommand.graph.about = פלט גרף התלויות של הבנייה. ת�
 cli.subcommand.graph.long_about = הטלת המניפסט המנותח של Netsuke לגרף בנייה קנוני וכתיבתו כ‑Graphviz DOT, או כדף HTML עצמאי עם `--html`. השתמשו ב‑`--output <קובץ>` לכתיבה לקובץ; `-` כותב לפלט התקני.
 cli.subcommand.generate.about = יצירת מניפסט Ninja בלי להריץ את Ninja.
 cli.subcommand.generate.long_about = כתיבת מניפסט Ninja שנוצר לפלט התקני או לקובץ שנבחר באמצעות `--output`.
+cli.subcommand.help.about = הדפס את העזרה ברמה העליונה, או את העזרה עבור נושא בעל שם.
+cli.subcommand.help.long_about = ללא נושא, זה תואם את `--help`. השתמש ב-`help targets` כדי להדפיס את קטלוג היעדים והפעולות עבור הקובץ שנבחר.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = פעולות:
+cli.help.targets_heading = יעדים:
+cli.help.default_marker = ברירת מחדל
 
 # טקסט העזרה של אפשרויות פקודת המשנה build.
 cli.subcommand.build.flag.targets.help = היעדים שיש לבנות (בהשמטה נעשה שימוש בברירות המחדל של המניפסט).
@@ -368,6 +375,7 @@ status.tool.clean = ניקוי
 status.tool.graph = גרף
 status.tool.graph_html = גרף (HTML)
 status.tool.generate = יצירה
+status.tool.help_targets = עזרת יעדים
 
 # מחרוזות עיבוד הגרף ל‑HTML.
 graph.html.title = גרף הבנייה של Netsuke

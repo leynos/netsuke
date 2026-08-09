@@ -32,6 +32,13 @@ cli.subcommand.graph.about = 輸出建置相依性圖。預設格式為 DOT。
 cli.subcommand.graph.long_about = 將剖析後的 Netsuke 資訊清單投影為正規的建置圖，並寫成 Graphviz DOT；加上 `--html` 時則寫成自足的 HTML 頁面。使用 `--output <檔案>` 寫入檔案；`-` 會寫入標準輸出。
 cli.subcommand.generate.about = 產生 Ninja 資訊清單但不執行 Ninja。
 cli.subcommand.generate.long_about = 將產生的 Ninja 資訊清單寫入標準輸出，或寫入以 `--output` 選定的檔案。
+cli.subcommand.help.about = 列印頂層說明，或列印指定主題的說明。
+cli.subcommand.help.long_about = 沒有主題時，此命令等同於 `--help`。使用 `help targets` 列印所選清單的目標和操作目錄。
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = 操作：
+cli.help.targets_heading = 目標：
+cli.help.default_marker = 預設
 
 # build 子命令選項的說明文字。
 cli.subcommand.build.flag.targets.help = 要建置的目標（省略時採用資訊清單的預設值）。
@@ -367,6 +374,7 @@ status.tool.clean = 清理
 status.tool.graph = 圖
 status.tool.graph_html = 圖（HTML）
 status.tool.generate = 產生
+status.tool.help_targets = 目標說明
 
 # 圖的 HTML 算繪文字。
 graph.html.title = Netsuke 建置圖

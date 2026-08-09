@@ -32,6 +32,13 @@ cli.subcommand.graph.about = Keluarkan graf ketergantungan build. Format bawaann
 cli.subcommand.graph.long_about = Proyeksikan manifes Netsuke yang telah diurai menjadi graf build kanonis dan tulis sebagai Graphviz DOT, atau sebagai halaman HTML mandiri dengan `--html`. Gunakan `--output <BERKAS>` untuk menulis ke berkas; `-` menulis ke keluaran standar.
 cli.subcommand.generate.about = Hasilkan manifes Ninja tanpa menjalankan Ninja.
 cli.subcommand.generate.long_about = Tulis manifes Ninja yang dihasilkan ke keluaran standar atau ke berkas yang dipilih dengan `--output`.
+cli.subcommand.help.about = Cetak bantuan tingkat atas, atau bantuan untuk topik bernama.
+cli.subcommand.help.long_about = Tanpa topik, ini sama dengan `--help`. Gunakan `help targets` untuk mencetak katalog target dan tindakan untuk file yang dipilih.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = Tindakan:
+cli.help.targets_heading = Target:
+cli.help.default_marker = bawaan
 
 # Teks bantuan untuk opsi subperintah build.
 cli.subcommand.build.flag.targets.help = Target yang akan dibangun (jika dihilangkan, memakai bawaan dari manifes).
@@ -368,6 +375,7 @@ status.tool.clean = Pembersihan
 status.tool.graph = Graf
 status.tool.graph_html = Graf (HTML)
 status.tool.generate = Pembuatan
+status.tool.help_targets = Bantuan target
 
 # Teks perender HTML untuk graf.
 graph.html.title = Graf build Netsuke

@@ -32,6 +32,13 @@ cli.subcommand.graph.about = Вывести граф зависимостей с
 cli.subcommand.graph.long_about = Преобразовать разобранный манифест Netsuke в канонический граф сборки и записать его в формате Graphviz DOT либо, с параметром `--html`, как самостоятельную HTML-страницу. Используйте `--output <ФАЙЛ>` для записи в файл; `-` выводит в стандартный поток.
 cli.subcommand.generate.about = Создать манифест Ninja, не запуская Ninja.
 cli.subcommand.generate.long_about = Записать созданный манифест Ninja в стандартный поток вывода либо в файл, выбранный параметром `--output`.
+cli.subcommand.help.about = Печатает справку верхнего уровня или справку по указанной теме.
+cli.subcommand.help.long_about = Без темы это соответствует `--help`. Используйте `help targets`, чтобы вывести каталог целей и действий для выбранного файла.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = Действия:
+cli.help.targets_heading = Цели:
+cli.help.default_marker = по умолчанию
 
 # Текст справки для параметров подкоманды build.
 cli.subcommand.build.flag.targets.help = Цели для сборки (если не указаны, берутся цели манифеста по умолчанию).
@@ -368,6 +375,7 @@ status.tool.clean = Очистка
 status.tool.graph = Граф
 status.tool.graph_html = Граф (HTML)
 status.tool.generate = Генерация
+status.tool.help_targets = Справка по целям
 
 # Строки HTML-представления графа.
 graph.html.title = Граф сборки Netsuke

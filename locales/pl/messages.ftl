@@ -32,6 +32,13 @@ cli.subcommand.graph.about = Wypisz graf zależności budowania. Domyślnym form
 cli.subcommand.graph.long_about = Przekształć wczytany manifest Netsuke w kanoniczny graf budowania i zapisz go jako Graphviz DOT albo — z opcją `--html` — jako samodzielną stronę HTML. Użyj `--output <PLIK>`, aby zapisać do pliku; `-` zapisuje na standardowe wyjście.
 cli.subcommand.generate.about = Wygeneruj manifest Ninja bez uruchamiania Ninji.
 cli.subcommand.generate.long_about = Zapisz wygenerowany manifest Ninja na standardowe wyjście albo do pliku wybranego opcją `--output`.
+cli.subcommand.help.about = Wyświetla pomoc najwyższego poziomu lub pomoc dla nazwanego tematu.
+cli.subcommand.help.long_about = Bez tematu odpowiada to `--help`. Użyj `help targets`, aby wyświetlić katalog celów i akcji dla wybranego pliku.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = Akcje:
+cli.help.targets_heading = Cele:
+cli.help.default_marker = domyślny
 
 # Tekst pomocy opcji podpolecenia build.
 cli.subcommand.build.flag.targets.help = Cele do zbudowania (w razie pominięcia używa celów domyślnych z manifestu).
@@ -368,6 +375,7 @@ status.tool.clean = Czyszczenie
 status.tool.graph = Graf
 status.tool.graph_html = Graf (HTML)
 status.tool.generate = Generowanie
+status.tool.help_targets = Pomoc celów
 
 # Teksty renderera HTML grafu.
 graph.html.title = Graf budowania Netsuke
