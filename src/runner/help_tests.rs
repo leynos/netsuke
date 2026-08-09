@@ -6,7 +6,6 @@
 
 use super::*;
 use crate::cli_localization::build_localizer;
-use crate::localization;
 use crate::localization::set_localizer_for_tests;
 use crate::manifest;
 use crate::snapshot_test_support::{snapshot_settings, theme_prefs};
@@ -50,65 +49,57 @@ fn localizer_lock() -> std::sync::MutexGuard<'static, ()> {
     localizer_test_lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// Install the English localizer into the library's own global handle.
+/// Run one catalogue snapshot: install the locale, render through the closure,
+/// and bind the snapshot assertion.
 ///
-/// The test-support helpers install into a separate crate instance in unit-test
-/// binaries, so unit tests must set the library localizer directly.
-fn en_localizer() -> localization::LocalizerGuard {
-    set_localizer_for_tests(Arc::from(build_localizer(Some("en-US"))))
+/// The assertion name is passed at runtime, so all four snapshot tests share
+/// this setup while keeping their distinct snapshot files.
+fn catalogue_snapshot(
+    locale: &str,
+    snapshot_name: &str,
+    render: impl FnOnce(&[HelpEntry]) -> Result<String>,
+) -> Result<()> {
+    let _lock = localizer_lock();
+    let _guard = set_localizer_for_tests(Arc::from(build_localizer(Some(locale))));
+    let entries = fixture_entries()?;
+    let rendered = render(&entries)?;
+    snapshot_settings("help_targets").bind(|| {
+        assert_snapshot!(snapshot_name, rendered);
+    });
+    Ok(())
 }
 
 #[test]
 fn text_catalogue_snapshot() -> Result<()> {
-    let _lock = localizer_lock();
-    let _guard = en_localizer();
-    let entries = fixture_entries()?;
-    let rendered = normalize_fluent_isolates(&render_text(
-        &entries,
-        theme_prefs(ThemePreference::Unicode),
-    ));
-    snapshot_settings("help_targets").bind(|| {
-        assert_snapshot!("text_catalogue", rendered);
-    });
-    Ok(())
+    catalogue_snapshot("en-US", "text_catalogue", |entries| {
+        Ok(normalize_fluent_isolates(&render_text(
+            entries,
+            theme_prefs(ThemePreference::Unicode),
+        )))
+    })
 }
 
 #[test]
 fn accessible_catalogue_snapshot() -> Result<()> {
-    let _lock = localizer_lock();
-    let _guard = en_localizer();
-    let entries = fixture_entries()?;
-    let rendered =
-        normalize_fluent_isolates(&render_text(&entries, theme_prefs(ThemePreference::Ascii)));
-    snapshot_settings("help_targets").bind(|| {
-        assert_snapshot!("accessible_catalogue", rendered);
-    });
-    Ok(())
+    catalogue_snapshot("en-US", "accessible_catalogue", |entries| {
+        Ok(normalize_fluent_isolates(&render_text(
+            entries,
+            theme_prefs(ThemePreference::Ascii),
+        )))
+    })
 }
 
 #[test]
 fn localized_catalogue_snapshot() -> Result<()> {
-    let _lock = localizer_lock();
-    let _guard = set_localizer_for_tests(Arc::from(build_localizer(Some("es-ES"))));
-    let entries = fixture_entries()?;
-    let rendered = normalize_fluent_isolates(&render_text(
-        &entries,
-        theme_prefs(ThemePreference::Unicode),
-    ));
-    snapshot_settings("help_targets").bind(|| {
-        assert_snapshot!("localized_catalogue_es_es", rendered);
-    });
-    Ok(())
+    catalogue_snapshot("es-ES", "localized_catalogue_es_es", |entries| {
+        Ok(normalize_fluent_isolates(&render_text(
+            entries,
+            theme_prefs(ThemePreference::Unicode),
+        )))
+    })
 }
 
 #[test]
 fn json_catalogue_snapshot() -> Result<()> {
-    let _lock = localizer_lock();
-    let _guard = en_localizer();
-    let entries = fixture_entries()?;
-    let rendered = render_json(&entries)?;
-    snapshot_settings("help_targets").bind(|| {
-        assert_snapshot!("json_catalogue", rendered);
-    });
-    Ok(())
+    catalogue_snapshot("en-US", "json_catalogue", render_json)
 }
