@@ -16,7 +16,7 @@ use normalize::force_literal_escapes;
 
 #[derive(Debug, Clone)]
 /// A glob pattern and its normalised representation.
-pub struct GlobPattern {
+struct GlobPattern {
     raw: String,
     normalized: String,
 }
@@ -28,7 +28,7 @@ impl GlobPattern {
         clippy::missing_const_for_fn,
         reason = "const String::as_str() not available on all MSRV targets"
     )]
-    pub fn raw(&self) -> &str {
+    fn raw(&self) -> &str {
         self.raw.as_str()
     }
 
@@ -38,7 +38,7 @@ impl GlobPattern {
         clippy::missing_const_for_fn,
         reason = "const String::as_str() not available on all MSRV targets"
     )]
-    pub fn normalized(&self) -> &str {
+    fn normalized(&self) -> &str {
         self.normalized.as_str()
     }
 
@@ -47,7 +47,7 @@ impl GlobPattern {
     /// # Errors
     ///
     /// Returns an error when brace validation fails.
-    pub fn new(raw: &str) -> std::result::Result<Self, Error> {
+    fn new(raw: &str) -> std::result::Result<Self, Error> {
         validate_brace_matching(raw)?;
 
         #[cfg(unix)]
@@ -65,15 +65,51 @@ impl GlobPattern {
     }
 }
 
-pub type GlobEntryResult = std::result::Result<std::path::PathBuf, glob::GlobError>;
+/// Result of iterating a single entry produced by the `glob` crate walker.
+///
+/// Internal to the glob module: only [`glob_paths`] and the `walk` submodule
+/// consume it, so it is deliberately not part of the public API surface.
+///
+/// `#[deny(unreachable_pub)]` on the `mod glob;` declaration in
+/// [`crate::manifest`] rejects `pub` items that are still unreachable from the
+/// crate root, so widening this alias to `pub` fails the build. The doctests on
+/// [`glob_paths`] pin the same boundary from a downstream crate's point of
+/// view; they live there because that is where rustdoc will run them.
+type GlobEntryResult = std::result::Result<std::path::PathBuf, glob::GlobError>;
 
 /// Expand a glob pattern and collect the matching UTF-8 file paths.
+///
+/// This is the only public item in the glob module: `netsuke::manifest`
+/// re-exports it and nothing else. The examples below hold that boundary from
+/// a downstream crate's point of view, and are attached here rather than to the
+/// private items they describe because rustdoc renders and runs the examples of
+/// public items.
 ///
 /// # Errors
 ///
 /// Returns an error when the pattern is syntactically invalid, when
 /// capability-restricted filesystem access fails, or when a match contains
 /// non-UTF-8 data.
+///
+/// # Examples
+///
+/// The entry point is reachable through the re-export:
+///
+/// ```
+/// use netsuke::manifest::glob_paths;
+/// let _: fn(&str) -> _ = glob_paths;
+/// ```
+///
+/// The module's internals are not. `GlobEntryResult` is a private alias inside
+/// the private `manifest::glob` module, so no downstream path names it:
+///
+/// ```compile_fail,E0603
+/// use netsuke::manifest::glob::GlobEntryResult;
+/// ```
+///
+/// The passing example above is the control for this rejection: it fails
+/// instead if the rustdoc harness wiring breaks, so the `compile_fail` block
+/// cannot pass vacuously.
 pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     use glob::{MatchOptions, glob_with};
 

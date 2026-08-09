@@ -5,10 +5,10 @@ use crate::localization::{self, keys};
 
 #[derive(Debug)]
 pub(super) struct GlobErrorContext {
-    pub pattern: String,
-    pub error_char: char,
-    pub position: usize,
-    pub error_type: GlobErrorType,
+    pub(super) pattern: String,
+    pub(super) error_char: char,
+    pub(super) position: usize,
+    pub(super) error_type: GlobErrorType,
 }
 
 #[derive(Debug)]

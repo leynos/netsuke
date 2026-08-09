@@ -1569,6 +1569,38 @@ targets:
     command: "cargo clippy --manifest-path {{ item }}/Cargo.toml"
 ```
 
+## Manifest glob module boundary
+
+Glob expansion lives in `src/manifest/glob/`, and `glob_paths` is its only
+boundary. `src/manifest/mod.rs` declares `mod glob;` privately and re-exports
+just that function, so nothing else in the module — `GlobPattern`, the error
+helpers in `glob/errors.rs`, the `walk` submodule, or the `GlobEntryResult`
+alias — is reachable from the crate root. `GlobEntryResult` in particular
+stays private to `manifest::glob`: only `glob_paths` and `walk` consume it, and
+it names a `glob` crate type that callers should never have to depend on.
+
+Two compile-time guards hold that boundary:
+
+- `#[deny(unreachable_pub)]` on the `mod glob;` declaration. The lint rejects
+  `pub` items that are still unreachable from the crate root, which is what
+  catches an accidental `pub type GlobEntryResult`. `glob_paths` is exempt only
+  because `src/manifest/mod.rs` deliberately re-exports it, making it genuinely
+  reachable; every item here that is not re-exported stays guarded.
+- A pair of doctests attached to the public `glob_paths` documentation: a
+  `compile_fail,E0603` block importing `netsuke::manifest::glob::GlobEntryResult`
+  and a passing block importing `netsuke::manifest::glob_paths`. Together they
+  validate the downstream view — the alias has no public path, while the entry
+  point does. The passing block is the control: if the rustdoc harness wiring
+  breaks, it fails rather than letting the rejection pass vacuously. Both are
+  attached to `glob_paths` rather than to the private items they describe
+  because rustdoc renders and runs the examples of public items, which also
+  makes the boundary discoverable from the published API documentation.
+
+When adding to this module, keep new items private, or `pub(super)` when a
+sibling submodule needs them; widen the boundary only by adding a deliberate
+re-export in `src/manifest/mod.rs`. The comments in the source are supporting
+detail for these rules, not a substitute for them.
+
 ## Test isolation utilities
 
 Environment variable mutations and working-directory changes are process-global
