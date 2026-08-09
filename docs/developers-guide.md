@@ -1616,13 +1616,17 @@ having to reproduce it.
   (`unreachable_symlink`, `not_a_file`). Labels carry only these closed sets,
   never the pattern or a path, in line with the low-cardinality rule in
   `AGENTS.md`.
-- **Tracing** — events carry the pattern, which manifest authors already see
-  quoted back in glob error messages, and, for a skipped entry, only its path
-  relative to the literal prefix. The absolute path is never logged: the
-  relative one reveals nothing beyond the subtree the pattern itself named.
-  This differs from the stricter `path_hash` convention used for
-  configuration discovery, where the paths are not ones the user named in the
-  first place.
+- **Tracing** — events carry the pattern and the literal prefix derived from
+  it verbatim, and both may be absolute paths, since a manifest may write
+  `glob('/opt/vendor/*.c')`. That is deliberate: the pattern is text the
+  manifest author wrote and already sees quoted back in every glob error
+  message, so redacting it in traces while printing it in errors would buy
+  nothing, and the prefix, being a substring of the pattern, reveals no more.
+  What tracing does not carry is a matched path: a skipped entry is recorded
+  relative to the literal prefix, so the event never discloses where that
+  prefix sits on disk. This is looser than the `path_hash` convention used
+  for configuration discovery, where the paths are ones the tool found
+  rather than ones the user named.
 
 ## Test isolation utilities
 

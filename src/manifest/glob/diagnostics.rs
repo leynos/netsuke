@@ -6,13 +6,24 @@
 //! because a symbolic link escapes the prefix. Both are recorded here so a
 //! degraded expansion is visible without having to reproduce it.
 //!
-//! What is recorded is deliberately bounded. Metric labels carry only a
-//! closed set of outcome and reason strings, never the pattern or a path, in
-//! line with the low-cardinality rule in `AGENTS.md`. Tracing events carry the
-//! pattern — which manifest authors already see quoted back in glob error
-//! messages — and, for a skipped entry, only its path relative to the literal
-//! prefix. The absolute path is never logged: the relative one reveals nothing
-//! beyond the subtree the pattern itself named.
+//! What is recorded is deliberately bounded, but not uniformly redacted.
+//!
+//! Metric labels carry only a closed set of outcome and reason strings, never
+//! the pattern or a path, in line with the low-cardinality rule in `AGENTS.md`.
+//!
+//! Tracing events carry the pattern verbatim, and the literal prefix derived
+//! from it. **Both may be absolute paths**, because a manifest may write
+//! `glob('/opt/vendor/*.c')`. That is deliberate: the pattern is text the
+//! manifest author wrote and already sees quoted back in every glob error
+//! message, so redacting it in traces while printing it in errors would buy
+//! nothing. The prefix is a substring of the pattern and so reveals no more.
+//!
+//! What tracing does not carry is a matched path. A skipped entry is recorded
+//! relative to the literal prefix, so the event names only what the pattern
+//! itself already reached for and never discloses where that prefix sits on
+//! disk. This is looser than the `path_hash` convention used for
+//! configuration discovery, where the paths are ones the tool found rather
+//! than ones the user named.
 
 use super::GlobPattern;
 use camino::Utf8Path;

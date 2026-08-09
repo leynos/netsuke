@@ -48,17 +48,25 @@ impl GlobRoot {
 
     /// Fetch metadata for a matched path via the capability-scoped handle.
     ///
-    /// Returns `Ok(None)` when the lookup fails and some component of the
-    /// match is a symbolic link — whether the final component or an
-    /// intermediate directory. Such a link either escapes the literal prefix
-    /// or dangles, so it names no file reachable within the capability and is
-    /// skipped rather than aborting the whole expansion. Every other failure
-    /// (a genuine permission error on a link-free path, say) still propagates.
+    /// Returns `Ok(None)` only when the match is unresolvable in one of the two
+    /// ways a symbolic link makes it so: the link escapes the literal prefix,
+    /// which `cap_std` reports as [`io::ErrorKind::PermissionDenied`], or it
+    /// dangles, which surfaces as [`io::ErrorKind::NotFound`]. The link may be
+    /// the final component or an intermediate directory. Either way the match
+    /// names no file reachable within the capability, so it is skipped rather
+    /// than aborting the whole expansion.
+    ///
+    /// Every other failure propagates, including a symlink loop
+    /// ([`io::ErrorKind::FilesystemLoop`]): a cyclic link is a broken tree
+    /// rather than an absent file, and silently dropping it would hide the
+    /// breakage. A link whose target is genuinely unreadable inside the prefix
+    /// is skipped along with the escapes, because `cap_std` reports both as
+    /// `PermissionDenied` and the capability cannot tell them apart.
     pub(super) fn metadata(&self, path: &Utf8Path) -> io::Result<Option<cap_std::fs::Metadata>> {
         let relative = self.relativise(path)?;
         match self.dir.metadata(relative) {
             Ok(metadata) => Ok(Some(metadata)),
-            Err(_) if self.traverses_symlink(relative) => {
+            Err(err) if is_unresolvable_link(&err) && self.traverses_symlink(relative) => {
                 diagnostics::record_unreachable_symlink(relative);
                 Ok(None)
             }
@@ -110,6 +118,20 @@ impl GlobRoot {
             relative
         })
     }
+}
+
+/// Report whether `err` is how a link the capability cannot follow surfaces.
+///
+/// `cap_std` raises [`io::ErrorKind::PermissionDenied`] for a resolution that
+/// leaves the capability's tree, and the platform raises
+/// [`io::ErrorKind::NotFound`] for a link with no target. Nothing else counts:
+/// a loop, an I/O failure, or an invalid argument all describe a tree that is
+/// broken rather than a match that is simply not there.
+fn is_unresolvable_link(err: &io::Error) -> bool {
+    matches!(
+        err.kind(),
+        io::ErrorKind::PermissionDenied | io::ErrorKind::NotFound
+    )
 }
 
 /// Longest literal directory prefix of a normalised pattern.

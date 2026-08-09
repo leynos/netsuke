@@ -67,7 +67,8 @@
   a pattern whose literal prefix is missing or names something other than a
   directory now expands to no matches, and a match reached through a symbolic
   link — the match itself or an intermediate directory — that resolves
-  outside that prefix or dangles is skipped rather than failing the expansion
+  outside that prefix or dangles is skipped rather than failing the
+  expansion, though a cyclic symbolic link still fails the expansion
   ([#173](https://github.com/leynos/netsuke/issues/173))
 
 ### Removed

@@ -392,7 +392,9 @@ to the pattern's longest literal directory prefix — the text up to the first
 directory, the call returns an empty list rather than failing. A match is
 skipped rather than reported as an error when the metadata lookup fails
 because a symbolic link — the match itself or a directory reached on the way
-to it — resolves outside that prefix or dangles.
+to it — resolves outside that prefix or dangles. A cyclic symbolic link is
+reported as an error rather than skipped, since it describes a broken tree
+rather than a missing file.
 
 ### Define reusable macros
 

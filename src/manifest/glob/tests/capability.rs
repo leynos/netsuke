@@ -3,6 +3,7 @@ use super::super::walk::{literal_dir_prefix, open_root_dir};
 use super::super::{GlobPattern, glob_paths};
 use anyhow::{Context, Result, anyhow, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
+use minijinja::ErrorKind;
 use rstest::{fixture, rstest};
 use tempfile::{TempDir, tempdir};
 use test_support::cwd_guard::CwdGuard;
@@ -177,9 +178,9 @@ fn glob_paths_skips_symlinks_escaping_the_prefix(
     test_fs::create_dir(&src)?;
     test_fs::create_dir(&vendor)?;
     test_fs::write(vendor.join("escaped.c"), "escaped")?;
-    if let Some(parent) = std::path::Path::new(kept)
+    if let Some(parent) = Utf8Path::new(kept)
         .parent()
-        .filter(|p| !p.as_os_str().is_empty())
+        .filter(|p| !p.as_str().is_empty())
     {
         test_fs::create_dir_all(src.join(parent))?;
     }
@@ -195,6 +196,50 @@ fn glob_paths_skips_symlinks_escaping_the_prefix(
     ensure!(
         results.iter().all(|p| !p.ends_with("escaped.c")),
         "a symlink resolving outside the prefix should be skipped: {results:?}"
+    );
+    Ok(())
+}
+
+/// A link with no target is absent rather than broken, so it is skipped like
+/// an escaping one.
+#[cfg(unix)]
+#[test]
+fn glob_paths_skips_dangling_symlinks() -> Result<()> {
+    let temp = tempdir()?;
+    let src = temp.path().join("src");
+    test_fs::create_dir(&src)?;
+    test_fs::write(src.join("real.c"), "real")?;
+    test_fs::symlink("nowhere.c", src.join("dangling.c"))?;
+
+    let pattern = format!("{}/src/*.c", temp.path().display());
+    let results = glob_paths(&pattern).context("a dangling symlink must not abort the walk")?;
+    ensure!(
+        results.iter().any(|p| p.ends_with("real.c")),
+        "valid matches should be preserved: {results:?}"
+    );
+    ensure!(
+        results.iter().all(|p| !p.ends_with("dangling.c")),
+        "a dangling symlink should be skipped: {results:?}"
+    );
+    Ok(())
+}
+
+/// A cyclic link describes a broken tree rather than an absent file, so it
+/// must not be quietly dropped along with the escaping and dangling links.
+#[cfg(unix)]
+#[test]
+fn glob_paths_reports_symlink_loops() -> Result<()> {
+    let temp = tempdir()?;
+    let src = temp.path().join("src");
+    test_fs::create_dir(&src)?;
+    test_fs::symlink("loop.c", src.join("loop.c"))?;
+
+    let pattern = format!("{}/src/*.c", temp.path().display());
+    let err = glob_paths(&pattern).expect_err("a symlink loop should surface as an error");
+    ensure!(
+        err.kind() == ErrorKind::InvalidOperation,
+        "unexpected error kind {kind:?}",
+        kind = err.kind()
     );
     Ok(())
 }
