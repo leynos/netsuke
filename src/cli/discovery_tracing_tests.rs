@@ -1,13 +1,14 @@
 //! Tests for configuration discovery tracing.
 //!
-//! Selection is exercised through the injected [`EnvProvider`] double, so these
+//! Selection is exercised through an injected [`mockable::MockEnv`], so these
 //! tests never mutate the process environment and need no lock.
 
 use super::*;
-use crate::cli::test_support::TestEnv;
+use crate::cli::test_support::{empty_mock_env, mock_env_with};
 use crate::snapshot_test_support::snapshot_settings;
 use anyhow::{Context, Result, ensure};
 use insta::assert_snapshot;
+use mockable::MockEnv;
 use rstest::rstest;
 use tempfile::tempdir;
 
@@ -28,7 +29,7 @@ fn snapshot_failure_event(assertion: &EventAssertion<'_>, snapshot_name: &str) -
 /// Resolve `cli_config`/`env_config` and trace the result, returning both.
 fn resolve_and_trace(
     cli_config: Option<PathBuf>,
-    env: &TestEnv,
+    env: &MockEnv,
 ) -> Result<(ConfigPathResolution, Vec<String>)> {
     capture_events(|| {
         let resolution = resolve_config_selector(cli_config, env);
@@ -92,10 +93,9 @@ struct ConfigPathScenario {
     expected_env_trace: Some((CONFIG_ENV_VAR, false)),
 })]
 fn explicit_config_path_logs_selected_selector(#[case] scenario: ConfigPathScenario) -> Result<()> {
-    let mut env = TestEnv::default();
-    if let Some(value) = scenario.config_env {
-        env = env.with_var(CONFIG_ENV_VAR, value);
-    }
+    let env = scenario.config_env.map_or_else(empty_mock_env, |value| {
+        mock_env_with([(CONFIG_ENV_VAR, value)])
+    });
 
     let (resolution, events) = resolve_and_trace(scenario.cli_config.map(PathBuf::from), &env)?;
     let selector_event = find_event(&events, "resolved config path")?;
@@ -153,7 +153,7 @@ fn explicit_config_path_logs_selected_selector(#[case] scenario: ConfigPathScena
 /// only `NETSUKE_CONFIG` is ever looked up.
 #[test]
 fn legacy_config_path_variable_is_not_a_selector() -> Result<()> {
-    let env = TestEnv::default().with_var("NETSUKE_CONFIG_PATH", "legacy-should-be-ignored.toml");
+    let env = mock_env_with([("NETSUKE_CONFIG_PATH", "legacy-should-be-ignored.toml")]);
 
     let (resolution, events) = resolve_and_trace(None, &env)?;
 
@@ -179,7 +179,7 @@ fn legacy_config_path_variable_is_not_a_selector() -> Result<()> {
 fn selector_resolution_event_schema_snapshot() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
     let config_path = temp.path().join("selector.toml");
-    let env = TestEnv::default().with_var(CONFIG_ENV_VAR, config_path.as_os_str());
+    let env = mock_env_with([(CONFIG_ENV_VAR, config_path.as_os_str().to_owned())]);
 
     let (resolution, events) = resolve_and_trace(None, &env)?;
     ensure!(

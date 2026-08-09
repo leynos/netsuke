@@ -2,27 +2,10 @@
 
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
+use mockable::MockEnv;
 use netsuke::cli_localization;
-use std::{collections::HashMap, ffi::OsString, sync::Arc};
+use std::{ffi::OsString, sync::Arc};
 use tempfile::tempdir;
-
-#[derive(Default)]
-struct TestEnv {
-    values: HashMap<&'static str, OsString>,
-}
-
-impl TestEnv {
-    fn with_var(mut self, name: &'static str, value: impl Into<OsString>) -> Self {
-        self.values.insert(name, value.into());
-        self
-    }
-}
-
-impl netsuke::cli::ConfigEnvProvider for TestEnv {
-    fn get(&self, key: &str) -> Option<OsString> {
-        self.values.get(key).cloned()
-    }
-}
 
 #[test]
 fn resolve_merged_json_honours_injected_env() -> Result<()> {
@@ -39,7 +22,9 @@ fn resolve_merged_json_honours_injected_env() -> Result<()> {
     let (cli, matches) =
         netsuke::cli::parse_with_localizer_from(["netsuke", "--config", &config_arg], &localizer)
             .context("parse CLI args for injected JSON env")?;
-    let env = TestEnv::default().with_var("NETSUKE_JSON", "1");
+    let mut env = MockEnv::new();
+    env.expect_os_string()
+        .returning(|key| (key == "NETSUKE_JSON").then(|| OsString::from("1")));
 
     ensure!(
         netsuke::cli::resolve_merged_json_with_env(&cli, &matches, &env)?,
