@@ -156,12 +156,9 @@ fn expand_foreach_expands_sequence_values() -> Result<()> {
     expand_foreach(&mut doc, &env)?;
     let targets = targets(&doc)?;
     anyhow::ensure!(targets.len() == 2, "expected two targets");
+    ensure_foreach_removed(targets, "target")?;
     for (idx, target) in targets.iter().enumerate() {
         let map = target.as_object().context("target map")?;
-        anyhow::ensure!(
-            !map.contains_key("foreach"),
-            "foreach should be removed after target expansion"
-        );
         let vars = map
             .get("vars")
             .and_then(|v| v.as_object())
@@ -198,19 +195,8 @@ fn expand_foreach_applies_when_expression() -> Result<()> {
     expand_foreach(&mut doc, &env)?;
     let targets = targets(&doc)?;
     anyhow::ensure!(targets.len() == 2, "expected filtered targets");
-    let indexes = indexes(targets, "target")?;
-    anyhow::ensure!(
-        indexes == vec![1, 2],
-        "unexpected filtered indexes: {:?}",
-        indexes
-    );
-    for target in targets {
-        let map = target.as_object().context("target map")?;
-        anyhow::ensure!(
-            !map.contains_key("foreach"),
-            "foreach should be removed from filtered targets"
-        );
-    }
+    anyhow::ensure!(indexes(targets, "target")? == vec![1, 2], "wrong indexes");
+    ensure_foreach_removed(targets, "filtered target")?;
     Ok(())
 }
 
@@ -225,10 +211,7 @@ fn expand_foreach_empty_foreach_produces_no_entries() -> Result<()> {
     )?;
     expand_foreach(&mut doc, &env)?;
     let targets = targets(&doc)?;
-    anyhow::ensure!(
-        targets.is_empty(),
-        "empty foreach should expand to no targets: {targets:?}"
-    );
+    anyhow::ensure!(targets.is_empty(), "empty foreach must produce no targets");
     Ok(())
 }
 

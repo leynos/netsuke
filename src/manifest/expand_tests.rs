@@ -29,10 +29,7 @@ pub(super) fn actions(doc: &ManifestValue) -> Result<&[ManifestValue]> {
         .context("actions sequence missing")
 }
 
-pub(super) fn ensure_foreach_removed(
-    entries: &[ManifestValue],
-    section: &str,
-) -> Result<()> {
+pub(super) fn ensure_foreach_removed(entries: &[ManifestValue], section: &str) -> Result<()> {
     for entry in entries {
         let map = entry
             .as_object()
