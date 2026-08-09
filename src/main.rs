@@ -34,7 +34,7 @@ impl DiagMode {
         matches!(self, Self::Json)
     }
 }
-
+mod observability;
 #[path = "startup_tracing.rs"]
 mod startup_tracing;
 
@@ -76,6 +76,7 @@ fn run_with_args(
     // Buffering keeps the locale fallback report without taking that risk.
     let startup_writer = StartupWriter::buffering();
     init_tracing(LevelFilter::WARN, startup_writer.clone());
+    observability::init_metrics();
     let localizer = startup_localizer(&args, env, system_locale);
     let startup_mode = DiagMode::from_json_enabled(json_hint);
     let (parsed_cli, matches) =
@@ -84,17 +85,17 @@ fn run_with_args(
             // The buffer was settled inside, before the branch that exits.
             Err(code) => return code,
         };
-
+    let verbose = parsed_cli.verbose;
     if is_informational_help(&parsed_cli) {
         settle_startup_diagnostics(&startup_writer, startup_mode);
-        return run_cli(&parsed_cli, system_locale, startup_mode);
+        return finish_run(run_cli(&parsed_cli, system_locale, startup_mode), verbose);
     }
 
     let mode = match resolve_json_mode_or_exit(&parsed_cli, &matches, startup_mode) {
         Ok(mode) => mode,
         Err(code) => {
             settle_startup_diagnostics(&startup_writer, startup_mode);
-            return code;
+            return finish_run(code, verbose);
         }
     };
     // The effective mode is known here, before configuration is merged, so the
@@ -102,10 +103,18 @@ fn run_with_args(
     settle_startup_diagnostics(&startup_writer, mode);
     let merged_cli = match merge_cli_or_exit(&parsed_cli, &matches, mode) {
         Ok(merged) => merged,
-        Err(code) => return code,
+        Err(code) => return finish_run(code, verbose),
     };
     let runtime_mode = DiagMode::from_json_enabled(merged_cli.json);
-    run_cli(&merged_cli, system_locale, runtime_mode)
+    finish_run(run_cli(&merged_cli, system_locale, runtime_mode), verbose)
+}
+
+/// Emit a development snapshot after the command has completed when requested.
+fn finish_run(exit_code: ExitCode, verbose: bool) -> ExitCode {
+    if verbose {
+        observability::emit_metrics_snapshot();
+    }
+    exit_code
 }
 
 const fn is_informational_help(cli: &cli::Cli) -> bool {
@@ -230,11 +239,20 @@ fn parse_cli_or_exit(
     }
 }
 
-fn config_err_to_exit(err: &(dyn std::error::Error + 'static), mode: DiagMode) -> ExitCode {
+fn config_err_to_exit(
+    err: &(dyn std::error::Error + 'static),
+    mode: DiagMode,
+    operation: &'static str,
+) -> ExitCode {
     if mode.is_json() {
         diagnostic_json::emit_or_fallback(diagnostic_json::render_error_json(err))
     } else {
-        tracing::error!(error = %err, "configuration load failed");
+        tracing::error!(
+            operation,
+            error_category = observability::classify_error(err),
+            error = %err,
+            "configuration load failed"
+        );
         ExitCode::FAILURE
     }
 }
@@ -244,7 +262,9 @@ fn resolve_json_mode_or_exit(
     matches: &ArgMatches,
     fallback_mode: DiagMode,
 ) -> Result<DiagMode, ExitCode> {
-    match cli::resolve_merged_json(parsed_cli, matches) {
+    match observability::record_config_load(observability::DIAG_MODE_PHASE, || {
+        cli::resolve_merged_json(parsed_cli, matches)
+    }) {
         Ok(is_json_enabled) => {
             let mode = DiagMode::from_json_enabled(is_json_enabled);
             set_tracing_filter(startup_filter(mode, parsed_cli.verbose));
@@ -258,7 +278,11 @@ fn resolve_json_mode_or_exit(
             if fallback_filter != LevelFilter::OFF {
                 drop(cli::resolve_merged_json(parsed_cli, matches));
             }
-            Err(config_err_to_exit(err.as_ref(), fallback_mode))
+            Err(config_err_to_exit(
+                err.as_ref(),
+                fallback_mode,
+                observability::DIAG_MODE_OPERATION,
+            ))
         }
     }
 }
@@ -268,9 +292,11 @@ fn merge_cli_or_exit(
     matches: &ArgMatches,
     mode: DiagMode,
 ) -> Result<cli::Cli, ExitCode> {
-    cli::merge_with_config(parsed_cli, matches)
-        .map(cli::Cli::with_default_command)
-        .map_err(|err| config_err_to_exit(err.as_ref(), mode))
+    observability::record_config_load(observability::MERGE_PHASE, || {
+        cli::merge_with_config(parsed_cli, matches)
+    })
+    .map(cli::Cli::with_default_command)
+    .map_err(|err| config_err_to_exit(err.as_ref(), mode, observability::MERGE_OPERATION))
 }
 
 fn configure_runtime(

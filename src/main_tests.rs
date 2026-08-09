@@ -3,6 +3,7 @@
 use super::*;
 use anyhow::{Result, ensure};
 use netsuke::localization::keys;
+use ortho_config::OrthoError;
 use rstest::rstest;
 use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
@@ -283,6 +284,53 @@ fn startup_installs_and_restores_the_global_localizer() -> Result<()> {
     ensure!(
         after == before,
         "the previous localizer must be restored, got {after:?} rather than {before:?}"
+    );
+    Ok(())
+}
+
+/// Human-readable config failures identify their bounded operation and category.
+#[test]
+fn config_load_errors_include_operational_context() -> Result<()> {
+    let writer = StartupWriter::buffering();
+    let subscriber = Registry::default()
+        .with(LevelFilter::ERROR)
+        .with(fmt::layer().with_writer(writer.clone()).with_ansi(false));
+    let validation_error = OrthoError::Validation {
+        key: "jobs".into(),
+        message: "must be positive".into(),
+    };
+    let file_error = OrthoError::File {
+        path: "private.toml".into(),
+        source: Box::new(std::io::Error::other("read failure")),
+    };
+
+    tracing::subscriber::with_default(subscriber, || -> Result<()> {
+        ensure!(
+            config_err_to_exit(
+                &validation_error,
+                DiagMode::Human,
+                observability::DIAG_MODE_OPERATION,
+            ) == ExitCode::FAILURE,
+            "a diagnostic-mode config error must fail the command"
+        );
+        ensure!(
+            config_err_to_exit(&file_error, DiagMode::Human, observability::MERGE_OPERATION)
+                == ExitCode::FAILURE,
+            "a merge config error must fail the command"
+        );
+        Ok(())
+    })?;
+
+    let recorded = String::from_utf8_lossy(&writer.buffered()).into_owned();
+    ensure!(
+        recorded.contains("operation=\"diag_mode_resolution\"")
+            && recorded.contains("error_category=\"validation\""),
+        "diagnostic-mode failures must identify their operation and category: {recorded:?}"
+    );
+    ensure!(
+        recorded.contains("operation=\"config_merge\"")
+            && recorded.contains("error_category=\"io\""),
+        "merge failures must identify their operation and category: {recorded:?}"
     );
     Ok(())
 }

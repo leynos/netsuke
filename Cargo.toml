@@ -119,6 +119,7 @@ hashbrown = "0.17.1"
 walkdir = "2.5"
 metrics = "0.24.6"
 monotony = "0.1.0"
+metrics-util = { version = "0.20", features = ["debugging"] }
 mockable = "3.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
@@ -154,9 +155,6 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"], default-featu
 insta = { version = "1", features = ["yaml", "filters"] }
 assert_cmd = "2.0.0"
 predicates = "3"
-# Provides the DebuggingRecorder used to assert bounded telemetry without a
-# global recorder; constrained to the family that pairs with metrics 0.24.
-metrics-util = { version = "0.20", features = ["debugging"] }
 mockable = { version = "3.0", features = ["mock"] }
 monotony = { version = "0.1.0", features = ["test-util"] }
 serial_test = "3"
