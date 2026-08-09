@@ -1550,11 +1550,15 @@ Two compile-time guards hold that boundary:
   catches an accidental `pub type GlobEntryResult`. `glob_paths` is exempt only
   because `src/manifest/mod.rs` deliberately re-exports it, making it genuinely
   reachable; every item here that is not re-exported stays guarded.
-- A `compile_fail,E0603` doctest on `GlobEntryResult`, paired with a passing
-  doctest that imports `netsuke::manifest::glob_paths`. Together these pin the
-  downstream view: the alias has no public path, while the entry point does.
-  The passing doctest is the control — if the harness wiring breaks, it fails
-  rather than letting the rejection pass vacuously.
+- A pair of doctests attached to the public `glob_paths` documentation: a
+  `compile_fail,E0603` block importing `netsuke::manifest::glob::GlobEntryResult`
+  and a passing block importing `netsuke::manifest::glob_paths`. Together they
+  validate the downstream view — the alias has no public path, while the entry
+  point does. The passing block is the control: if the rustdoc harness wiring
+  breaks, it fails rather than letting the rejection pass vacuously. Both are
+  attached to `glob_paths` rather than to the private items they describe
+  because rustdoc renders and runs the examples of public items, which also
+  makes the boundary discoverable from the published API documentation.
 
 When adding to this module, keep new items private, or `pub(super)` when a
 sibling submodule needs them; widen the boundary only by adding a deliberate
