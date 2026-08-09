@@ -4,9 +4,9 @@
 //! for operators, while also attaching stable tracing fields for tools that
 //! consume structured diagnostics.
 
+use super::StderrMode;
 use super::command_env::env_names_eq;
 use super::redaction::{CommandArg, redact_sensitive_args};
-use super::StderrMode;
 use camino::Utf8PathBuf;
 use std::{
     ffi::OsStr,

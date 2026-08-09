@@ -4,9 +4,10 @@ use crate::cli::Cli;
 
 /// Policy for routing a Ninja subprocess's standard streams.
 ///
-/// Governs both child stdout and child stderr routing: [`Suppress`] keeps JSON
-/// diagnostics machine-readable by draining both streams to `io::sink()`, while
-/// [`Forward`] releases them to the parent's corresponding streams.
+/// Governs both child stdout and child stderr routing: [`StderrMode::Suppress`]
+/// keeps JSON diagnostics machine-readable by draining both streams to
+/// `io::sink()`, while [`StderrMode::Forward`] releases them to the parent's
+/// corresponding streams.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StderrMode {
     /// Forward child stdout and stderr to the parent's streams.
@@ -19,11 +20,7 @@ impl StderrMode {
     /// Derive the policy from whether JSON diagnostics are enabled.
     #[must_use]
     pub const fn from_json_enabled(json: bool) -> Self {
-        if json {
-            Self::Suppress
-        } else {
-            Self::Forward
-        }
+        if json { Self::Suppress } else { Self::Forward }
     }
 
     /// Derive the policy from the resolved CLI diagnostics preference.
