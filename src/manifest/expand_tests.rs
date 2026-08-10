@@ -10,6 +10,9 @@ mod action_condition_cases;
 #[path = "expand_test_cases/condition_cases.rs"]
 mod condition_cases;
 
+#[path = "expand_test_cases/foreach_property_cases.rs"]
+mod foreach_property_cases;
+
 #[path = "expand_test_cases/structure_cases.rs"]
 mod structure_cases;
 

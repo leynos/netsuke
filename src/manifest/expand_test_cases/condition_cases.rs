@@ -222,6 +222,8 @@ fn expand_foreach_non_object_entry_is_passed_through() -> Result<()> {
         "targets:
   - just-a-string
   - name: real
+    foreach:
+      - expanded
     command: echo hi",
     )?;
     expand_foreach(&mut doc, &env)?;
@@ -239,6 +241,22 @@ fn expand_foreach_non_object_entry_is_passed_through() -> Result<()> {
     anyhow::ensure!(
         second_target.get("name").and_then(ManifestValue::as_str) == Some("real"),
         "second target should remain object named real: {second_target:?}"
+    );
+    anyhow::ensure!(
+        !second_target.contains_key("foreach"),
+        "expanded target should no longer contain foreach: {second_target:?}"
+    );
+    let vars = second_target
+        .get("vars")
+        .and_then(ManifestValue::as_object)
+        .context("second target vars")?;
+    anyhow::ensure!(
+        vars.get("item").and_then(ManifestValue::as_str) == Some("expanded"),
+        "second target should retain the iteration item: {vars:?}"
+    );
+    anyhow::ensure!(
+        vars.get("index").and_then(ManifestValue::as_u64) == Some(0),
+        "second target should retain the iteration index: {vars:?}"
     );
     Ok(())
 }
