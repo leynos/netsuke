@@ -39,46 +39,59 @@ pub fn render_manifest(
 }
 
 fn render_rule(rule: &mut crate::ast::Rule, env: &Environment, vars: &Vars) -> Result<()> {
-    if let Some(desc) = &mut rule.description {
-        *desc = render_str_with(env, desc, vars, || "render rule description".into())?;
-    }
-    match &mut rule.recipe {
-        Recipe::Command { command } => {
-            render_recipe_string_or_list(command, env, vars, || "render rule command".into())?;
-        }
-        Recipe::Script { script } => {
-            *script = render_str_with(env, script, vars, || "render rule script".into())?;
-        }
-        Recipe::Rule { rule: r } => render_string_or_list(r, env, vars)?,
-    }
+    render_description(&mut rule.description, env, vars, "rule")?;
+    render_recipe(&mut rule.recipe, env, vars, "rule")?;
     Ok(())
 }
 
 fn render_target(target: &mut Target, env: &Environment) -> Result<()> {
     render_vars(&mut target.vars, env)?;
-    if let Some(desc) = &mut target.description {
-        *desc = render_str_with(env, desc, &target.vars, || {
-            "render target description".into()
-        })?;
-    }
+    render_description(&mut target.description, env, &target.vars, "target")?;
     render_string_or_list(&mut target.name, env, &target.vars)?;
     render_string_or_list(&mut target.sources, env, &target.vars)?;
     render_string_or_list(&mut target.deps, env, &target.vars)?;
     render_string_or_list(&mut target.order_only_deps, env, &target.vars)?;
-    match &mut target.recipe {
-        Recipe::Command { command } => {
-            render_recipe_string_or_list(command, env, &target.vars, || {
-                "render target command".into()
-            })?;
-        }
-        Recipe::Script { script } => {
-            *script = render_str_with(env, script, &target.vars, || "render target script".into())?;
-        }
-        Recipe::Rule { rule } => render_string_or_list(rule, env, &target.vars)?,
+    render_recipe(&mut target.recipe, env, &target.vars, "target")?;
+    Ok(())
+}
+
+/// Render an optional target or rule description against its context.
+///
+/// The `subject` selects the error-context wording ("rule" or "target") so
+/// that diagnostics keep naming the manifest entry being rendered.
+fn render_description(
+    description: &mut Option<String>,
+    env: &Environment,
+    vars: &Vars,
+    subject: &str,
+) -> Result<()> {
+    if let Some(desc) = description {
+        *desc = render_str_with(env, desc, vars, || format!("render {subject} description"))?;
     }
     Ok(())
 }
 
+/// Render a target or rule recipe against its context.
+///
+/// The `subject` selects the error-context wording ("rule" or "target") so
+/// that diagnostics keep naming the manifest entry being rendered. A command
+/// recipe is rendered through [`render_recipe_string_or_list`] so the `ins`/`outs`
+/// placeholders stay available; a rule-reference recipe reuses
+/// [`render_string_or_list`].
+fn render_recipe(recipe: &mut Recipe, env: &Environment, vars: &Vars, subject: &str) -> Result<()> {
+    match recipe {
+        Recipe::Command { command } => {
+            render_recipe_string_or_list(command, env, vars, || {
+                format!("render {subject} command")
+            })?;
+        }
+        Recipe::Script { script } => {
+            *script = render_str_with(env, script, vars, || format!("render {subject} script"))?;
+        }
+        Recipe::Rule { rule } => render_string_or_list(rule, env, vars)?,
+    }
+    Ok(())
+}
 fn render_vars(vars: &mut Vars, env: &Environment) -> Result<()> {
     let snapshot = vars.clone();
     for (key, value) in vars.iter_mut() {
@@ -381,6 +394,85 @@ mod tests {
             report.contains("render rule command entry 2"),
             "error should name the failing list position, got: {report}"
         );
+        Ok(())
+    }
+
+    #[expect(clippy::panic, reason = "panic for clearer test failures")]
+    fn expect_script(recipe: &Recipe, label: impl std::fmt::Display) -> &str {
+        match recipe {
+            Recipe::Script { script } => script,
+            other => panic!("expected {label} script recipe, got {other:?}"),
+        }
+    }
+
+    #[expect(clippy::panic, reason = "panic for clearer test failures")]
+    fn expect_rule_ref(recipe: &Recipe, label: impl std::fmt::Display) -> &StringOrList {
+        match recipe {
+            Recipe::Rule { rule } => rule,
+            other => panic!("expected {label} rule-reference recipe, got {other:?}"),
+        }
+    }
+
+    #[expect(clippy::panic, reason = "panic for clearer test failures")]
+    fn assert_rendered_script_and_rule_recipes(rendered: &NetsukeManifest) {
+        let Some(rendered_target) = rendered.targets.first() else {
+            panic!("rendered script target missing");
+        };
+        assert_eq!(
+            expect_script(&rendered_target.recipe, "rendered script target"),
+            "echo world"
+        );
+        let Some(rendered_rule) = rendered.rules.first() else {
+            panic!("rendered rule-reference rule missing");
+        };
+        assert_eq!(
+            expect_list(
+                expect_rule_ref(&rendered_rule.recipe, "rendered rule reference"),
+                "rule reference names",
+            ),
+            ["base"]
+        );
+    }
+
+    #[test]
+    fn render_manifest_renders_script_and_rule_ref_recipes() -> Result<()> {
+        let mut target_vars = Vars::new();
+        target_vars.insert("subject".into(), ManifestValue::String("world".into()));
+        let target = Target {
+            name: StringOrList::String("scripted".into()),
+            recipe: Recipe::Script {
+                script: "echo {{ subject }}".into(),
+            },
+            sources: StringOrList::Empty,
+            deps: StringOrList::Empty,
+            order_only_deps: StringOrList::Empty,
+            vars: target_vars,
+            phony: false,
+            always: false,
+            description: None,
+        };
+        let rule = Rule {
+            name: "delegating".into(),
+            recipe: Recipe::Rule {
+                rule: StringOrList::List(vec!["{{ rule_name }}".into()]),
+            },
+            description: None,
+        };
+        let mut manifest_vars = Vars::new();
+        manifest_vars.insert("rule_name".into(), ManifestValue::String("base".into()));
+
+        let manifest = NetsukeManifest {
+            netsuke_version: Version::parse("1.0.0")?,
+            vars: manifest_vars,
+            macros: Vec::new(),
+            rules: vec![rule],
+            actions: Vec::new(),
+            targets: vec![target],
+            defaults: Vec::new(),
+        };
+
+        let rendered = render_manifest(manifest, &minijinja::Environment::new())?;
+        assert_rendered_script_and_rule_recipes(&rendered);
         Ok(())
     }
 }
