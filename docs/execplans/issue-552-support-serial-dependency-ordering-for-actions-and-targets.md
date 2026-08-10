@@ -4,7 +4,7 @@ This ExecPlan is a living document. Keep `Progress`, `Surprises & discoveries`,
 `Decision log`, and `Outcomes & retrospective` current as implementation
 proceeds.
 
-Status: **Draft — awaiting approval before implementation.**
+Status: **In development — plan approved by the user on 2026-08-10; implementation in progress.**
 
 Issue: [#552](https://github.com/leynos/netsuke/issues/552)
 
@@ -171,9 +171,18 @@ criterion in issue #552 and all repository gates pass.
   declaration order, failure short-circuiting, shared work reuse, and unrelated
   branch concurrency behaved as required.
 - [x] (2026-08-10 11:59Z) Drafted this self-contained implementation plan.
-- [ ] Obtain explicit approval for the plan and its compatibility boundary.
-- [ ] Add failing schema, IR, generator, behavioural, and runtime regressions.
-- [ ] Implement AST and IR representation.
+- [x] (2026-08-10) User approved the plan and its compatibility boundary via the
+  implementation request; the developer also received the repository gate list.
+- [x] (2026-08-10) Added schema and IR regressions: omission defaults to
+  `parallel`, explicit `parallel`/`serial` parse on targets and actions, an
+  unknown value such as `sequential` is rejected, and declaration order and the
+  `DependencyOrder` survive lowering for both targets and actions.
+- [x] (2026-08-10) Implemented the AST and IR representation:
+  `DependencyOrder::{Parallel, Serial}` on `Target` (serde lowercase, default
+  parallel) and on `BuildEdge`, copied during `from_manifest` lowering, and
+  re-exported through `ir`. Updated every direct `BuildEdge` literal, doctest,
+  and fixture to compile. `cargo check --all-targets` and 739 lib + touched
+  integration tests pass.
 - [ ] Implement deterministic Ninja bundle and dyndep lowering.
 - [ ] Implement atomic dyndep sidecar materialization in every CLI path.
 - [ ] Complete user, design, developer, layout, roadmap, and ADR documentation.
@@ -181,6 +190,35 @@ criterion in issue #552 and all repository gates pass.
 - [ ] Commit each green logical change and record final evidence here.
 
 ## Surprises and discoveries
+
+- (2026-08-10) Re-validated the staged dyndep chain with real Ninja 1.11.1:
+  declaration order holds when all sidecars are pre-materialized; a later
+  sidecar is revealed only after the preceding gate; failure of an early real
+  dependency stops later stages from being scheduled; and unrelated branches
+  remain available. The chain requires no generator recipe and no nested Ninja
+  process.
+- (2026-08-10) Ninja path escaping in build/dyndep documents uses `$` as the
+  escape character. Spaces, `$`, `:`, `|`, and similar metacharacters in target
+  or dependency paths must be escaped as `$ ` (space is `$ `), `$$` for a
+  literal dollar, `$:` for colon, `$|` for pipe. Unescaped spaces split a token
+  into multiple paths. The generator therefore needs a dedicated Ninja
+  path-escape helper distinct from the existing shell-script escaping.
+
+- (2026-08-10) Ninja resolves every path named in a build file — including a
+  `dyndep =` value and every path inside the referenced dyndep document —
+  relative to Ninja's process working directory, which is the `-C` directory
+  when one is supplied. The directory containing the main build file does not
+  affect path resolution. Confirmed with Ninja 1.11.1: with the main build
+  file in an OS temp directory and `-C` set to the user's project directory,
+  a sidecar written beneath `project/.netsuke/dyndep/` is located, loaded, and
+  its revealed dependency built correctly. The runner therefore needs no
+  architectural change; the plan's existing `.netsuke` navigation already
+  matches Ninja's model.
+- A dyndep document updates the edge by naming the edge's *outputs*, not the
+  dyndep file itself. The first failed probes named the sidecar path in the
+  sidecar's `build` statement, which Ninja rejects with
+  `not mentioned in its dyndep file`. The accepted form is
+  `build <edge-output>: dyndep | <real-dep>`.
 
 - An order-only dependency on a phony gate orders only the gate itself. Ninja
   eagerly schedules all already-visible transitive inputs, so the real recipes

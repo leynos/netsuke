@@ -48,6 +48,7 @@ impl EdgeBuilder {
             action_id: "id".into(),
             inputs: self.inputs,
             implicit_deps: self.implicit_deps,
+            dependency_order: crate::ast::DependencyOrder::Parallel,
             explicit_outputs: vec![self.output],
             implicit_outputs: Vec::new(),
             order_only_deps: Vec::new(),

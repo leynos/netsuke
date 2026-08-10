@@ -40,6 +40,7 @@ fn edge_strategy_with_ranges(
                     action_id,
                     inputs,
                     implicit_deps,
+                    dependency_order: crate::ast::DependencyOrder::Parallel,
                     explicit_outputs,
                     implicit_outputs,
                     order_only_deps,

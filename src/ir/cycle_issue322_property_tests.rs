@@ -21,6 +21,7 @@ fn build_edge(output: Utf8PathBuf) -> BuildEdge {
         action_id: "id".into(),
         inputs: Vec::new(),
         implicit_deps: Vec::new(),
+        dependency_order: crate::ast::DependencyOrder::Parallel,
         explicit_outputs: vec![output],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),

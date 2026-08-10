@@ -112,6 +112,7 @@ impl BuildGraph {
                 action_id,
                 inputs,
                 implicit_deps,
+                dependency_order: target.dependency_order,
                 explicit_outputs: outputs,
                 implicit_outputs: Vec::new(),
                 order_only_deps: to_paths(&target.order_only_deps),
