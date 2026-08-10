@@ -9,6 +9,7 @@ use anyhow::{Context, Result};
 use clap::CommandFactory;
 use serde::Serialize;
 use tracing::info;
+use unicode_width::UnicodeWidthStr;
 
 use crate::ast::{NetsukeManifest, Target};
 use crate::cli::Cli;
@@ -174,13 +175,16 @@ fn render_section(
     out.push('\n');
     let width = entries
         .iter()
-        .map(|entry| entry.name.len())
+        .map(|entry| UnicodeWidthStr::width(entry.name.as_str()))
         .max()
         .unwrap_or(0);
     let marker = default_marker(prefs);
     for entry in entries {
-        let name_column = format!("  {:<width$}  ", entry.name, width = width);
-        out.push_str(&name_column);
+        let name_width = UnicodeWidthStr::width(entry.name.as_str());
+        out.push_str("  ");
+        out.push_str(&entry.name);
+        out.push_str(&" ".repeat(width.saturating_sub(name_width)));
+        out.push_str("  ");
         if let Some(description) = &entry.description {
             out.push_str(description);
         }
