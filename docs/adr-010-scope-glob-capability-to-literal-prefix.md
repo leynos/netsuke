@@ -6,7 +6,7 @@ Accepted.
 
 ## Date
 
-2026-08-09.
+2026-08-09
 
 ## Context and problem statement
 
@@ -42,9 +42,9 @@ prefix instead of at a fixed root:
   `[*]`, so `src/[*]x/generated/*.c` reaches `src/[*]x/generated/` rather
   than stopping at the first `[`.
 - **`GlobRoot` couples the handle and the prefix.** `walk::open_root_dir`
-  opens a `cap_std::fs::Dir` at the literal prefix using
-  `Dir::open_ambient_dir` and wraps it, together with the prefix, in a
-  `GlobRoot`. Every subsequent metadata lookup relativises the matched path
+  opens a `cap_std::fs::Dir` at the literal prefix one component at a time,
+  refusing symbolic links, and wraps it together with the lexical prefix in a
+  `GlobRoot`. Every subsequent metadata lookup relativizes the matched path
   against the prefix (`GlobRoot::relativise`) before resolving it through the
   handle, so the capability only ever sees paths inside the subtree it was
   opened at.
@@ -66,7 +66,7 @@ prefix instead of at a fixed root:
   ever match inside its literal prefix, so opening the capability there gives
   the metadata check exactly the authority the pattern could use, rather
   than the authority of the whole filesystem root or working directory.
-- **Relativisation keeps the capability boundary honest.** Resolving a
+- **Relativization keeps the capability boundary honest.** Resolving a
   matched path against the capability requires rebasing it onto the prefix
   first (`GlobRoot::relativise`); a path that does not start with the prefix
   cannot be looked up at all, so the capability cannot be handed an
@@ -76,6 +76,10 @@ prefix instead of at a fixed root:
   non-directory prefix as an empty expansion (rather than a hard failure)
   matches the semantics a caller already expects from a glob that matches no
   files.
+- **A symbolic-link prefix is rejected.** Opening each literal directory
+  component without following links prevents a pattern such as `src/link/*.c`
+  from gaining the authority of `link`'s target, while retaining the lexical
+  prefix in `GlobRoot` for later match relativization.
 - **Symbolic-link handling follows from capability semantics rather than
   being layered on top.** `cap_std` reports both an escaping symlink
   resolution and a resolution that leaves the capability's tree as
@@ -119,10 +123,9 @@ prefix instead of at a fixed root:
   and unreachable-symlink outcomes as low-cardinality counters
   (`netsuke_manifest_glob_expansions_total`,
   `netsuke_manifest_glob_entries_skipped_total`) labelled only by a closed
-  set of outcome and reason strings; tracing events carry the pattern and
-  prefix, which are manifest-author-supplied text already echoed back in
-  glob error messages, but never a matched path outside the literal prefix
-  the pattern itself named.
+  set of outcome and reason strings. Tracing preserves relative patterns and
+  prefixes, replaces absolute forms with `<absolute>`, and never carries a
+  matched path outside the literal prefix the pattern itself named.
 
 ## Alternatives considered
 

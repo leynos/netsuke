@@ -1051,6 +1051,8 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   scoped to the pattern's literal directory prefix, so it cannot inspect
   anything outside the subtree the pattern can match; the pattern match walk
   itself still uses ambient filesystem access.
+- Verbose glob tracing preserves relative patterns and prefixes, but replaces
+  absolute forms with `<absolute>`.
 - `raw` template output and handwritten shell fragments remain the manifest
   author's responsibility.
 - Literal shell dollar expressions currently require Ninja-aware escaping,

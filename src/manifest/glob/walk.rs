@@ -20,7 +20,8 @@
 use super::{
     GlobEntryResult, GlobErrorContext, GlobErrorType, GlobPattern, create_glob_error, diagnostics,
 };
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
+use cap_primitives::fs::{FollowSymlinks, open_dir_nofollow, open_parent_dir, stat};
 use cap_std::{ambient_authority, fs::Dir};
 use minijinja::Error;
 use std::io;
@@ -258,7 +259,7 @@ pub(super) fn unescape_literal_escapes(prefix: &str) -> String {
 /// empty result the matcher would produce.
 pub(super) fn open_root_dir(pattern: &GlobPattern) -> io::Result<Option<GlobRoot>> {
     let prefix = unescape_literal_escapes(literal_dir_prefix(pattern.normalized()));
-    match Dir::open_ambient_dir(&prefix, ambient_authority()) {
+    match open_literal_prefix(Utf8Path::new(&prefix)) {
         Ok(dir) => Ok(Some(GlobRoot {
             dir,
             prefix: Utf8PathBuf::from(prefix),
@@ -269,6 +270,58 @@ pub(super) fn open_root_dir(pattern: &GlobPattern) -> io::Result<Option<GlobRoot
         }
         Err(err) => Err(err),
     }
+}
+
+/// Open `prefix` without following a symbolic link in its literal components.
+///
+/// The only ambient opening establishes the lexical filesystem root for an
+/// absolute prefix, or the current directory for a relative one. Subsequent
+/// normal components use `open_dir_nofollow`, while `..` deliberately moves
+/// through the parent-directory capability so parent-relative patterns retain
+/// their existing behaviour.
+fn open_literal_prefix(prefix: &Utf8Path) -> io::Result<Dir> {
+    let (base, remainder) = if prefix.is_absolute() {
+        let root = prefix.ancestors().last().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "an absolute glob prefix must have a filesystem root",
+            )
+        })?;
+        let remainder = prefix.strip_prefix(root).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "an absolute glob prefix must start with its filesystem root",
+            )
+        })?;
+        (root, remainder)
+    } else {
+        (Utf8Path::new("."), prefix)
+    };
+    let mut dir = Dir::open_ambient_dir(base, ambient_authority())?.into_std_file();
+
+    for component in remainder.components() {
+        dir = match component {
+            Utf8Component::CurDir => dir,
+            Utf8Component::ParentDir => open_parent_dir(&dir, ambient_authority())?,
+            Utf8Component::Normal(name) => {
+                if stat(&dir, name.as_ref(), FollowSymlinks::No)?.is_symlink() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        "a glob literal prefix cannot traverse a symbolic link",
+                    ));
+                }
+                open_dir_nofollow(&dir, name.as_ref())?
+            }
+            Utf8Component::Prefix(_) | Utf8Component::RootDir => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "a glob prefix remainder cannot contain a filesystem root",
+                ));
+            }
+        };
+    }
+
+    Ok(Dir::from_std_file(dir))
 }
 
 /// Report whether `err` means the literal prefix names no usable directory.

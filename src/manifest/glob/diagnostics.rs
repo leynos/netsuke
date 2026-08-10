@@ -11,12 +11,10 @@
 //! Metric labels carry only a closed set of outcome and reason strings, never
 //! the pattern or a path, in line with the low-cardinality rule in `AGENTS.md`.
 //!
-//! Tracing events carry the pattern verbatim, and the literal prefix derived
-//! from it. **Both may be absolute paths**, because a manifest may write
-//! `glob('/opt/vendor/*.c')`. That is deliberate: the pattern is text the
-//! manifest author wrote and already sees quoted back in every glob error
-//! message, so redacting it in traces while printing it in errors would buy
-//! nothing. The prefix is a substring of the pattern and so reveals no more.
+//! Tracing events preserve relative patterns and prefixes, but replace either
+//! absolute form with the stable `<absolute>` marker. Errors still retain the
+//! caller's pattern so they can explain invalid input precisely; tracing does
+//! not need that detail to identify the expansion outcome.
 //!
 //! What tracing does not carry is a matched path. A skipped entry is recorded
 //! relative to the literal prefix, so the event names only what the pattern
@@ -32,6 +30,16 @@ use std::sync::Once;
 
 const EXPANSIONS_TOTAL: &str = "netsuke_manifest_glob_expansions_total";
 const ENTRIES_SKIPPED_TOTAL: &str = "netsuke_manifest_glob_entries_skipped_total";
+const ABSOLUTE_PATH: &str = "<absolute>";
+
+/// Return a useful trace value without disclosing an absolute path.
+fn bounded_path(value: &str) -> &str {
+    if Utf8Path::new(value).is_absolute() {
+        ABSOLUTE_PATH
+    } else {
+        value
+    }
+}
 
 /// Register the metric descriptions once per process.
 fn describe_metrics() {
@@ -57,8 +65,8 @@ pub(super) fn record_unopenable_prefix(pattern: &GlobPattern, prefix: &str) {
     describe_metrics();
     counter!(EXPANSIONS_TOTAL, "outcome" => "unopenable_prefix").increment(1);
     tracing::debug!(
-        pattern = %pattern.raw(),
-        prefix = %prefix,
+        pattern = %bounded_path(pattern.raw()),
+        prefix = %bounded_path(prefix),
         "glob literal prefix names no directory; expanding to no matches"
     );
 }
@@ -68,7 +76,7 @@ pub(super) fn record_expansion_matched(pattern: &GlobPattern, matches: usize) {
     describe_metrics();
     counter!(EXPANSIONS_TOTAL, "outcome" => "matched").increment(1);
     tracing::debug!(
-        pattern = %pattern.raw(),
+        pattern = %bounded_path(pattern.raw()),
         matches,
         "glob expansion complete"
     );

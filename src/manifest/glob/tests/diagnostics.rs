@@ -71,11 +71,17 @@ fn a_completed_expansion_counts_its_matches() -> Result<()> {
         counter_value(&snapshot, EXPANSIONS, ("outcome", "matched")) == Some(1),
         "a completed expansion should count once as matched: {snapshot:?}"
     );
+    let expansion_event = events
+        .iter()
+        .find(|event| event.contains("glob expansion complete"))
+        .context("expected a completed-expansion event")?;
     ensure!(
-        events
-            .iter()
-            .any(|event| event.contains("glob expansion complete") && event.contains("matches=2")),
-        "expected the match count in a trace event: {events:?}"
+        expansion_event.contains("matches=2") && expansion_event.contains("pattern=<absolute>"),
+        "expected bounded fields in the trace event: {expansion_event}"
+    );
+    ensure!(
+        !expansion_event.contains(&temp.path().display().to_string()),
+        "the event must not disclose the absolute path: {expansion_event}"
     );
     Ok(())
 }
@@ -101,8 +107,12 @@ fn an_unopenable_prefix_counts_and_names_the_prefix() -> Result<()> {
         .find(|event| event.contains("glob literal prefix names no directory"))
         .context("expected an unopenable-prefix event")?;
     ensure!(
-        prefix_event.contains("no-such-dir"),
-        "the event should name the prefix: {prefix_event}"
+        prefix_event.contains("pattern=<absolute>") && prefix_event.contains("prefix=<absolute>"),
+        "expected bounded fields in the trace event: {prefix_event}"
+    );
+    ensure!(
+        !prefix_event.contains(&temp.path().display().to_string()),
+        "the event must not disclose the absolute path: {prefix_event}"
     );
     Ok(())
 }

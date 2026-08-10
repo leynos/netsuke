@@ -34,6 +34,12 @@ fn glob_paths_rejects_unmatched_brace() {
     assert_eq!(err.kind(), ErrorKind::SyntaxError);
 }
 
+#[test]
+fn glob_paths_rejects_an_invalid_pattern_before_a_missing_prefix() {
+    let err = glob_paths("missing/[").expect_err("an invalid pattern should error");
+    assert_eq!(err.kind(), ErrorKind::SyntaxError);
+}
+
 #[cfg(unix)]
 #[test]
 fn glob_paths_accepts_escaped_braces_and_matches_files() -> Result<()> {

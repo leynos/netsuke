@@ -68,7 +68,9 @@
   directory now expands to no matches, and a match reached through a symbolic
   link — the match itself or an intermediate directory — that resolves
   outside that prefix or dangles is skipped rather than failing the
-  expansion, though a cyclic symbolic link still fails the expansion
+  expansion, though a cyclic symbolic link still fails the expansion; opening
+  a symbolic-link prefix now fails, and glob tracing redacts absolute patterns
+  and prefixes as `<absolute>`
   ([#173](https://github.com/leynos/netsuke/issues/173))
 
 ### Removed

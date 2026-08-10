@@ -1610,6 +1610,11 @@ directory prefix, computed by `walk::literal_dir_prefix`: the pattern text up
 to the first `*`, `?`, `[`, or `{`, trimmed back to the last path separator.
 For `src/**/*.c` that prefix is `src/`.
 
+`walk::open_literal_prefix` owns the opening policy: it opens the lexical root
+or current directory ambiently once, then opens each normal literal component
+without following symbolic links. It is used only to establish `GlobRoot`;
+metadata lookups remain the responsibility of that root.
+
 - **Bracketed literal escapes do not stop the scan.** The `[*]`, `[?]`,
   `[[]`, `[]]`, `[{]`, and `[}]` forms that `normalize::force_literal_escapes`
   produces from `\*`, `\?`, and the like name a literal character rather than
@@ -1663,17 +1668,12 @@ having to reproduce it.
   (`unreachable_symlink`, `not_a_file`). Labels carry only these closed sets,
   never the pattern or a path, in line with the low-cardinality rule in
   `AGENTS.md`.
-- **Tracing** — events carry the pattern and the literal prefix derived from
-  it verbatim, and both may be absolute paths, since a manifest may write
-  `glob('/opt/vendor/*.c')`. That is deliberate: the pattern is text the
-  manifest author wrote and already sees quoted back in every glob error
-  message, so redacting it in traces while printing it in errors would buy
-  nothing, and the prefix, being a substring of the pattern, reveals no more.
-  What tracing does not carry is a matched path: a skipped entry is recorded
-  relative to the literal prefix, so the event never discloses where that
-  prefix sits on disk. This is looser than the `path_hash` convention used
-  for configuration discovery, where the paths are ones the tool found
-  rather than ones the user named.
+- **Tracing** — events preserve relative patterns and prefixes, but replace
+  either absolute form with the stable `<absolute>` marker. Errors retain the
+  caller's pattern so they can explain invalid input precisely. What tracing
+  does not carry is a matched path: a skipped entry is recorded relative to
+  the literal prefix, so the event never discloses where that prefix sits on
+  disk.
 
 ## Test isolation utilities
 

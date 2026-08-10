@@ -6,7 +6,7 @@ schema = 1
 stems = []
 
 [words]
-accepted = []
+accepted = ["relativization", "relativizes"]
 
 [words.corrections]
 

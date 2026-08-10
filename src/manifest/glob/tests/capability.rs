@@ -107,6 +107,29 @@ fn open_root_dir_scopes_past_an_escaped_metacharacter() -> Result<()> {
     Ok(())
 }
 
+/// A literal prefix must not follow a symbolic link before its capability is
+/// established, even when the linked directory would contain a valid match.
+#[cfg(unix)]
+#[test]
+fn open_root_dir_rejects_a_symlinked_literal_prefix() -> Result<()> {
+    let temp = tempdir()?;
+    let target = temp.path().join("target");
+    test_fs::create_dir(&target)?;
+    test_fs::write(target.join("in.c"), "in")?;
+    test_fs::symlink("target", temp.path().join("link"))?;
+
+    let pattern = GlobPattern::new(&format!("{}/link/*.c", temp.path().display()))?;
+    ensure!(
+        open_root_dir(&pattern).is_err(),
+        "a symbolic-link prefix must not receive a capability"
+    );
+    ensure!(
+        glob_paths(pattern.raw()).is_err(),
+        "a symbolic-link prefix must fail rather than traverse its target"
+    );
+    Ok(())
+}
+
 /// Restores a directory's mode so the temporary tree can still be removed.
 #[cfg(unix)]
 struct ModeGuard(Utf8PathBuf);

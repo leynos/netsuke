@@ -145,6 +145,17 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     };
 
     let pattern_state = GlobPattern::new(pattern)?;
+    let entries = glob_with(pattern_state.normalized(), opts).map_err(|e| {
+        create_glob_error(
+            &GlobErrorContext {
+                pattern: pattern_state.raw().to_owned(),
+                error_char: char::from(0),
+                position: 0,
+                error_type: GlobErrorType::InvalidPattern,
+            },
+            Some(e.to_string()),
+        )
+    })?;
 
     let Some(root) = open_root_dir(&pattern_state).map_err(|e| {
         create_glob_error(
@@ -164,17 +175,6 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
         return Ok(Vec::new());
     };
 
-    let entries = glob_with(pattern_state.normalized(), opts).map_err(|e| {
-        create_glob_error(
-            &GlobErrorContext {
-                pattern: pattern_state.raw().to_owned(),
-                error_char: char::from(0),
-                position: 0,
-                error_type: GlobErrorType::InvalidPattern,
-            },
-            Some(e.to_string()),
-        )
-    })?;
     let mut paths = Vec::new();
     for entry in entries {
         if let Some(p) = process_glob_entry(entry, &pattern_state, &root)? {
