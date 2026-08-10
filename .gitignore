@@ -4,6 +4,8 @@ target/
 *.swp
 .crush/
 .claude/
+.vtcode/
+vtcode.toml
 .memdb/
 .grepai/
 build.ninja
