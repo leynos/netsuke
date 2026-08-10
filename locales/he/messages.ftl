@@ -172,6 +172,8 @@ ir.invalid_command = שיבוץ לא תקין בפקודה: { $snippet }.
 # שגיאות ביצירת קובצי Ninja.
 ninja_gen.missing_action = הפעולה „{ $id }” שאליה מפנה קשת בנייה חסרה.
 ninja_gen.format = לא ניתן היה לעצב את פלט מניפסט Ninja.
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # אימות תבניות מארח.
 host_pattern.empty = תבנית המארח אינה יכולה להיות ריקה.
@@ -412,3 +414,4 @@ example.errors_found = { $count ->
     [many] נמצאו { $count } שגיאות.
    *[other] נמצאו { $count } שגיאות.
 }
+

@@ -172,6 +172,8 @@ ir.invalid_command = Nieprawidłowa interpolacja w poleceniu: { $snippet }.
 # Błędy generowania plików Ninja.
 ninja_gen.missing_action = Brakuje akcji „{ $id }”, do której odwołuje się krawędź budowania.
 ninja_gen.format = Nie udało się sformatować wyjścia manifestu Ninja.
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # Walidacja wzorców hostów.
 host_pattern.empty = Wzorzec hosta nie może być pusty.
@@ -413,3 +415,4 @@ example.errors_found = { $count ->
     [many] Znaleziono { $count } błędów.
    *[other] Znaleziono { $count } błędu.
 }
+

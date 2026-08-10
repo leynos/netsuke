@@ -172,6 +172,8 @@ ir.invalid_command = درج نامعتبر در فرمان: { $snippet }.
 # خطاهای تولید پرونده‌های Ninja.
 ninja_gen.missing_action = کنش «{ $id }» که یک یال ساخت به آن ارجاع می‌دهد وجود ندارد.
 ninja_gen.format = قالب‌بندی خروجی مانیفست Ninja ممکن نشد.
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # اعتبارسنجی الگوهای میزبان.
 host_pattern.empty = الگوی میزبان نباید تهی باشد.
@@ -407,3 +409,4 @@ example.errors_found = { $count ->
     [one] ‏{ $count } خطا یافت شد.
    *[other] ‏{ $count } خطا یافت شد.
 }
+

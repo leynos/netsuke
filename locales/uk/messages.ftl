@@ -172,6 +172,8 @@ ir.invalid_command = Некоректна підстановка в команд
 # Помилки створення файлів Ninja.
 ninja_gen.missing_action = Відсутня дія «{ $id }», на яку посилається ребро збирання.
 ninja_gen.format = Не вдалося відформатувати вивід маніфесту Ninja.
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # Перевірка шаблонів вузлів.
 host_pattern.empty = Шаблон вузла не повинен бути порожнім.
@@ -414,3 +416,4 @@ example.errors_found = { $count ->
     [many] Знайдено { $count } помилок.
    *[other] Знайдено { $count } помилки.
 }
+

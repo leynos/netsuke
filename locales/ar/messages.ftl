@@ -172,6 +172,8 @@ ir.invalid_command = إقحام غير صالح داخل الأمر: { $snippet 
 # أخطاء توليد ملفات Ninja.
 ninja_gen.missing_action = الإجراء «{ $id }» الذي تشير إليه حافة بناء مفقود.
 ninja_gen.format = تعذّر تنسيق مخرجات ملف بيانات Ninja.
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # التحقق من أنماط المضيفين.
 host_pattern.empty = يجب ألّا يكون نمط المضيف فارغًا.
@@ -415,3 +417,4 @@ example.errors_found = { $count ->
     [many] عُثر على { $count } خطأً.
    *[other] عُثر على { $count } خطأ.
 }
+

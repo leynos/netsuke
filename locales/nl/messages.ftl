@@ -172,6 +172,8 @@ ir.invalid_command = Ongeldige interpolatie in de opdracht: { $snippet }.
 # Fouten bij het genereren van Ninja.
 ninja_gen.missing_action = De actie ‘{ $id }’ waarnaar een bouwtak verwijst, ontbreekt.
 ninja_gen.format = De uitvoer van het Ninja-manifest kon niet worden opgemaakt.
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # Validatie van hostpatronen.
 host_pattern.empty = Het hostpatroon mag niet leeg zijn.
@@ -408,3 +410,4 @@ example.errors_found = { $count ->
     [one] { $count } fout gevonden.
    *[other] { $count } fouten gevonden.
 }
+

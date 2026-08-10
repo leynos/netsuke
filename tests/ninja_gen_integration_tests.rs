@@ -467,3 +467,93 @@ fn generate_format_error() -> Result<()> {
     );
     Ok(())
 }
+
+#[rstest]
+fn serial_graph_rejected_by_string_only_generation() -> Result<()> {
+    let action = Action {
+        recipe: Recipe::Command {
+            command: "echo done".into(),
+        },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    };
+    let edge = BuildEdge {
+        action_id: "a".into(),
+        inputs: Vec::new(),
+        implicit_deps: vec![Utf8PathBuf::from("dep1"), Utf8PathBuf::from("dep2")],
+        dependency_order: netsuke::ast::DependencyOrder::Serial,
+        explicit_outputs: vec![Utf8PathBuf::from("all")],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: false,
+        always: false,
+    };
+    let mut graph = BuildGraph::default();
+    graph.actions.insert("a".into(), action);
+    graph.targets.insert(Utf8PathBuf::from("all"), edge);
+
+    let mut out = String::new();
+    let err = generate_into(&graph, &mut out)
+        .err()
+        .context("serial graph must be rejected by string-only generation")?;
+    ensure!(
+        matches!(err, NinjaGenError::DyndepFilesRequired { .. }),
+        "expected DyndepFilesRequired, got {err:?}"
+    );
+    ensure!(
+        out.is_empty(),
+        "string-only generation must not write partial output"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn bundle_generation_for_serial_graph_materializes_sidecars() -> Result<()> {
+    let action = Action {
+        recipe: Recipe::Command {
+            command: "echo done".into(),
+        },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    };
+    let edge = BuildEdge {
+        action_id: "a".into(),
+        inputs: Vec::new(),
+        implicit_deps: vec![Utf8PathBuf::from("check-fmt"), Utf8PathBuf::from("test")],
+        dependency_order: netsuke::ast::DependencyOrder::Serial,
+        explicit_outputs: vec![Utf8PathBuf::from("all")],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: false,
+        always: false,
+    };
+    let mut graph = BuildGraph::default();
+    graph.actions.insert("a".into(), action);
+    graph.targets.insert(Utf8PathBuf::from("all"), edge);
+
+    let bundle = netsuke::ninja_gen::generate_bundle(&graph)?;
+    ensure!(
+        bundle
+            .build_file()
+            .contains("ninja_required_version = 1.10"),
+        "serial bundle must declare version floor"
+    );
+    ensure!(
+        bundle.dyndep_files().len() == 2,
+        "expected two sidecars, got {}",
+        bundle.dyndep_files().len()
+    );
+    for dd in bundle.dyndep_files() {
+        ensure!(
+            dd.content().starts_with("ninja_dyndep_version = 1\n"),
+            "sidecar must start with dyndep version header"
+        );
+    }
+    Ok(())
+}

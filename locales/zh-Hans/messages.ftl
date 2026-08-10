@@ -171,6 +171,8 @@ ir.invalid_command = 命令中的插值无效：{ $snippet }。
 # Ninja 生成错误。
 ninja_gen.missing_action = 缺少构建边引用的动作“{ $id }”。
 ninja_gen.format = 无法格式化 Ninja 清单的输出。
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # 主机模式校验。
 host_pattern.empty = 主机模式不能为空。
@@ -404,3 +406,4 @@ example.errors_found = { $count ->
     [0] 未发现错误。
    *[other] 发现 { $count } 个错误。
 }
+

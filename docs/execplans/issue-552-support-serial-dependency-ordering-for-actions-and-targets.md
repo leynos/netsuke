@@ -183,7 +183,16 @@ criterion in issue #552 and all repository gates pass.
   re-exported through `ir`. Updated every direct `BuildEdge` literal, doctest,
   and fixture to compile. `cargo check --all-targets` and 739 lib + touched
   integration tests pass.
-- [ ] Implement deterministic Ninja bundle and dyndep lowering.
+- [x] (2026-08-10) Implemented deterministic Ninja bundle and dyndep lowering:
+  the new `src/ninja_gen/dyndep.rs` submodule adds `GeneratedNinja` (main
+  text plus content-addressed `GeneratedDyndep` sidecars) and
+  `generate_bundle`. Serial multi-dependency edges lower into one phony gate
+  and sidecar per dependency; the version floor is emitted only when gates
+  exist; sidecars are content-addressed beneath `.netsuke/dyndep`; and
+  string-only generation returns `NinjaGenError::DyndepFilesRequired`
+  without writing partial output. Added reserved-namespace collision errors
+  and localization keys across all 35 catalogues. Unit, integration, and
+  doctests pass.
 - [ ] Implement atomic dyndep sidecar materialization in every CLI path.
 - [ ] Complete user, design, developer, layout, roadmap, and ADR documentation.
 - [ ] Run focused verification and all repository gates.

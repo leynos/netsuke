@@ -172,6 +172,8 @@ ir.invalid_command = コマンドの補間が無効です: { $snippet }。
 # Ninja 生成のエラー。
 ninja_gen.missing_action = ビルド辺が参照するアクション「{ $id }」がありません。
 ninja_gen.format = Ninja マニフェストの出力を整形できませんでした。
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # ホストパターンの検証。
 host_pattern.empty = ホストパターンを空にすることはできません。
@@ -405,3 +407,4 @@ example.errors_found = { $count ->
     [0] エラーは見つかりませんでした。
    *[other] { $count } 件のエラーが見つかりました。
 }
+

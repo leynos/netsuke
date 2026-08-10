@@ -172,6 +172,8 @@ ir.invalid_command = Cur a-steach mì-dhligheach san àithne: { $snippet }.
 # Mearachdan dèanamh Ninja.
 ninja_gen.missing_action = Tha an gnìomh “{ $id }” air a bheil oir togail a' toirt iomradh a dhìth.
 ninja_gen.format = Cha b' urrainnear às-chur an fhoirm-liosta Ninja fhòrmatadh.
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # Dearbhadh phàtranan òstair.
 host_pattern.empty = Chan fhaod pàtran an òstair a bhith falamh.
@@ -412,3 +414,4 @@ example.errors_found = { $count ->
     [few] Chaidh { $count } mearachdan a lorg.
    *[other] Chaidh { $count } mearachd a lorg.
 }
+

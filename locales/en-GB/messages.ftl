@@ -172,6 +172,8 @@ ir.invalid_command = Invalid command interpolation: { $snippet }.
 # Ninja generation errors.
 ninja_gen.missing_action = Missing action '{ $id }' referenced by a build edge.
 ninja_gen.format = Failed to format the Ninja manifest output.
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # Host pattern validation.
 host_pattern.empty = Host pattern must not be empty.
@@ -408,3 +410,4 @@ example.errors_found = { $count ->
     [one] { $count } error found.
    *[other] { $count } errors found.
 }
+

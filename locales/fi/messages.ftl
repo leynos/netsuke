@@ -172,6 +172,8 @@ ir.invalid_command = Virheellinen komennon sijoitus: { $snippet }.
 # Ninja-generoinnin virheet.
 ninja_gen.missing_action = Toiminto ”{ $id }”, johon koontikaari viittaa, puuttuu.
 ninja_gen.format = Ninja-manifestin tulostetta ei voitu muotoilla.
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # Isäntähahmojen tarkistus.
 host_pattern.empty = Isäntähahmo ei saa olla tyhjä.
@@ -409,3 +411,4 @@ example.errors_found = { $count ->
     [one] Löytyi { $count } virhe.
    *[other] Löytyi { $count } virhettä.
 }
+

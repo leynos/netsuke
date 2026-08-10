@@ -172,6 +172,8 @@ ir.invalid_command = Interpolare nevalidă în comandă: { $snippet }.
 # Erori la generarea fișierelor Ninja.
 ninja_gen.missing_action = Lipsește acțiunea „{ $id }” la care face referire o muchie de construire.
 ninja_gen.format = Ieșirea manifestului Ninja nu a putut fi formatată.
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # Validarea tiparelor de gazdă.
 host_pattern.empty = Tiparul de gazdă nu trebuie să fie gol.
@@ -411,3 +413,4 @@ example.errors_found = { $count ->
     [few] S-au găsit { $count } erori.
    *[other] S-au găsit { $count } de erori.
 }
+

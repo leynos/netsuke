@@ -149,6 +149,8 @@ define_keys! {
     IR_INVALID_COMMAND => "ir.invalid_command",
     NINJA_GEN_MISSING_ACTION => "ninja_gen.missing_action",
     NINJA_GEN_FORMAT => "ninja_gen.format",
+    NINJA_GEN_DYNDEP_FILES_REQUIRED => "ninja_gen.dyndep_files_required",
+    NINJA_GEN_RESERVED_OUTPUT_PATH => "ninja_gen.reserved_output_path",
     HOST_PATTERN_EMPTY => "host_pattern.empty",
     HOST_PATTERN_CONTAINS_SCHEME => "host_pattern.contains_scheme",
     HOST_PATTERN_CONTAINS_SLASH => "host_pattern.contains_slash",

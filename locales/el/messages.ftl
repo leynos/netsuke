@@ -173,6 +173,8 @@ ir.invalid_command = Μη έγκυρη παρεμβολή στην εντολή:
 # Σφάλματα παραγωγής αρχείων Ninja.
 ninja_gen.missing_action = Λείπει η ενέργεια «{ $id }» στην οποία παραπέμπει ακμή δόμησης.
 ninja_gen.format = Δεν ήταν δυνατή η μορφοποίηση της εξόδου του δηλωτικού Ninja.
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # Έλεγχος μοτίβων κόμβων.
 host_pattern.empty = Το μοτίβο κόμβου δεν πρέπει να είναι κενό.
@@ -409,3 +411,4 @@ example.errors_found = { $count ->
     [one] Βρέθηκε { $count } σφάλμα.
    *[other] Βρέθηκαν { $count } σφάλματα.
 }
+

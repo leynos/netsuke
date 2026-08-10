@@ -172,6 +172,8 @@ ir.invalid_command = Érvénytelen behelyettesítés a parancsban: { $snippet }.
 # A Ninja-fájlok előállításának hibái.
 ninja_gen.missing_action = Hiányzik a(z) „{ $id }” művelet, amelyre egy építési él hivatkozik.
 ninja_gen.format = A Ninja-jegyzék kimenetét nem sikerült formázni.
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # A gépminták ellenőrzése.
 host_pattern.empty = A gépminta nem lehet üres.
@@ -409,3 +411,4 @@ example.errors_found = { $count ->
     [one] { $count } hiba található.
    *[other] { $count } hiba található.
 }
+

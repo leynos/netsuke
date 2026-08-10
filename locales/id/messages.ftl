@@ -172,6 +172,8 @@ ir.invalid_command = Penyisipan tidak sah pada perintah: { $snippet }.
 # Galat pembuatan berkas Ninja.
 ninja_gen.missing_action = Tindakan "{ $id }" yang dirujuk sebuah sisi build tidak ada.
 ninja_gen.format = Keluaran manifes Ninja tidak dapat diformat.
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # Validasi pola host.
 host_pattern.empty = Pola host tidak boleh kosong.
@@ -406,3 +408,4 @@ example.errors_found = { $count ->
     [0] Tidak ada galat yang ditemukan.
    *[other] { $count } galat ditemukan.
 }
+

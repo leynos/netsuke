@@ -6,6 +6,9 @@
 //! generated Ninja file is written by the runner and `generate` command for
 //! downstream execution by the Ninja build system.
 
+pub mod dyndep;
+pub use dyndep::{GeneratedDyndep, GeneratedNinja, generate_bundle};
+
 use crate::ast::{Recipe, StringOrList};
 use crate::ir::{BuildEdge, BuildGraph};
 use crate::localization::{self, keys};
@@ -14,11 +17,11 @@ use itertools::Itertools;
 use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter, Write};
 
-#[path = "ninja_gen_command_list.rs"]
+#[path = "../ninja_gen_command_list.rs"]
 pub(crate) mod ninja_gen_command_list;
-#[path = "ninja_gen_error.rs"]
+#[path = "../ninja_gen_error.rs"]
 mod ninja_gen_error;
-#[path = "ninja_gen_validation.rs"]
+#[path = "../ninja_gen_validation.rs"]
 mod ninja_gen_validation;
 
 use ninja_gen_command_list::{ActionId, CommandListEntry, command_list_entry};
@@ -119,6 +122,11 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 /// structure, a command-list `eval` payload cannot be analysed, a command-list
 /// entry contains a Ninja control character, or writing to the output fails.
 pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), NinjaGenError> {
+    if graph_requires_dyndep(graph) {
+        return Err(NinjaGenError::DyndepFilesRequired {
+            message: localization::message(keys::NINJA_GEN_DYNDEP_FILES_REQUIRED),
+        });
+    }
     let mut actions: Vec<_> = graph.actions.iter().collect();
     actions.sort_by_key(|(id, _)| *id);
     for (zero_based_action_index, (id, action)) in actions.into_iter().enumerate() {
@@ -164,12 +172,12 @@ pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), Ni
 }
 
 /// Convert a slice of paths into a space-separated string.
-fn join(paths: &[Utf8PathBuf]) -> String {
+pub(crate) fn join(paths: &[Utf8PathBuf]) -> String {
     paths.iter().map(|p| p.as_str()).join(" ")
 }
 
 /// Generate a stable key for a list of paths.
-fn path_key(paths: &[Utf8PathBuf]) -> String {
+pub(crate) fn path_key(paths: &[Utf8PathBuf]) -> String {
     let mut parts: Vec<String> = paths.iter().map(|p| p.as_str().to_owned()).collect();
     parts.sort_unstable();
     let separator = char::from(0).to_string();
@@ -193,8 +201,34 @@ fn escape_script(script: &str) -> String {
         .replace('\n', "\\n")
 }
 
+/// Escape a Ninja path for embedding in a build or dyndep document.
+///
+/// Ninja uses `$` as its escape character: space becomes `$ `, a literal
+/// dollar becomes `$$`, and the other token-splitting metacharacters (`:`, `|`)
+/// gain a `$` prefix. Unescaped spaces split a single path into multiple
+/// tokens, so every metacharacter must be escaped.
+pub(crate) fn escape_ninja_path(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    for ch in path.chars() {
+        match ch {
+            ' ' => out.push_str("$ "),
+            '$' => out.push_str("$$"),
+            ':' => out.push_str("$:"),
+            '|' => out.push_str("$|"),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
+/// Whether the graph contains an edge whose serial list needs dyndep gates.
+pub(crate) fn graph_requires_dyndep(graph: &BuildGraph) -> bool {
+    graph.targets.values().any(|edge| {
+        edge.dependency_order == crate::ast::DependencyOrder::Serial && edge.implicit_deps.len() > 1
+    })
+}
 /// Wrapper struct to display a rule with its identifier.
-struct NamedAction<'a> {
+pub(crate) struct NamedAction<'a> {
     id: &'a str,
     action: &'a crate::ir::Action,
 }
@@ -303,7 +337,7 @@ impl Display for NamedAction<'_> {
 }
 
 /// Wrapper struct to display a build edge.
-struct DisplayEdge<'a> {
+pub(crate) struct DisplayEdge<'a> {
     edge: &'a BuildEdge,
     action_restat: bool,
 }
@@ -330,11 +364,11 @@ impl Display for DisplayEdge<'_> {
     }
 }
 #[cfg(test)]
-#[path = "ninja_gen_property_tests.rs"]
+#[path = "../ninja_gen_property_tests.rs"]
 mod property_tests;
 #[cfg(test)]
-#[path = "ninja_gen_test_support.rs"]
+#[path = "../ninja_gen_test_support.rs"]
 mod test_support;
 #[cfg(test)]
-#[path = "ninja_gen_tests.rs"]
+#[path = "../ninja_gen_tests.rs"]
 mod tests;

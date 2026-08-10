@@ -172,6 +172,8 @@ ir.invalid_command = การแทรกค่าในคำสั่งไ�
 # ข้อผิดพลาดในการสร้างไฟล์ Ninja
 ninja_gen.missing_action = ไม่มีการกระทำ “{ $id }” ที่เส้นเชื่อมของการสร้างอ้างถึง
 ninja_gen.format = จัดรูปแบบผลลัพธ์ของไฟล์รายการ Ninja ไม่สำเร็จ
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # การตรวจสอบรูปแบบโฮสต์
 host_pattern.empty = รูปแบบโฮสต์ต้องไม่ว่างเปล่า
@@ -405,3 +407,4 @@ example.errors_found = { $count ->
     [0] ไม่พบข้อผิดพลาด
    *[other] พบข้อผิดพลาด { $count } รายการ
 }
+

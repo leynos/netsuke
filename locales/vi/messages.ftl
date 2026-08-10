@@ -172,6 +172,8 @@ ir.invalid_command = Nội suy không hợp lệ trong lệnh: { $snippet }.
 # Lỗi khi tạo tệp Ninja.
 ninja_gen.missing_action = Thiếu hành động “{ $id }” mà một cạnh dựng tham chiếu.
 ninja_gen.format = Không định dạng được đầu ra của tệp kê khai Ninja.
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # Kiểm tra mẫu máy chủ.
 host_pattern.empty = Mẫu máy chủ không được để trống.
@@ -405,3 +407,4 @@ example.errors_found = { $count ->
     [0] Không tìm thấy lỗi nào.
    *[other] Tìm thấy { $count } lỗi.
 }
+

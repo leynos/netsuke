@@ -172,6 +172,8 @@ ir.invalid_command = Некорректная подстановка в кома
 # Ошибки генерации файлов Ninja.
 ninja_gen.missing_action = Отсутствует действие «{ $id }», на которое ссылается ребро сборки.
 ninja_gen.format = Не удалось отформатировать вывод манифеста Ninja.
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # Проверка шаблонов узлов.
 host_pattern.empty = Шаблон узла не должен быть пустым.
@@ -414,3 +416,4 @@ example.errors_found = { $count ->
     [many] Найдено { $count } ошибок.
    *[other] Найдено { $count } ошибки.
 }
+

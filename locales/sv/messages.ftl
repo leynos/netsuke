@@ -172,6 +172,8 @@ ir.invalid_command = Ogiltig interpolering i kommandot: { $snippet }.
 # Fel vid generering av Ninja.
 ninja_gen.missing_action = Åtgärden ”{ $id }” som en byggbåge hänvisar till saknas.
 ninja_gen.format = Ninja-manifestets utdata kunde inte formateras.
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # Validering av värdmönster.
 host_pattern.empty = Värdmönstret får inte vara tomt.
@@ -407,3 +409,4 @@ example.errors_found = { $count ->
     [one] { $count } fel hittades.
    *[other] { $count } fel hittades.
 }
+

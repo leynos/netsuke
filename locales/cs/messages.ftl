@@ -172,6 +172,8 @@ ir.invalid_command = Neplatné vložení v příkazu: { $snippet }.
 # Chyby při generování souborů Ninja.
 ninja_gen.missing_action = Chybí akce „{ $id }“, na kterou odkazuje hrana sestavení.
 ninja_gen.format = Výstup manifestu Ninja se nepodařilo naformátovat.
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # Ověření vzorů hostitelů.
 host_pattern.empty = Vzor hostitele nesmí být prázdný.
@@ -412,3 +414,4 @@ example.errors_found = { $count ->
     [many] Nalezeno { $count } chyby.
    *[other] Nalezeno { $count } chyb.
 }
+

@@ -172,6 +172,8 @@ ir.invalid_command = आदेश में अमान्य प्रक्�
 # Ninja निर्माण की त्रुटियाँ।
 ninja_gen.missing_action = किसी बिल्ड कोर द्वारा संदर्भित क्रिया “{ $id }” अनुपस्थित है।
 ninja_gen.format = Ninja मैनिफ़ेस्ट का निर्गम स्वरूपित नहीं किया जा सका।
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # होस्ट प्रतिरूपों का सत्यापन।
 host_pattern.empty = होस्ट प्रतिरूप रिक्त नहीं होना चाहिए।
@@ -410,3 +412,4 @@ example.errors_found = { $count ->
     [one] { $count } त्रुटि मिली।
    *[other] { $count } त्रुटियाँ मिलीं।
 }
+

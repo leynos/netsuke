@@ -172,6 +172,8 @@ ir.invalid_command = Ugyldig indsættelse i kommandoen: { $snippet }.
 # Fejl under generering af Ninja.
 ninja_gen.missing_action = Handlingen "{ $id }", som en byggekant henviser til, mangler.
 ninja_gen.format = Ninja-manifestets output kunne ikke formateres.
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # Validering af værtsmønstre.
 host_pattern.empty = Værtsmønsteret må ikke være tomt.
@@ -407,3 +409,4 @@ example.errors_found = { $count ->
     [one] { $count } fejl fundet.
    *[other] { $count } fejl fundet.
 }
+

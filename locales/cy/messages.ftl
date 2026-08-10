@@ -172,6 +172,8 @@ ir.invalid_command = Mewnosodiad annilys yn y gorchymyn: { $snippet }.
 # Gwallau cynhyrchu Ninja.
 ninja_gen.missing_action = Mae'r weithred ‘{ $id }’ y cyfeirir ati gan ymyl adeiladu ar goll.
 ninja_gen.format = Methwyd â fformatio allbwn y maniffest Ninja.
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # Dilysu patrymau gwesteiwyr.
 host_pattern.empty = Rhaid i'r patrwm gwesteiwr beidio â bod yn wag.
@@ -415,3 +417,4 @@ example.errors_found = { $count ->
     [many] Cafwyd hyd i { $count } gwall.
    *[other] Cafwyd hyd i { $count } gwall.
 }
+

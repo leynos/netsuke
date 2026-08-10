@@ -172,6 +172,8 @@ ir.invalid_command = Komutta geçersiz yerleştirme: { $snippet }.
 # Ninja üretimi hataları.
 ninja_gen.missing_action = Bir derleme kenarının başvurduğu "{ $id }" eylemi eksik.
 ninja_gen.format = Ninja bildiriminin çıktısı biçimlendirilemedi.
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # Makine deseni doğrulaması.
 host_pattern.empty = Makine deseni boş olmamalıdır.
@@ -408,3 +410,4 @@ example.errors_found = { $count ->
     [one] { $count } hata bulundu.
    *[other] { $count } hata bulundu.
 }
+

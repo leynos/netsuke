@@ -172,6 +172,8 @@ ir.invalid_command = 명령의 보간이 잘못되었습니다: { $snippet }.
 # Ninja 생성 오류.
 ninja_gen.missing_action = 빌드 간선이 참조하는 동작 '{ $id }'이(가) 없습니다.
 ninja_gen.format = Ninja 매니페스트 출력의 서식을 지정하지 못했습니다.
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # 호스트 패턴 검증.
 host_pattern.empty = 호스트 패턴은 비어 있을 수 없습니다.
@@ -405,3 +407,4 @@ example.errors_found = { $count ->
     [0] 오류를 찾지 못했습니다.
    *[other] 오류 { $count }개를 찾았습니다.
 }
+
