@@ -105,11 +105,9 @@ impl GlobRoot {
     /// [`Self::traverses_symlink`] has already settled it.
     fn ancestor_is_symlink(&self, relative: &Utf8Path) -> bool {
         let mut ancestor = Utf8PathBuf::new();
-        let mut components = relative.components().peekable();
-        while let Some(component) = components.next() {
-            if components.peek().is_none() {
-                break;
-            }
+        let mut components = relative.components();
+        components.next_back();
+        for component in components {
             ancestor.push(component);
             match self.dir.symlink_metadata(&ancestor) {
                 Ok(metadata) if metadata.is_symlink() => return true,
