@@ -106,6 +106,12 @@ runner.io.derive_relative_path = 无法推导 Ninja 的相对路径。
 runner.io.non_utf8_path = 不支持非 UTF-8 路径（路径：{ $path }）。
 runner.io.write_stdout = 无法将 Ninja 清单写入标准输出。
 runner.io.flush_stdout = 无法刷新标准输出的缓冲区。
+runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
+runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
+runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
+runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
+runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
+runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
 
 # 清单诊断。
 manifest.parse = 清单解析失败。
@@ -406,4 +412,5 @@ example.errors_found = { $count ->
     [0] 未发现错误。
    *[other] 发现 { $count } 个错误。
 }
+
 

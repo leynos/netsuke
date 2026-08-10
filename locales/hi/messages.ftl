@@ -107,6 +107,12 @@ runner.io.derive_relative_path = सापेक्ष Ninja पथ नहीं
 runner.io.non_utf8_path = UTF-8 से भिन्न पथ समर्थित नहीं हैं (पथ: { $path })।
 runner.io.write_stdout = Ninja मैनिफ़ेस्ट मानक निर्गम पर नहीं लिखा जा सका।
 runner.io.flush_stdout = मानक निर्गम का बफ़र खाली नहीं किया जा सका।
+runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
+runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
+runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
+runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
+runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
+runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
 
 # मैनिफ़ेस्ट के निदान।
 manifest.parse = मैनिफ़ेस्ट का विश्लेषण विफल रहा।
@@ -412,4 +418,5 @@ example.errors_found = { $count ->
     [one] { $count } त्रुटि मिली।
    *[other] { $count } त्रुटियाँ मिलीं।
 }
+
 

@@ -107,6 +107,12 @@ runner.io.derive_relative_path = تعذّر اشتقاق مسار Ninja النس
 runner.io.non_utf8_path = المسارات غير المرمّزة بـ UTF-8 غير مدعومة (المسار: { $path }).
 runner.io.write_stdout = تعذّرت كتابة ملف بيانات Ninja إلى المخرج القياسي.
 runner.io.flush_stdout = تعذّر إفراغ ذاكرة المخرج القياسي.
+runner.io.dyndep.create_dir = ‏ Failed to create the dyndep directory { $path }.
+runner.io.dyndep.read = ‏ Failed to read generated dyndep file at { $path }.
+runner.io.dyndep.write = ‏ Failed to write generated dyndep file at { $path }.
+runner.io.dyndep.rename = ‏ Failed to finalize generated dyndep file at { $path }.
+runner.io.dyndep.corrupt = ‏ Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
+runner.io.dyndep.race = ‏ Another process wrote dyndep file { $path } but its content could not be verified.
 
 # تشخيصات ملف البيانات.
 manifest.parse = فشل تحليل ملف البيانات.
@@ -172,8 +178,8 @@ ir.invalid_command = إقحام غير صالح داخل الأمر: { $snippet 
 # أخطاء توليد ملفات Ninja.
 ninja_gen.missing_action = الإجراء «{ $id }» الذي تشير إليه حافة بناء مفقود.
 ninja_gen.format = تعذّر تنسيق مخرجات ملف بيانات Ninja.
-ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
-ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
+ninja_gen.dyndep_files_required = ‏ This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = ‏ The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # التحقق من أنماط المضيفين.
 host_pattern.empty = يجب ألّا يكون نمط المضيف فارغًا.
@@ -417,4 +423,6 @@ example.errors_found = { $count ->
     [many] عُثر على { $count } خطأً.
    *[other] عُثر على { $count } خطأ.
 }
+
+
 

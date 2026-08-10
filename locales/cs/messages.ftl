@@ -107,6 +107,12 @@ runner.io.derive_relative_path = Relativní cestu pro Ninju se nepodařilo odvod
 runner.io.non_utf8_path = Cesty, které nejsou v UTF-8, nejsou podporovány (cesta: { $path }).
 runner.io.write_stdout = Manifest Ninja se nepodařilo zapsat na standardní výstup.
 runner.io.flush_stdout = Vyrovnávací paměť standardního výstupu se nepodařilo vyprázdnit.
+runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
+runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
+runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
+runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
+runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
+runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
 
 # Diagnostika manifestu.
 manifest.parse = Zpracování manifestu selhalo.
@@ -414,4 +420,5 @@ example.errors_found = { $count ->
     [many] Nalezeno { $count } chyby.
    *[other] Nalezeno { $count } chyb.
 }
+
 

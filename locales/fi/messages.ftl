@@ -107,6 +107,12 @@ runner.io.derive_relative_path = Suhteellista Ninja-polkua ei voitu johtaa.
 runner.io.non_utf8_path = Polkuja, jotka eivät ole UTF-8:aa, ei tueta (polku: { $path }).
 runner.io.write_stdout = Ninja-manifestia ei voitu kirjoittaa vakiotulosteeseen.
 runner.io.flush_stdout = Vakiotulosteen puskuria ei voitu tyhjentää.
+runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
+runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
+runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
+runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
+runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
+runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
 
 # Manifestin diagnostiikka.
 manifest.parse = Manifestin jäsentäminen epäonnistui.
@@ -411,4 +417,5 @@ example.errors_found = { $count ->
     [one] Löytyi { $count } virhe.
    *[other] Löytyi { $count } virhettä.
 }
+
 

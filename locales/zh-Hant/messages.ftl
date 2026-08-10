@@ -106,6 +106,12 @@ runner.io.derive_relative_path = 無法推導 Ninja 的相對路徑。
 runner.io.non_utf8_path = 不支援非 UTF-8 的路徑（路徑：{ $path }）。
 runner.io.write_stdout = 無法將 Ninja 資訊清單寫入標準輸出。
 runner.io.flush_stdout = 無法清空標準輸出的緩衝區。
+runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
+runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
+runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
+runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
+runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
+runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
 
 # 資訊清單診斷。
 manifest.parse = 資訊清單剖析失敗。
@@ -406,4 +412,5 @@ example.errors_found = { $count ->
     [0] 未發現錯誤。
    *[other] 發現 { $count } 個錯誤。
 }
+
 

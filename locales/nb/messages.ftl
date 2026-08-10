@@ -107,6 +107,12 @@ runner.io.derive_relative_path = Den relative Ninja-stien kunne ikke utledes.
 runner.io.non_utf8_path = Stier som ikke er UTF-8, støttes ikke (sti: { $path }).
 runner.io.write_stdout = Ninja-manifestet kunne ikke skrives til stdout.
 runner.io.flush_stdout = Bufferen for stdout kunne ikke tømmes.
+runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
+runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
+runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
+runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
+runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
+runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
 
 # Manifestdiagnostikk.
 manifest.parse = Innlesingen av manifestet mislyktes.
@@ -409,4 +415,5 @@ example.errors_found = { $count ->
     [one] { $count } feil funnet.
    *[other] { $count } feil funnet.
 }
+
 

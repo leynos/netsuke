@@ -107,6 +107,12 @@ runner.io.derive_relative_path = อนุมานเส้นทางสั�
 runner.io.non_utf8_path = ไม่รองรับเส้นทางที่ไม่ใช่ UTF-8 (เส้นทาง: { $path })
 runner.io.write_stdout = เขียนไฟล์รายการ Ninja ไปยังเอาต์พุตมาตรฐานไม่สำเร็จ
 runner.io.flush_stdout = ล้างบัฟเฟอร์ของเอาต์พุตมาตรฐานไม่สำเร็จ
+runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
+runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
+runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
+runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
+runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
+runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
 
 # การวินิจฉัยไฟล์รายการ
 manifest.parse = การแจงไฟล์รายการล้มเหลว
@@ -407,4 +413,5 @@ example.errors_found = { $count ->
     [0] ไม่พบข้อผิดพลาด
    *[other] พบข้อผิดพลาด { $count } รายการ
 }
+
 

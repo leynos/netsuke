@@ -108,6 +108,12 @@ runner.io.derive_relative_path = Impossibile derivare il percorso Ninja relativo
 runner.io.non_utf8_path = I percorsi non UTF-8 non sono supportati (percorso: { $path }).
 runner.io.write_stdout = Impossibile scrivere il manifest Ninja su stdout.
 runner.io.flush_stdout = Impossibile svuotare il buffer di stdout.
+runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
+runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
+runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
+runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
+runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
+runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
 
 # Diagnostica del manifest.
 manifest.parse = Analisi del manifest non riuscita.
@@ -410,4 +416,5 @@ example.errors_found = { $count ->
     [one] Trovato { $count } errore.
    *[other] Trovati { $count } errori.
 }
+
 

@@ -107,6 +107,12 @@ runner.io.derive_relative_path = استخراج مسیر نسبی Ninja ممکن
 runner.io.non_utf8_path = مسیرهایی که UTF-8 نیستند پشتیبانی نمی‌شوند (مسیر: { $path }).
 runner.io.write_stdout = نوشتن مانیفست Ninja در خروجی استاندارد ممکن نشد.
 runner.io.flush_stdout = تخلیهٔ میان‌گیر خروجی استاندارد ممکن نشد.
+runner.io.dyndep.create_dir = ‏ Failed to create the dyndep directory { $path }.
+runner.io.dyndep.read = ‏ Failed to read generated dyndep file at { $path }.
+runner.io.dyndep.write = ‏ Failed to write generated dyndep file at { $path }.
+runner.io.dyndep.rename = ‏ Failed to finalize generated dyndep file at { $path }.
+runner.io.dyndep.corrupt = ‏ Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
+runner.io.dyndep.race = ‏ Another process wrote dyndep file { $path } but its content could not be verified.
 
 # تشخیص‌های مانیفست.
 manifest.parse = تجزیهٔ مانیفست ناکام ماند.
@@ -172,8 +178,8 @@ ir.invalid_command = درج نامعتبر در فرمان: { $snippet }.
 # خطاهای تولید پرونده‌های Ninja.
 ninja_gen.missing_action = کنش «{ $id }» که یک یال ساخت به آن ارجاع می‌دهد وجود ندارد.
 ninja_gen.format = قالب‌بندی خروجی مانیفست Ninja ممکن نشد.
-ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
-ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
+ninja_gen.dyndep_files_required = ‏ This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.reserved_output_path = ‏ The path '{ $path }' is reserved for Netsuke's serial dependency state.
 
 # اعتبارسنجی الگوهای میزبان.
 host_pattern.empty = الگوی میزبان نباید تهی باشد.
@@ -409,4 +415,6 @@ example.errors_found = { $count ->
     [one] ‏{ $count } خطا یافت شد.
    *[other] ‏{ $count } خطا یافت شد.
 }
+
+
 

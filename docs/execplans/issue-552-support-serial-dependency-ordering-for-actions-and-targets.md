@@ -193,7 +193,18 @@ criterion in issue #552 and all repository gates pass.
   without writing partial output. Added reserved-namespace collision errors
   and localization keys across all 35 catalogues. Unit, integration, and
   doctests pass.
-- [ ] Implement atomic dyndep sidecar materialization in every CLI path.
+- [x] (2026-08-10) Implemented atomic dyndep sidecar materialization in
+  every CLI path. `src/runner/process/dyndep_files.rs` materializes the
+  bundle sidecars beneath `.netsuke/dyndep` relative to the effective Ninja
+  working directory, using capability-scoped writes, a same-directory
+  `create_new` temporary file, and an atomic rename. Existing content is
+  verified and reused; corruption and concurrent-writer outcomes are
+  covered. `generate_ninja` now routes every build, clean, and generate
+  invocation through `generate_bundle` plus materialization before invoking
+  Ninja. Added runtime tests driving real Ninja: strict declaration order,
+  failure short-circuiting, and materializer idempotence/corruption paths.
+  Verified end-to-end with a real serial manifest and real Ninja 1.11.1
+  (order observed: fmt, lint, test, all). Full suite: 1930 tests pass.
 - [ ] Complete user, design, developer, layout, roadmap, and ADR documentation.
 - [ ] Run focused verification and all repository gates.
 - [ ] Commit each green logical change and record final evidence here.

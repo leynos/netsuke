@@ -9,6 +9,7 @@ use std::{io, path::Path, process::Command};
 mod child_exit;
 mod command_list_telemetry;
 mod command_logging;
+mod dyndep_files;
 mod failure_attribution;
 mod file_io;
 mod ninja_program;
@@ -31,6 +32,15 @@ pub use ninja_program::resolve_ninja_program_utf8;
 #[cfg(test)]
 use ninja_program::{resolve_ninja_program_utf8_with, resolve_ninja_program_with};
 use output_forwarding::{StatusObserver, spawn_and_stream_output};
+
+
+};
+pub use dyndep_files::materialize_dyndep_files;
+pub use file_io::*;
+pub use ninja_program::resolve_ninja_program;
+#[cfg(doctest)]
+pub use ninja_program::resolve_ninja_program_utf8;
+#[cfg(test)]
 
 mod command_env;
 mod configure;

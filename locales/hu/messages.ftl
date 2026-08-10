@@ -107,6 +107,12 @@ runner.io.derive_relative_path = A viszonylagos Ninja-útvonalat nem sikerült l
 runner.io.non_utf8_path = A nem UTF-8 útvonalak nem támogatottak (útvonal: { $path }).
 runner.io.write_stdout = A Ninja-jegyzéket nem sikerült a szabványos kimenetre írni.
 runner.io.flush_stdout = A szabványos kimenet pufferét nem sikerült üríteni.
+runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
+runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
+runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
+runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
+runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
+runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
 
 # Jegyzékdiagnosztika.
 manifest.parse = A jegyzék feldolgozása sikertelen.
@@ -411,4 +417,5 @@ example.errors_found = { $count ->
     [one] { $count } hiba található.
    *[other] { $count } hiba található.
 }
+
 

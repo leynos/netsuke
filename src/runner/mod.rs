@@ -361,9 +361,10 @@ fn generate_ninja(
         PipelineStage::NinjaSynthesisAndExecution,
         tool_key,
     );
-    let ninja = ninja_gen::generate(&graph)
+    let bundle = ninja_gen::generate_bundle(&graph)
         .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))?;
-    Ok(NinjaContent::new(ninja))
+    process::materialize_dyndep_files(cli, bundle.dyndep_files())?;
+    Ok(NinjaContent::new(bundle.build_file().to_owned()))
 }
 
 pub(super) fn load_manifest_with_stage_reporting(

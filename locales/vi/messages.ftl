@@ -107,6 +107,12 @@ runner.io.derive_relative_path = Không suy ra được đường dẫn Ninja t�
 runner.io.non_utf8_path = Không hỗ trợ đường dẫn không phải UTF-8 (đường dẫn: { $path }).
 runner.io.write_stdout = Không ghi được tệp kê khai Ninja ra đầu ra chuẩn.
 runner.io.flush_stdout = Không xả được bộ đệm đầu ra chuẩn.
+runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
+runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
+runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
+runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
+runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
+runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
 
 # Chẩn đoán tệp kê khai.
 manifest.parse = Phân tích tệp kê khai thất bại.
@@ -407,4 +413,5 @@ example.errors_found = { $count ->
     [0] Không tìm thấy lỗi nào.
    *[other] Tìm thấy { $count } lỗi.
 }
+
 

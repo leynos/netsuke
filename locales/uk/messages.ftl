@@ -107,6 +107,12 @@ runner.io.derive_relative_path = Не вдалося вивести віднос
 runner.io.non_utf8_path = Шляхи, відмінні від UTF-8, не підтримуються (шлях: { $path }).
 runner.io.write_stdout = Не вдалося записати маніфест Ninja у стандартний потік виводу.
 runner.io.flush_stdout = Не вдалося скинути буфер стандартного потоку виводу.
+runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
+runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
+runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
+runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
+runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
+runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
 
 # Діагностика маніфесту.
 manifest.parse = Не вдалося розібрати маніфест.
@@ -416,4 +422,5 @@ example.errors_found = { $count ->
     [many] Знайдено { $count } помилок.
    *[other] Знайдено { $count } помилки.
 }
+
 

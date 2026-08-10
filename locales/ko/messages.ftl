@@ -107,6 +107,12 @@ runner.io.derive_relative_path = 상대 Ninja 경로를 유도하지 못했습�
 runner.io.non_utf8_path = UTF-8이 아닌 경로는 지원하지 않습니다(경로: { $path }).
 runner.io.write_stdout = Ninja 매니페스트를 표준 출력에 쓰지 못했습니다.
 runner.io.flush_stdout = 표준 출력의 버퍼를 비우지 못했습니다.
+runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
+runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
+runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
+runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
+runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
+runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
 
 # 매니페스트 진단.
 manifest.parse = 매니페스트 해석에 실패했습니다.
@@ -407,4 +413,5 @@ example.errors_found = { $count ->
     [0] 오류를 찾지 못했습니다.
    *[other] 오류 { $count }개를 찾았습니다.
 }
+
 

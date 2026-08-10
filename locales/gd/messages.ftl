@@ -107,6 +107,12 @@ runner.io.derive_relative_path = Cha b' urrainnear slighe Ninja choimeasach a th
 runner.io.non_utf8_path = Chan eil taic ann do shlighean nach eil nan UTF-8 (slighe: { $path }).
 runner.io.write_stdout = Cha b' urrainnear am foirm-liosta Ninja a sgrìobhadh don às-chur àbhaisteach.
 runner.io.flush_stdout = Cha b' urrainnear bufair an às-chuir àbhaistich fhalmhachadh.
+runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
+runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
+runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
+runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
+runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
+runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
 
 # Breithneachadh an fhoirm-liosta.
 manifest.parse = Dh'fhàillig parsadh an fhoirm-liosta.
@@ -414,4 +420,5 @@ example.errors_found = { $count ->
     [few] Chaidh { $count } mearachdan a lorg.
    *[other] Chaidh { $count } mearachd a lorg.
 }
+
 

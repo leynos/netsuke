@@ -128,6 +128,19 @@ impl GeneratedNinja {
     }
 }
 
+#[cfg(test)]
+impl GeneratedDyndep {
+    /// Build a sidecar fixture for tests that must construct bundles from
+    /// scratch rather than through .
+    #[must_use]
+    pub(crate) fn fixture(relative_path: Utf8PathBuf, content: String) -> Self {
+        Self {
+            relative_path,
+            content,
+        }
+    }
+}
+
 /// Generate a complete Ninja bundle for `graph`, materializing staged dyndep
 /// sidecars for every multi-dependency serial edge.
 ///

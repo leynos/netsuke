@@ -107,6 +107,12 @@ runner.io.derive_relative_path = Den relativa Ninja-sökvägen kunde inte härle
 runner.io.non_utf8_path = Sökvägar som inte är UTF-8 stöds inte (sökväg: { $path }).
 runner.io.write_stdout = Ninja-manifestet kunde inte skrivas till stdout.
 runner.io.flush_stdout = Bufferten för stdout kunde inte tömmas.
+runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
+runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
+runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
+runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
+runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
+runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
 
 # Manifestdiagnostik.
 manifest.parse = Tolkningen av manifestet misslyckades.
@@ -409,4 +415,5 @@ example.errors_found = { $count ->
     [one] { $count } fel hittades.
    *[other] { $count } fel hittades.
 }
+
 
