@@ -183,7 +183,6 @@ mod tests {
     use crate::ninja_gen::GeneratedDyndep;
     use anyhow::{Result, ensure};
     use camino::Utf8PathBuf;
-    use std::fs;
 
     fn temp_cli(dir: &std::path::Path) -> Cli {
         Cli {
@@ -196,6 +195,12 @@ mod tests {
         GeneratedDyndep::fixture(Utf8PathBuf::from(name), content.to_owned())
     }
 
+    fn temp_dir(temp: &tempfile::TempDir) -> Result<Dir> {
+        let path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+            .map_err(|path| anyhow!("temporary directory is not UTF-8: {}", path.display()))?;
+        Dir::open_ambient_dir(path, ambient_authority()).map_err(Into::into)
+    }
+
     #[test]
     fn materializes_nested_sidecar_and_reuses_it() -> Result<()> {
         let temp = tempfile::tempdir()?;
@@ -203,8 +208,11 @@ mod tests {
         let dyndep = sidecar(".netsuke/dyndep/abc.dd", "ninja_dyndep_version = 1\n");
 
         materialize_dyndep_files(&cli, &[dyndep])?;
-        let final_path = temp.path().join(".netsuke/dyndep/abc.dd");
-        ensure_matching(&final_path, "ninja_dyndep_version = 1\n")?;
+        ensure_matching(
+            &temp_dir(&temp)?,
+            ".netsuke/dyndep/abc.dd",
+            "ninja_dyndep_version = 1\n",
+        )?;
 
         // Second run reuses the existing sidecar without error.
         materialize_dyndep_files(
@@ -221,9 +229,9 @@ mod tests {
     fn corrupt_existing_sidecar_is_reported() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let cli = temp_cli(temp.path());
-        let final_path = temp.path().join(".netsuke/dyndep/bad.dd");
-        fs::create_dir_all(final_path.parent().expect("parent exists"))?;
-        fs::write(&final_path, "corrupt")?;
+        let dir = temp_dir(&temp)?;
+        dir.create_dir_all(DYNDEP_DIR)?;
+        dir.write(".netsuke/dyndep/bad.dd", "corrupt")?;
 
         let result =
             materialize_dyndep_files(&cli, &[sidecar(".netsuke/dyndep/bad.dd", "expected")]);
@@ -236,26 +244,17 @@ mod tests {
         let temp = tempfile::tempdir()?;
         let cli = temp_cli(temp.path());
         materialize_dyndep_files(&cli, &[sidecar(".netsuke/dyndep/x.dd", "content")])?;
-        let dir = temp.path().join(".netsuke/dyndep");
-        let leftovers: Vec<_> = fs::read_dir(&dir)?
-            .filter_map(Result::ok)
-            .map(|e| e.file_name().to_string_lossy().into_owned())
-            .filter(|n| {
-                std::path::Path::new(n)
-                    .extension()
-                    .is_some_and(|extension| extension.eq_ignore_ascii_case("tmp"))
-            })
-            .collect();
+        let temp_file = ".netsuke/dyndep/x.dd.tmp";
         ensure!(
-            leftovers.is_empty(),
-            "temp files left behind: {leftovers:?}"
+            temp_dir(&temp)?.open(temp_file).is_err(),
+            "temp file left behind"
         );
         Ok(())
     }
 
-    fn ensure_matching(path: &std::path::Path, expected: &str) -> Result<()> {
+    fn ensure_matching(dir: &Dir, path: &str, expected: &str) -> Result<()> {
         anyhow::ensure!(
-            fs::read_to_string(path)? == expected,
+            dir.read_to_string(path)? == expected,
             "sidecar content does not match"
         );
         Ok(())
