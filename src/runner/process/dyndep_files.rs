@@ -113,31 +113,56 @@ fn read_verified(dir: &Dir, rel: &Utf8Path, expected: &str) -> Result<ReadOutcom
 /// rename, tolerating a concurrent writer that wins the race.
 fn write_atomic(dir: &Dir, rel: &Utf8Path, content: &str) -> Result<()> {
     let temp = unique_temp_name(rel);
+    let Some(mut file) = create_temp_file(dir, &temp, rel, content)? else {
+        return Ok(());
+    };
+    write_and_sync_temp_file(&mut file, rel, content)?;
+    rename_temp_file(dir, &temp, rel, content)
+}
+
+/// Create a temporary sidecar or confirm that a concurrent writer finished it.
+fn create_temp_file(
+    dir: &Dir,
+    temp: &Utf8Path,
+    rel: &Utf8Path,
+    content: &str,
+) -> Result<Option<cap_std::fs_utf8::File>> {
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
-    let mut file = match dir.open_with(&temp, &options) {
-        Ok(file) => file,
+    match dir.open_with(temp, &options) {
+        Ok(file) => Ok(Some(file)),
         Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
-            // Another process won the race for our temporary name; verify the
-            // final path and treat matching content as success.
-            return match read_verified(dir, rel, content)? {
-                ReadOutcome::Matching => Ok(()),
-                ReadOutcome::Mismatch => Err(anyhow!(
-                    localization::message(keys::RUNNER_IO_DYNDEP_CORRUPT)
-                        .with_arg("path", rel.as_str())
-                )),
-                ReadOutcome::Missing => Err(anyhow!(
-                    localization::message(keys::RUNNER_IO_DYNDEP_RACE)
-                        .with_arg("path", rel.as_str())
-                )),
-            };
+            handle_temp_name_collision(dir, rel, content)
         }
-        Err(err) => {
-            return Err(err).with_context(|| {
-                localization::message(keys::RUNNER_IO_DYNDEP_WRITE).with_arg("path", rel.as_str())
-            });
-        }
-    };
+        Err(err) => Err(err).with_context(|| {
+            localization::message(keys::RUNNER_IO_DYNDEP_WRITE).with_arg("path", rel.as_str())
+        }),
+    }
+}
+
+/// Verify the final sidecar after another writer used the temporary name.
+fn handle_temp_name_collision(
+    dir: &Dir,
+    rel: &Utf8Path,
+    content: &str,
+) -> Result<Option<cap_std::fs_utf8::File>> {
+    match read_verified(dir, rel, content)? {
+        ReadOutcome::Matching => Ok(None),
+        ReadOutcome::Mismatch => Err(anyhow!(
+            localization::message(keys::RUNNER_IO_DYNDEP_CORRUPT).with_arg("path", rel.as_str())
+        )),
+        ReadOutcome::Missing => Err(anyhow!(
+            localization::message(keys::RUNNER_IO_DYNDEP_RACE).with_arg("path", rel.as_str())
+        )),
+    }
+}
+
+/// Write, flush, and synchronize a temporary sidecar before renaming it.
+fn write_and_sync_temp_file(
+    file: &mut cap_std::fs_utf8::File,
+    rel: &Utf8Path,
+    content: &str,
+) -> Result<()> {
     file.write_all(content.as_bytes()).with_context(|| {
         localization::message(keys::RUNNER_IO_DYNDEP_WRITE).with_arg("path", rel.as_str())
     })?;
@@ -147,19 +172,34 @@ fn write_atomic(dir: &Dir, rel: &Utf8Path, content: &str) -> Result<()> {
     file.sync_all().with_context(|| {
         localization::message(keys::RUNNER_IO_DYNDEP_WRITE).with_arg("path", rel.as_str())
     })?;
+    Ok(())
+}
+
+/// Rename a completed temporary sidecar into its final location.
+fn rename_temp_file(dir: &Dir, temp: &Utf8Path, rel: &Utf8Path, content: &str) -> Result<()> {
+    match dir.rename(temp, dir, rel) {
+        Ok(()) => Ok(()),
+        Err(err) => handle_rename_failure(dir, rel, content, err),
+    }
+}
+
+/// Verify a final sidecar when another process wins the rename race.
+fn handle_rename_failure(
+    dir: &Dir,
+    rel: &Utf8Path,
+    content: &str,
+    rename_error: std::io::Error,
+) -> Result<()> {
     // Rename is relative to the same directory; `rename` replaces an existing
     // destination, so if another process already wrote the final file, the
     // atomic replace yields content identical to ours.
-    if let Err(err) = dir.rename(&temp, dir, rel) {
-        // The final file may have appeared via a concurrent writer; verify it.
-        if read_verified(dir, rel, content)? != ReadOutcome::Matching {
-            return Err(err).with_context(|| {
-                localization::message(keys::RUNNER_IO_DYNDEP_RENAME).with_arg("path", rel.as_str())
-            });
-        }
-        drop(dir.remove_file(&temp));
+    if read_verified(dir, rel, content)? == ReadOutcome::Matching {
+        drop(dir.remove_file(unique_temp_name(rel)));
+        return Ok(());
     }
-    Ok(())
+    Err(rename_error).with_context(|| {
+        localization::message(keys::RUNNER_IO_DYNDEP_RENAME).with_arg("path", rel.as_str())
+    })
 }
 
 /// Produce a deterministic, low-collision temporary name beside the final path.
@@ -250,6 +290,21 @@ mod tests {
             "temp file left behind"
         );
         Ok(())
+    }
+
+    #[test]
+    fn matching_final_sidecar_handles_existing_temp_file() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let dir = temp_dir(&temp)?;
+        let rel = Utf8Path::new(".netsuke/dyndep/matching.dd");
+        let content = "ninja_dyndep_version = 1\n";
+        dir.create_dir_all(DYNDEP_DIR)?;
+        dir.write(rel, content)?;
+        dir.write(unique_temp_name(rel), "concurrent temporary content")?;
+
+        write_atomic(&dir, rel, content)?;
+
+        ensure_matching(&dir, rel.as_str(), content)
     }
 
     fn ensure_matching(dir: &Dir, path: &str, expected: &str) -> Result<()> {
