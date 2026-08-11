@@ -52,6 +52,20 @@ fn graph_with_edge(edge: BuildEdge) -> Result<BuildGraph> {
     Ok(graph)
 }
 
+fn assert_edge_produces_no_staging(edge: BuildEdge) -> Result<()> {
+    let graph = graph_with_edge(edge)?;
+    let bundle = generate_bundle(&graph)?;
+    ensure!(
+        !bundle.build_file().contains("ninja_required_version"),
+        "edge must not emit a version floor"
+    );
+    ensure!(
+        bundle.dyndep_files().is_empty(),
+        "edge must not produce sidecars"
+    );
+    Ok(())
+}
+
 #[test]
 fn serial_bundle_emits_version_and_staged_sidecars() -> Result<()> {
     let graph = graph_with_edge(serial_edge("all", &["check-fmt", "lint", "test"]))?;
@@ -121,32 +135,12 @@ fn serial_sidecars_reveal_real_deps_in_order() -> Result<()> {
 
 #[test]
 fn parallel_edges_produce_no_sidecars() -> Result<()> {
-    let graph = graph_with_edge(parallel_edge("all", &["dep1", "dep2"]))?;
-    let bundle = generate_bundle(&graph)?;
-    ensure!(
-        !bundle.build_file().contains("ninja_required_version"),
-        "parallel bundle must not emit a version floor"
-    );
-    ensure!(
-        bundle.dyndep_files().is_empty(),
-        "parallel graph must produce no sidecars"
-    );
-    Ok(())
+    assert_edge_produces_no_staging(parallel_edge("all", &["dep1", "dep2"]))
 }
 
 #[test]
 fn one_element_serial_list_needs_no_gates() -> Result<()> {
-    let graph = graph_with_edge(serial_edge("all", &["dep1"]))?;
-    let bundle = generate_bundle(&graph)?;
-    ensure!(
-        !bundle.build_file().contains("ninja_required_version"),
-        "single-dependency serial list must not emit a version floor"
-    );
-    ensure!(
-        bundle.dyndep_files().is_empty(),
-        "single-dependency serial list must produce no sidecars"
-    );
-    Ok(())
+    assert_edge_produces_no_staging(serial_edge("all", &["dep1"]))
 }
 
 #[test]
