@@ -6,7 +6,7 @@ expression: rendered
 Actions:
   lint          Run rustdoc, Clippy, and Whitaker [★ default]
   test          Run unit, behavioural, UI, and documentation tests [★ default]
-  undocumented  
+  undocumented
 
 Targets:
   target/release/catnap  Build the optimized release binary

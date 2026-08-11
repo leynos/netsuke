@@ -184,8 +184,8 @@ fn render_section(
         out.push_str("  ");
         out.push_str(&entry.name);
         out.push_str(&" ".repeat(width.saturating_sub(name_width)));
-        out.push_str("  ");
         if let Some(description) = &entry.description {
+            out.push_str("  ");
             out.push_str(description);
         }
         if entry.is_default {
