@@ -20,7 +20,7 @@ fn action(command: &str) -> Action {
 }
 
 fn serial_edge(output: &str, deps: &[&str]) -> BuildEdge {
-    let implicit_deps: Vec<_> = deps.iter().map(|d| Utf8PathBuf::from(d)).collect();
+    let implicit_deps: Vec<_> = deps.iter().map(Utf8PathBuf::from).collect();
     BuildEdge {
         action_id: "a".into(),
         inputs: Vec::new(),
@@ -40,16 +40,21 @@ fn parallel_edge(output: &str, deps: &[&str]) -> BuildEdge {
     edge
 }
 
-fn graph_with_edge(edge: BuildEdge) -> BuildGraph {
+fn graph_with_edge(edge: BuildEdge) -> Result<BuildGraph> {
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), action("echo done"));
-    graph.targets.insert(edge.explicit_outputs[0].clone(), edge);
-    graph
+    let output = edge
+        .explicit_outputs
+        .first()
+        .cloned()
+        .context("test edge must have an output")?;
+    graph.targets.insert(output, edge);
+    Ok(graph)
 }
 
 #[test]
 fn serial_bundle_emits_version_and_staged_sidecars() -> Result<()> {
-    let graph = graph_with_edge(serial_edge("all", &["check-fmt", "lint", "test"]));
+    let graph = graph_with_edge(serial_edge("all", &["check-fmt", "lint", "test"]))?;
     let bundle = generate_bundle(&graph)?;
     ensure!(
         bundle
@@ -86,9 +91,13 @@ fn serial_bundle_emits_version_and_staged_sidecars() -> Result<()> {
 
 #[test]
 fn serial_sidecars_reveal_real_deps_in_order() -> Result<()> {
-    let graph = graph_with_edge(serial_edge("all", &["check-fmt", "lint", "test"]));
+    let graph = graph_with_edge(serial_edge("all", &["check-fmt", "lint", "test"]))?;
     let bundle = generate_bundle(&graph)?;
-    let contents: Vec<&str> = bundle.dyndep_files().iter().map(|d| d.content()).collect();
+    let contents: Vec<&str> = bundle
+        .dyndep_files()
+        .iter()
+        .map(GeneratedDyndep::content)
+        .collect();
     // Sidecar order follows declaration order because the first sidecar has no
     // predecessor while later sidecars are produced by ordered edges.
     let fmt_at = contents
@@ -112,7 +121,7 @@ fn serial_sidecars_reveal_real_deps_in_order() -> Result<()> {
 
 #[test]
 fn parallel_edges_produce_no_sidecars() -> Result<()> {
-    let graph = graph_with_edge(parallel_edge("all", &["dep1", "dep2"]));
+    let graph = graph_with_edge(parallel_edge("all", &["dep1", "dep2"]))?;
     let bundle = generate_bundle(&graph)?;
     ensure!(
         !bundle.build_file().contains("ninja_required_version"),
@@ -127,7 +136,7 @@ fn parallel_edges_produce_no_sidecars() -> Result<()> {
 
 #[test]
 fn one_element_serial_list_needs_no_gates() -> Result<()> {
-    let graph = graph_with_edge(serial_edge("all", &["dep1"]));
+    let graph = graph_with_edge(serial_edge("all", &["dep1"]))?;
     let bundle = generate_bundle(&graph)?;
     ensure!(
         !bundle.build_file().contains("ninja_required_version"),
@@ -142,7 +151,7 @@ fn one_element_serial_list_needs_no_gates() -> Result<()> {
 
 #[test]
 fn repeated_dependency_keeps_separate_stage_sidecars() -> Result<()> {
-    let graph = graph_with_edge(serial_edge("all", &["same", "same"]));
+    let graph = graph_with_edge(serial_edge("all", &["same", "same"]))?;
     let bundle = generate_bundle(&graph)?;
     // Each gate stage is distinct, so each stage has its own content-addressed
     // sidecar even when the revealed dependency is the same node. Ninja
@@ -161,7 +170,11 @@ fn repeated_dependency_keeps_separate_stage_sidecars() -> Result<()> {
         "each stage needs its own sidecar, got {}",
         bundle.dyndep_files().len()
     );
-    let contents: Vec<&str> = bundle.dyndep_files().iter().map(|d| d.content()).collect();
+    let contents: Vec<&str> = bundle
+        .dyndep_files()
+        .iter()
+        .map(GeneratedDyndep::content)
+        .collect();
     ensure!(
         contents.iter().all(|c| c.contains("same")),
         "every stage sidecar must reveal the shared dependency"
@@ -173,7 +186,7 @@ fn repeated_dependency_keeps_separate_stage_sidecars() -> Result<()> {
 fn reserved_output_namespace_is_rejected() -> Result<()> {
     let mut edge = parallel_edge("all", &["dep"]);
     edge.explicit_outputs = vec![Utf8PathBuf::from(".netsuke/serial/x")];
-    let graph = graph_with_edge(edge);
+    let graph = graph_with_edge(edge)?;
     let err = generate_bundle(&graph)
         .err()
         .context("reserved path must be rejected")?;

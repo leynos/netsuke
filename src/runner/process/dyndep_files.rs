@@ -37,7 +37,7 @@ pub fn materialize_dyndep_files(cli: &Cli, dyndep_files: &[GeneratedDyndep]) -> 
     let dir = open_effective_dir(cli)?;
     dir.create_dir_all(DYNDEP_DIR).with_context(|| {
         localization::message(keys::RUNNER_IO_DYNDEP_CREATE_DIR)
-            .with_arg("path", DYNDEP_DIR.to_string())
+            .with_arg("path", DYNDEP_DIR.to_owned())
     })?;
     for sidecar in dyndep_files {
         materialize_one(&dir, sidecar)?;
@@ -157,7 +157,7 @@ fn write_atomic(dir: &Dir, rel: &Utf8Path, content: &str) -> Result<()> {
                 localization::message(keys::RUNNER_IO_DYNDEP_RENAME).with_arg("path", rel.as_str())
             });
         }
-        let _ = dir.remove_file(&temp);
+        drop(dir.remove_file(&temp));
     }
     Ok(())
 }
@@ -169,9 +169,10 @@ fn write_atomic(dir: &Dir, rel: &Utf8Path, content: &str) -> Result<()> {
 /// re-verification of the final content.
 fn unique_temp_name(rel: &Utf8Path) -> Utf8PathBuf {
     let name = rel.file_name().unwrap_or("sidecar.dd");
-    rel.parent()
-        .map(|parent| parent.join(format!("{name}.tmp")))
-        .unwrap_or_else(|| Utf8PathBuf::from(format!("{name}.tmp")))
+    rel.parent().map_or_else(
+        || Utf8PathBuf::from(format!("{name}.tmp")),
+        |parent| parent.join(format!("{name}.tmp")),
+    )
 }
 
 #[cfg(test)]
@@ -237,9 +238,13 @@ mod tests {
         materialize_dyndep_files(&cli, &[sidecar(".netsuke/dyndep/x.dd", "content")])?;
         let dir = temp.path().join(".netsuke/dyndep");
         let leftovers: Vec<_> = fs::read_dir(&dir)?
-            .filter_map(|e| e.ok())
+            .filter_map(Result::ok)
             .map(|e| e.file_name().to_string_lossy().into_owned())
-            .filter(|n| n.ends_with(".tmp"))
+            .filter(|n| {
+                std::path::Path::new(n)
+                    .extension()
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("tmp"))
+            })
             .collect();
         ensure!(
             leftovers.is_empty(),

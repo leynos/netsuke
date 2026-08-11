@@ -7,6 +7,7 @@
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use netsuke::ast::{DependencyOrder, Recipe};
 use netsuke::ir::{Action, BuildEdge, BuildGraph};
 use netsuke::ninja_gen::generate_bundle;
@@ -28,13 +29,17 @@ fn action(command: &str) -> Action {
     }
 }
 
-fn edge(output: &str, deps: &[&str], order: DependencyOrder) -> BuildEdge {
-    let implicit_deps: Vec<_> = deps.iter().map(Utf8PathBuf::from).collect();
+fn edge(
+    action_id: &str,
+    output: &str,
+    deps: &[&str],
+    dependency_order: DependencyOrder,
+) -> BuildEdge {
     BuildEdge {
-        action_id: "dep-rule".into(),
+        action_id: action_id.into(),
         inputs: Vec::new(),
-        implicit_deps,
-        dependency_order: order,
+        implicit_deps: deps.iter().map(Utf8PathBuf::from).collect(),
+        dependency_order,
         explicit_outputs: vec![Utf8PathBuf::from(output)],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -43,21 +48,57 @@ fn edge(output: &str, deps: &[&str], order: DependencyOrder) -> BuildEdge {
     }
 }
 
+fn serial_order_graph() -> BuildGraph {
+    let mut graph = BuildGraph::default();
+    for (name, command) in [
+        ("fmt", "echo one >> order.log"),
+        ("lint", "echo two >> order.log"),
+        ("test", "echo three >> order.log"),
+        ("all", "echo all >> order.log"),
+    ] {
+        graph.actions.insert(name.into(), action(command));
+    }
+    for (action_id, output, deps, dependency_order) in [
+        ("fmt", "check-fmt", &[][..], DependencyOrder::Parallel),
+        ("lint", "lint", &[][..], DependencyOrder::Parallel),
+        ("test", "test", &[][..], DependencyOrder::Parallel),
+        (
+            "all",
+            "all",
+            &["check-fmt", "lint", "test"][..],
+            DependencyOrder::Serial,
+        ),
+    ] {
+        graph.targets.insert(
+            Utf8PathBuf::from(output),
+            edge(action_id, output, deps, dependency_order),
+        );
+    }
+    graph
+}
+
 /// Write a bundle into `dir` (sidecars beneath `.netsuke/dyndep`) and return
 /// the main build file path.
 fn stage_bundle(dir: &TempDir, bundle: &netsuke::ninja_gen::GeneratedNinja) -> Result<Utf8PathBuf> {
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).map_err(|path| {
+        anyhow::anyhow!("temporary Ninja directory is not UTF-8: {}", path.display())
+    })?;
+    let root_dir = Dir::open_ambient_dir(&root, ambient_authority())
+        .context("open temporary Ninja directory")?;
     for dd in bundle.dyndep_files() {
-        let path = dir.path().join(dd.relative_path());
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| format!("create sidecar dir {}", parent.display()))?;
+        if let Some(parent) = dd.relative_path().parent() {
+            root_dir
+                .create_dir_all(parent)
+                .with_context(|| format!("create sidecar dir {parent}"))?;
         }
-        std::fs::write(&path, dd.content())
-            .with_context(|| format!("write sidecar {}", path.display()))?;
+        root_dir
+            .write(dd.relative_path(), dd.content())
+            .with_context(|| format!("write sidecar {}", dd.relative_path()))?;
     }
-    let main = dir.path().join("build.ninja");
-    std::fs::write(&main, bundle.build_file()).context("write main ninja file")?;
-    Utf8PathBuf::from_path_buf(main).map_err(|_| anyhow::anyhow!("main path utf8"))
+    root_dir
+        .write("build.ninja", bundle.build_file())
+        .context("write main ninja file")?;
+    Ok(root.join("build.ninja"))
 }
 
 fn run_ninja(dir: &TempDir, main: &Utf8PathBuf) -> Result<std::process::Output> {
@@ -74,79 +115,7 @@ fn run_ninja(dir: &TempDir, main: &Utf8PathBuf) -> Result<std::process::Output> 
 #[test]
 fn serial_deps_run_in_declaration_order() -> Result<()> {
     let dir = tempfile::tempdir()?;
-    let mut graph = BuildGraph::default();
-
-    graph
-        .actions
-        .insert("fmt".into(), action("echo one >> order.log"));
-    graph
-        .actions
-        .insert("lint".into(), action("echo two >> order.log"));
-    graph
-        .actions
-        .insert("test".into(), action("echo three >> order.log"));
-    graph
-        .actions
-        .insert("all".into(), action("echo all >> order.log"));
-
-    graph.targets.insert(
-        Utf8PathBuf::from("check-fmt"),
-        BuildEdge {
-            action_id: "fmt".into(),
-            inputs: Vec::new(),
-            implicit_deps: Vec::new(),
-            dependency_order: DependencyOrder::Parallel,
-            explicit_outputs: vec![Utf8PathBuf::from("check-fmt")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-        },
-    );
-    graph.targets.insert(
-        Utf8PathBuf::from("lint"),
-        BuildEdge {
-            action_id: "lint".into(),
-            inputs: Vec::new(),
-            implicit_deps: Vec::new(),
-            dependency_order: DependencyOrder::Parallel,
-            explicit_outputs: vec![Utf8PathBuf::from("lint")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-        },
-    );
-    graph.targets.insert(
-        Utf8PathBuf::from("test"),
-        BuildEdge {
-            action_id: "test".into(),
-            inputs: Vec::new(),
-            implicit_deps: Vec::new(),
-            dependency_order: DependencyOrder::Parallel,
-            explicit_outputs: vec![Utf8PathBuf::from("test")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-        },
-    );
-    graph.targets.insert(
-        Utf8PathBuf::from("all"),
-        BuildEdge {
-            action_id: "all".into(),
-            inputs: Vec::new(),
-            implicit_deps: vec!["check-fmt".into(), "lint".into(), "test".into()],
-            dependency_order: DependencyOrder::Serial,
-            explicit_outputs: vec![Utf8PathBuf::from("all")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-        },
-    );
-
-    let bundle = generate_bundle(&graph)?;
+    let bundle = generate_bundle(&serial_order_graph())?;
     let main = stage_bundle(&dir, &bundle)?;
     let out = run_ninja(&dir, &main)?;
     ensure!(
@@ -154,7 +123,12 @@ fn serial_deps_run_in_declaration_order() -> Result<()> {
         "ninja failed: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let log = std::fs::read_to_string(dir.path().join("order.log"))?;
+    let root_path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).map_err(|path| {
+        anyhow::anyhow!("temporary Ninja directory is not UTF-8: {}", path.display())
+    })?;
+    let root = Dir::open_ambient_dir(&root_path, ambient_authority())
+        .context("open temporary Ninja directory")?;
+    let log = root.read_to_string("order.log").context("read order log")?;
     ensure!(
         log.lines().collect::<Vec<_>>() == vec!["one", "two", "three", "all"],
         "deps ran out of order: {log:?}"

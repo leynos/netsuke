@@ -85,7 +85,7 @@ impl GeneratedDyndep {
     /// Borrow the sidecar path relative to the effective Ninja working
     /// directory.
     #[must_use]
-    pub fn relative_path(&self) -> &Utf8PathBuf {
+    pub const fn relative_path(&self) -> &Utf8PathBuf {
         &self.relative_path
     }
 
@@ -159,14 +159,14 @@ pub fn generate_bundle(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenErr
 
     let mut out = String::new();
     if serial_present {
-        writeln!(out, "ninja_required_version = 1.10\n").expect("write to String cannot fail");
+        writeln!(out, "ninja_required_version = 1.10\n")?;
     }
 
     let mut actions: Vec<_> = graph.actions.iter().collect();
     actions.sort_by_key(|(id, _)| *id);
     for (id, action) in actions {
         use crate::ninja_gen::NamedAction;
-        writeln!(out, "{}", NamedAction { id, action }).expect("write to String cannot fail");
+        writeln!(out, "{}", NamedAction { id, action })?;
     }
 
     let mut edges: Vec<_> = graph.targets.values().collect();
@@ -193,8 +193,7 @@ pub fn generate_bundle(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenErr
             edge.dependency_order == DependencyOrder::Serial && edge.implicit_deps.len() > 1;
         if requires_gates {
             let mut added = Vec::new();
-            render_serial_block(edge, &mut out, &mut stages, &mut added)
-                .expect("write to String cannot fail");
+            render_serial_block(edge, &mut out, &mut stages, &mut added)?;
             let mut aggregate = edge.clone();
             aggregate.implicit_deps = added;
             aggregate.dependency_order = DependencyOrder::Parallel;
@@ -205,8 +204,7 @@ pub fn generate_bundle(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenErr
                     edge: &aggregate,
                     action_restat: action.restat,
                 }
-            )
-            .expect("write to String cannot fail");
+            )?;
         } else {
             writeln!(
                 out,
@@ -215,15 +213,14 @@ pub fn generate_bundle(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenErr
                     edge,
                     action_restat: action.restat,
                 }
-            )
-            .expect("write to String cannot fail");
+            )?;
         }
     }
 
     if !graph.default_targets.is_empty() {
         let mut defs = graph.default_targets.clone();
         defs.sort();
-        writeln!(out, "default {}", join(&defs)).expect("write to String cannot fail");
+        writeln!(out, "default {}", join(&defs))?;
     }
 
     Ok(GeneratedNinja {
@@ -339,11 +336,15 @@ fn reject_reserved_paths(graph: &BuildGraph) -> Result<(), NinjaGenError> {
             .chain(&edge.order_only_deps)
         {
             let as_str = path.as_str();
-            if as_str == SERIAL_NAMESPACE
-                || as_str == DYNDEP_NAMESPACE
-                || as_str.starts_with(&format!("{SERIAL_NAMESPACE}/"))
-                || as_str.starts_with(&format!("{DYNDEP_NAMESPACE}/"))
-            {
+            let is_reserved = [SERIAL_NAMESPACE, DYNDEP_NAMESPACE]
+                .iter()
+                .any(|namespace| {
+                    as_str == *namespace
+                        || as_str
+                            .strip_prefix(namespace)
+                            .is_some_and(|suffix| suffix.starts_with('/'))
+                });
+            if is_reserved {
                 return Err(NinjaGenError::ReservedOutputPath {
                     path: path.clone(),
                     message: localization::message(keys::NINJA_GEN_RESERVED_OUTPUT_PATH)
