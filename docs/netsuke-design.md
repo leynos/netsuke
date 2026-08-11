@@ -382,6 +382,10 @@ are specified.
   any of these dependencies will trigger a rebuild of the current target, but
   `deps` do not appear in `ins` or Ninja `$in`.
 
+- `dependency_order`: An optional `parallel` or `serial` policy for the direct
+  `deps` list on an action or target. It defaults to `parallel`; `serial`
+  preserves declaration order without changing the freshness class of `deps`.
+
 - `order_only_deps`: An optional list of prerequisite target names or paths
   that must be built before this target, but whose modification does not
   trigger a rebuild of this target. This maps directly to Ninja's order-only
@@ -404,6 +408,7 @@ The cleaner model is:
 - `sources` contribute to `ins` / `$in`.
 - `deps` affect ordering and rebuild decisions, but do not appear in `ins`.
 - `order_only_deps` affect ordering only.
+- `dependency_order` changes only the scheduling policy for direct `deps`.
 
 - `vars`: An optional mapping of local variables. These variables override any
   global variables defined in the top-level `vars` section for the scope of
@@ -2097,6 +2102,22 @@ structures to the Ninja file syntax.
    build my_app: link foo.o bar.o | lib_dependency.a
    ```
 
+   A `BuildEdge` whose `dependency_order` is `serial` and has more than one
+   implicit dependency is an exception to this direct rendering. The generator
+   lowers it into staged phony gates, with one content-addressed Ninja dyndep
+   sidecar per dependency. A gate can reveal exactly one real dependency; the
+   edge producing the next sidecar depends on the preceding gate. This makes
+   each later dependency unavailable to Ninja until the previous one succeeds,
+   while preserving one Ninja scheduler and its shared-work memoization.
+
+   The generated result is a bundle, not merely a string: the main Ninja text
+   and its `.netsuke/dyndep` sidecars must be materialized relative to the
+   effective Ninja working directory before the file can run. The main file
+   declares `ninja_required_version = 1.10` only when it contains such staged
+   serial ordering. `.netsuke/serial` and `.netsuke/dyndep` are reserved for
+   generated state. `serial` applies only to direct implicit dependencies; it
+   does not delay an independently reachable node elsewhere in the graph.
+
 4\. **Write Defaults:** Finally, write the `default` statement, listing all
 paths from `graph.default_targets`.
 
@@ -2132,6 +2153,11 @@ representation portable.
   optional key-value pairs or flags, keeping the generator easy to scan.
 - Integration tests snapshot the generated Ninja file with `insta` and
   execute the Ninja binary to validate structure and no-op behaviour.
+  Serial-ordering tests additionally use real Ninja to prove declaration
+  order, failure short-circuiting, shared-work reuse, and unrelated-branch
+  concurrency. [ADR-010](adr-010-use-ninja-dyndep-for-serial-dependency-ordering.md)
+  records why staged dyndep is used instead of order-only gates, pools, or
+  recursive Ninja invocations.
 
 ## Section 6: Process Management and Secure Execution
 

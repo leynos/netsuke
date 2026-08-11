@@ -4,9 +4,9 @@ This ExecPlan is a living document. Keep `Progress`, `Surprises & discoveries`,
 `Decision log`, and `Outcomes & retrospective` current as implementation
 proceeds.
 
-Status: **In development — plan approved by the user on 2026-08-10; the
-implementation commits are complete and documentation, final validation,
-review, and publication remain.**
+Status: **In development — implementation and documentation changes pass the
+full deterministic suite. Commit, independent review, and pull-request refresh
+remain.**
 
 Issue: [#552](https://github.com/leynos/netsuke/issues/552)
 
@@ -211,8 +211,24 @@ criterion in issue #552 and all repository gates pass.
   in Stage 6 before beginning the documentation milestone. Confirmed that the
   serial implementation uses the planned AST-to-IR-to-bundle-to-materializer
   flow without a scheduler or new dependency.
-- [ ] Complete user, design, developer, layout, roadmap, and ADR documentation.
-- [ ] Run focused verification and all repository gates.
+- [x] (2026-08-11) Documented the manifest syntax and user-visible execution
+  contract in `docs/users-guide.md`, including the default, serial scope,
+  failure handling, shared-work behaviour, independent-reachability boundary,
+  Ninja 1.10 floor, generated sidecars, and reserved paths. Updated the
+  design, developer, repository-layout, contents, and roadmap documents and
+  added ADR-010 for the durable backend decision.
+- [x] (2026-08-12) Ran the full deterministic suite. Formatting, type checking,
+  linting, Markdown linting, and Mermaid validation passed; the documentation
+  example loader rejected the new YAML fence because it lacked a
+  `tested-example` marker. Made the sample a complete manifest, registered its
+  stable identifier in the executable-documentation tests, and will rerun the
+  complete suite before committing.
+- [x] (2026-08-12) Re-ran the complete deterministic suite after the
+  executable-example correction. `make check-fmt`, `make typecheck`,
+  `make lint`, `make test`, `make markdownlint`, and `make nixie` passed.
+  `make test` reported 1,939 passed tests, one skipped test, and passing
+  doctests. The canonical command-specific logs use the current branch suffix
+  beneath `/tmp`.
 - [ ] Commit each green logical change and record final evidence here.
 
 ## Surprises and discoveries
@@ -340,11 +356,12 @@ criterion in issue #552 and all repository gates pass.
 ## Outcomes and retrospective
 
 The implementation has delivered the planned closed schema enum, backend-only
-staged dyndep lowering, complete generated bundle, and capability-scoped,
-atomic sidecar materialization. The user-facing and maintainer documentation,
-the durable ADR, fresh full-gate evidence, independent review, and publication
-remain. The final retrospective will record those results, commit identifiers,
-and any review-driven corrections.
+staged dyndep lowering, complete generated bundle, capability-scoped atomic
+sidecar materialization, and the user-facing and maintainer documentation. The
+documentation makes the intentionally limited path-scoped execution guarantee
+explicit rather than implying global serialization. Fresh full-gate evidence,
+independent review, the documentation commit identifier, and final
+pull-request refresh remain.
 
 ## Context and orientation
 
@@ -923,3 +940,16 @@ implementation approach.
 implementation with the plan. Added the documentation-preparation evidence and
 the narrow trailing-catalogue-whitespace cleanup required before the first full
 validation and review. This does not change the remaining implementation scope.
+
+2026-08-11: Completed the user and maintainer documentation milestone after
+review feedback identified that the implementation-only plan was insufficient
+for issue #552 acceptance. ADR-010 records the staged-dyndep decision and the
+user guide now states the syntax, guarantees, limitations, version floor, and
+generated-state behaviour. Final gates and independent review remain before
+completion.
+
+2026-08-12: The first full documentation gate run exposed the repository's
+executable-fence contract. The serial-syntax sample is now a valid standalone
+manifest with an explicit marker and an entry in the documentation-example
+registry, so its syntax cannot drift without the normal test suite detecting
+it.

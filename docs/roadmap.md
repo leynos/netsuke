@@ -175,6 +175,11 @@ and agents.
     ordering and rebuild decisions without appearing in recipe arguments.
   - [x] Align cycle detection, generated Ninja output, and user-facing
     dependency documentation.
+  - [x] Add `dependency_order: serial` for direct action and target `deps`.
+    Staged Ninja dyndep lowering preserves declaration order, failure
+    short-circuiting, shared-work reuse, and unrelated-branch concurrency;
+    [ADR-010](adr-010-use-ninja-dyndep-for-serial-dependency-ordering.md)
+    records the path-scoped guarantee and generated-state contract.
 - [x] 3.14.4. Add `command_available(name, **kwargs)` as a non-throwing
   executable probe. Depends on archived task `3.5.1`. See
   [executable discovery](netsuke-design.md#executable-discovery-filter-which).

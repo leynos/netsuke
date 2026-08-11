@@ -36,6 +36,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-output-streams",
     "guide-project-anchor",
     "guide-project-config",
+    "guide-serial-dependency-order-manifest",
     "guide-source-install",
     "guide-utility-commands",
     "guide-windows-help",
@@ -161,6 +162,7 @@ fn every_documented_fence_has_a_known_unique_identifier() -> Result<()> {
 #[case("guide-command-list")]
 #[case("guide-direct-command-list")]
 #[case("guide-command-available-manifest")]
+#[case("guide-serial-dependency-order-manifest")]
 #[case("stdlib-yaml-syntax-manifest")]
 #[case("stdlib-jinja-syntax-manifest")]
 fn documented_manifest_generates_ninja(#[case] example_id: &str) -> Result<()> {

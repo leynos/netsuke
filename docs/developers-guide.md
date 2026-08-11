@@ -1608,10 +1608,47 @@ into `BuildEdge.order_only_deps`. Keep those classes separate: recipe
 interpolation (`$in` and `{{ ins }}`) receives only `BuildEdge.inputs`, while
 `src/ninja_gen.rs` renders implicit deps with Ninja's single-pipe separator.
 
+`Target::dependency_order` is a closed manifest enum carried unchanged to
+`BuildEdge::dependency_order`. `parallel` is the default. The ordering policy
+applies only to a manifest `deps` list; never infer it from the number or shape
+of graph edges, and do not apply it to inputs or order-only dependencies.
+
 `src/ir/cycle.rs::CycleDetector::visit` traverses `inputs` and `implicit_deps`
 when detecting cycles. It intentionally does not traverse `order_only_deps`,
 because order-only dependencies express scheduling order rather than rebuild
 freshness.
+
+### Serial dependency bundles
+
+`src/ninja_gen/dyndep.rs` owns the Ninja-specific lowering for a serial list
+with more than one dependency. It produces a `GeneratedNinja` bundle: the main
+build-file text plus immutable, content-addressed `GeneratedDyndep` sidecars.
+The generated phony gates live under `.netsuke/serial`; sidecars live under
+`.netsuke/dyndep`. Those are reserved output namespaces, validated before
+generation. A string-only generator must return `DyndepFilesRequired` for a
+graph that needs sidecars rather than returning an incomplete build file.
+
+Each gate reveals one real dependency through a Ninja dyndep file. The next
+sidecar-producing edge depends on the preceding gate, which keeps later direct
+dependencies unavailable to the scheduler until earlier work succeeds. This is
+not an order-only chain or a Ninja pool: both leave the real dependencies
+visible to Ninja too early. Preserve one top-level Ninja invocation so shared
+nodes keep Ninja's normal execute-once memoization.
+
+`src/runner/process/dyndep_files.rs` is the sole owner of sidecar persistence.
+Every `build`, `clean`, and `generate` path must obtain a bundle and call its
+materializer before writing or invoking the main file. It writes through an
+effective-working-directory capability, verifies existing content, and uses a
+same-directory temporary file plus atomic rename. Keep generated sidecars
+content-addressed and idempotent; corruption is an error, not a reason to
+overwrite an unknown file.
+
+The intended serial guarantee is path-scoped. A later dependency that is
+independently reachable elsewhere in the requested graph may start via that
+other path. Do not broaden the implementation with a global lock, pool, or
+new scheduler without an approved design change. See
+[ADR-010](adr-010-use-ninja-dyndep-for-serial-dependency-ordering.md) for the
+durable decision and its alternatives.
 
 ### Recipe placeholder ownership
 

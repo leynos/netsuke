@@ -386,6 +386,9 @@ A target supports these fields:
   recipe arguments. Declare them on each target; reusable rules reject `deps`.
   The planned rule-level `deps_from` contract is not implemented in
   v0.1.0-beta1.
+- `dependency_order`: scheduling policy for the `deps` list. `parallel` is the
+  default; `serial` runs a list with more than one dependency in declaration
+  order.
 - `order_only_deps`: ordering dependencies. Their changes do not rebuild the
   dependent target.
 - `vars`: values that override global variables for this target. The `env`
@@ -407,6 +410,64 @@ v0.1.0-beta1.
 
 Cycle detection follows `sources` and `deps`. Order-only dependencies enforce
 ordering but do not participate in cycle detection.
+
+
+### Run direct dependencies serially
+
+Actions and targets both accept `dependency_order`. Omit it, or set it to
+`parallel`, to retain Ninja's ordinary concurrent scheduling. Set it to
+`serial` when the direct `deps` list is an ordered workflow:
+
+<!-- tested-example: guide-serial-dependency-order-manifest -->
+
+```yaml
+netsuke_version: "1.0.0"
+
+actions:
+  - name: check-fmt
+    command: "echo checking format"
+  - name: lint
+    command: "echo linting"
+  - name: test
+    command: "echo testing"
+  - name: all
+    command: ":"
+    dependency_order: serial
+    deps:
+      - check-fmt
+      - lint
+      - test
+
+targets:
+  - name: release-notes
+    command: "echo preparing release notes"
+  - name: release
+    command: "./package-release"
+    dependency_order: serial
+    deps:
+      - check-fmt
+      - test
+      - release-notes
+```
+
+For a serial list, Netsuke starts each direct dependency only after the
+preceding one succeeds. If an earlier dependency fails, later dependencies in
+that list do not start through the serial path. Repeated or shared dependencies
+are still owned by the one Ninja invocation and execute at most once.
+
+Serial ordering applies only to the direct `deps` list. It does not serialize
+`sources`, `order_only_deps`, or unrelated work. An independently requested or
+otherwise reachable later dependency can still start through that separate
+path; use a dedicated aggregate action when the whole workflow must share the
+same ordered entry point.
+
+Netsuke uses Ninja's `dyndep` support for serial lists with two or more
+dependencies, and generated builds containing one require Ninja 1.10 or newer.
+`netsuke generate`, `build`, and `clean` materialize the generated sidecars
+under `.netsuke/dyndep` in the effective working directory. Those
+content-addressed files are reusable state and `clean` does not remove them.
+Do not define targets beneath `.netsuke/serial` or `.netsuke/dyndep`; Netsuke
+reserves both paths for this feature.
 
 ## Use Jinja safely
 
@@ -853,7 +914,9 @@ textual outline and a `<noscript>` DOT representation.
 
 `generate` writes Ninja without running it. With no `--output`, stdout contains
 only the generated Ninja manifest. With `--output <FILE>`, Netsuke writes the
-manifest to that file and leaves stdout empty.
+manifest to that file and leaves stdout empty. For a serial dependency list,
+both forms also materialize the referenced `.netsuke/dyndep` sidecars beside
+the effective Ninja working directory, so the emitted manifest is executable.
 
 `clean` removes file outputs tracked by Ninja. Phony targets and actions do not
 represent files and are not removed.
