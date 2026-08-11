@@ -104,6 +104,9 @@ operator, user, and contributor references are easier to find.
 - [RFC 0001: Harden release integrity and admission](rfcs/0001-release-hardening.md):
   Proposed release-profile invariants, secret and dependency policy, and
   exact-commit release admission.
+- [RFC 0002: Repository-wide code-health contracts and fuzzing](rfcs/0002-code-health.md):
+  Proposed workflow-policy validation, gate self-consistency, health-signal
+  ownership, and scheduled coverage-guided fuzzing.
 
 ## Proposals
 
