@@ -5,7 +5,7 @@
 //! actions and targets with their descriptions. The no-topic and
 //! subcommand-name topics render clap's localized help text instead.
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use clap::CommandFactory;
 use serde::Serialize;
 use tracing::info;
@@ -63,10 +63,10 @@ pub(super) fn handle_help_targets(cli: &Cli, reporter: &dyn StatusReporter) -> R
     BuildGraph::from_manifest(&manifest)
         .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH))?;
 
+    let entries = build_catalogue(&manifest);
+    validate_defaults(&manifest.defaults, &entries)?;
     let status_key: LocalizationKey = keys::STATUS_TOOL_HELP_TARGETS.into();
     report_pipeline_stage(reporter, PipelineStage::GraphRendering, Some(status_key));
-
-    let entries = build_catalogue(&manifest);
     if cli.json {
         let rendered = render_json(&entries).context("serialize help targets catalogue")?;
         process::write_text_stdout(&rendered)?;
@@ -118,6 +118,16 @@ fn build_catalogue(manifest: &NetsukeManifest) -> Vec<HelpEntry> {
         append_target_entries(&mut entries, target, false, &manifest.defaults);
     }
     entries
+}
+
+fn validate_defaults(defaults: &[String], entries: &[HelpEntry]) -> Result<()> {
+    for default in defaults {
+        ensure!(
+            entries.iter().any(|entry| entry.name == *default),
+            "manifest default '{default}' does not name a declared action or target"
+        );
+    }
+    Ok(())
 }
 
 fn append_target_entries(

@@ -85,6 +85,11 @@ fn run_with_args(
             Err(code) => return code,
         };
 
+    if is_informational_help(&parsed_cli) {
+        settle_startup_diagnostics(&startup_writer, startup_mode);
+        return run_cli(&parsed_cli, system_locale, startup_mode);
+    }
+
     let mode = match resolve_json_mode_or_exit(&parsed_cli, &matches, startup_mode) {
         Ok(mode) => mode,
         Err(code) => {
@@ -100,14 +105,29 @@ fn run_with_args(
         Err(code) => return code,
     };
     let runtime_mode = DiagMode::from_json_enabled(merged_cli.json);
-    configure_runtime(&merged_cli, system_locale, runtime_mode);
-    let output_mode =
-        output_mode::resolve(merged_cli.accessibility_override(), Some(merged_cli.color));
+    run_cli(&merged_cli, system_locale, runtime_mode)
+}
+
+const fn is_informational_help(cli: &cli::Cli) -> bool {
+    matches!(
+        &cli.command,
+        Some(cli::Commands::Help(args))
+            if !matches!(args.topic.as_ref(), Some(cli::HelpTopic::Targets))
+    )
+}
+
+fn run_cli(
+    cli: &cli::Cli,
+    system_locale: &impl locale_resolution::SystemLocale,
+    runtime_mode: DiagMode,
+) -> ExitCode {
+    configure_runtime(cli, system_locale, runtime_mode);
+    let output_mode = output_mode::resolve(cli.accessibility_override(), Some(cli.color));
     let prefs = output_prefs::resolve_from_theme(
-        merged_cli.theme_preference(),
-        ThemeContext::new(None, Some(merged_cli.color), output_mode),
+        cli.theme_preference(),
+        ThemeContext::new(None, Some(cli.color), output_mode),
     );
-    match runner::run(&merged_cli, prefs) {
+    match runner::run(cli, prefs) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => handle_runner_error(err, prefs, runtime_mode),
     }

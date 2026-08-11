@@ -49,9 +49,10 @@ fn description_duplicates_and_unknown_fields_are_rejected() -> Result<()> {
                 description: "second"
                 command: "echo hi"
         "#;
+        let error = parse_manifest(yaml).expect_err("duplicate target description should fail");
         ensure!(
-            parse_manifest(yaml).is_err(),
-            "duplicate target description should fail"
+            format!("{error:?}").contains("description"),
+            "duplicate-description diagnostic should name the field: {error:?}"
         );
     }
 
@@ -64,9 +65,11 @@ fn description_duplicates_and_unknown_fields_are_rejected() -> Result<()> {
                 explanation: "unknown metadata"
                 command: "echo hi"
         "#;
+        let error = parse_manifest(yaml)
+            .expect_err("unknown target field alongside description should fail");
         ensure!(
-            parse_manifest(yaml).is_err(),
-            "unknown target field alongside description should fail"
+            format!("{error:?}").contains("explanation"),
+            "unknown-field diagnostic should name the field: {error:?}"
         );
     }
     Ok(())

@@ -32,7 +32,7 @@ cli.subcommand.graph.about = Emite graful dependențelor de construire. Formatul
 cli.subcommand.graph.long_about = Proiectează manifestul Netsuke analizat într-un graf de construire canonic și îl scrie ca Graphviz DOT sau, cu `--html`, ca pagină HTML de sine stătătoare. Folosiți `--output <FIȘIER>` pentru a scrie într-un fișier; `-` scrie la ieșirea standard.
 cli.subcommand.generate.about = Generează manifestul Ninja fără a rula Ninja.
 cli.subcommand.generate.long_about = Scrie manifestul Ninja generat la ieșirea standard sau într-un fișier ales cu `--output`.
-cli.subcommand.help.about = Afișează ajutorul de nivel superior sau ajutorul pentru un subiect numit.
+cli.subcommand.help.about = Afișați ajutorul de nivel superior sau ajutorul pentru un subiect numit.
 cli.subcommand.help.long_about = Fără subiect, acest lucru corespunde cu `--help`. Folosiți `help targets` pentru a afișa catalogul de ținte și acțiuni pentru fișierul selectat.
 
 # Help catalogue headings and markers.

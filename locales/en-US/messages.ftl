@@ -375,7 +375,7 @@ status.tool.clean = Clean
 status.tool.graph = Graph
 status.tool.graph_html = Graph (HTML)
 status.tool.generate = Generate
-status.tool.help_targets = Help targets
+status.tool.help_targets = Target help
 
 # Graph HTML renderer strings.
 graph.html.title = Netsuke build graph

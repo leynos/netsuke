@@ -850,8 +850,9 @@ manifest to that file and leaves stdout empty.
 represent files and are not removed.
 
 `help targets` prints the target and action catalogue for the selected
-manifest — actions first, then targets — with a `[default]` marker on manifest
-defaults and an empty description column for entries without a `description`:
+manifest — actions first, then targets — with a localized default marker such
+as `[★ default]` (or `[* default]` in accessible output) on manifest defaults
+and an empty description column for entries without a `description`:
 
 <!-- tested-example: guide-help-targets -->
 

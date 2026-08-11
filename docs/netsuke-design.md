@@ -344,10 +344,10 @@ rule:
 - `script`: A multi-line script passed to the interpreter. When present, it is
   defined using the YAML `|` block style.
 
-- `description`: A planned, target-local status string. When present on a target
-  or action, it overrides the referenced rule description for the concrete
-  build edge. This lets selected conditional actions explain what they are
-  doing without embedding `echo` statements in recipes.
+- `description`: Optional discovery metadata for a target or action. It is
+  rendered through the normal manifest context and displayed by
+  `netsuke help targets`. It does not affect Ninja progress output: that stays
+  driven by the referenced rule's `description`.
 
 - `env`: A planned mapping of environment variables to apply when this target or
   action runs. Target-level values override rule-level values after the rule is

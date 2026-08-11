@@ -12,7 +12,7 @@ Commands:
   clean     Elimina artefactos de compilación mediante Ninja.
   graph     Emite el grafo de dependencias de compilación. El formato predeterminado es DOT.
   generate  Genera el manifiesto Ninja sin ejecutar Ninja.
-  help      Imprime la ayuda de nivel superior o la ayuda de un tema determinado.
+  help      Imprima la ayuda de nivel superior o la ayuda de un tema determinado.
 
 Options:
   -f, --file <FILE>

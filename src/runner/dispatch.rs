@@ -20,7 +20,7 @@ pub(super) fn execute(cli: &Cli, command: Commands, context: &ExecutionContext<'
 }
 
 fn execute_help(cli: &Cli, args: &HelpArgs, context: &ExecutionContext<'_>) -> Result<()> {
-    match args.topic {
+    match args.topic.as_ref() {
         None => help::render_root_help(),
         Some(HelpTopic::Targets) => help::handle_help_targets(cli, context.reporter),
         Some(HelpTopic::Build) => help::render_subcommand_help("build"),
