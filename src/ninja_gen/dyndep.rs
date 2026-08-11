@@ -169,53 +169,8 @@ pub fn generate_bundle(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenErr
         writeln!(out, "{}", NamedAction { id, action })?;
     }
 
-    let mut edges: Vec<_> = graph.targets.values().collect();
-    edges.sort_by_key(|a| path_key(&a.explicit_outputs));
-    let mut seen: HashSet<String> = HashSet::new();
     let mut stages = SerialStages::default();
-
-    for edge in edges {
-        let key = path_key(&edge.explicit_outputs);
-        if !seen.insert(key.clone()) {
-            continue;
-        }
-        let action =
-            graph
-                .actions
-                .get(&edge.action_id)
-                .ok_or_else(|| NinjaGenError::MissingAction {
-                    id: edge.action_id.clone(),
-                    message: localization::message(keys::NINJA_GEN_MISSING_ACTION)
-                        .with_arg("id", &edge.action_id),
-                })?;
-
-        let requires_gates =
-            edge.dependency_order == DependencyOrder::Serial && edge.implicit_deps.len() > 1;
-        if requires_gates {
-            let mut added = Vec::new();
-            render_serial_block(edge, &mut out, &mut stages, &mut added)?;
-            let mut aggregate = edge.clone();
-            aggregate.implicit_deps = added;
-            aggregate.dependency_order = DependencyOrder::Parallel;
-            writeln!(
-                out,
-                "{}",
-                crate::ninja_gen::DisplayEdge {
-                    edge: &aggregate,
-                    action_restat: action.restat,
-                }
-            )?;
-        } else {
-            writeln!(
-                out,
-                "{}",
-                crate::ninja_gen::DisplayEdge {
-                    edge,
-                    action_restat: action.restat,
-                }
-            )?;
-        }
-    }
+    render_edges(graph, &mut out, &mut stages)?;
 
     if !graph.default_targets.is_empty() {
         let mut defs = graph.default_targets.clone();
@@ -227,6 +182,83 @@ pub fn generate_bundle(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenErr
         build_file: out,
         dyndep_files: stages.dyndep_files,
     })
+}
+
+/// Render each distinct graph edge in stable output order.
+fn render_edges(
+    graph: &BuildGraph,
+    out: &mut String,
+    stages: &mut SerialStages,
+) -> Result<(), NinjaGenError> {
+    let mut edges: Vec<_> = graph.targets.values().collect();
+    edges.sort_by_key(|a| path_key(&a.explicit_outputs));
+    let mut seen: HashSet<String> = HashSet::new();
+
+    for edge in edges {
+        let key = path_key(&edge.explicit_outputs);
+        if !seen.insert(key.clone()) {
+            continue;
+        }
+        render_edge(graph, edge, out, stages)?;
+    }
+    Ok(())
+}
+
+/// Render one graph edge, applying staged dyndep lowering when required.
+fn render_edge(
+    graph: &BuildGraph,
+    edge: &BuildEdge,
+    out: &mut String,
+    stages: &mut SerialStages,
+) -> Result<(), NinjaGenError> {
+    let action =
+        graph
+            .actions
+            .get(&edge.action_id)
+            .ok_or_else(|| NinjaGenError::MissingAction {
+                id: edge.action_id.clone(),
+                message: localization::message(keys::NINJA_GEN_MISSING_ACTION)
+                    .with_arg("id", &edge.action_id),
+            })?;
+
+    let requires_gates =
+        edge.dependency_order == DependencyOrder::Serial && edge.implicit_deps.len() > 1;
+    if requires_gates {
+        return render_serial_edge(edge, action.restat, out, stages);
+    }
+    render_display_edge(edge, action.restat, out)
+}
+
+/// Render one staged serial edge and replace its real dependencies with gates.
+fn render_serial_edge(
+    edge: &BuildEdge,
+    action_restat: bool,
+    out: &mut String,
+    stages: &mut SerialStages,
+) -> Result<(), NinjaGenError> {
+    let mut added = Vec::new();
+    render_serial_block(edge, out, stages, &mut added)?;
+    let mut aggregate = edge.clone();
+    aggregate.implicit_deps = added;
+    aggregate.dependency_order = DependencyOrder::Parallel;
+    render_display_edge(&aggregate, action_restat, out)
+}
+
+/// Render an edge using its already selected Ninja action metadata.
+fn render_display_edge(
+    edge: &BuildEdge,
+    action_restat: bool,
+    out: &mut String,
+) -> Result<(), NinjaGenError> {
+    writeln!(
+        out,
+        "{}",
+        crate::ninja_gen::DisplayEdge {
+            edge,
+            action_restat,
+        }
+    )?;
+    Ok(())
 }
 
 /// Mutable staging state shared while lowering one serial edge.
