@@ -53,6 +53,12 @@ operator, user, and contributor references are easier to find.
   Manifest telemetry decision record, separating observability from evaluation
   and bounding and redacting the emitted metrics and spans.
 
+## Requests for comments
+
+- [RFC 0001: Harden release integrity and admission](rfcs/0001-release-hardening.md):
+  Proposed release-profile invariants, secret and dependency policy, and
+  exact-commit release admission.
+
 ## User and operator guides
 
 - [quickstart.md](quickstart.md): First-run walkthrough for building with
