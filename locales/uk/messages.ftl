@@ -422,5 +422,3 @@ example.errors_found = { $count ->
     [many] Знайдено { $count } помилок.
    *[other] Знайдено { $count } помилки.
 }
-
-

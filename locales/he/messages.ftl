@@ -420,6 +420,3 @@ example.errors_found = { $count ->
     [many] נמצאו { $count } שגיאות.
    *[other] נמצאו { $count } שגיאות.
 }
-
-
-

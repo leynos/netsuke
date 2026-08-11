@@ -4,7 +4,9 @@ This ExecPlan is a living document. Keep `Progress`, `Surprises & discoveries`,
 `Decision log`, and `Outcomes & retrospective` current as implementation
 proceeds.
 
-Status: **In development — plan approved by the user on 2026-08-10; implementation in progress.**
+Status: **In development — plan approved by the user on 2026-08-10; the
+implementation commits are complete and documentation, final validation,
+review, and publication remain.**
 
 Issue: [#552](https://github.com/leynos/netsuke/issues/552)
 
@@ -184,32 +186,47 @@ criterion in issue #552 and all repository gates pass.
   and fixture to compile. `cargo check --all-targets` and 739 lib + touched
   integration tests pass.
 - [x] (2026-08-10) Implemented deterministic Ninja bundle and dyndep lowering:
-  the new `src/ninja_gen/dyndep.rs` submodule adds `GeneratedNinja` (main
-  text plus content-addressed `GeneratedDyndep` sidecars) and
-  `generate_bundle`. Serial multi-dependency edges lower into one phony gate
-  and sidecar per dependency; the version floor is emitted only when gates
-  exist; sidecars are content-addressed beneath `.netsuke/dyndep`; and
-  string-only generation returns `NinjaGenError::DyndepFilesRequired`
-  without writing partial output. Added reserved-namespace collision errors
-  and localization keys across all 35 catalogues. Unit, integration, and
-  doctests pass.
+  the new `src/ninja_gen/dyndep.rs` submodule adds `GeneratedNinja` (main text
+  plus content-addressed `GeneratedDyndep` sidecars) and `generate_bundle`.
+  Serial multi-dependency edges lower into one phony gate and sidecar per
+  dependency; the version floor is emitted only when gates exist; sidecars are
+  content-addressed beneath `.netsuke/dyndep`; and string-only generation
+  returns `NinjaGenError::DyndepFilesRequired` without writing partial output.
+  Added reserved-namespace collision errors and localization keys across all 35
+  catalogues. Unit, integration, and doctests pass.
 - [x] (2026-08-10) Implemented atomic dyndep sidecar materialization in
-  every CLI path. `src/runner/process/dyndep_files.rs` materializes the
-  bundle sidecars beneath `.netsuke/dyndep` relative to the effective Ninja
-  working directory, using capability-scoped writes, a same-directory
-  `create_new` temporary file, and an atomic rename. Existing content is
-  verified and reused; corruption and concurrent-writer outcomes are
-  covered. `generate_ninja` now routes every build, clean, and generate
-  invocation through `generate_bundle` plus materialization before invoking
-  Ninja. Added runtime tests driving real Ninja: strict declaration order,
-  failure short-circuiting, and materializer idempotence/corruption paths.
-  Verified end-to-end with a real serial manifest and real Ninja 1.11.1
-  (order observed: fmt, lint, test, all). Full suite: 1930 tests pass.
+  every CLI path. `src/runner/process/dyndep_files.rs` materializes the bundle
+  sidecars beneath `.netsuke/dyndep` relative to the effective Ninja working
+  directory, using capability-scoped writes, a same-directory `create_new`
+  temporary file, and an atomic rename. Existing content is verified and
+  reused; corruption and concurrent-writer outcomes are covered.
+  `generate_ninja` now routes every build, clean, and generate invocation
+  through `generate_bundle` plus materialization before invoking Ninja. Added
+  runtime tests driving real Ninja: strict declaration order, failure
+  short-circuiting, and materializer idempotence/corruption paths. Verified
+  end-to-end with a real serial manifest and real Ninja 1.11.1 (order observed:
+  fmt, lint, test, all). Full suite: 1930 tests pass.
+- [x] (2026-08-11 19:43Z) Re-read this plan, the issue, current implementation
+  commits, the decision-record convention, and every documentation target named
+  in Stage 6 before beginning the documentation milestone. Confirmed that the
+  serial implementation uses the planned AST-to-IR-to-bundle-to-materializer
+  flow without a scheduler or new dependency.
 - [ ] Complete user, design, developer, layout, roadmap, and ADR documentation.
 - [ ] Run focused verification and all repository gates.
 - [ ] Commit each green logical change and record final evidence here.
 
 ## Surprises and discoveries
+
+- (2026-08-11) The prior materializer commit accidentally left surplus blank
+  lines at EOF in each changed Fluent catalogue. `git show --check` reports
+  them even though the current worktree is clean. Remove only those trailing
+  blank lines in a preparatory cleanup before the next full validation run.
+- (2026-08-11) The first fresh full-gate run stopped before review: typecheck
+  found an unused runtime-test helper, and Clippy found `expect` calls in
+  fallible bundle formatting plus three small idiom violations in the
+  materializer. `check-fmt`, Markdown linting, and Mermaid validation passed.
+  The correction remains within the approved implementation and needs no new
+  dependency or architecture.
 
 - (2026-08-10) Re-validated the staged dyndep chain with real Ninja 1.11.1:
   declaration order holds when all sidecars are pre-materialized; a later
@@ -219,18 +236,19 @@ criterion in issue #552 and all repository gates pass.
   process.
 - (2026-08-10) Ninja path escaping in build/dyndep documents uses `$` as the
   escape character. Spaces, `$`, `:`, `|`, and similar metacharacters in target
-  or dependency paths must be escaped as `$ ` (space is `$ `), `$$` for a
-  literal dollar, `$:` for colon, `$|` for pipe. Unescaped spaces split a token
-  into multiple paths. The generator therefore needs a dedicated Ninja
-  path-escape helper distinct from the existing shell-script escaping.
+  or dependency paths must use Ninja's dollar escape: a dollar sign followed by
+  a space for a literal space, `$$` for a literal dollar, `$:` for colon, and
+  `$|` for pipe. Unescaped spaces split a token into multiple paths. The
+  generator therefore needs a dedicated Ninja path-escape helper distinct from
+  the existing shell-script escaping.
 
 - (2026-08-10) Ninja resolves every path named in a build file — including a
   `dyndep =` value and every path inside the referenced dyndep document —
   relative to Ninja's process working directory, which is the `-C` directory
   when one is supplied. The directory containing the main build file does not
-  affect path resolution. Confirmed with Ninja 1.11.1: with the main build
-  file in an OS temp directory and `-C` set to the user's project directory,
-  a sidecar written beneath `project/.netsuke/dyndep/` is located, loaded, and
+  affect path resolution. Confirmed with Ninja 1.11.1: with the main build file
+  in an OS temp directory and `-C` set to the user's project directory, a
+  sidecar written beneath `project/.netsuke/dyndep/` is located, loaded, and
   its revealed dependency built correctly. The runner therefore needs no
   architectural change; the plan's existing `.netsuke` navigation already
   matches Ninja's model.
@@ -263,6 +281,18 @@ criterion in issue #552 and all repository gates pass.
   fetch cache, so `.netsuke/dyndep` does not introduce a second state root.
 
 ## Decision log
+
+- **Decision:** retain the existing AST, IR, Ninja generation, runner, and
+  localization implementation commits as the reviewed functional baseline, then
+  repair only their trailing-catalogue-whitespace defect before full gates.
+  **Rationale:** the defect does not alter Fluent messages or behaviour, but a
+  clean diff is required before the first post-implementation review. **Date:**
+  2026-08-11.
+- **Decision:** propagate `fmt::Error` through the existing
+  `NinjaGenError::Format` conversion instead of asserting that `String`
+  formatting cannot fail. **Rationale:** this keeps the generator's public
+  error contract intact and satisfies the repository's no-`expect` policy
+  without adding an abstraction. **Date:** 2026-08-11.
 
 - **Decision:** use staged Ninja dyndep files rather than an order-only gate
   chain, a pool, or recursive builds. **Rationale:** it is the only evaluated
@@ -309,9 +339,12 @@ criterion in issue #552 and all repository gates pass.
 
 ## Outcomes and retrospective
 
-No implementation has started. On completion, replace this paragraph with the
-observable behaviour delivered, gate results, commit identifiers, deviations
-from the plan, and lessons for future scheduling features.
+The implementation has delivered the planned closed schema enum, backend-only
+staged dyndep lowering, complete generated bundle, and capability-scoped,
+atomic sidecar materialization. The user-facing and maintainer documentation,
+the durable ADR, fresh full-gate evidence, independent review, and publication
+remain. The final retrospective will record those results, commit identifiers,
+and any review-driven corrections.
 
 ## Context and orientation
 
@@ -885,3 +918,8 @@ confirming their exact APIs in `Cargo.toml` and existing call sites.
 proposal with a staged dyndep bundle, adds atomic sidecar materialization, and
 records the independent-reachability limit that must be approved with the
 implementation approach.
+
+2026-08-11: Updated the live status after reconciling the committed
+implementation with the plan. Added the documentation-preparation evidence and
+the narrow trailing-catalogue-whitespace cleanup required before the first full
+validation and review. This does not change the remaining implementation scope.

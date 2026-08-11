@@ -414,5 +414,3 @@ example.errors_found = { $count ->
     [0] Tidak ada galat yang ditemukan.
    *[other] { $count } galat ditemukan.
 }
-
-

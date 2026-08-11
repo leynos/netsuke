@@ -413,5 +413,3 @@ example.errors_found = { $count ->
     [0] エラーは見つかりませんでした。
    *[other] { $count } 件のエラーが見つかりました。
 }
-
-

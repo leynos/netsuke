@@ -417,5 +417,3 @@ example.errors_found = { $count ->
     [one] Foi encontrado { $count } erro.
    *[other] Foram encontrados { $count } erros.
 }
-
-

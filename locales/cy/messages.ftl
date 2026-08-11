@@ -423,5 +423,3 @@ example.errors_found = { $count ->
     [many] Cafwyd hyd i { $count } gwall.
    *[other] Cafwyd hyd i { $count } gwall.
 }
-
-
