@@ -40,7 +40,7 @@ fn existing_directory_manifest_path_is_rejected(
 }
 
 #[rstest]
-fn read_only_parent_reports_target_path(
+fn non_directory_parent_propagates_target_inspection_error(
     temp_manifest_workspace: TempManifestWorkspace,
 ) -> Result<()> {
     let (temp, temp_path) = temp_manifest_workspace?;
@@ -51,7 +51,10 @@ fn read_only_parent_reports_target_path(
     let Err(err) = ensure_manifest_exists(&temp_path, Utf8Path::new("parent/manifest.yml")) else {
         anyhow::bail!("non-directory parent should error");
     };
-    anyhow::ensure!(err.kind() == io::ErrorKind::AlreadyExists);
+    anyhow::ensure!(
+        err.kind() != io::ErrorKind::NotFound,
+        "target inspection error should not be treated as absence: {err}"
+    );
     let msg = err.to_string();
     let manifest_str = manifest
         .to_str()
@@ -121,16 +124,17 @@ fn raced_file_manifest_path_is_returned_unchanged(
     let (_temp, temp_path) = temp_manifest_workspace?;
     let expected_path = temp_path.join("manifest.yml");
     let competing_contents = b"competing manifest contents";
+    anyhow::ensure!(
+        fs::inspect_path(&expected_path)? == fs::PathState::Absent,
+        "precondition: manifest path should be absent"
+    );
 
-    let returned_path = ensure_manifest_exists_with_before_persist(
-        &temp_path,
-        Utf8Path::new("manifest.yml"),
-        |file, manifest_path| {
-            fs::write(manifest_path.as_std_path(), competing_contents)?;
-            Ok(file)
-        },
-    )
-    .context("tolerate manifest created before persistence")?;
+    let _hook = install_before_persist_hook(move |file, manifest_path| {
+        fs::write(manifest_path.as_std_path(), competing_contents)?;
+        Ok(file)
+    });
+    let returned_path = ensure_manifest_exists(&temp_path, Utf8Path::new("manifest.yml"))
+        .context("tolerate manifest created before persistence")?;
 
     anyhow::ensure!(returned_path == expected_path, "manifest path should match");
     let contents = fs::read(expected_path.as_std_path()).context("read competing manifest")?;
@@ -144,15 +148,16 @@ fn raced_directory_manifest_path_is_rejected(
 ) -> Result<()> {
     let (_temp, temp_path) = temp_manifest_workspace?;
     let expected_path = temp_path.join("manifest.yml");
+    anyhow::ensure!(
+        fs::inspect_path(&expected_path)? == fs::PathState::Absent,
+        "precondition: manifest path should be absent"
+    );
 
-    let Err(err) = ensure_manifest_exists_with_before_persist(
-        &temp_path,
-        Utf8Path::new("manifest.yml"),
-        |file, manifest_path| {
-            fs::create_dir(manifest_path.as_std_path())?;
-            Ok(file)
-        },
-    ) else {
+    let _hook = install_before_persist_hook(|file, manifest_path| {
+        fs::create_dir(manifest_path.as_std_path())?;
+        Ok(file)
+    });
+    let Err(err) = ensure_manifest_exists(&temp_path, Utf8Path::new("manifest.yml")) else {
         anyhow::bail!("directory created before persistence should be rejected");
     };
 
@@ -161,6 +166,27 @@ fn raced_directory_manifest_path_is_rejected(
         err.to_string().contains(expected_path.as_str()),
         "message: {err}"
     );
+    Ok(())
+}
+
+#[rstest]
+fn before_persist_hook_does_not_escape_its_scope(
+    temp_manifest_workspace: TempManifestWorkspace,
+) -> Result<()> {
+    let (_temp, temp_path) = temp_manifest_workspace?;
+    {
+        let _hook = install_before_persist_hook(|_, _| {
+            Err(io::Error::other(
+                "hook should be removed when its guard drops",
+            ))
+        });
+    }
+
+    let expected_path = temp_path.join("manifest.yml");
+    let returned_path = ensure_manifest_exists(&temp_path, Utf8Path::new("manifest.yml"))
+        .context("create manifest after hook scope ends")?;
+
+    anyhow::ensure!(returned_path == expected_path, "manifest path should match");
     Ok(())
 }
 
@@ -284,10 +310,7 @@ proptest! {
 
         let expected_staged_contents = staged_contents.clone();
         let hook_contents = competing_contents.clone();
-        let result = ensure_manifest_exists_with_before_persist(
-            &temp_path,
-            cli_file,
-            move |file, manifest_path| {
+        let _hook = install_before_persist_hook(move |file, manifest_path| {
                 let replacement = replace_staged_manifest(file, manifest_path, &staged_contents)?;
                 match state {
                     TargetState::RacedFile => {
@@ -299,8 +322,8 @@ proptest! {
                     | TargetState::ExistingDirectory => {}
                 }
                 Ok(replacement)
-            },
-        );
+            });
+        let result = ensure_manifest_exists(&temp_path, cli_file);
 
         match state {
             TargetState::Missing => {

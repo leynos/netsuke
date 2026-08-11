@@ -6,6 +6,9 @@ use cap_std::{ambient_authority, fs_utf8};
 use std::io;
 use tempfile::NamedTempFile;
 
+#[cfg(test)]
+use std::cell::RefCell;
+
 /// Prefix the provided manifest body with the standard Netsuke version header.
 #[must_use]
 pub fn manifest_yaml(body: &str) -> String {
@@ -21,6 +24,8 @@ pub fn manifest_yaml(body: &str) -> String {
 /// check but before persistence, that target is likewise returned unchanged.
 /// Directory targets return an [`io::ErrorKind::IsADirectory`] error. When a
 /// manifest must be created, staging occurs atomically in the target directory.
+/// Target inspection is fallible: metadata errors other than `NotFound`
+/// propagate to the caller.
 /// These guarantees describe the controlled implementation ordering and do not
 /// establish behaviour for every filesystem or scheduler.
 ///
@@ -45,42 +50,44 @@ pub fn manifest_yaml(body: &str) -> String {
 /// assert!(manifest.exists());
 /// ```
 pub fn ensure_manifest_exists(temp_dir: &Utf8Path, cli_file: &Utf8Path) -> io::Result<Utf8PathBuf> {
-    ensure_manifest_exists_impl(temp_dir, cli_file, |file, _| Ok(file))
-}
-
-fn ensure_manifest_exists_impl(
-    temp_dir: &Utf8Path,
-    cli_file: &Utf8Path,
-    before_persist: impl FnOnce(NamedTempFile, &Utf8Path) -> io::Result<NamedTempFile>,
-) -> io::Result<Utf8PathBuf> {
     let manifest_path = resolve_manifest_path(temp_dir, cli_file)?;
 
-    if fs::is_dir(&manifest_path) {
-        return Err(io::Error::new(
-            io::ErrorKind::IsADirectory,
-            format!("Manifest path points to a directory, expected a file: {manifest_path}"),
-        ));
+    match inspect_manifest_target(&manifest_path)? {
+        fs::PathState::Absent => create_manifest_file(temp_dir, manifest_path.as_ref())?,
+        fs::PathState::Directory => return Err(manifest_path_is_directory_error(&manifest_path)),
+        fs::PathState::NonDirectory => return Ok(manifest_path),
     }
 
-    if fs::exists(&manifest_path) {
-        return Ok(manifest_path);
-    }
-
-    create_manifest_file(temp_dir, manifest_path.as_ref(), before_persist)?;
     Ok(manifest_path)
 }
 
-/// Run manifest creation with a deterministic action before persistence.
+fn inspect_manifest_target(manifest_path: &Utf8Path) -> io::Result<fs::PathState> {
+    fs::inspect_path(manifest_path).map_err(|error| {
+        io::Error::new(
+            error.kind(),
+            format!("Failed to inspect manifest path {manifest_path}: {error}"),
+        )
+    })
+}
+
+fn manifest_path_is_directory_error(manifest_path: &Utf8Path) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::IsADirectory,
+        format!("Manifest path points to a directory, expected a file: {manifest_path}"),
+    )
+}
+
+/// Install a deterministic action before a staged manifest is persisted.
 ///
 /// This test-only seam models controlled target creation after the initial
-/// existence check; it does not introduce scheduling into production code.
+/// existence check; it does not introduce scheduling into production code. Its
+/// guard restores the preceding hook when it is dropped.
 #[cfg(test)]
-fn ensure_manifest_exists_with_before_persist(
-    temp_dir: &Utf8Path,
-    cli_file: &Utf8Path,
-    before_persist: impl FnOnce(NamedTempFile, &Utf8Path) -> io::Result<NamedTempFile>,
-) -> io::Result<Utf8PathBuf> {
-    ensure_manifest_exists_impl(temp_dir, cli_file, before_persist)
+fn install_before_persist_hook(
+    hook: impl FnOnce(NamedTempFile, &Utf8Path) -> io::Result<NamedTempFile> + 'static,
+) -> BeforePersistHookGuard {
+    let previous = BEFORE_PERSIST_HOOK.with(|hook_slot| hook_slot.replace(Some(Box::new(hook))));
+    BeforePersistHookGuard { previous }
 }
 
 fn resolve_manifest_path(temp_dir: &Utf8Path, cli_file: &Utf8Path) -> io::Result<Utf8PathBuf> {
@@ -100,16 +107,20 @@ fn resolve_manifest_path(temp_dir: &Utf8Path, cli_file: &Utf8Path) -> io::Result
     Ok(manifest_path)
 }
 
-fn create_manifest_file(
-    temp_dir: &Utf8Path,
-    manifest_path: &Utf8Path,
-    before_persist: impl FnOnce(NamedTempFile, &Utf8Path) -> io::Result<NamedTempFile>,
-) -> io::Result<()> {
+fn create_manifest_file(temp_dir: &Utf8Path, manifest_path: &Utf8Path) -> io::Result<()> {
     let dest_dir = manifest_path.parent().unwrap_or(temp_dir);
     ensure_parent_directory(manifest_path, dest_dir)?;
     let mut file = create_temp_file(dest_dir, manifest_path)?;
     write_manifest_content(&mut file, manifest_path)?;
-    persist_manifest_file(before_persist(file, manifest_path)?, manifest_path)
+    #[cfg(test)]
+    {
+        persist_manifest_file(run_before_persist_hook(file, manifest_path)?, manifest_path)
+    }
+
+    #[cfg(not(test))]
+    {
+        persist_manifest_file(file, manifest_path)
+    }
 }
 
 fn create_temp_file(dest_dir: &Utf8Path, manifest_path: &Utf8Path) -> io::Result<NamedTempFile> {
@@ -137,14 +148,17 @@ fn write_manifest_content(file: &mut NamedTempFile, manifest_path: &Utf8Path) ->
 fn persist_manifest_file(file: NamedTempFile, manifest_path: &Utf8Path) -> io::Result<()> {
     match file.persist_noclobber(manifest_path.as_std_path()) {
         Ok(_) => Ok(()),
-        Err(e) if e.error.kind() == io::ErrorKind::AlreadyExists && fs::is_dir(manifest_path) => {
-            Err(io::Error::new(
-                io::ErrorKind::IsADirectory,
-                format!("Manifest path points to a directory, expected a file: {manifest_path}"),
-            ))
-        }
-        Err(e) if e.error.kind() == io::ErrorKind::AlreadyExists && fs::exists(manifest_path) => {
-            Ok(())
+        Err(e) if e.error.kind() == io::ErrorKind::AlreadyExists => {
+            match inspect_manifest_target(manifest_path)? {
+                fs::PathState::Directory => Err(manifest_path_is_directory_error(manifest_path)),
+                fs::PathState::NonDirectory => Ok(()),
+                fs::PathState::Absent => Err(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    format!(
+                        "Manifest target disappeared after no-clobber persistence reported it existed: {manifest_path}"
+                    ),
+                )),
+            }
         }
         Err(e) => Err(io::Error::new(
             e.error.kind(),
@@ -159,19 +173,22 @@ fn persist_manifest_file(file: NamedTempFile, manifest_path: &Utf8Path) -> io::R
 }
 
 fn ensure_parent_directory(manifest_path: &Utf8Path, dest_dir: &Utf8Path) -> io::Result<()> {
-    if fs::exists(dest_dir) {
-        // If the path exists but is not a directory, report a clear error that
-        // includes the final manifest path. Returning AlreadyExists mirrors the
-        // semantics that the desired directory “exists” but is unusable.
-        if fs::is_dir(dest_dir) {
-            return Ok(());
+    match fs::inspect_path(dest_dir).map_err(|error| {
+        io::Error::new(
+            error.kind(),
+            format!("Failed to inspect manifest parent directory for {manifest_path}: {error}"),
+        )
+    })? {
+        fs::PathState::Directory => return Ok(()),
+        fs::PathState::NonDirectory => {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                format!(
+                    "Failed to create manifest parent directory for {manifest_path}: parent path exists and is not a directory",
+                ),
+            ));
         }
-        return Err(io::Error::new(
-            io::ErrorKind::AlreadyExists,
-            format!(
-                "Failed to create manifest parent directory for {manifest_path}: parent path exists and is not a directory",
-            ),
-        ));
+        fs::PathState::Absent => {}
     }
 
     let base = find_existing_ancestor(dest_dir, manifest_path)?;
@@ -204,16 +221,65 @@ fn find_existing_ancestor<'a>(
     let mut ancestors = dest_dir.ancestors();
     ancestors.next(); // Skip self
 
-    ancestors
-        .find(|candidate| fs::exists(candidate))
-        .ok_or_else(|| {
+    for candidate in ancestors {
+        match fs::inspect_path(candidate).map_err(|error| {
             io::Error::new(
-                io::ErrorKind::NotFound,
+                error.kind(),
                 format!(
-                    "Failed to locate an existing ancestor for manifest directory {manifest_path}",
+                    "Failed to inspect manifest ancestor {candidate} for {manifest_path}: {error}"
                 ),
             )
-        })
+        })? {
+            fs::PathState::Directory => return Ok(candidate),
+            fs::PathState::NonDirectory => {
+                return Err(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    format!(
+                        "Failed to create manifest parent directory for {manifest_path}: ancestor {candidate} is not a directory",
+                    ),
+                ));
+            }
+            fs::PathState::Absent => {}
+        }
+    }
+
+    Err(io::Error::new(
+        io::ErrorKind::NotFound,
+        format!("Failed to locate an existing ancestor for manifest directory {manifest_path}"),
+    ))
+}
+
+#[cfg(test)]
+type BeforePersistHook = Box<dyn FnOnce(NamedTempFile, &Utf8Path) -> io::Result<NamedTempFile>>;
+
+#[cfg(test)]
+thread_local! {
+    static BEFORE_PERSIST_HOOK: RefCell<Option<BeforePersistHook>> = const { RefCell::new(None) };
+}
+
+#[cfg(test)]
+#[must_use]
+struct BeforePersistHookGuard {
+    previous: Option<BeforePersistHook>,
+}
+
+#[cfg(test)]
+impl Drop for BeforePersistHookGuard {
+    fn drop(&mut self) {
+        BEFORE_PERSIST_HOOK.with(|hook_slot| *hook_slot.borrow_mut() = self.previous.take());
+    }
+}
+
+#[cfg(test)]
+fn run_before_persist_hook(
+    file: NamedTempFile,
+    manifest_path: &Utf8Path,
+) -> io::Result<NamedTempFile> {
+    let hook = BEFORE_PERSIST_HOOK.with(|hook_slot| hook_slot.borrow_mut().take());
+    match hook {
+        Some(installed_hook) => installed_hook(file, manifest_path),
+        None => Ok(file),
+    }
 }
 
 #[cfg(test)]
