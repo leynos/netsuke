@@ -16,8 +16,8 @@ use std::sync::Arc;
 use test_support::fluent::normalize_fluent_isolates;
 use test_support::localizer_test_lock;
 
-/// Parse the fixed fixture manifest and flatten it into catalogue entries.
-fn fixture_entries() -> Result<Vec<HelpEntry>> {
+/// Parse the fixed fixture manifest used by the catalogue snapshots.
+fn fixture_manifest() -> Result<NetsukeManifest> {
     let yaml = r#"netsuke_version: "1.0.0"
 actions:
   - name: lint
@@ -38,8 +38,7 @@ defaults:
   - lint
   - test
 "#;
-    let manifest = manifest::from_str(yaml)?;
-    Ok(build_catalogue(&manifest))
+    manifest::from_str(yaml)
 }
 
 /// Acquire the localizer test lock, recovering from poisoning the way the
@@ -57,12 +56,12 @@ fn localizer_lock() -> std::sync::MutexGuard<'static, ()> {
 fn catalogue_snapshot(
     locale: &str,
     snapshot_name: &str,
-    render: impl FnOnce(&[HelpEntry]) -> Result<String>,
+    render: impl FnOnce(&NetsukeManifest) -> Result<String>,
 ) -> Result<()> {
     let _lock = localizer_lock();
     let _guard = set_localizer_for_tests(Arc::from(build_localizer(Some(locale))));
-    let entries = fixture_entries()?;
-    let rendered = render(&entries)?;
+    let manifest = fixture_manifest()?;
+    let rendered = render(&manifest)?;
     snapshot_settings("help_targets").bind(|| {
         assert_snapshot!(snapshot_name, rendered);
     });
@@ -71,9 +70,9 @@ fn catalogue_snapshot(
 
 #[test]
 fn text_catalogue_snapshot() -> Result<()> {
-    catalogue_snapshot("en-US", "text_catalogue", |entries| {
+    catalogue_snapshot("en-US", "text_catalogue", |manifest| {
         Ok(normalize_fluent_isolates(&render_text(
-            entries,
+            &build_catalogue(manifest),
             theme_prefs(ThemePreference::Unicode),
         )))
     })
@@ -81,9 +80,9 @@ fn text_catalogue_snapshot() -> Result<()> {
 
 #[test]
 fn accessible_catalogue_snapshot() -> Result<()> {
-    catalogue_snapshot("en-US", "accessible_catalogue", |entries| {
+    catalogue_snapshot("en-US", "accessible_catalogue", |manifest| {
         Ok(normalize_fluent_isolates(&render_text(
-            entries,
+            &build_catalogue(manifest),
             theme_prefs(ThemePreference::Ascii),
         )))
     })
@@ -91,9 +90,9 @@ fn accessible_catalogue_snapshot() -> Result<()> {
 
 #[test]
 fn localized_catalogue_snapshot() -> Result<()> {
-    catalogue_snapshot("es-ES", "localized_catalogue_es_es", |entries| {
+    catalogue_snapshot("es-ES", "localized_catalogue_es_es", |manifest| {
         Ok(normalize_fluent_isolates(&render_text(
-            entries,
+            &build_catalogue(manifest),
             theme_prefs(ThemePreference::Unicode),
         )))
     })
@@ -101,5 +100,7 @@ fn localized_catalogue_snapshot() -> Result<()> {
 
 #[test]
 fn json_catalogue_snapshot() -> Result<()> {
-    catalogue_snapshot("en-US", "json_catalogue", render_json)
+    catalogue_snapshot("en-US", "json_catalogue", |manifest| {
+        render_json(build_catalogue(manifest))
+    })
 }

@@ -8,6 +8,7 @@
 use anyhow::{Context, Result, ensure};
 use clap::CommandFactory;
 use serde::Serialize;
+use std::collections::HashSet;
 use tracing::info;
 use unicode_width::UnicodeWidthStr;
 
@@ -26,9 +27,9 @@ use super::path_helpers::{ensure_manifest_exists_or_error, resolve_manifest_path
 use super::{load_manifest_with_stage_reporting, process};
 
 /// One catalogue row: a single resolved target name with its metadata.
-struct HelpEntry {
+struct HelpEntry<'a> {
     name: String,
-    description: Option<String>,
+    description: Option<&'a str>,
     is_action: bool,
     is_default: bool,
 }
@@ -68,7 +69,7 @@ pub(super) fn handle_help_targets(cli: &Cli, reporter: &dyn StatusReporter) -> R
     let status_key: LocalizationKey = keys::STATUS_TOOL_HELP_TARGETS.into();
     report_pipeline_stage(reporter, PipelineStage::GraphRendering, Some(status_key));
     if cli.json {
-        let rendered = render_json(&entries).context("serialize help targets catalogue")?;
+        let rendered = render_json(entries).context("serialize help targets catalogue")?;
         process::write_text_stdout(&rendered)?;
     } else {
         let rendered = render_text(&entries, resolved_prefs(cli));
@@ -109,38 +110,40 @@ pub(super) fn render_subcommand_help(name: &str) -> Result<()> {
 /// Flatten the rendered manifest into a deterministic catalogue in declaration
 /// order: actions first, then targets. A multi-name entry yields one row per
 /// name, each carrying the same description and default status.
-fn build_catalogue(manifest: &NetsukeManifest) -> Vec<HelpEntry> {
+fn build_catalogue(manifest: &NetsukeManifest) -> Vec<HelpEntry<'_>> {
     let mut entries = Vec::new();
+    let defaults: HashSet<&str> = manifest.defaults.iter().map(String::as_str).collect();
     for target in &manifest.actions {
-        append_target_entries(&mut entries, target, true, &manifest.defaults);
+        append_target_entries(&mut entries, target, true, &defaults);
     }
     for target in &manifest.targets {
-        append_target_entries(&mut entries, target, false, &manifest.defaults);
+        append_target_entries(&mut entries, target, false, &defaults);
     }
     entries
 }
 
-fn validate_defaults(defaults: &[String], entries: &[HelpEntry]) -> Result<()> {
+fn validate_defaults(defaults: &[String], entries: &[HelpEntry<'_>]) -> Result<()> {
+    let names: HashSet<&str> = entries.iter().map(|entry| entry.name.as_str()).collect();
     for default in defaults {
         ensure!(
-            entries.iter().any(|entry| entry.name == *default),
+            names.contains(default.as_str()),
             "manifest default '{default}' does not name a declared action or target"
         );
     }
     Ok(())
 }
 
-fn append_target_entries(
-    entries: &mut Vec<HelpEntry>,
-    target: &Target,
+fn append_target_entries<'a>(
+    entries: &mut Vec<HelpEntry<'a>>,
+    target: &'a Target,
     is_action: bool,
-    defaults: &[String],
+    defaults: &HashSet<&str>,
 ) {
     for name in target.name.to_string_vec() {
         entries.push(HelpEntry {
-            is_default: defaults.iter().any(|default| default == &name),
+            is_default: defaults.contains(name.as_str()),
             name,
-            description: target.description.clone(),
+            description: target.description.as_deref(),
             is_action,
         });
     }
@@ -160,9 +163,9 @@ fn resolved_prefs(cli: &Cli) -> OutputPrefs {
 /// section, with aligned name and description columns and a localized default
 /// marker. A missing description leaves the entry visible without a description
 /// column. Empty sections are omitted.
-fn render_text(entries: &[HelpEntry], prefs: OutputPrefs) -> String {
-    let actions: Vec<&HelpEntry> = entries.iter().filter(|entry| entry.is_action).collect();
-    let targets: Vec<&HelpEntry> = entries.iter().filter(|entry| !entry.is_action).collect();
+fn render_text(entries: &[HelpEntry<'_>], prefs: OutputPrefs) -> String {
+    let actions: Vec<&HelpEntry<'_>> = entries.iter().filter(|entry| entry.is_action).collect();
+    let targets: Vec<&HelpEntry<'_>> = entries.iter().filter(|entry| !entry.is_action).collect();
     let mut out = String::new();
     render_section(&mut out, &actions, keys::CLI_HELP_ACTIONS_HEADING, prefs);
     if !actions.is_empty() && !targets.is_empty() {
@@ -174,7 +177,7 @@ fn render_text(entries: &[HelpEntry], prefs: OutputPrefs) -> String {
 
 fn render_section(
     out: &mut String,
-    entries: &[&HelpEntry],
+    entries: &[&HelpEntry<'_>],
     heading_key: &'static str,
     prefs: OutputPrefs,
 ) {
@@ -194,7 +197,7 @@ fn render_section(
         out.push_str("  ");
         out.push_str(&entry.name);
         out.push_str(&" ".repeat(width.saturating_sub(name_width)));
-        if let Some(description) = &entry.description {
+        if let Some(description) = entry.description {
             out.push_str("  ");
             out.push_str(description);
         }
@@ -232,31 +235,32 @@ struct HelpTargetsResult<'a> {
 
 #[derive(Debug, Serialize)]
 struct HelpEntryJson<'a> {
-    name: &'a str,
+    name: String,
     description: Option<&'a str>,
     default: bool,
 }
 
-fn render_json(entries: &[HelpEntry]) -> Result<String> {
+fn render_json(entries: Vec<HelpEntry<'_>>) -> Result<String> {
+    let (actions, targets): (Vec<_>, Vec<_>) =
+        entries.into_iter().partition(|entry| entry.is_action);
     serde_json::to_string_pretty(&HelpTargetsDocument {
         schema_version: SCHEMA_VERSION,
         generator: GeneratorInfo::current(),
         result: HelpTargetsResult {
             command: "help-targets",
-            actions: json_entries(entries, true),
-            targets: json_entries(entries, false),
+            actions: json_entries(actions),
+            targets: json_entries(targets),
         },
     })
     .context("serialize help targets catalogue")
 }
 
-fn json_entries(entries: &[HelpEntry], is_action: bool) -> Vec<HelpEntryJson<'_>> {
+fn json_entries(entries: Vec<HelpEntry<'_>>) -> Vec<HelpEntryJson<'_>> {
     entries
-        .iter()
-        .filter(|entry| entry.is_action == is_action)
+        .into_iter()
         .map(|entry| HelpEntryJson {
-            name: &entry.name,
-            description: entry.description.as_deref(),
+            name: entry.name,
+            description: entry.description,
             default: entry.is_default,
         })
         .collect()

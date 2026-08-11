@@ -115,9 +115,38 @@ fn localize_subcommands(command: &mut Command, localizer: &dyn Localizer) {
 
         // Localise subcommand argument help text.
         updated = localize_arguments(updated, localizer, known);
+        updated = localize_help_topics(updated, localizer, known);
 
         *subcommand = updated;
     }
+}
+
+/// Localise the topics nested beneath the `help` subcommand.
+fn localize_help_topics(
+    mut command: Command,
+    localizer: &dyn Localizer,
+    subcommand: Option<Subcommand>,
+) -> Command {
+    if !matches!(subcommand, Some(Subcommand::Help)) {
+        return command;
+    }
+
+    for topic in command.get_subcommands_mut() {
+        let known = HelpTopicName::from_name(topic.get_name());
+        let mut updated = std::mem::take(topic);
+        if let Some(localized) = localize_field(
+            localizer,
+            known.map(help_topic_about_key),
+            updated
+                .get_about()
+                .map(|s: &clap::builder::StyledStr| s.to_string()),
+        ) {
+            updated = updated.about(localized);
+        }
+        *topic = updated;
+    }
+
+    command
 }
 
 /// The set of known CLI subcommands.
@@ -141,6 +170,29 @@ impl Subcommand {
             "graph" => Some(Self::Graph),
             "generate" => Some(Self::Generate),
             "help" => Some(Self::Help),
+            _ => None,
+        }
+    }
+}
+
+/// The topics nested under the `help` subcommand.
+#[derive(Clone, Copy)]
+enum HelpTopicName {
+    Targets,
+    Build,
+    Clean,
+    Graph,
+    Generate,
+}
+
+impl HelpTopicName {
+    fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "targets" => Some(Self::Targets),
+            "build" => Some(Self::Build),
+            "clean" => Some(Self::Clean),
+            "graph" => Some(Self::Graph),
+            "generate" => Some(Self::Generate),
             _ => None,
         }
     }
@@ -218,6 +270,16 @@ const fn subcommand_long_about_key(subcommand: Subcommand) -> &'static str {
         Subcommand::Graph => keys::CLI_SUBCOMMAND_GRAPH_LONG_ABOUT,
         Subcommand::Generate => keys::CLI_SUBCOMMAND_GENERATE_LONG_ABOUT,
         Subcommand::Help => keys::CLI_SUBCOMMAND_HELP_LONG_ABOUT,
+    }
+}
+
+const fn help_topic_about_key(topic: HelpTopicName) -> &'static str {
+    match topic {
+        HelpTopicName::Targets => keys::CLI_HELP_TARGETS_HEADING,
+        HelpTopicName::Build => keys::CLI_SUBCOMMAND_BUILD_ABOUT,
+        HelpTopicName::Clean => keys::CLI_SUBCOMMAND_CLEAN_ABOUT,
+        HelpTopicName::Graph => keys::CLI_SUBCOMMAND_GRAPH_ABOUT,
+        HelpTopicName::Generate => keys::CLI_SUBCOMMAND_GENERATE_ABOUT,
     }
 }
 

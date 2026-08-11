@@ -48,3 +48,44 @@ fn localized_help_snapshots_include_config_flag(
         assert_snapshot!(snapshot_name, normalized_help);
     });
 }
+
+/// Verifies `netsuke help --help` localizes its nested topic descriptions.
+#[rstest]
+#[case::en_us(
+    "en-US",
+    [
+        "Targets:",
+        "Build targets defined in the manifest",
+        "Remove build artefacts via Ninja",
+        "Emit the build dependency graph",
+        "Generate the Ninja manifest without running Ninja",
+    ]
+)]
+#[case::es_es(
+    "es-ES",
+    [
+        "Objetivos:",
+        "Compila objetivos definidos en el manifiesto",
+        "Elimina artefactos de compilación mediante Ninja",
+        "Emite el grafo de dependencias de compilación",
+        "Genera el manifiesto Ninja sin ejecutar Ninja",
+    ]
+)]
+fn localized_help_topics_include_localized_descriptions(
+    #[case] locale: &str,
+    #[case] expected_descriptions: [&str; 5],
+) {
+    let localizer = build_localizer(Some(locale));
+    let mut command = localize_command(Cli::command(), localizer.as_ref());
+    let help = command
+        .find_subcommand_mut("help")
+        .expect("help subcommand should exist");
+    let rendered_help = normalize_fluent_isolates(&help.render_long_help().to_string());
+
+    for description in expected_descriptions {
+        assert!(
+            rendered_help.contains(description),
+            "localized help topics for {locale} should contain {description:?}: {rendered_help}"
+        );
+    }
+}
