@@ -246,6 +246,12 @@ criterion in issue #552 and all repository gates pass.
   change as `04e2369`. `make check-fmt`, `make typecheck`, `make lint`, and
   `make test` all passed; the full test suite reported 1,940 passed tests, one
   skipped test, and passing doctests.
+- [x] (2026-08-12) Split `generate_bundle` edge processing into private
+  `render_edges`, `render_edge`, serial-edge, and display-edge helpers while
+  preserving sorted de-duplication, MissingAction construction, staged-gate
+  lowering, and emitted text. Committed as `ce47d61`. The focused dyndep tests
+  and `make check-fmt`, `make typecheck`, `make lint`, and `make test` passed
+  with no generated-output or snapshot changes.
 - [x] Committed each green logical change and recorded final evidence here.
 
 ## Surprises and discoveries
@@ -985,3 +991,8 @@ retains each separately named zero-staging behaviour test.
 protocol. The temporary-name collision path still accepts only matching final
 content, while corruption, a missing final sidecar, write failures, and rename
 failures retain their existing localization and error behaviour.
+
+2026-08-12: Reduced `generate_bundle` complexity by separating stable edge
+selection from individual-edge rendering. The new helpers retain the exact
+serial staging and ordinary display paths, so generated Ninja text, sidecar
+content, and MissingAction errors remain unchanged.
