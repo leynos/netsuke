@@ -158,8 +158,8 @@ fn resolved_prefs(cli: &Cli) -> OutputPrefs {
 
 /// Render the text catalogue: an "Actions:" section followed by a "Targets:"
 /// section, with aligned name and description columns and a localized default
-/// marker. A missing description stays an empty column so the entry is never
-/// hidden. Empty sections are omitted.
+/// marker. A missing description leaves the entry visible without a description
+/// column. Empty sections are omitted.
 fn render_text(entries: &[HelpEntry], prefs: OutputPrefs) -> String {
     let actions: Vec<&HelpEntry> = entries.iter().filter(|entry| entry.is_action).collect();
     let targets: Vec<&HelpEntry> = entries.iter().filter(|entry| !entry.is_action).collect();
