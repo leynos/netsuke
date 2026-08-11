@@ -205,6 +205,15 @@ fn escape_script(script: &str) -> String {
         .replace('\n', "\\n")
 }
 
+/// Quote `value` as one literal POSIX shell argument.
+///
+/// The command-list renderer passes each entry to `eval` so an inline comment
+/// or trailing control operator cannot consume the brace-group terminator.
+fn shell_single_quote(value: &str) -> String {
+    let escaped = value.replace('\'', r"'\\''");
+    format!("'{escaped}'")
+}
+
 /// Wrapper struct to display a rule with its identifier.
 struct NamedAction<'a> {
     id: &'a str,
@@ -217,15 +226,16 @@ impl NamedAction<'_> {
             Recipe::Command { command } => {
                 let command_line = match command {
                     StringOrList::String(cmd) => cmd.clone(),
-                    // Brace groups keep each entry a distinct shell unit so its
-                    // own `||`, `;`, or `&` cannot escape the entry boundary
-                    // and mask an earlier failure. Braces run in the current
-                    // shell (unlike `( ... )`), so working directory,
-                    // environment, and variables set by one entry still carry
-                    // into the next, and the `&&` chain stays fail-fast.
+                    // Brace groups keep each entry a distinct shell unit, and
+                    // `eval` prevents comments or trailing control operators
+                    // inside an entry consuming its terminator. Braces run in
+                    // the current shell (unlike `( ... )`), so working
+                    // directory, environment, and variables set by one entry
+                    // still carry into the next, and the `&&` chain stays
+                    // fail-fast.
                     StringOrList::List(items) => items
                         .iter()
-                        .map(|item| format!("{{ {item}; }}"))
+                        .map(|item| format!("{{ eval {}; }}", shell_single_quote(item)))
                         .join(" && "),
                     StringOrList::Empty => return Self::reject_empty_command_recipe(),
                 };

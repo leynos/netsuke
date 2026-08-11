@@ -116,7 +116,9 @@ fn generate_command_list_ninja_joins_a_fail_fast_chain() -> Result<()> {
 
     let ninja = generate(&graph)?;
     ensure!(
-        ninja.contains("command = { echo one; } && { echo two; } && { echo three; }"),
+        ninja.contains(
+            "command = { eval 'echo one'; } && { eval 'echo two'; } && { eval 'echo three'; }"
+        ),
         "command list entries should be isolated brace groups joined by &&:\n{ninja}"
     );
     Ok(())

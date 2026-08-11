@@ -23,7 +23,7 @@
   their signatures and no embedder needs to change
   ([#490](https://github.com/leynos/netsuke/issues/490))
 - Accept a non-empty ordered list of commands for a rule or target `command`
-  recipe, executed as a single fail-fast `&&` shell chain so the build stops
+  recipe, executed as a single fail-fast `&&` shell chain, so the build stops
   at the first non-zero exit; an empty command list is rejected at parse time
   ([#550](https://github.com/leynos/netsuke/issues/550))
 

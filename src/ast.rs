@@ -145,7 +145,8 @@ pub enum Recipe {
     /// A shell command, given as a scalar or an ordered list executed by a
     /// fail-fast shell chain.
     Command {
-        /// Shell command executed verbatim by Ninja.
+        /// A scalar command passes through unchanged; list entries are
+        /// evaluated in brace groups joined by a fail-fast `&&` chain.
         command: StringOrList,
     },
     /// An embedded multi-line script.

@@ -223,7 +223,7 @@ erDiagram
         bool always
     }
     RECIPE {
-        string command
+        StringOrList command
         string script
         StringOrList rule
     }
@@ -250,18 +250,18 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   `{{ outs }}` to represent input and output files. Netsuke expands these
   placeholders to space-separated lists of file paths quoted for POSIX `/bin/sh`
   using the [`shell-quote`](https://docs.rs/shell-quote/latest/shell_quote/)
-  crate (Sh mode) before hashing the action. The IR stores the fully expanded
-  command; Ninja executes this text verbatim. After interpolation, the command
-  must be parsable by [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode).
-  A list command is emitted as a single fail-fast `&&` chain, so entries run in
-  declaration order and the chain stops at the first non-zero exit; all entries
-  share one shell process, carrying working directory, environment, and shell
-  variables forward like a `script` block, and each later entry starts only
-  when the preceding entry exits with status zero. An empty command list is
-  rejected during manifest deserialization. Automatic shell escaping applies
-  only where the schema has enough structure to identify argument boundaries.
-  Plain command strings remain shell text; authors should use structured recipes
-  or explicit quoting helpers for arbitrary variables.
+  crate (Sh mode) before hashing the action. After interpolation, a scalar
+  command passes through unchanged, while a list is lowered to brace groups
+  that evaluate each entry and are joined by `&&` (for example,
+  `{ eval 'first'; } && { eval 'second'; }`). The groups run in declaration
+  order in one shell process and stop at the first non-zero exit, so working
+  directory, environment, and shell variables carry forward while each entry
+  remains a separate shell unit. The resulting command must be parsable by
+  [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode). An empty command
+  list is rejected during manifest deserialization. Automatic shell escaping
+  applies only where the schema has enough structure to identify argument
+  boundaries. Plain command strings remain shell text; authors should use
+  structured recipes or explicit quoting helpers for arbitrary variables.
 
 - `script`: A multi-line script declared with the YAML `|` block style. The
   entire block is passed to an interpreter. If the first line begins with `#!`
@@ -331,7 +331,8 @@ rule:
   - clean-up
 ```
 
-- `command`: A single command string to run directly for this target.
+- `command`: A command string or non-empty ordered list of command strings to
+  run directly for this target.
 
 - `script`: A multi-line script passed to the interpreter. When present, it is
   defined using the YAML `|` block style.
