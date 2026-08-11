@@ -239,6 +239,13 @@ criterion in issue #552 and all repository gates pass.
   parallel and one-element-serial tests. Committed as `df68f82`. The focused
   dyndep module, `make check-fmt`, `make typecheck`, `make lint`, and
   `make test` passed.
+- [x] (2026-08-12) Linearized `write_atomic` in
+  `src/runner/process/dyndep_files.rs` by extracting temporary-file creation,
+  collision verification, write-and-sync, and rename-race helpers. Added the
+  matching-final-sidecar temporary-name-collision regression and committed the
+  change as `04e2369`. `make check-fmt`, `make typecheck`, `make lint`, and
+  `make test` all passed; the full test suite reported 1,940 passed tests, one
+  skipped test, and passing doctests.
 - [x] Committed each green logical change and recorded final evidence here.
 
 ## Surprises and discoveries
@@ -973,3 +980,8 @@ the existing draft pull request with the completed documentation milestone.
 2026-08-12: Applied the requested test-only assertion-helper extraction after
 plan completion. It changes neither production code nor feature semantics and
 retains each separately named zero-staging behaviour test.
+
+2026-08-12: Refactored the atomic dyndep sidecar writer without changing its
+protocol. The temporary-name collision path still accepts only matching final
+content, while corruption, a missing final sidecar, write failures, and rename
+failures retain their existing localization and error behaviour.
