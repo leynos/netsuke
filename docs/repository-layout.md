@@ -134,6 +134,10 @@ Place new production Rust modules under the `src/` subtree that owns the
 feature boundary. Use `test_support/` for reusable integration-test helpers and
 keep one-off fixtures close to the tests that consume them.
 
+Place proposed changes requiring technical review under `docs/rfcs/`, using the
+numbering and status conventions in the documentation style guide. Link each
+RFC from `docs/contents.md` when it is first committed.
+
 The crates.io package is named `netsuke-build`, while its library and binary
 targets remain named `netsuke`. Keep command-line help, manual pages, release
 artefacts, and operating-system packages aligned with the `netsuke` target name

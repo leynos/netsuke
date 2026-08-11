@@ -98,6 +98,13 @@ operator, user, and contributor references are easier to find.
   composition boundary for configuration fields, parser-only selectors, and
   subcommands.
 
+
+## Requests for comments
+
+- [RFC 0001: Harden release integrity and admission](rfcs/0001-release-hardening.md):
+  Proposed release-profile invariants, secret and dependency policy, and
+  exact-commit release admission.
+
 ## Proposals
 
 - [rfcs/](rfcs/): Requests for Comments proposing changes that need technical
