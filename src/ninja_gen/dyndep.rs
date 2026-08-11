@@ -171,9 +171,8 @@ pub fn generate_bundle(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenErr
 
     let mut edges: Vec<_> = graph.targets.values().collect();
     edges.sort_by_key(|a| path_key(&a.explicit_outputs));
-    let mut seen = HashSet::new();
-    let mut dyndep_files: Vec<GeneratedDyndep> = Vec::new();
-    let mut staged_sidecars: HashSet<Utf8PathBuf> = HashSet::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut stages = SerialStages::default();
 
     for edge in edges {
         let key = path_key(&edge.explicit_outputs);
@@ -194,14 +193,8 @@ pub fn generate_bundle(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenErr
             edge.dependency_order == DependencyOrder::Serial && edge.implicit_deps.len() > 1;
         if requires_gates {
             let mut added = Vec::new();
-            render_serial_block(
-                edge,
-                &mut out,
-                &mut dyndep_files,
-                &mut staged_sidecars,
-                &mut added,
-            )
-            .expect("write to String cannot fail");
+            render_serial_block(edge, &mut out, &mut stages, &mut added)
+                .expect("write to String cannot fail");
             let mut aggregate = edge.clone();
             aggregate.implicit_deps = added;
             aggregate.dependency_order = DependencyOrder::Parallel;
@@ -235,8 +228,15 @@ pub fn generate_bundle(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenErr
 
     Ok(GeneratedNinja {
         build_file: out,
-        dyndep_files,
+        dyndep_files: stages.dyndep_files,
     })
+}
+
+/// Mutable staging state shared while lowering one serial edge.
+#[derive(Default)]
+struct SerialStages {
+    dyndep_files: Vec<GeneratedDyndep>,
+    staged_sidecars: HashSet<Utf8PathBuf>,
 }
 
 /// Emit the staged gates and sidecar-producing phony edges for one serial edge,
@@ -245,8 +245,7 @@ pub fn generate_bundle(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenErr
 fn render_serial_block(
     edge: &BuildEdge,
     out: &mut String,
-    dyndep_files: &mut Vec<GeneratedDyndep>,
-    staged_sidecars: &mut HashSet<Utf8PathBuf>,
+    stages: &mut SerialStages,
     gate_paths: &mut Vec<Utf8PathBuf>,
 ) -> std::fmt::Result {
     use crate::ninja_gen::escape_ninja_path;
@@ -278,8 +277,8 @@ fn render_serial_block(
         writeln!(out, "  dyndep = {sidecar_escaped}")?;
         writeln!(out)?;
 
-        if staged_sidecars.insert(sidecar.clone()) {
-            dyndep_files.push(GeneratedDyndep {
+        if stages.staged_sidecars.insert(sidecar.clone()) {
+            stages.dyndep_files.push(GeneratedDyndep {
                 relative_path: sidecar,
                 content,
             });
