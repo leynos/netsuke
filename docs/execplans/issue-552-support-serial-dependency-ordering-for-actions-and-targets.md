@@ -4,9 +4,8 @@ This ExecPlan is a living document. Keep `Progress`, `Surprises & discoveries`,
 `Decision log`, and `Outcomes & retrospective` current as implementation
 proceeds.
 
-Status: **In development — implementation and documentation changes pass the
-full deterministic suite. Commit, independent review, and pull-request refresh
-remain.**
+Status: **Complete — implementation and documentation changes pass the full
+deterministic suite and independent review.**
 
 Issue: [#552](https://github.com/leynos/netsuke/issues/552)
 
@@ -229,7 +228,12 @@ criterion in issue #552 and all repository gates pass.
   `make test` reported 1,939 passed tests, one skipped test, and passing
   doctests. The canonical command-specific logs use the current branch suffix
   beneath `/tmp`.
-- [ ] Commit each green logical change and record final evidence here.
+- [x] (2026-08-12) Committed the documentation and executable-example coverage
+  as `7153538` (`Document serial dependency ordering (#552)`).
+- [x] (2026-08-12) Ran `coderabbit review --agent` on the committed milestone.
+  It completed successfully with zero actionable findings. The review log uses
+  the current branch suffix beneath `/tmp` and ends in `-2.out`.
+- [x] Committed each green logical change and recorded final evidence here.
 
 ## Surprises and discoveries
 
@@ -359,9 +363,10 @@ The implementation has delivered the planned closed schema enum, backend-only
 staged dyndep lowering, complete generated bundle, capability-scoped atomic
 sidecar materialization, and the user-facing and maintainer documentation. The
 documentation makes the intentionally limited path-scoped execution guarantee
-explicit rather than implying global serialization. Fresh full-gate evidence,
-independent review, the documentation commit identifier, and final
-pull-request refresh remain.
+explicit rather than implying global serialization. The complete deterministic
+suite passed after the executable documentation sample was registered, and
+CodeRabbit found no actionable concerns on `7153538`. The feature is ready for
+the draft pull request and normal reviewer evaluation.
 
 ## Context and orientation
 
@@ -953,3 +958,8 @@ executable-fence contract. The serial-syntax sample is now a valid standalone
 manifest with an explicit marker and an entry in the documentation-example
 registry, so its syntax cannot drift without the normal test suite detecting
 it.
+
+2026-08-12: The full suite passed after the executable-example correction, and
+the independent CodeRabbit review of `7153538` returned no actionable concerns.
+This completes the implementation plan; the remaining work is only to refresh
+the existing draft pull request with the completed documentation milestone.
