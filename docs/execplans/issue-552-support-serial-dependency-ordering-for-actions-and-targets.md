@@ -233,6 +233,12 @@ criterion in issue #552 and all repository gates pass.
 - [x] (2026-08-12) Ran `coderabbit review --agent` on the committed milestone.
   It completed successfully with zero actionable findings. The review log uses
   the current branch suffix beneath `/tmp` and ends in `-2.out`.
+- [x] (2026-08-12) Refactored the duplicated no-staging assertions in
+  `src/ninja_gen/dyndep_tests.rs` into the private
+  `assert_edge_produces_no_staging` helper without merging the distinct
+  parallel and one-element-serial tests. Committed as `df68f82`. The focused
+  dyndep module, `make check-fmt`, `make typecheck`, `make lint`, and
+  `make test` passed.
 - [x] Committed each green logical change and recorded final evidence here.
 
 ## Surprises and discoveries
@@ -963,3 +969,7 @@ it.
 the independent CodeRabbit review of `7153538` returned no actionable concerns.
 This completes the implementation plan; the remaining work is only to refresh
 the existing draft pull request with the completed documentation milestone.
+
+2026-08-12: Applied the requested test-only assertion-helper extraction after
+plan completion. It changes neither production code nor feature semantics and
+retains each separately named zero-staging behaviour test.
