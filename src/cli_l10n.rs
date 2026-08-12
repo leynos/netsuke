@@ -274,7 +274,7 @@ const fn subcommand_long_about_key(subcommand: Subcommand) -> &'static str {
 
 const fn help_topic_about_key(topic: HelpTopicName) -> &'static str {
     match topic {
-        HelpTopicName::Targets => keys::CLI_HELP_TARGETS_HEADING,
+        HelpTopicName::Targets => keys::CLI_HELP_TARGETS_ABOUT,
         HelpTopicName::Subcommand(subcommand) => subcommand_about_key(subcommand),
     }
 }
@@ -344,7 +344,7 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
-    #[case("targets", Some(keys::CLI_HELP_TARGETS_HEADING))]
+    #[case("targets", Some(keys::CLI_HELP_TARGETS_ABOUT))]
     #[case("build", Some(keys::CLI_SUBCOMMAND_BUILD_ABOUT))]
     #[case("clean", Some(keys::CLI_SUBCOMMAND_CLEAN_ABOUT))]
     #[case("graph", Some(keys::CLI_SUBCOMMAND_GRAPH_ABOUT))]

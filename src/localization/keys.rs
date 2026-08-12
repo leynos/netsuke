@@ -41,6 +41,7 @@ define_keys! {
     CLI_SUBCOMMAND_HELP_LONG_ABOUT => "cli.subcommand.help.long_about",
     CLI_HELP_ACTIONS_HEADING => "cli.help.actions_heading",
     CLI_HELP_TARGETS_HEADING => "cli.help.targets_heading",
+    CLI_HELP_TARGETS_ABOUT => "cli.help.targets_about",
     CLI_HELP_DEFAULT_MARKER => "cli.help.default_marker",
     CLI_SUBCOMMAND_BUILD_FLAG_TARGETS_HELP => "cli.subcommand.build.flag.targets.help",
     CLI_SUBCOMMAND_GRAPH_FLAG_HTML_HELP => "cli.subcommand.graph.flag.html.help",

@@ -54,7 +54,7 @@ fn localized_help_snapshots_include_config_flag(
 #[case::en_us(
     "en-US",
     [
-        "Targets:",
+        "List targets and actions in the selected manifest.",
         "Build targets defined in the manifest",
         "Remove build artefacts via Ninja",
         "Emit the build dependency graph",
@@ -64,7 +64,7 @@ fn localized_help_snapshots_include_config_flag(
 #[case::es_es(
     "es-ES",
     [
-        "Objetivos:",
+        "Enumerar objetivos y acciones en el manifiesto seleccionado.",
         "Compila objetivos definidos en el manifiesto",
         "Elimina artefactos de compilación mediante Ninja",
         "Emite el grafo de dependencias de compilación",
