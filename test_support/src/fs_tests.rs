@@ -8,6 +8,7 @@
 use super::{PathState, create_dir_all, inspect_path, try_is_file, write};
 use rstest::{fixture, rstest};
 use std::io;
+use std::path::Path;
 
 /// Temporary workspace for the filesystem helper tests.
 ///
@@ -19,6 +20,24 @@ type TempDir = io::Result<tempfile::TempDir>;
 #[fixture]
 fn temp_dir() -> TempDir {
     tempfile::tempdir()
+}
+
+fn assert_traversal_through_file_propagates_non_not_found<T>(
+    temp_dir: TempDir,
+    inspect: impl FnOnce(&Path) -> io::Result<T>,
+) -> anyhow::Result<()> {
+    let temp = temp_dir?;
+    let file = temp.path().join("regular-file");
+    write(&file, b"fixture")?;
+
+    let Err(error) = inspect(&file.join("child")) else {
+        anyhow::bail!("traversing through a regular file should fail");
+    };
+    anyhow::ensure!(
+        error.kind() != io::ErrorKind::NotFound,
+        "traversal through a file should not be reported as absence, got {error:?}"
+    );
+    Ok(())
 }
 
 #[rstest]
@@ -58,18 +77,7 @@ fn try_is_file_reports_a_directory_as_not_a_file(temp_dir: TempDir) -> anyhow::R
 
 #[rstest]
 fn try_is_file_propagates_errors_other_than_not_found(temp_dir: TempDir) -> anyhow::Result<()> {
-    let temp = temp_dir?;
-    let file = temp.path().join("regular-file");
-    write(&file, b"fixture")?;
-
-    let Err(error) = try_is_file(file.join("child")) else {
-        anyhow::bail!("traversing through a regular file should fail");
-    };
-    anyhow::ensure!(
-        error.kind() != io::ErrorKind::NotFound,
-        "traversal through a file should not be reported as absence, got {error:?}"
-    );
-    Ok(())
+    assert_traversal_through_file_propagates_non_not_found(temp_dir, |path| try_is_file(path))
 }
 
 #[rstest]
@@ -88,18 +96,7 @@ fn inspect_path_distinguishes_absent_directory_and_non_directory(
 
 #[rstest]
 fn inspect_path_propagates_errors_other_than_not_found(temp_dir: TempDir) -> anyhow::Result<()> {
-    let temp = temp_dir?;
-    let file = temp.path().join("regular-file");
-    write(&file, b"fixture")?;
-
-    let Err(error) = inspect_path(file.join("child")) else {
-        anyhow::bail!("traversing through a regular file should fail");
-    };
-    anyhow::ensure!(
-        error.kind() != io::ErrorKind::NotFound,
-        "traversal through a file should not be reported as absence, got {error:?}"
-    );
-    Ok(())
+    assert_traversal_through_file_propagates_non_not_found(temp_dir, |path| inspect_path(path))
 }
 
 #[rstest]
