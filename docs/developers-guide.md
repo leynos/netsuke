@@ -1713,6 +1713,12 @@ is not obvious from the name:
   underlying metadata error. Fixture code must use this wrapper for directory
   predicates rather than calling `std::fs::metadata(...).is_dir()` or
   `Path::is_dir` directly.
+- `PathState` and `inspect_path(path) -> io::Result<PathState>` provide a
+  fallible target-state probe. `PathState::Absent` means metadata returned
+  `NotFound`, `PathState::Directory` means the target is a directory, and
+  `PathState::NonDirectory` means it exists but is not a directory. The probe
+  follows symlinks, so a dangling symlink is `Absent` even when its directory
+  entry exists; metadata errors other than `NotFound` are propagated.
 - `try_is_file(path) -> io::Result<bool>` is the fallible counterpart to the
   boolean predicates: `Ok(true)` when the path is a regular file, `Ok(false)`
   when it is absent (`NotFound` is folded into the boolean result), and `Err`

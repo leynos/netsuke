@@ -19,6 +19,21 @@ fn temp_manifest_workspace() -> TempManifestWorkspace {
     Ok((temp, temp_path))
 }
 
+fn assert_no_staged_manifest_files(temp_path: &Utf8Path, expected_path: &Utf8Path) -> Result<()> {
+    for entry_result in temp_path
+        .read_dir_utf8()
+        .context("inspect manifest workspace")?
+    {
+        let workspace_entry = entry_result.context("inspect manifest workspace entry")?;
+        anyhow::ensure!(
+            workspace_entry.path() == expected_path,
+            "leftover staged manifest file: {}",
+            workspace_entry.path()
+        );
+    }
+    Ok(())
+}
+
 #[rstest]
 fn existing_directory_manifest_path_is_rejected(
     temp_manifest_workspace: TempManifestWorkspace,
@@ -60,6 +75,36 @@ fn non_directory_parent_propagates_target_inspection_error(
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("manifest path is not valid UTF-8"))?;
     anyhow::ensure!(msg.contains(manifest_str), "message: {msg}");
+    Ok(())
+}
+
+#[rstest]
+fn non_directory_parent_components_are_reported_as_not_a_directory(
+    temp_manifest_workspace: TempManifestWorkspace,
+) -> Result<()> {
+    let (_temp, temp_path) = temp_manifest_workspace?;
+    let parent = temp_path.join("parent");
+    fs::write(parent.as_std_path(), b"file").context("write placeholder parent file")?;
+    let manifest_path = parent.join("manifest.yml");
+
+    let Err(parent_err) = ensure_parent_directory(&manifest_path, &parent) else {
+        anyhow::bail!("non-directory parent should be rejected");
+    };
+    anyhow::ensure!(parent_err.kind() == io::ErrorKind::NotADirectory);
+    anyhow::ensure!(parent_err.to_string().contains(manifest_path.as_str()));
+
+    let ancestor = temp_path.join("ancestor");
+    fs::write(ancestor.as_std_path(), b"file").context("write placeholder ancestor file")?;
+    let ancestor_manifest_path = ancestor.join("child/manifest.yml");
+    let dest_dir = ancestor_manifest_path
+        .parent()
+        .context("manifest path missing parent")?;
+    let Err(ancestor_err) = find_existing_ancestor(dest_dir, &ancestor_manifest_path) else {
+        anyhow::bail!("non-directory ancestor should be rejected");
+    };
+    anyhow::ensure!(ancestor_err.kind() == io::ErrorKind::NotADirectory);
+    let ancestor_message = ancestor_err.to_string();
+    anyhow::ensure!(ancestor_message.contains(ancestor_manifest_path.as_str()));
     Ok(())
 }
 
@@ -139,6 +184,7 @@ fn raced_file_manifest_path_is_returned_unchanged(
     anyhow::ensure!(returned_path == expected_path, "manifest path should match");
     let contents = fs::read(expected_path.as_std_path()).context("read competing manifest")?;
     anyhow::ensure!(contents == competing_contents, "manifest contents changed");
+    assert_no_staged_manifest_files(&temp_path, &expected_path)?;
     Ok(())
 }
 
@@ -166,6 +212,7 @@ fn raced_directory_manifest_path_is_rejected(
         err.to_string().contains(expected_path.as_str()),
         "message: {err}"
     );
+    assert_no_staged_manifest_files(&temp_path, &expected_path)?;
     Ok(())
 }
 
@@ -341,7 +388,10 @@ proptest! {
                 prop_assert_eq!(contents, competing_contents);
             }
             TargetState::ExistingDirectory | TargetState::RacedDirectory => {
-                let error = result.expect_err("directory target should be rejected");
+                prop_assert!(result.is_err(), "directory target should be rejected");
+                let error = result
+                    .err()
+                    .ok_or_else(|| TestCaseError::fail("directory target should be rejected"))?;
                 prop_assert_eq!(error.kind(), io::ErrorKind::IsADirectory);
                 prop_assert!(error.to_string().contains(expected_path.as_str()));
             }

@@ -81,7 +81,10 @@ fn manifest_path_is_directory_error(manifest_path: &Utf8Path) -> io::Error {
 ///
 /// This test-only seam models controlled target creation after the initial
 /// existence check; it does not introduce scheduling into production code. Its
-/// guard restores the preceding hook when it is dropped.
+/// action is one-shot: [`run_before_persist_hook`] removes it before execution,
+/// so it runs at most once per guard even across multiple
+/// [`ensure_manifest_exists`] calls. The guard restores the preceding hook when
+/// it is dropped.
 #[cfg(test)]
 fn install_before_persist_hook(
     hook: impl FnOnce(NamedTempFile, &Utf8Path) -> io::Result<NamedTempFile> + 'static,
@@ -182,7 +185,7 @@ fn ensure_parent_directory(manifest_path: &Utf8Path, dest_dir: &Utf8Path) -> io:
         fs::PathState::Directory => return Ok(()),
         fs::PathState::NonDirectory => {
             return Err(io::Error::new(
-                io::ErrorKind::AlreadyExists,
+                io::ErrorKind::NotADirectory,
                 format!(
                     "Failed to create manifest parent directory for {manifest_path}: parent path exists and is not a directory",
                 ),
@@ -233,7 +236,7 @@ fn find_existing_ancestor<'a>(
             fs::PathState::Directory => return Ok(candidate),
             fs::PathState::NonDirectory => {
                 return Err(io::Error::new(
-                    io::ErrorKind::AlreadyExists,
+                    io::ErrorKind::NotADirectory,
                     format!(
                         "Failed to create manifest parent directory for {manifest_path}: ancestor {candidate} is not a directory",
                     ),

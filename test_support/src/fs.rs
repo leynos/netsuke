@@ -133,6 +133,8 @@ pub fn is_dir(path: impl AsRef<Path>) -> bool {
 /// Only [`io::ErrorKind::NotFound`] becomes [`PathState::Absent`]. All other
 /// metadata failures are returned so callers do not mistake an unreadable path
 /// for an absent one.
+/// [`std::fs::metadata`] follows symbolic links, so a dangling symbolic link is
+/// reported as [`PathState::Absent`] even though its directory entry exists.
 ///
 /// # Errors
 ///
