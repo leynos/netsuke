@@ -262,6 +262,18 @@ criterion in issue #552 and all repository gates pass.
   for the root pass, matching the existing `test_support` pass. `make
   check-fmt`, `make typecheck`, `make lint`, `make test`, `make markdownlint`,
   and `make nixie` all passed afterwards.
+- [x] (2026-08-12) Replaced the deterministic temporary-sidecar suffix with a
+  per-process, monotonic attempt name and retry `create_new` collisions. Keep
+  every name below the final sidecar parent so the capability-scoped rename
+  stays atomic, and pass the created path through rename-race cleanup rather
+  than regenerating it. Cover stale files, generated-name distinction, and an
+  existing matching final sidecar with another temporary file. The focused
+  suite passed 7 tests. The first full lint run identified a five-argument
+  helper and then a by-value context; grouping and borrowing the context
+  resolved both without changing the atomic protocol. `make check-fmt`, `make
+  typecheck`, `make lint`, `make test` (1,943 passed, 1 skipped, doctests
+  passed), `make markdownlint`, and `make nixie` all passed. CodeRabbit found
+  no concerns.
 - [x] Committed each green logical change and recorded final evidence here.
 
 ## Surprises and discoveries
@@ -1012,3 +1024,18 @@ gate run exposed pre-existing ambient filesystem findings because the root
 Whitaker recipe omitted its `DYLINT_TOML` input. Passing the existing policy to
 that invocation restores its intentionally narrow exclusions without weakening
 the capability lint; the full deterministic suite passed afterwards.
+
+2026-08-12: Temporary sidecar names are private to the runner materializer and
+must never be reused by callers. A process identifier and monotonic sequence
+keep concurrent write attempts distinct; `create_new` remains the final
+authority and retries a stale collision. The helper may be used only to create
+or inspect sidecars relative to the final dyndep path, preserving same-directory
+atomic rename semantics.
+
+2026-08-12: `RenameFailureContext` is a private, single-use grouping for the
+exact temporary path, final path, and expected content after one attempted
+rename. Only `rename_temp_file` constructs it and only `handle_rename_failure`
+consumes it; it must not become a runner-wide filesystem abstraction.
+The first lint pass rejected a by-value context parameter, so the failure
+handler borrows the private context instead; this does not alter the cleanup
+path or error ownership.
