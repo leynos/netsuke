@@ -28,28 +28,30 @@ use std::{
 /// The embedder fixture type-checks against the public API.
 #[test]
 fn command_env_embedder_fixture_compiles() -> io::Result<()> {
-    let rlib = NetsukeRlib::build()?;
-    let output = rlib.compile("tests/ui/command_env_embedder_pass.rs")?;
-
-    if !output.status.success() {
-        return Err(io::Error::other(format!(
-            "the embedder fixture should compile against the public API:\n{}",
-            stderr(&output),
-        )));
-    }
-    Ok(())
+    compile_public_api_fixture(
+        "tests/ui/command_env_embedder_pass.rs",
+        "the embedder fixture should compile against the public API",
+    )
 }
 
 /// The public command-list constructors compile for an external embedder.
 #[test]
 fn command_list_public_api_fixture_compiles() -> io::Result<()> {
+    compile_public_api_fixture(
+        "tests/ui/command_list_public_api_pass.rs",
+        "the command-list public API fixture should compile",
+    )
+}
+
+/// Compile one external public-API fixture through the direct-rustc harness.
+fn compile_public_api_fixture(source: &str, failure_message: &str) -> io::Result<()> {
     let rlib = NetsukeRlib::build()?;
-    let output = rlib.compile("tests/ui/command_list_public_api_pass.rs")?;
+    let output = rlib.compile(source)?;
 
     if !output.status.success() {
         return Err(io::Error::other(format!(
-            "the command-list public API fixture should compile:\n{}",
-            stderr(&output),
+            "{failure_message}:\n{}",
+            stderr(&output)
         )));
     }
     Ok(())
