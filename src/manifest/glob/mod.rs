@@ -107,7 +107,7 @@ pub(super) struct GlobExpansion {
     pattern: GlobPattern,
     paths: Vec<String>,
     outcome: GlobOutcome,
-    skipped: Vec<GlobSkip>,
+    skipped: GlobSkippedEntries,
 }
 
 /// Terminal outcome of a glob expansion.
@@ -116,10 +116,30 @@ enum GlobOutcome {
     UnopenablePrefix(String),
 }
 
-/// Reason a matched entry was omitted from the result set.
-enum GlobSkip {
-    UnreachableSymlink(camino::Utf8PathBuf),
-    NotAFile,
+/// Maximum unreachable-symlink paths retained for tracing one expansion.
+const MAX_UNREACHABLE_SYMLINK_SAMPLES: usize = 4;
+
+/// Bounded diagnostic data about entries omitted from an expansion.
+#[derive(Default)]
+struct GlobSkippedEntries {
+    unreachable_symlinks: usize,
+    unreachable_symlink_samples: Vec<camino::Utf8PathBuf>,
+    not_a_file: usize,
+}
+
+impl GlobSkippedEntries {
+    /// Record an unreachable symlink while retaining a bounded trace sample.
+    fn record_unreachable_symlink(&mut self, relative: camino::Utf8PathBuf) {
+        self.unreachable_symlinks += 1;
+        if self.unreachable_symlink_samples.len() < MAX_UNREACHABLE_SYMLINK_SAMPLES {
+            self.unreachable_symlink_samples.push(relative);
+        }
+    }
+
+    /// Record an entry that does not name a regular file.
+    const fn record_not_a_file(&mut self) {
+        self.not_a_file += 1;
+    }
 }
 
 /// Entry selected by the capability-scoped metadata query.
@@ -215,19 +235,19 @@ pub(super) fn expand_glob(pattern: &str) -> std::result::Result<GlobExpansion, E
             outcome: GlobOutcome::UnopenablePrefix(literal_dir_path(&pattern_state)),
             pattern: pattern_state,
             paths: Vec::new(),
-            skipped: Vec::new(),
+            skipped: GlobSkippedEntries::default(),
         });
     };
 
     let mut paths = Vec::new();
-    let mut skipped = Vec::new();
+    let mut skipped = GlobSkippedEntries::default();
     for entry in entries {
         match process_glob_entry(entry, &pattern_state, &root)? {
             GlobEntry::Path(path) => paths.push(path),
             GlobEntry::UnreachableSymlink(relative) => {
-                skipped.push(GlobSkip::UnreachableSymlink(relative));
+                skipped.record_unreachable_symlink(relative);
             }
-            GlobEntry::NotAFile => skipped.push(GlobSkip::NotAFile),
+            GlobEntry::NotAFile => skipped.record_not_a_file(),
         }
     }
     Ok(GlobExpansion {

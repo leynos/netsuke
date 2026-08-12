@@ -4,7 +4,7 @@
 //! subscriber scoped to the call. The recorder and subscriber are both
 //! thread-local, so no test-wide lock is needed.
 
-use super::super::{expand_glob, glob_paths, record_expansion};
+use super::super::{MAX_UNREACHABLE_SYMLINK_SAMPLES, expand_glob, glob_paths, record_expansion};
 use anyhow::{Context, Result, ensure};
 use metrics::SharedString;
 use metrics_util::{
@@ -155,6 +155,55 @@ fn a_skipped_symlink_counts_and_traces_only_the_relative_path() -> Result<()> {
     ensure!(
         !skip_event.contains(&temp.path().display().to_string()),
         "the event must not disclose the absolute path: {skip_event}"
+    );
+    Ok(())
+}
+
+/// All skipped links contribute to metrics, but traces retain only four paths.
+#[cfg(unix)]
+#[rstest]
+fn skipped_symlink_diagnostics_retain_a_bounded_sample() -> Result<()> {
+    let temp = tempdir()?;
+    let src = temp.path().join("src");
+    let vendor = temp.path().join("vendor");
+    test_fs::create_dir(&src)?;
+    test_fs::create_dir(&vendor)?;
+    let skipped_count = MAX_UNREACHABLE_SYMLINK_SAMPLES + 2;
+    for index in 0..skipped_count {
+        let name = format!("escaped-{index:02}.txt");
+        test_fs::write(vendor.join(&name), "escaped")?;
+        test_fs::symlink(format!("../vendor/{name}"), src.join(name))?;
+    }
+    let pattern = format!("{}/src/*.txt", temp.path().display());
+
+    let (results, events, snapshot) = recorded(|| expand_and_record(&pattern));
+    ensure!(results?.is_empty(), "every match should be skipped");
+    ensure!(
+        counter_value(&snapshot, SKIPPED, ("reason", "unreachable_symlink"))
+            == Some(skipped_count as u64),
+        "the aggregate counter should include every skipped link: {snapshot:?}"
+    );
+    let sampled_events: Vec<_> = events
+        .iter()
+        .filter(|event| event.contains("cannot resolve"))
+        .collect();
+    ensure!(
+        sampled_events.len() == MAX_UNREACHABLE_SYMLINK_SAMPLES,
+        "expected exactly the bounded trace sample: {sampled_events:?}"
+    );
+    for index in 0..MAX_UNREACHABLE_SYMLINK_SAMPLES {
+        ensure!(
+            sampled_events
+                .iter()
+                .any(|event| event.contains(&format!("relative=escaped-{index:02}.txt"))),
+            "sample should retain escaped-{index:02}.txt: {sampled_events:?}"
+        );
+    }
+    ensure!(
+        !sampled_events.iter().any(|event| event.contains(&format!(
+            "relative=escaped-{MAX_UNREACHABLE_SYMLINK_SAMPLES:02}.txt"
+        ))),
+        "the first entry beyond the sample must not be traced: {sampled_events:?}"
     );
     Ok(())
 }

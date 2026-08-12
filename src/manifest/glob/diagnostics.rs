@@ -23,7 +23,7 @@
 //! configuration discovery, where the paths are ones the tool found rather
 //! than ones the user named.
 
-use super::{GlobExpansion, GlobOutcome, GlobSkip};
+use super::{GlobExpansion, GlobOutcome, GlobSkippedEntries};
 use camino::Utf8Path;
 use metrics::{counter, describe_counter};
 use std::sync::Once;
@@ -66,12 +66,7 @@ pub(super) fn record(expansion: &GlobExpansion) {
         GlobOutcome::Matched => record_expansion_matched(expansion),
         GlobOutcome::UnopenablePrefix(prefix) => record_unopenable_prefix(expansion, prefix),
     }
-    for skipped in &expansion.skipped {
-        match skipped {
-            GlobSkip::UnreachableSymlink(relative) => record_unreachable_symlink(relative),
-            GlobSkip::NotAFile => record_not_a_file(),
-        }
-    }
+    record_skipped_entries(&expansion.skipped);
 }
 
 /// Record an expansion that stopped because the literal prefix is unusable.
@@ -100,17 +95,25 @@ fn record_expansion_matched(expansion: &GlobExpansion) {
 ///
 /// `relative` is the match relative to the literal prefix, so it stays within
 /// the scope the pattern already named.
-fn record_unreachable_symlink(relative: &Utf8Path) {
+fn record_skipped_entries(skipped: &GlobSkippedEntries) {
     describe_metrics();
-    counter!(ENTRIES_SKIPPED_TOTAL, "reason" => "unreachable_symlink").increment(1);
+    if skipped.unreachable_symlinks != 0 {
+        counter!(ENTRIES_SKIPPED_TOTAL, "reason" => "unreachable_symlink")
+            .increment(u64::try_from(skipped.unreachable_symlinks).unwrap_or(u64::MAX));
+        for relative in &skipped.unreachable_symlink_samples {
+            record_unreachable_symlink(relative);
+        }
+    }
+    if skipped.not_a_file != 0 {
+        counter!(ENTRIES_SKIPPED_TOTAL, "reason" => "not_a_file")
+            .increment(u64::try_from(skipped.not_a_file).unwrap_or(u64::MAX));
+    }
+}
+
+/// Trace an unreachable symbolic-link path retained in the bounded sample.
+fn record_unreachable_symlink(relative: &Utf8Path) {
     tracing::debug!(
         relative = %relative,
         "glob match traverses a symbolic link the capability cannot resolve; skipping"
     );
-}
-
-/// Record a match dropped because it does not name a regular file.
-fn record_not_a_file() {
-    describe_metrics();
-    counter!(ENTRIES_SKIPPED_TOTAL, "reason" => "not_a_file").increment(1);
 }
