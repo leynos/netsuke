@@ -221,11 +221,13 @@ implement it until the user explicitly approves the draft.
 - [x] (2026-08-12 17:08Z) Milestone 4: adopted `parse_localized_command`
   after the existing parser happy- and unhappy-path suites preserved Netsuke's
   configured localized value-parser contract.
-- [ ] (2026-08-12 17:08Z) CodeRabbit review for Milestones 1–4 is blocked
-  before analysis because `coderabbit review --agent` awaits browser OAuth
-  authentication. The deterministic gates remain green; retry the review after
-  the CLI has been authenticated before starting Milestone 5.
-- [ ] Milestone 5: validate real release-help metadata and generated artefacts.
+- [x] (2026-08-12 17:08Z) CodeRabbit reviewed Milestones 1–4 at `eba40a18`
+  after browser OAuth authentication completed. `coderabbit review --agent`
+  reported zero high, medium, or low findings.
+- [x] (2026-08-12 17:08Z) Milestone 5: installed `cargo-orthohelp` v0.9.0,
+  changed the release helper to invoke its required `orthohelp` subcommand,
+  and generated the expected Unix and Windows artefact layouts. The compact
+  metadata snapshot and workflow/release-helper contracts are green.
 - [ ] Milestone 6: update user, design, developer, and planning documentation.
 - [ ] Milestone 7: run final gates, review the diff and surrounding code, and
   record the outcome.
@@ -306,6 +308,21 @@ implement it until the user explicitly approves the draft.
   an external authentication blocker, not a code concern or a rate limit;
   Milestone 5 must wait for a successful review.
 
+- Observation: real v0.9.0 release-help generation requires
+  `cargo-orthohelp orthohelp`, whereas the previously pinned command accepted
+  generator options directly. Evidence: direct invocation rejected `--format`
+  and instructed callers to use the subcommand; both Unix and Windows runs
+  succeeded after the helper added it. Impact: the script and a red-green
+  helper-contract assertion now pin the new invocation shape.
+
+- Observation: generated help contains parser-only schema omissions rather
+  than a v0.9.0 output-path failure. Evidence: the generated man page has no
+  `--config` flag or subcommands and renders missing Fluent IDs because
+  `CliConfig` has no parser-only selector field or `OrthoConfigSubcommandDocs`
+  metadata. Impact: retain the generated artefacts and record configuration
+  and parser metadata convergence as follow-up work; do not expand this
+  version migration beyond its approved boundary.
+
 ## Decision Log
 
 - Decision: preserve the current feature-based module layout and apply
@@ -377,6 +394,18 @@ implement it until the user explicitly approves the draft.
   its append/replace policy, precedence, discovery declaration, and subcommand
   count, but upstream headings and prose fields are not an application
   contract. Date/Author: 2026-08-12 / Codex.
+
+- Decision: adopt `cargo-orthohelp orthohelp` in the release helper.
+  Rationale: it is the v0.9.0 executable's documented direct invocation form,
+  preserves Cargo's `cargo orthohelp` user form, and is verified by both a
+  helper contract and real Unix/Windows generation. Date/Author: 2026-08-12 /
+  Codex.
+
+- Decision: defer parser/config documentation metadata convergence. Rationale:
+  exposing `--config`, subcommands, and localized prose in generated help
+  requires merging the intentionally separate parser and configuration schema,
+  which is a larger design decision than a compatible library upgrade.
+  Date/Author: 2026-08-12 / Codex.
 
 ## Outcomes & retrospective
 
