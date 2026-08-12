@@ -108,8 +108,9 @@ pub fn register_with_config(
 ///
 /// The registration preserves pure rendering helpers, including date, path,
 /// collection, and executable-discovery helpers. It replaces `fetch`,
-/// `shell`, and `grep` with explicit errors so consumers can render discovery
-/// metadata without network access, cache writes, or command execution.
+/// `shell`, `grep`, and `contents` with explicit errors so consumers can
+/// render discovery metadata without network access, cache writes, command
+/// execution, or host file-content disclosure.
 ///
 pub(crate) fn register_manifest_query_with_config(
     env: &mut Environment<'_>,
@@ -118,7 +119,7 @@ pub(crate) fn register_manifest_query_with_config(
     let state = StdlibState::default();
     register_read_only_helpers(env, config);
     time::register_query_functions(env);
-    register_disabled_impure_helpers(env);
+    register_disabled_query_helpers(env);
     state
 }
 
@@ -140,8 +141,11 @@ fn register_read_only_helpers(env: &mut Environment<'_>, config: &StdlibConfig) 
     which::register(env, which_config);
 }
 
-/// Register deliberate failures for stdlib helpers that have side effects.
-fn register_disabled_impure_helpers(env: &mut Environment<'_>) {
+/// Register deliberate failures for helpers excluded from manifest queries.
+fn register_disabled_query_helpers(env: &mut Environment<'_>) {
+    env.add_function("env", |_variable: String| -> Result<String, Error> {
+        Err(manifest_query_operation_error("env"))
+    });
     env.add_function(
         "fetch",
         |_url: String, _kwargs: Kwargs| -> Result<Value, Error> {
@@ -165,15 +169,22 @@ fn register_disabled_impure_helpers(env: &mut Environment<'_>) {
          _options: Option<Value>|
          -> Result<Value, Error> { Err(manifest_query_operation_error("grep")) },
     );
+    env.add_filter(
+        "contents",
+        |_value: String, _encoding: Option<String>| -> Result<String, Error> {
+            Err(manifest_query_operation_error("contents"))
+        },
+    );
 }
 
-/// Explain why an impure helper is unavailable while querying a manifest.
+/// Explain why a restricted helper is unavailable while querying a manifest.
 fn manifest_query_operation_error(operation: &str) -> Error {
     Error::new(
         ErrorKind::InvalidOperation,
         format!(
             "{operation} is disabled while rendering `netsuke help targets`; \
-             manifest queries permit only side-effect-free template helpers"
+             manifest queries permit only non-disclosing, side-effect-free \
+             template helpers"
         ),
     )
 }

@@ -7,7 +7,7 @@
 
 use super::{
     EnvReader, ManifestLoadStage, ManifestName, ManifestParse, NetsukeManifest, StdlibConfig,
-    StdlibRegistration, from_str_named, notify_stage, process_env_reader,
+    StdlibRegistration, env_reader::disabled_env_reader, from_str_named, notify_stage,
     workspace::open_manifest_workspace,
 };
 use crate::{localization, localization::keys, stdlib::NetworkPolicy};
@@ -24,9 +24,10 @@ pub(crate) fn from_path_for_manifest_query(
     path: impl AsRef<Path>,
     on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
+    let env_reader = disabled_env_reader();
     from_path_with_registration(
         path,
-        &process_env_reader(),
+        &env_reader,
         on_stage,
         StdlibRegistration::ManifestQuery,
     )

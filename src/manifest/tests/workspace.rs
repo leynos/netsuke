@@ -217,18 +217,21 @@ fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
     Ok(())
 }
 
-/// Discovery queries must reject helpers that could perform I/O before any
-/// network request, cache write, or command execution occurs.
+/// Discovery queries must reject helpers that could cause side effects or
+/// disclose host data before a catalogue is rendered.
 #[rstest]
 #[case::fetch("{{ fetch('https://example.invalid', cache=true) }}", "fetch")]
 #[case::shell("{{ 'ignored' | shell('printf side-effect') }}", "shell")]
 #[case::grep("{{ 'ignored' | grep('ignored') }}", "grep")]
-fn manifest_query_rejects_impure_template_helpers(
+#[case::env("{{ env('PATH') }}", "env")]
+#[case::contents("{{ 'secret.txt' | contents }}", "contents")]
+fn manifest_query_rejects_restricted_template_helpers(
     #[case] expression: &str,
     #[case] helper: &str,
 ) -> AnyResult<()> {
     let temp = tempdir().context("create manifest-query workspace")?;
     let manifest_path = temp.path().join("Netsukefile");
+    test_fs::write(temp.path().join("secret.txt"), QUERY_SECRET)?;
     let manifest = format!(
         concat!(
             "netsuke_version: \"1.0.0\"\n",
@@ -243,12 +246,16 @@ fn manifest_query_rejects_impure_template_helpers(
     test_fs::write(&manifest_path, manifest)?;
 
     let error = from_path_for_manifest_query(&manifest_path, None)
-        .expect_err("manifest query should reject side-effecting template helpers");
+        .expect_err("manifest query should reject restricted template helpers");
     ensure!(
         error
             .chain()
-            .any(|cause| cause.to_string().contains(&format!("{helper} is disabled"))),
+            .any(|cause| cause.to_string().contains(helper)),
         "query should name its rejected helper: {error:?}"
+    );
+    ensure!(
+        !error.to_string().contains(QUERY_SECRET),
+        "a query error must not disclose local file contents: {error:?}"
     );
     ensure!(
         !temp.path().join(".netsuke").exists(),
@@ -256,7 +263,52 @@ fn manifest_query_rejects_impure_template_helpers(
     );
     Ok(())
 }
+/// Discovery queries must reject helpers that could cause side effects or
+/// disclose host data before a catalogue is rendered.
+#[rstest]
+#[case::fetch("{{ fetch('https://example.invalid', cache=true) }}", "fetch")]
+#[case::shell("{{ 'ignored' | shell('printf side-effect') }}", "shell")]
+#[case::grep("{{ 'ignored' | grep('ignored') }}", "grep")]
+#[case::env("{{ env('PATH') }}", "env")]
+#[case::contents("{{ 'secret.txt' | contents }}", "contents")]
+fn manifest_query_rejects_restricted_template_helpers(
+    #[case] expression: &str,
+    #[case] helper: &str,
+) -> AnyResult<()> {
+    let temp = tempdir().context("create manifest-query workspace")?;
+    let manifest_path = temp.path().join("Netsukefile");
+    test_fs::write(temp.path().join("secret.txt"), QUERY_SECRET)?;
+    let manifest = format!(
+        concat!(
+            "netsuke_version: \"1.0.0\"\n",
+            "targets:\n",
+            "  - name: discovery\n",
+            "    description: >-\n",
+            "      {}\n",
+            "    command: echo discovery\n",
+        ),
+        expression,
+    );
+    test_fs::write(&manifest_path, manifest)?;
 
+    let error = from_path_for_manifest_query(&manifest_path, None)
+        .expect_err("manifest query should reject restricted template helpers");
+    ensure!(
+        error
+            .chain()
+            .any(|cause| cause.to_string().contains(helper)),
+        "query should name its rejected helper: {error:?}"
+    );
+    ensure!(
+        !error.to_string().contains(QUERY_SECRET),
+        "a query error must not disclose local file contents: {error:?}"
+    );
+    ensure!(
+        !temp.path().join(".netsuke").exists(),
+        "a rejected query must not create a fetch cache"
+    );
+    Ok(())
+}
 #[test]
 fn manifest_query_rejects_clock_dependent_template_helpers() -> AnyResult<()> {
     let temp = tempdir().context("create clock-free manifest-query workspace")?;
@@ -282,3 +334,5 @@ fn manifest_query_rejects_clock_dependent_template_helpers() -> AnyResult<()> {
     );
     Ok(())
 }
+
+const QUERY_SECRET: &str = "help-query-secret";

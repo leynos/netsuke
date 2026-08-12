@@ -74,6 +74,12 @@ pub fn process_env_reader() -> EnvReader {
     Arc::new(move |key| env.raw(key).map_err(EnvReadError::from))
 }
 
+/// Construct a reader that prevents template queries from disclosing host
+/// environment values.
+pub(super) fn disabled_env_reader() -> EnvReader {
+    Arc::new(|_| Err(EnvReadError::NotPresent))
+}
+
 /// Resolve `name` through `read_env`, mapping failures to Jinja errors.
 ///
 /// Failures are traced with only a bounded `failure_kind`, and the localized
