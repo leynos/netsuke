@@ -38,6 +38,7 @@ cli.subcommand.help.long_about = หากไม่มีหัวข้อ ค�
 # Help catalogue headings and markers.
 cli.help.actions_heading = การดำเนินการ:
 cli.help.targets_heading = เป้าหมาย:
+cli.help.targets_about = แสดงรายการเป้าหมายและการดำเนินการในไฟล์ที่เลือก
 cli.help.default_marker = ค่าเริ่มต้น
 
 # ข้อความช่วยเหลือของตัวเลือกในคำสั่งย่อย build

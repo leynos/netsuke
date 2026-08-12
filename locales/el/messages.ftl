@@ -38,6 +38,7 @@ cli.subcommand.help.long_about = Χωρίς θέμα, αυτό ταιριάζε�
 # Help catalogue headings and markers.
 cli.help.actions_heading = Ενέργειες:
 cli.help.targets_heading = Στόχοι:
+cli.help.targets_about = Παράθεση στόχων και ενεργειών στο επιλεγμένο δηλωτικό.
 cli.help.default_marker = προεπιλογή
 
 # Κείμενο βοήθειας για τις επιλογές της υποεντολής build.

@@ -38,6 +38,7 @@ cli.subcommand.help.long_about = Без теми це відповідає `--he
 # Help catalogue headings and markers.
 cli.help.actions_heading = Дії:
 cli.help.targets_heading = Цілі:
+cli.help.targets_about = Вивести список цілей і дій у вибраному файлі.
 cli.help.default_marker = за замовчуванням
 
 # Текст довідки для параметрів підкоманди build.

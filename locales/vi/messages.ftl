@@ -38,6 +38,7 @@ cli.subcommand.help.long_about = Không có chủ đề, lệnh này tương ứ
 # Help catalogue headings and markers.
 cli.help.actions_heading = Hành động:
 cli.help.targets_heading = Mục tiêu:
+cli.help.targets_about = Liệt kê mục tiêu và hành động trong tệp kê khai đã chọn.
 cli.help.default_marker = mặc định
 
 # Văn bản trợ giúp cho tuỳ chọn của lệnh con build.

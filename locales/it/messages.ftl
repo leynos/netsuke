@@ -38,6 +38,7 @@ cli.subcommand.help.long_about = Senza argomento, corrisponde a `--help`. Usa `h
 # Help catalogue headings and markers.
 cli.help.actions_heading = Azioni:
 cli.help.targets_heading = Target:
+cli.help.targets_about = Elenca target e azioni nel file selezionato.
 cli.help.default_marker = predefinito
 
 # Testo di aiuto delle opzioni del sottocomando build.

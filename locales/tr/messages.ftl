@@ -38,6 +38,7 @@ cli.subcommand.help.long_about = Konu olmadan bu, `--help` ile aynıdır. Seçil
 # Help catalogue headings and markers.
 cli.help.actions_heading = Eylemler:
 cli.help.targets_heading = Hedefler:
+cli.help.targets_about = Seçilen dosyadaki hedef ve eylemleri listele.
 cli.help.default_marker = varsayılan
 
 # build alt komutunun seçenekleri için yardım metni.

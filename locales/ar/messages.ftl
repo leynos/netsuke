@@ -38,6 +38,7 @@ cli.subcommand.help.long_about = بدون موضوع، يطابق هذا `--help
 # Help catalogue headings and markers.
 cli.help.actions_heading = الإجراءات:
 cli.help.targets_heading = الأهداف:
+cli.help.targets_about = سرد الأهداف والإجراءات في الملف المحدد.
 cli.help.default_marker = الافتراضي
 
 # نص المساعدة لخيارات الأمر الفرعي build.

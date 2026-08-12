@@ -256,9 +256,10 @@ and agents.
   [netsuke-design.md §2.6](netsuke-design.md#26-planned-recipe-ergonomics-and-execution-feedback).
   - [x] Add target/action `description` as discovery metadata and list it with
     `netsuke help targets`.
-  - [ ] Add a future target/action description override for the referenced rule
-    description on a concrete edge, if selected-action progress requires it.
-  - [ ] Report selected action descriptions in normal Ninja progress output.
+  - [x] Keep target/action descriptions as discovery metadata; they do not
+    override the referenced rule description for Ninja progress.
+  - [x] Keep normal Ninja progress sourced from the referenced rule description;
+    do not report target/action descriptions there.
   - [ ] In verbose mode, report why manifest-time `when` branches were included
     or skipped.
   - [ ] Do not add generic `debug`, `info`, or `warn` manifest keys unless a

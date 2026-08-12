@@ -38,6 +38,7 @@ cli.subcommand.help.long_about = Zonder onderwerp komt dit overeen met `--help`.
 # Help catalogue headings and markers.
 cli.help.actions_heading = Acties:
 cli.help.targets_heading = Doelen:
+cli.help.targets_about = Doelen en acties in het geselecteerde bestand weergeven.
 cli.help.default_marker = standaard
 
 # Helptekst voor opties van de subopdracht build.

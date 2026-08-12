@@ -38,6 +38,7 @@ cli.subcommand.help.long_about = Ilman aihetta tämä vastaa `--help`-komentoa. 
 # Help catalogue headings and markers.
 cli.help.actions_heading = Toiminnot:
 cli.help.targets_heading = Kohteet:
+cli.help.targets_about = Luettele valitun tiedoston kohteet ja toiminnot.
 cli.help.default_marker = oletus
 
 # build-alikomennon valitsimien ohjeteksti.

@@ -38,6 +38,7 @@ cli.subcommand.help.long_about = 没有主题时，此命令等价于 `--help`�
 # Help catalogue headings and markers.
 cli.help.actions_heading = 操作：
 cli.help.targets_heading = 目标：
+cli.help.targets_about = 列出所选清单中的目标和操作。
 cli.help.default_marker = 默认
 
 # build 子命令选项的帮助文本。

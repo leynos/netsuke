@@ -38,6 +38,7 @@ cli.subcommand.help.long_about = Heb bwnc, mae hyn yn cyfateb i `--help`. Defnyd
 # Help catalogue headings and markers.
 cli.help.actions_heading = Gweithredoedd:
 cli.help.targets_heading = Targedau:
+cli.help.targets_about = Rhestru targedau a gweithredoedd yn y maniffest a ddewiswyd.
 cli.help.default_marker = diofyn
 
 # Testun cymorth dewisiadau'r is-orchymyn build.
