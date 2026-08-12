@@ -376,7 +376,7 @@ status.tool.clean = Curățare
 status.tool.graph = Graf
 status.tool.graph_html = Graf (HTML)
 status.tool.generate = Generare
-status.tool.help_targets = Ajutor ținte
+status.tool.help_targets = Ajutor pentru ținte
 
 # Textele redării grafului în HTML.
 graph.html.title = Graful de construire Netsuke
