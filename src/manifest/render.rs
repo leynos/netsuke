@@ -1,7 +1,7 @@
 //! Renders manifest templates using `MiniJinja` before IR lowering.
 //!
 //! Provides [`render_manifest`], which evaluates Jinja2-style template
-//! expressions in target and rule fields.  [`render_recipe_str_with`] ensures
+//! expressions in target and rule fields. Recipe rendering ensures
 //! `ins`/`outs` context keys are always present, inserting
 //! `__NETSUKE_INS_PLACEHOLDER__`/`__NETSUKE_OUTS_PLACEHOLDER__` when absent
 //! so that [`crate::ir::cmd_interpolate`] can substitute them later.
@@ -11,6 +11,9 @@ use crate::ast::{NetsukeManifest, Recipe, StringOrList, Target, Vars};
 use crate::ir::{INS_TOKEN, OUTS_TOKEN};
 use anyhow::{Context, Result};
 use minijinja::Environment;
+
+#[cfg(test)]
+use std::cell::Cell;
 
 /// Render manifest targets and rules by evaluating template expressions.
 ///
@@ -111,8 +114,9 @@ fn render_recipe_string_or_list(
     what: impl FnOnce() -> String,
 ) -> Result<()> {
     let label = what();
+    let recipe_ctx = recipe_render_context(ctx);
     let render_entry = |entry: &mut String, position: Option<usize>| -> Result<()> {
-        *entry = render_recipe_str_with(env, entry, ctx, || {
+        *entry = render_str_with(env, entry, &recipe_ctx, || {
             position.map_or_else(|| label.clone(), |index| format!("{label} entry {index}"))
         })?;
         Ok(())
@@ -129,29 +133,13 @@ fn render_recipe_string_or_list(
     Ok(())
 }
 
-fn render_str_with(
-    env: &Environment,
-    tpl: &str,
-    ctx: &impl serde::Serialize,
-    what: impl FnOnce() -> String,
-) -> Result<String> {
-    render_template(env, tpl, ctx).with_context(what)
-}
-
-/// Clones the supplied template context (`Vars`) and guarantees `ins` and `outs`
-/// entries exist before invoking `MiniJinja` rendering.
+/// Clone a recipe context once, adding the delayed path placeholders.
 ///
-/// If `ins` or `outs` are absent, they are populated with the placeholders
-/// `__NETSUKE_INS_PLACEHOLDER__` and `__NETSUKE_OUTS_PLACEHOLDER__` so
-/// downstream logic can rely on those variables being present before later
-/// `Ninja` substitution. Rendering is performed by
-/// calling `render_str_with`.
-fn render_recipe_str_with(
-    env: &Environment,
-    tpl: &str,
-    ctx: &Vars,
-    what: impl FnOnce() -> String,
-) -> Result<String> {
+/// Every list entry sees the same Jinja bindings. Keeping this preparation
+/// outside the entry loop avoids cloning a target's complete `vars` map for
+/// each item while retaining the scalar rendering contract.
+fn recipe_render_context(ctx: &Vars) -> Vars {
+    record_recipe_context_preparation();
     let mut recipe_ctx = ctx.clone();
     recipe_ctx
         .entry("ins".into())
@@ -159,7 +147,39 @@ fn render_recipe_str_with(
     recipe_ctx
         .entry("outs".into())
         .or_insert_with(|| ManifestValue::String(OUTS_TOKEN.into()));
-    render_str_with(env, tpl, &recipe_ctx, what)
+    recipe_ctx
+}
+
+#[cfg(test)]
+thread_local! {
+    static RECIPE_CONTEXT_PREPARATIONS: Cell<usize> = const { Cell::new(0) };
+}
+
+#[cfg(test)]
+fn record_recipe_context_preparation() {
+    RECIPE_CONTEXT_PREPARATIONS.with(|count| count.set(count.get() + 1));
+}
+
+#[cfg(not(test))]
+const fn record_recipe_context_preparation() {}
+
+#[cfg(test)]
+pub(super) fn reset_recipe_context_preparations() {
+    RECIPE_CONTEXT_PREPARATIONS.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(super) fn recipe_context_preparations() -> usize {
+    RECIPE_CONTEXT_PREPARATIONS.with(Cell::get)
+}
+
+fn render_str_with(
+    env: &Environment,
+    tpl: &str,
+    ctx: &impl serde::Serialize,
+    what: impl FnOnce() -> String,
+) -> Result<String> {
+    render_template(env, tpl, ctx).with_context(what)
 }
 
 #[cfg(test)]
@@ -353,3 +373,7 @@ mod tests {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "render_command_list_tests.rs"]
+mod command_list_tests;

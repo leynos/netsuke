@@ -1,5 +1,8 @@
 //! Integration tests for stderr logging and JSON output contracts.
 
+#[cfg(unix)]
+#[path = "logging_stderr/command_list_failure.rs"]
+mod command_list_failure;
 #[path = "logging_stderr/config_tracing.rs"]
 mod config_tracing;
 #[path = "logging_stderr/json.rs"]

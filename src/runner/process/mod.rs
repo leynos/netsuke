@@ -9,9 +9,10 @@ use std::{
     process::{Child, Command, ExitStatus},
     thread,
 };
-use tracing::{debug, warn};
 
+mod child_exit;
 mod command_logging;
+mod failure_attribution;
 mod file_io;
 mod ninja_program;
 mod ninja_status;
@@ -21,10 +22,12 @@ mod streaming;
 #[cfg(test)]
 mod tests;
 
+use child_exit::{finalize_streaming, ninja_exit_error, terminate_child};
 use command_logging::{
     CommandLogContext, command_span, log_command_execution, log_command_exit_failure,
     log_command_spawn_failure,
 };
+use failure_attribution::{FailureAttributionWriter, forward_stderr_with_attribution};
 pub use file_io::*;
 pub use ninja_program::resolve_ninja_program;
 #[cfg(doctest)]
@@ -48,7 +51,6 @@ use streaming::{ForwardStats, forward_child_output, forward_child_output_with_ni
 /// This alias appears in `pub(crate)` function signatures and borrows a mutable
 /// callback for the call duration, so callers can retain state across updates.
 type StatusObserver<'a> = &'a mut dyn FnMut(u32, u32, &str);
-
 // Public helpers for doctests only. This exposes internal helpers as a stable
 // testing surface without exporting them in release builds.
 #[cfg(doctest)]
@@ -69,18 +71,35 @@ pub mod doc {
     };
 }
 
+#[derive(Clone, Copy)]
+struct ExitFailureContext<'a> {
+    operation: &'a str,
+    suppress_stderr: bool,
+    command_list_failure: Option<&'a str>,
+}
+
 fn check_exit_status_with_context(
     status: ExitStatus,
     context: &CommandLogContext,
-    operation: &str,
-    suppress_stderr: bool,
+    failure_context: ExitFailureContext<'_>,
 ) -> io::Result<()> {
     if status.success() {
         Ok(())
     } else {
         tracing::Span::current().record("failure_category", "exit_status");
-        log_command_exit_failure(context, operation, suppress_stderr, status);
-        ninja_exit_error(status)
+        log_command_exit_failure(
+            context,
+            failure_context.operation,
+            failure_context.suppress_stderr,
+            status,
+        );
+        if let Some(failure) = failure_context.command_list_failure {
+            tracing::warn!(
+                command_list_failure = failure,
+                "Ninja command-list entry failed"
+            );
+        }
+        ninja_exit_error(status, failure_context.command_list_failure)
     }
 }
 
@@ -99,8 +118,17 @@ fn run_command_and_stream_with_context(
         tracing::Span::current().record("failure_category", "spawn");
         log_command_spawn_failure(&context, operation, suppress_stderr, err);
     })?;
-    let status = spawn_and_stream_output(child, status_observer, suppress_stderr)?;
-    check_exit_status_with_context(status, &context, operation, suppress_stderr)
+    let (status, command_list_failure) =
+        spawn_and_stream_output(child, status_observer, suppress_stderr)?;
+    check_exit_status_with_context(
+        status,
+        &context,
+        ExitFailureContext {
+            operation,
+            suppress_stderr,
+            command_list_failure: command_list_failure.as_deref(),
+        },
+    )
 }
 
 /// Invoke the Ninja executable with the provided CLI settings.
@@ -292,41 +320,28 @@ pub(crate) fn run_ninja_tool_with_status(
     run_ninja_tool_internal(request, Some(status_observer))
 }
 
-fn handle_forwarding_stats(stats: ForwardStats, stream_name: &str) {
-    if stats.write_failed {
-        debug!("{stream_name} forwarding encountered closed pipe; output truncated");
-    }
-}
-
-fn handle_forwarding_thread_result(result: thread::Result<ForwardStats>, stream_name: &str) {
-    match result {
-        Ok(stats) => handle_forwarding_stats(stats, stream_name),
-        Err(err) => {
-            warn!("{stream_name} forwarding thread panicked: {err:?}");
-        }
-    }
-}
-
 fn forward_stdout(
     stdout: impl io::Read,
     output: &mut impl io::Write,
     status_observer: Option<StatusObserver<'_>>,
-) -> ForwardStats {
-    match status_observer {
+) -> (ForwardStats, Option<String>) {
+    let mut attribution_writer = FailureAttributionWriter::new(output);
+    let stats = match status_observer {
         Some(observer) => forward_child_output_with_ninja_status(
             BufReader::new(stdout),
-            output,
+            &mut attribution_writer,
             observer,
             "stdout",
         ),
-        None => forward_child_output(BufReader::new(stdout), output, "stdout"),
-    }
+        None => forward_child_output(BufReader::new(stdout), &mut attribution_writer, "stdout"),
+    };
+    (stats, attribution_writer.into_failure())
 }
 fn spawn_and_stream_output(
     mut child: Child,
     status_observer: Option<StatusObserver<'_>>,
     suppress_stderr: bool,
-) -> io::Result<ExitStatus> {
+) -> io::Result<(ExitStatus, Option<String>)> {
     let Some(stdout) = child.stdout.take() else {
         terminate_child(&mut child, "stdout pipe unavailable");
         return Err(io::Error::other("child process missing stdout pipe"));
@@ -342,16 +357,16 @@ fn spawn_and_stream_output(
         // not block behind stderr forwarding. In JSON diagnostics mode we still
         // drain child stderr, but discard it to keep stderr machine-readable.
         if suppress_stderr {
-            forward_child_output(BufReader::new(stderr), io::sink(), "stderr")
+            forward_stderr_with_attribution(BufReader::new(stderr), io::sink())
         } else {
-            forward_child_output(BufReader::new(stderr), io::stderr(), "stderr")
+            forward_stderr_with_attribution(BufReader::new(stderr), io::stderr())
         }
     });
 
     // Intentionally drain stdout on the main thread when `status_observer` is
     // present so forwarding and callback-driven status updates keep a stable
     // ordering; moving this elsewhere can regress output timing/interleaving.
-    let stdout_stats = if suppress_stderr {
+    let (stdout_stats, stdout_failure) = if suppress_stderr {
         let mut output = io::sink();
         forward_stdout(stdout, &mut output, status_observer)
     } else {
@@ -363,31 +378,6 @@ fn spawn_and_stream_output(
     // joined on every exit path. Returning early on a `wait()` error would
     // otherwise detach the thread, leaking it and discarding its result.
     let wait_result = child.wait();
-    finalize_streaming(wait_result, stdout_stats, err_handle)
-}
-
-/// Drain forwarding bookkeeping and join the stderr thread, then surface the
-/// child's wait result. The stderr thread is always joined first so a failed
-/// `wait()` cannot detach background work.
-fn finalize_streaming(
-    wait_result: io::Result<ExitStatus>,
-    stdout_stats: ForwardStats,
-    err_handle: thread::JoinHandle<ForwardStats>,
-) -> io::Result<ExitStatus> {
-    handle_forwarding_stats(stdout_stats, "stdout");
-    handle_forwarding_thread_result(err_handle.join(), "stderr");
-    wait_result
-}
-
-fn terminate_child(child: &mut Child, context: &str) {
-    if let Err(err) = child.kill() {
-        tracing::debug!("failed to kill child after {context}: {err}");
-    }
-    if let Err(err) = child.wait() {
-        tracing::debug!("failed to reap child after {context}: {err}");
-    }
-}
-
-fn ninja_exit_error(status: ExitStatus) -> io::Result<()> {
-    Err(io::Error::other(format!("ninja exited with {status}")))
+    let (status, stderr_failure) = finalize_streaming(wait_result, stdout_stats, err_handle)?;
+    Ok((status, stderr_failure.or(stdout_failure)))
 }

@@ -23,6 +23,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-command-list",
     "guide-complete-manifest",
     "guide-crates-io-install",
+    "guide-direct-command-list",
     "guide-env-reader-snippet",
     "guide-first-build-commands",
     "guide-first-build-manifest",
@@ -157,6 +158,7 @@ fn every_documented_fence_has_a_known_unique_identifier() -> Result<()> {
 #[case("guide-foreach-manifest")]
 #[case("guide-macro-manifest")]
 #[case("guide-command-list")]
+#[case("guide-direct-command-list")]
 #[case("guide-command-available-manifest")]
 #[case("stdlib-yaml-syntax-manifest")]
 #[case("stdlib-jinja-syntax-manifest")]

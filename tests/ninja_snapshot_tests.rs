@@ -145,7 +145,7 @@ fn multi_command_manifest_ninja_snapshot() -> Result<()> {
 
     ensure!(
         ninja_content.contains(
-            "{ eval 'echo check-fmt'; } && { eval 'echo lint'; } && { eval 'echo test'; }"
+            "{ if eval 'echo check-fmt'; then :; else _netsuke_command_status=$$?; printf '%s\\n' 'netsuke command-list failure: action 1, entry 1' >&2; exit \"$$_netsuke_command_status\"; fi; } && { if eval 'echo lint'; then :; else _netsuke_command_status=$$?; printf '%s\\n' 'netsuke command-list failure: action 1, entry 2' >&2; exit \"$$_netsuke_command_status\"; fi; } && { if eval 'echo test'; then :; else _netsuke_command_status=$$?; printf '%s\\n' 'netsuke command-list failure: action 1, entry 3' >&2; exit \"$$_netsuke_command_status\"; fi; }"
         ),
         "expected the command list joined into a fail-fast chain:\n{ninja_content}"
     );

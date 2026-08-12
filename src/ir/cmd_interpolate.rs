@@ -9,7 +9,73 @@ use crate::localization::{self, keys};
 use camino::Utf8PathBuf;
 use shell_quote::{QuoteRefExt, Sh};
 
+#[cfg(test)]
+use std::cell::Cell;
+
 use super::IrGenError;
+
+/// Quoted `$in` and `$out` substitutions prepared for one recipe.
+///
+/// A rule command list shares its input/output bindings, so lowering creates
+/// this once and reuses it for every entry rather than re-quoting paths for
+/// each command.
+#[derive(Debug, Clone)]
+pub(crate) struct CommandBindings {
+    ins: String,
+    outs: String,
+}
+
+impl CommandBindings {
+    /// Quote the paths once for every command in one recipe.
+    #[must_use]
+    pub(crate) fn new(inputs: &[Utf8PathBuf], outputs: &[Utf8PathBuf]) -> Self {
+        record_binding_preparation();
+        Self {
+            ins: quote_paths(inputs).join(" "),
+            outs: quote_paths(outputs).join(" "),
+        }
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    static BINDING_PREPARATIONS: Cell<usize> = const { Cell::new(0) };
+}
+
+#[cfg(test)]
+fn record_binding_preparation() {
+    BINDING_PREPARATIONS.with(|count| count.set(count.get() + 1));
+}
+
+#[cfg(not(test))]
+const fn record_binding_preparation() {}
+
+#[cfg(test)]
+pub(crate) fn reset_binding_preparations() {
+    BINDING_PREPARATIONS.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn binding_preparations() -> usize {
+    BINDING_PREPARATIONS.with(Cell::get)
+}
+
+fn quote_paths(paths: &[Utf8PathBuf]) -> Vec<String> {
+    paths
+        .iter()
+        .map(|path| {
+            // Utf8PathBuf guarantees UTF-8, and shell quoting should preserve it.
+            let bytes: Vec<u8> = path.as_str().quoted(Sh);
+            match String::from_utf8(bytes) {
+                Ok(text) => text,
+                Err(err) => {
+                    debug_assert!(false, "shell quoting produced non UTF-8 bytes: {err}");
+                    String::from_utf8_lossy(err.as_bytes()).into_owned()
+                }
+            }
+        })
+        .collect()
+}
 
 /// Returns `true` when the command contains an odd number of backticks.
 ///
@@ -22,31 +88,22 @@ fn has_unmatched_backticks(s: &str) -> bool {
     s.chars().filter(|&c| c == '`').count().rem_euclid(2) != 0
 }
 
+#[cfg(test)]
 pub(crate) fn interpolate_command(
     template: &str,
     inputs: &[Utf8PathBuf],
     outputs: &[Utf8PathBuf],
 ) -> Result<String, IrGenError> {
-    fn quote_paths(paths: &[Utf8PathBuf]) -> Vec<String> {
-        paths
-            .iter()
-            .map(|p| {
-                // Utf8PathBuf guarantees UTF-8, and shell quoting should preserve it.
-                let bytes: Vec<u8> = p.as_str().quoted(Sh);
-                match String::from_utf8(bytes) {
-                    Ok(text) => text,
-                    Err(err) => {
-                        debug_assert!(false, "shell quoting produced non UTF-8 bytes: {err}");
-                        String::from_utf8_lossy(err.as_bytes()).into_owned()
-                    }
-                }
-            })
-            .collect()
-    }
+    let bindings = CommandBindings::new(inputs, outputs);
+    interpolate_command_with_bindings(template, &bindings)
+}
 
-    let ins = quote_paths(inputs);
-    let outs = quote_paths(outputs);
-    let interpolated = substitute(template, &ins, &outs);
+/// Interpolate `template` with bindings prepared for its enclosing recipe.
+pub(crate) fn interpolate_command_with_bindings(
+    template: &str,
+    bindings: &CommandBindings,
+) -> Result<String, IrGenError> {
+    let interpolated = substitute(template, &bindings.ins, &bindings.outs);
     if has_unmatched_backticks(&interpolated) || shlex::split(&interpolated).is_none() {
         let snippet = interpolated.chars().take(160).collect();
         let message = localization::message(keys::IR_INVALID_COMMAND).with_arg("snippet", &snippet);
@@ -175,9 +232,7 @@ fn try_match_token<'a>(
     Some((replacement, matched_len))
 }
 
-fn substitute(template: &str, ins: &[String], outs: &[String]) -> String {
-    let ins_joined = ins.join(" ");
-    let outs_joined = outs.join(" ");
+fn substitute(template: &str, ins: &str, outs: &str) -> String {
     let chars: Vec<char> = template.chars().collect();
     let mut out = String::with_capacity(template.len());
     let mut in_backticks = false;
@@ -196,7 +251,7 @@ fn substitute(template: &str, ins: &[String], outs: &[String]) -> String {
             continue;
         }
 
-        if let Some((replacement, skip)) = find_substitution(&chars, i, &ins_joined, &outs_joined) {
+        if let Some((replacement, skip)) = find_substitution(&chars, i, ins, outs) {
             out.push_str(replacement);
             i += skip;
         } else {

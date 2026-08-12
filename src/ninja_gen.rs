@@ -14,7 +14,6 @@ use itertools::Itertools;
 use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter, Write};
 use thiserror::Error;
-
 /// Errors produced while rendering Ninja manifests.
 #[derive(Debug, Error)]
 pub enum NinjaGenError {
@@ -25,6 +24,12 @@ pub enum NinjaGenError {
         id: String,
         /// Localized error message.
         message: LocalizedMessage,
+    },
+    /// An action built outside manifest deserialization has no command entries.
+    #[error("command-list action {action_index} has no command entries")]
+    EmptyCommandRecipe {
+        /// One-based stable position in generated action order.
+        action_index: usize,
     },
     /// Formatting the Ninja output failed.
     #[error("{message}")]
@@ -45,7 +50,6 @@ impl From<fmt::Error> for NinjaGenError {
         }
     }
 }
-
 macro_rules! write_kv {
     ($f:expr, $key:expr, $opt:expr) => {
         if let Some(val) = $opt {
@@ -92,8 +96,9 @@ macro_rules! write_flag {
 ///
 /// # Errors
 ///
-/// Returns [`NinjaGenError`] if a build edge references an unknown action or
-/// writing to the output fails.
+/// Returns [`NinjaGenError`] if a build edge references an unknown action, a
+/// programmatic action has an empty command recipe, or writing to the output
+/// fails.
 pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
     let mut out = String::new();
     generate_into(graph, &mut out)?;
@@ -131,12 +136,24 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 ///
 /// # Errors
 ///
-/// Returns [`NinjaGenError`] if a build edge references an unknown action or writing to the output fails.
+/// Returns [`NinjaGenError`] if a build edge references an unknown action, a
+/// programmatic action has an empty command recipe, or writing to the output
+/// fails.
 pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), NinjaGenError> {
     let mut actions: Vec<_> = graph.actions.iter().collect();
     actions.sort_by_key(|(id, _)| *id);
-    for (id, action) in actions {
-        write!(out, "{}", NamedAction { id, action })?;
+    for (zero_based_action_index, (id, action)) in actions.into_iter().enumerate() {
+        let action_index = zero_based_action_index + 1;
+        validate_action_recipe(action, action_index)?;
+        write!(
+            out,
+            "{}",
+            NamedAction {
+                id,
+                action,
+                action_index,
+            }
+        )?;
     }
 
     let mut edges: Vec<_> = graph.targets.values().collect();
@@ -210,22 +227,48 @@ fn escape_script(script: &str) -> String {
 /// The command-list renderer passes each entry to `eval` so an inline comment
 /// or trailing control operator cannot consume the brace-group terminator.
 fn shell_single_quote(value: &str) -> String {
-    let escaped = value.replace('\'', r"'\\''");
+    let escaped = value.replace('\'', r"'\''");
     format!("'{escaped}'")
+}
+
+/// Prefix used to carry bounded list-entry failure attribution through Ninja.
+pub(crate) const COMMAND_LIST_FAILURE_PREFIX: &str = "netsuke command-list failure: action ";
+
+const fn validate_action_recipe(
+    action: &crate::ir::Action,
+    action_index: usize,
+) -> Result<(), NinjaGenError> {
+    if matches!(
+        action.recipe,
+        Recipe::Command {
+            command: StringOrList::Empty
+        }
+    ) {
+        return Err(NinjaGenError::EmptyCommandRecipe { action_index });
+    }
+    Ok(())
 }
 
 /// Wrapper struct to display a rule with its identifier.
 struct NamedAction<'a> {
     id: &'a str,
     action: &'a crate::ir::Action,
+    action_index: usize,
 }
 
 impl NamedAction<'_> {
     fn write_recipe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.action.recipe {
-            Recipe::Command { command } => {
-                let command_line = match command {
-                    StringOrList::String(cmd) => cmd.clone(),
+            Recipe::Command {
+                command: StringOrList::String(scalar_command),
+            } => {
+                Self::assert_shell_command(scalar_command);
+                writeln!(f, "  command = {scalar_command}")
+            }
+            Recipe::Command {
+                command: StringOrList::List(items),
+            } => {
+                let command_line =
                     // Brace groups keep each entry a distinct shell unit, and
                     // `eval` prevents comments or trailing control operators
                     // inside an entry consuming its terminator. Braces run in
@@ -233,15 +276,18 @@ impl NamedAction<'_> {
                     // directory, environment, and variables set by one entry
                     // still carry into the next, and the `&&` chain stays
                     // fail-fast.
-                    StringOrList::List(items) => items
-                        .iter()
-                        .map(|item| format!("{{ eval {}; }}", shell_single_quote(item)))
-                        .join(" && "),
-                    StringOrList::Empty => return Self::reject_empty_command_recipe(),
-                };
+                    items.iter()
+                        .enumerate()
+                        .map(|(entry_index, item)| {
+                            command_list_entry(item, self.action_index, entry_index + 1)
+                        })
+                        .join(" && ");
                 Self::assert_shell_command(&command_line);
                 writeln!(f, "  command = {command_line}")
             }
+            Recipe::Command {
+                command: StringOrList::Empty,
+            } => Self::reject_empty_command_recipe(),
             Recipe::Script { script } => Self::write_script_command(f, script),
             Recipe::Rule { .. } => Self::reject_rule_recipe(),
         }
@@ -303,6 +349,15 @@ impl NamedAction<'_> {
     }
 }
 
+fn command_list_entry(command: &str, action_index: usize, entry_index: usize) -> String {
+    let context = format!("{COMMAND_LIST_FAILURE_PREFIX}{action_index}, entry {entry_index}");
+    format!(
+        "{{ if eval {}; then :; else _netsuke_command_status=$$?; printf '%s\\n' '{}' >&2; exit \"$$_netsuke_command_status\"; fi; }}",
+        shell_single_quote(command),
+        context,
+    )
+}
+
 impl Display for NamedAction<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         writeln!(f, "rule {}", self.id)?;
@@ -310,7 +365,6 @@ impl Display for NamedAction<'_> {
         self.write_metadata(f)
     }
 }
-
 /// Wrapper struct to display a build edge.
 struct DisplayEdge<'a> {
     edge: &'a BuildEdge,

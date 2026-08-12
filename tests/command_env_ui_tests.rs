@@ -40,6 +40,21 @@ fn command_env_embedder_fixture_compiles() -> io::Result<()> {
     Ok(())
 }
 
+/// The public command-list constructors compile for an external embedder.
+#[test]
+fn command_list_public_api_fixture_compiles() -> io::Result<()> {
+    let rlib = NetsukeRlib::build()?;
+    let output = rlib.compile("tests/ui/command_list_public_api_pass.rs")?;
+
+    if !output.status.success() {
+        return Err(io::Error::other(format!(
+            "the command-list public API fixture should compile:\n{}",
+            stderr(&output),
+        )));
+    }
+    Ok(())
+}
+
 /// The `netsuke` rlib and the deps directory holding its dependencies.
 struct NetsukeRlib {
     rlib: PathBuf,

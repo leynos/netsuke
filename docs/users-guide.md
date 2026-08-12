@@ -337,7 +337,11 @@ targets:
 The same list form can be attached directly to a target. Jinja rendering and
 `{{ outs }}` interpolation apply independently to each entry:
 
+<!-- tested-example: guide-direct-command-list -->
+
 ```yaml
+netsuke_version: "1.0.0"
+
 targets:
   - name: report.txt
     vars:

@@ -8,8 +8,11 @@
 use proptest::prelude::*;
 use test_support::ninja_gen::paths_strategy;
 
-use super::DisplayEdge;
-use crate::ir::BuildEdge;
+use super::{DisplayEdge, NinjaGenError, generate};
+use crate::{
+    ast::{Recipe, StringOrList},
+    ir::{Action, BuildEdge, BuildGraph},
+};
 
 fn edge_strategy_with_ranges(
     input_range: std::ops::Range<usize>,
@@ -67,6 +70,47 @@ fn bare_pipe_position(line: &str) -> Option<usize> {
     line.match_indices(" | ").map(|(index, _)| index).next()
 }
 
+fn command_list_graph(entries: &[String]) -> BuildGraph {
+    let mut graph = BuildGraph::default();
+    graph.actions.insert(
+        "action".into(),
+        Action {
+            recipe: Recipe::Command {
+                command: StringOrList::List(
+                    entries
+                        .iter()
+                        .map(|entry| format!("echo {entry}"))
+                        .collect(),
+                ),
+            },
+            description: None,
+            depfile: None,
+            deps_format: None,
+            pool: None,
+            restat: false,
+        },
+    );
+    graph
+}
+
+fn scalar_graph(command: String) -> BuildGraph {
+    let mut graph = BuildGraph::default();
+    graph.actions.insert(
+        "action".into(),
+        Action {
+            recipe: Recipe::Command {
+                command: StringOrList::String(command),
+            },
+            description: None,
+            depfile: None,
+            deps_format: None,
+            pool: None,
+            restat: false,
+        },
+    );
+    graph
+}
+
 proptest! {
     #[test]
     fn implicit_deps_separator_precedes_order_only_separator(edge in edge_strategy_with_ranges(1..5, 1..5, 1..5)) {
@@ -99,5 +143,58 @@ proptest! {
 
         prop_assert!(bare_pipe_position(deps).is_none());
         prop_assert!(deps.contains(" || "));
+    }
+
+    #[test]
+    fn command_lists_preserve_order_boundaries_and_fail_fast_joins(entries in prop::collection::vec("[a-z]{1,12}", 1..9)) {
+        let ninja = generate(&command_list_graph(&entries)).expect("non-empty command list should generate");
+        let command_line = ninja.lines().find(|line| line.starts_with("  command = "))
+            .expect("generated action should include a command line");
+        let expected_entries: Vec<String> = entries.iter().enumerate().map(|(index, entry)| {
+            format!(
+                "{{ if eval 'echo {entry}'; then :; else _netsuke_command_status=$$?; printf '%s\\n' 'netsuke command-list failure: action 1, entry {}' >&2; exit \"$$_netsuke_command_status\"; fi; }}",
+                index + 1,
+            )
+        }).collect();
+
+        let mut previous = 0usize;
+        for expected_entry in &expected_entries {
+            let position = command_line
+                .get(previous..)
+                .and_then(|remaining| remaining.find(expected_entry))
+                .expect("every entry should retain its independent shell boundary");
+            previous += position + expected_entry.len();
+        }
+        prop_assert_eq!(command_line.matches("{ if eval '").count(), entries.len());
+        prop_assert_eq!(command_line.matches(" && ").count(), entries.len() - 1);
+    }
+
+    #[test]
+    fn scalar_command_output_retains_the_preexisting_form(command in "echo [a-z]{1,12}") {
+        let ninja = generate(&scalar_graph(command.clone())).expect("scalar command should generate");
+        let expected_command_line = format!("  command = {command}\n");
+        let retains_scalar_form = ninja.contains(&expected_command_line);
+        let uses_list_boundary = ninja.contains("{ if eval '");
+        prop_assert!(retains_scalar_form);
+        prop_assert!(!uses_list_boundary);
+    }
+
+    #[test]
+    fn programmatic_empty_command_recipes_are_rejected(action_id in "[a-z]{1,12}") {
+        let mut graph = BuildGraph::default();
+        graph.actions.insert(
+            action_id,
+            Action {
+                recipe: Recipe::Command { command: StringOrList::Empty },
+                description: None,
+                depfile: None,
+                deps_format: None,
+                pool: None,
+                restat: false,
+            },
+        );
+        let error = generate(&graph).expect_err("empty command recipe should be rejected");
+        let is_stable_empty_recipe_error = matches!(error, NinjaGenError::EmptyCommandRecipe { action_index: 1 });
+        prop_assert!(is_stable_empty_recipe_error);
     }
 }

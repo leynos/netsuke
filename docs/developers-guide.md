@@ -225,7 +225,7 @@ The lowering stages have deliberately separate responsibilities:
   subshell, so directory changes, environment assignments, and shell
   variables can carry from one entry to the next. The `&&` chain remains
   fail-fast.
-- `src/runner/process` forwards the command's output and recognises the
+- `src/runner/process` forwards the command's output and recognizes the
   bounded `netsuke command-list failure: action N, entry M` marker. A failed
   list therefore retains the original exit status while adding the generated
   action index and one-based entry index to the Ninja failure error.

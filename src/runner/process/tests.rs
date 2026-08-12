@@ -111,7 +111,7 @@ fn finalize_streaming_joins_stderr_thread_when_wait_fails() {
     let err_handle = thread::spawn(move || {
         thread::sleep(Duration::from_millis(100));
         worker_flag.store(true, Ordering::SeqCst);
-        ForwardStats::default()
+        (ForwardStats::default(), None)
     });
 
     let wait_result = Err(io::Error::other("simulated wait failure"));

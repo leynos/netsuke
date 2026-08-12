@@ -3,7 +3,7 @@ source: tests/ninja_snapshot_tests.rs
 expression: ninja_content
 ---
 rule 2ba9145cfe6f2224b0cbcf527eea1371cf3cc742c8790e332ddfb7ba0c51e3da
-  command = { eval 'echo check-fmt'; } && { eval 'echo lint'; } && { eval 'echo test'; }
+  command = { if eval 'echo check-fmt'; then :; else _netsuke_command_status=$$?; printf '%s\n' 'netsuke command-list failure: action 1, entry 1' >&2; exit "$$_netsuke_command_status"; fi; } && { if eval 'echo lint'; then :; else _netsuke_command_status=$$?; printf '%s\n' 'netsuke command-list failure: action 1, entry 2' >&2; exit "$$_netsuke_command_status"; fi; } && { if eval 'echo test'; then :; else _netsuke_command_status=$$?; printf '%s\n' 'netsuke command-list failure: action 1, entry 3' >&2; exit "$$_netsuke_command_status"; fi; }
   description = Run the required checks sequentially
 
 build aggregate: 2ba9145cfe6f2224b0cbcf527eea1371cf3cc742c8790e332ddfb7ba0c51e3da
