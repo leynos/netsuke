@@ -1124,8 +1124,15 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   status zero. A failed entry may still leave side effects behind before it
   halts the chain. The generated brace/eval boundary keeps comments and
   trailing control operators inside an entry from changing the chain's
-  structure. Failure diagnostics include the action fingerprint and one-based
-  entry position when Netsuke can attribute the failed list entry.
+  structure. An entry may start at most one background job; Netsuke waits for
+  that job before moving to a later entry, and rejects an entry that starts
+  more than one background job during Ninja generation. A direct simple
+  `exec`, optionally prefixed by shell assignments, is supervised so its
+  success or failure retains the list's status semantics: a successful `exec`
+  ends the remaining chain, while structured or nested `exec` forms are
+  rejected during Ninja generation. Failure diagnostics include the action
+  fingerprint and one-based entry position when Netsuke can attribute the
+  failed list entry.
 - Literal shell dollar expressions currently require Ninja-aware escaping,
   such as `$$PATH`.
 

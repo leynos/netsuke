@@ -225,7 +225,14 @@ The lowering stages have deliberately separate responsibilities:
   generated group terminator. Braces run in the current shell, not a
   subshell, so directory changes, environment assignments, and shell
   variables can carry from one entry to the next. The `&&` chain remains
-  fail-fast.
+  fail-fast. Each entry may start at most one background job; the generated
+  wrapper waits for that job before it evaluates a later entry. Ninja
+  generation rejects entries that start more than one background job. A
+  direct simple `exec`, optionally prefixed by shell assignments, is
+  evaluated in a retaining subshell so its success or failure remains visible
+  to the wrapper; a successful `exec` ends the remaining chain. Structured or
+  nested `exec` forms are rejected during Ninja generation because the wrapper
+  cannot supervise them without changing their shell semantics.
 - `src/runner/process` forwards the command's output and recognizes the
   bounded `netsuke command-list failure: action HASH, entry M` marker. A failed
   list therefore retains the original exit status while adding the fixed-width
