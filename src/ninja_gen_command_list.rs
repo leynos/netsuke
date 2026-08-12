@@ -12,15 +12,19 @@ pub(crate) fn command_list_entry(command: &str, action_id: &str, entry_index: us
     let evaluator = command_evaluator(command, &context);
     format!(
         concat!(
-            "{{ _netsuke_background_before=$${{!:-}}; ",
+            "{{ _netsuke_background_before=\"$$(jobs -p)\"; ",
             "trap '_netsuke_command_status=$$?; printf \"%s\\n\" \"{}\" >&2; ",
             "trap - EXIT; exit \"$$_netsuke_command_status\"' EXIT; ",
             "if {}; then _netsuke_command_status=0; ",
             "else _netsuke_command_status=$$?; fi; ",
-            "_netsuke_background_after=$${{!:-}}; ",
-            "if [ -n \"$$_netsuke_background_after\" ] && ",
-            "[ \"$$_netsuke_background_after\" != \"$$_netsuke_background_before\" ]; then ",
-            "wait \"$$_netsuke_background_after\"; _netsuke_command_status=$$?; fi; ",
+            "_netsuke_background_after=\"$$(jobs -p)\"; ",
+            "for _netsuke_background_job in $$_netsuke_background_after; do ",
+            "case \" $$_netsuke_background_before \" in ",
+            "*\" $$_netsuke_background_job \"*) ;; ",
+            "*) if wait \"$$_netsuke_background_job\"; then :; ",
+            "else _netsuke_background_status=$$?; ",
+            "if [ \"$$_netsuke_command_status\" -eq 0 ]; then ",
+            "_netsuke_command_status=$$_netsuke_background_status; fi; fi;; esac; done; ",
             "if [ \"$$_netsuke_command_status\" -eq 0 ]; then trap - EXIT; :; ",
             "else trap - EXIT; printf '%s\\n' '{}' >&2; ",
             "exit \"$$_netsuke_command_status\"; fi; }}"

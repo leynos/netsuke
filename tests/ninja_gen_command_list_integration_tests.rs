@@ -244,6 +244,37 @@ fn command_list_background_failure_waits_before_the_next_entry() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn command_list_waits_for_every_background_job_before_the_next_entry() -> Result<()> {
+    let Some(dir) = ninja_integration_setup() else {
+        return Ok(());
+    };
+    let command = failing_command_list_command(vec![
+        "false & true &".into(),
+        "echo unexpected > continued-after-multiple-background-jobs.txt".into(),
+    ])?;
+    let output = run_generated_command_with_ninja(&dir, &command)?;
+    ensure!(
+        !output.status.success(),
+        "a failing background job must fail the Ninja build"
+    );
+    let diagnostics = format!(
+        "{}{}",
+        String::from_utf8(output.stdout).context("Ninja stdout should be UTF-8")?,
+        String::from_utf8(output.stderr).context("Ninja stderr should be UTF-8")?,
+    );
+    ensure!(
+        diagnostics.contains(", entry 1"),
+        "the background failure should identify the first entry: {diagnostics}"
+    );
+    let workspace = open_temp_workspace(&dir)?;
+    ensure!(
+        !workspace.exists("continued-after-multiple-background-jobs.txt"),
+        "a failed background job must prevent a later entry from running"
+    );
+    Ok(())
+}
+
 fn rendered_direct_target_manifest() -> Result<NetsukeManifest> {
     let manifest = manifest::from_str(
         r#"

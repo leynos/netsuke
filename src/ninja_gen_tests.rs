@@ -116,10 +116,11 @@ fn generate_command_list_ninja_joins_a_fail_fast_chain() -> Result<()> {
 
     let ninja = generate(&graph)?;
     ensure!(
-        ninja.contains("command = { _netsuke_background_before=$${!:-};")
+        ninja.contains("command = { _netsuke_background_before=\"$$(jobs -p)\";")
             && ninja.contains("if eval 'echo one'")
             && ninja.contains("if eval 'echo two'")
             && ninja.contains("if eval 'echo three'")
+            && ninja.contains("for _netsuke_background_job in $$_netsuke_background_after; do")
             && ninja.matches("} && {").count() == 2,
         "command list entries should be isolated brace groups joined by &&:\n{ninja}"
     );

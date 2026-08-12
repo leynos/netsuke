@@ -159,7 +159,12 @@ proptest! {
                 .expect("every entry should retain its independent shell boundary");
             previous += position + expected_entry.len();
         }
-        prop_assert_eq!(command_line.matches("{ _netsuke_background_before=$${!:-};").count(), entries.len());
+        prop_assert_eq!(
+            command_line
+                .matches("{ _netsuke_background_before=\"$$(jobs -p)\";")
+                .count(),
+            entries.len()
+        );
         prop_assert_eq!(command_line.matches("} && {").count(), entries.len() - 1);
     }
 
