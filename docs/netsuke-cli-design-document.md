@@ -70,9 +70,12 @@ accessibility, and `--json`.
 
 `netsuke help targets` loads, expands, renders, and validates the manifest,
 then prints actions followed by targets. It does not invoke Ninja, run recipes,
-or create build outputs. This keeps discovery useful in an unfamiliar project
-without making help a build operation. Existing manifests remain compatible
-when they omit the optional descriptions.
+or create build outputs. Rendering uses a restricted, side-effect-free Jinja
+surface: expressions invoking `fetch`, `shell`, or `grep` are rejected rather
+than executed. This keeps discovery useful in an unfamiliar project without
+making help a build operation. Existing manifests remain compatible when they
+omit the optional descriptions; the helper restriction applies only to this
+inspection path.
 
 Intuitive **defaults** further contribute to a smooth UX. As noted, if no
 subcommand is given, `netsuke build` is assumed by default. Similarly, common

@@ -860,12 +860,14 @@ and an empty description column for entries without a `description`:
 netsuke help targets
 ```
 
-The command loads, expands, renders, and validates the manifest exactly like a
-build, but performs no recipes and creates no build outputs. It honours the
-usual manifest-selection options (`--file`, `-C/--directory`) and the normal
-colour, accessibility, locale, and JSON-output conventions; with `--json` the
-catalogue is emitted as a versioned JSON document whose `result.command` is
-`help-targets`.
+The command loads, expands, renders, and validates the manifest through the
+same structural stages as a build, but performs no recipes and creates no
+build outputs. Rendering uses a restricted, side-effect-free Jinja surface:
+expressions invoking `fetch`, `shell`, or `grep` are rejected rather than
+executed. It honours the usual manifest-selection options (`--file`,
+`-C/--directory`) and the normal colour, accessibility, locale, and JSON-output
+conventions; with `--json` the catalogue is emitted as a versioned JSON
+document whose `result.command` is `help-targets`.
 
 ## Configure Netsuke
 

@@ -47,10 +47,12 @@ layer routes `HelpTopic::Targets` to `src/runner/help.rs`, which resolves and
 runs the manifest loading, expansion, rendering, and IR-validation stages to
 produce a deterministic action-then-target catalogue. It may validate a
 `BuildGraph`, but it must not generate a Ninja file, call a Ninja subprocess,
-execute a recipe, or create build outputs. The no-topic and named-command help
-paths render clap help directly and do not load a manifest. Keep future help
-topics within this boundary rather than coupling read-only inspection to
-`runner::process`.
+execute a recipe, or create build outputs. Its Jinja environment is a
+restricted, side-effect-free query surface: expressions invoking `fetch`,
+`shell`, or `grep` are rejected rather than executed. The no-topic and
+named-command help paths render clap help directly and do not load a manifest.
+Keep future help topics within this boundary rather than coupling read-only
+inspection to `runner::process`.
 
 ## Localization
 
