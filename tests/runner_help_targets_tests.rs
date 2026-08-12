@@ -9,9 +9,13 @@
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use netsuke::cli::{Cli, Commands, HelpArgs, HelpTopic};
 use netsuke::output_prefs;
 use netsuke::runner::run;
+use netsuke::{
+    cli::{Cli, Commands, HelpArgs, HelpTopic},
+    ir::BuildGraph,
+    manifest, ninja_gen,
+};
 use rstest::{fixture, rstest};
 use serde_json::Value;
 use std::path::PathBuf;
@@ -175,6 +179,71 @@ fn help_targets_honours_directory_flag(
     ensure!(
         stdout.contains("lint") && stdout.contains("target/release/catnap"),
         "catalogue should list the fixture names: {stdout}"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn help_targets_renders_foreach_descriptions_without_changing_rule_progress() -> Result<()> {
+    let temp = tempfile::tempdir().context("create foreach help-targets workspace")?;
+    let manifest_path = temp.path().join("Netsukefile");
+    let temp_path = Utf8Path::from_path(temp.path()).context("temporary path should be UTF-8")?;
+    let workspace = Dir::open_ambient_dir(temp_path, ambient_authority())
+        .context("open foreach help-targets fixture directory")?;
+    workspace
+        .write(
+            "Netsukefile",
+            r#"netsuke_version: "1.0.0"
+rules:
+  - name: render-report
+    description: Render reports through the shared rule
+    command: touch $out
+targets:
+  - name: report-{{ item }}
+    description: Build the {{ item }} report
+    rule: render-report
+    foreach:
+      - weekly
+      - monthly
+"#,
+        )
+        .context("write foreach manifest")?;
+
+    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
+        .arg("--file")
+        .arg(&manifest_path)
+        .arg("help")
+        .arg("targets")
+        .output()
+        .context("run help targets against foreach manifest")?;
+    ensure!(
+        output.status.success(),
+        "help targets should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for expected in [
+        "report-weekly",
+        "Build the weekly report",
+        "report-monthly",
+        "Build the monthly report",
+    ] {
+        ensure!(
+            stdout.contains(expected),
+            "catalogue should render foreach description {expected:?}: {stdout}"
+        );
+    }
+
+    let manifest = manifest::from_path(&manifest_path)?;
+    let graph = BuildGraph::from_manifest(&manifest).context("generate foreach graph")?;
+    let ninja = ninja_gen::generate(&graph).context("generate foreach Ninja manifest")?;
+    ensure!(
+        ninja.contains("description = Render reports through the shared rule"),
+        "Ninja should retain the rule progress description: {ninja}"
+    );
+    ensure!(
+        !ninja.contains("Build the weekly report") && !ninja.contains("Build the monthly report"),
+        "target discovery descriptions must not replace Ninja progress: {ninja}"
     );
     Ok(())
 }

@@ -15,7 +15,10 @@ use camino::Utf8Path;
 #[cfg(unix)]
 use cap_std::fs::FileTypeExt;
 use cap_std::{ambient_authority, fs, fs_utf8::Dir};
-use minijinja::{Environment, Error, value::Value};
+use minijinja::{
+    Environment, Error, ErrorKind, State,
+    value::{Kwargs, Value},
+};
 use std::sync::Arc;
 
 use crate::localization::{self, keys};
@@ -92,6 +95,35 @@ pub fn register_with_config(
     config: StdlibConfig,
 ) -> anyhow::Result<StdlibState> {
     let state = StdlibState::default();
+    register_read_only_helpers(env, &config);
+    let impure = state.impure_flag();
+    let (network_config, command_config) = config.into_components();
+    network::register_functions(env, Arc::clone(&impure), network_config);
+    command::register(env, impure, command_config);
+    Ok(state)
+}
+
+/// Register helpers suitable for manifest queries that must not cause I/O.
+///
+/// The registration preserves pure rendering helpers, including date, path,
+/// collection, and executable-discovery helpers.  It replaces `fetch`,
+/// `shell`, and `grep` with explicit errors so consumers can render discovery
+/// metadata without opening network connections, writing fetch caches, or
+/// executing commands.
+///
+pub(crate) fn register_manifest_query_with_config(
+    env: &mut Environment<'_>,
+    config: &StdlibConfig,
+) -> StdlibState {
+    let state = StdlibState::default();
+    register_read_only_helpers(env, config);
+    register_disabled_impure_helpers(env);
+    state
+}
+
+/// Register helpers that do not execute a command, make a network request, or
+/// mutate the manifest workspace.
+fn register_read_only_helpers(env: &mut Environment<'_>, config: &StdlibConfig) {
     register_file_tests(env);
     path::register_filters(env, config.home_directory().clone());
     collections::register_filters(env);
@@ -105,12 +137,45 @@ pub fn register_with_config(
         WhichConfig::new(which_cwd, which_path, which_skip_dirs, which_cache_capacity)
             .with_pathext_override(config.pathext_override().cloned());
     which::register(env, which_config);
-    let impure = state.impure_flag();
-    let (network_config, command_config) = config.into_components();
-    network::register_functions(env, Arc::clone(&impure), network_config);
-    command::register(env, impure, command_config);
     time::register_functions(env);
-    Ok(state)
+}
+
+/// Register deliberate failures for stdlib helpers that have side effects.
+fn register_disabled_impure_helpers(env: &mut Environment<'_>) {
+    env.add_function(
+        "fetch",
+        |_url: String, _kwargs: Kwargs| -> Result<Value, Error> {
+            Err(manifest_query_operation_error("fetch"))
+        },
+    );
+    env.add_filter(
+        "shell",
+        |_state: &State,
+         _value: Value,
+         _command: String,
+         _options: Option<Value>|
+         -> Result<Value, Error> { Err(manifest_query_operation_error("shell")) },
+    );
+    env.add_filter(
+        "grep",
+        |_state: &State,
+         _value: Value,
+         _pattern: String,
+         _flags: Option<Value>,
+         _options: Option<Value>|
+         -> Result<Value, Error> { Err(manifest_query_operation_error("grep")) },
+    );
+}
+
+/// Explain why an impure helper is unavailable while querying a manifest.
+fn manifest_query_operation_error(operation: &str) -> Error {
+    Error::new(
+        ErrorKind::InvalidOperation,
+        format!(
+            "{operation} is disabled while rendering `netsuke help targets`; \
+             manifest queries permit only side-effect-free template helpers"
+        ),
+    )
 }
 
 /// Convert UTF-8 or fall back to bytes for byte-oriented network helpers.

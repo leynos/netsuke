@@ -1,6 +1,7 @@
 //! Tests covering manifest workspace resolution and filesystem helpers.
 use super::super::{
-    EnvReadError, EnvReader, from_path_with_policy_and_env, open_manifest_workspace,
+    EnvReadError, EnvReader, from_path_for_manifest_query, from_path_with_policy_and_env,
+    open_manifest_workspace,
 };
 use crate::ast::Recipe;
 use crate::stdlib::NetworkPolicy;
@@ -213,5 +214,45 @@ fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
         "outside working directory must not receive cache data"
     );
 
+    Ok(())
+}
+
+/// Discovery queries must reject helpers that could perform I/O before any
+/// network request, cache write, or command execution occurs.
+#[rstest]
+#[case::fetch("{{ fetch('https://example.invalid', cache=true) }}", "fetch")]
+#[case::shell("{{ 'ignored' | shell('printf side-effect') }}", "shell")]
+#[case::grep("{{ 'ignored' | grep('ignored') }}", "grep")]
+fn manifest_query_rejects_impure_template_helpers(
+    #[case] expression: &str,
+    #[case] helper: &str,
+) -> AnyResult<()> {
+    let temp = tempdir().context("create manifest-query workspace")?;
+    let manifest_path = temp.path().join("Netsukefile");
+    let manifest = format!(
+        concat!(
+            "netsuke_version: \"1.0.0\"\n",
+            "targets:\n",
+            "  - name: discovery\n",
+            "    description: >-\n",
+            "      {}\n",
+            "    command: echo discovery\n",
+        ),
+        expression,
+    );
+    test_fs::write(&manifest_path, manifest)?;
+
+    let error = from_path_for_manifest_query(&manifest_path, None)
+        .expect_err("manifest query should reject side-effecting template helpers");
+    ensure!(
+        error
+            .chain()
+            .any(|cause| cause.to_string().contains(&format!("{helper} is disabled"))),
+        "query should name its rejected helper: {error:?}"
+    );
+    ensure!(
+        !temp.path().join(".netsuke").exists(),
+        "a rejected query must not create a fetch cache"
+    );
     Ok(())
 }

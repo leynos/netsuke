@@ -14,6 +14,7 @@ use serde_json::json;
 fn foreach_doc(section: &str, items: &[String], when: Option<&str>) -> ManifestValue {
     let mut entry = json!({
         "name": "literal",
+        "description": "Build {{ item }}",
         "command": "echo hi",
         "foreach": items,
     });
@@ -89,6 +90,32 @@ proptest! {
             }
             let expected: Vec<u64> = (0..items.len() as u64).collect();
             prop_assert_eq!(indexes, expected);
+        }
+    }
+
+    /// Every `foreach` clone keeps its discovery metadata so final rendering
+    /// can resolve the same item-specific description as the target name.
+    #[test]
+    fn foreach_preserves_description_templates(items in item_names(10)) {
+        let env = Environment::new();
+        for section in ["targets", "actions"] {
+            let mut doc = foreach_doc(section, &items, None);
+            expand_foreach(&mut doc, &env)
+                .map_err(|e| TestCaseError::fail(format!("expansion failed: {e}")))?;
+            let descriptions: Result<Vec<_>, TestCaseError> = expanded_entries(&doc, section)?
+                .iter()
+                .map(|entry| {
+                    entry
+                        .get("description")
+                        .and_then(ManifestValue::as_str)
+                        .map(str::to_owned)
+                        .ok_or_else(|| TestCaseError::fail("expanded description missing"))
+                })
+                .collect();
+            prop_assert_eq!(
+                descriptions?,
+                vec!["Build {{ item }}".to_owned(); items.len()]
+            );
         }
     }
 

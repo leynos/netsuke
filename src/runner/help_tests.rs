@@ -10,8 +10,10 @@ use crate::localization::set_localizer_for_tests;
 use crate::manifest;
 use crate::snapshot_test_support::{snapshot_settings, theme_prefs};
 use crate::theme::ThemePreference;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use insta::assert_snapshot;
+use proptest::prelude::*;
+use semver::Version;
 use std::sync::Arc;
 use test_support::fluent::normalize_fluent_isolates;
 use test_support::localizer_test_lock;
@@ -103,4 +105,133 @@ fn json_catalogue_snapshot() -> Result<()> {
     catalogue_snapshot("en-US", "json_catalogue", |manifest| {
         render_json(build_catalogue(manifest))
     })
+}
+
+#[test]
+fn text_catalogue_escapes_terminal_control_characters() -> Result<()> {
+    let mut manifest = fixture_manifest()?;
+    let action = manifest
+        .actions
+        .first_mut()
+        .context("help target fixture should contain an action")?;
+    action.name =
+        crate::ast::StringOrList::String("line\nnext\t\u{001B}[31mred\u{009B}m".to_owned());
+    action.description = Some("description\r\nwith\tcontrols\u{0007}".to_owned());
+
+    let output = render_text(
+        &build_catalogue(&manifest),
+        theme_prefs(ThemePreference::Unicode),
+    );
+
+    anyhow::ensure!(
+        output.contains("line\\nnext\\t\\u{1b}[31mred\\u{9b}m"),
+        "name controls should be visible escapes: {output:?}"
+    );
+    anyhow::ensure!(
+        output.contains("description\\r\\nwith\\tcontrols\\u{7}"),
+        "description controls should be visible escapes: {output:?}"
+    );
+    anyhow::ensure!(
+        !output.contains('\r') && !output.contains('\u{001B}') && !output.contains('\u{009B}'),
+        "text output must not contain terminal control characters: {output:?}"
+    );
+    anyhow::ensure!(
+        output.lines().count() == 8,
+        "escaped newlines must not create additional catalogue rows: {output:?}"
+    );
+    Ok(())
+}
+
+/// Generate target metadata with at least one name, allowing actions and
+/// targets to exercise scalar/list flattening through the same catalogue path.
+fn target_metadata() -> impl Strategy<Value = (Vec<String>, Option<String>)> {
+    (
+        proptest::collection::vec("[a-z]{1,8}", 1..4),
+        prop_oneof![Just(None), "[A-Za-z ]{0,20}".prop_map(Some)],
+    )
+}
+
+/// Build a simple target because catalogue construction depends only on names,
+/// descriptions, and action categorization.
+fn catalogue_target(names: Vec<String>, description: Option<String>, phony: bool) -> Target {
+    Target {
+        name: crate::ast::StringOrList::List(names),
+        recipe: crate::ast::Recipe::Command {
+            command: "true".to_owned(),
+        },
+        sources: crate::ast::StringOrList::Empty,
+        deps: crate::ast::StringOrList::Empty,
+        order_only_deps: crate::ast::StringOrList::Empty,
+        vars: crate::ast::Vars::default(),
+        phony,
+        always: false,
+        description,
+    }
+}
+
+proptest! {
+    /// Catalogue construction preserves declaration order, expands every name,
+    /// retains metadata, and marks each alias selected by `defaults`.
+    #[test]
+    fn catalogue_preserves_order_names_metadata_and_defaults(
+        actions in proptest::collection::vec(target_metadata(), 0..5),
+        targets in proptest::collection::vec(target_metadata(), 0..5),
+        default_flags in proptest::collection::vec(any::<bool>(), 0..64),
+    ) {
+        let declared_names: Vec<String> = actions
+            .iter()
+            .chain(&targets)
+            .flat_map(|(names, _)| names.iter().cloned())
+            .collect();
+        let defaults = if declared_names.is_empty() {
+            Vec::new()
+        } else {
+            declared_names
+                .iter()
+                .zip(default_flags)
+                .filter(|(_, is_default)| *is_default)
+                .map(|(name, _)| name.clone())
+                .collect()
+        };
+        let manifest = NetsukeManifest {
+            netsuke_version: Version::new(1, 0, 0),
+            vars: crate::ast::Vars::default(),
+            macros: Vec::new(),
+            rules: Vec::new(),
+            actions: actions
+                .iter()
+                .cloned()
+                .map(|(names, description)| catalogue_target(names, description, true))
+                .collect(),
+            targets: targets
+                .iter()
+                .cloned()
+                .map(|(names, description)| catalogue_target(names, description, false))
+                .collect(),
+            defaults: defaults.clone(),
+        };
+        let default_names = &defaults;
+        let expected: Vec<(String, Option<String>, bool, bool)> = actions
+            .iter()
+            .map(|(names, description)| (names, description, true))
+            .chain(targets.iter().map(|(names, description)| (names, description, false)))
+            .flat_map(|(names, description, is_action)| {
+                names.iter().cloned().map(move |name| {
+                    let is_default = default_names.contains(&name);
+                    (name, description.clone(), is_action, is_default)
+                })
+            })
+            .collect();
+        let actual: Vec<(String, Option<String>, bool, bool)> = build_catalogue(&manifest)
+            .into_iter()
+            .map(|entry| (
+                entry.name,
+                entry.description.map(str::to_owned),
+                entry.is_action,
+                entry.is_default,
+            ))
+            .collect();
+
+        prop_assert_eq!(actual, expected);
+    }
 }

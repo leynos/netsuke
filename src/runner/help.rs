@@ -8,7 +8,7 @@
 use anyhow::{Context, Result, ensure};
 use clap::CommandFactory;
 use serde::Serialize;
-use std::collections::HashSet;
+use std::{borrow::Cow, collections::HashSet};
 use tracing::info;
 use unicode_width::UnicodeWidthStr;
 
@@ -24,7 +24,7 @@ use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipel
 use crate::theme::ThemeContext;
 
 use super::path_helpers::{ensure_manifest_exists_or_error, resolve_manifest_path};
-use super::{load_manifest_with_stage_reporting, process};
+use super::process;
 
 /// One catalogue row: a single resolved target name with its metadata.
 struct HelpEntry<'a> {
@@ -37,8 +37,9 @@ struct HelpEntry<'a> {
 /// Render the `help targets` catalogue to stdout without invoking Ninja.
 ///
 /// The manifest is loaded, expanded, rendered, and validated through the same
-/// pipeline stages as a real build; the IR is built only to validate the
-/// rendered manifest, and no recipe is executed and no build output created.
+/// pipeline stages as a real build, but with impure template helpers disabled.
+/// The IR is built only to validate the rendered manifest, and no recipe is
+/// executed and no build output created.
 ///
 /// # Errors
 ///
@@ -52,10 +53,7 @@ pub(super) fn handle_help_targets(cli: &Cli, reporter: &dyn StatusReporter) -> R
     );
     let manifest_path = resolve_manifest_path(cli)?;
     ensure_manifest_exists_or_error(cli, reporter, &manifest_path)?;
-    let policy = cli
-        .network_policy()
-        .context(localization::message(keys::RUNNER_CONTEXT_NETWORK_POLICY))?;
-    let manifest = load_manifest_with_stage_reporting(&manifest_path, policy, reporter)?;
+    let manifest = load_manifest_for_query_with_stage_reporting(&manifest_path, reporter)?;
 
     report_pipeline_stage(reporter, PipelineStage::IrGenerationValidation, None);
     // Building the IR validates the rendered manifest (duplicate outputs,
@@ -186,20 +184,24 @@ fn render_section(
     }
     out.push_str(&localization::message(heading_key).to_string());
     out.push('\n');
-    let width = entries
+    let display_names: Vec<Cow<'_, str>> = entries
         .iter()
-        .map(|entry| UnicodeWidthStr::width(entry.name.as_str()))
+        .map(|entry| terminal_safe(&entry.name))
+        .collect();
+    let width = display_names
+        .iter()
+        .map(|name| UnicodeWidthStr::width(name.as_ref()))
         .max()
         .unwrap_or(0);
     let marker = default_marker(prefs);
-    for entry in entries {
-        let name_width = UnicodeWidthStr::width(entry.name.as_str());
+    for (entry, name) in entries.iter().zip(display_names) {
+        let name_width = UnicodeWidthStr::width(name.as_ref());
         out.push_str("  ");
-        out.push_str(&entry.name);
+        out.push_str(&name);
         out.push_str(&" ".repeat(width.saturating_sub(name_width)));
         if let Some(description) = entry.description {
             out.push_str("  ");
-            out.push_str(description);
+            out.push_str(&terminal_safe(description));
         }
         if entry.is_default {
             out.push(' ');
@@ -207,6 +209,55 @@ fn render_section(
         }
         out.push('\n');
     }
+}
+
+/// Render manifest-controlled text safely for a terminal.
+///
+/// Catalogue names and descriptions can contain arbitrary rendered template
+/// values.  Keep printable Unicode intact, while making every control
+/// character visible so a manifest cannot inject terminal controls or rows.
+fn terminal_safe(input: &str) -> Cow<'_, str> {
+    if !input.chars().any(char::is_control) {
+        return Cow::Borrowed(input);
+    }
+
+    let mut escaped = String::with_capacity(input.len());
+    for character in input.chars() {
+        match character {
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            control if control.is_control() => escaped.extend(control.escape_default()),
+            printable => escaped.push(printable),
+        }
+    }
+    Cow::Owned(escaped)
+}
+
+/// Load a manifest for a no-side-effect metadata query while reporting stages.
+fn load_manifest_for_query_with_stage_reporting(
+    manifest_path: &camino::Utf8PathBuf,
+    reporter: &dyn StatusReporter,
+) -> Result<NetsukeManifest> {
+    let mut on_stage = |stage| match stage {
+        crate::manifest::ManifestLoadStage::ManifestIngestion => {
+            report_pipeline_stage(reporter, PipelineStage::ManifestIngestion, None);
+        }
+        crate::manifest::ManifestLoadStage::InitialYamlParsing => {
+            report_pipeline_stage(reporter, PipelineStage::InitialYamlParsing, None);
+        }
+        crate::manifest::ManifestLoadStage::TemplateExpansion => {
+            report_pipeline_stage(reporter, PipelineStage::TemplateExpansion, None);
+        }
+        crate::manifest::ManifestLoadStage::FinalRendering => {
+            report_pipeline_stage(reporter, PipelineStage::FinalRendering, None);
+        }
+    };
+    crate::manifest::from_path_for_manifest_query(manifest_path.as_std_path(), Some(&mut on_stage))
+        .with_context(|| {
+            localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
+                .with_arg("path", manifest_path.as_str())
+        })
 }
 
 /// The localized default marker, pairing a theme glyph with a translated label
