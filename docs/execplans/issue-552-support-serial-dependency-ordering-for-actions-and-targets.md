@@ -1081,3 +1081,11 @@ unrelated branch. Bundle generation remains effect-free; runner command
 boundaries will open and inject the filesystem capability for sidecar
 publication. The remaining revision adds bounded outcome and duration
 telemetry and removes unnecessary ownership copies.
+
+2026-08-12: Completed the review remediation in two green commits. Real Ninja
+now proves execute-once shared work and unrelated-branch concurrency; the
+generator returns an effect-free bundle that command-boundary publication
+materializes through an injected directory capability; and bounded telemetry
+covers bundle generation, serial lowering, and sidecar materialization. The
+final deterministic gate run passed all six checks (1,944 tests, one skipped,
+and passing doctests), and CodeRabbit reported zero findings before publication.
