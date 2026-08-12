@@ -298,11 +298,23 @@ Rules may also provide `description`, text used for Ninja's progress display.
 
 A `command` list runs its entries in declaration order and stops at the first
 non-zero exit, so entries share the fail-fast behaviour of a handwritten
-`&&` chain. All entries run in one shell process, so working directory,
-environment, and shell variables set by an earlier entry carry into later
-entries, exactly as they do for `script`. Each later entry starts only when
-the preceding entry exits with status zero. An empty command list is rejected
-when the manifest is parsed.
+`&&` chain. The command field is a `StringOrList`: a scalar remains one shell
+command, while a YAML sequence is rendered and lowered one entry at a time.
+This applies equally to rules, direct targets, and actions. Each entry sees the
+same Jinja context, including `{{ ins }}` and `{{ outs }}`; those two
+placeholders are resolved later to the concrete target's shell-quoted input
+and output paths. An empty command list is rejected when the manifest is
+parsed.
+
+At execution time, each list entry is evaluated inside its own brace group and
+the groups are joined with `&&`. The entry is passed to `eval` as a
+shell-quoted payload, so an inline `#` comment or a trailing control operator
+such as `&` cannot consume the generated group's closing boundary. Brace
+groups run in the current shell rather than a subshell: a changed working
+directory, environment assignment, or shell variable can therefore be used by
+later entries. A failed entry stops the chain, and the diagnostic identifies
+the generated action and one-based list-entry positions, for example
+`netsuke command-list failure: action 1, entry 2`.
 
 <!-- tested-example: guide-command-list -->
 
@@ -320,6 +332,19 @@ rules:
 targets:
   - name: done
     rule: comprehensive-check
+```
+
+The same list form can be attached directly to a target. Jinja rendering and
+`{{ outs }}` interpolation apply independently to each entry:
+
+```yaml
+targets:
+  - name: report.txt
+    vars:
+      heading: Report
+    command:
+      - "printf '{{ heading }}\\n' > {{ outs }}"
+      - "printf 'complete\\n' >> {{ outs }}"
 ```
 
 Prefer a `command` list for a short, ordered sequence of distinct commands.
@@ -1093,7 +1118,10 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   entry inherits the working directory, environment, and shell variables
   left by an earlier entry, and runs only when that earlier entry exits with
   status zero. A failed entry may still leave side effects behind before it
-  halts the chain.
+  halts the chain. The generated brace/eval boundary keeps comments and
+  trailing control operators inside an entry from changing the chain's
+  structure. Failure diagnostics include the action and entry positions when
+  Netsuke can attribute the failed list entry.
 - Literal shell dollar expressions currently require Ninja-aware escaping,
   such as `$$PATH`.
 

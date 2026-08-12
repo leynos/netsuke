@@ -196,6 +196,45 @@ they are per-invocation arguments tagged `#[serde(skip)]` on
 would silently change the artefact destination — a footgun the design avoids by
 construction.
 
+## Command and recipe lowering
+
+Command recipes use the `StringOrList` AST type. A scalar command remains one
+shell-text value; a YAML sequence is an ordered list of entries. The same
+recipe path handles commands declared on reusable rules, direct targets, and
+actions. Manifest deserialization rejects an empty command list. Code that
+constructs the IR directly must also reject `StringOrList::Empty` during Ninja
+generation rather than emitting an unusable rule.
+
+The lowering stages have deliberately separate responsibilities:
+
+- `src/manifest/render.rs` renders a scalar or each list entry independently.
+  Every entry sees the same cloned recipe context, including target variables
+  and delayed `ins`/`outs` markers. A rendering error for a list includes its
+  one-based entry position.
+- `src/ir/from_manifest_support.rs` prepares one shell-quoted input/output
+  binding set for the recipe, then interpolates every scalar or list entry with
+  that set. `{{ ins }}` and `{{ outs }}` markers and standalone `$in` and
+  `$out` tokens are resolved per entry; tokens inside backticks are preserved.
+  The resulting action contains ordinary command text and no Ninja
+  placeholders.
+- `src/ninja_gen.rs` emits a scalar command unchanged. For a list, it puts
+  each entry in a brace group and joins the groups with `&&`. Each group uses
+  `eval` with a shell-quoted entry payload. This keeps an inline comment or a
+  trailing control operator such as `&` inside the entry from consuming the
+  generated group terminator. Braces run in the current shell, not a
+  subshell, so directory changes, environment assignments, and shell
+  variables can carry from one entry to the next. The `&&` chain remains
+  fail-fast.
+- `src/runner/process` forwards the command's output and recognises the
+  bounded `netsuke command-list failure: action N, entry M` marker. A failed
+  list therefore retains the original exit status while adding the generated
+  action index and one-based entry index to the Ninja failure error.
+
+Changes to this pipeline must preserve the scalar/list distinction, per-entry
+rendering, current-shell state sharing, and failure attribution. The focused
+rendering, lowering, Ninja-generation, and real-Ninja integration tests are
+the behavioural contract for these boundaries.
+
 ## Package and target naming
 
 The crates.io package is `netsuke-build`; the library target, the binary
