@@ -254,18 +254,19 @@ and agents.
 - [ ] 3.14.11. Surface selected conditional actions without recipe `echo`.
   Requires 3.14.2 and 3.14.4. See
   [netsuke-design.md §2.6](netsuke-design.md#26-planned-recipe-ergonomics-and-execution-feedback).
-  - [ ] Add target/action `description` support and let it override referenced
-    rule descriptions for the concrete edge.
+  - [x] Add target/action `description` as discovery metadata and list it with
+    `netsuke help targets`.
+  - [ ] Add a future target/action description override for the referenced rule
+    description on a concrete edge, if selected-action progress requires it.
   - [ ] Report selected action descriptions in normal Ninja progress output.
   - [ ] In verbose mode, report why manifest-time `when` branches were included
     or skipped.
   - [ ] Do not add generic `debug`, `info`, or `warn` manifest keys unless a
     later diagnostics design defines severity semantics.
-  - Note: `description` currently exists only on `Rule` and IR `Action`
-    (populated from the rule). `Target` in `src/ast.rs` uses
-    `#[serde(deny_unknown_fields)]`, so a target/action `description` is
-    rejected today; the struct must gain the field before the override
-    behaviour can be implemented.
+  - Note: target/action `description` is discovery metadata rendered by
+    `netsuke help targets`; Ninja progress remains sourced from the referenced
+    rule's `description`. Target/action environment mappings remain future work
+    under 3.14.9.
 
 ### 3.15. Canonical CLI redesign
 

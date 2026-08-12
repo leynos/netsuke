@@ -599,14 +599,18 @@ splitting and reduces the need for `shell_escape` in ordinary recipes.
 
 #### Execution feedback
 
-The existing `description` field is the right primitive for normal status text.
-Netsuke should extend it to targets and actions, and should use the selected
-edge's description when emitting Ninja progress. Conditional branch-selection
-messages belong in Netsuke's verbose diagnostics, not in mandatory recipe
-output:
+Rule descriptions are the source of normal Ninja progress text. Target and
+action descriptions are discovery metadata displayed by `netsuke help targets`;
+they do not affect Ninja progress output. Ninja progress comes exclusively from
+the referenced `Rule::description`. Planned target/action environment mappings
+remain separate future work under roadmap item 3.14.9. Conditional
+branch-selection messages belong in Netsuke's verbose diagnostics, not in
+mandatory recipe output:
 
-- In normal output, the selected action's `description` explains the task being
-  run.
+- In `netsuke help targets`, target and action `description` values explain the
+  operations available in the manifest.
+- In normal Ninja output, the referenced rule's `description` explains the task
+  being run.
 - In verbose output, Netsuke reports why manifest-time conditional branches were
   included or skipped.
 - Netsuke should not add generic mutually exclusive `debug`, `info`, or `warn`
