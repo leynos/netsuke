@@ -34,7 +34,7 @@ mod walk;
 use errors::{GlobErrorContext, GlobErrorType, create_glob_error};
 use normalize::normalize_separators;
 use validate::validate_brace_matching;
-use walk::{literal_dir_path, open_root_dir, process_glob_entry};
+use walk::{open_root_dir, process_glob_entry};
 
 #[cfg(unix)]
 use normalize::force_literal_escapes;
@@ -104,7 +104,6 @@ type GlobEntryResult = std::result::Result<std::path::PathBuf, glob::GlobError>;
 
 /// A completed glob expansion and the bounded outcomes it observed.
 pub(super) struct GlobExpansion {
-    pattern: GlobPattern,
     paths: Vec<String>,
     outcome: GlobOutcome,
     skipped: GlobSkippedEntries,
@@ -113,7 +112,7 @@ pub(super) struct GlobExpansion {
 /// Terminal outcome of a glob expansion.
 enum GlobOutcome {
     Matched,
-    UnopenablePrefix(String),
+    UnopenablePrefix,
 }
 
 /// Maximum unreachable-symlink paths retained for tracing one expansion.
@@ -232,8 +231,7 @@ pub(super) fn expand_glob(pattern: &str) -> std::result::Result<GlobExpansion, E
         // The pattern's literal directory prefix does not exist, so the
         // pattern cannot match anything.
         return Ok(GlobExpansion {
-            outcome: GlobOutcome::UnopenablePrefix(literal_dir_path(&pattern_state)),
-            pattern: pattern_state,
+            outcome: GlobOutcome::UnopenablePrefix,
             paths: Vec::new(),
             skipped: GlobSkippedEntries::default(),
         });
@@ -251,7 +249,6 @@ pub(super) fn expand_glob(pattern: &str) -> std::result::Result<GlobExpansion, E
         }
     }
     Ok(GlobExpansion {
-        pattern: pattern_state,
         paths,
         outcome: GlobOutcome::Matched,
         skipped,

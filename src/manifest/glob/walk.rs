@@ -69,8 +69,12 @@ impl GlobRoot {
     /// breakage. A link whose target is genuinely unreadable inside the prefix
     /// is skipped along with the escapes, because `cap_std` reports both as
     /// `PermissionDenied` and the capability cannot tell them apart.
+    #[cfg(test)]
     pub(super) fn metadata(&self, path: &Utf8Path) -> io::Result<Option<cap_std::fs::Metadata>> {
-        let relative = self.relativise(path)?;
+        self.metadata_relative(self.relativise(path)?)
+    }
+
+    fn metadata_relative(&self, relative: &Utf8Path) -> io::Result<Option<cap_std::fs::Metadata>> {
         match self.dir.metadata(relative) {
             Ok(metadata) => Ok(Some(metadata)),
             Err(err) if is_unresolvable_link(&err) && self.traverses_symlink(relative) => Ok(None),
@@ -322,7 +326,7 @@ fn open_literal_prefix(prefix: &Utf8Path) -> io::Result<Dir> {
 }
 
 /// Return the filesystem path represented by a pattern's literal prefix.
-pub(super) fn literal_dir_path(pattern: &GlobPattern) -> String {
+fn literal_dir_path(pattern: &GlobPattern) -> String {
     unescape_literal_escapes(literal_dir_prefix(pattern.normalized()))
 }
 
@@ -385,9 +389,9 @@ pub(super) fn process_glob_entry(
 /// Classify whether a match names a regular file reachable through the
 /// capability, returning a bounded reason when it does not.
 fn names_a_file(root: &GlobRoot, path: &Utf8Path) -> io::Result<GlobEntry> {
-    let relative = root.relativise(path)?.to_path_buf();
-    let Some(metadata) = root.metadata(path)? else {
-        return Ok(GlobEntry::UnreachableSymlink(relative));
+    let relative = root.relativise(path)?;
+    let Some(metadata) = root.metadata_relative(relative)? else {
+        return Ok(GlobEntry::UnreachableSymlink(relative.to_path_buf()));
     };
     if metadata.is_file() {
         return Ok(GlobEntry::Path(path.as_str().replace('\\', "/")));

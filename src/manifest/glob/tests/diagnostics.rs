@@ -82,7 +82,7 @@ fn a_completed_expansion_counts_its_matches() -> Result<()> {
         .find(|event| event.contains("glob expansion complete"))
         .context("expected a completed-expansion event")?;
     ensure!(
-        expansion_event.contains("matches=2") && expansion_event.contains("pattern=<absolute>"),
+        expansion_event.contains("matches=2") && expansion_event.contains("pattern=\"<redacted>\""),
         "expected bounded fields in the trace event: {expansion_event}"
     );
     ensure!(
@@ -113,7 +113,8 @@ fn an_unopenable_prefix_counts_and_names_the_prefix() -> Result<()> {
         .find(|event| event.contains("glob literal prefix names no directory"))
         .context("expected an unopenable-prefix event")?;
     ensure!(
-        prefix_event.contains("pattern=<absolute>") && prefix_event.contains("prefix=<absolute>"),
+        prefix_event.contains("pattern=\"<redacted>\"")
+            && prefix_event.contains("prefix=\"<redacted>\""),
         "expected bounded fields in the trace event: {prefix_event}"
     );
     ensure!(
@@ -123,11 +124,10 @@ fn an_unopenable_prefix_counts_and_names_the_prefix() -> Result<()> {
     Ok(())
 }
 
-/// A skipped match is counted by reason and traced by its path relative to the
-/// prefix — never by its absolute path.
+/// A skipped match is counted by reason and traced without its path.
 #[cfg(unix)]
 #[rstest]
-fn a_skipped_symlink_counts_and_traces_only_the_relative_path() -> Result<()> {
+fn a_skipped_symlink_counts_and_redacts_its_relative_path() -> Result<()> {
     let temp = tempdir()?;
     let src = temp.path().join("src");
     let vendor = temp.path().join("vendor");
@@ -149,17 +149,21 @@ fn a_skipped_symlink_counts_and_traces_only_the_relative_path() -> Result<()> {
         .find(|event| event.contains("cannot resolve"))
         .context("expected a skipped-match event")?;
     ensure!(
-        skip_event.contains("relative=escaped.txt"),
-        "the event should carry the prefix-relative path: {skip_event}"
+        skip_event.contains("relative=\"<redacted>\""),
+        "the event should carry a redacted relative path: {skip_event}"
     );
     ensure!(
         !skip_event.contains(&temp.path().display().to_string()),
         "the event must not disclose the absolute path: {skip_event}"
     );
+    ensure!(
+        !skip_event.contains("escaped.txt"),
+        "the event must not disclose the relative path: {skip_event}"
+    );
     Ok(())
 }
 
-/// All skipped links contribute to metrics, but traces retain only four paths.
+/// All skipped links contribute to metrics, but traces retain only four entries.
 #[cfg(unix)]
 #[rstest]
 fn skipped_symlink_diagnostics_retain_a_bounded_sample() -> Result<()> {
@@ -191,19 +195,40 @@ fn skipped_symlink_diagnostics_retain_a_bounded_sample() -> Result<()> {
         sampled_events.len() == MAX_UNREACHABLE_SYMLINK_SAMPLES,
         "expected exactly the bounded trace sample: {sampled_events:?}"
     );
-    for index in 0..MAX_UNREACHABLE_SYMLINK_SAMPLES {
+    for sampled_event in &sampled_events {
         ensure!(
-            sampled_events
-                .iter()
-                .any(|event| event.contains(&format!("relative=escaped-{index:02}.txt"))),
-            "sample should retain escaped-{index:02}.txt: {sampled_events:?}"
+            sampled_event.contains("relative=\"<redacted>\""),
+            "sampled events must redact their paths: {sampled_events:?}"
         );
     }
     ensure!(
-        !sampled_events.iter().any(|event| event.contains(&format!(
-            "relative=escaped-{MAX_UNREACHABLE_SYMLINK_SAMPLES:02}.txt"
-        ))),
-        "the first entry beyond the sample must not be traced: {sampled_events:?}"
+        !sampled_events
+            .iter()
+            .any(|event| event.contains("escaped-")),
+        "sampled events must not disclose retained paths: {sampled_events:?}"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn a_relative_unopenable_prefix_redacts_caller_controlled_fields() -> Result<()> {
+    let pattern = "glob-diagnostics-no-such-prefix/*.txt";
+
+    let (results, events, _snapshot) = recorded(|| expand_and_record(pattern));
+    ensure!(results?.is_empty(), "a missing prefix should match nothing");
+
+    let prefix_event = events
+        .iter()
+        .find(|event| event.contains("glob literal prefix names no directory"))
+        .context("expected an unopenable-prefix event")?;
+    ensure!(
+        prefix_event.contains("pattern=\"<redacted>\"")
+            && prefix_event.contains("prefix=\"<redacted>\""),
+        "expected redacted fields in the trace event: {prefix_event}"
+    );
+    ensure!(
+        !prefix_event.contains("glob-diagnostics-no-such-prefix"),
+        "the event must not disclose the relative pattern: {prefix_event}"
     );
     Ok(())
 }
