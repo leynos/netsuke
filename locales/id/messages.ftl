@@ -38,7 +38,7 @@ cli.subcommand.help.long_about = Tanpa topik, ini sama dengan `--help`. Gunakan 
 # Help catalogue headings and markers.
 cli.help.actions_heading = Tindakan:
 cli.help.targets_heading = Target:
-cli.help.targets_about = Mencetak target dan tindakan dalam file yang dipilih.
+cli.help.targets.about = Mencetak target dan tindakan dalam file yang dipilih.
 cli.help.default_marker = bawaan
 
 # Teks bantuan untuk opsi subperintah build.

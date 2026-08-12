@@ -38,7 +38,7 @@ cli.subcommand.help.long_about = Téma nélkül ez a `--help`-nek felel meg. A `
 # Help catalogue headings and markers.
 cli.help.actions_heading = Műveletek:
 cli.help.targets_heading = Célok:
-cli.help.targets_about = A kiválasztott fájl céljainak és műveleteinek listázása.
+cli.help.targets.about = A kiválasztott fájl céljainak és műveleteinek listázása.
 cli.help.default_marker = alapértelmezett
 
 # A build alparancs kapcsolóinak súgószövege.

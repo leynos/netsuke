@@ -38,7 +38,7 @@ cli.subcommand.help.long_about = Uden emne svarer dette til `--help`. Brug `help
 # Help catalogue headings and markers.
 cli.help.actions_heading = Handlinger:
 cli.help.targets_heading = Mål:
-cli.help.targets_about = Vis mål og handlinger i det valgte manifest.
+cli.help.targets.about = Vis mål og handlinger i det valgte manifest.
 cli.help.default_marker = standard
 
 # Hjælpetekst til tilvalg for underkommandoen build.

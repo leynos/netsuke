@@ -38,7 +38,7 @@ cli.subcommand.help.long_about = Bez tématu odpovídá příkazu `--help`. Pomo
 # Help catalogue headings and markers.
 cli.help.actions_heading = Akce:
 cli.help.targets_heading = Cíle:
-cli.help.targets_about = Vypsat cíle a akce ve vybraném manifestu.
+cli.help.targets.about = Vypsat cíle a akce ve vybraném manifestu.
 cli.help.default_marker = výchozí
 
 # Text nápovědy přepínačů podpříkazu build.

@@ -38,7 +38,7 @@ cli.subcommand.help.long_about = Fără subiect, acest lucru corespunde cu `--he
 # Help catalogue headings and markers.
 cli.help.actions_heading = Acțiuni:
 cli.help.targets_heading = Ținte:
-cli.help.targets_about = Listează țintele și acțiunile din fișierul selectat.
+cli.help.targets.about = Listează țintele și acțiunile din fișierul selectat.
 cli.help.default_marker = implicit
 
 # Textul de ajutor pentru opțiunile subcomenzii build.

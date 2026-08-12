@@ -38,7 +38,7 @@ cli.subcommand.help.long_about = With no topic this matches `--help`. Use `help 
 # Help catalogue headings and markers.
 cli.help.actions_heading = Actions:
 cli.help.targets_heading = Targets:
-cli.help.targets_about = List targets and actions in the selected manifest.
+cli.help.targets.about = List targets and actions in the selected manifest.
 cli.help.default_marker = default
 
 # Build subcommand flag help text.

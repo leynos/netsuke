@@ -38,7 +38,7 @@ cli.subcommand.help.long_about = Às aonais cuspair, tha seo a' freagairt ri `--
 # Help catalogue headings and markers.
 cli.help.actions_heading = Gnìomhan:
 cli.help.targets_heading = Targaidean:
-cli.help.targets_about = Dèan liosta de na targaidean agus na gnìomhan anns an fhoirm-liosta a chaidh a thaghadh.
+cli.help.targets.about = Dèan liosta de na targaidean agus na gnìomhan anns an fhoirm-liosta a chaidh a thaghadh.
 cli.help.default_marker = bunaiteach
 
 # Teacsa taice roghainnean an fho-àithne build.

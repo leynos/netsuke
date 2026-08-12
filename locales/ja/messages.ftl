@@ -38,7 +38,7 @@ cli.subcommand.help.long_about = トピックなしの場合、これは `--help
 # Help catalogue headings and markers.
 cli.help.actions_heading = アクション:
 cli.help.targets_heading = ターゲット:
-cli.help.targets_about = 選択したファイルのターゲットとアクションを一覧表示します。
+cli.help.targets.about = 選択したファイルのターゲットとアクションを一覧表示します。
 cli.help.default_marker = 既定
 
 # build サブコマンドのオプションのヘルプ文。

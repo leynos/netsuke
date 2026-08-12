@@ -38,7 +38,7 @@ cli.subcommand.help.long_about = 주제가 없으면 `--help`와 동일합니다
 # Help catalogue headings and markers.
 cli.help.actions_heading = 작업:
 cli.help.targets_heading = 대상:
-cli.help.targets_about = 선택한 파일의 대상 및 작업을 나열합니다.
+cli.help.targets.about = 선택한 파일의 대상 및 작업을 나열합니다.
 cli.help.default_marker = 기본값
 
 # build 하위 명령 옵션의 도움말.

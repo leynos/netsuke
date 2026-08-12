@@ -38,7 +38,7 @@ cli.subcommand.help.long_about = بدون موضوع، این با `--help` یک
 # Help catalogue headings and markers.
 cli.help.actions_heading = اقدامات:
 cli.help.targets_heading = اهداف:
-cli.help.targets_about = فهرست کردن اهداف و اقدامات در پروندهٔ انتخاب‌شده.
+cli.help.targets.about = فهرست کردن اهداف و اقدامات در پروندهٔ انتخاب‌شده.
 cli.help.default_marker = پیش‌فرض
 
 # متن راهنمای گزینه‌های زیرفرمان build.

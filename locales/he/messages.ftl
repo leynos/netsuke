@@ -38,7 +38,7 @@ cli.subcommand.help.long_about = ללא נושא, זה תואם את `--help`. �
 # Help catalogue headings and markers.
 cli.help.actions_heading = פעולות:
 cli.help.targets_heading = יעדים:
-cli.help.targets_about = הצגת רשימת היעדים והפעולות במניפסט שנבחר.
+cli.help.targets.about = הצגת רשימת היעדים והפעולות במניפסט שנבחר.
 cli.help.default_marker = ברירת מחדל
 
 # טקסט העזרה של אפשרויות פקודת המשנה build.

@@ -38,7 +38,7 @@ cli.subcommand.help.long_about = बिना विषय के यह `--help
 # Help catalogue headings and markers.
 cli.help.actions_heading = क्रियाएँ:
 cli.help.targets_heading = लक्ष्य:
-cli.help.targets_about = चयनित मैनिफेस्ट में लक्ष्यों और क्रियाओं की सूची बनाएँ।
+cli.help.targets.about = चयनित मैनिफेस्ट में लक्ष्यों और क्रियाओं की सूची बनाएँ।
 cli.help.default_marker = डिफ़ॉल्ट
 
 # build उपआदेश के विकल्पों का सहायता पाठ।

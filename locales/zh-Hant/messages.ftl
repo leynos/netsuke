@@ -36,9 +36,9 @@ cli.subcommand.help.about = 列印頂層說明，或列印指定主題的說明�
 cli.subcommand.help.long_about = 沒有主題時，此命令等同於 `--help`。使用 `help targets` 列印所選清單的目標和操作目錄。
 
 # Help catalogue headings and markers.
-cli.help.actions_heading = 操作：
+cli.help.actions_heading = 動作：
 cli.help.targets_heading = 目標：
-cli.help.targets_about = 列出所選資訊清單中的目標和操作。
+cli.help.targets.about = 列出所選資訊清單中的目標和動作。
 cli.help.default_marker = 預設
 
 # build 子命令選項的說明文字。
