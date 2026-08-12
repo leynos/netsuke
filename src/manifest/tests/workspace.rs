@@ -256,3 +256,29 @@ fn manifest_query_rejects_impure_template_helpers(
     );
     Ok(())
 }
+
+#[test]
+fn manifest_query_rejects_clock_dependent_template_helpers() -> AnyResult<()> {
+    let temp = tempdir().context("create clock-free manifest-query workspace")?;
+    let manifest_path = temp.path().join("Netsukefile");
+    test_fs::write(
+        &manifest_path,
+        concat!(
+            "netsuke_version: \"1.0.0\"\n",
+            "targets:\n",
+            "  - name: discovery\n",
+            "    description: \"{{ now() }}\"\n",
+            "    command: echo discovery\n",
+        ),
+    )?;
+
+    let error = from_path_for_manifest_query(&manifest_path, None)
+        .expect_err("manifest query should reject the clock-dependent now helper");
+    ensure!(
+        error
+            .chain()
+            .any(|cause| cause.to_string().contains("unknown function: now")),
+        "query should reject the unavailable now helper: {error:?}"
+    );
+    Ok(())
+}

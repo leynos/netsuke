@@ -292,6 +292,19 @@ mod tests {
         }
     }
 
+    fn expect_script(recipe: &Recipe, label: impl std::fmt::Display) -> Result<&str> {
+        match recipe {
+            Recipe::Script { script } => Ok(script),
+            other => anyhow::bail!("expected {label} script recipe, got {other:?}"),
+        }
+    }
+
+    fn expect_rule_ref(recipe: &Recipe, label: impl std::fmt::Display) -> Result<&StringOrList> {
+        match recipe {
+            Recipe::Rule { rule } => Ok(rule),
+            other => anyhow::bail!("expected {label} rule-reference recipe, got {other:?}"),
+        }
+    }
     fn assert_rendered_target(target: &Target) {
         assert_eq!(expect_var(&target.vars, "message"), "hello world");
         assert_eq!(
@@ -397,41 +410,27 @@ mod tests {
         Ok(())
     }
 
-    #[expect(clippy::panic, reason = "panic for clearer test failures")]
-    fn expect_script(recipe: &Recipe, label: impl std::fmt::Display) -> &str {
-        match recipe {
-            Recipe::Script { script } => script,
-            other => panic!("expected {label} script recipe, got {other:?}"),
-        }
-    }
-
-    #[expect(clippy::panic, reason = "panic for clearer test failures")]
-    fn expect_rule_ref(recipe: &Recipe, label: impl std::fmt::Display) -> &StringOrList {
-        match recipe {
-            Recipe::Rule { rule } => rule,
-            other => panic!("expected {label} rule-reference recipe, got {other:?}"),
-        }
-    }
-
-    #[expect(clippy::panic, reason = "panic for clearer test failures")]
-    fn assert_rendered_script_and_rule_recipes(rendered: &NetsukeManifest) {
-        let Some(rendered_target) = rendered.targets.first() else {
-            panic!("rendered script target missing");
-        };
-        assert_eq!(
-            expect_script(&rendered_target.recipe, "rendered script target"),
-            "echo world"
+    fn assert_rendered_script_and_rule_recipes(rendered: &NetsukeManifest) -> Result<()> {
+        let rendered_target = rendered
+            .targets
+            .first()
+            .context("rendered script target missing")?;
+        anyhow::ensure!(
+            expect_script(&rendered_target.recipe, "rendered script target")? == "echo world",
+            "expected rendered script target recipe to equal 'echo world'"
         );
-        let Some(rendered_rule) = rendered.rules.first() else {
-            panic!("rendered rule-reference rule missing");
-        };
-        assert_eq!(
+        let rendered_rule = rendered
+            .rules
+            .first()
+            .context("rendered rule-reference rule missing")?;
+        anyhow::ensure!(
             expect_list(
-                expect_rule_ref(&rendered_rule.recipe, "rendered rule reference"),
+                expect_rule_ref(&rendered_rule.recipe, "rendered rule reference")?,
                 "rule reference names",
-            ),
-            ["base"]
+            ) == ["base"],
+            "expected rendered rule-reference names to equal ['base']"
         );
+        Ok(())
     }
 
     #[test]
@@ -472,7 +471,7 @@ mod tests {
         };
 
         let rendered = render_manifest(manifest, &minijinja::Environment::new())?;
-        assert_rendered_script_and_rule_recipes(&rendered);
+        assert_rendered_script_and_rule_recipes(&rendered)?;
         Ok(())
     }
 }

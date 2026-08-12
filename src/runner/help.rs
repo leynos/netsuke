@@ -217,7 +217,7 @@ fn render_section(
 /// values.  Keep printable Unicode intact, while making every control
 /// character visible so a manifest cannot inject terminal controls or rows.
 fn terminal_safe(input: &str) -> Cow<'_, str> {
-    if !input.chars().any(char::is_control) {
+    if !input.chars().any(is_terminal_control) {
         return Cow::Borrowed(input);
     }
 
@@ -227,11 +227,20 @@ fn terminal_safe(input: &str) -> Cow<'_, str> {
             '\n' => escaped.push_str("\\n"),
             '\r' => escaped.push_str("\\r"),
             '\t' => escaped.push_str("\\t"),
-            control if control.is_control() => escaped.extend(control.escape_default()),
+            control if is_terminal_control(control) => escaped.extend(control.escape_unicode()),
             printable => escaped.push(printable),
         }
     }
     Cow::Owned(escaped)
+}
+
+/// Return whether a character can control terminal display or reading order.
+const fn is_terminal_control(character: char) -> bool {
+    character.is_control()
+        || matches!(
+            character,
+            '\u{061C}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
+        )
 }
 
 /// Load a manifest for a no-side-effect metadata query while reporting stages.

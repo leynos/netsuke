@@ -7,7 +7,7 @@
 //! in `--json` mode.
 
 use anyhow::{Context, Result, ensure};
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use netsuke::output_prefs;
 use netsuke::runner::run;
@@ -18,7 +18,6 @@ use netsuke::{
 };
 use rstest::{fixture, rstest};
 use serde_json::Value;
-use std::path::PathBuf;
 use test_support::{localizer_test_lock, set_en_localizer};
 
 mod fixtures;
@@ -26,9 +25,9 @@ use fixtures::create_test_manifest;
 
 /// Write a manifest with actions, targets, defaults, and one entry whose
 /// description is missing, so both catalogue sections are exercised.
-fn write_help_targets_manifest(temp: &tempfile::TempDir) -> Result<PathBuf> {
-    let manifest_path = temp.path().join("Netsukefile");
+fn write_help_targets_manifest(temp: &tempfile::TempDir) -> Result<Utf8PathBuf> {
     let temp_path = Utf8Path::from_path(temp.path()).context("temporary path should be UTF-8")?;
+    let manifest_path = temp_path.join("Netsukefile");
     let workspace = Dir::open_ambient_dir(temp_path, ambient_authority())
         .context("open help-targets fixture directory")?;
     workspace
@@ -53,12 +52,12 @@ defaults:
   - test
 "#,
         )
-        .with_context(|| format!("write manifest to {}", manifest_path.display()))?;
+        .with_context(|| format!("write manifest to {}", manifest_path.as_str()))?;
     Ok(manifest_path)
 }
 
 #[fixture]
-fn help_targets_manifest() -> Result<(tempfile::TempDir, PathBuf)> {
+fn help_targets_manifest() -> Result<(tempfile::TempDir, Utf8PathBuf)> {
     let temp = tempfile::tempdir().context("create help-targets fixture directory")?;
     let manifest_path = write_help_targets_manifest(&temp)?;
     Ok((temp, manifest_path))
@@ -72,7 +71,7 @@ fn run_help_targets(cli: &Cli) -> Result<()> {
 
 #[rstest]
 fn help_targets_prints_actions_and_targets(
-    #[from(help_targets_manifest)] fixture: Result<(tempfile::TempDir, PathBuf)>,
+    #[from(help_targets_manifest)] fixture: Result<(tempfile::TempDir, Utf8PathBuf)>,
 ) -> Result<()> {
     let (_temp, manifest_path) = fixture?;
     let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
@@ -108,11 +107,12 @@ fn help_targets_prints_actions_and_targets(
 
 #[rstest]
 fn help_targets_json_reports_command_identifier(
-    #[from(help_targets_manifest)] fixture: Result<(tempfile::TempDir, PathBuf)>,
+    #[from(help_targets_manifest)] fixture: Result<(tempfile::TempDir, Utf8PathBuf)>,
 ) -> Result<()> {
     let (temp, manifest_path) = fixture?;
+    let temp_path = Utf8Path::from_path(temp.path()).context("temporary path should be UTF-8")?;
     let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
-        .current_dir(temp.path())
+        .current_dir(temp_path)
         .arg("--json")
         .arg("--file")
         .arg(&manifest_path)
@@ -156,12 +156,13 @@ fn help_targets_json_reports_command_identifier(
 
 #[rstest]
 fn help_targets_honours_directory_flag(
-    #[from(help_targets_manifest)] fixture: Result<(tempfile::TempDir, PathBuf)>,
+    #[from(help_targets_manifest)] fixture: Result<(tempfile::TempDir, Utf8PathBuf)>,
 ) -> Result<()> {
     let (temp, _manifest_path) = fixture?;
+    let temp_path = Utf8Path::from_path(temp.path()).context("temporary path should be UTF-8")?;
     let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
         .arg("-C")
-        .arg(temp.path())
+        .arg(temp_path)
         .arg("help")
         .arg("targets")
         .output()
@@ -186,8 +187,8 @@ fn help_targets_honours_directory_flag(
 #[rstest]
 fn help_targets_renders_foreach_descriptions_without_changing_rule_progress() -> Result<()> {
     let temp = tempfile::tempdir().context("create foreach help-targets workspace")?;
-    let manifest_path = temp.path().join("Netsukefile");
     let temp_path = Utf8Path::from_path(temp.path()).context("temporary path should be UTF-8")?;
+    let manifest_path = temp_path.join("Netsukefile");
     let workspace = Dir::open_ambient_dir(temp_path, ambient_authority())
         .context("open foreach help-targets fixture directory")?;
     workspace
@@ -256,11 +257,11 @@ fn help_targets_with_invalid_manifest_reports_error() -> Result<()> {
         .context("open invalid-manifest fixture directory")?;
     let data = Dir::open_ambient_dir("tests/data", ambient_authority())
         .context("open invalid manifest fixture directory")?;
-    let manifest_path = temp.path().join("Netsukefile");
+    let manifest_path = temp_path.join("Netsukefile");
     data.copy("invalid_version.yml", &workspace, "Netsukefile")
-        .with_context(|| format!("copy invalid manifest to {}", manifest_path.display()))?;
+        .with_context(|| format!("copy invalid manifest to {}", manifest_path.as_str()))?;
     let cli = Cli {
-        file: manifest_path,
+        file: manifest_path.into_std_path_buf(),
         command: Some(Commands::Help(HelpArgs {
             topic: Some(HelpTopic::Targets),
         })),
@@ -269,6 +270,37 @@ fn help_targets_with_invalid_manifest_reports_error() -> Result<()> {
     let Err(_) = run_help_targets(&cli) else {
         anyhow::bail!("expected help targets to fail with invalid manifest");
     };
+    Ok(())
+}
+
+#[test]
+fn help_targets_rejects_valid_manifest_with_missing_rule() -> Result<()> {
+    let temp = tempfile::tempdir().context("create missing-rule fixture directory")?;
+    let temp_path = Utf8Path::from_path(temp.path()).context("temporary path should be UTF-8")?;
+    let manifest_path = temp_path.join("Netsukefile");
+    let workspace = Dir::open_ambient_dir(temp_path, ambient_authority())
+        .context("open missing-rule fixture directory")?;
+    workspace
+        .write(
+            "Netsukefile",
+            b"netsuke_version: \"1.0.0\"\ntargets:\n  - name: out/app\n    rule: missing\n",
+        )
+        .context("write missing-rule manifest")?;
+    let cli = Cli {
+        file: manifest_path.into_std_path_buf(),
+        command: Some(Commands::Help(HelpArgs {
+            topic: Some(HelpTopic::Targets),
+        })),
+        ..Cli::default()
+    };
+
+    let error = run_help_targets(&cli).expect_err("missing manifest rule should fail help targets");
+    ensure!(
+        error
+            .chain()
+            .any(|cause| cause.to_string().contains("was not found")),
+        "IR validation should report the missing rule: {error:?}"
+    );
     Ok(())
 }
 
@@ -285,7 +317,7 @@ fn help_targets_rejects_unknown_manifest_default() -> Result<()> {
         )
         .context("write unknown-default manifest")?;
     let cli = Cli {
-        file: manifest_path,
+        file: manifest_path.into_std_path_buf(),
         command: Some(Commands::Help(HelpArgs {
             topic: Some(HelpTopic::Targets),
         })),

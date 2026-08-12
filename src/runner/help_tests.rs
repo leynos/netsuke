@@ -114,9 +114,10 @@ fn text_catalogue_escapes_terminal_control_characters() -> Result<()> {
         .actions
         .first_mut()
         .context("help target fixture should contain an action")?;
-    action.name =
-        crate::ast::StringOrList::String("line\nnext\t\u{001B}[31mred\u{009B}m".to_owned());
-    action.description = Some("description\r\nwith\tcontrols\u{0007}".to_owned());
+    action.name = crate::ast::StringOrList::String(
+        "line\nnext\t\u{001B}[31mred\u{009B}m\u{202E}reordered".to_owned(),
+    );
+    action.description = Some("description\r\nwith\tcontrols\u{0007}\u{202E}".to_owned());
 
     let output = render_text(
         &build_catalogue(&manifest),
@@ -124,15 +125,18 @@ fn text_catalogue_escapes_terminal_control_characters() -> Result<()> {
     );
 
     anyhow::ensure!(
-        output.contains("line\\nnext\\t\\u{1b}[31mred\\u{9b}m"),
+        output.contains("line\\nnext\\t\\u{1b}[31mred\\u{9b}m\\u{202e}reordered"),
         "name controls should be visible escapes: {output:?}"
     );
     anyhow::ensure!(
-        output.contains("description\\r\\nwith\\tcontrols\\u{7}"),
+        output.contains("description\\r\\nwith\\tcontrols\\u{7}\\u{202e}"),
         "description controls should be visible escapes: {output:?}"
     );
     anyhow::ensure!(
-        !output.contains('\r') && !output.contains('\u{001B}') && !output.contains('\u{009B}'),
+        !output.contains('\r')
+            && !output.contains('\u{001B}')
+            && !output.contains('\u{009B}')
+            && !output.contains('\u{202E}'),
         "text output must not contain terminal control characters: {output:?}"
     );
     anyhow::ensure!(

@@ -96,6 +96,7 @@ pub fn register_with_config(
 ) -> anyhow::Result<StdlibState> {
     let state = StdlibState::default();
     register_read_only_helpers(env, &config);
+    time::register_functions(env);
     let impure = state.impure_flag();
     let (network_config, command_config) = config.into_components();
     network::register_functions(env, Arc::clone(&impure), network_config);
@@ -103,13 +104,12 @@ pub fn register_with_config(
     Ok(state)
 }
 
-/// Register helpers suitable for manifest queries that must not cause I/O.
+/// Register helpers suitable for manifest queries that must avoid side effects.
 ///
 /// The registration preserves pure rendering helpers, including date, path,
-/// collection, and executable-discovery helpers.  It replaces `fetch`,
+/// collection, and executable-discovery helpers. It replaces `fetch`,
 /// `shell`, and `grep` with explicit errors so consumers can render discovery
-/// metadata without opening network connections, writing fetch caches, or
-/// executing commands.
+/// metadata without network access, cache writes, or command execution.
 ///
 pub(crate) fn register_manifest_query_with_config(
     env: &mut Environment<'_>,
@@ -117,12 +117,13 @@ pub(crate) fn register_manifest_query_with_config(
 ) -> StdlibState {
     let state = StdlibState::default();
     register_read_only_helpers(env, config);
+    time::register_query_functions(env);
     register_disabled_impure_helpers(env);
     state
 }
 
-/// Register helpers that do not execute a command, make a network request, or
-/// mutate the manifest workspace.
+/// Register query helpers that avoid side effects while retaining filesystem
+/// capabilities for file tests, path helpers, and `which`.
 fn register_read_only_helpers(env: &mut Environment<'_>, config: &StdlibConfig) {
     register_file_tests(env);
     path::register_filters(env, config.home_directory().clone());
@@ -137,7 +138,6 @@ fn register_read_only_helpers(env: &mut Environment<'_>, config: &StdlibConfig) 
         WhichConfig::new(which_cwd, which_path, which_skip_dirs, which_cache_capacity)
             .with_pathext_override(config.pathext_override().cloned());
     which::register(env, which_config);
-    time::register_functions(env);
 }
 
 /// Register deliberate failures for stdlib helpers that have side effects.

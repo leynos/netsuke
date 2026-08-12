@@ -34,6 +34,11 @@ const OFFSET_FMT: &[FormatItem<'static>] =
 /// Register time helpers with the environment.
 pub(crate) fn register_functions(env: &mut Environment<'_>) {
     env.add_function("now", |kwargs: Kwargs| now(&kwargs));
+    register_query_functions(env);
+}
+
+/// Register time helpers whose output does not depend on the current clock.
+pub(crate) fn register_query_functions(env: &mut Environment<'_>) {
     env.add_function("timedelta", |kwargs: Kwargs| timedelta(&kwargs));
 }
 
