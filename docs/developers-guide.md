@@ -26,6 +26,32 @@ as the durable architecture record.
 
 [adr-003-cli]: adr-003-agent-consistent-human-first-cli.md
 
+## Ninja child-process APIs and help-runner boundary
+
+The public Ninja process helpers are re-exported from `netsuke::runner`.
+`CommandEnv` is an explicit, composable set of child-process overrides:
+`CommandEnv::inherit()` leaves the parent environment in place,
+`with_var` overrides one variable, and `with_path` replaces the child's
+`PATH`. The parent process is never mutated. `NinjaBuildRequest` and
+`NinjaToolRequest` borrow the program, CLI settings, generated build file,
+target list or tool name, and `CommandEnv` needed for one invocation.
+
+The legacy `run_ninja` and `run_ninja_tool` helpers retain their existing
+signatures and inherit the parent environment. Callers that need an isolated
+child use `run_ninja_with` or `run_ninja_tool_with` with one of the request
+types. Keep environment selection at this process boundary: do not add
+process-wide environment mutation to callers or tests.
+
+`netsuke help targets` is deliberately a different runner path. The dispatch
+layer routes `HelpTopic::Targets` to `src/runner/help.rs`, which resolves and
+runs the manifest loading, expansion, rendering, and IR-validation stages to
+produce a deterministic action-then-target catalogue. It may validate a
+`BuildGraph`, but it must not generate a Ninja file, call a Ninja subprocess,
+execute a recipe, or create build outputs. The no-topic and named-command help
+paths render clap help directly and do not load a manifest. Keep future help
+topics within this boundary rather than coupling read-only inspection to
+`runner::process`.
+
 ## Localization
 
 `src/locale_catalogues.rs` is the authoritative registry of shipped catalogues.

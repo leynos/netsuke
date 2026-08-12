@@ -59,6 +59,21 @@ example should appear in documentation: for instance, creating a minimal
 Netsukefile and running `netsuke` to show how quickly the tool produces a
 result. This immediate feedback is crucial for a positive first impression.
 
+### Discover manifest operations
+
+The CLI also provides a read-only manifest catalogue for discovery. Authors
+may add an optional `description` to a target or action; these values describe
+the operation in `netsuke help targets` and do not replace a referenced rule's
+description for Ninja progress output. The topic honours the selected
+manifest and the normal output preferences, including localization,
+accessibility, and `--json`.
+
+`netsuke help targets` loads, expands, renders, and validates the manifest,
+then prints actions followed by targets. It does not invoke Ninja, run recipes,
+or create build outputs. This keeps discovery useful in an unfamiliar project
+without making help a build operation. Existing manifests remain compatible
+when they omit the optional descriptions.
+
 Intuitive **defaults** further contribute to a smooth UX. As noted, if no
 subcommand is given, `netsuke build` is assumed by default. Similarly, common
 options have sensible defaults: by default, Netsuke looks for `Netsukefile` in
