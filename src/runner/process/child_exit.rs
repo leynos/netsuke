@@ -6,7 +6,7 @@ use std::{
     thread,
 };
 
-use super::streaming::ForwardStats;
+use super::{failure_attribution::CommandListFailure, streaming::ForwardStats};
 
 /// Terminate a partially configured child and reap it before returning an error.
 pub(super) fn terminate_child(child: &mut Child, context: &str) {
@@ -21,7 +21,7 @@ pub(super) fn terminate_child(child: &mut Child, context: &str) {
 /// Convert a Ninja exit status into an error with optional bounded attribution.
 pub(super) fn ninja_exit_error(
     status: ExitStatus,
-    command_list_failure: Option<&str>,
+    command_list_failure: Option<&CommandListFailure>,
 ) -> io::Result<()> {
     let message = command_list_failure.map_or_else(
         || format!("ninja exited with {status}"),
@@ -34,8 +34,8 @@ pub(super) fn ninja_exit_error(
 pub(super) fn finalize_streaming(
     wait_result: io::Result<ExitStatus>,
     stdout_stats: ForwardStats,
-    err_handle: thread::JoinHandle<(ForwardStats, Option<String>)>,
-) -> io::Result<(ExitStatus, Option<String>)> {
+    err_handle: thread::JoinHandle<(ForwardStats, Option<CommandListFailure>)>,
+) -> io::Result<(ExitStatus, Option<CommandListFailure>)> {
     handle_forwarding_stats(stdout_stats, "stdout");
     let command_list_failure = match err_handle.join() {
         Ok((stats, context)) => {

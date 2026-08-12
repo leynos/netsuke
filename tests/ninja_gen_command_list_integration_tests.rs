@@ -104,6 +104,116 @@ fn command_list_entry_ending_in_background_operator_preserves_the_next_boundary(
     )
 }
 
+fn failing_command_list_command(entries: Vec<String>) -> Result<String> {
+    let action = Action {
+        recipe: Recipe::Command {
+            command: StringOrList::List(entries),
+        },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    };
+    let mut graph = BuildGraph::default();
+    graph.actions.insert("chain".into(), action);
+    let ninja = generate(&graph)?;
+    ninja
+        .lines()
+        .find_map(|line| line.strip_prefix("  command = "))
+        .map(str::to_owned)
+        .context("generated command-list action missing")
+}
+
+fn open_temp_workspace(dir: &TempDir) -> Result<Dir> {
+    let dir_path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
+        .map_err(|path| anyhow::anyhow!("temp dir path {path:?} is not UTF-8"))?;
+    Dir::open_ambient_dir(&dir_path, ambient_authority()).context("open command-list workspace")
+}
+
+fn run_generated_command_with_ninja(dir: &TempDir, command: &str) -> Result<std::process::Output> {
+    let workspace = open_temp_workspace(dir)?;
+    workspace.write(
+        "build.ninja",
+        format!("rule chain\n  command = {command}\nbuild out: chain\n").as_bytes(),
+    )?;
+    Command::new("ninja")
+        .arg("out")
+        .current_dir(dir.path())
+        .output()
+        .context("run generated command-list with Ninja")
+}
+
+#[test]
+fn command_list_exit_entry_preserves_status_and_emits_attribution() -> Result<()> {
+    let Some(dir) = ninja_integration_setup() else {
+        return Ok(());
+    };
+    let command = failing_command_list_command(vec![
+        "exit 23".into(),
+        "echo unexpected > continued-after-exit.txt".into(),
+    ])?;
+    let shell_command = command.replace("$$", "$");
+    let output = Command::new("sh")
+        .args(["-c", &shell_command])
+        .current_dir(dir.path())
+        .output()
+        .context("run generated command-list shell")?;
+    ensure!(
+        output.status.code() == Some(23),
+        "exit command should retain status 23, got {:?}",
+        output.status
+    );
+    let stderr = String::from_utf8(output.stderr).context("shell stderr should be UTF-8")?;
+    ensure!(
+        stderr.contains("netsuke command-list failure: action ") && stderr.contains(", entry 1"),
+        "exit command should emit the first-entry marker: {stderr}"
+    );
+    let workspace = open_temp_workspace(&dir)?;
+    ensure!(
+        !workspace.exists("continued-after-exit.txt"),
+        "an exit failure must not run a later entry"
+    );
+    Ok(())
+}
+
+#[test]
+fn command_list_background_failure_waits_before_the_next_entry() -> Result<()> {
+    let Some(dir) = ninja_integration_setup() else {
+        return Ok(());
+    };
+    let command = failing_command_list_command(vec![
+        "false &".into(),
+        "echo unexpected > continued-after-background.txt".into(),
+    ])?;
+    let shell_command = command.replace("$$", "$");
+    let output = Command::new("sh")
+        .args(["-c", &shell_command])
+        .current_dir(dir.path())
+        .output()
+        .context("run generated command-list shell")?;
+    ensure!(
+        !output.status.success(),
+        "failing background work must fail its command-list entry"
+    );
+    let stderr = String::from_utf8(output.stderr).context("shell stderr should be UTF-8")?;
+    ensure!(
+        stderr.contains(", entry 1"),
+        "background failure should identify the first entry: {stderr}"
+    );
+    let workspace = open_temp_workspace(&dir)?;
+    ensure!(
+        !workspace.exists("continued-after-background.txt"),
+        "a background failure must stop later entries"
+    );
+    let ninja_output = run_generated_command_with_ninja(&dir, &command)?;
+    ensure!(
+        !ninja_output.status.success(),
+        "Ninja must fail when a backgrounded entry fails: {ninja_output:?}"
+    );
+    Ok(())
+}
+
 fn rendered_direct_target_manifest() -> Result<NetsukeManifest> {
     let manifest = manifest::from_str(
         r#"

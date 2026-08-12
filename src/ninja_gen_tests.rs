@@ -116,17 +116,11 @@ fn generate_command_list_ninja_joins_a_fail_fast_chain() -> Result<()> {
 
     let ninja = generate(&graph)?;
     ensure!(
-        ninja.contains(concat!(
-            "command = { if eval 'echo one'; then :; else _netsuke_command_status=$$?; ",
-            "printf '%s\\n' 'netsuke command-list failure: action 1, entry 1' >&2; ",
-            "exit \"$$_netsuke_command_status\"; fi; } && ",
-            "{ if eval 'echo two'; then :; else _netsuke_command_status=$$?; ",
-            "printf '%s\\n' 'netsuke command-list failure: action 1, entry 2' >&2; ",
-            "exit \"$$_netsuke_command_status\"; fi; } && ",
-            "{ if eval 'echo three'; then :; else _netsuke_command_status=$$?; ",
-            "printf '%s\\n' 'netsuke command-list failure: action 1, entry 3' >&2; ",
-            "exit \"$$_netsuke_command_status\"; fi; }"
-        )),
+        ninja.contains("command = { _netsuke_background_before=$${!:-};")
+            && ninja.contains("if eval 'echo one'")
+            && ninja.contains("if eval 'echo two'")
+            && ninja.contains("if eval 'echo three'")
+            && ninja.matches("} && {").count() == 2,
         "command list entries should be isolated brace groups joined by &&:\n{ninja}"
     );
     Ok(())
@@ -134,24 +128,24 @@ fn generate_command_list_ninja_joins_a_fail_fast_chain() -> Result<()> {
 
 #[test]
 fn programmatic_empty_command_recipe_returns_a_typed_generation_error() {
-    let action = Action {
-        recipe: Recipe::Command {
-            command: StringOrList::Empty,
-        },
-        description: None,
-        depfile: None,
-        deps_format: None,
-        pool: None,
-        restat: false,
-    };
-    let mut graph = BuildGraph::default();
-    graph.actions.insert("empty".into(), action);
+    for command in [StringOrList::Empty, StringOrList::List(Vec::new())] {
+        let action = Action {
+            recipe: Recipe::Command { command },
+            description: None,
+            depfile: None,
+            deps_format: None,
+            pool: None,
+            restat: false,
+        };
+        let mut graph = BuildGraph::default();
+        graph.actions.insert("empty".into(), action);
 
-    let error = generate(&graph).expect_err("empty command recipe should not generate Ninja");
-    assert!(
-        matches!(error, NinjaGenError::EmptyCommandRecipe { action_index: 1 }),
-        "empty command recipe should produce the stable typed error, got {error:?}"
-    );
+        let error = generate(&graph).expect_err("empty command recipe should not generate Ninja");
+        assert!(
+            matches!(error, NinjaGenError::EmptyCommandRecipe { action_index: 1 }),
+            "empty command recipe should produce the stable typed error, got {error:?}"
+        );
+    }
 }
 
 #[test]

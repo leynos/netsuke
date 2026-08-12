@@ -202,8 +202,9 @@ Command recipes use the `StringOrList` AST type. A scalar command remains one
 shell-text value; a YAML sequence is an ordered list of entries. The same
 recipe path handles commands declared on reusable rules, direct targets, and
 actions. Manifest deserialization rejects an empty command list. Code that
-constructs the IR directly must also reject `StringOrList::Empty` during Ninja
-generation rather than emitting an unusable rule.
+constructs the IR directly must also reject both `StringOrList::Empty` and an
+empty `StringOrList::List(Vec::new())` during Ninja generation rather than
+emitting an unusable rule.
 
 The lowering stages have deliberately separate responsibilities:
 
@@ -226,9 +227,18 @@ The lowering stages have deliberately separate responsibilities:
   variables can carry from one entry to the next. The `&&` chain remains
   fail-fast.
 - `src/runner/process` forwards the command's output and recognizes the
-  bounded `netsuke command-list failure: action N, entry M` marker. A failed
-  list therefore retains the original exit status while adding the generated
-  action index and one-based entry index to the Ninja failure error.
+  bounded `netsuke command-list failure: action HASH, entry M` marker. A failed
+  list therefore retains the original exit status while adding the fixed-width
+  hashed action fingerprint and one-based entry index to the Ninja failure
+  error.
+
+Attributed list failures emit the bounded tracing fields
+`command_list_action` (a fixed-width action fingerprint) and
+`command_list_entry` (the one-based entry index), plus the matching
+`command_list_failure` marker. The process boundary records
+`netsuke_ninja_command_list_failures_total` and
+`netsuke_ninja_command_list_failure_duration_seconds`, with an `outcome`
+label of `failure`. These diagnostics and metrics contain no command text.
 
 Changes to this pipeline must preserve the scalar/list distinction, per-entry
 rendering, current-shell state sharing, and failure attribution. The focused

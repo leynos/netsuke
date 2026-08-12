@@ -150,23 +150,17 @@ proptest! {
         let ninja = generate(&command_list_graph(&entries)).expect("non-empty command list should generate");
         let command_line = ninja.lines().find(|line| line.starts_with("  command = "))
             .expect("generated action should include a command line");
-        let expected_entries: Vec<String> = entries.iter().enumerate().map(|(index, entry)| {
-            format!(
-                "{{ if eval 'echo {entry}'; then :; else _netsuke_command_status=$$?; printf '%s\\n' 'netsuke command-list failure: action 1, entry {}' >&2; exit \"$$_netsuke_command_status\"; fi; }}",
-                index + 1,
-            )
-        }).collect();
-
         let mut previous = 0usize;
-        for expected_entry in &expected_entries {
+        for entry in &entries {
+            let expected_entry = format!("if eval 'echo {entry}'");
             let position = command_line
                 .get(previous..)
-                .and_then(|remaining| remaining.find(expected_entry))
+                .and_then(|remaining| remaining.find(&expected_entry))
                 .expect("every entry should retain its independent shell boundary");
             previous += position + expected_entry.len();
         }
-        prop_assert_eq!(command_line.matches("{ if eval '").count(), entries.len());
-        prop_assert_eq!(command_line.matches(" && ").count(), entries.len() - 1);
+        prop_assert_eq!(command_line.matches("{ _netsuke_background_before=$${!:-};").count(), entries.len());
+        prop_assert_eq!(command_line.matches("} && {").count(), entries.len() - 1);
     }
 
     #[test]
@@ -180,12 +174,21 @@ proptest! {
     }
 
     #[test]
-    fn programmatic_empty_command_recipes_are_rejected(action_id in "[a-z]{1,12}") {
+    fn programmatic_empty_command_recipes_are_rejected(
+        action_id in "[a-z]{1,12}",
+        use_empty_list in any::<bool>(),
+    ) {
         let mut graph = BuildGraph::default();
         graph.actions.insert(
             action_id,
             Action {
-                recipe: Recipe::Command { command: StringOrList::Empty },
+                recipe: Recipe::Command {
+                    command: if use_empty_list {
+                        StringOrList::List(Vec::new())
+                    } else {
+                        StringOrList::Empty
+                    },
+                },
                 description: None,
                 depfile: None,
                 deps_format: None,

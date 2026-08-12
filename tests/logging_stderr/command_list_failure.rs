@@ -8,7 +8,11 @@ use serde_json::Value;
 use tempfile::TempDir;
 use test_support::ninja::ninja_integration_workspace;
 
-const FAILURE_CONTEXT: &str = "netsuke command-list failure: action 1, entry 2";
+const FAILURE_PREFIX: &str = "netsuke command-list failure: action ";
+
+fn identifies_entry(message: &str, entry: usize) -> bool {
+    message.contains(FAILURE_PREFIX) && message.contains(&format!(", entry {entry}"))
+}
 
 fn failing_command_list_workspace() -> Result<Option<TempDir>> {
     let temp = match ninja_integration_workspace() {
@@ -55,7 +59,7 @@ fn failed_command_list_entry_is_attributed_in_human_output() -> Result<()> {
     );
     let stderr = String::from_utf8(output.stderr).context("stderr should be valid UTF-8")?;
     ensure!(
-        stderr.contains(FAILURE_CONTEXT),
+        identifies_entry(&stderr, 2),
         "human diagnostics should name the bounded failing entry: {stderr}"
     );
     let output_file = open_workspace(&temp)?
@@ -81,7 +85,7 @@ fn failed_command_list_entry_is_attributed_in_json_diagnostics() -> Result<()> {
     let stderr = String::from_utf8(output.stderr).context("stderr should be valid UTF-8")?;
     let diagnostics: Value = serde_json::from_str(&stderr).context("stderr should be JSON")?;
     ensure!(
-        diagnostics.to_string().contains(FAILURE_CONTEXT),
+        identifies_entry(&diagnostics.to_string(), 2),
         "JSON diagnostics should retain bounded entry attribution: {diagnostics}"
     );
     ensure!(
@@ -103,7 +107,7 @@ fn failed_command_list_entry_is_attributed_in_tracing_output() -> Result<()> {
     );
     let stderr = String::from_utf8(output.stderr).context("stderr should be valid UTF-8")?;
     ensure!(
-        stderr.contains("command_list_failure") && stderr.contains(FAILURE_CONTEXT),
+        stderr.contains("command_list_failure") && identifies_entry(&stderr, 2),
         "tracing should record the bounded command-list failure context: {stderr}"
     );
     Ok(())

@@ -8,9 +8,11 @@ use std::{
     path::Path,
     process::{Child, Command, ExitStatus},
     thread,
+    time::Instant,
 };
 
 mod child_exit;
+mod command_list_telemetry;
 mod command_logging;
 mod failure_attribution;
 mod file_io;
@@ -27,7 +29,9 @@ use command_logging::{
     CommandLogContext, command_span, log_command_execution, log_command_exit_failure,
     log_command_spawn_failure,
 };
-use failure_attribution::{FailureAttributionWriter, forward_stderr_with_attribution};
+use failure_attribution::{
+    CommandListFailure, FailureAttributionWriter, forward_stderr_with_attribution,
+};
 pub use file_io::*;
 pub use ninja_program::resolve_ninja_program;
 #[cfg(doctest)]
@@ -75,7 +79,8 @@ pub mod doc {
 struct ExitFailureContext<'a> {
     operation: &'a str,
     suppress_stderr: bool,
-    command_list_failure: Option<&'a str>,
+    command_list_failure: Option<&'a CommandListFailure>,
+    started: Instant,
 }
 
 fn check_exit_status_with_context(
@@ -94,10 +99,7 @@ fn check_exit_status_with_context(
             status,
         );
         if let Some(failure) = failure_context.command_list_failure {
-            tracing::warn!(
-                command_list_failure = failure,
-                "Ninja command-list entry failed"
-            );
+            command_list_telemetry::record_failure(failure, failure_context.started.elapsed());
         }
         ninja_exit_error(status, failure_context.command_list_failure)
     }
@@ -114,6 +116,7 @@ fn run_command_and_stream_with_context(
     let _entered = span.enter();
 
     log_command_execution(&context, operation, suppress_stderr);
+    let started = Instant::now();
     let child = cmd.spawn().inspect_err(|err| {
         tracing::Span::current().record("failure_category", "spawn");
         log_command_spawn_failure(&context, operation, suppress_stderr, err);
@@ -126,7 +129,8 @@ fn run_command_and_stream_with_context(
         ExitFailureContext {
             operation,
             suppress_stderr,
-            command_list_failure: command_list_failure.as_deref(),
+            command_list_failure: command_list_failure.as_ref(),
+            started,
         },
     )
 }
@@ -324,7 +328,7 @@ fn forward_stdout(
     stdout: impl io::Read,
     output: &mut impl io::Write,
     status_observer: Option<StatusObserver<'_>>,
-) -> (ForwardStats, Option<String>) {
+) -> (ForwardStats, Option<CommandListFailure>) {
     let mut attribution_writer = FailureAttributionWriter::new(output);
     let stats = match status_observer {
         Some(observer) => forward_child_output_with_ninja_status(
@@ -341,7 +345,7 @@ fn spawn_and_stream_output(
     mut child: Child,
     status_observer: Option<StatusObserver<'_>>,
     suppress_stderr: bool,
-) -> io::Result<(ExitStatus, Option<String>)> {
+) -> io::Result<(ExitStatus, Option<CommandListFailure>)> {
     let Some(stdout) = child.stdout.take() else {
         terminate_child(&mut child, "stdout pipe unavailable");
         return Err(io::Error::other("child process missing stdout pipe"));

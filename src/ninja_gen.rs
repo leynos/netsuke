@@ -14,6 +14,11 @@ use itertools::Itertools;
 use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter, Write};
 use thiserror::Error;
+
+#[path = "ninja_gen_command_list.rs"]
+pub(crate) mod ninja_gen_command_list;
+
+use ninja_gen_command_list::command_list_entry;
 /// Errors produced while rendering Ninja manifests.
 #[derive(Debug, Error)]
 pub enum NinjaGenError {
@@ -145,15 +150,7 @@ pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), Ni
     for (zero_based_action_index, (id, action)) in actions.into_iter().enumerate() {
         let action_index = zero_based_action_index + 1;
         validate_action_recipe(action, action_index)?;
-        write!(
-            out,
-            "{}",
-            NamedAction {
-                id,
-                action,
-                action_index,
-            }
-        )?;
+        write!(out, "{}", NamedAction { id, action })?;
     }
 
     let mut edges: Vec<_> = graph.targets.values().collect();
@@ -222,28 +219,13 @@ fn escape_script(script: &str) -> String {
         .replace('\n', "\\n")
 }
 
-/// Quote `value` as one literal POSIX shell argument.
-///
-/// The command-list renderer passes each entry to `eval` so an inline comment
-/// or trailing control operator cannot consume the brace-group terminator.
-fn shell_single_quote(value: &str) -> String {
-    let escaped = value.replace('\'', r"'\''");
-    format!("'{escaped}'")
-}
-
-/// Prefix used to carry bounded list-entry failure attribution through Ninja.
-pub(crate) const COMMAND_LIST_FAILURE_PREFIX: &str = "netsuke command-list failure: action ";
-
 const fn validate_action_recipe(
     action: &crate::ir::Action,
     action_index: usize,
 ) -> Result<(), NinjaGenError> {
-    if matches!(
-        action.recipe,
-        Recipe::Command {
-            command: StringOrList::Empty
-        }
-    ) {
+    if let Recipe::Command { command } = &action.recipe
+        && command.is_empty_content()
+    {
         return Err(NinjaGenError::EmptyCommandRecipe { action_index });
     }
     Ok(())
@@ -253,7 +235,6 @@ const fn validate_action_recipe(
 struct NamedAction<'a> {
     id: &'a str,
     action: &'a crate::ir::Action,
-    action_index: usize,
 }
 
 impl NamedAction<'_> {
@@ -279,7 +260,7 @@ impl NamedAction<'_> {
                     items.iter()
                         .enumerate()
                         .map(|(entry_index, item)| {
-                            command_list_entry(item, self.action_index, entry_index + 1)
+                            command_list_entry(item, self.id, entry_index + 1)
                         })
                         .join(" && ");
                 Self::assert_shell_command(&command_line);
@@ -347,15 +328,6 @@ impl NamedAction<'_> {
     const fn reject_empty_command_recipe() -> fmt::Result {
         Err(fmt::Error)
     }
-}
-
-fn command_list_entry(command: &str, action_index: usize, entry_index: usize) -> String {
-    let context = format!("{COMMAND_LIST_FAILURE_PREFIX}{action_index}, entry {entry_index}");
-    format!(
-        "{{ if eval {}; then :; else _netsuke_command_status=$$?; printf '%s\\n' '{}' >&2; exit \"$$_netsuke_command_status\"; fi; }}",
-        shell_single_quote(command),
-        context,
-    )
 }
 
 impl Display for NamedAction<'_> {
