@@ -1655,12 +1655,15 @@ decision to scope the capability this way and the alternatives it rejected.
 
 ### Glob expansion observability
 
-`src/manifest/glob/diagnostics.rs` records two outcomes of the
-capability-scoped walk that are expected rather than erroneous, so neither
-reaches the top-level diagnostics: a literal prefix that names no directory,
-and a match dropped because a symbolic link cannot be resolved through the
-capability. Recording both here keeps a degraded expansion visible without
-having to reproduce it.
+`src/manifest/glob::expand_glob` returns bounded observations for two outcomes
+of the capability-scoped walk that are expected rather than erroneous, so
+neither reaches the top-level diagnostics: a literal prefix that names no
+directory, and a match dropped because a symbolic link cannot be resolved
+through the capability. `src/manifest/mod.rs` records those observations after
+the query at the Jinja `glob` helper's orchestration boundary, via
+`glob::record_expansion`. Keeping recording there leaves the expansion query
+free of metrics and tracing side effects while keeping a degraded expansion
+visible without having to reproduce it.
 
 - **Metrics** — `netsuke_manifest_glob_expansions_total`, labelled
   `outcome` (`matched`, `unopenable_prefix`), and

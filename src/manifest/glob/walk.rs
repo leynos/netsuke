@@ -18,7 +18,7 @@
 //! onto the prefix before its metadata lookup.
 
 use super::{
-    GlobEntryResult, GlobErrorContext, GlobErrorType, GlobPattern, create_glob_error, diagnostics,
+    GlobEntry, GlobEntryResult, GlobErrorContext, GlobErrorType, GlobPattern, create_glob_error,
 };
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use cap_primitives::fs::{FollowSymlinks, open_dir_nofollow, open_parent_dir, stat};
@@ -73,10 +73,7 @@ impl GlobRoot {
         let relative = self.relativise(path)?;
         match self.dir.metadata(relative) {
             Ok(metadata) => Ok(Some(metadata)),
-            Err(err) if is_unresolvable_link(&err) && self.traverses_symlink(relative) => {
-                diagnostics::record_unreachable_symlink(relative);
-                Ok(None)
-            }
+            Err(err) if is_unresolvable_link(&err) && self.traverses_symlink(relative) => Ok(None),
             Err(err) => Err(err),
         }
     }
@@ -258,16 +255,13 @@ pub(super) fn unescape_literal_escapes(prefix: &str) -> String {
 /// directory); the pattern can match nothing in that case, mirroring the
 /// empty result the matcher would produce.
 pub(super) fn open_root_dir(pattern: &GlobPattern) -> io::Result<Option<GlobRoot>> {
-    let prefix = unescape_literal_escapes(literal_dir_prefix(pattern.normalized()));
+    let prefix = literal_dir_path(pattern);
     match open_literal_prefix(Utf8Path::new(&prefix)) {
         Ok(dir) => Ok(Some(GlobRoot {
             dir,
             prefix: Utf8PathBuf::from(prefix),
         })),
-        Err(err) if prefix_is_unopenable(&err) => {
-            diagnostics::record_unopenable_prefix(pattern, &prefix);
-            Ok(None)
-        }
+        Err(err) if prefix_is_unopenable(&err) => Ok(None),
         Err(err) => Err(err),
     }
 }
@@ -304,6 +298,9 @@ fn open_literal_prefix(prefix: &Utf8Path) -> io::Result<Dir> {
             Utf8Component::CurDir => dir,
             Utf8Component::ParentDir => open_parent_dir(&dir, ambient_authority())?,
             Utf8Component::Normal(name) => {
+                // `open_dir_nofollow` alone accepts directory symlinks with
+                // the pinned capability implementation, so inspect the
+                // component before opening it.
                 if stat(&dir, name.as_ref(), FollowSymlinks::No)?.is_symlink() {
                     return Err(io::Error::new(
                         io::ErrorKind::PermissionDenied,
@@ -322,6 +319,11 @@ fn open_literal_prefix(prefix: &Utf8Path) -> io::Result<Dir> {
     }
 
     Ok(Dir::from_std_file(dir))
+}
+
+/// Return the filesystem path represented by a pattern's literal prefix.
+pub(super) fn literal_dir_path(pattern: &GlobPattern) -> String {
+    unescape_literal_escapes(literal_dir_prefix(pattern.normalized()))
 }
 
 /// Report whether `err` means the literal prefix names no usable directory.
@@ -367,7 +369,7 @@ pub(super) fn process_glob_entry(
     entry: GlobEntryResult,
     pattern: &GlobPattern,
     root: &GlobRoot,
-) -> std::result::Result<Option<String>, Error> {
+) -> std::result::Result<GlobEntry, Error> {
     let path = entry.map_err(|e| create_io_error(pattern, 0, e.to_string()))?;
     let utf_path = Utf8PathBuf::try_from(path).map_err(|_| {
         create_io_error(
@@ -376,24 +378,19 @@ pub(super) fn process_glob_entry(
             "glob matched a non-UTF-8 path".to_owned(),
         )
     })?;
-    let keep = names_a_file(root, &utf_path)
-        .map_err(|err| create_io_error(pattern, pattern.raw().len(), err.to_string()))?;
-    if !keep {
-        return Ok(None);
-    }
-    Ok(Some(utf_path.as_str().replace('\\', "/")))
+    names_a_file(root, &utf_path)
+        .map_err(|err| create_io_error(pattern, pattern.raw().len(), err.to_string()))
 }
 
-/// Report whether a match names a regular file reachable through the
-/// capability, recording why it was dropped when it does not.
-fn names_a_file(root: &GlobRoot, path: &Utf8Path) -> io::Result<bool> {
-    // An unreachable match has already been recorded as skipped.
+/// Classify whether a match names a regular file reachable through the
+/// capability, returning a bounded reason when it does not.
+fn names_a_file(root: &GlobRoot, path: &Utf8Path) -> io::Result<GlobEntry> {
+    let relative = root.relativise(path)?.to_path_buf();
     let Some(metadata) = root.metadata(path)? else {
-        return Ok(false);
+        return Ok(GlobEntry::UnreachableSymlink(relative));
     };
     if metadata.is_file() {
-        return Ok(true);
+        return Ok(GlobEntry::Path(path.as_str().replace('\\', "/")));
     }
-    diagnostics::record_not_a_file();
-    Ok(false)
+    Ok(GlobEntry::NotAFile)
 }

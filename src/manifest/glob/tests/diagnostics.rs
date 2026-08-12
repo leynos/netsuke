@@ -1,11 +1,10 @@
 //! Tests for the counters and tracing events glob expansion records.
 //!
-//! Each case drives `glob_paths` through a recorder and a subscriber scoped to
-//! the call, so it fails if the corresponding `record_*` call is removed. The
-//! recorder and subscriber are both thread-local, so no test-wide lock is
-//! needed.
+//! Each case records data returned by the pure expansion query through a
+//! subscriber scoped to the call. The recorder and subscriber are both
+//! thread-local, so no test-wide lock is needed.
 
-use super::super::glob_paths;
+use super::super::{expand_glob, glob_paths, record_expansion};
 use anyhow::{Context, Result, ensure};
 use metrics::SharedString;
 use metrics_util::{
@@ -37,6 +36,13 @@ fn recorded<T>(expand: impl FnOnce() -> T) -> (T, Vec<String>, Snapshot) {
     (value, events, snapshotter.snapshot().into_vec())
 }
 
+/// Expand and record at the manifest adapter's telemetry boundary.
+fn expand_and_record(pattern: &str) -> Result<Vec<String>> {
+    let expansion = expand_glob(pattern)?;
+    record_expansion(&expansion);
+    Ok(expansion.into_paths())
+}
+
 /// Value of the counter `name` carrying the label `label = value`.
 fn counter_value(snapshot: &Snapshot, name: &str, label: (&str, &str)) -> Option<u64> {
     snapshot.iter().find_map(|(key, _, _, debug_value)| {
@@ -64,7 +70,7 @@ fn a_completed_expansion_counts_its_matches() -> Result<()> {
     test_fs::write(temp.path().join("b.txt"), "b")?;
     let pattern = format!("{}/*.txt", temp.path().display());
 
-    let (results, events, snapshot) = recorded(|| glob_paths(&pattern));
+    let (results, events, snapshot) = recorded(|| expand_and_record(&pattern));
     ensure!(results?.len() == 2, "both files should match");
 
     ensure!(
@@ -91,7 +97,7 @@ fn an_unopenable_prefix_counts_and_names_the_prefix() -> Result<()> {
     let temp = tempdir()?;
     let pattern = format!("{}/no-such-dir/*.txt", temp.path().display());
 
-    let (results, events, snapshot) = recorded(|| glob_paths(&pattern));
+    let (results, events, snapshot) = recorded(|| expand_and_record(&pattern));
     ensure!(results?.is_empty(), "a missing prefix should match nothing");
 
     ensure!(
@@ -131,7 +137,7 @@ fn a_skipped_symlink_counts_and_traces_only_the_relative_path() -> Result<()> {
     test_fs::symlink("../vendor/escaped.txt", src.join("escaped.txt"))?;
     let pattern = format!("{}/src/*.txt", temp.path().display());
 
-    let (results, events, snapshot) = recorded(|| glob_paths(&pattern));
+    let (results, events, snapshot) = recorded(|| expand_and_record(&pattern));
     ensure!(results?.is_empty(), "the only match should be skipped");
 
     ensure!(
@@ -160,12 +166,32 @@ fn a_directory_match_counts_as_not_a_file() -> Result<()> {
     test_fs::write(temp.path().join("a.txt"), "a")?;
     let pattern = format!("{}/*", temp.path().display());
 
-    let (results, _events, snapshot) = recorded(|| glob_paths(&pattern));
+    let (results, _events, snapshot) = recorded(|| expand_and_record(&pattern));
     ensure!(results?.len() == 1, "only the file should survive");
 
     ensure!(
         counter_value(&snapshot, SKIPPED, ("reason", "not_a_file")) == Some(1),
         "the directory should count once as not a file: {snapshot:?}"
+    );
+    Ok(())
+}
+
+/// Direct callers can reuse the glob query without receiving global telemetry.
+#[rstest]
+fn glob_paths_is_a_pure_query() -> Result<()> {
+    let temp = tempdir()?;
+    test_fs::write(temp.path().join("a.txt"), "a")?;
+    let pattern = format!("{}/*.txt", temp.path().display());
+
+    let (results, events, snapshot) = recorded(|| glob_paths(&pattern));
+    ensure!(results?.len() == 1, "the file should match");
+    ensure!(
+        events.is_empty(),
+        "the query must not emit trace events: {events:?}"
+    );
+    ensure!(
+        snapshot.is_empty(),
+        "the query must not record metrics: {snapshot:?}"
     );
     Ok(())
 }

@@ -4,6 +4,7 @@ use super::super::{GlobPattern, glob_paths};
 use anyhow::{Context, Result, anyhow, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use minijinja::ErrorKind;
+use rstest::rstest;
 use tempfile::tempdir;
 use test_support::fs as test_fs;
 
@@ -34,7 +35,7 @@ fn glob_paths_rejects_unmatched_brace() {
     assert_eq!(err.kind(), ErrorKind::SyntaxError);
 }
 
-#[test]
+#[rstest]
 fn glob_paths_rejects_an_invalid_pattern_before_a_missing_prefix() {
     let err = glob_paths("missing/[").expect_err("an invalid pattern should error");
     assert_eq!(err.kind(), ErrorKind::SyntaxError);

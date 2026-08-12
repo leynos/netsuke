@@ -23,7 +23,7 @@
 //! configuration discovery, where the paths are ones the tool found rather
 //! than ones the user named.
 
-use super::GlobPattern;
+use super::{GlobExpansion, GlobOutcome, GlobSkip};
 use camino::Utf8Path;
 use metrics::{counter, describe_counter};
 use std::sync::Once;
@@ -60,24 +60,38 @@ fn describe_metrics() {
     });
 }
 
+/// Record the observations returned by the pure glob expansion query.
+pub(super) fn record(expansion: &GlobExpansion) {
+    match &expansion.outcome {
+        GlobOutcome::Matched => record_expansion_matched(expansion),
+        GlobOutcome::UnopenablePrefix(prefix) => record_unopenable_prefix(expansion, prefix),
+    }
+    for skipped in &expansion.skipped {
+        match skipped {
+            GlobSkip::UnreachableSymlink(relative) => record_unreachable_symlink(relative),
+            GlobSkip::NotAFile => record_not_a_file(),
+        }
+    }
+}
+
 /// Record an expansion that stopped because the literal prefix is unusable.
-pub(super) fn record_unopenable_prefix(pattern: &GlobPattern, prefix: &str) {
+fn record_unopenable_prefix(expansion: &GlobExpansion, prefix: &str) {
     describe_metrics();
     counter!(EXPANSIONS_TOTAL, "outcome" => "unopenable_prefix").increment(1);
     tracing::debug!(
-        pattern = %bounded_path(pattern.raw()),
+        pattern = %bounded_path(expansion.pattern.raw()),
         prefix = %bounded_path(prefix),
         "glob literal prefix names no directory; expanding to no matches"
     );
 }
 
 /// Record an expansion that ran the walk to completion.
-pub(super) fn record_expansion_matched(pattern: &GlobPattern, matches: usize) {
+fn record_expansion_matched(expansion: &GlobExpansion) {
     describe_metrics();
     counter!(EXPANSIONS_TOTAL, "outcome" => "matched").increment(1);
     tracing::debug!(
-        pattern = %bounded_path(pattern.raw()),
-        matches,
+        pattern = %bounded_path(expansion.pattern.raw()),
+        matches = expansion.paths.len(),
         "glob expansion complete"
     );
 }
@@ -86,7 +100,7 @@ pub(super) fn record_expansion_matched(pattern: &GlobPattern, matches: usize) {
 ///
 /// `relative` is the match relative to the literal prefix, so it stays within
 /// the scope the pattern already named.
-pub(super) fn record_unreachable_symlink(relative: &Utf8Path) {
+fn record_unreachable_symlink(relative: &Utf8Path) {
     describe_metrics();
     counter!(ENTRIES_SKIPPED_TOTAL, "reason" => "unreachable_symlink").increment(1);
     tracing::debug!(
@@ -96,7 +110,7 @@ pub(super) fn record_unreachable_symlink(relative: &Utf8Path) {
 }
 
 /// Record a match dropped because it does not name a regular file.
-pub(super) fn record_not_a_file() {
+fn record_not_a_file() {
     describe_metrics();
     counter!(ENTRIES_SKIPPED_TOTAL, "reason" => "not_a_file").increment(1);
 }
