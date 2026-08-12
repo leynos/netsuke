@@ -115,6 +115,7 @@ runner.io.dyndep.rename = Luodun dyndep-tiedoston viimeistely polussa { $path } 
 runner.io.dyndep.corrupt = Luotu dyndep-tiedosto polussa { $path } ei vastaa odotettua sisältöä; poista vain kyseinen tiedosto ja yritä uudelleen.
 runner.io.dyndep.race = Toinen prosessi kirjoitti dyndep-tiedoston polkuun { $path }, mutta sen sisältöä ei voitu tarkistaa.
 runner.io.dyndep.temp_collisions = Yksilöllistä väliaikaista dyndep-tiedostoa polulle { $path } ei voitu luoda toistuvien nimiristiriitojen jälkeen.
+runner.io.dyndep.too_large = Luotu dyndep-tiedosto polussa { $path } ylittää { $limit } tavun tarkistusrajan.
 
 # Manifestin diagnostiikka.
 manifest.parse = Manifestin jäsentäminen epäonnistui.

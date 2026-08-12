@@ -114,6 +114,7 @@ runner.io.dyndep.rename = 无法完成 { $path } 处生成的 dyndep 文件。
 runner.io.dyndep.corrupt = { $path } 处生成的 dyndep 文件与预期内容不匹配；请仅删除该文件后重试。
 runner.io.dyndep.race = 另一个进程写入了 dyndep 文件 { $path }，但无法验证其内容。
 runner.io.dyndep.temp_collisions = 多次发生名称冲突后，仍无法为 { $path } 创建唯一的临时 dyndep 文件。
+runner.io.dyndep.too_large = { $path } 处生成的 dyndep 文件超过 { $limit } 字节的验证上限。
 
 # 清单诊断。
 manifest.parse = 清单解析失败。

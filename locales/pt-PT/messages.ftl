@@ -116,6 +116,7 @@ runner.io.dyndep.rename = Não foi possível finalizar o ficheiro dyndep gerado 
 runner.io.dyndep.corrupt = O ficheiro dyndep gerado em { $path } não corresponde ao conteúdo esperado; remova apenas esse ficheiro e tente novamente.
 runner.io.dyndep.race = Outro processo escreveu o ficheiro dyndep { $path }, mas não foi possível verificar o seu conteúdo.
 runner.io.dyndep.temp_collisions = Não foi possível criar um ficheiro dyndep temporário exclusivo para { $path } após colisões de nomes repetidas.
+runner.io.dyndep.too_large = O ficheiro dyndep gerado em { $path } excede o limite de verificação de { $limit } bytes.
 
 # Diagnósticos do manifesto.
 manifest.parse = A análise do manifesto falhou.

@@ -4,6 +4,7 @@
 //! `ninja`, overridable with `NETSUKE_NINJA`).
 
 mod dispatch;
+mod dyndep_generation_telemetry;
 mod dyndep_publication;
 mod error;
 mod reporter;
@@ -364,8 +365,10 @@ fn generate_ninja(
         PipelineStage::NinjaSynthesisAndExecution,
         tool_key,
     );
-    ninja_gen::generate_bundle(&graph)
-        .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))
+    dyndep_generation_telemetry::instrument_bundle_generation(&graph, || {
+        ninja_gen::generate_bundle(&graph)
+    })
+    .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))
 }
 
 pub(super) fn load_manifest_with_stage_reporting(

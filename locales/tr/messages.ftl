@@ -115,6 +115,7 @@ runner.io.dyndep.rename = { $path } konumundaki oluşturulan dyndep dosyası son
 runner.io.dyndep.corrupt = { $path } konumundaki oluşturulan dyndep dosyası beklenen içerikle eşleşmiyor; yalnızca bu dosyayı kaldırıp yeniden deneyin.
 runner.io.dyndep.race = Başka bir işlem { $path } dyndep dosyasına yazdı ancak içeriği doğrulanamadı.
 runner.io.dyndep.temp_collisions = Tekrarlanan ad çakışmalarından sonra { $path } için benzersiz bir geçici dyndep dosyası oluşturulamadı.
+runner.io.dyndep.too_large = { $path } konumundaki oluşturulan dyndep dosyası { $limit } baytlık doğrulama sınırını aşıyor.
 
 # Bildirim tanılaması.
 manifest.parse = Bildirimin ayrıştırılması başarısız oldu.

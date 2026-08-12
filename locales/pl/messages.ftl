@@ -115,6 +115,7 @@ runner.io.dyndep.rename = Nie udało się sfinalizować wygenerowanego pliku dyn
 runner.io.dyndep.corrupt = Wygenerowany plik dyndep w { $path } nie pasuje do oczekiwanej zawartości; usuń tylko ten plik i spróbuj ponownie.
 runner.io.dyndep.race = Inny proces zapisał plik dyndep { $path }, ale nie udało się zweryfikować jego zawartości.
 runner.io.dyndep.temp_collisions = Po wielokrotnych kolizjach nazw nie udało się utworzyć unikatowego tymczasowego pliku dyndep dla { $path }.
+runner.io.dyndep.too_large = Wygenerowany plik dyndep w { $path } przekracza limit weryfikacji wynoszący { $limit } bajtów.
 
 # Diagnostyka manifestu.
 manifest.parse = Analiza manifestu nie powiodła się.

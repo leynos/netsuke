@@ -12,7 +12,7 @@ fn build_edge(inputs: &[&str], implicit_deps: &[&str], output: &str) -> BuildEdg
         action_id: "id".into(),
         inputs: inputs.iter().map(|name| path(name)).collect(),
         implicit_deps: implicit_deps.iter().map(|name| path(name)).collect(),
-        dependency_order: crate::ast::DependencyOrder::Parallel,
+        dependency_order: crate::ir::DependencyOrder::Parallel,
         explicit_outputs: vec![path(output)],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),

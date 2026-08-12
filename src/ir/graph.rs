@@ -14,7 +14,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use thiserror::Error;
 
-use crate::ast::{DependencyOrder, Recipe};
+use crate::ast::Recipe;
 
 #[cfg(kani)]
 #[path = "graph_kani_map.rs"]
@@ -36,6 +36,28 @@ pub struct BuildGraph {
     pub targets: IrHashMap<Utf8PathBuf, BuildEdge>,
     /// Targets built when no explicit target is requested.
     pub default_targets: Vec<Utf8PathBuf>,
+}
+
+/// Dependency scheduling policy carried by the domain build graph.
+///
+/// This IR type deliberately has no serialization responsibility. Manifest
+/// spelling and Serde behaviour belong to [`crate::ast::DependencyOrder`] and
+/// are converted explicitly while lowering the manifest into the graph.
+///
+/// ```compile_fail
+/// use netsuke::ir::DependencyOrder;
+///
+/// // Serialize the manifest AST policy, not its lowered domain counterpart.
+/// serde_json::to_string(&DependencyOrder::Parallel)?;
+/// # Ok::<(), serde_json::Error>(())
+/// ```
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum DependencyOrder {
+    /// Dependencies may run in any order allowed by the build scheduler.
+    #[default]
+    Parallel,
+    /// Dependencies run in declaration order, one after another.
+    Serial,
 }
 
 /// A reusable command analogous to a Ninja rule.

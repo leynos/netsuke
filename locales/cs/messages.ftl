@@ -115,6 +115,7 @@ runner.io.dyndep.rename = Nepodařilo se dokončit vygenerovaný soubor dyndep (
 runner.io.dyndep.corrupt = Vygenerovaný soubor dyndep (cesta: { $path }) neodpovídá očekávanému obsahu; odstraňte pouze tento soubor a zkuste to znovu.
 runner.io.dyndep.race = Jiný proces zapsal soubor dyndep { $path }, ale jeho obsah se nepodařilo ověřit.
 runner.io.dyndep.temp_collisions = Po opakovaných kolizích názvů se nepodařilo vytvořit jedinečný dočasný soubor dyndep (cesta: { $path }).
+runner.io.dyndep.too_large = Vygenerovaný soubor dyndep (cesta: { $path }) překračuje limit ověření { $limit } bajtů.
 
 # Diagnostika manifestu.
 manifest.parse = Zpracování manifestu selhalo.

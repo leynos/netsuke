@@ -178,12 +178,13 @@ criterion in issue #552 and all repository gates pass.
   `parallel`, explicit `parallel`/`serial` parse on targets and actions, an
   unknown value such as `sequential` is rejected, and declaration order and the
   `DependencyOrder` survive lowering for both targets and actions.
-- [x] (2026-08-10) Implemented the AST and IR representation:
-  `DependencyOrder::{Parallel, Serial}` on `Target` (serde lowercase, default
-  parallel) and on `BuildEdge`, copied during `from_manifest` lowering, and
-  re-exported through `ir`. Updated every direct `BuildEdge` literal, doctest,
-  and fixture to compile. `cargo check --all-targets` and 739 library tests plus
-  the touched integration tests passed.
+- [x] (2026-08-10) Implemented the AST and IR representation: the manifest AST
+  owns the Serde-enabled `DependencyOrder::{Parallel, Serial}` syntax, while
+  the IR owns a serialization-free domain enum with the same variants.
+  `from_manifest` converts explicitly between them and preserves dependency
+  declaration order. Updated every direct `BuildEdge` literal, doctest, and
+  fixture to use the domain type. `cargo check --all-targets` and 739 library
+  tests plus the touched integration tests passed.
 - [x] (2026-08-10) Implemented deterministic Ninja bundle and dyndep lowering:
   the new `src/ninja_gen/dyndep.rs` submodule adds `GeneratedNinja` (main text
   plus content-addressed `GeneratedDyndep` sidecars) and `generate_bundle`.
@@ -314,9 +315,25 @@ criterion in issue #552 and all repository gates pass.
   full suite reported 1,970 passed tests, one skipped test, and passing
   doctests. The subsequent independent CodeRabbit review reported zero
   findings.
+- [x] (2026-08-12) Closed the remaining serial-dyndep review gaps without
+  changing scheduling semantics. Public-CLI tests now prove runner-owned
+  sidecar publication, declaration order, and failure short-circuiting at
+  `-j 3`; generation telemetry lives at the runner boundary; four bounded
+  serial-lowering properties cover staging, order, repetition, content-address
+  invariants, and determinism; AST and IR dependency-order types are distinct;
+  and existing-sidecar verification is bounded at 16 MiB. All focused suites
+  passed. The six full deterministic gates passed with 1,979 tests, one skip,
+  and passing doctests, followed by a zero-finding CodeRabbit review.
 
 ## Surprises and discoveries
 
+- (2026-08-12) The first serial-lowering property run correctly shrank to two
+  repeated dependencies, but exposed a test-oracle error rather than a
+  generator defect: the preceding gate constrains the next sidecar-producing
+  phony edge, not the gate edge that consumes that sidecar. The property now
+  asserts the actual staging relationship. The existing named repeated-
+  dependency unit test already pins the shrunk case, so no generated regression
+  seed was retained.
 - (2026-08-12) The first full second-review test run found that the shared
   shell-quoting BDD fixture still contained a newline-bearing output path. The
   new generator validation correctly rejected the whole graph, preventing two
@@ -414,21 +431,30 @@ criterion in issue #552 and all repository gates pass.
   generation must be usable without a filesystem effect; accepting a
   capability-scoped directory at the materializer makes the publication
   authority explicit and testable. **Date:** 2026-08-12.
-- **Decision:** put serial bundle and materialization telemetry in dedicated
-  private modules rather than interleaving it with rendering or filesystem
-  operations. **Rationale:** the wrappers make query and command policy
-  explicit while restricting fields to bounded counts and outcome categories.
-  **Date:** 2026-08-12.
+- **Decision:** keep generation telemetry in the runner boundary's
+  `src/runner/dyndep_generation_telemetry.rs` and publication telemetry in
+  `src/runner/process/dyndep_telemetry.rs`; keep `src/ninja_gen` generation and
+  rendering telemetry-free. **Rationale:** the separate wrappers make query
+  and command policy explicit while restricting fields to bounded counts and
+  outcome categories. **Date:** 2026-08-12.
+- **Decision:** reject an existing dyndep sidecar larger than 16 MiB before
+  allocating verification storage. **Rationale:** generated sidecars are small
+  Ninja fragments, so this conservative ceiling supports large manifests while
+  preventing an untrusted existing file from causing unbounded memory use. A
+  metadata-sized buffer and one-byte growth probe also bound reads if the file
+  changes during verification. **Date:** 2026-08-12.
 
 - **Decision:** use staged Ninja dyndep files rather than an order-only gate
   chain, a pool, or recursive builds. **Rationale:** it is the only evaluated
   design that keeps a single scheduler, prevents later dependencies from
   becoming schedulable through the annotated path, propagates failure, and
   leaves unrelated work unconstrained. **Date:** 2026-08-10.
-- **Decision:** add `DependencyOrder::{Parallel, Serial}` to the AST and carry
-  it explicitly on each IR `BuildEdge`. **Rationale:** a closed enum rejects
-  misspellings, preserves future extension space, and avoids inferring
-  scheduling policy from graph shape. **Date:** 2026-08-10.
+- **Decision:** give the manifest AST and domain IR distinct
+  `DependencyOrder::{Parallel, Serial}` enums, converting explicitly while
+  lowering each `BuildEdge`. **Rationale:** the closed AST enum owns YAML and
+  Serde policy, while the IR enum remains backend-agnostic and free of syntax
+  responsibilities; both avoid inferring scheduling policy from graph shape.
+  **Date:** 2026-08-12.
 - **Decision:** apply `dependency_order` only to `Target::deps`.
   **Rationale:** actions already use the target shape, while sources and
   order-only dependencies have distinct freshness semantics not covered by the
@@ -635,12 +661,13 @@ pub struct Target {
 Adjust derives to match the surrounding AST types and add Rustdoc examples
 showing the default and serial forms. Do not add this field to `Rule`.
 
-In `src/ir/graph.rs`, add `dependency_order: DependencyOrder` to `BuildEdge`. In
-`src/ir/from_manifest.rs`, copy the parsed value while leaving `implicit_deps`
-in source order. Update every direct `BuildEdge` construction, fixture, and
-doctest to specify the default explicitly or use a shared test constructor
-where one already exists. Do not introduce a new general-purpose builder solely
-to conceal updates.
+In `src/ir/graph.rs`, define a domain-only `DependencyOrder` with no Serde
+derives or attributes and add it to `BuildEdge`. In `src/ir/from_manifest.rs`,
+convert the parsed AST value explicitly while leaving `implicit_deps` in source
+order. Update every direct `BuildEdge` construction, fixture, and doctest to use
+the IR type explicitly or use a shared test constructor where one already
+exists. Do not introduce a new general-purpose builder solely to conceal
+updates.
 
 Run the parser and IR tests. Also run existing cycle tests to prove the new
 field does not change graph validation.
@@ -1133,3 +1160,28 @@ corrects the requested catalogue wording, rejects Ninja path controls across
 all edge fields and default targets, moves dependency-order lowering tests into
 a dedicated module, and exercises serial runtime order with concurrent jobs and
 observable marker preconditions. No finding in this pass was stale.
+
+2026-08-12: Separated the manifest syntax enum from the domain IR policy. The
+Serde-enabled AST type still owns the lowercase YAML spelling and parallel
+default; `from_manifest` now converts both variants explicitly into a distinct,
+serialization-free IR enum. Focused AST and lowering tests retain omission and
+variant coverage, and a compile-fail Rustdoc check guards the IR boundary.
+
+2026-08-12: Bounded existing-sidecar verification at 16 MiB. Publication now
+checks metadata before allocation, reads through a metadata-sized limit, and
+uses a one-byte probe so concurrent growth cannot make the read unbounded. An
+oversized sidecar fails through a dedicated localized category present in all
+35 catalogues; the focused materialization suite passes all nine tests.
+
+2026-08-12: Restored runner-boundary proof with real `netsuke -j 3 build`
+processes, while retaining the direct Ninja tests as focused lowering evidence.
+Moved all generation timing, spans, registration, counters, and histograms out
+of `src/ninja_gen` and into the runner-owned `generate_ninja` boundary. The
+generator is again a pure, fallible graph-to-bundle transformation and the
+serial contract remains one scheduler with shared-work reuse, ordered failure
+short-circuiting, and concurrency for unrelated branches.
+
+2026-08-12: Clarified the telemetry ownership decision: generation telemetry is
+runner-owned by `src/runner/dyndep_generation_telemetry.rs`, publication
+telemetry is owned by `src/runner/process/dyndep_telemetry.rs`, and Ninja
+generation/rendering remains telemetry-free.

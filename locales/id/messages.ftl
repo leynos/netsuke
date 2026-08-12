@@ -115,6 +115,7 @@ runner.io.dyndep.rename = Gagal menyelesaikan berkas dyndep yang dibuat di { $pa
 runner.io.dyndep.corrupt = Berkas dyndep yang dibuat di { $path } tidak cocok dengan isi yang diharapkan; hapus hanya berkas tersebut lalu coba lagi.
 runner.io.dyndep.race = Proses lain menulis berkas dyndep { $path }, tetapi isinya tidak dapat diverifikasi.
 runner.io.dyndep.temp_collisions = Gagal membuat berkas dyndep sementara yang unik untuk { $path } setelah benturan nama berulang.
+runner.io.dyndep.too_large = Berkas dyndep yang dihasilkan di { $path } melebihi batas verifikasi { $limit } bita.
 
 # Diagnostik manifes.
 manifest.parse = Penguraian manifes gagal.

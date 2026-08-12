@@ -115,6 +115,7 @@ runner.io.dyndep.rename = Không thể hoàn tất tệp dyndep đã tạo tại
 runner.io.dyndep.corrupt = Tệp dyndep đã tạo tại { $path } không khớp với nội dung mong đợi; chỉ xóa tệp đó rồi thử lại.
 runner.io.dyndep.race = Một tiến trình khác đã ghi tệp dyndep { $path }, nhưng không thể xác minh nội dung.
 runner.io.dyndep.temp_collisions = Không thể tạo tệp dyndep tạm thời duy nhất cho { $path } sau nhiều lần trùng tên.
+runner.io.dyndep.too_large = Tệp dyndep đã tạo tại { $path } vượt quá giới hạn xác minh { $limit } byte.
 
 # Chẩn đoán tệp kê khai.
 manifest.parse = Phân tích tệp kê khai thất bại.

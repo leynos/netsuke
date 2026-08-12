@@ -115,6 +115,7 @@ runner.io.dyndep.rename = { $path }의 생성된 dyndep 파일을 확정하지 �
 runner.io.dyndep.corrupt = { $path }의 생성된 dyndep 파일이 예상 콘텐츠와 일치하지 않습니다. 해당 파일만 삭제한 후 다시 시도하세요.
 runner.io.dyndep.race = 다른 프로세스가 dyndep 파일 { $path }을(를) 작성했지만 콘텐츠를 확인하지 못했습니다.
 runner.io.dyndep.temp_collisions = 이름 충돌이 반복되어 { $path }에 대한 고유한 임시 dyndep 파일을 만들지 못했습니다.
+runner.io.dyndep.too_large = { $path }의 생성된 dyndep 파일이 { $limit }바이트 검증 제한을 초과합니다.
 
 # 매니페스트 진단.
 manifest.parse = 매니페스트 해석에 실패했습니다.

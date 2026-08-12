@@ -115,6 +115,7 @@ runner.io.dyndep.rename = Kunne ikke færdiggøre den genererede dyndep-fil på 
 runner.io.dyndep.corrupt = Den genererede dyndep-fil på { $path } matcher ikke det forventede indhold; fjern kun denne fil, og prøv igen.
 runner.io.dyndep.race = En anden proces skrev dyndep-filen { $path }, men indholdet kunne ikke verificeres.
 runner.io.dyndep.temp_collisions = Kunne ikke oprette en entydig midlertidig dyndep-fil for { $path } efter gentagne navnekollisioner.
+runner.io.dyndep.too_large = Den genererede dyndep-fil på { $path } overskrider verificeringsgrænsen på { $limit } byte.
 
 # Manifestdiagnostik.
 manifest.parse = Parsingen af manifestet mislykkedes.

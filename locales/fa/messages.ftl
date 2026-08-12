@@ -115,6 +115,7 @@ runner.io.dyndep.rename = ‏ نهایی‌کردن فایل dyndep تولیدش
 runner.io.dyndep.corrupt = ‏ فایل dyndep تولیدشده در ‏{ $path } با محتوای مورد انتظار مطابقت ندارد؛ فقط همان فایل را حذف کنید و دوباره تلاش کنید.
 runner.io.dyndep.race = ‏ فرایند دیگری فایل dyndep ‏{ $path } را نوشت، اما محتوای آن قابل تأیید نبود.
 runner.io.dyndep.temp_collisions = ‏ پس از برخوردهای مکرر نام‌ها، ایجاد فایل موقت و یکتای dyndep برای ‏{ $path } ممکن نشد.
+runner.io.dyndep.too_large = ‏ فایل dyndep تولیدشده در ‏{ $path } از حدّ تأیید ‏{ $limit } بایت فراتر می‌رود.
 
 # تشخیص‌های مانیفست.
 manifest.parse = تجزیهٔ مانیفست ناکام ماند.

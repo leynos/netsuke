@@ -103,7 +103,7 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 /// graph.targets.insert(Utf8PathBuf::from("out"), BuildEdge {
 ///     action_id: "a".into(), inputs: Vec::new(),
 ///     implicit_deps: Vec::new(),
-///     dependency_order: netsuke::ast::DependencyOrder::Parallel,
+///     dependency_order: netsuke::ir::DependencyOrder::Parallel,
 ///     explicit_outputs: vec![Utf8PathBuf::from("out")],
 ///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
 ///     phony: false, always: false
@@ -212,7 +212,7 @@ pub(crate) fn graph_requires_dyndep(graph: &BuildGraph) -> bool {
 
 /// Whether one edge's serial dependency list needs staged dyndep gates.
 pub(crate) fn edge_requires_gates(edge: &BuildEdge) -> bool {
-    edge.dependency_order == crate::ast::DependencyOrder::Serial && edge.implicit_deps.len() > 1
+    edge.dependency_order == crate::ir::DependencyOrder::Serial && edge.implicit_deps.len() > 1
 }
 /// Wrapper struct to display a rule with its identifier.
 pub(crate) struct NamedAction<'a> {

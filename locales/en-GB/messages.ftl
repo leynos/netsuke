@@ -115,6 +115,7 @@ runner.io.dyndep.rename = Failed to finalise generated dyndep file at { $path }.
 runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
 runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
 runner.io.dyndep.temp_collisions = Failed to create a unique temporary dyndep file for { $path } after repeated name collisions.
+runner.io.dyndep.too_large = Generated dyndep file at { $path } exceeds the { $limit }-byte verification limit.
 
 # Manifest diagnostics.
 manifest.parse = Manifest parse failed.

@@ -29,6 +29,5 @@ mod cycle;
 mod from_manifest;
 mod graph;
 
-pub use crate::ast::DependencyOrder;
 pub(crate) use cmd_interpolate::{INS_TOKEN, OUTS_TOKEN};
-pub use graph::{Action, BuildEdge, BuildGraph, IrGenError};
+pub use graph::{Action, BuildEdge, BuildGraph, DependencyOrder, IrGenError};

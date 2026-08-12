@@ -14,8 +14,8 @@
 //! rejects graphs that require a bundle.
 //!
 //! ```rust
-//! use netsuke::ast::{Recipe, DependencyOrder};
-//! use netsuke::ir::{BuildEdge, BuildGraph};
+//! use netsuke::ast::Recipe;
+//! use netsuke::ir::{BuildEdge, BuildGraph, DependencyOrder};
 //! use netsuke::ninja_gen::generate_bundle;
 //! use camino::Utf8PathBuf;
 //!
@@ -53,8 +53,6 @@
 
 #[path = "dyndep_bundle.rs"]
 mod bundle;
-#[path = "dyndep_telemetry.rs"]
-mod telemetry;
 pub use bundle::{GeneratedDyndep, GeneratedNinja};
 
 use crate::hex;
@@ -91,9 +89,7 @@ const DYNDEP_NAMESPACE: &str = ".netsuke/dyndep";
 /// `.netsuke/dyndep` namespace, and [`NinjaGenError::MissingAction`] when an
 /// edge references an unknown action.
 pub fn generate_bundle(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenError> {
-    telemetry::instrument_bundle_generation(graph.actions.len(), graph.targets.len(), || {
-        generate_bundle_inner(graph)
-    })
+    generate_bundle_inner(graph)
 }
 
 fn generate_bundle_inner(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenError> {
@@ -178,11 +174,9 @@ fn render_serial_edge(
     out: &mut String,
     stages: &mut SerialStages,
 ) -> Result<(), NinjaGenError> {
-    telemetry::instrument_serial_lowering(edge.implicit_deps.len(), || {
-        let mut gate_paths = Vec::new();
-        render_serial_block(edge, out, stages, &mut gate_paths)?;
-        render_display_edge(edge, action_restat, &gate_paths, out)
-    })
+    let mut gate_paths = Vec::new();
+    render_serial_block(edge, out, stages, &mut gate_paths)?;
+    render_display_edge(edge, action_restat, &gate_paths, out)
 }
 
 /// Render an edge using its already selected Ninja action metadata.

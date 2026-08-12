@@ -1648,13 +1648,13 @@ same-directory temporary file plus atomic rename. Keep generated sidecars
 content-addressed and idempotent; corruption is an error, not a reason to
 overwrite an unknown file.
 
-`src/ninja_gen/dyndep_telemetry.rs` and
-`src/runner/process/dyndep_telemetry.rs` own this feature's observability.
-They may wrap the generation and publication boundaries, respectively, with
-bounded outcome-and-duration metrics and spans. Do not put manifest paths,
-action IDs, sidecar names, or content in those fields; rendering and
-publication helpers must remain telemetry-free so their query and command
-responsibilities stay explicit.
+`src/runner/dyndep_generation_telemetry.rs` owns runner-boundary generation
+telemetry, and `src/runner/process/dyndep_telemetry.rs` owns publication
+telemetry. They may wrap their respective boundaries with bounded
+outcome-and-duration metrics and spans. Do not put manifest paths, action IDs,
+sidecar names, or content in those fields; `src/ninja_gen` generation and
+rendering must remain telemetry-free so their query responsibilities stay
+explicit.
 
 The intended serial guarantee is path-scoped. A later dependency that is
 independently reachable elsewhere in the requested graph may start via that

@@ -114,6 +114,7 @@ runner.io.dyndep.rename = 無法完成 { $path } 處產生的 dyndep 檔案。
 runner.io.dyndep.corrupt = { $path } 處產生的 dyndep 檔案與預期內容不符；請只刪除該檔案後重試。
 runner.io.dyndep.race = 另一個程序寫入了 dyndep 檔案 { $path }，但無法驗證其內容。
 runner.io.dyndep.temp_collisions = 多次發生名稱衝突後，仍無法為 { $path } 建立唯一的暫存 dyndep 檔案。
+runner.io.dyndep.too_large = { $path } 處產生的 dyndep 檔案超過 { $limit } 位元組的驗證上限。
 
 # 資訊清單診斷。
 manifest.parse = 資訊清單剖析失敗。

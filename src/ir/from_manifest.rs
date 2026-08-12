@@ -15,7 +15,7 @@ use crate::localization::{self, keys};
 
 use super::{
     cycle::{self, CycleDetectionReport},
-    graph::{Action, BuildEdge, BuildGraph, IrGenError, IrHashMap},
+    graph::{Action, BuildEdge, BuildGraph, DependencyOrder, IrGenError, IrHashMap},
 };
 
 #[path = "from_manifest_support.rs"]
@@ -112,7 +112,7 @@ impl BuildGraph {
                 action_id,
                 inputs,
                 implicit_deps,
-                dependency_order: target.dependency_order,
+                dependency_order: target.dependency_order.into(),
                 explicit_outputs: outputs,
                 implicit_outputs: Vec::new(),
                 order_only_deps: to_paths(&target.order_only_deps),
@@ -164,3 +164,12 @@ impl BuildGraph {
 #[cfg(kani)]
 #[path = "from_manifest_verification.rs"]
 mod verification;
+
+impl From<crate::ast::DependencyOrder> for DependencyOrder {
+    fn from(order: crate::ast::DependencyOrder) -> Self {
+        match order {
+            crate::ast::DependencyOrder::Parallel => Self::Parallel,
+            crate::ast::DependencyOrder::Serial => Self::Serial,
+        }
+    }
+}

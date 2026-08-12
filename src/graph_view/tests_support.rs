@@ -61,7 +61,7 @@ pub(super) fn add_edge(graph: &mut BuildGraph, fixture: EdgeFixture<'_>) {
         action_id: fixture.action_id.into(),
         inputs: fixture.inputs.iter().map(|s| p(s)).collect(),
         implicit_deps: fixture.implicit_deps.iter().map(|s| p(s)).collect(),
-        dependency_order: crate::ast::DependencyOrder::Parallel,
+        dependency_order: crate::ir::DependencyOrder::Parallel,
         explicit_outputs: fixture.explicit_outputs.iter().map(|s| p(s)).collect(),
         implicit_outputs: fixture.implicit_outputs.iter().map(|s| p(s)).collect(),
         order_only_deps: fixture.order_only_deps.iter().map(|s| p(s)).collect(),

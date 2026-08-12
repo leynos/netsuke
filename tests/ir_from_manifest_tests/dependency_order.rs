@@ -61,6 +61,30 @@ fn serial_dependency_order_survives_lowering(
 }
 
 #[rstest]
+fn explicit_parallel_dependency_order_survives_lowering() -> Result<()> {
+    let yaml = concat!(
+        "netsuke_version: '1.0.0'\n",
+        "targets:\n",
+        "  - name: all\n",
+        "    dependency_order: parallel\n",
+        "    deps: [check-fmt, lint]\n",
+        "    command: echo $out\n",
+    );
+    let manifest = manifest::from_str(yaml)?;
+    let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
+    let edge = graph
+        .targets
+        .get(&Utf8PathBuf::from("all"))
+        .context("expected edge for all")?;
+    ensure!(
+        edge.dependency_order == DependencyOrder::Parallel,
+        "expected explicit parallel dependency order, got {:?}",
+        edge.dependency_order
+    );
+    Ok(())
+}
+
+#[rstest]
 fn parallel_dependency_order_lowering_is_default() -> Result<()> {
     let yaml = concat!(
         "netsuke_version: '1.0.0'\n",

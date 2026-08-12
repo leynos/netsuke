@@ -115,6 +115,7 @@ runner.io.dyndep.rename = ไม่สามารถดำเนินการ
 runner.io.dyndep.corrupt = ไฟล์ dyndep ที่สร้างขึ้นที่ { $path } ไม่ตรงกับเนื้อหาที่คาดไว้ ให้ลบเฉพาะไฟล์นี้แล้วลองอีกครั้ง
 runner.io.dyndep.race = กระบวนการอื่นเขียนไฟล์ dyndep { $path } แต่ไม่สามารถตรวจสอบเนื้อหาได้
 runner.io.dyndep.temp_collisions = ไม่สามารถสร้างไฟล์ dyndep ชั่วคราวที่ไม่ซ้ำกันสำหรับ { $path } ได้หลังเกิดชื่อชนกันหลายครั้ง
+runner.io.dyndep.too_large = ไฟล์ dyndep ที่สร้างขึ้นที่ { $path } มีขนาดเกินขีดจำกัดการตรวจสอบ { $limit } ไบต์
 
 # การวินิจฉัยไฟล์รายการ
 manifest.parse = การแจงไฟล์รายการล้มเหลว

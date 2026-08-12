@@ -1,8 +1,8 @@
 //! Unit tests for staged dyndep bundle generation.
 
 use super::*;
-use crate::ast::{DependencyOrder, Recipe};
-use crate::ir::{Action, BuildGraph};
+use crate::ast::Recipe;
+use crate::ir::{Action, BuildGraph, DependencyOrder};
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use rstest::rstest;
