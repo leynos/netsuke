@@ -267,9 +267,13 @@ fn help_targets_with_invalid_manifest_reports_error() -> Result<()> {
         })),
         ..Cli::default()
     };
-    let Err(_) = run_help_targets(&cli) else {
-        anyhow::bail!("expected help targets to fail with invalid manifest");
-    };
+    let error = run_help_targets(&cli).expect_err("invalid manifest should fail help targets");
+    ensure!(
+        error
+            .chain()
+            .any(|cause| cause.to_string().contains("Manifest parse failed.")),
+        "error should identify the manifest parsing failure: {error:?}"
+    );
     Ok(())
 }
 
