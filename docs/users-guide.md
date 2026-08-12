@@ -466,7 +466,7 @@ dependencies, and generated builds containing staged serial ordering require
 Ninja 1.10 or newer.
 `netsuke generate`, `build`, and `clean` materialize the generated sidecars
 under `.netsuke/dyndep` in the effective working directory. Those
-content-addressed files are reusable state and `clean` does not remove them.
+content-addressed files are reusable state, and `clean` does not remove them.
 Do not define targets beneath `.netsuke/serial` or `.netsuke/dyndep`; Netsuke
 reserves both paths for this feature.
 

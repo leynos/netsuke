@@ -11,8 +11,8 @@ use camino::Utf8PathBuf;
 
 /// Escape a Ninja path for embedding in a build or dyndep document.
 pub(crate) fn escape_ninja_path(path: &str) -> Result<String, NinjaGenError> {
-    if path.contains('|') {
-        return Err(unsupported_path_character(path, '|'));
+    if let Some(character) = unsupported_character(path) {
+        return Err(unsupported_path_character(path, character));
     }
     let mut out = String::with_capacity(path.len());
     for ch in path.chars() {
@@ -37,12 +37,25 @@ pub(crate) fn reject_unsupported_path_characters(graph: &BuildGraph) -> Result<(
             .chain(&edge.implicit_deps)
             .chain(&edge.order_only_deps)
         {
-            if path.as_str().contains('|') {
-                return Err(unsupported_path_character(path.as_str(), '|'));
-            }
+            validate_path(path.as_str())?;
         }
     }
+    for path in &graph.default_targets {
+        validate_path(path.as_str())?;
+    }
     Ok(())
+}
+
+fn validate_path(path: &str) -> Result<(), NinjaGenError> {
+    if let Some(character) = unsupported_character(path) {
+        return Err(unsupported_path_character(path, character));
+    }
+    Ok(())
+}
+
+fn unsupported_character(path: &str) -> Option<char> {
+    path.chars()
+        .find(|character| matches!(character, '|' | '\t' | '\r' | '\n'))
 }
 
 fn unsupported_path_character(path: &str, character: char) -> NinjaGenError {

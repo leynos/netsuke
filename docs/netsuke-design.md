@@ -222,6 +222,7 @@ erDiagram
         Recipe recipe
         StringOrList sources
         StringOrList deps
+        string dependency_order
         StringOrList order_only_deps
         map vars
         string description

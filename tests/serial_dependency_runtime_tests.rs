@@ -52,10 +52,22 @@ fn edge(
 fn serial_order_graph() -> BuildGraph {
     let mut graph = BuildGraph::default();
     for (name, command) in [
-        ("fmt", "echo one >> order.log"),
-        ("lint", "echo two >> order.log"),
-        ("test", "echo three >> order.log"),
-        ("all", "echo all >> order.log"),
+        (
+            "fmt",
+            "test ! -e check-fmt && echo one >> order.log && touch check-fmt",
+        ),
+        (
+            "lint",
+            "test -e check-fmt && test ! -e lint && echo two >> order.log && touch lint",
+        ),
+        (
+            "test",
+            "test -e lint && test ! -e test && echo three >> order.log && touch test",
+        ),
+        (
+            "all",
+            "test -e test && test ! -e all && echo all >> order.log && touch all",
+        ),
     ] {
         graph.actions.insert(name.into(), action(command));
     }
@@ -179,23 +191,39 @@ fn run_ninja_with_jobs(
         .context("spawn ninja")
 }
 
-#[test]
-fn serial_deps_run_in_declaration_order() -> Result<()> {
-    let dir = tempfile::tempdir()?;
-    let bundle = generate_bundle(&serial_order_graph())?;
-    let main = stage_bundle(&dir, &bundle)?;
-    let out = run_ninja(&dir, &main)?;
+struct SuccessfulNinjaRun {
+    _directory: TempDir,
+    root: Dir,
+}
+
+fn run_successful_graph(graph: &BuildGraph, jobs: u8) -> Result<SuccessfulNinjaRun> {
+    let directory = tempfile::tempdir()?;
+    let bundle = generate_bundle(graph)?;
+    let main = stage_bundle(&directory, &bundle)?;
+    let output = run_ninja_with_jobs(&directory, &main, jobs)?;
     ensure!(
-        out.status.success(),
+        output.status.success(),
         "ninja failed: {}",
-        String::from_utf8_lossy(&out.stderr)
+        String::from_utf8_lossy(&output.stderr)
     );
-    let root_path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).map_err(|path| {
+    let root_path = Utf8PathBuf::from_path_buf(directory.path().to_path_buf()).map_err(|path| {
         anyhow::anyhow!("temporary Ninja directory is not UTF-8: {}", path.display())
     })?;
     let root = Dir::open_ambient_dir(&root_path, ambient_authority())
         .context("open temporary Ninja directory")?;
-    let log = root.read_to_string("order.log").context("read order log")?;
+    Ok(SuccessfulNinjaRun {
+        _directory: directory,
+        root,
+    })
+}
+
+#[test]
+fn serial_deps_run_in_declaration_order() -> Result<()> {
+    let run = run_successful_graph(&serial_order_graph(), 3)?;
+    let log = run
+        .root
+        .read_to_string("order.log")
+        .context("read order log")?;
     ensure!(
         log.lines().collect::<Vec<_>>() == vec!["one", "two", "three", "all"],
         "deps ran out of order: {log:?}"
@@ -278,21 +306,9 @@ fn failure_of_early_dep_stops_later_stages() -> Result<()> {
 
 #[test]
 fn shared_serial_work_runs_once_while_unrelated_work_progresses() -> Result<()> {
-    let dir = tempfile::tempdir()?;
-    let bundle = generate_bundle(&shared_work_graph())?;
-    let main = stage_bundle(&dir, &bundle)?;
-    let out = run_ninja_with_jobs(&dir, &main, 3)?;
-    ensure!(
-        out.status.success(),
-        "ninja failed: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let root_path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).map_err(|path| {
-        anyhow::anyhow!("temporary Ninja directory is not UTF-8: {}", path.display())
-    })?;
-    let root = Dir::open_ambient_dir(&root_path, ambient_authority())
-        .context("open temporary Ninja directory")?;
-    let executions = root
+    let run = run_successful_graph(&shared_work_graph(), 3)?;
+    let executions = run
+        .root
         .read_to_string("execution.log")
         .context("read shared-work log")?;
     ensure!(
@@ -300,7 +316,7 @@ fn shared_serial_work_runs_once_while_unrelated_work_progresses() -> Result<()> 
         "shared work must execute once: {executions:?}"
     );
     ensure!(
-        root.open("all").is_ok(),
+        run.root.open("all").is_ok(),
         "aggregate must finish after serial consumers and unrelated work"
     );
     Ok(())

@@ -109,12 +109,12 @@ runner.io.non_utf8_path = Cesty, které nejsou v UTF-8, nejsou podporovány (ces
 runner.io.write_stdout = Manifest Ninja se nepodařilo zapsat na standardní výstup.
 runner.io.flush_stdout = Vyrovnávací paměť standardního výstupu se nepodařilo vyprázdnit.
 runner.io.dyndep.create_dir = Nepodařilo se vytvořit adresář dyndep { $path }.
-runner.io.dyndep.read = Nepodařilo se přečíst vygenerovaný soubor dyndep v { $path }.
-runner.io.dyndep.write = Nepodařilo se zapsat vygenerovaný soubor dyndep do { $path }.
-runner.io.dyndep.rename = Nepodařilo se dokončit vygenerovaný soubor dyndep v { $path }.
-runner.io.dyndep.corrupt = Vygenerovaný soubor dyndep v { $path } neodpovídá očekávanému obsahu; odstraňte pouze tento soubor a zkuste to znovu.
+runner.io.dyndep.read = Nepodařilo se přečíst vygenerovaný soubor dyndep (cesta: { $path }).
+runner.io.dyndep.write = Nepodařilo se zapsat vygenerovaný soubor dyndep (cesta: { $path }).
+runner.io.dyndep.rename = Nepodařilo se dokončit vygenerovaný soubor dyndep (cesta: { $path }).
+runner.io.dyndep.corrupt = Vygenerovaný soubor dyndep (cesta: { $path }) neodpovídá očekávanému obsahu; odstraňte pouze tento soubor a zkuste to znovu.
 runner.io.dyndep.race = Jiný proces zapsal soubor dyndep { $path }, ale jeho obsah se nepodařilo ověřit.
-runner.io.dyndep.temp_collisions = Po opakovaných kolizích názvů se nepodařilo vytvořit jedinečný dočasný soubor dyndep pro { $path }.
+runner.io.dyndep.temp_collisions = Po opakovaných kolizích názvů se nepodařilo vytvořit jedinečný dočasný soubor dyndep (cesta: { $path }).
 
 # Diagnostika manifestu.
 manifest.parse = Zpracování manifestu selhalo.

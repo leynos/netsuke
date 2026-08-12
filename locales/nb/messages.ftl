@@ -182,7 +182,7 @@ ninja_gen.missing_action = Handlingen «{ $id }» som en byggekant viser til, ma
 ninja_gen.format = Utdataene fra Ninja-manifestet kunne ikke formateres.
 ninja_gen.dyndep_files_required = Dette bygget krever en generert Ninja-pakke. Bruk `netsuke build`, `netsuke clean` eller `netsuke generate` for å materialisere dyndep-filene.
 ninja_gen.reserved_output_path = Stien '{ $path }' er reservert for Netsukes serielle avhengighetstilstand.
-ninja_gen.unsupported_path_character = Stien '{ $path }' inneholder det ikke-støttede Ninja-banetecknet '{ $character }'.
+ninja_gen.unsupported_path_character = Stien '{ $path }' inneholder det ikke-støttede Ninja-banetegnet '{ $character }'.
 
 # Validering av vertsmønstre.
 host_pattern.empty = Vertsmønsteret kan ikke være tomt.

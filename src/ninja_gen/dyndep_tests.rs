@@ -197,6 +197,12 @@ enum EdgePathField {
     OrderOnlyDependency,
 }
 
+#[derive(Clone, Copy)]
+enum GraphPathField {
+    Edge(EdgePathField),
+    DefaultTarget,
+}
+
 fn set_edge_path(edge: &mut BuildEdge, field: EdgePathField, path: &str) {
     let paths = vec![Utf8PathBuf::from(path)];
     match field {
@@ -206,6 +212,52 @@ fn set_edge_path(edge: &mut BuildEdge, field: EdgePathField, path: &str) {
         EdgePathField::ImplicitDependency => edge.implicit_deps = paths,
         EdgePathField::OrderOnlyDependency => edge.order_only_deps = paths,
     }
+}
+
+fn graph_with_path(field: GraphPathField, path: &str) -> Result<BuildGraph> {
+    let mut edge = parallel_edge("all", &["dep"]);
+    if let GraphPathField::Edge(edge_field) = field {
+        set_edge_path(&mut edge, edge_field, path);
+        if matches!(edge_field, EdgePathField::ExplicitOutput) {
+            edge.explicit_outputs.insert(0, Utf8PathBuf::from("all"));
+        }
+    }
+    let mut graph = graph_with_edge(edge)?;
+    if matches!(field, GraphPathField::DefaultTarget) {
+        graph.default_targets = vec![Utf8PathBuf::from(path)];
+    }
+    Ok(graph)
+}
+
+#[rstest]
+fn unsupported_control_characters_are_rejected_in_every_path_field(
+    #[values(
+        GraphPathField::Edge(EdgePathField::ExplicitOutput),
+        GraphPathField::Edge(EdgePathField::ImplicitOutput),
+        GraphPathField::Edge(EdgePathField::Input),
+        GraphPathField::Edge(EdgePathField::ImplicitDependency),
+        GraphPathField::Edge(EdgePathField::OrderOnlyDependency),
+        GraphPathField::DefaultTarget
+    )]
+    field: GraphPathField,
+    #[values('\t', '\r', '\n')] character: char,
+) -> Result<()> {
+    let path = format!("invalid{character}path");
+    let graph = graph_with_path(field, &path)?;
+    let error = generate_bundle(&graph)
+        .err()
+        .context("unsupported control character must be rejected")?;
+    ensure!(
+        matches!(
+            error,
+            NinjaGenError::UnsupportedPathCharacter {
+                character: actual,
+                ..
+            } if actual == character
+        ),
+        "expected UnsupportedPathCharacter for {character:?}, got {error:?}"
+    );
+    Ok(())
 }
 
 #[rstest]

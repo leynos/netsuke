@@ -109,12 +109,12 @@ runner.io.non_utf8_path = Шляхи, відмінні від UTF-8, не під
 runner.io.write_stdout = Не вдалося записати маніфест Ninja у стандартний потік виводу.
 runner.io.flush_stdout = Не вдалося скинути буфер стандартного потоку виводу.
 runner.io.dyndep.create_dir = Не вдалося створити каталог dyndep { $path }.
-runner.io.dyndep.read = Не вдалося прочитати створений файл dyndep у { $path }.
-runner.io.dyndep.write = Не вдалося записати створений файл dyndep у { $path }.
-runner.io.dyndep.rename = Не вдалося завершити створений файл dyndep у { $path }.
-runner.io.dyndep.corrupt = Створений файл dyndep у { $path } не відповідає очікуваному вмісту; видаліть лише цей файл і повторіть спробу.
+runner.io.dyndep.read = Не вдалося прочитати створений файл dyndep (шлях: { $path }).
+runner.io.dyndep.write = Не вдалося записати створений файл dyndep (шлях: { $path }).
+runner.io.dyndep.rename = Не вдалося завершити створений файл dyndep (шлях: { $path }).
+runner.io.dyndep.corrupt = Створений файл dyndep (шлях: { $path }) не відповідає очікуваному вмісту; видаліть лише цей файл і повторіть спробу.
 runner.io.dyndep.race = Інший процес записав файл dyndep { $path }, але його вміст не вдалося перевірити.
-runner.io.dyndep.temp_collisions = Не вдалося створити унікальний тимчасовий файл dyndep для { $path } після повторних колізій імен.
+runner.io.dyndep.temp_collisions = Не вдалося створити унікальний тимчасовий файл dyndep (шлях: { $path }) після повторних колізій імен.
 
 # Діагностика маніфесту.
 manifest.parse = Не вдалося розібрати маніфест.

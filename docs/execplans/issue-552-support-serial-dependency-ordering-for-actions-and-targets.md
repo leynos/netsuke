@@ -306,9 +306,24 @@ criterion in issue #552 and all repository gates pass.
   `make typecheck`, `make lint`, `make test`, `make markdownlint`, and `make
   nixie` passed; the full suite reported 1,952 passed tests, one skipped test,
   and passing doctests. CodeRabbit completed with zero findings.
+- [x] (2026-08-12) Validated the second review remediation: control-character
+  path rejection, dependency-order module split, concurrent runtime-order
+  coverage, schema and migration links, and targeted locale corrections are
+  implemented. All 52 focused tests passed. `make check-fmt`, `make typecheck`,
+  `make lint`, `make test`, `make markdownlint`, and `make nixie` passed; the
+  full suite reported 1,970 passed tests, one skipped test, and passing
+  doctests. The subsequent independent CodeRabbit review reported zero
+  findings.
 
 ## Surprises and discoveries
 
+- (2026-08-12) The first full second-review test run found that the shared
+  shell-quoting BDD fixture still contained a newline-bearing output path. The
+  new generator validation correctly rejected the whole graph, preventing two
+  otherwise unrelated quoting scenarios from observing generated content. The
+  fixture now uses its existing apostrophe path as the edge case; IR-level
+  command interpolation coverage remains separate from the generator's stricter
+  Ninja path contract.
 - (2026-08-11) The prior materializer commit accidentally left surplus blank
   lines at EOF in each changed Fluent catalogue. `git show --check` reports
   them even though the current worktree is clean. Remove only those trailing
@@ -1110,3 +1125,11 @@ implementation. The plan contains no machine-specific absolute path, so no
 path replacement was needed; the test-results sentence was corrected, and the
 ADR, design sketch, and user's guide now align with the `BuildEdge` policy and
 staged serial-ordering contract.
+
+2026-08-12: A second review pass verified every reported schema, link,
+punctuation, locale, control-character, and test-structure issue against the
+current branch. The minimal remediation adds the missing manifest-schema field,
+corrects the requested catalogue wording, rejects Ninja path controls across
+all edge fields and default targets, moves dependency-order lowering tests into
+a dedicated module, and exercises serial runtime order with concurrent jobs and
+observable marker preconditions. No finding in this pass was stale.

@@ -180,7 +180,7 @@ ir.invalid_command = Ogiltig interpolering i kommandot: { $snippet }.
 # Fel vid generering av Ninja.
 ninja_gen.missing_action = Åtgärden ”{ $id }” som en byggbåge hänvisar till saknas.
 ninja_gen.format = Ninja-manifestets utdata kunde inte formateras.
-ninja_gen.dyndep_files_required = Den här byggningen kräver ett genererat Ninja-paket; använd `netsuke build`, `netsuke clean` eller `netsuke generate` för att materialisera dyndep-filerna.
+ninja_gen.dyndep_files_required = Det här bygget kräver ett genererat Ninja-paket; använd `netsuke build`, `netsuke clean` eller `netsuke generate` för att materialisera dyndep-filerna.
 ninja_gen.reserved_output_path = Sökvägen '{ $path }' är reserverad för Netsukes seriella beroendetillstånd.
 ninja_gen.unsupported_path_character = Sökvägen '{ $path }' innehåller det tecken i Ninja-sökvägar som inte stöds: '{ $character }'.
 
