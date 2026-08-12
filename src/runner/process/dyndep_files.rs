@@ -30,10 +30,14 @@ pub(crate) const DYNDEP_DIR: &str = ".netsuke/dyndep";
 ///
 /// # Errors
 ///
-/// Returns an error if the working directory cannot be opened or the
-/// `.netsuke/dyndep` directory created, or if any sidecar write, rename, or
-/// content verification fails.
+/// Returns successfully without opening the working directory when
+/// `dyndep_files` is empty. Otherwise returns an error if the working directory
+/// cannot be opened or the `.netsuke/dyndep` directory created, or if any
+/// sidecar write, rename, or content verification fails.
 pub fn materialize_dyndep_files(cli: &Cli, dyndep_files: &[GeneratedDyndep]) -> Result<()> {
+    if dyndep_files.is_empty() {
+        return Ok(());
+    }
     let dir = open_effective_dir(cli)?;
     dir.create_dir_all(DYNDEP_DIR).with_context(|| {
         localization::message(keys::RUNNER_IO_DYNDEP_CREATE_DIR)
@@ -262,6 +266,20 @@ mod tests {
                 "ninja_dyndep_version = 1\n",
             )],
         )?;
+        Ok(())
+    }
+
+    #[test]
+    fn empty_sidecar_list_does_not_create_dyndep_directory() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let cli = temp_cli(temp.path());
+
+        materialize_dyndep_files(&cli, &[])?;
+
+        ensure!(
+            temp_dir(&temp)?.open(DYNDEP_DIR).is_err(),
+            "empty sidecar list must not create {DYNDEP_DIR}"
+        );
         Ok(())
     }
 

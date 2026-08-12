@@ -598,19 +598,19 @@ no narrower — that covers the enumerated integration-test crates. The
 `test_support` crate uses capability-backed fixture helpers and remains linted
 by Whitaker under its own narrow policy.
 
-`test_support` is a workspace member, but the root Whitaker invocation selects
-only the `netsuke-build` package (the Cargo package name behind the `netsuke`
-targets; see ADR-007) and disables Dylint dependency checks. It therefore
-compiles `test_support` as a dependency without applying the root
-`dylint.toml`. Its one sanctioned ambient boundary is configured per crate.
-Workspace membership makes Dylint discover the root configuration even when
-launched from `test_support/`, so the scoped recipe supplies the contents of
-`test_support/dylint.toml` explicitly through `DYLINT_TOML`. The second pass
-also uses `--package test_support` and `--no-deps`, because running from a
-member directory alone would otherwise check the parent workspace. That
-configuration names only `test_support::fs` in `excluded_paths`. The root
-`excluded_crates` must not contain `test_support`: every other module in the
-crate remains subject to the filesystem policy.
+The root Whitaker invocation selects only the `netsuke-build` package (the
+Cargo package name behind the `netsuke` targets; see ADR-007) and disables
+Dylint dependency checks. It supplies the root `dylint.toml` contents
+explicitly through `DYLINT_TOML`, so every invocation receives the same
+capability-boundary policy regardless of how Dylint resolves the current
+crate. `test_support` is a workspace member with one sanctioned ambient
+boundary configured per crate. Its second, scoped invocation supplies
+`test_support/dylint.toml` through `DYLINT_TOML`, and uses `--package
+test_support` and `--no-deps`, because running from a member directory alone
+would otherwise check the parent workspace. That configuration names only
+`test_support::fs` in `excluded_paths`. The root `excluded_crates` must not
+contain `test_support`: every other module in the crate remains subject to the
+filesystem policy.
 
 Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
 allows. Do not use Rust `#[allow]` or `#[expect]` for `no_std_fs_operations`:

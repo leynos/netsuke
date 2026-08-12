@@ -252,6 +252,16 @@ criterion in issue #552 and all repository gates pass.
   lowering, and emitted text. Committed as `ce47d61`. The focused dyndep tests
   and `make check-fmt`, `make typecheck`, `make lint`, and `make test` passed
   with no generated-output or snapshot changes.
+- [x] (2026-08-12) Added the empty-sidecar fast path to
+  `materialize_dyndep_files` before capability opening and state-directory
+  creation, with a focused test proving it does not create `.netsuke/dyndep`.
+  The focused materializer suite passed. The first full lint run exposed that
+  the root Whitaker recipe did not pass the existing `dylint.toml` policy to
+  Dylint; its documented build-script and ambient-path exclusions therefore
+  appeared as false positives. The recipe now supplies `DYLINT_TOML` explicitly
+  for the root pass, matching the existing `test_support` pass. `make
+  check-fmt`, `make typecheck`, `make lint`, `make test`, `make markdownlint`,
+  and `make nixie` all passed afterwards.
 - [x] Committed each green logical change and recorded final evidence here.
 
 ## Surprises and discoveries
@@ -996,3 +1006,9 @@ failures retain their existing localization and error behaviour.
 selection from individual-edge rendering. The new helpers retain the exact
 serial staging and ordinary display paths, so generated Ninja text, sidecar
 content, and MissingAction errors remain unchanged.
+
+2026-08-12: Added an empty-sidecar materialization fast path. The first full
+gate run exposed pre-existing ambient filesystem findings because the root
+Whitaker recipe omitted its `DYLINT_TOML` input. Passing the existing policy to
+that invocation restores its intentionally narrow exclusions without weakening
+the capability lint; the full deterministic suite passed afterwards.
