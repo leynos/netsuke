@@ -389,10 +389,12 @@ parent-relative patterns such as `glob('../shared/*.h')`. Expansion is scoped
 to the pattern's longest literal directory prefix — the text up to the first
 `*`, `?`, `[` or `{`, trimmed back to the last separator, so `src/` for
 `src/**/*.c`. If that prefix does not exist, or names something that is not a
-directory, the call returns an empty list rather than failing. A match is
-skipped rather than reported as an error when the metadata lookup fails
-because a symbolic link — the match itself or a directory reached on the way
-to it — resolves outside that prefix or dangles. A cyclic symbolic link is
+directory, the call returns an empty list rather than failing. A symbolic-link
+literal prefix, such as `src/link/*.c`, cannot establish the capability and
+causes expansion to fail. A match is skipped rather than reported as an error
+when the metadata lookup cannot resolve a symbolic link — the match itself or
+a directory reached on the way to it — because it is unreadable within the
+prefix, dangling, or resolves outside that prefix. A cyclic symbolic link is
 reported as an error rather than skipped, since it describes a broken tree
 rather than a missing file.
 
@@ -1051,8 +1053,10 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   scoped to the pattern's literal directory prefix, so it cannot inspect
   anything outside the subtree the pattern can match; the pattern match walk
   itself still uses ambient filesystem access.
-- Verbose glob tracing preserves relative patterns and prefixes, but replaces
-  absolute forms with `<absolute>`.
+- Verbose glob tracing replaces every caller-controlled path field — patterns,
+  prefixes, and sampled relative matches — with the stable `<redacted>` marker.
+  Aggregate metrics retain only bounded status and reason data. Error messages
+  may retain the original input so invalid patterns can be explained.
 - `raw` template output and handwritten shell fragments remain the manifest
   author's responsibility.
 - Literal shell dollar expressions currently require Ninja-aware escaping,

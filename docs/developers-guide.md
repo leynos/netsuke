@@ -1659,8 +1659,9 @@ decision to scope the capability this way and the alternatives it rejected.
 of the capability-scoped walk that are expected rather than erroneous, so
 neither reaches the top-level diagnostics: a literal prefix that names no
 directory, and matches dropped because a symbolic link cannot be resolved
-through the capability. It aggregates every skipped entry while retaining at
-most the first four unreachable-symlink paths as a trace sample. The
+through the capability, including an unreadable link within the prefix. It
+aggregates every skipped entry while retaining at most the first four
+unreachable-symlink paths as a trace sample. The
 `src/manifest/mod.rs` adapter records those observations after the query at the
 Jinja `glob` helper's orchestration boundary, via `glob::record_expansion`.
 Keeping recording there leaves the expansion query free of metrics and tracing
@@ -1674,13 +1675,12 @@ reproduce it.
   every skipped entry, not only the sampled paths. Labels carry only these
   closed sets, never the pattern or a path, in line with the low-cardinality
   rule in `AGENTS.md`.
-- **Tracing** — events preserve relative patterns and prefixes, but replace
-  either absolute form with the stable `<absolute>` marker. Errors retain the
-  caller's pattern so they can explain invalid input precisely. A skipped
-  unreachable-symlink event is emitted only for the retained sample, with no
-  more than four such events per expansion, and each sampled path is recorded
-  relative to the literal prefix. Tracing therefore never discloses where
-  that prefix sits on disk.
+- **Tracing** — every caller-controlled path field is replaced with the stable
+  `<redacted>` marker: patterns, prefixes, and sampled relative matches. A
+  skipped unreachable-symlink event is emitted only for the retained sample,
+  with no more than four such events per expansion. Metrics retain only
+  bounded aggregate status and reason data; errors may retain the caller's
+  original pattern so invalid input can be explained precisely.
 
 ## Test isolation utilities
 

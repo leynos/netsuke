@@ -123,9 +123,10 @@ prefix instead of at a fixed root:
   and unreachable-symlink outcomes as low-cardinality counters
   (`netsuke_manifest_glob_expansions_total`,
   `netsuke_manifest_glob_entries_skipped_total`) labelled only by a closed
-  set of outcome and reason strings. Tracing preserves relative patterns and
-  prefixes, replaces absolute forms with `<absolute>`, and never carries a
-  matched path outside the literal prefix the pattern itself named.
+  set of outcome and reason strings. Tracing replaces every caller-controlled
+  path field — patterns, prefixes, and sampled relative matches — with the
+  stable `<redacted>` marker. Errors may retain the original caller input so
+  invalid patterns can be explained precisely.
 
 ## Alternatives considered
 
