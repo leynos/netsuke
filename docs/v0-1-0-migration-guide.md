@@ -16,6 +16,7 @@ on it is conditional on tracking those changes.
 
 ## At-a-glance changes
 
+<!-- markdownlint-disable-next-line MD013 -->
 Table: documented v0.1.0 additions, including `netsuke help targets`, and their impact
 
 | Area | Impact | Where to read more |

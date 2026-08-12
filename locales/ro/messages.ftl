@@ -351,8 +351,8 @@ stdlib.register.dir_non_utf8 = Directorul curent conține componente care nu sun
 # Raportarea stării în modul de ieșire accesibil.
 status.state.pending = în așteptare
 status.state.running = în desfășurare
-status.state.done = finalizat
-status.state.failed = eșuat
+status.state.done = finalizată
+status.state.failed = eșuată
 status.stage.label = Etapa { $current }/{ $total }: { $description }
 status.stage.summary = [{ $state }] { $label }
 status.stage.summary_with_task = [{ $state }] { $label } ({ $task_progress })
