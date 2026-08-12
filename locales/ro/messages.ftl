@@ -102,17 +102,19 @@ runner.io.write_ninja_file = Fișierul Ninja din { $path } nu a putut fi scris.
 runner.io.flush_ninja_file = Memoria tampon a fișierului Ninja din { $path } nu a putut fi golită.
 runner.io.sync_ninja_file = Fișierul Ninja din { $path } nu a putut fi sincronizat.
 runner.io.open_ambient_dir = Directorul înconjurător nu a putut fi deschis.
+runner.io.non_utf8_working_directory = Calea directorului de lucru nu este UTF-8 valid.
 runner.io.no_existing_ancestor = Pentru { $path } nu există niciun director părinte.
 runner.io.derive_relative_path = Calea Ninja relativă nu a putut fi dedusă.
 runner.io.non_utf8_path = Căile care nu sunt UTF-8 nu sunt acceptate (calea: { $path }).
 runner.io.write_stdout = Manifestul Ninja nu a putut fi scris la ieșirea standard.
 runner.io.flush_stdout = Memoria tampon a ieșirii standard nu a putut fi golită.
-runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
-runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
-runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
-runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
-runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
-runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
+runner.io.dyndep.create_dir = Nu s-a putut crea directorul dyndep { $path }.
+runner.io.dyndep.read = Nu s-a putut citi fișierul dyndep generat la { $path }.
+runner.io.dyndep.write = Nu s-a putut scrie fișierul dyndep generat la { $path }.
+runner.io.dyndep.rename = Nu s-a putut finaliza fișierul dyndep generat la { $path }.
+runner.io.dyndep.corrupt = Fișierul dyndep generat la { $path } nu corespunde conținutului așteptat; eliminați doar acest fișier și încercați din nou.
+runner.io.dyndep.race = Un alt proces a scris fișierul dyndep { $path }, dar conținutul său nu a putut fi verificat.
+runner.io.dyndep.temp_collisions = Nu s-a putut crea un fișier dyndep temporar unic pentru { $path } după coliziuni repetate de nume.
 
 # Diagnostice ale manifestului.
 manifest.parse = Analiza manifestului a eșuat.
@@ -178,8 +180,9 @@ ir.invalid_command = Interpolare nevalidă în comandă: { $snippet }.
 # Erori la generarea fișierelor Ninja.
 ninja_gen.missing_action = Lipsește acțiunea „{ $id }” la care face referire o muchie de construire.
 ninja_gen.format = Ieșirea manifestului Ninja nu a putut fi formatată.
-ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
-ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
+ninja_gen.dyndep_files_required = Această compilare necesită un pachet Ninja generat; utilizați `netsuke build`, `netsuke clean` sau `netsuke generate` pentru a materializa fișierele dyndep.
+ninja_gen.reserved_output_path = Calea '{ $path }' este rezervată pentru starea dependențelor seriale Netsuke.
+ninja_gen.unsupported_path_character = Calea '{ $path }' conține caracterul de cale Ninja nesuportat '{ $character }'.
 
 # Validarea tiparelor de gazdă.
 host_pattern.empty = Tiparul de gazdă nu trebuie să fie gol.

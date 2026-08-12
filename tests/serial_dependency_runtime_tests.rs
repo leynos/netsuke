@@ -11,6 +11,7 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use netsuke::ast::{DependencyOrder, Recipe};
 use netsuke::ir::{Action, BuildEdge, BuildGraph};
 use netsuke::ninja_gen::generate_bundle;
+use std::io::ErrorKind;
 use std::process::Command;
 use tempfile::TempDir;
 
@@ -168,6 +169,13 @@ fn run_ninja_with_jobs(
         .arg(jobs.to_string())
         .arg("all")
         .output()
+        .map_err(|error| {
+            if error.kind() == ErrorKind::NotFound {
+                anyhow::anyhow!("ninja must be available on PATH to run serial dependency tests")
+            } else {
+                error.into()
+            }
+        })
         .context("spawn ninja")
 }
 

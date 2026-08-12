@@ -103,17 +103,19 @@ runner.io.write_ninja_file = No se pudo escribir el archivo Ninja en { $path }.
 runner.io.flush_ninja_file = No se pudo vaciar el archivo Ninja en { $path }.
 runner.io.sync_ninja_file = No se pudo sincronizar el archivo Ninja en { $path }.
 runner.io.open_ambient_dir = No se pudo abrir el directorio del entorno.
+runner.io.non_utf8_working_directory = La ruta del directorio de trabajo no es un UTF-8 válido.
 runner.io.no_existing_ancestor = No existe un directorio antecesor para { $path }.
 runner.io.derive_relative_path = No se pudo derivar la ruta relativa de Ninja.
 runner.io.non_utf8_path = No se admiten rutas que no sean UTF-8 (ruta: { $path }).
 runner.io.write_stdout = No se pudo escribir el manifiesto de Ninja en stdout.
 runner.io.flush_stdout = No se pudo vaciar stdout.
-runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
-runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
-runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
-runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
-runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
-runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
+runner.io.dyndep.create_dir = No se pudo crear el directorio dyndep { $path }.
+runner.io.dyndep.read = No se pudo leer el archivo dyndep generado en { $path }.
+runner.io.dyndep.write = No se pudo escribir el archivo dyndep generado en { $path }.
+runner.io.dyndep.rename = No se pudo finalizar el archivo dyndep generado en { $path }.
+runner.io.dyndep.corrupt = El archivo dyndep generado en { $path } no coincide con el contenido esperado; elimine solo ese archivo y vuelva a intentarlo.
+runner.io.dyndep.race = Otro proceso escribió el archivo dyndep { $path }, pero no se pudo verificar su contenido.
+runner.io.dyndep.temp_collisions = No se pudo crear un archivo dyndep temporal único para { $path } tras repetidas colisiones de nombres.
 
 # Diagnósticos del manifiesto.
 manifest.parse = Falló el análisis del manifiesto.
@@ -179,8 +181,9 @@ ir.invalid_command = Interpolación de comando no válida: { $snippet }.
 # Errores de generación de Ninja.
 ninja_gen.missing_action = Falta la acción '{ $id }' referenciada por una arista de compilación.
 ninja_gen.format = No se pudo dar formato a la salida del manifiesto de Ninja.
-ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
-ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
+ninja_gen.dyndep_files_required = Esta compilación requiere un paquete Ninja generado; use `netsuke build`, `netsuke clean` o `netsuke generate` para materializar los archivos dyndep.
+ninja_gen.reserved_output_path = La ruta '{ $path }' está reservada para el estado de dependencias seriales de Netsuke.
+ninja_gen.unsupported_path_character = La ruta '{ $path }' contiene el carácter de ruta de Ninja no admitido '{ $character }'.
 
 # Validación de patrones de host.
 host_pattern.empty = El patrón de host no debe estar vacío.

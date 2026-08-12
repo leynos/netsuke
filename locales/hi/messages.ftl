@@ -102,17 +102,19 @@ runner.io.write_ninja_file = { $path } की Ninja फ़ाइल में �
 runner.io.flush_ninja_file = { $path } की Ninja फ़ाइल का बफ़र खाली नहीं किया जा सका।
 runner.io.sync_ninja_file = { $path } की Ninja फ़ाइल समकालिक नहीं की जा सकी।
 runner.io.open_ambient_dir = आसपास की निर्देशिका नहीं खोली जा सकी।
+runner.io.non_utf8_working_directory = कार्य निर्देशिका का पथ मान्य UTF-8 नहीं है।
 runner.io.no_existing_ancestor = { $path } के लिए कोई विद्यमान पूर्वज निर्देशिका नहीं है।
 runner.io.derive_relative_path = सापेक्ष Ninja पथ नहीं निकाला जा सका।
 runner.io.non_utf8_path = UTF-8 से भिन्न पथ समर्थित नहीं हैं (पथ: { $path })।
 runner.io.write_stdout = Ninja मैनिफ़ेस्ट मानक निर्गम पर नहीं लिखा जा सका।
 runner.io.flush_stdout = मानक निर्गम का बफ़र खाली नहीं किया जा सका।
-runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
-runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
-runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
-runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
-runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
-runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
+runner.io.dyndep.create_dir = dyndep निर्देशिका { $path } नहीं बनाई जा सकी।
+runner.io.dyndep.read = { $path } पर बनाई गई dyndep फ़ाइल पढ़ी नहीं जा सकी।
+runner.io.dyndep.write = { $path } पर बनाई गई dyndep फ़ाइल लिखी नहीं जा सकी।
+runner.io.dyndep.rename = { $path } पर बनाई गई dyndep फ़ाइल को अंतिम रूप नहीं दिया जा सका।
+runner.io.dyndep.corrupt = { $path } पर बनाई गई dyndep फ़ाइल अपेक्षित सामग्री से मेल नहीं खाती; केवल उसी फ़ाइल को हटाकर फिर प्रयास करें।
+runner.io.dyndep.race = किसी अन्य प्रक्रिया ने { $path } पर dyndep फ़ाइल लिखी, लेकिन उसकी सामग्री सत्यापित नहीं की जा सकी।
+runner.io.dyndep.temp_collisions = बार-बार नाम टकराने के बाद { $path } के लिए एक अद्वितीय अस्थायी dyndep फ़ाइल नहीं बनाई जा सकी।
 
 # मैनिफ़ेस्ट के निदान।
 manifest.parse = मैनिफ़ेस्ट का विश्लेषण विफल रहा।
@@ -178,8 +180,9 @@ ir.invalid_command = आदेश में अमान्य प्रक्�
 # Ninja निर्माण की त्रुटियाँ।
 ninja_gen.missing_action = किसी बिल्ड कोर द्वारा संदर्भित क्रिया “{ $id }” अनुपस्थित है।
 ninja_gen.format = Ninja मैनिफ़ेस्ट का निर्गम स्वरूपित नहीं किया जा सका।
-ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
-ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
+ninja_gen.dyndep_files_required = इस बिल्ड के लिए जनरेट किया गया Ninja बंडल आवश्यक है; dyndep फ़ाइलों को मूर्त रूप देने के लिए `netsuke build`, `netsuke clean` या `netsuke generate` का उपयोग करें।
+ninja_gen.reserved_output_path = पथ '{ $path }' Netsuke की क्रमिक निर्भरता स्थिति के लिए आरक्षित है।
+ninja_gen.unsupported_path_character = पथ '{ $path }' में असमर्थित Ninja पथ वर्ण '{ $character }' है।
 
 # होस्ट प्रतिरूपों का सत्यापन।
 host_pattern.empty = होस्ट प्रतिरूप रिक्त नहीं होना चाहिए।

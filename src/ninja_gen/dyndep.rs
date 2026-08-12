@@ -57,11 +57,13 @@ mod bundle;
 mod telemetry;
 pub use bundle::{GeneratedDyndep, GeneratedNinja};
 
-use crate::ast::DependencyOrder;
 use crate::hex;
 use crate::ir::{BuildEdge, BuildGraph};
 use crate::localization::{self, keys};
-use crate::ninja_gen::{NinjaGenError, join, path_key};
+use crate::ninja_gen::{
+    NinjaGenError, edge_requires_gates, graph_requires_dyndep, join, path_key,
+    reject_unsupported_path_characters,
+};
 use camino::Utf8PathBuf;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
@@ -95,6 +97,7 @@ pub fn generate_bundle(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenErr
 }
 
 fn generate_bundle_inner(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenError> {
+    reject_unsupported_path_characters(graph)?;
     reject_reserved_paths(graph)?;
     let serial_present = graph_requires_dyndep(graph);
 
@@ -107,7 +110,7 @@ fn generate_bundle_inner(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenE
     actions.sort_by_key(|(id, _)| *id);
     for (id, action) in actions {
         use crate::ninja_gen::NamedAction;
-        writeln!(out, "{}", NamedAction { id, action })?;
+        write!(out, "{}", NamedAction { id, action })?;
     }
 
     let mut stages = SerialStages::default();
@@ -162,9 +165,7 @@ fn render_edge(
                     .with_arg("id", &edge.action_id),
             })?;
 
-    let requires_gates =
-        edge.dependency_order == DependencyOrder::Serial && edge.implicit_deps.len() > 1;
-    if requires_gates {
+    if edge_requires_gates(edge) {
         return render_serial_edge(edge, action.restat, out, stages);
     }
     render_display_edge(edge, action.restat, &edge.implicit_deps, out)
@@ -191,7 +192,7 @@ fn render_display_edge(
     implicit_deps: &[Utf8PathBuf],
     out: &mut String,
 ) -> Result<(), NinjaGenError> {
-    writeln!(
+    write!(
         out,
         "{}",
         crate::ninja_gen::DisplayEdge {
@@ -218,19 +219,19 @@ fn render_serial_block(
     out: &mut String,
     stages: &mut SerialStages,
     gate_paths: &mut Vec<Utf8PathBuf>,
-) -> std::fmt::Result {
+) -> Result<(), NinjaGenError> {
     use crate::ninja_gen::escape_ninja_path;
 
     let parent = parent_identity(edge);
     let mut previous_gate: Option<Utf8PathBuf> = None;
     for (index, dep) in edge.implicit_deps.iter().enumerate() {
         let gate = parent.join(format!("{index:03}"));
-        let content = sidecar_content(&gate, dep);
+        let content = sidecar_content(&gate, dep)?;
         let digest = sidecar_digest(&content);
         let sidecar = Utf8PathBuf::from(format!("{DYNDEP_NAMESPACE}/{digest}.dd"));
 
-        let sidecar_escaped = escape_ninja_path(sidecar.as_str());
-        let gate_escaped = escape_ninja_path(gate.as_str());
+        let sidecar_escaped = escape_ninja_path(sidecar.as_str())?;
+        let gate_escaped = escape_ninja_path(gate.as_str())?;
 
         // The phony edge that produces (but never rebuilds) the sidecar file.
         // Starting at the second stage it depends on the previous gate, which
@@ -238,7 +239,7 @@ fn render_serial_block(
         match &previous_gate {
             None => writeln!(out, "build {sidecar_escaped}: phony")?,
             Some(prev) => {
-                let prev_escaped = escape_ninja_path(prev.as_str());
+                let prev_escaped = escape_ninja_path(prev.as_str())?;
                 writeln!(out, "build {sidecar_escaped}: phony {prev_escaped}")?;
             }
         }
@@ -281,11 +282,13 @@ fn parent_identity(edge: &BuildEdge) -> Utf8PathBuf {
 }
 
 /// Render the dyndep document for one gate and its real dependency.
-fn sidecar_content(gate: &Utf8PathBuf, dep: &Utf8PathBuf) -> String {
+fn sidecar_content(gate: &Utf8PathBuf, dep: &Utf8PathBuf) -> Result<String, NinjaGenError> {
     use crate::ninja_gen::escape_ninja_path;
-    let gate_escaped = escape_ninja_path(gate.as_str());
-    let dep_escaped = escape_ninja_path(dep.as_str());
-    format!("ninja_dyndep_version = 1\nbuild {gate_escaped}: dyndep | {dep_escaped}\n")
+    let gate_escaped = escape_ninja_path(gate.as_str())?;
+    let dep_escaped = escape_ninja_path(dep.as_str())?;
+    Ok(format!(
+        "ninja_dyndep_version = 1\nbuild {gate_escaped}: dyndep | {dep_escaped}\n"
+    ))
 }
 
 /// Content-address a sidecar by its complete bytes and a format tag.
@@ -328,13 +331,6 @@ fn reject_reserved_paths(graph: &BuildGraph) -> Result<(), NinjaGenError> {
         }
     }
     Ok(())
-}
-
-/// Whether the graph contains an edge that needs staged dyndep gates.
-fn graph_requires_dyndep(graph: &BuildGraph) -> bool {
-    graph.targets.values().any(|edge| {
-        edge.dependency_order == DependencyOrder::Serial && edge.implicit_deps.len() > 1
-    })
 }
 
 #[cfg(test)]

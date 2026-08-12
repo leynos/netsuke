@@ -102,17 +102,19 @@ runner.io.write_ninja_file = Не вдалося записати файл Ninja
 runner.io.flush_ninja_file = Не вдалося скинути буфер файлу Ninja у { $path }.
 runner.io.sync_ninja_file = Не вдалося синхронізувати файл Ninja у { $path }.
 runner.io.open_ambient_dir = Не вдалося відкрити навколишній каталог.
+runner.io.non_utf8_working_directory = Шлях робочого каталогу не є коректним UTF-8.
 runner.io.no_existing_ancestor = Для { $path } не існує батьківського каталогу.
 runner.io.derive_relative_path = Не вдалося вивести відносний шлях Ninja.
 runner.io.non_utf8_path = Шляхи, відмінні від UTF-8, не підтримуються (шлях: { $path }).
 runner.io.write_stdout = Не вдалося записати маніфест Ninja у стандартний потік виводу.
 runner.io.flush_stdout = Не вдалося скинути буфер стандартного потоку виводу.
-runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
-runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
-runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
-runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
-runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
-runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
+runner.io.dyndep.create_dir = Не вдалося створити каталог dyndep { $path }.
+runner.io.dyndep.read = Не вдалося прочитати створений файл dyndep у { $path }.
+runner.io.dyndep.write = Не вдалося записати створений файл dyndep у { $path }.
+runner.io.dyndep.rename = Не вдалося завершити створений файл dyndep у { $path }.
+runner.io.dyndep.corrupt = Створений файл dyndep у { $path } не відповідає очікуваному вмісту; видаліть лише цей файл і повторіть спробу.
+runner.io.dyndep.race = Інший процес записав файл dyndep { $path }, але його вміст не вдалося перевірити.
+runner.io.dyndep.temp_collisions = Не вдалося створити унікальний тимчасовий файл dyndep для { $path } після повторних колізій імен.
 
 # Діагностика маніфесту.
 manifest.parse = Не вдалося розібрати маніфест.
@@ -178,8 +180,9 @@ ir.invalid_command = Некоректна підстановка в команд
 # Помилки створення файлів Ninja.
 ninja_gen.missing_action = Відсутня дія «{ $id }», на яку посилається ребро збирання.
 ninja_gen.format = Не вдалося відформатувати вивід маніфесту Ninja.
-ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
-ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
+ninja_gen.dyndep_files_required = Для цієї збірки потрібен створений пакет Ninja; використовуйте `netsuke build`, `netsuke clean` або `netsuke generate`, щоб матеріалізувати файли dyndep.
+ninja_gen.reserved_output_path = Шлях '{ $path }' зарезервовано для стану послідовних залежностей Netsuke.
+ninja_gen.unsupported_path_character = Шлях '{ $path }' містить непідтримуваний символ шляху Ninja: '{ $character }'.
 
 # Перевірка шаблонів вузлів.
 host_pattern.empty = Шаблон вузла не повинен бути порожнім.

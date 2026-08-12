@@ -102,17 +102,19 @@ runner.io.write_ninja_file = Nie udało się zapisać pliku Ninja w { $path }.
 runner.io.flush_ninja_file = Nie udało się opróżnić bufora pliku Ninja w { $path }.
 runner.io.sync_ninja_file = Nie udało się zsynchronizować pliku Ninja w { $path }.
 runner.io.open_ambient_dir = Nie udało się otworzyć katalogu otoczenia.
+runner.io.non_utf8_working_directory = Ścieżka katalogu roboczego nie jest prawidłowym tekstem UTF-8.
 runner.io.no_existing_ancestor = Dla { $path } nie istnieje żaden katalog nadrzędny.
 runner.io.derive_relative_path = Nie udało się wyznaczyć względnej ścieżki Ninja.
 runner.io.non_utf8_path = Ścieżki inne niż UTF-8 nie są obsługiwane (ścieżka: { $path }).
 runner.io.write_stdout = Nie udało się zapisać manifestu Ninja na standardowe wyjście.
 runner.io.flush_stdout = Nie udało się opróżnić bufora standardowego wyjścia.
-runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
-runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
-runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
-runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
-runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
-runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
+runner.io.dyndep.create_dir = Nie udało się utworzyć katalogu dyndep { $path }.
+runner.io.dyndep.read = Nie udało się odczytać wygenerowanego pliku dyndep w { $path }.
+runner.io.dyndep.write = Nie udało się zapisać wygenerowanego pliku dyndep w { $path }.
+runner.io.dyndep.rename = Nie udało się sfinalizować wygenerowanego pliku dyndep w { $path }.
+runner.io.dyndep.corrupt = Wygenerowany plik dyndep w { $path } nie pasuje do oczekiwanej zawartości; usuń tylko ten plik i spróbuj ponownie.
+runner.io.dyndep.race = Inny proces zapisał plik dyndep { $path }, ale nie udało się zweryfikować jego zawartości.
+runner.io.dyndep.temp_collisions = Po wielokrotnych kolizjach nazw nie udało się utworzyć unikatowego tymczasowego pliku dyndep dla { $path }.
 
 # Diagnostyka manifestu.
 manifest.parse = Analiza manifestu nie powiodła się.
@@ -178,8 +180,9 @@ ir.invalid_command = Nieprawidłowa interpolacja w poleceniu: { $snippet }.
 # Błędy generowania plików Ninja.
 ninja_gen.missing_action = Brakuje akcji „{ $id }”, do której odwołuje się krawędź budowania.
 ninja_gen.format = Nie udało się sformatować wyjścia manifestu Ninja.
-ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
-ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
+ninja_gen.dyndep_files_required = Ta kompilacja wymaga wygenerowanego pakietu Ninja; użyj `netsuke build`, `netsuke clean` lub `netsuke generate`, aby utworzyć pliki dyndep.
+ninja_gen.reserved_output_path = Ścieżka '{ $path }' jest zarezerwowana dla stanu szeregowych zależności Netsuke.
+ninja_gen.unsupported_path_character = Ścieżka '{ $path }' zawiera nieobsługiwany znak ścieżki Ninja: '{ $character }'.
 
 # Walidacja wzorców hostów.
 host_pattern.empty = Wzorzec hosta nie może być pusty.

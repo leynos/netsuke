@@ -101,17 +101,19 @@ runner.io.write_ninja_file = 無法寫入 { $path } 的 Ninja 檔案。
 runner.io.flush_ninja_file = 無法清空 { $path } Ninja 檔案的緩衝區。
 runner.io.sync_ninja_file = 無法同步 { $path } 的 Ninja 檔案。
 runner.io.open_ambient_dir = 無法開啟周邊目錄。
+runner.io.non_utf8_working_directory = 工作目錄路徑不是有效的 UTF-8。
 runner.io.no_existing_ancestor = { $path } 沒有既有的上層目錄。
 runner.io.derive_relative_path = 無法推導 Ninja 的相對路徑。
 runner.io.non_utf8_path = 不支援非 UTF-8 的路徑（路徑：{ $path }）。
 runner.io.write_stdout = 無法將 Ninja 資訊清單寫入標準輸出。
 runner.io.flush_stdout = 無法清空標準輸出的緩衝區。
-runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
-runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
-runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
-runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
-runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
-runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
+runner.io.dyndep.create_dir = 無法建立 dyndep 目錄 { $path }。
+runner.io.dyndep.read = 無法讀取 { $path } 處產生的 dyndep 檔案。
+runner.io.dyndep.write = 無法寫入 { $path } 處產生的 dyndep 檔案。
+runner.io.dyndep.rename = 無法完成 { $path } 處產生的 dyndep 檔案。
+runner.io.dyndep.corrupt = { $path } 處產生的 dyndep 檔案與預期內容不符；請只刪除該檔案後重試。
+runner.io.dyndep.race = 另一個程序寫入了 dyndep 檔案 { $path }，但無法驗證其內容。
+runner.io.dyndep.temp_collisions = 多次發生名稱衝突後，仍無法為 { $path } 建立唯一的暫存 dyndep 檔案。
 
 # 資訊清單診斷。
 manifest.parse = 資訊清單剖析失敗。
@@ -177,8 +179,9 @@ ir.invalid_command = 命令中的插值無效：{ $snippet }。
 # Ninja 產生錯誤。
 ninja_gen.missing_action = 缺少建置邊所參照的動作「{ $id }」。
 ninja_gen.format = 無法格式化 Ninja 資訊清單的輸出。
-ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
-ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
+ninja_gen.dyndep_files_required = 此建置需要產生的 Ninja 套件；請使用 `netsuke build`、`netsuke clean` 或 `netsuke generate` 以產生 dyndep 檔案。
+ninja_gen.reserved_output_path = 路徑「{ $path }」已保留給 Netsuke 的序列相依性狀態。
+ninja_gen.unsupported_path_character = 路徑「{ $path }」包含不支援的 Ninja 路徑字元「{ $character }」。
 
 # 主機樣式驗證。
 host_pattern.empty = 主機樣式不得為空。

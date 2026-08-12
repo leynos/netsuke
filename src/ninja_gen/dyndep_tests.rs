@@ -1,10 +1,11 @@
 //! Unit tests for staged dyndep bundle generation.
 
 use super::*;
-use crate::ast::Recipe;
+use crate::ast::{DependencyOrder, Recipe};
 use crate::ir::{Action, BuildGraph};
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
+use rstest::rstest;
 
 fn action(command: &str) -> Action {
     Action {
@@ -144,6 +145,17 @@ fn one_element_serial_list_needs_no_gates() -> Result<()> {
 }
 
 #[test]
+fn parallel_bundle_matches_string_generation() -> Result<()> {
+    let graph = graph_with_edge(parallel_edge("all", &["dep1", "dep2"]))?;
+    let bundle = generate_bundle(&graph)?;
+    ensure!(
+        bundle.build_file() == crate::ninja_gen::generate(&graph)?,
+        "parallel bundle output must match string generation"
+    );
+    Ok(())
+}
+
+#[test]
 fn repeated_dependency_keeps_separate_stage_sidecars() -> Result<()> {
     let graph = graph_with_edge(serial_edge("all", &["same", "same"]))?;
     let bundle = generate_bundle(&graph)?;
@@ -176,10 +188,38 @@ fn repeated_dependency_keeps_separate_stage_sidecars() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn reserved_output_namespace_is_rejected() -> Result<()> {
+#[derive(Clone, Copy)]
+enum EdgePathField {
+    ExplicitOutput,
+    ImplicitOutput,
+    Input,
+    ImplicitDependency,
+    OrderOnlyDependency,
+}
+
+fn set_edge_path(edge: &mut BuildEdge, field: EdgePathField, path: &str) {
+    let paths = vec![Utf8PathBuf::from(path)];
+    match field {
+        EdgePathField::ExplicitOutput => edge.explicit_outputs = paths,
+        EdgePathField::ImplicitOutput => edge.implicit_outputs = paths,
+        EdgePathField::Input => edge.inputs = paths,
+        EdgePathField::ImplicitDependency => edge.implicit_deps = paths,
+        EdgePathField::OrderOnlyDependency => edge.order_only_deps = paths,
+    }
+}
+
+#[rstest]
+#[case::explicit_output(EdgePathField::ExplicitOutput)]
+#[case::implicit_output(EdgePathField::ImplicitOutput)]
+#[case::input(EdgePathField::Input)]
+#[case::implicit_dependency(EdgePathField::ImplicitDependency)]
+#[case::order_only_dependency(EdgePathField::OrderOnlyDependency)]
+fn reserved_output_namespace_is_rejected(#[case] field: EdgePathField) -> Result<()> {
     let mut edge = parallel_edge("all", &["dep"]);
-    edge.explicit_outputs = vec![Utf8PathBuf::from(".netsuke/serial/x")];
+    set_edge_path(&mut edge, field, ".netsuke/serial/x");
+    if edge.explicit_outputs == [Utf8PathBuf::from(".netsuke/serial/x")] {
+        edge.explicit_outputs.insert(0, Utf8PathBuf::from("all"));
+    }
     let graph = graph_with_edge(edge)?;
     let err = generate_bundle(&graph)
         .err()
@@ -187,6 +227,30 @@ fn reserved_output_namespace_is_rejected() -> Result<()> {
     ensure!(
         matches!(err, NinjaGenError::ReservedOutputPath { .. }),
         "expected ReservedOutputPath, got {err:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn similarly_prefixed_namespace_is_accepted() -> Result<()> {
+    let mut edge = parallel_edge("all", &["dep"]);
+    edge.implicit_outputs = vec![Utf8PathBuf::from(".netsuke-extra/x")];
+    generate_bundle(&graph_with_edge(edge)?)?;
+    Ok(())
+}
+
+#[test]
+fn pipe_in_path_is_rejected_before_generation() -> Result<()> {
+    let graph = graph_with_edge(serial_edge("all", &["unsupported|dependency", "test"]))?;
+    let err = generate_bundle(&graph)
+        .err()
+        .context("pipe path must be rejected")?;
+    ensure!(
+        matches!(
+            err,
+            NinjaGenError::UnsupportedPathCharacter { character: '|', .. }
+        ),
+        "expected UnsupportedPathCharacter, got {err:?}"
     );
     Ok(())
 }

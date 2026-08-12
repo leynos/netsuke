@@ -102,17 +102,19 @@ runner.io.write_ninja_file = { $path } の Ninja ファイルに書き込めま�
 runner.io.flush_ninja_file = { $path } の Ninja ファイルのバッファーを書き出せませんでした。
 runner.io.sync_ninja_file = { $path } の Ninja ファイルを同期できませんでした。
 runner.io.open_ambient_dir = 周囲のディレクトリーを開けませんでした。
+runner.io.non_utf8_working_directory = 作業ディレクトリーのパスは有効な UTF-8 ではありません。
 runner.io.no_existing_ancestor = { $path } に対応する既存の上位ディレクトリーがありません。
 runner.io.derive_relative_path = Ninja の相対パスを導出できませんでした。
 runner.io.non_utf8_path = UTF-8 でないパスには対応していません（パス: { $path }）。
 runner.io.write_stdout = Ninja マニフェストを標準出力に書き込めませんでした。
 runner.io.flush_stdout = 標準出力のバッファーを書き出せませんでした。
-runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
-runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
-runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
-runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
-runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
-runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
+runner.io.dyndep.create_dir = dyndep ディレクトリ { $path } を作成できませんでした。
+runner.io.dyndep.read = { $path } にある生成済み dyndep ファイルを読み取れませんでした。
+runner.io.dyndep.write = { $path } に生成済み dyndep ファイルを書き込めませんでした。
+runner.io.dyndep.rename = { $path } にある生成済み dyndep ファイルを確定できませんでした。
+runner.io.dyndep.corrupt = { $path } にある生成済み dyndep ファイルが期待した内容と一致しません。このファイルだけを削除して再試行してください。
+runner.io.dyndep.race = 別のプロセスが dyndep ファイル { $path } を書き込みましたが、内容を検証できませんでした。
+runner.io.dyndep.temp_collisions = 名前の衝突が繰り返されたため、{ $path } 用の一意な一時 dyndep ファイルを作成できませんでした。
 
 # マニフェストの診断。
 manifest.parse = マニフェストの解析に失敗しました。
@@ -178,8 +180,9 @@ ir.invalid_command = コマンドの補間が無効です: { $snippet }。
 # Ninja 生成のエラー。
 ninja_gen.missing_action = ビルド辺が参照するアクション「{ $id }」がありません。
 ninja_gen.format = Ninja マニフェストの出力を整形できませんでした。
-ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
-ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
+ninja_gen.dyndep_files_required = このビルドには生成済み Ninja バンドルが必要です。dyndep ファイルを具体化するには `netsuke build`、`netsuke clean`、または `netsuke generate` を使用してください。
+ninja_gen.reserved_output_path = パス '{ $path }' は Netsuke の直列依存関係の状態用に予約されています。
+ninja_gen.unsupported_path_character = パス '{ $path }' にサポートされていない Ninja パス文字 '{ $character }' が含まれています。
 
 # ホストパターンの検証。
 host_pattern.empty = ホストパターンを空にすることはできません。

@@ -25,7 +25,9 @@ pub(super) fn materialize_dyndep_bundle(cli: &Cli, bundle: &GeneratedNinja) -> R
 /// Open the effective Ninja working directory through the runner capability seam.
 fn open_effective_dir(cli: &Cli) -> Result<Dir> {
     if let Some(dir) = &cli.directory {
-        let utf8 = Utf8Path::from_path(dir).context("non-UTF-8 working directory")?;
+        let utf8 = Utf8Path::from_path(dir).context(localization::message(
+            keys::RUNNER_IO_NON_UTF8_WORKING_DIRECTORY,
+        ))?;
         Dir::open_ambient_dir(utf8.as_str(), ambient_authority()).with_context(|| {
             localization::message(keys::RUNNER_IO_OPEN_AMBIENT_DIR).with_arg("path", utf8.as_str())
         })

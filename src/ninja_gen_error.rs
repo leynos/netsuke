@@ -80,6 +80,16 @@ pub enum NinjaGenError {
         /// Localized error message.
         message: LocalizedMessage,
     },
+    /// A path contains a character unsupported by Ninja path syntax.
+    #[error("{message}")]
+    UnsupportedPathCharacter {
+        /// Path containing the unsupported character.
+        path: camino::Utf8PathBuf,
+        /// Unsupported character.
+        character: char,
+        /// Localized error message.
+        message: LocalizedMessage,
+    },
     /// Formatting the Ninja output failed.
     #[error("{message}")]
     Format {

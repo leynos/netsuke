@@ -468,11 +468,10 @@ fn generate_format_error() -> Result<()> {
     Ok(())
 }
 
-#[rstest]
-fn serial_graph_rejected_by_string_only_generation() -> Result<()> {
+fn serial_graph(command: &str, dependencies: &[&str]) -> BuildGraph {
     let action = Action {
         recipe: Recipe::Command {
-            command: "echo done".into(),
+            command: command.into(),
         },
         description: None,
         depfile: None,
@@ -483,7 +482,7 @@ fn serial_graph_rejected_by_string_only_generation() -> Result<()> {
     let edge = BuildEdge {
         action_id: "a".into(),
         inputs: Vec::new(),
-        implicit_deps: vec![Utf8PathBuf::from("dep1"), Utf8PathBuf::from("dep2")],
+        implicit_deps: dependencies.iter().map(Utf8PathBuf::from).collect(),
         dependency_order: netsuke::ast::DependencyOrder::Serial,
         explicit_outputs: vec![Utf8PathBuf::from("all")],
         implicit_outputs: Vec::new(),
@@ -494,6 +493,11 @@ fn serial_graph_rejected_by_string_only_generation() -> Result<()> {
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), action);
     graph.targets.insert(Utf8PathBuf::from("all"), edge);
+    graph
+}
+#[rstest]
+fn serial_graph_rejected_by_string_only_generation() -> Result<()> {
+    let graph = serial_graph("echo done", &["dep1", "dep2"]);
 
     let mut out = String::new();
     let err = generate_into(&graph, &mut out)
@@ -512,30 +516,7 @@ fn serial_graph_rejected_by_string_only_generation() -> Result<()> {
 
 #[rstest]
 fn bundle_generation_for_serial_graph_materializes_sidecars() -> Result<()> {
-    let action = Action {
-        recipe: Recipe::Command {
-            command: "echo done".into(),
-        },
-        description: None,
-        depfile: None,
-        deps_format: None,
-        pool: None,
-        restat: false,
-    };
-    let edge = BuildEdge {
-        action_id: "a".into(),
-        inputs: Vec::new(),
-        implicit_deps: vec![Utf8PathBuf::from("check-fmt"), Utf8PathBuf::from("test")],
-        dependency_order: netsuke::ast::DependencyOrder::Serial,
-        explicit_outputs: vec![Utf8PathBuf::from("all")],
-        implicit_outputs: Vec::new(),
-        order_only_deps: Vec::new(),
-        phony: false,
-        always: false,
-    };
-    let mut graph = BuildGraph::default();
-    graph.actions.insert("a".into(), action);
-    graph.targets.insert(Utf8PathBuf::from("all"), edge);
+    let graph = serial_graph("echo done", &["check-fmt", "test"]);
 
     let bundle = netsuke::ninja_gen::generate_bundle(&graph)?;
     ensure!(

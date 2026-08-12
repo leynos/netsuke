@@ -102,6 +102,7 @@ runner.io.write_ninja_file = Failed to write Ninja file at { $path }.
 runner.io.flush_ninja_file = Failed to flush Ninja file at { $path }.
 runner.io.sync_ninja_file = Failed to sync Ninja file at { $path }.
 runner.io.open_ambient_dir = Failed to open ambient directory.
+runner.io.non_utf8_working_directory = The working directory path is not valid UTF-8.
 runner.io.no_existing_ancestor = No existing ancestor directory for { $path }.
 runner.io.derive_relative_path = Failed to derive relative Ninja path.
 runner.io.non_utf8_path = Non-UTF-8 path is not supported (path: { $path }).
@@ -110,9 +111,10 @@ runner.io.flush_stdout = Failed to flush stdout.
 runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
 runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
 runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
-runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
+runner.io.dyndep.rename = Failed to finalise generated dyndep file at { $path }.
 runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
 runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
+runner.io.dyndep.temp_collisions = Failed to create a unique temporary dyndep file for { $path } after repeated name collisions.
 
 # Manifest diagnostics.
 manifest.parse = Manifest parse failed.
@@ -178,8 +180,9 @@ ir.invalid_command = Invalid command interpolation: { $snippet }.
 # Ninja generation errors.
 ninja_gen.missing_action = Missing action '{ $id }' referenced by a build edge.
 ninja_gen.format = Failed to format the Ninja manifest output.
-ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
+ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialised.
 ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
+ninja_gen.unsupported_path_character = The path '{ $path }' contains the unsupported Ninja path character '{ $character }'.
 
 # Host pattern validation.
 host_pattern.empty = Host pattern must not be empty.

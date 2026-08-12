@@ -462,7 +462,8 @@ path; use a dedicated aggregate action when the whole workflow must share the
 same ordered entry point.
 
 Netsuke uses Ninja's `dyndep` support for serial lists with two or more
-dependencies, and generated builds containing one require Ninja 1.10 or newer.
+dependencies, and generated builds containing staged serial ordering require
+Ninja 1.10 or newer.
 `netsuke generate`, `build`, and `clean` materialize the generated sidecars
 under `.netsuke/dyndep` in the effective working directory. Those
 content-addressed files are reusable state and `clean` does not remove them.

@@ -67,7 +67,7 @@ impl GeneratedNinja {
 #[cfg(test)]
 impl GeneratedDyndep {
     /// Build a sidecar fixture for tests that must construct bundles from
-    /// scratch rather than through generation.
+    /// scratch rather than through [`super::generate_bundle`].
     #[must_use]
     pub(crate) fn fixture(relative_path: Utf8PathBuf, content: String) -> Self {
         Self {

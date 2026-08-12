@@ -425,7 +425,7 @@ fn manifest_error_cases(
     "    dependency_order: serial\n",
     "    deps: [check-fmt, lint, test]\n",
     "    command: echo $out\n",
-), "all", false)]
+), "all", false, &["check-fmt", "lint", "test"])]
 #[case::action_serial(concat!(
     "netsuke_version: '1.0.0'\n",
     "actions:\n",
@@ -434,11 +434,12 @@ fn manifest_error_cases(
     "    deps: [fmt, clippy]\n",
     "    command: echo $out\n",
     "targets: []\n",
-), "gate", true)]
+), "gate", true, &["fmt", "clippy"])]
 fn serial_dependency_order_survives_lowering(
     #[case] yaml: &str,
     #[case] output: &str,
     #[case] expected_phony: bool,
+    #[case] expected_dependencies: &[&str],
 ) -> Result<()> {
     let manifest = manifest::from_str(yaml)?;
     let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
@@ -455,6 +456,15 @@ fn serial_dependency_order_survives_lowering(
         edge.phony == expected_phony,
         "unexpected phony flag for {output}: {}",
         edge.phony
+    );
+    ensure!(
+        edge.implicit_deps
+            == expected_dependencies
+                .iter()
+                .map(Utf8PathBuf::from)
+                .collect::<Vec<_>>(),
+        "unexpected dependencies for {output}: {:?}",
+        edge.implicit_deps
     );
     Ok(())
 }

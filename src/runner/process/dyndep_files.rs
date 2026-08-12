@@ -29,6 +29,8 @@ pub(crate) const DYNDEP_DIR: &str = ".netsuke/dyndep";
 
 /// Distinguishes temporary sidecars created by separate write attempts.
 static TEMP_FILE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+/// Maximum number of colliding temporary names tolerated per write.
+const MAX_TEMP_FILE_ATTEMPTS: usize = 16;
 
 /// Materialize every sidecar in `dyndep_files` through `dir`.
 ///
@@ -114,8 +116,13 @@ fn read_verified(dir: &Dir, rel: &Utf8Path, expected: &str) -> Result<ReadOutcom
 /// rename, tolerating a concurrent writer that wins the race.
 fn write_atomic(dir: &Dir, rel: &Utf8Path, content: &str) -> Result<()> {
     let (temp, mut file) = create_unique_temp_file(dir, rel)?;
-    write_and_sync_temp_file(&mut file, rel, content)?;
-    rename_temp_file(dir, &temp, rel, content)
+    let write_result = write_and_sync_temp_file(&mut file, rel, content);
+    drop(file);
+    let result = write_result.and_then(|()| rename_temp_file(dir, &temp, rel, content));
+    if result.is_err() {
+        drop(dir.remove_file(&temp));
+    }
+    result
 }
 
 /// Create a temporary sidecar with a path that no other entry claims.
@@ -123,12 +130,16 @@ fn create_unique_temp_file(
     dir: &Dir,
     rel: &Utf8Path,
 ) -> Result<(Utf8PathBuf, cap_std::fs_utf8::File)> {
-    loop {
+    for _ in 0..MAX_TEMP_FILE_ATTEMPTS {
         let temp = unique_temp_name(rel);
         if let Some(file) = create_temp_file(dir, &temp, rel)? {
             return Ok((temp, file));
         }
     }
+    Err(anyhow!(
+        localization::message(keys::RUNNER_IO_DYNDEP_TEMP_COLLISIONS)
+            .with_arg("path", rel.as_str())
+    ))
 }
 
 /// Create a temporary sidecar, reporting a name collision to the caller.
@@ -141,18 +152,11 @@ fn create_temp_file(
     options.write(true).create_new(true);
     match dir.open_with(temp, &options) {
         Ok(file) => Ok(Some(file)),
-        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
-            Ok(handle_temp_name_collision())
-        }
+        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => Ok(None),
         Err(err) => Err(err).with_context(|| {
             localization::message(keys::RUNNER_IO_DYNDEP_WRITE).with_arg("path", rel.as_str())
         }),
     }
-}
-
-/// Signal that the caller should retry with another temporary name.
-const fn handle_temp_name_collision() -> Option<cap_std::fs_utf8::File> {
-    None
 }
 
 /// Write, flush, and synchronize a temporary sidecar before renaming it.
@@ -177,19 +181,14 @@ fn write_and_sync_temp_file(
 fn rename_temp_file(dir: &Dir, temp: &Utf8Path, rel: &Utf8Path, content: &str) -> Result<()> {
     match dir.rename(temp, dir, rel) {
         Ok(()) => Ok(()),
-        Err(rename_error) => handle_rename_failure(
-            dir,
-            &RenameFailureContext { temp, rel, content },
-            rename_error,
-        ),
+        Err(rename_error) => {
+            handle_rename_failure(dir, &RenameAttempt { temp, rel, content }, rename_error)
+        }
     }
 }
 
-/// Sidecar values retained when handling the outcome of one attempted rename.
-///
-/// This remains private to atomic dyndep materialization: only
-/// [`rename_temp_file`] creates it, and [`handle_rename_failure`] consumes it.
-struct RenameFailureContext<'a> {
+/// Paths and expected content for one failed same-directory rename.
+struct RenameAttempt<'a> {
     temp: &'a Utf8Path,
     rel: &'a Utf8Path,
     content: &'a str,
@@ -198,18 +197,18 @@ struct RenameFailureContext<'a> {
 /// Verify a final sidecar when another process wins the rename race.
 fn handle_rename_failure(
     dir: &Dir,
-    context: &RenameFailureContext<'_>,
+    attempt: &RenameAttempt<'_>,
     rename_error: std::io::Error,
 ) -> Result<()> {
     // Rename is relative to the same directory; `rename` replaces an existing
     // destination, so if another process already wrote the final file, the
     // atomic replace yields content identical to ours.
-    if read_verified(dir, context.rel, context.content)? == ReadOutcome::Matching {
-        drop(dir.remove_file(context.temp));
+    if read_verified(dir, attempt.rel, attempt.content)? == ReadOutcome::Matching {
+        drop(dir.remove_file(attempt.temp));
         return Ok(());
     }
     Err(rename_error).with_context(|| {
-        localization::message(keys::RUNNER_IO_DYNDEP_RENAME).with_arg("path", context.rel.as_str())
+        localization::message(keys::RUNNER_IO_DYNDEP_RENAME).with_arg("path", attempt.rel.as_str())
     })
 }
 
@@ -300,8 +299,21 @@ mod tests {
         let temp = tempfile::tempdir()?;
         let dir = temp_dir(&temp)?;
         materialize_dyndep_files(&dir, &[sidecar(".netsuke/dyndep/x.dd", "content")])?;
-        let temp_file = ".netsuke/dyndep/x.dd.tmp";
-        ensure!(dir.open(temp_file).is_err(), "temp file left behind");
+        ensure_no_temp_files(&dir)?;
+        Ok(())
+    }
+
+    #[test]
+    fn failed_atomic_write_removes_temp_file() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let dir = temp_dir(&temp)?;
+        let rel = Utf8Path::new(".netsuke/dyndep/destination.dd");
+        dir.create_dir_all(rel)?;
+
+        let result = write_atomic(&dir, rel, "content");
+
+        ensure!(result.is_err(), "rename over a directory must fail");
+        ensure_no_temp_files(&dir)?;
         Ok(())
     }
 
@@ -349,6 +361,22 @@ mod tests {
         anyhow::ensure!(
             dir.read_to_string(path)? == expected,
             "sidecar content does not match"
+        );
+        Ok(())
+    }
+
+    fn ensure_no_temp_files(dir: &Dir) -> Result<()> {
+        let names = dir
+            .read_dir(DYNDEP_DIR)?
+            .map(|entry| entry.and_then(|item| item.file_name()))
+            .collect::<std::io::Result<Vec<_>>>()?;
+        ensure!(
+            names.iter().all(|name| {
+                Utf8Path::new(name)
+                    .extension()
+                    .is_none_or(|extension| !extension.eq_ignore_ascii_case("tmp"))
+            }),
+            "temporary files left behind: {names:?}"
         );
         Ok(())
     }

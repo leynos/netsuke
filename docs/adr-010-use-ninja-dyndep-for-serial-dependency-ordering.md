@@ -6,7 +6,7 @@ Accepted.
 
 ## Date
 
-2026-08-11.
+2026-08-11
 
 ## Context and problem statement
 
@@ -23,6 +23,13 @@ backend-agnostic and make generated Ninja output executable in every command
 path.
 
 ## Decision
+
+**Y-statement:** In the context of declaration-ordered direct dependencies,
+and facing the forces of shared-work reuse, failure short-circuiting,
+unrelated-branch concurrency, backend-neutral IR, and executable generated
+output, we decided to use staged Ninja dyndep sidecars for
+`dependency_order: serial`, accepting the Ninja 1.10 floor, reserved generated
+state beneath `.netsuke`, and a path-scoped ordering guarantee.
 
 In the context of a `dependency_order: serial` manifest `deps` list, Netsuke
 will use staged Ninja dyndep sidecars to reveal one direct dependency at a time
@@ -111,6 +118,6 @@ manifest policy. It requires a separately approved design.
   [`src/ninja_gen/dyndep.rs`](../src/ninja_gen/dyndep.rs)
 - Atomic sidecar materialization:
   [`src/runner/process/dyndep_files.rs`](../src/runner/process/dyndep_files.rs)
-- User contract: [users guide](users-guide.md#run-direct-dependencies-serially)
+- User contract: [user's guide](users-guide.md#run-direct-dependencies-serially)
 - Implementation history:
   [issue #552 ExecPlan](execplans/issue-552-support-serial-dependency-ordering-for-actions-and-targets.md)

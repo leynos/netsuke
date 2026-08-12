@@ -7,7 +7,10 @@
 //! downstream execution by the Ninja build system.
 
 pub mod dyndep;
+mod path_syntax;
+
 pub use dyndep::{GeneratedDyndep, GeneratedNinja, generate_bundle};
+pub(crate) use path_syntax::{escape_ninja_path, reject_unsupported_path_characters};
 
 use crate::ast::{Recipe, StringOrList};
 use crate::ir::{BuildEdge, BuildGraph};
@@ -122,6 +125,7 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 /// structure, a command-list `eval` payload cannot be analysed, a command-list
 /// entry contains a Ninja control character, or writing to the output fails.
 pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), NinjaGenError> {
+    reject_unsupported_path_characters(graph)?;
     if graph_requires_dyndep(graph) {
         return Err(NinjaGenError::DyndepFilesRequired {
             message: localization::message(keys::NINJA_GEN_DYNDEP_FILES_REQUIRED),
@@ -201,32 +205,14 @@ fn escape_script(script: &str) -> String {
         .replace('\'', "'\"'\"'")
         .replace('\n', "\\n")
 }
-
-/// Escape a Ninja path for embedding in a build or dyndep document.
-///
-/// Ninja uses `$` as its escape character: space becomes `$ `, a literal
-/// dollar becomes `$$`, and the other token-splitting metacharacters (`:`, `|`)
-/// gain a `$` prefix. Unescaped spaces split a single path into multiple
-/// tokens, so every metacharacter must be escaped.
-pub(crate) fn escape_ninja_path(path: &str) -> String {
-    let mut out = String::with_capacity(path.len());
-    for ch in path.chars() {
-        match ch {
-            ' ' => out.push_str("$ "),
-            '$' => out.push_str("$$"),
-            ':' => out.push_str("$:"),
-            '|' => out.push_str("$|"),
-            _ => out.push(ch),
-        }
-    }
-    out
-}
-
 /// Whether the graph contains an edge whose serial list needs dyndep gates.
 pub(crate) fn graph_requires_dyndep(graph: &BuildGraph) -> bool {
-    graph.targets.values().any(|edge| {
-        edge.dependency_order == crate::ast::DependencyOrder::Serial && edge.implicit_deps.len() > 1
-    })
+    graph.targets.values().any(edge_requires_gates)
+}
+
+/// Whether one edge's serial dependency list needs staged dyndep gates.
+pub(crate) fn edge_requires_gates(edge: &BuildEdge) -> bool {
+    edge.dependency_order == crate::ast::DependencyOrder::Serial && edge.implicit_deps.len() > 1
 }
 /// Wrapper struct to display a rule with its identifier.
 pub(crate) struct NamedAction<'a> {

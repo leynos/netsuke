@@ -2,7 +2,6 @@
 //!
 //! Moved to its own file so the parent `mod.rs` stays under the repository's
 //! 400-line ceiling.
-//! Unit tests for Ninja file generation and rule synthesis.
 use super::*;
 use crate::ir::{Action, BuildEdge, BuildGraph};
 use anyhow::{Result, ensure};

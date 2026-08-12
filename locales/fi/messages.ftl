@@ -102,17 +102,19 @@ runner.io.write_ninja_file = Ninja-tiedostoa polussa { $path } ei voitu kirjoitt
 runner.io.flush_ninja_file = Ninja-tiedoston puskuria polussa { $path } ei voitu tyhjentää.
 runner.io.sync_ninja_file = Ninja-tiedostoa polussa { $path } ei voitu synkronoida.
 runner.io.open_ambient_dir = Ympäröivää hakemistoa ei voitu avata.
+runner.io.non_utf8_working_directory = Työhakemiston polku ei ole kelvollinen UTF-8.
 runner.io.no_existing_ancestor = Polulle { $path } ei löydy olemassa olevaa ylähakemistoa.
 runner.io.derive_relative_path = Suhteellista Ninja-polkua ei voitu johtaa.
 runner.io.non_utf8_path = Polkuja, jotka eivät ole UTF-8:aa, ei tueta (polku: { $path }).
 runner.io.write_stdout = Ninja-manifestia ei voitu kirjoittaa vakiotulosteeseen.
 runner.io.flush_stdout = Vakiotulosteen puskuria ei voitu tyhjentää.
-runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
-runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
-runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
-runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
-runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
-runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
+runner.io.dyndep.create_dir = Dyndep-hakemiston { $path } luominen epäonnistui.
+runner.io.dyndep.read = Luodun dyndep-tiedoston lukeminen polusta { $path } epäonnistui.
+runner.io.dyndep.write = Luodun dyndep-tiedoston kirjoittaminen polkuun { $path } epäonnistui.
+runner.io.dyndep.rename = Luodun dyndep-tiedoston viimeistely polussa { $path } epäonnistui.
+runner.io.dyndep.corrupt = Luotu dyndep-tiedosto polussa { $path } ei vastaa odotettua sisältöä; poista vain kyseinen tiedosto ja yritä uudelleen.
+runner.io.dyndep.race = Toinen prosessi kirjoitti dyndep-tiedoston polkuun { $path }, mutta sen sisältöä ei voitu tarkistaa.
+runner.io.dyndep.temp_collisions = Yksilöllistä väliaikaista dyndep-tiedostoa polulle { $path } ei voitu luoda toistuvien nimiristiriitojen jälkeen.
 
 # Manifestin diagnostiikka.
 manifest.parse = Manifestin jäsentäminen epäonnistui.
@@ -178,8 +180,9 @@ ir.invalid_command = Virheellinen komennon sijoitus: { $snippet }.
 # Ninja-generoinnin virheet.
 ninja_gen.missing_action = Toiminto ”{ $id }”, johon koontikaari viittaa, puuttuu.
 ninja_gen.format = Ninja-manifestin tulostetta ei voitu muotoilla.
-ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
-ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
+ninja_gen.dyndep_files_required = Tämä koonti vaatii luodun Ninja-paketin; käytä komentoa `netsuke build`, `netsuke clean` tai `netsuke generate`, jotta dyndep-tiedostot luodaan.
+ninja_gen.reserved_output_path = Polku '{ $path }' on varattu Netsuken sarjariippuvuuksien tilalle.
+ninja_gen.unsupported_path_character = Polku '{ $path }' sisältää tukemattoman Ninja-polun merkin '{ $character }'.
 
 # Isäntähahmojen tarkistus.
 host_pattern.empty = Isäntähahmo ei saa olla tyhjä.

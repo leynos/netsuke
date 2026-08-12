@@ -182,8 +182,8 @@ criterion in issue #552 and all repository gates pass.
   `DependencyOrder::{Parallel, Serial}` on `Target` (serde lowercase, default
   parallel) and on `BuildEdge`, copied during `from_manifest` lowering, and
   re-exported through `ir`. Updated every direct `BuildEdge` literal, doctest,
-  and fixture to compile. `cargo check --all-targets` and 739 lib + touched
-  integration tests pass.
+  and fixture to compile. `cargo check --all-targets` and 739 library tests plus
+  the touched integration tests passed.
 - [x] (2026-08-10) Implemented deterministic Ninja bundle and dyndep lowering:
   the new `src/ninja_gen/dyndep.rs` submodule adds `GeneratedNinja` (main text
   plus content-addressed `GeneratedDyndep` sidecars) and `generate_bundle`.
@@ -291,6 +291,21 @@ criterion in issue #552 and all repository gates pass.
   lowering, and sidecar publication boundaries. The focused dyndep suite and
   runtime Ninja suite passed; all deterministic gates passed (1,944 tests, one
   skipped, and passing doctests), then CodeRabbit reported zero findings.
+- [x] (2026-08-12) Verified the latest review findings against the current
+  branch. Stale findings were skipped because the absolute path is already
+  removed, the shared-work and unrelated-concurrency runtime test already
+  exists, and the generation/publication and clone issues are resolved. The
+  confirmed minimal fixes cover docs and locales, the render policy assertion,
+  reserved-path matrix and prefix boundary, bundle equivalence and shared gate
+  predicate/`write!`, pipe rejection, fixture-link and header cleanup, IR
+  dependency-order assertions, integration helpers, Ninja-not-found handling,
+  and materializer cleanup, bounded retries, directory scans, and localized
+  errors. Focused evidence: 21 dyndep tests, one render test, and 29 touched
+  integration/runtime tests passed.
+- [x] (2026-08-12) Completed the review-fix validation. `make check-fmt`,
+  `make typecheck`, `make lint`, `make test`, `make markdownlint`, and `make
+  nixie` passed; the full suite reported 1,952 passed tests, one skipped test,
+  and passing doctests. CodeRabbit completed with zero findings.
 
 ## Surprises and discoveries
 
@@ -1089,3 +1104,9 @@ materializes through an injected directory capability; and bounded telemetry
 covers bundle generation, serial lowering, and sidecar materialization. The
 final deterministic gate run passed all six checks (1,944 tests, one skipped,
 and passing doctests), and CodeRabbit reported zero findings before publication.
+
+2026-08-12: Verified the documentation review findings against the current
+implementation. The plan contains no machine-specific absolute path, so no
+path replacement was needed; the test-results sentence was corrected, and the
+ADR, design sketch, and user's guide now align with the `BuildEdge` policy and
+staged serial-ordering contract.

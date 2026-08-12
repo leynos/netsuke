@@ -102,17 +102,19 @@ runner.io.write_ninja_file = Ninja-filen i { $path } kunne ikke skrives.
 runner.io.flush_ninja_file = Bufferen for Ninja-filen i { $path } kunne ikke tømmes.
 runner.io.sync_ninja_file = Ninja-filen i { $path } kunne ikke synkroniseres.
 runner.io.open_ambient_dir = Den omgivende mappe kunne ikke åbnes.
+runner.io.non_utf8_working_directory = Stien til arbejdsbiblioteket er ikke gyldig UTF-8.
 runner.io.no_existing_ancestor = Der findes ingen overordnet mappe for { $path }.
 runner.io.derive_relative_path = Den relative Ninja-sti kunne ikke udledes.
 runner.io.non_utf8_path = Stier, der ikke er UTF-8, understøttes ikke (sti: { $path }).
 runner.io.write_stdout = Ninja-manifestet kunne ikke skrives til stdout.
 runner.io.flush_stdout = Bufferen for stdout kunne ikke tømmes.
-runner.io.dyndep.create_dir = Failed to create the dyndep directory { $path }.
-runner.io.dyndep.read = Failed to read generated dyndep file at { $path }.
-runner.io.dyndep.write = Failed to write generated dyndep file at { $path }.
-runner.io.dyndep.rename = Failed to finalize generated dyndep file at { $path }.
-runner.io.dyndep.corrupt = Generated dyndep file at { $path } does not match its expected content; remove that single file and retry.
-runner.io.dyndep.race = Another process wrote dyndep file { $path } but its content could not be verified.
+runner.io.dyndep.create_dir = Kunne ikke oprette dyndep-mappen { $path }.
+runner.io.dyndep.read = Kunne ikke læse den genererede dyndep-fil på { $path }.
+runner.io.dyndep.write = Kunne ikke skrive den genererede dyndep-fil til { $path }.
+runner.io.dyndep.rename = Kunne ikke færdiggøre den genererede dyndep-fil på { $path }.
+runner.io.dyndep.corrupt = Den genererede dyndep-fil på { $path } matcher ikke det forventede indhold; fjern kun denne fil, og prøv igen.
+runner.io.dyndep.race = En anden proces skrev dyndep-filen { $path }, men indholdet kunne ikke verificeres.
+runner.io.dyndep.temp_collisions = Kunne ikke oprette en entydig midlertidig dyndep-fil for { $path } efter gentagne navnekollisioner.
 
 # Manifestdiagnostik.
 manifest.parse = Parsingen af manifestet mislykkedes.
@@ -178,8 +180,9 @@ ir.invalid_command = Ugyldig indsættelse i kommandoen: { $snippet }.
 # Fejl under generering af Ninja.
 ninja_gen.missing_action = Handlingen "{ $id }", som en byggekant henviser til, mangler.
 ninja_gen.format = Ninja-manifestets output kunne ikke formateres.
-ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
-ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
+ninja_gen.dyndep_files_required = Dette build kræver en genereret Ninja-pakke; brug `netsuke build`, `netsuke clean` eller `netsuke generate`, så dyndep-filerne materialiseres.
+ninja_gen.reserved_output_path = Stien '{ $path }' er reserveret til Netsukes serielle afhængighedstilstand.
+ninja_gen.unsupported_path_character = Stien '{ $path }' indeholder det ikke-understøttede Ninja-stitegn '{ $character }'.
 
 # Validering af værtsmønstre.
 host_pattern.empty = Værtsmønsteret må ikke være tomt.
