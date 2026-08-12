@@ -144,7 +144,7 @@ fn behavioural_build_and_package_generates_release_help_with_orthohelp() {
         .expect("build-and-package workflow should be readable");
 
     assert!(
-        contents.contains("cargo install cargo-orthohelp --version 0.8.0 --locked"),
+        contents.contains("cargo install cargo-orthohelp --version 0.9.0 --locked"),
         "workflow should install the pinned cargo-orthohelp release tool"
     );
     assert!(
@@ -195,7 +195,7 @@ fn behavioural_build_and_package_validates_release_help_tooling() {
         .expect("build-and-package workflow should be readable");
 
     assert!(
-        contents.contains("cargo-orthohelp --version | grep '0\\.8\\.0'"),
+        contents.contains("cargo-orthohelp --version | grep '0\\.9\\.0'"),
         "workflow should validate the installed cargo-orthohelp version"
     );
     assert!(

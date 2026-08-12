@@ -79,13 +79,13 @@ jobs:
           python-version: ${{ inputs['python-version'] }}
 
       - name: Install cargo-orthohelp
-        run: cargo install cargo-orthohelp --version 0.8.0 --locked
+        run: cargo install cargo-orthohelp --version 0.9.0 --locked
 
       - name: Validate cargo-orthohelp version
         shell: bash
         run: |
           set -euo pipefail
-          cargo-orthohelp --version | grep '0\.8\.0'
+          cargo-orthohelp --version | grep '0\.9\.0'
 
       - name: Build release binary
         uses: leynos/shared-actions/.github/actions/rust-build-release@8add2d99854a5b77548eae98cca59202e68fefc8

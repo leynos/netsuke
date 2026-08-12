@@ -11,7 +11,10 @@ use ortho_config::{OrthoError, OrthoResult};
 use serde_json::Value;
 use std::sync::Arc;
 
-use super::discovery::{EnvProvider, StdEnvProvider, collect_diag_file_layers_with_env};
+use super::discovery::{
+    DiscoverySources, EnvProvider, StdEnvProvider, collect_diag_file_layers_with_sources,
+    discovery_env_source,
+};
 use super::parser::Cli;
 
 const JSON_ENV_VAR: &str = "NETSUKE_JSON";
@@ -26,7 +29,12 @@ const JSON_ENV_VAR: &str = "NETSUKE_JSON";
 /// Returns an [`ortho_config::OrthoError`] when a selected config file cannot
 /// be loaded, or when `NETSUKE_JSON` contains an invalid boolean.
 pub fn resolve_merged_json(cli: &Cli, matches: &ArgMatches) -> OrthoResult<bool> {
-    resolve_merged_json_with_env(cli, matches, &StdEnvProvider)
+    resolve_merged_json_with_sources(
+        cli,
+        matches,
+        &StdEnvProvider,
+        Arc::new(ortho_config::ProcessEnv),
+    )
 }
 
 /// Resolve the JSON preference using an injected environment provider.
@@ -43,7 +51,18 @@ pub fn resolve_merged_json_with_env(
     matches: &ArgMatches,
     env: &impl EnvProvider,
 ) -> OrthoResult<bool> {
-    let mut json = json_from_file_layers(cli, env)?;
+    resolve_merged_json_with_sources(cli, matches, env, discovery_env_source(env))
+}
+
+/// Resolve JSON using the same selector and discovery adapters as merging.
+fn resolve_merged_json_with_sources(
+    cli: &Cli,
+    matches: &ArgMatches,
+    env: &impl EnvProvider,
+    discovery_env: ortho_config::SharedEnvSource,
+) -> OrthoResult<bool> {
+    let sources = DiscoverySources::new(env, discovery_env);
+    let mut json = json_from_file_layers(cli, &sources)?;
     if !has_cli_json_override(matches)
         && let Some(env_json) = json_from_env(env)?
     {
@@ -74,9 +93,12 @@ fn has_cli_json_override(matches: &ArgMatches) -> bool {
 }
 
 /// Resolve the last valid JSON preference from the selected config layers.
-fn json_from_file_layers(cli: &Cli, env: &impl EnvProvider) -> OrthoResult<bool> {
+fn json_from_file_layers(
+    cli: &Cli,
+    sources: &DiscoverySources<'_, impl EnvProvider>,
+) -> OrthoResult<bool> {
     let default = Cli::default().json;
-    let layers = collect_diag_file_layers_with_env(cli, env)?;
+    let layers = collect_diag_file_layers_with_sources(cli, sources)?;
     let mut json = default;
     for layer in layers {
         if let Some(layer_json) = json_from_layer(&layer.into_value()) {

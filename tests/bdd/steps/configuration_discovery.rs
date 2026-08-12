@@ -62,6 +62,11 @@ jobs = {jobs}
     write_config_file(world, file_name.as_str(), &content, true)
 }
 
+#[given("a malformed project config file {file_name:string}")]
+fn malformed_project_config(world: &TestWorld, file_name: FileName) -> Result<()> {
+    write_config_file(world, file_name.as_str(), "emoji = \"always\n", true)
+}
+
 /// Returns the TOML snippet for a config file that sets only `emoji`.
 fn emoji_config_content(emoji: EmojiPolicy) -> String {
     format!("\nemoji = \"{emoji}\"\n")

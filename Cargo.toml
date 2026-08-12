@@ -130,13 +130,13 @@ time = { version = "0.3.44", features = ["formatting", "macros", "parsing", "ser
 ureq = { version = "2.10.5" }
 wait-timeout = "0.2"
 url = "^2.5.0"
-ortho_config = { version = "0.8.0", features = ["serde_json"] }
+ortho_config = { version = "0.9.0", features = ["serde_json"] }
 sys-locale = "0.3.2"
 
 [build-dependencies]
 clap = { version = "4.5.0", features = ["derive"] }
 clap_mangen = "0.3.0"
-ortho_config = { version = "0.8.0", features = ["serde_json"] }
+ortho_config = { version = "0.9.0", features = ["serde_json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 thiserror = "1"
@@ -163,6 +163,8 @@ strip-ansi-escapes = "0.2"
 toml = "0.8"
 serde_yaml = "0.9"
 proptest = "1.11.0"
+googletest = "0.14.3"
+pretty_assertions = "1.4.1"
 # Plural-selection tests must pass numeric arguments to Fluent. `ortho_config`
 # exposes `LocalizationArgs` as a map of `FluentValue`, but does not re-export
 # the value type, so the tests need `fluent-bundle` directly. Constrained to

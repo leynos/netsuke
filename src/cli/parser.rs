@@ -16,9 +16,8 @@
 
 use clap::builder::{TypedValueParser, ValueParser};
 use clap::error::ErrorKind;
-use clap::{ArgMatches, Args, CommandFactory, FromArgMatches, Parser, Subcommand};
-use ortho_config::localize_clap_error_with_command;
-use ortho_config::{LocalizationArgs, Localizer};
+use clap::{ArgMatches, Args, CommandFactory, Parser, Subcommand};
+use ortho_config::{LocalizationArgs, Localizer, parse_localized_command};
 use serde::{Deserialize, Serialize};
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -316,18 +315,11 @@ where
     I: IntoIterator<Item = T>,
     T: Into<OsString> + Clone,
 {
-    let mut command = localize_command(Cli::command(), localizer.as_ref());
-    command = configure_validation_parsers(command, localizer);
-    let matches = command
-        .try_get_matches_from_mut(iter)
-        .map_err(|err| localize_clap_error_with_command(err, localizer.as_ref(), Some(&command)))?;
-    let matches_for_merge = matches.clone();
-    let mut matches_for_parse = matches;
-    let cli = Cli::from_arg_matches_mut(&mut matches_for_parse).map_err(|clap_err| {
-        let with_cmd = clap_err.with_cmd(&command);
-        localize_clap_error_with_command(with_cmd, localizer.as_ref(), Some(&command))
-    })?;
-    Ok((cli, matches_for_merge))
+    let command = configure_validation_parsers(
+        localize_command(Cli::command(), localizer.as_ref()),
+        localizer,
+    );
+    parse_localized_command(command, iter, localizer.as_ref())
 }
 
 fn configure_validation_parsers(

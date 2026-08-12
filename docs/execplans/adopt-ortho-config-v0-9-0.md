@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -201,14 +201,30 @@ implement it until the user explicitly approves the draft.
   enough to satisfy that declared minimum.
 - [x] (2026-08-12 16:03Z) Draft this ExecPlan with architecture boundaries,
   Red-Green-Refactor milestones, coverage choices, and exception thresholds.
-- [ ] Obtain explicit approval for the draft before implementation.
-- [ ] Milestone 1: capture the v0.8.0 baseline and add red compatibility tests.
-- [ ] Milestone 2: upgrade runtime, build, and release-tool dependencies and
-  restore compilation.
-- [ ] Milestone 3: make injected automatic discovery hermetic and verify
-  failure semantics.
-- [ ] Milestone 4: adopt the combined localized parse boundary if compatibility
-  tests prove it preserves Netsuke's parser contract.
+- [x] (2026-08-12 16:35Z) Obtain explicit approval for the draft before
+  implementation.
+- [x] (2026-08-12 16:35Z) Start Milestone 1 with a clean working tree and
+  record the v0.8.0 baseline: `make check-fmt`, `make typecheck`, `make lint`,
+  and `make test` all passed. The non-doctest suite reported 1,917 passing
+  tests and one skip.
+- [x] (2026-08-12 17:08Z) Milestone 1: captured the baseline and added the
+  red workflow-pin and injected-XDG-discovery tests. The first failed because
+  the workflow still named v0.8.0; the second returned no injected XDG layer
+  before `MapEnv` was wired into discovery.
+- [x] (2026-08-12 17:08Z) Milestone 2: upgraded both `ortho_config`
+  requirements and the release-tool workflow pin to v0.9.0, added the required
+  assertion dependencies, and updated the resolved lockfile.
+- [x] (2026-08-12 17:08Z) Milestone 3: made injected automatic discovery
+  hermetic, retained ambient `ProcessEnv` in production, and added unit,
+  behavioural, and closed-environment end-to-end coverage for absent, valid,
+  malformed, and missing-parent candidate outcomes.
+- [x] (2026-08-12 17:08Z) Milestone 4: adopted `parse_localized_command`
+  after the existing parser happy- and unhappy-path suites preserved Netsuke's
+  configured localized value-parser contract.
+- [ ] (2026-08-12 17:08Z) CodeRabbit review for Milestones 1–4 is blocked
+  before analysis because `coderabbit review --agent` awaits browser OAuth
+  authentication. The deterministic gates remain green; retry the review after
+  the CLI has been authenticated before starting Milestone 5.
 - [ ] Milestone 5: validate real release-help metadata and generated artefacts.
 - [ ] Milestone 6: update user, design, developer, and planning documentation.
 - [ ] Milestone 7: run final gates, review the diff and surrounding code, and
@@ -251,8 +267,8 @@ implement it until the user explicitly approves the draft.
   pin and its tests are a required part of the atomic version migration.
 
 - Observation: the accepted explicit-selection ADR still describes
-  `env_config_path` as reading `std::env::var_os`, although the current code has
-  already replaced that ambient read with `ConfigEnvProvider` injection.
+  `env_config_path` as reading `std::env::var_os`, although the current code
+  has already replaced that ambient read with `ConfigEnvProvider` injection.
   Evidence: `docs/adr-004-explicit-config-selection-outside-orthoconfig.md`
   names the old implementation, while `src/cli/discovery.rs` takes
   `&impl EnvProvider`. Impact: update the existing ADR's implementation
@@ -264,6 +280,31 @@ implement it until the user explicitly approves the draft.
   crates.io reports current compatible releases 0.14.3 and 1.4.1 respectively.
   Impact: add them as test-only caret requirements and document their distinct
   use rather than rewriting unrelated tests.
+
+- Observation: `CliConfig::get_doc_metadata()` exposes field sources and
+  precedence but not merge strategy. Evidence: OrthoConfig v0.9.0's
+  `FieldMetadata` has CLI, environment, and file metadata but no merge-policy
+  member. Impact: the new compact snapshot derives Netsuke's four append fields
+  from the configuration policy and marks the remaining fields as replace,
+  avoiding a full upstream-structure snapshot.
+
+- Observation: the initial adapter hand-off created six arguments in
+  `push_file_layers_with_sources`, which Clippy rejects. Evidence: the first
+  full lint reported `clippy::too_many_arguments`. Impact: `DiscoverySources`
+  now groups the Netsuke `EnvProvider` port with the narrow OrthoConfig
+  discovery adapter, documenting a real composition boundary instead of
+  suppressing the lint.
+
+- Observation: Whitaker rejects direct `std::fs` operations in the new E2E
+  target. Evidence: `make lint` reported `no_std_fs_operations` for three
+  fixture writes. Impact: the test uses the established `test_support::fs`
+  fixture boundary and leaves production capability policy intact.
+
+- Observation: CodeRabbit did not reach analysis for the Milestones 1–4
+  review. Evidence: `coderabbit review --agent` emitted `awaiting_browser_auth`
+  and an OAuth login URL, then stopped without review findings. Impact: this is
+  an external authentication blocker, not a code concern or a rate limit;
+  Milestone 5 must wait for a successful review.
 
 ## Decision Log
 
@@ -324,6 +365,18 @@ implement it until the user explicitly approves the draft.
   alignment, a private environment adapter, and use of a new upstream helper
   refine the existing configuration architecture without establishing a
   hard-to-reverse system-wide direction. Date/Author: 2026-08-12 / Codex.
+
+- Decision: make `DiscoverySources` a crate-private composition input owned by
+  `src/cli/discovery.rs`. Rationale: only CLI merge and early diagnostic
+  resolution may pair a Netsuke environment port with either `ProcessEnv` or a
+  fixed-key `MapEnv`; no other module may use it as a general environment
+  copying utility. Date/Author: 2026-08-12 / Codex.
+
+- Decision: snapshot an application-owned metadata projection rather than
+  OrthoConfig's complete IR. Rationale: Netsuke must pin field order, sources,
+  its append/replace policy, precedence, discovery declaration, and subcommand
+  count, but upstream headings and prose fields are not an application
+  contract. Date/Author: 2026-08-12 / Codex.
 
 ## Outcomes & retrospective
 
@@ -688,8 +741,8 @@ Update documentation only after behaviour and generated artefacts are known:
   not transplanted.
 - In `docs/adr-004-explicit-config-selection-outside-orthoconfig.md`, preserve
   the accepted selector-ownership decision while replacing the stale direct
-  `std::env::var_os` description with the current injected
-  `ConfigEnvProvider` port and the v0.9.0 automatic-discovery adapter boundary.
+  `std::env::var_os` description with the current injected `ConfigEnvProvider`
+  port and the v0.9.0 automatic-discovery adapter boundary.
 - In `docs/developers-guide.md`, update the `cargo-orthohelp` install command,
   document the `ProcessEnv`/`MapEnv` composition roots, the fixed-key
   projection helper's ownership and permitted callers, and the narrow roles of

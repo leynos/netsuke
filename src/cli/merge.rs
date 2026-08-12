@@ -26,11 +26,15 @@ use ortho_config::declarative::LayerComposition;
 use ortho_config::figment::Figment;
 use ortho_config::{MergeComposer, OrthoMergeExt, OrthoResult, sanitize_value};
 use serde::Serialize;
+use std::sync::Arc;
 
 use serde_json::{Map, Value, json};
 
 use super::config::{BuildConfig, CliConfig};
-use super::discovery::{EnvProvider, StdEnvProvider, push_file_layers_with_env};
+use super::discovery::{
+    DiscoverySources, EnvProvider, StdEnvProvider, discovery_env_source,
+    push_file_layers_with_sources,
+};
 use super::environment::EnvironmentLayer;
 use super::parser::{BuildArgs, Cli, Commands};
 use super::validation_error;
@@ -42,7 +46,12 @@ use super::validation_error;
 /// Returns an [`ortho_config::OrthoError`] if layer composition or merging
 /// fails.
 pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli> {
-    merge_with_config_and_env(cli, matches, &StdEnvProvider)
+    merge_with_config_sources(
+        cli,
+        matches,
+        &StdEnvProvider,
+        Arc::new(ortho_config::ProcessEnv),
+    )
 }
 
 /// Merge configuration layers using an explicit environment provider.
@@ -60,6 +69,16 @@ pub fn merge_with_config_and_env(
     matches: &ArgMatches,
     env: &impl EnvProvider,
 ) -> OrthoResult<Cli> {
+    merge_with_config_sources(cli, matches, env, discovery_env_source(env))
+}
+
+/// Merge configuration using distinct value and discovery adapters.
+fn merge_with_config_sources(
+    cli: &Cli,
+    matches: &ArgMatches,
+    env: &impl EnvProvider,
+    discovery_env: ortho_config::SharedEnvSource,
+) -> OrthoResult<Cli> {
     let mut errors = Vec::new();
     let mut composer = MergeComposer::with_capacity(4);
 
@@ -68,7 +87,8 @@ pub fn merge_with_config_and_env(
         Err(err) => errors.push(err),
     }
 
-    push_file_layers_with_env(cli, &mut composer, &mut errors, env);
+    let discovery_sources = DiscoverySources::new(env, discovery_env);
+    push_file_layers_with_sources(cli, &mut composer, &mut errors, &discovery_sources);
 
     match Figment::from(EnvironmentLayer::new(env.entries()))
         .extract::<Value>()

@@ -1,0 +1,133 @@
+---
+source: tests/ortho_config_metadata_snapshot_tests.rs
+expression: metadata_snapshot()
+---
+ir_version: "1.1"
+precedence:
+  - Defaults
+  - File
+  - Env
+  - Cli
+discovery: ~
+fields:
+  - name: file
+    cli:
+      long: file
+      short: f
+      multiple: false
+      possible_values: []
+    environment: NETSUKE_FILE
+    file: file
+    merge_strategy: replace
+  - name: jobs
+    cli:
+      long: jobs
+      short: j
+      multiple: false
+      possible_values: []
+    environment: NETSUKE_JOBS
+    file: jobs
+    merge_strategy: replace
+  - name: verbose
+    cli:
+      long: verbose
+      short: v
+      multiple: false
+      possible_values: []
+    environment: NETSUKE_VERBOSE
+    file: verbose
+    merge_strategy: replace
+  - name: locale
+    cli:
+      long: locale
+      short: l
+      multiple: false
+      possible_values: []
+    environment: NETSUKE_LOCALE
+    file: locale
+    merge_strategy: replace
+  - name: fetch_allow_scheme
+    cli:
+      long: fetch-allow-scheme
+      short: F
+      multiple: true
+      possible_values: []
+    environment: NETSUKE_FETCH_ALLOW_SCHEME
+    file: fetch_allow_scheme
+    merge_strategy: append
+  - name: fetch_allow_host
+    cli:
+      long: fetch-allow-host
+      short: e
+      multiple: true
+      possible_values: []
+    environment: NETSUKE_FETCH_ALLOW_HOST
+    file: fetch_allow_host
+    merge_strategy: append
+  - name: fetch_block_host
+    cli:
+      long: fetch-block-host
+      short: E
+      multiple: true
+      possible_values: []
+    environment: NETSUKE_FETCH_BLOCK_HOST
+    file: fetch_block_host
+    merge_strategy: append
+  - name: fetch_default_deny
+    cli:
+      long: fetch-default-deny
+      short: t
+      multiple: false
+      possible_values: []
+    environment: NETSUKE_FETCH_DEFAULT_DENY
+    file: fetch_default_deny
+    merge_strategy: replace
+  - name: json
+    cli:
+      long: json
+      short: J
+      multiple: false
+      possible_values: []
+    environment: NETSUKE_JSON
+    file: json
+    merge_strategy: replace
+  - name: no_input
+    cli: ~
+    environment: NETSUKE_NO_INPUT
+    file: no_input
+    merge_strategy: replace
+  - name: color
+    cli: ~
+    environment: NETSUKE_COLOR
+    file: color
+    merge_strategy: replace
+  - name: emoji
+    cli: ~
+    environment: NETSUKE_EMOJI
+    file: emoji
+    merge_strategy: replace
+  - name: progress
+    cli: ~
+    environment: NETSUKE_PROGRESS
+    file: progress
+    merge_strategy: replace
+  - name: accessibility
+    cli: ~
+    environment: NETSUKE_ACCESSIBILITY
+    file: accessibility
+    merge_strategy: replace
+  - name: default_targets
+    cli:
+      long: default-targets
+      short: d
+      multiple: true
+      possible_values: []
+    environment: NETSUKE_DEFAULT_TARGETS
+    file: default_targets
+    merge_strategy: append
+  - name: cmds
+    cli: ~
+    environment: NETSUKE_CMDS
+    file: cmds
+    merge_strategy: replace
+subcommand_count: 0

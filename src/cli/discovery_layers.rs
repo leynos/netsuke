@@ -4,9 +4,13 @@
 //! project `.netsuke.toml` outranks user-scope files. Path comparison and its
 //! fallback policy live here because that policy is a discovery decision.
 
-use ortho_config::{ConfigDiscovery, MergeLayer, OrthoResult, load_config_file_as_chain};
+use ortho_config::{
+    ConfigDiscovery, MergeLayer, OrthoResult, SharedEnvSource, load_config_file_as_chain,
+};
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
+#[cfg(test)]
+use std::sync::Arc;
 
 use super::CONFIG_ENV_VAR;
 use super::diagnostics::debug_optional_config_path;
@@ -16,18 +20,29 @@ use super::paths::{FsPathNormalizer, PathNormalizer, normalized_path_key};
 ///
 /// Anchors the project root to `directory` when supplied; otherwise the default
 /// project roots apply. `NETSUKE_CONFIG` is registered as the discovery env var.
-fn config_discovery(directory: Option<&PathBuf>) -> ConfigDiscovery {
-    let mut builder = ConfigDiscovery::builder("netsuke").env_var(CONFIG_ENV_VAR);
+fn config_discovery(directory: Option<&PathBuf>, env_source: SharedEnvSource) -> ConfigDiscovery {
+    let mut builder = ConfigDiscovery::builder("netsuke")
+        .env_var(CONFIG_ENV_VAR)
+        .env_source(env_source);
     if let Some(dir) = directory {
         builder = builder.clear_project_roots().add_project_root(dir);
     }
     builder.build()
 }
 
+#[cfg(test)]
 pub(crate) fn collect_file_layers(
     directory: Option<&Path>,
 ) -> OrthoResult<Vec<MergeLayer<'static>>> {
-    collect_file_layers_with_normalizer(directory, &FsPathNormalizer)
+    collect_file_layers_with_env_source(directory, Arc::new(ortho_config::ProcessEnv))
+}
+
+/// Collect layers with the environment source chosen at the composition root.
+pub(super) fn collect_file_layers_with_env_source(
+    directory: Option<&Path>,
+    env_source: SharedEnvSource,
+) -> OrthoResult<Vec<MergeLayer<'static>>> {
+    collect_file_layers_with_normalizer_and_env_source(directory, &FsPathNormalizer, env_source)
 }
 
 /// Return the key used to compare `path` against the expected project file.
@@ -43,11 +58,25 @@ fn comparison_key(normalizer: &impl PathNormalizer, path: &str) -> PathBuf {
 }
 
 /// Build the discovery layer chain, resolving paths through `normalizer`.
+#[cfg(test)]
 pub(super) fn collect_file_layers_with_normalizer(
     directory: Option<&Path>,
     normalizer: &impl PathNormalizer,
 ) -> OrthoResult<Vec<MergeLayer<'static>>> {
-    let discovery = config_discovery(directory.map(PathBuf::from).as_ref());
+    collect_file_layers_with_normalizer_and_env_source(
+        directory,
+        normalizer,
+        Arc::new(ortho_config::ProcessEnv),
+    )
+}
+
+/// Build the discovery layer chain with an injected environment source.
+fn collect_file_layers_with_normalizer_and_env_source(
+    directory: Option<&Path>,
+    normalizer: &impl PathNormalizer,
+    env_source: SharedEnvSource,
+) -> OrthoResult<Vec<MergeLayer<'static>>> {
+    let discovery = config_discovery(directory.map(PathBuf::from).as_ref(), env_source);
     let mut file_layers = discovery.compose_layers();
     let mut errors = file_layers.required_errors;
     if file_layers.value.is_empty() {
