@@ -178,6 +178,36 @@ fn command_list_exit_entry_preserves_status_and_emits_attribution() -> Result<()
 }
 
 #[test]
+fn command_list_exec_failure_preserves_attribution_and_stops_the_chain() -> Result<()> {
+    let Some(dir) = ninja_integration_setup() else {
+        return Ok(());
+    };
+    let command = failing_command_list_command(vec![
+        "exec false".into(),
+        "echo unexpected > continued-after-exec.txt".into(),
+    ])?;
+    let output = run_generated_command_with_ninja(&dir, &command)?;
+    ensure!(
+        !output.status.success(),
+        "a process-replacing entry must fail the Ninja build"
+    );
+    let stdout = String::from_utf8(output.stdout).context("Ninja stdout should be UTF-8")?;
+    let stderr = String::from_utf8(output.stderr).context("Ninja stderr should be UTF-8")?;
+    let diagnostics = format!("{stdout}{stderr}");
+    ensure!(
+        diagnostics.contains("netsuke command-list failure: action ")
+            && diagnostics.contains(", entry 1"),
+        "exec failure should emit the first-entry marker: {diagnostics}"
+    );
+    let workspace = open_temp_workspace(&dir)?;
+    ensure!(
+        !workspace.exists("continued-after-exec.txt"),
+        "an exec failure must not run a later entry"
+    );
+    Ok(())
+}
+
+#[test]
 fn command_list_background_failure_waits_before_the_next_entry() -> Result<()> {
     let Some(dir) = ninja_integration_setup() else {
         return Ok(());

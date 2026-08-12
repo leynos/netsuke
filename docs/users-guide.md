@@ -314,7 +314,7 @@ groups run in the current shell rather than a subshell: a changed working
 directory, environment assignment, or shell variable can therefore be used by
 later entries. A failed entry stops the chain, and the diagnostic identifies
 the generated action and one-based list-entry positions, for example
-`netsuke command-list failure: action 1, entry 2`.
+`netsuke command-list failure: action HASH, entry 2`.
 
 <!-- tested-example: guide-command-list -->
 
@@ -1124,8 +1124,8 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   status zero. A failed entry may still leave side effects behind before it
   halts the chain. The generated brace/eval boundary keeps comments and
   trailing control operators inside an entry from changing the chain's
-  structure. Failure diagnostics include the action and entry positions when
-  Netsuke can attribute the failed list entry.
+  structure. Failure diagnostics include the action fingerprint and one-based
+  entry position when Netsuke can attribute the failed list entry.
 - Literal shell dollar expressions currently require Ninja-aware escaping,
   such as `$$PATH`.
 

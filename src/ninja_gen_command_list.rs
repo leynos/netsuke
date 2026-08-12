@@ -9,12 +9,13 @@ pub(crate) const COMMAND_LIST_FAILURE_PREFIX: &str = "netsuke command-list failu
 pub(crate) fn command_list_entry(command: &str, action_id: &str, entry_index: usize) -> String {
     let identity = action_identity(action_id);
     let context = format!("{COMMAND_LIST_FAILURE_PREFIX}{identity}, entry {entry_index}");
+    let evaluator = command_evaluator(command, &context);
     format!(
         concat!(
             "{{ _netsuke_background_before=$${{!:-}}; ",
             "trap '_netsuke_command_status=$$?; printf \"%s\\n\" \"{}\" >&2; ",
             "trap - EXIT; exit \"$$_netsuke_command_status\"' EXIT; ",
-            "if eval {}; then _netsuke_command_status=0; ",
+            "if {}; then _netsuke_command_status=0; ",
             "else _netsuke_command_status=$$?; fi; ",
             "_netsuke_background_after=$${{!:-}}; ",
             "if [ -n \"$$_netsuke_background_after\" ] && ",
@@ -24,10 +25,29 @@ pub(crate) fn command_list_entry(command: &str, action_id: &str, entry_index: us
             "else trap - EXIT; printf '%s\\n' '{}' >&2; ",
             "exit \"$$_netsuke_command_status\"; fi; }}"
         ),
-        context,
-        shell_single_quote(command),
-        context,
+        context, evaluator, context,
     )
+}
+
+/// Evaluate an entry while preserving attribution before a direct `exec`.
+///
+/// `exec` replaces the current shell, preventing its EXIT trap and outer
+/// failure branch from running. Emit the bounded marker first in that narrow
+/// case, then retain normal process-replacement semantics.
+fn command_evaluator(command: &str, context: &str) -> String {
+    let quoted = shell_single_quote(command);
+    if command_starts_with_exec(command) {
+        format!("printf '%s\\n' '{context}' >&2; eval {quoted}")
+    } else {
+        format!("eval {quoted}")
+    }
+}
+
+/// Whether an entry's first shell word is the process-replacing `exec` builtin.
+fn command_starts_with_exec(command: &str) -> bool {
+    shlex::split(command)
+        .and_then(|words| words.into_iter().next())
+        .is_some_and(|word| word == "exec")
 }
 
 /// Return a fixed-width fingerprint for an action identifier.
