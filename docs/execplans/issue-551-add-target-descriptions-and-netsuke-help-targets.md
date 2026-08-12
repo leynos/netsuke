@@ -16,8 +16,11 @@ catalogue through a new `netsuke help targets` subcommand. The command loads,
 expands, renders, and validates the selected manifest without invoking Ninja,
 then prints the available targets and actions with their descriptions.
 
-The discovery query uses a restricted, side-effect-free Jinja surface so
-manifest inspection cannot fetch data, execute commands, or write caches.
+The discovery query uses a restricted, side-effect-free Jinja surface. It
+blocks `env()`, the `contents` filter, `fetch`, `shell`, and `grep`, so manifest
+inspection cannot disclose host environment or file contents, fetch data,
+execute commands, or write caches. Normal build manifest rendering remains
+unchanged.
 
 A user can verify the change by writing a manifest with an action and a target
 that carry `description`, then running `netsuke help targets` and observing the

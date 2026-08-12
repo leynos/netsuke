@@ -863,8 +863,10 @@ netsuke help targets
 The command loads, expands, renders, and validates the manifest through the
 same structural stages as a build, but performs no recipes and creates no
 build outputs. Rendering uses a restricted, side-effect-free Jinja surface:
-expressions invoking `fetch`, `shell`, or `grep` are rejected rather than
-executed. It honours the usual manifest-selection options (`--file`,
+query expressions invoking `env()`, the `contents` filter, `fetch`, `shell`,
+or `grep` are rejected rather than executed. This restriction applies only to
+query rendering; normal build manifest rendering remains unchanged. It
+honours the usual manifest-selection options (`--file`,
 `-C/--directory`) and the normal colour, accessibility, locale, and JSON-output
 conventions; with `--json` the catalogue is emitted as a versioned JSON
 document whose `result.command` is `help-targets`.
