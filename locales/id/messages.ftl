@@ -33,12 +33,12 @@ cli.subcommand.graph.long_about = Proyeksikan manifes Netsuke yang telah diurai 
 cli.subcommand.generate.about = Hasilkan manifes Ninja tanpa menjalankan Ninja.
 cli.subcommand.generate.long_about = Tulis manifes Ninja yang dihasilkan ke keluaran standar atau ke berkas yang dipilih dengan `--output`.
 cli.subcommand.help.about = Cetak bantuan tingkat atas, atau bantuan untuk topik bernama.
-cli.subcommand.help.long_about = Tanpa topik, ini sama dengan `--help`. Gunakan `help targets` untuk mencetak katalog target dan tindakan untuk file yang dipilih.
+cli.subcommand.help.long_about = Tanpa topik, ini sama dengan `--help`. Gunakan `help targets` untuk mencetak katalog target dan tindakan untuk berkas yang dipilih.
 
 # Help catalogue headings and markers.
 cli.help.actions_heading = Tindakan:
 cli.help.targets_heading = Target:
-cli.help.targets.about = Mencetak target dan tindakan dalam file yang dipilih.
+cli.help.targets.about = Mencetak target dan tindakan dalam berkas yang dipilih.
 cli.help.default_marker = bawaan
 
 # Teks bantuan untuk opsi subperintah build.

@@ -32,7 +32,7 @@ cli.subcommand.graph.about = Den Build-Abhängigkeitsgraphen ausgeben. Standardf
 cli.subcommand.graph.long_about = Das eingelesene Netsuke-Manifest in einen kanonischen Build-Graphen überführen und als Graphviz-DOT ausgeben oder mit `--html` als eigenständige HTML-Seite. Mit `--output <DATEI>` in eine Datei schreiben; `-` schreibt nach stdout.
 cli.subcommand.generate.about = Das Ninja-Manifest erzeugen, ohne Ninja auszuführen.
 cli.subcommand.generate.long_about = Das erzeugte Ninja-Manifest nach stdout schreiben oder in eine mit `--output` gewählte Datei.
-cli.subcommand.help.about = Zeigt die Hilfe auf oberster Ebene oder die Hilfe für ein benanntes Thema.
+cli.subcommand.help.about = Die Hilfe auf oberster Ebene oder die Hilfe für ein benanntes Thema anzeigen.
 cli.subcommand.help.long_about = Ohne Thema entspricht dies `--help`. Verwenden Sie `help targets`, um den Ziel- und Aktionskatalog für die ausgewählte Datei anzuzeigen.
 
 # Help catalogue headings and markers.

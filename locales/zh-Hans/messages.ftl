@@ -36,9 +36,9 @@ cli.subcommand.help.about = 打印顶层帮助，或打印指定主题的帮助�
 cli.subcommand.help.long_about = 没有主题时，此命令等价于 `--help`。使用 `help targets` 打印所选清单的目标和操作目录。
 
 # Help catalogue headings and markers.
-cli.help.actions_heading = 操作：
+cli.help.actions_heading = 动作：
 cli.help.targets_heading = 目标：
-cli.help.targets.about = 列出所选清单中的目标和操作。
+cli.help.targets.about = 列出所选清单中的目标和动作。
 cli.help.default_marker = 默认
 
 # build 子命令选项的帮助文本。

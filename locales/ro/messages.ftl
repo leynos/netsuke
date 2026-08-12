@@ -32,7 +32,7 @@ cli.subcommand.graph.about = Emite graful dependențelor de construire. Formatul
 cli.subcommand.graph.long_about = Proiectează manifestul Netsuke analizat într-un graf de construire canonic și îl scrie ca Graphviz DOT sau, cu `--html`, ca pagină HTML de sine stătătoare. Folosiți `--output <FIȘIER>` pentru a scrie într-un fișier; `-` scrie la ieșirea standard.
 cli.subcommand.generate.about = Generează manifestul Ninja fără a rula Ninja.
 cli.subcommand.generate.long_about = Scrie manifestul Ninja generat la ieșirea standard sau într-un fișier ales cu `--output`.
-cli.subcommand.help.about = Afișați ajutorul de nivel superior sau ajutorul pentru un subiect numit.
+cli.subcommand.help.about = Afișează ajutorul de nivel superior sau ajutorul pentru un subiect numit.
 cli.subcommand.help.long_about = Fără subiect, acest lucru corespunde cu `--help`. Folosiți `help targets` pentru a afișa catalogul de ținte și acțiuni pentru fișierul selectat.
 
 # Help catalogue headings and markers.
@@ -351,8 +351,8 @@ stdlib.register.dir_non_utf8 = Directorul curent conține componente care nu sun
 # Raportarea stării în modul de ieșire accesibil.
 status.state.pending = în așteptare
 status.state.running = în desfășurare
-status.state.done = finalizată
-status.state.failed = eșuată
+status.state.done = finalizat
+status.state.failed = eșuat
 status.stage.label = Etapa { $current }/{ $total }: { $description }
 status.stage.summary = [{ $state }] { $label }
 status.stage.summary_with_task = [{ $state }] { $label } ({ $task_progress })
