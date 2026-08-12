@@ -80,15 +80,13 @@ prefix instead of at a fixed root:
   component without following links prevents a pattern such as `src/link/*.c`
   from gaining the authority of `link`'s target, while retaining the lexical
   prefix in `GlobRoot` for later match relativization.
-- **Symbolic-link handling follows from capability semantics rather than
-  being layered on top.** `cap_std` reports both an escaping symlink
-  resolution and a resolution that leaves the capability's tree as
-  `PermissionDenied`, and a dangling link as `NotFound`
-  (`walk::is_unresolvable_link`). Scoping the capability to the literal
-  prefix means these are exactly the failure modes a narrowly opened handle
-  produces, so the existing metadata-lookup code path needed no additional
-  branching to support the narrower scope, only the recording of a skipped
-  match (`diagnostics::record_unreachable_symlink`).
+- **Symbolic-link handling is explicit and bounded.**
+  `GlobRoot::metadata_relative` classifies a failed
+  metadata lookup as a skipped link only when `is_unresolvable_link` identifies
+  `PermissionDenied` or `NotFound` and `traverses_symlink` confirms a final or
+  intermediate symbolic link. Other failures, including symlink loops, still
+  propagate. This classification is paired with bounded skipped-match
+  recording via `diagnostics::record_unreachable_symlink`.
 
 ## Consequences
 
