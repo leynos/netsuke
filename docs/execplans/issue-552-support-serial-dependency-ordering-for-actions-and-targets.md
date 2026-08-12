@@ -275,6 +275,17 @@ criterion in issue #552 and all repository gates pass.
   passed), `make markdownlint`, and `make nixie` all passed. CodeRabbit found
   no concerns.
 - [x] Committed each green logical change and recorded final evidence here.
+- [x] (2026-08-12) Review follow-up: added a real-Ninja regression with two
+  serial consumers of one shared dependency and an unrelated branch. The test
+  proves the shared output executes once and uses a marker handshake to prove
+  that unrelated work progresses concurrently. Added the missing v0.1.0
+  migration guidance and removed developer-specific workspace metadata from
+  this plan. All deterministic gates passed and CodeRabbit returned no
+  findings for this milestone.
+- [ ] (2026-08-12) Address the remaining PR review: separate bundle generation
+  from publication with a capability-injected materializer, eliminate
+  unnecessary ownership copies, and add bounded telemetry. Validate the green
+  milestone before its independent review.
 
 ## Surprises and discoveries
 
@@ -340,6 +351,11 @@ criterion in issue #552 and all repository gates pass.
   be modular rather than appended to those files.
 - Netsuke already owns the `.netsuke` workspace-state namespace through its
   fetch cache, so `.netsuke/dyndep` does not introduce a second state root.
+- (2026-08-12) The initial real-Ninja tests established order and failure but
+  did not encode the plan's independently observed shared-work and unrelated
+  concurrency behaviour. The review correctly treats both as separate runtime
+  contracts, so the follow-up test uses a bounded marker handshake rather than
+  a timing-only assertion.
 
 ## Decision log
 
@@ -354,6 +370,11 @@ criterion in issue #552 and all repository gates pass.
   formatting cannot fail. **Rationale:** this keeps the generator's public
   error contract intact and satisfies the repository's no-`expect` policy
   without adding an abstraction. **Date:** 2026-08-11.
+- **Decision:** keep `generate_bundle` as a read-only query and move all
+  sidecar publication to explicit runner command boundaries. **Rationale:**
+  generation must be usable without a filesystem effect; accepting a
+  capability-scoped directory at the materializer makes the publication
+  authority explicit and testable. **Date:** 2026-08-12.
 
 - **Decision:** use staged Ninja dyndep files rather than an order-only gate
   chain, a pool, or recursive builds. **Rationale:** it is the only evaluated
@@ -796,8 +817,7 @@ the complete log on failure, and record the final result and log path in
 All commands run from the repository root:
 
 ```plaintext
-/home/leynos/.lody/repos/github---leynos---netsuke/worktrees/
-6c498022-7fb6-49a9-94a9-56723bb7d1e1
+<repository root>
 ```
 
 First confirm branch and cleanliness:
@@ -1039,3 +1059,11 @@ consumes it; it must not become a runner-wide filesystem abstraction.
 The first lint pass rejected a by-value context parameter, so the failure
 handler borrows the private context instead; this does not alter the cleanup
 path or error ownership.
+
+2026-08-12: PR review follow-up reopens the plan for two missing observable
+contracts and a query-command boundary repair. The new real-Ninja regression
+proves single execution for shared serial work and concurrent progress for an
+unrelated branch. Bundle generation remains effect-free; runner command
+boundaries will open and inject the filesystem capability for sidecar
+publication. The remaining revision adds bounded outcome and duration
+telemetry and removes unnecessary ownership copies.

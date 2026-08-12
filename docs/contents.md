@@ -66,7 +66,8 @@ operator, user, and contributor references are easier to find.
 - [quickstart.md](quickstart.md): First-run walkthrough for building with
   Netsuke.
 - [v0-1-0-migration-guide.md](v0-1-0-migration-guide.md): Migration notes for
-  the v0.1.0 child-environment API additions and glob behaviour, and the
+  the v0.1.0 child-environment API, glob behaviour, and serial-dependency
+  additions, and the
   stability caveat that covers them.
 - [users-guide.md](users-guide.md): End-user reference for authoring and
   running Netsuke manifests, including executable discovery and

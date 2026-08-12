@@ -77,6 +77,55 @@ fn serial_order_graph() -> BuildGraph {
     graph
 }
 
+fn shared_work_graph() -> BuildGraph {
+    let mut graph = BuildGraph::default();
+    for (name, command) in [
+        (
+            "shared",
+            "i=0; while test ! -f unrelated-start; do i=$$((i + 1)); test \"$$i\" -lt 100 || exit 1; sleep 0.01; done; test ! -f unrelated-end || exit 1; echo shared >> execution.log; touch shared",
+        ),
+        ("left", "test -f shared && touch left"),
+        ("right", "test -f shared && touch right"),
+        (
+            "unrelated",
+            "touch unrelated-start; sleep 0.2; touch unrelated-end; touch unrelated",
+        ),
+        ("all", "touch all"),
+    ] {
+        graph.actions.insert(name.into(), action(command));
+    }
+    for (action_id, output, deps, dependency_order) in [
+        ("shared", "shared", &[][..], DependencyOrder::Parallel),
+        ("left", "left", &[][..], DependencyOrder::Parallel),
+        ("right", "right", &[][..], DependencyOrder::Parallel),
+        (
+            "left",
+            "left-final",
+            &["shared", "left"][..],
+            DependencyOrder::Serial,
+        ),
+        (
+            "right",
+            "right-final",
+            &["shared", "right"][..],
+            DependencyOrder::Serial,
+        ),
+        ("unrelated", "unrelated", &[][..], DependencyOrder::Parallel),
+        (
+            "all",
+            "all",
+            &["left-final", "right-final", "unrelated"][..],
+            DependencyOrder::Parallel,
+        ),
+    ] {
+        graph.targets.insert(
+            Utf8PathBuf::from(output),
+            edge(action_id, output, deps, dependency_order),
+        );
+    }
+    graph
+}
+
 /// Write a bundle into `dir` (sidecars beneath `.netsuke/dyndep`) and return
 /// the main build file path.
 fn stage_bundle(dir: &TempDir, bundle: &netsuke::ninja_gen::GeneratedNinja) -> Result<Utf8PathBuf> {
@@ -102,11 +151,21 @@ fn stage_bundle(dir: &TempDir, bundle: &netsuke::ninja_gen::GeneratedNinja) -> R
 }
 
 fn run_ninja(dir: &TempDir, main: &Utf8PathBuf) -> Result<std::process::Output> {
+    run_ninja_with_jobs(dir, main, 1)
+}
+
+fn run_ninja_with_jobs(
+    dir: &TempDir,
+    main: &Utf8PathBuf,
+    jobs: u8,
+) -> Result<std::process::Output> {
     Command::new(NINJA)
         .arg("-C")
         .arg(dir.path())
         .arg("-f")
         .arg(main.as_str())
+        .arg("-j")
+        .arg(jobs.to_string())
         .arg("all")
         .output()
         .context("spawn ninja")
@@ -205,6 +264,36 @@ fn failure_of_early_dep_stops_later_stages() -> Result<()> {
     ensure!(
         !dir.path().join("all-marker").exists(),
         "aggregate must not run after the first dep fails"
+    );
+    Ok(())
+}
+
+#[test]
+fn shared_serial_work_runs_once_while_unrelated_work_progresses() -> Result<()> {
+    let dir = tempfile::tempdir()?;
+    let bundle = generate_bundle(&shared_work_graph())?;
+    let main = stage_bundle(&dir, &bundle)?;
+    let out = run_ninja_with_jobs(&dir, &main, 3)?;
+    ensure!(
+        out.status.success(),
+        "ninja failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let root_path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).map_err(|path| {
+        anyhow::anyhow!("temporary Ninja directory is not UTF-8: {}", path.display())
+    })?;
+    let root = Dir::open_ambient_dir(&root_path, ambient_authority())
+        .context("open temporary Ninja directory")?;
+    let executions = root
+        .read_to_string("execution.log")
+        .context("read shared-work log")?;
+    ensure!(
+        executions.lines().collect::<Vec<_>>() == ["shared"],
+        "shared work must execute once: {executions:?}"
+    );
+    ensure!(
+        root.open("all").is_ok(),
+        "aggregate must finish after serial consumers and unrelated work"
     );
     Ok(())
 }
