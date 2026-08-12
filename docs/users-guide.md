@@ -851,6 +851,11 @@ this order:
 An explicit file that is missing or invalid causes an error; Netsuke does not
 fall back to discovery.
 
+When automatic discovery finds no configuration file, Netsuke uses its built-in
+defaults. When it finds a candidate that cannot be loaded, such as malformed
+TOML or a file whose `extends` parent is missing, Netsuke reports the load
+error. A broken discovered configuration is therefore not treated as absent.
+
 ### Diagnose configuration selection
 
 Pass `--verbose` to see how Netsuke selected its configuration. Structured

@@ -80,12 +80,15 @@ environment selection, diagnostics, and automatic discovery are combined.
 
 Netsuke resolves explicit configuration paths in `src/cli/discovery.rs`.
 
-- `explicit_config_path` applies `--config` > `NETSUKE_CONFIG`, ignoring empty
-  environment values.
-- `env_config_path(var_name)` reads one environment variable with
-  `std::env::var_os`, so precedence tests use current-process values.
-- `push_file_layers` drains successful layer loads into the merge composer, or
-  records the load error for final diagnostics.
+- `resolve_config_selector` applies `--config` > `NETSUKE_CONFIG`, ignoring
+  empty environment values.
+- `env_config_path(env, var_name)` reads through Netsuke's injected
+  `ConfigEnvProvider` port. Production supplies `ConfigStdEnvProvider`; tests
+  use a map-backed provider without mutating process-global state.
+- `push_file_layers_with_sources` drains successful layer loads into the merge
+  composer, or records the load error for final diagnostics. Its private
+  `DiscoverySources` input pairs that port with the selected OrthoConfig
+  discovery adapter.
 - Automatic discovery remains the fallback only when no explicit selector is
   present.
 
@@ -94,6 +97,10 @@ Netsuke resolves explicit configuration paths in `src/cli/discovery.rs`.
 - The CLI adapter has a small amount of Netsuke-specific orchestration logic,
   but the rules are visible and testable where the public contract is defined.
 - OrthoConfig does not gain Netsuke-specific configuration selector semantics.
+- Ambient composition uses OrthoConfig `ProcessEnv`; injected composition uses
+  a closed `MapEnv` containing only documented discovery keys. This keeps
+  automatic discovery hermetic in tests while retaining platform home fallback
+  for users.
 - Explicit selected files fail closed. A missing or invalid file reports the
   selected-file error instead of silently inheriting a discovered file.
 - Future changes to selector precedence must update `discovery.rs`, the
@@ -102,6 +109,7 @@ Netsuke resolves explicit configuration paths in `src/cli/discovery.rs`.
 ## Related documents
 
 - [`docs/developers-guide.md`](developers-guide.md)
+- [`docs/execplans/adopt-ortho-config-v0-9-0.md`](execplans/adopt-ortho-config-v0-9-0.md)
 - [`docs/execplans/3-11-3-expose-config-path-and-netsuke-config.md`][execplan]
 - [`docs/netsuke-design.md`](netsuke-design.md)
 

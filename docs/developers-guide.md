@@ -785,7 +785,7 @@ rather than from `build.rs`. The build script remains responsible for the
 localization key audit only. Release automation installs the pinned tool with:
 
 ```bash
-cargo install cargo-orthohelp --version 0.8.0 --locked
+cargo install cargo-orthohelp --version 0.9.0 --locked
 ```
 
 The workflow then calls:
@@ -793,6 +793,10 @@ The workflow then calls:
 ```bash
 scripts/generate-release-help.sh <target> <bin-name> <out-dir> <ps-module-name>
 ```
+
+The script invokes `cargo-orthohelp orthohelp`; v0.9.0 reserves direct
+generator options for that subcommand. Keep its `rstest` script contract and
+the real Unix and Windows generation smoke aligned with this invocation.
 
 The script writes manual pages under
 `target/orthohelp/<target>/release/man/man1/` and, for Windows targets,
@@ -808,6 +812,10 @@ tests, plain `#[rstest]` parametrized cases for exhaustive state-enumeration
 unit tests, and `rstest-bdd` release-help scenarios.
 `src/cli/config_path_precedence_tests.rs` is the canonical exhaustive
 state-enumeration example.
+
+Use `googletest` matchers for structural or diagnostic assertions and
+`pretty_assertions` for ordered collection equality where its diff is useful.
+Do not rewrite established tests only to introduce either library.
 
 ## Local build acceleration
 
@@ -2394,9 +2402,9 @@ Private helper functions for config discovery and JSON-output resolution.
 
 Configuration merge helpers:
 
-- `config_discovery(directory: Option<&PathBuf>) -> ConfigDiscovery` builds
-  the single-pass OrthoConfig discovery scanner with an optional project-root
-  anchor.
+- `config_discovery(directory, env_source) -> ConfigDiscovery` builds the
+  single-pass OrthoConfig discovery scanner with an optional project-root
+  anchor and the environment adapter selected at the composition root.
 - `project_scope_file_str(directory: Option<&Path>) -> Option<String>`
   resolves the expected project `.netsuke.toml` path for project-layer
   detection.
@@ -2408,17 +2416,15 @@ Configuration merge helpers:
   `PathBuf`.
 - `explicit_config_path_with_env(cli, env) -> Option<PathBuf>` resolves explicit
   config selection from `--config` and `NETSUKE_CONFIG`.
-- `push_file_layers_with_env(cli, composer, errors, env) -> ()` pushes explicit
-  or discovered file layers onto a `MergeComposer`. The injected `env`
-  parameter follows the environment mandate: it supplies environment access
-  without requiring callers to mutate the process environment. Explicit load
+- `push_file_layers_with_sources(cli, composer, errors, sources) -> ()` pushes
+  explicit or discovered file layers onto a `MergeComposer`. Explicit load
   errors are pushed into `errors`, and automatic discovery is not attempted
   after an explicit selector fails.
-- `collect_diag_file_layers_with_env(cli, env)` reuses the same file-layer
-  precedence for early JSON resolution.
-- `collect_file_layers(directory)` builds the fallback discovery layer chain,
-  applies the project-layer second pass, and returns
-  `OrthoResult<Vec<MergeLayer<'static>>>`.
+- `collect_diag_file_layers_with_sources(cli, sources)` reuses the same
+  file-layer precedence for early JSON resolution.
+- `collect_file_layers_with_env_source(directory, env_source)` builds the
+  fallback discovery layer chain, applies the project-layer second pass, and
+  returns `OrthoResult<Vec<MergeLayer<'static>>>`.
 - `is_empty_value(value: &serde_json::Value) -> bool` detects an empty CLI
   override object.
 - `json_from_layer(value: &serde_json::Value) -> Option<bool>` extracts `json`
@@ -2453,6 +2459,15 @@ so discovery and value merging observe one environment. Keep this port scoped
 to CLI configuration; runner, manifest, locale, and stdlib environment seams
 remain separate because their input and lifetime contracts differ.
 
+`DiscoverySources` is a crate-private composition input owned by
+`src/cli/discovery.rs`. Only full merge and early JSON resolution may construct
+it. Ambient entry points pair `ConfigStdEnvProvider` with OrthoConfig
+`ProcessEnv`; injected entry points project the same `ConfigEnvProvider` into a
+closed `MapEnv` containing only `NETSUKE_CONFIG`, `HOME`, `USERPROFILE`,
+`XDG_CONFIG_HOME`, `XDG_CONFIG_DIRS`, `APPDATA`, and `LOCALAPPDATA`. Do not
+reuse this fixed-key projection as a general environment-copy helper;
+`EnvironmentLayer` alone enumerates the full `NETSUKE_*` value environment.
+
 `explicit_config_path_with_env` is the crate-internal seam for explicit
 config-file selection. It evaluates the precedence chain in this order:
 
@@ -2486,12 +2501,11 @@ The `cli` module re-exports this trait publicly as `ConfigEnvProvider` (and
 the unrelated `LocaleEnvProvider` in `locale_resolution`; crate-internal code
 uses the bare `EnvProvider` name.
 
-Discovery tests that exercise OrthoConfig's `ConfigDiscovery` must run the
-ambient adapter in an isolated child configured with `env_clear()` followed by
-`Command::env`. Tests for Netsuke's own environment port should inject a
-provider directly. `EnvLock` is reserved for tests that change the process
-working directory alongside `CwdGuard`; it does not justify environment
-mutation.
+Tests for injected configuration discovery should provide a map-backed
+`ConfigEnvProvider`. End-to-end tests of the ambient `ProcessEnv` adapter must
+run in an isolated child configured with `env_clear()` followed by
+`Command::env`. `EnvLock` is reserved for tests that change the process working
+directory alongside `CwdGuard`; it does not justify environment mutation.
 
 Unit tests that only need to verify explicit config path precedence should test
 `explicit_config_path_with_env` with an injected provider instead of mutating

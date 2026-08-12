@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -228,9 +228,14 @@ implement it until the user explicitly approves the draft.
   changed the release helper to invoke its required `orthohelp` subcommand,
   and generated the expected Unix and Windows artefact layouts. The compact
   metadata snapshot and workflow/release-helper contracts are green.
-- [ ] Milestone 6: update user, design, developer, and planning documentation.
-- [ ] Milestone 7: run final gates, review the diff and surrounding code, and
-  record the outcome.
+- [x] (2026-08-12 18:31Z) Milestone 6: updated the design, explicit-selector
+  ADR, developer conventions, user guide, and decision-record index. The
+  documentation records the v0.9.0 discovery adapter, failure distinction,
+  release-helper invocation, and deliberate metadata follow-up boundary.
+- [x] (2026-08-12 18:42Z) Milestone 7: reran the complete deterministic gate
+  suite and reviewed the documentation diff with CodeRabbit. All checks and
+  reviews are green; the outcomes and deferred metadata follow-up are recorded
+  below.
 
 ## Surprises & discoveries
 
@@ -302,11 +307,12 @@ implement it until the user explicitly approves the draft.
   fixture writes. Impact: the test uses the established `test_support::fs`
   fixture boundary and leaves production capability policy intact.
 
-- Observation: CodeRabbit did not reach analysis for the Milestones 1–4
-  review. Evidence: `coderabbit review --agent` emitted `awaiting_browser_auth`
-  and an OAuth login URL, then stopped without review findings. Impact: this is
-  an external authentication blocker, not a code concern or a rate limit;
-  Milestone 5 must wait for a successful review.
+- Observation: the initial CodeRabbit Milestones 1–4 review required browser
+  OAuth authentication. Evidence: `coderabbit review --agent` initially
+  emitted `awaiting_browser_auth`, and the rerun completed after authentication
+  with zero findings. Impact: this was an external authentication prerequisite,
+  not a code concern or rate limit; every completed milestone has a clean
+  CodeRabbit review.
 
 - Observation: real v0.9.0 release-help generation requires
   `cargo-orthohelp orthohelp`, whereas the previously pinned command accepted
@@ -409,12 +415,33 @@ implement it until the user explicitly approves the draft.
 
 ## Outcomes & retrospective
 
-No implementation has started. When the plan is complete, summarize the
-versions adopted, observable compatibility evidence, tests added, documentation
-updated, gate results, and any deferred v0.9.0 capabilities. Record whether the
-environment seam and combined localization path reduced application glue
-without changing user behaviour. If any planned item was omitted, explain why
-and link the Decision Log entry.
+The migration is complete. Runtime and build-time dependencies now resolve
+`ortho_config` v0.9.0, and release automation installs `cargo-orthohelp`
+v0.9.0. The release helper invokes its required `orthohelp` subcommand and a
+real Unix and Windows generation smoke produced the expected man page and
+PowerShell help layouts.
+
+The existing `ConfigEnvProvider` remains Netsuke's port. Production composes
+OrthoConfig `ProcessEnv`; injected paths project only the documented discovery
+keys into `MapEnv`. This protects the discovery adapter boundary without
+changing the user-facing configuration precedence. Unit, behavioural, and
+closed-environment end-to-end tests now cover absent, valid, malformed, and
+missing-parent discovery outcomes. The parser uses v0.9.0's combined localized
+entry point after Netsuke applies its validation parser configuration.
+
+The new compact metadata snapshot tests Netsuke's stable configuration
+projection, while `googletest` and `pretty_assertions` make new diagnostic and
+collection assertions clear. Existing Proptest coverage remains sufficient for
+the selector precedence invariant; no new Kani or Verus obligation was
+introduced. The user guide, design, ADR 004, developer guidance, and document
+index now describe the resulting behaviour and ownership conventions.
+
+`make check-fmt`, `make typecheck`, `make lint`, `make test`,
+`make markdownlint`, and `make nixie` passed at the final milestone. CodeRabbit
+reported zero findings for Milestones 1–4, 5, and 6. The only deferred item is
+configuration and parser metadata convergence: generated release help still
+cannot represent parser-only `--config` and subcommand metadata. That is a
+separate public metadata design decision, not a v0.9.0 compatibility defect.
 
 ## Context and orientation
 
@@ -1078,3 +1105,8 @@ selection ADR discovered during validation. The plan now treats that ADR as
 controlling, schedules its stale environment-access detail for correction, and
 adds its missing contents-index entry without changing the migration's
 implementation boundary.
+
+Completed, 2026-08-12: recorded the v0.9.0 implementation, the hermetic
+discovery adapter, the release-help subcommand correction, validation evidence,
+and the parser-metadata follow-up. The plan is now a completion record as well
+as the approved migration guide.
