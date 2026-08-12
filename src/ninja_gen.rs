@@ -17,8 +17,11 @@ use thiserror::Error;
 
 #[path = "ninja_gen_command_list.rs"]
 pub(crate) mod ninja_gen_command_list;
+#[path = "ninja_gen_validation.rs"]
+mod ninja_gen_validation;
 
 use ninja_gen_command_list::command_list_entry;
+use ninja_gen_validation::validate_action_recipe;
 /// Errors produced while rendering Ninja manifests.
 #[derive(Debug, Error)]
 pub enum NinjaGenError {
@@ -35,6 +38,28 @@ pub enum NinjaGenError {
     EmptyCommandRecipe {
         /// One-based stable position in generated action order.
         action_index: usize,
+    },
+    /// A list entry starts more than one background job, which cannot be
+    /// attributed reliably by a shared POSIX shell.
+    #[error(
+        "command-list action {action_index}, entry {entry_index} starts multiple background jobs"
+    )]
+    MultipleBackgroundJobs {
+        /// One-based stable position in generated action order.
+        action_index: usize,
+        /// One-based stable position in the command list.
+        entry_index: usize,
+    },
+    /// A list entry uses `exec` in a shell structure the wrapper cannot
+    /// supervise without changing its semantics.
+    #[error(
+        "command-list action {action_index}, entry {entry_index} has unsupported exec structure"
+    )]
+    UnsupportedCommandListExec {
+        /// One-based stable position in generated action order.
+        action_index: usize,
+        /// One-based stable position in the command list.
+        entry_index: usize,
     },
     /// Formatting the Ninja output failed.
     #[error("{message}")]
@@ -217,18 +242,6 @@ fn escape_script(script: &str) -> String {
         .replace('`', "\\`")
         .replace('\'', "'\"'\"'")
         .replace('\n', "\\n")
-}
-
-const fn validate_action_recipe(
-    action: &crate::ir::Action,
-    action_index: usize,
-) -> Result<(), NinjaGenError> {
-    if let Recipe::Command { command } = &action.recipe
-        && command.is_empty_content()
-    {
-        return Err(NinjaGenError::EmptyCommandRecipe { action_index });
-    }
-    Ok(())
 }
 
 /// Wrapper struct to display a rule with its identifier.

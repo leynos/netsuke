@@ -116,11 +116,11 @@ fn generate_command_list_ninja_joins_a_fail_fast_chain() -> Result<()> {
 
     let ninja = generate(&graph)?;
     ensure!(
-        ninja.contains("command = { _netsuke_background_before=\"$$(jobs -p)\";")
+        ninja.contains("command = { _netsuke_background_before=$${!:-};")
             && ninja.contains("if eval 'echo one'")
             && ninja.contains("if eval 'echo two'")
             && ninja.contains("if eval 'echo three'")
-            && ninja.contains("for _netsuke_background_job in $$_netsuke_background_after; do")
+            && ninja.contains("if wait \"$$_netsuke_background_after\"; then :;")
             && ninja.matches("} && {").count() == 2,
         "command list entries should be isolated brace groups joined by &&:\n{ninja}"
     );
@@ -147,6 +147,34 @@ fn programmatic_empty_command_recipe_returns_a_typed_generation_error() {
             "empty command recipe should produce the stable typed error, got {error:?}"
         );
     }
+}
+
+#[test]
+fn nested_command_list_exec_returns_a_typed_generation_error() {
+    let action = Action {
+        recipe: Recipe::Command {
+            command: StringOrList::List(vec!["if true; then exec false; fi".into()]),
+        },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    };
+    let mut graph = BuildGraph::default();
+    graph.actions.insert("nested-exec".into(), action);
+
+    let error = generate(&graph).expect_err("nested exec should not generate Ninja");
+    assert!(
+        matches!(
+            error,
+            NinjaGenError::UnsupportedCommandListExec {
+                action_index: 1,
+                entry_index: 1,
+            }
+        ),
+        "nested exec should produce the stable typed error, got {error:?}"
+    );
 }
 
 #[test]

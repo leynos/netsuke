@@ -11,7 +11,7 @@ use minijinja::Environment;
 use netsuke::ast::{NetsukeManifest, Recipe, StringOrList};
 use netsuke::ir::{Action, BuildEdge, BuildGraph};
 use netsuke::manifest::{self, render_manifest};
-use netsuke::ninja_gen::generate;
+use netsuke::ninja_gen::{NinjaGenError, generate};
 use std::process::Command;
 use tempfile::TempDir;
 use test_support::ninja_gen::ninja_integration_setup;
@@ -98,10 +98,19 @@ fn command_list_entry_ending_in_background_operator_preserves_the_next_boundary(
     };
     run_command_list(
         &dir,
-        vec!["true &".into(), "echo second > after-background.txt".into()],
+        vec![
+            "(sleep 0.1; echo waited > waited-background-job.txt) &".into(),
+            "echo second > after-background.txt".into(),
+        ],
         "after-background.txt",
         "second",
-    )
+    )?;
+    let workspace = open_temp_workspace(&dir)?;
+    ensure!(
+        workspace.exists("waited-background-job.txt"),
+        "Ninja must wait for a successful background job before running the next entry"
+    );
+    Ok(())
 }
 
 fn failing_command_list_command(entries: Vec<String>) -> Result<String> {
@@ -178,12 +187,37 @@ fn command_list_exit_entry_preserves_status_and_emits_attribution() -> Result<()
 }
 
 #[test]
-fn command_list_exec_failure_preserves_attribution_and_stops_the_chain() -> Result<()> {
+fn command_list_exec_entries_preserve_attribution_and_success() -> Result<()> {
     let Some(dir) = ninja_integration_setup() else {
         return Ok(());
     };
+    let successful_command = failing_command_list_command(vec![
+        "exec true".into(),
+        "echo unexpected > continued-after-successful-exec.txt".into(),
+    ])?;
+    let successful_output = run_generated_command_with_ninja(&dir, &successful_command)?;
+    ensure!(
+        successful_output.status.success(),
+        "a successful process-replacing entry must succeed"
+    );
+    let successful_diagnostics = format!(
+        "{}{}",
+        String::from_utf8(successful_output.stdout).context("Ninja stdout should be UTF-8")?,
+        String::from_utf8(successful_output.stderr).context("Ninja stderr should be UTF-8")?,
+    );
+    ensure!(
+        !successful_diagnostics
+            .lines()
+            .any(|line| line.starts_with("netsuke command-list failure: action ")),
+        "successful exec must not emit failure attribution: {successful_diagnostics}"
+    );
+    let workspace = open_temp_workspace(&dir)?;
+    ensure!(
+        !workspace.exists("continued-after-successful-exec.txt"),
+        "a successful exec must retain process-replacement semantics"
+    );
     let command = failing_command_list_command(vec![
-        "exec false".into(),
+        "FOO=1 exec false".into(),
         "echo unexpected > continued-after-exec.txt".into(),
     ])?;
     let output = run_generated_command_with_ninja(&dir, &command)?;
@@ -197,9 +231,8 @@ fn command_list_exec_failure_preserves_attribution_and_stops_the_chain() -> Resu
     ensure!(
         diagnostics.contains("netsuke command-list failure: action ")
             && diagnostics.contains(", entry 1"),
-        "exec failure should emit the first-entry marker: {diagnostics}"
+        "assignment-prefixed exec failure should emit the first-entry marker: {diagnostics}"
     );
-    let workspace = open_temp_workspace(&dir)?;
     ensure!(
         !workspace.exists("continued-after-exec.txt"),
         "an exec failure must not run a later entry"
@@ -213,7 +246,7 @@ fn command_list_background_failure_waits_before_the_next_entry() -> Result<()> {
         return Ok(());
     };
     let command = failing_command_list_command(vec![
-        "false &".into(),
+        "sh -c 'sleep 0.1; exit 1' &".into(),
         "echo unexpected > continued-after-background.txt".into(),
     ])?;
     let shell_command = command.replace("$$", "$");
@@ -245,32 +278,21 @@ fn command_list_background_failure_waits_before_the_next_entry() -> Result<()> {
 }
 
 #[test]
-fn command_list_waits_for_every_background_job_before_the_next_entry() -> Result<()> {
-    let Some(dir) = ninja_integration_setup() else {
-        return Ok(());
-    };
-    let command = failing_command_list_command(vec![
+fn command_list_rejects_multiple_background_jobs() -> Result<()> {
+    let error = failing_command_list_command(vec![
         "false & true &".into(),
         "echo unexpected > continued-after-multiple-background-jobs.txt".into(),
-    ])?;
-    let output = run_generated_command_with_ninja(&dir, &command)?;
+    ])
+    .expect_err("multiple background jobs should be rejected before Ninja runs");
     ensure!(
-        !output.status.success(),
-        "a failing background job must fail the Ninja build"
-    );
-    let diagnostics = format!(
-        "{}{}",
-        String::from_utf8(output.stdout).context("Ninja stdout should be UTF-8")?,
-        String::from_utf8(output.stderr).context("Ninja stderr should be UTF-8")?,
-    );
-    ensure!(
-        diagnostics.contains(", entry 1"),
-        "the background failure should identify the first entry: {diagnostics}"
-    );
-    let workspace = open_temp_workspace(&dir)?;
-    ensure!(
-        !workspace.exists("continued-after-multiple-background-jobs.txt"),
-        "a failed background job must prevent a later entry from running"
+        matches!(
+            error.downcast_ref::<NinjaGenError>(),
+            Some(NinjaGenError::MultipleBackgroundJobs {
+                action_index: 1,
+                entry_index: 1,
+            })
+        ),
+        "multiple background jobs should return a stable typed error: {error:?}"
     );
     Ok(())
 }

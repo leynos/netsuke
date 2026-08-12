@@ -161,7 +161,7 @@ proptest! {
         }
         prop_assert_eq!(
             command_line
-                .matches("{ _netsuke_background_before=\"$$(jobs -p)\";")
+                .matches("{ _netsuke_background_before=$${!:-};")
                 .count(),
             entries.len()
         );
