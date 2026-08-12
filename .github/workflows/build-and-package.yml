@@ -85,7 +85,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo-orthohelp --version | grep '0\.9\.0'
+          cargo-orthohelp --version | grep -Eq '(^|[[:space:]])0\.9\.0([[:space:]]|$)'
 
       - name: Build release binary
         uses: leynos/shared-actions/.github/actions/rust-build-release@8add2d99854a5b77548eae98cca59202e68fefc8

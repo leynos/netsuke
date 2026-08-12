@@ -2384,7 +2384,7 @@ Because `MergeComposer` uses last-wins semantics, pushing the project layers
 after user layers gives them higher precedence.
 
 Early JSON resolution reuses this logic through
-`collect_diag_file_layers_with_env`, before full configuration merging.
+`collect_diag_file_layers_with_sources`, before full configuration merging.
 
 ### Layer precedence
 
@@ -2765,8 +2765,8 @@ split diagnostics, path comparison, and tests out of the main discovery flow:
   (`--config` versus `NETSUKE_CONFIG`), the removed legacy
   `NETSUKE_CONFIG_PATH` alias, and event-schema snapshots for both selection
   and explicit load failures.
-- `discovery_layer_tests.rs` — tests which branch
-  `collect_diag_file_layers_with_env` takes (explicit path versus automatic
+- `discovery_layer_tests.rs` — tests the test-only
+  `collect_diag_file_layers_with_env` wrapper (explicit path versus automatic
   discovery) and the project-scope second pass in `collect_file_layers`.
 
 Both test modules import `capture_events`, `find_event`, and `EventAssertion`

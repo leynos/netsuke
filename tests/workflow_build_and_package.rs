@@ -195,7 +195,9 @@ fn behavioural_build_and_package_validates_release_help_tooling() {
         .expect("build-and-package workflow should be readable");
 
     assert!(
-        contents.contains("cargo-orthohelp --version | grep '0\\.9\\.0'"),
+        contents.contains(
+            "cargo-orthohelp --version | grep -Eq '(^|[[:space:]])0\\.9\\.0([[:space:]]|$)'"
+        ),
         "workflow should validate the installed cargo-orthohelp version"
     );
     assert!(

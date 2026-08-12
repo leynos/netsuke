@@ -83,8 +83,8 @@ Netsuke resolves explicit configuration paths in `src/cli/discovery.rs`.
 - `resolve_config_selector` applies `--config` > `NETSUKE_CONFIG`, ignoring
   empty environment values.
 - `env_config_path(env, var_name)` reads through Netsuke's injected
-  `ConfigEnvProvider` port. Production supplies `ConfigStdEnvProvider`; tests
-  use a map-backed provider without mutating process-global state.
+  `EnvProvider` port. Production supplies `StdEnvProvider`; tests use a
+  map-backed provider without mutating process-global state.
 - `push_file_layers_with_sources` drains successful layer loads into the merge
   composer, or records the load error for final diagnostics. Its private
   `DiscoverySources` input pairs that port with the selected OrthoConfig

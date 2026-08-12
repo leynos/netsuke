@@ -261,7 +261,7 @@ selected command:
 
 <!-- tested-example: guide-subcommand -->
 ```rust
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use ortho_config::{OrthoConfig, OrthoResult, SubcmdConfigMerge};
 use serde::{Deserialize, Serialize};
 
@@ -277,7 +277,7 @@ enum Command {
     Serve(ServeConfig),
 }
 
-#[derive(Debug, Default, Parser, Deserialize, Serialize, OrthoConfig)]
+#[derive(Debug, Default, Args, Deserialize, Serialize, OrthoConfig)]
 #[command(name = "serve")]
 #[ortho_config(prefix = "ACME_SERVE_")]
 struct ServeConfig {
@@ -569,7 +569,7 @@ sections. A typical progression is:
 
 The [Hello World application](../examples/hello_world/) demonstrates these
 pieces in a larger layout. The
-[v0.9.0 migration guide](v0-9-0-migration-guide.md) explains compatibility
+[v0.9.0 migration guide](ortho-config-v0-9-0-migration-guide.md) explains compatibility
 changes for existing v0.8.0 users, and the
 [API documentation](https://docs.rs/ortho_config) is the source for complete
 type and method signatures.

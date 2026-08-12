@@ -423,6 +423,6 @@ crate, and keep a wildcard arm because `OrthoError` is non-exhaustive.
 - [ ] Enable metrics or agent context only when the application has a consumer
   for them.
 
-The [user's guide](users-guide.md) contains complete worked examples for each
-new pattern. The [changelog](../CHANGELOG.md) remains the concise release
-inventory.
+The [user's guide](ortho-config-users-guide.md) contains complete worked
+examples for each new pattern. The [changelog](../CHANGELOG.md) remains the
+concise release inventory.
