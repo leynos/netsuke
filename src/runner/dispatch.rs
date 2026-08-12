@@ -2,12 +2,17 @@
 
 use super::{
     ExecutionContext, NinjaToolSpec, generate_ninja, graph, handle_build, handle_ninja_tool, help,
-    process, resolve_output_path,
+    ExecutionContext, NinjaContent, NinjaToolSpec, generate_ninja, graph, handle_build,
+    handle_ninja_tool, materialize_dyndep_bundle, process, resolve_output_path,
 };
 use crate::cli::{BuildArgs, Cli, Commands, HelpArgs, HelpTopic};
 use crate::localization::keys;
 use crate::result_json;
 use anyhow::{Context, Result};
+
+
+//! Dispatch parsed commands and emit their successful JSON result documents.
+};
 
 pub(super) fn execute(cli: &Cli, command: Commands, context: &ExecutionContext<'_>) -> Result<()> {
     match command {
@@ -44,7 +49,9 @@ fn execute_generate(
     output: Option<&std::path::PathBuf>,
     context: &ExecutionContext<'_>,
 ) -> Result<()> {
-    let ninja = generate_ninja(cli, context.reporter, None)?;
+    let bundle = generate_ninja(cli, context.reporter, None)?;
+    materialize_dyndep_bundle(cli, &bundle)?;
+    let ninja = NinjaContent::new(bundle.into_parts().0);
     if let Some(file) = output {
         let output_path = resolve_output_path(cli, file.as_path());
         process::write_ninja_file(output_path.as_ref(), &ninja)?;

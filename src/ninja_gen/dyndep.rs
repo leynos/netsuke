@@ -51,6 +51,12 @@
 //! assert_eq!(bundle.dyndep_files().len(), 2);
 //! ```
 
+#[path = "dyndep_bundle.rs"]
+mod bundle;
+#[path = "dyndep_telemetry.rs"]
+mod telemetry;
+pub use bundle::{GeneratedDyndep, GeneratedNinja};
+
 use crate::ast::DependencyOrder;
 use crate::hex;
 use crate::ir::{BuildEdge, BuildGraph};
@@ -70,77 +76,6 @@ const SERIAL_NAMESPACE: &str = ".netsuke/serial";
 /// Reserved state namespace for dyndep sidecar files.
 const DYNDEP_NAMESPACE: &str = ".netsuke/dyndep";
 
-/// One generated dyndep sidecar file inside a [`GeneratedNinja`] bundle.
-///
-/// `relative_path` is relative to the effective Ninja working directory and
-/// matches the path the main build file references. `content` is the full
-/// Ninja-syntax dyndep document.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GeneratedDyndep {
-    relative_path: Utf8PathBuf,
-    content: String,
-}
-
-impl GeneratedDyndep {
-    /// Borrow the sidecar path relative to the effective Ninja working
-    /// directory.
-    #[must_use]
-    pub const fn relative_path(&self) -> &Utf8PathBuf {
-        &self.relative_path
-    }
-
-    /// Borrow the dyndep document content to materialize.
-    #[must_use]
-    pub fn content(&self) -> &str {
-        &self.content
-    }
-}
-
-/// The complete generated Ninja artefact: the main build file text plus every
-/// dyndep sidecar required to load and execute it.
-///
-/// All paths are relative to the effective Ninja working directory. Do not
-/// invoke Ninja on [`GeneratedNinja::build_file`] until every sidecar in
-/// [`GeneratedNinja::dyndep_files`] has been materialized beside it.
-#[derive(Debug, Clone)]
-pub struct GeneratedNinja {
-    build_file: String,
-    dyndep_files: Vec<GeneratedDyndep>,
-}
-
-impl GeneratedNinja {
-    /// Borrow the main Ninja build file text.
-    #[must_use]
-    pub fn build_file(&self) -> &str {
-        &self.build_file
-    }
-
-    /// Borrow the dyndep sidecars required by `build_file`.
-    #[must_use]
-    pub fn dyndep_files(&self) -> &[GeneratedDyndep] {
-        &self.dyndep_files
-    }
-
-    /// Consume the bundle, returning the main file text and its sidecars.
-    #[must_use]
-    pub fn into_parts(self) -> (String, Vec<GeneratedDyndep>) {
-        (self.build_file, self.dyndep_files)
-    }
-}
-
-#[cfg(test)]
-impl GeneratedDyndep {
-    /// Build a sidecar fixture for tests that must construct bundles from
-    /// scratch rather than through .
-    #[must_use]
-    pub(crate) fn fixture(relative_path: Utf8PathBuf, content: String) -> Self {
-        Self {
-            relative_path,
-            content,
-        }
-    }
-}
-
 /// Generate a complete Ninja bundle for `graph`, materializing staged dyndep
 /// sidecars for every multi-dependency serial edge.
 ///
@@ -154,6 +89,12 @@ impl GeneratedDyndep {
 /// `.netsuke/dyndep` namespace, and [`NinjaGenError::MissingAction`] when an
 /// edge references an unknown action.
 pub fn generate_bundle(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenError> {
+    telemetry::instrument_bundle_generation(graph.actions.len(), graph.targets.len(), || {
+        generate_bundle_inner(graph)
+    })
+}
+
+fn generate_bundle_inner(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenError> {
     reject_reserved_paths(graph)?;
     let serial_present = graph_requires_dyndep(graph);
 
@@ -226,7 +167,7 @@ fn render_edge(
     if requires_gates {
         return render_serial_edge(edge, action.restat, out, stages);
     }
-    render_display_edge(edge, action.restat, out)
+    render_display_edge(edge, action.restat, &edge.implicit_deps, out)
 }
 
 /// Render one staged serial edge and replace its real dependencies with gates.
@@ -236,18 +177,18 @@ fn render_serial_edge(
     out: &mut String,
     stages: &mut SerialStages,
 ) -> Result<(), NinjaGenError> {
-    let mut added = Vec::new();
-    render_serial_block(edge, out, stages, &mut added)?;
-    let mut aggregate = edge.clone();
-    aggregate.implicit_deps = added;
-    aggregate.dependency_order = DependencyOrder::Parallel;
-    render_display_edge(&aggregate, action_restat, out)
+    telemetry::instrument_serial_lowering(edge.implicit_deps.len(), || {
+        let mut gate_paths = Vec::new();
+        render_serial_block(edge, out, stages, &mut gate_paths)?;
+        render_display_edge(edge, action_restat, &gate_paths, out)
+    })
 }
 
 /// Render an edge using its already selected Ninja action metadata.
 fn render_display_edge(
     edge: &BuildEdge,
     action_restat: bool,
+    implicit_deps: &[Utf8PathBuf],
     out: &mut String,
 ) -> Result<(), NinjaGenError> {
     writeln!(
@@ -256,6 +197,7 @@ fn render_display_edge(
         crate::ninja_gen::DisplayEdge {
             edge,
             action_restat,
+            implicit_deps,
         }
     )?;
     Ok(())

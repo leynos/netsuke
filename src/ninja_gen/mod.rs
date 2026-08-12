@@ -158,6 +158,7 @@ pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), Ni
             DisplayEdge {
                 edge,
                 action_restat: action.restat,
+                implicit_deps: &edge.implicit_deps,
             }
         )?;
     }
@@ -340,6 +341,7 @@ impl Display for NamedAction<'_> {
 pub(crate) struct DisplayEdge<'a> {
     edge: &'a BuildEdge,
     action_restat: bool,
+    implicit_deps: &'a [Utf8PathBuf],
 }
 
 impl Display for DisplayEdge<'_> {
@@ -352,8 +354,8 @@ impl Display for DisplayEdge<'_> {
         if !self.edge.inputs.is_empty() {
             write!(f, " {}", join(&self.edge.inputs))?;
         }
-        if !self.edge.implicit_deps.is_empty() {
-            write!(f, " | {}", join(&self.edge.implicit_deps))?;
+        if !self.implicit_deps.is_empty() {
+            write!(f, " | {}", join(self.implicit_deps))?;
         }
         if !self.edge.order_only_deps.is_empty() {
             write!(f, " || {}", join(&self.edge.order_only_deps))?;

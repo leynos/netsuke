@@ -55,6 +55,7 @@ fn format_edge(edge: &BuildEdge) -> String {
     DisplayEdge {
         edge,
         action_restat: false,
+        implicit_deps: &edge.implicit_deps,
     }
     .to_string()
 }

@@ -13,12 +13,13 @@
 //! an atomic rename so concurrent Netsuke processes cannot observe partial
 //! content.
 
-use crate::cli::Cli;
+#[path = "dyndep_telemetry.rs"]
+mod telemetry;
+
 use crate::localization::{self, keys};
 use crate::ninja_gen::GeneratedDyndep;
 use anyhow::{Context, Result, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::ambient_authority;
 use cap_std::fs_utf8::{Dir, OpenOptions};
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -29,60 +30,52 @@ pub(crate) const DYNDEP_DIR: &str = ".netsuke/dyndep";
 /// Distinguishes temporary sidecars created by separate write attempts.
 static TEMP_FILE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
-/// Materialize every sidecar in `dyndep_files` under the effective Ninja
-/// working directory selected by `cli`.
+/// Materialize every sidecar in `dyndep_files` through `dir`.
 ///
 /// # Errors
 ///
-/// Returns successfully without opening the working directory when
-/// `dyndep_files` is empty. Otherwise returns an error if the working directory
-/// cannot be opened or the `.netsuke/dyndep` directory created, or if any
-/// sidecar write, rename, or content verification fails.
-pub fn materialize_dyndep_files(cli: &Cli, dyndep_files: &[GeneratedDyndep]) -> Result<()> {
+/// Returns successfully without creating generated state when `dyndep_files`
+/// is empty. Otherwise returns an error if the `.netsuke/dyndep` directory
+/// cannot be created, or if any sidecar write, rename, or content verification
+/// fails.
+pub(crate) fn materialize_dyndep_files(dir: &Dir, dyndep_files: &[GeneratedDyndep]) -> Result<()> {
+    telemetry::instrument_materialization(dyndep_files.len(), || {
+        materialize_dyndep_files_inner(dir, dyndep_files)
+    })
+}
+
+/// Apply the sidecar publication command through the supplied capability.
+fn materialize_dyndep_files_inner(dir: &Dir, dyndep_files: &[GeneratedDyndep]) -> Result<()> {
     if dyndep_files.is_empty() {
         return Ok(());
     }
-    let dir = open_effective_dir(cli)?;
     dir.create_dir_all(DYNDEP_DIR).with_context(|| {
         localization::message(keys::RUNNER_IO_DYNDEP_CREATE_DIR)
             .with_arg("path", DYNDEP_DIR.to_owned())
     })?;
     for sidecar in dyndep_files {
-        materialize_one(&dir, sidecar)?;
+        materialize_one(dir, sidecar)?;
     }
     Ok(())
 }
 
-/// Open the effective Ninja working directory through the capability seam.
-///
-/// Honours the CLI `--directory` option; otherwise uses the current directory.
-fn open_effective_dir(cli: &Cli) -> Result<Dir> {
-    if let Some(dir) = &cli.directory {
-        let utf8 = Utf8Path::from_path(dir).context("non-UTF-8 working directory")?;
-        Dir::open_ambient_dir(utf8.as_str(), ambient_authority()).with_context(|| {
-            localization::message(keys::RUNNER_IO_OPEN_AMBIENT_DIR).with_arg("path", utf8.as_str())
-        })
-    } else {
-        Dir::open_ambient_dir(".", ambient_authority())
-            .context(localization::message(keys::RUNNER_IO_OPEN_AMBIENT_DIR))
-    }
-}
-
 /// Materialize one sidecar idempotently and atomically.
 fn materialize_one(dir: &Dir, sidecar: &GeneratedDyndep) -> Result<()> {
-    let rel = sidecar.relative_path().clone();
-    match read_verified(dir, &rel, sidecar.content())? {
+    telemetry::instrument_sidecar_materialization(|| materialize_one_inner(dir, sidecar))
+}
+
+/// Publish or verify one sidecar without attaching observability policy.
+fn materialize_one_inner(dir: &Dir, sidecar: &GeneratedDyndep) -> Result<()> {
+    let rel = sidecar.relative_path();
+    match read_verified(dir, rel, sidecar.content())? {
         ReadOutcome::Matching => {
-            tracing::debug!(
-                path = %rel,
-                "reusing existing dyndep sidecar",
-            );
+            tracing::debug!(operation = "reuse", "reusing existing dyndep sidecar",);
             Ok(())
         }
         ReadOutcome::Mismatch => Err(anyhow!(
             localization::message(keys::RUNNER_IO_DYNDEP_CORRUPT).with_arg("path", rel.as_str())
         )),
-        ReadOutcome::Missing => write_atomic(dir, &rel, sidecar.content()),
+        ReadOutcome::Missing => write_atomic(dir, rel, sidecar.content()),
     }
 }
 
@@ -245,13 +238,6 @@ mod tests {
     use anyhow::{Result, ensure};
     use camino::Utf8PathBuf;
 
-    fn temp_cli(dir: &std::path::Path) -> Cli {
-        Cli {
-            directory: Some(dir.to_path_buf()),
-            ..Cli::default()
-        }
-    }
-
     fn sidecar(name: &str, content: &str) -> GeneratedDyndep {
         GeneratedDyndep::fixture(Utf8PathBuf::from(name), content.to_owned())
     }
@@ -259,25 +245,21 @@ mod tests {
     fn temp_dir(temp: &tempfile::TempDir) -> Result<Dir> {
         let path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
             .map_err(|path| anyhow!("temporary directory is not UTF-8: {}", path.display()))?;
-        Dir::open_ambient_dir(path, ambient_authority()).map_err(Into::into)
+        Dir::open_ambient_dir(path, cap_std::ambient_authority()).map_err(Into::into)
     }
 
     #[test]
     fn materializes_nested_sidecar_and_reuses_it() -> Result<()> {
         let temp = tempfile::tempdir()?;
-        let cli = temp_cli(temp.path());
+        let dir = temp_dir(&temp)?;
         let dyndep = sidecar(".netsuke/dyndep/abc.dd", "ninja_dyndep_version = 1\n");
 
-        materialize_dyndep_files(&cli, &[dyndep])?;
-        ensure_matching(
-            &temp_dir(&temp)?,
-            ".netsuke/dyndep/abc.dd",
-            "ninja_dyndep_version = 1\n",
-        )?;
+        materialize_dyndep_files(&dir, &[dyndep])?;
+        ensure_matching(&dir, ".netsuke/dyndep/abc.dd", "ninja_dyndep_version = 1\n")?;
 
         // Second run reuses the existing sidecar without error.
         materialize_dyndep_files(
-            &cli,
+            &dir,
             &[sidecar(
                 ".netsuke/dyndep/abc.dd",
                 "ninja_dyndep_version = 1\n",
@@ -289,12 +271,12 @@ mod tests {
     #[test]
     fn empty_sidecar_list_does_not_create_dyndep_directory() -> Result<()> {
         let temp = tempfile::tempdir()?;
-        let cli = temp_cli(temp.path());
+        let dir = temp_dir(&temp)?;
 
-        materialize_dyndep_files(&cli, &[])?;
+        materialize_dyndep_files(&dir, &[])?;
 
         ensure!(
-            temp_dir(&temp)?.open(DYNDEP_DIR).is_err(),
+            dir.open(DYNDEP_DIR).is_err(),
             "empty sidecar list must not create {DYNDEP_DIR}"
         );
         Ok(())
@@ -303,13 +285,12 @@ mod tests {
     #[test]
     fn corrupt_existing_sidecar_is_reported() -> Result<()> {
         let temp = tempfile::tempdir()?;
-        let cli = temp_cli(temp.path());
         let dir = temp_dir(&temp)?;
         dir.create_dir_all(DYNDEP_DIR)?;
         dir.write(".netsuke/dyndep/bad.dd", "corrupt")?;
 
         let result =
-            materialize_dyndep_files(&cli, &[sidecar(".netsuke/dyndep/bad.dd", "expected")]);
+            materialize_dyndep_files(&dir, &[sidecar(".netsuke/dyndep/bad.dd", "expected")]);
         ensure!(result.is_err(), "corrupt sidecar must be reported");
         Ok(())
     }
@@ -317,27 +298,23 @@ mod tests {
     #[test]
     fn no_temp_files_left_behind() -> Result<()> {
         let temp = tempfile::tempdir()?;
-        let cli = temp_cli(temp.path());
-        materialize_dyndep_files(&cli, &[sidecar(".netsuke/dyndep/x.dd", "content")])?;
+        let dir = temp_dir(&temp)?;
+        materialize_dyndep_files(&dir, &[sidecar(".netsuke/dyndep/x.dd", "content")])?;
         let temp_file = ".netsuke/dyndep/x.dd.tmp";
-        ensure!(
-            temp_dir(&temp)?.open(temp_file).is_err(),
-            "temp file left behind"
-        );
+        ensure!(dir.open(temp_file).is_err(), "temp file left behind");
         Ok(())
     }
 
     #[test]
     fn stale_temp_file_does_not_block_materialization() -> Result<()> {
         let temp = tempfile::tempdir()?;
-        let cli = temp_cli(temp.path());
         let dir = temp_dir(&temp)?;
         let rel = Utf8Path::new(".netsuke/dyndep/stale.dd");
         let content = "ninja_dyndep_version = 1\n";
         dir.create_dir_all(DYNDEP_DIR)?;
         dir.write(unique_temp_name(rel), "stale temporary content")?;
 
-        materialize_dyndep_files(&cli, &[sidecar(rel.as_str(), content)])?;
+        materialize_dyndep_files(&dir, &[sidecar(rel.as_str(), content)])?;
 
         ensure_matching(&dir, rel.as_str(), content)
     }

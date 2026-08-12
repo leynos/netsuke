@@ -86,10 +86,10 @@ output and some leaf files so the long-lived structure remains visible.
   support.
 - `src/manifest/`: Manifest parsing, expansion, rendering, diagnostics, and
   manifest-specific tests.
-- `src/ninja_gen/`: Ninja rendering, including staged dyndep generation for
-  serial manifest dependencies.
-- `src/runner/`: Process execution, path handling, runner errors, and runtime
-  command orchestration.
+- `src/ninja_gen/`: Ninja rendering, staged-dyndep bundle generation, and its
+  bounded generation telemetry for serial manifest dependencies.
+- `src/runner/`: Process execution, path handling, runner errors, command
+  orchestration, and capability-injected dyndep publication.
 - `src/snapshots/`: Checked-in `insta` snapshots for source-level snapshot
   tests.
 - `src/stdlib/`: Netsuke standard library modules exposed to manifest

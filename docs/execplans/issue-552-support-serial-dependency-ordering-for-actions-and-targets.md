@@ -282,10 +282,15 @@ criterion in issue #552 and all repository gates pass.
   migration guidance and removed developer-specific workspace metadata from
   this plan. All deterministic gates passed and CodeRabbit returned no
   findings for this milestone.
-- [ ] (2026-08-12) Address the remaining PR review: separate bundle generation
-  from publication with a capability-injected materializer, eliminate
-  unnecessary ownership copies, and add bounded telemetry. Validate the green
-  milestone before its independent review.
+- [x] (2026-08-12) Separated effect-free `GeneratedNinja` production from the
+  runner's explicit, capability-injected publication command. The command
+  handlers now consume the bundle after publication, removing the generated
+  main-string copy. Serial rendering uses a dependency view instead of cloning
+  `BuildEdge`, and materialization borrows sidecar paths. Added bounded spans,
+  outcome counters, and duration histograms at bundle generation, serial
+  lowering, and sidecar publication boundaries. The focused dyndep suite and
+  runtime Ninja suite passed; all deterministic gates passed (1,944 tests, one
+  skipped, and passing doctests), then CodeRabbit reported zero findings.
 
 ## Surprises and discoveries
 
@@ -356,6 +361,10 @@ criterion in issue #552 and all repository gates pass.
   concurrency behaviour. The review correctly treats both as separate runtime
   contracts, so the follow-up test uses a bounded marker handshake rather than
   a timing-only assertion.
+- (2026-08-12) `GeneratedNinja` already had a consuming `into_parts` API, so
+  command handlers can move the generated main string only after sidecar
+  publication succeeds. An edge-display dependency view similarly removes the
+  need to clone a complete `BuildEdge` during serial lowering.
 
 ## Decision log
 
@@ -375,6 +384,11 @@ criterion in issue #552 and all repository gates pass.
   generation must be usable without a filesystem effect; accepting a
   capability-scoped directory at the materializer makes the publication
   authority explicit and testable. **Date:** 2026-08-12.
+- **Decision:** put serial bundle and materialization telemetry in dedicated
+  private modules rather than interleaving it with rendering or filesystem
+  operations. **Rationale:** the wrappers make query and command policy
+  explicit while restricting fields to bounded counts and outcome categories.
+  **Date:** 2026-08-12.
 
 - **Decision:** use staged Ninja dyndep files rather than an order-only gate
   chain, a pool, or recursive builds. **Rationale:** it is the only evaluated

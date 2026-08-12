@@ -4,6 +4,7 @@
 //! `ninja`, overridable with `NETSUKE_NINJA`).
 
 mod dispatch;
+mod dyndep_publication;
 mod error;
 mod reporter;
 
@@ -21,6 +22,7 @@ use std::borrow::Cow;
 use std::io::{self, IsTerminal};
 use std::path::Path;
 use tracing::{debug, info};
+use dyndep_publication::materialize_dyndep_bundle;
 
 /// Default Ninja executable to invoke.
 pub const NINJA_PROGRAM: &str = "ninja";
@@ -222,7 +224,9 @@ fn on_task_progress_callback(reporter: &dyn StatusReporter) -> impl FnMut(u32, u
 ///
 /// Returns an error if manifest generation or Ninja execution fails.
 fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> Result<()> {
-    let ninja = generate_ninja(cli, context.reporter, Some(keys::STATUS_TOOL_BUILD.into()))?;
+    let bundle = generate_ninja(cli, context.reporter, Some(keys::STATUS_TOOL_BUILD.into()))?;
+    materialize_dyndep_bundle(cli, &bundle)?;
+    let ninja = NinjaContent::new(bundle.into_parts().0);
     let targets = if args.targets.is_empty() {
         BuildTargets::new(&cli.default_targets)
     } else {
@@ -284,7 +288,9 @@ fn handle_ninja_tool(
         subcommand = tool.name,
         "Preparing Ninja tool invocation"
     );
-    let ninja = generate_ninja(cli, context.reporter, Some(tool.key))?;
+    let bundle = generate_ninja(cli, context.reporter, Some(tool.key))?;
+    materialize_dyndep_bundle(cli, &bundle)?;
+    let ninja = NinjaContent::new(bundle.into_parts().0);
 
     let tmp = process::create_temp_ninja_file(&ninja)?;
     let build_path = tmp.path();
@@ -318,7 +324,7 @@ fn handle_ninja_tool(
     Ok(())
 }
 
-/// Generate Ninja from the manifest referenced by `cli` and report pipeline stages.
+/// Generate a Ninja bundle from the manifest referenced by `cli`.
 ///
 /// # Errors
 ///
@@ -327,17 +333,14 @@ fn handle_ninja_tool(
 /// # Examples
 /// ```ignore
 /// use netsuke::cli::Cli;
-/// use netsuke::runner::generate_ninja;
-/// use netsuke::status::SilentReporter;
-/// let cli = Cli::default();
-/// let ninja = generate_ninja(&cli, &SilentReporter, None).expect("generate");
-/// assert!(ninja.as_str().contains("rule"));
+/// use netsuke::ninja_gen::GeneratedNinja;
+/// # let _: Option<GeneratedNinja> = None;
 /// ```
 fn generate_ninja(
     cli: &Cli,
     reporter: &dyn StatusReporter,
     tool_key: Option<LocalizationKey>,
-) -> Result<NinjaContent> {
+) -> Result<ninja_gen::GeneratedNinja> {
     let manifest_path = resolve_manifest_path(cli)?;
     ensure_manifest_exists_or_error(cli, reporter, &manifest_path)?;
 
@@ -361,10 +364,8 @@ fn generate_ninja(
         PipelineStage::NinjaSynthesisAndExecution,
         tool_key,
     );
-    let bundle = ninja_gen::generate_bundle(&graph)
-        .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))?;
-    process::materialize_dyndep_files(cli, bundle.dyndep_files())?;
-    Ok(NinjaContent::new(bundle.build_file().to_owned()))
+    ninja_gen::generate_bundle(&graph)
+        .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))
 }
 
 pub(super) fn load_manifest_with_stage_reporting(

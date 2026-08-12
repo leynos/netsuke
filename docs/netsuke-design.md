@@ -2110,13 +2110,15 @@ structures to the Ninja file syntax.
    each later dependency unavailable to Ninja until the previous one succeeds,
    while preserving one Ninja scheduler and its shared-work memoization.
 
-   The generated result is a bundle, not merely a string: the main Ninja text
-   and its `.netsuke/dyndep` sidecars must be materialized relative to the
-   effective Ninja working directory before the file can run. The main file
-   declares `ninja_required_version = 1.10` only when it contains such staged
-   serial ordering. `.netsuke/serial` and `.netsuke/dyndep` are reserved for
-   generated state. `serial` applies only to direct implicit dependencies; it
-   does not delay an independently reachable node elsewhere in the graph.
+   The generated result is a bundle, not merely a string: generation is an
+   effect-free query that returns the main Ninja text and its
+   `.netsuke/dyndep` sidecars. Each runner command then materializes those
+   sidecars through an injected effective-working-directory capability before
+   it writes or runs the main file. The main file declares
+   `ninja_required_version = 1.10` only when it contains such staged serial
+   ordering. `.netsuke/serial` and `.netsuke/dyndep` are reserved for generated
+   state. `serial` applies only to direct implicit dependencies; it does not
+   delay an independently reachable node elsewhere in the graph.
 
 4\. **Write Defaults:** Finally, write the `default` statement, listing all
 paths from `graph.default_targets`.

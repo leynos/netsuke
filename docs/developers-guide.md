@@ -1635,13 +1635,26 @@ not an order-only chain or a Ninja pool: both leave the real dependencies
 visible to Ninja too early. Preserve one top-level Ninja invocation so shared
 nodes keep Ninja's normal execute-once memoization.
 
-`src/runner/process/dyndep_files.rs` is the sole owner of sidecar persistence.
-Every `build`, `clean`, and `generate` path must obtain a bundle and call its
-materializer before writing or invoking the main file. It writes through an
-effective-working-directory capability, verifies existing content, and uses a
+`GeneratedNinja` is the query-command boundary: generation may construct and
+return it, but it must not publish any filesystem state.
+`src/runner/dyndep_publication.rs` owns the `materialize_dyndep_bundle`
+command, which every `build`, `clean`, and `generate` boundary must call before
+writing or invoking the main file. That command opens the effective
+working-directory capability and injects it into
+`src/runner/process/dyndep_files.rs`, the sole owner of sidecar persistence.
+The materializer may only use that injected `Dir`; it must not inspect CLI
+state or reopen ambient authority. It verifies existing content, then uses a
 same-directory temporary file plus atomic rename. Keep generated sidecars
 content-addressed and idempotent; corruption is an error, not a reason to
 overwrite an unknown file.
+
+`src/ninja_gen/dyndep_telemetry.rs` and
+`src/runner/process/dyndep_telemetry.rs` own this feature's observability.
+They may wrap the generation and publication boundaries, respectively, with
+bounded outcome-and-duration metrics and spans. Do not put manifest paths,
+action IDs, sidecar names, or content in those fields; rendering and
+publication helpers must remain telemetry-free so their query and command
+responsibilities stay explicit.
 
 The intended serial guarantee is path-scoped. A later dependency that is
 independently reachable elsewhere in the requested graph may start via that
