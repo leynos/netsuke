@@ -16,8 +16,25 @@ pub(crate) enum CommandListEntryError {
     UnsupportedExec,
 }
 
+/// One rendered shell command-list entry.
+#[derive(Clone, Copy)]
+pub(super) struct CommandListEntry<'a>(pub(super) &'a str);
+
+/// An internal action identifier before it is converted to a safe fingerprint.
+#[derive(Clone, Copy)]
+pub(super) struct ActionId<'a>(pub(super) &'a str);
+
+/// One shell word parsed from a command-list entry.
+#[derive(Clone, Copy)]
+struct ShellWord<'a>(&'a str);
+
+/// The shell-word sequence parsed from one command-list entry.
+struct ShellWords(Vec<String>);
+
 /// Return the unsupported boundary, if any, for one command-list entry.
-pub(crate) fn command_list_entry_error(command: &str) -> Option<CommandListEntryError> {
+pub(super) fn command_list_entry_error(
+    command: CommandListEntry<'_>,
+) -> Option<CommandListEntryError> {
     if background_operator_count(command) > 1 {
         Some(CommandListEntryError::MultipleBackgroundJobs)
     } else if exec_boundary(command) == ExecBoundary::Unsupported {
@@ -28,7 +45,11 @@ pub(crate) fn command_list_entry_error(command: &str) -> Option<CommandListEntry
 }
 
 /// Render one entry so it fails atomically without exposing command content.
-pub(crate) fn command_list_entry(command: &str, action_id: &str, entry_index: usize) -> String {
+pub(super) fn command_list_entry(
+    command: CommandListEntry<'_>,
+    action_id: ActionId<'_>,
+    entry_index: usize,
+) -> String {
     let identity = action_identity(action_id);
     let context = format!("{COMMAND_LIST_FAILURE_PREFIX}{identity}, entry {entry_index}");
     let (evaluator, exec_succeeded) = command_evaluator(command);
@@ -59,7 +80,7 @@ pub(crate) fn command_list_entry(command: &str, action_id: &str, entry_index: us
 /// A direct `exec` replaces its subshell, allowing the brace group to observe
 /// its status. A successful replacement then exits the command chain without
 /// emitting a marker, as an in-shell `exec` would.
-fn command_evaluator(command: &str) -> (String, &'static str) {
+fn command_evaluator(command: CommandListEntry<'_>) -> (String, &'static str) {
     let quoted = shell_single_quote(command);
     if exec_boundary(command) == ExecBoundary::Direct {
         (format!("(eval {quoted})"), " _netsuke_exec_succeeded=1;")
@@ -76,49 +97,73 @@ enum ExecBoundary {
 }
 
 /// Classify `exec` only when it begins a simple command after assignments.
-fn exec_boundary(command: &str) -> ExecBoundary {
-    let Some(words) = shlex::split(command) else {
-        return ExecBoundary::None;
-    };
-    let Some(first_non_assignment) = words.iter().find(|word| !is_assignment(word)) else {
-        return ExecBoundary::None;
-    };
-    if first_non_assignment == "exec" {
-        ExecBoundary::Direct
-    } else if is_unsupported_exec_structure(first_non_assignment, &words) {
-        ExecBoundary::Unsupported
-    } else {
-        ExecBoundary::None
+fn exec_boundary(command: CommandListEntry<'_>) -> ExecBoundary {
+    ShellWords::parse(command).map_or(ExecBoundary::None, |words| words.exec_boundary())
+}
+
+impl ShellWords {
+    /// Parse the shell words that make up one command-list entry.
+    fn parse(command: CommandListEntry<'_>) -> Option<Self> {
+        shlex::split(command.0).map(Self)
+    }
+
+    /// Classify `exec` only when it begins a simple command after assignments.
+    fn exec_boundary(&self) -> ExecBoundary {
+        let Some(first_non_assignment) = self.first_non_assignment() else {
+            return ExecBoundary::None;
+        };
+        if first_non_assignment.is_exec() {
+            ExecBoundary::Direct
+        } else if first_non_assignment.is_exec_wrapper() && self.contains_exec() {
+            ExecBoundary::Unsupported
+        } else {
+            ExecBoundary::None
+        }
+    }
+
+    /// Return the first word that is not a leading assignment.
+    fn first_non_assignment(&self) -> Option<ShellWord<'_>> {
+        self.0
+            .iter()
+            .map(|word| ShellWord(word))
+            .find(|word| !word.is_assignment())
+    }
+
+    /// Whether the parsed entry has an `exec` word anywhere in its structure.
+    fn contains_exec(&self) -> bool {
+        self.0.iter().any(|word| ShellWord(word).is_exec())
     }
 }
 
-/// Whether a shell structure can replace the wrapper before it reports failure.
-fn is_unsupported_exec_structure(first_word: &str, words: &[String]) -> bool {
-    is_exec_wrapper(first_word) && words.iter().any(|word| word == "exec")
-}
+impl ShellWord<'_> {
+    /// Whether this word is `exec`.
+    fn is_exec(self) -> bool {
+        self.0 == "exec"
+    }
 
-/// Whether `word` can invoke `exec` outside the direct supported boundary.
-fn is_exec_wrapper(word: &str) -> bool {
-    matches!(word, "if" | "command")
-}
+    /// Whether this word can invoke `exec` outside the direct supported boundary.
+    fn is_exec_wrapper(self) -> bool {
+        matches!(self.0, "if" | "command")
+    }
 
-/// Whether `word` is a valid POSIX shell assignment word.
-fn is_assignment(word: &str) -> bool {
-    let Some((name, _)) = word.split_once('=') else {
-        return false;
-    };
-    let mut chars = name.chars();
-    chars
-        .next()
-        .is_some_and(|first| first == '_' || first.is_ascii_alphabetic())
-        && chars.all(|character| character == '_' || character.is_ascii_alphanumeric())
+    /// Whether this word is a valid POSIX shell assignment word.
+    fn is_assignment(self) -> bool {
+        let Some((name, _)) = self.0.split_once('=') else {
+            return false;
+        };
+        let mut chars = name.chars();
+        chars
+            .next()
+            .is_some_and(|first| first == '_' || first.is_ascii_alphabetic())
+            && chars.all(|character| character == '_' || character.is_ascii_alphanumeric())
+    }
 }
 
 /// Count unquoted background operators without mistaking `&&` for one.
-fn background_operator_count(command: &str) -> usize {
+fn background_operator_count(command: CommandListEntry<'_>) -> usize {
     let mut state = ShellScanState::new();
     let mut count = 0;
-    let mut characters = command.chars().peekable();
+    let mut characters = command.0.chars().peekable();
     while let Some(character) = characters.next() {
         if state.consume_escaped() {
             continue;
@@ -222,15 +267,71 @@ impl ShellScanState {
 ///
 /// IR-generated identifiers are already hashes, but hashing again prevents a
 /// programmatically supplied identifier from disclosing arbitrary content.
-fn action_identity(action_id: &str) -> String {
-    to_lower_hex(&Sha256::digest(action_id.as_bytes()))
+fn action_identity(action_id: ActionId<'_>) -> String {
+    to_lower_hex(&Sha256::digest(action_id.0.as_bytes()))
 }
 
 /// Quote `value` as one literal POSIX shell argument.
 ///
 /// The command-list renderer passes each entry to `eval` so an inline comment
 /// or trailing control operator cannot consume the brace-group terminator.
-fn shell_single_quote(value: &str) -> String {
-    let escaped = value.replace('\'', r"'\''");
+fn shell_single_quote(command: CommandListEntry<'_>) -> String {
+    let escaped = command.0.replace('\'', r"'\''");
     format!("'{escaped}'")
+}
+
+#[cfg(test)]
+mod tests {
+    //! Unit tests for private command-list shell boundaries.
+
+    use super::{
+        ActionId, CommandListEntry, ExecBoundary, action_identity, background_operator_count,
+        command_list_entry, exec_boundary, shell_single_quote,
+    };
+
+    #[test]
+    fn classifies_direct_and_unsupported_exec_entries() {
+        assert_eq!(
+            exec_boundary(CommandListEntry("FOO=1 exec false")),
+            ExecBoundary::Direct
+        );
+        assert_eq!(
+            exec_boundary(CommandListEntry("if true; then exec false; fi")),
+            ExecBoundary::Unsupported
+        );
+    }
+
+    #[test]
+    fn counts_only_unquoted_background_operators_before_comments() {
+        assert_eq!(background_operator_count(CommandListEntry("sleep 1 &")), 1);
+        assert_eq!(
+            background_operator_count(CommandListEntry("sleep 1 & true &")),
+            2
+        );
+        assert_eq!(
+            background_operator_count(CommandListEntry("echo '&' # &")),
+            0
+        );
+    }
+
+    #[test]
+    fn shell_quotes_each_entry_as_one_literal_argument() {
+        assert_eq!(
+            shell_single_quote(CommandListEntry("echo 'quoted'")),
+            "'echo '\\''quoted'\\'''"
+        );
+    }
+
+    #[test]
+    fn rendered_entry_uses_a_hashed_action_identity_and_one_based_index() {
+        let rendered = command_list_entry(CommandListEntry("false"), ActionId("example"), 3);
+        let expected_identity = "50d858e0985ecc7f60418aaf0cc5ab587f42c2570a884095a9e8ccacd0f6545c";
+        assert_eq!(action_identity(ActionId("example")), expected_identity);
+        assert!(
+            rendered.contains(&format!(
+                "netsuke command-list failure: action {expected_identity}, entry 3"
+            )),
+            "entry must use the hashed identity and its one-based index: {rendered}"
+        );
+    }
 }

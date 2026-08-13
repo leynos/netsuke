@@ -20,7 +20,7 @@ pub(crate) mod ninja_gen_command_list;
 #[path = "ninja_gen_validation.rs"]
 mod ninja_gen_validation;
 
-use ninja_gen_command_list::command_list_entry;
+use ninja_gen_command_list::{ActionId, CommandListEntry, command_list_entry};
 use ninja_gen_validation::validate_action_recipe;
 /// Errors produced while rendering Ninja manifests.
 #[derive(Debug, Error)]
@@ -273,7 +273,11 @@ impl NamedAction<'_> {
                     items.iter()
                         .enumerate()
                         .map(|(entry_index, item)| {
-                            command_list_entry(item, self.id, entry_index + 1)
+                            command_list_entry(
+                                CommandListEntry(item),
+                                ActionId(self.id),
+                                entry_index + 1,
+                            )
                         })
                         .join(" && ");
                 Self::assert_shell_command(&command_line);
