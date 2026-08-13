@@ -128,7 +128,11 @@ fn from_str_named(
     jinja.add_function("env", move |var_name: String| {
         env_var_with(&var_name, |key| reader(key))
     });
-    jinja.add_function("glob", |pattern: String| glob_paths(&pattern));
+    jinja.add_function("glob", |pattern: String| {
+        let expansion = glob::expand_glob(&pattern)?;
+        glob::record_expansion(&expansion);
+        Ok(expansion.into_paths())
+    });
     let _stdlib_state = match stdlib_config {
         Some(config) => crate::stdlib::register_with_config(&mut jinja, config),
         None => crate::stdlib::register(&mut jinja),

@@ -52,14 +52,17 @@ operator, user, and contributor references are easier to find.
 - [adr-009-bounded-redacted-manifest-telemetry.md](adr-009-bounded-redacted-manifest-telemetry.md):
   Manifest telemetry decision record, separating observability from evaluation
   and bounding and redacting the emitted metrics and spans.
+- [adr-010-scope-glob-capability-to-literal-prefix.md](adr-010-scope-glob-capability-to-literal-prefix.md):
+  Glob capability-scoping decision record, opening the metadata capability at
+  a pattern's literal directory prefix instead of an ambient root.
 
 ## User and operator guides
 
 - [quickstart.md](quickstart.md): First-run walkthrough for building with
   Netsuke.
 - [v0-1-0-migration-guide.md](v0-1-0-migration-guide.md): Migration notes for
-  the v0.1.0 child-environment API additions, and the stability caveat that
-  covers them.
+  the v0.1.0 child-environment API additions and glob behaviour, and the
+  stability caveat that covers them.
 - [users-guide.md](users-guide.md): End-user reference for authoring and
   running Netsuke manifests, including executable discovery and
   `command_available` branch selection.

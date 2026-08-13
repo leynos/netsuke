@@ -1601,6 +1601,87 @@ sibling submodule needs them; widen the boundary only by adding a deliberate
 re-export in `src/manifest/mod.rs`. The comments in the source are supporting
 detail for these rules, not a substitute for them.
 
+### Capability scope
+
+The metadata check that filters directories out of a glob's results goes
+through a `cap_std::fs::Dir` handle rather than a raw filesystem call.
+`walk::open_root_dir` opens that handle at the pattern's longest literal
+directory prefix, computed by `walk::literal_dir_prefix`: the pattern text up
+to the first `*`, `?`, `[`, or `{`, trimmed back to the last path separator.
+For `src/**/*.c` that prefix is `src/`.
+
+`walk::open_literal_prefix` owns the opening policy: it opens the lexical root
+or current directory ambiently once, then opens each normal literal component
+without following symbolic links. It is used only to establish `GlobRoot`;
+metadata lookups remain the responsibility of that root.
+
+- **Bracketed literal escapes do not stop the scan.** The `[*]`, `[?]`,
+  `[[]`, `[]]`, `[{]`, and `[}]` forms that `normalize::force_literal_escapes`
+  produces from `\*`, `\?`, and the like name a literal character rather than
+  a wildcard, so `src/[*]x/generated/*.c` reaches `src/[*]x/generated/`, not
+  `src/`. A genuine character class such as `[ab]` is still a wildcard and
+  still stops the scan. The resulting prefix is still pattern text, so
+  `walk::unescape_literal_escapes` resolves it to the path it names
+  (`src/[*]x/` becomes the directory `src/*x/`) before the capability is
+  opened and before any match is stripped of it.
+- **`GlobRoot` couples the handle with the prefix.** Matches keep the
+  pattern's own rooting as they arrive from the `glob` crate's walker — an
+  absolute pattern yields absolute matches, while a parent-relative pattern
+  such as `../*.txt` yields matches like `../out.txt` — so
+  `GlobRoot::relativise` rebases each one onto the prefix before the
+  metadata lookup. A path that does not start with the prefix is rejected
+  outright rather than resolved through a wider capability.
+- **No literal directory component falls back to the working directory.** A
+  pattern such as `*.c` yields a prefix of `.`. `walk::prefix_is_unopenable`
+  treats a missing prefix, and a prefix that names something other than a
+  directory, as no capability at all; `glob_paths` then returns an empty
+  match set rather than an error. Any other failure to open the prefix
+  propagates.
+- **`walk::is_unresolvable_link` governs which failed lookups are skipped
+  rather than fatal.** Only `io::ErrorKind::PermissionDenied` (an escape from
+  the capability's tree, or a genuine permission failure the capability
+  cannot distinguish from one) and `io::ErrorKind::NotFound` (a dangling
+  link) count, and only when some component of the matched path is actually
+  a symbolic link. A `FilesystemLoop` is a broken tree rather than an absent
+  file, so it propagates instead of being skipped.
+- **The boundary that remains.** The match walk itself is the `glob` crate's,
+  and that crate traverses the filesystem ambiently. Only the metadata check
+  is capability-scoped, so narrowing the capability's opening point narrows
+  what the metadata check can resolve, not what the walk itself can see on
+  disk.
+
+[ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) records the
+decision to scope the capability this way and the alternatives it rejected.
+
+### Glob expansion observability
+
+`src/manifest/glob::expand_glob` returns bounded observations for two outcomes
+of the capability-scoped walk that are expected rather than erroneous, so
+neither reaches the top-level diagnostics: a literal prefix that names no
+directory, and matches dropped because a symbolic link cannot be resolved
+through the capability, including an unreadable link within the prefix. It
+aggregates every skipped entry while retaining at most the first four
+unreachable-symlink paths as a trace sample. The
+`src/manifest/mod.rs` adapter records those observations after the query at the
+Jinja `glob` helper's orchestration boundary, via `glob::record_expansion`.
+Keeping recording there leaves the expansion query free of metrics and tracing
+side effects while keeping a degraded expansion visible without having to
+reproduce it.
+
+- **Metrics** — `netsuke_manifest_glob_expansions_total`, labelled
+  `outcome` (`matched`, `unopenable_prefix`), and
+  `netsuke_manifest_glob_entries_skipped_total`, labelled `reason`
+  (`unreachable_symlink`, `not_a_file`). The skipped-entry counter includes
+  every skipped entry, not only the sampled paths. Labels carry only these
+  closed sets, never the pattern or a path, in line with the low-cardinality
+  rule in `AGENTS.md`.
+- **Tracing** — every caller-controlled path field is replaced with the stable
+  `<redacted>` marker: patterns, prefixes, and sampled relative matches. A
+  skipped unreachable-symlink event is emitted only for the retained sample,
+  with no more than four such events per expansion. Metrics retain only
+  bounded aggregate status and reason data; errors may retain the caller's
+  original pattern so invalid input can be explained precisely.
+
 ## Test isolation utilities
 
 Environment variable mutations and working-directory changes are process-global

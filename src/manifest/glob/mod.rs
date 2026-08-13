@@ -1,6 +1,31 @@
-//! Utilities for normalising and validating manifest glob patterns.
+//! Filesystem glob expansion for manifest templates.
+//!
+//! [`glob_paths`] is the module's only boundary: `manifest` re-exports it as
+//! the `glob()` Jinja helper and nothing else here is reachable from the crate
+//! root. It takes a raw pattern, expands it, and returns the matching file
+//! paths in the order the `glob` crate yields them, with directories filtered
+//! out.
+//!
+//! The work is split across four private submodules:
+//!
+//! - `validate` rejects unbalanced braces before any filesystem access.
+//! - `normalize` maps separators onto the platform's and, on Unix, rewrites
+//!   backslash escapes into the bracket classes the `glob` crate understands.
+//!   [`GlobPattern`] pairs the caller's text with that normalised form.
+//! - `walk` owns the filesystem side: it computes the pattern's literal
+//!   directory prefix, opens a capability-scoped `cap_std` handle there, and
+//!   runs the metadata check that filters each match.
+//! - `diagnostics` records the bounded data the pure expansion query returns
+//!   at the manifest orchestration boundary.
+//!
+//! Matching itself belongs to the `glob` crate, which traverses the filesystem
+//! ambiently; only the metadata check is capability-scoped. `walk`'s module
+//! documentation and
+//! [ADR-010](https://github.com/leynos/netsuke/blob/main/docs/adr-010-scope-glob-capability-to-literal-prefix.md)
+//! describe that boundary and why it remains.
 use minijinja::Error;
 
+mod diagnostics;
 mod errors;
 mod normalize;
 mod validate;
@@ -77,6 +102,60 @@ impl GlobPattern {
 /// view; they live there because that is where rustdoc will run them.
 type GlobEntryResult = std::result::Result<std::path::PathBuf, glob::GlobError>;
 
+/// A completed glob expansion and the bounded outcomes it observed.
+pub(super) struct GlobExpansion {
+    paths: Vec<String>,
+    outcome: GlobOutcome,
+    skipped: GlobSkippedEntries,
+}
+
+/// Terminal outcome of a glob expansion.
+enum GlobOutcome {
+    Matched,
+    UnopenablePrefix,
+}
+
+/// Maximum unreachable-symlink paths retained for tracing one expansion.
+const MAX_UNREACHABLE_SYMLINK_SAMPLES: usize = 4;
+
+/// Bounded diagnostic data about entries omitted from an expansion.
+#[derive(Default)]
+struct GlobSkippedEntries {
+    unreachable_symlinks: usize,
+    unreachable_symlink_samples: Vec<camino::Utf8PathBuf>,
+    not_a_file: usize,
+}
+
+impl GlobSkippedEntries {
+    /// Record an unreachable symlink while retaining a bounded trace sample.
+    fn record_unreachable_symlink(&mut self, relative: camino::Utf8PathBuf) {
+        self.unreachable_symlinks += 1;
+        if self.unreachable_symlink_samples.len() < MAX_UNREACHABLE_SYMLINK_SAMPLES {
+            self.unreachable_symlink_samples.push(relative);
+        }
+    }
+
+    /// Record an entry that does not name a regular file.
+    const fn record_not_a_file(&mut self) {
+        self.not_a_file += 1;
+    }
+}
+
+/// Entry selected by the capability-scoped metadata query.
+#[derive(Debug)]
+pub(super) enum GlobEntry {
+    Path(String),
+    UnreachableSymlink(camino::Utf8PathBuf),
+    NotAFile,
+}
+
+impl GlobExpansion {
+    /// Consume the expansion and return the paths the query selected.
+    pub(super) fn into_paths(self) -> Vec<String> {
+        self.paths
+    }
+}
+
 /// Expand a glob pattern and collect the matching UTF-8 file paths.
 ///
 /// This is the only public item in the glob module: `netsuke::manifest`
@@ -111,6 +190,11 @@ type GlobEntryResult = std::result::Result<std::path::PathBuf, glob::GlobError>;
 /// instead if the rustdoc harness wiring breaks, so the `compile_fail` block
 /// cannot pass vacuously.
 pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
+    expand_glob(pattern).map(GlobExpansion::into_paths)
+}
+
+/// Expand a pattern and return its bounded diagnostic data without recording it.
+pub(super) fn expand_glob(pattern: &str) -> std::result::Result<GlobExpansion, Error> {
     use glob::{MatchOptions, glob_with};
 
     let opts = MatchOptions {
@@ -120,19 +204,6 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     };
 
     let pattern_state = GlobPattern::new(pattern)?;
-
-    let root = open_root_dir(&pattern_state).map_err(|e| {
-        create_glob_error(
-            &GlobErrorContext {
-                pattern: pattern_state.raw().to_owned(),
-                error_char: char::from(0),
-                position: 0,
-                error_type: GlobErrorType::IoError,
-            },
-            Some(e.to_string()),
-        )
-    })?;
-
     let entries = glob_with(pattern_state.normalized(), opts).map_err(|e| {
         create_glob_error(
             &GlobErrorContext {
@@ -144,13 +215,53 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
             Some(e.to_string()),
         )
     })?;
+
+    let Some(root) = open_root_dir(&pattern_state).map_err(|e| {
+        create_glob_error(
+            &GlobErrorContext {
+                pattern: pattern_state.raw().to_owned(),
+                error_char: char::from(0),
+                position: 0,
+                error_type: GlobErrorType::IoError,
+            },
+            Some(e.to_string()),
+        )
+    })?
+    else {
+        // The pattern's literal directory prefix does not exist, so the
+        // pattern cannot match anything.
+        return Ok(GlobExpansion {
+            outcome: GlobOutcome::UnopenablePrefix,
+            paths: Vec::new(),
+            skipped: GlobSkippedEntries::default(),
+        });
+    };
+
     let mut paths = Vec::new();
+    let mut skipped = GlobSkippedEntries::default();
     for entry in entries {
-        if let Some(p) = process_glob_entry(entry, &pattern_state, &root)? {
-            paths.push(p);
+        match process_glob_entry(entry, &pattern_state, &root)? {
+            GlobEntry::Path(path) => paths.push(path),
+            GlobEntry::UnreachableSymlink(relative) => {
+                skipped.record_unreachable_symlink(relative);
+            }
+            GlobEntry::NotAFile => skipped.record_not_a_file(),
         }
     }
-    Ok(paths)
+    Ok(GlobExpansion {
+        paths,
+        outcome: GlobOutcome::Matched,
+        skipped,
+    })
+}
+
+/// Record the bounded observations from a completed expansion.
+///
+/// `glob_paths` deliberately does not call this function: it is a pure query.
+/// The manifest-template adapter records observations after it calls
+/// [`expand_glob`].
+pub(super) fn record_expansion(expansion: &GlobExpansion) {
+    diagnostics::record(expansion);
 }
 
 #[cfg(test)]

@@ -1062,9 +1062,10 @@ providing a secure bridge to the underlying system.
 
 - `glob(pattern: &str) -> Result<Vec<String>, Error>`: Expand filesystem
   patterns (e.g., `src/**/*.c`) into a list of matched paths. Results are
-  yielded in lexicographic order by the iterator and returned unchanged.
-  Symlinks are followed by the `glob` crate by default. Matching is case-
-  sensitive on all platforms. `glob_with` enforces
+  yielded in lexicographic order by the iterator and returned unchanged. A
+  match reached through a symbolic link that escapes the pattern's literal
+  directory prefix, or that dangles, is skipped; a symlink loop fails the
+  expansion. Matching is case-sensitive on all platforms. `glob_with` enforces
   `require_literal_separator = true` internally, so wildcards do not cross path
   separators unless `**` is used. Callers may use `/` or `\\` in patterns;
   these are normalized to the host platform before matching. Results contain
@@ -1079,6 +1080,16 @@ providing a secure bridge to the underlying system.
   `config\*.yml` maps to `config/*.yml`. On Windows, backslash escapes are not
   supported. This provides globbing support not available in Ninja itself,
   which does not support globbing.[^3]
+
+  The metadata check that filters directories out of the results runs
+  through a capability opened at the pattern's literal directory prefix
+  (`src/` for `src/**/*.c`) rather than at an ambient root; the match walk
+  itself remains the `glob` crate's own, which traverses the filesystem
+  ambiently.
+  [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) records this
+  decision; see the
+  [developer's guide](developers-guide.md#capability-scope) for the prefix
+  computation and symlink-handling rules.
 - `python_version(requirement: &str) -> Result<bool, Error>`: An example of a
   domain-specific helper function that demonstrates the extensibility of this
   architecture. This function would execute `python --version` or

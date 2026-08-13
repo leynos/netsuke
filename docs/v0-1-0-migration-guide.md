@@ -23,6 +23,7 @@ Table: v0.1.0 child-environment API additions and their impact
 | Convenience wrappers | Unchanged. `run_ninja` and `run_ninja_tool` behave exactly as before, inheriting the process environment. | [Users' guide](users-guide.md) |
 | Child environment | New opt-in `netsuke::runner::CommandEnv` carries additive variable overrides and an injected `PATH` for Ninja child processes. | [Users' guide](users-guide.md) |
 | Request types | New `netsuke::runner::NinjaBuildRequest` and `netsuke::runner::NinjaToolRequest` name the program, build file, and targets or tool for the `*_with` run functions. | [Users' guide](users-guide.md) |
+| Glob expansion | Parent-relative patterns such as `glob('../shared/*.h')` now expand. Metadata checks use a capability rooted at the pattern's longest literal directory prefix; missing or non-directory prefixes return no matches, and unresolvable symlink matches are skipped. | [Users' guide](users-guide.md) and [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) |
 
 ## Nothing to change for existing callers
 

@@ -345,3 +345,6 @@ fn glob_is_case_sensitive_on_windows(temp_dir: tempfile::TempDir) -> Result<()> 
     ensure!(manifest.targets.is_empty());
     Ok(())
 }
+
+#[path = "manifest_glob_tests/capability_scope.rs"]
+mod capability_scope;

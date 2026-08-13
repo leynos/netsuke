@@ -1472,6 +1472,7 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "camino",
+ "cap-primitives",
  "cap-std",
  "clap",
  "clap_mangen",

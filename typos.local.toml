@@ -6,7 +6,28 @@ schema = 1
 stems = []
 
 [words]
-accepted = []
+accepted = [
+  "relativisable",
+  "relativisably",
+  "relativisation",
+  "relativisations",
+  "relativise",
+  "relativised",
+  "relativiser",
+  "relativisers",
+  "relativises",
+  "relativising",
+  "relativizable",
+  "relativizably",
+  "relativization",
+  "relativizations",
+  "relativize",
+  "relativized",
+  "relativizer",
+  "relativizers",
+  "relativizes",
+  "relativizing",
+]
 
 [words.corrections]
 
