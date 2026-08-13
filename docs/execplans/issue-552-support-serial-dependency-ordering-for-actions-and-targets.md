@@ -335,7 +335,8 @@ criterion in issue #552 and all repository gates pass.
   publication before Ninja dispatch. The 9 focused materializer tests and 4
   serial CLI tests passed. `make check-fmt`, `make typecheck`, `make lint`,
   `make test`, `make markdownlint`, and `make nixie` passed; the full suite
-  reported 1,981 passed tests, one skipped test, and passing doctests.
+  reported 1,981 passed tests, one skipped test, and passing doctests. The
+  subsequent CodeRabbit review completed with zero actionable findings.
 
 ## Surprises and discoveries
 
@@ -1123,7 +1124,7 @@ the existing draft pull request with the completed documentation milestone.
 its limit or concurrent-growth detection. Public-CLI tests now cover serial
 sidecar publication for `generate` and `clean`, including loading generated
 output with Ninja. Focused and full deterministic validation passed; the
-post-milestone independent review remains.
+post-milestone independent review reported zero actionable findings.
 
 2026-08-12: Applied the requested test-only assertion-helper extraction after
 plan completion. It changes neither production code nor feature semantics and
