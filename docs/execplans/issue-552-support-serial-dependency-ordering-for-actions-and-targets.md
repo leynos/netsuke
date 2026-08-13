@@ -76,7 +76,7 @@ criterion in issue #552 and all repository gates pass.
 - Do not add a new external crate unless implementation proves that the
   workspace cannot provide the required digest or atomic-write primitive.
 - No production Rust source file may exceed 400 lines. In particular,
-  `src/ninja_gen.rs` and `src/runner/process/mod.rs` are already near the
+  `src/ninja_gen/mod.rs` and `src/runner/process/mod.rs` are already near the
   limit, so new responsibilities belong in focused submodules.
 - Every new module must begin with a `//!` module-level comment, and every new
   public API must have Rustdoc with a useful example.
@@ -329,6 +329,13 @@ criterion in issue #552 and all repository gates pass.
   signature, migration wording, Finnish state-expression, Polish path-label,
   and developer-guide boundary corrections; the table contents and runtime
   behaviour remain unchanged.
+- [x] (2026-08-14) Refactored bounded sidecar verification into named open,
+  size-check, bounded-read, and outcome helpers. Added public-CLI coverage for
+  serial `generate` publication plus Ninja loading and serial `clean`
+  publication before Ninja dispatch. The 9 focused materializer tests and 4
+  serial CLI tests passed. `make check-fmt`, `make typecheck`, `make lint`,
+  `make test`, `make markdownlint`, and `make nixie` passed; the full suite
+  reported 1,981 passed tests, one skipped test, and passing doctests.
 
 ## Surprises and discoveries
 
@@ -403,7 +410,7 @@ criterion in issue #552 and all repository gates pass.
 - Ninja's `rspfile_content` binding cannot conveniently encode the required
   multiline dyndep document. A literal `\n` remains literal and produces an
   invalid file. Netsuke therefore needs to materialize sidecars itself.
-- `src/ninja_gen.rs` is currently 400 lines and
+- `src/ninja_gen/mod.rs` was 400 lines before the module split, and
   `src/runner/process/mod.rs` is close to that limit. The implementation must
   be modular rather than appended to those files.
 - Netsuke already owns the `.netsuke` workspace-state namespace through its
@@ -520,7 +527,7 @@ Netsukefile YAML
     -> src/ast.rs Target
     -> src/ir/from_manifest.rs process_targets
     -> src/ir/graph.rs BuildEdge
-    -> src/ninja_gen.rs generated Ninja artefact
+    -> src/ninja_gen/mod.rs generated Ninja artefact
     -> src/runner/* materialization and Ninja invocation
 ```
 
@@ -550,7 +557,7 @@ generation must know whether the edge's implicit dependencies are ordered. Many
 tests and Rustdoc examples construct `BuildEdge` directly; update every literal
 mechanically and default it to parallel.
 
-`src/ninja_gen.rs` currently renders a graph to one string. Extract dyndep
+`src/ninja_gen/mod.rs` currently renders a graph to one string. Extract dyndep
 identifier, sidecar, and staged-edge construction into
 `src/ninja_gen/dyndep.rs`. Keep the top-level module responsible for ordinary
 rendering and selecting the staged representation.
@@ -1111,6 +1118,12 @@ surfaces, including the `src/ninja_gen/mod.rs` path and AST-to-IR conversion
 description; no Rust or test files were changed.
 This completes the implementation plan; the remaining work is only to refresh
 the existing draft pull request with the completed documentation milestone.
+
+2026-08-14: Reduced bounded sidecar verification complexity without changing
+its limit or concurrent-growth detection. Public-CLI tests now cover serial
+sidecar publication for `generate` and `clean`, including loading generated
+output with Ninja. Focused and full deterministic validation passed; the
+post-milestone independent review remains.
 
 2026-08-12: Applied the requested test-only assertion-helper extraction after
 plan completion. It changes neither production code nor feature semantics and

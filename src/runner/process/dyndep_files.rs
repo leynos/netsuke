@@ -96,33 +96,54 @@ enum ReadOutcome {
 
 /// Read an existing sidecar and compare it with the expected content.
 fn read_verified(dir: &Dir, rel: &Utf8Path, expected: &str) -> Result<ReadOutcome> {
+    let Some(mut file) = open_existing_sidecar(dir, rel)? else {
+        return Ok(ReadOutcome::Missing);
+    };
+    let size = verified_sidecar_size(&file, rel)?;
+    let (content, grew_while_reading) = read_sidecar_content(&mut file, size, rel)?;
+    Ok(content_outcome(&content, expected, grew_while_reading))
+}
+
+fn open_existing_sidecar(dir: &Dir, rel: &Utf8Path) -> Result<Option<cap_std::fs_utf8::File>> {
     let mut options = OpenOptions::new();
     options.read(true);
-    let mut file = match dir.open_with(rel, &options) {
-        Ok(file) => file,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(ReadOutcome::Missing),
-        Err(err) => {
-            return Err(err).with_context(|| {
-                localization::message(keys::RUNNER_IO_DYNDEP_READ).with_arg("path", rel.as_str())
-            });
-        }
-    };
-    let file_size = file.metadata().with_context(|| {
-        localization::message(keys::RUNNER_IO_DYNDEP_READ).with_arg("path", rel.as_str())
-    })?;
-    if file_size.len() > MAX_VERIFIED_DYNDEP_SIZE {
+    match dir.open_with(rel, &options) {
+        Ok(file) => Ok(Some(file)),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(err).with_context(|| {
+            localization::message(keys::RUNNER_IO_DYNDEP_READ).with_arg("path", rel.as_str())
+        }),
+    }
+}
+
+fn verified_sidecar_size(file: &cap_std::fs_utf8::File, rel: &Utf8Path) -> Result<u64> {
+    let size = file
+        .metadata()
+        .with_context(|| {
+            localization::message(keys::RUNNER_IO_DYNDEP_READ).with_arg("path", rel.as_str())
+        })?
+        .len();
+    if size > MAX_VERIFIED_DYNDEP_SIZE {
         return Err(anyhow!(
             localization::message(keys::RUNNER_IO_DYNDEP_TOO_LARGE)
                 .with_arg("path", rel.as_str())
                 .with_arg("limit", MAX_VERIFIED_DYNDEP_SIZE)
         ));
     }
-    let verified_size = usize::try_from(file_size.len()).with_context(|| {
+    Ok(size)
+}
+
+fn read_sidecar_content(
+    file: &mut cap_std::fs_utf8::File,
+    size: u64,
+    rel: &Utf8Path,
+) -> Result<(Vec<u8>, bool)> {
+    let verified_size = usize::try_from(size).with_context(|| {
         localization::message(keys::RUNNER_IO_DYNDEP_READ).with_arg("path", rel.as_str())
     })?;
     let mut buf = Vec::with_capacity(verified_size);
-    Read::by_ref(&mut file)
-        .take(file_size.len())
+    Read::by_ref(file)
+        .take(size)
         .read_to_end(&mut buf)
         .with_context(|| {
             localization::message(keys::RUNNER_IO_DYNDEP_READ).with_arg("path", rel.as_str())
@@ -131,10 +152,14 @@ fn read_verified(dir: &Dir, rel: &Utf8Path, expected: &str) -> Result<ReadOutcom
     let grew_while_reading = file.read(&mut growth_probe).with_context(|| {
         localization::message(keys::RUNNER_IO_DYNDEP_READ).with_arg("path", rel.as_str())
     })? != 0;
-    if !grew_while_reading && buf == expected.as_bytes() {
-        Ok(ReadOutcome::Matching)
+    Ok((buf, grew_while_reading))
+}
+
+fn content_outcome(content: &[u8], expected: &str, grew_while_reading: bool) -> ReadOutcome {
+    if !grew_while_reading && content == expected.as_bytes() {
+        ReadOutcome::Matching
     } else {
-        Ok(ReadOutcome::Mismatch)
+        ReadOutcome::Mismatch
     }
 }
 
