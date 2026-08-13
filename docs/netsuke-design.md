@@ -219,6 +219,7 @@ erDiagram
         StringOrList deps
         StringOrList order_only_deps
         map vars
+        string description
         bool phony
         bool always
     }
@@ -676,10 +677,10 @@ schema defined in Section 2. They will be defined in a dedicated module,
 enable automatic deserialization and easy debugging.
 
 The authoritative live AST contract is [src/ast.rs](../src/ast.rs). Fields and
-types marked `FUTURE` in the snippet below are forward-looking API sketches. In
-particular, `Rule.env`, `Target.description`, `Target.env`, `Recipe::Exec`,
-`ExecRecipe`, `EnvValue`, and `EnvOperation` describe the intended schema once
-the roadmap tasks land; they are not assertions about the current codebase.
+types marked `FUTURE` in the snippet below are forward-looking API sketches.
+`Target.description` is implemented optional discovery metadata; the remaining
+forward-looking fields describe the intended schema once the roadmap tasks
+land and are not assertions about the current codebase.
 
 Rust
 
@@ -762,7 +763,8 @@ pub struct Target {
     #[serde(default)]
     pub vars: HashMap<String, serde_json::Value>,
 
-    // FUTURE: planned Target.description extension; not present in src/ast.rs yet.
+    /// Optional discovery metadata shown by `netsuke help targets`.
+    #[serde(default)]
     pub description: Option<String>,
 
     // FUTURE: planned Target.env extension; not present in src/ast.rs yet.
