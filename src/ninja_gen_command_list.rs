@@ -2,6 +2,8 @@
 
 use sha2::{Digest, Sha256};
 
+use crate::hex::to_lower_hex;
+
 /// Prefix used to carry bounded list-entry failure attribution through Ninja.
 pub(crate) const COMMAND_LIST_FAILURE_PREFIX: &str = "netsuke command-list failure: action ";
 
@@ -221,20 +223,7 @@ impl ShellScanState {
 /// IR-generated identifiers are already hashes, but hashing again prevents a
 /// programmatically supplied identifier from disclosing arbitrary content.
 fn action_identity(action_id: &str) -> String {
-    let digest = Sha256::digest(action_id.as_bytes());
-    let mut identity = String::with_capacity(digest.len() * 2);
-    for byte in digest {
-        identity.push(hex_digit(byte >> 4));
-        identity.push(hex_digit(byte & 0x0f));
-    }
-    identity
-}
-
-const fn hex_digit(nibble: u8) -> char {
-    match nibble {
-        0..=9 => (b'0' + nibble) as char,
-        _ => (b'a' + (nibble - 10)) as char,
-    }
+    to_lower_hex(&Sha256::digest(action_id.as_bytes()))
 }
 
 /// Quote `value` as one literal POSIX shell argument.

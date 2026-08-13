@@ -280,7 +280,7 @@ fn command_list_background_failure_waits_before_the_next_entry() -> Result<()> {
 #[test]
 fn command_list_rejects_multiple_background_jobs() -> Result<()> {
     let error = failing_command_list_command(vec![
-        "false & true &".into(),
+        "true & sh -c 'sleep 0.1; exit 1' &".into(),
         "echo unexpected > continued-after-multiple-background-jobs.txt".into(),
     ])
     .expect_err("multiple background jobs should be rejected before Ninja runs");
