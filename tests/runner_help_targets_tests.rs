@@ -69,6 +69,40 @@ fn run_help_targets(cli: &Cli) -> Result<()> {
     run(cli, output_prefs::resolve(None)).context("running help targets subcommand")
 }
 
+fn assert_help_targets_rejects_manifest(
+    fixture_name: &str,
+    manifest: &[u8],
+    expected_error: &str,
+) -> Result<()> {
+    let temp =
+        tempfile::tempdir().with_context(|| format!("create {fixture_name} fixture directory"))?;
+    let temp_path = Utf8Path::from_path(temp.path())
+        .with_context(|| format!("{fixture_name} temporary path should be UTF-8"))?;
+    let manifest_path = temp_path.join("Netsukefile");
+    let workspace = Dir::open_ambient_dir(temp_path, ambient_authority())
+        .with_context(|| format!("open {fixture_name} fixture directory"))?;
+    workspace
+        .write("Netsukefile", manifest)
+        .with_context(|| format!("write {fixture_name} manifest"))?;
+    let cli = Cli {
+        file: manifest_path.into_std_path_buf(),
+        command: Some(Commands::Help(HelpArgs {
+            topic: Some(HelpTopic::Targets),
+        })),
+        ..Cli::default()
+    };
+    let Err(error) = run_help_targets(&cli) else {
+        anyhow::bail!("{fixture_name} manifest should fail help targets");
+    };
+    ensure!(
+        error
+            .chain()
+            .any(|cause| cause.to_string().contains(expected_error)),
+        "error should contain {expected_error:?}: {error:?}"
+    );
+    Ok(())
+}
+
 #[rstest]
 fn help_targets_prints_actions_and_targets(
     #[from(help_targets_manifest)] fixture: Result<(tempfile::TempDir, Utf8PathBuf)>,
@@ -279,62 +313,20 @@ fn help_targets_with_invalid_manifest_reports_error() -> Result<()> {
 
 #[test]
 fn help_targets_rejects_valid_manifest_with_missing_rule() -> Result<()> {
-    let temp = tempfile::tempdir().context("create missing-rule fixture directory")?;
-    let temp_path = Utf8Path::from_path(temp.path()).context("temporary path should be UTF-8")?;
-    let manifest_path = temp_path.join("Netsukefile");
-    let workspace = Dir::open_ambient_dir(temp_path, ambient_authority())
-        .context("open missing-rule fixture directory")?;
-    workspace
-        .write(
-            "Netsukefile",
-            b"netsuke_version: \"1.0.0\"\ntargets:\n  - name: out/app\n    rule: missing\n",
-        )
-        .context("write missing-rule manifest")?;
-    let cli = Cli {
-        file: manifest_path.into_std_path_buf(),
-        command: Some(Commands::Help(HelpArgs {
-            topic: Some(HelpTopic::Targets),
-        })),
-        ..Cli::default()
-    };
-
-    let error = run_help_targets(&cli).expect_err("missing manifest rule should fail help targets");
-    ensure!(
-        error
-            .chain()
-            .any(|cause| cause.to_string().contains("was not found")),
-        "IR validation should report the missing rule: {error:?}"
-    );
-    Ok(())
+    assert_help_targets_rejects_manifest(
+        "missing-rule",
+        b"netsuke_version: \"1.0.0\"\ntargets:\n  - name: out/app\n    rule: missing\n",
+        "was not found",
+    )
 }
 
 #[test]
 fn help_targets_rejects_unknown_manifest_default() -> Result<()> {
-    let (temp, manifest_path) = help_targets_manifest()?;
-    let temp_path = Utf8Path::from_path(temp.path()).context("temporary path should be UTF-8")?;
-    let workspace = Dir::open_ambient_dir(temp_path, ambient_authority())
-        .context("open unknown-default fixture directory")?;
-    workspace
-        .write(
-            "Netsukefile",
-            b"netsuke_version: \"1.0.0\"\nactions:\n  - name: lint\n    command: cargo clippy\ntargets: []\ndefaults:\n  - missing\n",
-        )
-        .context("write unknown-default manifest")?;
-    let cli = Cli {
-        file: manifest_path.into_std_path_buf(),
-        command: Some(Commands::Help(HelpArgs {
-            topic: Some(HelpTopic::Targets),
-        })),
-        ..Cli::default()
-    };
-    let error = run_help_targets(&cli).expect_err("unknown manifest default should fail");
-    ensure!(
-        error
-            .chain()
-            .any(|cause| cause.to_string().contains("default 'missing'")),
-        "error should identify the unknown default: {error:?}"
-    );
-    Ok(())
+    assert_help_targets_rejects_manifest(
+        "unknown-default",
+        b"netsuke_version: \"1.0.0\"\nactions:\n  - name: lint\n    command: cargo clippy\ntargets: []\ndefaults:\n  - missing\n",
+        "default 'missing'",
+    )
 }
 
 #[rstest]
