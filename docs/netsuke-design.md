@@ -1963,7 +1963,7 @@ classDiagram
          Exec
      }
     class ninja_gen {
-        +generate(graph: &BuildGraph) String
+        +generate_bundle(graph: &BuildGraph) Result<GeneratedNinja, NinjaGenError>
     }
     BuildGraph "1" o-- "many" Action : actions
     BuildGraph "1" o-- "many" BuildEdge : targets

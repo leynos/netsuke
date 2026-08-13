@@ -470,7 +470,7 @@ content-addressed files are reusable state, and `clean` does not remove them.
 Do not define targets beneath `.netsuke/serial` or `.netsuke/dyndep`; Netsuke
 reserves both paths for this feature.
 
-If you are migrating an existing manifest, see the
+When migrating an existing manifest, see the
 [v0.1.0 migration guide](v0-1-0-migration-guide.md#opting-into-serial-dependency-ordering)
 for the opt-in syntax, Ninja version requirement, and generated-state
 reservation.

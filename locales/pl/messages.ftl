@@ -109,13 +109,13 @@ runner.io.non_utf8_path = Ścieżki inne niż UTF-8 nie są obsługiwane (ście�
 runner.io.write_stdout = Nie udało się zapisać manifestu Ninja na standardowe wyjście.
 runner.io.flush_stdout = Nie udało się opróżnić bufora standardowego wyjścia.
 runner.io.dyndep.create_dir = Nie udało się utworzyć katalogu dyndep { $path }.
-runner.io.dyndep.read = Nie udało się odczytać wygenerowanego pliku dyndep w { $path }.
-runner.io.dyndep.write = Nie udało się zapisać wygenerowanego pliku dyndep w { $path }.
-runner.io.dyndep.rename = Nie udało się sfinalizować wygenerowanego pliku dyndep w { $path }.
-runner.io.dyndep.corrupt = Wygenerowany plik dyndep w { $path } nie pasuje do oczekiwanej zawartości; usuń tylko ten plik i spróbuj ponownie.
+runner.io.dyndep.read = Nie udało się odczytać wygenerowanego pliku dyndep (ścieżka: { $path }).
+runner.io.dyndep.write = Nie udało się zapisać wygenerowanego pliku dyndep (ścieżka: { $path }).
+runner.io.dyndep.rename = Nie udało się sfinalizować wygenerowanego pliku dyndep (ścieżka: { $path }).
+runner.io.dyndep.corrupt = Wygenerowany plik dyndep (ścieżka: { $path }) nie pasuje do oczekiwanej zawartości; usuń tylko ten plik i spróbuj ponownie.
 runner.io.dyndep.race = Inny proces zapisał plik dyndep { $path }, ale nie udało się zweryfikować jego zawartości.
-runner.io.dyndep.temp_collisions = Po wielokrotnych kolizjach nazw nie udało się utworzyć unikatowego tymczasowego pliku dyndep dla { $path }.
-runner.io.dyndep.too_large = Wygenerowany plik dyndep w { $path } przekracza limit weryfikacji wynoszący { $limit } bajtów.
+runner.io.dyndep.temp_collisions = Po wielokrotnych kolizjach nazw nie udało się utworzyć unikatowego tymczasowego pliku dyndep (ścieżka: { $path }).
+runner.io.dyndep.too_large = Wygenerowany plik dyndep (ścieżka: { $path }) przekracza limit weryfikacji wynoszący { $limit } bajtów.
 
 # Diagnostyka manifestu.
 manifest.parse = Analiza manifestu nie powiodła się.

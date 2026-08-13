@@ -182,7 +182,7 @@ ir.invalid_command = Virheellinen komennon sijoitus: { $snippet }.
 ninja_gen.missing_action = Toiminto ”{ $id }”, johon koontikaari viittaa, puuttuu.
 ninja_gen.format = Ninja-manifestin tulostetta ei voitu muotoilla.
 ninja_gen.dyndep_files_required = Tämä koonti vaatii luodun Ninja-paketin; käytä komentoa `netsuke build`, `netsuke clean` tai `netsuke generate`, jotta dyndep-tiedostot luodaan.
-ninja_gen.reserved_output_path = Polku '{ $path }' on varattu Netsuken sarjariippuvuuksien tilalle.
+ninja_gen.reserved_output_path = Polku '{ $path }' on varattu Netsuken sarjariippuvuuksien tilan tallentamiseen.
 ninja_gen.unsupported_path_character = Polku '{ $path }' sisältää tukemattoman Ninja-polun merkin '{ $character }'.
 
 # Isäntähahmojen tarkistus.

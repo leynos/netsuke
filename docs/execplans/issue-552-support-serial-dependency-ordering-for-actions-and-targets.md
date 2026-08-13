@@ -324,6 +324,11 @@ criterion in issue #552 and all repository gates pass.
   and existing-sidecar verification is bounded at 16 MiB. All focused suites
   passed. The six full deterministic gates passed with 1,979 tests, one skip,
   and passing doctests, followed by a zero-finding CodeRabbit review.
+- [x] (2026-08-14) Re-verified the documentation and locale review findings
+  against the current branch. Applied only the still-valid caption, bundle
+  signature, migration wording, Finnish state-expression, Polish path-label,
+  and developer-guide boundary corrections; the table contents and runtime
+  behaviour remain unchanged.
 
 ## Surprises and discoveries
 
@@ -459,6 +464,12 @@ criterion in issue #552 and all repository gates pass.
   **Rationale:** actions already use the target shape, while sources and
   order-only dependencies have distinct freshness semantics not covered by the
   issue. **Date:** 2026-08-10.
+- **Decision:** keep documentation terminology aligned with the implementation
+  boundary: `ast::DependencyOrder` owns manifest serialization, while
+  `ir::DependencyOrder` is the serialization-free domain type explicitly
+  produced during lowering. **Rationale:** this makes the developer guide and
+  design diagram describe the fallible `GeneratedNinja` bundle contract without
+  changing the serial dependency contract. **Date:** 2026-08-14.
 - **Decision:** preserve ordinary dependency nodes in IR and perform
   Ninja-specific staged lowering in the Ninja generator. **Rationale:** dyndep
   gates are a backend mechanism, not a user graph concept; keeping them out of
@@ -1093,6 +1104,11 @@ it.
 
 2026-08-12: The full suite passed after the executable-example correction, and
 the independent CodeRabbit review of `7153538` returned no actionable concerns.
+
+2026-08-14: Re-verified the remaining documentation and locale findings against
+the current implementation. Updated only the six requested documentation
+surfaces, including the `src/ninja_gen/mod.rs` path and AST-to-IR conversion
+description; no Rust or test files were changed.
 This completes the implementation plan; the remaining work is only to refresh
 the existing draft pull request with the completed documentation milestone.
 

@@ -1606,12 +1606,15 @@ unit tests where a small fixed set of cases must all be verified.
 manifest `deps` into `BuildEdge.implicit_deps`, and manifest `order_only_deps`
 into `BuildEdge.order_only_deps`. Keep those classes separate: recipe
 interpolation (`$in` and `{{ ins }}`) receives only `BuildEdge.inputs`, while
-`src/ninja_gen.rs` renders implicit deps with Ninja's single-pipe separator.
+`src/ninja_gen/mod.rs` renders implicit deps with Ninja's single-pipe separator.
 
-`Target::dependency_order` is a closed manifest enum carried unchanged to
-`BuildEdge::dependency_order`. `parallel` is the default. The ordering policy
-applies only to a manifest `deps` list; never infer it from the number or shape
-of graph edges, and do not apply it to inputs or order-only dependencies.
+`ast::DependencyOrder` is the closed manifest enum responsible for YAML and
+Serde. `src/ir/from_manifest.rs` explicitly converts it to the
+serialization-free `ir::DependencyOrder` stored in
+`BuildEdge::dependency_order`; both types have matching `Parallel` and `Serial`
+variants, and `parallel` remains the default. The ordering policy applies only
+to a manifest `deps` list; never infer it from the number or shape of graph
+edges, and do not apply it to inputs or order-only dependencies.
 
 `src/ir/cycle.rs::CycleDetector::visit` traverses `inputs` and `implicit_deps`
 when detecting cycles. It intentionally does not traverse `order_only_deps`,
