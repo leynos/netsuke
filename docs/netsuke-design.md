@@ -2125,6 +2125,27 @@ structures to the Ninja file syntax.
    state. `serial` applies only to direct implicit dependencies; it does not
    delay an independently reachable node elsewhere in the graph.
 
+Figure: Runner-owned serial dyndep bundle generation and execution.
+
+```mermaid
+sequenceDiagram
+    accTitle: Runner-owned serial dependency generation and execution
+    accDescr: The runner generates a Ninja bundle, materializes its dyndep sidecars, and invokes Ninja in serial order.
+    actor User
+    participant Runner as runner.generate_ninja
+    participant NinjaGen as ninja_gen.generate_bundle
+    participant Dyndep as process.materialize_dyndep_files
+    participant Ninja
+
+    User->>Runner: netsuke build / clean / generate
+    Runner->>NinjaGen: generate_bundle(graph)
+    NinjaGen-->>Runner: GeneratedNinja (build_file, dyndep_files)
+    Runner->>Dyndep: materialize_dyndep_files(cli, bundle.dyndep_files())
+    Dyndep-->>Runner: dyndep sidecars materialized
+    Runner->>Ninja: invoke with bundle.build_file()
+    Ninja-->>User: serial deps run in order, parallel elsewhere
+```
+
 4\. **Write Defaults:** Finally, write the `default` statement, listing all
 paths from `graph.default_targets`.
 

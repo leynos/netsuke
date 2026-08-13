@@ -337,6 +337,9 @@ criterion in issue #552 and all repository gates pass.
   `make test`, `make markdownlint`, and `make nixie` passed; the full suite
   reported 1,981 passed tests, one skipped test, and passing doctests. The
   subsequent CodeRabbit review completed with zero actionable findings.
+- [x] (2026-08-14) Added an accessible sequence diagram to the design document
+  showing runner-owned bundle generation, dyndep sidecar materialization, and
+  Ninja invocation. `make markdownlint` and `make nixie` passed.
 
 ## Surprises and discoveries
 
@@ -1125,6 +1128,10 @@ its limit or concurrent-growth detection. Public-CLI tests now cover serial
 sidecar publication for `generate` and `clean`, including loading generated
 output with Ninja. Focused and full deterministic validation passed; the
 post-milestone independent review reported zero actionable findings.
+
+2026-08-14: Added the runner-to-generator-to-materializer sequence to the
+design document with a visible figure caption and Mermaid accessibility title
+and description. This documents the existing boundary without changing it.
 
 2026-08-12: Applied the requested test-only assertion-helper extraction after
 plan completion. It changes neither production code nor feature semantics and
