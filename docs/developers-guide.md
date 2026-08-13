@@ -48,13 +48,26 @@ runs the manifest loading, expansion, rendering, and IR-validation stages to
 produce a deterministic action-then-target catalogue. It may validate a
 `BuildGraph`, but it must not generate a Ninja file, call a Ninja subprocess,
 execute a recipe, or create build outputs. Its Jinja environment is a
-restricted, side-effect-free query surface: query expressions invoking
-`env()`, the `contents` filter, `fetch`, `shell`, or `grep` are rejected rather
-than executed. This restriction applies only to query rendering; normal build
-manifest rendering remains unchanged. The no-topic and named-command help
-paths render clap help directly and do not load a manifest. Keep future help
-topics within this boundary rather than coupling read-only inspection to
-`runner::process`.
+restricted, side-effect-free query surface. It allowlists only the lexical path
+filters `basename`, `dirname`, `with_suffix`, and `relative_to`, the collection
+filters `uniq`, `flatten`, and `group_by`, and the clock-independent `timedelta`
+function. It rejects `env()` and `glob()`, file tests, filesystem metadata
+filters such as `size` and `linecount`, `hash`, `digest`, `contents`, `realpath`,
+and `expanduser`, executable discovery through `which` and
+`command_available`, network and command helpers (`fetch`, `shell`, and
+`grep`), and the clock-dependent `now()` function. Normal build manifest
+rendering still registers the full standard library; this restriction applies
+only to query rendering.
+
+The query allowlist has one owner: `register_manifest_query`. Query loading
+does not construct `StdlibConfig`; the registration function composes the
+allowlist directly. Reuse its lexical path, collection, and time registration
+helpers only when a helper's result depends on template inputs rather than the
+host. Do not add a host-observing helper to the shared query registration path;
+assess and record any future allowlist change here. The no-topic and
+named-command help paths render clap help directly and do not load a manifest.
+Keep future help topics within this boundary rather than coupling read-only
+inspection to `runner::process`.
 
 ## Localization
 

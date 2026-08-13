@@ -81,11 +81,17 @@ netsuke help targets
 The command honours the usual manifest-selection options, including `--file`
 and `-C/--directory`. It loads, expands, renders, and validates the manifest
 through a restricted, side-effect-free Jinja surface, then prints actions and
-targets without running recipes or creating build outputs. Query expressions
-invoking `env()`, the `contents` filter, `fetch`, `shell`, or `grep` are
-rejected rather than executed by this command. This restriction applies only
-to query rendering; normal build manifest rendering remains unchanged. Add
-`--json` to receive the versioned JSON result document; its
+targets without running recipes or creating build outputs. Queries allow only
+the lexical path filters `basename`, `dirname`, `with_suffix`, and
+`relative_to`, the collection filters `uniq`, `flatten`, and `group_by`, and
+the clock-independent `timedelta` function. Queries reject `env()` and
+`glob()`, file tests, filesystem metadata filters such as `size` and
+`linecount`, `hash`, `digest`, `contents`, `realpath`, and `expanduser`,
+executable discovery through `which` and `command_available`, network and
+command helpers (`fetch`, `shell`, and `grep`), and the clock-dependent `now()`
+function. Normal build manifest rendering retains the full standard library;
+this restriction applies only to query rendering. Add `--json` to receive the
+versioned JSON result document; its
 `result.command` is `help-targets`. The command and the new descriptions are
 beta-series additions and remain subject to the stability caveat above.
 

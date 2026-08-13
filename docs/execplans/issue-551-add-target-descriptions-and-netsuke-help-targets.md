@@ -17,10 +17,16 @@ expands, renders, and validates the selected manifest without invoking Ninja,
 then prints the available targets and actions with their descriptions.
 
 The discovery query uses a restricted, side-effect-free Jinja surface. It
-blocks `env()`, the `contents` filter, `fetch`, `shell`, and `grep`, so manifest
-inspection cannot disclose host environment or file contents, fetch data,
-execute commands, or write caches. Normal build manifest rendering remains
-unchanged.
+allowlists only the lexical path filters `basename`, `dirname`, `with_suffix`,
+and `relative_to`, the collection filters `uniq`, `flatten`, and `group_by`,
+and the clock-independent `timedelta` function. It rejects `env()` and `glob()`,
+file tests, filesystem metadata filters such as `size` and `linecount`, `hash`,
+`digest`, `contents`, `realpath`, and `expanduser`, executable discovery through
+`which` and `command_available`, network and command helpers (`fetch`, `shell`,
+and `grep`), and the clock-dependent `now()` function. This keeps manifest
+inspection from disclosing host state, reading file contents, fetching data,
+executing commands, or writing caches. Normal build manifest rendering retains
+the full standard library; the restriction applies only to query rendering.
 
 A user can verify the change by writing a manifest with an action and a target
 that carry `description`, then running `netsuke help targets` and observing the
@@ -111,6 +117,9 @@ default marker such as `[★ default]` on manifest defaults.
       progress; added `cli.help.targets.about` to all 35 shipped locales.
 - [x] (2026-08-12, `625e93f`) Used a dedicated localized synopsis for the nested
       `targets` help topic and aligned the localized help assertions with it.
+- [x] (2026-08-14) Documented the complete query-mode allowlist, its excluded
+      host-observing helpers, and the full standard library retained by normal
+      manifest rendering.
 
 ## Surprises & discoveries
 

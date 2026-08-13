@@ -862,14 +862,24 @@ netsuke help targets
 
 The command loads, expands, renders, and validates the manifest through the
 same structural stages as a build, but performs no recipes and creates no
-build outputs. Rendering uses a restricted, side-effect-free Jinja surface:
-query expressions invoking `env()`, the `contents` filter, `fetch`, `shell`,
-or `grep` are rejected rather than executed. This restriction applies only to
-query rendering; normal build manifest rendering remains unchanged. It
-honours the usual manifest-selection options (`--file`,
+build outputs. Rendering uses a restricted, side-effect-free Jinja surface.
+Queries allow only the lexical path filters `basename`, `dirname`,
+`with_suffix`, and `relative_to`, the collection filters `uniq`, `flatten`, and
+`group_by`, and the clock-independent `timedelta` function. Queries reject
+`env()` and `glob()`, file tests, filesystem metadata filters such as `size` and
+`linecount`, `hash`, `digest`, `contents`, `realpath`, and `expanduser`,
+executable discovery through `which` and `command_available`, network and
+command helpers (`fetch`, `shell`, and `grep`), and the clock-dependent `now()`
+function. Normal build manifest rendering retains the full standard library;
+this restriction applies only to query rendering. It honours the usual
+manifest-selection options (`--file`,
 `-C/--directory`) and the normal colour, accessibility, locale, and JSON-output
 conventions; with `--json` the catalogue is emitted as a versioned JSON
 document whose `result.command` is `help-targets`.
+
+The standard-library reference describes the full helper set available while
+rendering a normal build manifest. The query allowlist above is the deliberate
+exception for `netsuke help targets`.
 
 ## Configure Netsuke
 
