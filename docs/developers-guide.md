@@ -437,6 +437,7 @@ Four workflows carry the contract:
 | Workflow | Job | Shared action | `with.rustflags` |
 | --- | --- | --- | --- |
 | [`ci.yml`](../.github/workflows/ci.yml) | `build-test` | `setup-rust` | `-D warnings -Zpolonius=next` |
+| [`ci.yml`](../.github/workflows/ci.yml) | `build-test-windows` | `setup-rust` | `-D warnings -Zpolonius=next` |
 | [`coverage-main.yml`](../.github/workflows/coverage-main.yml) | `coverage-upload` | `setup-rust` | `-D warnings -Zpolonius=next` |
 | [`netsukefile-test.yml`](../.github/workflows/netsukefile-test.yml) | `netsukefile` | `setup-rust` | `-Zpolonius=next` |
 | [`build-and-package.yml`](../.github/workflows/build-and-package.yml) | `build` | `rust-build-release` | `-Zpolonius=next` |
@@ -2778,6 +2779,13 @@ rules — normalization, the fallback — in the `#[cfg(any(windows, test))]` un
 tests that the Linux suite executes, and reserve the Windows-gated suite for
 behaviour that genuinely cannot run elsewhere.
 
+The `build-test-windows` job in `.github/workflows/ci.yml` now compiles and
+runs the `#[cfg(windows)]` suite on `windows-latest` too, so a Windows-gated
+test does gate a merge. The split still stands: host-independent rules stay in
+the `#[cfg(any(windows, test))]` unit tests so every host — including a
+developer on Unix — exercises them, while the Windows-gated suite covers the
+behaviour that only exists there.
+
 #### `PATHEXT` normalization
 
 `stdlib::which::env::parse_pathext` turns a raw `PATHEXT` value into lowercase,
@@ -2800,6 +2808,17 @@ Composition rules:
 - A value yielding no usable extension falls back to the built-in list. An
   empty result would mean Windows treats nothing as executable, so `which`
   would report every command missing.
+
+The widening was reassessed when `build-test-windows` began compiling and
+testing the `#[cfg(windows)]` arm directly (#518): the original motivation for
+`#[cfg(any(windows, test))]` — reaching the pure string logic from a CI host
+that never compiled Windows — is gone, but reverting to `#[cfg(windows)]`
+would drop Unix-host coverage of `parse_pathext`'s normalization,
+de-duplication, and fallback rules, which `src/stdlib/which/pathext_tests.rs`
+pins on every host. There is no equivalent Unix-side test for a Windows-only
+function, so the widening stays: the pure string logic is exercised on both
+Linux and Windows, and a Windows-gated regression cannot hide from the Unix
+suite.
 
 The full normalization contract, which the property tests in
 `src/stdlib/which/pathext_tests.rs` pin:
