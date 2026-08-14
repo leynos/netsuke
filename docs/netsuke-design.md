@@ -2942,8 +2942,12 @@ manual flag repetition.
 The CLI definition doubles as the source for user documentation. Release
 automation now calls `cargo-orthohelp` explicitly through
 `scripts/generate-release-help.sh`; ordinary Cargo builds no longer write help
-artefacts. The build script remains in place only for the localization key
-audit against Fluent bundles.
+artefacts. `cargo-orthohelp` remains the release source for the manual page and
+PowerShell help. Separately, `build.rs` generates Bash, Elvish, Fish,
+PowerShell, and Zsh completion assets from `Cli::command()`. The completion
+files are staged as portable shell-completion sidecars under
+`completions/<shell>/` in release archives. The build script also performs the
+localization key audit against Fluent bundles.
 
 Manual pages are generated under
 `target/orthohelp/<target>/release/man/man1/netsuke.1`. Windows targets also
@@ -2973,7 +2977,9 @@ staged `man_path` output into the shared `linux-packages` composite. The
 resulting `.deb` and `.rpm` archives both declare a runtime dependency on
 `ninja-build`. Windows and macOS builds use the same staging composite from
 `leynos/shared-actions`; Windows staging also carries the PowerShell help files
-as release artefacts alongside the MSI package. The composite shells out to a
+as release artefacts alongside the MSI package. Every standalone release
+archive also carries the generated shell completion sidecars under
+`completions/<shell>/`. The composite shells out to a
 Cyclopts-driven script that reads the `.github/release-staging.toml`
 configuration (Tom's Obvious, Minimal Language (TOML)), merges the `[common]`
 configuration with the target-specific overrides, and copies the configured

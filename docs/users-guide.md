@@ -73,10 +73,19 @@ Because successive pre-releases share that numeric version, installing a
 later pre-release MSI replaces the existing installation for that version
 series rather than installing alongside it.
 
-SHA-256 checksum files accompany standalone binaries and staged help and
-licence files. Installer packages do not have checksum sidecars in
-v0.1.0-beta1. Windows PowerShell help files are published beside each MSI as
+SHA-256 checksum files accompany standalone binaries and staged help,
+completion, and licence files. Installer packages do not have checksum sidecars
+in v0.1.0-beta1. Windows PowerShell help files are published beside each MSI as
 sidecar artefacts rather than embedded in the installer.
+
+Each standalone release archive also contains generated shell completion
+sidecars under `completions/<shell>/` for Bash, Elvish, Fish, PowerShell, and
+Zsh. These files are portable and separate from the executable and installer
+payloads. To use one, extract the matching archive and copy the file for the
+chosen shell into that shell's normal completion directory, or load it through
+the shell's documented completion mechanism. The package installation
+commands above do not install completion files; completion directory names and
+activation steps vary by shell and platform.
 
 Install the current source checkout with Cargo. The clone supplies both the
 pinned nightly toolchain and `RUSTFLAGS=-Zpolonius=next`, so neither is given

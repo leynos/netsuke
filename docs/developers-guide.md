@@ -855,6 +855,13 @@ PowerShell external help under
 date from `SOURCE_DATE_EPOCH`, falling back to `1970-01-01` when unset or
 invalid.
 
+Shell completions are generated separately by `build.rs` from
+`Cli::command()` for Bash, Elvish, Fish, PowerShell, and Zsh. Release staging
+copies these portable completion sidecars into each standalone archive under
+`completions/<shell>/`. They remain separate files for users to copy into the
+completion location documented by their shell; package installation does not
+claim to install them.
+
 Keep `[package.metadata.ortho_config]` in `Cargo.toml` aligned with the CLI
 when adding, renaming, or removing user-facing options. Changes to CLI
 documentation metadata should be covered by `rstest` workflow/script contract
