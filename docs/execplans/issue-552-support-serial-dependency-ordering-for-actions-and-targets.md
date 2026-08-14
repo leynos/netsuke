@@ -354,7 +354,7 @@ criterion in issue #552 and all repository gates pass.
   capability documentation alongside the serial-ordering contract. Renumbered
   the serial dyndep record to ADR-011 because main now owns ADR-010. `make
   check-fmt`, `make test`, `make typecheck`, `make lint`, `make markdownlint`,
-  and `make nixie` passed; the test suite reported 2,058 passed tests, one
+  and `make nixie` passed; the test suite reported 2,068 passed tests, one
   skipped test, and passing doctests. Lease-protected publication remains.
 
 ## Surprises and discoveries
@@ -1269,3 +1269,5 @@ the serial dependency documentation. Because main now assigns ADR-010 to glob
 capability scoping, the serial dyndep decision and its references move to
 ADR-011. All code, test, documentation, and diagram gates passed after removing
 one duplicate blank line introduced by the additive documentation merge.
+`origin/main` advanced once during the first gate run, so the branch replayed
+cleanly onto the new tip and passed the complete gate set again.
