@@ -31,6 +31,7 @@ Table: v0.1.0 child-environment API additions and their impact
 The convenience wrappers keep their signatures and their behaviour: the
 child inherits the calling process's environment, and Ninja is resolved
 exactly as before. No caller needs to change to adopt this release.
+
 ## Opting into ordered command lists
 
 Existing scalar `command` recipes remain valid, so no migration is required.
