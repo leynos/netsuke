@@ -14,7 +14,6 @@
 
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
-use netsuke::locale_resolution::NETSUKE_METRICS_LISTEN_ENV;
 use rstest::rstest;
 use tempfile::TempDir;
 use test_support::netsuke::{NetsukeRun, run_netsuke_in_with_env};
@@ -105,39 +104,6 @@ fn json_mode_emits_only_the_diagnostic_document() -> Result<()> {
     ensure!(
         parsed.get("schema_version").is_some(),
         "expected a diagnostic document, got: {parsed}"
-    );
-    Ok(())
-}
-
-/// An invalid metrics listener must not pollute JSON diagnostics with tracing.
-#[test]
-fn invalid_metrics_listener_emits_a_json_diagnostic() -> Result<()> {
-    let directory = TempDir::new().context("stage an empty working directory")?;
-    let output = run_netsuke_in_with_env(
-        directory.path(),
-        &["--json", "build"],
-        &[(NETSUKE_METRICS_LISTEN_ENV, "not-a-socket-address")],
-    )?;
-    let stderr = stderr_of(&output);
-
-    ensure!(
-        !output.success,
-        "an invalid metrics listener must fail startup"
-    );
-    ensure!(
-        output.stdout.is_empty(),
-        "JSON startup failure must not write stdout, got: {:?}",
-        output.stdout
-    );
-    ensure!(
-        !stderr.contains("ERROR"),
-        "JSON startup failure must not contain tracing output, got: {stderr}"
-    );
-    let parsed: serde_json::Value = serde_json::from_str(&stderr)
-        .with_context(|| format!("stderr must be exactly one JSON document, got: {stderr}"))?;
-    ensure!(
-        parsed.get("schema_version").is_some() && stderr.contains(NETSUKE_METRICS_LISTEN_ENV),
-        "expected the listener failure diagnostic, got: {parsed}"
     );
     Ok(())
 }

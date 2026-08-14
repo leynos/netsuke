@@ -1,6 +1,7 @@
 //! Application entry point.
 //!
 //! Parses command-line arguments and delegates execution to [`runner::run`].
+//! It records configuration-load outcomes and latency during startup.
 
 use clap::ArgMatches;
 use clap::error::ErrorKind;
@@ -93,18 +94,6 @@ fn run_with_args(
     let startup_writer = StartupWriter::buffering();
     init_tracing(LevelFilter::WARN, startup_writer.clone());
     let startup_mode = DiagMode::from_json_enabled(json_hint);
-    if let Err(error) = install_metrics_recorder(env) {
-        if startup_mode.is_json() {
-            let exit_code = diagnostic_json::emit_or_fallback(diagnostic_json::render_error_json(
-                error.as_ref(),
-            ));
-            settle_startup_diagnostics(&startup_writer, startup_mode);
-            return exit_code;
-        }
-        tracing::error!(%error, "failed to install the metrics recorder");
-        settle_startup_diagnostics(&startup_writer, startup_mode);
-        return ExitCode::FAILURE;
-    }
     observability::init_metrics();
     let localizer = startup_localizer(&args, env, system_locale);
     let (parsed_cli, matches) =
@@ -224,7 +213,6 @@ fn set_tracing_filter(level: LevelFilter) {
         handle.modify(|filter| *filter = level).ok();
     }
 }
-
 fn startup_localizer(
     args: &[OsString],
     env: &impl locale_resolution::LocaleEnvProvider,
@@ -269,8 +257,8 @@ fn parse_cli_or_exit(
 
 /// Emit the configuration-load metrics for one startup attempt.
 ///
-/// Recording goes through the `metrics` façade, so it is a no-op unless the
-/// operator has installed a recorder.
+/// Recording goes through the `metrics` façade, backed by the application's
+/// in-process `DebuggingRecorder`.
 fn record_config_load_metrics(elapsed: Duration, succeeded: bool) {
     let outcome = if succeeded { "success" } else { "failure" };
     metrics::histogram!(CONFIG_LOAD_DURATION_SECONDS).record(elapsed.as_secs_f64());
