@@ -97,9 +97,9 @@ default marker such as `[★ default]` on manifest defaults.
       help_en_us/help_es_es snapshots.
 - [x] (2026-08-09) Phase 4: users-guide updated (schema field, distinction
       from rule descriptions, subcommand list, worked example + tested-example
-      and its test); build.rs Clap man generation can include `help`, while
-      release man and PowerShell artefacts require follow-on `CliConfig`/Clap
-      integration. No shell completion artefacts exist to update.
+      and its test); CliConfig/Clap integration keeps build.rs and release man
+      and PowerShell artefacts aligned with the `help targets` command. No
+      shell completion artefacts exist to update.
 - [x] (2026-08-09) All gates green: check-fmt, lint (rustdoc/clippy/Whitaker),
       nextest (1936), doctests, markdownlint, spelling, nixie. Committed as
       four atomic commits.
@@ -175,10 +175,9 @@ The issue's acceptance criteria are met: the AST, rendered manifest, and
 catalogue carry target/action descriptions; parser, validation, render, and
 expansion coverage exists; `netsuke help targets` is snapshot-tested in text,
 accessible, localized, and JSON modes; alternate manifest selection is tested;
-the users guide documents the schema field and the subcommand. The build.rs
-Clap man generation can include the new command surface, while release man
-and PowerShell artefacts require follow-on `CliConfig`/Clap integration; no
-shell completion artefacts exist to update.
+the users guide documents the schema field and the subcommand. CliConfig/Clap
+integration keeps build.rs and release man and PowerShell artefacts aligned
+with the new command surface; no shell completion artefacts exist to update.
 
 The post-`314f12b` follow-up additionally isolates discovery rendering from
 impure template helpers, keeps terminal text safe, preserves rule descriptions
@@ -255,9 +254,9 @@ generates Ninja build files. Key files and modules for this task:
   `tests/features/cli.feature` + `tests/bdd/steps/cli.rs`, and a full-process
   BDD scenario. Regenerate `help_en_us`/`help_es_es` snapshots.
 - Phase 4: document the field and the subcommand in `docs/users-guide.md`;
-  confirm build.rs Clap man generation can include the command, and record
-  the follow-on `CliConfig`/Clap integration needed for release man and
-  PowerShell artefacts. No shell completion artefacts exist to update.
+  integrate CliConfig with Clap so build.rs, release man, and PowerShell
+  artefacts expose the same `help targets` command surface. No shell completion
+  artefacts exist to update.
 
 ## Validation and acceptance
 

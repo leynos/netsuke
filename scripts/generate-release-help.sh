@@ -178,6 +178,7 @@ if target_is_windows "$target"; then
     --out-dir "$out_dir" \
     --locale "$locale" \
     --ps-module-name "$module_name" \
+    --ps-split-subcommands true \
     --ensure-en-us true
 
   require_file "$out_dir/powershell/$module_name/$module_name.psm1" \

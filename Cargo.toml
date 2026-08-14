@@ -29,7 +29,7 @@ name = "netsuke"
 path = "src/main.rs"
 
 [package.metadata.ortho_config]
-root_type = "netsuke::cli::CliConfig"
+root_type = "netsuke::cli::ReleaseHelpCli"
 locales   = [
     "ar",
     "cs",

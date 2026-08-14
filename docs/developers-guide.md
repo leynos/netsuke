@@ -827,8 +827,12 @@ the policy, rejects tracked drift, and scans every tracked Markdown file.
 ## Release help tooling
 
 Release builds generate help artefacts explicitly with `cargo-orthohelp`,
-rather than from `build.rs`. The build script remains responsible for the
-localization key audit only. Release automation installs the pinned tool with:
+rather than from `build.rs`. The metadata root is
+`netsuke::cli::ReleaseHelpCli`, which combines `CliConfig` field metadata with
+the Clap command surface, including `help targets`, so the release manual and
+PowerShell help remain aligned with the CLI. The build script remains
+responsible for the localization key audit only. Release automation installs
+the pinned tool with:
 
 ```bash
 cargo install cargo-orthohelp --version 0.9.0 --locked

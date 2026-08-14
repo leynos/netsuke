@@ -17,6 +17,7 @@ mod help;
 mod merge;
 mod parser;
 mod parsing;
+mod release_help;
 
 #[cfg(test)]
 pub(crate) mod test_support;
@@ -30,6 +31,7 @@ pub use parser::{
     BuildArgs, Cli, Commands, GraphArgs, json_hint_from_args, locale_hint_from_args,
     parse_with_localizer_from,
 };
+pub use release_help::ReleaseHelpCli;
 
 /// Maximum number of jobs accepted by the CLI.
 pub(super) const MAX_JOBS: usize = 64;

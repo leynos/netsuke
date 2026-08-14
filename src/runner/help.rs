@@ -123,9 +123,10 @@ fn build_catalogue(manifest: &NetsukeManifest) -> Vec<HelpEntry<'_>> {
 fn validate_defaults(defaults: &[String], entries: &[HelpEntry<'_>]) -> Result<()> {
     let names: HashSet<&str> = entries.iter().map(|entry| entry.name.as_str()).collect();
     for default in defaults {
+        let safe_default = terminal_safe(default);
         ensure!(
             names.contains(default.as_str()),
-            "manifest default '{default}' does not name a declared action or target"
+            "manifest default '{safe_default}' does not name a declared action or target"
         );
     }
     Ok(())
