@@ -208,17 +208,19 @@ fn load_layers_from_path_logs_bounded_failure_fields() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
     let missing_path = temp.path().join("missing-secret-name.toml");
 
-    let (error, events) = capture_events(|| {
-        Ok::<_, anyhow::Error>(
-            load_layers_from_path(&missing_path)
-                .expect_err("missing explicit config file should fail"),
-        )
+    let (warning, load_result) = load_layers_from_path_with_warning(&missing_path);
+    let (load_error, events) = capture_events(|| {
+        warning
+            .as_ref()
+            .expect("missing explicit config should retain a warning")
+            .emit();
+        Ok::<_, anyhow::Error>(load_result.expect_err("missing explicit config file should fail"))
     })?;
     let warn_event = find_event(&events, "explicit config load failed")?;
     let assertion = EventAssertion::new(warn_event, &missing_path);
 
     ensure!(
-        error.to_string().contains("missing-secret-name.toml"),
+        load_error.to_string().contains("missing-secret-name.toml"),
         "returned error should retain the diagnostic path"
     );
     ensure!(
@@ -230,7 +232,7 @@ fn load_layers_from_path_logs_bounded_failure_fields() -> Result<()> {
         !warn_event.contains("error="),
         "warn event should not include full formatted error text: {warn_event}"
     );
-    assertion.ensure_private_event_fields(&error.to_string())?;
+    assertion.ensure_private_event_fields(&load_error.to_string())?;
     snapshot_failure_event(&assertion, "explicit_load_missing_event_schema")?;
     Ok(())
 }
@@ -242,14 +244,16 @@ fn load_layers_from_path_logs_invalid_toml_failure() -> Result<()> {
     test_support::fs::write(&config_path, "theme = [invalid parser secret\n")
         .with_context(|| format!("write {}", config_path.display()))?;
 
-    let (error, events) = capture_events(|| {
-        Ok::<_, anyhow::Error>(
-            load_layers_from_path(&config_path)
-                .expect_err("invalid explicit config file should fail"),
-        )
+    let (warning, load_result) = load_layers_from_path_with_warning(&config_path);
+    let (load_error, events) = capture_events(|| {
+        warning
+            .as_ref()
+            .expect("invalid explicit config should retain a warning")
+            .emit();
+        Ok::<_, anyhow::Error>(load_result.expect_err("invalid explicit config file should fail"))
     })?;
     let warn_event = find_event(&events, "explicit config load failed")?;
-    let formatted_error = error.to_string();
+    let formatted_error = load_error.to_string();
 
     ensure!(
         warn_event.contains("failure_kind=LoadError"),

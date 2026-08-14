@@ -1,0 +1,11 @@
+[package]
+name = "netsuke-cli-configuration-ui"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+mockable = "3.0"
+netsuke = { package = "netsuke-build", path = "../../.." }
