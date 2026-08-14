@@ -1,10 +1,14 @@
-//! Conditional expansion cases for manifest entries; action-only cases live
-//! in `action_condition_cases`.
+//! Conditional expansion cases; action-only cases live in `action_condition_cases`.
 
 use super::*;
 use anyhow::{Context, Result};
 use minijinja::Environment;
-use rstest::rstest;
+use rstest::{fixture, rstest};
+
+#[fixture]
+fn environment() -> Environment<'static> {
+    Environment::new()
+}
 
 #[rstest]
 #[case::targets("targets")]
@@ -200,24 +204,26 @@ fn expand_foreach_applies_when_expression() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn expand_foreach_empty_foreach_produces_no_entries() -> Result<()> {
-    let env = Environment::new();
+#[rstest]
+fn expand_foreach_empty_foreach_produces_no_entries(
+    environment: Environment<'static>,
+) -> Result<()> {
     let mut doc: ManifestValue = serde_saphyr::from_str(
         "targets:
   - name: literal
     foreach: []
     command: echo hi",
     )?;
-    expand_foreach(&mut doc, &env)?;
+    expand_foreach(&mut doc, &environment)?;
     let targets = targets(&doc)?;
     anyhow::ensure!(targets.is_empty(), "empty foreach must produce no targets");
     Ok(())
 }
 
-#[test]
-fn expand_foreach_non_object_entry_is_passed_through() -> Result<()> {
-    let env = Environment::new();
+#[rstest]
+fn expand_foreach_non_object_entry_is_passed_through(
+    environment: Environment<'static>,
+) -> Result<()> {
     let mut doc: ManifestValue = serde_saphyr::from_str(
         "targets:
   - just-a-string
@@ -226,7 +232,7 @@ fn expand_foreach_non_object_entry_is_passed_through() -> Result<()> {
       - expanded
     command: echo hi",
     )?;
-    expand_foreach(&mut doc, &env)?;
+    expand_foreach(&mut doc, &environment)?;
     let targets = targets(&doc)?;
     anyhow::ensure!(targets.len() == 2, "expected both entries to survive");
     anyhow::ensure!(
@@ -261,9 +267,10 @@ fn expand_foreach_non_object_entry_is_passed_through() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn expand_foreach_iteration_vars_do_not_get_overwritten_by_entry_vars() -> Result<()> {
-    let env = Environment::new();
+#[rstest]
+fn expand_foreach_iteration_vars_do_not_get_overwritten_by_entry_vars(
+    environment: Environment<'static>,
+) -> Result<()> {
     let mut doc: ManifestValue = serde_saphyr::from_str(
         "targets:
   - name: literal
@@ -273,7 +280,7 @@ fn expand_foreach_iteration_vars_do_not_get_overwritten_by_entry_vars() -> Resul
       item: from-entry
       other: untouched",
     )?;
-    expand_foreach(&mut doc, &env)?;
+    expand_foreach(&mut doc, &environment)?;
     let targets = targets(&doc)?;
     anyhow::ensure!(targets.len() == 1, "expected one expanded target");
     let vars = targets
@@ -282,9 +289,7 @@ fn expand_foreach_iteration_vars_do_not_get_overwritten_by_entry_vars() -> Resul
         .and_then(|map| map.get("vars"))
         .and_then(ManifestValue::as_object)
         .context("vars map")?;
-    // `inject_iteration_vars` inserts `item`/`index` after cloning the entry,
-    // so the iteration-injected value takes precedence over the entry's own
-    // `item` var while unrelated vars survive.
+    // Iteration vars override colliding entry vars while unrelated vars survive.
     anyhow::ensure!(
         vars.get("item").and_then(ManifestValue::as_str) == Some("from-iteration"),
         "iteration item should override the entry's own item var: {vars:?}"
@@ -298,8 +303,7 @@ fn expand_foreach_iteration_vars_do_not_get_overwritten_by_entry_vars() -> Resul
 
 #[test]
 fn expand_foreach_jinja_filter_in_name() -> Result<()> {
-    // Name rendering happens in the full pipeline (render_manifest), so this
-    // test drives manifest::from_str rather than expand_foreach directly.
+    // Name rendering happens in `render_manifest`, so drive the full parsing pipeline.
     let manifest = crate::manifest::from_str(
         "netsuke_version: \"1.0.0\"
 targets:
