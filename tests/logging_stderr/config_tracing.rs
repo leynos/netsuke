@@ -43,6 +43,34 @@ fn assert_config_load_failure(stderr: &str, operation: &str, error_category: &st
     Ok(())
 }
 
+const DIAG_MODE_SUCCESS_METRICS: &[MetricSnapshotRecord] = &[
+    MetricSnapshotRecord {
+        name: "config_load_total",
+        labels: &[
+            "Label(\"phase\", \"diag_mode\")",
+            "Label(\"outcome\", \"success\")",
+        ],
+        value: Some("Counter(1)"),
+    },
+    MetricSnapshotRecord {
+        name: "config_load_duration_seconds",
+        labels: &["Label(\"phase\", \"diag_mode\")"],
+        value: None,
+    },
+    MetricSnapshotRecord {
+        name: "config_load_total",
+        labels: &[
+            "Label(\"phase\", \"merge\")",
+            "Label(\"outcome\", \"success\")",
+        ],
+        value: Some("Counter(1)"),
+    },
+    MetricSnapshotRecord {
+        name: "config_load_duration_seconds",
+        labels: &["Label(\"phase\", \"merge\")"],
+        value: None,
+    },
+];
 const DIAG_MODE_FAILURE_METRICS: &[MetricSnapshotRecord] = &[
     MetricSnapshotRecord {
         name: "config_load_total",
@@ -141,7 +169,7 @@ fn explicit_selection_traces_bounded_fields() -> Result<()> {
         run.success,
         "a selected valid config should complete successfully"
     );
-    assert_config_metrics_snapshot(&run.stderr)?;
+    assert_config_metrics_snapshot(&run.stderr, DIAG_MODE_SUCCESS_METRICS)?;
     Ok(())
 }
 
