@@ -15,20 +15,10 @@ use std::ffi::OsString;
 use std::io::{self, IsTerminal, Write};
 use std::process::ExitCode;
 use std::sync::{Arc, OnceLock};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{Registry, fmt, reload};
-
-use anyhow::Context;
-use metrics_exporter_prometheus::PrometheusBuilder;
-
-//! Application entry point.
-//!
-//! Parses command-line arguments and delegates execution to [`runner::run`].
-//! It also installs optional Prometheus metrics and records configuration-load
-//! outcomes and latency during startup.
-};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DiagMode {
@@ -50,9 +40,11 @@ mod observability;
 #[path = "startup_tracing.rs"]
 mod startup_tracing;
 
+#[path = "config_load.rs"]
+mod config_load;
+
 use config_resolution::{merge_cli_or_exit, resolve_json_mode_or_exit};
 use startup_tracing::StartupWriter;
-
 /// Counter recording the outcome of each configuration-load attempt.
 ///
 /// Labelled by `outcome` (`success` or `failure`) so operators can track the
@@ -83,13 +75,15 @@ fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().collect();
     let env = locale_resolution::SystemEnv;
     let system_locale = locale_resolution::SysLocale;
-    run_with_args(args, &env, &system_locale)
+    let mut configuration_clock = config_load::SystemConfigurationLoadClock::new();
+    run_with_args(args, &env, &system_locale, &mut configuration_clock)
 }
 
 fn run_with_args(
     args: Vec<OsString>,
     env: &impl locale_resolution::LocaleEnvProvider,
     system_locale: &impl locale_resolution::SystemLocale,
+    configuration_clock: &mut impl config_load::ConfigurationLoadClock,
 ) -> ExitCode {
     let json_hint = locale_resolution::resolve_startup_json(&args, env);
     // Recorded at `WARN` but written to a buffer, not to stderr. `json_hint` is
@@ -113,27 +107,16 @@ fn run_with_args(
         return finish_run(run_cli(&parsed_cli, system_locale, startup_mode), verbose);
     }
 
-    let config_load_started = Instant::now();
-    let (mode, discovered_layers) =
-        match resolve_json_mode_or_exit(&parsed_cli, &matches, startup_mode) {
-            Ok(resolved) => resolved,
-            Err(code) => {
-                record_config_load_metrics(config_load_started.elapsed(), false);
-                settle_startup_diagnostics(&startup_writer, startup_mode);
-                return finish_run(code, verbose);
-            }
-        };
-    // The effective mode is known here, before configuration is merged, so the
-    // startup warning reaches the user ahead of any configuration processing.
-    settle_startup_diagnostics(&startup_writer, mode);
-    let merged_cli = match merge_cli_or_exit(&parsed_cli, &matches, mode, discovered_layers) {
+    let configuration = config_load::ConfigurationLoadContext::new(
+        &parsed_cli,
+        &matches,
+        startup_mode,
+        &startup_writer,
+    );
+    let merged_cli = match config_load::resolve_configuration(&configuration, configuration_clock) {
         Ok(merged) => merged,
-        Err(code) => {
-            record_config_load_metrics(config_load_started.elapsed(), false);
-            return finish_run(code, verbose);
-        }
+        Err(code) => return finish_run(code, verbose),
     };
-    record_config_load_metrics(config_load_started.elapsed(), true);
     let merged_verbose = merged_cli.verbose;
     let runtime_mode = DiagMode::from_json_enabled(merged_cli.json);
     finish_run(
