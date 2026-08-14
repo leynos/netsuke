@@ -2903,12 +2903,13 @@ rules — normalization, the fallback — in the `#[cfg(any(windows, test))]` un
 tests that the Linux suite executes, and reserve the Windows-gated suite for
 behaviour that genuinely cannot run elsewhere.
 
-The `build-test-windows` job in `.github/workflows/ci.yml` now compiles and
-runs the `#[cfg(windows)]` suite on `windows-latest` too, so a Windows-gated
-test does gate a merge. The split still stands: host-independent rules stay in
-the `#[cfg(any(windows, test))]` unit tests so every host — including a
-developer on Unix — exercises them, while the Windows-gated suite covers the
-behaviour that only exists there.
+The `build-test-windows` job in `.github/workflows/ci.yml` is a merge gate: it
+compiles, lints (Clippy and Whitaker), and tests the `#[cfg(windows)]` suite on
+`windows-latest` under `-D warnings`, so a Windows-gated test or lint finding
+blocks a merge. The split still stands: host-independent rules stay in the
+`#[cfg(any(windows, test))]` unit tests so every host — including a developer
+on Unix — exercises them, while the Windows-gated suite covers the behaviour
+that only exists there.
 
 #### `PATHEXT` normalization
 
