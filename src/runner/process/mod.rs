@@ -103,10 +103,10 @@ fn run_command_and_stream_with_context<Clock: MonotonicClock>(
 
 /// Invoke Ninja with an explicit child-process environment.
 ///
-/// Unlike [`run_ninja`], the caller supplies the environment applied to the
-/// spawned command. Tests use this to place a fake Ninja on the child's `PATH`
-/// without mutating the parent process, which would race every other test in
-/// the same binary.
+/// Unlike [`crate::runner::run_ninja`], the caller supplies the environment
+/// applied to the spawned command. Tests use this to place a fake Ninja on the
+/// child's `PATH` without mutating the parent process, which would race every
+/// other test in the same binary.
 ///
 /// # Examples
 ///
