@@ -2405,7 +2405,7 @@ Configuration merge helpers:
 - `config_discovery(directory, env_source) -> ConfigDiscovery` builds the
   single-pass OrthoConfig discovery scanner with an optional project-root
   anchor and the environment adapter selected at the composition root.
-- `project_scope_file_str(directory: Option<&Path>) -> Option<String>`
+- `project_scope_file(directory: Option<&Path>) -> Option<PathBuf>`
   resolves the expected project `.netsuke.toml` path for project-layer
   detection.
 - `project_scope_layers(directory)` loads the project-scope config directly,
