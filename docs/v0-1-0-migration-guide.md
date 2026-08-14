@@ -64,7 +64,6 @@ Both request types borrow their fields, so one `CommandEnv` and one `Cli`
 can serve several invocations. Worked examples live in the users' guide's
 "Drive Ninja with an explicit environment" section.
 
-
 ## Discover targets and actions
 
 Target and action `description` values are optional discovery metadata. Adding
