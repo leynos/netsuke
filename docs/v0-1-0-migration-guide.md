@@ -78,10 +78,12 @@ dependencies after an earlier one fails, while shared work still executes at
 most once in the enclosing Ninja invocation.
 
 Serial lists containing two or more dependencies require Ninja 1.10 or newer.
-Netsuke writes their supporting dyndep sidecars beneath `.netsuke/dyndep` in
-the effective working directory before `generate`, `build`, or `clean` uses
-the generated Ninja file. User targets must not use `.netsuke/dyndep` or
-`.netsuke/serial`: both namespaces are reserved for Netsuke's generated state.
+The `generate` command materialises its supporting dyndep sidecars beneath
+`.netsuke/dyndep` in the effective working directory while writing the
+generated Ninja manifest. The `build` and `clean` commands materialise the
+sidecars before invoking Ninja with the generated Ninja file. User targets must
+not use `.netsuke/dyndep` or `.netsuke/serial`: both namespaces are reserved for
+Netsuke's generated state.
 The [users' guide](users-guide.md#run-direct-dependencies-serially) documents
 the execution scope and the independent-reachability boundary.
 

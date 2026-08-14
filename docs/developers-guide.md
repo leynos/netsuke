@@ -1627,9 +1627,11 @@ freshness.
 with more than one dependency. It produces a `GeneratedNinja` bundle: the main
 build-file text plus immutable, content-addressed `GeneratedDyndep` sidecars.
 The generated phony gates live under `.netsuke/serial`; sidecars live under
-`.netsuke/dyndep`. Those are reserved output namespaces, validated before
-generation. A string-only generator must return `DyndepFilesRequired` for a
-graph that needs sidecars rather than returning an incomplete build file.
+`.netsuke/dyndep`. Those are reserved graph namespaces, validated before
+generation. User graph paths in outputs, inputs, implicit dependencies, and
+order-only dependencies cannot use either namespace. A string-only generator
+must return `DyndepFilesRequired` for a graph that needs sidecars rather than
+returning an incomplete build file.
 
 Each gate reveals one real dependency through a Ninja dyndep file. The next
 sidecar-producing edge depends on the preceding gate, which keeps later direct

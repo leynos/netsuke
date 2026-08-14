@@ -74,8 +74,9 @@ to run through that other path.
 
 - Serial lists with zero or one dependency use ordinary Ninja lowering; no
   relative order needs enforcing and no dyndep version floor is emitted.
-- User outputs cannot claim `.netsuke/serial` or `.netsuke/dyndep`, because
-  those names are reserved generated state.
+- User graph paths in outputs, inputs, implicit dependencies, and order-only
+  dependencies cannot use `.netsuke/serial` or `.netsuke/dyndep`, because those
+  names are reserved generated state.
 - `build`, `clean`, and `generate` each materialize sidecars relative to the
   effective Ninja working directory. `clean` may leave the immutable,
   content-addressed sidecars in place.

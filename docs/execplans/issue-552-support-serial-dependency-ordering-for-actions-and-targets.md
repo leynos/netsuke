@@ -364,6 +364,15 @@ criterion in issue #552 and all repository gates pass.
   entries after confirming that no runtime path references it. Concurrent
   publication continues to use verified content outcomes and the live read,
   rename, corruption, and bounded temporary-collision errors.
+- [x] (2026-08-15) Re-verified the latest documentation review findings against
+  the current implementation. Corrected the reserved-namespace wording in the
+  ADR and developer guide to cover outputs, inputs, implicit dependencies, and
+  order-only dependencies. Corrected migration guidance so `generate` is
+  described as materialising sidecars while writing its manifest and `build`
+  and `clean` as materialising them before invoking Ninja. The
+  `docs/netsuke-design.md` gate description remains unchanged because it
+  already matches the current runner boundary and command-specific flow; that
+  review suggestion was stale.
 
 ## Surprises and discoveries
 
