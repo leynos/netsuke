@@ -298,8 +298,11 @@ fn spawn_failure_logging_honours_explicit_stderr_mode() {
         );
         // The single captured warning is the spawn failure; inspect it alone so a
         // stray event carrying the expected field cannot mask a missing frame.
+        let event = events
+            .first()
+            .expect("the exactly-one-warning assertion above guarantees a first event");
         assert!(
-            events[0].contains("failure_category=\"spawn\"") && events[0].contains(expected_field),
+            event.contains("failure_category=\"spawn\"") && event.contains(expected_field),
             "the captured warning should be a spawn failure recording {expected_field} for \
              {mode:?} with cli.json={json}, got: {events:?}"
         );

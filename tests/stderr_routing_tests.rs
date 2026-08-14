@@ -8,6 +8,7 @@
 //! Ninja, and the parent asserts where the markers landed.
 
 use anyhow::{Context, Result, bail, ensure};
+use mockable::{DefaultEnv, Env};
 use netsuke::cli::Cli;
 use netsuke::runner::{
     BuildTargets, CommandEnv, NinjaBuildRequest, NinjaToolRequest, StderrMode, run_ninja_tool_with,
@@ -67,9 +68,14 @@ fn run_routing_worker(job: &str, tool: bool, ninja: &Path, ran_file: &Path) -> R
 #[test]
 #[ignore = "invoked as a stream-routing worker"]
 fn routing_worker() -> Result<()> {
-    let job = std::env::var(JOB_ENV).context("read routing job")?;
-    let tool = std::env::var_os(TOOL_ENV).is_some();
-    let ninja = PathBuf::from(std::env::var_os(NINJA_ENV).context("read fake ninja path")?);
+    let process_env = DefaultEnv;
+    let job = process_env.raw(JOB_ENV).context("read routing job")?;
+    let tool = process_env.os_string(TOOL_ENV).is_some();
+    let ninja = PathBuf::from(
+        process_env
+            .os_string(NINJA_ENV)
+            .context("read fake ninja path")?,
+    );
     let stderr_mode = match job.as_str() {
         "forward" => StderrMode::Forward,
         "suppress" => StderrMode::Suppress,
@@ -105,14 +111,14 @@ fn routing_worker() -> Result<()> {
     result.context("run Ninja invocation in routing worker")
 }
 
-/// cli.json=true with stderr_mode=Forward: the child markers must reach the
+/// cli.json=true with `stderr_mode=Forward`: the child markers must reach the
 /// user's stdout and stderr, proving routing ignores the JSON setting.
 #[cfg(unix)]
 #[test]
 fn forward_request_routes_child_streams_despite_json_cli() -> Result<()> {
     let ran_dir = tempdir().context("create run-marker directory")?;
     let ran_file = ran_dir.path().join("ran");
-    let (ninja_dir, ninja) = marker_emitting_ninja(&ran_file)?;
+    let (_ninja_dir, ninja) = marker_emitting_ninja(&ran_file)?;
     let output = run_routing_worker("forward", false, &ninja, &ran_file)?
         .output()
         .context("run forwarding build worker")?;
@@ -135,7 +141,7 @@ fn forward_request_routes_child_streams_despite_json_cli() -> Result<()> {
     Ok(())
 }
 
-/// cli.json=false with stderr_mode=Suppress: both child markers must be
+/// cli.json=false with `stderr_mode=Suppress`: both child markers must be
 /// drained even though the human CLI would otherwise forward them, and the
 /// run marker proves the child really executed.
 #[cfg(unix)]
@@ -143,7 +149,7 @@ fn forward_request_routes_child_streams_despite_json_cli() -> Result<()> {
 fn suppress_request_drains_child_streams_despite_human_cli() -> Result<()> {
     let ran_dir = tempdir().context("create run-marker directory")?;
     let ran_file = ran_dir.path().join("ran");
-    let (ninja_dir, ninja) = marker_emitting_ninja(&ran_file)?;
+    let (_ninja_dir, ninja) = marker_emitting_ninja(&ran_file)?;
     let output = run_routing_worker("suppress", false, &ninja, &ran_file)?
         .output()
         .context("run suppressing build worker")?;
@@ -167,14 +173,14 @@ fn suppress_request_drains_child_streams_despite_human_cli() -> Result<()> {
     Ok(())
 }
 
-/// cli.json=true with stderr_mode=Forward on the tool request: the child
+/// cli.json=true with `stderr_mode=Forward` on the tool request: the child
 /// markers must reach the user, proving the tool path also ignores cli.json.
 #[cfg(unix)]
 #[test]
 fn forward_tool_request_routes_child_streams_despite_json_cli() -> Result<()> {
     let ran_dir = tempdir().context("create run-marker directory")?;
     let ran_file = ran_dir.path().join("ran");
-    let (ninja_dir, ninja) = marker_emitting_ninja(&ran_file)?;
+    let (_ninja_dir, ninja) = marker_emitting_ninja(&ran_file)?;
     let output = run_routing_worker("forward", true, &ninja, &ran_file)?
         .output()
         .context("run forwarding tool worker")?;
@@ -197,14 +203,14 @@ fn forward_tool_request_routes_child_streams_despite_json_cli() -> Result<()> {
     Ok(())
 }
 
-/// cli.json=false with stderr_mode=Suppress on the tool request: both child
+/// cli.json=false with `stderr_mode=Suppress` on the tool request: both child
 /// markers must be drained, with the run marker proving the child executed.
 #[cfg(unix)]
 #[test]
 fn suppress_tool_request_drains_child_streams_despite_human_cli() -> Result<()> {
     let ran_dir = tempdir().context("create run-marker directory")?;
     let ran_file = ran_dir.path().join("ran");
-    let (ninja_dir, ninja) = marker_emitting_ninja(&ran_file)?;
+    let (_ninja_dir, ninja) = marker_emitting_ninja(&ran_file)?;
     let output = run_routing_worker("suppress", true, &ninja, &ran_file)?
         .output()
         .context("run suppressing tool worker")?;
