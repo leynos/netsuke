@@ -10,7 +10,6 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use netsuke::ast::{Recipe, StringOrList};
 use netsuke::ir::{Action, BuildEdge, BuildGraph};
 use netsuke::ninja_gen::{NinjaGenError, generate};
-use rstest::rstest;
 use std::process::Command;
 use tempfile::TempDir;
 use test_support::ninja_gen::ninja_integration_setup;
@@ -124,6 +123,26 @@ fn command_list_command_line(entries: Vec<String>) -> Result<String> {
         .find_map(|line| line.strip_prefix("  command = "))
         .map(str::to_owned)
         .context("generated command-list action missing")
+}
+
+fn assert_multiple_background_jobs_are_rejected(
+    entries: Vec<String>,
+    expectation: &str,
+) -> Result<()> {
+    let Err(error) = command_list_command_line(entries) else {
+        anyhow::bail!("{expectation}");
+    };
+    ensure!(
+        matches!(
+            error.downcast_ref::<NinjaGenError>(),
+            Some(NinjaGenError::MultipleBackgroundJobs {
+                action_index: 1,
+                entry_index: 1,
+            })
+        ),
+        "multiple background jobs should return a stable typed error: {error:?}"
+    );
+    Ok(())
 }
 
 fn open_temp_workspace(dir: &TempDir) -> Result<Dir> {
@@ -289,26 +308,26 @@ fn command_list_background_failure_waits_before_the_next_entry() -> Result<()> {
     Ok(())
 }
 
-#[rstest]
-#[case::direct("true & sh -c 'sleep 0.1; exit 1' &")]
-#[case::nested_eval("eval 'false & true &'")]
-fn command_list_rejects_unattributable_background_jobs(#[case] entry: &str) -> Result<()> {
-    let error = command_list_command_line(vec![
-        entry.into(),
-        "echo unexpected > continued-after-rejection.txt".into(),
-    ])
-    .expect_err("unattributable background jobs should be rejected before Ninja runs");
-    ensure!(
-        matches!(
-            error.downcast_ref::<NinjaGenError>(),
-            Some(NinjaGenError::MultipleBackgroundJobs {
-                action_index: 1,
-                entry_index: 1,
-            })
-        ),
-        "entry {entry} should return a stable typed error: {error:?}"
-    );
-    Ok(())
+#[test]
+fn command_list_rejects_multiple_background_jobs() -> Result<()> {
+    assert_multiple_background_jobs_are_rejected(
+        vec![
+            "true & sh -c 'sleep 0.1; exit 1' &".into(),
+            "echo unexpected > continued-after-multiple-background-jobs.txt".into(),
+        ],
+        "multiple background jobs should be rejected before Ninja runs",
+    )
+}
+
+#[test]
+fn command_list_rejects_nested_eval_background_jobs_before_later_entries() -> Result<()> {
+    assert_multiple_background_jobs_are_rejected(
+        vec![
+            "eval 'false & true &'".into(),
+            "echo unexpected > continued-after-nested-eval.txt".into(),
+        ],
+        "nested eval background jobs should be rejected before Ninja runs",
+    )
 }
 
 #[path = "support/ninja_gen_direct_target_command_list.rs"]
