@@ -119,12 +119,11 @@ impl WorkspaceMatchContext {
 
         if !command_has_ext {
             let candidates = env::candidate_paths(Utf8Path::new(""), &command_lower, env.pathext());
-            basenames.extend(
-                candidates
-                    .into_iter()
-                    .filter_map(|candidate| Utf8Path::new(candidate.as_str()).file_name())
-                    .map(|name| name.to_ascii_lowercase()),
-            );
+            basenames.extend(candidates.into_iter().filter_map(|candidate| {
+                Utf8Path::new(candidate.as_str())
+                    .file_name()
+                    .map(|name| name.to_ascii_lowercase())
+            }));
         }
 
         Self {
