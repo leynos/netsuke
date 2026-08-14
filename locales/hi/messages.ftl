@@ -113,7 +113,6 @@ runner.io.dyndep.read = { $path } पर बनाई गई dyndep फ़ाइ
 runner.io.dyndep.write = { $path } पर बनाई गई dyndep फ़ाइल लिखी नहीं जा सकी।
 runner.io.dyndep.rename = { $path } पर बनाई गई dyndep फ़ाइल को अंतिम रूप नहीं दिया जा सका।
 runner.io.dyndep.corrupt = { $path } पर बनाई गई dyndep फ़ाइल अपेक्षित सामग्री से मेल नहीं खाती; केवल उसी फ़ाइल को हटाकर फिर प्रयास करें।
-runner.io.dyndep.race = किसी अन्य प्रक्रिया ने { $path } पर dyndep फ़ाइल लिखी, लेकिन उसकी सामग्री सत्यापित नहीं की जा सकी।
 runner.io.dyndep.temp_collisions = बार-बार नाम टकराने के बाद { $path } के लिए एक अद्वितीय अस्थायी dyndep फ़ाइल नहीं बनाई जा सकी।
 runner.io.dyndep.too_large = { $path } पर बनाई गई dyndep फ़ाइल { $limit } बाइट की सत्यापन सीमा से बड़ी है।
 

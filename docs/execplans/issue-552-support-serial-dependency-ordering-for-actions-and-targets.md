@@ -360,6 +360,10 @@ criterion in issue #552 and all repository gates pass.
   runner contract. The capability-scoped publication boundary is
   `materialize_dyndep_bundle(cli, bundle)`; it opens the effective directory
   before delegating sidecar writes, so the diagram now shows that boundary.
+- [x] (2026-08-14) Removed the stale `RUNNER_IO_DYNDEP_RACE` key and its locale
+  entries after confirming that no runtime path references it. Concurrent
+  publication continues to use verified content outcomes and the live read,
+  rename, corruption, and bounded temporary-collision errors.
 
 ## Surprises and discoveries
 

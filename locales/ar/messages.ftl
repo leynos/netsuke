@@ -113,7 +113,6 @@ runner.io.dyndep.read = ‏ تعذّرت قراءة ملف dyndep المُنشأ
 runner.io.dyndep.write = ‏ تعذّرت كتابة ملف dyndep المُنشأ في ‏{ $path }.
 runner.io.dyndep.rename = ‏ تعذّر إنهاء ملف dyndep المُنشأ في ‏{ $path }.
 runner.io.dyndep.corrupt = ‏ ملف dyndep المُنشأ في ‏{ $path } لا يطابق المحتوى المتوقع؛ أزل ذلك الملف وحده وأعد المحاولة.
-runner.io.dyndep.race = ‏ كتبت عملية أخرى ملف dyndep ‏{ $path }، ولكن تعذّر التحقّق من محتواه.
 runner.io.dyndep.temp_collisions = ‏ تعذّر إنشاء ملف dyndep مؤقت وفريد لـ ‏{ $path } بعد اصطدامات متكرّرة في الأسماء.
 runner.io.dyndep.too_large = ‏ يتجاوز ملف dyndep المُنشأ في ‏{ $path } حدّ التحقّق البالغ ‏{ $limit } بايت.
 

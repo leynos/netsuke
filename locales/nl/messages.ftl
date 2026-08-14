@@ -113,7 +113,6 @@ runner.io.dyndep.read = Het gegenereerde dyndep-bestand op { $path } kon niet wo
 runner.io.dyndep.write = Het gegenereerde dyndep-bestand op { $path } kon niet worden geschreven.
 runner.io.dyndep.rename = Het gegenereerde dyndep-bestand op { $path } kon niet worden voltooid.
 runner.io.dyndep.corrupt = Het gegenereerde dyndep-bestand op { $path } komt niet overeen met de verwachte inhoud; verwijder alleen dit bestand en probeer het opnieuw.
-runner.io.dyndep.race = Een ander proces heeft het dyndep-bestand { $path } geschreven, maar de inhoud kon niet worden geverifieerd.
 runner.io.dyndep.temp_collisions = Er kon na herhaalde naamconflicten geen uniek tijdelijk dyndep-bestand voor { $path } worden gemaakt.
 runner.io.dyndep.too_large = Het gegenereerde dyndep-bestand op { $path } overschrijdt de verificatielimiet van { $limit } bytes.
 

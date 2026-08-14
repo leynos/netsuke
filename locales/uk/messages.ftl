@@ -113,7 +113,6 @@ runner.io.dyndep.read = Не вдалося прочитати створени�
 runner.io.dyndep.write = Не вдалося записати створений файл dyndep (шлях: { $path }).
 runner.io.dyndep.rename = Не вдалося завершити створений файл dyndep (шлях: { $path }).
 runner.io.dyndep.corrupt = Створений файл dyndep (шлях: { $path }) не відповідає очікуваному вмісту; видаліть лише цей файл і повторіть спробу.
-runner.io.dyndep.race = Інший процес записав файл dyndep { $path }, але його вміст не вдалося перевірити.
 runner.io.dyndep.temp_collisions = Не вдалося створити унікальний тимчасовий файл dyndep (шлях: { $path }) після повторних колізій імен.
 runner.io.dyndep.too_large = Створений файл dyndep (шлях: { $path }) перевищує межу перевірки в { $limit } байтів.
 

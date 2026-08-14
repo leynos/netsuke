@@ -113,7 +113,6 @@ runner.io.dyndep.read = Nu s-a putut citi fișierul dyndep generat la { $path }.
 runner.io.dyndep.write = Nu s-a putut scrie fișierul dyndep generat la { $path }.
 runner.io.dyndep.rename = Nu s-a putut finaliza fișierul dyndep generat la { $path }.
 runner.io.dyndep.corrupt = Fișierul dyndep generat la { $path } nu corespunde conținutului așteptat; eliminați doar acest fișier și încercați din nou.
-runner.io.dyndep.race = Un alt proces a scris fișierul dyndep { $path }, dar conținutul său nu a putut fi verificat.
 runner.io.dyndep.temp_collisions = Nu s-a putut crea un fișier dyndep temporar unic pentru { $path } după coliziuni repetate de nume.
 runner.io.dyndep.too_large = Fișierul dyndep generat la { $path } depășește limita de verificare de { $limit } octeți.
 

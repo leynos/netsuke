@@ -113,7 +113,6 @@ runner.io.dyndep.read = { $path } konumundaki oluşturulan dyndep dosyası okuna
 runner.io.dyndep.write = { $path } konumundaki oluşturulan dyndep dosyasına yazılamadı.
 runner.io.dyndep.rename = { $path } konumundaki oluşturulan dyndep dosyası sonlandırılamadı.
 runner.io.dyndep.corrupt = { $path } konumundaki oluşturulan dyndep dosyası beklenen içerikle eşleşmiyor; yalnızca bu dosyayı kaldırıp yeniden deneyin.
-runner.io.dyndep.race = Başka bir işlem { $path } dyndep dosyasına yazdı ancak içeriği doğrulanamadı.
 runner.io.dyndep.temp_collisions = Tekrarlanan ad çakışmalarından sonra { $path } için benzersiz bir geçici dyndep dosyası oluşturulamadı.
 runner.io.dyndep.too_large = { $path } konumundaki oluşturulan dyndep dosyası { $limit } baytlık doğrulama sınırını aşıyor.
 

@@ -113,7 +113,6 @@ runner.io.dyndep.read = A generált dyndep fájl olvasása sikertelen innen: { $
 runner.io.dyndep.write = A generált dyndep fájl írása sikertelen ide: { $path }.
 runner.io.dyndep.rename = A generált dyndep fájl véglegesítése sikertelen itt: { $path }.
 runner.io.dyndep.corrupt = A(z) { $path } helyen található generált dyndep fájl tartalma nem egyezik a várt tartalommal; csak ezt a fájlt törölje, majd próbálja újra.
-runner.io.dyndep.race = Egy másik folyamat a(z) { $path } dyndep fájlt írta, de a tartalma nem ellenőrizhető.
 runner.io.dyndep.temp_collisions = Ismételt névütközések után nem sikerült egyedi ideiglenes dyndep fájlt létrehozni a(z) { $path } útvonalhoz.
 runner.io.dyndep.too_large = A létrehozott dyndep fájl ({ $path }) meghaladja a(z) { $limit } bájtos ellenőrzési korlátot.
 

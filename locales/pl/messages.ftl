@@ -113,7 +113,6 @@ runner.io.dyndep.read = Nie udało się odczytać wygenerowanego pliku dyndep (�
 runner.io.dyndep.write = Nie udało się zapisać wygenerowanego pliku dyndep (ścieżka: { $path }).
 runner.io.dyndep.rename = Nie udało się sfinalizować wygenerowanego pliku dyndep (ścieżka: { $path }).
 runner.io.dyndep.corrupt = Wygenerowany plik dyndep (ścieżka: { $path }) nie pasuje do oczekiwanej zawartości; usuń tylko ten plik i spróbuj ponownie.
-runner.io.dyndep.race = Inny proces zapisał plik dyndep { $path }, ale nie udało się zweryfikować jego zawartości.
 runner.io.dyndep.temp_collisions = Po wielokrotnych kolizjach nazw nie udało się utworzyć unikatowego tymczasowego pliku dyndep (ścieżka: { $path }).
 runner.io.dyndep.too_large = Wygenerowany plik dyndep (ścieżka: { $path }) przekracza limit weryfikacji wynoszący { $limit } bajtów.
 

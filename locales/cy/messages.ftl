@@ -113,7 +113,6 @@ runner.io.dyndep.read = Methu darllen ffeil dyndep a gynhyrchwyd yn { $path }.
 runner.io.dyndep.write = Methu ysgrifennu ffeil dyndep a gynhyrchwyd at { $path }.
 runner.io.dyndep.rename = Methu cwblhau ffeil dyndep a gynhyrchwyd yn { $path }.
 runner.io.dyndep.corrupt = Nid yw'r ffeil dyndep a gynhyrchwyd yn { $path } yn cyfateb i'w chynnwys disgwyliedig; tynnwch y ffeil honno yn unig a cheisiwch eto.
-runner.io.dyndep.race = Ysgrifennodd proses arall ffeil dyndep { $path }, ond ni ellid dilysu ei chynnwys.
 runner.io.dyndep.temp_collisions = Methwyd creu ffeil dyndep dros dro unigryw ar gyfer { $path } ar ôl gwrthdrawiadau enwau mynych.
 runner.io.dyndep.too_large = Mae'r ffeil dyndep a gynhyrchwyd yn { $path } yn fwy na'r terfyn dilysu o { $limit } beit.
 

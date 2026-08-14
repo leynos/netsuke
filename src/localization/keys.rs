@@ -100,7 +100,6 @@ define_keys! {
     RUNNER_IO_DYNDEP_WRITE => "runner.io.dyndep.write",
     RUNNER_IO_DYNDEP_RENAME => "runner.io.dyndep.rename",
     RUNNER_IO_DYNDEP_CORRUPT => "runner.io.dyndep.corrupt",
-    RUNNER_IO_DYNDEP_RACE => "runner.io.dyndep.race",
     RUNNER_IO_DYNDEP_TEMP_COLLISIONS => "runner.io.dyndep.temp_collisions",
     RUNNER_IO_DYNDEP_TOO_LARGE => "runner.io.dyndep.too_large",
     MANIFEST_PARSE => "manifest.parse",

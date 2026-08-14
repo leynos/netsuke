@@ -113,7 +113,6 @@ runner.io.dyndep.read = Dh’fhàillig leughadh an fhaidhle dyndep a chaidh a ch
 runner.io.dyndep.write = Dh’fhàillig sgrìobhadh an fhaidhle dyndep a chaidh a chruthachadh aig { $path }.
 runner.io.dyndep.rename = Dh’fhàillig crìochnachadh an fhaidhle dyndep a chaidh a chruthachadh aig { $path }.
 runner.io.dyndep.corrupt = Chan eil an fhaidhle dyndep a chaidh a chruthachadh aig { $path } a’ freagairt ris an t-susbaint ris an robh dùil; thoir air falbh an fhaidhle sin a-mhàin agus feuch ris a-rithist.
-runner.io.dyndep.race = Sgrìobh pròiseas eile am faidhle dyndep { $path }, ach cha b’ urrainn dhuinn an t-susbaint aige a dhearbhadh.
 runner.io.dyndep.temp_collisions = Dh’fhàillig cruthachadh faidhle dyndep sealach àraidh airson { $path } às dèidh buairidhean ainmean tric.
 runner.io.dyndep.too_large = Tha am faidhle dyndep a chaidh a chruthachadh aig { $path } nas motha na crìoch dearbhaidh { $limit } baidht.
 

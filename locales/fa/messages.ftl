@@ -113,7 +113,6 @@ runner.io.dyndep.read = ‏ خواندن فایل dyndep تولیدشده در �
 runner.io.dyndep.write = ‏ نوشتن فایل dyndep تولیدشده در ‏{ $path } ممکن نبود.
 runner.io.dyndep.rename = ‏ نهایی‌کردن فایل dyndep تولیدشده در ‏{ $path } ممکن نبود.
 runner.io.dyndep.corrupt = ‏ فایل dyndep تولیدشده در ‏{ $path } با محتوای مورد انتظار مطابقت ندارد؛ فقط همان فایل را حذف کنید و دوباره تلاش کنید.
-runner.io.dyndep.race = ‏ فرایند دیگری فایل dyndep ‏{ $path } را نوشت، اما محتوای آن قابل تأیید نبود.
 runner.io.dyndep.temp_collisions = ‏ پس از برخوردهای مکرر نام‌ها، ایجاد فایل موقت و یکتای dyndep برای ‏{ $path } ممکن نشد.
 runner.io.dyndep.too_large = ‏ فایل dyndep تولیدشده در ‏{ $path } از حدّ تأیید ‏{ $limit } بایت فراتر می‌رود.
 
