@@ -67,3 +67,85 @@ pub(super) fn configure_ninja_tool_command(
     cmd.arg("-t").arg(request.tool);
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    //! Unit tests for Ninja command configuration without spawning Ninja.
+
+    use super::*;
+    use anyhow::{Result, ensure};
+    use std::ffi::{OsStr, OsString};
+
+    fn command_arguments(cmd: &Command) -> Vec<OsString> {
+        cmd.get_args().map(OsStr::to_os_string).collect()
+    }
+
+    fn expected_base_arguments(build_file: &Path) -> Result<Vec<OsString>> {
+        Ok(vec![
+            OsString::from("-j"),
+            OsString::from("4"),
+            OsString::from("-f"),
+            build_file.canonicalize()?.into_os_string(),
+        ])
+    }
+
+    #[test]
+    fn build_configuration_preserves_argument_order() -> Result<()> {
+        let build_file = tempfile::NamedTempFile::new()?;
+        let options = NinjaProcessOptions {
+            jobs: Some(4),
+            ..NinjaProcessOptions::default()
+        };
+        let target_names = vec![String::from("default")];
+        let targets = super::super::BuildTargets::new(&target_names);
+        let env = CommandEnv::inherit();
+        let request = NinjaBuildRequest {
+            program: Path::new("ninja"),
+            options: &options,
+            build_file: build_file.path(),
+            targets: &targets,
+            env: &env,
+        };
+        let mut cmd = Command::new("ninja");
+
+        configure_ninja_build_command(&mut cmd, &request)?;
+
+        let mut expected = expected_base_arguments(build_file.path())?;
+        expected.push(OsString::from("default"));
+        let actual = command_arguments(&cmd);
+        ensure!(
+            actual == expected,
+            "build command argument order changed: {actual:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn tool_configuration_preserves_argument_order() -> Result<()> {
+        let build_file = tempfile::NamedTempFile::new()?;
+        let options = NinjaProcessOptions {
+            jobs: Some(4),
+            ..NinjaProcessOptions::default()
+        };
+        let env = CommandEnv::inherit();
+        let request = NinjaToolRequest {
+            program: Path::new("ninja"),
+            options: &options,
+            build_file: build_file.path(),
+            tool: "clean",
+            env: &env,
+        };
+        let mut cmd = Command::new("ninja");
+
+        configure_ninja_tool_command(&mut cmd, &request)?;
+
+        let mut expected = expected_base_arguments(build_file.path())?;
+        expected.extend([OsString::from("-t"), OsString::from("clean")]);
+        let actual = command_arguments(&cmd);
+        ensure!(
+            actual == expected,
+            "tool command argument order changed: {actual:?}"
+        );
+        Ok(())
+    }
+}
