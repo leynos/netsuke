@@ -2694,6 +2694,24 @@ early rather than silently ignored. The `json` setting selects machine-readable
 output: each invocation emits one versioned result document on success or one
 versioned diagnostic document on failure.
 
+
+#### Configuration observability
+
+Configuration loading remains a plain query. The application-owned recorder
+boundary in `src/observability.rs` composes instrumentation at the CLI root,
+around the diagnostic-mode resolution and full-merge queries; configuration
+loading itself does not emit telemetry. The process-wide recorder is installed
+by the application after tracing is ready, while tests use local recorders.
+
+The metric vocabulary keeps labels bounded: `config_load_total` uses only
+`phase` (`diag_mode` or `merge`) and `outcome` (`success` or `failure`), while
+`config_load_duration_seconds` uses only `phase`. Paths, configuration values,
+and error text are not metric labels. At command completion, a verbose
+human-mode run drains and logs an aggregate `metrics snapshot`. After a
+successful configuration merge, merged verbosity gates that snapshot; a
+pre-merge failure uses parsed CLI verbosity. JSON mode suppresses tracing,
+including the snapshot, so its diagnostic document remains uncorrupted.
+
 CLI help and clap errors are localized via Fluent resources; locale resolution
 is handled in `src/locale_resolution.rs` in two phases. Before the
 configuration merge, `startup_localizer` (`src/main.rs`) resolves the locale

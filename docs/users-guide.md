@@ -1019,6 +1019,14 @@ Configuration tracing is disabled in JSON mode, including when `json = true`
 comes from a configuration file. This keeps stderr empty for successful JSON
 commands and reserves it for the single diagnostic document on failure.
 
+Verbose human-mode runs also emit a `metrics snapshot` aggregate after command
+completion. Verbosity can come from `--verbose`, `NETSUKE_VERBOSE`, or
+`verbose = true` in a configuration file. After a successful configuration
+merge, the merged verbosity controls the snapshot; if configuration fails
+before that merge completes, the parsed CLI verbosity is used instead. JSON
+mode suppresses tracing and metrics snapshots so that its diagnostic document
+remains the only stderr output.
+
 The annotated [sample configuration](sample-netsuke.toml) lists every key. A
 small project configuration looks like this:
 
@@ -1245,6 +1253,10 @@ Netsuke reports failures at the earliest stage that can identify them:
 
 Human diagnostics include remediation hints where one is available. JSON mode
 exposes the same information as fields.
+
+Human-mode configuration-load failures include structured `operation` and
+`error_category` fields. JSON mode preserves the diagnostic document as the
+machine-readable failure output.
 
 The `--verbose` flag enables diagnostic tracing and successful timing
 summaries. It is suppressed in JSON mode so stderr remains parseable.

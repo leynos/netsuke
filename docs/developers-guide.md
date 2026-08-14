@@ -3650,6 +3650,9 @@ the Proptest suite keep the `Utf8PathBuf` instantiation tied to production.
 
 ## Configuration observability
 
+**Cross-references:** [CLI design](netsuke-design.md) §8.4, for the
+application-owned recorder boundary and end-of-run snapshot policy.
+
 `src/observability.rs` owns the application-level instrumentation for the two
 configuration-loading boundaries in `src/main.rs`. Keep configuration loading
 itself as a plain query: compose this instrumentation only at the CLI
@@ -3669,8 +3672,11 @@ The bounded metric contract is:
 `metrics_util::debugging::DebuggingRecorder` after tracing starts. This
 recorder is intentionally application-owned; tests must use
 `metrics::with_local_recorder` with a local recorder instead.
-`emit_metrics_snapshot()` drains and logs the aggregate snapshot only when the
-parsed CLI enables verbose output, immediately before `run_with_args` returns.
+`emit_metrics_snapshot()` drains and logs the aggregate snapshot at command
+completion. After a successful configuration merge, `finish_run` gates it on
+merged `verbose`; if diagnostic-mode resolution or the full merge fails before
+a merged configuration exists, it uses parsed CLI `verbose` instead. JSON
+sets tracing to `OFF`, so JSON runs suppress this snapshot.
 
 The debugging recorder preserves raw histogram observations rather than
 aggregating them into buckets. Netsuke configures no custom buckets; a future
