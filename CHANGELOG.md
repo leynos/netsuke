@@ -24,7 +24,10 @@
   ([#490](https://github.com/leynos/netsuke/issues/490))
 - Accept a non-empty ordered list of commands for a rule or target `command`
   recipe, executed as a single fail-fast `&&` shell chain, so the build stops
-  at the first non-zero exit; an empty command list is rejected at parse time
+  at the first non-zero exit; an empty command list is rejected at parse time,
+  and entries with multiple background jobs or unsupported `exec` structures
+  are rejected during Ninja generation as `MultipleBackgroundJobs` or
+  `UnsupportedCommandListExec`
   ([#550](https://github.com/leynos/netsuke/issues/550))
 
 ### Changed
