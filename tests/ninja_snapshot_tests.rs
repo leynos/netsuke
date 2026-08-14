@@ -4,11 +4,10 @@
 //! output using `insta`, and validate it with the real `ninja`
 //! executable. The manifest uses a simple TOUCH rule so the build is
 //! fast and deterministic.
-
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use insta::{Settings, assert_snapshot};
-use netsuke::{ir::BuildGraph, manifest, ninja_gen};
+use netsuke::{ir::BuildGraph, manifest, ninja_gen, stdlib::StdlibConfig};
 use std::{fs, process::Command};
 use tempfile::tempdir;
 use test_support::ensure_binaries_available;
@@ -133,8 +132,11 @@ fn conditional_manifest_ninja_snapshot() -> Result<()> {
 
 #[test]
 fn command_available_manifest_ninja_snapshot() -> Result<()> {
-    // `cwd_mode="never"` plus a command name guaranteed absent keeps the
-    // expansion deterministic without any real binary on PATH.
+    // Pin the `command_available` resolver to an empty PATH through the
+    // stdlib configuration seam, so a host or CI image with a binary named
+    // like the fixture cannot flip the guard. `cwd_mode="never"` additionally
+    // excludes the workspace root from the search; the absent command name
+    // alone is not sufficient for determinism.
     let manifest_yaml = r#"
         netsuke_version: "1.0.0"
         actions:
@@ -153,7 +155,12 @@ fn command_available_manifest_ninja_snapshot() -> Result<()> {
             rule: touch
     "#;
 
-    let manifest = manifest::from_str(manifest_yaml)?;
+    let config = StdlibConfig::from_current_dir()?.with_path_override("");
+    let manifest = manifest::from_str_with_env_and_config(
+        manifest_yaml,
+        &manifest::process_env_reader(),
+        config,
+    )?;
     let ir = BuildGraph::from_manifest(&manifest)?;
     let ninja_content = ninja_gen::generate(&ir)?;
 

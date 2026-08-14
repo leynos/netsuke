@@ -2250,8 +2250,8 @@ mutate_env_var(world, EnvVarKey::from("NETSUKE_EMOJI"), None)?;
 
 Production-facing unit and integration tests follow the same rule. Use the
 appropriate injected seam, such as `run_with_ninja_program`,
-`from_path_with_policy_and_env`, `StdlibConfig::with_path_override`,
-`StdlibConfig::with_home_override`, or
+`from_path_with_policy_and_env`, `manifest::from_str_with_env_and_config`,
+`StdlibConfig::with_path_override`, `StdlibConfig::with_home_override`, or
 `StdlibConfig::with_command_path_override`. End-to-end tests may call
 `env_clear()` and then apply values with `Command::env`, because the mutation
 is confined to the child.
