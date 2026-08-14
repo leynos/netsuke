@@ -2943,16 +2943,15 @@ to the test module's path, not to a shared helper module.
 
 Startup configuration loading is instrumented through the
 [`metrics`](https://docs.rs/metrics) façade so operators can detect failure
-trends and startup-latency regressions in production. The instrumentation
-lives in `src/main.rs` around `resolve_json_mode_or_exit` and
+trends and startup-latency regressions in production. Overall startup-attempt
+metrics are recorded around `resolve_json_mode_or_exit` and
 `merge_cli_or_exit`, spanning diagnostic-mode resolution
 (`cli::resolve_merged_json`) through the full layer merge
-(`cli::merge_with_config`).
+(`cli::merge_with_config`); phase-level metrics are composed in
+`src/observability.rs` around those same boundaries.
 
-Because `metrics` is a façade, the macros are no-ops unless the operator
-installs a recorder (for example a Prometheus or OpenTelemetry exporter) at
-process start. Netsuke does not bundle a recorder; it only emits the
-measurements.
+By default, Netsuke installs its in-process `DebuggingRecorder`; verbose runs
+can emit its snapshot through the debug log.
 
 Instruments emitted by `record_config_load_metrics`:
 
@@ -3695,13 +3694,13 @@ the Proptest suite keep the `Utf8PathBuf` instantiation tied to production.
 **Cross-references:** [CLI design](netsuke-design.md) §8.4, for the
 application-owned recorder boundary and end-of-run snapshot policy.
 
-`src/observability.rs` owns the application-level instrumentation for the two
+`src/observability.rs` owns the phase-level instrumentation for the two
 configuration-loading boundaries in `src/main.rs`. Keep configuration loading
 itself as a plain query: compose this instrumentation only at the CLI
 composition root. Other subsystem boundaries retain their local telemetry
 modules and must not add unbounded configuration detail to these series.
 
-The bounded metric contract is:
+The phase-level metric contract is:
 
 - Counter `config_load_total` records exactly one outcome for each logical
   configuration-load phase. Its `phase` label is `diag_mode` for early
@@ -3710,10 +3709,16 @@ The bounded metric contract is:
 - Histogram `config_load_duration_seconds` records one duration for each of
   those phases and carries only the same bounded `phase` label.
 
+These internal phase metrics are separate from the operator-facing
+startup-attempt metrics documented above: `netsuke_config_load_total` carries
+only the `outcome` label, and `netsuke_config_load_duration_seconds` has no
+labels. The `netsuke_` prefix identifies the public startup-attempt family.
+
 `init_metrics()` installs an application-owned filtering recorder around the
 process-wide `metrics_util::debugging::DebuggingRecorder` after tracing starts.
-It retains only the two configuration-load metric names above, so unrelated
-workload histograms cannot accumulate samples until shutdown. Tests must use
+It retains only the bounded configuration-load series above (phase-level and
+startup-attempt), so unrelated workload histograms cannot accumulate samples
+until shutdown. Tests must use
 `metrics::with_local_recorder` with a local recorder instead.
 `emit_metrics_snapshot()` drains and logs that configuration-load aggregate at
 command completion. After a successful configuration merge, `finish_run` gates
@@ -3738,14 +3743,16 @@ aggregating them into buckets. Netsuke configures no custom buckets; a future
 exporter may choose its own bucket policy without changing this metric name or
 label contract.
 
-Human-readable `configuration load failed` events include two structured
-fields:
+Human-readable `configuration load failed` events include two bounded
+structured fields:
 
 - `operation`: `diag_mode_resolution` or `config_merge`.
 - `error_category`: `io`, `parse`, or `validation`.
 
-The first two fields remain deliberately low-cardinality. Do not add paths,
-configuration values, or error text as metric labels.
+For human and JSON output, detailed source error text remains in the
+user-facing diagnostic path (stderr for human output and structured JSON for
+JSON output), not in a structured tracing field or metric label. Do not add
+paths, configuration values, or error text as metric labels.
 
 ## Documentation upkeep
 

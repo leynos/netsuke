@@ -92,9 +92,21 @@ fn run_with_args(
     // Buffering keeps the locale fallback report without taking that risk.
     let startup_writer = StartupWriter::buffering();
     init_tracing(LevelFilter::WARN, startup_writer.clone());
+    let startup_mode = DiagMode::from_json_enabled(json_hint);
+    if let Err(error) = install_metrics_recorder(env) {
+        if startup_mode.is_json() {
+            let exit_code = diagnostic_json::emit_or_fallback(diagnostic_json::render_error_json(
+                error.as_ref(),
+            ));
+            settle_startup_diagnostics(&startup_writer, startup_mode);
+            return exit_code;
+        }
+        tracing::error!(%error, "failed to install the metrics recorder");
+        settle_startup_diagnostics(&startup_writer, startup_mode);
+        return ExitCode::FAILURE;
+    }
     observability::init_metrics();
     let localizer = startup_localizer(&args, env, system_locale);
-    let startup_mode = DiagMode::from_json_enabled(json_hint);
     let (parsed_cli, matches) =
         match parse_cli_or_exit(args, &localizer, startup_mode, &startup_writer) {
             Ok(parsed) => parsed,
