@@ -258,7 +258,10 @@ Attributed list failures emit the bounded tracing fields
 `command_list_failure` marker. The process boundary records
 `netsuke_ninja_command_list_failures_total` and
 `netsuke_ninja_command_list_failure_duration_seconds`, with an `outcome`
-label of `failure`. These diagnostics and metrics contain no command text.
+label of `failure`. Elapsed failure duration is measured through the injected
+`monotony::MonotonicClock`; production uses `StdMonotonicClock`, while tests use
+deterministic test clocks. These diagnostics and metrics contain no command
+text.
 
 Changes to this pipeline must preserve the scalar/list distinction, per-entry
 rendering, current-shell state sharing, and failure attribution. The focused
