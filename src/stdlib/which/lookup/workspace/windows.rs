@@ -122,7 +122,7 @@ impl WorkspaceMatchContext {
             basenames.extend(candidates.into_iter().filter_map(|candidate| {
                 Utf8Path::new(candidate.as_str())
                     .file_name()
-                    .map(|name| name.to_ascii_lowercase())
+                    .map(str::to_ascii_lowercase)
             }));
         }
 
