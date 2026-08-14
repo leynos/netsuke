@@ -3098,10 +3098,11 @@ manual flag repetition.
   resolution take an injected `&impl mockable::Env` in the public
   `*_with_env` entry points. Production wrappers supply
   `mockable::DefaultEnv`; tests supply `mockable::MockEnv` without mutating the
-  process environment. Startup passes the `DiscoveredLayers` returned by
-  `resolve_json_and_layers_with_env` to `merge_with_layers`, so file discovery
-  and loading happen once. OrthoConfig discovery remains an external boundary
-  and may still read platform environment variables directly.
+  process environment. Startup obtains a `DiscoveryOutcome` from
+  `resolve_json_and_layers_outcome_with_env`, emits its deferred diagnostics,
+  then passes `into_layers()` to `merge_with_process_environment_layers`, so
+  file discovery and loading happen once. OrthoConfig discovery remains an
+  external boundary and may still read platform environment variables directly.
 - Configuration files use TOML format by default. JSON5 (`.json`, `.json5`) and
   YAML (`.yaml`, `.yml`) formats are supported when the corresponding Cargo
   features are enabled.
