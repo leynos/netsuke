@@ -21,6 +21,7 @@ use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{Registry, fmt, reload};
 
+use monotony::{MonotonicClock, StdMonotonicClock};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DiagMode {
     Human,
@@ -76,15 +77,14 @@ fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().collect();
     let env = locale_resolution::SystemEnv;
     let system_locale = locale_resolution::SysLocale;
-    let mut configuration_clock = config_load::SystemConfigurationLoadClock::new();
-    run_with_args(args, &env, &system_locale, &mut configuration_clock)
+    run_with_args(args, &env, &system_locale, &StdMonotonicClock)
 }
 
 fn run_with_args(
     args: Vec<OsString>,
     env: &impl locale_resolution::LocaleEnvProvider,
     system_locale: &impl locale_resolution::SystemLocale,
-    configuration_clock: &mut impl config_load::ConfigurationLoadClock,
+    configuration_clock: &impl MonotonicClock,
 ) -> ExitCode {
     let json_hint = locale_resolution::resolve_startup_json(&args, env);
     // Recorded at `WARN` but written to a buffer, not to stderr. `json_hint` is

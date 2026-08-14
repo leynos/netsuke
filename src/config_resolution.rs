@@ -43,15 +43,15 @@ pub(crate) fn resolve_json_mode_or_exit(
     parsed_cli: &cli::Cli,
     matches: &ArgMatches,
     fallback_mode: DiagMode,
+    clock: &impl MonotonicClock,
 ) -> Result<(DiagMode, cli::DiscoveredLayers), ExitCode> {
     let env = cli::ConfigStdEnvProvider;
-    let clock = monotony::StdMonotonicClock;
     JsonModeResolutionContext {
         parsed_cli,
         matches,
         fallback_mode,
         env: &env,
-        clock: &clock,
+        clock,
     }
     .resolve_with(cli::resolve_json_and_layers_outcome_with_env)
 }
@@ -130,9 +130,9 @@ pub(crate) fn merge_cli_or_exit(
     matches: &ArgMatches,
     mode: DiagMode,
     discovered_layers: cli::DiscoveredLayers,
+    clock: &impl MonotonicClock,
 ) -> Result<cli::Cli, ExitCode> {
-    let clock = monotony::StdMonotonicClock;
-    observability::record_config_load(observability::ConfigLoadPhase::Merge, &clock, || {
+    observability::record_config_load(observability::ConfigLoadPhase::Merge, clock, || {
         cli::merge_with_cached_file_layers(
             parsed_cli,
             matches,

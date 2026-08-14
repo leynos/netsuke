@@ -5,11 +5,12 @@
 //! failures, merge failures, and successful merges.
 
 use super::*;
-use anyhow::{Result, bail, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
 use metrics::Label;
 use metrics_util::debugging::{DebugValue, DebuggingRecorder};
+use monotony::{MonotonicClock, StdMonotonicClock, test_util::QueuedMonotonicClock};
 use proptest::{prelude::*, test_runner::TestCaseError};
 use rstest::rstest;
 use std::ffi::OsString;
@@ -191,17 +192,6 @@ impl locale_resolution::SystemLocale for NoSystemLocale {
     }
 }
 
-/// A deterministic elapsed-time source for startup-boundary tests.
-struct FixedConfigurationLoadClock(Duration);
-
-impl config_load::ConfigurationLoadClock for FixedConfigurationLoadClock {
-    fn restart(&mut self) {}
-
-    fn elapsed(&self) -> Duration {
-        self.0
-    }
-}
-
 /// One real configuration-load route and its expected metric outcome.
 #[derive(Clone, Copy)]
 enum ConfigurationLoadScenario {
@@ -239,6 +229,27 @@ impl ConfigurationLoadScenario {
             Self::SuccessfulMerge => &[("diag_mode", "success"), ("merge", "success")],
         }
     }
+
+    const fn clock_reads(self) -> usize {
+        match self {
+            Self::JsonResolutionFailure => 4,
+            Self::MergeFailure | Self::SuccessfulMerge => 6,
+        }
+    }
+}
+
+/// Build the exact monotonic sequence consumed by one startup scenario.
+fn configuration_clock(
+    scenario: ConfigurationLoadScenario,
+    duration: Duration,
+) -> Result<QueuedMonotonicClock> {
+    let started_at = StdMonotonicClock.now();
+    let finished_at = started_at
+        .checked_add(duration)
+        .context("configuration-load test duration must fit in an Instant")?;
+    let mut instants = vec![started_at; scenario.clock_reads() - 1];
+    instants.push(finished_at);
+    Ok(QueuedMonotonicClock::from_instants(instants))
 }
 
 /// Run a configuration scenario through the binary orchestration and capture
@@ -265,10 +276,10 @@ fn run_with_config_metrics(
     let _lock = test_support::localizer_test_lock()
         .map_err(|error| anyhow::anyhow!("localizer test lock poisoned: {error}"))?;
     let _restore = localization::set_localizer_for_tests(localization::localizer());
-    let mut clock = FixedConfigurationLoadClock(duration);
+    let clock = configuration_clock(scenario, duration)?;
     let mut exit = None;
     let metrics = captured_metrics(|| {
-        exit = Some(run_with_args(args, &EmptyEnv, &NoSystemLocale, &mut clock));
+        exit = Some(run_with_args(args, &EmptyEnv, &NoSystemLocale, &clock));
     });
     ensure!(
         exit == Some(ExitCode::FAILURE),

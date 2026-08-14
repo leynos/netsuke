@@ -5,46 +5,13 @@
 //! deterministic elapsed time.
 
 use clap::ArgMatches;
+use monotony::MonotonicClock;
 use netsuke::cli;
-use std::time::{Duration, Instant};
 
 use super::{
     DiagMode, StartupWriter, merge_cli_or_exit, record_config_load_metrics,
     resolve_json_mode_or_exit, settle_startup_diagnostics,
 };
-
-/// Supplies elapsed time for one configuration-load attempt.
-pub(super) trait ConfigurationLoadClock {
-    /// Begin measuring a configuration-load attempt.
-    fn restart(&mut self);
-
-    /// Return the duration since the most recent [`Self::restart`] call.
-    fn elapsed(&self) -> Duration;
-}
-
-/// Wall-clock implementation used by the production startup path.
-pub(super) struct SystemConfigurationLoadClock {
-    started: Instant,
-}
-
-impl SystemConfigurationLoadClock {
-    /// Construct a clock ready to measure its first configuration load.
-    pub(super) fn new() -> Self {
-        Self {
-            started: Instant::now(),
-        }
-    }
-}
-
-impl ConfigurationLoadClock for SystemConfigurationLoadClock {
-    fn restart(&mut self) {
-        self.started = Instant::now();
-    }
-
-    fn elapsed(&self) -> Duration {
-        self.started.elapsed()
-    }
-}
 
 /// Dependencies that define one configuration-load attempt.
 ///
@@ -80,17 +47,18 @@ impl<'a> ConfigurationLoadContext<'a> {
 /// and ends after either that resolution or the full configuration merge.
 pub(super) fn resolve_configuration(
     context: &ConfigurationLoadContext<'_>,
-    clock: &mut impl ConfigurationLoadClock,
+    clock: &impl MonotonicClock,
 ) -> Result<cli::Cli, std::process::ExitCode> {
-    clock.restart();
+    let started_at = clock.now();
     let (mode, discovered_layers) = match resolve_json_mode_or_exit(
         context.parsed_cli,
         context.matches,
         context.startup_mode,
+        clock,
     ) {
         Ok(mode) => mode,
         Err(code) => {
-            record_config_load_metrics(clock.elapsed(), false);
+            record_config_load_metrics(clock.now().duration_since(started_at), false);
             settle_startup_diagnostics(context.startup_writer, context.startup_mode);
             return Err(code);
         }
@@ -98,14 +66,19 @@ pub(super) fn resolve_configuration(
     // The effective mode is known here, before configuration is merged, so the
     // startup warning reaches the user ahead of any configuration processing.
     settle_startup_diagnostics(context.startup_writer, mode);
-    let merged_cli =
-        match merge_cli_or_exit(context.parsed_cli, context.matches, mode, discovered_layers) {
-            Ok(merged) => merged,
-            Err(code) => {
-                record_config_load_metrics(clock.elapsed(), false);
-                return Err(code);
-            }
-        };
-    record_config_load_metrics(clock.elapsed(), true);
+    let merged_cli = match merge_cli_or_exit(
+        context.parsed_cli,
+        context.matches,
+        mode,
+        discovered_layers,
+        clock,
+    ) {
+        Ok(merged) => merged,
+        Err(code) => {
+            record_config_load_metrics(clock.now().duration_since(started_at), false);
+            return Err(code);
+        }
+    };
+    record_config_load_metrics(clock.now().duration_since(started_at), true);
     Ok(merged_cli)
 }
