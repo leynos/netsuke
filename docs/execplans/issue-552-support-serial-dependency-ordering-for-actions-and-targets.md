@@ -368,11 +368,17 @@ criterion in issue #552 and all repository gates pass.
   the current implementation. Corrected the reserved-namespace wording in the
   ADR and developer guide to cover outputs, inputs, implicit dependencies, and
   order-only dependencies. Corrected migration guidance so `generate` is
-  described as materialising sidecars while writing its manifest and `build`
-  and `clean` as materialising them before invoking Ninja. The
+  described as materializing sidecars while writing its manifest and `build`
+  and `clean` as materializing them before invoking Ninja. The
   `docs/netsuke-design.md` gate description remains unchanged because it
   already matches the current runner boundary and command-specific flow; that
   review suggestion was stale.
+- [x] (2026-08-15) Retained content-addressed sidecars rather than introducing
+  automatic retention. Pruning by age, count, or size would invalidate older
+  `generate --output` manifests that still reference their digest paths. A
+  future purge command must be explicitly destructive and document that
+  compatibility boundary; it is not a safe maintenance action for `build`,
+  `clean`, or `generate`.
 
 ## Surprises and discoveries
 

@@ -136,7 +136,7 @@ fn render_edges(
 
     for edge in edges {
         let key = path_key(&edge.explicit_outputs);
-        if !seen.insert(key.clone()) {
+        if !seen.insert(key) {
             continue;
         }
         render_edge(graph, edge, out, stages)?;
