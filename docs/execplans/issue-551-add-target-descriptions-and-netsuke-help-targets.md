@@ -97,7 +97,9 @@ default marker such as `[★ default]` on manifest defaults.
       help_en_us/help_es_es snapshots.
 - [x] (2026-08-09) Phase 4: users-guide updated (schema field, distinction
       from rule descriptions, subcommand list, worked example + tested-example
-      and its test); man page and PowerShell help pick up `help` automatically.
+      and its test); build.rs Clap man generation can include `help`, while
+      release man and PowerShell artefacts require follow-on `CliConfig`/Clap
+      integration. No shell completion artefacts exist to update.
 - [x] (2026-08-09) All gates green: check-fmt, lint (rustdoc/clippy/Whitaker),
       nextest (1936), doctests, markdownlint, spelling, nixie. Committed as
       four atomic commits.
@@ -162,9 +164,10 @@ default marker such as `[★ default]` on manifest defaults.
 - Decision: follow the issue's supplied coding plan exactly, phase by phase.
   Rationale: the plan has already been reviewed and accepted as requirements.
   Date/Author: 2026-08-09 / Claude.
-- Decision: create the execplan under `docs/execplans/fef13161.md` (derived
-  from the current branch name as instructed). Rationale: AGENTS.md names the
-  plan file from the current branch. Date/Author: 2026-08-09 / Claude.
+- Decision: create the execplan under
+  `docs/execplans/issue-551-add-target-descriptions-and-netsuke-help-targets.md`
+  (derived from the current branch name as instructed). Rationale: AGENTS.md
+  names the plan file from the current branch. Date/Author: 2026-08-09 / Claude.
 
 ## Outcomes & retrospective
 
@@ -172,9 +175,10 @@ The issue's acceptance criteria are met: the AST, rendered manifest, and
 catalogue carry target/action descriptions; parser, validation, render, and
 expansion coverage exists; `netsuke help targets` is snapshot-tested in text,
 accessible, localized, and JSON modes; alternate manifest selection is tested;
-the users guide documents the schema field and the subcommand; and the man
-page plus PowerShell help pick up the new command surface automatically
-through clap derivation (no shell completions exist to update).
+the users guide documents the schema field and the subcommand. The build.rs
+Clap man generation can include the new command surface, while release man
+and PowerShell artefacts require follow-on `CliConfig`/Clap integration; no
+shell completion artefacts exist to update.
 
 The post-`314f12b` follow-up additionally isolates discovery rendering from
 impure template helpers, keeps terminal text safe, preserves rule descriptions
@@ -251,7 +255,9 @@ generates Ninja build files. Key files and modules for this task:
   `tests/features/cli.feature` + `tests/bdd/steps/cli.rs`, and a full-process
   BDD scenario. Regenerate `help_en_us`/`help_es_es` snapshots.
 - Phase 4: document the field and the subcommand in `docs/users-guide.md`;
-  confirm man page and PowerShell help pick up the command automatically.
+  confirm build.rs Clap man generation can include the command, and record
+  the follow-on `CliConfig`/Clap integration needed for release man and
+  PowerShell artefacts. No shell completion artefacts exist to update.
 
 ## Validation and acceptance
 

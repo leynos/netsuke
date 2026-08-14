@@ -376,7 +376,7 @@ status.tool.clean = Vyčištění
 status.tool.graph = Graf
 status.tool.graph_html = Graf (HTML)
 status.tool.generate = Generování
-status.tool.help_targets = Nápověda k cílům
+status.tool.help_targets = Katalog cílů
 
 # Texty vykreslování grafu do HTML.
 graph.html.title = Graf sestavení Netsuke

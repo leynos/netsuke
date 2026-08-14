@@ -856,6 +856,7 @@ let ast = NetsukeManifest {
         deps: StringOrList::Empty,
         order_only_deps: StringOrList::Empty,
         vars: HashMap::new(),
+        description: None,
         phony: false,
         always: false,
     }],

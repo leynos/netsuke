@@ -37,16 +37,16 @@ fn write_help_targets_manifest(temp: &tempfile::TempDir) -> Result<Utf8PathBuf> 
 actions:
   - name: lint
     description: Run rustdoc, Clippy, and Whitaker
-    command: cargo clippy --all-targets --all-features -- -D warnings
+    command: touch lint-ran
   - name: test
     description: Run unit, behavioural, UI, and documentation tests
-    command: cargo test
+    command: touch test-ran
 targets:
   - name: target/release/catnap
     description: Build the optimized release binary
-    command: cargo build --release
+    command: touch release-ran
   - name: plain
-    command: echo plain
+    command: touch plain-ran
 defaults:
   - lint
   - test
@@ -67,6 +67,20 @@ fn run_help_targets(cli: &Cli) -> Result<()> {
     let _lock = localizer_test_lock().map_err(|e| anyhow::anyhow!("{e}"))?;
     let _guard = set_en_localizer();
     run(cli, output_prefs::resolve(None)).context("running help targets subcommand")
+}
+
+fn assert_fixture_recipes_not_run(workspace: &Dir) -> Result<()> {
+    for output in ["lint-ran", "test-ran", "release-ran", "plain-ran"] {
+        ensure!(
+            workspace.open(output).is_err(),
+            "help targets must not execute the recipe that creates {output}"
+        );
+    }
+    ensure!(
+        workspace.open(".netsuke").is_err(),
+        "help targets must not create a build-output directory"
+    );
+    Ok(())
 }
 
 fn assert_help_targets_rejects_manifest(
@@ -137,6 +151,72 @@ fn help_targets_prints_actions_and_targets(
         "an undocumented entry should still be listed without a description: {stdout}"
     );
     Ok(())
+}
+
+#[rstest]
+fn help_targets_accessible_output_marks_defaults_without_recipes(
+    #[from(help_targets_manifest)] fixture: Result<(tempfile::TempDir, Utf8PathBuf)>,
+) -> Result<()> {
+    let (temp, manifest_path) = fixture?;
+    let temp_path = Utf8Path::from_path(temp.path()).context("temporary path should be UTF-8")?;
+    let workspace = Dir::open_ambient_dir(temp_path, ambient_authority())
+        .context("open accessible help-targets fixture directory")?;
+    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
+        .current_dir(temp_path)
+        .arg("--accessibility")
+        .arg("on")
+        .arg("--file")
+        .arg(&manifest_path)
+        .arg("help")
+        .arg("targets")
+        .output()
+        .context("run accessible netsuke help targets")?;
+    ensure!(
+        output.status.success(),
+        "accessible help targets should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    ensure!(
+        stdout.contains("[* default]"),
+        "accessible catalogue should use the ASCII default marker: {stdout}"
+    );
+    assert_fixture_recipes_not_run(&workspace)
+}
+
+#[rstest]
+fn help_targets_localizes_output_without_recipes(
+    #[from(help_targets_manifest)] fixture: Result<(tempfile::TempDir, Utf8PathBuf)>,
+) -> Result<()> {
+    let (temp, manifest_path) = fixture?;
+    let temp_path = Utf8Path::from_path(temp.path()).context("temporary path should be UTF-8")?;
+    let workspace = Dir::open_ambient_dir(temp_path, ambient_authority())
+        .context("open localized help-targets fixture directory")?;
+    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
+        .current_dir(temp_path)
+        .arg("--locale")
+        .arg("es-ES")
+        .arg("--emoji")
+        .arg("always")
+        .arg("--file")
+        .arg(&manifest_path)
+        .arg("help")
+        .arg("targets")
+        .output()
+        .context("run localized netsuke help targets")?;
+    ensure!(
+        output.status.success(),
+        "localized help targets should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for expected in ["Acciones:", "Objetivos:", "[★ predeterminado]"] {
+        ensure!(
+            stdout.contains(expected),
+            "localized catalogue should contain {expected:?}: {stdout}"
+        );
+    }
+    assert_fixture_recipes_not_run(&workspace)
 }
 
 #[rstest]
@@ -294,6 +374,66 @@ targets:
     ensure!(
         workspace.open("action-unit").is_err() && workspace.open("action-integration").is_err(),
         "help targets must not execute action recipes"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn help_targets_rejects_impure_description_without_creating_outputs() -> Result<()> {
+    let temp = tempfile::tempdir().context("create impure-query help-targets workspace")?;
+    let temp_path = Utf8Path::from_path(temp.path()).context("temporary path should be UTF-8")?;
+    let manifest_path = temp_path.join("Netsukefile");
+    let workspace = Dir::open_ambient_dir(temp_path, ambient_authority())
+        .context("open impure-query help-targets fixture directory")?;
+    workspace
+        .write(
+            "Netsukefile",
+            r#"netsuke_version: "1.0.0"
+actions:
+  - name: query-environment
+    description: "{{ env('PATH') }}"
+    command: touch lint-ran
+targets:
+  - name: generated-file
+    description: Generate the file
+    command: touch release-ran
+defaults:
+  - query-environment
+"#,
+        )
+        .context("write impure-query manifest")?;
+
+    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
+        .current_dir(temp_path)
+        .arg("--file")
+        .arg(&manifest_path)
+        .arg("help")
+        .arg("targets")
+        .output()
+        .context("run help targets against impure description")?;
+    ensure!(
+        !output.status.success(),
+        "help targets must reject a manifest query that reads the environment"
+    );
+    ensure!(
+        output.stdout.is_empty(),
+        "failed help targets must not write a partial catalogue: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    ensure!(
+        stderr.contains("Deserializing and rendering manifest values")
+            && stderr.contains("Failed to load manifest")
+            && !stderr.contains("Building and validating dependency graph"),
+        "disabled helper should reject the manifest while descriptions render: {stderr}"
+    );
+    ensure!(
+        workspace.open("lint-ran").is_err() && workspace.open("release-ran").is_err(),
+        "rejected help targets must not execute manifest recipes"
+    );
+    ensure!(
+        workspace.open(".netsuke").is_err(),
+        "rejected help targets must not create a build-output directory"
     );
     Ok(())
 }
