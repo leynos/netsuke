@@ -261,6 +261,38 @@ fn unsupported_control_characters_are_rejected_in_every_path_field(
 }
 
 #[rstest]
+#[case::space("path with space", "path$ with$ space")]
+#[case::dollar("path$money", "path$$money")]
+#[case::colon("path:colon", "path$:colon")]
+fn ninja_metacharacters_are_escaped_in_every_path_field(
+    #[values(
+        GraphPathField::Edge(EdgePathField::ExplicitOutput),
+        GraphPathField::Edge(EdgePathField::ImplicitOutput),
+        GraphPathField::Edge(EdgePathField::Input),
+        GraphPathField::Edge(EdgePathField::ImplicitDependency),
+        GraphPathField::Edge(EdgePathField::OrderOnlyDependency),
+        GraphPathField::DefaultTarget
+    )]
+    field: GraphPathField,
+    #[case] path: &str,
+    #[case] escaped: &str,
+) -> Result<()> {
+    let graph = graph_with_path(field, path)?;
+    let generated = crate::ninja_gen::generate(&graph)?;
+    let bundle = generate_bundle(&graph)?;
+
+    ensure!(
+        generated.contains(escaped),
+        "string generation must escape {path:?} as {escaped:?}"
+    );
+    ensure!(
+        bundle.build_file().contains(escaped),
+        "bundle generation must escape {path:?} as {escaped:?}"
+    );
+    Ok(())
+}
+
+#[rstest]
 #[case::explicit_output(EdgePathField::ExplicitOutput)]
 #[case::implicit_output(EdgePathField::ImplicitOutput)]
 #[case::input(EdgePathField::Input)]

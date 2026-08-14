@@ -11,9 +11,12 @@ use camino::Utf8PathBuf;
 
 /// Escape a Ninja path for embedding in a build or dyndep document.
 pub(crate) fn escape_ninja_path(path: &str) -> Result<String, NinjaGenError> {
-    if let Some(character) = unsupported_character(path) {
-        return Err(unsupported_path_character(path, character));
-    }
+    validate_path(path)?;
+    Ok(escape_validated_ninja_path(path))
+}
+
+/// Escape a path after whole-graph syntax validation has succeeded.
+pub(super) fn escape_validated_ninja_path(path: &str) -> String {
     let mut out = String::with_capacity(path.len());
     for ch in path.chars() {
         match ch {
@@ -23,7 +26,7 @@ pub(crate) fn escape_ninja_path(path: &str) -> Result<String, NinjaGenError> {
             _ => out.push(ch),
         }
     }
-    Ok(out)
+    out
 }
 
 /// Reject graph paths that Ninja cannot represent.

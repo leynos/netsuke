@@ -4,6 +4,15 @@ use super::*;
 use crate::ninja_gen::GeneratedDyndep;
 use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;
+use metrics_util::MetricKind;
+use metrics_util::debugging::{DebugValue, DebuggingRecorder};
+
+type Snapshot = Vec<(
+    metrics_util::CompositeKey,
+    Option<metrics::Unit>,
+    Option<metrics::SharedString>,
+    DebugValue,
+)>;
 
 fn sidecar(name: &str, content: &str) -> GeneratedDyndep {
     GeneratedDyndep::fixture(Utf8PathBuf::from(name), content.to_owned())
@@ -13,6 +22,62 @@ fn temp_dir(temp: &tempfile::TempDir) -> Result<Dir> {
     let path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
         .map_err(|path| anyhow!("temporary directory is not UTF-8: {}", path.display()))?;
     Dir::open_ambient_dir(path, cap_std::ambient_authority()).map_err(Into::into)
+}
+
+fn recorded<T>(invoke: impl FnOnce() -> T) -> (T, Snapshot) {
+    let recorder = DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+    let value = metrics::with_local_recorder(&recorder, invoke);
+    (value, snapshotter.snapshot().into_vec())
+}
+
+fn counter_value(snapshot: &Snapshot, outcome: &str) -> Option<u64> {
+    snapshot
+        .iter()
+        .find_map(|(key, _unit, _description, value)| {
+            if key.kind() != MetricKind::Counter
+                || key.key().name() != telemetry::MATERIALIZATIONS_TOTAL
+            {
+                return None;
+            }
+            let has_outcome = key
+                .key()
+                .labels()
+                .any(|label| label.key() == "outcome" && label.value() == outcome);
+            match value {
+                DebugValue::Counter(count) if has_outcome => Some(*count),
+                _ => None,
+            }
+        })
+}
+
+fn duration_sample_count(snapshot: &Snapshot) -> usize {
+    snapshot
+        .iter()
+        .find_map(|(key, _unit, _description, value)| {
+            if key.kind() != MetricKind::Histogram
+                || key.key().name() != telemetry::MATERIALIZATION_DURATION
+            {
+                return None;
+            }
+            match value {
+                DebugValue::Histogram(samples) => Some(samples.len()),
+                _ => None,
+            }
+        })
+        .unwrap_or_default()
+}
+
+fn assert_materialization_metrics(snapshot: &Snapshot, outcome: &str) -> Result<()> {
+    ensure!(
+        counter_value(snapshot, outcome) == Some(1),
+        "materialization must record one {outcome} outcome"
+    );
+    ensure!(
+        duration_sample_count(snapshot) == 1,
+        "materialization must record one duration sample"
+    );
+    Ok(())
 }
 
 #[test]
@@ -33,6 +98,33 @@ fn materializes_nested_sidecar_and_reuses_it() -> Result<()> {
         )],
     )?;
     Ok(())
+}
+
+#[test]
+fn materialization_records_success_metrics() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let dir = temp_dir(&temp)?;
+    let dyndep = sidecar(".netsuke/dyndep/metrics.dd", "content");
+
+    let (result, snapshot) = recorded(|| materialize_dyndep_files(&dir, &[dyndep]));
+
+    result?;
+    assert_materialization_metrics(&snapshot, "success")
+}
+
+#[test]
+fn materialization_records_error_metrics() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let dir = temp_dir(&temp)?;
+    let rel = ".netsuke/dyndep/metrics-error.dd";
+    dir.create_dir_all(DYNDEP_DIR)?;
+    dir.write(rel, "corrupt")?;
+
+    let (result, snapshot) =
+        recorded(|| materialize_dyndep_files(&dir, &[sidecar(rel, "expected")]));
+
+    ensure!(result.is_err(), "corrupt sidecar must fail materialization");
+    assert_materialization_metrics(&snapshot, "error")
 }
 
 #[test]
@@ -84,6 +176,35 @@ fn oversized_existing_sidecar_is_rejected() -> Result<()> {
 }
 
 #[test]
+fn sidecar_growth_during_verification_is_a_mismatch() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let dir = temp_dir(&temp)?;
+    let rel = Utf8Path::new(".netsuke/dyndep/growing.dd");
+    let expected = "expected";
+    dir.create_dir_all(DYNDEP_DIR)?;
+    dir.write(rel, expected)?;
+    let mut file = open_existing_sidecar(&dir, rel)?.context("sidecar must exist")?;
+    let size = verified_sidecar_size(&file, rel)?;
+    let mut append_options = OpenOptions::new();
+    append_options.append(true);
+    let mut writer = dir.open_with(rel, &append_options)?;
+    writer.write_all(b" growth")?;
+    writer.flush()?;
+
+    let (content, grew_while_reading) = read_sidecar_content(&mut file, size, rel)?;
+
+    ensure!(
+        grew_while_reading,
+        "growth probe must observe appended data"
+    );
+    ensure!(
+        content_outcome(&content, expected, grew_while_reading) == ReadOutcome::Mismatch,
+        "a sidecar that grows during verification must not be reused"
+    );
+    Ok(())
+}
+
+#[test]
 fn no_temp_files_left_behind() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let dir = temp_dir(&temp)?;
@@ -113,7 +234,8 @@ fn stale_temp_file_does_not_block_materialization() -> Result<()> {
     let rel = Utf8Path::new(".netsuke/dyndep/stale.dd");
     let content = "ninja_dyndep_version = 1\n";
     dir.create_dir_all(DYNDEP_DIR)?;
-    dir.write(unique_temp_name(rel), "stale temporary content")?;
+    let stale = TempNameSource::new("stale".to_owned()).next_name(rel);
+    dir.write(stale, "stale temporary content")?;
 
     materialize_dyndep_files(&dir, &[sidecar(rel.as_str(), content)])?;
 
@@ -123,12 +245,38 @@ fn stale_temp_file_does_not_block_materialization() -> Result<()> {
 #[test]
 fn separate_temp_names_for_same_sidecar_differ() {
     let rel = Utf8Path::new(".netsuke/dyndep/names.dd");
-    let first = unique_temp_name(rel);
-    let second = unique_temp_name(rel);
+    let mut names = TempNameSource::new("fixture".to_owned());
+    let first = names.next_name(rel);
+    let second = names.next_name(rel);
 
     assert_ne!(first, second, "temporary names must differ per attempt");
     assert_eq!(first.parent(), rel.parent());
     assert_eq!(second.parent(), rel.parent());
+}
+
+#[test]
+fn temporary_name_collision_retries_are_bounded() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let dir = temp_dir(&temp)?;
+    let rel = Utf8Path::new(".netsuke/dyndep/collisions.dd");
+    dir.create_dir_all(DYNDEP_DIR)?;
+    let mut occupied_names = TempNameSource::new("collisions".to_owned());
+    for _ in 0..MAX_TEMP_FILE_ATTEMPTS {
+        dir.write(occupied_names.next_name(rel), "occupied")?;
+    }
+    let mut attempted_names = TempNameSource::new("collisions".to_owned());
+
+    let error = create_unique_temp_file_with_source(&dir, rel, &mut attempted_names)
+        .err()
+        .context("all occupied temporary names must exhaust the retry bound")?;
+    let expected = localization::message(keys::RUNNER_IO_DYNDEP_TEMP_COLLISIONS)
+        .with_arg("path", rel.as_str())
+        .to_string();
+    ensure!(
+        format!("{error:#}").contains(&expected),
+        "expected localized collision error, got: {error:#}"
+    );
+    Ok(())
 }
 
 #[test]
@@ -139,7 +287,8 @@ fn matching_final_sidecar_succeeds_with_another_temp_file() -> Result<()> {
     let content = "ninja_dyndep_version = 1\n";
     dir.create_dir_all(DYNDEP_DIR)?;
     dir.write(rel, content)?;
-    dir.write(unique_temp_name(rel), "concurrent temporary content")?;
+    let other_temp = TempNameSource::new("concurrent".to_owned()).next_name(rel);
+    dir.write(other_temp, "concurrent temporary content")?;
 
     write_atomic(&dir, rel, content)?;
 

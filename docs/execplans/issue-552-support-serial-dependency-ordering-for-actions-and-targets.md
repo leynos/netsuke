@@ -340,6 +340,15 @@ criterion in issue #552 and all repository gates pass.
 - [x] (2026-08-14) Added an accessible sequence diagram to the design document
   showing runner-owned bundle generation, dyndep sidecar materialization, and
   Ninja invocation. `make markdownlint` and `make nixie` passed.
+- [x] (2026-08-14) Closed the latest review findings by escaping every graph
+  path in main Ninja edges and defaults, replacing the global temporary-name
+  sequence with a private operation-scoped source, and pinning publication
+  telemetry, growth detection, and bounded collision retries with focused
+  tests. Corrected the design flow and Ninja loading probe. The focused suites
+  passed 13 materializer, 49 generator, and 4 CLI tests. `make check-fmt`,
+  `make typecheck`, `make lint`, `make test`, `make markdownlint`, and `make
+  nixie` passed; the full suite reported 2,003 passed tests, one skipped test,
+  and passing doctests.
 
 ## Surprises and discoveries
 
@@ -494,6 +503,17 @@ criterion in issue #552 and all repository gates pass.
   `.netsuke/dyndep`, and gates beneath `.netsuke/serial`. **Rationale:**
   deterministic names make generation reproducible, reuse safe, and stale cache
   entries harmless. **Date:** 2026-08-10.
+- **Decision:** generate temporary sidecar candidates from a private,
+  operation-scoped nonce and local retry sequence. This source is owned only by
+  dyndep publication and is injectable solely for focused collision tests;
+  `create_new` remains the authority for each candidate. **Rationale:** this
+  preserves same-directory atomic writes and bounded collision retries without
+  process-global mutable state. **Date:** 2026-08-14.
+- **Decision:** validate the whole graph before rendering, then use one shared
+  infallible escaping helper for every user-controlled path in main edges and
+  default statements. **Rationale:** all supported Ninja metacharacters must be
+  encoded consistently, while unsupported controls retain the existing
+  localized validation error. **Date:** 2026-08-14.
 - **Decision:** generate no dyndep chain for zero- or one-element serial lists.
   **Rationale:** no relative ordering exists to enforce, so ordinary lowering
   is equivalent and avoids unnecessary generated state. **Date:** 2026-08-10.
@@ -1132,6 +1152,13 @@ post-milestone independent review reported zero actionable findings.
 2026-08-14: Added the runner-to-generator-to-materializer sequence to the
 design document with a visible figure caption and Mermaid accessibility title
 and description. This documents the existing boundary without changing it.
+
+2026-08-14: Reopened the completed plan for the latest verified review round.
+The implementation now scopes temporary-name state to one publication attempt,
+routes main-edge and default paths through the validated Ninja escaper, and
+adds focused evidence for publication telemetry, concurrent growth, and retry
+exhaustion. The corrected command-flow diagram distinguishes `generate` from
+the Ninja-invoking `build` and `clean` boundaries.
 
 2026-08-12: Applied the requested test-only assertion-helper extraction after
 plan completion. It changes neither production code nor feature semantics and

@@ -2130,7 +2130,11 @@ Figure: Runner-owned serial dyndep bundle generation and execution.
 ```mermaid
 sequenceDiagram
     accTitle: Runner-owned serial dependency generation and execution
-    accDescr: The runner generates a Ninja bundle and materializes its dyndep sidecars. Generate writes the generated Ninja manifest without invoking Ninja; build invokes Ninja for serial dependency execution; clean invokes Ninja in clean tool mode.
+    accDescr {
+      The runner generates a Ninja bundle and materializes its dyndep sidecars.
+      Generate writes the manifest without invoking Ninja. Build invokes Ninja
+      for execution, and clean invokes Ninja in clean tool mode.
+    }
     actor User
     participant Runner as runner.generate_ninja
     participant NinjaGen as ninja_gen.generate_bundle
@@ -2143,7 +2147,7 @@ sequenceDiagram
     Runner->>Dyndep: materialize_dyndep_files(cli, bundle.dyndep_files())
     Dyndep-->>Runner: dyndep sidecars materialized
     alt generate
-        Runner-->>User: write generated Ninja manifest; do not invoke Ninja
+        Runner-->>User: write generated Ninja manifest without invoking Ninja
     else build
         Runner->>Ninja: invoke with bundle.build_file()
         Ninja-->>User: serial deps run in order, parallel elsewhere

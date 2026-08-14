@@ -178,7 +178,10 @@ pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), Ni
 
 /// Convert a slice of paths into a space-separated string.
 pub(crate) fn join(paths: &[Utf8PathBuf]) -> String {
-    paths.iter().map(|p| p.as_str()).join(" ")
+    paths
+        .iter()
+        .map(|path| path_syntax::escape_validated_ninja_path(path.as_str()))
+        .join(" ")
 }
 
 /// Generate a stable key for a list of paths.

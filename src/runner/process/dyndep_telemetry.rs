@@ -9,8 +9,9 @@ use metrics::{counter, describe_counter, describe_histogram, histogram};
 use std::{sync::Once, time::Instant};
 use tracing::field;
 
-const MATERIALIZATIONS_TOTAL: &str = "netsuke_runner_dyndep_materializations_total";
-const MATERIALIZATION_DURATION: &str = "netsuke_runner_dyndep_materialization_duration_seconds";
+pub(super) const MATERIALIZATIONS_TOTAL: &str = "netsuke_runner_dyndep_materializations_total";
+pub(super) const MATERIALIZATION_DURATION: &str =
+    "netsuke_runner_dyndep_materialization_duration_seconds";
 
 /// Record a complete dyndep materialization command.
 pub(super) fn instrument_materialization<T>(

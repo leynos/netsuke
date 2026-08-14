@@ -21,14 +21,14 @@ use crate::ninja_gen::GeneratedDyndep;
 use anyhow::{Context, Result, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::{Dir, OpenOptions};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::io::{Read, Write};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Namespace for generated dyndep sidecar files.
 pub(crate) const DYNDEP_DIR: &str = ".netsuke/dyndep";
 
-/// Distinguishes temporary sidecars created by separate write attempts.
-static TEMP_FILE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 /// Maximum number of colliding temporary names tolerated per write.
 const MAX_TEMP_FILE_ATTEMPTS: usize = 16;
 /// Maximum existing dyndep sidecar size accepted during verification.
@@ -181,8 +181,18 @@ fn create_unique_temp_file(
     dir: &Dir,
     rel: &Utf8Path,
 ) -> Result<(Utf8PathBuf, cap_std::fs_utf8::File)> {
+    let mut names = TempNameSource::for_operation();
+    create_unique_temp_file_with_source(dir, rel, &mut names)
+}
+
+/// Create a temporary sidecar from an operation-scoped candidate source.
+fn create_unique_temp_file_with_source(
+    dir: &Dir,
+    rel: &Utf8Path,
+    names: &mut TempNameSource,
+) -> Result<(Utf8PathBuf, cap_std::fs_utf8::File)> {
     for _ in 0..MAX_TEMP_FILE_ATTEMPTS {
-        let temp = unique_temp_name(rel);
+        let temp = names.next_name(rel);
         if let Some(file) = create_temp_file(dir, &temp, rel)? {
             return Ok((temp, file));
         }
@@ -263,20 +273,48 @@ fn handle_rename_failure(
     })
 }
 
-/// Produce a distinct same-directory temporary name for one write attempt.
+/// Operation-scoped source of same-directory temporary path candidates.
 ///
-/// The process identifier and monotonically increasing sequence distinguish
-/// concurrent writers. `create_new` still guards against an unlikely stale
-/// collision, which the caller resolves by choosing another name.
-fn unique_temp_name(rel: &Utf8Path) -> Utf8PathBuf {
-    let name = rel.file_name().unwrap_or("sidecar.dd");
-    let process_id = std::process::id();
-    let sequence = TEMP_FILE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-    let temp_name = format!("{name}.{process_id}.{sequence}.tmp");
-    rel.parent().map_or_else(
-        || Utf8PathBuf::from(&temp_name),
-        |parent| parent.join(&temp_name),
-    )
+/// This private source is used only by dyndep publication. Its nonce separates
+/// concurrent operations, while its local sequence supports bounded collision
+/// retries without process-global mutable state. `create_new` remains the
+/// authority that decides whether each candidate is available.
+struct TempNameSource {
+    nonce: String,
+    sequence: u64,
+}
+
+impl TempNameSource {
+    fn for_operation() -> Self {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let mut thread_hasher = DefaultHasher::new();
+        std::thread::current().id().hash(&mut thread_hasher);
+        let nonce = format!(
+            "{}.{}.{}",
+            std::process::id(),
+            timestamp,
+            thread_hasher.finish()
+        );
+        Self::new(nonce)
+    }
+
+    const fn new(nonce: String) -> Self {
+        Self { nonce, sequence: 0 }
+    }
+
+    fn next_name(&mut self, rel: &Utf8Path) -> Utf8PathBuf {
+        let name = rel.file_name().unwrap_or("sidecar.dd");
+        let sequence = self.sequence;
+        self.sequence += 1;
+        let temp_name = format!("{name}.{}.{sequence}.tmp", self.nonce);
+        rel.parent().map_or_else(
+            || Utf8PathBuf::from(&temp_name),
+            |parent| parent.join(&temp_name),
+        )
+    }
 }
 
 #[cfg(test)]

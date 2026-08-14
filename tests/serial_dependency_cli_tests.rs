@@ -75,7 +75,7 @@ fn dyndep_sidecar_count(root: &Dir) -> Result<usize> {
 fn run_ninja_loading_probe(directory: &TempDir) -> Result<std::process::Output> {
     match Command::new("ninja")
         .current_dir(directory.path())
-        .args(["-f", "build.ninja", "-t", "targets", "all"])
+        .args(["-f", "build.ninja"])
         .output()
     {
         Ok(output) => Ok(output),
