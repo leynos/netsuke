@@ -200,7 +200,7 @@ fn composed_path_reaches_the_spawned_process(
         build_file: build_file.as_path(),
         targets: &targets,
         env: &CommandEnv::inherit().with_path(&composed),
-        stderr_mode: StderrMode::from_cli(&cli),
+        stderr_mode: StderrMode::from_json_enabled(cli.json),
     })
     .context("run the probe")?;
 
@@ -256,7 +256,7 @@ fn unoverridden_parent_variables_are_inherited(
         build_file: build_file.as_path(),
         targets: &targets,
         env: &CommandEnv::inherit().with_var("NETSUKE_PROBE_MARKER", "sentinel"),
-        stderr_mode: StderrMode::from_cli(&cli),
+        stderr_mode: StderrMode::from_json_enabled(cli.json),
     })
     .context("run the probe")?;
 
@@ -295,7 +295,7 @@ fn general_overrides_reach_the_spawned_tool_process(
         build_file: build_file.as_path(),
         tool: "clean",
         env: &CommandEnv::inherit().with_var("NETSUKE_PROBE_MARKER", "sentinel"),
-        stderr_mode: StderrMode::from_cli(&cli),
+        stderr_mode: StderrMode::from_json_enabled(cli.json),
     })
     .context("run the probe")?;
 

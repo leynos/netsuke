@@ -123,7 +123,7 @@ pub fn run_ninja(
         build_file,
         targets,
         env: &CommandEnv::inherit(),
-        stderr_mode: StderrMode::from_cli(cli),
+        stderr_mode: StderrMode::from_json_enabled(cli.json),
     })
 }
 
@@ -157,7 +157,7 @@ pub fn run_ninja(
 ///     build_file: Path::new("build.ninja"),
 ///     targets: &targets,
 ///     env: &env,
-///     stderr_mode: StderrMode::from_cli(&cli),
+///     stderr_mode: StderrMode::from_json_enabled(cli.json),
 /// })?;
 /// # Ok::<(), std::io::Error>(())
 /// ```
@@ -194,7 +194,7 @@ pub fn run_ninja_tool(program: &Path, cli: &Cli, build_file: &Path, tool: &str) 
         build_file,
         tool,
         env: &CommandEnv::inherit(),
-        stderr_mode: StderrMode::from_cli(cli),
+        stderr_mode: StderrMode::from_json_enabled(cli.json),
     })
 }
 
@@ -214,7 +214,7 @@ pub fn run_ninja_tool(program: &Path, cli: &Cli, build_file: &Path, tool: &str) 
 ///     build_file: Path::new("build.ninja"),
 ///     tool: "clean",
 ///     env: &CommandEnv::inherit(),
-///     stderr_mode: StderrMode::from_cli(&cli),
+///     stderr_mode: StderrMode::from_json_enabled(cli.json),
 /// })?;
 /// # Ok::<(), std::io::Error>(())
 /// ```
@@ -315,4 +315,3 @@ pub(crate) fn run_ninja_tool_with_status(
 ) -> io::Result<()> {
     run_ninja_tool_internal(request, Some(status_observer), &StdMonotonicClock)
 }
-

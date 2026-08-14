@@ -231,7 +231,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> 
                 build_file: build_path,
                 targets: &targets,
                 env: &CommandEnv::inherit(),
-                stderr_mode: StderrMode::from_cli(cli),
+                stderr_mode: StderrMode::from_json_enabled(cli.json),
             },
             &mut on_task_progress,
         )
@@ -293,7 +293,7 @@ fn handle_ninja_tool(
                 build_file: build_path,
                 tool: tool.name,
                 env: &CommandEnv::inherit(),
-                stderr_mode: StderrMode::from_cli(cli),
+                stderr_mode: StderrMode::from_json_enabled(cli.json),
             },
             &mut on_task_progress,
         )

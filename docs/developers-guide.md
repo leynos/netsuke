@@ -3264,9 +3264,10 @@ paths:
 4. Let `run_command_and_stream_with_context` handle span creation, execution
    logging, failure logging, and exit-status enforcement via context helpers.
 
-The runner derives the policy from CLI state with `StderrMode::from_cli(cli)`
-when it builds the request; the process layer consumes the request's field and
-never reads `cli.json` itself.
+The `StderrMode` policy type is independent of `Cli`; the runner derives the
+policy at request-build time with `StderrMode::from_json_enabled(cli.json)`,
+while the process layer consumes the request's `stderr_mode` field and never
+reads `cli.json` itself.
 
 ### Module: `runner::process::redaction`
 

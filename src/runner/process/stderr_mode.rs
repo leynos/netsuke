@@ -1,7 +1,5 @@
 //! Child standard-stream routing policy for Ninja subprocesses.
 
-use crate::cli::Cli;
-
 /// Policy for routing a Ninja subprocess's standard streams.
 ///
 /// Governs both child stdout and child stderr routing: [`StderrMode::Suppress`]
@@ -21,12 +19,6 @@ impl StderrMode {
     #[must_use]
     pub const fn from_json_enabled(json: bool) -> Self {
         if json { Self::Suppress } else { Self::Forward }
-    }
-
-    /// Derive the policy from the resolved CLI diagnostics preference.
-    #[must_use]
-    pub const fn from_cli(cli: &Cli) -> Self {
-        Self::from_json_enabled(cli.json)
     }
 
     /// Return `true` when the policy drains child streams to `io::sink()`.
@@ -55,17 +47,5 @@ mod tests {
     #[case(StderrMode::Forward, false)]
     fn is_suppress_reflects_variant(#[case] mode: StderrMode, #[case] expected: bool) {
         assert_eq!(mode.is_suppress(), expected);
-    }
-
-    #[test]
-    fn from_cli_delegates_to_json_setting() {
-        let human = Cli::default();
-        assert_eq!(StderrMode::from_cli(&human), StderrMode::Forward);
-
-        let json = Cli {
-            json: true,
-            ..Cli::default()
-        };
-        assert_eq!(StderrMode::from_cli(&json), StderrMode::Suppress);
     }
 }

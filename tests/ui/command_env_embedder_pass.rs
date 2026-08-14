@@ -32,7 +32,7 @@ fn compose_requests<'a>(parts: &Parts<'a>) -> (NinjaBuildRequest<'a>, NinjaToolR
         build_file: parts.build_file,
         targets: parts.targets,
         env: parts.env,
-        stderr_mode: StderrMode::from_cli(parts.cli),
+        stderr_mode: StderrMode::from_json_enabled(parts.cli.json),
     };
     let tool = NinjaToolRequest {
         program: parts.program,
@@ -40,7 +40,7 @@ fn compose_requests<'a>(parts: &Parts<'a>) -> (NinjaBuildRequest<'a>, NinjaToolR
         build_file: parts.build_file,
         tool: "clean",
         env: parts.env,
-        stderr_mode: StderrMode::from_cli(parts.cli),
+        stderr_mode: StderrMode::from_json_enabled(parts.cli.json),
     };
     (build, tool)
 }
