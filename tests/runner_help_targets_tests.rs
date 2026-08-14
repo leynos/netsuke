@@ -83,6 +83,38 @@ fn assert_fixture_recipes_not_run(workspace: &Dir) -> Result<()> {
     Ok(())
 }
 
+fn assert_foreach_help_catalogue(manifest_path: &Utf8Path) -> Result<()> {
+    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
+        .arg("--file")
+        .arg(manifest_path)
+        .arg("help")
+        .arg("targets")
+        .output()
+        .context("run help targets against foreach manifest")?;
+    ensure!(
+        output.status.success(),
+        "help targets should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for expected in [
+        "report-weekly",
+        "Build the weekly report",
+        "report-monthly",
+        "Build the monthly report",
+        "check-unit",
+        "Run unit",
+        "check-integration",
+        "Run integration",
+    ] {
+        ensure!(
+            stdout.contains(expected),
+            "catalogue should render foreach description {expected:?}: {stdout}"
+        );
+    }
+    Ok(())
+}
+
 fn assert_help_targets_rejects_manifest(
     fixture_name: &str,
     manifest: &[u8],
@@ -331,34 +363,7 @@ targets:
         )
         .context("write foreach manifest")?;
 
-    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
-        .arg("--file")
-        .arg(&manifest_path)
-        .arg("help")
-        .arg("targets")
-        .output()
-        .context("run help targets against foreach manifest")?;
-    ensure!(
-        output.status.success(),
-        "help targets should succeed; stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    for expected in [
-        "report-weekly",
-        "Build the weekly report",
-        "report-monthly",
-        "Build the monthly report",
-        "check-unit",
-        "Run unit",
-        "check-integration",
-        "Run integration",
-    ] {
-        ensure!(
-            stdout.contains(expected),
-            "catalogue should render foreach description {expected:?}: {stdout}"
-        );
-    }
+    assert_foreach_help_catalogue(&manifest_path)?;
 
     let manifest = manifest::from_path(&manifest_path)?;
     let graph = BuildGraph::from_manifest(&manifest).context("generate foreach graph")?;
