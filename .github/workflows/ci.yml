@@ -125,10 +125,8 @@ jobs:
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
 
   build-test-windows:
-    # Non-blocking while the 47 never-compiled `#[cfg(windows)]` sites are
-    # cleared under `-D warnings` (see #518). Remove `continue-on-error` once
-    # the tree is green on this platform.
-    continue-on-error: true
+    # Gates merges: the `#[cfg(windows)]` tree is compiled, linted, and tested
+    # under `-D warnings` on this platform (see #518).
     runs-on: windows-latest
     permissions:
       contents: read
@@ -176,10 +174,8 @@ jobs:
       - name: Format
         run: make SHELL=bash check-fmt
       - name: Lint (Clippy)
-        # Non-blocking while the `#[cfg(windows)]` surface is cleared, so a
-        # Clippy failure does not skip the Test step and hide the rest of the
-        # backlog. Remove once the tree is green on this platform.
-        continue-on-error: true
+        # Clippy and `cargo doc` over the whole workspace under `-D warnings`,
+        # including the `#[cfg(windows)]` arms.
         run: make SHELL=bash lint-clippy
       - name: Cache Whitaker installer
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
@@ -189,11 +185,9 @@ jobs:
             ~/.cache/cargo-binstall
           key: whitaker-installer-${{ runner.os }}-${{ runner.arch }}-${{ env.WHITAKER_INSTALLER_VERSION }}
       - name: Install Whitaker
-        # Whitaker on Windows is unverified (nightly driver + Unix-shaped
-        # installer path). Keep it non-blocking: if it cannot install or run,
-        # lint-clippy remains the Windows lint gate and Whitaker is tracked
-        # separately rather than blocking the job.
-        continue-on-error: true
+        # Installs and runs on windows-latest (verified in #562); the same
+        # binstall-with-cargo-install-fallback path as the Linux job. A failure
+        # here blocks the merge.
         run: |
           if ! command -v whitaker-installer >/dev/null 2>&1; then
             if cargo binstall --version >/dev/null 2>&1; then
@@ -205,12 +199,13 @@ jobs:
           fi
           whitaker-installer
       - name: Lint (Whitaker)
-        continue-on-error: true
+        # Whitaker/Dylint over the workspace under `-D warnings`, including
+        # the `#[cfg(windows)]` arms. A failure blocks the merge.
         run: make SHELL=bash lint-whitaker
       - name: Test
-        # Non-blocking while the `#[cfg(windows)]` test tree is cleared.
-        # Remove once the tree is green on this platform.
-        continue-on-error: true
+        # cargo-nextest plus doctests under `-D warnings -Zpolonius=next`,
+        # compiling and running the `#[cfg(windows)]` test tree. A failure
+        # blocks the merge.
         run: make SHELL=bash test
 
   kani-smoke:
