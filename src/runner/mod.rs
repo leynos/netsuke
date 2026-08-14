@@ -8,17 +8,15 @@
 
 mod dispatch;
 mod error;
+mod reporter;
 
 pub use error::RunnerError;
 
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::localization::{self, keys};
-use crate::output_mode::{self, OutputMode};
+use crate::output_mode;
 use crate::output_prefs::OutputPrefs;
-use crate::status::{
-    AccessibleReporter, IndicatifReporter, LocalizationKey, PipelineStage, SilentReporter,
-    StatusReporter, VerboseTimingReporter, report_pipeline_stage,
-};
+use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipeline_stage};
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
@@ -115,43 +113,6 @@ impl Default for BuildTargets<'_> {
     }
 }
 
-/// Build the appropriate [`StatusReporter`] for the resolved output mode,
-/// progress preference, verbose preference, and output preferences.
-#[derive(Debug, Clone, Copy)]
-struct ReporterOptions {
-    mode: OutputMode,
-    progress_enabled: bool,
-    verbose: bool,
-    prefs: OutputPrefs,
-    stdout_is_tty: bool,
-}
-
-fn make_reporter(options: ReporterOptions) -> Box<dyn StatusReporter> {
-    let base: Box<dyn StatusReporter> = if options.progress_enabled {
-        let force_text_task_updates =
-            should_force_text_task_updates(options.mode, options.stdout_is_tty);
-        match options.mode {
-            OutputMode::Accessible => Box::new(AccessibleReporter::new(options.prefs)),
-            OutputMode::Standard => Box::new(IndicatifReporter::with_force_text_task_updates(
-                options.prefs,
-                force_text_task_updates,
-            )),
-        }
-    } else {
-        Box::new(SilentReporter)
-    };
-
-    if options.verbose {
-        Box::new(VerboseTimingReporter::new(base, options.prefs))
-    } else {
-        base
-    }
-}
-
-const fn should_force_text_task_updates(mode: OutputMode, stdout_is_tty: bool) -> bool {
-    mode.is_accessible() || !stdout_is_tty
-}
-
 /// Execute the parsed [`Cli`] commands with the given output preferences.
 ///
 /// # Errors
@@ -174,7 +135,7 @@ pub fn run_with_ninja_program(cli: &Cli, prefs: OutputPrefs, program: &Path) -> 
     let mode = output_mode::resolve(cli.accessibility_override(), Some(cli.color));
     let progress_enabled = cli.progress_enabled() && !cli.json;
     let stdout_is_tty = std::io::stdout().is_terminal();
-    let reporter = make_reporter(ReporterOptions {
+    let reporter = reporter::make_reporter(reporter::ReporterOptions {
         mode,
         progress_enabled,
         verbose: cli.verbose && !cli.json,
@@ -195,11 +156,9 @@ pub fn run_with_ninja_program(cli: &Cli, prefs: OutputPrefs, program: &Path) -> 
 
 /// Invoke the Ninja executable with the provided CLI settings.
 ///
-/// The function forwards the job count and working directory to Ninja,
-/// specifies the temporary build file, and streams its standard output and
-/// error back to the user. The stderr policy is derived from the CLI's JSON
-/// diagnostic setting here at the runner boundary, then passed explicitly to
-/// the process layer on the request.
+/// Forwards the job count and working directory, specifies the temporary
+/// build file, and streams the child's output back to the user. The
+/// `stderr_mode` policy is derived from the CLI's JSON diagnostic setting.
 ///
 /// # Errors
 ///
@@ -223,10 +182,9 @@ pub fn run_ninja(
 
 /// Invoke a Ninja tool (e.g., `ninja -t clean`) with the provided CLI settings.
 ///
-/// The function forwards the job count and working directory to Ninja,
-/// specifies the build file, and streams its standard output and error back to
-/// the user. The stderr policy is derived from the CLI's JSON diagnostic
-/// setting at the runner boundary before execution.
+/// Forwards the job count and working directory, specifies the build file,
+/// and streams the child's output back to the user. The `stderr_mode` policy
+/// is derived from the CLI's JSON diagnostic setting.
 ///
 /// # Errors
 ///
