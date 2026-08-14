@@ -105,8 +105,12 @@ fn run_with_args(
         Ok(merged) => merged,
         Err(code) => return finish_run(code, verbose),
     };
+    let merged_verbose = merged_cli.verbose;
     let runtime_mode = DiagMode::from_json_enabled(merged_cli.json);
-    finish_run(run_cli(&merged_cli, system_locale, runtime_mode), verbose)
+    finish_run(
+        run_cli(&merged_cli, system_locale, runtime_mode),
+        merged_verbose,
+    )
 }
 
 /// Emit a development snapshot after the command has completed when requested.
