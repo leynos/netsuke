@@ -2176,8 +2176,10 @@ The command construction follows this pattern:
 
 Stream routing follows the `stderr_mode` policy carried by the request.
 Outside JSON mode (`StderrMode::Forward`) the child's standard output and
-error are piped and forwarded to Netsuke's own streams in order, so users see
-Ninja's messages as it produces them. In JSON diagnostics mode the request
+error are piped and forwarded to Netsuke's own streams concurrently: stdout is
+drained on the main thread while a separate thread forwards stderr, so users
+see Ninja's messages as it produces them. No relative ordering is guaranteed
+between the two streams. In JSON diagnostics mode the request
 carries `StderrMode::Suppress`, which drains both streams to `io::sink()`:
 stdout carries only the versioned result document and stderr only the
 diagnostic document, keeping both machine-readable. The runner derives the

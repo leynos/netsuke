@@ -121,7 +121,7 @@ without breaking any existing functionality.
   `IndicatifReporter` accepts `OutputPrefs` and uses success prefix
 - `src/status_timing.rs`: `VerboseTimingReporter` accepts `OutputPrefs` and
   uses timing prefix with indented detail lines
-- `src/runner/mod.rs`: Updated reporter factory
+- `src/runner/reporter.rs`: Updated reporter factory
 - `tests/features/progress_output.feature`: Updated and expanded scenarios
 - `docs/roadmap.md`: Marked 3.10.2 as complete
 
@@ -138,7 +138,7 @@ without breaking any existing functionality.
 5. `locales/en-US/messages.ftl` — English locale messages.
 6. `locales/es-ES/messages.ftl` — Spanish locale messages.
 7. `tests/features/progress_output.feature` — BDD progress scenarios.
-8. `src/runner/mod.rs` — Reporter factory (`make_reporter()`).
+8. `src/runner/reporter.rs` — Reporter factory (`make_reporter()`).
 
 ### New prefix design
 

@@ -156,9 +156,11 @@ pub fn run_with_ninja_program(cli: &Cli, prefs: OutputPrefs, program: &Path) -> 
 
 /// Invoke the Ninja executable with the provided CLI settings.
 ///
-/// Forwards the job count and working directory, specifies the temporary
-/// build file, and streams the child's output back to the user. The
-/// `stderr_mode` policy is derived from the CLI's JSON diagnostic setting.
+/// Forwards the job count and working directory and specifies the temporary
+/// build file. Child output follows the `stderr_mode` policy derived from the
+/// CLI's JSON diagnostic setting: `StderrMode::Suppress` drains both child
+/// streams to a sink so JSON output stays machine-readable, while
+/// `StderrMode::Forward` relays them to the user.
 ///
 /// # Errors
 ///
@@ -182,9 +184,10 @@ pub fn run_ninja(
 
 /// Invoke a Ninja tool (e.g., `ninja -t clean`) with the provided CLI settings.
 ///
-/// Forwards the job count and working directory, specifies the build file,
-/// and streams the child's output back to the user. The `stderr_mode` policy
-/// is derived from the CLI's JSON diagnostic setting.
+/// Forwards the job count and working directory and specifies the build file.
+/// Child output follows the `stderr_mode` policy derived from the CLI's JSON
+/// diagnostic setting: `StderrMode::Suppress` drains both child streams to a
+/// sink, while `StderrMode::Forward` relays them to the user.
 ///
 /// # Errors
 ///

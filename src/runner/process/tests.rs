@@ -290,12 +290,18 @@ fn spawn_failure_logging_honours_explicit_stderr_mode() {
             );
             captured.snapshot()
         });
+        assert_eq!(
+            events.len(),
+            1,
+            "exactly one warning should be captured for {mode:?} with cli.json={json}, \
+             got: {events:?}"
+        );
+        // The single captured warning is the spawn failure; inspect it alone so a
+        // stray event carrying the expected field cannot mask a missing frame.
         assert!(
-            events.iter().any(|event| {
-                event.contains("failure_category=\"spawn\"") && event.contains(expected_field)
-            }),
-            "a spawn-failure event should record {expected_field} for {mode:?} with \
-             cli.json={json}, got: {events:?}"
+            events[0].contains("failure_category=\"spawn\"") && events[0].contains(expected_field),
+            "the captured warning should be a spawn failure recording {expected_field} for \
+             {mode:?} with cli.json={json}, got: {events:?}"
         );
     }
 }

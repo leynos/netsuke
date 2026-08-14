@@ -3208,6 +3208,23 @@ context rather than resolving output or process configuration again; tests
 should inject the program through `run_with_ninja_program` when they need a
 deterministic child executable.
 
+### Module: `runner::reporter`
+
+`src/runner/reporter.rs` owns construction of the run's `StatusReporter` from
+resolved output settings. `ReporterOptions` bundles the resolved output mode,
+progress preference, verbose preference, output preferences, and whether
+standard output is a TTY. `make_reporter(options)` selects the base reporter,
+`AccessibleReporter` or `IndicatifReporter` when progress is enabled and
+`SilentReporter` otherwise, then wraps it in `VerboseTimingReporter` when
+verbose mode is active. `should_force_text_task_updates` decides whether the
+indicatif reporter emits textual task updates, forcing them for accessible
+mode or non-TTY standard output.
+
+`run_with_ninja_program` (in `src/runner/mod.rs`) constructs the run's
+`StatusReporter` through `reporter::make_reporter` after resolving output mode
+and reporter settings, then shares it via the `ExecutionContext` it passes to
+`dispatch::execute`.
+
 ### Module: `runner::process::ninja_program`
 
 `src/runner/process/ninja_program.rs` owns the executable-resolution boundary.

@@ -183,7 +183,8 @@ The output architecture spans several modules:
    - `report_pipeline_stage()` helper for stage transitions.
 
 4. **Runner module** (`src/runner/mod.rs`):
-   - `make_reporter()`: Factory function for selecting reporter.
+   - `make_reporter()`: Factory function for selecting reporter, defined in
+     `src/runner/reporter.rs`.
    - `handle_build()` and `handle_ninja_tool()`: Orchestrate build execution.
    - `on_task_progress_callback()`: Bridges Ninja status parsing to reporter.
 

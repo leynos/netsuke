@@ -107,8 +107,8 @@ Observable success:
       task-progress rendering in `IndicatifReporter` and
       `AccessibleReporter`.
 - [x] (2026-02-24) Stage C: Added centralized fallback behaviour in
-      `src/runner/mod.rs` (`should_force_text_task_updates`) to emit textual
-      task updates when stdout is non-TTY or accessible mode is enabled.
+      `src/runner/reporter.rs` (`should_force_text_task_updates`) to emit
+      textual task updates when stdout is non-TTY or accessible mode is enabled.
 - [x] (2026-02-24) Stage D: Added/updated unit and behavioural coverage using
       `rstest` and `rstest-bdd`:
       `src/runner/process/ninja_status.rs`,
@@ -184,7 +184,8 @@ Validation summary:
 Primary implementation surfaces:
 
 - `src/runner/process/mod.rs`: child process spawning and output forwarding.
-- `src/runner/mod.rs`: reporter construction and pipeline orchestration.
+- `src/runner/reporter.rs`: reporter construction.
+- `src/runner/mod.rs`: pipeline orchestration.
 - `src/status.rs`: reporter trait and implementations.
 - `src/status_pipeline.rs`: six-stage canonical ordering and labels.
 - `src/cli/mod.rs`: OrthoConfig-derived CLI configuration.
