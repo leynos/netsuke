@@ -3090,24 +3090,21 @@ manual flag repetition.
   `merge_with_cached_file_layers(...)` to merge defaults, discovered layers,
   environment variables via Figment and CLI overrides extracted from
   `ArgMatches`.
-- The `config_discovery()` function uses OrthoConfig's builder API with the
-  application name, environment selector, and an environment source selected at
-  the CLI composition root. Ambient runs use `ProcessEnv`; injected runs use a
-  closed `MapEnv` projected from Netsuke's environment port, preventing tests
-  from falling through to host directories.
-- A missing optional candidate means no configuration layer and therefore
-  built-in defaults. A candidate that exists but cannot load is retained as an
-  error when no candidate succeeds, so malformed configuration and a missing
-  `extends` parent are never mistaken for absence.
+- The `config_discovery()` function uses OrthoConfig's builder API without
+  further customization beyond the application name and environment variable
+  override, relying on OrthoConfig's platform-specific defaults for standard
+  directory resolution.
 - Netsuke-owned environment reads for explicit config selection and early JSON
-  resolution go through the `EnvProvider` port in `src/cli/discovery.rs`.
-  Production code uses `StdEnvProvider`; tests can inject a map-backed provider
-  instead of mutating the process environment. The v0.9.0 adapter projects only
-  the documented discovery keys into OrthoConfig, while `EnvironmentLayer`
-  retains the complete `NETSUKE_*` value merge boundary.
-- Configuration files use TOML. OrthoConfig's optional YAML provider remains
-  disabled; Netsukefile YAML continues to be parsed by the separate
-  `serde-saphyr` manifest boundary.
+  resolution take an injected `&impl mockable::Env` in the public
+  `*_with_env` entry points. Production wrappers supply
+  `mockable::DefaultEnv`; tests supply `mockable::MockEnv` without mutating the
+  process environment. Startup passes the `DiscoveredLayers` returned by
+  `resolve_json_and_layers_with_env` to `merge_with_layers`, so file discovery
+  and loading happen once. OrthoConfig discovery remains an external boundary
+  and may still read platform environment variables directly.
+- Configuration files use TOML format by default. JSON5 (`.json`, `.json5`) and
+  YAML (`.yaml`, `.yml`) formats are supported when the corresponding Cargo
+  features are enabled.
 - Explicit config selection is handled outside OrthoConfig's built-in discovery
   override surface so Netsuke keeps its custom project-over-user precedence for
   automatic discovery. If an explicit selector is set, the
