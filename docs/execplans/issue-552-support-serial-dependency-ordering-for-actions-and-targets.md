@@ -348,7 +348,8 @@ criterion in issue #552 and all repository gates pass.
   passed 13 materializer, 49 generator, and 4 CLI tests. `make check-fmt`,
   `make typecheck`, `make lint`, `make test`, `make markdownlint`, and `make
   nixie` passed; the full suite reported 2,003 passed tests, one skipped test,
-  and passing doctests.
+  and passing doctests. CodeRabbit reviewed the committed milestone and reported
+  zero actionable findings across 75 changed files.
 
 ## Surprises and discoveries
 
@@ -1158,7 +1159,8 @@ The implementation now scopes temporary-name state to one publication attempt,
 routes main-edge and default paths through the validated Ninja escaper, and
 adds focused evidence for publication telemetry, concurrent growth, and retry
 exhaustion. The corrected command-flow diagram distinguishes `generate` from
-the Ninja-invoking `build` and `clean` boundaries.
+the Ninja-invoking `build` and `clean` boundaries. All focused and full gates
+passed, and the independent CodeRabbit review reported no concerns.
 
 2026-08-12: Applied the requested test-only assertion-helper extraction after
 plan completion. It changes neither production code nor feature semantics and
