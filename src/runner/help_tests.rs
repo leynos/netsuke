@@ -146,6 +146,37 @@ fn text_catalogue_escapes_terminal_control_characters() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn text_catalogue_escapes_cc_range_boundaries() -> Result<()> {
+    let mut manifest = fixture_manifest()?;
+    let action = manifest
+        .actions
+        .first_mut()
+        .context("help target fixture should contain an action")?;
+    action.name = crate::ast::StringOrList::String(
+        "start\0unit\u{001F}delete\u{007F}application\u{009F}end".to_owned(),
+    );
+
+    let output = render_text(
+        &build_catalogue(&manifest),
+        theme_prefs(ThemePreference::Unicode),
+    );
+
+    for escaped in ["\\u{0}", "\\u{1f}", "\\u{7f}", "\\u{9f}"] {
+        anyhow::ensure!(
+            output.contains(escaped),
+            "text catalogue should escape Cc boundary {escaped}: {output:?}"
+        );
+    }
+    for control in ['\0', '\u{001F}', '\u{007F}', '\u{009F}'] {
+        anyhow::ensure!(
+            !output.contains(control),
+            "text catalogue must not contain Cc boundary {control:?}: {output:?}"
+        );
+    }
+    Ok(())
+}
+
 /// Generate target metadata with at least one name, allowing actions and
 /// targets to exercise scalar/list flattening through the same catalogue path.
 fn target_metadata() -> impl Strategy<Value = (Vec<String>, Option<String>)> {

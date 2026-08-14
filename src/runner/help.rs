@@ -237,11 +237,16 @@ fn terminal_safe(input: &str) -> Cow<'_, str> {
 
 /// Return whether a character can control terminal display or reading order.
 const fn is_terminal_control(character: char) -> bool {
-    character.is_control()
-        || matches!(
-            character,
-            '\u{061C}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}'
-        )
+    matches!(
+        character,
+        '\0'..='\u{001F}'
+            | '\u{007F}'..='\u{009F}'
+            | '\u{061C}'
+            | '\u{200E}'
+            | '\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2066}'..='\u{2069}'
+    )
 }
 
 /// Load a manifest for a no-side-effect metadata query while reporting stages.
