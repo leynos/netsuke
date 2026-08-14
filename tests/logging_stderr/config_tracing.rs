@@ -7,7 +7,7 @@
 
 use anyhow::{Context, Result, ensure};
 use tempfile::{TempDir, tempdir};
-use test_support::netsuke::run_netsuke_in;
+use test_support::netsuke::{run_netsuke_in, run_netsuke_in_with_env};
 
 /// Lines emitted by the tracing subscriber, excluding the final error report.
 ///
@@ -32,6 +32,26 @@ fn diagnostic_lines(stderr: &str) -> Vec<&str> {
         .filter(|line| is_tracing_line(line))
         .filter(|line| !line.contains("configuration load failed"))
         .collect()
+}
+
+fn assert_config_load_failure(stderr: &str, operation: &str, error_category: &str) -> Result<()> {
+    ensure!(
+        stderr.contains("configuration load failed")
+            && stderr.contains(&format!("operation=\"{operation}\""))
+            && stderr.contains(&format!("error_category=\"{error_category}\"")),
+        "stderr should identify the config-load operation and category: {stderr}"
+    );
+    Ok(())
+}
+
+fn assert_config_metrics_snapshot(stderr: &str) -> Result<()> {
+    ensure!(
+        stderr.contains("metrics snapshot")
+            && stderr.contains("config_load_total")
+            && stderr.contains("config_load_duration_seconds"),
+        "a verbose early exit should emit the configuration metrics snapshot: {stderr}"
+    );
+    Ok(())
 }
 
 fn workspace() -> Result<TempDir> {
@@ -112,6 +132,27 @@ fn explicit_load_failure_traces_failure_kind() -> Result<()> {
         !joined.contains("explicit configuration file not found"),
         "diagnostics must not repeat the formatted error text: {joined}"
     );
+    assert_config_load_failure(&run.stderr, "diag_mode_resolution", "io")?;
+    assert_config_metrics_snapshot(&run.stderr)?;
+    Ok(())
+}
+
+/// An environment validation failure reaches the full configuration merge.
+#[test]
+fn environment_validation_failure_identifies_config_merge() -> Result<()> {
+    let temp = workspace()?;
+    let run = run_netsuke_in_with_env(
+        temp.path(),
+        &["--verbose", "generate"],
+        &[("NETSUKE_JOBS", "0")],
+    )?;
+
+    ensure!(
+        !run.success,
+        "an invalid configuration environment value should fail the run"
+    );
+    assert_config_load_failure(&run.stderr, "config_merge", "validation")?;
+    assert_config_metrics_snapshot(&run.stderr)?;
     Ok(())
 }
 

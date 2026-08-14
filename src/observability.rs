@@ -112,13 +112,30 @@ mod tests {
     fn is_counter_record(entry: &SnapshotEntry, phase: &str, outcome: &str) -> bool {
         entry.0.kind() == MetricKind::Counter
             && entry.0.key().name() == CONFIG_LOAD_COUNTER
-            && has_label(entry, phase)
-            && has_label(entry, outcome)
+            && has_label(entry, "phase", phase)
+            && has_label(entry, "outcome", outcome)
             && matches!(entry.3, DebugValue::Counter(1))
     }
 
-    fn has_label(entry: &SnapshotEntry, value: &str) -> bool {
-        entry.0.key().labels().any(|label| label.value() == value)
+    fn has_label(entry: &SnapshotEntry, key: &str, value: &str) -> bool {
+        entry
+            .0
+            .key()
+            .labels()
+            .any(|label| label.key() == key && label.value() == value)
+    }
+
+    fn assert_one_single_sample_duration_record(snapshot: &[SnapshotEntry], phase: &str) {
+        assert_eq!(
+            snapshot
+                .iter()
+                .filter(|entry| {
+                    is_single_sample_duration_record(entry) && has_label(entry, "phase", phase)
+                })
+                .count(),
+            1,
+            "expected one configuration-load duration record for phase {phase}",
+        );
     }
 
     fn count_single_sample_duration_records(snapshot: &[SnapshotEntry]) -> usize {
@@ -167,6 +184,8 @@ mod tests {
         let snapshot = snapshotter.snapshot().into_vec();
         assert_one_counter_record(&snapshot, DIAG_MODE_PHASE, "success");
         assert_one_counter_record(&snapshot, MERGE_PHASE, "failure");
+        assert_one_single_sample_duration_record(&snapshot, DIAG_MODE_PHASE);
+        assert_one_single_sample_duration_record(&snapshot, MERGE_PHASE);
         assert_eq!(count_single_sample_duration_records(&snapshot), 2);
     }
 }

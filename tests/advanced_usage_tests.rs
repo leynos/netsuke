@@ -142,6 +142,23 @@ fn run_config_layer_build(
     )
 }
 
+fn assert_config_metrics_snapshot(stderr: &str) -> Result<()> {
+    for expected in [
+        "metrics snapshot",
+        "config_load_total",
+        "config_load_duration_seconds",
+        "Label(\"phase\", \"diag_mode\")",
+        "Label(\"phase\", \"merge\")",
+        "Label(\"outcome\", \"success\")",
+    ] {
+        ensure!(
+            stderr.contains(expected),
+            "expected metrics snapshot field {expected:?} in stderr, got:\n{stderr}"
+        );
+    }
+    Ok(())
+}
+
 // -------------------------------------------------------------------------
 // Clean subcommand edge cases
 // -------------------------------------------------------------------------
@@ -265,27 +282,50 @@ fn generate_to_missing_parent_directory_succeeds_by_creating_parents() -> Result
 // -------------------------------------------------------------------------
 
 #[rstest]
-#[case("config file enables verbose", &["build"], &[], true)]
-#[case("env var overrides config file", &["build"], &[("NETSUKE_VERBOSE", "false")], false)]
-#[case("cli flag overrides env var", &["--verbose", "build"], &[("NETSUKE_VERBOSE", "false")], true)]
+#[case::config_file_enables("verbose = true\n", &["build"], &[], true)]
+#[case::env_var_enables(
+    "verbose = false\n",
+    &["build"],
+    &[("NETSUKE_VERBOSE", "true")],
+    true
+)]
+#[case::env_var_overrides_config(
+    "verbose = true\n",
+    &["build"],
+    &[("NETSUKE_VERBOSE", "false")],
+    false
+)]
+#[case::cli_flag_overrides_env(
+    "verbose = true\n",
+    &["--verbose", "build"],
+    &[("NETSUKE_VERBOSE", "false")],
+    true
+)]
 fn verbose_config_precedence(
-    #[case] scenario: &str,
+    #[case] config_content: &str,
     #[case] args: &[&str],
     #[case] extra_env: &[(&str, &str)],
-    #[case] expect_timing: bool,
+    #[case] expect_verbose_diagnostics: bool,
 ) -> Result<()> {
-    let output = run_config_layer_build(scenario, "verbose = true\n", args, extra_env)?;
-    ensure!(output.success, "{scenario}: expected build to succeed");
-    if expect_timing {
+    let output =
+        run_config_layer_build("verbose config precedence", config_content, args, extra_env)?;
+    ensure!(output.success, "expected build to succeed");
+    if expect_verbose_diagnostics {
         ensure!(
             output.stderr.contains("Timing"),
             "expected verbose timing summary in stderr, got:\n{}",
             output.stderr
         );
+        assert_config_metrics_snapshot(&output.stderr)?;
     } else {
         ensure!(
             !output.stderr.contains("Timing"),
             "expected no timing summary, got:\n{}",
+            output.stderr
+        );
+        ensure!(
+            !output.stderr.contains("metrics snapshot"),
+            "expected no metrics snapshot, got:\n{}",
             output.stderr
         );
     }
