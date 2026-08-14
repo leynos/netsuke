@@ -9,16 +9,15 @@
 use std::io;
 use std::path::Path;
 
-use netsuke::cli::Cli;
 use netsuke::runner::{
-    BuildTargets, CommandEnv, NinjaBuildRequest, NinjaToolRequest, StderrMode, run_ninja_tool_with,
-    run_ninja_with,
+    BuildTargets, CommandEnv, NinjaBuildRequest, NinjaProcessOptions, NinjaToolRequest,
+    StderrMode, run_ninja_tool_with, run_ninja_with,
 };
 
 /// The pieces an embedder would hold before building requests.
 struct Parts<'a> {
     program: &'a Path,
-    cli: &'a Cli,
+    options: &'a NinjaProcessOptions,
     build_file: &'a Path,
     targets: &'a BuildTargets<'a>,
     env: &'a CommandEnv,
@@ -28,19 +27,19 @@ struct Parts<'a> {
 fn compose_requests<'a>(parts: &Parts<'a>) -> (NinjaBuildRequest<'a>, NinjaToolRequest<'a>) {
     let build = NinjaBuildRequest {
         program: parts.program,
-        cli: parts.cli,
+        options: parts.options,
         build_file: parts.build_file,
         targets: parts.targets,
         env: parts.env,
-        stderr_mode: StderrMode::from_json_enabled(parts.cli.json),
+        stderr_mode: StderrMode::Forward,
     };
     let tool = NinjaToolRequest {
         program: parts.program,
-        cli: parts.cli,
+        options: parts.options,
         build_file: parts.build_file,
         tool: "clean",
         env: parts.env,
-        stderr_mode: StderrMode::from_json_enabled(parts.cli.json),
+        stderr_mode: StderrMode::Forward,
     };
     (build, tool)
 }
@@ -53,11 +52,11 @@ fn main() -> io::Result<()> {
     assert!(!env.is_empty());
     assert!(env.get("PATH").is_some());
 
-    let cli = Cli::default();
+    let options = NinjaProcessOptions::default();
     let targets = BuildTargets::default();
     let parts = Parts {
         program: Path::new("ninja"),
-        cli: &cli,
+        options: &options,
         build_file: Path::new("build.ninja"),
         targets: &targets,
         env: &env,

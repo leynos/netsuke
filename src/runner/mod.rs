@@ -40,11 +40,13 @@ pub const NINJA_PROGRAM: &str = "ninja";
 pub const NINJA_ENV: &str = "NETSUKE_NINJA";
 
 mod graph;
+mod ninja_process_adapter;
 mod help;
 mod ninja_content;
 mod path_helpers;
 mod process;
 pub use ninja_content::NinjaContent;
+pub use ninja_process_adapter::{run_ninja, run_ninja_tool};
 #[cfg(doctest)]
 pub use process::doc;
 pub use process::{
@@ -237,7 +239,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> 
         )
     };
     if context.progress_enabled {
-        let options = ninja_process_options(cli);
+        let options = ninja_process_adapter::ninja_process_options(cli);
         let mut on_task_progress = on_task_progress_callback(context.reporter);
         process::run_ninja_with_status(
             process::NinjaBuildRequest {
@@ -301,7 +303,7 @@ fn handle_ninja_tool(
         )
     };
     if context.progress_enabled {
-        let options = ninja_process_options(cli);
+        let options = ninja_process_adapter::ninja_process_options(cli);
         let mut on_task_progress = on_task_progress_callback(context.reporter);
         process::run_ninja_tool_with_status(
             process::NinjaToolRequest {
