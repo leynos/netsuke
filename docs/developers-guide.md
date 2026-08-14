@@ -1663,7 +1663,7 @@ The intended serial guarantee is path-scoped. A later dependency that is
 independently reachable elsewhere in the requested graph may start via that
 other path. Do not broaden the implementation with a global lock, pool, or
 new scheduler without an approved design change. See
-[ADR-010](adr-010-use-ninja-dyndep-for-serial-dependency-ordering.md) for the
+[ADR-011](adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md) for the
 durable decision and its alternatives.
 
 ### Recipe placeholder ownership

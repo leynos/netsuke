@@ -2194,7 +2194,7 @@ representation portable.
   execute the Ninja binary to validate structure and no-op behaviour.
   Serial-ordering tests additionally use real Ninja to prove declaration
   order, failure short-circuiting, shared-work reuse, and unrelated-branch
-  concurrency. [ADR-010](adr-010-use-ninja-dyndep-for-serial-dependency-ordering.md)
+  concurrency. [ADR-011](adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md)
   records why staged dyndep is used instead of order-only gates, pools, or
   recursive Ninja invocations.
 
