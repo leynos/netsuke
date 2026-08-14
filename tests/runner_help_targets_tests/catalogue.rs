@@ -276,8 +276,11 @@ targets:
         "target discovery descriptions must not replace Ninja progress: {ninja}"
     );
     ensure!(
-        workspace.open("action-unit").is_err() && workspace.open("action-integration").is_err(),
-        "help targets must not execute action recipes"
+        workspace.open("action-unit").is_err()
+            && workspace.open("action-integration").is_err()
+            && workspace.open("report-weekly").is_err()
+            && workspace.open("report-monthly").is_err(),
+        "help targets must not execute action or target recipes"
     );
     Ok(())
 }

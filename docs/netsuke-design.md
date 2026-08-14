@@ -196,6 +196,11 @@ level keys.
 The E-R diagram below summarizes the structure of a `Netsukefile` and the
 relationships between its components.
 
+For screen readers: `NETSUKE_MANIFEST` contains reusable `RULE` definitions and
+`TARGET` entries, including actions. A `TARGET` has optional `description`
+metadata for target and action discovery through `netsuke help targets`; this
+is distinct from `RULE.description`, which supplies Ninja progress text.
+
 ```mermaid
 erDiagram
     NETSUKE_MANIFEST {
@@ -239,6 +244,8 @@ erDiagram
     TARGET }o--|| STRING_OR_LIST : uses
     RECIPE }o--|| STRING_OR_LIST : uses
 ```
+
+Figure 1: Entity-relationship view of the `Netsukefile` manifest.
 
 ### 2.3 Defining `rules`
 
@@ -1994,13 +2001,13 @@ This transformation involves several steps:
 
    FUTURE:
 
-   Roadmap tasks `3.14.9` and `3.14.11` will extend `ir::Action`, action
-   registration, and the `actions` map with target-level `description` and
-   `env` behaviour. Target-level `description` and `env` values will override
-   or extend the referenced rule for the concrete action. Env-aware action
-   hashing will include resolved environment bindings alongside the recipe and
-   file set so otherwise identical actions remain distinct when their execution
-   environment differs.
+   Roadmap task `3.14.9` will extend `ir::Action`, action registration, and the
+   `actions` map with target-level `env` behaviour. Target-level `description`
+   remains discovery-only metadata: it is not part of the IR and does not
+   replace the referenced rule's description for Ninja progress. Env-aware
+   action hashing will include resolved environment bindings alongside the
+   recipe and file set so otherwise identical actions remain distinct when their
+   execution environment differs.
 
 4. **Graph Validation:** As the graph is constructed, perform validation checks.
    This includes ensuring that every rule referenced by a target exists in the

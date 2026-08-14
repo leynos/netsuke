@@ -44,13 +44,14 @@ process-wide environment mutation to callers or tests.
 
 `netsuke help targets` is deliberately a different runner path. The dispatch
 layer routes `HelpTopic::Targets` to `src/runner/help.rs`, which resolves and
-runs the manifest loading, expansion, rendering, and IR-validation stages to
-produce a deterministic action-then-target catalogue. It may validate a
-`BuildGraph`, but it must not generate a Ninja file, call a Ninja subprocess,
-execute a recipe, or create build outputs. Its Jinja environment is a
-restricted, side-effect-free query surface. It allowlists only the lexical path
-filters `basename`, `dirname`, `with_suffix`, and `relative_to`, the collection
-filters `uniq`, `flatten`, and `group_by`, and the clock-independent `timedelta`
+runs the manifest loading, expansion, and rendering stages, then always builds
+and validates a `BuildGraph` before rendering the deterministic
+action-then-target catalogue. An invalid graph aborts before the catalogue is
+rendered. It must not generate a Ninja file, call a Ninja subprocess, execute a
+recipe, or create build outputs. Its Jinja environment is a restricted,
+side-effect-free query surface. It allowlists only the lexical path filters
+`basename`, `dirname`, `with_suffix`, and `relative_to`, the collection filters
+`uniq`, `flatten`, and `group_by`, and the clock-independent `timedelta`
 function. It rejects `env()` and `glob()`, file tests, filesystem metadata
 filters such as `size` and `linecount`, `hash`, `digest`, `contents`, `realpath`,
 and `expanduser`, executable discovery through `which` and
@@ -826,13 +827,14 @@ the policy, rejects tracked drift, and scans every tracked Markdown file.
 
 ## Release help tooling
 
-Release builds generate help artefacts explicitly with `cargo-orthohelp`,
-rather than from `build.rs`. The metadata root is
-`netsuke::cli::ReleaseHelpCli`, which combines `CliConfig` field metadata with
-the Clap command surface, including `help targets`, so the release manual and
-PowerShell help remain aligned with the CLI. The build script remains
-responsible for the localization key audit only. Release automation installs
-the pinned tool with:
+Release builds generate their manual and PowerShell help explicitly with
+`cargo-orthohelp`, rather than consuming the ordinary-build help artefacts from
+`build.rs`. The metadata root is `netsuke::cli::ReleaseHelpCli`, which combines
+`CliConfig` field metadata with the Clap command surface, including
+`help targets`, so the release manual and PowerShell help remain aligned with
+the CLI. During ordinary Cargo builds, `build.rs` generates the local manual
+page and shell completions, and audits the localization keys. Release
+automation installs the pinned tool with:
 
 ```bash
 cargo install cargo-orthohelp --version 0.9.0 --locked

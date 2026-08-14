@@ -97,9 +97,13 @@ default marker such as `[★ default]` on manifest defaults.
       help_en_us/help_es_es snapshots.
 - [x] (2026-08-09) Phase 4: users-guide updated (schema field, distinction
       from rule descriptions, subcommand list, worked example + tested-example
-      and its test); CliConfig/Clap integration keeps build.rs and release man
-      and PowerShell artefacts aligned with the `help targets` command. No
-      shell completion artefacts exist to update.
+      and its test); CliConfig/Clap integration keeps ordinary-build `build.rs`
+      artefacts (the `target/generated-man/...` man page and
+      `target/generated-completions/...` Bash, Elvish, Fish, PowerShell, and Zsh
+      completions) and release `cargo-orthohelp` artefacts under
+      `target/orthohelp/...` aligned with the `help targets` command. Release
+      staging and workflow contracts cover the manual, PowerShell help, and
+      completion sidecars.
 - [x] (2026-08-09) All gates green: check-fmt, lint (rustdoc/clippy/Whitaker),
       nextest (1936), doctests, markdownlint, spelling, nixie. Committed as
       four atomic commits.
@@ -175,9 +179,12 @@ The issue's acceptance criteria are met: the AST, rendered manifest, and
 catalogue carry target/action descriptions; parser, validation, render, and
 expansion coverage exists; `netsuke help targets` is snapshot-tested in text,
 accessible, localized, and JSON modes; alternate manifest selection is tested;
-the users guide documents the schema field and the subcommand. CliConfig/Clap
-integration keeps build.rs and release man and PowerShell artefacts aligned
-with the new command surface; no shell completion artefacts exist to update.
+the users guide documents the schema field and the subcommand. Ordinary
+`build.rs` output includes a man page and Bash, Elvish, Fish, PowerShell, and
+Zsh completion files. Release `cargo-orthohelp` output includes the manual and
+Windows PowerShell help, with `man_page_contract_tests.rs`,
+`release_staging_tests.rs`, and `workflow_build_and_package.rs` covering those
+artefacts and the completion sidecars.
 
 The post-`314f12b` follow-up additionally isolates discovery rendering from
 impure template helpers, keeps terminal text safe, preserves rule descriptions
@@ -254,9 +261,11 @@ generates Ninja build files. Key files and modules for this task:
   `tests/features/cli.feature` + `tests/bdd/steps/cli.rs`, and a full-process
   BDD scenario. Regenerate `help_en_us`/`help_es_es` snapshots.
 - Phase 4: document the field and the subcommand in `docs/users-guide.md`;
-  integrate CliConfig with Clap so build.rs, release man, and PowerShell
-  artefacts expose the same `help targets` command surface. No shell completion
-  artefacts exist to update.
+  integrate CliConfig with Clap so ordinary-build `build.rs` man and
+  `target/generated-completions/...` Bash, Elvish, Fish, PowerShell, and Zsh
+  completion artefacts, plus release `cargo-orthohelp` manual and Windows
+  PowerShell help under `target/orthohelp/...`, expose the same `help targets`
+  command surface. Release staging and workflow contracts cover these outputs.
 
 ## Validation and acceptance
 
