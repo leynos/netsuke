@@ -6,6 +6,8 @@ use super::child_exit::finalize_streaming;
 use super::command_list_telemetry::COMMAND_LIST_FAILURE_DURATION;
 use super::streaming::ForwardStats;
 use super::*;
+use crate::cli::Cli;
+use crate::test_tracing_capture::with_test_subscriber;
 use camino::Utf8PathBuf;
 #[cfg(unix)]
 use metrics_util::{
@@ -18,6 +20,7 @@ use monotony::{StdMonotonicClock, test_util::FixedMonotonicClock};
 use proptest::prelude::*;
 use rstest::{fixture, rstest};
 use std::ffi::OsString;
+use std::path::Path;
 #[cfg(unix)]
 use std::path::PathBuf;
 #[cfg(unix)]
@@ -25,6 +28,7 @@ use std::process::Stdio;
 use std::thread;
 #[cfg(unix)]
 use std::time::Duration;
+use tracing_subscriber::filter::LevelFilter;
 
 /// A `MockEnv` answering exactly one `os_string` read of `NETSUKE_NINJA`.
 ///
@@ -252,5 +256,42 @@ proptest! {
         let resolved = resolve_ninja_program_utf8_with(&ninja_env(Some(env_value)));
 
         prop_assert_eq!(resolved, expected);
+    }
+}
+
+/// Spawning a missing Ninja emits a spawn-failure warning whose
+/// `suppress_stderr` field follows the request's explicit `stderr_mode`, not
+/// the request's `cli.json` state. The mismatch in each case proves the process
+/// layer consumes the policy field and does not re-derive it from CLI JSON.
+#[test]
+fn spawn_failure_logging_honours_explicit_stderr_mode() {
+    let cases = [
+        (true, StderrMode::Forward, "suppress_stderr=false"),
+        (false, StderrMode::Suppress, "suppress_stderr=true"),
+    ];
+    for (json, mode, expected_field) in cases {
+        let cli = Cli {
+            json,
+            ..Cli::default()
+        };
+        let targets = BuildTargets::default();
+        let events = with_test_subscriber(LevelFilter::WARN, |captured| {
+            let _ = run_ninja_with(&NinjaBuildRequest {
+                program: Path::new("netsuke-test-missing-ninja"),
+                cli: &cli,
+                build_file: Path::new("build.ninja"),
+                targets: &targets,
+                env: &CommandEnv::inherit(),
+                stderr_mode: mode,
+            });
+            captured.snapshot()
+        });
+        assert!(
+            events.iter().any(|event| {
+                event.contains("failure_category=\"spawn\"") && event.contains(expected_field)
+            }),
+            "a spawn-failure event should record {expected_field} for {mode:?} with \
+             cli.json={json}, got: {events:?}"
+        );
     }
 }

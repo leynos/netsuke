@@ -101,32 +101,6 @@ fn run_command_and_stream_with_context<Clock: MonotonicClock>(
     check_exit_status_with_context(status, &context, &failure_context)
 }
 
-/// Invoke the Ninja executable with the provided CLI settings.
-///
-/// The function forwards the job count and working directory to Ninja,
-/// specifies the temporary build file, and streams its standard output and
-/// error back to the user.
-///
-/// # Errors
-///
-/// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
-/// streams are unavailable, or when Ninja reports a non-zero exit status.
-pub fn run_ninja(
-    program: &Path,
-    cli: &Cli,
-    build_file: &Path,
-    targets: &BuildTargets<'_>,
-) -> io::Result<()> {
-    run_ninja_with(&NinjaBuildRequest {
-        program,
-        cli,
-        build_file,
-        targets,
-        env: &CommandEnv::inherit(),
-        stderr_mode: StderrMode::from_json_enabled(cli.json),
-    })
-}
-
 /// Invoke Ninja with an explicit child-process environment.
 ///
 /// Unlike [`run_ninja`], the caller supplies the environment applied to the
@@ -175,27 +149,6 @@ fn run_ninja_with_clock(
     clock: &impl MonotonicClock,
 ) -> io::Result<()> {
     run_ninja_build_internal(*request, None, clock)
-}
-
-/// Invoke a Ninja tool (e.g., `ninja -t clean`) with the provided CLI settings.
-///
-/// The function forwards the job count and working directory to Ninja,
-/// specifies the build file, and streams its standard output and error back to
-/// the user.
-///
-/// # Errors
-///
-/// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
-/// streams are unavailable, or when Ninja reports a non-zero exit status.
-pub fn run_ninja_tool(program: &Path, cli: &Cli, build_file: &Path, tool: &str) -> io::Result<()> {
-    run_ninja_tool_with(&NinjaToolRequest {
-        program,
-        cli,
-        build_file,
-        tool,
-        env: &CommandEnv::inherit(),
-        stderr_mode: StderrMode::from_json_enabled(cli.json),
-    })
 }
 
 /// Invoke a Ninja tool with an explicit child-process environment.

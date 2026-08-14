@@ -3374,8 +3374,11 @@ governs is the environment Ninja's own child commands see when it shells out.
 The explicit request APIs compose on top of `CommandEnv`: `NinjaBuildRequest`/
 `NinjaToolRequest` carry `env: &CommandEnv` and `stderr_mode: StderrMode`
 fields alongside the program, CLI settings, and build file, and are consumed
-by `run_ninja_with`/`run_ninja_tool_with`. The convenience wrappers `run_ninja`/`run_ninja_tool`
-call these with `CommandEnv::inherit()`, reproducing production behaviour;
+by `run_ninja_with`/`run_ninja_tool_with`. The convenience wrappers
+`run_ninja`/`run_ninja_tool` live at the runner boundary
+(`src/runner/mod.rs`), call these with `CommandEnv::inherit()`, and derive the
+`stderr_mode` policy from the CLI via
+`StderrMode::from_json_enabled(cli.json)`, reproducing production behaviour;
 tests reach for `run_ninja_with`/`run_ninja_tool_with` directly to supply a
 `CommandEnv` built with `with_path` instead. Section 6.1 of the
 [design document](netsuke-design.md) records the same architecture from the

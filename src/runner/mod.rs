@@ -22,7 +22,7 @@ use crate::status::{
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
-use std::io::IsTerminal;
+use std::io::{self, IsTerminal};
 use std::path::Path;
 use tracing::{debug, info};
 
@@ -47,8 +47,8 @@ mod process;
 #[cfg(doctest)]
 pub use process::doc;
 pub use process::{
-    CommandEnv, NinjaBuildRequest, NinjaToolRequest, StderrMode, run_ninja, run_ninja_tool,
-    run_ninja_tool_with, run_ninja_with,
+    CommandEnv, NinjaBuildRequest, NinjaToolRequest, StderrMode, run_ninja_tool_with,
+    run_ninja_with,
 };
 
 use path_helpers::{ensure_manifest_exists_or_error, resolve_manifest_path, resolve_output_path};
@@ -191,6 +191,56 @@ pub fn run_with_ninja_program(cli: &Cli, prefs: OutputPrefs, program: &Path) -> 
         ninja_program: program,
     };
     dispatch::execute(cli, command, &context)
+}
+
+/// Invoke the Ninja executable with the provided CLI settings.
+///
+/// The function forwards the job count and working directory to Ninja,
+/// specifies the temporary build file, and streams its standard output and
+/// error back to the user. The stderr policy is derived from the CLI's JSON
+/// diagnostic setting here at the runner boundary, then passed explicitly to
+/// the process layer on the request.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
+/// streams are unavailable, or when Ninja reports a non-zero exit status.
+pub fn run_ninja(
+    program: &Path,
+    cli: &Cli,
+    build_file: &Path,
+    targets: &BuildTargets<'_>,
+) -> io::Result<()> {
+    run_ninja_with(&NinjaBuildRequest {
+        program,
+        cli,
+        build_file,
+        targets,
+        env: &CommandEnv::inherit(),
+        stderr_mode: StderrMode::from_json_enabled(cli.json),
+    })
+}
+
+/// Invoke a Ninja tool (e.g., `ninja -t clean`) with the provided CLI settings.
+///
+/// The function forwards the job count and working directory to Ninja,
+/// specifies the build file, and streams its standard output and error back to
+/// the user. The stderr policy is derived from the CLI's JSON diagnostic
+/// setting at the runner boundary before execution.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
+/// streams are unavailable, or when Ninja reports a non-zero exit status.
+pub fn run_ninja_tool(program: &Path, cli: &Cli, build_file: &Path, tool: &str) -> io::Result<()> {
+    run_ninja_tool_with(&NinjaToolRequest {
+        program,
+        cli,
+        build_file,
+        tool,
+        env: &CommandEnv::inherit(),
+        stderr_mode: StderrMode::from_json_enabled(cli.json),
+    })
 }
 
 fn on_task_progress_callback(reporter: &dyn StatusReporter) -> impl FnMut(u32, u32, &str) + '_ {

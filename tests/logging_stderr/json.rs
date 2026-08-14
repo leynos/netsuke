@@ -1,7 +1,8 @@
 //! JSON diagnostic, result-envelope, and standard stderr integration tests.
 
-use super::support::{open_workspace, temp_with_minimal_manifest};
+use super::support::{open_workspace, temp_with_minimal_manifest, write_fake_ninja_script};
 use anyhow::{Context, Result, ensure};
+use camino::Utf8Path;
 #[cfg(unix)]
 use netsuke::runner::NINJA_ENV;
 use predicates::prelude::*;
@@ -283,6 +284,54 @@ fn json_success_graph_keeps_clean_stderr(
             && graph.contains("\"hello\" [label=\"hello\"")
             && graph.lines().any(|line| line == "}"),
         "graph result should contain the expected hello-node structure: {graph}"
+    );
+    Ok(())
+}
+
+/// `--json build` with a fake Ninja that writes markers to both stdout and
+/// stderr: JSON mode must suppress child output entirely, so stderr stays
+/// empty and stdout holds exactly one result document with no child marker
+/// leaking in. Guards the process layer against forwarding child streams in
+/// JSON mode.
+#[cfg(unix)]
+#[test]
+fn json_mode_suppresses_child_stdout_and_stderr_markers() -> Result<()> {
+    let temp = temp_with_minimal_manifest()?;
+    let workspace = open_workspace(&temp)?;
+    // The capability-scoped directory writes the script under a relative
+    // name; the absolute path is reserved for `NINJA_ENV`, since program
+    // resolution must not depend on the child's working directory.
+    write_fake_ninja_script(
+        &workspace,
+        Utf8Path::new("fake-ninja-markers"),
+        &["NINJA_STDOUT_MARKER_LINE_1", "NINJA_STDOUT_MARKER_LINE_2"],
+        Some("NINJA_STDERR_MARKER"),
+    )?;
+    let ninja_std = temp.path().join("fake-ninja-markers");
+    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
+        .current_dir(temp.path())
+        .env(NINJA_ENV, ninja_std.as_path())
+        .arg("--json")
+        .arg("build")
+        .output()
+        .context("run netsuke --json build with marker-emitting fake ninja")?;
+
+    ensure!(output.status.success(), "build should succeed");
+    ensure!(
+        output.stderr.is_empty(),
+        "JSON mode should suppress child stderr: {:?}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).context("stdout should be valid UTF-8")?;
+    ensure!(
+        !stdout.contains("NINJA_STDOUT_MARKER") && !stdout.contains("NINJA_STDERR_MARKER"),
+        "child markers must not leak into JSON output: {stdout}"
+    );
+    let document: Value =
+        serde_json::from_str(&stdout).context("stdout should hold exactly one JSON document")?;
+    ensure!(
+        document.get("schema_version").and_then(Value::as_u64) == Some(1),
+        "build result should use schema version 1: {document}"
     );
     Ok(())
 }

@@ -1,4 +1,21 @@
-//! Child standard-stream routing policy for Ninja subprocesses.
+//! Policy for routing a Ninja subprocess's standard streams.
+//!
+//! [`StderrMode`] carries the child-output routing decision explicitly instead
+//! of burying it in a boolean re-derived inside the process layer. The runner
+//! chooses the policy at the runner boundary when it builds a request: in JSON
+//! diagnostics mode ([`crate::cli::Cli`]`::json`) the child's output must not
+//! pollute the machine-readable streams, so the mode maps to [`Suppress`];
+//! otherwise it maps to [`Forward`]. The policy travels on
+//! [`crate::runner::NinjaBuildRequest`] and [`crate::runner::NinjaToolRequest`]
+//! as the `stderr_mode` field, and the process layer only consumes that field —
+//! it never re-derives the policy from CLI state itself.
+//!
+//! [`Forward`] releases the child's stdout and stderr to the parent's
+//! corresponding streams, preserving ordering for builds whose output the user
+//! watches live. [`Suppress`] drains both streams to `io::sink()`, keeping JSON
+//! diagnostics machine-readable: stdout carries only the versioned result
+//! document and stderr only the diagnostic document, with no child output mixed
+//! in.
 
 /// Policy for routing a Ninja subprocess's standard streams.
 ///

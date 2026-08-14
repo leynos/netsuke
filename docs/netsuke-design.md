@@ -2132,10 +2132,13 @@ child process's execution environment.
 Every invocation is described by a borrowed request bundle rather than a long
 parameter list: `NinjaBuildRequest` for a build and `NinjaToolRequest` for
 `ninja -t <tool>`. Each names the resolved program, the parsed CLI settings,
-the generated build file, the targets or tool, and a `&CommandEnv` describing
-the child's environment. `run_ninja_with` and `run_ninja_tool_with` consume
-these; the convenience wrappers `run_ninja` and `run_ninja_tool` call them with
-`CommandEnv::inherit()`, which is production behaviour.
+the generated build file, the targets or tool, a `&CommandEnv` describing the
+child's environment, and the `stderr_mode: StderrMode` policy field.
+`run_ninja_with` and `run_ninja_tool_with` consume these; the convenience
+wrappers `run_ninja` and `run_ninja_tool` live at the runner boundary, call
+them with `CommandEnv::inherit()`, and derive the `stderr_mode` policy from the
+CLI via `StderrMode::from_json_enabled(cli.json)`, which is production
+behaviour.
 
 The command construction follows this pattern:
 
@@ -2171,9 +2174,18 @@ The command construction follows this pattern:
    to the user's console, potentially with additional formatting or status
    updates from Netsuke itself.
 
-Standard output and error are piped and written back to Netsuke's own streams
-so users see Ninja's messages in order. A non-zero exit status or failure to
-spawn the process is reported as an `io::Error` for the CLI to surface.
+Stream routing follows the `stderr_mode` policy carried by the request.
+Outside JSON mode (`StderrMode::Forward`) the child's standard output and
+error are piped and forwarded to Netsuke's own streams in order, so users see
+Ninja's messages as it produces them. In JSON diagnostics mode the request
+carries `StderrMode::Suppress`, which drains both streams to `io::sink()`:
+stdout carries only the versioned result document and stderr only the
+diagnostic document, keeping both machine-readable. The runner derives the
+policy from the CLI's JSON setting via
+`StderrMode::from_json_enabled(cli.json)`; the process layer consumes the
+request's `stderr_mode` field and never re-derives it. A non-zero exit status
+or failure to spawn the process is reported as an `io::Error` for the CLI to
+surface.
 
 The `ninja_subprocess` span and its spawn and exit events carry
 `env_override_count` and `path_overridden`, derived from the prepared
