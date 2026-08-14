@@ -276,7 +276,7 @@ fn spawn_failure_logging_honours_explicit_stderr_mode() {
         };
         let targets = BuildTargets::default();
         let events = with_test_subscriber(LevelFilter::WARN, |captured| {
-            let _ = run_ninja_with(&NinjaBuildRequest {
+            let result = run_ninja_with(&NinjaBuildRequest {
                 program: Path::new("netsuke-test-missing-ninja"),
                 cli: &cli,
                 build_file: Path::new("build.ninja"),
@@ -284,6 +284,10 @@ fn spawn_failure_logging_honours_explicit_stderr_mode() {
                 env: &CommandEnv::inherit(),
                 stderr_mode: mode,
             });
+            assert!(
+                result.is_err(),
+                "spawning a missing Ninja should fail before any forwarding"
+            );
             captured.snapshot()
         });
         assert!(
