@@ -150,8 +150,7 @@ pub(super) fn verify_cli_policy_allows(world: &TestWorld, url: &UrlString) -> Re
     let parsed = url.parse().context("parse URL for CLI policy check")?;
     ensure!(
         policy.evaluate(&parsed).is_ok(),
-        "expected CLI policy to allow {}",
-        url,
+        "expected CLI policy to allow {url}",
     );
     Ok(())
 }
@@ -164,14 +163,13 @@ pub(super) fn verify_cli_policy_rejects(
     let policy = cli_network_policy(world)?;
     let parsed = url.parse().context("parse URL for CLI policy check")?;
     let Err(err) = policy.evaluate(&parsed) else {
-        bail!("expected CLI policy to reject {}", url);
+        bail!("expected CLI policy to reject {url}");
     };
     let normalized_error = normalize_fluent_isolates(&err.to_string());
     let normalized_message = normalize_fluent_isolates(message.as_str());
     ensure!(
         normalized_error.contains(&normalized_message),
-        "expected error to mention '{}', got '{err}'",
-        message,
+        "expected error to mention '{message}', got '{err}'",
     );
     Ok(())
 }
@@ -201,8 +199,7 @@ pub(super) fn verify_error_contains(world: &TestWorld, fragment: &ErrorFragment)
     let normalized_fragment = normalize_fluent_isolates(fragment.as_str());
     ensure!(
         normalized_error.contains(&normalized_fragment),
-        "Error message '{error}' does not contain expected '{}'",
-        fragment
+        "Error message '{error}' does not contain expected '{fragment}'"
     );
     Ok(())
 }

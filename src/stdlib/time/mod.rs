@@ -65,7 +65,13 @@ fn parse_offset(raw: &str) -> Result<UtcOffset, Error> {
         return Err(invalid_offset(raw));
     }
 
-    UtcOffset::parse(trimmed, OFFSET_FMT).map_err(|_| invalid_offset(raw))
+    let parsed = UtcOffset::parse(trimmed, OFFSET_FMT).map_err(|_| invalid_offset(raw))?;
+    // `time` accepts offsets beyond a civil day; templates expose ISO 8601 offsets.
+    if parsed.whole_hours().abs() >= 24 {
+        return Err(invalid_offset(raw));
+    }
+
+    Ok(parsed)
 }
 
 fn invalid_offset(raw: &str) -> Error {

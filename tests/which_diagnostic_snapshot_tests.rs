@@ -18,7 +18,7 @@ struct SnapshotWorkspace {
 fn snapshot_workspace() -> Result<SnapshotWorkspace> {
     let temp = tempfile::tempdir().context("create snapshot workspace")?;
     let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-        .map_err(|path| anyhow!("temp path should be UTF-8: {path:?}"))?;
+        .map_err(|path| anyhow!("temp path should be UTF-8: {}", path.display()))?;
     Ok(SnapshotWorkspace { _temp: temp, root })
 }
 

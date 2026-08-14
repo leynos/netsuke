@@ -78,8 +78,7 @@ pub(super) fn assert_cache_entry_exists(
     let entry = workspace.join(cache_relative).join(entry_name);
     ensure!(
         fs::exists(entry.as_std_path()),
-        "entry {} should exist",
-        entry
+        "entry {entry} should exist"
     );
     Ok(())
 }

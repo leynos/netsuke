@@ -70,7 +70,7 @@ pub(crate) mod fallible {
     pub(crate) fn filter_workspace() -> Result<Workspace> {
         let temp = tempdir().context("create standard filter workspace")?;
         let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-            .map_err(|path| anyhow!("workspace path is not valid UTF-8: {path:?}"))?;
+            .map_err(|path| anyhow!("workspace path is not valid UTF-8: {}", path.display()))?;
         let dir = Dir::open_ambient_dir(&root, ambient_authority())
             .context("open filter workspace directory")?;
         dir.write("file", b"data")

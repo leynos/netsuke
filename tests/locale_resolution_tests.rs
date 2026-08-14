@@ -27,10 +27,7 @@ fn normalize_locale_tag_handles_common_formats(
     let normalized = normalize_locale_tag(raw);
     ensure!(
         normalized.as_deref() == expected,
-        "expected {:?} to normalize to {:?}, got {:?}",
-        raw,
-        expected,
-        normalized
+        "expected {raw:?} to normalize to {expected:?}, got {normalized:?}"
     );
     Ok(())
 }

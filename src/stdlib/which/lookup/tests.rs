@@ -17,7 +17,7 @@ impl TempWorkspace {
     fn new() -> Result<Self> {
         let tempdir = TempDir::new().context("create tempdir")?;
         let root = Utf8PathBuf::from_path_buf(tempdir.path().to_path_buf())
-            .map_err(|path| anyhow!("utf8 path required, got {:?}", path))?;
+            .map_err(|path| anyhow!("utf8 path required, got {path:?}"))?;
         Ok(Self {
             root,
             _tempdir: tempdir,

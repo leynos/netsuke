@@ -34,8 +34,12 @@ pub(crate) fn ensure_workspace(world: &TestWorld) -> Result<Utf8PathBuf> {
         return Ok(root);
     }
     let temp = tempfile::tempdir().context("create stdlib workspace")?;
-    let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-        .map_err(|path| anyhow!("stdlib workspace path is not valid UTF-8: {path:?}"))?;
+    let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).map_err(|path| {
+        anyhow!(
+            "stdlib workspace path is not valid UTF-8: {}",
+            path.display()
+        )
+    })?;
     let handle = Dir::open_ambient_dir(&root, ambient_authority())
         .context("open stdlib workspace directory")?;
     handle

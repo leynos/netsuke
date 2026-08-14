@@ -152,7 +152,7 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
         merged.progress == ProgressPolicy::Never,
         "CLI layer should override progress setting",
     );
-    ensure!(merged.json, "CLI layer should override json setting",);
+    ensure!(merged.json, "CLI layer should override json setting");
     ensure!(
         merged.locale.as_deref() == Some("en-US"),
         "file layer should populate locale when CLI does not override",

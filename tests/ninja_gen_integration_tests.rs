@@ -127,7 +127,7 @@ fn ninja_integration_tests(
         return Ok(());
     };
     let dir_path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
-        .map_err(|path| anyhow::anyhow!("temp dir path {:?} is not UTF-8", path))?;
+        .map_err(|path| anyhow::anyhow!("temp dir path {path:?} is not UTF-8"))?;
 
     let NinjaIntegrationCase {
         action,
@@ -145,8 +145,7 @@ fn ninja_integration_tests(
     if !matches!(&assertion, AssertionType::FileExists) {
         ensure!(
             output == target_name,
-            "expected edge output '{}' to match test target '{target_name}'",
-            output
+            "expected edge output '{output}' to match test target '{target_name}'"
         );
     }
     let mut graph = BuildGraph::default();
@@ -177,8 +176,7 @@ fn ninja_integration_tests(
                 .with_context(|| format!("check existence of {target_name}"))?;
             ensure!(
                 exists,
-                "expected {} to exist after ninja invocation",
-                &target_name
+                "expected {target_name} to exist after ninja invocation"
             );
         }
         AssertionType::FileContent(expected) => {
