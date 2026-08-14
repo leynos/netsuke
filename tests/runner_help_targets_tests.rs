@@ -233,6 +233,13 @@ rules:
   - name: render-report
     description: Render reports through the shared rule
     command: touch $out
+actions:
+  - name: check-{{ item }}
+    description: Run {{ item }}
+    command: touch action-{{ item }}
+    foreach:
+      - unit
+      - integration
 targets:
   - name: report-{{ item }}
     description: Build the {{ item }} report
@@ -262,6 +269,10 @@ targets:
         "Build the weekly report",
         "report-monthly",
         "Build the monthly report",
+        "check-unit",
+        "Run unit",
+        "check-integration",
+        "Run integration",
     ] {
         ensure!(
             stdout.contains(expected),
@@ -279,6 +290,10 @@ targets:
     ensure!(
         !ninja.contains("Build the weekly report") && !ninja.contains("Build the monthly report"),
         "target discovery descriptions must not replace Ninja progress: {ninja}"
+    );
+    ensure!(
+        workspace.open("action-unit").is_err() && workspace.open("action-integration").is_err(),
+        "help targets must not execute action recipes"
     );
     Ok(())
 }

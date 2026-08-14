@@ -25,12 +25,7 @@ pub(crate) fn from_path_for_manifest_query(
     on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
     let env_reader = disabled_env_reader();
-    from_path_with_registration(
-        path,
-        &env_reader,
-        on_stage,
-        StdlibRegistration::ManifestQuery,
-    )
+    from_path_with_registration(path, &env_reader, on_stage, ManifestLoadMode::ManifestQuery)
 }
 
 /// Load a manifest with the full stdlib and an explicit network policy.
@@ -40,9 +35,15 @@ pub(super) fn from_path_with_policy_and_env(
     env_reader: &EnvReader,
     on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
-    from_path_with_registration(path, env_reader, on_stage, |config| {
-        StdlibRegistration::Full(config.with_network_policy(policy))
-    })
+    from_path_with_registration(path, env_reader, on_stage, ManifestLoadMode::Full(policy))
+}
+
+/// Select the standard-library boundary for a manifest load.
+enum ManifestLoadMode {
+    /// A normal build load with a configured network policy.
+    Full(NetworkPolicy),
+    /// A metadata-only load that must not construct an ambient stdlib config.
+    ManifestQuery,
 }
 
 /// Read a manifest and render it with the selected stdlib registration.
@@ -50,7 +51,7 @@ fn from_path_with_registration(
     path: impl AsRef<Path>,
     env_reader: &EnvReader,
     mut on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
-    register_stdlib: impl FnOnce(StdlibConfig) -> StdlibRegistration,
+    mode: ManifestLoadMode,
 ) -> Result<NetsukeManifest> {
     notify_stage(&mut on_stage, ManifestLoadStage::ManifestIngestion);
     let path_ref = path.as_ref();
@@ -63,14 +64,19 @@ fn from_path_with_registration(
                 .with_arg("path", path_ref.display().to_string())
         })?;
     let name = ManifestName::new(path_ref.display().to_string());
-    let config = register_stdlib(
-        StdlibConfig::new(workspace.dir)?.with_workspace_root_path(workspace.root)?,
-    );
+    let stdlib_registration = match mode {
+        ManifestLoadMode::Full(policy) => StdlibRegistration::Full(Box::new(
+            StdlibConfig::new(workspace.dir)?
+                .with_workspace_root_path(workspace.root)?
+                .with_network_policy(policy),
+        )),
+        ManifestLoadMode::ManifestQuery => StdlibRegistration::ManifestQuery,
+    };
     from_str_named(
         &data,
         ManifestParse {
             name: &name,
-            stdlib_registration: Some(config),
+            stdlib_registration: Some(stdlib_registration),
             env_reader,
         },
         &mut on_stage,

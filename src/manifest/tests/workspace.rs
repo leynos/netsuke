@@ -224,7 +224,17 @@ fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
 #[case::shell("{{ 'ignored' | shell('printf side-effect') }}", "shell")]
 #[case::grep("{{ 'ignored' | grep('ignored') }}", "grep")]
 #[case::env("{{ env('PATH') }}", "env")]
+#[case::glob("{{ glob('*') }}", "glob")]
+#[case::expanduser("{{ '~' | expanduser }}", "expanduser")]
 #[case::contents("{{ 'secret.txt' | contents }}", "contents")]
+#[case::realpath("{{ 'secret.txt' | realpath }}", "realpath")]
+#[case::size("{{ 'secret.txt' | size }}", "size")]
+#[case::linecount("{{ 'secret.txt' | linecount }}", "linecount")]
+#[case::hash("{{ 'secret.txt' | hash }}", "hash")]
+#[case::digest("{{ 'secret.txt' | digest }}", "digest")]
+#[case::file_test("{{ 'secret.txt' is file }}", "file")]
+#[case::which("{{ which('sh') }}", "which")]
+#[case::command_available("{{ command_available('sh') }}", "command_available")]
 fn manifest_query_rejects_restricted_template_helpers(
     #[case] expression: &str,
     #[case] helper: &str,
@@ -270,7 +280,17 @@ fn manifest_query_rejects_restricted_template_helpers(
 #[case::shell("{{ 'ignored' | shell('printf side-effect') }}", "shell")]
 #[case::grep("{{ 'ignored' | grep('ignored') }}", "grep")]
 #[case::env("{{ env('PATH') }}", "env")]
+#[case::glob("{{ glob('*') }}", "glob")]
+#[case::expanduser("{{ '~' | expanduser }}", "expanduser")]
 #[case::contents("{{ 'secret.txt' | contents }}", "contents")]
+#[case::realpath("{{ 'secret.txt' | realpath }}", "realpath")]
+#[case::size("{{ 'secret.txt' | size }}", "size")]
+#[case::linecount("{{ 'secret.txt' | linecount }}", "linecount")]
+#[case::hash("{{ 'secret.txt' | hash }}", "hash")]
+#[case::digest("{{ 'secret.txt' | digest }}", "digest")]
+#[case::file_test("{{ 'secret.txt' is file }}", "file")]
+#[case::which("{{ which('sh') }}", "which")]
+#[case::command_available("{{ command_available('sh') }}", "command_available")]
 fn manifest_query_rejects_restricted_template_helpers(
     #[case] expression: &str,
     #[case] helper: &str,

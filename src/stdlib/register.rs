@@ -106,25 +106,20 @@ pub fn register_with_config(
 
 /// Register helpers suitable for manifest queries that must avoid side effects.
 ///
-/// The registration preserves pure rendering helpers, including date, path,
-/// collection, and executable-discovery helpers. It replaces `fetch`,
-/// `shell`, `grep`, and `contents` with explicit errors so consumers can
-/// render discovery metadata without network access, cache writes, command
-/// execution, or host file-content disclosure.
+/// The registration preserves only lexical path filters, collection helpers,
+/// and clock-independent time helpers. It rejects helpers that inspect the
+/// host, perform I/O, or invoke commands so consumers can render discovery
+/// metadata without disclosing host state.
 ///
-pub(crate) fn register_manifest_query_with_config(
-    env: &mut Environment<'_>,
-    config: &StdlibConfig,
-) -> StdlibState {
+pub(crate) fn register_manifest_query(env: &mut Environment<'_>) -> StdlibState {
     let state = StdlibState::default();
-    register_read_only_helpers(env, config);
+    register_query_helpers(env);
     time::register_query_functions(env);
     register_disabled_query_helpers(env);
     state
 }
 
-/// Register query helpers that avoid side effects while retaining filesystem
-/// capabilities for file tests, path helpers, and `which`.
+/// Register helpers that do not execute a command or make a network request.
 fn register_read_only_helpers(env: &mut Environment<'_>, config: &StdlibConfig) {
     register_file_tests(env);
     path::register_filters(env, config.home_directory().clone());
@@ -141,10 +136,19 @@ fn register_read_only_helpers(env: &mut Environment<'_>, config: &StdlibConfig) 
     which::register(env, which_config);
 }
 
+/// Register the allowlisted helpers for manifest discovery queries.
+fn register_query_helpers(env: &mut Environment<'_>) {
+    path::register_query_filters(env);
+    collections::register_filters(env);
+}
+
 /// Register deliberate failures for helpers excluded from manifest queries.
 fn register_disabled_query_helpers(env: &mut Environment<'_>) {
     env.add_function("env", |_variable: String| -> Result<String, Error> {
         Err(manifest_query_operation_error("env"))
+    });
+    env.add_function("glob", |_pattern: String| -> Result<Value, Error> {
+        Err(manifest_query_operation_error("glob"))
     });
     env.add_function(
         "fetch",

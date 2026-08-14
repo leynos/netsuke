@@ -112,9 +112,9 @@ struct ManifestParse<'a> {
 /// Selects the stdlib surface available while rendering a manifest.
 enum StdlibRegistration {
     /// The complete stdlib used for a normal build manifest.
-    Full(StdlibConfig),
+    Full(Box<StdlibConfig>),
     /// The read-only stdlib used to inspect manifest discovery metadata.
-    ManifestQuery(StdlibConfig),
+    ManifestQuery,
 }
 fn from_str_named(
     yaml: &str,
@@ -147,11 +147,11 @@ fn from_str_named(
     });
     let _stdlib_state = match stdlib_registration {
         Some(StdlibRegistration::Full(config)) => {
-            crate::stdlib::register_with_config(&mut jinja, config)
+            crate::stdlib::register_with_config(&mut jinja, *config)
         }
-        Some(StdlibRegistration::ManifestQuery(config)) => Ok(
-            crate::stdlib::register_manifest_query_with_config(&mut jinja, &config),
-        ),
+        Some(StdlibRegistration::ManifestQuery) => {
+            Ok(crate::stdlib::register_manifest_query(&mut jinja))
+        }
         None => crate::stdlib::register(&mut jinja),
     }?;
 

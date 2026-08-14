@@ -27,7 +27,12 @@ fn register_expanduser(env: &mut Environment<'_>, home_directory: HomeDirectory)
     });
 }
 
-pub(crate) fn register_filters(env: &mut Environment<'_>, home_directory: HomeDirectory) {
+/// Register path filters that transform strings without inspecting the host.
+///
+/// This deliberately limited surface is shared by manifest discovery queries.
+/// Add a filter here only when it is entirely lexical; filters that inspect the
+/// filesystem or environment belong exclusively in [`register_filters`].
+fn register_lexical_filters(env: &mut Environment<'_>) {
     env.add_filter("basename", |raw: String| -> Result<String, Error> {
         Ok(path_utils::basename(Utf8Path::new(&raw)))
     });
@@ -53,6 +58,15 @@ pub(crate) fn register_filters(env: &mut Environment<'_>, home_directory: HomeDi
             path_utils::relative_to(Utf8Path::new(&raw), Utf8Path::new(&root))
         },
     );
+}
+
+/// Register path filters safe for manifest discovery queries.
+pub(crate) fn register_query_filters(env: &mut Environment<'_>) {
+    register_lexical_filters(env);
+}
+
+pub(crate) fn register_filters(env: &mut Environment<'_>, home_directory: HomeDirectory) {
+    register_lexical_filters(env);
     env.add_filter("realpath", |raw: String| -> Result<String, Error> {
         path_utils::canonicalize_any(Utf8Path::new(&raw)).map(camino::Utf8PathBuf::into_string)
     });
