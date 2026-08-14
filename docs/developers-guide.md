@@ -227,8 +227,10 @@ The lowering stages have deliberately separate responsibilities:
   variables can carry from one entry to the next. The `&&` chain remains
   fail-fast. Each entry may start at most one background job; the generated
   wrapper waits for that job before it evaluates a later entry. Ninja
-  generation rejects entries that start more than one background job. A
-  direct simple `exec`, optionally prefixed by shell assignments, is
+  generation rejects entries that start more than one background job. It also
+  rejects entries whose nested `eval` payload makes the background-job count
+  dynamic, because the wrapper cannot safely determine which jobs to wait for.
+  A direct simple `exec`, optionally prefixed by shell assignments, is
   evaluated in a retaining subshell so its success or failure remains visible
   to the wrapper; a successful `exec` ends the remaining chain. Structured or
   nested `exec` forms are rejected during Ninja generation because the wrapper

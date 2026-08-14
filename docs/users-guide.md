@@ -1126,10 +1126,12 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   trailing control operators inside an entry from changing the chain's
   structure. An entry may start at most one background job; Netsuke waits for
   that job before moving to a later entry, and rejects an entry that starts
-  more than one background job during Ninja generation. A direct simple
-  `exec`, optionally prefixed by shell assignments, is supervised so its
-  success or failure retains the list's status semantics: a successful `exec`
-  ends the remaining chain, while structured or nested `exec` forms are
+  more than one background job during Ninja generation. It also rejects an
+  entry whose nested `eval` payload makes the background-job count dynamic,
+  because the wrapper cannot safely determine which jobs to wait for. A direct
+  simple `exec`, optionally prefixed by shell assignments, is supervised so
+  its success or failure retains the list's status semantics: a successful
+  `exec` ends the remaining chain, while structured or nested `exec` forms are
   rejected during Ninja generation. Failure diagnostics include the action
   fingerprint and one-based entry position when Netsuke can attribute the
   failed list entry.
