@@ -60,6 +60,9 @@ operator, user, and contributor references are easier to find.
 - [adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md](adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md):
   Serial `deps` ordering decision record, covering staged Ninja dyndep bundles,
   their scoped execution guarantee, and generated-state ownership.
+- [ADR-012](adr-012-bound-dyndep-sidecar-retention.md):
+  Deterministic retention, lease, and failure-boundary policy for generated
+  dyndep sidecars.
 
 ## User and operator guides
 

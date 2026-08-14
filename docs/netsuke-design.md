@@ -2157,6 +2157,17 @@ sequenceDiagram
     end
 ```
 
+The runner holds a capability-scoped exclusive lease on the dyndep directory
+from sidecar materialization through Ninja consumption or generated-output
+consumption. While the lease is held, stale `.tmp` files are removed and
+retention preserves the current bundle plus at most 32 obsolete `.dd` files
+and 1 MiB of obsolete `.dd` bytes. `build` and `generate` prune after
+materialization; `clean` prunes only after successful `ninja -t clean` and not
+on failure. Sidecars remain immutable and content-addressed. Consequently,
+an older arbitrary `generate --output` manifest may lose its sidecars after a
+later command and must be regenerated. See
+[ADR-012](adr-012-bound-dyndep-sidecar-retention.md) for this policy.
+
 4\. **Write Defaults:** Finally, write the `default` statement, listing all
 paths from `graph.default_targets`.
 

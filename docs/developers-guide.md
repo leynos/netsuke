@@ -1653,6 +1653,17 @@ same-directory temporary file plus atomic rename. Keep generated sidecars
 content-addressed and idempotent; corruption is an error, not a reason to
 overwrite an unknown file.
 
+`DyndepPublicationLease` also coordinates retention. Sidecar-capable `build`,
+`generate`, and `clean` commands hold the capability-scoped exclusive
+`.netsuke/dyndep` directory lease through Ninja or generated-output
+consumption. While the lease is held, stale `.tmp` files are removed and
+obsolete `.dd` files are retained in deterministic path order up to 32 files
+and 1 MiB. The current bundle is always retained. `build` and `generate`
+prune after materialization; `clean` prunes only after successful
+`ninja -t clean`, never after a failed clean. Do not introduce age-based
+cleanup or mutate an existing content-addressed sidecar. See
+[ADR-012](adr-012-bound-dyndep-sidecar-retention.md) for the durable policy.
+
 `src/runner/dyndep_generation_telemetry.rs` owns runner-boundary generation
 telemetry, and `src/runner/process/dyndep_telemetry.rs` owns publication
 telemetry. They may wrap their respective boundaries with bounded

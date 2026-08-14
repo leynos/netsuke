@@ -465,8 +465,17 @@ Netsuke uses Ninja's `dyndep` support for serial lists with two or more
 dependencies, and generated builds containing staged serial ordering require
 Ninja 1.10 or newer.
 `netsuke generate`, `build`, and `clean` materialize the generated sidecars
-under `.netsuke/dyndep` in the effective working directory. Those
-content-addressed files are reusable state, and `clean` does not remove them.
+under `.netsuke/dyndep` in the effective working directory before writing or
+invoking the generated Ninja file. The sidecars are immutable and
+content-addressed. Each sidecar-capable command retains the current bundle,
+then at most 32 obsolete `.dd` files and 1 MiB of obsolete `.dd` bytes. Stale
+`.tmp` files are removed while the exclusive sidecar-directory lease is held.
+`build` and `generate` prune after materialization; `clean` prunes only after
+successful `ninja -t clean`, and does not prune when clean fails.
+
+An older arbitrary manifest written with `generate --output` may lose its
+referenced sidecars after a later command. Regenerate that manifest before
+using it if retention has removed any of its sidecars.
 Do not define targets beneath `.netsuke/serial` or `.netsuke/dyndep`; Netsuke
 reserves both paths for this feature.
 
@@ -922,7 +931,10 @@ textual outline and a `<noscript>` DOT representation.
 only the generated Ninja manifest. With `--output <FILE>`, Netsuke writes the
 manifest to that file and leaves stdout empty. For a serial dependency list,
 both forms also materialize the referenced `.netsuke/dyndep` sidecars beside
-the effective Ninja working directory, so the emitted manifest is executable.
+the effective Ninja working directory, so the emitted manifest is executable
+at that point. Retention is bounded: a later Netsuke command may remove
+sidecars referenced by an older arbitrary output file. Regenerate the file
+when that happens.
 
 `clean` removes file outputs tracked by Ninja. Phony targets and actions do not
 represent files and are not removed.

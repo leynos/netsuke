@@ -142,4 +142,10 @@ Netsuke runtime state belongs under `.netsuke/` in the effective working
 directory, never in the repository layout itself. In particular,
 `.netsuke/dyndep` contains immutable content-addressed sidecars for serial
 dependencies and `.netsuke/serial` is a reserved generated-gate namespace;
-manifest outputs must not claim either path.
+manifest outputs must not claim either path. Sidecar-capable commands retain
+the current bundle, at most 32 obsolete `.dd` files, and 1 MiB of obsolete
+`.dd` bytes. They remove stale `.tmp` files while holding the exclusive
+directory lease; `clean` prunes only after successful `ninja -t clean`.
+An older arbitrary `generate --output` manifest may therefore need
+regeneration after a later command. See
+[ADR-012](adr-012-bound-dyndep-sidecar-retention.md).
