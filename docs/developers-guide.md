@@ -239,14 +239,16 @@ The lowering stages have deliberately separate responsibilities:
   hashed action fingerprint and one-based entry index to the Ninja failure
   error.
 
-The planned lowest-layer POSIX shell-word quoting helper is scoped to literal
-words for the shell that executes generated recipes. Reuse it both for the
-shell-quoted payload passed to command-list `eval` and for the input/output
-paths interpolated during IR lowering. This helper is not the platform-specific
+The lowest-layer POSIX shell-word quoting used for input/output paths during IR
+lowering is `shell_quote::QuoteRefExt::quoted(Sh)`. It performs minimal,
+fragmented shell quoting, which is appropriate for a literal shell word but not
+for the command-list `eval` payload. That renderer requires a canonical
+single-quoted payload so existing generated Ninja list text remains
+byte-for-byte stable, and the delimiter/boundary tests continue to hold. Keep
+that quoting in the deliberately local `shell_single_quote` function; it is
+not a general-purpose helper. Neither quoting path is the platform-specific
 `src/stdlib/command/quote.rs` implementation behind the `command.quote`
 template wrapper, which must retain its `cmd.exe` quoting behaviour on Windows.
-Keep callers at these lowering boundaries composing the shared helper rather
-than duplicating quoting rules.
 
 Attributed list failures emit the bounded tracing fields
 `command_list_action` (a fixed-width action fingerprint) and
