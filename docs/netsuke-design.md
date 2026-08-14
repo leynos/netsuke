@@ -2138,13 +2138,13 @@ sequenceDiagram
     actor User
     participant Runner as runner.generate_ninja
     participant NinjaGen as ninja_gen.generate_bundle
-    participant Dyndep as process.materialize_dyndep_files
+    participant Dyndep as runner.materialize_dyndep_bundle
     participant Ninja
 
     User->>Runner: netsuke build / clean / generate
     Runner->>NinjaGen: generate_bundle(graph)
     NinjaGen-->>Runner: GeneratedNinja (build_file, dyndep_files)
-    Runner->>Dyndep: materialize_dyndep_files(cli, bundle.dyndep_files())
+    Runner->>Dyndep: materialize_dyndep_bundle(cli, bundle)
     Dyndep-->>Runner: dyndep sidecars materialized
     alt generate
         Runner-->>User: write generated Ninja manifest without invoking Ninja

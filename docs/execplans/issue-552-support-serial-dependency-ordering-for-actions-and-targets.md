@@ -356,6 +356,10 @@ criterion in issue #552 and all repository gates pass.
   check-fmt`, `make test`, `make typecheck`, `make lint`, `make markdownlint`,
   and `make nixie` passed; the test suite reported 2,068 passed tests, one
   skipped test, and passing doctests. Lease-protected publication remains.
+- [x] (2026-08-14) Re-verified the serial-dyndep sequence diagram against the
+  runner contract. The capability-scoped publication boundary is
+  `materialize_dyndep_bundle(cli, bundle)`; it opens the effective directory
+  before delegating sidecar writes, so the diagram now shows that boundary.
 
 ## Surprises and discoveries
 
