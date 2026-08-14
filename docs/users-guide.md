@@ -1041,13 +1041,40 @@ Configuration tracing is disabled in JSON mode, including when `json = true`
 comes from a configuration file. This keeps stderr empty for successful JSON
 commands and reserves it for the single diagnostic document on failure.
 
-Verbose human-mode runs also emit a `metrics snapshot` aggregate after command
-completion. Verbosity can come from `--verbose`, `NETSUKE_VERBOSE`, or
-`verbose = true` in a configuration file. After a successful configuration
-merge, the merged verbosity controls the snapshot; if configuration fails
-before that merge completes, the parsed CLI verbosity is used instead. JSON
-mode suppresses tracing and metrics snapshots so that its diagnostic document
-remains the only stderr output.
+In human mode, every configuration failure includes bounded `operation` and
+`error_category` fields in its tracing event. Passing `--verbose` additionally
+emits one final `metrics snapshot` debug event before Netsuke exits. The
+snapshot is an in-process diagnostic record, not a metrics listener or a
+Prometheus endpoint.
+After a successful configuration merge, verbosity can also come from
+`NETSUKE_VERBOSE` or `verbose = true` in a configuration file. A configuration
+failure before that merge uses only CLI `--verbose`.
+
+It includes the bounded configuration-load series:
+
+- `netsuke_config_load_total`, with `outcome=success` or `outcome=failure`.
+- `netsuke_config_load_duration_seconds`, with one sample for the startup
+  configuration-load attempt.
+- The phase-level `config_load_total` and
+  `config_load_duration_seconds` entries, labelled with `phase=diag_mode` or
+  `phase=merge`; the counter also carries the bounded outcome value.
+
+For example, a missing explicit file reports the actionable error first, then
+the bounded tracing fields and the snapshot (timestamps and metric values vary):
+
+<!-- tested-example: guide-configuration-observability -->
+
+```plaintext
+Configuration file error in 'missing.toml': explicit configuration file not found
+ERROR ... configuration load failed operation="diag_mode_resolution" error_category="io"
+DEBUG ... metrics snapshot metrics=[...]
+```
+
+The snapshot is available for a configuration failure when `--verbose` was
+supplied on the command line. A `verbose = true` setting in a file that cannot
+be loaded cannot enable diagnostics because configuration merging has not
+completed. JSON mode suppresses the tracing and snapshot so stderr remains one
+machine-readable diagnostic document.
 
 #### Bounded configuration metrics
 
@@ -1295,8 +1322,10 @@ diagnostic JSON preference pass or `config_merge` for the full merge;
 never recorded. JSON mode preserves the diagnostic document as the
 machine-readable failure output.
 
-The `--verbose` flag enables diagnostic tracing and successful timing
-summaries. It is suppressed in JSON mode so stderr remains parseable.
+The `--verbose` flag enables diagnostic tracing, successful timing summaries,
+and the final metrics snapshot described in
+[Diagnose configuration selection](#diagnose-configuration-selection). It is
+suppressed in JSON mode so stderr remains parseable.
 
 ## Review the safety boundary
 

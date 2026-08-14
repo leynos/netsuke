@@ -63,6 +63,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-012](adr-012-bound-dyndep-sidecar-retention.md):
   Deterministic retention, lease, and failure-boundary policy for generated
   dyndep sidecars.
+- [adr-013-application-owned-configuration-observability.md](adr-013-application-owned-configuration-observability.md):
+  Application-owned configuration-load metrics, verbose snapshots, and bounded
+  label vocabulary.
 
 ## User and operator guides
 

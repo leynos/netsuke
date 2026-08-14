@@ -22,6 +22,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-command-available-manifest",
     "guide-command-list",
     "guide-complete-manifest",
+    "guide-configuration-observability",
     "guide-crates-io-install",
     "guide-direct-command-list",
     "guide-env-reader-snippet",

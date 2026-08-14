@@ -137,6 +137,11 @@ fn explicit_selection_traces_bounded_fields() -> Result<()> {
         !joined.contains(raw_path.as_str()),
         "diagnostics must not log the raw config path: {joined}"
     );
+    ensure!(
+        run.success,
+        "a selected valid config should complete successfully"
+    );
+    assert_config_metrics_snapshot(&run.stderr)?;
     Ok(())
 }
 

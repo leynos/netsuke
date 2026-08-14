@@ -2737,6 +2737,28 @@ happens before that exit. The buffer is bounded: it keeps the earliest bytes,
 appends a truncation marker once, and drops the remainder, so its size never
 depends on how much a run emits.
 
+Configuration-load observability belongs to the application composition root;
+this decision is recorded in
+[ADR-013](adr-013-application-owned-configuration-observability.md).
+The query functions `cli::resolve_merged_json` and
+`cli::merge_with_config` do not install a recorder or own configuration-load
+metrics; `run_with_args` composes the phase and startup-attempt measurements
+around those queries. `src/observability.rs` owns the bounded phase vocabulary,
+while `src/main.rs` owns the process recorder and the startup-attempt series.
+The application installs an in-process `DebuggingRecorder`; it does not open a
+metrics listener as a side effect of a command invocation.
+
+Metric labels are closed sets: phase-level series use `diag_mode` or `merge`,
+and both phase-level and startup-attempt counters use `success` or `failure`.
+The startup-attempt duration has no labels. Paths, configuration values, and
+formatted source errors remain in user-facing diagnostics where appropriate;
+they must not become metric labels. When a run reaches configuration loading,
+the recorder emits its aggregate snapshot only for verbose runs, after command
+completion or a configuration-load exit.
+The full metric names, phase boundaries, and test-recorder rules are documented
+in the configuration-load observability section of the
+[developer's guide](developers-guide.md).
+
 `src/locale_catalogues.rs` is the authoritative registry of shipped catalogues.
 A `define_locales!` macro embeds `locales/<tag>/messages.ftl` for each declared
 tag, so a registry entry without a catalogue fails to compile. Every other

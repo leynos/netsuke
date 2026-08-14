@@ -40,8 +40,19 @@ fn captured_metrics(body: impl FnOnce()) -> Vec<(String, Vec<Label>, DebugValue)
 /// Verify the configuration-load metric contract for one startup path.
 fn verify_config_load_metrics(
     metrics: &[(String, Vec<Label>, DebugValue)],
-    expected_outcome: &str,
+    scenario: ConfigurationLoadScenario,
     expected_duration: f64,
+) -> Result<()> {
+    verify_startup_outcome_counter(metrics, scenario.expected_outcome())?;
+    verify_startup_duration_histogram(metrics, expected_duration)?;
+    verify_phase_metrics(metrics, scenario.expected_phase_outcomes())?;
+    Ok(())
+}
+
+/// Verify the public startup-attempt counter for one configuration path.
+fn verify_startup_outcome_counter(
+    metrics: &[(String, Vec<Label>, DebugValue)],
+    expected_outcome: &str,
 ) -> Result<()> {
     let counters = metrics
         .iter()
@@ -70,7 +81,14 @@ fn verify_config_load_metrics(
         counter.2 == DebugValue::Counter(1),
         "counter must record exactly one attempt"
     );
+    Ok(())
+}
 
+/// Verify the public startup-attempt duration histogram for one configuration path.
+fn verify_startup_duration_histogram(
+    metrics: &[(String, Vec<Label>, DebugValue)],
+    expected_duration: f64,
+) -> Result<()> {
     let histograms = metrics
         .iter()
         .filter(|(name, _, _)| name == "netsuke_config_load_duration_seconds")
@@ -96,6 +114,65 @@ fn verify_config_load_metrics(
         "duration sample must be {expected_duration}"
     );
     Ok(())
+}
+
+/// Verify the phase-level metric records from the startup configuration path.
+fn verify_phase_metrics(
+    metrics: &[(String, Vec<Label>, DebugValue)],
+    expected_phase_outcomes: &[(&str, &str)],
+) -> Result<()> {
+    let counters = metrics
+        .iter()
+        .filter(|(name, _, _)| name == "config_load_total")
+        .collect::<Vec<_>>();
+    ensure!(
+        counters.len() == expected_phase_outcomes.len(),
+        "expected one phase counter per configuration path"
+    );
+    let histograms = metrics
+        .iter()
+        .filter(|(name, _, _)| name == "config_load_duration_seconds")
+        .collect::<Vec<_>>();
+    ensure!(
+        histograms.len() == expected_phase_outcomes.len(),
+        "expected one phase histogram per configuration path"
+    );
+
+    for (phase, outcome) in expected_phase_outcomes {
+        let counter_count = counters
+            .iter()
+            .filter(|counter| {
+                has_exact_labels(&counter.1, &[("phase", phase), ("outcome", outcome)])
+                    && counter.2 == DebugValue::Counter(1)
+            })
+            .count();
+        ensure!(
+            counter_count == 1,
+            "expected one phase counter for phase={phase}, outcome={outcome}"
+        );
+        let histogram_count = histograms
+            .iter()
+            .filter(|histogram| {
+                has_exact_labels(&histogram.1, &[("phase", phase)])
+                    && matches!(&histogram.2, DebugValue::Histogram(samples) if samples.len() == 1)
+            })
+            .count();
+        ensure!(
+            histogram_count == 1,
+            "expected one phase histogram for phase={phase}"
+        );
+    }
+    Ok(())
+}
+
+/// Check that a metric has all and only the expected bounded labels.
+fn has_exact_labels(labels: &[Label], expected: &[(&str, &str)]) -> bool {
+    labels.len() == expected.len()
+        && expected.iter().all(|(key, value)| {
+            labels
+                .iter()
+                .any(|label| label.key() == *key && label.value() == *value)
+        })
 }
 
 struct EmptyEnv;
@@ -154,6 +231,14 @@ impl ConfigurationLoadScenario {
             Self::SuccessfulMerge => "success",
         }
     }
+
+    const fn expected_phase_outcomes(self) -> &'static [(&'static str, &'static str)] {
+        match self {
+            Self::JsonResolutionFailure => &[("diag_mode", "failure")],
+            Self::MergeFailure => &[("diag_mode", "success"), ("merge", "failure")],
+            Self::SuccessfulMerge => &[("diag_mode", "success"), ("merge", "success")],
+        }
+    }
 }
 
 /// Run a configuration scenario through the binary orchestration and capture
@@ -202,11 +287,7 @@ fn configuration_failures_record_metrics_for_their_exit_path(
     let duration = Duration::from_millis(7);
     let metrics = run_with_config_metrics(scenario, duration)?;
 
-    verify_config_load_metrics(
-        &metrics,
-        scenario.expected_outcome(),
-        duration.as_secs_f64(),
-    )?;
+    verify_config_load_metrics(&metrics, scenario, duration.as_secs_f64())?;
     Ok(())
 }
 
@@ -217,11 +298,7 @@ fn a_successful_configuration_merge_records_metrics_before_runner_failure() -> R
     let scenario = ConfigurationLoadScenario::SuccessfulMerge;
     let metrics = run_with_config_metrics(scenario, duration)?;
 
-    verify_config_load_metrics(
-        &metrics,
-        scenario.expected_outcome(),
-        duration.as_secs_f64(),
-    )?;
+    verify_config_load_metrics(&metrics, scenario, duration.as_secs_f64())?;
     Ok(())
 }
 
@@ -235,11 +312,7 @@ proptest! {
         for scenario in ConfigurationLoadScenario::ALL {
             let metrics = run_with_config_metrics(scenario, duration)
                 .map_err(|error| TestCaseError::fail(error.to_string()))?;
-            verify_config_load_metrics(
-                &metrics,
-                scenario.expected_outcome(),
-                duration.as_secs_f64(),
-            )
+            verify_config_load_metrics(&metrics, scenario, duration.as_secs_f64())
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
         }
     }
