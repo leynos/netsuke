@@ -124,6 +124,88 @@ jobs:
           access-token: ${{ env.CS_ACCESS_TOKEN }}
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
 
+  build-test-windows:
+    # Non-blocking while the 47 never-compiled `#[cfg(windows)]` sites are
+    # cleared under `-D warnings` (see #518). Remove `continue-on-error` once
+    # the tree is green on this platform.
+    continue-on-error: true
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+      BUILD_PROFILE: debug
+      # The tree requires -Zpolonius=next (see
+      # docs/adr-006-adopt-polonius-nightly-toolchain.md), so CI builds with
+      # the dated nightly pinned in rust-toolchain.toml.
+      NETSUKE_RUST_TOOLCHAIN: nightly-2026-06-25
+      WHITAKER_INSTALLER_VERSION: '0.2.7'
+      # Single source of truth for the cargo-nextest pin. `make test` runs the
+      # non-doctest suite through nextest, so the job installs it up front.
+      NEXTEST_VERSION: '0.9.133'
+    defaults:
+      run:
+        # The Makefile uses POSIX shell constructs throughout; Git Bash is
+        # preinstalled on windows-latest. GNU Make's default recipe shell on
+        # Windows is cmd.exe, so every make invocation overrides SHELL to bash.
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Install GNU Make
+        run: choco install make --yes --no-progress
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@8add2d99854a5b77548eae98cca59202e68fefc8
+        with:
+          toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
+          components: rustfmt, clippy
+          # Preserve warnings-as-errors and Polonius through toolchain setup.
+          rustflags: -D warnings -Zpolonius=next
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        with:
+          tool: nextest@${{ env.NEXTEST_VERSION }}
+      - name: Show rustc version
+        run: |
+          rustup show
+          rustc --version
+          cargo --version
+      - name: Show Ninja version
+        run: ninja --version
+      - name: Format
+        run: make SHELL=bash check-fmt
+      - name: Lint (Clippy)
+        run: make SHELL=bash lint-clippy
+      - name: Cache Whitaker installer
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.cargo/bin/whitaker-installer
+            ~/.cache/cargo-binstall
+          key: whitaker-installer-${{ runner.os }}-${{ runner.arch }}-${{ env.WHITAKER_INSTALLER_VERSION }}
+      - name: Install Whitaker
+        # Whitaker on Windows is unverified (nightly driver + Unix-shaped
+        # installer path). Keep it non-blocking: if it cannot install or run,
+        # lint-clippy remains the Windows lint gate and Whitaker is tracked
+        # separately rather than blocking the job.
+        continue-on-error: true
+        run: |
+          if ! command -v whitaker-installer >/dev/null 2>&1; then
+            if cargo binstall --version >/dev/null 2>&1; then
+              cargo binstall --no-confirm --locked "whitaker-installer@${WHITAKER_INSTALLER_VERSION}"
+            else
+              echo "cargo-binstall unavailable; building whitaker-installer from crates.io"
+              cargo install --locked whitaker-installer --version "${WHITAKER_INSTALLER_VERSION}"
+            fi
+          fi
+          whitaker-installer
+      - name: Lint (Whitaker)
+        continue-on-error: true
+        run: make SHELL=bash lint-whitaker
+      - name: Test
+        run: make SHELL=bash test
+
   kani-smoke:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
