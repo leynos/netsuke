@@ -7,10 +7,8 @@
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use minijinja::Environment;
-use netsuke::ast::{NetsukeManifest, Recipe, StringOrList};
+use netsuke::ast::{Recipe, StringOrList};
 use netsuke::ir::{Action, BuildEdge, BuildGraph};
-use netsuke::manifest::{self, render_manifest};
 use netsuke::ninja_gen::{NinjaGenError, generate};
 use std::process::Command;
 use tempfile::TempDir;
@@ -22,18 +20,8 @@ fn run_command_list(
     expected_file: &str,
     expected_content: &str,
 ) -> Result<()> {
-    let dir_path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
-        .map_err(|path| anyhow::anyhow!("temp dir path {path:?} is not UTF-8"))?;
-    let action = Action {
-        recipe: Recipe::Command {
-            command: StringOrList::List(entries),
-        },
-        description: None,
-        depfile: None,
-        deps_format: None,
-        pool: None,
-        restat: false,
-    };
+    let dir_path = temp_workspace_path(dir)?;
+    let action = command_list_action(entries);
     let target = Utf8PathBuf::from("out");
     let edge = BuildEdge {
         action_id: "chain".into(),
@@ -51,8 +39,7 @@ fn run_command_list(
     graph.default_targets.push(target);
 
     let ninja = generate(&graph)?;
-    let handle = Dir::open_ambient_dir(&dir_path, ambient_authority())
-        .with_context(|| format!("open ambient dir for temp workspace at {dir_path}"))?;
+    let handle = open_temp_workspace(dir)?;
     handle
         .write("build.ninja", ninja.as_bytes())
         .context("write ninja build file")?;
@@ -99,7 +86,7 @@ fn command_list_entry_ending_in_background_operator_preserves_the_next_boundary(
     run_command_list(
         &dir,
         vec![
-            "(sleep 0.1; echo waited > waited-background-job.txt) &".into(),
+            "(sleep 1 && echo waited > waited-background-job.txt) &".into(),
             "echo second > after-background.txt".into(),
         ],
         "after-background.txt",
@@ -113,8 +100,8 @@ fn command_list_entry_ending_in_background_operator_preserves_the_next_boundary(
     Ok(())
 }
 
-fn failing_command_list_command(entries: Vec<String>) -> Result<String> {
-    let action = Action {
+const fn command_list_action(entries: Vec<String>) -> Action {
+    Action {
         recipe: Recipe::Command {
             command: StringOrList::List(entries),
         },
@@ -123,7 +110,11 @@ fn failing_command_list_command(entries: Vec<String>) -> Result<String> {
         deps_format: None,
         pool: None,
         restat: false,
-    };
+    }
+}
+
+fn command_list_command_line(entries: Vec<String>) -> Result<String> {
+    let action = command_list_action(entries);
     let mut graph = BuildGraph::default();
     graph.actions.insert("chain".into(), action);
     let ninja = generate(&graph)?;
@@ -135,9 +126,14 @@ fn failing_command_list_command(entries: Vec<String>) -> Result<String> {
 }
 
 fn open_temp_workspace(dir: &TempDir) -> Result<Dir> {
+    let dir_path = temp_workspace_path(dir)?;
+    Dir::open_ambient_dir(&dir_path, ambient_authority()).context("open command-list workspace")
+}
+
+fn temp_workspace_path(dir: &TempDir) -> Result<Utf8PathBuf> {
     let dir_path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
         .map_err(|path| anyhow::anyhow!("temp dir path {path:?} is not UTF-8"))?;
-    Dir::open_ambient_dir(&dir_path, ambient_authority()).context("open command-list workspace")
+    Ok(dir_path)
 }
 
 fn run_generated_command_with_ninja(dir: &TempDir, command: &str) -> Result<std::process::Output> {
@@ -158,7 +154,7 @@ fn command_list_exit_entry_preserves_status_and_emits_attribution() -> Result<()
     let Some(dir) = ninja_integration_setup() else {
         return Ok(());
     };
-    let command = failing_command_list_command(vec![
+    let command = command_list_command_line(vec![
         "exit 23".into(),
         "echo unexpected > continued-after-exit.txt".into(),
     ])?;
@@ -183,6 +179,21 @@ fn command_list_exit_entry_preserves_status_and_emits_attribution() -> Result<()
         !workspace.exists("continued-after-exit.txt"),
         "an exit failure must not run a later entry"
     );
+    let ninja_output = run_generated_command_with_ninja(&dir, &command)?;
+    ensure!(
+        !ninja_output.status.success(),
+        "Ninja should report the generated command failure, got {:?}",
+        ninja_output.status
+    );
+    let ninja_diagnostics = format!(
+        "{}{}",
+        String::from_utf8(ninja_output.stdout).context("Ninja stdout should be UTF-8")?,
+        String::from_utf8(ninja_output.stderr).context("Ninja stderr should be UTF-8")?,
+    );
+    ensure!(
+        ninja_diagnostics.contains(", entry 1"),
+        "Ninja should retain the first-entry marker: {ninja_diagnostics}"
+    );
     Ok(())
 }
 
@@ -191,7 +202,7 @@ fn command_list_exec_entries_preserve_attribution_and_success() -> Result<()> {
     let Some(dir) = ninja_integration_setup() else {
         return Ok(());
     };
-    let successful_command = failing_command_list_command(vec![
+    let successful_command = command_list_command_line(vec![
         "exec true".into(),
         "echo unexpected > continued-after-successful-exec.txt".into(),
     ])?;
@@ -216,7 +227,7 @@ fn command_list_exec_entries_preserve_attribution_and_success() -> Result<()> {
         !workspace.exists("continued-after-successful-exec.txt"),
         "a successful exec must retain process-replacement semantics"
     );
-    let command = failing_command_list_command(vec![
+    let command = command_list_command_line(vec![
         "FOO=1 exec false".into(),
         "echo unexpected > continued-after-exec.txt".into(),
     ])?;
@@ -245,7 +256,7 @@ fn command_list_background_failure_waits_before_the_next_entry() -> Result<()> {
     let Some(dir) = ninja_integration_setup() else {
         return Ok(());
     };
-    let command = failing_command_list_command(vec![
+    let command = command_list_command_line(vec![
         "sh -c 'sleep 0.1; exit 1' &".into(),
         "echo unexpected > continued-after-background.txt".into(),
     ])?;
@@ -279,7 +290,7 @@ fn command_list_background_failure_waits_before_the_next_entry() -> Result<()> {
 
 #[test]
 fn command_list_rejects_multiple_background_jobs() -> Result<()> {
-    let error = failing_command_list_command(vec![
+    let error = command_list_command_line(vec![
         "true & sh -c 'sleep 0.1; exit 1' &".into(),
         "echo unexpected > continued-after-multiple-background-jobs.txt".into(),
     ])
@@ -297,103 +308,25 @@ fn command_list_rejects_multiple_background_jobs() -> Result<()> {
     Ok(())
 }
 
-fn rendered_direct_target_manifest() -> Result<NetsukeManifest> {
-    let manifest = manifest::from_str(
-        r#"
-netsuke_version: "1.0.0"
-targets:
-  - name: result.txt
-    sources: input.txt
-    vars:
-      first: rendered-first
-      second: rendered-second
-    command:
-      - "test -f $in && echo '{{ first }}' > $out"
-      - "echo '{{ second }}' >> {{ outs }}"
-"#,
-    )?;
-    render_manifest(manifest, &Environment::new())
-}
-
-fn assert_rendered_direct_target(manifest: &NetsukeManifest) -> Result<()> {
-    let target = manifest
-        .targets
-        .first()
-        .context("rendered direct target missing")?;
-    let Recipe::Command { command } = &target.recipe else {
-        anyhow::bail!("direct target should retain its command recipe");
-    };
-    ensure!(
-        command.to_string_vec()
-            == [
-                "test -f $in && echo 'rendered-first' > $out",
-                "echo 'rendered-second' >> __NETSUKE_OUTS_PLACEHOLDER__",
-            ],
-        "rendered direct-target command entries should preserve declaration order: {command:?}"
-    );
-    Ok(())
-}
-
-fn direct_target_command_list_graph() -> Result<BuildGraph> {
-    let rendered = rendered_direct_target_manifest()?;
-    assert_rendered_direct_target(&rendered)?;
-    let graph = BuildGraph::from_manifest(&rendered)?;
-    let action = graph
-        .actions
-        .values()
-        .next()
-        .context("direct target action missing")?;
-    let Recipe::Command {
-        command: lowered_command,
-    } = &action.recipe
-    else {
-        anyhow::bail!("lowered direct target should retain a command recipe");
-    };
-    ensure!(
-        lowered_command.to_string_vec()
-            == [
-                "test -f input.txt && echo 'rendered-first' > result.txt",
-                "echo 'rendered-second' >> result.txt",
-            ],
-        "IR should interpolate every direct-target entry independently in order: {lowered_command:?}"
-    );
-    Ok(graph)
-}
-
-fn execute_direct_target_command_list(dir: &TempDir, graph: &BuildGraph) -> Result<()> {
-    let dir_path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
-        .map_err(|path| anyhow::anyhow!("temp dir path {path:?} is not UTF-8"))?;
-
-    let handle = Dir::open_ambient_dir(&dir_path, ambient_authority())
-        .with_context(|| format!("open ambient dir for temp workspace at {dir_path}"))?;
-    handle
-        .write("input.txt", b"input")
-        .context("write direct-target input")?;
-    handle
-        .write("build.ninja", generate(graph)?.as_bytes())
-        .context("write generated Ninja file")?;
-    let ninja_output = Command::new("ninja")
-        .arg("result.txt")
-        .current_dir(dir_path.as_std_path())
-        .output()
-        .context("run real Ninja for direct target command list")?;
-    ensure!(
-        ninja_output.status.success(),
-        "direct target command list should succeed: {ninja_output:?}"
-    );
-    let result = handle.read_to_string("result.txt")?;
-    ensure!(
-        result == "rendered-first\nrendered-second\n",
-        "target output should prove both entries executed in declaration order, got {result:?}"
-    );
-    Ok(())
-}
-
 #[test]
-fn direct_target_command_list_renders_lowers_and_executes_in_order() -> Result<()> {
-    let Some(dir) = ninja_integration_setup() else {
-        return Ok(());
-    };
-    let graph = direct_target_command_list_graph()?;
-    execute_direct_target_command_list(&dir, &graph)
+fn command_list_rejects_nested_eval_background_jobs_before_later_entries() -> Result<()> {
+    let error = command_list_command_line(vec![
+        "eval 'false & true &'".into(),
+        "echo unexpected > continued-after-nested-eval.txt".into(),
+    ])
+    .expect_err("nested eval background jobs should be rejected before Ninja runs");
+    ensure!(
+        matches!(
+            error.downcast_ref::<NinjaGenError>(),
+            Some(NinjaGenError::MultipleBackgroundJobs {
+                action_index: 1,
+                entry_index: 1,
+            })
+        ),
+        "nested eval background jobs should return a stable typed error: {error:?}"
+    );
+    Ok(())
 }
+
+#[path = "support/ninja_gen_direct_target_command_list.rs"]
+mod direct_target_tests;

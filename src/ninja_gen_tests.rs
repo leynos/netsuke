@@ -1,5 +1,6 @@
 //! Unit tests for Ninja file generation and rule synthesis.
 
+use super::test_support::command_action;
 use super::*;
 use crate::ir::{Action, BuildEdge, BuildGraph};
 use anyhow::{Result, ensure};
@@ -86,20 +87,11 @@ fn generate_script_ninja_round_trips() -> Result<()> {
 
 #[rstest]
 fn generate_command_list_ninja_joins_a_fail_fast_chain() -> Result<()> {
-    let action = Action {
-        recipe: Recipe::Command {
-            command: StringOrList::List(vec![
-                "echo one".into(),
-                "echo two".into(),
-                "echo three".into(),
-            ]),
-        },
-        description: None,
-        depfile: None,
-        deps_format: None,
-        pool: None,
-        restat: false,
-    };
+    let action = command_action(StringOrList::List(vec![
+        "echo one".into(),
+        "echo two".into(),
+        "echo three".into(),
+    ]));
     let edge = BuildEdge {
         action_id: "a".into(),
         inputs: Vec::new(),
@@ -116,51 +108,54 @@ fn generate_command_list_ninja_joins_a_fail_fast_chain() -> Result<()> {
 
     let ninja = generate(&graph)?;
     ensure!(
-        ninja.contains("command = { _netsuke_background_before=$${!:-};")
-            && ninja.contains("if eval 'echo one'")
-            && ninja.contains("if eval 'echo two'")
-            && ninja.contains("if eval 'echo three'")
-            && ninja.contains("if wait \"$$_netsuke_background_after\"; then :;")
-            && ninja.matches("} && {").count() == 2,
-        "command list entries should be isolated brace groups joined by &&:\n{ninja}"
+        ninja.contains("command = { _netsuke_background_before=$${!:-};"),
+        "first list boundary should start the generated command:\n{ninja}"
+    );
+    ensure!(
+        ninja.contains("if eval 'echo one'"),
+        "first command should retain its evaluator:\n{ninja}"
+    );
+    ensure!(
+        ninja.contains("if eval 'echo two'"),
+        "second command should retain its evaluator:\n{ninja}"
+    );
+    ensure!(
+        ninja.contains("if eval 'echo three'"),
+        "third command should retain its evaluator:\n{ninja}"
+    );
+    ensure!(
+        ninja.contains("if wait \"$$_netsuke_background_after\"; then :;"),
+        "list boundary should wait for its one supported background job:\n{ninja}"
+    );
+    ensure!(
+        ninja.matches("} && {").count() == 2,
+        "three list boundaries should be joined by exactly two && operators:\n{ninja}"
     );
     Ok(())
 }
 
-#[test]
-fn programmatic_empty_command_recipe_returns_a_typed_generation_error() {
-    for command in [StringOrList::Empty, StringOrList::List(Vec::new())] {
-        let action = Action {
-            recipe: Recipe::Command { command },
-            description: None,
-            depfile: None,
-            deps_format: None,
-            pool: None,
-            restat: false,
-        };
-        let mut graph = BuildGraph::default();
-        graph.actions.insert("empty".into(), action);
+#[rstest]
+#[case::empty(StringOrList::Empty)]
+#[case::empty_list(StringOrList::List(Vec::new()))]
+fn programmatic_empty_command_recipe_returns_a_typed_generation_error(
+    #[case] command: StringOrList,
+) {
+    let action = command_action(command);
+    let mut graph = BuildGraph::default();
+    graph.actions.insert("empty".into(), action);
 
-        let error = generate(&graph).expect_err("empty command recipe should not generate Ninja");
-        assert!(
-            matches!(error, NinjaGenError::EmptyCommandRecipe { action_index: 1 }),
-            "empty command recipe should produce the stable typed error, got {error:?}"
-        );
-    }
+    let error = generate(&graph).expect_err("empty command recipe should not generate Ninja");
+    assert!(
+        matches!(error, NinjaGenError::EmptyCommandRecipe { action_index: 1 }),
+        "empty command recipe should produce the stable typed error, got {error:?}"
+    );
 }
 
 #[test]
 fn nested_command_list_exec_returns_a_typed_generation_error() {
-    let action = Action {
-        recipe: Recipe::Command {
-            command: StringOrList::List(vec!["if true; then exec false; fi".into()]),
-        },
-        description: None,
-        depfile: None,
-        deps_format: None,
-        pool: None,
-        restat: false,
-    };
+    let action = command_action(StringOrList::List(vec![
+        "if true; then exec false; fi".into(),
+    ]));
     let mut graph = BuildGraph::default();
     graph.actions.insert("nested-exec".into(), action);
 

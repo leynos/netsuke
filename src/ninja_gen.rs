@@ -39,10 +39,10 @@ pub enum NinjaGenError {
         /// One-based stable position in generated action order.
         action_index: usize,
     },
-    /// A list entry starts more than one background job, which cannot be
-    /// attributed reliably by a shared POSIX shell.
+    /// A list entry starts multiple or dynamically generated background jobs,
+    /// which cannot be attributed reliably by a shared POSIX shell.
     #[error(
-        "command-list action {action_index}, entry {entry_index} starts multiple background jobs"
+        "command-list action {action_index}, entry {entry_index} has unsupported background jobs"
     )]
     MultipleBackgroundJobs {
         /// One-based stable position in generated action order.
@@ -127,8 +127,9 @@ macro_rules! write_flag {
 /// # Errors
 ///
 /// Returns [`NinjaGenError`] if a build edge references an unknown action, a
-/// programmatic action has an empty command recipe, or writing to the output
-/// fails.
+/// programmatic action has an empty command recipe, a command-list entry starts
+/// multiple background jobs, a command-list entry uses an unsupported `exec`
+/// structure, or writing to the output fails.
 pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
     let mut out = String::new();
     generate_into(graph, &mut out)?;
@@ -167,8 +168,9 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 /// # Errors
 ///
 /// Returns [`NinjaGenError`] if a build edge references an unknown action, a
-/// programmatic action has an empty command recipe, or writing to the output
-/// fails.
+/// programmatic action has an empty command recipe, a command-list entry starts
+/// multiple background jobs, a command-list entry uses an unsupported `exec`
+/// structure, or writing to the output fails.
 pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), NinjaGenError> {
     let mut actions: Vec<_> = graph.actions.iter().collect();
     actions.sort_by_key(|(id, _)| *id);
@@ -261,28 +263,7 @@ impl NamedAction<'_> {
             }
             Recipe::Command {
                 command: StringOrList::List(items),
-            } => {
-                let command_line =
-                    // Brace groups keep each entry a distinct shell unit, and
-                    // `eval` prevents comments or trailing control operators
-                    // inside an entry consuming its terminator. Braces run in
-                    // the current shell (unlike `( ... )`), so working
-                    // directory, environment, and variables set by one entry
-                    // still carry into the next, and the `&&` chain stays
-                    // fail-fast.
-                    items.iter()
-                        .enumerate()
-                        .map(|(entry_index, item)| {
-                            command_list_entry(
-                                CommandListEntry(item),
-                                ActionId(self.id),
-                                entry_index + 1,
-                            )
-                        })
-                        .join(" && ");
-                Self::assert_shell_command(&command_line);
-                writeln!(f, "  command = {command_line}")
-            }
+            } => self.write_command_list(f, items),
             Recipe::Command {
                 command: StringOrList::Empty,
             } => Self::reject_empty_command_recipe(),
@@ -299,6 +280,25 @@ impl NamedAction<'_> {
         let cmd = format!("/bin/sh -e -c \"printf %b '{escaped}' | /bin/sh -e\"");
         Self::assert_shell_command(&cmd);
         writeln!(f, "  command = {cmd}")
+    }
+
+    /// Write list entries as isolated current-shell groups joined by `&&`.
+    fn write_command_list(&self, f: &mut Formatter<'_>, items: &[String]) -> fmt::Result {
+        // Brace groups keep each entry a distinct shell unit, and `eval`
+        // prevents comments or trailing control operators inside an entry
+        // consuming its terminator. Braces run in the current shell (unlike
+        // `( ... )`), so working directory, environment, and variables set by
+        // one entry still carry into the next, and the `&&` chain stays
+        // fail-fast.
+        let command_line = items
+            .iter()
+            .enumerate()
+            .map(|(entry_index, item)| {
+                command_list_entry(CommandListEntry(item), ActionId(self.id), entry_index + 1)
+            })
+            .join(" && ");
+        Self::assert_shell_command(&command_line);
+        writeln!(f, "  command = {command_line}")
     }
 
     fn write_metadata(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -354,6 +354,7 @@ impl Display for NamedAction<'_> {
         self.write_metadata(f)
     }
 }
+
 /// Wrapper struct to display a build edge.
 struct DisplayEdge<'a> {
     edge: &'a BuildEdge,
@@ -384,6 +385,9 @@ impl Display for DisplayEdge<'_> {
 #[cfg(test)]
 #[path = "ninja_gen_property_tests.rs"]
 mod property_tests;
+#[cfg(test)]
+#[path = "ninja_gen_test_support.rs"]
+mod test_support;
 #[cfg(test)]
 #[path = "ninja_gen_tests.rs"]
 mod tests;

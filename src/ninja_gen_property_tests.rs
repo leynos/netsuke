@@ -8,10 +8,10 @@
 use proptest::prelude::*;
 use test_support::ninja_gen::paths_strategy;
 
-use super::{DisplayEdge, NinjaGenError, generate};
+use super::{DisplayEdge, NinjaGenError, generate, test_support::command_action};
 use crate::{
-    ast::{Recipe, StringOrList},
-    ir::{Action, BuildEdge, BuildGraph},
+    ast::StringOrList,
+    ir::{BuildEdge, BuildGraph},
 };
 
 fn edge_strategy_with_ranges(
@@ -70,45 +70,44 @@ fn bare_pipe_position(line: &str) -> Option<usize> {
     line.match_indices(" | ").map(|(index, _)| index).next()
 }
 
-fn command_list_graph(entries: &[String]) -> BuildGraph {
+/// Build the one-action graph used by command recipe generation properties.
+fn command_graph(recipe: StringOrList) -> BuildGraph {
     let mut graph = BuildGraph::default();
-    graph.actions.insert(
-        "action".into(),
-        Action {
-            recipe: Recipe::Command {
-                command: StringOrList::List(
-                    entries
-                        .iter()
-                        .map(|entry| format!("echo {entry}"))
-                        .collect(),
-                ),
-            },
-            description: None,
-            depfile: None,
-            deps_format: None,
-            pool: None,
-            restat: false,
-        },
-    );
+    graph
+        .actions
+        .insert("action".into(), command_action(recipe));
     graph
 }
 
+fn command_list_graph(entries: &[String]) -> BuildGraph {
+    command_graph(StringOrList::List(
+        entries
+            .iter()
+            .map(|entry| format!("echo {entry}"))
+            .collect(),
+    ))
+}
+
 fn scalar_graph(command: String) -> BuildGraph {
-    let mut graph = BuildGraph::default();
-    graph.actions.insert(
-        "action".into(),
-        Action {
-            recipe: Recipe::Command {
-                command: StringOrList::String(command),
-            },
-            description: None,
-            depfile: None,
-            deps_format: None,
-            pool: None,
-            restat: false,
-        },
-    );
-    graph
+    command_graph(StringOrList::String(command))
+}
+
+fn command_list_entry_strategy() -> impl Strategy<Value = String> {
+    prop_oneof![
+        Just("plain"),
+        Just("two words"),
+        Just("apostrophe's"),
+        Just("dollar$value"),
+        Just("hash # comment"),
+        Just("semi;colon"),
+        Just("double\"quote"),
+        Just("parentheses()"),
+    ]
+    .prop_map(str::to_owned)
+}
+
+fn canonical_shell_single_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', r"'\''"))
 }
 
 proptest! {
@@ -146,17 +145,23 @@ proptest! {
     }
 
     #[test]
-    fn command_lists_preserve_order_boundaries_and_fail_fast_joins(entries in prop::collection::vec("[a-z]{1,12}", 1..9)) {
+    fn command_lists_preserve_order_boundaries_and_fail_fast_joins(entries in prop::collection::vec(command_list_entry_strategy(), 1..9)) {
         let ninja = generate(&command_list_graph(&entries)).expect("non-empty command list should generate");
         let command_line = ninja.lines().find(|line| line.starts_with("  command = "))
             .expect("generated action should include a command line");
-        let mut previous = 0usize;
+        let mut previous = 0;
         for entry in &entries {
-            let expected_entry = format!("if eval 'echo {entry}'");
+            let expected_entry = format!("eval {}", canonical_shell_single_quote(&format!("echo {entry}")));
+            let expected_count = entries.iter().filter(|candidate| *candidate == entry).count();
+            prop_assert_eq!(
+                command_line.matches(&expected_entry).count(),
+                expected_count,
+                "every entry should retain one independently quoted evaluator"
+            );
             let position = command_line
                 .get(previous..)
                 .and_then(|remaining| remaining.find(&expected_entry))
-                .expect("every entry should retain its independent shell boundary");
+                .expect("entries should retain their declaration order");
             previous += position + expected_entry.len();
         }
         prop_assert_eq!(
@@ -173,34 +178,20 @@ proptest! {
         let ninja = generate(&scalar_graph(command.clone())).expect("scalar command should generate");
         let expected_command_line = format!("  command = {command}\n");
         let retains_scalar_form = ninja.contains(&expected_command_line);
-        let uses_list_boundary = ninja.contains("{ if eval '");
+        let uses_list_boundary = ninja.contains("_netsuke_background_before=$${!:-}");
         prop_assert!(retains_scalar_form);
         prop_assert!(!uses_list_boundary);
     }
 
     #[test]
     fn programmatic_empty_command_recipes_are_rejected(
-        action_id in "[a-z]{1,12}",
         use_empty_list in any::<bool>(),
     ) {
-        let mut graph = BuildGraph::default();
-        graph.actions.insert(
-            action_id,
-            Action {
-                recipe: Recipe::Command {
-                    command: if use_empty_list {
-                        StringOrList::List(Vec::new())
-                    } else {
-                        StringOrList::Empty
-                    },
-                },
-                description: None,
-                depfile: None,
-                deps_format: None,
-                pool: None,
-                restat: false,
-            },
-        );
+        let graph = command_graph(if use_empty_list {
+            StringOrList::List(Vec::new())
+        } else {
+            StringOrList::Empty
+        });
         let error = generate(&graph).expect_err("empty command recipe should be rejected");
         let is_stable_empty_recipe_error = matches!(error, NinjaGenError::EmptyCommandRecipe { action_index: 1 });
         prop_assert!(is_stable_empty_recipe_error);
