@@ -31,6 +31,15 @@ a recorder or own configuration-load metrics. `run_with_args` wraps those
 queries, and `src/observability.rs` owns the phase-level vocabulary and
 classification helpers.
 
+Both aggregate and phase-level configuration-load timing receive the same
+`&impl monotony::MonotonicClock` seam. Production supplies
+`monotony::StdMonotonicClock`; tests use deterministic clocks from
+`monotony::test_util`. No boundary defines a local
+`ConfigurationLoadClock` or `SystemConfigurationLoadClock`, and no boundary
+calls `Instant::now` directly. Netsuke selects `monotony = "0.1.0"`; its
+public contract keeps the production clock abstraction dependency-free while
+its optional `test-util` feature provides deterministic test clocks.
+
 The application installs one in-process
 `metrics_util::debugging::DebuggingRecorder` after tracing starts. Netsuke does
 not open a metrics listener or install a network exporter as a side effect of a

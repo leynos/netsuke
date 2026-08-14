@@ -2950,6 +2950,17 @@ metrics are recorded around `resolve_json_mode_or_exit` and
 (`cli::merge_with_config`); phase-level metrics are composed in
 `src/observability.rs` around those same boundaries.
 
+Both aggregate and phase-level configuration-load timing use the same
+injected elapsed-time seam: each boundary receives
+`&impl monotony::MonotonicClock`. Production supplies
+`monotony::StdMonotonicClock`; tests use deterministic clocks from
+`monotony::test_util`, such as `FixedMonotonicClock` and
+`QueuedMonotonicClock`. Do not add a local `ConfigurationLoadClock` or
+`SystemConfigurationLoadClock`, or call `Instant::now` directly at these
+boundaries. The dependency choice is `monotony = "0.1.0"`; its public
+contract keeps the production clock abstraction dependency-free while its
+`test-util` feature provides deterministic test clocks.
+
 By default, Netsuke installs its in-process `DebuggingRecorder`; verbose runs
 can emit its snapshot through the debug log.
 
@@ -2961,8 +2972,8 @@ Instruments emitted by `record_config_load_metrics`:
   resolution or a `merge_with_config` error. Use it to compute the
   configuration-load failure rate.
 - `netsuke_config_load_duration_seconds` — a histogram recording the
-  wall-clock duration of the configuration-load phase in seconds (one sample
-  per startup that reaches configuration resolution). Suggested operator bucket
+  elapsed duration of the configuration-load phase in seconds (one sample per
+  startup that reaches configuration resolution). Suggested operator bucket
   boundaries: `0.001, 0.005, 0.01,
   0.05, 0.1, 0.5, 1.0` seconds; configuration loading is expected to complete
   in single-digit milliseconds, so buckets above one second exist only to
