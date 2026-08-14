@@ -43,6 +43,7 @@ updates:
     directories:
       - "/"
       - "/test_support"
+      - "/tests/ui/cli_configuration_pass"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
