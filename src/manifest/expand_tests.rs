@@ -10,6 +10,12 @@ mod action_condition_cases;
 #[path = "expand_test_cases/condition_cases.rs"]
 mod condition_cases;
 
+#[path = "expand_test_cases/foreach_property_cases.rs"]
+mod foreach_property_cases;
+
+#[path = "expand_test_cases/structure_cases.rs"]
+mod structure_cases;
+
 #[path = "expand_test_cases/property_cases.rs"]
 mod property_cases;
 #[path = "expand_test_cases/target_command_available_cases.rs"]
@@ -29,6 +35,18 @@ pub(super) fn actions(doc: &ManifestValue) -> Result<&[ManifestValue]> {
         .context("actions sequence missing")
 }
 
+pub(super) fn ensure_foreach_removed(entries: &[ManifestValue], section: &str) -> Result<()> {
+    for entry in entries {
+        let map = entry
+            .as_object()
+            .with_context(|| format!("{section} entry map"))?;
+        anyhow::ensure!(
+            !map.contains_key("foreach"),
+            "foreach should be removed after {section} expansion"
+        );
+    }
+    Ok(())
+}
 pub(super) fn section_entries<'a>(
     doc: &'a ManifestValue,
     section: &str,

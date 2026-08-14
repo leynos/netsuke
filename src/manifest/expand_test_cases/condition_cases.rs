@@ -1,10 +1,14 @@
-//! Conditional expansion cases for manifest entries; action-only cases live
-//! in `action_condition_cases`.
+//! Conditional expansion cases; action-only cases live in `action_condition_cases`.
 
 use super::*;
 use anyhow::{Context, Result};
 use minijinja::Environment;
-use rstest::rstest;
+use rstest::{fixture, rstest};
+
+#[fixture]
+fn environment() -> Environment<'static> {
+    Environment::new()
+}
 
 #[rstest]
 #[case::targets("targets")]
@@ -156,6 +160,7 @@ fn expand_foreach_expands_sequence_values() -> Result<()> {
     expand_foreach(&mut doc, &env)?;
     let targets = targets(&doc)?;
     anyhow::ensure!(targets.len() == 2, "expected two targets");
+    ensure_foreach_removed(targets, "target")?;
     for (idx, target) in targets.iter().enumerate() {
         let map = target.as_object().context("target map")?;
         let vars = map
@@ -194,41 +199,132 @@ fn expand_foreach_applies_when_expression() -> Result<()> {
     expand_foreach(&mut doc, &env)?;
     let targets = targets(&doc)?;
     anyhow::ensure!(targets.len() == 2, "expected filtered targets");
-    let indexes = indexes(targets, "target")?;
+    anyhow::ensure!(indexes(targets, "target")? == vec![1, 2], "wrong indexes");
+    ensure_foreach_removed(targets, "filtered target")?;
+    Ok(())
+}
+
+#[rstest]
+fn expand_foreach_empty_foreach_produces_no_entries(
+    environment: Environment<'static>,
+) -> Result<()> {
+    let mut doc: ManifestValue = serde_saphyr::from_str(
+        "targets:
+  - name: literal
+    foreach: []
+    command: echo hi",
+    )?;
+    expand_foreach(&mut doc, &environment)?;
+    let targets = targets(&doc)?;
+    anyhow::ensure!(targets.is_empty(), "empty foreach must produce no targets");
+    Ok(())
+}
+
+#[rstest]
+fn expand_foreach_non_object_entry_is_passed_through(
+    environment: Environment<'static>,
+) -> Result<()> {
+    let mut doc: ManifestValue = serde_saphyr::from_str(
+        "targets:
+  - just-a-string
+  - name: real
+    foreach:
+      - expanded
+    command: echo hi",
+    )?;
+    expand_foreach(&mut doc, &environment)?;
+    let targets = targets(&doc)?;
+    anyhow::ensure!(targets.len() == 2, "expected both entries to survive");
     anyhow::ensure!(
-        indexes == vec![1, 2],
-        "unexpected filtered indexes: {:?}",
-        indexes
+        targets.first().and_then(ManifestValue::as_str) == Some("just-a-string"),
+        "bare string entry should pass through unexpanded: {:?}",
+        targets.first()
+    );
+    let second_target = targets
+        .get(1)
+        .and_then(ManifestValue::as_object)
+        .context("second target object")?;
+    anyhow::ensure!(
+        second_target.get("name").and_then(ManifestValue::as_str) == Some("real"),
+        "second target should remain object named real: {second_target:?}"
+    );
+    anyhow::ensure!(
+        !second_target.contains_key("foreach"),
+        "expanded target should no longer contain foreach: {second_target:?}"
+    );
+    let vars = second_target
+        .get("vars")
+        .and_then(ManifestValue::as_object)
+        .context("second target vars")?;
+    anyhow::ensure!(
+        vars.get("item").and_then(ManifestValue::as_str) == Some("expanded"),
+        "second target should retain the iteration item: {vars:?}"
+    );
+    anyhow::ensure!(
+        vars.get("index").and_then(ManifestValue::as_u64) == Some(0),
+        "second target should retain the iteration index: {vars:?}"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn expand_foreach_iteration_vars_do_not_get_overwritten_by_entry_vars(
+    environment: Environment<'static>,
+) -> Result<()> {
+    let mut doc: ManifestValue = serde_saphyr::from_str(
+        "targets:
+  - name: literal
+    foreach:
+      - from-iteration
+    vars:
+      item: from-entry
+      other: untouched",
+    )?;
+    expand_foreach(&mut doc, &environment)?;
+    let targets = targets(&doc)?;
+    anyhow::ensure!(targets.len() == 1, "expected one expanded target");
+    let vars = targets
+        .first()
+        .and_then(ManifestValue::as_object)
+        .and_then(|map| map.get("vars"))
+        .and_then(ManifestValue::as_object)
+        .context("vars map")?;
+    // Iteration vars override colliding entry vars while unrelated vars survive.
+    anyhow::ensure!(
+        vars.get("item").and_then(ManifestValue::as_str) == Some("from-iteration"),
+        "iteration item should override the entry's own item var: {vars:?}"
+    );
+    anyhow::ensure!(
+        vars.get("other").and_then(ManifestValue::as_str) == Some("untouched"),
+        "unrelated entry vars should survive expansion: {vars:?}"
     );
     Ok(())
 }
 
 #[test]
-fn expand_foreach_preserves_object_key_order() -> Result<()> {
-    let env = Environment::new();
-    let yaml = r"targets:
-  - name: literal
-    vars:
-      existing: keep
+fn expand_foreach_jinja_filter_in_name() -> Result<()> {
+    // Name rendering happens in `render_manifest`, so drive the full parsing pipeline.
+    let manifest = crate::manifest::from_str(
+        "netsuke_version: \"1.0.0\"
+targets:
+  - name: '{{ item | upper }}'
     foreach:
-      - 1
-      - 2
-    when: 'true'
-    after: done
-";
-    let mut doc: ManifestValue = serde_saphyr::from_str(yaml)?;
-    expand_foreach(&mut doc, &env)?;
-    let targets = targets(&doc)?;
-    anyhow::ensure!(targets.len() == 2, "expected expanded targets");
-    for target in targets {
-        let map = target.as_object().context("target object")?;
-        let keys: Vec<&str> = map.keys().map(String::as_str).collect();
-        anyhow::ensure!(
-            keys == ["name", "vars", "after"],
-            "key order should remain stable: {:?}",
-            keys
-        );
-    }
+      - alpha
+      - beta
+    command: echo hi",
+    )?;
+    let names: Vec<&str> = manifest
+        .targets
+        .iter()
+        .map(|t| match &t.name {
+            crate::ast::StringOrList::String(s) => Ok(s.as_str()),
+            other => Err(anyhow::anyhow!("expected string name, got {other:?}")),
+        })
+        .collect::<Result<_>>()?;
+    anyhow::ensure!(
+        names == ["ALPHA", "BETA"],
+        "expected uppercased names from Jinja filter: {names:?}"
+    );
     Ok(())
 }
 

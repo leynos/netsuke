@@ -44,6 +44,7 @@ fn expand_foreach_applies_action_when_expression() -> Result<()> {
     let actions = actions(&doc)?;
     anyhow::ensure!(actions.len() == 2, "expected filtered actions");
     anyhow::ensure!(indexes(actions, "action")? == vec![1, 2], "wrong indexes");
+    ensure_foreach_removed(actions, "filtered action")?;
     Ok(())
 }
 
