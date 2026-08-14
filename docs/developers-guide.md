@@ -1712,10 +1712,13 @@ is not obvious from the name:
   absent or unreadable path returns `false` rather than surfacing the
   underlying metadata error. Fixture code must use this wrapper for directory
   predicates rather than calling `std::fs::metadata(...).is_dir()` or
-  `Path::is_dir` directly. `test_support/src/manifest.rs` is an existing caller:
-  `ensure_manifest_exists` uses it both to reject a directory where a manifest
-  file is expected, and to accept a destination directory that is already
-  present.
+  `Path::is_dir` directly.
+- `PathState` and `inspect_path(path) -> io::Result<PathState>` provide a
+  fallible target-state probe. `PathState::Absent` means metadata returned
+  `NotFound`, `PathState::Directory` means the target is a directory, and
+  `PathState::NonDirectory` means it exists but is not a directory. The probe
+  follows symlinks, so a dangling symlink is `Absent` even when its directory
+  entry exists; metadata errors other than `NotFound` are propagated.
 - `try_is_file(path) -> io::Result<bool>` is the fallible counterpart to the
   boolean predicates: `Ok(true)` when the path is a regular file, `Ok(false)`
   when it is absent (`NotFound` is folded into the boolean result), and `Err`
@@ -1748,6 +1751,22 @@ handle inside this module instead: the caller never sees a `File`, so the
 ambient boundary stays where the lint expects it. Prefer that shape — pass in
 what the operation needs and keep the handle here — over widening an exclusion
 to a module that wants a raw `File`.
+
+### `test_support::ensure_manifest_exists`
+
+`test_support::ensure_manifest_exists` (`test_support/src/manifest.rs`) never
+overwrites an existing non-directory target. If another actor creates a
+non-directory target after the initial existence check but before persistence,
+no-clobber persistence leaves that target unchanged and returns its path, which
+satisfies the existence contract. An existing directory, including one created
+at the controlled pre-persist point, returns `io::ErrorKind::IsADirectory`.
+
+When a manifest is missing, its generated contents are written to a temporary
+file staged in the destination directory before persistence. The tests inject
+the pre-persist action to cover controlled creation orderings; they do not claim
+to model arbitrary scheduler or filesystem interleavings. The fallible
+`test_support::fs::inspect_path` probe treats `NotFound` as absence and
+propagates every other metadata error.
 
 ### Shared Makefile contract helpers
 

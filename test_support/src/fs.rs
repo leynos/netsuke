@@ -21,6 +21,17 @@ use std::io;
 use std::path::Path;
 use std::time::SystemTime;
 
+/// The state observed when inspecting a filesystem path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PathState {
+    /// The path does not exist.
+    Absent,
+    /// The path exists and is a directory.
+    Directory,
+    /// The path exists and is not a directory.
+    NonDirectory,
+}
+
 /// Write `contents` to `path`, creating or truncating the file.
 ///
 /// # Errors
@@ -115,6 +126,43 @@ pub fn exists(path: impl AsRef<Path>) -> bool {
 #[must_use]
 pub fn is_dir(path: impl AsRef<Path>) -> bool {
     fs::metadata(path).is_ok_and(|metadata| metadata.is_dir())
+}
+
+/// Inspect whether `path` is absent, a directory, or another target.
+///
+/// Only [`io::ErrorKind::NotFound`] becomes [`PathState::Absent`]. All other
+/// metadata failures are returned so callers do not mistake an unreadable path
+/// for an absent one.
+/// [`std::fs::metadata`] follows symbolic links, so a dangling symbolic link is
+/// reported as [`PathState::Absent`] even though its directory entry exists.
+///
+/// # Errors
+///
+/// Propagates the underlying metadata failure for any error other than
+/// [`io::ErrorKind::NotFound`].
+///
+/// # Examples
+///
+/// ```
+/// use test_support::fs::{PathState, inspect_path};
+///
+/// let dir = tempfile::tempdir().expect("create tempdir");
+/// let file = dir.path().join("file");
+/// test_support::fs::write(&file, "contents").expect("write file");
+/// assert_eq!(inspect_path(&file).expect("inspect file"), PathState::NonDirectory);
+/// assert_eq!(inspect_path(dir.path()).expect("inspect directory"), PathState::Directory);
+/// assert_eq!(
+///     inspect_path(dir.path().join("absent")).expect("inspect absent path"),
+///     PathState::Absent
+/// );
+/// ```
+pub fn inspect_path(path: impl AsRef<Path>) -> io::Result<PathState> {
+    match fs::metadata(path) {
+        Ok(metadata) if metadata.is_dir() => Ok(PathState::Directory),
+        Ok(_) => Ok(PathState::NonDirectory),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(PathState::Absent),
+        Err(error) => Err(error),
+    }
 }
 
 /// Return `true` when `path` is a regular file, surfacing unexpected errors.
