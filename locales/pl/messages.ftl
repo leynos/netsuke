@@ -180,7 +180,7 @@ ir.invalid_command = Nieprawidłowa interpolacja w poleceniu: { $snippet }.
 # Błędy generowania plików Ninja.
 ninja_gen.missing_action = Brakuje akcji „{ $id }”, do której odwołuje się krawędź budowania.
 ninja_gen.format = Nie udało się sformatować wyjścia manifestu Ninja.
-ninja_gen.dyndep_files_required = Ta kompilacja wymaga wygenerowanego pakietu Ninja; użyj `netsuke build`, `netsuke clean` lub `netsuke generate`, aby utworzyć pliki dyndep.
+ninja_gen.dyndep_files_required = Ta operacja wymaga wygenerowanego pakietu Ninja; użyj `netsuke build`, `netsuke clean` lub `netsuke generate`, aby utworzyć pliki dyndep.
 ninja_gen.reserved_output_path = Ścieżka '{ $path }' jest zarezerwowana dla stanu szeregowych zależności Netsuke.
 ninja_gen.unsupported_path_character = Ścieżka '{ $path }' zawiera nieobsługiwany znak ścieżki Ninja: '{ $character }'.
 
