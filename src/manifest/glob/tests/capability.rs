@@ -1,8 +1,10 @@
 //! Tests for the capability handle the glob metadata checks run through.
+#[cfg(unix)]
 use super::super::walk::{literal_dir_prefix, open_root_dir};
 use super::super::{GlobPattern, glob_paths};
 use anyhow::{Context, Result, anyhow, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
+#[cfg(unix)]
 use minijinja::ErrorKind;
 use rstest::{fixture, rstest};
 use tempfile::{TempDir, tempdir};
