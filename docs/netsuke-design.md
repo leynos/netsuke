@@ -2941,9 +2941,9 @@ manual flag repetition.
 
 The CLI definition doubles as the source for user documentation. Release
 automation now calls `cargo-orthohelp` explicitly through
-`scripts/generate-release-help.sh`; ordinary Cargo builds no longer write help
-artefacts. `cargo-orthohelp` remains the release source for the manual page and
-PowerShell help. Separately, `build.rs` generates Bash, Elvish, Fish,
+`scripts/generate-release-help.sh`; ordinary Cargo builds do not supply the
+release manual page or PowerShell help. `cargo-orthohelp` remains the release
+source for those artefacts. Separately, `build.rs` generates Bash, Elvish, Fish,
 PowerShell, and Zsh completion assets from `Cli::command()`. The completion
 files are staged as portable shell-completion sidecars under
 `completions/<shell>/` in release archives. The build script also performs the

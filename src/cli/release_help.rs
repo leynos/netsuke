@@ -72,6 +72,7 @@ mod tests {
     //! Tests for release-help metadata assembled from the Clap command tree.
 
     use super::*;
+    use anyhow::{Context, Result, ensure};
 
     #[test]
     fn metadata_documents_help_targets_through_the_help_subcommand() {
@@ -100,5 +101,25 @@ mod tests {
                 .contains("root_type = \"netsuke::cli::ReleaseHelpCli\""),
             "cargo-orthohelp should load the metadata that includes Clap subcommands"
         );
+    }
+
+    #[test]
+    fn release_help_metadata_localizes_the_help_targets_description() -> Result<()> {
+        let metadata = ReleaseHelpCli::get_doc_metadata();
+        let help = metadata
+            .subcommands
+            .iter()
+            .find(|command| command.app_name == "help")
+            .context("release help metadata should include the help command")?;
+        let localizer = crate::cli_localization::build_localizer(Some("en-US"));
+        let description = localizer
+            .lookup(&help.about_id, None)
+            .context("release help metadata should resolve its help description")?;
+
+        ensure!(
+            description.contains("help targets"),
+            "release help description should document the targets topic: {description}"
+        );
+        Ok(())
     }
 }

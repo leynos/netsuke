@@ -1,13 +1,16 @@
 //! Build script for Netsuke.
 //!
-//! This script performs two main tasks:
+//! This script performs three main tasks:
 //! - Generate the CLI manual page into `target/generated-man/<target>/<profile>` for release
 //!   packaging.
+//! - Generate Bash, Elvish, Fish, PowerShell, and Zsh completion files into
+//!   `target/generated-completions/<target>/<profile>` from the same Clap command tree.
 //! - Audit localization keys declared in `src/localization/keys.rs` against the Fluent bundles
 //!   in `locales/*/messages.ftl`, failing the build if any declared key is missing from a
 //!   locale.
 use cap_std::{ambient_authority, fs::Dir};
 use clap::CommandFactory;
+use clap_complete::aot::{Shell, generate_to};
 use clap_mangen::Man;
 use std::{
     env,
@@ -119,10 +122,10 @@ fn manual_date() -> String {
     clippy::disallowed_methods,
     reason = "TARGET and PROFILE are set by Cargo for the build script alone; nothing else knows the triple and profile being built, so they cannot be passed in"
 )]
-fn out_dir_for_target_profile() -> PathBuf {
+fn out_dir_for_target_profile(artefact: &str) -> PathBuf {
     let target = env::var("TARGET").unwrap_or_else(|_| "unknown-target".into());
     let profile = env::var("PROFILE").unwrap_or_else(|_| "unknown-profile".into());
-    PathBuf::from(format!("target/generated-man/{target}/{profile}"))
+    PathBuf::from(format!("target/{artefact}/{target}/{profile}"))
 }
 
 fn write_man_page(data: &[u8], dir: &Path, page_name: &str) -> std::io::Result<PathBuf> {
@@ -205,9 +208,36 @@ fn generate_man_page(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+fn generate_completions(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    fs::create_dir_all(out_dir)?;
+    let cli_command = cli::Cli::command();
+    let name = cli_command
+        .get_bin_name()
+        .unwrap_or_else(|| cli_command.get_name())
+        .to_owned();
+
+    for shell in [
+        Shell::Bash,
+        Shell::Elvish,
+        Shell::Fish,
+        Shell::PowerShell,
+        Shell::Zsh,
+    ] {
+        let mut completion_command = cli::Cli::command();
+        generate_to(shell, &mut completion_command, &name, out_dir)?;
+    }
+
+    // Publish the directory so tests can inspect the exact generated artefacts
+    // rather than recreating the generator's path and file-name conventions.
+    println!(
+        "cargo:rustc-env=NETSUKE_GENERATED_COMPLETIONS_DIR={}",
+        out_dir.display()
+    );
+    Ok(())
+}
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     emit_rerun_directives();
     build_l10n_audit::audit_localization_keys()?;
-    let out_dir = out_dir_for_target_profile();
-    generate_man_page(&out_dir)
+    generate_man_page(&out_dir_for_target_profile("generated-man"))?;
+    generate_completions(&out_dir_for_target_profile("generated-completions"))
 }

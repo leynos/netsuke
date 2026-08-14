@@ -324,7 +324,7 @@ pub enum Commands {
         output: Option<PathBuf>,
     },
 
-    /// Print the top-level help, or the help for a named topic.
+    /// Print the top-level help, or the help for a named topic such as `help targets`.
     ///
     /// With no topic this matches `--help`. `help targets` renders the
     /// target and action catalogue for the selected manifest.

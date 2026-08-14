@@ -91,6 +91,48 @@ fn release_staging_omits_build_script_help_sources(#[case] removed: &str) -> Res
 }
 
 #[rstest]
+#[case(
+    "target/generated-completions/{target}/release/netsuke.bash",
+    "completions/bash/netsuke"
+)]
+#[case(
+    "target/generated-completions/{target}/release/netsuke.elv",
+    "completions/elvish/netsuke.elv"
+)]
+#[case(
+    "target/generated-completions/{target}/release/netsuke.fish",
+    "completions/fish/netsuke.fish"
+)]
+#[case(
+    "target/generated-completions/{target}/release/_netsuke.ps1",
+    "completions/powershell/_netsuke.ps1"
+)]
+#[case(
+    "target/generated-completions/{target}/release/_netsuke",
+    "completions/zsh/_netsuke"
+)]
+fn release_staging_declares_generated_completion_sidecars(
+    #[case] source: &str,
+    #[case] destination: &str,
+) -> Result<()> {
+    let config = staging_config()?;
+    let artefacts = config
+        .get("common")
+        .and_then(|common| common.get("artefacts"))
+        .and_then(Value::as_array)
+        .context("common release artefacts should be an array")?;
+    let staged = artefacts.iter().any(|artefact| {
+        artefact.get("source").and_then(Value::as_str) == Some(source)
+            && artefact.get("destination").and_then(Value::as_str) == Some(destination)
+    });
+    ensure!(
+        staged,
+        "release staging should include {source} at {destination}: {artefacts:?}"
+    );
+    Ok(())
+}
+
+#[rstest]
 #[case("x86_64-unknown-linux-gnu")]
 #[case("aarch64-unknown-linux-gnu")]
 #[case("x86_64-apple-darwin")]
