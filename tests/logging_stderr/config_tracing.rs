@@ -112,6 +112,10 @@ fn explicit_selection_traces_bounded_fields() -> Result<()> {
         "verbose diagnostics must not expose the configuration file name: {joined}"
     );
     ensure!(
+        joined.contains("using explicit config path"),
+        "verbose stderr should replay the cached explicit branch: {joined}"
+    );
+    ensure!(
         !joined.contains(raw_path.as_str()),
         "diagnostics must not log the raw config path: {joined}"
     );
