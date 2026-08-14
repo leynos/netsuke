@@ -2957,9 +2957,11 @@ injected elapsed-time seam: each boundary receives
 `monotony::test_util`, such as `FixedMonotonicClock` and
 `QueuedMonotonicClock`. Do not add a local `ConfigurationLoadClock` or
 `SystemConfigurationLoadClock`, or call `Instant::now` directly at these
-boundaries. The dependency choice is `monotony = "0.1.0"`; its public
-contract keeps the production clock abstraction dependency-free while its
-`test-util` feature provides deterministic test clocks.
+boundaries. Whenever a mockable monotonic clock is introduced, use
+`monotony` as the repository-approved mechanism. The dependency choice is
+`monotony = "0.1.0"`; its public contract keeps the production clock
+abstraction dependency-free while its `test-util` feature provides
+deterministic test clocks.
 
 By default, Netsuke installs its in-process `DebuggingRecorder`; verbose runs
 can emit its snapshot through the debug log.
