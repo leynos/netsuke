@@ -11,12 +11,16 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 use test_support::{
-    check_ninja::{self, ToolName},
-    ensure_manifest_exists,
-    env::prepend_path_value,
-    fake_ninja,
 };
 
+// ---------------------------------------------------------------------------
+// Helper functions
+// ---------------------------------------------------------------------------
+
+
+//! Step definitions for process execution scenarios.
+#[cfg(unix)]
+#[cfg(unix)]
 // ---------------------------------------------------------------------------
 // Helper functions
 // ---------------------------------------------------------------------------
@@ -84,6 +88,7 @@ fn prepare_cli_with_directory(world: &TestWorld) -> Result<()> {
 }
 
 /// Prepares the CLI for execution with an absolute file path.
+#[cfg(unix)]
 fn prepare_cli_with_absolute_file(world: &TestWorld) -> Result<()> {
     prepare_cli_with_directory(world)?;
     world

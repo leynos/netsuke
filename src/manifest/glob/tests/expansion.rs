@@ -1,7 +1,13 @@
 //! Tests for the match set [`glob_paths`] returns.
+#[cfg(unix)]
+use super::super::GlobPattern;
+use super::super::glob_paths;
+#[cfg(unix)]
 use super::super::walk::{GlobRoot, process_glob_entry};
-use super::super::{GlobPattern, glob_paths};
-use anyhow::{Context, Result, anyhow, ensure};
+#[cfg(unix)]
+use anyhow::{Context, anyhow};
+use anyhow::{Result, ensure};
+#[cfg(unix)]
 use cap_std::{ambient_authority, fs::Dir};
 use minijinja::ErrorKind;
 use rstest::rstest;

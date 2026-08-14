@@ -23,7 +23,7 @@ struct CollectionState {
 }
 
 impl CollectionState {
-    fn new(collect_all: bool) -> Self {
+    const fn new(collect_all: bool) -> Self {
         Self {
             matches: Vec::new(),
             collect_all,
@@ -119,11 +119,12 @@ impl WorkspaceMatchContext {
 
         if !command_has_ext {
             let candidates = env::candidate_paths(Utf8Path::new(""), &command_lower, env.pathext());
-            for candidate in candidates {
-                if let Some(name) = Utf8Path::new(candidate.as_str()).file_name() {
-                    basenames.insert(name.to_ascii_lowercase());
-                }
-            }
+            basenames.extend(
+                candidates
+                    .into_iter()
+                    .filter_map(|candidate| Utf8Path::new(candidate.as_str()).file_name())
+                    .map(|name| name.to_ascii_lowercase()),
+            );
         }
 
         Self {

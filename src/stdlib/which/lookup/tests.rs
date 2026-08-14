@@ -297,7 +297,7 @@ fn resolve_direct_appends_pathext(workspace: Result<TempWorkspace>) -> Result<()
     test_fs::create_dir_all(tools_dir.as_std_path()).context("mkdir tools")?;
     let exe = base.with_extension("bat");
     test_fs::write(exe.as_std_path(), b"@echo off\r\n").context("write stub")?;
-    make_executable(&exe)?;
+    make_executable(exe.as_std_path())?;
 
     let snapshot = EnvSnapshot {
         cwd: env.root.clone(),

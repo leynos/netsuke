@@ -349,7 +349,7 @@ fn prefix_is_unopenable(err: &io::Error) -> bool {
     {
         /// `ERROR_DIRECTORY`: the path is not a directory.
         const ERROR_DIRECTORY: i32 = 267;
-        return err.raw_os_error() == Some(ERROR_DIRECTORY);
+        err.raw_os_error() == Some(ERROR_DIRECTORY)
     }
     #[cfg(not(windows))]
     false

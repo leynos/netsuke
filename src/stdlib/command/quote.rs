@@ -26,6 +26,10 @@ impl fmt::Display for QuoteError {
     }
 }
 
+/// `QuoteError` crosses into `anyhow::Result` in the Windows quoting tests,
+/// which requires the `std::error::Error` trait.
+impl std::error::Error for QuoteError {}
+
 #[cfg(windows)]
 pub(super) fn quote(arg: &str) -> Result<String, QuoteError> {
     if arg.chars().any(|ch| matches!(ch, '\n' | '\r')) {
