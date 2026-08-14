@@ -11,7 +11,9 @@
 use anyhow::{Context, Result, ensure};
 use netsuke::runner::CommandEnv;
 use proptest::prelude::*;
-use rstest::{fixture, rstest};
+#[cfg(unix)]
+use rstest::fixture;
+use rstest::rstest;
 use std::{
     ffi::{OsStr, OsString},
     path::PathBuf,
