@@ -481,9 +481,7 @@ fn manifest_error_cases(
         ) => {
             ensure!(
                 outputs == exp_outputs,
-                "unexpected duplicate outputs: got {:?}, expected {:?}",
-                outputs,
-                exp_outputs
+                "unexpected duplicate outputs: got {outputs:?}, expected {exp_outputs:?}"
             );
         }
         (
@@ -501,9 +499,7 @@ fn manifest_error_cases(
             );
             ensure!(
                 rules == exp_rules,
-                "unexpected rules: got {:?}, expected {:?}",
-                rules,
-                exp_rules
+                "unexpected rules: got {rules:?}, expected {exp_rules:?}"
             );
         }
         (IrGenError::EmptyRule { target_name, .. }, ExpectedError::EmptyRule(exp_target)) => {
@@ -537,9 +533,7 @@ fn manifest_error_cases(
             actual.sort();
             ensure!(
                 actual == expected_cycle,
-                "unexpected dependency cycle: got {:?}, expected {:?}",
-                actual,
-                expected_cycle
+                "unexpected dependency cycle: got {actual:?}, expected {expected_cycle:?}"
             );
         }
         (other, exp) => bail!("expected {exp:?} but got {other:?}"),

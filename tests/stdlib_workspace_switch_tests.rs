@@ -61,13 +61,13 @@ fn the_switch_gates_the_workspace_fallback_end_to_end() -> Result<()> {
 
     let enabled = probe_verdict(&temp, None)?;
     ensure!(
-        enabled.contains("probe-true.txt"),
+        enabled.contains("probe-True.txt"),
         "with the switch unset the workspace fallback should find the probe:\n{enabled}"
     );
 
     let disabled = probe_verdict(&temp, Some("0"))?;
     ensure!(
-        disabled.contains("probe-false.txt"),
+        disabled.contains("probe-False.txt"),
         "with the switch set to 0 the fallback must not run:\n{disabled}"
     );
     Ok(())

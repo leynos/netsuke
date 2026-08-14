@@ -53,9 +53,7 @@ fn compare_tokens(actual: &[String], expected: &TokenList) -> Result<()> {
     let expected_vec = expected.to_vec();
     ensure!(
         actual == expected_vec,
-        "expected tokens {:?}, got {:?}",
-        expected_vec,
-        actual
+        "expected tokens {expected_vec:?}, got {actual:?}"
     );
     Ok(())
 }

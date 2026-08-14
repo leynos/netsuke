@@ -139,7 +139,7 @@ fn render_plain_error_json_records_cause_chain() -> Result<()> {
         .get("labels")
         .context("labels should be present")?;
 
-    ensure!(schema_version == 1, "schema version should be stable",);
+    ensure!(schema_version == 1, "schema version should be stable");
     ensure!(
         generator_name == "netsuke",
         "generator name should be present",

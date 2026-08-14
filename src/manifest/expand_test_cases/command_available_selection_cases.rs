@@ -4,6 +4,8 @@ use std::ffi::OsString;
 
 use anyhow::{Context, Result, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
+#[cfg(unix)]
+use cap_std::fs::PermissionsExt;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use googletest::prelude::*;
 use minijinja::Environment;
@@ -129,10 +131,12 @@ fn string_field<'a>(value: &'a ManifestValue, field: &str) -> Result<&'a str> {
 }
 
 fn write_tool(root: &Utf8Path, name: &str) -> Result<()> {
-    let path = root.join(tool_filename(name));
-    std::fs::write(path.as_std_path(), script_contents())
+    let dir = Dir::open_ambient_dir(root, ambient_authority())
+        .with_context(|| format!("open fixture directory {root}"))?;
+    let path = Utf8PathBuf::from(tool_filename(name));
+    dir.write(&path, script_contents())
         .with_context(|| format!("write fixture tool {path}"))?;
-    mark_executable(&path)
+    mark_executable(&dir, &path)
 }
 
 fn tool_filename(name: &str) -> String {
@@ -155,18 +159,17 @@ const fn script_contents() -> &'static [u8] {
 }
 
 #[cfg(unix)]
-fn mark_executable(path: &Utf8Path) -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-
-    let mut permissions = std::fs::metadata(path.as_std_path())
+fn mark_executable(dir: &Dir, path: &Utf8Path) -> Result<()> {
+    let mut permissions = dir
+        .metadata(path)
         .with_context(|| format!("stat {path}"))?
         .permissions();
     permissions.set_mode(0o755);
-    std::fs::set_permissions(path.as_std_path(), permissions)
+    dir.set_permissions(path, permissions)
         .with_context(|| format!("chmod {path}"))
 }
 
 #[cfg(not(unix))]
-fn mark_executable(_path: &Utf8Path) -> Result<()> {
+fn mark_executable(_dir: &Dir, _path: &Utf8Path) -> Result<()> {
     Ok(())
 }

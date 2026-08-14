@@ -41,8 +41,7 @@ fn world_env_vars_with_value_are_applied(prepared_world: Result<TestWorld>) -> R
     let val = env_value(&cmd, "NETSUKE_TEST_FLAG").expect("NETSUKE_TEST_FLAG should be present");
     ensure!(
         val == OsStr::new("enabled"),
-        "expected NETSUKE_TEST_FLAG to be 'enabled', got {:?}",
-        val
+        "expected NETSUKE_TEST_FLAG to be 'enabled', got {val:?}"
     );
     Ok(())
 }
@@ -77,8 +76,7 @@ fn scenario_path_override_is_forwarded_and_netsuke_executable_is_used(
         env_value(&cmd, "PATH").expect("PATH should be explicitly forwarded to the command");
     ensure!(
         path_val == OsStr::new("/fake/bin"),
-        "expected PATH to be '/fake/bin', got {:?}",
-        path_val
+        "expected PATH to be '/fake/bin', got {path_val:?}"
     );
 
     // Command should use the resolved netsuke_executable(), not rely on PATH lookup.

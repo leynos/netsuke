@@ -26,8 +26,7 @@ fn expand_foreach_preserves_object_key_order() -> Result<()> {
         let keys: Vec<&str> = map.keys().map(String::as_str).collect();
         anyhow::ensure!(
             keys == ["name", "vars", "after"],
-            "key order should remain stable: {:?}",
-            keys
+            "key order should remain stable: {keys:?}"
         );
     }
     Ok(())
