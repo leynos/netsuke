@@ -1,14 +1,27 @@
 //! Unit and property tests for Ninja process helpers.
 
 use super::super::{NINJA_ENV, NINJA_PROGRAM};
+#[cfg(unix)]
+use super::command_list_telemetry::COMMAND_LIST_FAILURE_DURATION;
 use super::*;
 use camino::Utf8PathBuf;
+#[cfg(unix)]
+use metrics_util::{
+    MetricKind,
+    debugging::{DebugValue, DebuggingRecorder},
+};
 use mockable::MockEnv;
+#[cfg(unix)]
+use monotony::test_util::FixedMonotonicClock;
 use proptest::prelude::*;
 use rstest::{fixture, rstest};
 use std::ffi::OsString;
 #[cfg(unix)]
 use std::path::PathBuf;
+#[cfg(unix)]
+use std::process::Stdio;
+#[cfg(unix)]
+use std::time::Duration;
 
 /// A `MockEnv` answering exactly one `os_string` read of `NETSUKE_NINJA`.
 ///
@@ -124,6 +137,55 @@ fn finalize_streaming_joins_stderr_thread_when_wait_fails() {
     assert!(
         joined.load(Ordering::SeqCst),
         "the stderr forwarding thread must be joined even when wait() fails"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn command_list_failure_duration_uses_the_injected_monotonic_clock() {
+    let duration = Duration::from_millis(7);
+    let clock = FixedMonotonicClock::with_elapsed(duration);
+    let mut command = Command::new("sh");
+    command
+        .args([
+            "-c",
+            concat!(
+                "printf '%s\\n' 'netsuke command-list failure: action ",
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef, entry 2' >&2; ",
+                "exit 1"
+            ),
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let recorder = DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+
+    let execution = CommandExecutionContext {
+        operation: "build",
+        suppress_stderr: true,
+        clock: &clock,
+    };
+    let result = metrics::with_local_recorder(&recorder, || {
+        run_command_and_stream_with_context(command, None, &execution)
+    });
+
+    assert!(result.is_err(), "the attributed command should fail");
+    let snapshot = snapshotter.snapshot().into_vec();
+    let recorded_durations = snapshot
+        .iter()
+        .filter(|(key, _, _, value)| {
+            key.kind() == MetricKind::Histogram
+                && key.key().name() == COMMAND_LIST_FAILURE_DURATION
+                && matches!(
+                    value,
+                    DebugValue::Histogram(samples)
+                        if samples.as_slice() == [duration.as_secs_f64()]
+                )
+        })
+        .count();
+    assert_eq!(
+        recorded_durations, 1,
+        "the failure duration must use the injected clock exactly once"
     );
 }
 

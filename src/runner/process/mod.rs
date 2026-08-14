@@ -3,12 +3,12 @@
 
 use super::BuildTargets;
 use crate::cli::Cli;
+use monotony::{MonotonicClock, StdMonotonicClock};
 use std::{
     io::{self, BufReader},
     path::Path,
     process::{Child, Command, ExitStatus},
     thread,
-    time::Instant,
 };
 
 mod child_exit;
@@ -24,10 +24,11 @@ mod streaming;
 #[cfg(test)]
 mod tests;
 
-use child_exit::{finalize_streaming, ninja_exit_error, terminate_child};
+use child_exit::{
+    ExitFailureContext, check_exit_status_with_context, finalize_streaming, terminate_child,
+};
 use command_logging::{
-    CommandLogContext, command_span, log_command_execution, log_command_exit_failure,
-    log_command_spawn_failure,
+    CommandLogContext, command_span, log_command_execution, log_command_spawn_failure,
 };
 use failure_attribution::{
     CommandListFailure, FailureAttributionWriter, forward_stderr_with_attribution,
@@ -55,6 +56,14 @@ use streaming::{ForwardStats, forward_child_output, forward_child_output_with_ni
 /// This alias appears in `pub(crate)` function signatures and borrows a mutable
 /// callback for the call duration, so callers can retain state across updates.
 type StatusObserver<'a> = &'a mut dyn FnMut(u32, u32, &str);
+
+/// Per-invocation process settings passed only from Ninja setup to execution.
+struct CommandExecutionContext<'a, Clock> {
+    operation: &'a str,
+    suppress_stderr: bool,
+    clock: &'a Clock,
+}
+
 // Public helpers for doctests only. This exposes internal helpers as a stable
 // testing surface without exporting them in release builds.
 #[cfg(doctest)]
@@ -75,64 +84,36 @@ pub mod doc {
     };
 }
 
-#[derive(Clone, Copy)]
-struct ExitFailureContext<'a> {
-    operation: &'a str,
-    suppress_stderr: bool,
-    command_list_failure: Option<&'a CommandListFailure>,
-    started: Instant,
-}
-
-fn check_exit_status_with_context(
-    status: ExitStatus,
-    context: &CommandLogContext,
-    failure_context: ExitFailureContext<'_>,
-) -> io::Result<()> {
-    if status.success() {
-        Ok(())
-    } else {
-        tracing::Span::current().record("failure_category", "exit_status");
-        log_command_exit_failure(
-            context,
-            failure_context.operation,
-            failure_context.suppress_stderr,
-            status,
-        );
-        if let Some(failure) = failure_context.command_list_failure {
-            command_list_telemetry::record_failure(failure, failure_context.started.elapsed());
-        }
-        ninja_exit_error(status, failure_context.command_list_failure)
-    }
-}
-
-fn run_command_and_stream_with_context(
+fn run_command_and_stream_with_context<Clock: MonotonicClock>(
     mut cmd: Command,
     status_observer: Option<StatusObserver<'_>>,
-    suppress_stderr: bool,
-    operation: &str,
+    execution: &CommandExecutionContext<'_, Clock>,
 ) -> io::Result<()> {
     let context = CommandLogContext::from_command(&cmd);
-    let span = command_span(&context, operation, suppress_stderr);
+    let span = command_span(&context, execution.operation, execution.suppress_stderr);
     let _entered = span.enter();
 
-    log_command_execution(&context, operation, suppress_stderr);
-    let started = Instant::now();
+    log_command_execution(&context, execution.operation, execution.suppress_stderr);
+    let started_at = execution.clock.now();
     let child = cmd.spawn().inspect_err(|err| {
         tracing::Span::current().record("failure_category", "spawn");
-        log_command_spawn_failure(&context, operation, suppress_stderr, err);
+        log_command_spawn_failure(
+            &context,
+            execution.operation,
+            execution.suppress_stderr,
+            err,
+        );
     })?;
     let (status, command_list_failure) =
-        spawn_and_stream_output(child, status_observer, suppress_stderr)?;
-    check_exit_status_with_context(
-        status,
-        &context,
-        ExitFailureContext {
-            operation,
-            suppress_stderr,
-            command_list_failure: command_list_failure.as_ref(),
-            started,
-        },
-    )
+        spawn_and_stream_output(child, status_observer, execution.suppress_stderr)?;
+    let failure_context = ExitFailureContext {
+        operation: execution.operation,
+        suppress_stderr: execution.suppress_stderr,
+        command_list_failure: command_list_failure.as_ref(),
+        clock: execution.clock,
+        started_at,
+    };
+    check_exit_status_with_context(status, &context, &failure_context)
 }
 
 /// Invoke the Ninja executable with the provided CLI settings.
@@ -197,7 +178,14 @@ pub fn run_ninja(
 /// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
 /// streams are unavailable, or when Ninja reports a non-zero exit status.
 pub fn run_ninja_with(request: &NinjaBuildRequest<'_>) -> io::Result<()> {
-    run_ninja_build_internal(*request, None)
+    run_ninja_with_clock(request, &StdMonotonicClock)
+}
+
+fn run_ninja_with_clock(
+    request: &NinjaBuildRequest<'_>,
+    clock: &impl MonotonicClock,
+) -> io::Result<()> {
+    run_ninja_build_internal(*request, None, clock)
 }
 
 /// Invoke a Ninja tool (e.g., `ninja -t clean`) with the provided CLI settings.
@@ -245,7 +233,7 @@ pub fn run_ninja_tool(program: &Path, cli: &Cli, build_file: &Path, tool: &str) 
 /// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
 /// streams are unavailable, or when Ninja reports a non-zero exit status.
 pub fn run_ninja_tool_with(request: &NinjaToolRequest<'_>) -> io::Result<()> {
-    run_ninja_tool_internal(*request, None)
+    run_ninja_tool_internal(*request, None, &StdMonotonicClock)
 }
 
 struct NinjaInternalRequest<'request, 'observer> {
@@ -255,22 +243,28 @@ struct NinjaInternalRequest<'request, 'observer> {
     operation: &'request str,
 }
 
-fn run_ninja_internal<F>(request: NinjaInternalRequest<'_, '_>, configure: F) -> io::Result<()>
+fn run_ninja_internal<F, Clock>(
+    request: NinjaInternalRequest<'_, '_>,
+    clock: &Clock,
+    configure: F,
+) -> io::Result<()>
 where
     F: FnOnce(&mut Command) -> io::Result<()>,
+    Clock: MonotonicClock,
 {
     let mut cmd = Command::new(request.program);
     configure(&mut cmd)?;
-    run_command_and_stream_with_context(
-        cmd,
-        request.status_observer,
-        request.cli.json,
-        request.operation,
-    )
+    let execution = CommandExecutionContext {
+        operation: request.operation,
+        suppress_stderr: request.cli.json,
+        clock,
+    };
+    run_command_and_stream_with_context(cmd, request.status_observer, &execution)
 }
 fn run_ninja_build_internal(
     request: NinjaBuildRequest<'_>,
     status_observer: Option<StatusObserver<'_>>,
+    clock: &impl MonotonicClock,
 ) -> io::Result<()> {
     run_ninja_internal(
         NinjaInternalRequest {
@@ -279,6 +273,7 @@ fn run_ninja_build_internal(
             status_observer,
             operation: "build",
         },
+        clock,
         |cmd| configure_ninja_build_command(cmd, &request),
     )
 }
@@ -286,6 +281,7 @@ fn run_ninja_build_internal(
 fn run_ninja_tool_internal(
     request: NinjaToolRequest<'_>,
     status_observer: Option<StatusObserver<'_>>,
+    clock: &impl MonotonicClock,
 ) -> io::Result<()> {
     run_ninja_internal(
         NinjaInternalRequest {
@@ -294,6 +290,7 @@ fn run_ninja_tool_internal(
             status_observer,
             operation: request.tool,
         },
+        clock,
         |cmd| configure_ninja_tool_command(cmd, &request),
     )
 }
@@ -308,7 +305,7 @@ pub(crate) fn run_ninja_with_status(
     request: NinjaBuildRequest<'_>,
     status_observer: StatusObserver<'_>,
 ) -> io::Result<()> {
-    run_ninja_build_internal(request, Some(status_observer))
+    run_ninja_build_internal(request, Some(status_observer), &StdMonotonicClock)
 }
 
 /// Invoke `ninja -t` and stream parsed task updates from status lines.
@@ -321,7 +318,7 @@ pub(crate) fn run_ninja_tool_with_status(
     request: NinjaToolRequest<'_>,
     status_observer: StatusObserver<'_>,
 ) -> io::Result<()> {
-    run_ninja_tool_internal(request, Some(status_observer))
+    run_ninja_tool_internal(request, Some(status_observer), &StdMonotonicClock)
 }
 
 fn forward_stdout(

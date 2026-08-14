@@ -5,7 +5,8 @@ use metrics::{counter, describe_counter, describe_histogram, histogram};
 use std::{sync::Once, time::Duration};
 
 const COMMAND_LIST_FAILURES_TOTAL: &str = "netsuke_ninja_command_list_failures_total";
-const COMMAND_LIST_FAILURE_DURATION: &str = "netsuke_ninja_command_list_failure_duration_seconds";
+pub(super) const COMMAND_LIST_FAILURE_DURATION: &str =
+    "netsuke_ninja_command_list_failure_duration_seconds";
 
 /// Record the only observable per-entry outcome: a safely attributed failure.
 pub(super) fn record_failure(failure: &CommandListFailure, elapsed: Duration) {
