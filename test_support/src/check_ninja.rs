@@ -331,7 +331,7 @@ pub fn fake_ninja_expect_tool_with_jobs(
     anyhow::bail!("fake_ninja_expect_tool_with_jobs is only supported on Unix platforms")
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     //! Unit coverage for the fake-Ninja factories in this module: verifies the
     //! generated shell scripts validate `-t`, `-f`, `-j`, and `-C` invocations

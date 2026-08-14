@@ -199,7 +199,9 @@ fn rust_compiler(env: &impl Env) -> OsString {
 mod tests {
     //! Unit tests for compiler selection and helper compilation.
 
-    use super::{RustHelperSource, compile_rust_helper_with_env, rust_compiler};
+    use super::rust_compiler;
+    #[cfg(unix)]
+    use super::{RustHelperSource, compile_rust_helper_with_env};
     #[cfg(unix)]
     use crate::exec::write_exec_with_content;
     #[cfg(unix)]
