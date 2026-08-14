@@ -302,15 +302,16 @@ fn target_state_strategy() -> impl Strategy<Value = TargetState> {
         Just(TargetState::RacedDirectory),
     ]
 }
-
+fn test_case_error(error: &io::Error) -> TestCaseError {
+    TestCaseError::fail(error.to_string())
+}
 fn property_workspace() -> Result<(TempDir, Utf8PathBuf), TestCaseError> {
-    let temp = TempDir::new().map_err(|error| TestCaseError::fail(error.to_string()))?;
+    let temp = TempDir::new().map_err(|error| test_case_error(&error))?;
     let temp_path = Utf8Path::from_path(temp.path())
         .ok_or_else(|| TestCaseError::fail("temporary path is not UTF-8"))?
         .to_owned();
     Ok((temp, temp_path))
 }
-
 fn replace_staged_manifest(
     staged_file: NamedTempFile,
     manifest_path: &Utf8Path,
@@ -327,7 +328,6 @@ fn replace_staged_manifest(
     replacement.write_all(contents)?;
     Ok(replacement)
 }
-
 // This property checks controlled creation orderings through the injected hook.
 // It does not model arbitrary operating-system scheduling or filesystems.
 proptest! {
@@ -349,9 +349,9 @@ proptest! {
 
         match state {
             TargetState::ExistingFile => fs::write(expected_path.as_std_path(), &competing_contents)
-                .map_err(|error| TestCaseError::fail(error.to_string()))?,
+                .map_err(|error| test_case_error(&error))?,
             TargetState::ExistingDirectory => fs::create_dir(expected_path.as_std_path())
-                .map_err(|error| TestCaseError::fail(error.to_string()))?,
+                .map_err(|error| test_case_error(&error))?,
             TargetState::Missing | TargetState::RacedFile | TargetState::RacedDirectory => {}
         }
 
@@ -374,17 +374,17 @@ proptest! {
 
         match state {
             TargetState::Missing => {
-                let returned_path = result.map_err(|error| TestCaseError::fail(error.to_string()))?;
+                let returned_path = result.map_err(|error| test_case_error(&error))?;
                 prop_assert_eq!(&returned_path, &expected_path);
                 let contents = fs::read(expected_path.as_std_path())
-                    .map_err(|error| TestCaseError::fail(error.to_string()))?;
+                    .map_err(|error| test_case_error(&error))?;
                 prop_assert_eq!(contents, expected_staged_contents);
             }
             TargetState::ExistingFile | TargetState::RacedFile => {
-                let returned_path = result.map_err(|error| TestCaseError::fail(error.to_string()))?;
+                let returned_path = result.map_err(|error| test_case_error(&error))?;
                 prop_assert_eq!(&returned_path, &expected_path);
                 let contents = fs::read(expected_path.as_std_path())
-                    .map_err(|error| TestCaseError::fail(error.to_string()))?;
+                    .map_err(|error| test_case_error(&error))?;
                 prop_assert_eq!(contents, competing_contents);
             }
             TargetState::ExistingDirectory | TargetState::RacedDirectory => {

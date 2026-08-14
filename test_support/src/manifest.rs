@@ -77,6 +77,19 @@ fn manifest_path_is_directory_error(manifest_path: &Utf8Path) -> io::Error {
     )
 }
 
+fn handle_raced_manifest_target(manifest_path: &Utf8Path) -> io::Result<()> {
+    match inspect_manifest_target(manifest_path)? {
+        fs::PathState::Directory => Err(manifest_path_is_directory_error(manifest_path)),
+        fs::PathState::NonDirectory => Ok(()),
+        fs::PathState::Absent => Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            format!(
+                "Manifest target disappeared after no-clobber persistence reported it existed: {manifest_path}"
+            ),
+        )),
+    }
+}
+
 /// Install a deterministic action before a staged manifest is persisted.
 ///
 /// This test-only seam models controlled target creation after the initial
@@ -152,16 +165,7 @@ fn persist_manifest_file(file: NamedTempFile, manifest_path: &Utf8Path) -> io::R
     match file.persist_noclobber(manifest_path.as_std_path()) {
         Ok(_) => Ok(()),
         Err(e) if e.error.kind() == io::ErrorKind::AlreadyExists => {
-            match inspect_manifest_target(manifest_path)? {
-                fs::PathState::Directory => Err(manifest_path_is_directory_error(manifest_path)),
-                fs::PathState::NonDirectory => Ok(()),
-                fs::PathState::Absent => Err(io::Error::new(
-                    io::ErrorKind::AlreadyExists,
-                    format!(
-                        "Manifest target disappeared after no-clobber persistence reported it existed: {manifest_path}"
-                    ),
-                )),
-            }
+            handle_raced_manifest_target(manifest_path)
         }
         Err(e) => Err(io::Error::new(
             e.error.kind(),
