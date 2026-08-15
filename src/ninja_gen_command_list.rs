@@ -40,6 +40,10 @@ struct ShellWords(Vec<String>);
 pub(super) fn command_list_entry_error(
     command: CommandListEntry<'_>,
 ) -> Option<CommandListEntryError> {
+    // Manifest validation normally rejects syntax that `shlex` cannot parse,
+    // but programmatic IR can bypass it. Preserve the direct scan on parse
+    // failure: it can still prove multiple direct background jobs, while
+    // nested `eval` and `exec` analysis remain unavailable.
     let direct_background_jobs = background_operator_count(command);
     if ShellWords::parse(command).is_some_and(|words| {
         words.background_job_count().is_none_or(|nested_jobs| {
