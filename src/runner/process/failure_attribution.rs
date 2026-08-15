@@ -1,4 +1,4 @@
-//! Bounded extraction of command-list failure attribution from Ninja stderr.
+//! Bounded extraction of command-list failure attribution from Ninja output.
 
 use crate::ninja_gen::ninja_gen_command_list::COMMAND_LIST_FAILURE_PREFIX;
 use std::io::{self, Write};
@@ -17,6 +17,73 @@ where
     let mut attribution_writer = FailureAttributionWriter::new(output);
     let stats = forward_child_output(reader, &mut attribution_writer, "stderr");
     (stats, attribution_writer.into_failure())
+}
+
+/// Retain only Ninja's trailing output, where it relays failed subcommand
+/// diagnostics after the command itself has completed.
+///
+/// Ninja merges a subcommand's stderr into its own stdout. Retaining a small
+/// tail lets the process boundary recover the generated failure marker after a
+/// non-zero exit without examining or line-buffering ordinary command output.
+pub(super) struct NinjaFailureOutputTail<W> {
+    inner: W,
+    tail: Vec<u8>,
+}
+
+impl<W> NinjaFailureOutputTail<W> {
+    const MAX_TAIL_BYTES: usize = 512;
+
+    pub(super) fn new(inner: W) -> Self {
+        Self {
+            inner,
+            tail: Vec::with_capacity(Self::MAX_TAIL_BYTES),
+        }
+    }
+
+    /// Extract a bounded marker only after Ninja has reported a failure.
+    pub(super) fn into_failure(self) -> Option<CommandListFailure> {
+        self.tail
+            .split(|byte| *byte == b'\n')
+            .filter_map(parse_marker)
+            .next_back()
+    }
+
+    #[cfg(test)]
+    const fn tail_len(&self) -> usize {
+        self.tail.len()
+    }
+
+    fn retain_tail(&mut self, bytes: &[u8]) {
+        if bytes.len() >= Self::MAX_TAIL_BYTES {
+            self.tail.clear();
+            let suffix = bytes
+                .get(bytes.len().saturating_sub(Self::MAX_TAIL_BYTES)..)
+                .unwrap_or_default();
+            self.tail.extend_from_slice(suffix);
+            return;
+        }
+
+        let retained = self.tail.len().saturating_add(bytes.len());
+        if retained > Self::MAX_TAIL_BYTES {
+            self.tail.drain(..retained - Self::MAX_TAIL_BYTES);
+        }
+        self.tail.extend_from_slice(bytes);
+    }
+}
+
+impl<W: Write> Write for NinjaFailureOutputTail<W> {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let count = self.inner.write(bytes)?;
+        let Some(written) = bytes.get(..count) else {
+            return Err(io::Error::other("writer reported an invalid byte count"));
+        };
+        self.retain_tail(written);
+        Ok(count)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
 }
 
 pub(super) struct FailureAttributionWriter<W> {
@@ -81,22 +148,23 @@ impl<W> FailureAttributionWriter<W> {
     }
 
     fn record_line(&mut self) {
-        let Ok(line) = std::str::from_utf8(&self.pending) else {
-            return;
-        };
-        let Some((action, entry)) = line
-            .strip_prefix(COMMAND_LIST_FAILURE_PREFIX)
-            .and_then(|suffix| suffix.split_once(", entry "))
-            .and_then(|(action, entry)| Some((action, entry.parse::<usize>().ok()?)))
-        else {
-            return;
-        };
-        if is_action_identity(action) && entry > 0 {
-            self.failure = Some(CommandListFailure {
-                action_identity: action.to_owned(),
-                entry_index: entry,
-            });
-        }
+        self.failure = parse_marker(&self.pending);
+    }
+}
+
+fn parse_marker(bytes: &[u8]) -> Option<CommandListFailure> {
+    let line = std::str::from_utf8(bytes).ok()?;
+    let (action, entry_text) = line
+        .strip_prefix(COMMAND_LIST_FAILURE_PREFIX)?
+        .split_once(", entry ")?;
+    let entry = entry_text.parse::<usize>().ok()?;
+    if is_action_identity(action) && entry > 0 {
+        Some(CommandListFailure {
+            action_identity: action.to_owned(),
+            entry_index: entry,
+        })
+    } else {
+        None
     }
 }
 
@@ -164,5 +232,31 @@ mod tests {
             .expect("valid marker after unbounded content should write");
 
         assert!(writer.into_failure().is_none());
+    }
+
+    #[test]
+    fn retains_a_bounded_ninja_output_tail_for_failure_attribution() {
+        let mut writer = NinjaFailureOutputTail::new(Vec::new());
+        writer
+            .write_all(&vec![b'x'; 256 * 1024])
+            .expect("large command output should forward");
+        writer
+            .write_all(
+                format!("\nnetsuke command-list failure: action {ACTION_IDENTITY}, entry 3\n")
+                    .as_bytes(),
+            )
+            .expect("Ninja failure marker should forward");
+
+        assert!(
+            writer.tail_len() <= NinjaFailureOutputTail::<Vec<u8>>::MAX_TAIL_BYTES,
+            "Ninja failure attribution must retain a fixed-size output tail"
+        );
+        assert_eq!(
+            writer.into_failure().map(|failure| failure.to_string()),
+            Some(
+                "netsuke command-list failure: action 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef, entry 3"
+                    .into()
+            )
+        );
     }
 }

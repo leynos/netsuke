@@ -1,8 +1,10 @@
 //! Unit and property tests for Ninja process helpers.
 
 use super::super::{NINJA_ENV, NINJA_PROGRAM};
+use super::child_exit::finalize_streaming;
 #[cfg(unix)]
 use super::command_list_telemetry::COMMAND_LIST_FAILURE_DURATION;
+use super::streaming::ForwardStats;
 use super::*;
 use camino::Utf8PathBuf;
 #[cfg(unix)]
@@ -12,7 +14,7 @@ use metrics_util::{
 };
 use mockable::MockEnv;
 #[cfg(unix)]
-use monotony::test_util::FixedMonotonicClock;
+use monotony::{StdMonotonicClock, test_util::FixedMonotonicClock};
 use proptest::prelude::*;
 use rstest::{fixture, rstest};
 use std::ffi::OsString;
@@ -20,6 +22,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 #[cfg(unix)]
 use std::process::Stdio;
+use std::thread;
 #[cfg(unix)]
 use std::time::Duration;
 
@@ -163,6 +166,7 @@ fn command_list_failure_duration_uses_the_injected_monotonic_clock() {
     let execution = CommandExecutionContext {
         operation: "build",
         suppress_stderr: true,
+        captures_ninja_failure_output: false,
         clock: &clock,
     };
     let result = metrics::with_local_recorder(&recorder, || {
@@ -187,6 +191,44 @@ fn command_list_failure_duration_uses_the_injected_monotonic_clock() {
         recorded_durations, 1,
         "the failure duration must use the injected clock exactly once"
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn large_stdout_cannot_supply_command_list_attribution() -> anyhow::Result<()> {
+    let mut command = Command::new("sh");
+    command
+        .args([
+            "-c",
+            concat!(
+                "yes x | head -c 262144; ",
+                "printf '%s\\n' 'netsuke command-list failure: action ",
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef, entry 2'; ",
+                "exit 1"
+            ),
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let execution = CommandExecutionContext {
+        operation: "build",
+        suppress_stderr: true,
+        // Only a Ninja build can relay a subcommand's stderr through stdout.
+        // An arbitrary command's large stdout must be forwarded untouched.
+        captures_ninja_failure_output: false,
+        clock: &StdMonotonicClock,
+    };
+
+    let Err(error) = run_command_and_stream_with_context(command, None, &execution) else {
+        anyhow::bail!("a failing command should return an error");
+    };
+
+    if error
+        .to_string()
+        .contains("netsuke command-list failure: action ")
+    {
+        anyhow::bail!("stdout must not supply command-list attribution: {error}");
+    }
+    Ok(())
 }
 
 // As above, the fixture is called directly because `proptest!` generates the

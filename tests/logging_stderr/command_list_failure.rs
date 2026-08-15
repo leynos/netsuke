@@ -14,7 +14,7 @@ fn identifies_entry(message: &str, entry: usize) -> bool {
     message.contains(FAILURE_PREFIX) && message.contains(&format!(", entry {entry}"))
 }
 
-fn failing_command_list_workspace() -> Result<Option<TempDir>> {
+fn failing_command_list_workspace(first_entry: &str) -> Result<Option<TempDir>> {
     let temp = match ninja_integration_workspace() {
         Ok(temp) => temp,
         Err(error) => {
@@ -25,15 +25,18 @@ fn failing_command_list_workspace() -> Result<Option<TempDir>> {
     let workspace: Dir = open_workspace(&temp)?;
     workspace.write(
         "Netsukefile",
-        r#"
+        format!(
+            r#"
 netsuke_version: "1.0.0"
 targets:
   - name: result.txt
     command:
-      - "echo first > $out"
+      - "{first_entry}"
       - "false"
       - "echo unexpected >> $out"
 "#,
+        )
+        .as_bytes(),
     )?;
     Ok(Some(temp))
 }
@@ -49,7 +52,7 @@ fn run_failing_build(temp: &TempDir, arguments: &[&str]) -> Result<std::process:
 
 #[test]
 fn failed_command_list_entry_is_attributed_in_human_output() -> Result<()> {
-    let Some(temp) = failing_command_list_workspace()? else {
+    let Some(temp) = failing_command_list_workspace("echo first > $out")? else {
         return Ok(());
     };
     let output = run_failing_build(&temp, &["--progress", "never", "build"])?;
@@ -74,7 +77,7 @@ fn failed_command_list_entry_is_attributed_in_human_output() -> Result<()> {
 
 #[test]
 fn failed_command_list_entry_is_attributed_in_json_diagnostics() -> Result<()> {
-    let Some(temp) = failing_command_list_workspace()? else {
+    let Some(temp) = failing_command_list_workspace("echo first > $out")? else {
         return Ok(());
     };
     let output = run_failing_build(&temp, &["--json", "build"])?;
@@ -97,7 +100,7 @@ fn failed_command_list_entry_is_attributed_in_json_diagnostics() -> Result<()> {
 
 #[test]
 fn failed_command_list_entry_is_attributed_in_tracing_output() -> Result<()> {
-    let Some(temp) = failing_command_list_workspace()? else {
+    let Some(temp) = failing_command_list_workspace("echo first > $out")? else {
         return Ok(());
     };
     let output = run_failing_build(&temp, &["--verbose", "--progress", "never", "build"])?;
@@ -109,6 +112,25 @@ fn failed_command_list_entry_is_attributed_in_tracing_output() -> Result<()> {
     ensure!(
         stderr.contains("command_list_failure") && identifies_entry(&stderr, 2),
         "tracing should record the bounded command-list failure context: {stderr}"
+    );
+    Ok(())
+}
+
+#[test]
+fn large_command_stdout_retains_command_list_failure_attribution() -> Result<()> {
+    let Some(temp) = failing_command_list_workspace("echo first > $out && yes x | head -c 262144")?
+    else {
+        return Ok(());
+    };
+    let output = run_failing_build(&temp, &["--progress", "never", "build"])?;
+    ensure!(
+        !output.status.success(),
+        "a failing list entry must fail the build"
+    );
+    let stderr = String::from_utf8(output.stderr).context("stderr should be valid UTF-8")?;
+    ensure!(
+        identifies_entry(&stderr, 2),
+        "large command stdout must not hide the bounded failing entry: {stderr}"
     );
     Ok(())
 }
