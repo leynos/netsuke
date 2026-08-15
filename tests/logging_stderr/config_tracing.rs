@@ -84,6 +84,10 @@ fn explicit_selection_traces_bounded_fields() -> Result<()> {
         "stderr should name the winning selector: {joined}"
     );
     ensure!(
+        joined.contains("using explicit config path"),
+        "verbose startup should replay the cached explicit selection: {joined}"
+    );
+    ensure!(
         joined.contains("path_hash=") && joined.contains("path_file_name="),
         "stderr should carry the bounded path fields: {joined}"
     );

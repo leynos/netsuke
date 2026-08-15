@@ -91,17 +91,18 @@ fn run_with_args(
         return finish_run(run_cli(&parsed_cli, system_locale, startup_mode), verbose);
     }
 
-    let mode = match resolve_json_mode_or_exit(&parsed_cli, &matches, startup_mode) {
-        Ok(mode) => mode,
-        Err(code) => {
-            settle_startup_diagnostics(&startup_writer, startup_mode);
-            return finish_run(code, verbose);
-        }
-    };
+    let (mode, discovered_layers) =
+        match resolve_json_mode_or_exit(&parsed_cli, &matches, startup_mode) {
+            Ok(resolved) => resolved,
+            Err(code) => {
+                settle_startup_diagnostics(&startup_writer, startup_mode);
+                return finish_run(code, verbose);
+            }
+        };
     // The effective mode is known here, before configuration is merged, so the
     // startup warning reaches the user ahead of any configuration processing.
     settle_startup_diagnostics(&startup_writer, mode);
-    let merged_cli = match merge_cli_or_exit(&parsed_cli, &matches, mode) {
+    let merged_cli = match merge_cli_or_exit(&parsed_cli, &matches, mode, discovered_layers) {
         Ok(merged) => merged,
         Err(code) => return finish_run(code, verbose),
     };
@@ -265,23 +266,23 @@ fn resolve_json_mode_or_exit(
     parsed_cli: &cli::Cli,
     matches: &ArgMatches,
     fallback_mode: DiagMode,
-) -> Result<DiagMode, ExitCode> {
-    match observability::record_config_load(observability::DIAG_MODE_PHASE, || {
-        cli::resolve_merged_json(parsed_cli, matches)
-    }) {
+) -> Result<(DiagMode, cli::DiscoveredLayers), ExitCode> {
+    let (result, outcome) = cli::resolve_json_and_layers_outcome_with_env(
+        parsed_cli,
+        matches,
+        &cli::ConfigStdEnvProvider,
+    );
+    match observability::record_config_load(observability::DIAG_MODE_PHASE, || result) {
         Ok(is_json_enabled) => {
             let mode = DiagMode::from_json_enabled(is_json_enabled);
             set_tracing_filter(startup_filter(mode, parsed_cli.verbose));
-            Ok(mode)
+            outcome.emit_diagnostics();
+            Ok((mode, outcome.into_layers()))
         }
         Err(err) => {
             let fallback_filter = startup_filter(fallback_mode, parsed_cli.verbose);
             set_tracing_filter(fallback_filter);
-            // Resolution failed before its diagnostics could be emitted. Replay
-            // only for human output after enabling its filter; JSON remains OFF.
-            if fallback_filter != LevelFilter::OFF {
-                drop(cli::resolve_merged_json(parsed_cli, matches));
-            }
+            outcome.emit_diagnostics();
             Err(config_err_to_exit(
                 err.as_ref(),
                 fallback_mode,
@@ -295,9 +296,15 @@ fn merge_cli_or_exit(
     parsed_cli: &cli::Cli,
     matches: &ArgMatches,
     mode: DiagMode,
+    discovered_layers: cli::DiscoveredLayers,
 ) -> Result<cli::Cli, ExitCode> {
     observability::record_config_load(observability::MERGE_PHASE, || {
-        cli::merge_with_config(parsed_cli, matches)
+        cli::merge_with_cached_file_layers(
+            parsed_cli,
+            matches,
+            &cli::ConfigStdEnvProvider,
+            discovered_layers,
+        )
     })
     .map(cli::Cli::with_default_command)
     .map_err(|err| config_err_to_exit(err.as_ref(), mode, observability::MERGE_OPERATION))

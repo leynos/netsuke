@@ -32,7 +32,13 @@ fn resolve_and_trace(
 ) -> Result<(ConfigPathResolution, Vec<String>)> {
     capture_events(|| {
         let resolution = resolve_config_selector(cli_config, env);
-        trace_config_path_resolution(&resolution);
+        DiscoveryTrace::new(
+            &resolution,
+            FileLayerTrace::Automatic {
+                project_scope: None,
+            },
+        )
+        .emit();
         Ok::<_, anyhow::Error>(resolution)
     })
 }

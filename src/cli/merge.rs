@@ -26,14 +26,13 @@ use ortho_config::declarative::LayerComposition;
 use ortho_config::figment::Figment;
 use ortho_config::{MergeComposer, OrthoMergeExt, OrthoResult, sanitize_value};
 use serde::Serialize;
-use std::sync::Arc;
 
 use serde_json::{Map, Value, json};
 
 use super::config::{BuildConfig, CliConfig};
 use super::discovery::{
-    DiscoverySources, EnvProvider, StdEnvProvider, discovery_env_source,
-    push_file_layers_with_sources,
+    DiscoveredLayers, EnvProvider, StdEnvProvider, discover_file_layers,
+    push_discovered_file_layers,
 };
 use super::environment::EnvironmentLayer;
 use super::parser::{BuildArgs, Cli, Commands};
@@ -46,12 +45,7 @@ use super::validation_error;
 /// Returns an [`ortho_config::OrthoError`] if layer composition or merging
 /// fails.
 pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli> {
-    merge_with_config_sources(
-        cli,
-        matches,
-        &StdEnvProvider,
-        Arc::new(ortho_config::ProcessEnv),
-    )
+    merge_with_config_and_env(cli, matches, &StdEnvProvider)
 }
 
 /// Merge configuration layers using an explicit environment provider.
@@ -69,15 +63,25 @@ pub fn merge_with_config_and_env(
     matches: &ArgMatches,
     env: &impl EnvProvider,
 ) -> OrthoResult<Cli> {
-    merge_with_config_sources(cli, matches, env, discovery_env_source(env))
+    let outcome = discover_file_layers(cli, env);
+    outcome.emit_diagnostics();
+    merge_with_cached_file_layers(cli, matches, env, outcome.into_layers())
 }
 
-/// Merge configuration using distinct value and discovery adapters.
-fn merge_with_config_sources(
+/// Merge configuration using file layers discovered by an earlier phase.
+///
+/// This composition boundary is used after diagnostic-mode resolution so the
+/// full merge reuses the first discovery pass rather than loading files again.
+///
+/// # Errors
+///
+/// Returns an [`ortho_config::OrthoError`] if layer composition or merging
+/// fails.
+pub fn merge_with_cached_file_layers(
     cli: &Cli,
     matches: &ArgMatches,
     env: &impl EnvProvider,
-    discovery_env: ortho_config::SharedEnvSource,
+    discovered: DiscoveredLayers,
 ) -> OrthoResult<Cli> {
     let mut errors = Vec::new();
     let mut composer = MergeComposer::with_capacity(4);
@@ -87,8 +91,7 @@ fn merge_with_config_sources(
         Err(err) => errors.push(err),
     }
 
-    let discovery_sources = DiscoverySources::new(env, discovery_env);
-    push_file_layers_with_sources(cli, &mut composer, &mut errors, &discovery_sources);
+    push_discovered_file_layers(&mut composer, &mut errors, discovered);
 
     match Figment::from(EnvironmentLayer::new(env.entries()))
         .extract::<Value>()

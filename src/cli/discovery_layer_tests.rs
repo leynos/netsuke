@@ -1,18 +1,17 @@
 //! Tests for configuration file-layer collection.
 //!
 //! These cover which branch the shared file-layer boundary takes — explicit path
-//! versus automatic discovery — and the project-scope second pass in
-//! [`collect_file_layers`]. Selector precedence and event-schema snapshots live
-//! in the tracing test module.
-
-use super::*;
-use crate::cli::test_support::TestEnv;
+//! versus automatic discovery — and the project-scope second pass. Selector
+//! precedence and event-schema snapshots live in the tracing test module.
 use anyhow::{Context, Result, ensure};
+use crate::cli::test_support::TestEnv;
 use googletest::prelude::*;
 use pretty_assertions::assert_eq;
-use rstest::rstest;
+use super::*;
 use tempfile::{TempDir, tempdir};
 
+use std::cell::Cell;
+use std::ffi::OsString;
 use super::event_assertions::{EventAssertion, capture_events, find_event};
 use super::layers::{collect_file_layers, collect_file_layers_with_normalizer};
 use super::paths::FailingPathNormalizer;
@@ -23,6 +22,25 @@ enum LayerScenario {
     Discovery,
 }
 
+/// Environment double that records discovery lookups for replay assertions.
+#[derive(Default)]
+struct CountingEnv {
+    get_calls: Cell<usize>,
+}
+
+impl CountingEnv {
+    /// Return the number of selector reads performed so far.
+    fn get_calls(&self) -> usize {
+        self.get_calls.get()
+    }
+}
+
+impl EnvProvider for CountingEnv {
+    fn get(&self, _key: &str) -> Option<OsString> {
+        self.get_calls.set(self.get_calls.get() + 1);
+        None
+    }
+}
 /// Build a [`Cli`] for `scenario`, rooted in the isolated `temp` directory.
 ///
 /// The explicit case writes a config file and selects it through `--config`; the
@@ -45,41 +63,88 @@ fn scenario_cli(scenario: LayerScenario, temp: &TempDir) -> Result<Cli> {
     }
 }
 
-#[rstest]
-#[case::explicit_config_path(LayerScenario::ExplicitConfig, false, "using explicit config path")]
-#[case::isolated_directory_discovery(LayerScenario::Discovery, true, "using config discovery")]
-fn collect_diag_file_layers_logs_selected_branch(
-    #[case] scenario: LayerScenario,
-    #[case] should_be_empty: bool,
-    #[case] expected_event: &str,
-) -> Result<()> {
+fn replay_events(discovered: &DiscoveryOutcome) -> Result<Vec<String>> {
+    let ((), events) = capture_events(|| {
+        discovered.emit_diagnostics();
+        Ok::<_, anyhow::Error>(())
+    })?;
+    Ok(events)
+}
+
+/// Cached explicit selection emits its branch without repeating discovery.
+#[test]
+fn replay_logs_explicit_config_branch_without_environment_access() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
-    let cli = scenario_cli(scenario, &temp)?;
-    let env = TestEnv::default();
-
-    let (layers, events) = capture_events(|| collect_diag_file_layers_with_env(&cli, &env))?;
-    let branch_event = find_event(&events, expected_event)?;
+    let cli = scenario_cli(LayerScenario::ExplicitConfig, &temp)?;
+    let env = CountingEnv::default();
+    let discovered = collect_diag_file_layers_with_env(&cli, &env);
+    let events = replay_events(&discovered)?;
+    find_event(&events, "resolved config path")?;
+    let branch_event = find_event(&events, "using explicit config path")?;
 
     ensure!(
-        layers.is_empty() == should_be_empty,
-        "layer collection result should match {scenario:?}"
+        !discovered.layers().is_empty(),
+        "explicit layer should be retained for the merge"
     );
     ensure!(
-        branch_event.contains(&format!("message={expected_event:?}"))
-            || branch_event.contains(&format!("message={expected_event}")),
-        "branch should emit the expected event: {branch_event}"
+        env.get_calls() == 0,
+        "explicit selection should not access the environment, including on replay"
     );
-    if matches!(scenario, LayerScenario::ExplicitConfig) {
-        EventAssertion::new(
-            branch_event,
-            cli.config.as_deref().context("explicit config")?,
-        )
-        .ensure_bounded_path_fields()?;
-        ensure!(
-            !branch_event.contains("path="),
-            "explicit path branch should avoid raw path fields: {branch_event}"
-        );
-    }
+    EventAssertion::new(
+        branch_event,
+        cli.config.as_deref().context("explicit config")?,
+    )
+    .ensure_bounded_path_fields()?;
+
+    Ok(())
+}
+
+/// Cached automatic discovery replays its appended project-scope decision.
+#[test]
+fn replay_logs_discovery_and_appended_project_scope_without_environment_access() -> Result<()> {
+    let temp = tempdir().context("create temp dir")?;
+    let cli = scenario_cli(LayerScenario::Discovery, &temp)?;
+    let env = CountingEnv::default();
+    let discovered = collect_diag_file_layers_with_env(&cli, &env);
+    ensure!(
+        env.get_calls() == 1,
+        "discovery should read the selector once"
+    );
+
+    let events = replay_events(&discovered)?;
+    ensure!(
+        env.get_calls() == 1,
+        "replay must not access the environment again"
+    );
+    find_event(&events, "read config path variable")?;
+    find_event(&events, "resolved config path")?;
+    find_event(&events, "using config discovery")?;
+    find_event(&events, "appending project-scope layers")?;
+
+    Ok(())
+}
+
+/// Cached automatic discovery replays its included project-scope decision.
+#[test]
+fn replay_logs_included_project_scope_without_environment_access() -> Result<()> {
+    let temp = tempdir().context("create temp dir")?;
+    test_support::fs::write(temp.path().join(".netsuke.toml"), "jobs = 7\n")
+        .context("write project config")?;
+    let cli = scenario_cli(LayerScenario::Discovery, &temp)?;
+    let env = CountingEnv::default();
+    let discovered = collect_diag_file_layers_with_env(&cli, &env);
+    ensure!(
+        env.get_calls() == 1,
+        "discovery should read the selector once"
+    );
+
+    let events = replay_events(&discovered)?;
+    ensure!(
+        env.get_calls() == 1,
+        "replay must not access the environment again"
+    );
+    find_event(&events, "using config discovery")?;
+    find_event(&events, "discovery included project-scope layers")?;
 
     Ok(())
 }
@@ -166,7 +231,12 @@ fn existing_project_scope_layer_is_not_appended_twice() -> Result<()> {
 
     // Equivalent to `project_dir`, but not in canonical form.
     let non_canonical = project_dir.join(".");
-    let (layers, events) = capture_events(|| collect_file_layers(Some(non_canonical.as_path())))?;
+    let cli = Cli {
+        directory: Some(non_canonical),
+        ..Cli::default()
+    };
+    let discovered = discover_file_layers(&cli, &TestEnv::default());
+    let layers = discovered.layers();
 
     let project_layers = layers
         .iter()
@@ -180,6 +250,7 @@ fn existing_project_scope_layer_is_not_appended_twice() -> Result<()> {
         project_layers == 1,
         "project-scope layer should appear exactly once, found {project_layers}: {layers:?}"
     );
+    let events = replay_events(&discovered)?;
     find_event(&events, "discovery included project-scope layers")?;
     Ok(())
 }
@@ -213,7 +284,6 @@ fn normalization_failure_does_not_fail_discovery() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn non_utf8_directory_does_not_duplicate_project_layer() -> Result<()> {
-    use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
 
     let temp = tempdir().context("create temp dir")?;
@@ -232,7 +302,12 @@ fn non_utf8_directory_does_not_duplicate_project_layer() -> Result<()> {
     )
     .context("write project config")?;
 
-    let layers = collect_file_layers(Some(project_dir.as_path()))?;
+    let cli = Cli {
+        directory: Some(project_dir),
+        ..Cli::default()
+    };
+    let discovered = discover_file_layers(&cli, &TestEnv::default());
+    let layers = discovered.layers();
     ensure!(layers.len() == 1, "expected one project layer: {layers:?}");
     Ok(())
 }

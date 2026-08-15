@@ -12,7 +12,6 @@ use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tracing::{debug, debug_span};
 
 use super::parser::Cli;
 
@@ -24,11 +23,12 @@ mod paths;
 
 #[path = "discovery_layers.rs"]
 mod layers;
-use diagnostics::{
-    ConfigLoadFailureKind, debug_config_path, path_hash, trace_config_path_variable,
-    warn_explicit_config_load_failed,
-};
-use layers::collect_file_layers_with_env_source;
+
+#[path = "discovery_trace.rs"]
+mod trace;
+use diagnostics::{BoundedConfigPath, ConfigLoadFailureKind, ConfigLoadWarning};
+use layers::collect_file_layers_with_trace_and_env_source;
+use trace::{DiscoveryDiagnostics, DiscoveryTrace, FileLayerTrace};
 
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG";
 const DISCOVERY_ENV_KEYS: [&str; 7] = [
@@ -77,38 +77,99 @@ impl EnvProvider for StdEnvProvider {
     }
 }
 
-/// Environment adapters consumed by configuration file discovery.
+/// File layers and loading errors produced by one discovery pass.
 ///
-/// The value adapter remains the Netsuke-owned [`EnvProvider`] port, whereas
-/// `discovery_env` is the deliberately narrow `OrthoConfig` adapter. Keeping
-/// them together makes every composition root choose both dependencies
-/// explicitly and prevents a test-only environment from leaking ambient reads.
-pub(crate) struct DiscoverySources<'a, E: EnvProvider + ?Sized> {
-    env: &'a E,
-    discovery_env: SharedEnvSource,
+/// The diagnostic pre-pass borrows the layers to resolve JSON output, then the
+/// full merge consumes the same result. Keeping errors beside the layers lets
+/// those phases retain their distinct error policies without rediscovery.
+pub struct DiscoveredLayers {
+    layers: Vec<MergeLayer<'static>>,
+    errors: Vec<Arc<ortho_config::OrthoError>>,
+    diagnostics: DiscoveryDiagnostics,
 }
 
-impl<'a, E: EnvProvider + ?Sized> DiscoverySources<'a, E> {
-    /// Construct the discovery adapters selected by one composition root.
-    pub(crate) fn new(env: &'a E, discovery_env: SharedEnvSource) -> Self {
-        Self { env, discovery_env }
+impl DiscoveredLayers {
+    /// Borrow the file layers in discovery order.
+    pub(crate) fn layers(&self) -> &[MergeLayer<'static>] {
+        &self.layers
+    }
+
+    /// Borrow the first discovery error, if loading failed.
+    pub(crate) fn first_error(&self) -> Option<&Arc<ortho_config::OrthoError>> {
+        self.errors.first()
+    }
+
+    /// Consume the result into its reusable layers and deferred errors.
+    pub(crate) fn into_parts(
+        self,
+    ) -> (Vec<MergeLayer<'static>>, Vec<Arc<ortho_config::OrthoError>>) {
+        (self.layers, self.errors)
     }
 }
 
-/// Load configuration layers with explicit selector and discovery adapters.
-pub(crate) fn push_file_layers_with_sources(
-    cli: &Cli,
+/// Layers and diagnostics returned by a side-effect-free discovery pass.
+///
+/// The diagnostic pre-pass reads the layers while retaining the bounded events
+/// for a composition boundary to emit after it installs the tracing filter.
+pub struct DiscoveryOutcome {
+    layers: DiscoveredLayers,
+}
+
+impl DiscoveryOutcome {
+    /// Borrow file layers in discovery order.
+    pub(crate) fn layers(&self) -> &[MergeLayer<'static>] {
+        self.layers.layers()
+    }
+
+    /// Borrow the first discovery error, if loading failed.
+    pub(crate) fn first_error(&self) -> Option<&Arc<ortho_config::OrthoError>> {
+        self.layers.first_error()
+    }
+
+    /// Consume the outcome into the reusable file layers.
+    #[must_use]
+    pub fn into_layers(self) -> DiscoveredLayers {
+        self.layers
+    }
+
+    /// Emit deferred diagnostics without repeating discovery.
+    pub fn emit_diagnostics(&self) {
+        self.layers.diagnostics.emit();
+    }
+}
+
+/// Discover configuration layers once through the injected environment.
+pub(crate) fn discover_file_layers(cli: &Cli, env: &impl EnvProvider) -> DiscoveryOutcome {
+    let (trace, load_warning, outcome) = collect_file_layers_with_env(cli, env);
+    let diagnostics = DiscoveryDiagnostics::new(trace, load_warning);
+    let layers = match outcome {
+        Ok(layers) => DiscoveredLayers {
+            layers,
+            errors: Vec::new(),
+            diagnostics,
+        },
+        Err(error) => DiscoveredLayers {
+            layers: Vec::new(),
+            errors: vec![error],
+            diagnostics,
+        },
+    };
+    DiscoveryOutcome { layers }
+}
+
+/// Add a discovered file layer result to a merge composition.
+///
+/// Discovery errors join the merge error collection, retaining the normal
+/// merge path's accumulated-error behaviour.
+pub(crate) fn push_discovered_file_layers(
     composer: &mut MergeComposer,
     errors: &mut Vec<Arc<ortho_config::OrthoError>>,
-    sources: &DiscoverySources<'_, impl EnvProvider>,
+    discovered: DiscoveredLayers,
 ) {
-    match collect_file_layers_with_env(cli, sources) {
-        Ok(layers) => {
-            for layer in layers {
-                composer.push_layer(layer);
-            }
-        }
-        Err(err) => errors.push(err),
+    let (layers, discovery_errors) = discovered.into_parts();
+    errors.extend(discovery_errors);
+    for layer in layers {
+        composer.push_layer(layer);
     }
 }
 
@@ -118,22 +179,36 @@ pub(crate) fn push_file_layers_with_sources(
 /// select the same file layers while retaining their own error handling.
 fn collect_file_layers_with_env(
     cli: &Cli,
-    sources: &DiscoverySources<'_, impl EnvProvider>,
-) -> OrthoResult<Vec<MergeLayer<'static>>> {
-    let resolution = resolve_config_selector(cli.config.clone(), sources.env);
-    trace_config_path_resolution(&resolution);
-    resolution.path.map_or_else(
+    env: &impl EnvProvider,
+) -> (
+    DiscoveryTrace,
+    Option<ConfigLoadWarning>,
+    OrthoResult<Vec<MergeLayer<'static>>>,
+) {
+    let resolution = resolve_config_selector(cli.config.clone(), env);
+    let (file_layers, load_warning, outcome) = resolution.path.as_deref().map_or_else(
         || {
-            debug!("using config discovery");
-            collect_file_layers_with_env_source(
+            let (project_scope, outcome) = collect_file_layers_with_trace_and_env_source(
                 cli.directory.as_deref(),
-                Arc::clone(&sources.discovery_env),
-            )
+                discovery_env_source(env),
+            );
+            (FileLayerTrace::Automatic { project_scope }, None, outcome)
         },
         |path| {
-            debug_config_path("using explicit config path", &path);
-            load_layers_from_path(&path)
+            let (load_warning, outcome) = load_layers_from_path_with_warning(path);
+            (
+                FileLayerTrace::Explicit {
+                    path: BoundedConfigPath::from_path(Some(path)),
+                },
+                load_warning,
+                outcome,
+            )
         },
+    );
+    (
+        DiscoveryTrace::new(&resolution, file_layers),
+        load_warning,
+        outcome,
     )
 }
 
@@ -155,8 +230,8 @@ pub(crate) fn discovery_env_source(env: &impl EnvProvider) -> SharedEnvSource {
 /// Select an explicit config path, giving `--config` precedence over `env`.
 ///
 /// A thin wrapper over [`resolve_config_selector`] for callers that need only
-/// the winning path. Like that query it performs no tracing; orchestration
-/// boundaries call [`trace_config_path_resolution`] to emit diagnostics.
+/// the winning path. Like that query it performs no tracing; discovery returns
+/// bounded diagnostics for composition boundaries to emit later.
 ///
 /// Production code takes the richer [`ConfigPathResolution`] so it can trace the
 /// environment lookups, leaving this as a convenience for precedence tests.
@@ -200,24 +275,6 @@ fn resolve_config_selector(
         path: primary_path,
     }
 }
-
-/// Emit bounded diagnostics for a completed path `resolution`.
-///
-/// Environment lookups are traced before the selector event. A selected path
-/// contributes only a correlation hash and file name, never its full value.
-fn trace_config_path_resolution(resolution: &ConfigPathResolution) {
-    for (var_name, path) in &resolution.environment_lookups {
-        trace_config_path_variable(var_name, path.as_deref());
-    }
-    debug!(
-        selector = resolution.selector,
-        path_hash = resolution.path.as_deref().map(path_hash).as_deref(),
-        path_file_name = ?resolution.path.as_deref().and_then(Path::file_name),
-        path_present = resolution.path.is_some(),
-        "resolved config path"
-    );
-}
-
 /// Read a non-empty config path from `var_name` through `env`.
 ///
 /// Returns `None` when the variable is unset or empty, so discovery still runs.
@@ -232,15 +289,31 @@ fn env_config_path(env: &impl EnvProvider, var_name: &str) -> Option<PathBuf> {
 ///
 /// Unlike discovery, a missing explicit file is an error because the caller
 /// selected it deliberately.
-pub(crate) fn load_layers_from_path(
-    path: &std::path::Path,
-) -> OrthoResult<Vec<MergeLayer<'static>>> {
+#[cfg(test)]
+pub(crate) fn load_layers_from_path(path: &Path) -> OrthoResult<Vec<MergeLayer<'static>>> {
+    let (load_warning, result) = load_layers_from_path_with_warning(path);
+    if let Some(warning) = load_warning {
+        warning.emit();
+    }
+    result
+}
+
+/// Load explicit layers while retaining a warning for the composition boundary.
+fn load_layers_from_path_with_warning(
+    path: &Path,
+) -> (
+    Option<ConfigLoadWarning>,
+    OrthoResult<Vec<MergeLayer<'static>>>,
+) {
     match load_config_file_as_chain(path) {
-        Ok(Some(chain)) => Ok(chain
-            .values
-            .into_iter()
-            .map(|(value, layer_path)| MergeLayer::file(Cow::Owned(value), Some(layer_path)))
-            .collect()),
+        Ok(Some(chain)) => (
+            None,
+            Ok(chain
+                .values
+                .into_iter()
+                .map(|(value, layer_path)| MergeLayer::file(Cow::Owned(value), Some(layer_path)))
+                .collect()),
+        ),
         Ok(None) => {
             let error = Arc::new(ortho_config::OrthoError::File {
                 path: path.to_path_buf(),
@@ -249,32 +322,29 @@ pub(crate) fn load_layers_from_path(
                     "explicit configuration file not found",
                 )),
             });
-            warn_explicit_config_load_failed(path, ConfigLoadFailureKind::Missing);
-            Err(error)
+            (
+                Some(ConfigLoadWarning::new(path, ConfigLoadFailureKind::Missing)),
+                Err(error),
+            )
         }
-        Err(error) => {
-            warn_explicit_config_load_failed(path, ConfigLoadFailureKind::LoadError);
-            Err(error)
-        }
+        Err(error) => (
+            Some(ConfigLoadWarning::new(
+                path,
+                ConfigLoadFailureKind::LoadError,
+            )),
+            Err(error),
+        ),
     }
 }
 
-/// Load diagnostic file layers with the same discovery adapter as merging.
-pub(crate) fn collect_diag_file_layers_with_sources(
-    cli: &Cli,
-    sources: &DiscoverySources<'_, impl EnvProvider>,
-) -> OrthoResult<Vec<MergeLayer<'static>>> {
-    let _span = debug_span!("collect_diag_file_layers").entered();
-    collect_file_layers_with_env(cli, sources)
-}
-
-#[cfg(test)]
-fn collect_diag_file_layers_with_env(
+/// Load file layers for early JSON resolution using injected environment access.
+///
+/// This delegates to the same precedence boundary as the normal merge path.
+pub(crate) fn collect_diag_file_layers_with_env(
     cli: &Cli,
     env: &impl EnvProvider,
-) -> OrthoResult<Vec<MergeLayer<'static>>> {
-    let sources = DiscoverySources::new(env, discovery_env_source(env));
-    collect_diag_file_layers_with_sources(cli, &sources)
+) -> DiscoveryOutcome {
+    discover_file_layers(cli, env)
 }
 
 #[cfg(test)]
@@ -293,89 +363,12 @@ mod layer_tests;
 #[path = "discovery_helper_proptests.rs"]
 mod helper_proptests;
 
-#[cfg(test)]
-mod tests {
-    //! Unit tests for config discovery through injected environment access.
-
-    use super::*;
-    use crate::cli::test_support::TestEnv;
-    use anyhow::ensure;
-    use cap_std::{ambient_authority, fs::Dir};
-    use rstest::rstest;
-    use tempfile::tempdir;
-
-    #[test]
-    fn env_config_path_returns_none_when_var_unset() {
-        let env = TestEnv::default();
-        assert!(env_config_path(&env, "__NETSUKE_TEST_VAR").is_none());
-    }
-
-    #[test]
-    fn env_config_path_returns_none_when_var_empty() {
-        let env = TestEnv::default().with_var("__NETSUKE_TEST_VAR", "");
-        assert!(env_config_path(&env, "__NETSUKE_TEST_VAR").is_none());
-    }
-
-    #[test]
-    fn env_config_path_returns_path_when_var_set() {
-        let env = TestEnv::default().with_var("__NETSUKE_TEST_VAR", "/tmp/foo.toml");
-        let result = env_config_path(&env, "__NETSUKE_TEST_VAR");
-        assert_eq!(result, Some(PathBuf::from("/tmp/foo.toml")));
-    }
-
-    #[rstest]
-    #[case::cli_wins_over_env(
-        Some("/env/path.toml"),
-        Some("/cli/path.toml"),
-        Some("/cli/path.toml")
-    )]
-    #[case::env_used_without_cli(Some("/env/path.toml"), None, Some("/env/path.toml"))]
-    #[case::none_when_sources_missing(None, None, None)]
-    fn explicit_config_path_obeys_precedence(
-        #[case] env_path: Option<&'static str>,
-        #[case] cli_path: Option<&'static str>,
-        #[case] expected: Option<&'static str>,
-    ) {
-        let mut env = TestEnv::default();
-        if let Some(path) = env_path {
-            env = env.with_var(CONFIG_ENV_VAR, path);
-        }
-        let cli = Cli {
-            config: cli_path.map(PathBuf::from),
-            ..Cli::default()
-        };
-
-        assert_eq!(
-            explicit_config_path_with_env(&cli, &env),
-            expected.map(PathBuf::from)
-        );
-    }
-
-    #[test]
-    fn collect_diag_file_layers_uses_injected_explicit_config() -> anyhow::Result<()> {
-        let dir = tempdir()?;
-        let config_path = dir.path().join("netsuke.toml");
-        let config_dir = Dir::open_ambient_dir(dir.path(), ambient_authority())?;
-        config_dir.write("netsuke.toml", b"json = true\n")?;
-
-        let env = TestEnv::default().with_var(CONFIG_ENV_VAR, config_path.as_os_str());
-        let layers = collect_diag_file_layers_with_env(&Cli::default(), &env)?;
-        let expected_path = config_path.to_string_lossy().into_owned();
-
-        ensure!(
-            layers.iter().any(|layer| layer
-                .path()
-                .is_some_and(|path| path.as_str() == expected_path)),
-            "should include the injected explicit config layer at {expected_path}"
-        );
-
-        Ok(())
-    }
-}
-
 /// Tests for explicit config-path precedence. Enumerated cases cover every
 /// combination of `--config` and `NETSUKE_CONFIG` presence; a proptest property
 /// test asserts the invariant for generated path values.
 #[cfg(test)]
 #[path = "config_path_precedence_tests.rs"]
 mod config_path_precedence_tests;
+#[cfg(test)]
+#[path = "discovery_unit_tests.rs"]
+mod unit_tests;

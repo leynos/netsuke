@@ -12,8 +12,8 @@ use serde_json::Value;
 use std::sync::Arc;
 
 use super::discovery::{
-    DiscoverySources, EnvProvider, StdEnvProvider, collect_diag_file_layers_with_sources,
-    discovery_env_source,
+    DiscoveredLayers, DiscoveryOutcome, EnvProvider, StdEnvProvider,
+    collect_diag_file_layers_with_env,
 };
 use super::parser::Cli;
 
@@ -29,12 +29,7 @@ const JSON_ENV_VAR: &str = "NETSUKE_JSON";
 /// Returns an [`ortho_config::OrthoError`] when a selected config file cannot
 /// be loaded, or when `NETSUKE_JSON` contains an invalid boolean.
 pub fn resolve_merged_json(cli: &Cli, matches: &ArgMatches) -> OrthoResult<bool> {
-    resolve_merged_json_with_sources(
-        cli,
-        matches,
-        &StdEnvProvider,
-        Arc::new(ortho_config::ProcessEnv),
-    )
+    resolve_merged_json_with_env(cli, matches, &StdEnvProvider)
 }
 
 /// Resolve the JSON preference using an injected environment provider.
@@ -51,24 +46,54 @@ pub fn resolve_merged_json_with_env(
     matches: &ArgMatches,
     env: &impl EnvProvider,
 ) -> OrthoResult<bool> {
-    resolve_merged_json_with_sources(cli, matches, env, discovery_env_source(env))
+    let (json, _) = resolve_json_and_layers_with_env(cli, matches, env)?;
+    Ok(json)
 }
 
-/// Resolve JSON using the same selector and discovery adapters as merging.
-fn resolve_merged_json_with_sources(
+/// Resolve diagnostic JSON mode and retain the discovered file layers.
+///
+/// The returned layers belong to this exact resolution pass and must be passed
+/// to [`super::merge::merge_with_cached_file_layers`] for the subsequent full
+/// merge.
+///
+/// # Errors
+///
+/// Returns the first discovery error immediately, or a validation error when
+/// `NETSUKE_JSON` contains an invalid boolean.
+pub fn resolve_json_and_layers_with_env(
     cli: &Cli,
     matches: &ArgMatches,
     env: &impl EnvProvider,
-    discovery_env: ortho_config::SharedEnvSource,
-) -> OrthoResult<bool> {
-    let sources = DiscoverySources::new(env, discovery_env);
-    let mut json = json_from_file_layers(cli, &sources)?;
-    if !has_cli_json_override(matches)
-        && let Some(env_json) = json_from_env(env)?
-    {
-        json = env_json;
-    }
-    Ok(json_from_matches(cli, matches, json))
+) -> OrthoResult<(bool, DiscoveredLayers)> {
+    let (result, outcome) = resolve_json_and_layers_outcome_with_env(cli, matches, env);
+    result.map(|json| (json, outcome.into_layers()))
+}
+
+/// Resolve diagnostic JSON mode while retaining a discovery outcome.
+///
+/// Startup uses this form to replay cached diagnostics after it enables its
+/// output filter, including when discovery or JSON validation fails. The
+/// outcome owns the discovered layers and deferred diagnostics. Standalone
+/// callers should usually prefer [`resolve_json_and_layers_with_env`].
+pub fn resolve_json_and_layers_outcome_with_env(
+    cli: &Cli,
+    matches: &ArgMatches,
+    env: &impl EnvProvider,
+) -> (OrthoResult<bool>, DiscoveryOutcome) {
+    let outcome = collect_diag_file_layers_with_env(cli, env);
+    let result = (|| {
+        if let Some(error) = outcome.first_error() {
+            return Err(Arc::clone(error));
+        }
+        let mut json = json_from_layers(outcome.layers());
+        if !has_cli_json_override(matches)
+            && let Some(env_json) = json_from_env(env)?
+        {
+            json = env_json;
+        }
+        Ok(json_from_matches(cli, matches, json))
+    })();
+    (result, outcome)
 }
 
 fn json_from_layer(value: &Value) -> Option<bool> {
@@ -92,22 +117,16 @@ fn has_cli_json_override(matches: &ArgMatches) -> bool {
     matches.value_source("json") == Some(ValueSource::CommandLine)
 }
 
-/// Resolve the last valid JSON preference from the selected config layers.
-fn json_from_file_layers(
-    cli: &Cli,
-    sources: &DiscoverySources<'_, impl EnvProvider>,
-) -> OrthoResult<bool> {
-    let default = Cli::default().json;
-    let layers = collect_diag_file_layers_with_sources(cli, sources)?;
-    let mut json = default;
+/// Resolve the last valid JSON preference from discovered config layers.
+fn json_from_layers(layers: &[ortho_config::MergeLayer<'static>]) -> bool {
+    let mut json = Cli::default().json;
     for layer in layers {
-        if let Some(layer_json) = json_from_layer(&layer.into_value()) {
+        if let Some(layer_json) = json_from_layer(&layer.clone().into_value()) {
             json = layer_json;
         }
     }
-    Ok(json)
+    json
 }
-
 /// Parse the optional `NETSUKE_JSON` value supplied by `env`.
 ///
 /// Invalid or non-Unicode values are validation errors rather than silently
