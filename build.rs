@@ -139,9 +139,6 @@ fn write_man_page(data: &[u8], dir: &Path, page_name: &str) -> std::io::Result<P
     };
     let temporary_name = format!("{page_name}.tmp");
     man_dir.write(&temporary_name, data)?;
-    if man_dir.metadata(page_name).is_ok() {
-        man_dir.remove_file(page_name)?;
-    }
     man_dir.rename(&temporary_name, &man_dir, page_name)?;
     Ok(dir.join(page_name))
 }

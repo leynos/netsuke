@@ -56,8 +56,9 @@ excluded_paths = [
 
     # The build script's parsers, included by path so `cargo test` can reach
     # them (build scripts are not test targets). Each reads a file Cargo hands
-    # it through `build_script_build`, which is excluded below for the same
-    # reason; these entries cover the copies compiled into the test crates.
+    # it through the build script; these entries cover the copies compiled into
+    # the test crates. The path-normalization exception remains module-scoped
+    # at `build_script_build::cli::discovery::paths` above.
     "build_l10n_keys_tests::keys",
     "build_l10n_parser_tests::ftl",
     "build_l10n_audit_rules_tests::ftl",

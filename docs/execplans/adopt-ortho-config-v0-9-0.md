@@ -271,6 +271,12 @@ implement it until the user explicitly approves the draft.
   `make typecheck`, `make lint` (docs, Clippy, and Whitaker),
   `make markdownlint` (81 files, 0 errors), `make nixie`, and
   `git diff --check` all passed.
+- [x] (2026-08-16) Addressed the follow-up review findings. Man-page
+  replacement now delegates directly to `Dir::rename`, avoiding a
+  pre-delete gap so a failed replacement preserves the existing page. The
+  `dylint.toml` comment now accurately describes the module-scoped
+  `build_script_build::cli::discovery::paths` exception rather than claiming
+  that the whole `build_script_build` crate is excluded.
 
 ## Surprises & discoveries
 
@@ -417,6 +423,18 @@ implement it until the user explicitly approves the draft.
   exclusions; the broader discovery module and build-script crate remain
   covered by the capability policy.
 
+- Observation: the man-page replacement path must not remove the existing page
+  before installing the temporary output. Evidence: the review identified the
+  `metadata`/`remove_file` pair immediately before `Dir::rename` in
+  `build.rs`. Impact: direct `Dir::rename` leaves the current page in place if
+  replacement fails, preserving the atomic replacement boundary.
+
+- Observation: the `dylint.toml` explanatory comment had drifted from the
+  configured scope. Evidence: `build_script_build` is not present in
+  `excluded_crates`; only `build_script_build::cli::discovery::paths` is
+  excluded by module path. Impact: revise the comment to describe the actual
+  narrow exception and avoid implying a broader capability-policy bypass.
+
 ## Decision Log
 
 - Decision: preserve the current feature-based module layout and apply
@@ -544,6 +562,18 @@ implement it until the user explicitly approves the draft.
   post-rebase gate results remain historical evidence, while this later run is
   the final all-green result for the remediation. Date/Author: 2026-08-15 /
   Codex.
+
+- Decision: replace an existing man page with a direct `Dir::rename` from the
+  temporary output, without a metadata check or pre-emptive removal.
+  Rationale: the capability API can perform the replacement while preserving
+  the current page when the rename fails, avoiding a window with no page.
+  Date/Author: 2026-08-16 / Codex.
+
+- Decision: describe the build-script filesystem exception in `dylint.toml` as
+  module-scoped. Rationale: only
+  `build_script_build::cli::discovery::paths` is excluded; the
+  `build_script_build` crate remains subject to the capability policy.
+  Date/Author: 2026-08-16 / Codex.
 
 ## Outcomes & retrospective
 
@@ -1335,3 +1365,8 @@ Revised, 2026-08-15: recorded the final all-green post-remediation gates:
 `make markdownlint`, `make nixie`, and `git diff --check`, with the exact test
 and documentation counts captured in `Progress`, `Outcomes & retrospective`, and
 `Artefacts and notes`.
+
+Revised, 2026-08-16: recorded the review correction to use direct
+`Dir::rename` for man-page replacement, preserving the current page if the
+replacement fails, and corrected the `dylint.toml` comment to describe only the
+module-scoped `build_script_build::cli::discovery::paths` exception.
