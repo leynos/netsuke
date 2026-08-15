@@ -239,7 +239,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> 
         )
     };
     if context.progress_enabled {
-        let options = ninja_process_adapter::ninja_process_options(cli);
+        let options = ninja_process_adapter::ninja_process_options(cli)?;
         let mut on_task_progress = on_task_progress_callback(context.reporter);
         process::run_ninja_with_status(
             process::NinjaBuildRequest {
@@ -303,7 +303,7 @@ fn handle_ninja_tool(
         )
     };
     if context.progress_enabled {
-        let options = ninja_process_adapter::ninja_process_options(cli);
+        let options = ninja_process_adapter::ninja_process_options(cli)?;
         let mut on_task_progress = on_task_progress_callback(context.reporter);
         process::run_ninja_tool_with_status(
             process::NinjaToolRequest {

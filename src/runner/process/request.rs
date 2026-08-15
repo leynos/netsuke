@@ -5,13 +5,14 @@
 //! what an invocation needs; `mod` holds the functions that act on them.
 
 use super::{BuildTargets, CommandEnv, StderrMode};
-use std::path::{Path, PathBuf};
+use camino::Utf8PathBuf;
+use std::path::Path;
 
 /// Process settings needed to configure a Ninja invocation.
 #[derive(Debug, Clone, Default)]
 pub struct NinjaProcessOptions {
-    /// Optional working directory passed to the child process.
-    pub working_dir: Option<PathBuf>,
+    /// Optional UTF-8 working directory passed to the child process.
+    pub working_dir: Option<Utf8PathBuf>,
     /// Optional maximum number of parallel Ninja jobs.
     pub jobs: Option<usize>,
 }

@@ -3431,6 +3431,13 @@ selected source at debug level. Process construction uses the resolved path
 exported by this module and must not interpret the environment override
 independently.
 
+`src/runner/ninja_process_adapter.rs` owns the one-way translation from `Cli`
+to `NinjaProcessOptions` and the public CLI-facing wrappers. It converts
+`Cli::directory` to the options' UTF-8 `working_dir`, returning
+`io::ErrorKind::InvalidData` for a non-UTF-8 path. The process module remains
+parser-independent; callers without CLI state construct `NinjaProcessOptions`
+directly.
+
 ### Module: `runner::process::command_logging`
 
 `src/runner/process/command_logging.rs` owns the structured logging contract

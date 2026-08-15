@@ -26,7 +26,7 @@ fn configure_ninja_base(
 ) -> io::Result<()> {
     env.apply(cmd);
     if let Some(dir) = &options.working_dir {
-        let canonical = canonicalize_utf8_path(dir.as_path())?;
+        let canonical = canonicalize_utf8_path(dir.as_std_path())?;
         cmd.current_dir(canonical.as_std_path());
     }
     if let Some(jobs) = options.jobs {
@@ -74,7 +74,27 @@ mod tests {
 
     use super::*;
     use anyhow::{Result, ensure};
+    use rstest::{fixture, rstest};
     use std::ffi::{OsStr, OsString};
+    use tempfile::NamedTempFile;
+
+    #[fixture]
+    fn temp_file() -> Result<NamedTempFile> {
+        Ok(NamedTempFile::new()?)
+    }
+
+    #[fixture]
+    fn options() -> NinjaProcessOptions {
+        NinjaProcessOptions {
+            jobs: Some(4),
+            ..NinjaProcessOptions::default()
+        }
+    }
+
+    #[fixture]
+    fn env() -> CommandEnv {
+        CommandEnv::inherit()
+    }
 
     fn command_arguments(cmd: &Command) -> Vec<OsString> {
         cmd.get_args().map(OsStr::to_os_string).collect()
@@ -89,16 +109,15 @@ mod tests {
         ])
     }
 
-    #[test]
-    fn build_configuration_preserves_argument_order() -> Result<()> {
-        let build_file = tempfile::NamedTempFile::new()?;
-        let options = NinjaProcessOptions {
-            jobs: Some(4),
-            ..NinjaProcessOptions::default()
-        };
+    #[rstest]
+    fn build_configuration_preserves_argument_order(
+        temp_file: Result<NamedTempFile>,
+        options: NinjaProcessOptions,
+        env: CommandEnv,
+    ) -> Result<()> {
+        let build_file = temp_file?;
         let target_names = vec![String::from("default")];
         let targets = super::super::BuildTargets::new(&target_names);
-        let env = CommandEnv::inherit();
         let request = NinjaBuildRequest {
             program: Path::new("ninja"),
             options: &options,
@@ -120,14 +139,13 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn tool_configuration_preserves_argument_order() -> Result<()> {
-        let build_file = tempfile::NamedTempFile::new()?;
-        let options = NinjaProcessOptions {
-            jobs: Some(4),
-            ..NinjaProcessOptions::default()
-        };
-        let env = CommandEnv::inherit();
+    #[rstest]
+    fn tool_configuration_preserves_argument_order(
+        temp_file: Result<NamedTempFile>,
+        options: NinjaProcessOptions,
+        env: CommandEnv,
+    ) -> Result<()> {
+        let build_file = temp_file?;
         let request = NinjaToolRequest {
             program: Path::new("ninja"),
             options: &options,

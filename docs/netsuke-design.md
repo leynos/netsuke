@@ -2232,8 +2232,8 @@ child process's execution environment.
 Every invocation is described by a borrowed request bundle rather than a long
 parameter list: `NinjaBuildRequest` for a build and `NinjaToolRequest` for
 `ninja -t <tool>`. Each names the resolved program, `NinjaProcessOptions`
-(working directory and job count), the generated build file, the targets or
-tool, a `&CommandEnv` describing the child's environment, and the
+(an optional UTF-8 working directory and job count), the generated build file,
+the targets or tool, a `&CommandEnv` describing the child's environment, and the
 `stderr_mode: StderrMode` policy field.
 `run_ninja_with` and `run_ninja_tool_with` consume these; the convenience
 wrappers `run_ninja` and `run_ninja_tool` live in
@@ -2242,6 +2242,8 @@ call them with `CommandEnv::inherit()`, and derive the `stderr_mode` policy
 from the CLI via `StderrMode::from_json_enabled(cli.json)`, which is production
 behaviour. Process requests never import `Cli`; callers without parser state
 construct `NinjaProcessOptions` directly.
+The adapter converts `Cli::directory` to the UTF-8 path at this boundary and
+returns `io::ErrorKind::InvalidData` if the CLI path is not valid UTF-8.
 
 The command construction follows this pattern:
 

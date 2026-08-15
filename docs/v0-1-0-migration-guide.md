@@ -27,7 +27,7 @@ Table: documented v0.1.0 additions, including `netsuke help targets`, and their 
 | --- | --- | --- |
 | Convenience wrappers | Unchanged. `run_ninja` and `run_ninja_tool` behave exactly as before, inheriting the process environment. | [Users' guide](users-guide.md) |
 | Child environment | New opt-in `netsuke::runner::CommandEnv` carries additive variable overrides and an injected `PATH` for Ninja child processes. | [Users' guide](users-guide.md) |
-| Request types | New `netsuke::runner::NinjaBuildRequest` and `netsuke::runner::NinjaToolRequest` name the program, build file, targets or tool, a child environment, and a required `stderr_mode: StderrMode` policy for the `*_with` run functions. | [Users' guide](users-guide.md) |
+| Request types | New `netsuke::runner::NinjaBuildRequest` and `netsuke::runner::NinjaToolRequest` name the program, `NinjaProcessOptions`, build file, targets or tool, a child environment, and a required `stderr_mode: StderrMode` policy for the `*_with` run functions. | [Users' guide](users-guide.md) |
 | Glob expansion | Parent-relative patterns such as `glob('../shared/*.h')` now expand. Metadata checks use a capability rooted at the pattern's longest literal directory prefix; missing or non-directory prefixes return no matches, and unresolvable symlink matches are skipped. | [Users' guide](users-guide.md) and [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) |
 | Command recipes | Existing scalar `command` recipes are unchanged. New YAML command lists are opt-in and run in declaration order with fail-fast semantics. | [Rules and recipes](users-guide.md#rules-and-recipes) |
 | Manifest discovery | Optional target/action `description` values are shown by the new `netsuke help targets` command. Manifests without them and existing build output are unchanged. | [Users' guide](users-guide.md) |
@@ -66,8 +66,11 @@ names remain valid and resolve through that child `PATH`; supply an
 absolute or otherwise resolved `program` only when executable selection
 must stay isolated from the injected `PATH`.
 
-Both request types borrow their fields, so one `CommandEnv` and one `Cli`
-can serve several invocations. Worked examples live in the users' guide's
+Both request types borrow their fields, so one `CommandEnv` and one
+`NinjaProcessOptions` can serve several invocations. Direct request callers
+now pass `options: &options` in place of `cli: &cli`; the adapter converts a
+CLI working directory to UTF-8 and returns `io::ErrorKind::InvalidData` when
+it cannot. Worked examples live in the users' guide's
 "Drive Ninja with an explicit environment" section.
 
 ## Reusing cached configuration discovery
