@@ -57,7 +57,7 @@ pub(super) fn handle_help_targets(cli: &Cli, reporter: &dyn StatusReporter) -> R
     let status_key: LocalizationKey = keys::STATUS_TOOL_HELP_TARGETS.into();
     report_pipeline_stage(reporter, PipelineStage::GraphRendering, Some(status_key));
     if cli.json {
-        let rendered = render_json(&query.entries).context("serialize help targets catalogue")?;
+        let rendered = render_json(&query.entries)?;
         process::write_text_stdout(&rendered)?;
     } else {
         let rendered = render_text(&query.entries, resolved_prefs(cli));
@@ -236,30 +236,31 @@ struct HelpTargetsResult<'a> {
 
 #[derive(Debug, Serialize)]
 struct HelpEntryJson<'a> {
-    name: String,
+    name: &'a str,
     description: Option<&'a str>,
     default: bool,
 }
 
 fn render_json(entries: &[HelpEntry]) -> Result<String> {
-    let (actions, targets): (Vec<_>, Vec<_>) = entries.iter().partition(|entry| entry.is_action);
     serde_json::to_string_pretty(&HelpTargetsDocument {
         schema_version: SCHEMA_VERSION,
         generator: GeneratorInfo::current(),
         result: HelpTargetsResult {
             command: "help-targets",
-            actions: json_entries(actions),
-            targets: json_entries(targets),
+            actions: json_entries(entries.iter().filter(|entry| entry.is_action)),
+            targets: json_entries(entries.iter().filter(|entry| !entry.is_action)),
         },
     })
     .context("serialize help targets catalogue")
 }
 
-fn json_entries(entries: Vec<&HelpEntry>) -> Vec<HelpEntryJson<'_>> {
+fn json_entries<'entry>(
+    entries: impl Iterator<Item = &'entry HelpEntry>,
+) -> Vec<HelpEntryJson<'entry>> {
     entries
         .into_iter()
         .map(|entry| HelpEntryJson {
-            name: entry.name.clone(),
+            name: entry.name.as_str(),
             description: entry.description.as_deref(),
             default: entry.is_default,
         })

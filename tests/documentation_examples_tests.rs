@@ -297,7 +297,7 @@ fn help_targets_example_lists_described_targets() -> Result<()> {
         "help targets example drifted"
     );
     let workspace = manifest_workspace("guide-first-build-manifest")?;
-    let run = run_netsuke_in(workspace.path(), &["help", "targets"])?;
+    let run = run_netsuke_in(workspace.path(), &["--locale", "en-US", "help", "targets"])?;
     assert_success(&run, "help targets example")?;
     ensure!(
         normalize_fluent_isolates(&run.stdout).contains("Targets:"),

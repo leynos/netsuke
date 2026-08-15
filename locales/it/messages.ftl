@@ -32,7 +32,7 @@ cli.subcommand.graph.about = Emetti il grafo delle dipendenze di build. Il forma
 cli.subcommand.graph.long_about = Proietta il manifest Netsuke analizzato in un grafo di build canonico e scrivilo come Graphviz DOT, oppure come pagina HTML autonoma con `--html`. Usa `--output <FILE>` per scrivere su file; `-` scrive su stdout.
 cli.subcommand.generate.about = Genera il manifest Ninja senza eseguire Ninja.
 cli.subcommand.generate.long_about = Scrivi il manifest Ninja generato su stdout oppure nel file scelto con `--output`.
-cli.subcommand.help.about = Stampa la guida di primo livello o la guida per un argomento nominato.
+cli.subcommand.help.about = Stampa la guida di primo livello o la guida per un argomento specificato.
 cli.subcommand.help.long_about = Senza argomento, corrisponde a `--help`. Usa `help targets` per stampare il catalogo di target e azioni per il file selezionato.
 
 # Help catalogue headings and markers.
@@ -85,6 +85,7 @@ runner.manifest.path_utf8 = Il percorso del manifest «{ $path }» non è UTF-8 
 runner.manifest.directory_utf8 = Il percorso della directory del manifest «{ $path }» non è UTF-8 valido.
 runner.manifest.directory_label = directory `{ $directory }`
 runner.manifest.current_directory_label = la directory corrente
+runner.manifest.default_not_declared = Il valore predefinito del manifest '{ $default }' non indica un'azione o un target dichiarato.
 runner.context.network_policy = Impossibile costruire il criterio di rete.
 runner.context.load_manifest = Impossibile caricare il manifest in { $path }.
 runner.context.serialise_manifest = Impossibile serializzare il manifest.
@@ -377,7 +378,7 @@ status.tool.clean = Pulizia
 status.tool.graph = Grafo
 status.tool.graph_html = Grafo (HTML)
 status.tool.generate = Generazione
-status.tool.help_targets = Guida target
+status.tool.help_targets = Guida ai target
 
 # Stringhe del renderer HTML del grafo.
 graph.html.title = Grafo di build di Netsuke

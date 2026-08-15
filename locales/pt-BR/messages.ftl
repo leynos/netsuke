@@ -85,6 +85,7 @@ runner.manifest.path_utf8 = O caminho do manifesto "{ $path }" não é UTF-8 vá
 runner.manifest.directory_utf8 = O caminho do diretório do manifesto "{ $path }" não é UTF-8 válido.
 runner.manifest.directory_label = diretório `{ $directory }`
 runner.manifest.current_directory_label = o diretório atual
+runner.manifest.default_not_declared = O padrão do manifesto '{ $default }' não nomeia uma ação ou um destino declarado.
 runner.context.network_policy = Não foi possível construir a política de rede.
 runner.context.load_manifest = Não foi possível carregar o manifesto em { $path }.
 runner.context.serialise_manifest = Não foi possível serializar o manifesto.

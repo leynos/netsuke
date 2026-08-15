@@ -33,7 +33,7 @@ cli.subcommand.graph.long_about = הטלת המניפסט המנותח של Nets
 cli.subcommand.generate.about = יצירת מניפסט Ninja בלי להריץ את Ninja.
 cli.subcommand.generate.long_about = כתיבת מניפסט Ninja שנוצר לפלט התקני או לקובץ שנבחר באמצעות `--output`.
 cli.subcommand.help.about = הדפיסו את העזרה ברמה העליונה, או את העזרה עבור נושא בעל שם.
-cli.subcommand.help.long_about = ללא נושא, זה תואם את `--help`. השתמש ב-`help targets` כדי להדפיס את קטלוג היעדים והפעולות עבור הקובץ שנבחר.
+cli.subcommand.help.long_about = ללא נושא, זה תואם את `--help`. השתמשו ב-`help targets` כדי להדפיס את קטלוג היעדים והפעולות עבור הקובץ שנבחר.
 
 # Help catalogue headings and markers.
 cli.help.actions_heading = פעולות:
@@ -84,6 +84,7 @@ runner.manifest.path_utf8 = נתיב המניפסט „{ $path }” אינו UTF
 runner.manifest.directory_utf8 = נתיב ספריית המניפסט „{ $path }” אינו UTF-8 תקין.
 runner.manifest.directory_label = הספרייה `{ $directory }`
 runner.manifest.current_directory_label = הספרייה הנוכחית
+runner.manifest.default_not_declared = ברירת המחדל של המניפסט '{ $default }' אינה מציינת פעולה או יעד מוצהרים.
 runner.context.network_policy = לא ניתן היה לבנות את מדיניות הרשת.
 runner.context.load_manifest = לא ניתן היה לטעון את המניפסט מ‑{ $path }.
 runner.context.serialise_manifest = לא ניתן היה לבצע סריאליזציה למניפסט.

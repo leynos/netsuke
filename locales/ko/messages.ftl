@@ -33,12 +33,12 @@ cli.subcommand.graph.long_about = 해석한 Netsuke 매니페스트를 정규 �
 cli.subcommand.generate.about = Ninja를 실행하지 않고 Ninja 매니페스트를 생성합니다.
 cli.subcommand.generate.long_about = 생성한 Ninja 매니페스트를 표준 출력이나 `--output`으로 고른 파일에 씁니다.
 cli.subcommand.help.about = 최상위 도움말 또는 지정된 주제에 대한 도움말을 출력합니다.
-cli.subcommand.help.long_about = 주제가 없으면 `--help`와 동일합니다. 선택한 파일의 대상 및 작업 카탈로그를 출력하려면 `help targets`를 사용하세요.
+cli.subcommand.help.long_about = 주제가 없으면 `--help`와 동일합니다. 선택한 매니페스트의 대상 및 작업 카탈로그를 출력하려면 `help targets`를 사용하세요.
 
 # Help catalogue headings and markers.
 cli.help.actions_heading = 작업:
 cli.help.targets_heading = 대상:
-cli.help.targets.about = 선택한 파일의 대상 및 작업을 나열합니다.
+cli.help.targets.about = 선택한 매니페스트의 대상 및 작업을 나열합니다.
 cli.help.default_marker = 기본값
 
 # build 하위 명령 옵션의 도움말.
@@ -84,6 +84,7 @@ runner.manifest.path_utf8 = 매니페스트 경로 '{ $path }'은(는) 올바른
 runner.manifest.directory_utf8 = 매니페스트 디렉터리 경로 '{ $path }'은(는) 올바른 UTF-8이 아닙니다.
 runner.manifest.directory_label = `{ $directory }` 디렉터리
 runner.manifest.current_directory_label = 현재 디렉터리
+runner.manifest.default_not_declared = 매니페스트 기본값 '{ $default }'이(가) 선언된 작업 또는 대상을 가리키지 않습니다.
 runner.context.network_policy = 네트워크 정책을 구성하지 못했습니다.
 runner.context.load_manifest = { $path }의 매니페스트를 불러오지 못했습니다.
 runner.context.serialise_manifest = 매니페스트를 직렬화하지 못했습니다.

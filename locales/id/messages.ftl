@@ -84,6 +84,7 @@ runner.manifest.path_utf8 = Jalur manifes "{ $path }" bukan UTF-8 yang sah.
 runner.manifest.directory_utf8 = Jalur direktori manifes "{ $path }" bukan UTF-8 yang sah.
 runner.manifest.directory_label = direktori `{ $directory }`
 runner.manifest.current_directory_label = direktori saat ini
+runner.manifest.default_not_declared = Nilai bawaan manifes '{ $default }' tidak menamai tindakan atau target yang dinyatakan.
 runner.context.network_policy = Kebijakan jaringan tidak dapat dibangun.
 runner.context.load_manifest = Manifes di { $path } tidak dapat dimuat.
 runner.context.serialise_manifest = Manifes tidak dapat diserialkan.

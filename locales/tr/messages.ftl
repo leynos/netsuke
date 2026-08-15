@@ -84,6 +84,7 @@ runner.manifest.path_utf8 = "{ $path }" bildirim yolu geçerli UTF-8 değil.
 runner.manifest.directory_utf8 = "{ $path }" bildirim dizini yolu geçerli UTF-8 değil.
 runner.manifest.directory_label = `{ $directory }` dizini
 runner.manifest.current_directory_label = geçerli dizin
+runner.manifest.default_not_declared = '{ $default }' bildirim varsayılanı, bildirilmiş bir eylem veya hedefi adlandırmıyor.
 runner.context.network_policy = Ağ ilkesi oluşturulamadı.
 runner.context.load_manifest = { $path } konumundaki bildirim yüklenemedi.
 runner.context.serialise_manifest = Bildirim serileştirilemedi.

@@ -89,17 +89,7 @@ fn record_missing_manifest_stage(error: &anyhow::Error, stages: &mut Vec<Pipelin
 /// Flatten the rendered manifest into a deterministic catalogue in declaration
 /// order: actions first, then targets. A multi-name entry yields one row per
 /// name, each carrying the same description and default status.
-#[cfg(test)]
 pub(super) fn build_catalogue(manifest: &NetsukeManifest) -> Vec<HelpEntry> {
-    build_catalogue_inner(manifest)
-}
-
-#[cfg(not(test))]
-fn build_catalogue(manifest: &NetsukeManifest) -> Vec<HelpEntry> {
-    build_catalogue_inner(manifest)
-}
-
-fn build_catalogue_inner(manifest: &NetsukeManifest) -> Vec<HelpEntry> {
     let mut entries = Vec::new();
     let defaults: HashSet<&str> = manifest.defaults.iter().map(String::as_str).collect();
     for target in &manifest.actions {
@@ -117,7 +107,8 @@ fn validate_defaults(defaults: &[String], entries: &[HelpEntry]) -> Result<()> {
         let safe_default = terminal_safe(default);
         ensure!(
             names.contains(default.as_str()),
-            "manifest default '{safe_default}' does not name a declared action or target"
+            localization::message(keys::RUNNER_MANIFEST_DEFAULT_NOT_DECLARED)
+                .with_arg("default", safe_default.as_ref())
         );
     }
     Ok(())

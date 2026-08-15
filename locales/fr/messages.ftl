@@ -39,7 +39,7 @@ cli.subcommand.help.long_about = Sans sujet, ceci correspond à `--help`. Utilis
 cli.help.actions_heading = Actions :
 cli.help.targets_heading = Cibles :
 cli.help.targets.about = Lister les cibles et actions du manifeste sélectionné.
-cli.help.default_marker = défaut
+cli.help.default_marker = par défaut
 
 # Texte d'aide des options de la sous-commande build.
 cli.subcommand.build.flag.targets.help = Cibles à compiler (utilise celles du manifeste si omis).
@@ -85,6 +85,7 @@ runner.manifest.path_utf8 = Le chemin de manifeste « { $path } » n'est pas de 
 runner.manifest.directory_utf8 = Le chemin du répertoire de manifeste « { $path } » n'est pas de l'UTF-8 valide.
 runner.manifest.directory_label = répertoire `{ $directory }`
 runner.manifest.current_directory_label = le répertoire courant
+runner.manifest.default_not_declared = La valeur par défaut du manifeste '{ $default }' ne désigne aucune action ni cible déclarée.
 runner.context.network_policy = Impossible de construire la politique réseau.
 runner.context.load_manifest = Impossible de charger le manifeste depuis { $path }.
 runner.context.serialise_manifest = Impossible de sérialiser le manifeste.

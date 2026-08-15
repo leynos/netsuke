@@ -84,6 +84,7 @@ runner.manifest.path_utf8 = Manifest path '{ $path }' is not valid UTF-8.
 runner.manifest.directory_utf8 = Manifest directory path '{ $path }' is not valid UTF-8.
 runner.manifest.directory_label = directory `{ $directory }`
 runner.manifest.current_directory_label = the current directory
+runner.manifest.default_not_declared = manifest default '{ $default }' does not name a declared action or target.
 runner.context.network_policy = Failed to build the network policy.
 runner.context.load_manifest = Failed to load manifest at { $path }.
 runner.context.serialise_manifest = Failed to serialise manifest.

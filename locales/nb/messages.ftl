@@ -33,7 +33,7 @@ cli.subcommand.graph.long_about = Overfør det innleste Netsuke-manifestet til e
 cli.subcommand.generate.about = Lag Ninja-manifestet uten å kjøre Ninja.
 cli.subcommand.generate.long_about = Skriv det genererte Ninja-manifestet til stdout eller til en fil valgt med `--output`.
 cli.subcommand.help.about = Skriv ut hjelpen på øverste nivå, eller hjelpen for et navngitt emne.
-cli.subcommand.help.long_about = Uten emne tilsvarer dette `--help`. Bruk `help targets` for å skrive ut katalogen over mål og handlinger for den valgte filen.
+cli.subcommand.help.long_about = Uten emne tilsvarer dette `--help`. Bruk `help targets` for å skrive ut katalogen over mål og handlinger for det valgte manifestet.
 
 # Help catalogue headings and markers.
 cli.help.actions_heading = Handlinger:
@@ -84,6 +84,7 @@ runner.manifest.path_utf8 = Manifeststien «{ $path }» er ikke gyldig UTF-8.
 runner.manifest.directory_utf8 = Stien til manifestkatalogen «{ $path }» er ikke gyldig UTF-8.
 runner.manifest.directory_label = katalogen `{ $directory }`
 runner.manifest.current_directory_label = gjeldende katalog
+runner.manifest.default_not_declared = Manifeststandarden '{ $default }' navngir ingen erklært handling eller mål.
 runner.context.network_policy = Nettverksregelen kunne ikke bygges.
 runner.context.load_manifest = Manifestet i { $path } kunne ikke lastes inn.
 runner.context.serialise_manifest = Manifestet kunne ikke serialiseres.

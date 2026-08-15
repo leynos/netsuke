@@ -84,6 +84,7 @@ runner.manifest.path_utf8 = مسیر مانیفست «{ $path }» ‏UTF-8 مع�
 runner.manifest.directory_utf8 = مسیر شاخهٔ مانیفست «{ $path }» ‏UTF-8 معتبر نیست.
 runner.manifest.directory_label = شاخهٔ `{ $directory }`
 runner.manifest.current_directory_label = شاخهٔ کنونی
+runner.manifest.default_not_declared = پیش‌فرض مانیفست «{ $default }» نام یک کنش یا هدف اعلام‌شده نیست.
 runner.context.network_policy = ساخت سیاست شبکه ممکن نشد.
 runner.context.load_manifest = بارگذاری مانیفست از { $path } ممکن نشد.
 runner.context.serialise_manifest = تبدیل مانیفست به داده‌های پیاپی ممکن نشد.

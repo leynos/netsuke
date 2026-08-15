@@ -264,7 +264,9 @@ fn manifest_query_rejects_restricted_template_helpers(
         "query should name its rejected helper: {error:?}"
     );
     ensure!(
-        !error.to_string().contains(QUERY_SECRET),
+        !error
+            .chain()
+            .any(|cause| cause.to_string().contains(QUERY_SECRET)),
         "a query error must not disclose local file contents: {error:?}"
     );
     ensure!(

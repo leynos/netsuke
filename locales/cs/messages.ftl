@@ -84,6 +84,7 @@ runner.manifest.path_utf8 = Cesta k manifestu „{ $path }“ není platné UTF-
 runner.manifest.directory_utf8 = Cesta k adresáři manifestu „{ $path }“ není platné UTF-8.
 runner.manifest.directory_label = adresář `{ $directory }`
 runner.manifest.current_directory_label = aktuální adresář
+runner.manifest.default_not_declared = Výchozí položka manifestu „{ $default }“ neoznačuje deklarovanou akci ani cíl.
 runner.context.network_policy = Síťovou zásadu se nepodařilo sestavit.
 runner.context.load_manifest = Manifest v { $path } se nepodařilo načíst.
 runner.context.serialise_manifest = Manifest se nepodařilo serializovat.

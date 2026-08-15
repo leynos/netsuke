@@ -84,6 +84,7 @@ runner.manifest.path_utf8 = Calea manifestului „{ $path }” nu este UTF-8 val
 runner.manifest.directory_utf8 = Calea directorului manifestului „{ $path }” nu este UTF-8 valid.
 runner.manifest.directory_label = directorul `{ $directory }`
 runner.manifest.current_directory_label = directorul curent
+runner.manifest.default_not_declared = Valoarea implicită a manifestului '{ $default }' nu denumește o acțiune sau o țintă declarată.
 runner.context.network_policy = Politica de rețea nu a putut fi construită.
 runner.context.load_manifest = Manifestul din { $path } nu a putut fi încărcat.
 runner.context.serialise_manifest = Manifestul nu a putut fi serializat.

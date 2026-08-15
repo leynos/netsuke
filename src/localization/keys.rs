@@ -72,6 +72,7 @@ define_keys! {
     RUNNER_MANIFEST_DIR_UTF8 => "runner.manifest.directory_utf8",
     RUNNER_MANIFEST_DIRECTORY => "runner.manifest.directory_label",
     RUNNER_MANIFEST_CURRENT_DIRECTORY => "runner.manifest.current_directory_label",
+    RUNNER_MANIFEST_DEFAULT_NOT_DECLARED => "runner.manifest.default_not_declared",
     RUNNER_CONTEXT_NETWORK_POLICY => "runner.context.network_policy",
     RUNNER_CONTEXT_LOAD_MANIFEST => "runner.context.load_manifest",
     RUNNER_CONTEXT_SERIALISE_MANIFEST => "runner.context.serialise_manifest",

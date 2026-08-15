@@ -84,6 +84,7 @@ runner.manifest.path_utf8 = เส้นทางไฟล์รายการ 
 runner.manifest.directory_utf8 = เส้นทางไดเรกทอรีของไฟล์รายการ “{ $path }” ไม่ใช่ UTF-8 ที่ถูกต้อง
 runner.manifest.directory_label = ไดเรกทอรี `{ $directory }`
 runner.manifest.current_directory_label = ไดเรกทอรีปัจจุบัน
+runner.manifest.default_not_declared = ค่าเริ่มต้นของรายการ '{ $default }' ไม่ได้ระบุการกระทำหรือเป้าหมายที่ประกาศไว้
 runner.context.network_policy = สร้างนโยบายเครือข่ายไม่สำเร็จ
 runner.context.load_manifest = โหลดไฟล์รายการที่ { $path } ไม่สำเร็จ
 runner.context.serialise_manifest = ทำให้ไฟล์รายการเป็นลำดับข้อมูลไม่สำเร็จ

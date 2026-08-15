@@ -84,6 +84,7 @@ runner.manifest.path_utf8 = Ścieżka manifestu „{ $path }” nie jest prawid�
 runner.manifest.directory_utf8 = Ścieżka katalogu manifestu „{ $path }” nie jest prawidłowym UTF-8.
 runner.manifest.directory_label = katalog `{ $directory }`
 runner.manifest.current_directory_label = bieżący katalog
+runner.manifest.default_not_declared = Domyślna wartość manifestu '{ $default }' nie wskazuje zadeklarowanej akcji ani celu.
 runner.context.network_policy = Nie udało się zbudować zasad sieciowych.
 runner.context.load_manifest = Nie udało się wczytać manifestu z { $path }.
 runner.context.serialise_manifest = Nie udało się zserializować manifestu.

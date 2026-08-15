@@ -84,6 +84,7 @@ runner.manifest.path_utf8 = Nid yw llwybr y maniffest ‘{ $path }’ yn UTF-8 d
 runner.manifest.directory_utf8 = Nid yw llwybr cyfeiriadur y maniffest ‘{ $path }’ yn UTF-8 dilys.
 runner.manifest.directory_label = cyfeiriadur `{ $directory }`
 runner.manifest.current_directory_label = y cyfeiriadur cyfredol
+runner.manifest.default_not_declared = Nid yw rhagosodiad y maniffest '{ $default }' yn enwi gweithred neu darged datganedig.
 runner.context.network_policy = Methwyd â llunio'r polisi rhwydwaith.
 runner.context.load_manifest = Methwyd â llwytho'r maniffest o { $path }.
 runner.context.serialise_manifest = Methwyd â chyfresoli'r maniffest.

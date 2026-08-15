@@ -85,6 +85,7 @@ runner.manifest.path_utf8 = Η διαδρομή δηλωτικού «{ $path }»
 runner.manifest.directory_utf8 = Η διαδρομή του καταλόγου δηλωτικού «{ $path }» δεν είναι έγκυρο UTF-8.
 runner.manifest.directory_label = κατάλογος `{ $directory }`
 runner.manifest.current_directory_label = ο τρέχων κατάλογος
+runner.manifest.default_not_declared = Η προεπιλογή δήλωσης '{ $default }' δεν ονομάζει δηλωμένη ενέργεια ή στόχο.
 runner.context.network_policy = Δεν ήταν δυνατή η κατασκευή της πολιτικής δικτύου.
 runner.context.load_manifest = Δεν ήταν δυνατή η φόρτωση του δηλωτικού από { $path }.
 runner.context.serialise_manifest = Δεν ήταν δυνατή η σειριοποίηση του δηλωτικού.

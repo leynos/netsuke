@@ -84,6 +84,7 @@ runner.manifest.path_utf8 = A(z) „{ $path }” jegyzékútvonal nem érvényes
 runner.manifest.directory_utf8 = A jegyzék könyvtárának útvonala („{ $path }”) nem érvényes UTF-8.
 runner.manifest.directory_label = a(z) `{ $directory }` könyvtár
 runner.manifest.current_directory_label = az aktuális könyvtár
+runner.manifest.default_not_declared = A(z) '{ $default }' jegyzék-alapértelmezés nem nevez meg deklarált műveletet vagy célt.
 runner.context.network_policy = A hálózati szabályt nem sikerült felépíteni.
 runner.context.load_manifest = A jegyzéket nem sikerült betölteni innen: { $path }.
 runner.context.serialise_manifest = A jegyzéket nem sikerült sorosítani.

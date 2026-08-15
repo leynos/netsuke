@@ -33,7 +33,7 @@ cli.subcommand.graph.long_about = 将解析后的 Netsuke 清单投影为规范�
 cli.subcommand.generate.about = 生成 Ninja 清单但不运行 Ninja。
 cli.subcommand.generate.long_about = 将生成的 Ninja 清单写入标准输出，或写入用 `--output` 选定的文件。
 cli.subcommand.help.about = 打印顶层帮助，或打印指定主题的帮助。
-cli.subcommand.help.long_about = 没有主题时，此命令等价于 `--help`。使用 `help targets` 打印所选清单的目标和操作目录。
+cli.subcommand.help.long_about = 没有主题时，此命令等价于 `--help`。使用 `help targets` 打印所选清单的目标和动作目录。
 
 # Help catalogue headings and markers.
 cli.help.actions_heading = 动作：
@@ -83,6 +83,7 @@ runner.manifest.path_utf8 = 清单路径“{ $path }”不是有效的 UTF-8。
 runner.manifest.directory_utf8 = 清单目录路径“{ $path }”不是有效的 UTF-8。
 runner.manifest.directory_label = 目录 `{ $directory }`
 runner.manifest.current_directory_label = 当前目录
+runner.manifest.default_not_declared = 清单默认值“{ $default }”未指定已声明的动作或目标。
 runner.context.network_policy = 无法构建网络策略。
 runner.context.load_manifest = 无法加载 { $path } 处的清单。
 runner.context.serialise_manifest = 无法序列化清单。

@@ -84,6 +84,7 @@ runner.manifest.path_utf8 = Der Manifestpfad „{ $path }“ ist kein gültiges 
 runner.manifest.directory_utf8 = Der Pfad des Manifestverzeichnisses „{ $path }“ ist kein gültiges UTF-8.
 runner.manifest.directory_label = Verzeichnis `{ $directory }`
 runner.manifest.current_directory_label = das aktuelle Verzeichnis
+runner.manifest.default_not_declared = Der Manifest-Standardwert '{ $default }' bezeichnet keine deklarierte Aktion oder kein Ziel.
 runner.context.network_policy = Die Netzwerkrichtlinie konnte nicht erstellt werden.
 runner.context.load_manifest = Das Manifest unter { $path } konnte nicht geladen werden.
 runner.context.serialise_manifest = Das Manifest konnte nicht serialisiert werden.

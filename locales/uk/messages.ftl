@@ -33,12 +33,12 @@ cli.subcommand.graph.long_about = Перетворити розібраний м
 cli.subcommand.generate.about = Створити маніфест Ninja, не запускаючи Ninja.
 cli.subcommand.generate.long_about = Записати створений маніфест Ninja у стандартний потік виводу або у файл, вибраний параметром `--output`.
 cli.subcommand.help.about = Друкує довідку верхнього рівня або довідку для вказаної теми.
-cli.subcommand.help.long_about = Без теми це відповідає `--help`. Використовуйте `help targets`, щоб надрукувати каталог цілей і дій для вибраного файлу.
+cli.subcommand.help.long_about = Без теми це відповідає `--help`. Використовуйте `help targets`, щоб надрукувати каталог цілей і дій для вибраного маніфесту.
 
 # Help catalogue headings and markers.
 cli.help.actions_heading = Дії:
 cli.help.targets_heading = Цілі:
-cli.help.targets.about = Вивести список цілей і дій у вибраному файлі.
+cli.help.targets.about = Вивести список цілей і дій у вибраному маніфесті.
 cli.help.default_marker = за замовчуванням
 
 # Текст довідки для параметрів підкоманди build.
@@ -84,6 +84,7 @@ runner.manifest.path_utf8 = Шлях до маніфесту «{ $path }» не 
 runner.manifest.directory_utf8 = Шлях до каталогу маніфесту «{ $path }» не є коректним UTF-8.
 runner.manifest.directory_label = каталог `{ $directory }`
 runner.manifest.current_directory_label = поточний каталог
+runner.manifest.default_not_declared = Типове значення маніфесту '{ $default }' не називає оголошену дію або ціль.
 runner.context.network_policy = Не вдалося побудувати мережеву політику.
 runner.context.load_manifest = Не вдалося завантажити маніфест за шляхом { $path }.
 runner.context.serialise_manifest = Не вдалося серіалізувати маніфест.

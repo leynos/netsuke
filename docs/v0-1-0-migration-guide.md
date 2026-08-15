@@ -6,7 +6,7 @@ discovery through `description` and `netsuke help targets`. Existing manifests
 remain compatible, and callers of the unchanged convenience wrappers compile
 unchanged.
 Rust callers that construct `Target` with a struct literal must add the new
-`description` field (set it to `None` or `Some(...)`); deserialised manifests
+`description` field (set it to `None` or `Some(...)`); deserialized manifests
 remain compatible, and every other addition is opt-in.
 
 ## Netsuke is a build tool, not a library

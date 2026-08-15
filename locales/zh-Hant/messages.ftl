@@ -33,7 +33,7 @@ cli.subcommand.graph.long_about = 將剖析後的 Netsuke 資訊清單投影為�
 cli.subcommand.generate.about = 產生 Ninja 資訊清單但不執行 Ninja。
 cli.subcommand.generate.long_about = 將產生的 Ninja 資訊清單寫入標準輸出，或寫入以 `--output` 選定的檔案。
 cli.subcommand.help.about = 列印頂層說明，或列印指定主題的說明。
-cli.subcommand.help.long_about = 沒有主題時，此命令等同於 `--help`。使用 `help targets` 列印所選清單的目標和操作目錄。
+cli.subcommand.help.long_about = 沒有主題時，此命令等同於 `--help`。使用 `help targets` 列印所選資訊清單的目標和動作目錄。
 
 # Help catalogue headings and markers.
 cli.help.actions_heading = 動作：
@@ -83,6 +83,7 @@ runner.manifest.path_utf8 = 資訊清單路徑「{ $path }」不是有效的 UTF
 runner.manifest.directory_utf8 = 資訊清單目錄路徑「{ $path }」不是有效的 UTF-8。
 runner.manifest.directory_label = 目錄 `{ $directory }`
 runner.manifest.current_directory_label = 目前的目錄
+runner.manifest.default_not_declared = 資訊清單預設值「{ $default }」未指定已宣告的動作或目標。
 runner.context.network_policy = 無法建立網路原則。
 runner.context.load_manifest = 無法載入 { $path } 的資訊清單。
 runner.context.serialise_manifest = 無法序列化資訊清單。

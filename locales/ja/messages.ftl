@@ -84,6 +84,7 @@ runner.manifest.path_utf8 = マニフェストのパス「{ $path }」は有効�
 runner.manifest.directory_utf8 = マニフェストのディレクトリーパス「{ $path }」は有効な UTF-8 ではありません。
 runner.manifest.directory_label = ディレクトリー `{ $directory }`
 runner.manifest.current_directory_label = 現在のディレクトリー
+runner.manifest.default_not_declared = マニフェストの既定値 '{ $default }' は、宣言されたアクションまたはターゲットを指していません。
 runner.context.network_policy = ネットワークポリシーを構築できませんでした。
 runner.context.load_manifest = { $path } のマニフェストを読み込めませんでした。
 runner.context.serialise_manifest = マニフェストを直列化できませんでした。

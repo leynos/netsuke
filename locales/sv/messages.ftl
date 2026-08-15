@@ -84,6 +84,7 @@ runner.manifest.path_utf8 = Manifestsökvägen ”{ $path }” är inte giltig U
 runner.manifest.directory_utf8 = Sökvägen till manifestkatalogen ”{ $path }” är inte giltig UTF-8.
 runner.manifest.directory_label = katalogen `{ $directory }`
 runner.manifest.current_directory_label = den aktuella katalogen
+runner.manifest.default_not_declared = Manifestets standardvärde '{ $default }' anger ingen deklarerad åtgärd eller något mål.
 runner.context.network_policy = Nätverkspolicyn kunde inte byggas.
 runner.context.load_manifest = Manifestet i { $path } kunde inte läsas in.
 runner.context.serialise_manifest = Manifestet kunde inte serialiseras.

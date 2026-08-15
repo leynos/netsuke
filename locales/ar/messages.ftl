@@ -84,6 +84,7 @@ runner.manifest.path_utf8 = مسار ملف البيانات «{ $path }» لي�
 runner.manifest.directory_utf8 = مسار دليل ملف البيانات «{ $path }» ليس UTF-8 صالحًا.
 runner.manifest.directory_label = الدليل `{ $directory }`
 runner.manifest.current_directory_label = الدليل الحالي
+runner.manifest.default_not_declared = الافتراضي للبيان «{ $default }» لا يسمّي إجراءً أو هدفًا معلنًا.
 runner.context.network_policy = تعذّر بناء سياسة الشبكة.
 runner.context.load_manifest = تعذّر تحميل ملف البيانات من { $path }.
 runner.context.serialise_manifest = تعذّرت سَلسَلة ملف البيانات.
@@ -157,7 +158,7 @@ manifest.glob.invalid_pattern = نمط glob غير صالح «{ $pattern }»: { 
 manifest.glob.unknown_pattern_error = خطأ نمط غير معروف.
 manifest.glob.io_failed = فشل glob للنمط «{ $pattern }»: { $detail }.
 manifest.glob.unknown_io_error = خطأ إدخال/إخراج غير معروف.
-manifest.command_list_empty = يجب ألّا تكون قائمة الأوامر فارغة؛ قدِّم سلسلة أمر أو قائمة غير فارغة.
+manifest.command_list_empty = يجب ألّا يكون الحقل «command» فارغًا: قدِّم سلسلة أمر أو قائمة غير فارغة.
 
 # أخطاء التمثيل الوسيط.
 ir.rule_not_found = تعذّر العثور على القاعدة «{ $rule }» التي يشير إليها الهدف «{ $target }».
@@ -376,7 +377,7 @@ status.tool.clean = التنظيف
 status.tool.graph = الرسم
 status.tool.graph_html = الرسم (HTML)
 status.tool.generate = التوليد
-status.tool.help_targets = مساعدة الأهداف
+status.tool.help_targets = فهرس الأهداف
 
 # نصوص عرض الرسم بصيغة HTML.
 graph.html.title = رسم بناء Netsuke

@@ -33,7 +33,7 @@ cli.subcommand.graph.long_about = Chiếu tệp kê khai Netsuke đã phân tíc
 cli.subcommand.generate.about = Tạo tệp kê khai Ninja mà không chạy Ninja.
 cli.subcommand.generate.long_about = Ghi tệp kê khai Ninja đã tạo ra đầu ra chuẩn hoặc ra tệp được chọn bằng `--output`.
 cli.subcommand.help.about = In trợ giúp cấp cao nhất hoặc trợ giúp cho một chủ đề cụ thể.
-cli.subcommand.help.long_about = Không có chủ đề, lệnh này tương ứng với `--help`. Dùng `help targets` để in danh mục mục tiêu và hành động cho tệp đã chọn.
+cli.subcommand.help.long_about = Không có chủ đề, lệnh này tương ứng với `--help`. Dùng `help targets` để in danh mục mục tiêu và hành động cho tệp kê khai đã chọn.
 
 # Help catalogue headings and markers.
 cli.help.actions_heading = Hành động:
@@ -84,6 +84,7 @@ runner.manifest.path_utf8 = Đường dẫn tệp kê khai “{ $path }” khôn
 runner.manifest.directory_utf8 = Đường dẫn thư mục tệp kê khai “{ $path }” không phải UTF-8 hợp lệ.
 runner.manifest.directory_label = thư mục `{ $directory }`
 runner.manifest.current_directory_label = thư mục hiện tại
+runner.manifest.default_not_declared = Giá trị mặc định của tệp kê khai '{ $default }' không nêu hành động hoặc mục tiêu đã khai báo.
 runner.context.network_policy = Không dựng được chính sách mạng.
 runner.context.load_manifest = Không nạp được tệp kê khai tại { $path }.
 runner.context.serialise_manifest = Không tuần tự hoá được tệp kê khai.

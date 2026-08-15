@@ -84,6 +84,7 @@ runner.manifest.path_utf8 = मैनिफ़ेस्ट पथ “{ $path }�
 runner.manifest.directory_utf8 = मैनिफ़ेस्ट की निर्देशिका का पथ “{ $path }” मान्य UTF-8 नहीं है।
 runner.manifest.directory_label = निर्देशिका `{ $directory }`
 runner.manifest.current_directory_label = वर्तमान निर्देशिका
+runner.manifest.default_not_declared = मेनिफ़ेस्ट डिफ़ॉल्ट '{ $default }' किसी घोषित क्रिया या लक्ष्य का नाम नहीं है।
 runner.context.network_policy = नेटवर्क नीति नहीं बनाई जा सकी।
 runner.context.load_manifest = { $path } से मैनिफ़ेस्ट नहीं लादा जा सका।
 runner.context.serialise_manifest = मैनिफ़ेस्ट का क्रमांकन नहीं हो सका।

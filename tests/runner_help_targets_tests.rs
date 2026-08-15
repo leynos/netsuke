@@ -10,7 +10,7 @@ use netsuke::cli::{Cli, Commands, HelpArgs, HelpTopic};
 use netsuke::output_prefs;
 use netsuke::runner::run;
 use rstest::{fixture, rstest};
-use test_support::{localizer_test_lock, set_en_localizer};
+use test_support::{fluent::normalize_fluent_isolates, localizer_test_lock, set_en_localizer};
 
 #[path = "runner_help_targets_tests/catalogue.rs"]
 mod catalogue;
@@ -92,7 +92,7 @@ fn assert_help_targets_rejects_manifest(
     ensure!(
         error
             .chain()
-            .any(|cause| cause.to_string().contains(expected_error)),
+            .any(|cause| normalize_fluent_isolates(&cause.to_string()).contains(expected_error)),
         "error should contain {expected_error:?}: {error:?}"
     );
     Ok(())
@@ -178,7 +178,7 @@ fn help_targets_does_not_emit_raw_manifest_controls_in_diagnostics() -> Result<(
         !output.status.success(),
         "unsafe default should make help targets fail validation"
     );
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stderr = normalize_fluent_isolates(&String::from_utf8_lossy(&output.stderr));
     ensure!(
         stderr.contains(r"default 'bad\nINJECTED'"),
         "diagnostic should show escaped manifest controls: {stderr}"

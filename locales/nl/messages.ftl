@@ -33,7 +33,7 @@ cli.subcommand.graph.long_about = Zet het ingelezen Netsuke-manifest om in een c
 cli.subcommand.generate.about = Genereer het Ninja-manifest zonder Ninja uit te voeren.
 cli.subcommand.generate.long_about = Schrijf het gegenereerde Ninja-manifest naar stdout of naar een bestand dat met `--output` is gekozen.
 cli.subcommand.help.about = Druk de hulp op het hoogste niveau af, of de hulp voor een genoemd onderwerp.
-cli.subcommand.help.long_about = Zonder onderwerp komt dit overeen met `--help`. Gebruik `help targets` om de catalogus van doelen en acties voor het geselecteerde bestand af te drukken.
+cli.subcommand.help.long_about = Zonder onderwerp komt dit overeen met `--help`. Gebruik `help targets` om de catalogus van doelen en acties voor het geselecteerde manifest af te drukken.
 
 # Help catalogue headings and markers.
 cli.help.actions_heading = Acties:
@@ -84,6 +84,7 @@ runner.manifest.path_utf8 = Het manifestpad ‘{ $path }’ is geen geldige UTF-
 runner.manifest.directory_utf8 = Het pad van de manifestmap ‘{ $path }’ is geen geldige UTF-8.
 runner.manifest.directory_label = map `{ $directory }`
 runner.manifest.current_directory_label = de huidige map
+runner.manifest.default_not_declared = De manifeststandaard '{ $default }' benoemt geen gedeclareerde actie of doel.
 runner.context.network_policy = Het netwerkbeleid kon niet worden opgebouwd.
 runner.context.load_manifest = Het manifest in { $path } kon niet worden geladen.
 runner.context.serialise_manifest = Het manifest kon niet worden geserialiseerd.
