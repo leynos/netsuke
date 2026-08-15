@@ -177,6 +177,22 @@ mod tests {
     use super::*;
     use crate::runner::CommandEnv;
     use rstest::rstest;
+    use tracing_subscriber::filter::LevelFilter;
+
+    fn logging_context() -> CommandLogContext {
+        CommandLogContext::from_command(&Command::new("ninja"))
+    }
+
+    fn captured_execution_event(operation: &str) -> String {
+        crate::test_tracing_capture::with_test_subscriber(LevelFilter::INFO, |captured| {
+            log_command_execution(&logging_context(), operation, false);
+            let events = captured.snapshot();
+            let [event] = events.as_slice() else {
+                panic!("expected one command execution event, got {events:?}");
+            };
+            event.clone()
+        })
+    }
 
     /// The override summary counts overrides and flags `PATH` without naming
     /// or valuing any variable, so the fields stay safe to log.
@@ -203,6 +219,62 @@ mod tests {
 
         assert_eq!(context.env_override_count, expected_count);
         assert_eq!(context.is_path_overridden, expected_path_overridden);
+    }
+
+    #[rstest]
+    #[case::build("build")]
+    #[case::named_tool("clean")]
+    fn execution_logging_preserves_operation_label(#[case] operation: &str) {
+        let event = captured_execution_event(operation);
+
+        assert!(
+            event.contains(&format!("operation={operation:?}")),
+            "execution event should retain its operation label: {event}"
+        );
+        assert!(
+            event.contains("message=Executing command"),
+            "execution event should identify command execution: {event}"
+        );
+    }
+
+    #[cfg(unix)]
+    fn failed_exit_status() -> ExitStatus {
+        use std::os::unix::process::ExitStatusExt;
+
+        ExitStatus::from_raw(1 << 8)
+    }
+
+    #[cfg(windows)]
+    fn failed_exit_status() -> ExitStatus {
+        use std::os::windows::process::ExitStatusExt;
+
+        ExitStatus::from_raw(1)
+    }
+
+    #[test]
+    fn exit_failure_logging_records_status_diagnostics() {
+        let event =
+            crate::test_tracing_capture::with_test_subscriber(LevelFilter::WARN, |captured| {
+                log_command_exit_failure(&logging_context(), "clean", true, failed_exit_status());
+                let events = captured.snapshot();
+                let [event] = events.as_slice() else {
+                    panic!("expected one exit failure event, got {events:?}");
+                };
+                event.clone()
+            });
+
+        assert!(
+            event.contains("operation=\"clean\""),
+            "exit failure event should retain its operation label: {event}"
+        );
+        assert!(
+            event.contains("failure_category=\"exit_status\""),
+            "exit failure event should identify the failure category: {event}"
+        );
+        assert!(
+            event.contains("status="),
+            "exit failure event should include the process status: {event}"
+        );
     }
 
     /// A Unix variable named `Path` is not `PATH`, and must not raise the flag.
