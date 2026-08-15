@@ -225,8 +225,8 @@ implement it until the user explicitly approves the draft.
   after browser OAuth authentication completed. `coderabbit review --agent`
   reported zero high, medium, or low findings.
 - [x] (2026-08-12 17:08Z) Milestone 5: installed `cargo-orthohelp` v0.9.0,
-  changed the release helper to invoke its required `orthohelp` subcommand,
-  and generated the expected Unix and Windows artefact layouts. The compact
+  changed the release helper to invoke its required `orthohelp` subcommand, and
+  generated the expected Unix and Windows artefact layouts. The compact
   metadata snapshot and workflow/release-helper contracts are green.
 - [x] (2026-08-12 18:31Z) Milestone 6: updated the design, explicit-selector
   ADR, developer conventions, user guide, and decision-record index. The
@@ -236,6 +236,24 @@ implement it until the user explicitly approves the draft.
   suite and reviewed the documentation diff with CodeRabbit. All checks and
   reviews are green; the outcomes and deferred metadata follow-up are recorded
   below.
+- [x] (2026-08-14) Verified the follow-up review findings against the rebased
+  tree. One stale documentation signature was corrected in
+  `docs/developers-guide.md`, changing
+  `project_scope_file_str(...) -> Option<String>` to
+  `project_scope_file(...) -> Option<PathBuf>`; all other findings were already
+  fixed.
+- [x] (2026-08-14) Replayed the initial rebase's `Cargo.lock` conflict by
+  taking the `origin/main` baseline, then applying the narrow
+  `cargo update -p ortho_config --precise 0.9.0` update. This avoided the
+  unrelated churn from `cargo generate-lockfile`; the resulting change was
+  committed as `642bac70`.
+- [x] (2026-08-14) Rebased cleanly again onto `origin/main` at `69286cdf`.
+  Mainline's fixture no-clobber changes had no pertinent overlap with this
+  branch, so no additional plan or implementation change was required. The
+  final branch head is `c12ce72a`.
+- [x] (2026-08-14) Ran the exact post-rebase gates: `make check-fmt`,
+  `make test` (1,992 non-doctests and all doctests), `make typecheck`, and
+  `make lint`; all passed. Published PR #558 at the final branch head.
 
 ## Surprises & discoveries
 
@@ -308,10 +326,10 @@ implement it until the user explicitly approves the draft.
   fixture boundary and leaves production capability policy intact.
 
 - Observation: the initial CodeRabbit Milestones 1–4 review required browser
-  OAuth authentication. Evidence: `coderabbit review --agent` initially
-  emitted `awaiting_browser_auth`, and the rerun completed after authentication
-  with zero findings. Impact: this was an external authentication prerequisite,
-  not a code concern or rate limit; every completed milestone has a clean
+  OAuth authentication. Evidence: `coderabbit review --agent` initially emitted
+  `awaiting_browser_auth`, and the rerun completed after authentication with
+  zero findings. Impact: this was an external authentication prerequisite, not
+  a code concern or rate limit; every completed milestone has a clean
   CodeRabbit review.
 
 - Observation: real v0.9.0 release-help generation requires
@@ -325,9 +343,28 @@ implement it until the user explicitly approves the draft.
   than a v0.9.0 output-path failure. Evidence: the generated man page has no
   `--config` flag or subcommands and renders missing Fluent IDs because
   `CliConfig` has no parser-only selector field or `OrthoConfigSubcommandDocs`
-  metadata. Impact: retain the generated artefacts and record configuration
-  and parser metadata convergence as follow-up work; do not expand this
-  version migration beyond its approved boundary.
+  metadata. Impact: retain the generated artefacts and record configuration and
+  parser metadata convergence as follow-up work; do not expand this version
+  migration beyond its approved boundary.
+
+- Observation: the follow-up review had one still-valid documentation finding;
+  the implementation findings were already fixed. Evidence:
+  `docs/developers-guide.md` described `project_scope_file_str(...)` returning
+  `Option<String>`, while the current API is
+  `project_scope_file(...) -> Option<PathBuf>`. Impact: correct that stale
+  signature only; no runtime change was required.
+
+- Observation: the initial rebase exposed a `Cargo.lock` conflict, and a
+  whole-lockfile regeneration introduced unrelated dependency churn. Evidence:
+  the conflict was resolved with the mainline lockfile as the baseline, then a
+  precise `cargo update -p ortho_config --precise 0.9.0` restored the intended
+  package update. Impact: preserve the mainline lockfile and avoid
+  `cargo generate-lockfile` for this narrow migration.
+
+- Observation: a later mainline change did not overlap this migration's
+  relevant files. Evidence: the clean rebase onto `origin/main` at `69286cdf`
+  showed no pertinent overlap with the fixture no-clobber changes. Impact: no
+  additional conflict resolution or plan amendment was needed.
 
 ## Decision Log
 
@@ -413,6 +450,28 @@ implement it until the user explicitly approves the draft.
   which is a larger design decision than a compatible library upgrade.
   Date/Author: 2026-08-12 / Codex.
 
+- Decision: fix only the stale `project_scope_file` documentation signature and
+  retain the other reviewed changes as-is. Rationale: the signature mismatch
+  was still present in the current tree, while the remaining review findings
+  were already resolved; a broader edit would add unsupported churn.
+  Date/Author: 2026-08-14 / Codex.
+
+- Decision: resolve the initial lockfile rebase conflict from the mainline
+  baseline, then apply a precise OrthoConfig update. Rationale: this preserves
+  dependencies introduced on `origin/main` and limits the migration to the
+  required package versions; `cargo generate-lockfile` needlessly refreshed
+  unrelated packages. Date/Author: 2026-08-14 / Codex.
+
+- Decision: accept the clean rebase onto `origin/main` at `69286cdf` without
+  changes for the fixture no-clobber work. Rationale: inspection found no
+  pertinent overlap with the migration's discovery or release-help changes.
+  Date/Author: 2026-08-14 / Codex.
+
+- Decision: publish PR #558 at `c12ce72a` after the exact post-rebase gates
+  passed. Rationale: `make check-fmt`, `make test`, `make typecheck`, and
+  `make lint` all passed, including 1,992 non-doctest tests and the doctests.
+  Date/Author: 2026-08-14 / Codex.
+
 ## Outcomes & retrospective
 
 The migration is complete. Runtime and build-time dependencies now resolve
@@ -442,6 +501,16 @@ reported zero findings for Milestones 1–4, 5, and 6. The only deferred item is
 configuration and parser metadata convergence: generated release help still
 cannot represent parser-only `--config` and subcommand metadata. That is a
 separate public metadata design decision, not a v0.9.0 compatibility defect.
+
+The follow-up review found one stale documentation signature, which was
+corrected in `docs/developers-guide.md`; all other findings were already fixed.
+The initial rebase's lockfile conflict was resolved by retaining the mainline
+baseline and applying a narrow OrthoConfig update, rather than regenerating the
+whole lockfile. A subsequent clean rebase onto `origin/main` at `69286cdf`
+confirmed no pertinent overlap with the fixture no-clobber changes. The exact
+post-rebase gates (`make check-fmt`, `make test`, `make typecheck`, and
+`make lint`) passed, with 1,992 non-doctest tests and all doctests succeeding.
+PR #558 was published at final head `c12ce72a`.
 
 ## Context and orientation
 
@@ -997,28 +1066,43 @@ Existing user changes are never reset or overwritten.
 
 ## Artefacts and notes
 
-At implementation time, retain concise evidence here rather than pasting full
-logs into the plan:
+Retain concise evidence here rather than pasting full logs into the plan:
 
 ```plaintext
 Baseline:
-- check-fmt: pending
-- typecheck: pending
-- lint: pending
-- test: pending
+- check-fmt: passed at the 2026-08-12 baseline
+- typecheck: passed at the 2026-08-12 baseline
+- lint: passed at the 2026-08-12 baseline
+- test: passed at the 2026-08-12 baseline (1,917 non-doctests and one skip)
 
 Red evidence:
-- injected automatic discovery: pending
-- malformed discovered candidate: pending
-- localized combined parse: pending
-- release tool pin: pending
+- injected automatic discovery: red test recorded before the `MapEnv` wiring
+- malformed discovered candidate: red test recorded before the discovery fix
+- localized combined parse: compatibility characterization recorded before
+  adopting `parse_localized_command`
+- release tool pin: red workflow assertion recorded before the v0.9.0 pin
 
 Green/refactor evidence:
-- focused discovery tests: pending
-- focused parser tests: pending
-- BDD and E2E tests: pending
-- metadata and release-help tests: pending
-- final gates: pending
+- focused discovery tests: passed after the hermetic adapter change
+- focused parser tests: passed after the combined localized parser change
+- BDD and E2E tests: passed for absent, valid, malformed, and missing-parent
+  discovery outcomes
+- metadata and release-help tests: passed, including Unix and Windows smoke
+  layouts
+- final gates: passed after the final rebase; `make test` reported 1,992
+  non-doctests and all doctests
+
+Review/rebase/publication evidence:
+- review correction: `project_scope_file(...) -> Option<PathBuf>` documented in
+  place of the stale `project_scope_file_str(...) -> Option<String>` signature;
+  other findings were already fixed
+- initial rebase: mainline `Cargo.lock` baseline plus
+  `cargo update -p ortho_config --precise 0.9.0`; no
+  `cargo generate-lockfile`; commit `642bac70`
+- subsequent rebase: clean onto `origin/main` `69286cdf`, with no pertinent
+  overlap with fixture no-clobber changes; final head `c12ce72a`
+- publication: PR #558 published after `check-fmt`, `test`, `typecheck`, and
+  `lint` passed
 ```
 
 Store long command output under `/tmp` with the
@@ -1110,3 +1194,9 @@ Completed, 2026-08-12: recorded the v0.9.0 implementation, the hermetic
 discovery adapter, the release-help subcommand correction, validation evidence,
 and the parser-metadata follow-up. The plan is now a completion record as well
 as the approved migration guide.
+
+Revised, 2026-08-14: recorded the review correction for the
+`project_scope_file` signature, the already-fixed status of the remaining
+findings, the conflict-aware narrow lockfile rebase, the clean rebase onto
+`origin/main` at `69286cdf`, the final gate results, and publication of PR #558
+at `c12ce72a`.
