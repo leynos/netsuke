@@ -6,9 +6,11 @@
 use crate::cli::Cli;
 use crate::localization::{self, keys};
 use crate::status::{PipelineStage, StatusReporter, report_pipeline_stage};
-use anyhow::{Result, anyhow};
-use camino::Utf8PathBuf;
+use anyhow::{Context, Result, anyhow};
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use std::borrow::Cow;
+use std::io::{self, ErrorKind};
 use std::path::Path;
 
 use super::RunnerError;
@@ -78,8 +80,13 @@ pub(super) fn ensure_manifest_exists_or_error(
     reporter: &dyn StatusReporter,
     manifest_path: &Utf8PathBuf,
 ) -> Result<()> {
-    if manifest_path.as_std_path().exists() {
-        return Ok(());
+    match manifest_metadata(manifest_path) {
+        Ok(()) => return Ok(()),
+        Err(error) if error.kind() != ErrorKind::NotFound => {
+            return Err(error)
+                .with_context(|| format!("inspect manifest metadata at {manifest_path}"));
+        }
+        Err(_) => {}
     }
 
     report_pipeline_stage(reporter, PipelineStage::ManifestIngestion, None);
@@ -115,4 +122,24 @@ pub(super) fn ensure_manifest_exists_or_error(
         help: localization::message(keys::RUNNER_MANIFEST_NOT_FOUND_HELP),
     }
     .into())
+}
+
+/// Inspect the selected manifest through a capability-scoped directory handle.
+///
+/// The explicit metadata result preserves permission and other I/O failures;
+/// callers may map only a genuine missing path to the user-facing diagnostic.
+fn manifest_metadata(manifest_path: &Utf8Path) -> io::Result<()> {
+    let parent = manifest_path
+        .parent()
+        .filter(|path| !path.as_str().is_empty())
+        .unwrap_or_else(|| Utf8Path::new("."));
+    let directory = Dir::open_ambient_dir(parent, ambient_authority())?;
+    let name = manifest_path.file_name().ok_or_else(|| {
+        io::Error::new(
+            ErrorKind::InvalidInput,
+            format!("manifest path {manifest_path} has no file name"),
+        )
+    })?;
+    directory.metadata(Utf8Path::new(name))?;
+    Ok(())
 }

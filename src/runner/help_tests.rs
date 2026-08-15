@@ -14,7 +14,9 @@ use anyhow::{Context, Result};
 use insta::assert_snapshot;
 use proptest::prelude::*;
 use semver::Version;
-use std::sync::Arc;
+use std::sync::{Arc, mpsc};
+use std::thread;
+use std::time::Duration;
 use test_support::fluent::normalize_fluent_isolates;
 use test_support::localizer_test_lock;
 
@@ -60,13 +62,47 @@ fn catalogue_snapshot(
     snapshot_name: &str,
     render: impl FnOnce(&NetsukeManifest) -> Result<String>,
 ) -> Result<()> {
-    let _lock = localizer_lock();
-    let _guard = set_localizer_for_tests(Arc::from(build_localizer(Some(locale))));
     let manifest = fixture_manifest()?;
-    let rendered = render(&manifest)?;
+    let rendered = render_catalogue_with_locale(locale, &manifest, render)?;
     snapshot_settings("help_targets").bind(|| {
         assert_snapshot!(snapshot_name, rendered);
     });
+    Ok(())
+}
+
+/// Render a catalogue while holding the localizer lock only for its global
+/// localization dependency.
+fn render_catalogue_with_locale(
+    locale: &str,
+    manifest: &NetsukeManifest,
+    render: impl FnOnce(&NetsukeManifest) -> Result<String>,
+) -> Result<String> {
+    let _lock = localizer_lock();
+    let _guard = set_localizer_for_tests(Arc::from(build_localizer(Some(locale))));
+    render(manifest)
+}
+
+#[test]
+fn catalogue_rendering_releases_localizer_lock_before_snapshot_work() -> Result<()> {
+    let manifest = fixture_manifest()?;
+    let rendered = render_catalogue_with_locale("en-US", &manifest, |parsed_manifest| {
+        render_json(build_catalogue(parsed_manifest))
+    })?;
+    let (acquired, confirmed) = mpsc::sync_channel(0);
+    let contender = thread::spawn(move || {
+        let _lock = localizer_lock();
+        acquired.send(()).ok();
+    });
+    confirmed
+        .recv_timeout(Duration::from_secs(5))
+        .context("localizer contender should acquire the lock before snapshot work")?;
+    contender
+        .join()
+        .map_err(|_| anyhow::anyhow!("localizer contender should complete"))?;
+    anyhow::ensure!(
+        rendered.contains("\"command\": \"help-targets\""),
+        "rendered catalogue should remain available after localizer contention"
+    );
     Ok(())
 }
 

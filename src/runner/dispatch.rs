@@ -15,14 +15,18 @@ pub(super) fn execute(cli: &Cli, command: Commands, context: &ExecutionContext<'
         Commands::Generate { output } => execute_generate(cli, output.as_ref(), context),
         Commands::Clean => execute_clean(cli, context),
         Commands::Graph(args) => graph::handle_graph(cli, &args, context.reporter),
-        Commands::Help(args) => execute_help(cli, &args, context),
+        Commands::Help(args) => execute_help(cli, &args, context.reporter),
     }
 }
 
-fn execute_help(cli: &Cli, args: &HelpArgs, context: &ExecutionContext<'_>) -> Result<()> {
+pub(super) fn execute_help(
+    cli: &Cli,
+    args: &HelpArgs,
+    reporter: &dyn crate::status::StatusReporter,
+) -> Result<()> {
     match args.topic.as_ref() {
         None => help::render_root_help(),
-        Some(HelpTopic::Targets) => help::handle_help_targets(cli, context.reporter),
+        Some(HelpTopic::Targets) => help::handle_help_targets(cli, reporter),
         Some(HelpTopic::Build) => help::render_subcommand_help("build"),
         Some(HelpTopic::Clean) => help::render_subcommand_help("clean"),
         Some(HelpTopic::Graph) => help::render_subcommand_help("graph"),

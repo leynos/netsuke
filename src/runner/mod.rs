@@ -20,6 +20,7 @@ use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipel
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
+use std::borrow::Cow;
 use std::io::{self, IsTerminal};
 use std::path::Path;
 use tracing::{debug, info};
@@ -120,8 +121,7 @@ impl Default for BuildTargets<'_> {
 ///
 /// Returns an error if manifest generation or the Ninja process fails.
 pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
-    let program = process::resolve_ninja_program();
-    run_with_ninja_program(cli, prefs, &program)
+    run_with_ninja_program_resolver(cli, prefs, None, process::resolve_ninja_program)
 }
 
 /// Execute parsed commands with an explicitly selected Ninja executable.
@@ -133,6 +133,16 @@ pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
 ///
 /// Returns an error if manifest generation or the selected Ninja process fails.
 pub fn run_with_ninja_program(cli: &Cli, prefs: OutputPrefs, program: &Path) -> Result<()> {
+    run_with_ninja_program_resolver(cli, prefs, Some(program), || program.to_path_buf())
+}
+
+/// Dispatch a command after resolving Ninja only for commands that require it.
+fn run_with_ninja_program_resolver(
+    cli: &Cli,
+    prefs: OutputPrefs,
+    configured_program: Option<&Path>,
+    resolve_program: impl FnOnce() -> std::path::PathBuf,
+) -> Result<()> {
     let mode = output_mode::resolve(cli.accessibility_override(), Some(cli.color));
     let progress_enabled = cli.progress_enabled() && !cli.json;
     let stdout_is_tty = std::io::stdout().is_terminal();
@@ -147,10 +157,15 @@ pub fn run_with_ninja_program(cli: &Cli, prefs: OutputPrefs, program: &Path) -> 
     let command = cli.command.clone().unwrap_or(Commands::Build(BuildArgs {
         targets: Vec::new(),
     }));
+    if let Commands::Help(args) = &command {
+        return dispatch::execute_help(cli, args, reporter.as_ref());
+    }
+    let ninja_program =
+        configured_program.map_or_else(|| Cow::Owned(resolve_program()), Cow::Borrowed);
     let context = ExecutionContext {
         reporter: reporter.as_ref(),
         progress_enabled,
-        ninja_program: program,
+        ninja_program: ninja_program.as_ref(),
     };
     dispatch::execute(cli, command, &context)
 }
