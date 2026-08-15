@@ -1002,6 +1002,31 @@ defaults. When it finds a candidate that cannot be loaded, such as malformed
 TOML or a file whose `extends` parent is missing, Netsuke reports the load
 error. A broken discovered configuration is therefore not treated as absent.
 
+
+### Reuse discovered configuration layers
+
+Normal command-line use requires no change. The Rust API remains an unstable
+beta surface, but callers that compose configuration themselves can avoid
+discovering and loading the same configuration files more than once. The
+`netsuke::cli::resolve_json_and_layers_with_env` function returns the resolved
+JSON boolean together with `DiscoveredLayers`; pass those layers to
+`netsuke::cli::merge_with_cached_file_layers` for the full merge.
+
+The diagnostic form, `netsuke::cli::resolve_json_and_layers_outcome_with_env`,
+returns the JSON resolution result and a `DiscoveryOutcome`. The outcome
+supports `emit_diagnostics()` and can be consumed with `into_layers()` before
+being passed to `merge_with_cached_file_layers`. This preserves diagnostics
+from the same discovery pass while avoiding repeated file loading.
+
+All of these functions take an injected `&impl ConfigEnvProvider`. The public
+`ConfigEnvProvider` trait provides `get(&self, key: &str) -> Option<OsString>`
+for selector and environment lookups, plus
+`entries(&self) -> Vec<(OsString, OsString)>` for the complete configuration
+environment layer. `entries()` defaults to an empty vector.
+`ConfigStdEnvProvider` is the process-backed implementation; tests and other
+adapters can provide an implementation without mutating the process
+environment.
+
 ### Diagnose configuration selection
 
 Pass `--verbose` to see how Netsuke selected its configuration. Structured
