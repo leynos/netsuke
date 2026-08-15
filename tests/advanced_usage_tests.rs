@@ -71,11 +71,22 @@ fn assert_json_success(output: &CommandOutput, expected_command: &str) -> Result
     Ok(())
 }
 
-fn assert_json_subcommand_success(
-    context: &str,
-    command: &str,
-    make_ninja: impl FnOnce() -> Result<(TempDir, std::path::PathBuf)>,
-) -> Result<()> {
+type NinjaSetup = fn() -> Result<(TempDir, std::path::PathBuf)>;
+
+struct JsonSubcommandRequest {
+    context: &'static str,
+    command: &'static str,
+    make_ninja: NinjaSetup,
+}
+
+impl JsonSubcommandRequest {
+    const fn into_parts(self) -> (&'static str, &'static str, NinjaSetup) {
+        (self.context, self.command, self.make_ninja)
+    }
+}
+
+fn assert_json_subcommand_success(request: JsonSubcommandRequest) -> Result<()> {
+    let (context, command, make_ninja) = request.into_parts();
     let workspace = setup_minimal_workspace(Path::new(env!("CARGO_MANIFEST_DIR")), context)?;
     let (_ninja_dir, ninja_path) = make_ninja()?;
     let output = run_netsuke(
@@ -86,18 +97,32 @@ fn assert_json_subcommand_success(
     assert_json_success(&output, command)
 }
 
+#[cfg(unix)]
+fn make_clean_ninja() -> Result<(TempDir, std::path::PathBuf)> {
+    fake_ninja_expect_tool(ToolName::new("clean"))
+}
+
+struct ConfigLayerBuildRequest<'a> {
+    context: &'a str,
+    config_content: &'a str,
+    args: &'a [&'a str],
+    extra_env: &'a [(&'a str, &'a str)],
+}
+
+impl<'a> ConfigLayerBuildRequest<'a> {
+    const fn into_parts(self) -> (&'a str, &'a str, &'a [&'a str], &'a [(&'a str, &'a str)]) {
+        (self.context, self.config_content, self.args, self.extra_env)
+    }
+}
+
 /// Shared workspace setup for configuration-layering tests.
 ///
 /// Creates a minimal workspace, writes `config_content` to `.netsuke.toml`,
 /// installs a fake ninja binary, and runs netsuke with the given `args` and
 /// `extra_env`.  Returns the captured [`CommandOutput`].
-fn run_config_layer_build(
-    context: &str,
-    config_content: &str,
-    args: &[&str],
-    extra_env: &[(&str, &str)],
-) -> Result<CommandOutput> {
-    let workspace = setup_minimal_workspace(context)?;
+fn run_config_layer_build(request: ConfigLayerBuildRequest<'_>) -> Result<CommandOutput> {
+    let (context, config_content, args, extra_env) = request.into_parts();
+    let workspace = setup_minimal_workspace(Path::new(env!("CARGO_MANIFEST_DIR")), context)?;
     let config = workspace.path().join(".netsuke.toml");
     std::fs::write(&config, config_content).context("write config file")?;
     let (_ninja_dir, ninja_path) = fake_ninja_check_build_file()?;
@@ -109,13 +134,39 @@ fn run_config_layer_build(
     )
 }
 
-fn contains_metric_record(snapshot: &str, expected_record: &str, expected_value: &str) -> bool {
+struct MetricRecordExpectation {
+    record: &'static str,
+    value: &'static str,
+}
+
+struct HistogramRecordExpectation {
+    record: &'static str,
+}
+
+impl MetricRecordExpectation {
+    const fn into_parts(self) -> (&'static str, &'static str) {
+        (self.record, self.value)
+    }
+}
+
+impl HistogramRecordExpectation {
+    const fn into_record(self) -> &'static str {
+        self.record
+    }
+}
+
+fn contains_metric_record(snapshot: &str, expected: MetricRecordExpectation) -> bool {
+    let (expected_record, expected_value) = expected.into_parts();
     snapshot
         .split("), (")
         .any(|record| record.contains(expected_record) && record.contains(expected_value))
 }
 
-fn contains_non_empty_histogram_record(snapshot: &str, expected_record: &str) -> bool {
+fn contains_non_empty_histogram_record(
+    snapshot: &str,
+    expected: HistogramRecordExpectation,
+) -> bool {
+    let expected_record = expected.into_record();
     snapshot.split("), (").any(|record| {
         record.contains(expected_record)
             && record.contains("Histogram([")
@@ -129,24 +180,34 @@ fn assert_config_metrics_snapshot(stderr: &str) -> Result<()> {
         .find(|line| line.contains("metrics snapshot"))
         .ok_or_else(|| anyhow::anyhow!("expected metrics snapshot in stderr: {stderr}"))?;
     let expected_counters = [
-        concat!(
-            r#"CompositeKey(Counter, Key { name: KeyName("config_load_total"), labels: ["#,
-            r#"Label("phase", "diag_mode"), Label("outcome", "success")]"#,
-        ),
-        concat!(
-            r#"CompositeKey(Counter, Key { name: KeyName("config_load_total"), labels: ["#,
-            r#"Label("phase", "merge"), Label("outcome", "success")]"#,
-        ),
+        MetricRecordExpectation {
+            record: concat!(
+                r#"CompositeKey(Counter, Key { name: KeyName("config_load_total"), labels: ["#,
+                r#"Label("phase", "diag_mode"), Label("outcome", "success")]"#,
+            ),
+            value: "Counter(1)",
+        },
+        MetricRecordExpectation {
+            record: concat!(
+                r#"CompositeKey(Counter, Key { name: KeyName("config_load_total"), labels: ["#,
+                r#"Label("phase", "merge"), Label("outcome", "success")]"#,
+            ),
+            value: "Counter(1)",
+        },
     ];
     let expected_histograms = [
-        concat!(
-            r#"CompositeKey(Histogram, Key { name: KeyName("config_load_duration_seconds"), labels: ["#,
-            r#"Label("phase", "diag_mode")]"#,
-        ),
-        concat!(
-            r#"CompositeKey(Histogram, Key { name: KeyName("config_load_duration_seconds"), labels: ["#,
-            r#"Label("phase", "merge")]"#,
-        ),
+        HistogramRecordExpectation {
+            record: concat!(
+                r#"CompositeKey(Histogram, Key { name: KeyName("config_load_duration_seconds"), labels: ["#,
+                r#"Label("phase", "diag_mode")]"#,
+            ),
+        },
+        HistogramRecordExpectation {
+            record: concat!(
+                r#"CompositeKey(Histogram, Key { name: KeyName("config_load_duration_seconds"), labels: ["#,
+                r#"Label("phase", "merge")]"#,
+            ),
+        },
     ];
     ensure!(
         snapshot.matches(r#"KeyName("config_load_total")"#).count() == expected_counters.len(),
@@ -160,15 +221,19 @@ fn assert_config_metrics_snapshot(stderr: &str) -> Result<()> {
         "expected exactly two configuration-load duration records: {snapshot}",
     );
     for expected_counter in expected_counters {
+        let expected_record = expected_counter.record;
         ensure!(
-            contains_metric_record(snapshot, expected_counter, "Counter(1)"),
-            "expected counter {expected_counter:?} in snapshot: {snapshot}",
+            contains_metric_record(snapshot, expected_counter),
+            "expected counter {:?} in snapshot: {snapshot}",
+            expected_record,
         );
     }
     for expected_histogram in expected_histograms {
+        let expected_record = expected_histogram.record;
         ensure!(
             contains_non_empty_histogram_record(snapshot, expected_histogram),
-            "expected histogram {expected_histogram:?} in snapshot: {snapshot}",
+            "expected histogram {:?} in snapshot: {snapshot}",
+            expected_record,
         );
     }
     Ok(())
@@ -199,14 +264,20 @@ fn clean_without_prior_build_handles_gracefully() -> Result<()> {
 
 #[rstest]
 fn build_json_emits_success_result() -> Result<()> {
-    assert_json_subcommand_success("JSON build success", "build", fake_ninja_check_build_file)
+    assert_json_subcommand_success(JsonSubcommandRequest {
+        context: "JSON build success",
+        command: "build",
+        make_ninja: fake_ninja_check_build_file,
+    })
 }
 
 #[cfg(unix)]
 #[rstest]
 fn clean_json_dispatches_tool_and_emits_success_result() -> Result<()> {
-    assert_json_subcommand_success("JSON clean success", "clean", || {
-        fake_ninja_expect_tool(ToolName::new("clean"))
+    assert_json_subcommand_success(JsonSubcommandRequest {
+        context: "JSON clean success",
+        command: "clean",
+        make_ninja: make_clean_ninja,
     })
 }
 
@@ -306,36 +377,47 @@ fn generate_to_missing_parent_directory_succeeds_by_creating_parents() -> Result
 // Configuration layering precedence
 // -------------------------------------------------------------------------
 
+struct ConfigPrecedenceCase<'a> {
+    config_content: &'a str,
+    args: &'a [&'a str],
+    extra_env: &'a [(&'a str, &'a str)],
+    expect_verbose_diagnostics: bool,
+}
+
 #[rstest]
-#[case::config_file_enables("verbose = true\n", &["build"], &[], true)]
-#[case::env_var_enables(
-    "verbose = false\n",
-    &["build"],
-    &[("NETSUKE_VERBOSE", "true")],
-    true
-)]
-#[case::env_var_overrides_config(
-    "verbose = true\n",
-    &["build"],
-    &[("NETSUKE_VERBOSE", "false")],
-    false
-)]
-#[case::cli_flag_overrides_env(
-    "verbose = true\n",
-    &["--verbose", "build"],
-    &[("NETSUKE_VERBOSE", "false")],
-    true
-)]
-fn verbose_config_precedence(
-    #[case] config_content: &str,
-    #[case] args: &[&str],
-    #[case] extra_env: &[(&str, &str)],
-    #[case] expect_verbose_diagnostics: bool,
-) -> Result<()> {
-    let output =
-        run_config_layer_build("verbose config precedence", config_content, args, extra_env)?;
+#[case::config_file_enables(ConfigPrecedenceCase {
+    config_content: "verbose = true\n",
+    args: &["build"],
+    extra_env: &[],
+    expect_verbose_diagnostics: true,
+})]
+#[case::env_var_enables(ConfigPrecedenceCase {
+    config_content: "verbose = false\n",
+    args: &["build"],
+    extra_env: &[("NETSUKE_VERBOSE", "true")],
+    expect_verbose_diagnostics: true,
+})]
+#[case::env_var_overrides_config(ConfigPrecedenceCase {
+    config_content: "verbose = true\n",
+    args: &["build"],
+    extra_env: &[("NETSUKE_VERBOSE", "false")],
+    expect_verbose_diagnostics: false,
+})]
+#[case::cli_flag_overrides_env(ConfigPrecedenceCase {
+    config_content: "verbose = true\n",
+    args: &["--verbose", "build"],
+    extra_env: &[("NETSUKE_VERBOSE", "false")],
+    expect_verbose_diagnostics: true,
+})]
+fn verbose_config_precedence(#[case] case: ConfigPrecedenceCase<'_>) -> Result<()> {
+    let output = run_config_layer_build(ConfigLayerBuildRequest {
+        context: "verbose config precedence",
+        config_content: case.config_content,
+        args: case.args,
+        extra_env: case.extra_env,
+    })?;
     ensure!(output.success, "expected build to succeed");
-    if expect_verbose_diagnostics {
+    if case.expect_verbose_diagnostics {
         ensure!(
             output.stderr.contains("Timing"),
             "expected verbose timing summary in stderr, got:\n{}",
