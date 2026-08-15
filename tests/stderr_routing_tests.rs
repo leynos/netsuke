@@ -31,16 +31,18 @@ const STDERR_MARKER: &str = "NETSUKE_ROUTING_STDERR_MARKER";
 /// Write a fake Ninja that emits both stream markers and, separately, records
 /// a run-marker file so the parent can tell whether the child ran at all.
 ///
-/// The run-marker file is written directly by the child, independent of any
-/// stream routing; it proves a suppression assertion observed output
-/// *because the child ran*, not because it never spawned.
+/// The run-marker path travels in `NETSUKE_TEST_ROUTING_RAN_FILE` (inherited by
+/// the child through [`CommandEnv::inherit`]), so no path is interpolated into
+/// the shell script. The run-marker file is written directly by the child,
+/// independent of any stream routing; it proves a suppression assertion
+/// observed output *because the child ran*, not because it never spawned.
 #[cfg(unix)]
-fn marker_emitting_ninja(ran_file: &Path) -> Result<(TempDir, PathBuf)> {
+fn marker_emitting_ninja() -> Result<(TempDir, PathBuf)> {
     let dir = tempdir().context("create fake-ninja directory")?;
     let script = format!(
         "#!/bin/sh\nprintf '%s\\n' '{STDOUT_MARKER}'\nprintf '%s\\n' '{STDERR_MARKER}' >&2\n\
-         touch '{}'\nexit 0\n",
-        ran_file.to_string_lossy()
+         touch \"${}\"\nexit 0\n",
+        RAN_FILE_ENV,
     );
     let path = write_exec_with_content(dir.path(), "fake-ninja", &script)
         .context("write fake ninja executable")?;
@@ -83,7 +85,7 @@ fn assert_routing_case(stderr_mode: StderrMode, tool: bool) -> Result<()> {
 
     let ran_dir = tempdir().context("create run-marker directory")?;
     let ran_file = ran_dir.path().join("ran");
-    let (_ninja_dir, ninja) = marker_emitting_ninja(&ran_file)?;
+    let (_ninja_dir, ninja) = marker_emitting_ninja()?;
     let output = run_routing_worker(job, tool, &ninja, &ran_file)?
         .output()
         .with_context(|| format!("run {stderr_mode:?} {path_label} worker"))?;
