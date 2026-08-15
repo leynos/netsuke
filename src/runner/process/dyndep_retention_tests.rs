@@ -6,13 +6,27 @@ use crate::runner::process::dyndep_telemetry::{
     RETAINED_BYTES_RECLAIMED, RETAINED_FILES_RECLAIMED, RETENTIONS_TOTAL,
 };
 use crate::runner::process::materialize_dyndep_files;
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use cap_std::fs_utf8::Dir;
+use fs4::FileExt;
 use metrics_util::{
     MetricKind,
     debugging::{DebugValue, DebuggingRecorder},
 };
+use mockable::{DefaultEnv, Env};
+use std::{
+    io::{BufRead, BufReader, Read, Write},
+    path::PathBuf,
+    process::{Command, Stdio},
+};
+
+const LEASE_WORKER_DIRECTORY: &str = "NETSUKE_TEST_DYNDEP_LEASE_DIRECTORY";
+const LEASE_WORKER_NAME: &str =
+    "runner::process::dyndep_retention::retention_tests::dyndep_publication_lease_worker";
+const WORKER_MARKER_PREFIX: &str = "netsuke-dyndep-lease:";
+const ACTIVE_SIDECAR_PATH: &str = ".netsuke/dyndep/active.dd";
+const ACTIVE_SIDECAR_CONTENT: &str = "active";
 
 fn temporary_dir(temp: &tempfile::TempDir) -> Result<Dir> {
     let path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
@@ -44,6 +58,115 @@ fn retained_sidecar_bytes(dir: &Dir) -> Result<u64> {
         .try_fold(0_u64, |total, path| {
             Ok(total.saturating_add(dir.metadata(path)?.len()))
         })
+}
+
+fn write_worker_marker(mut writer: impl Write, marker: &str) -> Result<()> {
+    writeln!(writer, "{WORKER_MARKER_PREFIX}{marker}")?;
+    writer.flush()?;
+    Ok(())
+}
+
+fn wait_for_worker_marker(reader: &mut impl BufRead, marker: &str) -> Result<()> {
+    let expected = format!("{WORKER_MARKER_PREFIX}{marker}");
+    loop {
+        let mut line = String::new();
+        ensure!(
+            reader.read_line(&mut line)? != 0,
+            "lease worker closed stdout before emitting {expected}"
+        );
+        if line.trim_end().ends_with(&expected) {
+            return Ok(());
+        }
+    }
+}
+
+fn worker_directory() -> Result<Dir> {
+    let process_env = DefaultEnv;
+    let root = PathBuf::from(
+        process_env
+            .os_string(LEASE_WORKER_DIRECTORY)
+            .context("read lease-worker directory")?,
+    );
+    let path = Utf8PathBuf::from_path_buf(root).map_err(|path| {
+        anyhow::anyhow!("lease-worker directory is not UTF-8: {}", path.display())
+    })?;
+    Dir::open_ambient_dir(path, cap_std::ambient_authority()).map_err(Into::into)
+}
+
+fn assert_lease_is_unavailable(dir: &Dir) -> Result<()> {
+    let mut options = cap_std::fs_utf8::OpenOptions::new();
+    options.read(true).write(true);
+    let file = dir.open_with(DYNDEP_LOCK, &options)?.into_std();
+    let error =
+        FileExt::try_lock(&file).expect_err("the parent lease must block the child lock attempt");
+    ensure!(
+        matches!(error, fs4::TryLockError::WouldBlock),
+        "the parent lease must make the child lock attempt nonblocking: {error}"
+    );
+    Ok(())
+}
+
+#[test]
+fn lease_blocks_other_processes_until_the_active_sidecar_is_released() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let dir = temporary_dir(&temp)?;
+    let active = sidecar(ACTIVE_SIDECAR_PATH, ACTIVE_SIDECAR_CONTENT);
+    let publication_lease = materialize_dyndep_files(&dir, std::slice::from_ref(&active))?;
+    drop(publication_lease);
+    let lease = DyndepPublicationLease::acquire(&dir)?;
+    let mut child = Command::new(std::env::current_exe()?)
+        .args(["--ignored", "--exact", LEASE_WORKER_NAME, "--nocapture"])
+        .env(LEASE_WORKER_DIRECTORY, temp.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let mut stdout = BufReader::new(child.stdout.take().context("capture lease-worker stdout")?);
+
+    wait_for_worker_marker(&mut stdout, "blocked")?;
+    drop(lease);
+    write_worker_marker(
+        child.stdin.as_mut().context("open lease-worker stdin")?,
+        "release",
+    )?;
+    drop(child.stdin.take());
+    wait_for_worker_marker(&mut stdout, "completed")?;
+    let status = child.wait()?;
+    drop(stdout);
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .context("capture lease-worker stderr")?
+        .read_to_string(&mut stderr)?;
+    ensure!(status.success(), "lease worker failed: {stderr}");
+    ensure!(
+        dir.open(active.relative_path()).is_ok(),
+        "the original active sidecar must remain after the child retention pass"
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore = "invoked by the cross-process dyndep lease test"]
+fn dyndep_publication_lease_worker() -> Result<()> {
+    let dir = worker_directory()?;
+    assert_lease_is_unavailable(&dir)?;
+    write_worker_marker(std::io::stdout().lock(), "blocked")?;
+
+    let mut input = String::new();
+    ensure!(
+        std::io::stdin().read_line(&mut input)? != 0,
+        "lease worker must receive the parent release marker"
+    );
+    ensure!(
+        input.trim_end() == format!("{WORKER_MARKER_PREFIX}release"),
+        "lease worker received an unexpected parent marker"
+    );
+    let active = sidecar(ACTIVE_SIDECAR_PATH, ACTIVE_SIDECAR_CONTENT);
+    let lease = materialize_dyndep_files(&dir, std::slice::from_ref(&active))?;
+    lease.prune(&dir, std::slice::from_ref(&active))?;
+    write_worker_marker(std::io::stdout().lock(), "completed")
 }
 
 #[test]
