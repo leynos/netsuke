@@ -1018,10 +1018,10 @@ whether a path was present, and which environment lookups were attempted.
 Events then identify whether Netsuke uses an explicit file or discovered layers.
 
 If an explicit file cannot be loaded, the warning records `failure_kind` as
-`Missing` or `LoadError`. Verbose tracing retains only a bounded `path_hash`
-and, where applicable, a presence indicator; it never retains or emits
-filenames or raw paths. The unkeyed hash is only a correlation identifier: it
-does not confidentially conceal a guessable path.
+`Missing` or `LoadError`. Verbose tracing uses only `path_hash` and
+`path_present`; it never exposes a file name or full path. The unkeyed
+`path_hash` is only a correlation identifier: it does not confidentially
+conceal a guessable path.
 
 Configuration tracing is disabled in JSON mode, including when `json = true`
 comes from a configuration file. This keeps stderr empty for successful JSON
