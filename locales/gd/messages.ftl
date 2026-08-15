@@ -114,7 +114,7 @@ runner.io.dyndep.read = Dh’fhàillig leughadh an fhaidhle dyndep a chaidh a ch
 runner.io.dyndep.write = Dh’fhàillig sgrìobhadh an fhaidhle dyndep a chaidh a chruthachadh aig { $path }.
 runner.io.dyndep.rename = Dh’fhàillig crìochnachadh an fhaidhle dyndep a chaidh a chruthachadh aig { $path }.
 runner.io.dyndep.corrupt = Chan eil an fhaidhle dyndep a chaidh a chruthachadh aig { $path } a’ freagairt ris an t-susbaint ris an robh dùil; thoir air falbh an fhaidhle sin a-mhàin agus feuch ris a-rithist.
-runner.io.dyndep.temp_collisions = Dh’fhàillig cruthachadh faidhle dyndep sealach àraidh airson { $path } às dèidh buairidhean ainmean tric.
+runner.io.dyndep.temp_collisions = Dh’fhàillig cruthachadh faidhle dyndep sealach àraidh airson { $path } às dèidh còmhstrithean ainmeachaidh tric.
 runner.io.dyndep.too_large = Tha am faidhle dyndep a chaidh a chruthachadh aig { $path } nas motha na crìoch dearbhaidh { $limit } baidht.
 
 # Breithneachadh an fhoirm-liosta.
@@ -181,7 +181,7 @@ ir.invalid_command = Cur a-steach mì-dhligheach san àithne: { $snippet }.
 # Mearachdan dèanamh Ninja.
 ninja_gen.missing_action = Tha an gnìomh “{ $id }” air a bheil oir togail a' toirt iomradh a dhìth.
 ninja_gen.format = Cha b' urrainnear às-chur an fhoirm-liosta Ninja fhòrmatadh.
-ninja_gen.dyndep_files_required = Feumaidh an togail seo pasgan Ninja a chaidh a chruthachadh; cleachd `netsuke build`, `netsuke clean` no `netsuke generate` gus na faidhlichean dyndep a dhèanamh stuthail.
+ninja_gen.dyndep_files_required = Feumaidh an togail seo pasgan Ninja a chaidh a chruthachadh; cleachd `netsuke build`, `netsuke clean` no `netsuke generate` gus na faidhlichean dyndep a chruthachadh.
 ninja_gen.reserved_output_path = Tha an t-slighe '{ $path }' glèidhte airson staid eisimeileachdan shreathach Netsuke.
 ninja_gen.unsupported_path_character = Tha an t-slighe '{ $path }' a’ gabhail a-steach caractar slighe Ninja nach eil a’ faighinn taic, '{ $character }'.
 

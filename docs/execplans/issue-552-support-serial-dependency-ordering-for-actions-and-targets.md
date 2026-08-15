@@ -423,6 +423,9 @@ criterion in issue #552 and all repository gates pass.
 - (2026-08-15) A retention warning from the latest review was stale: obsolete
   sidecars already have bounded count and byte budgets, and materialization,
   cleanup, and command consumption already share a capability-scoped lease.
+- (2026-08-15) The retention request was verified stale and contradictory to
+  accepted ADR-012 bounded automatic retention: the current bundle is
+  protected, while historical output may need regeneration.
 - (2026-08-11) The prior materializer commit accidentally left surplus blank
   lines at EOF in each changed Fluent catalogue. `git show --check` reports
   them even though the current worktree is clean. Remove only those trailing
