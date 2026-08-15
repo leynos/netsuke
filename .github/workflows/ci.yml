@@ -186,8 +186,11 @@ jobs:
           key: whitaker-installer-${{ runner.os }}-${{ runner.arch }}-${{ env.WHITAKER_INSTALLER_VERSION }}
       - name: Install Whitaker
         # Installs and runs on windows-latest (verified in #562); the same
-        # binstall-with-cargo-install-fallback path as the Linux job. A failure
-        # here blocks the merge.
+        # binstall-with-cargo-install-fallback path as the Linux job. On
+        # Windows the installer ships `whitaker` as a PowerShell wrapper
+        # (.ps1), which Git Bash cannot execute, so shim `whitaker` in the
+        # cargo bin directory (already on PATH) to run the wrapper through
+        # PowerShell. A failure here blocks the merge.
         run: |
           if ! command -v whitaker-installer >/dev/null 2>&1; then
             if cargo binstall --version >/dev/null 2>&1; then
@@ -198,6 +201,13 @@ jobs:
             fi
           fi
           whitaker-installer
+          if [ -f "${HOME}/.local/bin/whitaker.ps1" ]; then
+            printf '%s\n' \
+              '#!/bin/bash' \
+              'exec powershell -NoProfile -ExecutionPolicy Bypass -File "${HOME}/.local/bin/whitaker.ps1" "$@"' \
+              > "${CARGO_HOME:-$HOME/.cargo}/bin/whitaker"
+            chmod +x "${CARGO_HOME:-$HOME/.cargo}/bin/whitaker"
+          fi
       - name: Lint (Whitaker)
         # Whitaker/Dylint over the workspace under `-D warnings`, including
         # the `#[cfg(windows)]` arms. A failure blocks the merge.
