@@ -2906,18 +2906,40 @@ flowchart LR
 ```
 
 Netsuke configuration discovery is implemented in `src/cli/discovery.rs`.
-Explicit file selection is handled by `resolve_config_selector(...)`, which
-applies the precedence `--config` > `NETSUKE_CONFIG`. Layer loading and
-automatic discovery are handled by `push_file_layers_with_sources(...)`, which
-also applies the `-C/--directory` flag as the project-discovery root.
+Explicit file selection is handled by `explicit_config_path_with_env(...)`,
+which applies the precedence `--config` > `NETSUKE_CONFIG`.
+`discover_file_layers(...)` performs one discovery pass, applying the
+`-C/--directory` flag as the project-discovery root, and returns a
+`DiscoveryOutcome`. Its `DiscoveredLayers` owns the discovered layers,
+discovery errors and bounded deferred diagnostics.
+
+Diagnostic-mode resolution uses
+`resolve_json_and_layers_outcome_with_env(...)` to resolve JSON from those
+discovered layers and retain the outcome for the startup boundary.
+`DiscoveryOutcome::emit_diagnostics()` replays the retained diagnostics after
+tracing is configured without repeating environment or filesystem access.
+`collect_file_layers_with_trace_and_env_source(...)` performs the underlying
+discovery scan and retains bounded project-scope trace metadata.
+`DiscoveryOutcome::into_layers()` transfers the same discovered layers to
+`merge_with_cached_file_layers(...)`, which consumes them for the full merge
+and prevents a second discovery pass. The standalone
+`merge_with_config_and_env(...)` path performs discovery, emits diagnostics
+and delegates to `merge_with_cached_file_layers(...)`.
+
+Deferred bounded discovery diagnostics are retained only for replay after the
+startup tracing boundary is configured. They do not contain raw paths or file
+names and replay does not repeat environment or filesystem access. Discovery
+and configuration errors remain separate: diagnostic-mode resolution returns
+its discovery or JSON-validation error, while the full merge caller handles
+the retained discovery errors together with merge errors.
 
 **Figure: Explicit Config Selector Resolution** — This diagram shows how
 Netsuke chooses the configuration file before automatic discovery. Netsuke
 first checks `--config`, then `NETSUKE_CONFIG`. The first explicit selector
 found is loaded directly; if that file is missing or invalid, Netsuke reports
 the explicit-file error instead of falling back to discovery. Only when no
-explicit selector is present does Netsuke run two-pass config discovery and
-then proceed with the merged configuration.
+explicit selector is present does Netsuke run its cached configuration
+discovery pass and then proceed with the merged configuration.
 
 ```mermaid
 flowchart TD
@@ -2926,7 +2948,7 @@ flowchart TD
   HasEnvConfig{"Env NETSUKE_CONFIG<br/>set?"}
   UseCliConfig[["Use CLI --config path<br/>as config file"]]
   UseEnvConfig[["Use NETSUKE_CONFIG path<br/>as config file"]]
-  RunDiscovery[["Run two-pass<br/>config discovery"]]
+  RunDiscovery[["Run one cached<br/>config discovery pass"]]
   LoadConfig[["Load selected config<br/>into merge pipeline"]]
   ErrorMissing[["Error: explicit config<br/>file missing or invalid"]]
 
@@ -2952,11 +2974,9 @@ flowchart TD
 #### Discovery scopes and layered merging
 
 Configuration discovery searches multiple scopes and composes all discovered
-files into layers using OrthoConfig's `compose_layers()`. OrthoConfig discovers
-files in precedence order: system-scope (lowest precedence), user-scope, then
-project-scope (highest precedence). When multiple config files exist,
-`compose_layers()` loads them in this order so values from later layers
-override earlier ones—meaning project-scope has highest precedence among file
+files into layers using OrthoConfig's `compose_layers()`. The single
+`discover_file_layers` pass retains the resulting layers and ensures that
+project-scope layers have higher precedence than user- and system-scope
 layers. After file layers are merged, environment variables and CLI arguments
 override the merged result, ensuring explicit user intent always wins.
 
@@ -3014,10 +3034,11 @@ manual flag repetition.
 - The `explicit_config_path_with_env(...)` helper resolves explicit config
   selectors before automatic discovery so missing or invalid explicit files
   remain hard errors.
-- The `merge_with_config()` function in `src/cli/merge.rs` orchestrates the
-  full layer composition: it calls `push_file_layers(...)` to load explicit,
-  project, and user file layers, merges them with defaults, adds environment
-  variables via Figment, and finally applies CLI overrides extracted from
+- The `merge_with_config_and_env()` function in `src/cli/merge.rs` orchestrates
+  the full layer composition: it calls `discover_file_layers(...)`, emits the
+  retained bounded diagnostics, and delegates to
+  `merge_with_cached_file_layers(...)` to merge defaults, discovered layers,
+  environment variables via Figment and CLI overrides extracted from
   `ArgMatches`.
 - The `config_discovery()` function uses OrthoConfig's builder API with the
   application name, environment selector, and an environment source selected at
@@ -3038,8 +3059,8 @@ manual flag repetition.
   disabled; Netsukefile YAML continues to be parsed by the separate
   `serde-saphyr` manifest boundary.
 - Explicit config selection is handled outside OrthoConfig's built-in discovery
-  override surface so Netsuke keeps its custom two-pass project-over-user merge
-  behaviour for automatic discovery. If an explicit selector is set, the
+  override surface so Netsuke keeps its custom project-over-user precedence for
+  automatic discovery. If an explicit selector is set, the
   selected file is loaded directly and bypasses discovery, but still
   participates in the normal precedence ladder: defaults < file < environment <
   CLI.

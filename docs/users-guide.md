@@ -1035,10 +1035,10 @@ whether a path was present, and which environment lookups were attempted.
 Events then identify whether Netsuke uses an explicit file or discovered layers.
 
 If an explicit file cannot be loaded, the warning records `failure_kind` as
-`Missing` or `LoadError`. Path fields are bounded to `path_hash` and
-`path_file_name`; full paths and formatted parser errors are not tracing
-fields. The file name is visible, and the unkeyed hash is only a correlation
-identifier: it does not confidentially conceal a guessable path.
+`Missing` or `LoadError`. Discovery diagnostics expose bounded `path_hash` and
+presence fields. They do not expose raw configuration paths or configuration
+file names. The unkeyed `path_hash` is a bounded correlation identifier; it
+does not confidentially conceal a guessable path.
 
 Configuration tracing is disabled in JSON mode, including when `json = true`
 comes from a configuration file. This keeps stderr empty for successful JSON

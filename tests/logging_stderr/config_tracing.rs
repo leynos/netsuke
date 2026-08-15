@@ -44,13 +44,79 @@ fn assert_config_load_failure(stderr: &str, operation: &str, error_category: &st
     Ok(())
 }
 
-fn assert_config_metrics_snapshot(stderr: &str) -> Result<()> {
+#[derive(Clone, Copy)]
+struct MetricSnapshotRecord {
+    name: &'static str,
+    labels: &'static [&'static str],
+    value: Option<&'static str>,
+}
+
+const DIAG_MODE_FAILURE_METRICS: &[MetricSnapshotRecord] = &[
+    MetricSnapshotRecord {
+        name: "config_load_total",
+        labels: &[
+            "Label(\"phase\", \"diag_mode\")",
+            "Label(\"outcome\", \"failure\")",
+        ],
+        value: Some("Counter(1)"),
+    },
+    MetricSnapshotRecord {
+        name: "config_load_duration_seconds",
+        labels: &["Label(\"phase\", \"diag_mode\")"],
+        value: None,
+    },
+];
+
+const MERGE_FAILURE_METRICS: &[MetricSnapshotRecord] = &[
+    MetricSnapshotRecord {
+        name: "config_load_total",
+        labels: &[
+            "Label(\"phase\", \"diag_mode\")",
+            "Label(\"outcome\", \"success\")",
+        ],
+        value: Some("Counter(1)"),
+    },
+    MetricSnapshotRecord {
+        name: "config_load_total",
+        labels: &[
+            "Label(\"phase\", \"merge\")",
+            "Label(\"outcome\", \"failure\")",
+        ],
+        value: Some("Counter(1)"),
+    },
+    MetricSnapshotRecord {
+        name: "config_load_duration_seconds",
+        labels: &["Label(\"phase\", \"diag_mode\")"],
+        value: None,
+    },
+    MetricSnapshotRecord {
+        name: "config_load_duration_seconds",
+        labels: &["Label(\"phase\", \"merge\")"],
+        value: None,
+    },
+];
+
+fn assert_config_metrics_snapshot(
+    stderr: &str,
+    expected_records: &[MetricSnapshotRecord],
+) -> Result<()> {
     ensure!(
-        stderr.contains("metrics snapshot")
-            && stderr.contains("config_load_total")
-            && stderr.contains("config_load_duration_seconds"),
+        stderr.contains("metrics snapshot"),
         "a verbose early exit should emit the configuration metrics snapshot: {stderr}"
     );
+    for expected in expected_records {
+        let metric_name = format!("name: KeyName(\"{}\")", expected.name);
+        ensure!(
+            stderr.split("CompositeKey(").skip(1).any(|record| {
+                record.contains(&metric_name)
+                    && expected.labels.iter().all(|label| record.contains(label))
+                    && expected.value.is_none_or(|value| record.contains(value))
+            }),
+            "expected configuration metric record {} with labels {:?} in stderr: {stderr}",
+            expected.name,
+            expected.labels,
+        );
+    }
     Ok(())
 }
 
@@ -141,7 +207,7 @@ fn explicit_load_failure_traces_failure_kind() -> Result<()> {
         "diagnostics must not repeat the formatted error text: {joined}"
     );
     assert_config_load_failure(&run.stderr, "diag_mode_resolution", "io")?;
-    assert_config_metrics_snapshot(&run.stderr)?;
+    assert_config_metrics_snapshot(&run.stderr, DIAG_MODE_FAILURE_METRICS)?;
     Ok(())
 }
 
@@ -160,7 +226,7 @@ fn environment_validation_failure_identifies_config_merge() -> Result<()> {
         "an invalid configuration environment value should fail the run"
     );
     assert_config_load_failure(&run.stderr, "config_merge", "validation")?;
-    assert_config_metrics_snapshot(&run.stderr)?;
+    assert_config_metrics_snapshot(&run.stderr, MERGE_FAILURE_METRICS)?;
     Ok(())
 }
 

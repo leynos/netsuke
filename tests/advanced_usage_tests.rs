@@ -142,18 +142,61 @@ fn run_config_layer_build(
     )
 }
 
-fn assert_config_metrics_snapshot(stderr: &str) -> Result<()> {
-    for expected in [
-        "metrics snapshot",
-        "config_load_total",
-        "config_load_duration_seconds",
-        "Label(\"phase\", \"diag_mode\")",
-        "Label(\"phase\", \"merge\")",
-        "Label(\"outcome\", \"success\")",
-    ] {
+#[derive(Clone, Copy)]
+struct MetricSnapshotRecord {
+    name: &'static str,
+    labels: &'static [&'static str],
+    value: Option<&'static str>,
+}
+
+const SUCCESSFUL_CONFIG_METRICS: &[MetricSnapshotRecord] = &[
+    MetricSnapshotRecord {
+        name: "config_load_total",
+        labels: &[
+            "Label(\"phase\", \"diag_mode\")",
+            "Label(\"outcome\", \"success\")",
+        ],
+        value: Some("Counter(1)"),
+    },
+    MetricSnapshotRecord {
+        name: "config_load_total",
+        labels: &[
+            "Label(\"phase\", \"merge\")",
+            "Label(\"outcome\", \"success\")",
+        ],
+        value: Some("Counter(1)"),
+    },
+    MetricSnapshotRecord {
+        name: "config_load_duration_seconds",
+        labels: &["Label(\"phase\", \"diag_mode\")"],
+        value: None,
+    },
+    MetricSnapshotRecord {
+        name: "config_load_duration_seconds",
+        labels: &["Label(\"phase\", \"merge\")"],
+        value: None,
+    },
+];
+
+fn assert_config_metrics_snapshot(
+    stderr: &str,
+    expected_records: &[MetricSnapshotRecord],
+) -> Result<()> {
+    ensure!(
+        stderr.contains("metrics snapshot"),
+        "a verbose completion should emit the configuration metrics snapshot: {stderr}"
+    );
+    for expected in expected_records {
+        let metric_name = format!("name: KeyName(\"{}\")", expected.name);
         ensure!(
-            stderr.contains(expected),
-            "expected metrics snapshot field {expected:?} in stderr, got:\n{stderr}"
+            stderr.split("CompositeKey(").skip(1).any(|record| {
+                record.contains(&metric_name)
+                    && expected.labels.iter().all(|label| record.contains(label))
+                    && expected.value.is_none_or(|value| record.contains(value))
+            }),
+            "expected configuration metric record {} with labels {:?} in stderr: {stderr}",
+            expected.name,
+            expected.labels,
         );
     }
     Ok(())
@@ -316,7 +359,7 @@ fn verbose_config_precedence(
             "expected verbose timing summary in stderr, got:\n{}",
             output.stderr
         );
-        assert_config_metrics_snapshot(&output.stderr)?;
+        assert_config_metrics_snapshot(&output.stderr, SUCCESSFUL_CONFIG_METRICS)?;
     } else {
         ensure!(
             !output.stderr.contains("Timing"),

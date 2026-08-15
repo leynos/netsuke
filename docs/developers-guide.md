@@ -501,34 +501,117 @@ NEXTEST_VERSION="$(sed -n "s/.*NEXTEST_VERSION: '\(.*\)'.*/\1/p" \
   .github/workflows/ci.yml)"
 cargo install cargo-nextest --locked --version "$NEXTEST_VERSION"
 # or, for a prebuilt binary:
-cargo binstall --no-confirm "cargo-nextest@$NEXTEST_VERSION"
+cargo binstall --no-confirm --locked \
+  "whitaker-installer@$WHITAKER_INSTALLER_VERSION"
 ```
 
-See [Test execution](#test-execution) for what the checked-in nextest
-configuration does and does not cover.
+`whitaker-installer` and the lint libraries are separate artefacts with
+separate versions. `WHITAKER_INSTALLER_VERSION` pins the installer — the tool
+that stages libraries — and nothing else. The installer keeps its own checkout
+of the Whitaker repository under `~/.local/share/whitaker`, updates it with
+`git pull`, and stages the libraries from its default branch. Lint behaviour
+therefore tracks Whitaker HEAD.
 
-`make lint` starts with workspace-wide rustdoc through
-`RUSTDOCFLAGS="$(RUSTDOC_FLAGS)"` and
-`RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)"`. This
-denies warnings, enables Polonius, and preserves any `RUSTFLAGS` supplied by
-the caller. It then runs workspace-wide
-`cargo clippy --workspace --all-targets --all-features` and the
-[Whitaker](whitaker-users-guide.md) Dylint suite
-(`whitaker --all -- --all-targets --all-features`). Install Whitaker through
-the standalone installer described in the
-[Whitaker user's guide](whitaker-users-guide.md) so local linting matches
-continuous integration (CI); `make lint-clippy` runs the Clippy-only subset. CI
-pins the installer version in `WHITAKER_INSTALLER_VERSION` in
-`.github/workflows/ci.yml`. Install that same version locally so local runs
-match CI; read the pin from the workflow rather than copying the number, so the
-two cannot drift:
+**Running the lint libraries at HEAD is deliberate.** Netsuke follows the suite
+as it develops, so new lints and fixes arrive without a version bump here. Do
+not add a `[workspace.metadata.dylint]` block pinning `whitaker_suite` to a
+`tag` or `rev`. The [Whitaker user's guide](whitaker-users-guide.md) documents
+that form, and it is the right answer for a project wanting reproducible lint
+results, but adopting it here would reverse a standing decision rather than fix
+a defect.
+
+The cost is worth stating plainly: a change upstream can alter lint results
+between two runs with no change in this repository, and a local checkout that
+has not been restaged will disagree with CI, which stages fresh on every job.
+Restaging is what reconciles them.
+
+What the module-scoped exemptions in `dylint.toml` actually depend on is
+[Whitaker PR #315][whitaker-pr-315], which added the `excluded_paths` option,
+so the staged libraries must be recent enough to include it. Libraries staged
+from an older checkout ignore `excluded_paths` silently — the exemptions stop
+applying with no error, and the lint reports the modules they covered. Re-run
+`whitaker-installer` to restage from HEAD. If that checkout has been left on a
+detached HEAD, the install fails at its `git pull`; put it back on the default
+branch and re-run.
+
+[whitaker-pr-315]: https://github.com/leynos/whitaker/pull/315
+
+Whitaker is configured by `dylint.toml` at the repository root, where each
+sanctioned ambient-filesystem scope for `no_std_fs_operations` carries a
+documented rationale. `docs/whitaker-users-guide.md` is a near-verbatim import
+of the [upstream Whitaker user's guide][whitaker-upstream-guide]; refresh it
+from that URL rather than editing it in place, preserving the "Netsuke
+deviation from upstream" callout, and record Netsuke-specific policy here and in
+`dylint.toml`.
+
+[whitaker-upstream-guide]: https://raw.githubusercontent.com/leynos/whitaker/refs/heads/main/docs/users-guide.md
+
+Prefer `excluded_paths` over `excluded_crates`: a path entry exempts one module
+and its descendants, whereas a crate entry exempts a whole compilation unit.
+The application crate's module-scoped exemptions include
+`netsuke::stdlib::which::lookup` (executable discovery through `PATH` and
+cross-directory symlink canonicalization, which `cap_std` cannot express) and
+`netsuke::runner::process::file_io::ambient_sync` (temporary-file
+synchronization, scoped to the submodule holding only that `sync_all` so the
+rest of `file_io` keeps writing through `cap_std` handles). Configuration
+discovery otherwise uses capability-scoped canonicalization. Its small,
+dedicated path-normalization module, `netsuke::cli::discovery::paths`, remains
+narrowly excluded because `std::fs::canonicalize` preserves the absolute
+comparison keys and cross-directory symlink behaviour that `cap_std` rejects.
+For man-page generation, the build script compiles the `cli::build_support`
+parser subset and deliberately omits runtime discovery. The broader
+`netsuke::cli::discovery` module remains under the capability policy; no
+`build_script_build` exception is required. The behavioural step definitions,
+CLI integration tests, and shared workflow-reading helper that stage fixtures
+ambiently are scoped the same way. A crate-level entry is justified only when
+the ambient access lives in the crate root itself, where a path entry would be
+no narrower — that covers the enumerated integration-test crates. The
+`test_support` crate uses capability-backed fixture helpers and remains linted
+by Whitaker under its own narrow policy.
+
+The root Whitaker invocation selects only the `netsuke-build` package (the
+Cargo package name behind the `netsuke` targets; see ADR-007) and disables
+Dylint dependency checks. It supplies the root `dylint.toml` contents
+explicitly through `DYLINT_TOML`, so every invocation receives the same
+capability-boundary policy regardless of how Dylint resolves the current
+crate. `test_support` is a workspace member with one sanctioned ambient
+boundary configured per crate. Its second, scoped invocation supplies
+`test_support/dylint.toml` through `DYLINT_TOML`, and uses `--package
+test_support` and `--no-deps`, because running from a member directory alone
+would otherwise check the parent workspace. That configuration names only
+`test_support::fs` in `excluded_paths`. The root `excluded_crates` must not
+contain `test_support`: every other module in the crate remains subject to the
+filesystem policy.
+
+Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
+allows. Do not use Rust `#[allow]` or `#[expect]` for `no_std_fs_operations`:
+this Dylint lint is not known to `rustc`, so its exclusions must be configured
+there. Prefer migrating to `cap_std` over any of these; reach for an exclusion
+only when the operation is irreducibly ambient.
+
+To confirm the exclusions have not silently widened, add a temporary
+`std::fs::metadata` call to an unexcluded module — for example
+`src/stdlib/which/cache.rs`, a sibling of the excluded `lookup` module, or the
+body of `src/runner/process/file_io.rs` outside `ambient_sync` — then run
+`make lint-whitaker`. Both sites must still be reported; revert the probe
+afterwards. The same check applies to `test_support`: a `std::fs` call in, say,
+`test_support/src/exec.rs` must be reported even though `test_support::fs` is
+exempt.
+
+When command output is long, preserve exit codes and logs:
 
 ```bash
-WHITAKER_INSTALLER_VERSION="$(sed -n \
-  "s/.*WHITAKER_INSTALLER_VERSION: '\(.*\)'.*/\1/p" \
-  .github/workflows/ci.yml)"
-cargo install --locked whitaker-installer \
-  --version "$WHITAKER_INSTALLER_VERSION"
+set -o pipefail
+make test 2>&1 | tee /tmp/netsuke-make-test.log
+```
+
+These gates always use the repository toolchain and the default codegen
+backend. For a faster inner loop between gate runs, see
+[local build acceleration](#local-build-acceleration).
+
+For documentation changes, also run `make fmt`, `make markdownlint`, and
+`make nixie`.
+
 # or, for a prebuilt binary:
 cargo binstall --no-confirm --locked \
   "whitaker-installer@$WHITAKER_INSTALLER_VERSION"
@@ -2521,35 +2604,38 @@ Table: Scenario state groups and fields
 Configuration merging lives in `src/cli/merge.rs`. The module keeps
 config-layer plumbing separate from the public CLI surface in `cli::mod`.
 
-### Two-pass file discovery
 
-OrthoConfig's `ConfigDiscovery::compose_layers()` returns only the **first**
-matching config file it finds. Because user-scope locations (XDG Base
-Directory, HOME) are checked before the project root, a user config can shadow
-a project config.
+### Cached configuration discovery
 
-To enforce **project scope > user scope** precedence, `merge_with_config` uses
-a two-pass approach when no explicit config path is provided:
+`discover_file_layers` performs one discovery pass through the injected
+environment and returns a `DiscoveryOutcome`. The outcome retains a
+`DiscoveredLayers` value that owns the discovered layers, discovery errors and
+bounded deferred diagnostics. The diagnostic-mode resolver,
+`resolve_json_and_layers_outcome_with_env`, resolves the JSON preference from
+those discovered layers and preserves the outcome for the startup boundary.
 
-1. **First pass** — run `config_discovery()` to find whatever file exists
-   first (typically user-scope).
-2. **Second pass** — if the first pass did not find the project-scope file
-   and there is no explicit config path (`--config` or `NETSUKE_CONFIG`), load
-   `.netsuke.toml` from the project root directly via
-   `load_config_file_as_chain` and push its layers last.
+`DiscoveryOutcome::emit_diagnostics` replays the retained bounded diagnostics
+after tracing is configured. It does not repeat environment or filesystem
+access. `DiscoveryOutcome::into_layers` transfers the same
+`DiscoveredLayers` to `merge_with_cached_file_layers`, which consumes the
+cached layers for the full merge and prevents a second discovery pass.
 
-Because `MergeComposer` uses last-wins semantics, pushing the project layers
-after user layers gives them higher precedence.
+The standalone `merge_with_config_and_env` path performs discovery, emits the
+retained diagnostics and delegates to `merge_with_cached_file_layers`.
+`merge_with_config` is the process-environment wrapper around that path.
 
-Early JSON resolution reuses this logic through
-`collect_diag_file_layers_with_sources`, before full configuration merging.
+Deferred bounded discovery diagnostics are replay metadata only. Discovery
+errors remain owned by `DiscoveredLayers` and are handled by the diagnostic
+JSON resolver and the full-merge caller according to their respective error
+policies.
 
 ### Layer precedence
 
 The final merge order is:
 
 1. **Defaults** — `Cli::default()` serialized as a base layer.
-2. **File layers** — discovered config files in the two-pass order above.
+2. **File layers** — discovered config files in discovery order, with project
+   scope taking precedence over user and system scope.
 3. **Environment** — `NETSUKE_*` environment variables via the Figment Env
    provider.
 4. **CLI flags** — values explicitly passed on the command line.
@@ -2560,10 +2646,10 @@ Private helper functions for config discovery and JSON-output resolution.
 
 Configuration merge helpers:
 
-- `config_discovery(directory, env_source) -> ConfigDiscovery` builds the
-  single-pass OrthoConfig discovery scanner with an optional project-root
-  anchor and the environment adapter selected at the composition root.
-- `project_scope_file(directory: Option<&Path>) -> Option<PathBuf>`
+- `config_discovery(directory: Option<&PathBuf>) -> ConfigDiscovery` builds
+  the single-pass OrthoConfig discovery scanner with an optional project-root
+  anchor.
+- `project_scope_file_str(directory: Option<&Path>) -> Option<String>`
   resolves the expected project `.netsuke.toml` path for project-layer
   detection.
 - `project_scope_layers(directory)` loads the project-scope config directly,
@@ -2574,15 +2660,20 @@ Configuration merge helpers:
   `PathBuf`.
 - `explicit_config_path_with_env(cli, env) -> Option<PathBuf>` resolves explicit
   config selection from `--config` and `NETSUKE_CONFIG`.
-- `push_file_layers_with_sources(cli, composer, errors, sources) -> ()` pushes
-  explicit or discovered file layers onto a `MergeComposer`. Explicit load
-  errors are pushed into `errors`, and automatic discovery is not attempted
-  after an explicit selector fails.
-- `collect_diag_file_layers_with_sources(cli, sources)` reuses the same
-  file-layer precedence for early JSON resolution.
-- `collect_file_layers_with_env_source(directory, env_source)` builds the
-  fallback discovery layer chain, applies the project-layer second pass, and
-  returns `OrthoResult<Vec<MergeLayer<'static>>>`.
+- `discover_file_layers(cli, env) -> DiscoveryOutcome` performs one discovery
+  pass and retains the discovered layers, discovery errors and bounded
+  deferred diagnostics for the diagnostic and merge callers.
+- `push_discovered_file_layers(composer, errors, discovered) -> ()` transfers
+  the retained layers and discovery errors into the full merge composition.
+- `collect_file_layers_with_trace_and_env_source(directory, env_source)` runs
+  the one discovery pass and retains bounded project-scope trace metadata.
+- `resolve_json_and_layers_with_env(cli, matches, env)` returns the JSON
+  decision together with the discovered layers for a cached full merge.
+- `resolve_json_and_layers_outcome_with_env(cli, matches, env)` retains the
+  `DiscoveryOutcome` so startup can emit diagnostics after tracing setup and
+  then call `into_layers()`.
+- `merge_with_cached_file_layers(cli, matches, env, discovered)` consumes the
+  discovered layers without rediscovery.
 - `is_empty_value(value: &serde_json::Value) -> bool` detects an empty CLI
   override object.
 - `json_from_layer(value: &serde_json::Value) -> Option<bool>` extracts `json`
@@ -2671,15 +2762,16 @@ the process environment.
 
 Config selector resolution remains a pure query: `resolve_config_selector`
 records the winning selector, its optional path, and every environment lookup
-evaluated, and emits no tracing itself. Structured diagnostics are emitted only
-at the file-layer boundary, where `collect_file_layers_with_env` calls
-`trace_config_path_resolution` after resolution completes.
+evaluated, and emits no tracing itself. `discover_file_layers` retains the
+bounded diagnostics produced by that resolution and by layer loading;
+`DiscoveryOutcome::emit_diagnostics` replays them after tracing is configured.
 
-Tracing never logs full paths or formatted parser errors. Path values are
-bounded to a `path_hash` correlation identifier plus `path_file_name`, and load
-failures are classified with the `ConfigLoadFailureKind` enum instead of the
-formatted error text. `path_hash` is a bounded identifier for correlating
-events, not a cryptographic guarantee.
+Tracing never logs raw configuration paths, configuration file names or
+formatted parser errors. Discovery diagnostics expose bounded `path_hash` and
+presence fields, and load failures are classified with the
+`ConfigLoadFailureKind` enum instead of formatted error text. The unkeyed
+`path_hash` is a bounded correlation identifier, not confidential concealment
+of a guessable path.
 
 #### `json` contract
 
@@ -2916,16 +3008,15 @@ split diagnostics, path comparison, and tests out of the main discovery flow:
 - `discovery_event_assertions.rs` — shared test-only helpers:
   `capture_events` runs a closure under a TRACE capturing subscriber,
   `find_event` locates one emitted event by substring, and `EventAssertion`
-  bundles an event with its path to assert bounded `path_hash`/`path_file_name`
-  fields, the absence of the raw path or formatted error text, and to normalize
-  the hash before an `insta` snapshot.
+  bundles an event with its path to assert bounded `path_hash` and presence
+  fields, the absence of raw paths, file names and formatted error text, and to
+  normalize the hash before an `insta` snapshot.
 - `discovery_tracing_tests.rs` — tests selector precedence
   (`--config` versus `NETSUKE_CONFIG`), the removed legacy
   `NETSUKE_CONFIG_PATH` alias, and event-schema snapshots for both selection
   and explicit load failures.
-- `discovery_layer_tests.rs` — tests the test-only
-  `collect_diag_file_layers_with_env` wrapper (explicit path versus automatic
-  discovery) and the project-scope second pass in `collect_file_layers`.
+- `discovery_layer_tests.rs` — tests the explicit-path versus automatic
+  discovery branches and project-scope handling in the one discovery pass.
 
 Both test modules import `capture_events`, `find_event`, and `EventAssertion`
 from `discovery_event_assertions` rather than duplicating them. The `insta`
