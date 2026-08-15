@@ -5,17 +5,14 @@
 //! actions and targets with their descriptions. The no-topic and
 //! subcommand-name topics render clap's localized help text instead.
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 use clap::CommandFactory;
 use serde::Serialize;
-use std::{borrow::Cow, collections::HashSet};
-use tracing::info;
+use std::borrow::Cow;
 use unicode_width::UnicodeWidthStr;
 
-use crate::ast::{NetsukeManifest, Target};
 use crate::cli::Cli;
 use crate::cli_l10n::localize_command;
-use crate::ir::BuildGraph;
 use crate::json_envelope::{GeneratorInfo, SCHEMA_VERSION};
 use crate::localization::{self, keys};
 use crate::output_mode;
@@ -23,20 +20,17 @@ use crate::output_prefs::{self, OutputPrefs};
 use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipeline_stage};
 use crate::theme::ThemeContext;
 
-use super::path_helpers::{ensure_manifest_exists_or_error, resolve_manifest_path};
 use super::process;
 use telemetry::instrument_help_targets;
 
+#[path = "help_query.rs"]
+mod query;
 #[path = "help_telemetry.rs"]
 mod telemetry;
 
-/// One catalogue row: a single resolved target name with its metadata.
-struct HelpEntry<'a> {
-    name: String,
-    description: Option<&'a str>,
-    is_action: bool,
-    is_default: bool,
-}
+#[cfg(test)]
+use query::build_catalogue;
+use query::{HelpEntry, HelpTargetsQueryFailure, query_help_targets};
 
 /// Render the `help targets` catalogue to stdout without invoking Ninja.
 ///
@@ -50,40 +44,41 @@ struct HelpEntry<'a> {
 /// Returns an error when the manifest cannot be resolved, loaded, rendered, or
 /// validated, or when the catalogue cannot be serialized.
 pub(super) fn handle_help_targets(cli: &Cli, reporter: &dyn StatusReporter) -> Result<()> {
-    instrument_help_targets(|| handle_help_targets_inner(cli, reporter))
-}
-
-/// Run the catalogue query without crossing the observability boundary.
-fn handle_help_targets_inner(cli: &Cli, reporter: &dyn StatusReporter) -> Result<()> {
-    info!(
-        target: "netsuke::subcommand",
-        subcommand = "help-targets",
-        "Rendering target and action catalogue"
-    );
-    let manifest_path = resolve_manifest_path(cli)?;
-    ensure_manifest_exists_or_error(cli, reporter, &manifest_path)?;
-    let manifest = load_manifest_for_query_with_stage_reporting(&manifest_path, reporter)?;
-
+    let query =
+        match instrument_help_targets(|| query_help_targets(cli).map_err(anyhow::Error::new)) {
+            Ok(query) => query,
+            Err(error) => {
+                report_query_failure_stages(reporter, &error);
+                return Err(error);
+            }
+        };
+    report_query_stages(reporter, &query.stages);
     report_pipeline_stage(reporter, PipelineStage::IrGenerationValidation, None);
-    // Building the IR validates the rendered manifest (duplicate outputs,
-    // missing rules, cycles) exactly as a real build would, without generating
-    // Ninja or executing any recipe.
-    BuildGraph::from_manifest(&manifest)
-        .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH))?;
-
-    let entries = build_catalogue(&manifest);
-    validate_defaults(&manifest.defaults, &entries)?;
     let status_key: LocalizationKey = keys::STATUS_TOOL_HELP_TARGETS.into();
     report_pipeline_stage(reporter, PipelineStage::GraphRendering, Some(status_key));
     if cli.json {
-        let rendered = render_json(entries).context("serialize help targets catalogue")?;
+        let rendered = render_json(&query.entries).context("serialize help targets catalogue")?;
         process::write_text_stdout(&rendered)?;
     } else {
-        let rendered = render_text(&entries, resolved_prefs(cli));
+        let rendered = render_text(&query.entries, resolved_prefs(cli));
         process::write_text_stdout(&rendered)?;
     }
     reporter.report_complete(status_key);
     Ok(())
+}
+
+/// Emit the loading stages returned by the pure catalogue query.
+fn report_query_stages(reporter: &dyn StatusReporter, stages: &[PipelineStage]) {
+    for stage in stages {
+        report_pipeline_stage(reporter, *stage, None);
+    }
+}
+
+/// Emit stages accumulated before a pure catalogue query failed.
+fn report_query_failure_stages(reporter: &dyn StatusReporter, error: &anyhow::Error) {
+    if let Some(failure) = error.downcast_ref::<HelpTargetsQueryFailure>() {
+        report_query_stages(reporter, &failure.stages);
+    }
 }
 
 /// Render the localized top-level long help, matching `--help`.
@@ -114,49 +109,6 @@ pub(super) fn render_subcommand_help(name: &str) -> Result<()> {
     process::write_text_stdout(&text)
 }
 
-/// Flatten the rendered manifest into a deterministic catalogue in declaration
-/// order: actions first, then targets. A multi-name entry yields one row per
-/// name, each carrying the same description and default status.
-fn build_catalogue(manifest: &NetsukeManifest) -> Vec<HelpEntry<'_>> {
-    let mut entries = Vec::new();
-    let defaults: HashSet<&str> = manifest.defaults.iter().map(String::as_str).collect();
-    for target in &manifest.actions {
-        append_target_entries(&mut entries, target, true, &defaults);
-    }
-    for target in &manifest.targets {
-        append_target_entries(&mut entries, target, false, &defaults);
-    }
-    entries
-}
-
-fn validate_defaults(defaults: &[String], entries: &[HelpEntry<'_>]) -> Result<()> {
-    let names: HashSet<&str> = entries.iter().map(|entry| entry.name.as_str()).collect();
-    for default in defaults {
-        let safe_default = terminal_safe(default);
-        ensure!(
-            names.contains(default.as_str()),
-            "manifest default '{safe_default}' does not name a declared action or target"
-        );
-    }
-    Ok(())
-}
-
-fn append_target_entries<'a>(
-    entries: &mut Vec<HelpEntry<'a>>,
-    target: &'a Target,
-    is_action: bool,
-    defaults: &HashSet<&str>,
-) {
-    for name in target.name.to_string_vec() {
-        entries.push(HelpEntry {
-            is_default: defaults.contains(name.as_str()),
-            name,
-            description: target.description.as_deref(),
-            is_action,
-        });
-    }
-}
-
 /// Resolve the same output preferences the rest of the CLI uses, so emoji and
 /// accessibility settings drive the catalogue's marker glyph.
 fn resolved_prefs(cli: &Cli) -> OutputPrefs {
@@ -171,9 +123,9 @@ fn resolved_prefs(cli: &Cli) -> OutputPrefs {
 /// section, with aligned name and description columns and a localized default
 /// marker. A missing description leaves the entry visible without a description
 /// column. Empty sections are omitted.
-fn render_text(entries: &[HelpEntry<'_>], prefs: OutputPrefs) -> String {
-    let actions: Vec<&HelpEntry<'_>> = entries.iter().filter(|entry| entry.is_action).collect();
-    let targets: Vec<&HelpEntry<'_>> = entries.iter().filter(|entry| !entry.is_action).collect();
+fn render_text(entries: &[HelpEntry], prefs: OutputPrefs) -> String {
+    let actions: Vec<&HelpEntry> = entries.iter().filter(|entry| entry.is_action).collect();
+    let targets: Vec<&HelpEntry> = entries.iter().filter(|entry| !entry.is_action).collect();
     let mut out = String::new();
     render_section(&mut out, &actions, keys::CLI_HELP_ACTIONS_HEADING, prefs);
     if !actions.is_empty() && !targets.is_empty() {
@@ -185,7 +137,7 @@ fn render_text(entries: &[HelpEntry<'_>], prefs: OutputPrefs) -> String {
 
 fn render_section(
     out: &mut String,
-    entries: &[&HelpEntry<'_>],
+    entries: &[&HelpEntry],
     heading_key: &'static str,
     prefs: OutputPrefs,
 ) {
@@ -209,7 +161,7 @@ fn render_section(
         out.push_str("  ");
         out.push_str(&name);
         out.push_str(&" ".repeat(width.saturating_sub(name_width)));
-        if let Some(description) = entry.description {
+        if let Some(description) = entry.description.as_deref() {
             out.push_str("  ");
             out.push_str(&terminal_safe(description));
         }
@@ -258,32 +210,6 @@ const fn is_terminal_control(character: char) -> bool {
     )
 }
 
-/// Load a manifest for a no-side-effect metadata query while reporting stages.
-fn load_manifest_for_query_with_stage_reporting(
-    manifest_path: &camino::Utf8PathBuf,
-    reporter: &dyn StatusReporter,
-) -> Result<NetsukeManifest> {
-    let mut on_stage = |stage| match stage {
-        crate::manifest::ManifestLoadStage::ManifestIngestion => {
-            report_pipeline_stage(reporter, PipelineStage::ManifestIngestion, None);
-        }
-        crate::manifest::ManifestLoadStage::InitialYamlParsing => {
-            report_pipeline_stage(reporter, PipelineStage::InitialYamlParsing, None);
-        }
-        crate::manifest::ManifestLoadStage::TemplateExpansion => {
-            report_pipeline_stage(reporter, PipelineStage::TemplateExpansion, None);
-        }
-        crate::manifest::ManifestLoadStage::FinalRendering => {
-            report_pipeline_stage(reporter, PipelineStage::FinalRendering, None);
-        }
-    };
-    crate::manifest::from_path_for_manifest_query(manifest_path.as_std_path(), Some(&mut on_stage))
-        .with_context(|| {
-            localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
-                .with_arg("path", manifest_path.as_str())
-        })
-}
-
 /// The localized default marker, pairing a theme glyph with a translated label
 /// so the meaning never depends on the glyph alone.
 fn default_marker(prefs: OutputPrefs) -> String {
@@ -315,9 +241,8 @@ struct HelpEntryJson<'a> {
     default: bool,
 }
 
-fn render_json(entries: Vec<HelpEntry<'_>>) -> Result<String> {
-    let (actions, targets): (Vec<_>, Vec<_>) =
-        entries.into_iter().partition(|entry| entry.is_action);
+fn render_json(entries: &[HelpEntry]) -> Result<String> {
+    let (actions, targets): (Vec<_>, Vec<_>) = entries.iter().partition(|entry| entry.is_action);
     serde_json::to_string_pretty(&HelpTargetsDocument {
         schema_version: SCHEMA_VERSION,
         generator: GeneratorInfo::current(),
@@ -330,12 +255,12 @@ fn render_json(entries: Vec<HelpEntry<'_>>) -> Result<String> {
     .context("serialize help targets catalogue")
 }
 
-fn json_entries(entries: Vec<HelpEntry<'_>>) -> Vec<HelpEntryJson<'_>> {
+fn json_entries(entries: Vec<&HelpEntry>) -> Vec<HelpEntryJson<'_>> {
     entries
         .into_iter()
         .map(|entry| HelpEntryJson {
-            name: entry.name,
-            description: entry.description,
+            name: entry.name.clone(),
+            description: entry.description.as_deref(),
             default: entry.is_default,
         })
         .collect()

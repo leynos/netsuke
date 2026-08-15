@@ -48,7 +48,10 @@ pub(super) fn instrument_help_targets<T>(query: impl FnOnce() -> Result<T>) -> R
 
 /// Classify catalogue failures without exposing manifest-controlled detail.
 fn help_targets_error_category(error: &anyhow::Error) -> &'static str {
-    if error.downcast_ref::<RunnerError>().is_some() {
+    if error
+        .chain()
+        .any(|cause| cause.downcast_ref::<RunnerError>().is_some())
+    {
         "manifest_not_found"
     } else {
         "other"

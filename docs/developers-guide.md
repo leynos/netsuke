@@ -72,13 +72,14 @@ inspection to `runner::process`.
 
 ### Help-target query telemetry
 
-`src/runner/help_telemetry.rs` is the observability boundary around the complete
-`netsuke help targets` orchestration. `instrument_help_targets` wraps the
-manifest query and records the fixed metrics
+`src/runner/help_telemetry.rs` is the observability boundary around the pure
+manifest and catalogue query within `netsuke help targets`.
+`instrument_help_targets` wraps that query and records the fixed metrics
 `netsuke_runner_help_targets_total` and
 `netsuke_runner_help_targets_duration_seconds`. It also opens the
 `runner.help_targets` span and emits a bounded `Completed help targets query`
-event when the query finishes.
+event when the query finishes. The command boundary in `src/runner/help.rs`
+owns status reporting and rendering after the query succeeds.
 
 Telemetry labels use only the fixed `outcome` values `success` and `error`, and
 the fixed `error_category` values `none`, `manifest_not_found`, and `other`.
@@ -89,7 +90,8 @@ other details. Metric descriptions are registered once per process, through a
 Telemetry tests use `metrics::with_local_recorder` with a
 `metrics_util::DebuggingRecorder`, together with the local tracing subscriber
 capture helper. They assert the counter, duration sample, and completion event
-for both a successful fixture query and a missing-manifest failure.
+for a successful fixture query, a missing-manifest failure, and an invalid
+manifest failure classified as the non-`RunnerError` `other` category.
 
 ## Localization
 

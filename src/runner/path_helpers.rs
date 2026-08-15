@@ -80,6 +80,23 @@ pub(super) fn ensure_manifest_exists_or_error(
     reporter: &dyn StatusReporter,
     manifest_path: &Utf8PathBuf,
 ) -> Result<()> {
+    let result = ensure_manifest_exists(cli, manifest_path);
+    if result
+        .as_ref()
+        .err()
+        .and_then(|error| error.downcast_ref::<RunnerError>())
+        .is_some_and(|error| matches!(error, RunnerError::ManifestNotFound { .. }))
+    {
+        report_pipeline_stage(reporter, PipelineStage::ManifestIngestion, None);
+    }
+    result
+}
+
+/// Verify the selected manifest exists without emitting command status.
+///
+/// Commands that need to separate a pure manifest query from status reporting
+/// reuse this check, while the normal build path retains its ingestion report.
+pub(super) fn ensure_manifest_exists(cli: &Cli, manifest_path: &Utf8PathBuf) -> Result<()> {
     match manifest_metadata(manifest_path) {
         Ok(()) => return Ok(()),
         Err(error) if error.kind() != ErrorKind::NotFound => {
@@ -89,7 +106,6 @@ pub(super) fn ensure_manifest_exists_or_error(
         Err(_) => {}
     }
 
-    report_pipeline_stage(reporter, PipelineStage::ManifestIngestion, None);
     // `resolve_manifest_path()` validates that `file_name()` is Some.
     let manifest_name = manifest_path
         .file_name()

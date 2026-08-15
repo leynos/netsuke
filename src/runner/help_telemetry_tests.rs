@@ -23,6 +23,8 @@ actions:
 targets: []
 "#;
 
+const INVALID_MANIFEST: &str = "targets:\n\t- name: broken\n";
+
 /// One drained metrics snapshot; the debugging snapshotter empties histogram
 /// samples on read, so each test collects it exactly once.
 type Snapshot = Vec<(
@@ -43,12 +45,17 @@ fn recorded<T>(operation: impl FnOnce() -> T) -> (T, Snapshot) {
 
 /// Build a CLI pointing at a capability-written manifest fixture.
 fn help_targets_fixture() -> Result<(TempDir, Cli)> {
+    help_targets_fixture_with_manifest(MANIFEST)
+}
+
+/// Build a CLI pointing at a capability-written manifest fixture with `manifest`.
+fn help_targets_fixture_with_manifest(manifest: &str) -> Result<(TempDir, Cli)> {
     let temp = TempDir::new().context("create help telemetry workspace")?;
     let root = Utf8Path::from_path(temp.path()).context("telemetry workspace path is UTF-8")?;
     let workspace = Dir::open_ambient_dir(root, ambient_authority())
         .context("open help telemetry workspace")?;
     workspace
-        .write("Netsukefile", MANIFEST)
+        .write("Netsukefile", manifest)
         .context("write help telemetry manifest")?;
     let manifest_path = root.join("Netsukefile").into_std_path_buf();
     Ok((
@@ -172,6 +179,40 @@ fn help_targets_records_manifest_failure_telemetry() -> Result<()> {
                 && event.contains("outcome=\"error\"")
                 && event.contains("error_category=\"manifest_not_found\"")),
         "failed help targets should emit a bounded completion event: {events:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn help_targets_records_other_failure_telemetry() -> Result<()> {
+    let _lock = localizer_test_lock().map_err(|error| anyhow::anyhow!("{error}"))?;
+    let _guard = set_localizer_for_tests(Arc::from(crate::cli_localization::build_localizer(
+        Some("en-US"),
+    )));
+    let (_temp, cli) = help_targets_fixture_with_manifest(INVALID_MANIFEST)?;
+    let ((result, events), snapshot) = recorded(|| {
+        with_test_subscriber(LevelFilter::INFO, |captured| {
+            let result = handle_help_targets(&cli, &SilentReporter);
+            (result, captured.snapshot())
+        })
+    });
+
+    ensure!(result.is_err(), "invalid manifest should fail help targets");
+    ensure!(
+        counter_value(&snapshot, "error", "other") == Some(1),
+        "invalid manifest should increment the bounded other-failure counter"
+    );
+    ensure!(
+        duration_sample_count(&snapshot, "error", "other") == 1,
+        "invalid manifest should record one duration sample"
+    );
+    ensure!(
+        events
+            .iter()
+            .any(|event| event.contains("Completed help targets query")
+                && event.contains("outcome=\"error\"")
+                && event.contains("error_category=\"other\"")),
+        "invalid manifest should emit a bounded completion event: {events:?}"
     );
     Ok(())
 }

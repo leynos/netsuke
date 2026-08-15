@@ -5,6 +5,7 @@
 //! description is missing so the empty-column representation is pinned.
 
 use super::*;
+use crate::ast::{NetsukeManifest, Target};
 use crate::cli_localization::build_localizer;
 use crate::localization::set_localizer_for_tests;
 use crate::manifest;
@@ -86,7 +87,7 @@ fn render_catalogue_with_locale(
 fn catalogue_rendering_releases_localizer_lock_before_snapshot_work() -> Result<()> {
     let manifest = fixture_manifest()?;
     let rendered = render_catalogue_with_locale("en-US", &manifest, |parsed_manifest| {
-        render_json(build_catalogue(parsed_manifest))
+        render_json(&build_catalogue(parsed_manifest))
     })?;
     let (acquired, confirmed) = mpsc::sync_channel(0);
     let contender = thread::spawn(move || {
@@ -139,7 +140,7 @@ fn localized_catalogue_snapshot() -> Result<()> {
 #[test]
 fn json_catalogue_snapshot() -> Result<()> {
     catalogue_snapshot("en-US", "json_catalogue", |manifest| {
-        render_json(build_catalogue(manifest))
+        render_json(&build_catalogue(manifest))
     })
 }
 
@@ -297,7 +298,7 @@ proptest! {
             .into_iter()
             .map(|entry| (
                 entry.name,
-                entry.description.map(str::to_owned),
+                entry.description.as_deref().map(str::to_owned),
                 entry.is_action,
                 entry.is_default,
             ))
