@@ -56,6 +56,26 @@ fn retained_sidecar_bytes(dir: &Dir) -> Result<u64> {
         })
 }
 
+fn publish_repeated_sidecars(
+    dir: &Dir,
+    prefix: &str,
+    content: &str,
+    policy: RetentionPolicy,
+) -> Result<GeneratedDyndep> {
+    let mut latest_sidecar = None;
+
+    for index in 0..6 {
+        let path = format!(".netsuke/dyndep/{prefix}-{index}.dd");
+        let current = sidecar(&path, content);
+        let lease = materialize_dyndep_files(dir, std::slice::from_ref(&current))?;
+        prune_dyndep_sidecars(dir, &lease, std::slice::from_ref(&current), policy)?;
+        latest_sidecar = Some(current);
+        drop(lease);
+    }
+
+    latest_sidecar.context("loop must publish a current sidecar")
+}
+
 fn write_worker_marker(mut writer: impl Write, marker: &str) -> Result<()> {
     writeln!(writer, "{WORKER_MARKER_PREFIX}{marker}")?;
     writer.flush()?;
@@ -173,18 +193,7 @@ fn repeated_publication_respects_the_obsolete_file_count_budget() -> Result<()> 
     let temp = tempfile::tempdir()?;
     let dir = temporary_dir(&temp)?;
     let policy = RetentionPolicy::new(2, 1024);
-    let mut latest_sidecar = None;
-
-    for index in 0..6 {
-        let path = format!(".netsuke/dyndep/count-{index}.dd");
-        let current = sidecar(&path, &format!("content-{index}"));
-        let lease = materialize_dyndep_files(&dir, std::slice::from_ref(&current))?;
-        prune_dyndep_sidecars(&dir, &lease, std::slice::from_ref(&current), policy)?;
-        latest_sidecar = Some(current);
-        drop(lease);
-    }
-
-    let latest = latest_sidecar.context("loop must publish a current sidecar")?;
+    let latest = publish_repeated_sidecars(&dir, "count", "content", policy)?;
     let count = sidecar_names(&dir)?
         .iter()
         .filter(|path| has_extension(path, "dd"))
@@ -242,19 +251,7 @@ fn repeated_publication_respects_the_obsolete_byte_budget() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let dir = temporary_dir(&temp)?;
     let policy = RetentionPolicy::new(8, 12);
-    let content = "12345678";
-    let mut latest_sidecar = None;
-
-    for index in 0..6 {
-        let path = format!(".netsuke/dyndep/bytes-{index}.dd");
-        let current = sidecar(&path, content);
-        let lease = materialize_dyndep_files(&dir, std::slice::from_ref(&current))?;
-        prune_dyndep_sidecars(&dir, &lease, std::slice::from_ref(&current), policy)?;
-        latest_sidecar = Some(current);
-        drop(lease);
-    }
-
-    let latest = latest_sidecar.context("loop must publish a current sidecar")?;
+    let latest = publish_repeated_sidecars(&dir, "bytes", "12345678", policy)?;
     ensure!(
         retained_sidecar_bytes(&dir)? <= policy.max_bytes + latest.content().len() as u64,
         "the current bundle plus obsolete sidecars must fit the byte policy"
