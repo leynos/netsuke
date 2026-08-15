@@ -2694,7 +2694,6 @@ early rather than silently ignored. The `json` setting selects machine-readable
 output: each invocation emits one versioned result document on success or one
 versioned diagnostic document on failure.
 
-
 #### Configuration observability
 
 Configuration loading remains a plain query. The application-owned recorder
