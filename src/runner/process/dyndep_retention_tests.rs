@@ -261,6 +261,43 @@ fn repeated_publication_respects_the_obsolete_file_count_budget() -> Result<()> 
 }
 
 #[test]
+fn retention_scans_a_large_directory_in_deterministic_path_order() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let dir = temporary_dir(&temp)?;
+    let current = sidecar(".netsuke/dyndep/current.dd", "current");
+    let lease = materialize_dyndep_files(&dir, std::slice::from_ref(&current))?;
+    for index in 0..1_000 {
+        let path = format!(".netsuke/dyndep/stale-{index:04}.dd");
+        let content = if index == 0 { "xxx" } else { "x" };
+        dir.write(path, content)?;
+    }
+    prune_dyndep_sidecars(
+        &dir,
+        &lease,
+        std::slice::from_ref(&current),
+        RetentionPolicy::new(2, 2),
+    )?;
+    let mut retained = sidecar_names(&dir)?
+        .into_iter()
+        .filter(|path| has_extension(path, "dd"))
+        .collect::<Vec<_>>();
+    retained.sort();
+    ensure!(
+        retained
+            == [
+                Utf8PathBuf::from(".netsuke/dyndep/current.dd"),
+                Utf8PathBuf::from(".netsuke/dyndep/stale-0001.dd"),
+                Utf8PathBuf::from(".netsuke/dyndep/stale-0002.dd"),
+            ],
+        "retention must keep the current sidecar and the first fitting obsolete paths"
+    );
+    ensure!(dir.open(".netsuke/dyndep/stale-0000.dd").is_err());
+    ensure!(dir.open(".netsuke/dyndep/stale-0003.dd").is_err());
+    ensure!(dir.open(".netsuke/dyndep/stale-0999.dd").is_err());
+    Ok(())
+}
+
+#[test]
 fn repeated_publication_respects_the_obsolete_byte_budget() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let dir = temporary_dir(&temp)?;

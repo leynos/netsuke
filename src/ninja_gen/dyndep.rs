@@ -217,7 +217,6 @@ fn render_serial_block(
     use crate::ninja_gen::escape_ninja_path;
 
     let parent = parent_identity(edge);
-    let mut previous_gate: Option<Utf8PathBuf> = None;
     for (index, dep) in edge.implicit_deps.iter().enumerate() {
         let gate = parent.join(format!("{index:03}"));
         let content = sidecar_content(&gate, dep)?;
@@ -230,7 +229,7 @@ fn render_serial_block(
         // The phony edge that produces (but never rebuilds) the sidecar file.
         // Starting at the second stage it depends on the previous gate, which
         // prevents Ninja from revealing the next sidecar early.
-        match &previous_gate {
+        match gate_paths.last() {
             None => writeln!(out, "build {sidecar_escaped}: phony")?,
             Some(prev) => {
                 let prev_escaped = escape_ninja_path(prev.as_str())?;
@@ -249,8 +248,7 @@ fn render_serial_block(
                 content,
             });
         }
-        gate_paths.push(gate.clone());
-        previous_gate = Some(gate);
+        gate_paths.push(gate);
     }
     Ok(())
 }

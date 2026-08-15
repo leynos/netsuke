@@ -403,6 +403,12 @@ criterion in issue #552 and all repository gates pass.
   zero/one-item serial cases retain the existing requirement. The retention
   warning was stale because bounded, lease-coordinated retention already
   exists.
+- [x] (2026-08-15) Replaced retention's unbounded historical-sidecar
+  collection and global sort with a lease-protected multi-pass lexical scan.
+  It retains at most the policy budget, deletes non-fitting candidates during
+  selection, and performs a final bounded-set sweep. The focused 1,000-file
+  regression proves that the current sidecar and the first fitting stale paths
+  survive while all other stale paths are reclaimed.
 
 ## Surprises and discoveries
 
@@ -535,6 +541,12 @@ criterion in issue #552 and all repository gates pass.
   storage growth across changed manifests. The lease protects publication,
   cleanup, and current-bundle consumption; its deliberate cost is that serial
   commands in one working directory wait for each other. **Date:** 2026-08-15.
+- **Decision:** choose retained obsolete sidecars with a multi-pass,
+  lexicographic directory scan instead of collecting and sorting every stale
+  entry. **Rationale:** the fixed retention policy bounds the retained set, so
+  using only that set plus one cursor prevents a large historical cache from
+  increasing process memory while preserving deterministic path order.
+  **Date:** 2026-08-15.
 
 - **Decision:** use staged Ninja dyndep files rather than an order-only gate
   chain, a pool, or recursive builds. **Rationale:** it is the only evaluated
