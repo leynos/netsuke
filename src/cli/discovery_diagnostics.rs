@@ -1,12 +1,10 @@
 //! Bounded diagnostics for configuration discovery.
 //!
 //! These helpers keep tracing output free of full paths and formatted parser
-//! errors: a path contributes only a correlation hash and its file name, and a
-//! load failure contributes a [`ConfigLoadFailureKind`] rather than the error
-//! text.
+//! errors: a path contributes only a correlation hash, and a load failure
+//! contributes a [`ConfigLoadFailureKind`] rather than the error text.
 
 use std::collections::hash_map::DefaultHasher;
-use std::ffi::OsString;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
 use tracing::{debug, trace, warn};
@@ -48,12 +46,11 @@ impl ConfigLoadWarning {
 
 /// Bounded path fields retained for deferred discovery diagnostics.
 ///
-/// This stores only the correlation hash, file name, and presence bit needed
-/// to replay a diagnostic event. It deliberately excludes the full path.
+/// This stores only the correlation hash and presence bit needed to replay a
+/// diagnostic event. It deliberately excludes the full path and file name.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct BoundedConfigPath {
     pub(super) hash: Option<String>,
-    pub(super) file_name: Option<OsString>,
     pub(super) is_present: bool,
 }
 
@@ -62,7 +59,6 @@ impl BoundedConfigPath {
     pub(super) fn from_path(path: Option<&Path>) -> Self {
         Self {
             hash: path.map(path_hash),
-            file_name: path.and_then(Path::file_name).map(OsString::from),
             is_present: path.is_some(),
         }
     }
@@ -74,7 +70,6 @@ pub(super) fn trace_config_path_variable_from_fields(var_name: &str, path: &Boun
         var_name,
         found = path.is_present,
         path_hash = path.hash.as_deref(),
-        path_file_name = ?path.file_name,
         "read config path variable"
     );
 }
@@ -87,7 +82,6 @@ pub(super) fn warn_explicit_config_load_failed_from_fields(
     let path_hash = path.hash.as_deref().unwrap_or_default();
     warn!(
         path_hash = %path_hash,
-        path_file_name = ?path.file_name,
         failure_kind = ?failure_kind,
         "explicit config load failed"
     );
@@ -98,7 +92,6 @@ pub(super) fn debug_config_path_from_fields(message: &'static str, path: &Bounde
     let path_hash = path.hash.as_deref().unwrap_or_default();
     debug!(
         path_hash = %path_hash,
-        path_file_name = ?path.file_name,
         message
     );
 }
@@ -110,7 +103,6 @@ pub(super) fn debug_optional_config_path_from_fields(
 ) {
     debug!(
         path_hash = path.hash.as_deref(),
-        path_file_name = ?path.file_name,
         path_present = path.is_present,
         message
     );

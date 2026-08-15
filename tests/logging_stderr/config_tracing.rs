@@ -68,7 +68,7 @@ fn workspace() -> Result<TempDir> {
 #[test]
 fn explicit_selection_traces_bounded_fields() -> Result<()> {
     let temp = workspace()?;
-    let config = temp.path().join("selected-secret-name.toml");
+    let config = temp.path().join("customer@example.com.toml");
     test_support::fs::write(&config, "emoji = \"always\"\n").context("write config")?;
     let raw_path = config.to_string_lossy().into_owned();
 
@@ -88,12 +88,12 @@ fn explicit_selection_traces_bounded_fields() -> Result<()> {
         "verbose startup should replay the cached explicit selection: {joined}"
     );
     ensure!(
-        joined.contains("path_hash=") && joined.contains("path_file_name="),
-        "stderr should carry the bounded path fields: {joined}"
+        joined.contains("path_hash="),
+        "stderr should carry the bounded path hash: {joined}"
     );
     ensure!(
-        joined.contains("selected-secret-name.toml"),
-        "the bounded file name should be present: {joined}"
+        !joined.contains("customer@example.com.toml"),
+        "verbose diagnostics must not expose the configuration file name: {joined}"
     );
     ensure!(
         !joined.contains(raw_path.as_str()),
@@ -125,8 +125,12 @@ fn explicit_load_failure_traces_failure_kind() -> Result<()> {
         "stderr should classify the failure: {joined}"
     );
     ensure!(
-        joined.contains("path_hash=") && joined.contains("missing-secret-name.toml"),
-        "stderr should carry the bounded path fields: {joined}"
+        joined.contains("path_hash="),
+        "stderr should carry the bounded path hash: {joined}"
+    );
+    ensure!(
+        !joined.contains("missing-secret-name.toml"),
+        "diagnostics must not expose the configuration file name: {joined}"
     );
     ensure!(
         !joined.contains(raw_path.as_str()),

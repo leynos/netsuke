@@ -54,14 +54,9 @@ impl<'a> EventAssertion<'a> {
         Self { event, path }
     }
 
-    /// Assert the event carries the bounded `path_hash` and `path_file_name`
-    /// fields for the path in any accepted rendering form.
+    /// Assert the event carries the bounded `path_hash` without exposing a path.
     pub(super) fn ensure_bounded_path_fields(&self) -> Result<()> {
         let hash = path_hash(self.path);
-        let file_name = self
-            .path
-            .file_name()
-            .with_context(|| format!("expected file name for {}", self.path.display()))?;
         ensure!(
             self.event.contains(&format!("path_hash=\"{hash}\""))
                 || self.event.contains(&format!("path_hash=Some(\"{hash}\")"))
@@ -70,17 +65,11 @@ impl<'a> EventAssertion<'a> {
             self.path.display(),
             self.event
         );
-        ensure!(
-            self.event
-                .contains(&format!("path_file_name=Some({file_name:?})")),
-            "event should include path file name for {}: {}",
-            self.path.display(),
-            self.event
-        );
+        self.ensure_raw_path_absent()?;
         Ok(())
     }
 
-    /// Assert the event never leaks the raw path string.
+    /// Assert the event never leaks the raw path string or its file name.
     pub(super) fn ensure_raw_path_absent(&self) -> Result<()> {
         ensure!(
             !self.event.contains(self.path.to_string_lossy().as_ref()),
@@ -88,6 +77,14 @@ impl<'a> EventAssertion<'a> {
             self.path.display(),
             self.event
         );
+        if let Some(file_name) = self.path.file_name() {
+            ensure!(
+                !self.event.contains(file_name.to_string_lossy().as_ref()),
+                "event should not include path file name {}: {}",
+                file_name.to_string_lossy(),
+                self.event
+            );
+        }
         Ok(())
     }
 

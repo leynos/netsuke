@@ -66,7 +66,6 @@ impl ConfigPathTrace {
         debug!(
             selector = self.selector,
             path_hash = self.path.hash.as_deref(),
-            path_file_name = ?self.path.file_name,
             path_present = self.path.is_present,
             "resolved config path"
         );
