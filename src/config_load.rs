@@ -50,7 +50,7 @@ pub(super) fn resolve_configuration(
     clock: &impl MonotonicClock,
 ) -> Result<cli::Cli, std::process::ExitCode> {
     let started_at = clock.now();
-    let (mode, discovered_layers) = match resolve_json_mode_or_exit(
+    let resolution = match resolve_json_mode_or_exit(
         context.parsed_cli,
         context.matches,
         context.startup_mode,
@@ -65,14 +65,9 @@ pub(super) fn resolve_configuration(
     };
     // The effective mode is known here, before configuration is merged, so the
     // startup warning reaches the user ahead of any configuration processing.
-    settle_startup_diagnostics(context.startup_writer, mode);
-    let merged_cli = match merge_cli_or_exit(
-        context.parsed_cli,
-        context.matches,
-        mode,
-        discovered_layers,
-        clock,
-    ) {
+    settle_startup_diagnostics(context.startup_writer, resolution.mode);
+    let merged_cli = match merge_cli_or_exit(context.parsed_cli, context.matches, resolution, clock)
+    {
         Ok(merged) => merged,
         Err(code) => {
             record_config_load_metrics(clock.now().duration_since(started_at), false);

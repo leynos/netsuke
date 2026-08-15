@@ -44,7 +44,7 @@ pub(crate) fn resolve_json_mode_or_exit(
     matches: &ArgMatches,
     fallback_mode: DiagMode,
     clock: &impl MonotonicClock,
-) -> Result<(DiagMode, cli::DiscoveredLayers), ExitCode> {
+) -> Result<crate::ResolvedDiagnosticMode, ExitCode> {
     let env = cli::ConfigStdEnvProvider;
     JsonModeResolutionContext {
         parsed_cli,
@@ -54,6 +54,10 @@ pub(crate) fn resolve_json_mode_or_exit(
         clock,
     }
     .resolve_with(cli::resolve_json_and_layers_outcome_with_env)
+    .map(|(mode, discovered_layers)| crate::ResolvedDiagnosticMode {
+        mode,
+        discovered_layers,
+    })
 }
 
 /// Startup dependencies for one timed diagnostic-mode resolution.
@@ -128,8 +132,7 @@ where
 pub(crate) fn merge_cli_or_exit(
     parsed_cli: &cli::Cli,
     matches: &ArgMatches,
-    mode: DiagMode,
-    discovered_layers: cli::DiscoveredLayers,
+    resolution: crate::ResolvedDiagnosticMode,
     clock: &impl MonotonicClock,
 ) -> Result<cli::Cli, ExitCode> {
     observability::record_config_load(observability::ConfigLoadPhase::Merge, clock, || {
@@ -137,9 +140,15 @@ pub(crate) fn merge_cli_or_exit(
             parsed_cli,
             matches,
             &cli::ConfigStdEnvProvider,
-            discovered_layers,
+            resolution.discovered_layers,
         )
     })
     .map(cli::Cli::with_default_command)
-    .map_err(|err| config_err_to_exit(err.as_ref(), mode, observability::MERGE_OPERATION))
+    .map_err(|err| {
+        config_err_to_exit(
+            err.as_ref(),
+            resolution.mode,
+            observability::MERGE_OPERATION,
+        )
+    })
 }

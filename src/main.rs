@@ -38,6 +38,12 @@ impl DiagMode {
     }
 }
 mod config_resolution;
+
+/// Cached diagnostic resolution carried into the full configuration merge.
+struct ResolvedDiagnosticMode {
+    mode: DiagMode,
+    discovered_layers: cli::DiscoveredLayers,
+}
 mod observability;
 #[path = "startup_tracing.rs"]
 mod startup_tracing;
@@ -254,6 +260,7 @@ fn parse_cli_or_exit(
         }
     }
 }
+
 
 /// Emit the configuration-load metrics for one startup attempt.
 ///
