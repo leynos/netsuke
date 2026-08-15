@@ -417,6 +417,10 @@ criterion in issue #552 and all repository gates pass.
   the separate file-count and byte-budget tests. Both contracts retain their
   original assertions while the shared setup remains fallible and
   capability-scoped.
+- [x] (2026-08-15) Refined bounded retention candidate selection so each
+  multi-pass scan carries only one lexicographic path and its byte length. The
+  1,000-sidecar regression now proves that a sufficient budget retains exactly
+  the first two obsolete paths while preserving the current bundle sidecar.
 
 ## Surprises and discoveries
 

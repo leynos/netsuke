@@ -217,14 +217,13 @@ fn retention_scans_a_large_directory_in_deterministic_path_order() -> Result<()>
     let lease = materialize_dyndep_files(&dir, std::slice::from_ref(&current))?;
     for index in 0..1_000 {
         let path = format!(".netsuke/dyndep/stale-{index:04}.dd");
-        let content = if index == 0 { "xxx" } else { "x" };
-        dir.write(path, content)?;
+        dir.write(path, "x")?;
     }
     prune_dyndep_sidecars(
         &dir,
         &lease,
         std::slice::from_ref(&current),
-        RetentionPolicy::new(2, 2),
+        RetentionPolicy::new(2, 1_024),
     )?;
     let mut retained = sidecar_names(&dir)?
         .into_iter()
@@ -235,13 +234,12 @@ fn retention_scans_a_large_directory_in_deterministic_path_order() -> Result<()>
         retained
             == [
                 Utf8PathBuf::from(".netsuke/dyndep/current.dd"),
+                Utf8PathBuf::from(".netsuke/dyndep/stale-0000.dd"),
                 Utf8PathBuf::from(".netsuke/dyndep/stale-0001.dd"),
-                Utf8PathBuf::from(".netsuke/dyndep/stale-0002.dd"),
             ],
-        "retention must keep the current sidecar and the first fitting obsolete paths"
+        "retention must keep the current sidecar and first two obsolete paths"
     );
-    ensure!(dir.open(".netsuke/dyndep/stale-0000.dd").is_err());
-    ensure!(dir.open(".netsuke/dyndep/stale-0003.dd").is_err());
+    ensure!(dir.open(".netsuke/dyndep/stale-0002.dd").is_err());
     ensure!(dir.open(".netsuke/dyndep/stale-0999.dd").is_err());
     Ok(())
 }

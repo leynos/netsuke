@@ -123,14 +123,36 @@ fn prune_dyndep_sidecars_inner(
         .map(|sidecar| sidecar.relative_path().as_str())
         .collect::<std::collections::HashSet<_>>();
     let mut summary = RetentionSummary::default();
-    remove_stale_temp_files(dir, &mut summary)?;
-    let retained = select_retained_sidecars(dir, &current_paths, policy, &mut summary)?;
-    remove_unretained_sidecars(dir, &current_paths, &retained, &mut summary)?;
+    remove_stale_temporary_files(dir, &current_paths, &mut summary)?;
+    let mut retained_paths = Vec::with_capacity(policy.max_files);
+    let mut retained_bytes = 0_u64;
+    let mut cursor = None;
+
+    while retained_paths.len() < policy.max_files {
+        let Some((path, bytes)) =
+            next_obsolete_sidecar_after(dir, &current_paths, cursor.as_deref())?
+        else {
+            break;
+        };
+        cursor = Some(path.clone());
+        if retained_bytes.saturating_add(bytes) <= policy.max_bytes {
+            retained_bytes = retained_bytes.saturating_add(bytes);
+            retained_paths.push(path);
+        } else {
+            remove_candidate(dir, &path, bytes, &mut summary)?;
+        }
+    }
+
+    remove_unretained_sidecars(dir, &current_paths, &retained_paths, &mut summary)?;
     Ok(summary)
 }
 
 /// Remove interrupted atomic-write files after acquiring the publication lease.
-fn remove_stale_temp_files(dir: &Dir, summary: &mut RetentionSummary) -> Result<()> {
+fn remove_stale_temporary_files(
+    dir: &Dir,
+    current_paths: &std::collections::HashSet<&str>,
+    summary: &mut RetentionSummary,
+) -> Result<()> {
     for entry_result in dir
         .read_dir(DYNDEP_DIR)
         .with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?
@@ -140,7 +162,7 @@ fn remove_stale_temp_files(dir: &Dir, summary: &mut RetentionSummary) -> Result<
             .file_name()
             .with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?;
         let path = Utf8Path::new(DYNDEP_DIR).join(name);
-        if path.as_str() == DYNDEP_LOCK {
+        if path.as_str() == DYNDEP_LOCK || current_paths.contains(path.as_str()) {
             continue;
         }
         if has_extension(&path, "tmp") {
@@ -154,40 +176,13 @@ fn remove_stale_temp_files(dir: &Dir, summary: &mut RetentionSummary) -> Result<
     Ok(())
 }
 
-/// Select the lexicographically first obsolete sidecars that fit the budget.
-fn select_retained_sidecars(
-    dir: &Dir,
-    current_paths: &std::collections::HashSet<&str>,
-    policy: RetentionPolicy,
-    summary: &mut RetentionSummary,
-) -> Result<Vec<Utf8PathBuf>> {
-    let mut retained = Vec::with_capacity(policy.max_files);
-    let mut retained_bytes = 0_u64;
-    let mut cursor = None;
-
-    while retained.len() < policy.max_files {
-        let Some(path) = find_next_obsolete_sidecar(dir, current_paths, cursor.as_deref())? else {
-            break;
-        };
-        let bytes = candidate_size(dir, &path)?;
-        cursor = Some(path.clone());
-        if retained_bytes.saturating_add(bytes) <= policy.max_bytes {
-            retained_bytes = retained_bytes.saturating_add(bytes);
-            retained.push(path);
-        } else {
-            remove_candidate(dir, &path, bytes, summary)?;
-        }
-    }
-    Ok(retained)
-}
-
 /// Find the next obsolete sidecar without retaining the directory's full contents.
-fn find_next_obsolete_sidecar(
+fn next_obsolete_sidecar_after(
     dir: &Dir,
     current_paths: &std::collections::HashSet<&str>,
     cursor: Option<&Utf8Path>,
-) -> Result<Option<Utf8PathBuf>> {
-    let mut next = None;
+) -> Result<Option<(Utf8PathBuf, u64)>> {
+    let mut next: Option<(Utf8PathBuf, u64)> = None;
     for entry_result in dir
         .read_dir(DYNDEP_DIR)
         .with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?
@@ -205,9 +200,10 @@ fn find_next_obsolete_sidecar(
         }
         if next
             .as_ref()
-            .is_none_or(|candidate: &Utf8PathBuf| path.as_str() < candidate.as_str())
+            .is_none_or(|(candidate, _)| path.as_str() < candidate.as_str())
         {
-            next = Some(path);
+            let bytes = candidate_size(dir, &path)?;
+            next = Some((path, bytes));
         }
     }
     Ok(next)
