@@ -2711,6 +2711,10 @@ successful configuration merge, merged verbosity gates that snapshot; a
 pre-merge failure uses parsed CLI verbosity. JSON mode suppresses tracing,
 including the snapshot, so its diagnostic document remains uncorrupted.
 
+Deferred configuration-discovery tracing retains only correlation hashes and
+presence bits for path metadata so events can be replayed after discovery.
+Those deferred trace events never retain or emit filenames or raw paths.
+
 CLI help and clap errors are localized via Fluent resources; locale resolution
 is handled in `src/locale_resolution.rs` in two phases. Before the
 configuration merge, `startup_localizer` (`src/main.rs`) resolves the locale
