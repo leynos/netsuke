@@ -24,7 +24,7 @@ use super::{
 /// startup configuration-load failure rate.
 const CONFIG_LOAD_TOTAL: &str = "netsuke_config_load_total";
 
-/// Histogram recording the wall-clock duration of the configuration-load
+/// Histogram recording the elapsed duration of the configuration-load
 /// phase (diagnostic-mode resolution through layer merge) in seconds.
 const CONFIG_LOAD_DURATION_SECONDS: &str = "netsuke_config_load_duration_seconds";
 
