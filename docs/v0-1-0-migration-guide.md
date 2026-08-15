@@ -2,10 +2,13 @@
 
 This guide signposts the v0.1.0 beta additions: the injectable child
 environment (`CommandEnv`), the named Ninja request types, narrow process
-options (`NinjaProcessOptions`), and target/action discovery through
-`description` and `netsuke help targets`. Existing manifests remain compatible,
-and callers of the unchanged convenience wrappers compile unchanged. Rust
-callers that construct `Target` with a struct literal must add the new
+options (`NinjaProcessOptions`), target/action discovery through `description`
+and `netsuke help targets`, and cached configuration discovery. Existing
+manifests remain compatible, and callers of the unchanged convenience wrappers
+compile unchanged. The cached configuration discovery API is a breaking change
+for callers of the unstable Rust API; ordinary CLI users need no action.
+
+Rust callers that construct `Target` with a struct literal must add the new
 `description` field (set it to `None` or `Some(...)`); deserialized manifests
 remain compatible. Callers constructing `NinjaBuildRequest` or
 `NinjaToolRequest` must replace `cli: &cli` with `options: &options`; every
@@ -30,11 +33,11 @@ Table: documented v0.1.0 additions, including `netsuke help targets`, and their 
 | Convenience wrappers | Unchanged. `run_ninja` and `run_ninja_tool` behave exactly as before, inheriting the process environment. | [Users' guide](users-guide.md) |
 | Child environment | New opt-in `netsuke::runner::CommandEnv` carries additive variable overrides and an injected `PATH` for Ninja child processes. | [Users' guide](users-guide.md) |
 | Request types | New `netsuke::runner::NinjaBuildRequest` and `netsuke::runner::NinjaToolRequest` name the program, `NinjaProcessOptions`, build file, targets or tool, a child environment, and a required `stderr_mode: StderrMode` policy for the `*_with` run functions. | [Users' guide](users-guide.md) |
+| Cached CLI configuration API | Breaking for callers of the unstable Rust API. `ConfigEnvProvider` and `ConfigStdEnvProvider` are removed; use `mockable::Env` and the cached configuration discovery flow described below. | [Users' guide](users-guide.md) |
 | Glob expansion | Parent-relative patterns such as `glob('../shared/*.h')` now expand. Metadata checks use a capability rooted at the pattern's longest literal directory prefix; missing or non-directory prefixes return no matches, and unresolvable symlink matches are skipped. | [Users' guide](users-guide.md) and [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) |
 | Command recipes | Existing scalar `command` recipes are unchanged. New YAML command lists are opt-in and run in declaration order with fail-fast semantics. | [Rules and recipes](users-guide.md#rules-and-recipes) |
 | Manifest discovery | Optional target/action `description` values are shown by the new `netsuke help targets` command. Manifests without them and existing build output are unchanged. | [Users' guide](users-guide.md) |
 | Serial dependencies | New opt-in `dependency_order: serial` runs an action or target's direct `deps` list in declaration order. | [Serial dependency ordering](users-guide.md#run-direct-dependencies-serially) |
-| Cached configuration discovery | New opt-in `netsuke::cli::resolve_json_and_layers_outcome_with_env` and `netsuke::cli::merge_with_cached_file_layers` APIs let callers reuse discovered file layers. | [Users' guide](users-guide.md) |
 
 ## Nothing to change for existing callers
 
@@ -75,32 +78,35 @@ CLI working directory to UTF-8 and returns `io::ErrorKind::InvalidData` when
 it cannot. Worked examples live in the users' guide's
 "Drive Ninja with an explicit environment" section.
 
-## Reusing cached configuration discovery
 
-The cached configuration APIs are an opt-in flow for callers of the unstable
+## Cached CLI configuration API
 
-Rust API. Callers that adopt this composition boundary resolve JSON mode and
-discover file layers once. `resolve_json_and_layers_outcome_with_env` returns
-`(OrthoResult<bool>, DiscoveryOutcome)`. Callers can call
-`emit_diagnostics()` after a tracing filter is installed, then call
-`into_layers()` before passing the layers to `merge_with_cached_file_layers`.
+Callers of the unstable Rust configuration API must update to the cached
+configuration discovery flow. `ConfigEnvProvider` and `ConfigStdEnvProvider`
+are removed; custom providers should be replaced with `mockable::Env` at the
+injected boundary (`&impl mockable::Env`). Production callers use
+`mockable::DefaultEnv`, and deterministic tests use `mockable::MockEnv`. This
+is a breaking change without a deprecation period or stable compatibility
+guarantee.
 
-The standalone `resolve_merged_json_with_env` and
-`merge_with_config_and_env` functions retain their existing automatic
-discovery behaviour. The former resolves JSON mode, while the latter
-discovers and merges configuration in one call, so callers that do not need
-the cached flow require no migration.
+For the normal flow:
 
-v0.1.0 also instruments configuration loading itself. The internal
-phase-level series are `config_load_total`, labelled `phase=diag_mode|merge`
-and `outcome=success|failure`, and `config_load_duration_seconds`, labelled
-only `phase=diag_mode|merge`. The operator-facing startup-attempt series are
-`netsuke_config_load_total`, labelled only `outcome=success|failure`, and
-`netsuke_config_load_duration_seconds`, with no labels. Configuration-load
-failures add bounded `operation` and `error_category` fields. Neither
-exposes configuration paths. See the users' guide's
-[bounded configuration metrics](users-guide.md#bounded-configuration-metrics)
-and [interpret failures](users-guide.md#interpret-failures) sections.
+1. Call `resolve_json_and_layers_with_env` and retain its returned
+   `DiscoveredLayers`.
+2. Call `merge_with_layers` with the same discovered layers and the injected
+   environment.
+
+For startup diagnostics, call
+`resolve_json_and_layers_outcome_with_env`, then call `emit_diagnostics()`
+after the tracing filter is configured. Call `into_layers()` and pass the
+resulting `DiscoveredLayers` to `merge_with_process_environment_layers`.
+`DiscoveryOutcome` owns the deferred diagnostics until `emit_diagnostics()`
+and the discovered layers until `into_layers()`.
+
+Reusing the same discovered layers avoids a second configuration-file discovery
+and loading pass. `merge_with_config` and `merge_with_config_and_env` remain
+standalone alternatives: each discovers and merges configuration in one call,
+so neither reuses an earlier discovery.
 
 ## Opting into serial dependency ordering
 
