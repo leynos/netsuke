@@ -93,10 +93,10 @@ fn assert_which_resolves_to(
     expected: &Utf8Path,
 ) -> Result<()> {
     let rendered = env.render_str(&format!("{{{{ which('{command}') }}}}"), context! {})?;
-    let expected = rendered_form(expected);
+    let expected_form = rendered_form(expected);
     ensure!(
-        rendered == expected,
-        "expected which('{command}') to render {expected}, got {rendered}"
+        rendered == expected_form,
+        "expected which('{command}') to render {expected_form}, got {rendered}"
     );
     Ok(())
 }
