@@ -3225,6 +3225,25 @@ mode or non-TTY standard output.
 and reporter settings, then shares it via the `ExecutionContext` it passes to
 `dispatch::execute`.
 
+#### Reuse boundary
+
+- **Ownership:** `runner::reporter` is an internal, non-public submodule of
+  the runner; it owns all `StatusReporter` construction and the
+  concrete-reporter selection rules. Nothing outside it builds the run's
+  reporter, and it is not part of the crate's public API.
+- **Permitted call-sites:** only the runner boundary in `src/runner/mod.rs`
+  may call `make_reporter` — today solely `run_with_ninja_program`.
+  `runner::process`, dispatch handlers, and external embedders never
+  construct reporters; handlers consume the already-built reporter through
+  the `ExecutionContext`/`&dyn StatusReporter` only.
+- **Composition rules:** the caller must resolve all `ReporterOptions` inputs
+  (output mode, progress, verbose, output prefs, stdout TTY) from
+  CLI/environment state before calling `make_reporter`; the module performs
+  no such resolution itself. The reporter is composed once per run and
+  shared immutably. New reporter kinds or selection policies belong in this
+  module beside the mode-selection logic, colocated with the output-mode
+  policy.
+
 ### Module: `runner::process::ninja_program`
 
 `src/runner/process/ninja_program.rs` owns the executable-resolution boundary.
