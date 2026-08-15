@@ -62,6 +62,69 @@ fn run_routing_worker(job: &str, tool: bool, ninja: &Path, ran_file: &Path) -> R
     Ok(command)
 }
 
+/// Execute one request-level routing case selected by `stderr_mode` and the
+/// request path (`tool` selects the `ninja -t` request).
+///
+/// The request's `cli.json` deliberately contradicts `stderr_mode` (see the
+/// `routing_worker` description), so the marker assertions prove the process
+/// layer routes child streams by the explicit policy, not by the JSON setting.
+#[cfg(unix)]
+fn assert_routing_case(stderr_mode: StderrMode, tool: bool) -> Result<()> {
+    let job = match stderr_mode {
+        StderrMode::Forward => "forward",
+        StderrMode::Suppress => "suppress",
+    };
+    let path_label = if tool {
+        "tool request"
+    } else {
+        "build request"
+    };
+    let json = matches!(stderr_mode, StderrMode::Forward);
+
+    let ran_dir = tempdir().context("create run-marker directory")?;
+    let ran_file = ran_dir.path().join("ran");
+    let (_ninja_dir, ninja) = marker_emitting_ninja(&ran_file)?;
+    let output = run_routing_worker(job, tool, &ninja, &ran_file)?
+        .output()
+        .with_context(|| format!("run {stderr_mode:?} {path_label} worker"))?;
+    ensure!(
+        output.status.success(),
+        "{stderr_mode:?} {path_label} worker failed:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    let stdout = String::from_utf8(output.stdout).context("worker stdout should be UTF-8")?;
+    let stderr = String::from_utf8(output.stderr).context("worker stderr should be UTF-8")?;
+    match stderr_mode {
+        StderrMode::Forward => {
+            ensure!(
+                stdout.contains(STDOUT_MARKER),
+                "{path_label} with StderrMode::Forward should forward child stdout despite \
+                 cli.json={json}, got: {stdout}"
+            );
+            ensure!(
+                stderr.contains(STDERR_MARKER),
+                "{path_label} with StderrMode::Forward should forward child stderr despite \
+                 cli.json={json}, got: {stderr}"
+            );
+        }
+        StderrMode::Suppress => {
+            ensure!(ran_file.exists(), "fake Ninja should have run");
+            ensure!(
+                !stdout.contains(STDOUT_MARKER) && !stdout.contains(STDERR_MARKER),
+                "{path_label} with StderrMode::Suppress should drain child stdout despite \
+                 cli.json={json}, got: {stdout}"
+            );
+            ensure!(
+                !stderr.contains(STDOUT_MARKER) && !stderr.contains(STDERR_MARKER),
+                "{path_label} with StderrMode::Suppress should drain child stderr despite \
+                 cli.json={json}, got: {stderr}"
+            );
+        }
+    }
+    Ok(())
+}
+
 /// A request whose `cli.json` and `stderr_mode` deliberately disagree: the
 /// process layer must route streams by the explicit policy, not by `cli.json`.
 #[cfg(unix)]
@@ -111,66 +174,13 @@ fn routing_worker() -> Result<()> {
     result.context("run Ninja invocation in routing worker")
 }
 
-/// cli.json=true with `stderr_mode=Forward`: the child markers must reach the
-/// user's stdout and stderr, proving routing ignores the JSON setting.
+/// cli.json=true with `stderr_mode=Forward` on a build request: the child
+/// markers must reach the user's stdout and stderr, proving routing ignores
+/// the JSON setting.
 #[cfg(unix)]
 #[test]
 fn forward_request_routes_child_streams_despite_json_cli() -> Result<()> {
-    let ran_dir = tempdir().context("create run-marker directory")?;
-    let ran_file = ran_dir.path().join("ran");
-    let (_ninja_dir, ninja) = marker_emitting_ninja(&ran_file)?;
-    let output = run_routing_worker("forward", false, &ninja, &ran_file)?
-        .output()
-        .context("run forwarding build worker")?;
-    ensure!(
-        output.status.success(),
-        "forwarding build worker failed:\nstdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    );
-    let stdout = String::from_utf8(output.stdout).context("worker stdout should be UTF-8")?;
-    let stderr = String::from_utf8(output.stderr).context("worker stderr should be UTF-8")?;
-    ensure!(
-        stdout.contains(STDOUT_MARKER),
-        "cli.json=true with StderrMode::Forward should forward child stdout, got: {stdout}"
-    );
-    ensure!(
-        stderr.contains(STDERR_MARKER),
-        "cli.json=true with StderrMode::Forward should forward child stderr, got: {stderr}"
-    );
-    Ok(())
-}
-
-/// cli.json=false with `stderr_mode=Suppress`: both child markers must be
-/// drained even though the human CLI would otherwise forward them, and the
-/// run marker proves the child really executed.
-#[cfg(unix)]
-#[test]
-fn suppress_request_drains_child_streams_despite_human_cli() -> Result<()> {
-    let ran_dir = tempdir().context("create run-marker directory")?;
-    let ran_file = ran_dir.path().join("ran");
-    let (_ninja_dir, ninja) = marker_emitting_ninja(&ran_file)?;
-    let output = run_routing_worker("suppress", false, &ninja, &ran_file)?
-        .output()
-        .context("run suppressing build worker")?;
-    ensure!(
-        output.status.success(),
-        "suppressing build worker failed:\nstdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    );
-    ensure!(ran_file.exists(), "fake Ninja should have run");
-    let stdout = String::from_utf8(output.stdout).context("worker stdout should be UTF-8")?;
-    let stderr = String::from_utf8(output.stderr).context("worker stderr should be UTF-8")?;
-    ensure!(
-        !stdout.contains(STDOUT_MARKER) && !stdout.contains(STDERR_MARKER),
-        "cli.json=false with StderrMode::Suppress should drain child stdout, got: {stdout}"
-    );
-    ensure!(
-        !stderr.contains(STDOUT_MARKER) && !stderr.contains(STDERR_MARKER),
-        "cli.json=false with StderrMode::Suppress should drain child stderr, got: {stderr}"
-    );
-    Ok(())
+    assert_routing_case(StderrMode::Forward, false)
 }
 
 /// cli.json=true with `stderr_mode=Forward` on the tool request: the child
@@ -178,29 +188,16 @@ fn suppress_request_drains_child_streams_despite_human_cli() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn forward_tool_request_routes_child_streams_despite_json_cli() -> Result<()> {
-    let ran_dir = tempdir().context("create run-marker directory")?;
-    let ran_file = ran_dir.path().join("ran");
-    let (_ninja_dir, ninja) = marker_emitting_ninja(&ran_file)?;
-    let output = run_routing_worker("forward", true, &ninja, &ran_file)?
-        .output()
-        .context("run forwarding tool worker")?;
-    ensure!(
-        output.status.success(),
-        "forwarding tool worker failed:\nstdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    );
-    let stdout = String::from_utf8(output.stdout).context("worker stdout should be UTF-8")?;
-    let stderr = String::from_utf8(output.stderr).context("worker stderr should be UTF-8")?;
-    ensure!(
-        stdout.contains(STDOUT_MARKER),
-        "tool request with StderrMode::Forward should forward child stdout, got: {stdout}"
-    );
-    ensure!(
-        stderr.contains(STDERR_MARKER),
-        "tool request with StderrMode::Forward should forward child stderr, got: {stderr}"
-    );
-    Ok(())
+    assert_routing_case(StderrMode::Forward, true)
+}
+
+/// cli.json=false with `stderr_mode=Suppress` on a build request: both child
+/// markers must be drained even though the human CLI would otherwise forward
+/// them, and the run marker proves the child really executed.
+#[cfg(unix)]
+#[test]
+fn suppress_request_drains_child_streams_despite_human_cli() -> Result<()> {
+    assert_routing_case(StderrMode::Suppress, false)
 }
 
 /// cli.json=false with `stderr_mode=Suppress` on the tool request: both child
@@ -208,28 +205,5 @@ fn forward_tool_request_routes_child_streams_despite_json_cli() -> Result<()> {
 #[cfg(unix)]
 #[test]
 fn suppress_tool_request_drains_child_streams_despite_human_cli() -> Result<()> {
-    let ran_dir = tempdir().context("create run-marker directory")?;
-    let ran_file = ran_dir.path().join("ran");
-    let (_ninja_dir, ninja) = marker_emitting_ninja(&ran_file)?;
-    let output = run_routing_worker("suppress", true, &ninja, &ran_file)?
-        .output()
-        .context("run suppressing tool worker")?;
-    ensure!(
-        output.status.success(),
-        "suppressing tool worker failed:\nstdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    );
-    ensure!(ran_file.exists(), "fake Ninja should have run");
-    let stdout = String::from_utf8(output.stdout).context("worker stdout should be UTF-8")?;
-    let stderr = String::from_utf8(output.stderr).context("worker stderr should be UTF-8")?;
-    ensure!(
-        !stdout.contains(STDOUT_MARKER) && !stdout.contains(STDERR_MARKER),
-        "tool request with StderrMode::Suppress should drain child stdout, got: {stdout}"
-    );
-    ensure!(
-        !stderr.contains(STDOUT_MARKER) && !stderr.contains(STDERR_MARKER),
-        "tool request with StderrMode::Suppress should drain child stderr, got: {stderr}"
-    );
-    Ok(())
+    assert_routing_case(StderrMode::Suppress, true)
 }
