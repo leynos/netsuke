@@ -98,43 +98,96 @@ mod tests {
 
     type SnapshotEntry = (CompositeKey, Option<Unit>, Option<SharedString>, DebugValue);
 
-    fn assert_one_counter_record(snapshot: &[SnapshotEntry], phase: &str, outcome: &str) {
+    /// Exact bounded label pair expected on a configuration-load counter.
+    ///
+    /// This test-local value keeps assertion helpers free of unstructured
+    /// string arguments. Production metric composition remains in
+    /// [`record_config_load`].
+    #[derive(Clone, Copy)]
+    struct CounterLabels {
+        phase: &'static str,
+        outcome: &'static str,
+    }
+
+    /// One exact metric-label key-value pair expected in a snapshot entry.
+    #[derive(Clone, Copy)]
+    struct LabelExpectation {
+        key: &'static str,
+        value: &'static str,
+    }
+
+    const DIAG_MODE_SUCCESS: CounterLabels = CounterLabels {
+        phase: DIAG_MODE_PHASE,
+        outcome: "success",
+    };
+    const MERGE_FAILURE: CounterLabels = CounterLabels {
+        phase: MERGE_PHASE,
+        outcome: "failure",
+    };
+    const DIAG_MODE_LABEL: LabelExpectation = LabelExpectation {
+        key: "phase",
+        value: DIAG_MODE_PHASE,
+    };
+    const MERGE_LABEL: LabelExpectation = LabelExpectation {
+        key: "phase",
+        value: MERGE_PHASE,
+    };
+
+    fn assert_one_counter_record(snapshot: &[SnapshotEntry], labels: CounterLabels) {
         assert_eq!(
             snapshot
                 .iter()
-                .filter(|entry| is_counter_record(entry, phase, outcome))
+                .filter(|entry| is_counter_record(entry, labels))
                 .count(),
             1,
-            "expected one configuration-load counter record for phase {phase} and outcome {outcome}",
+            "expected one configuration-load counter record for phase {} and outcome {}",
+            labels.phase,
+            labels.outcome,
         );
     }
 
-    fn is_counter_record(entry: &SnapshotEntry, phase: &str, outcome: &str) -> bool {
+    fn is_counter_record(entry: &SnapshotEntry, labels: CounterLabels) -> bool {
         entry.0.kind() == MetricKind::Counter
             && entry.0.key().name() == CONFIG_LOAD_COUNTER
-            && has_label(entry, "phase", phase)
-            && has_label(entry, "outcome", outcome)
+            && has_label(
+                entry,
+                LabelExpectation {
+                    key: "phase",
+                    value: labels.phase,
+                },
+            )
+            && has_label(
+                entry,
+                LabelExpectation {
+                    key: "outcome",
+                    value: labels.outcome,
+                },
+            )
             && matches!(entry.3, DebugValue::Counter(1))
     }
 
-    fn has_label(entry: &SnapshotEntry, key: &str, value: &str) -> bool {
+    fn has_label(entry: &SnapshotEntry, expected: LabelExpectation) -> bool {
         entry
             .0
             .key()
             .labels()
-            .any(|label| label.key() == key && label.value() == value)
+            .any(|label| label.key() == expected.key && label.value() == expected.value)
     }
 
-    fn assert_one_single_sample_duration_record(snapshot: &[SnapshotEntry], phase: &str) {
+    fn assert_one_single_sample_duration_record(
+        snapshot: &[SnapshotEntry],
+        expected_phase: LabelExpectation,
+    ) {
         assert_eq!(
             snapshot
                 .iter()
                 .filter(|entry| {
-                    is_single_sample_duration_record(entry) && has_label(entry, "phase", phase)
+                    is_single_sample_duration_record(entry) && has_label(entry, expected_phase)
                 })
                 .count(),
             1,
-            "expected one configuration-load duration record for phase {phase}",
+            "expected one configuration-load duration record for phase {}",
+            expected_phase.value,
         );
     }
 
@@ -182,10 +235,10 @@ mod tests {
         });
 
         let snapshot = snapshotter.snapshot().into_vec();
-        assert_one_counter_record(&snapshot, DIAG_MODE_PHASE, "success");
-        assert_one_counter_record(&snapshot, MERGE_PHASE, "failure");
-        assert_one_single_sample_duration_record(&snapshot, DIAG_MODE_PHASE);
-        assert_one_single_sample_duration_record(&snapshot, MERGE_PHASE);
+        assert_one_counter_record(&snapshot, DIAG_MODE_SUCCESS);
+        assert_one_counter_record(&snapshot, MERGE_FAILURE);
+        assert_one_single_sample_duration_record(&snapshot, DIAG_MODE_LABEL);
+        assert_one_single_sample_duration_record(&snapshot, MERGE_LABEL);
         assert_eq!(count_single_sample_duration_records(&snapshot), 2);
     }
 }
