@@ -192,6 +192,7 @@ fn assert_config_metrics_snapshot(
             stderr.split("CompositeKey(").skip(1).any(|record| {
                 record.contains(&metric_name)
                     && expected.labels.iter().all(|label| record.contains(label))
+                    && record.matches("Label(").count() == expected.labels.len()
                     && expected.value.is_none_or(|value| record.contains(value))
             }),
             "expected configuration metric record {} with labels {:?} in stderr: {stderr}",
