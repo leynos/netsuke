@@ -2,7 +2,7 @@
 
 use super::test_support::command_action;
 use super::*;
-use crate::ir::{Action, BuildEdge, BuildGraph};
+use crate::ir::{Action, BuildEdge, BuildGraph, DependencyOrder};
 use anyhow::{Result, ensure};
 use rstest::rstest;
 
@@ -22,6 +22,7 @@ fn generate_simple_ninja() -> Result<()> {
         action_id: "a".into(),
         inputs: vec![Utf8PathBuf::from("in")],
         implicit_deps: Vec::new(),
+        dependency_order: DependencyOrder::Parallel,
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -64,6 +65,7 @@ fn generate_script_ninja_round_trips() -> Result<()> {
         action_id: "a".into(),
         inputs: Vec::new(),
         implicit_deps: Vec::new(),
+        dependency_order: DependencyOrder::Parallel,
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -96,6 +98,7 @@ fn generate_command_list_ninja_joins_a_fail_fast_chain() -> Result<()> {
         action_id: "a".into(),
         inputs: Vec::new(),
         implicit_deps: Vec::new(),
+        dependency_order: DependencyOrder::Parallel,
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),

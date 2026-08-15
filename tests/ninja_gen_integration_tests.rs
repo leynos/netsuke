@@ -8,7 +8,7 @@ use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use netsuke::ast::{Recipe, StringOrList};
-use netsuke::ir::{Action, BuildEdge, BuildGraph};
+use netsuke::ir::{Action, BuildEdge, BuildGraph, DependencyOrder};
 use netsuke::ninja_gen::{NinjaGenError, generate, generate_into};
 use rstest::{fixture, rstest};
 use std::process::Command;
@@ -225,6 +225,7 @@ fn command_list_fails_fast_at_first_nonzero_exit(
         action_id: "chain".into(),
         inputs: Vec::new(),
         implicit_deps: Vec::new(),
+        dependency_order: DependencyOrder::Parallel,
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -296,6 +297,7 @@ fn command_list_entry_control_flow_cannot_mask_an_earlier_failure(
         action_id: "chain".into(),
         inputs: Vec::new(),
         implicit_deps: Vec::new(),
+        dependency_order: DependencyOrder::Parallel,
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -360,6 +362,7 @@ fn command_list_entries_share_one_shell_process(
         action_id: "chain".into(),
         inputs: Vec::new(),
         implicit_deps: Vec::new(),
+        dependency_order: DependencyOrder::Parallel,
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),

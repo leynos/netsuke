@@ -61,6 +61,11 @@ fn record_outcome<T>(span: &tracing::Span, result: &Result<T, NinjaGenError>) ->
 const fn error_category(error: &NinjaGenError) -> &'static str {
     match error {
         NinjaGenError::MissingAction { .. } => "missing_action",
+        NinjaGenError::EmptyCommandRecipe { .. }
+        | NinjaGenError::MultipleBackgroundJobs { .. }
+        | NinjaGenError::UnsupportedCommandListExec { .. }
+        | NinjaGenError::UnanalyzableCommandListEval { .. }
+        | NinjaGenError::NinjaControlCharacter { .. } => "command_list",
         NinjaGenError::Format { .. } => "format",
         NinjaGenError::DyndepFilesRequired { .. } => "dyndep_files_required",
         NinjaGenError::ReservedOutputPath { .. } => "reserved_output_path",

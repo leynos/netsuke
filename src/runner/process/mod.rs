@@ -27,7 +27,6 @@ use child_exit::{ExitFailureContext, check_exit_status_with_context};
 use command_logging::{
     CommandLogContext, command_span, log_command_execution, log_command_spawn_failure,
 };
-use output_forwarding::{StatusObserver, spawn_and_stream_output};
 pub(crate) use dyndep_files::materialize_dyndep_files;
 pub(crate) use dyndep_retention::{DyndepPublicationLease, prune_dyndep_cache};
 pub use file_io::*;
@@ -36,6 +35,7 @@ pub use ninja_program::resolve_ninja_program;
 pub use ninja_program::resolve_ninja_program_utf8;
 #[cfg(test)]
 use ninja_program::{resolve_ninja_program_utf8_with, resolve_ninja_program_with};
+use output_forwarding::{StatusObserver, spawn_and_stream_output};
 
 mod command_env;
 mod configure;

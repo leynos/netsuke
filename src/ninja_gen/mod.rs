@@ -62,6 +62,7 @@ macro_rules! write_flag {
 /// graph.targets.insert(Utf8PathBuf::from("out"), BuildEdge {
 ///     action_id: "a".into(), inputs: Vec::new(),
 ///     implicit_deps: Vec::new(),
+///     dependency_order: netsuke::ir::DependencyOrder::Parallel,
 ///     explicit_outputs: vec![Utf8PathBuf::from("out")],
 ///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
 ///     phony: false, always: false
