@@ -79,6 +79,7 @@ fn settle_startup_diagnostics(writer: &StartupWriter, mode: DiagMode) {
     }
 }
 
+/// Collect production arguments and environment providers, then run Netsuke.
 fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().collect();
     let env = locale_resolution::SystemEnv;
@@ -86,6 +87,12 @@ fn main() -> ExitCode {
     run_with_args(args, &env, &system_locale, &StdMonotonicClock)
 }
 
+/// Run one invocation with injectable locale and configuration-clock providers.
+///
+/// Uses the injected [`MonotonicClock`] to orchestrate timed configuration
+/// loading before running the selected command. Returns the command's process
+/// exit code, including failures from argument parsing, configuration loading,
+/// and runner execution.
 fn run_with_args(
     args: Vec<OsString>,
     env: &impl locale_resolution::LocaleEnvProvider,
@@ -219,6 +226,7 @@ fn set_tracing_filter(level: LevelFilter) {
         handle.modify(|filter| *filter = level).ok();
     }
 }
+/// Resolve and install the localizer used while parsing startup arguments.
 fn startup_localizer(
     args: &[OsString],
     env: &impl locale_resolution::LocaleEnvProvider,
@@ -230,6 +238,11 @@ fn startup_localizer(
     localizer
 }
 
+/// Parse localized arguments, emitting valid JSON diagnostics when JSON is
+/// selected.
+///
+/// Help and version requests exit through clap; all other parse failures return
+/// the corresponding failure [`ExitCode`] on the JSON path.
 fn parse_cli_or_exit(
     args: Vec<OsString>,
     localizer: &Arc<dyn Localizer>,
@@ -262,6 +275,7 @@ fn parse_cli_or_exit(
 }
 
 
+
 /// Emit the configuration-load metrics for one startup attempt.
 ///
 /// Recording goes through the `metrics` façade, backed by the application's
@@ -271,6 +285,7 @@ fn record_config_load_metrics(elapsed: Duration, succeeded: bool) {
     metrics::histogram!(CONFIG_LOAD_DURATION_SECONDS).record(elapsed.as_secs_f64());
     metrics::counter!(CONFIG_LOAD_TOTAL, "outcome" => outcome).increment(1);
 }
+/// Apply the effective output filter and install the runtime localizer.
 fn configure_runtime(
     merged_cli: &cli::Cli,
     system_locale: &impl locale_resolution::SystemLocale,
@@ -286,6 +301,11 @@ fn configure_runtime(
     localization::set_localizer(Arc::clone(&runtime_localizer));
 }
 
+/// Render a runner failure according to the selected human or JSON mode.
+///
+/// JSON output uses the stable diagnostic serializer and fallback payload to
+/// remain valid JSON; human output writes a formatted error to stderr. Both
+/// paths return failure.
 fn handle_runner_error(
     err: anyhow::Error,
     prefs: output_prefs::OutputPrefs,
@@ -308,6 +328,7 @@ fn handle_runner_error(
     ExitCode::FAILURE
 }
 
+/// Select the most specific JSON-safe diagnostic representation for a failure.
 fn render_runtime_error_json(err: &anyhow::Error) -> serde_json::Result<String> {
     if let Some(runner_err) = err.downcast_ref::<runner::RunnerError>() {
         return diagnostic_json::render_diagnostic_json(runner_err);
