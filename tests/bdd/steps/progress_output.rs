@@ -26,7 +26,11 @@ fn make_script_executable(path: &Path) -> Result<()> {
 }
 
 #[cfg(not(unix))]
-fn make_script_executable(_path: &Path) -> Result<()> {
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "the fallible signature must match the Unix variant so the shared call site needs no platform-specific handling"
+)]
+const fn make_script_executable(_path: &Path) -> Result<()> {
     Ok(())
 }
 
