@@ -245,6 +245,34 @@ fn retention_scans_a_large_directory_in_deterministic_path_order() -> Result<()>
 }
 
 #[test]
+fn retention_reclaims_many_sidecars_larger_than_the_remaining_budget() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let dir = temporary_dir(&temp)?;
+    let current = sidecar(".netsuke/dyndep/current.dd", "current");
+    let lease = materialize_dyndep_files(&dir, std::slice::from_ref(&current))?;
+    for index in 0..1_000 {
+        dir.write(format!(".netsuke/dyndep/oversized-{index:04}.dd"), "xx")?;
+    }
+
+    prune_dyndep_sidecars(
+        &dir,
+        &lease,
+        std::slice::from_ref(&current),
+        RetentionPolicy::new(2, 1),
+    )?;
+
+    let sidecars = sidecar_names(&dir)?
+        .into_iter()
+        .filter(|path| has_extension(path, "dd"))
+        .count();
+    ensure!(dir.open(current.relative_path()).is_ok());
+    ensure!(sidecars == 1, "only the current sidecar must remain");
+    ensure!(dir.open(".netsuke/dyndep/oversized-0000.dd").is_err());
+    ensure!(dir.open(".netsuke/dyndep/oversized-0999.dd").is_err());
+    Ok(())
+}
+
+#[test]
 fn repeated_publication_respects_the_obsolete_byte_budget() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let dir = temporary_dir(&temp)?;

@@ -1,6 +1,6 @@
 # Lokaliseringsresurser för Netsukes kommandoradsgränssnitt.
 
-runner.io.dyndep.retention = Det gick inte att behålla den genererade dyndep-filen under { $path }.
+runner.io.dyndep.retention = Det gick inte att behålla den genererade dyndep-filen (sökväg: { $path }).
 cli.about = Netsuke kompilerar YAML- + Jinja-manifest till Ninja-byggplaner.
 cli.long_about = Netsuke omvandlar YAML- + Jinja-manifest till reproducerbara Ninja-grafer och kör Ninja med säkra standardvärden.
 cli.usage = { $usage }
@@ -106,7 +106,7 @@ runner.io.open_ambient_dir = Den omgivande katalogen kunde inte öppnas.
 runner.io.non_utf8_working_directory = Sökvägen till arbetskatalogen är inte giltig UTF-8.
 runner.io.no_existing_ancestor = Det finns ingen överordnad katalog för { $path }.
 runner.io.derive_relative_path = Den relativa Ninja-sökvägen kunde inte härledas.
-runner.io.non_utf8_path = Sökvägar som inte är UTF-8 stöds inte (sökväg: { $path }).
+runner.io.non_utf8_path = Sökvägen är inte kodad i UTF-8 och stöds inte (sökväg: { $path }).
 runner.io.write_stdout = Ninja-manifestet kunde inte skrivas till stdout.
 runner.io.flush_stdout = Bufferten för stdout kunde inte tömmas.
 runner.io.dyndep.create_dir = Det gick inte att skapa dyndep-katalogen { $path }.
@@ -183,7 +183,7 @@ ninja_gen.missing_action = Åtgärden ”{ $id }” som en byggbåge hänvisar t
 ninja_gen.format = Ninja-manifestets utdata kunde inte formateras.
 ninja_gen.dyndep_files_required = Det här bygget kräver ett genererat Ninja-paket; använd `netsuke build`, `netsuke clean` eller `netsuke generate` för att materialisera dyndep-filerna.
 ninja_gen.reserved_output_path = Sökvägen '{ $path }' är reserverad för Netsukes seriella beroendetillstånd.
-ninja_gen.unsupported_path_character = Sökvägen '{ $path }' innehåller det tecken i Ninja-sökvägar som inte stöds: '{ $character }'.
+ninja_gen.unsupported_path_character = Sökvägen '{ $path }' innehåller ett tecken som inte stöds i Ninja-sökvägar: '{ $character }'.
 
 # Validering av värdmönster.
 host_pattern.empty = Värdmönstret får inte vara tomt.

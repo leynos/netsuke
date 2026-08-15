@@ -104,18 +104,18 @@ runner.io.flush_ninja_file = Не удалось сбросить буфер ф�
 runner.io.sync_ninja_file = Не удалось синхронизировать файл Ninja в { $path }.
 runner.io.open_ambient_dir = Не удалось открыть окружающий каталог.
 runner.io.non_utf8_working_directory = Путь рабочего каталога не является допустимым UTF-8.
-runner.io.no_existing_ancestor = Для { $path } не существует родительского каталога.
+runner.io.no_existing_ancestor = Не найден родительский каталог (путь: { $path }).
 runner.io.derive_relative_path = Не удалось вывести относительный путь Ninja.
-runner.io.non_utf8_path = Пути, отличные от UTF-8, не поддерживаются (путь: { $path }).
+runner.io.non_utf8_path = Путь не закодирован в UTF-8 и не поддерживается (путь: { $path }).
 runner.io.write_stdout = Не удалось записать манифест Ninja в стандартный поток вывода.
 runner.io.flush_stdout = Не удалось сбросить буфер стандартного потока вывода.
 runner.io.dyndep.create_dir = Не удалось создать каталог dyndep { $path }.
-runner.io.dyndep.read = Не удалось прочитать созданный файл dyndep по пути { $path }.
-runner.io.dyndep.write = Не удалось записать созданный файл dyndep по пути { $path }.
-runner.io.dyndep.rename = Не удалось завершить созданный файл dyndep по пути { $path }.
-runner.io.dyndep.corrupt = Созданный файл dyndep по пути { $path } не соответствует ожидаемому содержимому; удалите только этот файл и повторите попытку.
-runner.io.dyndep.temp_collisions = После повторных коллизий имён не удалось создать уникальный временный файл dyndep для { $path }.
-runner.io.dyndep.too_large = Созданный файл dyndep по пути { $path } превышает предел проверки в { $limit } байт.
+runner.io.dyndep.read = Не удалось прочитать созданный файл dyndep (путь: { $path }).
+runner.io.dyndep.write = Не удалось записать созданный файл dyndep (путь: { $path }).
+runner.io.dyndep.rename = Не удалось завершить созданный файл dyndep (путь: { $path }).
+runner.io.dyndep.corrupt = Созданный файл dyndep (путь: { $path }) не соответствует ожидаемому содержимому; удалите только этот файл и повторите попытку.
+runner.io.dyndep.temp_collisions = После повторных коллизий имён не удалось создать уникальный временный файл dyndep (путь: { $path }).
+runner.io.dyndep.too_large = Созданный файл dyndep (путь: { $path }) превышает предел проверки в { $limit } байт.
 
 # Диагностика манифеста.
 manifest.parse = Не удалось разобрать манифест.

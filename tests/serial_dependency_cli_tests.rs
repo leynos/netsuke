@@ -253,7 +253,8 @@ fn clean_prunes_only_after_ninja_succeeds() -> Result<()> {
         "prepare serial sidecars: {}",
         String::from_utf8_lossy(&generate.stderr)
     );
-    let current_sidecar_count = dyndep_sidecar_count(&root)?;
+    let current_sidecars = dyndep_sidecar_paths(&root)?;
+    let current_sidecar_count = current_sidecars.len();
     for index in 0..=MAX_OBSOLETE_DYNDEP_FILES {
         root.write(
             format!(".netsuke/dyndep/stale-{index:02}.dd"),
@@ -270,6 +271,18 @@ fn clean_prunes_only_after_ninja_succeeds() -> Result<()> {
     ensure!(
         dyndep_sidecar_count(&root)? <= current_sidecar_count + MAX_OBSOLETE_DYNDEP_FILES,
         "successful clean must apply the obsolete-sidecar retention policy"
+    );
+    for sidecar in &current_sidecars {
+        ensure!(
+            root.read_to_string(sidecar).is_ok(),
+            "successful clean must preserve the current sidecar {sidecar}"
+        );
+    }
+    let ninja = run_ninja_loading_probe(&directory)?;
+    ensure!(
+        ninja.status.success(),
+        "Ninja could not load the serial build after clean: {}",
+        String::from_utf8_lossy(&ninja.stderr)
     );
     Ok(())
 }

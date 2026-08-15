@@ -129,18 +129,17 @@ fn prune_dyndep_sidecars_inner(
     let mut cursor = None;
 
     while retained_paths.len() < policy.max_files {
-        let Some((path, bytes)) =
-            next_obsolete_sidecar_after(dir, &current_paths, cursor.as_deref())?
-        else {
+        let scan = RetentionScan {
+            current_paths: &current_paths,
+            cursor: cursor.as_deref(),
+            remaining_bytes: policy.max_bytes.saturating_sub(retained_bytes),
+        };
+        let Some((path, bytes)) = next_obsolete_sidecar_after(dir, &scan, &mut summary)? else {
             break;
         };
         cursor = Some(path.clone());
-        if retained_bytes.saturating_add(bytes) <= policy.max_bytes {
-            retained_bytes = retained_bytes.saturating_add(bytes);
-            retained_paths.push(path);
-        } else {
-            remove_candidate(dir, &path, bytes, &mut summary)?;
-        }
+        retained_bytes = retained_bytes.saturating_add(bytes);
+        retained_paths.push(path);
     }
 
     remove_unretained_sidecars(dir, &current_paths, &retained_paths, &mut summary)?;
@@ -176,11 +175,18 @@ fn remove_stale_temporary_files(
     Ok(())
 }
 
+/// Inputs for one bounded, lexicographic sidecar-selection pass.
+struct RetentionScan<'paths, 'cursor> {
+    current_paths: &'paths std::collections::HashSet<&'paths str>,
+    cursor: Option<&'cursor Utf8Path>,
+    remaining_bytes: u64,
+}
+
 /// Find the next obsolete sidecar without retaining the directory's full contents.
 fn next_obsolete_sidecar_after(
     dir: &Dir,
-    current_paths: &std::collections::HashSet<&str>,
-    cursor: Option<&Utf8Path>,
+    scan: &RetentionScan<'_, '_>,
+    summary: &mut RetentionSummary,
 ) -> Result<Option<(Utf8PathBuf, u64)>> {
     let mut next: Option<(Utf8PathBuf, u64)> = None;
     for entry_result in dir
@@ -192,17 +198,26 @@ fn next_obsolete_sidecar_after(
             .file_name()
             .with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?;
         let path = Utf8Path::new(DYNDEP_DIR).join(name);
-        if !is_obsolete_sidecar(&path, current_paths) {
+        if !is_obsolete_sidecar(&path, scan.current_paths) {
             continue;
         }
-        if cursor.is_some_and(|after| path.as_str() <= after.as_str()) {
+        if scan
+            .cursor
+            .is_some_and(|after| path.as_str() <= after.as_str())
+        {
+            continue;
+        }
+        let bytes = candidate_size(dir, &path)?;
+        if bytes > scan.remaining_bytes {
+            // Retention only reduces the remaining byte budget, so this
+            // candidate can never become eligible in a later pass.
+            remove_candidate(dir, &path, bytes, summary)?;
             continue;
         }
         if next
             .as_ref()
             .is_none_or(|(candidate, _)| path.as_str() < candidate.as_str())
         {
-            let bytes = candidate_size(dir, &path)?;
             next = Some((path, bytes));
         }
     }

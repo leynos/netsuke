@@ -6,24 +6,26 @@ use metrics_util::{
     CompositeKey, MetricKind,
     debugging::{DebugValue, DebuggingRecorder},
 };
+use std::collections::BTreeMap;
 
 type MetricSnapshotEntry = (CompositeKey, Option<Unit>, Option<SharedString>, DebugValue);
 
-fn successful_retention_count(snapshot: &[MetricSnapshotEntry]) -> Option<u64> {
-    snapshot.iter().find_map(|(key, _, _, debug_value)| {
-        let is_success = key
-            .key()
-            .labels()
-            .any(|label| label.key() == "outcome" && label.value() == "success");
-        match (key.kind(), key.key().name(), is_success, debug_value) {
-            (MetricKind::Counter, name, true, DebugValue::Counter(count))
-                if name == RETENTIONS_TOTAL =>
-            {
-                Some(*count)
-            }
-            _ => None,
+fn retention_outcome_counters(snapshot: &[MetricSnapshotEntry]) -> BTreeMap<Option<&str>, u64> {
+    let mut counters = BTreeMap::new();
+    for (key, _, _, debug_value) in snapshot {
+        if let (MetricKind::Counter, name, DebugValue::Counter(count)) =
+            (key.kind(), key.key().name(), debug_value)
+            && name == RETENTIONS_TOTAL
+        {
+            let outcome = key
+                .key()
+                .labels()
+                .find(|label| label.key() == "outcome")
+                .map(metrics::Label::value);
+            *counters.entry(outcome).or_default() += count;
         }
-    })
+    }
+    counters
 }
 
 fn reclaimed_counter_value(snapshot: &[MetricSnapshotEntry], name: &str) -> Option<u64> {
@@ -58,8 +60,8 @@ fn retention_records_only_a_bounded_success_outcome_and_reclaimed_totals() -> Re
 
     let snapshot = snapshotter.snapshot().into_vec();
     ensure!(
-        successful_retention_count(&snapshot) == Some(1),
-        "retention must record exactly one fixed success outcome"
+        retention_outcome_counters(&snapshot) == BTreeMap::from([(Some("success"), 1)]),
+        "retention must record exactly one success retention outcome"
     );
     ensure!(
         reclaimed_counter_value(&snapshot, RETAINED_FILES_RECLAIMED) == Some(1),

@@ -421,6 +421,9 @@ criterion in issue #552 and all repository gates pass.
   multi-pass scan carries only one lexicographic path and its byte length. The
   1,000-sidecar regression now proves that a sufficient budget retains exactly
   the first two obsolete paths while preserving the current bundle sidecar.
+- [x] (2026-08-15) Re-verified the reviewed code, runtime, and locale findings
+  against the current implementation and fixed the valid issues. The
+  regression covers 1,000 non-fitting sidecars.
 
 ## Surprises and discoveries
 
@@ -559,6 +562,11 @@ criterion in issue #552 and all repository gates pass.
   using only that set plus one cursor prevents a large historical cache from
   increasing process memory while preserving deterministic path order.
   **Date:** 2026-08-15.
+- **Decision:** preserve exact lexicographic greedy byte-budget semantics with
+  bounded multi-pass scans; an arbitrary one-pass `read_dir` scan cannot
+  implement that policy without changing semantics. Each pass removes
+  candidates larger than the remaining budget, limiting scans to the fixed
+  file-cap selection passes plus final cleanup. **Date:** 2026-08-15.
 
 - **Decision:** use staged Ninja dyndep files rather than an order-only gate
   chain, a pool, or recursive builds. **Rationale:** it is the only evaluated
