@@ -41,8 +41,7 @@ fn marker_emitting_ninja() -> Result<(TempDir, PathBuf)> {
     let dir = tempdir().context("create fake-ninja directory")?;
     let script = format!(
         "#!/bin/sh\nprintf '%s\\n' '{STDOUT_MARKER}'\nprintf '%s\\n' '{STDERR_MARKER}' >&2\n\
-         touch \"${}\"\nexit 0\n",
-        RAN_FILE_ENV,
+         touch \"${RAN_FILE_ENV}\"\nexit 0\n",
     );
     let path = write_exec_with_content(dir.path(), "fake-ninja", &script)
         .context("write fake ninja executable")?;
