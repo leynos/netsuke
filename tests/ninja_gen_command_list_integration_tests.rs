@@ -10,6 +10,7 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use netsuke::ast::{Recipe, StringOrList};
 use netsuke::ir::{Action, BuildEdge, BuildGraph};
 use netsuke::ninja_gen::{NinjaGenError, generate};
+use rstest::rstest;
 use std::process::Command;
 use tempfile::TempDir;
 use test_support::ninja_gen::ninja_integration_setup;
@@ -308,25 +309,25 @@ fn command_list_background_failure_waits_before_the_next_entry() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn command_list_rejects_multiple_background_jobs() -> Result<()> {
+#[rstest]
+#[case::multiple_background_jobs(
+    "true & sh -c 'sleep 0.1; exit 1' &",
+    "echo unexpected > continued-after-multiple-background-jobs.txt",
+    "multiple background jobs should be rejected before Ninja runs"
+)]
+#[case::nested_eval_background_jobs(
+    "eval 'false & true &'",
+    "echo unexpected > continued-after-nested-eval.txt",
+    "nested eval background jobs should be rejected before Ninja runs"
+)]
+fn command_list_rejects_unattributable_background_jobs(
+    #[case] entry: &str,
+    #[case] later_entry: &str,
+    #[case] expectation: &str,
+) -> Result<()> {
     assert_multiple_background_jobs_are_rejected(
-        vec![
-            "true & sh -c 'sleep 0.1; exit 1' &".into(),
-            "echo unexpected > continued-after-multiple-background-jobs.txt".into(),
-        ],
-        "multiple background jobs should be rejected before Ninja runs",
-    )
-}
-
-#[test]
-fn command_list_rejects_nested_eval_background_jobs_before_later_entries() -> Result<()> {
-    assert_multiple_background_jobs_are_rejected(
-        vec![
-            "eval 'false & true &'".into(),
-            "echo unexpected > continued-after-nested-eval.txt".into(),
-        ],
-        "nested eval background jobs should be rejected before Ninja runs",
+        vec![entry.into(), later_entry.into()],
+        expectation,
     )
 }
 
