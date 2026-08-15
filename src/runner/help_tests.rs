@@ -229,7 +229,7 @@ fn catalogue_target(names: Vec<String>, description: Option<String>, phony: bool
     Target {
         name: crate::ast::StringOrList::List(names),
         recipe: crate::ast::Recipe::Command {
-            command: "true".to_owned(),
+            command: crate::ast::StringOrList::String("true".to_owned()),
         },
         sources: crate::ast::StringOrList::Empty,
         deps: crate::ast::StringOrList::Empty,

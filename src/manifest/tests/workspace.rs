@@ -273,62 +273,6 @@ fn manifest_query_rejects_restricted_template_helpers(
     );
     Ok(())
 }
-/// Discovery queries must reject helpers that could cause side effects or
-/// disclose host data before a catalogue is rendered.
-#[rstest]
-#[case::fetch("{{ fetch('https://example.invalid', cache=true) }}", "fetch")]
-#[case::shell("{{ 'ignored' | shell('printf side-effect') }}", "shell")]
-#[case::grep("{{ 'ignored' | grep('ignored') }}", "grep")]
-#[case::env("{{ env('PATH') }}", "env")]
-#[case::glob("{{ glob('*') }}", "glob")]
-#[case::expanduser("{{ '~' | expanduser }}", "expanduser")]
-#[case::contents("{{ 'secret.txt' | contents }}", "contents")]
-#[case::realpath("{{ 'secret.txt' | realpath }}", "realpath")]
-#[case::size("{{ 'secret.txt' | size }}", "size")]
-#[case::linecount("{{ 'secret.txt' | linecount }}", "linecount")]
-#[case::hash("{{ 'secret.txt' | hash }}", "hash")]
-#[case::digest("{{ 'secret.txt' | digest }}", "digest")]
-#[case::file_test("{{ 'secret.txt' is file }}", "file")]
-#[case::which("{{ which('sh') }}", "which")]
-#[case::command_available("{{ command_available('sh') }}", "command_available")]
-fn manifest_query_rejects_restricted_template_helpers(
-    #[case] expression: &str,
-    #[case] helper: &str,
-) -> AnyResult<()> {
-    let temp = tempdir().context("create manifest-query workspace")?;
-    let manifest_path = temp.path().join("Netsukefile");
-    test_fs::write(temp.path().join("secret.txt"), QUERY_SECRET)?;
-    let manifest = format!(
-        concat!(
-            "netsuke_version: \"1.0.0\"\n",
-            "targets:\n",
-            "  - name: discovery\n",
-            "    description: >-\n",
-            "      {}\n",
-            "    command: echo discovery\n",
-        ),
-        expression,
-    );
-    test_fs::write(&manifest_path, manifest)?;
-
-    let error = from_path_for_manifest_query(&manifest_path, None)
-        .expect_err("manifest query should reject restricted template helpers");
-    ensure!(
-        error
-            .chain()
-            .any(|cause| cause.to_string().contains(helper)),
-        "query should name its rejected helper: {error:?}"
-    );
-    ensure!(
-        !error.to_string().contains(QUERY_SECRET),
-        "a query error must not disclose local file contents: {error:?}"
-    );
-    ensure!(
-        !temp.path().join(".netsuke").exists(),
-        "a rejected query must not create a fetch cache"
-    );
-    Ok(())
-}
 #[test]
 fn manifest_query_rejects_clock_dependent_template_helpers() -> AnyResult<()> {
     let temp = tempdir().context("create clock-free manifest-query workspace")?;
