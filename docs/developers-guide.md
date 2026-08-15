@@ -510,21 +510,26 @@ deviation from upstream" callout, and record Netsuke-specific policy here and in
 
 Prefer `excluded_paths` over `excluded_crates`: a path entry exempts one module
 and its descendants, whereas a crate entry exempts a whole compilation unit.
-The application crate is scoped this way — only
+The application crate's module-scoped exemptions include
 `netsuke::stdlib::which::lookup` (executable discovery through `PATH` and
 cross-directory symlink canonicalization, which `cap_std` cannot express) and
 `netsuke::runner::process::file_io::ambient_sync` (temporary-file
 synchronization, scoped to the submodule holding only that `sync_all` so the
-rest of `file_io` keeps writing through `cap_std` handles), and
-`netsuke::cli::discovery::paths` (canonicalizing an ambient `--directory` to
-match OrthoConfig's layer paths) are exempt; the rest of `netsuke` stays under
-the capability policy. The behavioural step definitions, CLI integration tests,
-and shared workflow-reading helper that stage fixtures ambiently are scoped the
-same way. A crate-level entry is justified only when the ambient access lives
-in the crate root itself, where a path entry would be no narrower — that covers
-the Cargo build script and the enumerated integration-test crates. The
-`test_support` crate uses capability-backed fixture helpers and remains linted
-by Whitaker under its own narrow policy.
+rest of `file_io` keeps writing through `cap_std` handles). Configuration
+discovery otherwise uses capability-scoped canonicalization. Its small,
+dedicated path-normalization module, `netsuke::cli::discovery::paths`, remains
+narrowly excluded because `std::fs::canonicalize` preserves the absolute
+comparison keys and cross-directory symlink behaviour that `cap_std` rejects.
+The build-script copy is scoped separately as
+`build_script_build::cli::discovery::paths`; neither the broader
+`netsuke::cli::discovery` module nor the entire `build_script_build` crate is
+exempt. The rest of `netsuke` stays under the capability policy. The behavioural
+step definitions, CLI integration tests, and shared workflow-reading helper
+that stage fixtures ambiently are scoped the same way. A crate-level entry is
+justified only when the ambient access lives in the crate root itself, where a
+path entry would be no narrower — that covers the enumerated integration-test
+crates. The `test_support` crate uses capability-backed fixture helpers and
+remains linted by Whitaker under its own narrow policy.
 
 `test_support` is a workspace member, but the root Whitaker invocation selects
 only the `netsuke-build` package (the Cargo package name behind the `netsuke`
@@ -541,12 +546,10 @@ configuration names only `test_support::fs` in `excluded_paths`. The root
 crate remains subject to the filesystem policy.
 
 Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
-allows. The lint does honour in-source lint attributes, but this repository
-denies `clippy::allow_attributes`, so `#[allow(no_std_fs_operations)]` will not
-compile here; an in-source exemption must be a *temporary*, item-level
-`#[expect(no_std_fs_operations, reason = "…")]` that states the reason and the
-route back to compliance. Prefer migrating to `cap_std` over any of these;
-reach for an exclusion only when the operation is irreducibly ambient.
+allows. Do not use Rust `#[allow]` or `#[expect]` for `no_std_fs_operations`:
+this Dylint lint is not known to `rustc`, so its exclusions must be configured
+there. Prefer migrating to `cap_std` over any of these; reach for an exclusion
+only when the operation is irreducibly ambient.
 
 To confirm the exclusions have not silently widened, add a temporary
 `std::fs::metadata` call to an unexcluded module — for example

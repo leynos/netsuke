@@ -254,6 +254,23 @@ implement it until the user explicitly approves the draft.
 - [x] (2026-08-14) Ran the exact post-rebase gates: `make check-fmt`,
   `make test` (1,992 non-doctests and all doctests), `make typecheck`, and
   `make lint`; all passed. Published PR #558 at the final branch head.
+- [x] (2026-08-15) Addressed the post-turn Whitaker
+  `no_std_fs_operations` finding: `build.rs` and
+  `build_l10n_audit::read_source` now use capability-scoped directory reads,
+  while discovery retains only the dedicated path-normalization module
+  exclusions at `netsuke::cli::discovery::paths` and
+  `build_script_build::cli::discovery::paths`, needed for
+  OrthoConfig-compatible absolute comparison keys and cross-directory symlinks.
+  The focused `normalized_path_key_follows_cross_directory_symlinks` test
+  proves that compatibility. The broad discovery-module and build-script crate
+  exclusions were removed; the final gate evidence is recorded below.
+- [x] (2026-08-15) Completed the post-remediation gates. The initial
+  `make lint` run found only three Clippy `doc_markdown` backtick omissions in
+  `discovery_paths` Rustdoc; after correction, `make check-fmt`, `make test`
+  (1,993 nextest tests, one skipped; 100 doctests passed, 28 ignored),
+  `make typecheck`, `make lint` (docs, Clippy, and Whitaker),
+  `make markdownlint` (81 files, 0 errors), `make nixie`, and
+  `git diff --check` all passed.
 
 ## Surprises & discoveries
 
@@ -366,6 +383,40 @@ implement it until the user explicitly approves the draft.
   showed no pertinent overlap with the fixture no-clobber changes. Impact: no
   additional conflict resolution or plan amendment was needed.
 
+- Observation: the post-turn Whitaker lint found valid ambient filesystem I/O
+  in the build script, the localization audit's `read_source`, and the
+  discovery path normalizer. Evidence: the `no_std_fs_operations` report
+  identified those operations after the earlier migration gates. Impact:
+  build-script and audit reads now open directory capabilities with `cap_std`,
+  and the stale build-script crate and broad discovery-module exclusions are
+  removed; only the dedicated path-normalization modules remain excluded.
+
+- Observation: capability-scoped canonicalization cannot replace the discovery
+  normalizer completely. Evidence: the focused Unix test
+  `normalized_path_key_follows_cross_directory_symlinks` requires an alias in
+  one directory to resolve to its target in another, which `cap_std` rejects
+  when the symlink leaves the capability root. Impact: retain absolute
+  canonical comparison keys and this cross-directory symlink behaviour through
+  `std::fs::canonicalize`, with exclusions limited to the dedicated
+  path-normalization modules in the library and build-script paths rather than
+  exempting the broader discovery module or build-script crate.
+
+- Observation: the first post-remediation gate set found only documentation
+  lint omissions. Evidence: `make check-fmt`, `make test` (1,993 nextest tests
+  and doctests), `make typecheck`, `make markdownlint`, `make nixie`, and
+  `git diff --check` passed, while `make lint` reported three Clippy
+  `doc_markdown` backtick omissions in `discovery_paths` Rustdoc. Impact: the
+  three omissions were corrected, and the final lint rerun passed with the
+  documentation, Clippy, and Whitaker checks green.
+
+- Observation: Whitaker `excluded_paths` matches module boundaries rather than
+  arbitrary nested implementation scopes. Evidence: the attempted inner
+  `ambient` submodule exclusion did not match the reported path, while the
+  dedicated `discovery::paths` module did. Impact: replace the unsupported
+  inner scope with the minimal library and build-script `discovery::paths`
+  exclusions; the broader discovery module and build-script crate remain
+  covered by the capability policy.
+
 ## Decision Log
 
 - Decision: preserve the current feature-based module layout and apply
@@ -472,6 +523,28 @@ implement it until the user explicitly approves the draft.
   `make lint` all passed, including 1,992 non-doctest tests and the doctests.
   Date/Author: 2026-08-14 / Codex.
 
+- Decision: replace the build script's and localization audit's ambient file
+  reads with `cap_std` directory capabilities. Rationale: those reads have
+  stable parent-directory boundaries and do not require the ambient authority
+  that the post-turn Whitaker finding exposed. Date/Author: 2026-08-15 / Codex.
+
+- Decision: retain narrowly scoped Whitaker exclusions for the dedicated
+  path-normalization modules at `netsuke::cli::discovery::paths` and
+  `build_script_build::cli::discovery::paths`. Rationale:
+  `std::fs::canonicalize` preserves the absolute comparison keys and
+  cross-directory symlink behaviour required to match OrthoConfig, while
+  `cap_std` rejects that symlink case. The focused existing path test is the
+  compatibility evidence; neither the discovery module nor build-script crate
+  is broadly exempt, and no Rust `#[expect]` is used for this Dylint lint.
+  Date/Author: 2026-08-15 / Codex.
+
+- Decision: record the final post-remediation gate result in this plan.
+  Rationale: the focused compatibility evidence and the final gate set both
+  passed after correcting three `doc_markdown` findings. The earlier
+  post-rebase gate results remain historical evidence, while this later run is
+  the final all-green result for the remediation. Date/Author: 2026-08-15 /
+  Codex.
+
 ## Outcomes & retrospective
 
 The migration is complete. Runtime and build-time dependencies now resolve
@@ -496,11 +569,12 @@ introduced. The user guide, design, ADR 004, developer guidance, and document
 index now describe the resulting behaviour and ownership conventions.
 
 `make check-fmt`, `make typecheck`, `make lint`, `make test`,
-`make markdownlint`, and `make nixie` passed at the final milestone. CodeRabbit
-reported zero findings for Milestones 1–4, 5, and 6. The only deferred item is
-configuration and parser metadata convergence: generated release help still
-cannot represent parser-only `--config` and subcommand metadata. That is a
-separate public metadata design decision, not a v0.9.0 compatibility defect.
+`make markdownlint`, and `make nixie` passed at the 2026-08-14 final milestone,
+before the post-turn capability remediation. CodeRabbit reported zero findings
+for Milestones 1–4, 5, and 6. The only deferred item is configuration and
+parser metadata convergence: generated release help still cannot represent
+parser-only `--config` and subcommand metadata. That is a separate public
+metadata design decision, not a v0.9.0 compatibility defect.
 
 The follow-up review found one stale documentation signature, which was
 corrected in `docs/developers-guide.md`; all other findings were already fixed.
@@ -511,6 +585,20 @@ confirmed no pertinent overlap with the fixture no-clobber changes. The exact
 post-rebase gates (`make check-fmt`, `make test`, `make typecheck`, and
 `make lint`) passed, with 1,992 non-doctest tests and all doctests succeeding.
 PR #558 was published at final head `c12ce72a`.
+
+The post-turn Whitaker remediation is recorded above: build-script and
+localization-audit reads use `cap_std` directory capabilities, and the
+discovery normalizer retains only its focused `discovery::paths` module
+exclusions. The unsupported inner `ambient` scope was replaced after Whitaker
+path-match evidence; the broader discovery module and build-script crate remain
+under the capability policy.
+
+The first post-remediation lint run found only three Clippy `doc_markdown`
+backtick omissions in `discovery_paths` Rustdoc. After those corrections, the
+final gates passed: `make check-fmt`; `make test` with 1,993 nextest tests, one
+skipped test, and 100 doctests passed with 28 ignored; `make typecheck`;
+`make lint` including docs, Clippy, and Whitaker; `make markdownlint` over 81
+files with 0 errors; `make nixie`; and `git diff --check`.
 
 ## Context and orientation
 
@@ -1089,8 +1177,28 @@ Green/refactor evidence:
   discovery outcomes
 - metadata and release-help tests: passed, including Unix and Windows smoke
   layouts
-- final gates: passed after the final rebase; `make test` reported 1,992
-  non-doctests and all doctests
+- prior final gates: passed after the final rebase; `make test` reported 1,992
+  non-doctests and all doctests, before the post-turn remediation
+
+Post-turn Whitaker remediation:
+- `build.rs` and `build_l10n_audit::read_source` use `cap_std` directory
+  capabilities for their stable parent-directory reads
+- stale build-script crate and broad discovery-module exclusions were removed
+- `netsuke::cli::discovery::paths` and
+  `build_script_build::cli::discovery::paths` remain the only discovery
+  exclusions, preserving `std::fs::canonicalize`'s absolute comparison keys
+  and cross-directory symlink behaviour; the attempted inner `ambient` scope
+  was replaced because Whitaker matches module boundaries
+- `normalized_path_key_follows_cross_directory_symlinks` passed as focused
+  compatibility evidence
+- initial `make lint` failed only on three Clippy `doc_markdown` backtick
+  omissions in `discovery_paths` Rustdoc; the omissions were corrected
+- final post-remediation gates: `make check-fmt` passed; `make test` passed with
+  1,993 nextest tests, one skipped test, and 100 doctests passed with 28
+  ignored; `make typecheck` passed; `make lint` passed including docs, Clippy,
+  and Whitaker; `make markdownlint` passed over 81 files with 0 errors; and
+  `make nixie` plus `git diff --check` passed
+- final all-green full-gate result confirmed after the documentation corrections
 
 Review/rebase/publication evidence:
 - review correction: `project_scope_file(...) -> Option<PathBuf>` documented in
@@ -1200,3 +1308,30 @@ Revised, 2026-08-14: recorded the review correction for the
 findings, the conflict-aware narrow lockfile rebase, the clean rebase onto
 `origin/main` at `69286cdf`, the final gate results, and publication of PR #558
 at `c12ce72a`.
+
+Revised, 2026-08-15: recorded the post-turn Whitaker ambient-I/O findings and
+the capability-scoped conversions in `build.rs` and
+`build_l10n_audit::read_source`. The broad discovery-module and build-script
+crate exclusions were removed, while the focused library and build-script
+`discovery::paths` module exclusions remain because the existing
+cross-directory symlink test proves that `std::fs::canonicalize` is required
+for OrthoConfig-compatible absolute comparison keys. Earlier gate results are
+marked as pre-remediation; the final all-green gate result is recorded below.
+
+Revised, 2026-08-15: recorded the post-remediation gate set, including 1,993
+nextest tests, one skipped test, 100 doctests passed with 28 ignored,
+`markdownlint` over 81 files with 0 errors, and the three Clippy `doc_markdown`
+backtick omissions found and corrected before the final lint rerun.
+
+Revised, 2026-08-15: corrected the Whitaker scope record after path-match
+evidence showed that `excluded_paths` applies at module boundaries. The
+unsupported inner `ambient` scope was replaced with the dedicated library and
+build-script `discovery::paths` module exclusions; the broader discovery module
+and build-script crate remain covered. The final post-remediation gates then
+passed, including docs, Clippy, Whitaker, Markdown, Mermaid, and diff checks.
+
+Revised, 2026-08-15: recorded the final all-green post-remediation gates:
+`make check-fmt`, `make test`, `make typecheck`, `make lint`,
+`make markdownlint`, `make nixie`, and `git diff --check`, with the exact test
+and documentation counts captured in `Progress`, `Outcomes & retrospective`, and
+`Artefacts and notes`.

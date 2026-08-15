@@ -12,7 +12,7 @@ pub(super) trait PathNormalizer {
     fn normalize(&self, path: &Path) -> io::Result<PathBuf>;
 }
 
-/// Production normalizer backed by [`std::fs::canonicalize`].
+/// Production normalizer that exactly mirrors `OrthoConfig`'s canonical paths.
 #[derive(Debug, Default, Clone, Copy)]
 pub(super) struct FsPathNormalizer;
 

@@ -6,10 +6,11 @@
 //! - Audit localization keys declared in `src/localization/keys.rs` against the Fluent bundles
 //!   in `locales/*/messages.ftl`, failing the build if any declared key is missing from a
 //!   locale.
+use cap_std::{ambient_authority, fs::Dir};
 use clap::CommandFactory;
 use clap_mangen::Man;
 use std::{
-    env, fs,
+    env,
     path::{Path, PathBuf},
 };
 use time::{OffsetDateTime, format_description::well_known::Iso8601};
@@ -127,15 +128,22 @@ fn out_dir_for_target_profile() -> PathBuf {
 }
 
 fn write_man_page(data: &[u8], dir: &Path, page_name: &str) -> std::io::Result<PathBuf> {
-    fs::create_dir_all(dir)?;
-    let destination = dir.join(page_name);
-    let tmp = dir.join(format!("{page_name}.tmp"));
-    fs::write(&tmp, data)?;
-    if destination.exists() {
-        fs::remove_file(&destination)?;
+    let man_dir = if dir.is_relative() {
+        let working_dir = Dir::open_ambient_dir(".", ambient_authority())?;
+        working_dir.create_dir_all(dir)?;
+        working_dir.open_dir(dir)?
+    } else {
+        // Cargo creates `OUT_DIR` before the build script runs, so this boundary
+        // can narrow the build process's ambient authority to that directory.
+        Dir::open_ambient_dir(dir, ambient_authority())?
+    };
+    let temporary_name = format!("{page_name}.tmp");
+    man_dir.write(&temporary_name, data)?;
+    if man_dir.metadata(page_name).is_ok() {
+        man_dir.remove_file(page_name)?;
     }
-    fs::rename(&tmp, &destination)?;
-    Ok(destination)
+    man_dir.rename(&temporary_name, &man_dir, page_name)?;
+    Ok(dir.join(page_name))
 }
 
 fn emit_rerun_directives() {
