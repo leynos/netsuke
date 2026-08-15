@@ -1,5 +1,6 @@
 # Netsuke CLI localisation resources (British English, Oxford spelling).
 
+runner.io.dyndep.retention = Failed to apply generated dyndep retention beneath { $path }.
 cli.about = Netsuke compiles YAML + Jinja manifests into Ninja build plans.
 cli.long_about = Netsuke transforms YAML + Jinja manifests into reproducible Ninja graphs and runs Ninja with safe defaults.
 cli.usage = { $usage }

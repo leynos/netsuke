@@ -1,5 +1,6 @@
 # Netsuke की कमांड लाइन के लिए स्थानीयकरण संसाधन।
 
+runner.io.dyndep.retention = बनाई गई dyndep को { $path } के नीचे बनाए रखने की प्रक्रिया लागू नहीं की जा सकी।
 cli.about = Netsuke YAML + Jinja मैनिफ़ेस्ट को Ninja की बिल्ड योजनाओं में संकलित करता है।
 cli.long_about = Netsuke YAML + Jinja मैनिफ़ेस्ट को पुनरुत्पादनीय Ninja ग्राफ़ में बदलता है और सुरक्षित डिफ़ॉल्ट मानों के साथ Ninja चलाता है।
 cli.usage = { $usage }

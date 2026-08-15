@@ -13,9 +13,7 @@
 //! an atomic rename so concurrent Netsuke processes cannot observe partial
 //! content.
 
-#[path = "dyndep_telemetry.rs"]
-mod telemetry;
-
+use super::{dyndep_retention::DyndepPublicationLease, dyndep_telemetry as telemetry};
 use crate::localization::{self, keys};
 use crate::ninja_gen::GeneratedDyndep;
 use anyhow::{Context, Result, anyhow};
@@ -46,25 +44,32 @@ const MAX_VERIFIED_DYNDEP_SIZE: u64 = 16 * 1024 * 1024;
 /// is empty. Otherwise returns an error if the `.netsuke/dyndep` directory
 /// cannot be created, or if any sidecar write, rename, or content verification
 /// fails.
-pub(crate) fn materialize_dyndep_files(dir: &Dir, dyndep_files: &[GeneratedDyndep]) -> Result<()> {
+pub(crate) fn materialize_dyndep_files(
+    dir: &Dir,
+    dyndep_files: &[GeneratedDyndep],
+) -> Result<DyndepPublicationLease> {
     telemetry::instrument_materialization(dyndep_files.len(), || {
         materialize_dyndep_files_inner(dir, dyndep_files)
     })
 }
 
 /// Apply the sidecar publication command through the supplied capability.
-fn materialize_dyndep_files_inner(dir: &Dir, dyndep_files: &[GeneratedDyndep]) -> Result<()> {
+fn materialize_dyndep_files_inner(
+    dir: &Dir,
+    dyndep_files: &[GeneratedDyndep],
+) -> Result<DyndepPublicationLease> {
     if dyndep_files.is_empty() {
-        return Ok(());
+        return Ok(DyndepPublicationLease::empty());
     }
     dir.create_dir_all(DYNDEP_DIR).with_context(|| {
         localization::message(keys::RUNNER_IO_DYNDEP_CREATE_DIR)
             .with_arg("path", DYNDEP_DIR.to_owned())
     })?;
+    let lease = DyndepPublicationLease::acquire(dir)?;
     for sidecar in dyndep_files {
         materialize_one(dir, sidecar)?;
     }
-    Ok(())
+    Ok(lease)
 }
 
 /// Materialize one sidecar idempotently and atomically.

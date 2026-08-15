@@ -3,7 +3,8 @@
 use super::{
     ExecutionContext, NinjaToolSpec, generate_ninja, graph, handle_build, handle_ninja_tool, help,
     ExecutionContext, NinjaContent, NinjaToolSpec, generate_ninja, graph, handle_build,
-    handle_ninja_tool, materialize_dyndep_bundle, process, resolve_output_path,
+    handle_ninja_tool, materialize_dyndep_bundle, process, prune_dyndep_bundle,
+    resolve_output_path,
 };
 use crate::cli::{BuildArgs, Cli, Commands, HelpArgs, HelpTopic};
 use crate::localization::keys;
@@ -11,6 +12,12 @@ use crate::result_json;
 use anyhow::{Context, Result};
 
 
+//! Dispatch parsed commands and emit their successful JSON result documents.
+};
+
+
+//! Dispatch parsed commands and emit their successful JSON result documents.
+};
 //! Dispatch parsed commands and emit their successful JSON result documents.
 };
 
@@ -50,7 +57,8 @@ fn execute_generate(
     context: &ExecutionContext<'_>,
 ) -> Result<()> {
     let bundle = generate_ninja(cli, context.reporter, None)?;
-    materialize_dyndep_bundle(cli, &bundle)?;
+    let publication = materialize_dyndep_bundle(cli, &bundle)?;
+    prune_dyndep_bundle(cli, bundle.dyndep_files(), &publication)?;
     let ninja = NinjaContent::new(bundle.into_parts().0);
     if let Some(file) = output {
         let output_path = resolve_output_path(cli, file.as_path());
@@ -63,11 +71,14 @@ fn execute_generate(
     context
         .reporter
         .report_complete(keys::STATUS_TOOL_GENERATE.into());
-    if output.is_some() {
-        write_json_result(cli, "generate", None)
+    let json_result = if output.is_some() {
+        write_json_result(cli, "generate", None)?;
+        Ok(())
     } else {
         Ok(())
-    }
+    };
+    drop(publication);
+    json_result
 }
 
 fn execute_clean(cli: &Cli, context: &ExecutionContext<'_>) -> Result<()> {
@@ -76,6 +87,7 @@ fn execute_clean(cli: &Cli, context: &ExecutionContext<'_>) -> Result<()> {
         NinjaToolSpec {
             name: "clean",
             key: keys::STATUS_TOOL_CLEAN.into(),
+            prune_after_success: true,
         },
         context,
     )?;

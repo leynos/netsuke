@@ -51,6 +51,7 @@ pub use process::{
     run_ninja_with,
 };
 
+use dyndep_publication::{materialize_dyndep_bundle, prune_dyndep_bundle};
 use path_helpers::{ensure_manifest_exists_or_error, resolve_manifest_path, resolve_output_path};
 
 /// Runtime dependencies shared by command dispatch handlers.
@@ -226,7 +227,8 @@ fn on_task_progress_callback(reporter: &dyn StatusReporter) -> impl FnMut(u32, u
 /// Returns an error if manifest generation or Ninja execution fails.
 fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> Result<()> {
     let bundle = generate_ninja(cli, context.reporter, Some(keys::STATUS_TOOL_BUILD.into()))?;
-    materialize_dyndep_bundle(cli, &bundle)?;
+    let publication = materialize_dyndep_bundle(cli, &bundle)?;
+    prune_dyndep_bundle(cli, bundle.dyndep_files(), &publication)?;
     let ninja = NinjaContent::new(bundle.into_parts().0);
     let targets = if args.targets.is_empty() {
         BuildTargets::new(&cli.default_targets)
@@ -264,6 +266,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> 
     context
         .reporter
         .report_complete(keys::STATUS_TOOL_BUILD.into());
+    drop(publication);
     Ok(())
 }
 
@@ -272,6 +275,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> 
 struct NinjaToolSpec<'a> {
     name: &'a str,
     key: LocalizationKey,
+    prune_after_success: bool,
 }
 
 /// Execute a Ninja tool using a temporary build file and CLI settings.
@@ -290,8 +294,9 @@ fn handle_ninja_tool(
         "Preparing Ninja tool invocation"
     );
     let bundle = generate_ninja(cli, context.reporter, Some(tool.key))?;
-    materialize_dyndep_bundle(cli, &bundle)?;
-    let ninja = NinjaContent::new(bundle.into_parts().0);
+    let publication = materialize_dyndep_bundle(cli, &bundle)?;
+    let (ninja_file, dyndep_files) = bundle.into_parts();
+    let ninja = NinjaContent::new(ninja_file);
 
     let tmp = process::create_temp_ninja_file(&ninja)?;
     let build_path = tmp.path();
@@ -321,7 +326,11 @@ fn handle_ninja_tool(
     } else {
         run_ninja_tool(context.ninja_program, cli, build_path, tool.name).with_context(ctx)?;
     }
+    if tool.prune_after_success {
+        prune_dyndep_bundle(cli, &dyndep_files, &publication)?;
+    }
     context.reporter.report_complete(tool.key);
+    drop(publication);
     Ok(())
 }
 

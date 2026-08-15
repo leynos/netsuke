@@ -1,5 +1,6 @@
 # Lokalisatiebronnen voor de opdrachtregel van Netsuke.
 
+runner.io.dyndep.retention = De retentie van het gegenereerde dyndep-bestand onder { $path } kon niet worden toegepast.
 cli.about = Netsuke compileert YAML- en Jinja-manifesten tot Ninja-bouwplannen.
 cli.long_about = Netsuke zet YAML- en Jinja-manifesten om in reproduceerbare Ninja-grafen en voert Ninja uit met veilige standaardwaarden.
 cli.usage = { $usage }

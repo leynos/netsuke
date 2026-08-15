@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::ninja_gen::GeneratedDyndep;
+use crate::runner::process::dyndep_retention::{RetentionPolicy, prune_dyndep_sidecars};
 use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;
 use metrics_util::MetricKind;
@@ -162,8 +163,9 @@ fn oversized_existing_sidecar_is_rejected() -> Result<()> {
     let oversized_size = usize::try_from(MAX_VERIFIED_DYNDEP_SIZE + 1)?;
     dir.write(rel, vec![b'x'; oversized_size])?;
 
-    let error = materialize_dyndep_files(&dir, &[sidecar(rel, "expected")])
-        .expect_err("an oversized existing sidecar must be rejected");
+    let Err(error) = materialize_dyndep_files(&dir, &[sidecar(rel, "expected")]) else {
+        anyhow::bail!("an oversized existing sidecar must be rejected");
+    };
     let expected = localization::message(keys::RUNNER_IO_DYNDEP_TOO_LARGE)
         .with_arg("path", rel)
         .with_arg("limit", MAX_VERIFIED_DYNDEP_SIZE)
@@ -293,6 +295,32 @@ fn matching_final_sidecar_succeeds_with_another_temp_file() -> Result<()> {
     write_atomic(&dir, rel, content)?;
 
     ensure_matching(&dir, rel.as_str(), content)
+}
+
+#[test]
+fn retention_prunes_historical_sidecars_but_keeps_the_current_bundle() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let dir = temp_dir(&temp)?;
+    dir.create_dir_all(DYNDEP_DIR)?;
+    dir.write(".netsuke/dyndep/stale-a.dd", "stale-a")?;
+    dir.write(".netsuke/dyndep/stale-b.dd", "stale-b")?;
+    let current = sidecar(".netsuke/dyndep/current.dd", "current");
+
+    let lease = materialize_dyndep_files(&dir, std::slice::from_ref(&current))?;
+    prune_dyndep_sidecars(
+        &dir,
+        &lease,
+        std::slice::from_ref(&current),
+        RetentionPolicy::new(1, 8),
+    )?;
+
+    ensure_matching(&dir, current.relative_path().as_str(), current.content())?;
+    ensure!(
+        dir.open(".netsuke/dyndep/stale-a.dd").is_err()
+            || dir.open(".netsuke/dyndep/stale-b.dd").is_err(),
+        "retention must evict historical sidecars above its file-count budget"
+    );
+    Ok(())
 }
 
 fn ensure_matching(dir: &Dir, path: &str, expected: &str) -> Result<()> {

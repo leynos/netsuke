@@ -1,5 +1,6 @@
 # موارد التوطين لواجهة سطر الأوامر في Netsuke.
 
+runner.io.dyndep.retention = ‏ تعذّر تطبيق الاحتفاظ بـ dyndep المُنشأ أسفل ‏{ $path }.
 cli.about = يصرّف Netsuke بيانات YAML + Jinja إلى خطط بناء بصيغة Ninja.
 cli.long_about = يحوّل Netsuke بيانات YAML + Jinja إلى رسوم Ninja قابلة لإعادة الإنتاج، ثم ينفّذ Ninja بإعدادات افتراضية آمنة.
 cli.usage = { $usage }

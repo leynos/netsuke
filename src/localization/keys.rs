@@ -102,6 +102,7 @@ define_keys! {
     RUNNER_IO_DYNDEP_CORRUPT => "runner.io.dyndep.corrupt",
     RUNNER_IO_DYNDEP_TEMP_COLLISIONS => "runner.io.dyndep.temp_collisions",
     RUNNER_IO_DYNDEP_TOO_LARGE => "runner.io.dyndep.too_large",
+    RUNNER_IO_DYNDEP_RETENTION => "runner.io.dyndep.retention",
     MANIFEST_PARSE => "manifest.parse",
     MANIFEST_STRUCTURE_ERROR => "manifest.structure_error",
     MANIFEST_YAML_PARSE => "manifest.yaml.parse",

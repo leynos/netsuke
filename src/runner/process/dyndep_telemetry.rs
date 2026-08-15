@@ -12,6 +12,11 @@ use tracing::field;
 pub(super) const MATERIALIZATIONS_TOTAL: &str = "netsuke_runner_dyndep_materializations_total";
 pub(super) const MATERIALIZATION_DURATION: &str =
     "netsuke_runner_dyndep_materialization_duration_seconds";
+pub(super) const RETENTIONS_TOTAL: &str = "netsuke_runner_dyndep_retentions_total";
+pub(super) const RETAINED_FILES_RECLAIMED: &str =
+    "netsuke_runner_dyndep_retained_files_reclaimed_total";
+pub(super) const RETAINED_BYTES_RECLAIMED: &str =
+    "netsuke_runner_dyndep_retained_bytes_reclaimed_total";
 
 /// Record a complete dyndep materialization command.
 pub(super) fn instrument_materialization<T>(
@@ -49,6 +54,29 @@ pub(super) fn instrument_sidecar_materialization<T>(
     result
 }
 
+/// Record one bounded retention command without exposing sidecar identities.
+pub(super) fn instrument_retention<T>(
+    retain: impl FnOnce() -> Result<T>,
+    reclaimed: impl FnOnce(&T) -> (u64, u64),
+) -> Result<T> {
+    describe_metrics();
+    let span = tracing::trace_span!(
+        "runner.dyndep.retain",
+        outcome = field::Empty,
+        error_category = field::Empty,
+    );
+    let _guard = span.enter();
+    let result = retain();
+    let outcome = record_outcome(&span, &result, "dyndep retention failed");
+    counter!(RETENTIONS_TOTAL, "outcome" => outcome).increment(1);
+    if let Ok(summary) = &result {
+        let (files, bytes) = reclaimed(summary);
+        counter!(RETAINED_FILES_RECLAIMED).increment(files);
+        counter!(RETAINED_BYTES_RECLAIMED).increment(bytes);
+    }
+    result
+}
+
 /// Record a result with only bounded outcome and category fields.
 fn record_outcome<T>(
     span: &tracing::Span,
@@ -77,6 +105,18 @@ fn describe_metrics() {
         describe_histogram!(
             MATERIALIZATION_DURATION,
             "Measures dyndep materialization duration in seconds."
+        );
+        describe_counter!(
+            RETENTIONS_TOTAL,
+            "Counts bounded dyndep retention outcomes by fixed outcome."
+        );
+        describe_counter!(
+            RETAINED_FILES_RECLAIMED,
+            "Counts dyndep sidecar files reclaimed by retention."
+        );
+        describe_counter!(
+            RETAINED_BYTES_RECLAIMED,
+            "Counts dyndep sidecar bytes reclaimed by retention."
         );
     });
 }

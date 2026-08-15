@@ -10,6 +10,8 @@ mod child_exit;
 mod command_list_telemetry;
 mod command_logging;
 mod dyndep_files;
+mod dyndep_retention;
+mod dyndep_telemetry;
 mod failure_attribution;
 mod file_io;
 mod ninja_program;
@@ -27,6 +29,7 @@ use command_logging::{
 };
 use output_forwarding::{StatusObserver, spawn_and_stream_output};
 pub(crate) use dyndep_files::materialize_dyndep_files;
+pub(crate) use dyndep_retention::{DyndepPublicationLease, prune_dyndep_cache};
 pub use file_io::*;
 pub use ninja_program::resolve_ninja_program;
 #[cfg(doctest)]

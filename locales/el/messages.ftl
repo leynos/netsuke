@@ -1,5 +1,6 @@
 # Πόροι τοπικοποίησης για τη γραμμή εντολών του Netsuke.
 
+runner.io.dyndep.retention = Δεν ήταν δυνατή η εφαρμογή της διατήρησης του παραγόμενου dyndep κάτω από τη διαδρομή { $path }.
 cli.about = Το Netsuke μεταγλωττίζει δηλωτικά YAML + Jinja σε σχέδια δόμησης Ninja.
 cli.long_about = Το Netsuke μετατρέπει δηλωτικά YAML + Jinja σε αναπαραγώγιμα γραφήματα Ninja και εκτελεί το Ninja με ασφαλείς προεπιλογές.
 cli.usage = { $usage }

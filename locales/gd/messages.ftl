@@ -1,5 +1,6 @@
 # Goireasan sgeadachaidh airson loidhne-àithne Netsuke.
 
+runner.io.dyndep.retention = Dh’fhàillig cur an gnìomh gleidheadh an dyndep a chaidh a chruthachadh fo { $path }.
 cli.about = Bidh Netsuke a' cur ri chèile foirm-liostaichean YAML + Jinja gu planaichean togail Ninja.
 cli.long_about = Bidh Netsuke ag atharrachadh fhoirm-liostaichean YAML + Jinja gu graf Ninja a ghabhas ath-dhèanamh, agus a' ruith Ninja le bun-roghainnean sàbhailte.
 cli.usage = { $usage }

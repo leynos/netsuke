@@ -1,5 +1,6 @@
 # Netsuken komentorivin lokalisointiresurssit.
 
+runner.io.dyndep.retention = Luodun dyndep-tiedoston säilytystä polun { $path } alla ei voitu ottaa käyttöön.
 cli.about = Netsuke kääntää YAML- ja Jinja-manifestit Ninja-koontisuunnitelmiksi.
 cli.long_about = Netsuke muuntaa YAML- ja Jinja-manifestit toistettaviksi Ninja-graafeiksi ja suorittaa Ninjan turvallisin oletusasetuksin.
 cli.usage = { $usage }

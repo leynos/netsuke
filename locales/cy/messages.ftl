@@ -1,5 +1,6 @@
 # Adnoddau lleoleiddio ar gyfer llinell orchymyn Netsuke.
 
+runner.io.dyndep.retention = Methu gymhwyso cadw dyndep a gynhyrchwyd o dan { $path }.
 cli.about = Mae Netsuke yn trosi maniffestau YAML + Jinja yn gynlluniau adeiladu Ninja.
 cli.long_about = Mae Netsuke yn trawsnewid maniffestau YAML + Jinja yn graffiau Ninja atgynhyrchadwy ac yn rhedeg Ninja gyda rhagosodiadau diogel.
 cli.usage = { $usage }

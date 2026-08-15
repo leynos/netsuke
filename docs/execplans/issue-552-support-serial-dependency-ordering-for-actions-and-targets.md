@@ -4,8 +4,8 @@ This ExecPlan is a living document. Keep `Progress`, `Surprises & discoveries`,
 `Decision log`, and `Outcomes & retrospective` current as implementation
 proceeds.
 
-Status: **Complete — implementation and documentation changes pass the full
-deterministic suite and independent review.**
+Status: **Complete — coordinated, bounded dyndep retention passes deterministic
+and focused validation.**
 
 Issue: [#552](https://github.com/leynos/netsuke/issues/552)
 
@@ -107,9 +107,10 @@ criterion in issue #552 and all repository gates pass.
 - **Performance:** serial lowering may add one gate and one small dyndep file
   per dependency. It must remain linear in the number of serial dependencies
   and must not traverse unrelated subgraphs repeatedly.
-- **State:** `.netsuke/dyndep` is a reusable generated cache. `netsuke clean`
-  need not delete it, but stale content must be harmless because filenames are
-  content-addressed.
+- **State:** preserve every sidecar required by the current bundle, then bound
+  obsolete `.netsuke/dyndep` storage by fixed file-count and byte budgets.
+  Publication and cleanup share one capability-scoped per-directory lease until
+  the current command has finished consuming its bundle.
 - **Platform support:** sidecar generation must be shell-independent and use
   Rust filesystem APIs so Windows, macOS, and Linux release builds share the
   same behaviour.
@@ -158,6 +159,10 @@ criterion in issue #552 and all repository gates pass.
 - **Source-file size pressure.** Adding logic directly to near-limit modules
   would violate repository policy. Mitigation: establish focused dyndep
   generation and materialization modules before adding the implementation.
+- **Persistent cache growth.** Content-addressed names keep stale sidecars
+  harmless but let repeated manifest changes consume unbounded storage.
+  Mitigation: retain the current bundle plus a deterministic historical budget
+  while a publication lease protects active sidecars.
 
 ## Progress
 
@@ -373,12 +378,24 @@ criterion in issue #552 and all repository gates pass.
   `docs/netsuke-design.md` gate description remains unchanged because it
   already matches the current runner boundary and command-specific flow; that
   review suggestion was stale.
-- [x] (2026-08-15) Retained content-addressed sidecars rather than introducing
-  automatic retention. Pruning by age, count, or size would invalidate older
-  `generate --output` manifests that still reference their digest paths. A
-  future purge command must be explicitly destructive and document that
-  compatibility boundary; it is not a safe maintenance action for `build`,
-  `clean`, or `generate`.
+- [x] (2026-08-15) Replaced the earlier no-pruning policy with a coordinated,
+  deterministic historical budget: the current bundle is preserved; at most 32
+  obsolete sidecars and 1 MiB of obsolete sidecar bytes remain; and the
+  capability-scoped directory lease is held through the serial command's Ninja
+  or output-consumption boundary. Publication occurs before cleanup, while
+  `clean` cleans up only after successful `ninja -t clean`.
+- [x] (2026-08-15) Added focused materialization coverage for retention count
+  and byte budgets, current sidecars, stale temporary cleanup, localized cleanup
+  failures, and bounded telemetry. Added public CLI coverage for repeated
+  generate, successful clean cleanup, failed-clean preservation, and latest
+  generated-manifest Ninja loading. The focused materializer (14 tests),
+  retention (6 tests), and serial CLI (7 tests) suites pass.
+- [x] (2026-08-15) Validated the retention milestone: `make check-fmt`,
+  `make typecheck`, `make lint`, `make test`, `make markdownlint`, and
+  `make nixie` passed. The focused dyndep materializer (14), retention (6),
+  and serial CLI (7) suites also passed. The lock implementation uses `fs4`
+  only on a file already opened through the effective-directory capability,
+  satisfying the capability-filesystem lint without an exemption.
 
 ## Surprises and discoveries
 
@@ -498,6 +515,13 @@ criterion in issue #552 and all repository gates pass.
   preventing an untrusted existing file from causing unbounded memory use. A
   metadata-sized buffer and one-byte growth probe also bound reads if the file
   changes during verification. **Date:** 2026-08-12.
+- **Decision:** replace unbounded historical sidecar retention with a fixed
+  deterministic budget of 32 obsolete `.dd` files and 1 MiB of obsolete `.dd`
+  bytes, protected by one advisory lease opened through the effective directory
+  capability. **Rationale:** immutable digest paths prevent corruption but not
+  storage growth across changed manifests. The lease protects publication,
+  cleanup, and current-bundle consumption; its deliberate cost is that serial
+  commands in one working directory wait for each other. **Date:** 2026-08-15.
 
 - **Decision:** use staged Ninja dyndep files rather than an order-only gate
   chain, a pool, or recursive builds. **Rationale:** it is the only evaluated
@@ -1294,3 +1318,18 @@ ADR-011. All code, test, documentation, and diagram gates passed after removing
 one duplicate blank line introduced by the additive documentation merge.
 `origin/main` advanced once during the first gate run, so the branch replayed
 cleanly onto the new tip and passed the complete gate set again.
+
+2026-08-15: The review identified that immutable content-addressed sidecars
+were safe but unbounded across changed manifests. ADR-012 now records the
+replacement policy: current sidecars are never pruned, while deterministic
+retention limits obsolete sidecars to 32 files and 1 MiB. A capability-scoped
+advisory lease covers materialization, cleanup, and the command's Ninja or
+generated-output consumption. The user guide explains that an old arbitrary
+`generate --output` manifest can require regeneration after later retention.
+
+2026-08-15: Full validation passed after replacing the initially rejected
+standard-library file-lock call with `fs4` on the same capability-opened file
+handle. The new crate adds only a cross-platform advisory-lock implementation;
+it neither opens paths nor expands the locking authority. The final evidence
+includes all deterministic gates plus 14 materialization, 6 retention, and 7
+public serial-CLI focused tests.

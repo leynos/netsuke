@@ -1,5 +1,6 @@
 # ทรัพยากรการแปลภาษาสำหรับบรรทัดคำสั่งของ Netsuke
 
+runner.io.dyndep.retention = ไม่สามารถใช้การเก็บรักษา dyndep ที่สร้างขึ้นใต้ { $path } ได้
 cli.about = Netsuke คอมไพล์ไฟล์รายการ YAML + Jinja ให้เป็นแผนการสร้างของ Ninja
 cli.long_about = Netsuke แปลงไฟล์รายการ YAML + Jinja ให้เป็นกราฟ Ninja ที่สร้างซ้ำได้ แล้วเรียกใช้ Ninja ด้วยค่าเริ่มต้นที่ปลอดภัย
 cli.usage = { $usage }

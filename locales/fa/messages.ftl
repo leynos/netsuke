@@ -1,5 +1,6 @@
 # منابع بومی‌سازی خط فرمان Netsuke.
 
+runner.io.dyndep.retention = ‏ اعمال نگه‌داری dyndep تولیدشده در زیر ‏{ $path } ممکن نبود.
 cli.about = ‏Netsuke مانیفست‌های YAML + Jinja را به طرح‌های ساخت Ninja ترجمه می‌کند.
 cli.long_about = ‏Netsuke مانیفست‌های YAML + Jinja را به گراف‌های تکرارپذیر Ninja تبدیل می‌کند و Ninja را با پیش‌فرض‌های ایمن اجرا می‌کند.
 cli.usage = { $usage }

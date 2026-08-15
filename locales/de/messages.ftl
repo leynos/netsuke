@@ -1,5 +1,6 @@
 # Lokalisierungsressourcen für die Netsuke-CLI.
 
+runner.io.dyndep.retention = Die Aufbewahrung der generierten dyndep unter { $path } konnte nicht angewendet werden.
 cli.about = Netsuke übersetzt YAML- + Jinja-Manifeste in Ninja-Build-Pläne.
 cli.long_about = Netsuke wandelt YAML- + Jinja-Manifeste in reproduzierbare Ninja-Graphen um und führt Ninja mit sicheren Voreinstellungen aus.
 cli.usage = { $usage }

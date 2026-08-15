@@ -1,5 +1,6 @@
 # משאבי לוקליזציה לשורת הפקודה של Netsuke.
 
+runner.io.dyndep.retention = ‏לא ניתן להחיל את שמירת קובץ dyndep שנוצר מתחת ל־‏{ $path }.
 cli.about = ‏Netsuke מהדר מניפסטים של YAML + Jinja לתוכניות בנייה של Ninja.
 cli.long_about = ‏Netsuke ממיר מניפסטים של YAML + Jinja לגרפים ברי‑שחזור של Ninja ומריץ את Ninja עם ברירות מחדל בטוחות.
 cli.usage = { $usage }
