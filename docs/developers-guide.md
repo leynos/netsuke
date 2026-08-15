@@ -70,6 +70,27 @@ named-command help paths render clap help directly and do not load a manifest.
 Keep future help topics within this boundary rather than coupling read-only
 inspection to `runner::process`.
 
+### Help-target query telemetry
+
+`src/runner/help_telemetry.rs` is the observability boundary around the complete
+`netsuke help targets` orchestration. `instrument_help_targets` wraps the
+manifest query and records the fixed metrics
+`netsuke_runner_help_targets_total` and
+`netsuke_runner_help_targets_duration_seconds`. It also opens the
+`runner.help_targets` span and emits a bounded `Completed help targets query`
+event when the query finishes.
+
+Telemetry labels use only the fixed `outcome` values `success` and `error`, and
+the fixed `error_category` values `none`, `manifest_not_found`, and `other`.
+The wrapper never records manifest-controlled names, descriptions, paths, or
+other details. Metric descriptions are registered once per process, through a
+`Once`, so repeated queries do not re-register them.
+
+Telemetry tests use `metrics::with_local_recorder` with a
+`metrics_util::DebuggingRecorder`, together with the local tracing subscriber
+capture helper. They assert the counter, duration sample, and completion event
+for both a successful fixture query and a missing-manifest failure.
+
 ## Localization
 
 `src/locale_catalogues.rs` is the authoritative registry of shipped catalogues.
