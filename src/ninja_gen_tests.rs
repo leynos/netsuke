@@ -172,6 +172,57 @@ fn nested_command_list_exec_returns_a_typed_generation_error() {
     );
 }
 
+#[rstest]
+#[case::dynamic_eval(
+    "eval '$jobs'",
+    NinjaGenError::UnanalyzableCommandListEval {
+        action_index: 1,
+        entry_index: 1,
+    }
+)]
+#[case::newline(
+    "echo safe\nbuild injected: phony",
+    NinjaGenError::NinjaControlCharacter {
+        action_index: 1,
+        entry_index: 1,
+    }
+)]
+fn unsafe_command_list_entries_return_typed_generation_errors(
+    #[case] entry: &str,
+    #[case] expected: NinjaGenError,
+) {
+    let action = command_action(StringOrList::List(vec![entry.into()]));
+    let mut graph = BuildGraph::default();
+    graph.actions.insert("unsafe".into(), action);
+    let mut ninja = String::new();
+
+    let error = generate_into(&graph, &mut ninja)
+        .expect_err("unsafe command-list entries should not generate Ninja");
+    assert!(
+        matches!(
+            (error, expected),
+            (
+                NinjaGenError::UnanalyzableCommandListEval {
+                    action_index: 1,
+                    entry_index: 1,
+                },
+                NinjaGenError::UnanalyzableCommandListEval { .. }
+            ) | (
+                NinjaGenError::NinjaControlCharacter {
+                    action_index: 1,
+                    entry_index: 1,
+                },
+                NinjaGenError::NinjaControlCharacter { .. }
+            )
+        ),
+        "unsafe command-list entry should return its stable typed error"
+    );
+    assert!(
+        ninja.is_empty(),
+        "validation must reject the entry before it can inject Ninja output: {ninja}"
+    );
+}
+
 #[test]
 fn assert_shell_command_tolerates_complex_syntax() {
     let command = r#"/bin/sh -c "echo 'nested quotes' && echo \"double\" && (echo subshell)""#;

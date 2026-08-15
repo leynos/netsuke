@@ -15,10 +15,14 @@ pub(crate) const COMMAND_LIST_FAILURE_PREFIX: &str = "netsuke command-list failu
 /// A command-list entry cannot preserve the ordered execution contract.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum CommandListEntryError {
-    /// An entry starts multiple or dynamically generated background jobs.
+    /// An entry starts multiple background jobs.
     MultipleBackgroundJobs,
     /// An `exec` occurs in a shell structure the list wrapper cannot supervise.
     UnsupportedExec,
+    /// An `eval` payload cannot be analysed for attributable background jobs.
+    UnanalyzableEval,
+    /// An entry cannot be represented safely in one Ninja command binding.
+    NinjaControlCharacter,
 }
 
 /// One rendered shell command-list entry.
@@ -36,6 +40,10 @@ struct ShellWord<'a>(&'a str);
 /// The shell-word sequence parsed from one command-list entry.
 struct ShellWords(Vec<String>);
 
+/// Signals that static inspection cannot account for an `eval` payload.
+#[derive(Clone, Copy)]
+struct UnanalyzableEval;
+
 /// Return the unsupported boundary, if any, for one command-list entry.
 pub(super) fn command_list_entry_error(
     command: CommandListEntry<'_>,
@@ -45,14 +53,23 @@ pub(super) fn command_list_entry_error(
     // failure: it can still prove multiple direct background jobs, while
     // nested `eval` and `exec` analysis remain unavailable.
     let direct_background_jobs = background_operator_count(command);
-    if ShellWords::parse(command).is_some_and(|words| {
-        words.background_job_count().is_none_or(|nested_jobs| {
-            direct_background_jobs
-                .checked_add(nested_jobs)
-                .is_none_or(|background_jobs| background_jobs > 1)
-        })
-    }) || direct_background_jobs > 1
-    {
+    if command.has_ninja_control_character() {
+        Some(CommandListEntryError::NinjaControlCharacter)
+    } else if let Some(words) = ShellWords::parse(command) {
+        let Ok(nested_jobs) = words.background_job_count() else {
+            return Some(CommandListEntryError::UnanalyzableEval);
+        };
+        if direct_background_jobs
+            .checked_add(nested_jobs)
+            .is_none_or(|background_jobs| background_jobs > 1)
+        {
+            Some(CommandListEntryError::MultipleBackgroundJobs)
+        } else if exec_boundary(command) == ExecBoundary::Unsupported {
+            Some(CommandListEntryError::UnsupportedExec)
+        } else {
+            None
+        }
+    } else if direct_background_jobs > 1 {
         Some(CommandListEntryError::MultipleBackgroundJobs)
     } else if exec_boundary(command) == ExecBoundary::Unsupported {
         Some(CommandListEntryError::UnsupportedExec)
@@ -209,38 +226,49 @@ impl ShellWords {
     }
 
     /// Count background jobs launched by the entry, including static nested
-    /// `eval` payloads. `None` means an `eval` payload is dynamic and cannot
-    /// be attributed safely.
-    fn background_job_count(&self) -> Option<usize> {
+    /// `eval` payloads. An error means an `eval` payload cannot be analysed
+    /// without potentially hiding background jobs.
+    fn background_job_count(&self) -> Result<usize, UnanalyzableEval> {
         self.background_job_count_at_depth(0)
     }
 
-    fn background_job_count_at_depth(&self, depth: usize) -> Option<usize> {
+    fn background_job_count_at_depth(&self, depth: usize) -> Result<usize, UnanalyzableEval> {
         self.0
             .iter()
             .map(|word| ShellWord(word))
             .enumerate()
             .filter(|(index, word)| word.is_eval() && self.is_command_word(*index))
             .try_fold(0_usize, |count, (index, _)| {
-                count.checked_add(self.background_jobs_from_eval(index, depth)?)
+                count
+                    .checked_add(self.background_jobs_from_eval(index, depth)?)
+                    .ok_or(UnanalyzableEval)
             })
     }
 
-    fn background_jobs_from_eval(&self, index: usize, depth: usize) -> Option<usize> {
+    fn background_jobs_from_eval(
+        &self,
+        index: usize,
+        depth: usize,
+    ) -> Result<usize, UnanalyzableEval> {
         const MAX_EVAL_NESTING: usize = 16;
         if depth == MAX_EVAL_NESTING {
-            return None;
+            return Err(UnanalyzableEval);
         }
         let source = self.eval_source(index);
         if source.is_empty() {
-            return Some(0);
+            return Ok(0);
         }
         if ShellWord(&source).has_dynamic_expansion() {
-            return None;
+            return Err(UnanalyzableEval);
         }
         let nested = CommandListEntry(&source);
         background_operator_count(nested)
-            .checked_add(Self::parse(nested)?.background_job_count_at_depth(depth + 1)?)
+            .checked_add(
+                Self::parse(nested)
+                    .ok_or(UnanalyzableEval)?
+                    .background_job_count_at_depth(depth + 1)?,
+            )
+            .ok_or(UnanalyzableEval)
     }
 
     /// Reconstruct the static words that the `eval` command will evaluate.
@@ -315,6 +343,14 @@ impl ShellWord<'_> {
             .next()
             .is_some_and(|first| first == '_' || first.is_ascii_alphabetic())
             && chars.all(|character| character == '_' || character.is_ascii_alphanumeric())
+    }
+}
+
+impl CommandListEntry<'_> {
+    /// Whether this entry contains a control character Ninja cannot retain in
+    /// one `command =` binding.
+    fn has_ninja_control_character(self) -> bool {
+        self.0.chars().any(char::is_control)
     }
 }
 

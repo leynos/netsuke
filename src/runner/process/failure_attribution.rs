@@ -148,7 +148,9 @@ impl<W> FailureAttributionWriter<W> {
     }
 
     fn record_line(&mut self) {
-        self.failure = parse_marker(&self.pending);
+        if let Some(failure) = parse_marker(&self.pending) {
+            self.failure = Some(failure);
+        }
     }
 }
 
@@ -212,6 +214,27 @@ mod tests {
             Some(
                 "netsuke command-list failure: action 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef, entry 3"
             )
+        );
+    }
+
+    #[test]
+    fn retains_a_marker_when_later_output_has_no_marker() {
+        let mut writer = FailureAttributionWriter::new(Vec::new());
+        writer
+            .write_all(
+                format!("netsuke command-list failure: action {ACTION_IDENTITY}, entry 3\n")
+                    .as_bytes(),
+            )
+            .expect("failure marker should write");
+        writer
+            .write_all(b"ordinary command output\n")
+            .expect("ordinary output should write");
+
+        assert_eq!(
+            writer.into_failure().map(|failure| failure.to_string()),
+            Some(format!(
+                "netsuke command-list failure: action {ACTION_IDENTITY}, entry 3"
+            ))
         );
     }
 

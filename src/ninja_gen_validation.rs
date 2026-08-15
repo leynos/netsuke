@@ -35,6 +35,18 @@ pub(super) fn validate_action_recipe(
                         entry_index,
                     });
                 }
+                Some(CommandListEntryError::UnanalyzableEval) => {
+                    return Err(NinjaGenError::UnanalyzableCommandListEval {
+                        action_index,
+                        entry_index,
+                    });
+                }
+                Some(CommandListEntryError::NinjaControlCharacter) => {
+                    return Err(NinjaGenError::NinjaControlCharacter {
+                        action_index,
+                        entry_index,
+                    });
+                }
                 None => {}
             }
         }

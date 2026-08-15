@@ -8,78 +8,22 @@
 
 use crate::ast::{Recipe, StringOrList};
 use crate::ir::{BuildEdge, BuildGraph};
-use crate::localization::{self, LocalizedMessage, keys};
+use crate::localization::{self, keys};
 use camino::Utf8PathBuf;
 use itertools::Itertools;
 use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter, Write};
-use thiserror::Error;
 
 #[path = "ninja_gen_command_list.rs"]
 pub(crate) mod ninja_gen_command_list;
+#[path = "ninja_gen_error.rs"]
+mod ninja_gen_error;
 #[path = "ninja_gen_validation.rs"]
 mod ninja_gen_validation;
 
 use ninja_gen_command_list::{ActionId, CommandListEntry, command_list_entry};
+pub use ninja_gen_error::NinjaGenError;
 use ninja_gen_validation::validate_action_recipe;
-/// Errors produced while rendering Ninja manifests.
-#[derive(Debug, Error)]
-pub enum NinjaGenError {
-    /// The build graph referenced an action that was not defined.
-    #[error("{message}")]
-    MissingAction {
-        /// Identifier of the missing action referenced by a build edge.
-        id: String,
-        /// Localized error message.
-        message: LocalizedMessage,
-    },
-    /// An action built outside manifest deserialization has no command entries.
-    #[error("command-list action {action_index} has no command entries")]
-    EmptyCommandRecipe {
-        /// One-based stable position in generated action order.
-        action_index: usize,
-    },
-    /// A list entry starts multiple or dynamically generated background jobs,
-    /// which cannot be attributed reliably by a shared POSIX shell.
-    #[error(
-        "command-list action {action_index}, entry {entry_index} has unsupported background jobs"
-    )]
-    MultipleBackgroundJobs {
-        /// One-based stable position in generated action order.
-        action_index: usize,
-        /// One-based stable position in the command list.
-        entry_index: usize,
-    },
-    /// A list entry uses `exec` in a shell structure the wrapper cannot
-    /// supervise without changing its semantics.
-    #[error(
-        "command-list action {action_index}, entry {entry_index} has unsupported exec structure"
-    )]
-    UnsupportedCommandListExec {
-        /// One-based stable position in generated action order.
-        action_index: usize,
-        /// One-based stable position in the command list.
-        entry_index: usize,
-    },
-    /// Formatting the Ninja output failed.
-    #[error("{message}")]
-    Format {
-        /// Underlying formatting error.
-        #[source]
-        source: fmt::Error,
-        /// Localized error message.
-        message: LocalizedMessage,
-    },
-}
-
-impl From<fmt::Error> for NinjaGenError {
-    fn from(source: fmt::Error) -> Self {
-        Self::Format {
-            message: localization::message(keys::NINJA_GEN_FORMAT),
-            source,
-        }
-    }
-}
 macro_rules! write_kv {
     ($f:expr, $key:expr, $opt:expr) => {
         if let Some(val) = $opt {
@@ -129,7 +73,8 @@ macro_rules! write_flag {
 /// Returns [`NinjaGenError`] if a build edge references an unknown action, a
 /// programmatic action has an empty command recipe, a command-list entry starts
 /// multiple background jobs, a command-list entry uses an unsupported `exec`
-/// structure, or writing to the output fails.
+/// structure, a command-list `eval` payload cannot be analysed, a command-list
+/// entry contains a Ninja control character, or writing to the output fails.
 pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
     let mut out = String::new();
     generate_into(graph, &mut out)?;
@@ -170,7 +115,8 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 /// Returns [`NinjaGenError`] if a build edge references an unknown action, a
 /// programmatic action has an empty command recipe, a command-list entry starts
 /// multiple background jobs, a command-list entry uses an unsupported `exec`
-/// structure, or writing to the output fails.
+/// structure, a command-list `eval` payload cannot be analysed, a command-list
+/// entry contains a Ninja control character, or writing to the output fails.
 pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), NinjaGenError> {
     let mut actions: Vec<_> = graph.actions.iter().collect();
     actions.sort_by_key(|(id, _)| *id);

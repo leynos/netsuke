@@ -29,7 +29,6 @@
 //! assert_eq!(manifest.targets.len(), 1);
 //! ```
 
-use crate::localization::{self, keys};
 use semver::Version;
 use serde::{Deserialize, Serialize, de::Deserializer};
 use std::collections::HashMap;
@@ -44,6 +43,8 @@ pub type Vars = HashMap<String, serde_json::Value>;
 /// Map type for `vars` blocks under Kani.
 #[cfg(kani)]
 pub type Vars = HashMap<String, serde_json::Value, BuildHasherDefault<DefaultHasher>>;
+/// Stable schema error that the manifest adapter translates for its users.
+pub(crate) const EMPTY_COMMAND_LIST_ERROR: &str = "command list must not be empty";
 
 fn deserialize_actions<'de, D>(deserializer: D) -> Result<Vec<Target>, D::Error>
 where
@@ -182,9 +183,9 @@ impl<'de> Deserialize<'de> for Recipe {
         } = raw;
         match (command_field, script_field, rule_field) {
             (Some(command), None, None) => match command {
-                empty if empty.is_empty_content() => Err(serde::de::Error::custom(
-                    localization::message(keys::MANIFEST_COMMAND_LIST_EMPTY).to_string(),
-                )),
+                empty if empty.is_empty_content() => {
+                    Err(serde::de::Error::custom(EMPTY_COMMAND_LIST_ERROR))
+                }
                 command_value => Ok(Self::Command {
                     command: command_value,
                 }),

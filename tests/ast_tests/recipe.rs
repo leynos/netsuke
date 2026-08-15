@@ -84,3 +84,23 @@ fn empty_command_list_is_rejected() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn direct_ast_deserialization_uses_a_schema_error() -> Result<()> {
+    let yaml = r#"
+        netsuke_version: "1.0.0"
+        rules:
+          - name: none
+            command: []
+        targets:
+          - name: hello
+            rule: none
+    "#;
+    let error = serde_saphyr::from_str::<netsuke::ast::NetsukeManifest>(yaml)
+        .expect_err("an empty command list should fail AST deserialization");
+    ensure!(
+        error.to_string().contains("command list must not be empty"),
+        "direct AST deserialization should expose the neutral schema error: {error}"
+    );
+    Ok(())
+}

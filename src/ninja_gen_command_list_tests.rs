@@ -1,8 +1,9 @@
 //! Unit tests for private command-list shell boundaries.
 
 use super::{
-    ActionId, CommandListEntry, ExecBoundary, action_identity, background_operator_count,
-    command_list_entry, command_list_entry_error, exec_boundary, shell_single_quote,
+    ActionId, CommandListEntry, CommandListEntryError, ExecBoundary, action_identity,
+    background_operator_count, command_list_entry, command_list_entry_error, exec_boundary,
+    shell_single_quote,
 };
 use rstest::rstest;
 
@@ -40,14 +41,32 @@ fn counts_only_unquoted_background_operators_before_comments(
 }
 
 #[rstest]
-#[case::single_static_eval_job("eval 'true &'", false)]
-#[case::nested_multiple_jobs("eval 'false & true &'", true)]
-#[case::nested_and_outer_job("eval 'true &' &", true)]
-#[case::dynamic_eval_source("eval '$jobs'", true)]
-fn rejects_unattributable_eval_background_jobs(#[case] command: &str, #[case] rejects: bool) {
+#[case::single_static_eval_job("eval 'true &'", None)]
+#[case::nested_multiple_jobs(
+    "eval 'false & true &'",
+    Some(CommandListEntryError::MultipleBackgroundJobs)
+)]
+#[case::nested_and_outer_job(
+    "eval 'true &' &",
+    Some(CommandListEntryError::MultipleBackgroundJobs)
+)]
+#[case::unsupported_exec(
+    "if true; then exec false; fi",
+    Some(CommandListEntryError::UnsupportedExec)
+)]
+#[case::dynamic_eval_source("eval '$jobs'", Some(CommandListEntryError::UnanalyzableEval))]
+#[case::glob_eval_source("eval 'cp *.c build/'", Some(CommandListEntryError::UnanalyzableEval))]
+#[case::variable_eval_source(
+    "eval \"$CC -c main.c\"",
+    Some(CommandListEntryError::UnanalyzableEval)
+)]
+fn rejects_unattributable_eval_background_jobs(
+    #[case] command: &str,
+    #[case] expected: Option<CommandListEntryError>,
+) {
     assert_eq!(
-        command_list_entry_error(CommandListEntry(command)).is_some(),
-        rejects
+        command_list_entry_error(CommandListEntry(command)),
+        expected
     );
 }
 
