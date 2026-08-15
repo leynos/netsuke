@@ -103,7 +103,11 @@ fn mark_executable(path: &Path) -> Result<()> {
 }
 
 #[cfg(not(unix))]
-fn mark_executable(_path: &Path) -> Result<()> {
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "the fallible signature must match the Unix variant so the shared call site needs no platform-specific handling"
+)]
+const fn mark_executable(_path: &Path) -> Result<()> {
     Ok(())
 }
 
