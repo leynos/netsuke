@@ -3707,6 +3707,26 @@ the Proptest suite keep the `Utf8PathBuf` instantiation tied to production.
 **Cross-references:** [CLI design](netsuke-design.md) §8.4, for the
 application-owned recorder boundary and end-of-run snapshot policy.
 
+
+### Configuration-load boundary contract
+
+`ConfigurationLoadContext` in `src/config_load.rs` is the private
+startup-orchestration input bundle: parsed `cli::Cli`, parsed `ArgMatches`,
+fallback `DiagMode`, and `StartupWriter`. `resolve_configuration` owns one
+configuration-load attempt. It starts the injected clock immediately before
+diagnostic-mode resolution, measures through cached-layer merging, and records
+one startup-attempt success or failure when the attempt ends. A diagnostic
+resolution or merge failure returns the `ExitCode` selected by
+`config_err_to_exit`: JSON mode emits the structured diagnostic, while human
+mode logs bounded operation and error-category fields and writes the
+user-facing error.
+
+The boundary receives `&impl monotony::MonotonicClock`. Production passes
+`StdMonotonicClock`; tests pass deterministic clocks from
+`monotony::test_util`. Keep elapsed-time measurement on this injected
+contract; do not call `Instant::now` or introduce a configuration-specific
+clock abstraction.
+
 `src/observability.rs` owns the phase-level instrumentation for the two
 configuration-loading boundaries in `src/main.rs`. Keep configuration loading
 itself as a plain query: compose this instrumentation only at the CLI
