@@ -11,10 +11,10 @@ use minijinja::context;
 use mockable::{DefaultEnv, Env};
 use rstest::rstest;
 use std::ffi::OsString;
-use std::fs;
 use tempfile::tempdir;
 use test_support::command_helper::compile_rust_helper;
 use test_support::env::prepend_path_value;
+use test_support::fs as test_fs;
 
 use super::{StdlibConfig, fallible, streaming_match_payload};
 
@@ -175,13 +175,13 @@ fn grep_streams_large_output_on_windows() -> Result<()> {
         "grep streaming should mark template impure"
     );
     let rendered_path = camino::Utf8Path::new(rendered.as_str());
-    let metadata = fs::metadata(rendered_path.as_std_path())
+    let rendered_len = test_fs::file_len(rendered_path.as_std_path())
         .with_context(|| format!("stat streamed windows grep output {rendered_path}"))?;
     ensure!(
-        metadata.len() >= payload.len() as u64,
+        rendered_len >= payload.len() as u64,
         "streamed grep output should retain payload size"
     );
-    let contents = fs::read_to_string(rendered_path.as_std_path())
+    let contents = test_fs::read_to_string(rendered_path.as_std_path())
         .with_context(|| format!("read streamed windows grep output {rendered_path}"))?;
     ensure!(
         contents == payload,
