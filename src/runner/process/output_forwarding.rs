@@ -79,7 +79,9 @@ pub(super) fn spawn_and_stream_output(
         // not block behind stderr forwarding. In JSON diagnostics mode we still
         // drain child stderr, but discard it to keep stderr machine-readable.
         StderrMode::Suppress => forward_stderr_with_attribution(BufReader::new(stderr), io::sink()),
-        StderrMode::Forward => forward_stderr_with_attribution(BufReader::new(stderr), io::stderr()),
+        StderrMode::Forward => {
+            forward_stderr_with_attribution(BufReader::new(stderr), io::stderr())
+        }
     });
 
     // Intentionally drain stdout on the main thread when `status_observer` is

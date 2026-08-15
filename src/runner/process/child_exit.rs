@@ -9,8 +9,7 @@ use std::{
 };
 
 use super::{
-    StderrMode,
-    command_list_telemetry,
+    StderrMode, command_list_telemetry,
     command_logging::{CommandLogContext, log_command_exit_failure},
     failure_attribution::CommandListFailure,
     streaming::ForwardStats,
