@@ -34,6 +34,13 @@ type Snapshot = Vec<(
     DebugValue,
 )>;
 
+/// The fixed result labels expected for one help-targets telemetry scenario.
+struct ExpectedHelpTargetsTelemetry {
+    outcome: &'static str,
+    error_category: &'static str,
+    succeeds: bool,
+}
+
 /// Run an operation under a local metrics recorder and return its result and
 /// metrics snapshot without installing a process-wide recorder.
 fn recorded<T>(operation: impl FnOnce() -> T) -> (T, Snapshot) {
@@ -67,12 +74,17 @@ fn help_targets_fixture_with_manifest(manifest: &str) -> Result<(TempDir, Cli)> 
     ))
 }
 
-/// Find the counter value for one bounded outcome/error category pair.
-fn counter_value(snapshot: &Snapshot, outcome: &str, error_category: &str) -> Option<u64> {
+/// Find one metric with the exact bounded outcome and error-category labels.
+fn metric_value<'snapshot>(
+    snapshot: &'snapshot Snapshot,
+    kind: MetricKind,
+    name: &str,
+    expected: &ExpectedHelpTargetsTelemetry,
+) -> Option<&'snapshot DebugValue> {
     snapshot
         .iter()
         .find_map(|(key, _unit, _description, value)| {
-            if key.kind() != MetricKind::Counter || key.key().name() != HELP_TARGETS_TOTAL {
+            if key.kind() != kind || key.key().name() != name {
                 return None;
             }
             let labels: Vec<(&str, &str)> = key
@@ -80,139 +92,113 @@ fn counter_value(snapshot: &Snapshot, outcome: &str, error_category: &str) -> Op
                 .labels()
                 .map(|label| (label.key(), label.value()))
                 .collect();
-            let matches = labels.contains(&("outcome", outcome))
-                && labels.contains(&("error_category", error_category));
-            match value {
-                DebugValue::Counter(count) if matches => Some(*count),
-                _ => None,
-            }
+            let matches = labels.contains(&("outcome", expected.outcome))
+                && labels.contains(&("error_category", expected.error_category));
+            matches.then_some(value)
         })
 }
 
-/// Count recorded duration samples for one bounded outcome/error pair.
-fn duration_sample_count(snapshot: &Snapshot, outcome: &str, error_category: &str) -> usize {
-    snapshot
-        .iter()
-        .find_map(|(key, _unit, _description, value)| {
-            if key.kind() != MetricKind::Histogram || key.key().name() != HELP_TARGETS_DURATION {
-                return None;
-            }
-            let labels: Vec<(&str, &str)> = key
-                .key()
-                .labels()
-                .map(|label| (label.key(), label.value()))
-                .collect();
-            let matches = labels.contains(&("outcome", outcome))
-                && labels.contains(&("error_category", error_category));
-            match value {
-                DebugValue::Histogram(samples) if matches => Some(samples.len()),
-                _ => None,
-            }
+/// Assert the complete bounded telemetry contract for one help-targets query.
+fn assert_help_targets_telemetry(
+    cli: &Cli,
+    expected: &ExpectedHelpTargetsTelemetry,
+    scenario: &str,
+) -> Result<()> {
+    let _lock = localizer_test_lock().map_err(|error| anyhow::anyhow!("{error}"))?;
+    let _guard = set_localizer_for_tests(Arc::from(crate::cli_localization::build_localizer(
+        Some("en-US"),
+    )));
+    let ((result, events), snapshot) = recorded(|| {
+        with_test_subscriber(LevelFilter::INFO, |captured| {
+            let result = handle_help_targets(cli, &SilentReporter);
+            (result, captured.snapshot())
         })
-        .unwrap_or_default()
+    });
+
+    match (expected.succeeds, result) {
+        (true, Ok(())) | (false, Err(_)) => {}
+        (true, Err(error)) => {
+            anyhow::bail!("{scenario} should succeed: {error:?}");
+        }
+        (false, Ok(())) => {
+            anyhow::bail!("{scenario} should fail");
+        }
+    }
+
+    let counter = metric_value(&snapshot, MetricKind::Counter, HELP_TARGETS_TOTAL, expected);
+    ensure!(
+        matches!(counter, Some(DebugValue::Counter(1))),
+        "{scenario} should record one counter for outcome={:?}, error_category={:?}: {snapshot:?}",
+        expected.outcome,
+        expected.error_category,
+    );
+
+    let duration = metric_value(
+        &snapshot,
+        MetricKind::Histogram,
+        HELP_TARGETS_DURATION,
+        expected,
+    );
+    ensure!(
+        matches!(duration, Some(DebugValue::Histogram(samples)) if samples.len() == 1),
+        "{scenario} should record one duration sample for outcome={:?}, error_category={:?}: {snapshot:?}",
+        expected.outcome,
+        expected.error_category,
+    );
+    ensure!(
+        events
+            .iter()
+            .any(|event| event.contains("Completed help targets query")
+                && event.contains(&format!("outcome=\"{}\"", expected.outcome))
+                && event.contains(&format!("error_category=\"{}\"", expected.error_category))),
+        "{scenario} should emit a completion event for outcome={:?}, error_category={:?}: {events:?}; metrics: {snapshot:?}",
+        expected.outcome,
+        expected.error_category,
+    );
+    Ok(())
 }
 
 #[test]
 fn help_targets_records_bounded_success_telemetry() -> Result<()> {
-    let _lock = localizer_test_lock().map_err(|error| anyhow::anyhow!("{error}"))?;
-    let _guard = set_localizer_for_tests(Arc::from(crate::cli_localization::build_localizer(
-        Some("en-US"),
-    )));
     let (_temp, cli) = help_targets_fixture()?;
-    let ((result, events), snapshot) = recorded(|| {
-        with_test_subscriber(LevelFilter::INFO, |captured| {
-            let result = handle_help_targets(&cli, &SilentReporter);
-            (result, captured.snapshot())
-        })
-    });
-
-    result?;
-    ensure!(
-        counter_value(&snapshot, "success", "none") == Some(1),
-        "successful help targets should increment the bounded counter"
-    );
-    ensure!(
-        duration_sample_count(&snapshot, "success", "none") == 1,
-        "successful help targets should record one duration sample"
-    );
-    ensure!(
-        events
-            .iter()
-            .any(|event| event.contains("Completed help targets query")
-                && event.contains("outcome=\"success\"")
-                && event.contains("error_category=\"none\"")),
-        "successful help targets should emit a bounded completion event: {events:?}"
-    );
-    Ok(())
+    assert_help_targets_telemetry(
+        &cli,
+        &ExpectedHelpTargetsTelemetry {
+            outcome: "success",
+            error_category: "none",
+            succeeds: true,
+        },
+        "successful help targets",
+    )
 }
 
 #[test]
 fn help_targets_records_manifest_failure_telemetry() -> Result<()> {
-    let _lock = localizer_test_lock().map_err(|error| anyhow::anyhow!("{error}"))?;
-    let _guard = set_localizer_for_tests(Arc::from(crate::cli_localization::build_localizer(
-        Some("en-US"),
-    )));
     let cli = Cli {
         file: "missing-help-telemetry-manifest.yml".into(),
         ..Cli::default()
     };
-    let ((result, events), snapshot) = recorded(|| {
-        with_test_subscriber(LevelFilter::INFO, |captured| {
-            let result = handle_help_targets(&cli, &SilentReporter);
-            (result, captured.snapshot())
-        })
-    });
-
-    ensure!(result.is_err(), "missing manifest should fail help targets");
-    ensure!(
-        counter_value(&snapshot, "error", "manifest_not_found") == Some(1),
-        "missing manifest should increment the bounded failure counter"
-    );
-    ensure!(
-        duration_sample_count(&snapshot, "error", "manifest_not_found") == 1,
-        "missing manifest should record one duration sample"
-    );
-    ensure!(
-        events
-            .iter()
-            .any(|event| event.contains("Completed help targets query")
-                && event.contains("outcome=\"error\"")
-                && event.contains("error_category=\"manifest_not_found\"")),
-        "failed help targets should emit a bounded completion event: {events:?}"
-    );
-    Ok(())
+    assert_help_targets_telemetry(
+        &cli,
+        &ExpectedHelpTargetsTelemetry {
+            outcome: "error",
+            error_category: "manifest_not_found",
+            succeeds: false,
+        },
+        "missing manifest help targets",
+    )
 }
 
 #[test]
 fn help_targets_records_other_failure_telemetry() -> Result<()> {
-    let _lock = localizer_test_lock().map_err(|error| anyhow::anyhow!("{error}"))?;
-    let _guard = set_localizer_for_tests(Arc::from(crate::cli_localization::build_localizer(
-        Some("en-US"),
-    )));
     let (_temp, cli) = help_targets_fixture_with_manifest(INVALID_MANIFEST)?;
-    let ((result, events), snapshot) = recorded(|| {
-        with_test_subscriber(LevelFilter::INFO, |captured| {
-            let result = handle_help_targets(&cli, &SilentReporter);
-            (result, captured.snapshot())
-        })
-    });
-
-    ensure!(result.is_err(), "invalid manifest should fail help targets");
-    ensure!(
-        counter_value(&snapshot, "error", "other") == Some(1),
-        "invalid manifest should increment the bounded other-failure counter"
-    );
-    ensure!(
-        duration_sample_count(&snapshot, "error", "other") == 1,
-        "invalid manifest should record one duration sample"
-    );
-    ensure!(
-        events
-            .iter()
-            .any(|event| event.contains("Completed help targets query")
-                && event.contains("outcome=\"error\"")
-                && event.contains("error_category=\"other\"")),
-        "invalid manifest should emit a bounded completion event: {events:?}"
-    );
-    Ok(())
+    assert_help_targets_telemetry(
+        &cli,
+        &ExpectedHelpTargetsTelemetry {
+            outcome: "error",
+            error_category: "other",
+            succeeds: false,
+        },
+        "invalid manifest help targets",
+    )
 }
