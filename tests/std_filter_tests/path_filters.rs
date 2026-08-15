@@ -4,9 +4,9 @@
 //! `with_suffix`, `realpath`, and `expanduser`. Each test validates filter
 //! behaviour with various inputs and error conditions.
 
-use anyhow::{Context, Result, bail, ensure};
 #[cfg(unix)]
 use anyhow::anyhow;
+use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, ErrorKind};
