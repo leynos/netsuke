@@ -316,12 +316,20 @@ pub fn fake_ninja_expect_tool_with_jobs(
 }
 
 /// Stub for non-Unix platforms that returns an error.
+///
+/// # Errors
+///
+/// Always returns an error: this factory is only supported on Unix platforms.
 #[cfg(not(unix))]
 pub fn fake_ninja_expect_tool(_expected_tool: ToolName) -> Result<(TempDir, PathBuf)> {
     anyhow::bail!("fake_ninja_expect_tool is only supported on Unix platforms")
 }
 
 /// Stub for non-Unix platforms that returns an error.
+///
+/// # Errors
+///
+/// Always returns an error: this factory is only supported on Unix platforms.
 #[cfg(not(unix))]
 pub fn fake_ninja_expect_tool_with_jobs(
     _expected_tool: ToolName,
