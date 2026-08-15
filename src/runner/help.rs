@@ -25,6 +25,10 @@ use crate::theme::ThemeContext;
 
 use super::path_helpers::{ensure_manifest_exists_or_error, resolve_manifest_path};
 use super::process;
+use telemetry::instrument_help_targets;
+
+#[path = "help_telemetry.rs"]
+mod telemetry;
 
 /// One catalogue row: a single resolved target name with its metadata.
 struct HelpEntry<'a> {
@@ -46,6 +50,11 @@ struct HelpEntry<'a> {
 /// Returns an error when the manifest cannot be resolved, loaded, rendered, or
 /// validated, or when the catalogue cannot be serialized.
 pub(super) fn handle_help_targets(cli: &Cli, reporter: &dyn StatusReporter) -> Result<()> {
+    instrument_help_targets(|| handle_help_targets_inner(cli, reporter))
+}
+
+/// Run the catalogue query without crossing the observability boundary.
+fn handle_help_targets_inner(cli: &Cli, reporter: &dyn StatusReporter) -> Result<()> {
     info!(
         target: "netsuke::subcommand",
         subcommand = "help-targets",
@@ -335,3 +344,7 @@ fn json_entries(entries: Vec<HelpEntry<'_>>) -> Vec<HelpEntryJson<'_>> {
 #[cfg(test)]
 #[path = "help_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "help_telemetry_tests.rs"]
+mod telemetry_tests;

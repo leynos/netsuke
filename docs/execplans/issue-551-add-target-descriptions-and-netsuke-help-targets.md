@@ -111,17 +111,18 @@ default marker such as `[★ default]` on manifest defaults.
 - [x] (2026-08-09) Branch renamed to
       `issue-551-add-target-descriptions-and-netsuke-help-targets`, pushed,
       PR opened: <https://github.com/leynos/netsuke/pull/555>.
-- [x] (2026-08-12, `d524941`) Documented the restricted, side-effect-free Jinja
+- [x] (2026-08-14, `099f70ac`) Documented the restricted, side-effect-free Jinja
       surface for `netsuke help targets` in the migration, users', developers',
       and CLI design guides.
-- [x] (2026-08-12, `e5edb0d`) Routed target help through a restricted manifest
-      query path, escaped terminal control characters in text output, and added
-      end-to-end, IR, and property coverage for the query and catalogue
-      invariants.
-- [x] (2026-08-12, `e9efae6`) Clarified that target and action descriptions
-      remain discovery metadata and do not replace rule descriptions in Ninja
-      progress; added `cli.help.targets.about` to all 35 shipped locales.
-- [x] (2026-08-12, `625e93f`) Used a dedicated localized synopsis for the nested
+- [x] (2026-08-14, `98e6f95e`, `5d39023e`, `61afb7a6`) Routed target help through
+      a restricted manifest query path, escaped terminal control characters in
+      text output, and added end-to-end, IR, and property coverage for the
+      query and catalogue invariants.
+- [x] (2026-08-14, `49fb6bfe`, `0106a692`) Clarified that target and action
+      descriptions remain discovery metadata and do not replace rule
+      descriptions in Ninja progress; added `cli.help.targets.about` to all 35
+      shipped locales.
+- [x] (2026-08-14, `0106a692`) Used a dedicated localized synopsis for the nested
       `targets` help topic and aligned the localized help assertions with it.
 - [x] (2026-08-14) Documented the complete query-mode allowlist, its excluded
       host-observing helpers, and the full standard library retained by normal
@@ -157,9 +158,9 @@ default marker such as `[★ default]` on manifest defaults.
   was reverted. Impact: gates may intermittently fail on this test; re-run the
   suite when it hits (it passes in isolation and with `--test-threads=1`).
   Fixing the infrastructure properly is a separate concern from issue #551.
-- Observation: the post-`314f12b` query path uses a dedicated localized
+- Observation: the target-help query path uses a dedicated localized
   synopsis for the nested `targets` help topic rather than the catalogue's
-  section heading. Evidence: `625e93f`. Impact: keep the
+  section heading. Evidence: `0106a692`. Impact: keep the
   `cli.help.targets.about` key separate from `actions_heading` and
   `targets_heading`.
 
@@ -186,13 +187,13 @@ Windows PowerShell help, with `man_page_contract_tests.rs`,
 `release_staging_tests.rs`, and `workflow_build_and_package.rs` covering those
 artefacts and the completion sidecars.
 
-The post-`314f12b` follow-up additionally isolates discovery rendering from
-impure template helpers, keeps terminal text safe, preserves rule descriptions
-as the source of Ninja progress text, and supplies the nested help synopsis in
-all 35 shipped locales. These outcomes are recorded from commits `d524941`,
-`e5edb0d`, `e9efae6`, and `625e93f`; the current history does not record a new
-full-gate run after those commits, so no additional gate result is claimed
-here.
+The follow-up additionally isolates discovery rendering from impure template
+helpers, keeps terminal text safe, preserves rule descriptions as the source
+of Ninja progress text, and supplies the nested help synopsis in all 35
+shipped locales. These outcomes are recorded by reachable commits `98e6f95e`,
+`5d39023e`, `61afb7a6`, `49fb6bfe`, and `0106a692`. Commits `036dc331` and
+`9f1f8603` subsequently tightened BuildGraph validation, query dependencies,
+and localization-lock scoping; their full gate runs passed.
 
 Lessons learned:
 
