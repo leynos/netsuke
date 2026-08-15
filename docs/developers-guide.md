@@ -244,8 +244,8 @@ The lowering stages have deliberately separate responsibilities:
 Failure attribution is private to Ninja process execution:
 `FailureAttributionWriter` parses only Ninja's stderr. Because Ninja relays a
 failed subcommand's stderr on its own stdout, build runs retain only a fixed
-512-byte stdout tail and inspect it only after a non-zero exit. Ordinary child
-stdout streams forward directly and must not use this tail.
+512-byte stdout tail and use its parsed marker only after a non-zero exit.
+Ordinary child stdout streams forward directly and must not use this tail.
 
 The lowest-layer POSIX shell-word quoting used for input/output paths during IR
 lowering is `shell_quote::QuoteRefExt::quoted(Sh)`. It performs minimal,
