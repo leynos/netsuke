@@ -9,7 +9,7 @@ use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::context;
 use mockable::{DefaultEnv, Env};
-use rstest::{fixture, rstest};
+use rstest::rstest;
 use std::ffi::OsString;
 use std::fs;
 use tempfile::tempdir;
@@ -59,6 +59,7 @@ const ARGS_STUB: &str = concat!(
 );
 
 /// Error context messages for Windows command helper setup.
+#[derive(Copy, Clone)]
 struct WindowsSetupContext {
     tempdir: &'static str,
     root: &'static str,
@@ -115,14 +116,14 @@ fn grep_on_windows_bypasses_shell() -> Result<()> {
     )?;
 
     let config = StdlibConfig::from_current_dir()?.with_command_path_override(path);
-    let (mut env, mut state) = fallible::stdlib_env_with_config(config)?;
+    let (mut env, state) = fallible::stdlib_env_with_config(config)?;
     state.reset_impure();
     fallible::register_template(
         &mut env,
         "grep_win",
-        r#"{{ 'line1
+        r"{{ 'line1
 line2
-' | grep('^line2') | trim }}"#,
+' | grep('^line2') | trim }}",
     )?;
     let template = env
         .get_template("grep_win")
@@ -155,7 +156,7 @@ fn grep_streams_large_output_on_windows() -> Result<()> {
         .with_command_max_output_bytes(512)?
         .with_command_max_stream_bytes(200_000)?
         .with_command_path_override(path);
-    let (mut env, mut state) = fallible::stdlib_env_with_config(config)?;
+    let (mut env, state) = fallible::stdlib_env_with_config(config)?;
     state.reset_impure();
     fallible::register_template(
         &mut env,
@@ -173,15 +174,15 @@ fn grep_streams_large_output_on_windows() -> Result<()> {
         state.is_impure(),
         "grep streaming should mark template impure"
     );
-    let path = camino::Utf8Path::new(rendered.as_str());
-    let metadata = fs::metadata(path.as_std_path())
-        .with_context(|| format!("stat streamed windows grep output {}", path))?;
+    let rendered_path = camino::Utf8Path::new(rendered.as_str());
+    let metadata = fs::metadata(rendered_path.as_std_path())
+        .with_context(|| format!("stat streamed windows grep output {rendered_path}"))?;
     ensure!(
         metadata.len() >= payload.len() as u64,
         "streamed grep output should retain payload size"
     );
-    let contents = fs::read_to_string(path.as_std_path())
-        .with_context(|| format!("read streamed windows grep output {}", path))?;
+    let contents = fs::read_to_string(rendered_path.as_std_path())
+        .with_context(|| format!("read streamed windows grep output {rendered_path}"))?;
     ensure!(
         contents == payload,
         "streamed grep file should contain the helper payload"
@@ -202,9 +203,9 @@ fn shell_preserves_cmd_meta_characters() -> Result<()> {
         ARGS_STUB,
     )?;
 
-    let command = format!("\"{}\" \"literal %%^!\"", exe);
+    let command = format!("\"{exe}\" \"literal %%^!\"");
     let config = StdlibConfig::from_current_dir()?.with_command_path_override(path);
-    let (mut env, mut state) = fallible::stdlib_env_with_config(config)?;
+    let (mut env, state) = fallible::stdlib_env_with_config(config)?;
     state.reset_impure();
     fallible::register_template(&mut env, "shell_meta", "{{ '' | shell(cmd) }}")?;
     let template = env
