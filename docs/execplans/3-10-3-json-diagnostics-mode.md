@@ -300,8 +300,9 @@ The current diagnostics path is split across a small number of files:
   existing `Cli` struct and already derives `OrthoConfig`.
 - [src/cli_l10n.rs](../../src/cli_l10n.rs) maps clap
   argument identifiers to Fluent help keys.
-- [src/runner/mod.rs](../../src/runner/mod.rs) constructs
-  status reporters and executes commands.
+- [src/runner/reporter.rs](../../src/runner/reporter.rs)
+  constructs the status reporter, while
+  [src/runner/mod.rs](../../src/runner/mod.rs) executes commands.
 - [src/runner/error.rs](../../src/runner/error.rs) contains
   `RunnerError`, which already implements `miette::Diagnostic`.
 - [src/manifest/diagnostics/mod.rs](../../src/manifest/diagnostics/mod.rs)
@@ -479,9 +480,10 @@ Changes:
      through CLI or environment hints
    - render runtime failures as JSON when the merged CLI enables it
 2. Suppress `tracing_subscriber` stderr logging when JSON mode is active.
-3. In [src/runner/mod.rs](../../src/runner/mod.rs), force
-   `SilentReporter` when JSON mode is active so no status lines or timing
-   summaries reach `stderr`.
+3. In [src/runner/reporter.rs](../../src/runner/reporter.rs),
+   `make_reporter` selects `SilentReporter` when progress is disabled
+   in JSON mode, so no status lines or timing summaries reach
+   `stderr`.
 4. Ensure success-path subcommand output remains unchanged on `stdout`.
 
 Acceptance for Stage C:
