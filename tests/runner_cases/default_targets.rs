@@ -1,4 +1,9 @@
 //! Unix-only runner tests covering CLI default-target execution.
+//!
+//! The whole crate is Unix-only: it drives a fake `ninja` shell script and
+//! the Unix-only `FakeNinjaFixture`, neither of which exists on Windows.
+
+#![cfg(unix)]
 
 use anyhow::{Context, Result, ensure};
 use netsuke::cli::{BuildArgs, Cli, Commands};
