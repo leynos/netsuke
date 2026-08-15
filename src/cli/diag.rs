@@ -54,7 +54,9 @@ pub fn resolve_merged_json_with_env(
 ///
 /// The returned layers belong to this exact resolution pass and must be passed
 /// to [`super::merge::merge_with_cached_file_layers`] for the subsequent full
-/// merge.
+/// merge. This standalone wrapper replays deferred discovery diagnostics before
+/// returning. Startup callers that must configure tracing first use
+/// [`resolve_json_and_layers_outcome_with_env`] instead.
 ///
 /// # Errors
 ///
@@ -66,6 +68,7 @@ pub fn resolve_json_and_layers_with_env(
     env: &impl EnvProvider,
 ) -> OrthoResult<(bool, DiscoveredLayers)> {
     let (result, outcome) = resolve_json_and_layers_outcome_with_env(cli, matches, env);
+    outcome.emit_diagnostics();
     result.map(|json| (json, outcome.into_layers()))
 }
 
@@ -160,12 +163,41 @@ mod tests {
 
     use super::*;
     use crate::cli::test_support::TestEnv;
-    use anyhow::ensure;
+    use crate::test_tracing_capture::with_test_subscriber;
+    use anyhow::{Context, ensure};
     use cap_std::{ambient_authority, fs::Dir};
     use clap::CommandFactory;
     use clap::Parser;
     use serde_json::json;
+    use std::path::Path;
     use tempfile::tempdir;
+    use tracing_subscriber::filter::LevelFilter;
+
+    fn find_deferred_event<'a>(events: &'a [String], message: &str) -> anyhow::Result<&'a str> {
+        events
+            .iter()
+            .find(|event| event.contains(message))
+            .map(String::as_str)
+            .with_context(|| format!("expected event containing {message:?} in {events:?}"))
+    }
+
+    fn assert_bounded_path_event(event: &str, path: &Path) -> anyhow::Result<()> {
+        ensure!(
+            event.contains("path_hash="),
+            "event should contain a bounded path hash: {event}"
+        );
+        ensure!(
+            !event.contains(path.to_string_lossy().as_ref()),
+            "event should not expose the raw configuration path: {event}"
+        );
+        if let Some(file_name) = path.file_name() {
+            ensure!(
+                !event.contains(file_name.to_string_lossy().as_ref()),
+                "event should not expose the configuration file name: {event}"
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn json_from_layer_reads_json_bool() {
@@ -222,18 +254,73 @@ mod tests {
     }
 
     #[test]
-    fn resolve_merged_json_rejects_missing_injected_explicit_config() -> anyhow::Result<()> {
+    fn resolve_merged_json_replays_missing_explicit_config_diagnostics() -> anyhow::Result<()> {
         let dir = tempdir()?;
         let missing_config_path = dir.path().join("missing-netsuke.toml");
         let matches = Cli::command().get_matches_from(["netsuke"]);
         let env = TestEnv::default().with_var("NETSUKE_CONFIG", &missing_config_path);
 
-        let error = resolve_merged_json_with_env(&Cli::default(), &matches, &env)
-            .expect_err("missing injected explicit config should fail");
+        let (result, events) = with_test_subscriber(LevelFilter::TRACE, |captured| {
+            let result = resolve_merged_json_with_env(&Cli::default(), &matches, &env);
+            (result, captured.snapshot())
+        });
+        let error = result.expect_err("missing injected explicit config should fail");
         ensure!(
             matches!(error.as_ref(), OrthoError::File { path, .. } if path == &missing_config_path),
             "expected missing explicit config error for {missing_config_path:?}, got {error:?}"
         );
+        let selector_event = find_deferred_event(&events, "resolved config path")?;
+        ensure!(
+            selector_event.contains("selector=\"NETSUKE_CONFIG\"")
+                && selector_event.contains("path_present=true"),
+            "selector event should record the injected selector: {selector_event}"
+        );
+        assert_bounded_path_event(selector_event, &missing_config_path)?;
+        assert_bounded_path_event(
+            find_deferred_event(&events, "using explicit config path")?,
+            &missing_config_path,
+        )?;
+        let failure_event = find_deferred_event(&events, "explicit config load failed")?;
+        ensure!(
+            failure_event.contains("failure_kind=Missing"),
+            "load failure should retain its bounded kind: {failure_event}"
+        );
+        assert_bounded_path_event(failure_event, &missing_config_path)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_json_and_layers_replays_successful_explicit_config_diagnostics() -> anyhow::Result<()>
+    {
+        let dir = tempdir()?;
+        let config_path = dir.path().join("customer@example.com.toml");
+        let config_dir = Dir::open_ambient_dir(dir.path(), ambient_authority())?;
+        config_dir.write("customer@example.com.toml", b"json = true\n")?;
+        let matches = Cli::command().get_matches_from(["netsuke"]);
+        let cli = Cli {
+            config: Some(config_path.clone()),
+            ..Cli::default()
+        };
+
+        let (result, events) = with_test_subscriber(LevelFilter::TRACE, |captured| {
+            let result = resolve_json_and_layers_with_env(&cli, &matches, &TestEnv::default());
+            (result, captured.snapshot())
+        });
+        let (json, layers) = result?;
+        ensure!(json, "explicit configuration should enable JSON mode");
+        drop(layers);
+        let selector_event = find_deferred_event(&events, "resolved config path")?;
+        ensure!(
+            selector_event.contains("selector=\"cli_flag\"")
+                && selector_event.contains("path_present=true"),
+            "selector event should record the CLI selector: {selector_event}"
+        );
+        assert_bounded_path_event(selector_event, &config_path)?;
+        assert_bounded_path_event(
+            find_deferred_event(&events, "using explicit config path")?,
+            &config_path,
+        )?;
 
         Ok(())
     }
