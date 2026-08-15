@@ -1346,3 +1346,9 @@ handle. The new crate adds only a cross-platform advisory-lock implementation;
 it neither opens paths nor expands the locking authority. The final evidence
 includes all deterministic gates plus 14 materialization, 6 retention, and 7
 public serial-CLI focused tests.
+
+2026-08-15: Verified the remaining documentation and locale outcomes: the ADR
+date punctuation is template-compliant and remains unchanged; the four
+retention translations, users' guide sidecar location, and repository-layout
+telemetry attribution are corrected. The Polish rename request was invalid,
+and the Dutch rename request was already resolved; neither was changed.

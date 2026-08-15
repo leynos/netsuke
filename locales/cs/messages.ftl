@@ -1,6 +1,6 @@
 # Lokalizační zdroje příkazové řádky Netsuke.
 
-runner.io.dyndep.retention = Nepodařilo se použít uchování vygenerovaného dyndep pod { $path }.
+runner.io.dyndep.retention = Nepodařilo se použít uchování vygenerovaného dyndep (cesta: { $path }).
 cli.about = Netsuke překládá manifesty YAML + Jinja na plány sestavení pro Ninju.
 cli.long_about = Netsuke převádí manifesty YAML + Jinja na reprodukovatelné grafy Ninja a spouští Ninju s bezpečným výchozím nastavením.
 cli.usage = { $usage }

@@ -1,6 +1,6 @@
 # Ресурсы локализации командной строки Netsuke.
 
-runner.io.dyndep.retention = Не удалось применить сохранение созданного файла dyndep по пути { $path }.
+runner.io.dyndep.retention = Не удалось применить правила хранения сгенерированного файла dyndep (путь: { $path }).
 cli.about = Netsuke компилирует манифесты YAML + Jinja в планы сборки Ninja.
 cli.long_about = Netsuke преобразует манифесты YAML + Jinja в воспроизводимые графы Ninja и запускает Ninja с безопасными значениями по умолчанию.
 cli.usage = { $usage }

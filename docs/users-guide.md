@@ -930,7 +930,7 @@ textual outline and a `<noscript>` DOT representation.
 `generate` writes Ninja without running it. With no `--output`, stdout contains
 only the generated Ninja manifest. With `--output <FILE>`, Netsuke writes the
 manifest to that file and leaves stdout empty. For a serial dependency list,
-both forms also materialize the referenced `.netsuke/dyndep` sidecars beside
+both forms also materialize the referenced sidecars under `.netsuke/dyndep` in
 the effective Ninja working directory, so the emitted manifest is executable
 at that point. Retention is bounded: a later Netsuke command may remove
 sidecars referenced by an older arbitrary output file. Regenerate the file
