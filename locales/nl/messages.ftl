@@ -181,7 +181,7 @@ ir.invalid_command = Ongeldige interpolatie in de opdracht: { $snippet }.
 # Fouten bij het genereren van Ninja.
 ninja_gen.missing_action = De actie ‘{ $id }’ waarnaar een bouwtak verwijst, ontbreekt.
 ninja_gen.format = De uitvoer van het Ninja-manifest kon niet worden opgemaakt.
-ninja_gen.dyndep_files_required = Deze build vereist een gegenereerde Ninja-bundel; gebruik `netsuke build`, `netsuke clean` of `netsuke generate` om de dyndep-bestanden te materialiseren.
+ninja_gen.dyndep_files_required = Deze bewerking vereist een gegenereerde Ninja-bundel; gebruik `netsuke build`, `netsuke clean` of `netsuke generate` om de dyndep-bestanden te materialiseren.
 ninja_gen.reserved_output_path = Het pad '{ $path }' is gereserveerd voor de seriële afhankelijkheidsstatus van Netsuke.
 ninja_gen.unsupported_path_character = Het pad '{ $path }' bevat het niet-ondersteunde Ninja-padteken '{ $character }'.
 
