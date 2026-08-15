@@ -409,6 +409,10 @@ criterion in issue #552 and all repository gates pass.
   selection, and performs a final bounded-set sweep. The focused 1,000-file
   regression proves that the current sidecar and the first fitting stale paths
   survive while all other stale paths are reclaimed.
+- [x] (2026-08-15) Simplified the retention telemetry assertion by moving the
+  typed snapshot traversals into private helpers in a focused nested test
+  module. This preserves the exact success-label, counter-kind, and reclaimed
+  total contract while keeping each test module below the 400-line limit.
 
 ## Surprises and discoveries
 

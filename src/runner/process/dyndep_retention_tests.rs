@@ -10,10 +10,6 @@ use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use cap_std::fs_utf8::Dir;
 use fs4::FileExt;
-use metrics_util::{
-    MetricKind,
-    debugging::{DebugValue, DebuggingRecorder},
-};
 use mockable::{DefaultEnv, Env};
 use std::{
     io::{BufRead, BufReader, Read, Write},
@@ -169,64 +165,8 @@ fn dyndep_publication_lease_worker() -> Result<()> {
     write_worker_marker(std::io::stdout().lock(), "completed")
 }
 
-#[test]
-fn retention_records_only_a_bounded_success_outcome_and_reclaimed_totals() -> Result<()> {
-    let temp = tempfile::tempdir()?;
-    let dir = temporary_dir(&temp)?;
-    let current = sidecar(".netsuke/dyndep/current.dd", "current");
-    let lease = materialize_dyndep_files(&dir, std::slice::from_ref(&current))?;
-    dir.write(".netsuke/dyndep/stale.dd", "stale")?;
-    let recorder = DebuggingRecorder::new();
-    let snapshotter = recorder.snapshotter();
-
-    metrics::with_local_recorder(&recorder, || {
-        prune_dyndep_sidecars(
-            &dir,
-            &lease,
-            std::slice::from_ref(&current),
-            RetentionPolicy::new(0, 0),
-        )
-    })?;
-
-    let snapshot = snapshotter.snapshot().into_vec();
-    let retention_successes = snapshot.iter().find_map(|(key, _, _, debug_value)| {
-        let success = key
-            .key()
-            .labels()
-            .any(|label| label.key() == "outcome" && label.value() == "success");
-        match (key.kind(), key.key().name(), success, debug_value) {
-            (MetricKind::Counter, name, true, DebugValue::Counter(count))
-                if name == RETENTIONS_TOTAL =>
-            {
-                Some(*count)
-            }
-            _ => None,
-        }
-    });
-    ensure!(
-        retention_successes == Some(1),
-        "retention must record exactly one fixed success outcome"
-    );
-    let reclaimed = |name| {
-        snapshot.iter().find_map(|(key, _, _, debug_value)| {
-            match (key.kind(), key.key().name(), debug_value) {
-                (MetricKind::Counter, metric, DebugValue::Counter(count)) if metric == name => {
-                    Some(*count)
-                }
-                _ => None,
-            }
-        })
-    };
-    ensure!(
-        reclaimed(RETAINED_FILES_RECLAIMED) == Some(1),
-        "retention must record reclaimed sidecar files"
-    );
-    ensure!(
-        reclaimed(RETAINED_BYTES_RECLAIMED) == Some(5),
-        "retention must record reclaimed sidecar bytes"
-    );
-    Ok(())
-}
+#[path = "dyndep_retention_telemetry_tests.rs"]
+mod telemetry_tests;
 
 #[test]
 fn repeated_publication_respects_the_obsolete_file_count_budget() -> Result<()> {
