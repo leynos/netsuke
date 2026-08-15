@@ -33,12 +33,30 @@ pub enum StderrMode {
 
 impl StderrMode {
     /// Derive the policy from whether JSON diagnostics are enabled.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::runner::StderrMode;
+    ///
+    /// assert_eq!(StderrMode::from_json_enabled(true), StderrMode::Suppress);
+    /// assert_eq!(StderrMode::from_json_enabled(false), StderrMode::Forward);
+    /// ```
     #[must_use]
     pub const fn from_json_enabled(json: bool) -> Self {
         if json { Self::Suppress } else { Self::Forward }
     }
 
     /// Return `true` when the policy drains child streams to `io::sink()`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::runner::StderrMode;
+    ///
+    /// assert!(StderrMode::Suppress.is_suppress());
+    /// assert!(!StderrMode::Forward.is_suppress());
+    /// ```
     #[must_use]
     pub const fn is_suppress(self) -> bool {
         matches!(self, Self::Suppress)
