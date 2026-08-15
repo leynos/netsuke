@@ -7,8 +7,20 @@
 
 use anyhow::{Context, Result, ensure};
 use tempfile::{TempDir, tempdir};
-use test_support::config_metrics::{MetricSnapshotRecord, assert_config_metrics_snapshot};
 use test_support::netsuke::{run_netsuke_in, run_netsuke_in_with_env};
+
+#[path = "config_tracing_metrics.rs"]
+mod config_tracing_metrics;
+use config_tracing_metrics::{
+    CONFIGURATION_MERGE_FAILURE_METRICS, ConfigurationDiagnosticOutput,
+    DIAGNOSTIC_MODE_FAILURE_METRICS, SUCCESSFUL_EXPLICIT_SELECTION_METRICS,
+    assert_config_metrics_snapshot,
+};
+
+struct ConfigLoadFailureExpectation {
+    operation: &'static str,
+    error_category: &'static str,
+}
 
 /// Lines emitted by the tracing subscriber, excluding the final error report.
 ///
@@ -19,102 +31,36 @@ use test_support::netsuke::{run_netsuke_in, run_netsuke_in_with_env};
 /// Every tracing line begins with an ISO timestamp, whereas the error report's
 /// continuation lines do not. Matching the full `YYYY-` prefix rather than a
 /// leading digit keeps the report's numbered source snippet (`1 | ...`) out.
-fn is_tracing_line(line: &str) -> bool {
-    line.split_once('-').is_some_and(|(year, _)| {
-        year.len() == 4 && year.chars().all(|digit| digit.is_ascii_digit())
-    })
-}
-
-fn diagnostic_lines(stderr: &str) -> Vec<&str> {
-    stderr
+fn diagnostic_lines<'a>(output: &ConfigurationDiagnosticOutput<'a>) -> Vec<&'a str> {
+    output
+        .stderr
         .lines()
-        .filter(|line| is_tracing_line(line))
+        .filter(|line| {
+            line.split_once('-').is_some_and(|(year, _)| {
+                year.len() == 4 && year.chars().all(|digit| digit.is_ascii_digit())
+            })
+        })
         .filter(|line| !line.contains("configuration load failed"))
         .collect()
 }
 
-fn assert_config_load_failure(stderr: &str, operation: &str, error_category: &str) -> Result<()> {
+fn assert_config_load_failure(
+    output: &ConfigurationDiagnosticOutput<'_>,
+    expected: &ConfigLoadFailureExpectation,
+) -> Result<()> {
     ensure!(
-        stderr.contains("configuration load failed")
-            && stderr.contains(&format!("operation=\"{operation}\""))
-            && stderr.contains(&format!("error_category=\"{error_category}\"")),
-        "stderr should identify the config-load operation and category: {stderr}"
+        output.stderr.contains("configuration load failed")
+            && output
+                .stderr
+                .contains(&format!("operation=\"{}\"", expected.operation))
+            && output
+                .stderr
+                .contains(&format!("error_category=\"{}\"", expected.error_category)),
+        "stderr should identify the config-load operation and category: {}",
+        output.stderr
     );
     Ok(())
 }
-
-const DIAG_MODE_SUCCESS_METRICS: &[MetricSnapshotRecord] = &[
-    MetricSnapshotRecord {
-        name: "config_load_total",
-        labels: &[
-            "Label(\"phase\", \"diag_mode\")",
-            "Label(\"outcome\", \"success\")",
-        ],
-        value: Some("Counter(1)"),
-    },
-    MetricSnapshotRecord {
-        name: "config_load_duration_seconds",
-        labels: &["Label(\"phase\", \"diag_mode\")"],
-        value: None,
-    },
-    MetricSnapshotRecord {
-        name: "config_load_total",
-        labels: &[
-            "Label(\"phase\", \"merge\")",
-            "Label(\"outcome\", \"success\")",
-        ],
-        value: Some("Counter(1)"),
-    },
-    MetricSnapshotRecord {
-        name: "config_load_duration_seconds",
-        labels: &["Label(\"phase\", \"merge\")"],
-        value: None,
-    },
-];
-const DIAG_MODE_FAILURE_METRICS: &[MetricSnapshotRecord] = &[
-    MetricSnapshotRecord {
-        name: "config_load_total",
-        labels: &[
-            "Label(\"phase\", \"diag_mode\")",
-            "Label(\"outcome\", \"failure\")",
-        ],
-        value: Some("Counter(1)"),
-    },
-    MetricSnapshotRecord {
-        name: "config_load_duration_seconds",
-        labels: &["Label(\"phase\", \"diag_mode\")"],
-        value: None,
-    },
-];
-
-const MERGE_FAILURE_METRICS: &[MetricSnapshotRecord] = &[
-    MetricSnapshotRecord {
-        name: "config_load_total",
-        labels: &[
-            "Label(\"phase\", \"diag_mode\")",
-            "Label(\"outcome\", \"success\")",
-        ],
-        value: Some("Counter(1)"),
-    },
-    MetricSnapshotRecord {
-        name: "config_load_total",
-        labels: &[
-            "Label(\"phase\", \"merge\")",
-            "Label(\"outcome\", \"failure\")",
-        ],
-        value: Some("Counter(1)"),
-    },
-    MetricSnapshotRecord {
-        name: "config_load_duration_seconds",
-        labels: &["Label(\"phase\", \"diag_mode\")"],
-        value: None,
-    },
-    MetricSnapshotRecord {
-        name: "config_load_duration_seconds",
-        labels: &["Label(\"phase\", \"merge\")"],
-        value: None,
-    },
-];
 
 fn workspace() -> Result<TempDir> {
     let temp = tempdir().context("create temp dir")?;
@@ -142,7 +88,11 @@ fn explicit_selection_traces_bounded_fields() -> Result<()> {
         run.success,
         "an explicit configuration path should allow generate to succeed"
     );
-    let diagnostics = diagnostic_lines(&run.stderr);
+
+    let output = ConfigurationDiagnosticOutput {
+        stderr: &run.stderr,
+    };
+    let diagnostics = diagnostic_lines(&output);
     let joined = diagnostics.join("\n");
 
     ensure!(
@@ -169,11 +119,7 @@ fn explicit_selection_traces_bounded_fields() -> Result<()> {
         run.success,
         "a selected valid config should complete successfully"
     );
-    assert_config_metrics_snapshot(
-        &run.stderr,
-        &[DIAG_MODE_SUCCESS_COUNTER, MERGE_SUCCESS_COUNTER],
-        &[DIAG_MODE_DURATION_HISTOGRAM, MERGE_DURATION_HISTOGRAM],
-    )?;
+    assert_config_metrics_snapshot(&output, &SUCCESSFUL_EXPLICIT_SELECTION_METRICS)?;
     Ok(())
 }
 
@@ -188,7 +134,10 @@ fn explicit_load_failure_traces_failure_kind() -> Result<()> {
         temp.path(),
         &["--verbose", "--config", raw_path.as_str(), "generate"],
     )?;
-    let diagnostics = diagnostic_lines(&run.stderr);
+    let output = ConfigurationDiagnosticOutput {
+        stderr: &run.stderr,
+    };
+    let diagnostics = diagnostic_lines(&output);
     let joined = diagnostics.join("\n");
 
     ensure!(
@@ -222,12 +171,15 @@ fn explicit_load_failure_traces_failure_kind() -> Result<()> {
         "human stderr must not expose configuration details: {}",
         run.stderr
     );
-    assert_config_load_failure(&run.stderr, "diag_mode_resolution", "io")?;
-    assert_config_metrics_snapshot(
-        &run.stderr,
-        &[DIAG_MODE_FAILURE_COUNTER],
-        &[DIAG_MODE_DURATION_HISTOGRAM],
+
+    assert_config_load_failure(
+        &output,
+        &ConfigLoadFailureExpectation {
+            operation: "diag_mode_resolution",
+            error_category: "io",
+        },
     )?;
+    assert_config_metrics_snapshot(&output, &DIAGNOSTIC_MODE_FAILURE_METRICS)?;
     Ok(())
 }
 
@@ -240,17 +192,22 @@ fn environment_validation_failure_identifies_config_merge() -> Result<()> {
         &["--verbose", "generate"],
         &[("NETSUKE_JOBS", "0")],
     )?;
+    let output = ConfigurationDiagnosticOutput {
+        stderr: &run.stderr,
+    };
 
     ensure!(
         !run.success,
         "an invalid configuration environment value should fail the run"
     );
-    assert_config_load_failure(&run.stderr, "config_merge", "validation")?;
-    assert_config_metrics_snapshot(
-        &run.stderr,
-        &[DIAG_MODE_SUCCESS_COUNTER, MERGE_FAILURE_COUNTER],
-        &[DIAG_MODE_DURATION_HISTOGRAM, MERGE_DURATION_HISTOGRAM],
+    assert_config_load_failure(
+        &output,
+        &ConfigLoadFailureExpectation {
+            operation: "config_merge",
+            error_category: "validation",
+        },
     )?;
+    assert_config_metrics_snapshot(&output, &CONFIGURATION_MERGE_FAILURE_METRICS)?;
     Ok(())
 }
 
@@ -266,7 +223,10 @@ fn invalid_config_traces_without_parser_text() -> Result<()> {
         temp.path(),
         &["--verbose", "--config", raw_path.as_str(), "generate"],
     )?;
-    let joined = diagnostic_lines(&run.stderr).join("\n");
+    let output = ConfigurationDiagnosticOutput {
+        stderr: &run.stderr,
+    };
+    let joined = diagnostic_lines(&output).join("\n");
 
     ensure!(
         !run.success,
