@@ -396,6 +396,13 @@ criterion in issue #552 and all repository gates pass.
   and serial CLI (7) suites also passed. The lock implementation uses `fs4`
   only on a file already opened through the effective-directory capability,
   satisfying the capability-filesystem lint without an exemption.
+- [x] (2026-08-15) Re-verified the latest documentation review correction
+  against the generated-bundle and Ninja-version implementation: staged serial
+  ordering applies only to serial direct-dependency lists with at least two
+  items, so only those bundles require Ninja 1.10 or newer; parallel and
+  zero/one-item serial cases retain the existing requirement. The retention
+  warning was stale because bounded, lease-coordinated retention already
+  exists.
 
 ## Surprises and discoveries
 
@@ -413,6 +420,9 @@ criterion in issue #552 and all repository gates pass.
   fixture now uses its existing apostrophe path as the edge case; IR-level
   command interpolation coverage remains separate from the generator's stricter
   Ninja path contract.
+- (2026-08-15) A retention warning from the latest review was stale: obsolete
+  sidecars already have bounded count and byte budgets, and materialization,
+  cleanup, and command consumption already share a capability-scoped lease.
 - (2026-08-11) The prior materializer commit accidentally left surplus blank
   lines at EOF in each changed Fluent catalogue. `git show --check` reports
   them even though the current worktree is clean. Remove only those trailing

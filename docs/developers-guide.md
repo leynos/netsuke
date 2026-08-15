@@ -1633,6 +1633,10 @@ order-only dependencies cannot use either namespace. A string-only generator
 must return `DyndepFilesRequired` for a graph that needs sidecars rather than
 returning an incomplete build file.
 
+Generated bundles need Ninja 1.10 or newer only when a serial direct-dependency
+list has at least two items and therefore needs staged ordering; parallel lists
+and serial lists with zero or one item retain the existing Ninja requirement.
+
 Each gate reveals one real dependency through a Ninja dyndep file. The next
 sidecar-producing edge depends on the preceding gate, which keeps later direct
 dependencies unavailable to the scheduler until earlier work succeeds. This is
