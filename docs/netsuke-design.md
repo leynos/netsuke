@@ -2754,6 +2754,8 @@ metrics listener as a side effect of a command invocation.
 
 Metric labels are closed sets: phase-level series use `diag_mode` or `merge`,
 and both phase-level and startup-attempt counters use `success` or `failure`.
+Recorder-snapshot tests assert these labels through the same closed phase and
+outcome vocabulary.
 The startup-attempt duration has no labels. Paths, configuration values, and
 formatted source errors remain in user-facing diagnostics where appropriate;
 they must not become metric labels. When a run reaches configuration loading,
