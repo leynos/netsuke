@@ -36,7 +36,7 @@ default marker such as `[★ default]` on manifest defaults.
 ## Constraints
 
 - Traditional AST/render/expansion open-source repo layering must be respected:
-  `src/ast.rs`, `src/manifest/render.rs`, `src/manifest/expand.rs`.
+  `src/ast/mod.rs`, `src/manifest/render.rs`, `src/manifest/expand.rs`.
 - `description` must be optional on every target and action; duplicate or
   unknown fields must remain validation errors.
 - A target description is discovery metadata and must not silently replace a
@@ -210,7 +210,7 @@ Lessons learned:
 This repository is a Rust CLI (`netsuke`) that parses YAML+Jinja manifests and
 generates Ninja build files. Key files and modules for this task:
 
-- `src/ast.rs` — `NetsukeManifest`, `Target`, `Rule`, `Recipe`. `Target` has
+- `src/ast/mod.rs` — `NetsukeManifest`, `Target`, `Rule`, `Recipe`. `Target` has
   `deny_unknown_fields`; actions are `Vec<Target>` deserialized by
   `deserialize_actions`, which forces `phony = true`.
 - `src/manifest/mod.rs` — `from_str_named` pipeline: YAML parse, vars
@@ -240,7 +240,7 @@ generates Ninja build files. Key files and modules for this task:
 
 ## Plan of work
 
-- Phase 1: add `pub description: Option<String>` to `Target` in `src/ast.rs`
+- Phase 1: add `pub description: Option<String>` to `Target` in `src/ast/mod.rs`
   with `#[serde(default)]` and a Rustdoc comment mirroring `Rule::description`;
   render it in `render_target` through `render_str_with` exactly like
   `render_rule`; leave `expand.rs` untouched because `foreach`/`when` clone the

@@ -675,16 +675,18 @@ An Architecture Decision Record documents the migration rationale and
 compatibility results; no further action is required beyond monitoring upstream
 releases.
 
-### 3.2 Core Data Structures (`ast.rs`)
+
+### 3.2 Core Data Structures (`ast/mod.rs`)
 
 The Rust structs that `serde_saphyr` deserializes into form the Abstract Syntax
 Tree (AST) of the build manifest. These structs must precisely mirror the YAML
 schema defined in Section 2. They will be defined in a dedicated module,
-`src/ast.rs`, and annotated with `#[derive(Deserialize)]` (and `Debug`) to
+`src/ast/mod.rs`, and annotated with `#[derive(Deserialize)]` (and `Debug`) to
 enable automatic deserialization and easy debugging.
 
-The authoritative live AST contract is [src/ast.rs](../src/ast.rs). Fields and
-types marked `FUTURE` in the snippet below are forward-looking API sketches.
+The authoritative live AST contract is
+[src/ast/mod.rs](../src/ast/mod.rs). Fields and types marked `FUTURE` in the
+snippet below are forward-looking API sketches.
 `Target.description` is implemented optional discovery metadata; the remaining
 forward-looking fields describe the intended schema once the roadmap tasks
 land and are not assertions about the current codebase.
@@ -692,7 +694,7 @@ land and are not assertions about the current codebase.
 Rust
 
 ```rust
-// In src/ast.rs
+// In src/ast/mod.rs
 
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -724,7 +726,7 @@ pub struct Rule {
     #[serde(flatten)]
     pub recipe: Recipe,
     pub description: Option<String>,
-    // FUTURE: planned Rule.env extension; not present in src/ast.rs yet.
+    // FUTURE: planned Rule.env extension; not present in src/ast/mod.rs yet.
     #[serde(default)]
     pub env: HashMap<String, EnvValue>,
     #[serde(default)]
@@ -739,7 +741,7 @@ pub enum Recipe {
     Command { command: StringOrList },
     Script { script: String },
     Rule { rule: StringOrList },
-    // FUTURE: planned Recipe::Exec extension; not present in src/ast.rs yet.
+    // FUTURE: planned Recipe::Exec extension; not present in src/ast/mod.rs yet.
     Exec { exec: ExecRecipe },
 }
 
@@ -774,7 +776,7 @@ pub struct Target {
     #[serde(default)]
     pub description: Option<String>,
 
-    // FUTURE: planned Target.env extension; not present in src/ast.rs yet.
+    // FUTURE: planned Target.env extension; not present in src/ast/mod.rs yet.
     #[serde(default)]
     pub env: HashMap<String, EnvValue>,
 
@@ -825,7 +827,161 @@ and `as_single` build on it. Path conversion deliberately does not live here.
 The AST models the manifest's surface syntax, in which `sources`, `deps` and
 `order_only_deps` are plain strings; only manifest-to-IR lowering decides they
 name files on disk, so `src/ir/from_manifest_support.rs::to_paths` performs
-that interpretation at the boundary. Keeping `camino` out of `src/ast.rs`
+that interpretation at the boundary. Keeping `camino` out of `src/ast/mod.rs`
+stops filesystem concerns leaking into the domain model.
+
+### 3.2 Core Data Structures (`ast/mod.rs`)
+
+The Rust structs that `serde_saphyr` deserializes into form the Abstract Syntax
+Tree (AST) of the build manifest. These structs must precisely mirror the YAML
+schema defined in Section 2. They will be defined in a dedicated module,
+`src/ast/mod.rs`, and annotated with `#[derive(Deserialize)]` (and `Debug`) to
+enable automatic deserialization and easy debugging.
+
+The authoritative live AST contract is
+[src/ast/mod.rs](../src/ast/mod.rs). Fields and types marked `FUTURE` in the
+snippet below are forward-looking API sketches.
+`Target.description` is implemented optional discovery metadata; the remaining
+forward-looking fields describe the intended schema once the roadmap tasks
+land and are not assertions about the current codebase.
+
+Rust
+
+```rust
+// In src/ast/mod.rs
+
+use serde::Deserialize;
+use std::collections::HashMap;
+
+/// Represents the top-level structure of a Netsukefile file.
+#[serde(deny_unknown_fields)]
+pub struct NetsukeManifest {
+    pub netsuke_version: Version,
+
+    #[serde(default)]
+    pub vars: HashMap<String, serde_json::Value>,
+
+    #[serde(default)]
+    pub rules: Vec<Rule>,
+
+    #[serde(default)]
+    pub actions: Vec<Target>,
+
+    pub targets: Vec<Target>,
+
+    #[serde(default)]
+    pub defaults: Vec<String>,
+}
+
+/// Represents a reusable command template.
+#[serde(deny_unknown_fields)]
+pub struct Rule {
+    pub name: String,
+    #[serde(flatten)]
+    pub recipe: Recipe,
+    pub description: Option<String>,
+    // FUTURE: planned Rule.env extension; not present in src/ast/mod.rs yet.
+    #[serde(default)]
+    pub env: HashMap<String, EnvValue>,
+    #[serde(default)]
+    pub deps: StringOrList,
+    // Additional fields like 'pool' or 'restat' can be added here
+    // to map to more advanced Ninja features.
+}
+
+/// A union of execution styles for both rules and targets.
+#[serde(untagged)]
+pub enum Recipe {
+    Command { command: StringOrList },
+    Script { script: String },
+    Rule { rule: StringOrList },
+    // FUTURE: planned Recipe::Exec extension; not present in src/ast/mod.rs yet.
+    Exec { exec: ExecRecipe },
+}
+
+/// FUTURE: A structured command recipe that avoids shell word splitting.
+#[serde(deny_unknown_fields)]
+pub struct ExecRecipe {
+    pub program: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+}
+
+/// Represents a single build target or edge in the dependency graph.
+#[serde(deny_unknown_fields)]
+pub struct Target {
+    pub name: StringOrList,
+    #[serde(flatten)]
+    pub recipe: Recipe,
+
+    #[serde(default)]
+    pub sources: StringOrList,
+
+    #[serde(default)]
+    pub deps: StringOrList,
+
+    #[serde(default)]
+    pub order_only_deps: StringOrList,
+
+    #[serde(default)]
+    pub vars: HashMap<String, serde_json::Value>,
+
+    /// Optional discovery metadata shown by `netsuke help targets`.
+    #[serde(default)]
+    pub description: Option<String>,
+
+    // FUTURE: planned Target.env extension; not present in src/ast/mod.rs yet.
+    #[serde(default)]
+    pub env: HashMap<String, EnvValue>,
+
+    /// Run this target when requested even if a file with the same name exists.
+    #[serde(default)]
+    pub phony: bool,
+
+    /// Run this target on every invocation regardless of timestamps.
+    #[serde(default)]
+    pub always: bool,
+}
+
+/// FUTURE: Environment variable operations applied to a recipe invocation.
+#[serde(untagged)]
+pub enum EnvValue {
+    Value(String),
+    Operation(EnvOperation),
+}
+
+#[serde(deny_unknown_fields)]
+pub struct EnvOperation {
+    pub value: Option<String>,
+    pub default: Option<String>,
+    pub prepend: Option<String>,
+    pub append: Option<String>,
+    pub unset: Option<bool>,
+}
+
+/// An enum to handle fields that can be either a single string or a list of strings.
+#[serde(untagged)]
+pub enum StringOrList {
+    #[default]
+    Empty,
+    String(String),
+    List(Vec<String>),
+}
+```
+
+*Note: The* `StringOrList` *enum with* `#[serde(untagged)]` *preserves whether
+the manifest supplied one string or an ordered list. The same type represents
+command recipes, sources, dependencies, order-only dependencies, and rule
+selectors; command lists are executed in order, while path-like fields are
+interpreted only at the manifest-to-IR boundary.*
+
+`StringOrList` owns the conversions that only need to know its own shape:
+`map_each` applies a function to every contained string, and `to_string_vec`
+and `as_single` build on it. Path conversion deliberately does not live here.
+The AST models the manifest's surface syntax, in which `sources`, `deps` and
+`order_only_deps` are plain strings; only manifest-to-IR lowering decides they
+name files on disk, so `src/ir/from_manifest_support.rs::to_paths` performs
+that interpretation at the boundary. Keeping `camino` out of `src/ast/mod.rs`
 stops filesystem concerns leaking into the domain model.
 
 #### Example Manifest and AST
@@ -909,7 +1065,7 @@ parsing and template evaluation cleanly separated.
 
 ### 3.4 Design Decisions
 
-The AST structures are implemented in `src/ast.rs` and derive `Deserialize`.
+The AST structures are implemented in `src/ast/mod.rs` and derive `Deserialize`.
 Unknown fields are rejected to surface user errors early. `StringOrList`
 provides a default `Empty` variant, so optional lists are trivial to represent.
 The manifest version is parsed using the `semver` crate to validate that it
