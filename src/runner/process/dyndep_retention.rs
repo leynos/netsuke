@@ -6,7 +6,7 @@
 //! Every serial command holds the lease until it finishes consuming its bundle,
 //! so a concurrent Netsuke command cannot prune active sidecars.
 
-use super::{dyndep_files::DYNDEP_DIR, dyndep_telemetry as telemetry};
+use super::{DYNDEP_DIR, dyndep_telemetry as telemetry};
 use crate::localization::{self, keys};
 use crate::ninja_gen::GeneratedDyndep;
 use anyhow::{Context, Result};

@@ -273,3 +273,6 @@ pub(crate) fn run_ninja_tool_with_status(
 ) -> io::Result<()> {
     run_ninja_tool_internal(request, Some(status_observer), &StdMonotonicClock)
 }
+
+/// Namespace for generated dyndep sidecar files.
+pub(super) const DYNDEP_DIR: &str = ".netsuke/dyndep";

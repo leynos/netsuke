@@ -13,7 +13,7 @@
 //! an atomic rename so concurrent Netsuke processes cannot observe partial
 //! content.
 
-use super::{dyndep_retention::DyndepPublicationLease, dyndep_telemetry as telemetry};
+use super::{DYNDEP_DIR, dyndep_retention::DyndepPublicationLease, dyndep_telemetry as telemetry};
 use crate::localization::{self, keys};
 use crate::ninja_gen::GeneratedDyndep;
 use anyhow::{Context, Result, anyhow};
@@ -23,9 +23,6 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::io::{Read, Write};
 use std::time::{SystemTime, UNIX_EPOCH};
-
-/// Namespace for generated dyndep sidecar files.
-pub(crate) const DYNDEP_DIR: &str = ".netsuke/dyndep";
 
 /// Maximum number of colliding temporary names tolerated per write.
 const MAX_TEMP_FILE_ATTEMPTS: usize = 16;
