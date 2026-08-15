@@ -1,7 +1,6 @@
 //! Tests for startup diagnostics and the level they are gated by.
 
 use super::*;
-use crate::config_resolution::config_err_to_exit;
 use anyhow::{Result, ensure};
 use metrics::Label;
 use metrics_util::debugging::{DebugValue, DebuggingRecorder};
@@ -365,7 +364,7 @@ fn config_load_errors_include_operational_context() -> Result<()> {
 
     tracing::subscriber::with_default(subscriber, || -> Result<()> {
         ensure!(
-            config_err_to_exit(
+            config_load::config_err_to_exit(
                 &validation_error,
                 DiagMode::Human,
                 observability::DIAG_MODE_OPERATION,
@@ -373,8 +372,11 @@ fn config_load_errors_include_operational_context() -> Result<()> {
             "a diagnostic-mode config error must fail the command"
         );
         ensure!(
-            config_err_to_exit(&file_error, DiagMode::Human, observability::MERGE_OPERATION)
-                == ExitCode::FAILURE,
+            config_load::config_err_to_exit(
+                &file_error,
+                DiagMode::Human,
+                observability::MERGE_OPERATION,
+            ) == ExitCode::FAILURE,
             "a merge config error must fail the command"
         );
         Ok(())

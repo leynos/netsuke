@@ -16,7 +16,6 @@ use std::ffi::OsString;
 use std::io::{self, IsTerminal, Write};
 use std::process::ExitCode;
 use std::sync::{Arc, OnceLock};
-use std::time::Duration;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{Registry, fmt, reload};
@@ -37,31 +36,13 @@ impl DiagMode {
         matches!(self, Self::Json)
     }
 }
-mod config_resolution;
-
-/// Cached diagnostic resolution carried into the full configuration merge.
-struct ResolvedDiagnosticMode {
-    mode: DiagMode,
-    discovered_layers: cli::DiscoveredLayers,
-}
 mod observability;
 #[path = "startup_tracing.rs"]
 mod startup_tracing;
 
 #[path = "config_load.rs"]
 mod config_load;
-
-use config_resolution::{merge_cli_or_exit, resolve_json_mode_or_exit};
 use startup_tracing::StartupWriter;
-/// Counter recording the outcome of each configuration-load attempt.
-///
-/// Labelled by `outcome` (`success` or `failure`) so operators can track the
-/// startup configuration-load failure rate.
-const CONFIG_LOAD_TOTAL: &str = "netsuke_config_load_total";
-
-/// Histogram recording the wall-clock duration of the configuration-load
-/// phase (diagnostic-mode resolution through layer merge) in seconds.
-const CONFIG_LOAD_DURATION_SECONDS: &str = "netsuke_config_load_duration_seconds";
 /// Send buffered startup diagnostics where `mode` says they belong.
 ///
 /// Human mode releases them to stderr; JSON mode drops them, so the diagnostic
@@ -272,18 +253,6 @@ fn parse_cli_or_exit(
             }
         }
     }
-}
-
-
-
-/// Emit the configuration-load metrics for one startup attempt.
-///
-/// Recording goes through the `metrics` façade, backed by the application's
-/// in-process `DebuggingRecorder`.
-fn record_config_load_metrics(elapsed: Duration, succeeded: bool) {
-    let outcome = if succeeded { "success" } else { "failure" };
-    metrics::histogram!(CONFIG_LOAD_DURATION_SECONDS).record(elapsed.as_secs_f64());
-    metrics::counter!(CONFIG_LOAD_TOTAL, "outcome" => outcome).increment(1);
 }
 /// Apply the effective output filter and install the runtime localizer.
 fn configure_runtime(

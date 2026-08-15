@@ -86,6 +86,94 @@ fn assert_json_subcommand_success(
     assert_json_success(&output, command)
 }
 
+/// Shared workspace setup for configuration-layering tests.
+///
+/// Creates a minimal workspace, writes `config_content` to `.netsuke.toml`,
+/// installs a fake ninja binary, and runs netsuke with the given `args` and
+/// `extra_env`.  Returns the captured [`CommandOutput`].
+fn run_config_layer_build(
+    context: &str,
+    config_content: &str,
+    args: &[&str],
+    extra_env: &[(&str, &str)],
+) -> Result<CommandOutput> {
+    let workspace = setup_minimal_workspace(context)?;
+    let config = workspace.path().join(".netsuke.toml");
+    std::fs::write(&config, config_content).context("write config file")?;
+    let (_ninja_dir, ninja_path) = fake_ninja_check_build_file()?;
+    run_netsuke_with_env(
+        workspace.path(),
+        args,
+        Some(ninja_path.as_path()),
+        extra_env,
+    )
+}
+
+fn contains_metric_record(snapshot: &str, expected_record: &str, expected_value: &str) -> bool {
+    snapshot
+        .split("), (")
+        .any(|record| record.contains(expected_record) && record.contains(expected_value))
+}
+
+fn contains_non_empty_histogram_record(snapshot: &str, expected_record: &str) -> bool {
+    snapshot.split("), (").any(|record| {
+        record.contains(expected_record)
+            && record.contains("Histogram([")
+            && !record.contains("Histogram([])")
+    })
+}
+
+fn assert_config_metrics_snapshot(stderr: &str) -> Result<()> {
+    let snapshot = stderr
+        .lines()
+        .find(|line| line.contains("metrics snapshot"))
+        .ok_or_else(|| anyhow::anyhow!("expected metrics snapshot in stderr: {stderr}"))?;
+    let expected_counters = [
+        concat!(
+            r#"CompositeKey(Counter, Key { name: KeyName("config_load_total"), labels: ["#,
+            r#"Label("phase", "diag_mode"), Label("outcome", "success")]"#,
+        ),
+        concat!(
+            r#"CompositeKey(Counter, Key { name: KeyName("config_load_total"), labels: ["#,
+            r#"Label("phase", "merge"), Label("outcome", "success")]"#,
+        ),
+    ];
+    let expected_histograms = [
+        concat!(
+            r#"CompositeKey(Histogram, Key { name: KeyName("config_load_duration_seconds"), labels: ["#,
+            r#"Label("phase", "diag_mode")]"#,
+        ),
+        concat!(
+            r#"CompositeKey(Histogram, Key { name: KeyName("config_load_duration_seconds"), labels: ["#,
+            r#"Label("phase", "merge")]"#,
+        ),
+    ];
+    ensure!(
+        snapshot.matches(r#"KeyName("config_load_total")"#).count() == expected_counters.len(),
+        "expected exactly two configuration-load counter records: {snapshot}",
+    );
+    ensure!(
+        snapshot
+            .matches(r#"KeyName("config_load_duration_seconds")"#)
+            .count()
+            == expected_histograms.len(),
+        "expected exactly two configuration-load duration records: {snapshot}",
+    );
+    for expected_counter in expected_counters {
+        ensure!(
+            contains_metric_record(snapshot, expected_counter, "Counter(1)"),
+            "expected counter {expected_counter:?} in snapshot: {snapshot}",
+        );
+    }
+    for expected_histogram in expected_histograms {
+        ensure!(
+            contains_non_empty_histogram_record(snapshot, expected_histogram),
+            "expected histogram {expected_histogram:?} in snapshot: {snapshot}",
+        );
+    }
+    Ok(())
+}
+
 // -------------------------------------------------------------------------
 // Clean subcommand edge cases
 // -------------------------------------------------------------------------
@@ -210,6 +298,62 @@ fn generate_to_missing_parent_directory_succeeds_by_creating_parents() -> Result
         "expected manifest file to be created at {}",
         nested_path.display()
     );
+    Ok(())
+}
+
+// -------------------------------------------------------------------------
+
+// Configuration layering precedence
+// -------------------------------------------------------------------------
+
+#[rstest]
+#[case::config_file_enables("verbose = true\n", &["build"], &[], true)]
+#[case::env_var_enables(
+    "verbose = false\n",
+    &["build"],
+    &[("NETSUKE_VERBOSE", "true")],
+    true
+)]
+#[case::env_var_overrides_config(
+    "verbose = true\n",
+    &["build"],
+    &[("NETSUKE_VERBOSE", "false")],
+    false
+)]
+#[case::cli_flag_overrides_env(
+    "verbose = true\n",
+    &["--verbose", "build"],
+    &[("NETSUKE_VERBOSE", "false")],
+    true
+)]
+fn verbose_config_precedence(
+    #[case] config_content: &str,
+    #[case] args: &[&str],
+    #[case] extra_env: &[(&str, &str)],
+    #[case] expect_verbose_diagnostics: bool,
+) -> Result<()> {
+    let output =
+        run_config_layer_build("verbose config precedence", config_content, args, extra_env)?;
+    ensure!(output.success, "expected build to succeed");
+    if expect_verbose_diagnostics {
+        ensure!(
+            output.stderr.contains("Timing"),
+            "expected verbose timing summary in stderr, got:\n{}",
+            output.stderr
+        );
+        assert_config_metrics_snapshot(&output.stderr)?;
+    } else {
+        ensure!(
+            !output.stderr.contains("Timing"),
+            "expected no timing summary, got:\n{}",
+            output.stderr
+        );
+        ensure!(
+            !output.stderr.contains("metrics snapshot"),
+            "expected no metrics snapshot, got:\n{}",
+            output.stderr
+        );
+    }
     Ok(())
 }
 

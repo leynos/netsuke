@@ -169,7 +169,11 @@ fn explicit_selection_traces_bounded_fields() -> Result<()> {
         run.success,
         "a selected valid config should complete successfully"
     );
-    assert_config_metrics_snapshot(&run.stderr, DIAG_MODE_SUCCESS_METRICS)?;
+    assert_config_metrics_snapshot(
+        &run.stderr,
+        &[DIAG_MODE_SUCCESS_COUNTER, MERGE_SUCCESS_COUNTER],
+        &[DIAG_MODE_DURATION_HISTOGRAM, MERGE_DURATION_HISTOGRAM],
+    )?;
     Ok(())
 }
 
@@ -219,7 +223,11 @@ fn explicit_load_failure_traces_failure_kind() -> Result<()> {
         run.stderr
     );
     assert_config_load_failure(&run.stderr, "diag_mode_resolution", "io")?;
-    assert_config_metrics_snapshot(&run.stderr, DIAG_MODE_FAILURE_METRICS)?;
+    assert_config_metrics_snapshot(
+        &run.stderr,
+        &[DIAG_MODE_FAILURE_COUNTER],
+        &[DIAG_MODE_DURATION_HISTOGRAM],
+    )?;
     Ok(())
 }
 
@@ -238,7 +246,11 @@ fn environment_validation_failure_identifies_config_merge() -> Result<()> {
         "an invalid configuration environment value should fail the run"
     );
     assert_config_load_failure(&run.stderr, "config_merge", "validation")?;
-    assert_config_metrics_snapshot(&run.stderr, MERGE_FAILURE_METRICS)?;
+    assert_config_metrics_snapshot(
+        &run.stderr,
+        &[DIAG_MODE_SUCCESS_COUNTER, MERGE_FAILURE_COUNTER],
+        &[DIAG_MODE_DURATION_HISTOGRAM, MERGE_DURATION_HISTOGRAM],
+    )?;
     Ok(())
 }
 

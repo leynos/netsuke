@@ -4,7 +4,7 @@
 //! and validates the configuration-load metrics contract for JSON-resolution
 //! failures, merge failures, and successful merges.
 
-use super::*;
+use super::super::{locale_resolution, localization, run_with_args};
 use anyhow::{Context, Result, bail, ensure};
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
@@ -42,11 +42,18 @@ fn captured_metrics(body: impl FnOnce()) -> Vec<(String, Vec<Label>, DebugValue)
 fn verify_config_load_metrics(
     metrics: &[(String, Vec<Label>, DebugValue)],
     scenario: ConfigurationLoadScenario,
-    expected_duration: f64,
+    phase_duration: Duration,
 ) -> Result<()> {
     verify_startup_outcome_counter(metrics, scenario.expected_outcome())?;
-    verify_startup_duration_histogram(metrics, expected_duration)?;
-    verify_phase_metrics(metrics, scenario.expected_phase_outcomes())?;
+    verify_startup_duration_histogram(
+        metrics,
+        scenario.total_duration(phase_duration).as_secs_f64(),
+    )?;
+    verify_phase_metrics(
+        metrics,
+        scenario.expected_phase_outcomes(),
+        phase_duration.as_secs_f64(),
+    )?;
     Ok(())
 }
 
@@ -121,6 +128,7 @@ fn verify_startup_duration_histogram(
 fn verify_phase_metrics(
     metrics: &[(String, Vec<Label>, DebugValue)],
     expected_phase_outcomes: &[(&str, &str)],
+    expected_duration: f64,
 ) -> Result<()> {
     let counters = metrics
         .iter()
@@ -155,7 +163,11 @@ fn verify_phase_metrics(
             .iter()
             .filter(|histogram| {
                 has_exact_labels(&histogram.1, &[("phase", phase)])
-                    && matches!(&histogram.2, DebugValue::Histogram(samples) if samples.len() == 1)
+                    && matches!(
+                        &histogram.2,
+                        DebugValue::Histogram(samples)
+                            if samples.as_slice() == [expected_duration]
+                    )
             })
             .count();
         ensure!(
@@ -230,10 +242,11 @@ impl ConfigurationLoadScenario {
         }
     }
 
-    const fn clock_reads(self) -> usize {
+    /// Return the aggregate duration when every completed phase takes `duration`.
+    fn total_duration(self, duration: Duration) -> Duration {
         match self {
-            Self::JsonResolutionFailure => 4,
-            Self::MergeFailure | Self::SuccessfulMerge => 6,
+            Self::JsonResolutionFailure => duration,
+            Self::MergeFailure | Self::SuccessfulMerge => duration.saturating_add(duration),
         }
     }
 }
@@ -241,14 +254,30 @@ impl ConfigurationLoadScenario {
 /// Build the exact monotonic sequence consumed by one startup scenario.
 fn configuration_clock(
     scenario: ConfigurationLoadScenario,
-    duration: Duration,
+    phase_duration: Duration,
 ) -> Result<QueuedMonotonicClock> {
     let started_at = StdMonotonicClock.now();
-    let finished_at = started_at
-        .checked_add(duration)
-        .context("configuration-load test duration must fit in an Instant")?;
-    let mut instants = vec![started_at; scenario.clock_reads() - 1];
-    instants.push(finished_at);
+    let diag_finished_at = started_at
+        .checked_add(phase_duration)
+        .context("diagnostic-mode phase duration must fit in an Instant")?;
+    let instants = match scenario {
+        ConfigurationLoadScenario::JsonResolutionFailure => {
+            vec![started_at, started_at, diag_finished_at, diag_finished_at]
+        }
+        ConfigurationLoadScenario::MergeFailure | ConfigurationLoadScenario::SuccessfulMerge => {
+            let merge_finished_at = diag_finished_at
+                .checked_add(phase_duration)
+                .context("merge phase duration must fit in an Instant")?;
+            vec![
+                started_at,
+                started_at,
+                diag_finished_at,
+                diag_finished_at,
+                merge_finished_at,
+                merge_finished_at,
+            ]
+        }
+    };
     Ok(QueuedMonotonicClock::from_instants(instants))
 }
 
@@ -298,7 +327,7 @@ fn configuration_failures_record_metrics_for_their_exit_path(
     let duration = Duration::from_millis(7);
     let metrics = run_with_config_metrics(scenario, duration)?;
 
-    verify_config_load_metrics(&metrics, scenario, duration.as_secs_f64())?;
+    verify_config_load_metrics(&metrics, scenario, duration)?;
     Ok(())
 }
 
@@ -309,7 +338,7 @@ fn a_successful_configuration_merge_records_metrics_before_runner_failure() -> R
     let scenario = ConfigurationLoadScenario::SuccessfulMerge;
     let metrics = run_with_config_metrics(scenario, duration)?;
 
-    verify_config_load_metrics(&metrics, scenario, duration.as_secs_f64())?;
+    verify_config_load_metrics(&metrics, scenario, duration)?;
     Ok(())
 }
 
@@ -323,7 +352,7 @@ proptest! {
         for scenario in ConfigurationLoadScenario::ALL {
             let metrics = run_with_config_metrics(scenario, duration)
                 .map_err(|error| TestCaseError::fail(error.to_string()))?;
-            verify_config_load_metrics(&metrics, scenario, duration.as_secs_f64())
+            verify_config_load_metrics(&metrics, scenario, duration)
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
         }
     }
