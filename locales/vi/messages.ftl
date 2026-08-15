@@ -149,6 +149,7 @@ manifest.glob.invalid_pattern = Mẫu glob không hợp lệ “{ $pattern }”:
 manifest.glob.unknown_pattern_error = lỗi mẫu không xác định.
 manifest.glob.io_failed = Glob thất bại với “{ $pattern }”: { $detail }.
 manifest.glob.unknown_io_error = lỗi vào/ra không xác định.
+manifest.command_list_empty = Trường “command” không được để trống: hãy cung cấp một chuỗi lệnh hoặc một danh sách không rỗng.
 
 # Lỗi của biểu diễn trung gian.
 ir.rule_not_found = Không tìm thấy quy tắc “{ $rule }” mà đích “{ $target }” tham chiếu.

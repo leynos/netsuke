@@ -196,6 +196,84 @@ they are per-invocation arguments tagged `#[serde(skip)]` on
 would silently change the artefact destination — a footgun the design avoids by
 construction.
 
+## Command and recipe lowering
+
+Command recipes use the `StringOrList` AST type. A scalar command remains one
+shell-text value; a YAML sequence is an ordered list of entries. The same
+recipe path handles commands declared on reusable rules, direct targets, and
+actions. Manifest deserialization rejects an empty command list. Code that
+constructs the IR directly must also reject both `StringOrList::Empty` and an
+empty `StringOrList::List(Vec::new())` during Ninja generation rather than
+emitting an unusable rule.
+
+The lowering stages have deliberately separate responsibilities:
+
+- `src/manifest/render.rs` renders a scalar or each list entry independently.
+  Every entry sees the same cloned recipe context, including target variables
+  and delayed `ins`/`outs` markers. A rendering error for a list includes its
+  one-based entry position.
+- `src/ir/from_manifest_support.rs` prepares one shell-quoted input/output
+  binding set for the recipe, then interpolates every scalar or list entry with
+  that set. `{{ ins }}` and `{{ outs }}` markers and standalone `$in` and
+  `$out` tokens are resolved per entry; tokens inside backticks are preserved.
+  The resulting action contains ordinary command text and no Ninja
+  placeholders.
+- `src/ninja_gen.rs` emits a scalar command unchanged. For a list, it puts
+  each entry in a brace group and joins the groups with `&&`. Each group uses
+  `eval` with a shell-quoted entry payload. This keeps an inline comment or a
+  trailing control operator such as `&` inside the entry from consuming the
+  generated group terminator. Braces run in the current shell, not a
+  subshell, so directory changes, environment assignments, and shell
+  variables can carry from one entry to the next. The `&&` chain remains
+  fail-fast. Each entry may start at most one background job; the generated
+  wrapper waits for that job before it evaluates a later entry. Ninja
+  generation rejects entries that start more than one background job. It also
+  rejects entries whose nested `eval` payload makes the background-job count
+  dynamic, because the wrapper cannot safely determine which jobs to wait for.
+  A direct simple `exec`, optionally prefixed by shell assignments, is
+  evaluated in a retaining subshell so its success or failure remains visible
+  to the wrapper; a successful `exec` ends the remaining chain. Structured or
+  nested `exec` forms are rejected during Ninja generation because the wrapper
+  cannot supervise them without changing their shell semantics.
+- `src/runner/process` forwards the command's output and recognizes the
+  bounded `netsuke command-list failure: action HASH, entry M` marker. A failed
+  list therefore retains the original exit status while adding the fixed-width
+  hashed action fingerprint and one-based entry index to the Ninja failure
+  error.
+
+Failure attribution is private to Ninja process execution:
+`FailureAttributionWriter` parses only Ninja's stderr. Because Ninja relays a
+failed subcommand's stderr on its own stdout, build runs retain only a fixed
+512-byte stdout tail and use its parsed marker only after a non-zero exit.
+Ordinary child stdout streams forward directly and must not use this tail.
+
+The lowest-layer POSIX shell-word quoting used for input/output paths during IR
+lowering is `shell_quote::QuoteRefExt::quoted(Sh)`. It performs minimal,
+fragmented shell quoting, which is appropriate for a literal shell word but not
+for the command-list `eval` payload. That renderer requires a canonical
+single-quoted payload so existing generated Ninja list text remains
+byte-for-byte stable, and the delimiter/boundary tests continue to hold. Keep
+that quoting in the deliberately local `shell_single_quote` function; it is
+not a general-purpose helper. Neither quoting path is the platform-specific
+`src/stdlib/command/quote.rs` implementation behind the `command.quote`
+template wrapper, which must retain its `cmd.exe` quoting behaviour on Windows.
+
+Attributed list failures emit the bounded tracing fields
+`command_list_action` (a fixed-width action fingerprint) and
+`command_list_entry` (the one-based entry index), plus the matching
+`command_list_failure` marker. The process boundary records
+`netsuke_ninja_command_list_failures_total` and
+`netsuke_ninja_command_list_failure_duration_seconds`, with an `outcome`
+label of `failure`. Elapsed failure duration is measured through the injected
+`monotony::MonotonicClock`; production uses `StdMonotonicClock`, while tests use
+deterministic test clocks. These diagnostics and metrics contain no command
+text.
+
+Changes to this pipeline must preserve the scalar/list distinction, per-entry
+rendering, current-shell state sharing, and failure attribution. The focused
+rendering, lowering, Ninja-generation, and real-Ninja integration tests are
+the behavioural contract for these boundaries.
+
 ## Package and target naming
 
 The crates.io package is `netsuke-build`; the library target, the binary

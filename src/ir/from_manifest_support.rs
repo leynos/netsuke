@@ -13,7 +13,7 @@ use crate::hasher::ActionHasher;
 use crate::localization::{self, keys};
 
 use super::super::{
-    cmd_interpolate::interpolate_command,
+    cmd_interpolate::{CommandBindings, interpolate_command_with_bindings},
     graph::{Action, BuildEdge, IrGenError, IrHashMap},
 };
 
@@ -31,7 +31,22 @@ pub(super) fn register_action(
 ) -> Result<String, IrGenError> {
     let resolved_recipe = match recipe {
         Recipe::Command { command } => {
-            let interpolated = interpolate_command(&command, bindings.inputs, bindings.outputs)?;
+            let command_bindings = CommandBindings::new(bindings.inputs, bindings.outputs);
+            let interpolated = match command {
+                StringOrList::String(cmd) => StringOrList::String(
+                    interpolate_command_with_bindings(&cmd, &command_bindings)?,
+                ),
+                StringOrList::List(items) => {
+                    let mut rendered = Vec::with_capacity(items.len());
+                    for item in items {
+                        rendered.push(interpolate_command_with_bindings(&item, &command_bindings)?);
+                    }
+                    StringOrList::List(rendered)
+                }
+                // An empty command list cannot deserialize (the manifest
+                // parser rejects it), so nothing needs interpolating here.
+                StringOrList::Empty => StringOrList::Empty,
+            };
             Recipe::Command {
                 command: interpolated,
             }
@@ -335,3 +350,7 @@ pub(super) fn get_target_display_name(paths: &[Utf8PathBuf]) -> String {
         .map(|p: &Utf8PathBuf| p.to_string())
         .unwrap_or_default()
 }
+
+#[cfg(test)]
+#[path = "from_manifest_support_tests.rs"]
+mod tests;

@@ -103,7 +103,10 @@ fn extract_target_names(manifest: &NetsukeManifest) -> Result<Vec<String>> {
 
 fn extract_target_commands(manifest: &NetsukeManifest) -> Result<Vec<String>> {
     extract_target_field(manifest, |target| match &target.recipe {
-        Recipe::Command { command } => Ok(command.clone()),
+        Recipe::Command { command } => command
+            .as_single()
+            .map(str::to_owned)
+            .context("command should be a scalar"),
         other => bail!("expected command recipe, got {other:?}"),
     })
 }
@@ -122,7 +125,10 @@ fn renders_global_vars() -> Result<()> {
     let Recipe::Command { command } = &first.recipe else {
         bail!("expected command recipe, got {:?}", first.recipe);
     };
-    ensure!(command == "echo world", "unexpected command: {command}");
+    ensure!(
+        command.as_single() == Some("echo world"),
+        "unexpected command: {command:?}"
+    );
     Ok(())
 }
 
@@ -145,7 +151,10 @@ fn renders_env_function() -> Result<()> {
     let Recipe::Command { command } = &first.recipe else {
         bail!("expected command recipe, got {:?}", first.recipe);
     };
-    ensure!(command == "echo 42", "unexpected command: {command}");
+    ensure!(
+        command.as_single() == Some("echo 42"),
+        "unexpected command: {command:?}"
+    );
     ensure!(
         reader("NETSUKE_WRONG_ENV").is_err(),
         "the reader should reject a variable not named by the manifest"
@@ -220,7 +229,10 @@ fn registers_manifest_macros() -> Result<()> {
         .context("manifest should contain at least one target")?;
     match &target.recipe {
         Recipe::Command { command } => {
-            ensure!(command == "HELLO WORLD!", "unexpected command: {command}");
+            ensure!(
+                command.as_single() == Some("HELLO WORLD!"),
+                "unexpected command: {command:?}"
+            );
         }
         other => bail!("expected command recipe, got {other:?}"),
     }
@@ -285,7 +297,10 @@ fn registers_manifest_macro_argument_variants(
         .context("manifest should contain at least one target")?;
     match &target.recipe {
         Recipe::Command { command } => {
-            ensure!(command == expected, "unexpected command: {command}");
+            ensure!(
+                command.as_single() == Some(expected),
+                "unexpected command: {command:?}"
+            );
         }
         other => bail!("expected command recipe, got {other:?}"),
     }
@@ -361,7 +376,10 @@ fn renders_if_blocks(#[case] flag: bool, #[case] expected: &str) -> Result<()> {
     let Recipe::Command { command } = &first.recipe else {
         bail!("expected command recipe, got {:?}", first.recipe);
     };
-    ensure!(command == expected, "unexpected command: {command}");
+    ensure!(
+        command.as_single() == Some(expected),
+        "unexpected command: {command:?}"
+    );
     Ok(())
 }
 
@@ -483,7 +501,10 @@ fn expands_single_item_foreach_targets() -> Result<()> {
     let Recipe::Command { command } = &first.recipe else {
         bail!("expected command recipe, got {:?}", first.recipe);
     };
-    ensure!(command == "echo 'only'", "unexpected command: {command}");
+    ensure!(
+        command.as_single() == Some("echo 'only'"),
+        "unexpected command: {command:?}"
+    );
     Ok(())
 }
 
@@ -569,7 +590,10 @@ fn renders_target_fields_command() -> Result<()> {
     let Recipe::Command { command } = &target.recipe else {
         bail!("expected command recipe, got {:?}", target.recipe);
     };
-    ensure!(command == "echo 'base1'", "unexpected command: {command}");
+    ensure!(
+        command.as_single() == Some("echo 'base1'"),
+        "unexpected command: {command:?}"
+    );
     Ok(())
 }
 

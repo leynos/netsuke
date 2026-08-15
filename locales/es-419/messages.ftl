@@ -150,6 +150,7 @@ manifest.glob.invalid_pattern = Patrón glob no válido '{ $pattern }': { $detai
 manifest.glob.unknown_pattern_error = error de patrón desconocido.
 manifest.glob.io_failed = El glob falló para '{ $pattern }': { $detail }.
 manifest.glob.unknown_io_error = error de E/S desconocido.
+manifest.command_list_empty = El campo 'command' no debe estar vacío: proporcione una cadena de comando o una lista no vacía.
 
 # Errores de la representación intermedia.
 ir.rule_not_found = No se encontró la regla '{ $rule }' referenciada por el objetivo '{ $target }'.

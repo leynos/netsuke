@@ -148,6 +148,7 @@ manifest.glob.invalid_pattern = 無效的 glob 樣式「{ $pattern }」：{ $det
 manifest.glob.unknown_pattern_error = 未知的樣式錯誤。
 manifest.glob.io_failed = 對「{ $pattern }」執行 glob 失敗：{ $detail }。
 manifest.glob.unknown_io_error = 未知的輸入輸出錯誤。
+manifest.command_list_empty = 「command」欄位不得為空：請提供命令字串或非空清單。
 
 # 中介表示法的錯誤。
 ir.rule_not_found = 找不到目標「{ $target }」所參照的規則「{ $rule }」。

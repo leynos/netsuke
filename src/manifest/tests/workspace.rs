@@ -195,8 +195,8 @@ fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
     let first_target = manifest.targets.first().context("target missing")?;
     match &first_target.recipe {
         Recipe::Command { command } => anyhow::ensure!(
-            command == "workspace-body",
-            "unexpected recipe output: {command}"
+            command.as_single() == Some("workspace-body"),
+            "unexpected recipe output: {command:?}"
         ),
         other => anyhow::bail!("expected command recipe, got {other:?}"),
     }

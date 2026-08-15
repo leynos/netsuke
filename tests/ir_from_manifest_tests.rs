@@ -34,6 +34,37 @@ fn minimal_manifest_to_ir() -> Result<()> {
 }
 
 #[rstest]
+fn command_list_entries_are_interpolated_in_order() -> Result<()> {
+    let yaml = r#"
+        netsuke_version: "1.0.0"
+        rules:
+          - name: build
+            command:
+              - echo first $in
+              - echo second $out
+        targets:
+          - name: out/app
+            sources: src/main.c
+            rule: build
+    "#;
+    let manifest = manifest::from_str(yaml)?;
+    let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
+    let action = graph
+        .actions
+        .values()
+        .next()
+        .context("expected one action")?;
+    let Recipe::Command { command } = &action.recipe else {
+        bail!("expected a command recipe, got {:?}", action.recipe);
+    };
+    ensure!(
+        command.to_string_vec() == ["echo first src/main.c", "echo second out/app"],
+        "each list entry should be interpolated in declaration order: {command:?}"
+    );
+    Ok(())
+}
+
+#[rstest]
 fn duplicate_rules_emit_distinct_actions() -> Result<()> {
     let manifest = manifest::from_path("tests/data/duplicate_rules.yml")?;
     let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
@@ -220,8 +251,8 @@ fn manifest_deps_do_not_contribute_to_recipe_inputs() -> Result<()> {
     };
 
     ensure!(
-        command == "echo src/main.c src/main.c > out/app",
-        "deps should not appear in recipe interpolation: {command}"
+        command.as_single() == Some("echo src/main.c src/main.c > out/app"),
+        "deps should not appear in recipe interpolation: {command:?}"
     );
     ensure!(
         edge.inputs == vec![Utf8PathBuf::from("src/main.c")],

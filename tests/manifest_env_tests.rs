@@ -38,7 +38,10 @@ fn rendered_command(value: Result<String, EnvReadError>) -> Result<String> {
     let Recipe::Command { command } = &target.recipe else {
         return Err(anyhow!("expected command recipe, got {:?}", target.recipe));
     };
-    Ok(command.clone())
+    command
+        .as_single()
+        .map(str::to_owned)
+        .context("command should be a scalar")
 }
 
 #[rstest]

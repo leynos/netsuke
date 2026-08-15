@@ -223,7 +223,7 @@ erDiagram
         bool always
     }
     RECIPE {
-        string command
+        StringOrList command
         string script
         StringOrList rule
     }
@@ -245,18 +245,28 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
 
 - `name`: A unique string identifier for the rule.
 
-- `command`: A single command string to be executed. It may include the
-  placeholders `{{ ins }}` and `{{ outs }}` to represent input and output
-  files. Netsuke expands these placeholders to space-separated lists of file
-  paths quoted for POSIX `/bin/sh` using the
+- `command`: A command string, or a non-empty ordered list of command strings,
+  to be executed. `StringOrList` is also used for direct target and action
+  commands, so the rule and target forms have the same scalar/list semantics.
+  Each entry may include the placeholders `{{ ins }}` and `{{ outs }}`. Jinja
+  renders a scalar or each list entry separately with the same recipe context;
+  the placeholders are delayed until IR lowering, then replaced in every entry
+  with space-separated, POSIX-shell-quoted input and output paths using the
   [`shell-quote`](https://docs.rs/shell-quote/latest/shell_quote/) crate (Sh
-  mode) before hashing the action. The IR stores the fully expanded command;
-  Ninja executes this text verbatim. After interpolation, the command must be
-  parsable by [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode).
-  Automatic shell escaping applies only where the schema has enough structure
-  to identify argument boundaries. Plain command strings remain shell text;
-  authors should use structured recipes or explicit quoting helpers for
-  arbitrary variables.
+  mode) before hashing the action. Standalone `$in` and `$out` tokens are
+  resolved at the same boundary, while tokens inside backticks are preserved.
+  A scalar command is emitted unchanged. A list is lowered to brace groups
+  that evaluate each entry through a shell-quoted `eval` payload and are joined
+  by `&&`. The groups run in declaration order in one shell process and stop
+  at the first non-zero exit, so working directory, environment, and shell
+  variables carry forward. The `eval` boundary keeps an entry's inline
+  comments or trailing control operators from consuming the generated group
+  terminator. A failed entry emits a bounded action/entry marker for the
+  runner to include in the failure diagnostic. The resulting command must be
+  parsable by [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode). An
+  empty command list is rejected during manifest deserialization. Plain command
+  strings remain shell text; authors should use structured recipes or explicit
+  quoting helpers for arbitrary variables.
 
 - `script`: A multi-line script declared with the YAML `|` block style. The
   entire block is passed to an interpreter. If the first line begins with `#!`
@@ -326,7 +336,10 @@ rule:
   - clean-up
 ```
 
-- `command`: A single command string to run directly for this target.
+- `command`: A command string or non-empty ordered list of command strings to
+  run directly for this target. Direct target lists follow the same per-entry
+  Jinja rendering, delayed `ins`/`outs` interpolation, and shell lowering as
+  rule lists.
 
 - `script`: A multi-line script passed to the interpreter. When present, it is
   defined using the YAML `|` block style.
@@ -711,7 +724,7 @@ pub struct Rule {
 /// A union of execution styles for both rules and targets.
 #[serde(untagged)]
 pub enum Recipe {
-    Command { command: String },
+    Command { command: StringOrList },
     Script { script: String },
     Rule { rule: StringOrList },
     // FUTURE: planned Recipe::Exec extension; not present in src/ast.rs yet.
@@ -787,9 +800,11 @@ pub enum StringOrList {
 }
 ```
 
-*Note: The* `StringOrList` *enum with* `#[serde(untagged)]` *provides the
-flexibility for users to specify single sources, dependencies, and rule names
-as a simple string and multiple as a list, enhancing user-friendliness.*
+*Note: The* `StringOrList` *enum with* `#[serde(untagged)]` *preserves whether
+the manifest supplied one string or an ordered list. The same type represents
+command recipes, sources, dependencies, order-only dependencies, and rule
+selectors; command lists are executed in order, while path-like fields are
+interpreted only at the manifest-to-IR boundary.*
 
 `StringOrList` owns the conversions that only need to know its own shape:
 `map_each` applies a function to every contained string, and `to_string_vec`
@@ -1956,17 +1971,19 @@ This transformation involves several steps:
    Current behaviour:
 
    For each expanded target, resolve the referenced rule template, merge
-   rule-level and target-level execution metadata, interpolate its command with
-   the target's input and output paths, and register the resulting `ir::Action`
-   in the `actions` map. Actions are hashed on the fully resolved recipe and
-   file set, so identical rule templates yield distinct actions when their
-   paths differ. Create a corresponding `ir::BuildEdge` linking the target to
-   the action identifier and transfer the `phony` and `always` flags. `sources`
-   are lowered into the edge's explicit input list so recipe interpolation and
-   Ninja `$in` see only material inputs. `deps` are lowered into a separate
-   `implicit_deps` list, which maps to Ninja's implicit dependency syntax (`|`)
-   so Ninja orders and rebuilds them without exposing them as recipe arguments;
-   `order_only_deps` remains separate and maps to Ninja's `||` class.
+   rule-level and target-level execution metadata, and interpolate every
+   command entry with the target's input and output paths. Direct target and
+   action commands use the same path. Register the resulting scalar or ordered
+   `StringOrList` recipe in the `ir::Action` map. Actions are hashed on the
+   fully resolved recipe and file set, so identical rule templates yield
+   distinct actions when their paths differ. Create a corresponding
+   `ir::BuildEdge` linking the target to the action identifier and transfer the
+   `phony` and `always` flags. `sources` are lowered into the edge's explicit
+   input list so recipe interpolation and Ninja `$in` see only material inputs.
+   `deps` are lowered into a separate `implicit_deps` list, which maps to Ninja's
+   implicit dependency syntax (`|`) so Ninja orders and rebuilds them without
+   exposing them as recipe arguments; `order_only_deps` remains separate and
+   maps to Ninja's `||` class.
 
    FUTURE:
 
@@ -2010,9 +2027,12 @@ structures to the Ninja file syntax.
    be written at the top of the file (e.g., `msvc_deps_prefix` for Windows
 
 2. **Write Rules:** Iterate through the `graph.actions` map. For each
-   `ir::Action`, write a corresponding Ninja `rule` statement. The input and
-   output lists stored in the action replace the `ins` and `outs` placeholders.
-   These lists are then rewritten as Ninja's `$in` and `$out`.
+   `ir::Action`, write a corresponding Ninja `rule` statement. The IR already
+   contains ordinary command text: its input and output paths have replaced
+   Netsuke's `ins`/`outs` and `$in`/`$out` placeholders during lowering. Scalar
+   commands are emitted as-is. List commands are emitted as the brace-group,
+   `eval`, and `&&` chain described in §2.3, including the bounded failure
+   marker for each one-based entry.
 
    When an action's `recipe` is a script, the generated rule wraps the script
    in an invocation of `/bin/sh -e -c` so that multi-line scripts execute
@@ -2184,33 +2204,21 @@ catastrophic consequences.
 For this critical task, the recommended crate is `shell-quote`.
 
 While other crates like `shlex` exist, `shell-quote` offers a more robust and
-flexible API specifically designed for this purpose.[^22] It supports quoting
-for multiple shell flavours (e.g., Bash, sh, Fish), which is vital for a
-cross-platform build tool. It also correctly handles a wide variety of input
-types, including byte strings and OS-native strings, which is essential for
-dealing with non-UTF8 file paths. The
-
-`QuoteExt` trait provided by the crate offers an ergonomic and safe method for
-building command strings by pushing quoted components into a buffer:
-`script.push_quoted(Bash, "foo bar")`.
+flexible API specifically designed for this purpose.[^22] The current lowering
+path uses its `QuoteRefExt::quoted` method with `Sh` mode, producing
+POSIX-compatible quoted path arguments before the command is hashed. `shlex`
+remains a validation parser; it does not perform the quoting.
 
 ### 6.3 Implementation Strategy
 
-The command generation logic within the `ninja_gen.rs` module must not use
-simple string formatting (like `format!`) to construct the final command
-strings. Instead, parse the Netsuke command template (e.g.,
-`{{ cc }} -c {{ ins }} -o` `{{ outs }}`) and build the final command string
-step by step. The placeholders `{{ ins }}` and `{{ outs }}` are expanded to
-space-separated lists of file paths within Netsuke itself, each path being
-shell-escaped using the `shell-quote` API. Netsuke uses the `Sh` quoting mode
-to emit POSIX-compliant single-quoted strings and scans the template for
-standalone `$in` and `$out` tokens to avoid rewriting unrelated variables.
-Substitution happens during IR generation and the fully expanded command is
-emitted to `build.ninja` unchanged. After substitution, the command is
-validated with \[`shlex`\](<https://docs.rs/shlex/latest/shlex/>) to ensure it
-parses correctly. This approach guarantees that every dynamic part of the
-command is securely quoted, albeit at the cost of deduplicating only actions
-with identical file sets.
+The command interpolation logic in `src/ir/cmd_interpolate.rs` prepares one
+quoted input/output binding set per recipe and applies it to each scalar or
+list entry. It replaces the delayed `{{ ins }}`/`{{ outs }}` markers and
+standalone `$in`/`$out` tokens outside backticks, preserving longer identifiers
+and backtick-delimited text. Unbalanced backticks or text that `shlex` cannot
+parse produce an IR error before an action is hashed. Ninja generation then
+receives fully expanded command text and is responsible only for preserving the
+scalar form or constructing the list-entry shell boundaries.
 
 ### 6.4 Automatic Security as a "Friendliness" Feature
 
@@ -2220,10 +2228,11 @@ user to trivial security vulnerabilities is fundamentally unfriendly. In many
 build systems, the burden of correct shell quoting falls on the user, an
 error-prone task that requires specialized knowledge.
 
-Netsuke's design elevates security to a core feature by making it automatic and
-transparent. The user writes a simple, unquoted command template, and Netsuke
-performs the complex and critical task of making it secure behind the scenes.
-By integrating `shell-quote` directly into the Ninja file synthesis stage,
+Netsuke's design makes identified path substitution safe by default. Netsuke
+quotes the `ins`/`outs` path values before action hashing and Ninja synthesis;
+arbitrary Jinja values and handwritten shell fragments remain the manifest
+author's responsibility. By integrating `shell-quote` into IR command
+lowering, before action hashing and Ninja file synthesis,
 Netsuke protects users from a common and dangerous class of errors by default.
 This approach embodies a deeper form of user-friendliness: one that anticipates
 and mitigates risks on the user's behalf.

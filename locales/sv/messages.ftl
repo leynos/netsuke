@@ -149,6 +149,7 @@ manifest.glob.invalid_pattern = Ogiltigt glob-mönster ”{ $pattern }”: { $de
 manifest.glob.unknown_pattern_error = okänt mönsterfel.
 manifest.glob.io_failed = Glob misslyckades för ”{ $pattern }”: { $detail }.
 manifest.glob.unknown_io_error = okänt I/O-fel.
+manifest.command_list_empty = Fältet ”command” får inte vara tomt: ange en kommandosträng eller en icke-tom lista.
 
 # Fel i den interna representationen.
 ir.rule_not_found = Regeln ”{ $rule }” som målet ”{ $target }” hänvisar till hittades inte.

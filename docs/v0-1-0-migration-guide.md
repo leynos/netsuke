@@ -24,12 +24,21 @@ Table: v0.1.0 child-environment API additions and their impact
 | Child environment | New opt-in `netsuke::runner::CommandEnv` carries additive variable overrides and an injected `PATH` for Ninja child processes. | [Users' guide](users-guide.md) |
 | Request types | New `netsuke::runner::NinjaBuildRequest` and `netsuke::runner::NinjaToolRequest` name the program, build file, and targets or tool for the `*_with` run functions. | [Users' guide](users-guide.md) |
 | Glob expansion | Parent-relative patterns such as `glob('../shared/*.h')` now expand. Metadata checks use a capability rooted at the pattern's longest literal directory prefix; missing or non-directory prefixes return no matches, and unresolvable symlink matches are skipped. | [Users' guide](users-guide.md) and [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) |
+| Command recipes | Existing scalar `command` recipes are unchanged. New YAML command lists are opt-in and run in declaration order with fail-fast semantics. | [Rules and recipes](users-guide.md#rules-and-recipes) |
 
 ## Nothing to change for existing callers
 
 The convenience wrappers keep their signatures and their behaviour: the
 child inherits the calling process's environment, and Ninja is resolved
 exactly as before. No caller needs to change to adopt this release.
+
+## Opting into ordered command lists
+
+Existing scalar `command` recipes remain valid, so no migration is required.
+To run a short sequence of commands in declaration order, change a recipe to a
+non-empty YAML list. The entries run in one shell process and stop at the first
+non-zero exit. See [Rules and recipes](users-guide.md#rules-and-recipes) for
+the syntax, shell semantics, and examples.
 
 ## Opting into an explicit child environment
 

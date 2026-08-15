@@ -11,6 +11,8 @@ mod macros;
 mod manifest_files;
 #[path = "ast_tests/parsing.rs"]
 mod parsing;
+#[path = "ast_tests/recipe.rs"]
+mod recipe;
 #[path = "ast_tests/string_or_list.rs"]
 mod string_or_list;
 #[path = "ast_tests/support.rs"]

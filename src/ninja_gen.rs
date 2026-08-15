@@ -6,46 +6,24 @@
 //! generated Ninja file is written by the runner and `generate` command for
 //! downstream execution by the Ninja build system.
 
-use crate::ast::Recipe;
+use crate::ast::{Recipe, StringOrList};
 use crate::ir::{BuildEdge, BuildGraph};
-use crate::localization::{self, LocalizedMessage, keys};
+use crate::localization::{self, keys};
 use camino::Utf8PathBuf;
 use itertools::Itertools;
 use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter, Write};
-use thiserror::Error;
 
-/// Errors produced while rendering Ninja manifests.
-#[derive(Debug, Error)]
-pub enum NinjaGenError {
-    /// The build graph referenced an action that was not defined.
-    #[error("{message}")]
-    MissingAction {
-        /// Identifier of the missing action referenced by a build edge.
-        id: String,
-        /// Localized error message.
-        message: LocalizedMessage,
-    },
-    /// Formatting the Ninja output failed.
-    #[error("{message}")]
-    Format {
-        /// Underlying formatting error.
-        #[source]
-        source: fmt::Error,
-        /// Localized error message.
-        message: LocalizedMessage,
-    },
-}
+#[path = "ninja_gen_command_list.rs"]
+pub(crate) mod ninja_gen_command_list;
+#[path = "ninja_gen_error.rs"]
+mod ninja_gen_error;
+#[path = "ninja_gen_validation.rs"]
+mod ninja_gen_validation;
 
-impl From<fmt::Error> for NinjaGenError {
-    fn from(source: fmt::Error) -> Self {
-        Self::Format {
-            message: localization::message(keys::NINJA_GEN_FORMAT),
-            source,
-        }
-    }
-}
-
+use ninja_gen_command_list::{ActionId, CommandListEntry, command_list_entry};
+pub use ninja_gen_error::NinjaGenError;
+use ninja_gen_validation::validate_action_recipe;
 macro_rules! write_kv {
     ($f:expr, $key:expr, $opt:expr) => {
         if let Some(val) = $opt {
@@ -92,8 +70,11 @@ macro_rules! write_flag {
 ///
 /// # Errors
 ///
-/// Returns [`NinjaGenError`] if a build edge references an unknown action or
-/// writing to the output fails.
+/// Returns [`NinjaGenError`] if a build edge references an unknown action, a
+/// programmatic action has an empty command recipe, a command-list entry starts
+/// multiple background jobs, a command-list entry uses an unsupported `exec`
+/// structure, a command-list `eval` payload cannot be analysed, a command-list
+/// entry contains a Ninja control character, or writing to the output fails.
 pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
     let mut out = String::new();
     generate_into(graph, &mut out)?;
@@ -131,11 +112,17 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 ///
 /// # Errors
 ///
-/// Returns [`NinjaGenError`] if a build edge references an unknown action or writing to the output fails.
+/// Returns [`NinjaGenError`] if a build edge references an unknown action, a
+/// programmatic action has an empty command recipe, a command-list entry starts
+/// multiple background jobs, a command-list entry uses an unsupported `exec`
+/// structure, a command-list `eval` payload cannot be analysed, a command-list
+/// entry contains a Ninja control character, or writing to the output fails.
 pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), NinjaGenError> {
     let mut actions: Vec<_> = graph.actions.iter().collect();
     actions.sort_by_key(|(id, _)| *id);
-    for (id, action) in actions {
+    for (zero_based_action_index, (id, action)) in actions.into_iter().enumerate() {
+        let action_index = zero_based_action_index + 1;
+        validate_action_recipe(action, action_index)?;
         write!(out, "{}", NamedAction { id, action })?;
     }
 
@@ -214,10 +201,18 @@ struct NamedAction<'a> {
 impl NamedAction<'_> {
     fn write_recipe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.action.recipe {
-            Recipe::Command { command } => {
-                Self::assert_shell_command(command);
-                writeln!(f, "  command = {command}")
+            Recipe::Command {
+                command: StringOrList::String(scalar_command),
+            } => {
+                Self::assert_shell_command(scalar_command);
+                writeln!(f, "  command = {scalar_command}")
             }
+            Recipe::Command {
+                command: StringOrList::List(items),
+            } => self.write_command_list(f, items),
+            Recipe::Command {
+                command: StringOrList::Empty,
+            } => Self::reject_empty_command_recipe(),
             Recipe::Script { script } => Self::write_script_command(f, script),
             Recipe::Rule { .. } => Self::reject_rule_recipe(),
         }
@@ -231,6 +226,25 @@ impl NamedAction<'_> {
         let cmd = format!("/bin/sh -e -c \"printf %b '{escaped}' | /bin/sh -e\"");
         Self::assert_shell_command(&cmd);
         writeln!(f, "  command = {cmd}")
+    }
+
+    /// Write list entries as isolated current-shell groups joined by `&&`.
+    fn write_command_list(&self, f: &mut Formatter<'_>, items: &[String]) -> fmt::Result {
+        // Brace groups keep each entry a distinct shell unit, and `eval`
+        // prevents comments or trailing control operators inside an entry
+        // consuming its terminator. Braces run in the current shell (unlike
+        // `( ... )`), so working directory, environment, and variables set by
+        // one entry still carry into the next, and the `&&` chain stays
+        // fail-fast.
+        let command_line = items
+            .iter()
+            .enumerate()
+            .map(|(entry_index, item)| {
+                command_list_entry(CommandListEntry(item), ActionId(self.id), entry_index + 1)
+            })
+            .join(" && ");
+        Self::assert_shell_command(&command_line);
+        writeln!(f, "  command = {command_line}")
     }
 
     fn write_metadata(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -264,6 +278,17 @@ impl NamedAction<'_> {
         if cfg!(debug_assertions) {
             panic!("rules do not reference other rules");
         }
+        Err(fmt::Error)
+    }
+
+    /// Reject a command recipe that carries no entries.
+    ///
+    /// Deserialization rejects empty command recipes, so reaching here means an
+    /// earlier stage constructed one directly. `Display::to_string` turns the
+    /// returned error into a panic, so the fault still surfaces loudly without
+    /// a hand-rolled debug-only panic.
+    #[cold]
+    const fn reject_empty_command_recipe() -> fmt::Result {
         Err(fmt::Error)
     }
 }
@@ -307,94 +332,8 @@ impl Display for DisplayEdge<'_> {
 #[path = "ninja_gen_property_tests.rs"]
 mod property_tests;
 #[cfg(test)]
-mod tests {
-    //! Unit tests for Ninja file generation and rule synthesis.
-    use super::*;
-    use crate::ir::{Action, BuildEdge, BuildGraph};
-    use anyhow::{Result, ensure};
-    use rstest::rstest;
-    #[rstest]
-    fn generate_simple_ninja() -> Result<()> {
-        let action = Action {
-            recipe: Recipe::Command {
-                command: "echo hi".into(),
-            },
-            description: None,
-            depfile: None,
-            deps_format: None,
-            pool: None,
-            restat: false,
-        };
-        let edge = BuildEdge {
-            action_id: "a".into(),
-            inputs: vec![Utf8PathBuf::from("in")],
-            implicit_deps: Vec::new(),
-            explicit_outputs: vec![Utf8PathBuf::from("out")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-        };
-        let mut graph = BuildGraph::default();
-        graph.actions.insert("a".into(), action);
-        graph.targets.insert(Utf8PathBuf::from("out"), edge);
-        graph.default_targets.push(Utf8PathBuf::from("out"));
-
-        let ninja = generate(&graph)?;
-        let expected = concat!(
-            "rule a\n",
-            "  command = echo hi\n\n",
-            "build out: a in\n\n",
-            "default out\n"
-        );
-        ensure!(
-            ninja == expected,
-            "expected Ninja manifest:\n{expected}\nactual:\n{ninja}"
-        );
-        Ok(())
-    }
-
-    #[rstest]
-    fn generate_script_ninja_round_trips() -> Result<()> {
-        let script = "echo 'a b' && echo \"$HOME\" && printf %s \"`whoami`\"\n# line";
-        let action = Action {
-            recipe: Recipe::Script {
-                script: script.into(),
-            },
-            description: None,
-            depfile: None,
-            deps_format: None,
-            pool: None,
-            restat: false,
-        };
-        let edge = BuildEdge {
-            action_id: "a".into(),
-            inputs: Vec::new(),
-            implicit_deps: Vec::new(),
-            explicit_outputs: vec![Utf8PathBuf::from("out")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-        };
-        let mut graph = BuildGraph::default();
-        graph.actions.insert("a".into(), action);
-        graph.targets.insert(Utf8PathBuf::from("out"), edge);
-
-        let ninja = generate(&graph)?;
-        ensure!(ninja.contains("rule a"));
-        ensure!(ninja.contains("command = /bin/sh -e -c"));
-        ensure!(ninja.contains("echo '\"'\"'a b'\"'\"'"));
-        ensure!(ninja.contains("\\\"\\$HOME\\\""));
-        ensure!(ninja.contains("\\`whoami\\`"));
-        ensure!(ninja.contains("printf %b"));
-        ensure!(ninja.contains("\\n# line' | /bin/sh -e"));
-        Ok(())
-    }
-
-    #[test]
-    fn assert_shell_command_tolerates_complex_syntax() {
-        let command = r#"/bin/sh -c "echo 'nested quotes' && echo \"double\" && (echo subshell)""#;
-        NamedAction::assert_shell_command(command);
-    }
-}
+#[path = "ninja_gen_test_support.rs"]
+mod test_support;
+#[cfg(test)]
+#[path = "ninja_gen_tests.rs"]
+mod tests;

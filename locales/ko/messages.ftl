@@ -149,6 +149,7 @@ manifest.glob.invalid_pattern = 잘못된 glob 패턴 '{ $pattern }': { $detail 
 manifest.glob.unknown_pattern_error = 알 수 없는 패턴 오류.
 manifest.glob.io_failed = '{ $pattern }'에 대한 glob이 실패했습니다: { $detail }.
 manifest.glob.unknown_io_error = 알 수 없는 입출력 오류.
+manifest.command_list_empty = 'command' 필드는 비어 있을 수 없습니다: 명령 문자열 또는 비어 있지 않은 목록을 지정하십시오.
 
 # 중간 표현 오류.
 ir.rule_not_found = 대상 '{ $target }'이(가) 참조하는 규칙 '{ $rule }'을(를) 찾을 수 없습니다.

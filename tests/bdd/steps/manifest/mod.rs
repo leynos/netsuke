@@ -318,8 +318,8 @@ fn action_command_n(world: &TestWorld, index: usize, command: &str) -> Result<()
     with_action(world, index, |action| match &action.recipe {
         Recipe::Command { command: actual } => {
             ensure!(
-                actual == command.as_str(),
-                "expected action {index} command '{command}', got '{actual}'"
+                actual.as_single() == Some(command.as_str()),
+                "expected action {index} command '{command}', got '{actual:?}'"
             );
             Ok(())
         }

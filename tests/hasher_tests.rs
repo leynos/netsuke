@@ -31,7 +31,9 @@ use rstest::rstest;
 )]
 #[case(
     Action {
-        recipe: Recipe::Command { command: String::new() },
+        recipe: Recipe::Command {
+            command: StringOrList::String(String::new()),
+        },
         description: None,
         depfile: None,
         deps_format: None,

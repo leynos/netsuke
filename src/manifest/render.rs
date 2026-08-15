@@ -1,7 +1,7 @@
 //! Renders manifest templates using `MiniJinja` before IR lowering.
 //!
 //! Provides [`render_manifest`], which evaluates Jinja2-style template
-//! expressions in target and rule fields.  [`render_recipe_str_with`] ensures
+//! expressions in target and rule fields. Recipe rendering ensures
 //! `ins`/`outs` context keys are always present, inserting
 //! `__NETSUKE_INS_PLACEHOLDER__`/`__NETSUKE_OUTS_PLACEHOLDER__` when absent
 //! so that [`crate::ir::cmd_interpolate`] can substitute them later.
@@ -11,6 +11,9 @@ use crate::ast::{NetsukeManifest, Recipe, StringOrList, Target, Vars};
 use crate::ir::{INS_TOKEN, OUTS_TOKEN};
 use anyhow::{Context, Result};
 use minijinja::Environment;
+
+#[cfg(test)]
+use std::cell::Cell;
 
 /// Render manifest targets and rules by evaluating template expressions.
 ///
@@ -41,7 +44,7 @@ fn render_rule(rule: &mut crate::ast::Rule, env: &Environment, vars: &Vars) -> R
     }
     match &mut rule.recipe {
         Recipe::Command { command } => {
-            *command = render_recipe_str_with(env, command, vars, || "render rule command".into())?;
+            render_recipe_string_or_list(command, env, vars, || "render rule command".into())?;
         }
         Recipe::Script { script } => {
             *script = render_str_with(env, script, vars, || "render rule script".into())?;
@@ -59,7 +62,7 @@ fn render_target(target: &mut Target, env: &Environment) -> Result<()> {
     render_string_or_list(&mut target.order_only_deps, env, &target.vars)?;
     match &mut target.recipe {
         Recipe::Command { command } => {
-            *command = render_recipe_str_with(env, command, &target.vars, || {
+            render_recipe_string_or_list(command, env, &target.vars, || {
                 "render target command".into()
             })?;
         }
@@ -96,29 +99,47 @@ fn render_string_or_list(value: &mut StringOrList, env: &Environment, ctx: &Vars
     Ok(())
 }
 
-fn render_str_with(
-    env: &Environment,
-    tpl: &str,
-    ctx: &impl serde::Serialize,
-    what: impl FnOnce() -> String,
-) -> Result<String> {
-    render_template(env, tpl, ctx).with_context(what)
-}
-
-/// Clones the supplied template context (`Vars`) and guarantees `ins` and `outs`
-/// entries exist before invoking `MiniJinja` rendering.
+/// Render a recipe `command` field, injecting the `ins`/`outs` placeholders
+/// for every entry.
 ///
-/// If `ins` or `outs` are absent, they are populated with the placeholders
-/// `__NETSUKE_INS_PLACEHOLDER__` and `__NETSUKE_OUTS_PLACEHOLDER__` so
-/// downstream logic can rely on those variables being present before later
-/// `Ninja` substitution. Rendering is performed by
-/// calling `render_str_with`.
-fn render_recipe_str_with(
+/// A scalar command renders as today; each entry of a list command is
+/// rendered independently so `{{ ins }}`/`{{ outs }}` expand per entry during
+/// IR interpolation. The `what` label is computed once and shared by every
+/// entry. A scalar failure names the recipe stage alone; a list failure also
+/// names the one-based position of the entry that failed to render.
+fn render_recipe_string_or_list(
+    value: &mut StringOrList,
     env: &Environment,
-    tpl: &str,
     ctx: &Vars,
     what: impl FnOnce() -> String,
-) -> Result<String> {
+) -> Result<()> {
+    let label = what();
+    let recipe_ctx = recipe_render_context(ctx);
+    let render_entry = |entry: &mut String, position: Option<usize>| -> Result<()> {
+        *entry = render_str_with(env, entry, &recipe_ctx, || {
+            position.map_or_else(|| label.clone(), |index| format!("{label} entry {index}"))
+        })?;
+        Ok(())
+    };
+    match value {
+        StringOrList::String(s) => render_entry(s, None)?,
+        StringOrList::List(list) => {
+            for (index, item) in list.iter_mut().enumerate() {
+                render_entry(item, Some(index + 1))?;
+            }
+        }
+        StringOrList::Empty => {}
+    }
+    Ok(())
+}
+
+/// Clone a recipe context once, adding the delayed path placeholders.
+///
+/// Every list entry sees the same Jinja bindings. Keeping this preparation
+/// outside the entry loop avoids cloning a target's complete `vars` map for
+/// each item while retaining the scalar rendering contract.
+fn recipe_render_context(ctx: &Vars) -> Vars {
+    record_recipe_context_preparation();
     let mut recipe_ctx = ctx.clone();
     recipe_ctx
         .entry("ins".into())
@@ -126,7 +147,39 @@ fn render_recipe_str_with(
     recipe_ctx
         .entry("outs".into())
         .or_insert_with(|| ManifestValue::String(OUTS_TOKEN.into()));
-    render_str_with(env, tpl, &recipe_ctx, what)
+    recipe_ctx
+}
+
+#[cfg(test)]
+thread_local! {
+    static RECIPE_CONTEXT_PREPARATIONS: Cell<usize> = const { Cell::new(0) };
+}
+
+#[cfg(test)]
+fn record_recipe_context_preparation() {
+    RECIPE_CONTEXT_PREPARATIONS.with(|count| count.set(count.get() + 1));
+}
+
+#[cfg(not(test))]
+const fn record_recipe_context_preparation() {}
+
+#[cfg(test)]
+pub(super) fn reset_recipe_context_preparations() {
+    RECIPE_CONTEXT_PREPARATIONS.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(super) fn recipe_context_preparations() -> usize {
+    RECIPE_CONTEXT_PREPARATIONS.with(Cell::get)
+}
+
+fn render_str_with(
+    env: &Environment,
+    tpl: &str,
+    ctx: &impl serde::Serialize,
+    what: impl FnOnce() -> String,
+) -> Result<String> {
+    render_template(env, tpl, ctx).with_context(what)
 }
 
 #[cfg(test)]
@@ -212,7 +265,10 @@ mod tests {
     #[expect(clippy::panic, reason = "panic for clearer test failures")]
     fn expect_command(recipe: &Recipe, label: impl std::fmt::Display) -> &str {
         match recipe {
-            Recipe::Command { command } => command,
+            Recipe::Command { command } => match command {
+                StringOrList::String(item) => item,
+                other => panic!("expected {label} command as a scalar, got {other:?}"),
+            },
             other => panic!("expected {label} command recipe, got {other:?}"),
         }
     }
@@ -234,7 +290,7 @@ mod tests {
     fn assert_rendered_rule(rule: &Rule) {
         assert_eq!(rule.description.as_deref(), Some("2"));
         match &rule.recipe {
-            Recipe::Command { command } => assert_eq!(command, "4"),
+            Recipe::Command { command } => assert_eq!(command.as_single(), Some("4")),
             other => panic!("expected command recipe, got {other:?}"),
         }
     }
@@ -253,4 +309,71 @@ mod tests {
         assert_rendered_rule(rendered_rule);
         Ok(())
     }
+
+    #[test]
+    fn command_list_renders_each_entry_with_ins_outs_placeholders() -> Result<()> {
+        let env = Environment::new();
+        let manifest = NetsukeManifest {
+            netsuke_version: Version::parse("1.0.0")?,
+            vars: Vars::new(),
+            macros: Vec::new(),
+            rules: vec![Rule {
+                name: "check".into(),
+                recipe: Recipe::Command {
+                    command: StringOrList::List(vec![
+                        "echo {{ 1 + 1 }}".into(),
+                        "{{ ins }}".into(),
+                        "{{ outs }}".into(),
+                    ]),
+                },
+                description: None,
+            }],
+            actions: Vec::new(),
+            targets: Vec::new(),
+            defaults: Vec::new(),
+        };
+        let rendered = render_manifest(manifest, &env)?;
+        let rule = rendered.rules.first().context("rendered rule missing")?;
+        let Recipe::Command { command } = &rule.recipe else {
+            anyhow::bail!("expected command recipe, got {:?}", rule.recipe);
+        };
+        anyhow::ensure!(
+            command.to_string_vec() == ["echo 2", crate::ir::INS_TOKEN, crate::ir::OUTS_TOKEN],
+            "unexpected rendered command list: {command:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn command_list_render_failure_names_the_failing_entry() -> Result<()> {
+        let env = Environment::new();
+        let manifest = NetsukeManifest {
+            netsuke_version: Version::parse("1.0.0")?,
+            vars: Vars::new(),
+            macros: Vec::new(),
+            rules: vec![Rule {
+                name: "check".into(),
+                recipe: Recipe::Command {
+                    command: StringOrList::List(vec!["echo ok".into(), "echo {{ 1 + }}".into()]),
+                },
+                description: None,
+            }],
+            actions: Vec::new(),
+            targets: Vec::new(),
+            defaults: Vec::new(),
+        };
+        let error = render_manifest(manifest, &env)
+            .err()
+            .context("expected the malformed entry to fail rendering")?;
+        let report = format!("{error:#}");
+        anyhow::ensure!(
+            report.contains("render rule command entry 2"),
+            "error should name the failing list position, got: {report}"
+        );
+        Ok(())
+    }
 }
+
+#[cfg(test)]
+#[path = "render_command_list_tests.rs"]
+mod command_list_tests;

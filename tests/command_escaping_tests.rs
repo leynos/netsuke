@@ -33,7 +33,8 @@ fn command_words(body: &str) -> Result<Vec<String>> {
     let Recipe::Command { command } = &action.recipe else {
         bail!("expected command recipe, got: {:?}", action.recipe);
     };
-    shlex::split(command).context("split command into words")
+    let command_str = command.as_single().context("command should be a scalar")?;
+    shlex::split(command_str).context("split command into words")
 }
 
 #[rstest]

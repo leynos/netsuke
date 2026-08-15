@@ -149,6 +149,7 @@ manifest.glob.invalid_pattern = Virheellinen glob-hahmo ”{ $pattern }”: { $d
 manifest.glob.unknown_pattern_error = tuntematon hahmovirhe.
 manifest.glob.io_failed = Glob epäonnistui hahmolle ”{ $pattern }”: { $detail }.
 manifest.glob.unknown_io_error = tuntematon siirräntävirhe.
+manifest.command_list_empty = Kenttä ”command” ei saa olla tyhjä: anna komentomerkkijono tai ei-tyhjä luettelo.
 
 # Välimuotoesityksen virheet.
 ir.rule_not_found = Sääntöä ”{ $rule }”, johon kohde ”{ $target }” viittaa, ei löytynyt.

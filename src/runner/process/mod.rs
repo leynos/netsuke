@@ -3,27 +3,26 @@
 
 use super::BuildTargets;
 use crate::cli::Cli;
-use std::{
-    io::{self, BufReader},
-    path::Path,
-    process::{Child, Command, ExitStatus},
-    thread,
-};
-use tracing::{debug, warn};
+use monotony::{MonotonicClock, StdMonotonicClock};
+use std::{io, path::Path, process::Command};
 
+mod child_exit;
+mod command_list_telemetry;
 mod command_logging;
+mod failure_attribution;
 mod file_io;
 mod ninja_program;
 mod ninja_status;
+mod output_forwarding;
 mod paths;
 mod redaction;
 mod streaming;
 #[cfg(test)]
 mod tests;
 
+use child_exit::{ExitFailureContext, check_exit_status_with_context};
 use command_logging::{
-    CommandLogContext, command_span, log_command_execution, log_command_exit_failure,
-    log_command_spawn_failure,
+    CommandLogContext, command_span, log_command_execution, log_command_spawn_failure,
 };
 pub use file_io::*;
 pub use ninja_program::resolve_ninja_program;
@@ -31,6 +30,7 @@ pub use ninja_program::resolve_ninja_program;
 pub use ninja_program::resolve_ninja_program_utf8;
 #[cfg(test)]
 use ninja_program::{resolve_ninja_program_utf8_with, resolve_ninja_program_with};
+use output_forwarding::{StatusObserver, spawn_and_stream_output};
 
 mod command_env;
 mod configure;
@@ -39,15 +39,14 @@ pub use command_env::CommandEnv;
 use configure::{configure_ninja_build_command, configure_ninja_tool_command};
 pub use paths::*;
 pub use request::{NinjaBuildRequest, NinjaToolRequest};
-use streaming::{ForwardStats, forward_child_output, forward_child_output_with_ninja_status};
 
-/// Callback contract for task-progress updates from parsed Ninja status lines.
-///
-/// Accepts `(current, total, description)` where `current` and `total` are
-/// progress counters and `description` is a human-readable status string.
-/// This alias appears in `pub(crate)` function signatures and borrows a mutable
-/// callback for the call duration, so callers can retain state across updates.
-type StatusObserver<'a> = &'a mut dyn FnMut(u32, u32, &str);
+/// Per-invocation process settings passed only from Ninja setup to execution.
+struct CommandExecutionContext<'a, Clock> {
+    operation: &'a str,
+    suppress_stderr: bool,
+    captures_ninja_failure_output: bool,
+    clock: &'a Clock,
+}
 
 // Public helpers for doctests only. This exposes internal helpers as a stable
 // testing surface without exporting them in release builds.
@@ -69,38 +68,40 @@ pub mod doc {
     };
 }
 
-fn check_exit_status_with_context(
-    status: ExitStatus,
-    context: &CommandLogContext,
-    operation: &str,
-    suppress_stderr: bool,
-) -> io::Result<()> {
-    if status.success() {
-        Ok(())
-    } else {
-        tracing::Span::current().record("failure_category", "exit_status");
-        log_command_exit_failure(context, operation, suppress_stderr, status);
-        ninja_exit_error(status)
-    }
-}
-
-fn run_command_and_stream_with_context(
+fn run_command_and_stream_with_context<Clock: MonotonicClock>(
     mut cmd: Command,
     status_observer: Option<StatusObserver<'_>>,
-    suppress_stderr: bool,
-    operation: &str,
+    execution: &CommandExecutionContext<'_, Clock>,
 ) -> io::Result<()> {
     let context = CommandLogContext::from_command(&cmd);
-    let span = command_span(&context, operation, suppress_stderr);
+    let span = command_span(&context, execution.operation, execution.suppress_stderr);
     let _entered = span.enter();
 
-    log_command_execution(&context, operation, suppress_stderr);
+    log_command_execution(&context, execution.operation, execution.suppress_stderr);
+    let started_at = execution.clock.now();
     let child = cmd.spawn().inspect_err(|err| {
         tracing::Span::current().record("failure_category", "spawn");
-        log_command_spawn_failure(&context, operation, suppress_stderr, err);
+        log_command_spawn_failure(
+            &context,
+            execution.operation,
+            execution.suppress_stderr,
+            err,
+        );
     })?;
-    let status = spawn_and_stream_output(child, status_observer, suppress_stderr)?;
-    check_exit_status_with_context(status, &context, operation, suppress_stderr)
+    let (status, command_list_failure) = spawn_and_stream_output(
+        child,
+        status_observer,
+        execution.suppress_stderr,
+        execution.captures_ninja_failure_output,
+    )?;
+    let failure_context = ExitFailureContext {
+        operation: execution.operation,
+        suppress_stderr: execution.suppress_stderr,
+        command_list_failure: command_list_failure.as_ref(),
+        clock: execution.clock,
+        started_at,
+    };
+    check_exit_status_with_context(status, &context, &failure_context)
 }
 
 /// Invoke the Ninja executable with the provided CLI settings.
@@ -165,7 +166,14 @@ pub fn run_ninja(
 /// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
 /// streams are unavailable, or when Ninja reports a non-zero exit status.
 pub fn run_ninja_with(request: &NinjaBuildRequest<'_>) -> io::Result<()> {
-    run_ninja_build_internal(*request, None)
+    run_ninja_with_clock(request, &StdMonotonicClock)
+}
+
+fn run_ninja_with_clock(
+    request: &NinjaBuildRequest<'_>,
+    clock: &impl MonotonicClock,
+) -> io::Result<()> {
+    run_ninja_build_internal(*request, None, clock)
 }
 
 /// Invoke a Ninja tool (e.g., `ninja -t clean`) with the provided CLI settings.
@@ -213,7 +221,7 @@ pub fn run_ninja_tool(program: &Path, cli: &Cli, build_file: &Path, tool: &str) 
 /// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
 /// streams are unavailable, or when Ninja reports a non-zero exit status.
 pub fn run_ninja_tool_with(request: &NinjaToolRequest<'_>) -> io::Result<()> {
-    run_ninja_tool_internal(*request, None)
+    run_ninja_tool_internal(*request, None, &StdMonotonicClock)
 }
 
 struct NinjaInternalRequest<'request, 'observer> {
@@ -221,24 +229,32 @@ struct NinjaInternalRequest<'request, 'observer> {
     cli: &'request Cli,
     status_observer: Option<StatusObserver<'observer>>,
     operation: &'request str,
+    captures_ninja_failure_output: bool,
 }
 
-fn run_ninja_internal<F>(request: NinjaInternalRequest<'_, '_>, configure: F) -> io::Result<()>
+fn run_ninja_internal<F, Clock>(
+    request: NinjaInternalRequest<'_, '_>,
+    clock: &Clock,
+    configure: F,
+) -> io::Result<()>
 where
     F: FnOnce(&mut Command) -> io::Result<()>,
+    Clock: MonotonicClock,
 {
     let mut cmd = Command::new(request.program);
     configure(&mut cmd)?;
-    run_command_and_stream_with_context(
-        cmd,
-        request.status_observer,
-        request.cli.json,
-        request.operation,
-    )
+    let execution = CommandExecutionContext {
+        operation: request.operation,
+        suppress_stderr: request.cli.json,
+        captures_ninja_failure_output: request.captures_ninja_failure_output,
+        clock,
+    };
+    run_command_and_stream_with_context(cmd, request.status_observer, &execution)
 }
 fn run_ninja_build_internal(
     request: NinjaBuildRequest<'_>,
     status_observer: Option<StatusObserver<'_>>,
+    clock: &impl MonotonicClock,
 ) -> io::Result<()> {
     run_ninja_internal(
         NinjaInternalRequest {
@@ -246,7 +262,9 @@ fn run_ninja_build_internal(
             cli: request.cli,
             status_observer,
             operation: "build",
+            captures_ninja_failure_output: true,
         },
+        clock,
         |cmd| configure_ninja_build_command(cmd, &request),
     )
 }
@@ -254,6 +272,7 @@ fn run_ninja_build_internal(
 fn run_ninja_tool_internal(
     request: NinjaToolRequest<'_>,
     status_observer: Option<StatusObserver<'_>>,
+    clock: &impl MonotonicClock,
 ) -> io::Result<()> {
     run_ninja_internal(
         NinjaInternalRequest {
@@ -261,7 +280,9 @@ fn run_ninja_tool_internal(
             cli: request.cli,
             status_observer,
             operation: request.tool,
+            captures_ninja_failure_output: false,
         },
+        clock,
         |cmd| configure_ninja_tool_command(cmd, &request),
     )
 }
@@ -276,7 +297,7 @@ pub(crate) fn run_ninja_with_status(
     request: NinjaBuildRequest<'_>,
     status_observer: StatusObserver<'_>,
 ) -> io::Result<()> {
-    run_ninja_build_internal(request, Some(status_observer))
+    run_ninja_build_internal(request, Some(status_observer), &StdMonotonicClock)
 }
 
 /// Invoke `ninja -t` and stream parsed task updates from status lines.
@@ -289,105 +310,5 @@ pub(crate) fn run_ninja_tool_with_status(
     request: NinjaToolRequest<'_>,
     status_observer: StatusObserver<'_>,
 ) -> io::Result<()> {
-    run_ninja_tool_internal(request, Some(status_observer))
-}
-
-fn handle_forwarding_stats(stats: ForwardStats, stream_name: &str) {
-    if stats.write_failed {
-        debug!("{stream_name} forwarding encountered closed pipe; output truncated");
-    }
-}
-
-fn handle_forwarding_thread_result(result: thread::Result<ForwardStats>, stream_name: &str) {
-    match result {
-        Ok(stats) => handle_forwarding_stats(stats, stream_name),
-        Err(err) => {
-            warn!("{stream_name} forwarding thread panicked: {err:?}");
-        }
-    }
-}
-
-fn forward_stdout(
-    stdout: impl io::Read,
-    output: &mut impl io::Write,
-    status_observer: Option<StatusObserver<'_>>,
-) -> ForwardStats {
-    match status_observer {
-        Some(observer) => forward_child_output_with_ninja_status(
-            BufReader::new(stdout),
-            output,
-            observer,
-            "stdout",
-        ),
-        None => forward_child_output(BufReader::new(stdout), output, "stdout"),
-    }
-}
-fn spawn_and_stream_output(
-    mut child: Child,
-    status_observer: Option<StatusObserver<'_>>,
-    suppress_stderr: bool,
-) -> io::Result<ExitStatus> {
-    let Some(stdout) = child.stdout.take() else {
-        terminate_child(&mut child, "stdout pipe unavailable");
-        return Err(io::Error::other("child process missing stdout pipe"));
-    };
-    let Some(stderr) = child.stderr.take() else {
-        terminate_child(&mut child, "stderr pipe unavailable");
-        return Err(io::Error::other("child process missing stderr pipe"));
-    };
-
-    let err_handle = thread::spawn(move || {
-        // Avoid a long-lived stderr lock: status observers invoked while
-        // draining stdout may emit task updates to stderr, and that path must
-        // not block behind stderr forwarding. In JSON diagnostics mode we still
-        // drain child stderr, but discard it to keep stderr machine-readable.
-        if suppress_stderr {
-            forward_child_output(BufReader::new(stderr), io::sink(), "stderr")
-        } else {
-            forward_child_output(BufReader::new(stderr), io::stderr(), "stderr")
-        }
-    });
-
-    // Intentionally drain stdout on the main thread when `status_observer` is
-    // present so forwarding and callback-driven status updates keep a stable
-    // ordering; moving this elsewhere can regress output timing/interleaving.
-    let stdout_stats = if suppress_stderr {
-        let mut output = io::sink();
-        forward_stdout(stdout, &mut output, status_observer)
-    } else {
-        let mut output = io::stdout().lock();
-        forward_stdout(stdout, &mut output, status_observer)
-    };
-
-    // Capture the wait result without `?` so the stderr forwarding thread is
-    // joined on every exit path. Returning early on a `wait()` error would
-    // otherwise detach the thread, leaking it and discarding its result.
-    let wait_result = child.wait();
-    finalize_streaming(wait_result, stdout_stats, err_handle)
-}
-
-/// Drain forwarding bookkeeping and join the stderr thread, then surface the
-/// child's wait result. The stderr thread is always joined first so a failed
-/// `wait()` cannot detach background work.
-fn finalize_streaming(
-    wait_result: io::Result<ExitStatus>,
-    stdout_stats: ForwardStats,
-    err_handle: thread::JoinHandle<ForwardStats>,
-) -> io::Result<ExitStatus> {
-    handle_forwarding_stats(stdout_stats, "stdout");
-    handle_forwarding_thread_result(err_handle.join(), "stderr");
-    wait_result
-}
-
-fn terminate_child(child: &mut Child, context: &str) {
-    if let Err(err) = child.kill() {
-        tracing::debug!("failed to kill child after {context}: {err}");
-    }
-    if let Err(err) = child.wait() {
-        tracing::debug!("failed to reap child after {context}: {err}");
-    }
-}
-
-fn ninja_exit_error(status: ExitStatus) -> io::Result<()> {
-    Err(io::Error::other(format!("ninja exited with {status}")))
+    run_ninja_tool_internal(request, Some(status_observer), &StdMonotonicClock)
 }

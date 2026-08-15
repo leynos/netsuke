@@ -4,6 +4,8 @@ target/
 *.swp
 .crush/
 .claude/
+.vtcode/
+vtcode.toml
 .memdb/
 .grepai/
 build.ninja
@@ -17,5 +19,4 @@ __pycache__/
 .pytest_cache/
 .typos-oxendict-base.json
 .typos-oxendict-base.toml
-.vtcode/
 *.swo

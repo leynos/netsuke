@@ -36,7 +36,10 @@ targets:
     ensure!(name == "hello", "unexpected target name: {name}");
 
     if let Recipe::Command { command } = &first.recipe {
-        ensure!(command == "echo hi", "unexpected command: {command}");
+        ensure!(
+            *command == StringOrList::String("echo hi".into()),
+            "unexpected command: {command:?}"
+        );
     } else {
         bail!("Expected command recipe, got: {:?}", first.recipe);
     }
@@ -186,7 +189,10 @@ fn vars_section_allows_non_reserved_names() -> Result<()> {
     let Recipe::Command { command } = &first.recipe else {
         bail!("expected a command recipe, got {:?}", first.recipe);
     };
-    ensure!(command == "echo hi", "unexpected command: {command}");
+    ensure!(
+        *command == StringOrList::String("echo hi".into()),
+        "unexpected command: {command:?}"
+    );
     Ok(())
 }
 

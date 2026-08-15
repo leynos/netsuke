@@ -290,11 +290,70 @@ offending key.
 
 A rule or target must provide exactly one recipe:
 
-- `command`: one shell command.
+- `command`: one shell command, or an ordered list of commands.
 - `script`: a multi-line POSIX shell script.
 - `rule`: the name of another rule to use.
 
 Rules may also provide `description`, text used for Ninja's progress display.
+
+A `command` list runs its entries in declaration order and stops at the first
+non-zero exit, so entries share the fail-fast behaviour of a handwritten
+`&&` chain. The command field is a `StringOrList`: a scalar remains one shell
+command, while a YAML sequence is rendered and lowered one entry at a time.
+This applies equally to rules, direct targets, and actions. Each entry sees the
+same Jinja context, including `{{ ins }}` and `{{ outs }}`; those two
+placeholders are resolved later to the concrete target's shell-quoted input
+and output paths. An empty command list is rejected when the manifest is
+parsed.
+
+At execution time, each list entry is evaluated inside its own brace group and
+the groups are joined with `&&`. The entry is passed to `eval` as a
+shell-quoted payload, so an inline `#` comment or a trailing control operator
+such as `&` cannot consume the generated group's closing boundary. Brace
+groups run in the current shell rather than a subshell: a changed working
+directory, environment assignment, or shell variable can therefore be used by
+later entries. A failed entry stops the chain, and the diagnostic identifies
+the generated action and one-based list-entry positions, for example
+`netsuke command-list failure: action HASH, entry 2`.
+
+<!-- tested-example: guide-command-list -->
+
+```yaml
+netsuke_version: "1.0.0"
+
+rules:
+  - name: comprehensive-check
+    description: Run the required checks sequentially
+    command:
+      - echo "check-fmt"
+      - echo "lint"
+      - echo "test"
+
+targets:
+  - name: done
+    rule: comprehensive-check
+```
+
+The same list form can be attached directly to a target. Jinja rendering and
+`{{ outs }}` interpolation apply independently to each entry:
+
+<!-- tested-example: guide-direct-command-list -->
+
+```yaml
+netsuke_version: "1.0.0"
+
+targets:
+  - name: report.txt
+    vars:
+      heading: Report
+    command:
+      - "printf '{{ heading }}\\n' > {{ outs }}"
+      - "printf 'complete\\n' >> {{ outs }}"
+```
+
+Prefer a `command` list for a short, ordered sequence of distinct commands.
+Prefer `script` when the logic needs multi-line structure or shell
+constructs such as loops, conditionals, or variable assignment.
 
 The v0.1.0-beta1 `script` implementation invokes `/bin/sh -e`; it is not
 currently a portable PowerShell abstraction. Prefer `command` or
@@ -1059,6 +1118,23 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   may retain the original input so invalid patterns can be explained.
 - `raw` template output and handwritten shell fragments remain the manifest
   author's responsibility.
+- Each `command` list entry is joined into a single shell chain; a later
+  entry inherits the working directory, environment, and shell variables
+  left by an earlier entry, and runs only when that earlier entry exits with
+  status zero. A failed entry may still leave side effects behind before it
+  halts the chain. The generated brace/eval boundary keeps comments and
+  trailing control operators inside an entry from changing the chain's
+  structure. An entry may start at most one background job; Netsuke waits for
+  that job before moving to a later entry, and rejects an entry that starts
+  more than one background job during Ninja generation. It also rejects an
+  entry whose nested `eval` payload makes the background-job count dynamic,
+  because the wrapper cannot safely determine which jobs to wait for. A direct
+  simple `exec`, optionally prefixed by shell assignments, is supervised so
+  its success or failure retains the list's status semantics: a successful
+  `exec` ends the remaining chain, while structured or nested `exec` forms are
+  rejected during Ninja generation. Failure diagnostics include the action
+  fingerprint and one-based entry position when Netsuke can attribute the
+  failed list entry.
 - Literal shell dollar expressions currently require Ninja-aware escaping,
   such as `$$PATH`.
 

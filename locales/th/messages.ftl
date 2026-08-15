@@ -149,6 +149,7 @@ manifest.glob.invalid_pattern = รูปแบบ glob ไม่ถูกต้
 manifest.glob.unknown_pattern_error = ข้อผิดพลาดของรูปแบบที่ไม่รู้จัก
 manifest.glob.io_failed = glob ล้มเหลวสำหรับ “{ $pattern }”: { $detail }
 manifest.glob.unknown_io_error = ข้อผิดพลาดรับส่งข้อมูลที่ไม่รู้จัก
+manifest.command_list_empty = ฟิลด์ “command” ต้องไม่ว่าง: ระบุสตริงคำสั่งหรือรายการที่ไม่ว่าง
 
 # ข้อผิดพลาดของรูปแทนระดับกลาง
 ir.rule_not_found = ไม่พบกฎ “{ $rule }” ที่เป้าหมาย “{ $target }” อ้างถึง

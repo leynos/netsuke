@@ -23,7 +23,7 @@
 //! single namespace.
 
 use crate::{
-    ast::NetsukeManifest,
+    ast::{EMPTY_COMMAND_LIST_ERROR, NetsukeManifest},
     localization::{self, keys},
     stdlib::{NetworkPolicy, StdlibConfig},
 };
@@ -147,12 +147,23 @@ fn from_str_named(
 
     notify_stage(on_stage, ManifestLoadStage::FinalRendering);
     let manifest: NetsukeManifest =
-        serde_json::from_value(doc).map_err(|e| ManifestError::Parse {
-            source: map_data_error(e, name),
+        serde_json::from_value(doc).map_err(|error| ManifestError::Parse {
+            source: map_data_error(localize_recipe_error(error), name),
             message: localization::message(keys::MANIFEST_PARSE),
         })?;
 
     render_manifest(manifest, &jinja)
+}
+
+/// Translate schema-only recipe errors at the manifest adapter boundary.
+fn localize_recipe_error(error: serde_json::Error) -> serde_json::Error {
+    if error.to_string().starts_with(EMPTY_COMMAND_LIST_ERROR) {
+        serde_json::Error::custom(
+            localization::message(keys::MANIFEST_COMMAND_LIST_EMPTY).to_string(),
+        )
+    } else {
+        error
+    }
 }
 
 /// Names the manifest loader registers as Jinja helper functions.
@@ -260,7 +271,7 @@ pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
 ///
 /// assert!(matches!(
 ///     &manifest.targets[0].recipe,
-///     Recipe::Command { command } if command == "echo release"
+///     Recipe::Command { command } if command.as_single() == Some("echo release")
 /// ));
 /// ```
 pub fn from_str_with_env(yaml: &str, env_reader: &EnvReader) -> Result<NetsukeManifest> {
@@ -346,7 +357,7 @@ pub fn from_path_with_policy(
 ///
 /// assert!(matches!(
 ///     &manifest.targets[0].recipe,
-///     Recipe::Command { command } if command == "echo offline"
+///     Recipe::Command { command } if command.as_single() == Some("echo offline")
 /// ));
 /// ```
 pub fn from_path_with_policy_and_env(

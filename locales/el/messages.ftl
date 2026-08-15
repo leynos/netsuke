@@ -150,6 +150,7 @@ manifest.glob.invalid_pattern = Μη έγκυρο μοτίβο glob «{ $pattern
 manifest.glob.unknown_pattern_error = άγνωστο σφάλμα μοτίβου.
 manifest.glob.io_failed = Το glob απέτυχε για «{ $pattern }»: { $detail }.
 manifest.glob.unknown_io_error = άγνωστο σφάλμα εισόδου/εξόδου.
+manifest.command_list_empty = Το πεδίο «command» δεν πρέπει να είναι κενό: δώστε μια συμβολοσειρά εντολής ή μια μη κενή λίστα.
 
 # Σφάλματα της ενδιάμεσης αναπαράστασης.
 ir.rule_not_found = Ο κανόνας «{ $rule }» στον οποίο παραπέμπει ο στόχος «{ $target }» δεν βρέθηκε.

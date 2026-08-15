@@ -79,7 +79,7 @@ fn build_graph_duplicate_action_ids() {
         panic!("expected action for id 'a'");
     };
     if let Recipe::Command { command } = &action.recipe {
-        assert_eq!(command, "two");
+        assert_eq!(command.as_single(), Some("two"));
     } else {
         panic!("unexpected recipe type");
     }
