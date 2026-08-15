@@ -9,6 +9,7 @@
 pub mod dyndep;
 mod path_syntax;
 
+use dyndep::reject_reserved_paths;
 pub use dyndep::{GeneratedDyndep, GeneratedNinja, generate_bundle};
 pub(crate) use path_syntax::{escape_ninja_path, reject_unsupported_path_characters};
 
@@ -81,7 +82,8 @@ macro_rules! write_flag {
 /// programmatic action has an empty command recipe, a command-list entry starts
 /// multiple background jobs, a command-list entry uses an unsupported `exec`
 /// structure, a command-list `eval` payload cannot be analysed, a command-list
-/// entry contains a Ninja control character, or writing to the output fails.
+/// entry contains a Ninja control character, a graph path uses Netsuke's
+/// reserved serial-ordering namespace, or writing to the output fails.
 pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
     let mut out = String::new();
     generate_into(graph, &mut out)?;
@@ -124,9 +126,11 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 /// programmatic action has an empty command recipe, a command-list entry starts
 /// multiple background jobs, a command-list entry uses an unsupported `exec`
 /// structure, a command-list `eval` payload cannot be analysed, a command-list
-/// entry contains a Ninja control character, or writing to the output fails.
+/// entry contains a Ninja control character, a graph path uses Netsuke's
+/// reserved serial-ordering namespace, or writing to the output fails.
 pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), NinjaGenError> {
     reject_unsupported_path_characters(graph)?;
+    reject_reserved_paths(graph)?;
     if graph_requires_dyndep(graph) {
         return Err(NinjaGenError::DyndepFilesRequired {
             message: localization::message(keys::NINJA_GEN_DYNDEP_FILES_REQUIRED),

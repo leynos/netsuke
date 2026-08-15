@@ -1,9 +1,11 @@
 //! Unit tests for Ninja file generation and rule synthesis.
 
 use super::test_support::command_action;
-use super::*;
+use super::{NamedAction, NinjaGenError, generate, generate_into};
+use crate::ast::{Recipe, StringOrList};
 use crate::ir::{Action, BuildEdge, BuildGraph, DependencyOrder};
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
+use camino::Utf8PathBuf;
 use rstest::rstest;
 
 #[rstest]
@@ -44,6 +46,50 @@ fn generate_simple_ninja() -> Result<()> {
     ensure!(
         ninja == expected,
         "expected Ninja manifest:\n{expected}\nactual:\n{ninja}"
+    );
+    Ok(())
+}
+
+#[test]
+fn string_generation_apis_reject_reserved_paths() -> Result<()> {
+    let action = command_action("true".into());
+    let edge = BuildEdge {
+        action_id: "reserved".into(),
+        inputs: Vec::new(),
+        implicit_deps: vec![Utf8PathBuf::from(".netsuke/dyndep/reserved")],
+        dependency_order: DependencyOrder::Parallel,
+        explicit_outputs: vec![Utf8PathBuf::from("out")],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: false,
+        always: false,
+    };
+    let mut graph = BuildGraph::default();
+    graph.actions.insert("reserved".into(), action);
+    graph.targets.insert(Utf8PathBuf::from("out"), edge);
+
+    let generate_error = generate(&graph)
+        .err()
+        .context("generate must reject reserved paths")?;
+    ensure!(
+        matches!(generate_error, NinjaGenError::ReservedOutputPath { .. }),
+        "unexpected generate error: {generate_error:?}"
+    );
+
+    let mut output = String::new();
+    let generate_into_error = generate_into(&graph, &mut output)
+        .err()
+        .context("generate_into must reject reserved paths")?;
+    ensure!(
+        matches!(
+            generate_into_error,
+            NinjaGenError::ReservedOutputPath { .. }
+        ),
+        "unexpected generate_into error: {generate_into_error:?}"
+    );
+    ensure!(
+        output.is_empty(),
+        "reserved paths must not produce Ninja output"
     );
     Ok(())
 }

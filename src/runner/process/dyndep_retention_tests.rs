@@ -133,7 +133,6 @@ fn lease_blocks_other_processes_until_the_active_sidecar_is_released() -> Result
     let mut child = Command::new(std::env::current_exe()?)
         .args(["--ignored", "--exact", LEASE_WORKER_NAME, "--nocapture"])
         .env(LEASE_WORKER_DIRECTORY, temp.path())
-        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
@@ -141,11 +140,6 @@ fn lease_blocks_other_processes_until_the_active_sidecar_is_released() -> Result
 
     wait_for_worker_marker(&mut stdout, "blocked")?;
     drop(lease);
-    write_worker_marker(
-        child.stdin.as_mut().context("open lease-worker stdin")?,
-        "release",
-    )?;
-    drop(child.stdin.take());
     wait_for_worker_marker(&mut stdout, "completed")?;
     let status = child.wait()?;
     drop(stdout);
@@ -170,15 +164,6 @@ fn dyndep_publication_lease_worker() -> Result<()> {
     assert_lease_is_unavailable(&dir)?;
     write_worker_marker(std::io::stdout().lock(), "blocked")?;
 
-    let mut input = String::new();
-    ensure!(
-        std::io::stdin().read_line(&mut input)? != 0,
-        "lease worker must receive the parent release marker"
-    );
-    ensure!(
-        input.trim_end() == format!("{WORKER_MARKER_PREFIX}release"),
-        "lease worker received an unexpected parent marker"
-    );
     let active = sidecar(ACTIVE_SIDECAR_PATH, ACTIVE_SIDECAR_CONTENT);
     let lease = materialize_dyndep_files(&dir, std::slice::from_ref(&active))?;
     lease.prune(&dir, std::slice::from_ref(&active))?;

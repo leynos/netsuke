@@ -266,9 +266,12 @@ proptest! {
 
     #[test]
     fn short_serial_lists_need_no_staging(dependencies in paths_strategy("dep", 0..2)) {
-        let bundle = generate_serial_bundle(dependencies)?;
+        let bundle = generate_serial_bundle(dependencies.clone())?;
         prop_assert!(bundle.dyndep_files().is_empty());
         prop_assert!(!bundle.build_file().contains("ninja_required_version = 1.10"));
+        for dependency in dependencies {
+            prop_assert!(bundle.build_file().contains(dependency.as_str()));
+        }
     }
 
     #[test]

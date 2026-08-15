@@ -96,10 +96,14 @@ fn dyndep_sidecar_paths(root: &Dir) -> Result<Vec<Utf8PathBuf>> {
     let dyndep = root
         .open_dir(".netsuke/dyndep")
         .context("CLI command must materialize the dyndep directory")?;
-    Ok(dyndep
+    let names = dyndep
         .entries()
         .context("enumerate CLI-materialized dyndep sidecars")?
-        .filter_map(|entry_result| entry_result.ok().and_then(|entry| entry.file_name().ok()))
+        .map(|entry_result| entry_result.and_then(|entry| entry.file_name()))
+        .collect::<std::io::Result<Vec<_>>>()
+        .context("read CLI-materialized dyndep sidecar names")?;
+    Ok(names
+        .into_iter()
         .filter(|name| {
             Utf8Path::new(name)
                 .extension()

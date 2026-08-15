@@ -294,7 +294,7 @@ fn sidecar_digest(content: &str) -> String {
 
 /// Reject user outputs or dependencies that collide with the reserved
 /// serial-ordering state namespace.
-fn reject_reserved_paths(graph: &BuildGraph) -> Result<(), NinjaGenError> {
+pub(crate) fn reject_reserved_paths(graph: &BuildGraph) -> Result<(), NinjaGenError> {
     for edge in graph.targets.values() {
         for path in edge
             .explicit_outputs

@@ -1,7 +1,7 @@
 //! Unit tests for manifest template rendering.
 
 use super::*;
-use crate::ast::Rule;
+use crate::ast::{DependencyOrder, Rule};
 use minijinja::Environment;
 use semver::Version;
 
@@ -21,6 +21,7 @@ fn sample_manifest() -> Result<NetsukeManifest> {
         },
         sources: StringOrList::List(vec!["{{ subject }}.txt".into()]),
         deps: StringOrList::Empty,
+        dependency_order: DependencyOrder::Parallel,
         order_only_deps: StringOrList::List(vec!["{{ subject }}.meta".into()]),
         vars: target_vars,
         phony: false,
@@ -104,6 +105,7 @@ fn expect_rule_ref(recipe: &Recipe, label: impl std::fmt::Display) -> Result<&St
 }
 
 fn assert_rendered_target(target: &Target) {
+    assert_eq!(target.dependency_order, DependencyOrder::Parallel);
     assert_eq!(expect_var(&target.vars, "message"), "hello world");
     assert_eq!(
         target.description.as_deref(),
@@ -148,9 +150,12 @@ fn render_manifest_renders_targets_and_rules() -> Result<()> {
 #[test]
 fn command_list_renders_each_entry_with_ins_outs_placeholders() -> Result<()> {
     let env = Environment::new();
+    let mut vars = Vars::new();
+    vars.insert("ins".into(), ManifestValue::String("caller-ins".into()));
+    vars.insert("outs".into(), ManifestValue::String("caller-outs".into()));
     let manifest = NetsukeManifest {
         netsuke_version: Version::parse("1.0.0")?,
-        vars: Vars::new(),
+        vars,
         macros: Vec::new(),
         rules: vec![Rule {
             name: "check".into(),
@@ -242,6 +247,7 @@ fn render_manifest_renders_script_and_rule_ref_recipes() -> Result<()> {
         },
         sources: StringOrList::Empty,
         deps: StringOrList::Empty,
+        dependency_order: DependencyOrder::Parallel,
         order_only_deps: StringOrList::Empty,
         vars: target_vars,
         phony: false,

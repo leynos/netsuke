@@ -94,26 +94,130 @@ mod tests {
     use super::*;
     use metrics_util::MetricKind;
     use metrics_util::debugging::{DebugValue, DebuggingRecorder};
+    use std::sync::{Arc, Mutex, PoisonError};
+    use tracing::{
+        Subscriber,
+        field::{Field, Visit},
+        span::{Id, Record},
+    };
+    use tracing_subscriber::{
+        Layer, filter::LevelFilter, layer::Context as LayerContext, prelude::*,
+        registry::LookupSpan,
+    };
+
+    #[derive(Clone, Default)]
+    struct CapturedSpanFields {
+        fields: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl CapturedSpanFields {
+        fn snapshot(&self) -> Vec<String> {
+            self.fields
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clone()
+        }
+    }
+
+    impl<S> Layer<S> for CapturedSpanFields
+    where
+        S: Subscriber + for<'span> LookupSpan<'span>,
+    {
+        fn on_record(&self, _span: &Id, values: &Record<'_>, _ctx: LayerContext<'_, S>) {
+            let mut visitor = SpanFieldVisitor::default();
+            values.record(&mut visitor);
+            self.fields
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .extend(visitor.fields);
+        }
+    }
+
+    #[derive(Default)]
+    struct SpanFieldVisitor {
+        fields: Vec<String>,
+    }
+
+    impl Visit for SpanFieldVisitor {
+        fn record_str(&mut self, field: &Field, value: &str) {
+            self.fields.push(format!("{}={value:?}", field.name()));
+        }
+
+        fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
+            self.fields.push(format!("{}={value:?}", field.name()));
+        }
+    }
+
+    fn with_span_capture<T>(test: impl FnOnce(CapturedSpanFields) -> T) -> T {
+        let captured = CapturedSpanFields::default();
+        let subscriber =
+            tracing_subscriber::registry().with(captured.clone().with_filter(LevelFilter::TRACE));
+        tracing::subscriber::with_default(subscriber, || test(captured))
+    }
+
+    fn bundle_generation_count(
+        snapshot: &[(
+            metrics_util::CompositeKey,
+            Option<metrics::Unit>,
+            Option<metrics::SharedString>,
+            DebugValue,
+        )],
+        outcome: &str,
+    ) -> Option<u64> {
+        snapshot.iter().find_map(|(key, _, _, value)| {
+            let has_outcome = key
+                .key()
+                .labels()
+                .any(|label| label.key() == "outcome" && label.value() == outcome);
+            match (key.kind(), key.key().name(), value) {
+                (MetricKind::Counter, BUNDLE_GENERATIONS_TOTAL, DebugValue::Counter(count))
+                    if has_outcome =>
+                {
+                    Some(*count)
+                }
+                _ => None,
+            }
+        })
+    }
+
+    fn record_generation<T>(
+        recorder: &DebuggingRecorder,
+        graph: &BuildGraph,
+        generate: impl FnOnce() -> Result<T, NinjaGenError>,
+    ) -> Result<T, NinjaGenError> {
+        metrics::with_local_recorder(recorder, || instrument_bundle_generation(graph, generate))
+    }
 
     #[test]
     fn runner_boundary_records_bundle_generation() {
         let recorder = DebuggingRecorder::new();
         let snapshotter = recorder.snapshotter();
         let graph = BuildGraph::default();
-        let result = metrics::with_local_recorder(&recorder, || {
-            instrument_bundle_generation(&graph, || Ok::<_, NinjaGenError>(()))
+        let (success, error, span_fields) = with_span_capture(|captured| {
+            let success = record_generation(&recorder, &graph, || Ok::<_, NinjaGenError>(()));
+            let error = record_generation(&recorder, &graph, || {
+                Err::<(), _>(NinjaGenError::EmptyCommandRecipe { action_index: 1 })
+            });
+            (success, error, captured.snapshot())
         });
-        assert!(result.is_ok());
+        assert!(success.is_ok());
+        assert!(matches!(
+            error,
+            Err(NinjaGenError::EmptyCommandRecipe { action_index: 1 })
+        ));
         let snapshot = snapshotter.snapshot().into_vec();
-        assert!(snapshot.iter().any(|(key, _, _, value)| {
-            key.kind() == MetricKind::Counter
-                && key.key().name() == BUNDLE_GENERATIONS_TOTAL
-                && matches!(value, DebugValue::Counter(1))
-        }));
+        assert_eq!(bundle_generation_count(&snapshot, "success"), Some(1));
+        assert_eq!(bundle_generation_count(&snapshot, "error"), Some(1));
         assert!(snapshot.iter().any(|(key, _, _, value)| {
             key.kind() == MetricKind::Histogram
                 && key.key().name() == BUNDLE_GENERATION_DURATION
-                && matches!(value, DebugValue::Histogram(samples) if samples.len() == 1)
+                && matches!(value, DebugValue::Histogram(samples) if samples.len() == 2)
         }));
+        assert!(
+            span_fields
+                .iter()
+                .any(|field| field == "error_category=\"command_list\""),
+            "the error span must record the bounded command-list category: {span_fields:?}"
+        );
     }
 }
