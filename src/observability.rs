@@ -95,6 +95,7 @@ mod tests {
         CompositeKey, MetricKind,
         debugging::{DebugValue, DebuggingRecorder},
     };
+    use rstest::rstest;
 
     type SnapshotEntry = (CompositeKey, Option<Unit>, Option<SharedString>, DebugValue);
 
@@ -239,7 +240,7 @@ mod tests {
             && matches!(entry.3, DebugValue::Histogram(ref values) if values.len() == 1)
     }
 
-    #[test]
+    #[rstest]
     fn classifies_config_errors_without_exposing_details() {
         let file_error = OrthoError::File {
             path: "private.toml".into(),
@@ -256,7 +257,7 @@ mod tests {
         assert_eq!(classify_error(&fallback_error), "parse");
     }
 
-    #[test]
+    #[rstest]
     fn records_each_config_load_phase_and_outcome() {
         let recorder = DebuggingRecorder::new();
         let snapshotter = recorder.snapshotter();
