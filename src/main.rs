@@ -272,7 +272,7 @@ fn resolve_json_mode_or_exit(
         matches,
         &cli::ConfigStdEnvProvider,
     );
-    match observability::record_config_load(observability::DIAG_MODE_PHASE, || result) {
+    match observability::record_config_load(observability::ConfigLoadPhase::DiagMode, || result) {
         Ok(is_json_enabled) => {
             let mode = DiagMode::from_json_enabled(is_json_enabled);
             set_tracing_filter(startup_filter(mode, parsed_cli.verbose));
@@ -298,7 +298,7 @@ fn merge_cli_or_exit(
     mode: DiagMode,
     discovered_layers: cli::DiscoveredLayers,
 ) -> Result<cli::Cli, ExitCode> {
-    observability::record_config_load(observability::MERGE_PHASE, || {
+    observability::record_config_load(observability::ConfigLoadPhase::Merge, || {
         cli::merge_with_cached_file_layers(
             parsed_cli,
             matches,

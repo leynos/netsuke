@@ -84,12 +84,14 @@ impl EnvProvider for StdEnvProvider {
 /// those phases retain their distinct error policies without rediscovery.
 pub struct DiscoveredLayers {
     layers: Vec<MergeLayer<'static>>,
+    json_preference: bool,
     errors: Vec<Arc<ortho_config::OrthoError>>,
     diagnostics: DiscoveryDiagnostics,
 }
 
 impl DiscoveredLayers {
     /// Borrow the file layers in discovery order.
+    #[cfg(test)]
     pub(crate) fn layers(&self) -> &[MergeLayer<'static>] {
         &self.layers
     }
@@ -97,6 +99,11 @@ impl DiscoveredLayers {
     /// Borrow the first discovery error, if loading failed.
     pub(crate) fn first_error(&self) -> Option<&Arc<ortho_config::OrthoError>> {
         self.errors.first()
+    }
+
+    /// Return the JSON preference captured with these discovered layers.
+    pub(crate) const fn json_preference(&self) -> bool {
+        self.json_preference
     }
 
     /// Consume the result into its reusable layers and deferred errors.
@@ -117,6 +124,7 @@ pub struct DiscoveryOutcome {
 
 impl DiscoveryOutcome {
     /// Borrow file layers in discovery order.
+    #[cfg(test)]
     pub(crate) fn layers(&self) -> &[MergeLayer<'static>] {
         self.layers.layers()
     }
@@ -124,6 +132,11 @@ impl DiscoveryOutcome {
     /// Borrow the first discovery error, if loading failed.
     pub(crate) fn first_error(&self) -> Option<&Arc<ortho_config::OrthoError>> {
         self.layers.first_error()
+    }
+
+    /// Return the JSON preference captured during the discovery pass.
+    pub(crate) const fn json_preference(&self) -> bool {
+        self.layers.json_preference()
     }
 
     /// Consume the outcome into the reusable file layers.
@@ -143,13 +156,19 @@ pub(crate) fn discover_file_layers(cli: &Cli, env: &impl EnvProvider) -> Discove
     let (trace, load_warning, outcome) = collect_file_layers_with_env(cli, env);
     let diagnostics = DiscoveryDiagnostics::new(trace, load_warning);
     let layers = match outcome {
-        Ok(layers) => DiscoveredLayers {
-            layers,
-            errors: Vec::new(),
-            diagnostics,
-        },
+        Ok(discovered_layers) => {
+            let (layers, json_preference) =
+                layers::retain_layers_and_resolve_json(discovered_layers);
+            DiscoveredLayers {
+                layers,
+                json_preference,
+                errors: Vec::new(),
+                diagnostics,
+            }
+        }
         Err(error) => DiscoveredLayers {
             layers: Vec::new(),
+            json_preference: Cli::default().json,
             errors: vec![error],
             diagnostics,
         },
@@ -350,6 +369,12 @@ pub(crate) fn collect_diag_file_layers_with_env(
 #[cfg(test)]
 #[path = "discovery_event_assertions.rs"]
 mod event_assertions;
+
+#[cfg(test)]
+/// Assert a deferred diagnostic carries the expected bounded path fields.
+pub(crate) fn assert_bounded_path_event(event: &str, path: &Path) -> anyhow::Result<()> {
+    event_assertions::EventAssertion::new(event, path).ensure_bounded_path_fields()
+}
 
 #[cfg(test)]
 #[path = "discovery_tracing_tests.rs"]

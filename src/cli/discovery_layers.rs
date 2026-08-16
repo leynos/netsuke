@@ -5,15 +5,53 @@
 //! fallback policy live here because that policy is a discovery decision.
 
 use ortho_config::{
-    ConfigDiscovery, MergeLayer, OrthoResult, SharedEnvSource, load_config_file_as_chain,
+    ConfigDiscovery, MergeLayer, MergeProvenance, OrthoResult, SharedEnvSource,
+    load_config_file_as_chain,
 };
+use serde_json::Value;
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
+#[cfg(test)]
 use std::sync::Arc;
 
+use super::super::parser::Cli;
 use super::CONFIG_ENV_VAR;
 use super::diagnostics::{BoundedConfigPath, debug_optional_config_path_from_fields};
 use super::paths::{FsPathNormalizer, PathNormalizer, normalized_path_key};
+
+/// Preserve discovered layers while extracting their final JSON preference.
+///
+/// `MergeLayer` exposes its value only through consuming access. Rebuilding a
+/// file layer after inspecting that owned value avoids cloning a complete JSON
+/// configuration tree before the cached merge consumes it.
+pub(super) fn retain_layers_and_resolve_json(
+    layers: Vec<MergeLayer<'static>>,
+) -> (Vec<MergeLayer<'static>>, bool) {
+    let mut json = Cli::default().json;
+    let mut retained = Vec::with_capacity(layers.len());
+    for layer in layers {
+        debug_assert_eq!(
+            layer.provenance(),
+            MergeProvenance::File,
+            "discovery must retain only file layers"
+        );
+        let path = layer.path().map(ToOwned::to_owned);
+        let value = layer.into_value();
+        if let Some(layer_json) = json_from_value(&value) {
+            json = layer_json;
+        }
+        retained.push(MergeLayer::file(Cow::Owned(value), path));
+    }
+    (retained, json)
+}
+
+/// Read a Boolean JSON preference from one configuration-layer value.
+fn json_from_value(value: &Value) -> Option<bool> {
+    value
+        .as_object()
+        .and_then(|map| map.get("json"))
+        .and_then(Value::as_bool)
+}
 
 /// Project-scope outcome retained for a later trace replay.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -53,16 +91,6 @@ fn config_discovery(directory: Option<&PathBuf>, env_source: SharedEnvSource) ->
         builder = builder.clear_project_roots().add_project_root(dir);
     }
     builder.build()
-}
-
-/// Run discovery once and retain the project-scope outcome for later replay.
-pub(super) fn collect_file_layers_with_trace(
-    directory: Option<&Path>,
-) -> (
-    Option<ProjectScopeTrace>,
-    OrthoResult<Vec<MergeLayer<'static>>>,
-) {
-    collect_file_layers_with_trace_and_env_source(directory, Arc::new(ortho_config::ProcessEnv))
 }
 
 /// Run discovery with the composition root's environment source and retain its

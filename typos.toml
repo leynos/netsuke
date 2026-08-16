@@ -49,6 +49,7 @@ extend-ignore-re = [
     "(?m)^      should_upload_workflow_artifacts: \\$\\{\\{ steps\\.release_modes\\.outputs\\['should-upload-workflow-artifacts'\\] \\}\\}$",
     "(?m)^      should_upload_workflow_artifacts:$",
     "(?s)```.*?```",
+    "\\bNETSUKE_COLOR\\b",
     "\\bartifact-dir\\b",
     "\\bartifact-name\\b",
     "\\bartifact-suffix\\b",
@@ -1502,6 +1503,7 @@ extend-ignore-re = [
 "modularizers" = "modularizers"
 "modularizes" = "modularizes"
 "modularizing" = "modularizing"
+"mold" = "mold"
 "monetisable" = "monetizable"
 "monetisably" = "monetizably"
 "monetisation" = "monetization"

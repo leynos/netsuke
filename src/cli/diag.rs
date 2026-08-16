@@ -8,7 +8,6 @@
 use clap::ArgMatches;
 use clap::parser::ValueSource;
 use ortho_config::{OrthoError, OrthoResult};
-use serde_json::Value;
 use std::sync::Arc;
 
 use super::discovery::{
@@ -88,7 +87,7 @@ pub fn resolve_json_and_layers_outcome_with_env(
         if let Some(error) = outcome.first_error() {
             return Err(Arc::clone(error));
         }
-        let mut json = json_from_layers(outcome.layers());
+        let mut json = json_from_layers(&outcome);
         if !has_cli_json_override(matches)
             && let Some(env_json) = json_from_env(env)?
         {
@@ -99,11 +98,12 @@ pub fn resolve_json_and_layers_outcome_with_env(
     (result, outcome)
 }
 
-fn json_from_layer(value: &Value) -> Option<bool> {
+#[cfg(test)]
+fn json_from_layer(value: &serde_json::Value) -> Option<bool> {
     value
         .as_object()
         .and_then(|map| map.get("json"))
-        .and_then(Value::as_bool)
+        .and_then(serde_json::Value::as_bool)
 }
 
 /// Apply the command-line JSON override to a discovered preference.
@@ -121,14 +121,8 @@ fn has_cli_json_override(matches: &ArgMatches) -> bool {
 }
 
 /// Resolve the last valid JSON preference from discovered config layers.
-fn json_from_layers(layers: &[ortho_config::MergeLayer<'static>]) -> bool {
-    let mut json = Cli::default().json;
-    for layer in layers {
-        if let Some(layer_json) = json_from_layer(&layer.clone().into_value()) {
-            json = layer_json;
-        }
-    }
-    json
+const fn json_from_layers(outcome: &DiscoveryOutcome) -> bool {
+    outcome.json_preference()
 }
 /// Parse the optional `NETSUKE_JSON` value supplied by `env`.
 ///
@@ -162,14 +156,15 @@ mod tests {
     //! Unit tests for early JSON preference resolution.
 
     use super::*;
+    use crate::cli::discovery::assert_bounded_path_event;
     use crate::cli::test_support::TestEnv;
     use crate::test_tracing_capture::with_test_subscriber;
     use anyhow::{Context, ensure};
     use cap_std::{ambient_authority, fs::Dir};
     use clap::CommandFactory;
     use clap::Parser;
+    use rstest::rstest;
     use serde_json::json;
-    use std::path::Path;
     use tempfile::tempdir;
     use tracing_subscriber::filter::LevelFilter;
 
@@ -179,24 +174,6 @@ mod tests {
             .find(|event| event.contains(message))
             .map(String::as_str)
             .with_context(|| format!("expected event containing {message:?} in {events:?}"))
-    }
-
-    fn assert_bounded_path_event(event: &str, path: &Path) -> anyhow::Result<()> {
-        ensure!(
-            event.contains("path_hash="),
-            "event should contain a bounded path hash: {event}"
-        );
-        ensure!(
-            !event.contains(path.to_string_lossy().as_ref()),
-            "event should not expose the raw configuration path: {event}"
-        );
-        if let Some(file_name) = path.file_name() {
-            ensure!(
-                !event.contains(file_name.to_string_lossy().as_ref()),
-                "event should not expose the configuration file name: {event}"
-            );
-        }
-        Ok(())
     }
 
     #[test]
@@ -253,7 +230,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[rstest]
     fn resolve_merged_json_replays_missing_explicit_config_diagnostics() -> anyhow::Result<()> {
         let dir = tempdir()?;
         let missing_config_path = dir.path().join("missing-netsuke.toml");
@@ -290,7 +267,7 @@ mod tests {
         Ok(())
     }
 
-    #[test]
+    #[rstest]
     fn resolve_json_and_layers_replays_successful_explicit_config_diagnostics() -> anyhow::Result<()>
     {
         let dir = tempdir()?;

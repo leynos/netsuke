@@ -2604,7 +2604,6 @@ Table: Scenario state groups and fields
 Configuration merging lives in `src/cli/merge.rs`. The module keeps
 config-layer plumbing separate from the public CLI surface in `cli::mod`.
 
-
 ### Cached configuration discovery
 
 `discover_file_layers` performs one discovery pass through the injected
@@ -2766,12 +2765,16 @@ evaluated, and emits no tracing itself. `discover_file_layers` retains the
 bounded diagnostics produced by that resolution and by layer loading;
 `DiscoveryOutcome::emit_diagnostics` replays them after tracing is configured.
 
-Tracing never logs raw configuration paths, configuration file names or
-formatted parser errors. Discovery diagnostics expose bounded `path_hash` and
-presence fields, and load failures are classified with the
-`ConfigLoadFailureKind` enum instead of formatted error text. The unkeyed
-`path_hash` is a bounded correlation identifier, not confidential concealment
-of a guessable path.
+Deferred discovery diagnostics never log raw configuration paths, configuration
+file names or formatted parser errors. They expose bounded `path_hash` and
+presence fields, and classify load failures with the `ConfigLoadFailureKind`
+enum instead of formatted error text. The unkeyed `path_hash` is a bounded
+correlation identifier, not confidential concealment of a guessable path.
+
+This deferred contract is distinct from terminal `configuration load failed`
+records emitted by `src/main.rs`. Their structured `error` field renders the
+source error and may therefore contain source details such as a configuration
+path.
 
 #### `json` contract
 

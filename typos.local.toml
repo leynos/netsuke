@@ -7,6 +7,7 @@ stems = []
 
 [words]
 accepted = [
+  "mold",
   "relativisable",
   "relativisably",
   "relativisation",
@@ -57,6 +58,7 @@ ignore = ["mis-grouping",
   "\\bartifact-dir\\b",
   "\\bartifact-name\\b",
   "\\bartifact-suffix\\b",
+  "\\bNETSUKE_COLOR\\b",
 ]
 
 [files]

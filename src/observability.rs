@@ -26,6 +26,49 @@ pub(crate) const DIAG_MODE_OPERATION: &str = "diag_mode_resolution";
 /// Structured-log operation for full configuration merging.
 pub(crate) const MERGE_OPERATION: &str = "config_merge";
 
+/// Bounded configuration-loading phase used in metrics labels.
+#[derive(Clone, Copy)]
+pub(crate) enum ConfigLoadPhase {
+    /// Resolve diagnostic JSON mode from configuration.
+    DiagMode,
+    /// Merge all configuration layers.
+    Merge,
+}
+
+impl ConfigLoadPhase {
+    /// Return the stable metric label for this phase.
+    const fn as_label(self) -> &'static str {
+        match self {
+            Self::DiagMode => DIAG_MODE_PHASE,
+            Self::Merge => MERGE_PHASE,
+        }
+    }
+}
+
+/// Bounded configuration-loading outcome used in metrics labels.
+#[derive(Clone, Copy)]
+pub(crate) enum ConfigLoadOutcome {
+    /// The phase completed successfully.
+    Success,
+    /// The phase returned an error.
+    Failure,
+}
+
+impl ConfigLoadOutcome {
+    /// Classify a configuration-loading result without retaining its error.
+    const fn from_is_ok(is_ok: bool) -> Self {
+        if is_ok { Self::Success } else { Self::Failure }
+    }
+
+    /// Return the stable metric label for this outcome.
+    const fn as_label(self) -> &'static str {
+        match self {
+            Self::Success => "success",
+            Self::Failure => "failure",
+        }
+    }
+}
+
 static SNAPSHOTTER: OnceLock<Snapshotter> = OnceLock::new();
 
 /// Install the process metrics recorder once the tracing subscriber is ready.
@@ -49,15 +92,20 @@ pub(crate) fn emit_metrics_snapshot() {
 
 /// Record the outcome and duration of one configuration-loading phase.
 pub(crate) fn record_config_load<T, E>(
-    phase: &'static str,
+    phase: ConfigLoadPhase,
     load: impl FnOnce() -> Result<T, E>,
 ) -> Result<T, E> {
     describe_config_metrics();
     let started = Instant::now();
     let result = load();
-    let outcome = if result.is_ok() { "success" } else { "failure" };
-    counter!(CONFIG_LOAD_COUNTER, "phase" => phase, "outcome" => outcome).increment(1);
-    histogram!(CONFIG_LOAD_DURATION, "phase" => phase).record(started.elapsed());
+    let outcome = ConfigLoadOutcome::from_is_ok(result.is_ok());
+    counter!(
+        CONFIG_LOAD_COUNTER,
+        "phase" => phase.as_label(),
+        "outcome" => outcome.as_label()
+    )
+    .increment(1);
+    histogram!(CONFIG_LOAD_DURATION, "phase" => phase.as_label()).record(started.elapsed());
     result
 }
 
@@ -263,8 +311,8 @@ mod tests {
         let snapshotter = recorder.snapshotter();
 
         metrics::with_local_recorder(&recorder, || {
-            let success = record_config_load(DIAG_MODE_PHASE, || Ok::<_, ()>(()));
-            let failure = record_config_load(MERGE_PHASE, || Err::<(), _>(()));
+            let success = record_config_load(ConfigLoadPhase::DiagMode, || Ok::<_, ()>(()));
+            let failure = record_config_load(ConfigLoadPhase::Merge, || Err::<(), _>(()));
 
             assert!(success.is_ok());
             assert!(failure.is_err());

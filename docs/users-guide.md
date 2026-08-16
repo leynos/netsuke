@@ -1002,7 +1002,6 @@ defaults. When it finds a candidate that cannot be loaded, such as malformed
 TOML or a file whose `extends` parent is missing, Netsuke reports the load
 error. A broken discovered configuration is therefore not treated as absent.
 
-
 ### Reuse discovered configuration layers
 
 Normal command-line use requires no change. The Rust API remains an unstable

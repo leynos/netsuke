@@ -3,18 +3,19 @@
 //! These cover which branch the shared file-layer boundary takes — explicit path
 //! versus automatic discovery — and the project-scope second pass. Selector
 //! precedence and event-schema snapshots live in the tracing test module.
-use anyhow::{Context, Result, ensure};
+use super::*;
 use crate::cli::test_support::TestEnv;
+use anyhow::{Context, Result, ensure};
 use googletest::prelude::*;
 use pretty_assertions::assert_eq;
-use super::*;
+use rstest::rstest;
 use tempfile::{TempDir, tempdir};
 
+use super::event_assertions::{EventAssertion, capture_events, find_event};
+use super::layers::collect_file_layers_with_normalizer;
+use super::paths::FailingPathNormalizer;
 use std::cell::Cell;
 use std::ffi::OsString;
-use super::event_assertions::{EventAssertion, capture_events, find_event};
-use super::layers::{collect_file_layers, collect_file_layers_with_normalizer};
-use super::paths::FailingPathNormalizer;
 
 #[derive(Debug, Clone, Copy)]
 enum LayerScenario {
@@ -106,14 +107,15 @@ fn replay_logs_discovery_and_appended_project_scope_without_environment_access()
     let cli = scenario_cli(LayerScenario::Discovery, &temp)?;
     let env = CountingEnv::default();
     let discovered = collect_diag_file_layers_with_env(&cli, &env);
+    let discovery_get_calls = env.get_calls();
     ensure!(
-        env.get_calls() == 1,
-        "discovery should read the selector once"
+        discovery_get_calls > 0,
+        "discovery should read the injected environment"
     );
 
     let events = replay_events(&discovered)?;
     ensure!(
-        env.get_calls() == 1,
+        env.get_calls() == discovery_get_calls,
         "replay must not access the environment again"
     );
     find_event(&events, "read config path variable")?;
@@ -133,14 +135,15 @@ fn replay_logs_included_project_scope_without_environment_access() -> Result<()>
     let cli = scenario_cli(LayerScenario::Discovery, &temp)?;
     let env = CountingEnv::default();
     let discovered = collect_diag_file_layers_with_env(&cli, &env);
+    let discovery_get_calls = env.get_calls();
     ensure!(
-        env.get_calls() == 1,
-        "discovery should read the selector once"
+        discovery_get_calls > 0,
+        "discovery should read the injected environment"
     );
 
     let events = replay_events(&discovered)?;
     ensure!(
-        env.get_calls() == 1,
+        env.get_calls() == discovery_get_calls,
         "replay must not access the environment again"
     );
     find_event(&events, "using config discovery")?;
@@ -161,8 +164,12 @@ fn injected_automatic_discovery_uses_xdg_config_home() -> Result<()> {
     test_support::fs::write(&config_path, "json = true\n").context("write injected config")?;
 
     let env = TestEnv::default().with_var("XDG_CONFIG_HOME", xdg_config_home.as_os_str());
-    let sources = DiscoverySources::new(&env, discovery_env_source(&env));
-    let layers = collect_file_layers_with_env(&Cli::default(), &sources)?;
+    let discovered = discover_file_layers(&Cli::default(), &env);
+    ensure!(
+        discovered.first_error().is_none(),
+        "injected configuration discovery should succeed"
+    );
+    let layers = discovered.layers();
     let paths = layers
         .iter()
         .filter_map(|layer| layer.path().map(|path| path.as_str().to_owned()))
@@ -199,14 +206,19 @@ fn discovered_project_config_retains_load_outcome(
         ..Cli::default()
     };
     let env = TestEnv::default();
-    let sources = DiscoverySources::new(&env, discovery_env_source(&env));
-    let result = collect_file_layers_with_env(&cli, &sources);
+    let discovered = discover_file_layers(&cli, &env);
 
     if let Some(fragment) = expected_error_fragment {
-        let error = result.expect_err("invalid discovered config must fail");
+        let error = discovered
+            .first_error()
+            .context("invalid discovered config must fail")?;
         assert_that!(error.to_string(), contains_substring(fragment));
     } else {
-        let layers = result.context("valid discovered config must load")?;
+        ensure!(
+            discovered.first_error().is_none(),
+            "valid discovered config must load"
+        );
+        let layers = discovered.layers();
         assert_eq!(layers.len(), expected_layer_count);
     }
     Ok(())
