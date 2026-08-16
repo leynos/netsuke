@@ -112,7 +112,7 @@ runner.io.flush_stdout = Не удалось сбросить буфер ста�
 runner.io.dyndep.create_dir = Не удалось создать каталог dyndep { $path }.
 runner.io.dyndep.read = Не удалось прочитать созданный файл dyndep (путь: { $path }).
 runner.io.dyndep.write = Не удалось записать созданный файл dyndep (путь: { $path }).
-runner.io.dyndep.rename = Не удалось завершить созданный файл dyndep (путь: { $path }).
+runner.io.dyndep.rename = Не удалось переименовать созданный файл dyndep (путь: { $path }).
 runner.io.dyndep.corrupt = Созданный файл dyndep (путь: { $path }) не соответствует ожидаемому содержимому; удалите только этот файл и повторите попытку.
 runner.io.dyndep.temp_collisions = После повторных коллизий имён не удалось создать уникальный временный файл dyndep (путь: { $path }).
 runner.io.dyndep.too_large = Созданный файл dyndep (путь: { $path }) превышает предел проверки в { $limit } байт.
@@ -181,7 +181,7 @@ ir.invalid_command = Некорректная подстановка в кома
 # Ошибки генерации файлов Ninja.
 ninja_gen.missing_action = Отсутствует действие «{ $id }», на которое ссылается ребро сборки.
 ninja_gen.format = Не удалось отформатировать вывод манифеста Ninja.
-ninja_gen.dyndep_files_required = Для этой сборки требуется созданный пакет Ninja; используйте `netsuke build`, `netsuke clean` или `netsuke generate`, чтобы материализовать файлы dyndep.
+ninja_gen.dyndep_files_required = Для этой операции требуется созданный пакет Ninja; используйте `netsuke build`, `netsuke clean` или `netsuke generate`, чтобы материализовать файлы dyndep.
 ninja_gen.reserved_output_path = Путь '{ $path }' зарезервирован для состояния последовательных зависимостей Netsuke.
 ninja_gen.unsupported_path_character = Путь '{ $path }' содержит неподдерживаемый символ пути Ninja: '{ $character }'.
 

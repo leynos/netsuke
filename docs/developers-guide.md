@@ -285,7 +285,7 @@ The lowering stages have deliberately separate responsibilities:
   `$out` tokens are resolved per entry; tokens inside backticks are preserved.
   The resulting action contains ordinary command text and no Ninja
   placeholders.
-- `src/ninja_gen.rs` emits a scalar command unchanged. For a list, it puts
+- `src/ninja_gen/mod.rs` emits a scalar command unchanged. For a list, it puts
   each entry in a brace group and joins the groups with `&&`. Each group uses
   `eval` with a shell-quoted entry payload. This keeps an inline comment or a
   trailing control operator such as `&` inside the entry from consuming the
@@ -1650,12 +1650,16 @@ return it, but it must not publish any filesystem state.
 command, which every `build`, `clean`, and `generate` boundary must call before
 writing or invoking the main file. That command opens the effective
 working-directory capability and injects it into
-`src/runner/process/dyndep_files.rs`, the sole owner of sidecar persistence.
-The materializer may only use that injected `Dir`; it must not inspect CLI
-state or reopen ambient authority. It verifies existing content, then uses a
-same-directory temporary file plus atomic rename. Keep generated sidecars
-content-addressed and idempotent; corruption is an error, not a reason to
-overwrite an unknown file.
+`src/runner/process/dyndep_files.rs`, which owns atomic sidecar writes and
+content verification. The materializer may only use that injected `Dir`; it
+must not inspect CLI state or reopen ambient authority. It verifies existing
+content, then uses a same-directory temporary file plus atomic rename. Keep
+generated sidecars content-addressed and idempotent; corruption is an error,
+not a reason to overwrite an unknown file.
+
+`src/runner/process/dyndep_retention.rs` owns the publication lease and
+retention cleanup. The command-boundary module invokes it after materialization
+or successful clean while retaining the lease through bundle consumption.
 
 `DyndepPublicationLease` also coordinates retention. Sidecar-capable `build`,
 `generate`, and `clean` commands hold the capability-scoped exclusive

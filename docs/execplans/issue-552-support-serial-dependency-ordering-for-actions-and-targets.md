@@ -424,6 +424,11 @@ criterion in issue #552 and all repository gates pass.
 - [x] (2026-08-15) Re-verified the reviewed code, runtime, and locale findings
   against the current implementation and fixed the valid issues. The
   regression covers 1,000 non-fitting sidecars.
+- [x] (2026-08-16) Re-verified the documentation and locale requests against
+  the live module tree and runner ownership boundaries. Updated the AST and
+  Ninja module paths, clarified publication, atomic-write, and retention
+  ownership, and corrected the six requested catalogue messages without
+  changing Fluent placeholders. No supplied finding was stale.
 
 ## Surprises and discoveries
 
@@ -447,6 +452,12 @@ criterion in issue #552 and all repository gates pass.
 - (2026-08-15) The retention request was verified stale and contradictory to
   accepted ADR-012 bounded automatic retention: the current bundle is
   protected, while historical output may need regeneration.
+- (2026-08-16) The requested sidecar ownership wording was valid but needed
+  one boundary split: `runner/dyndep_publication.rs` owns command-level
+  publication and retention orchestration, `runner/process/dyndep_files.rs`
+  owns atomic writes and verification, and `runner/process/dyndep_retention.rs`
+  owns the lease and cleanup. Generation remains an effect-free
+  `ninja_gen` query.
 - (2026-08-11) The prior materializer commit accidentally left surplus blank
   lines at EOF in each changed Fluent catalogue. `git show --check` reports
   them even though the current worktree is clean. Remove only those trailing
@@ -652,7 +663,7 @@ The relevant pipeline is deliberately small:
 
 ```plaintext
 Netsukefile YAML
-    -> src/ast.rs Target
+    -> src/ast/mod.rs Target
     -> src/ir/from_manifest.rs process_targets
     -> src/ir/graph.rs BuildEdge
     -> src/ninja_gen/mod.rs generated Ninja artefact
@@ -671,7 +682,7 @@ The syntax and graph-loading constraints used below follow the official
 particular, the main edge names its dyndep file as an input and each sidecar
 contains the version header plus a one-to-one update for that edge.
 
-`src/ast.rs` defines `Target`, which is shared by ordinary targets and actions.
+`src/ast/mod.rs` defines `Target`, which is shared by ordinary targets and actions.
 Its `deps` vector is already ordered by YAML declaration. Add a serde-backed
 enum here rather than representing ordering as a string or Boolean.
 
@@ -785,7 +796,7 @@ before committing.
 
 ### Stage 2: Add the AST and IR contract
 
-In `src/ast.rs`, add the closed enum and target field. The intended public
+In `src/ast/mod.rs`, add the closed enum and target field. The intended public
 shape is:
 
 ```rust
@@ -1402,3 +1413,12 @@ initializes its bounded pass state, and delegates each entry; the private
 handler retains the existing lock/current-path exclusions, stale temporary-file
 cleanup, obsolete-sidecar selection, and localized error contexts. Focused
 retention tests and all repository code gates passed.
+
+2026-08-16: Re-verified the requested documentation and locale corrections
+against the current code. The split AST and Ninja module paths are now used in
+the live ADR, developer guide, design document, and this plan. Sidecar
+ownership names the publication boundary, atomic materializer, and retention
+module separately. Hungarian, Russian, and Vietnamese rename messages now say
+rename explicitly; the operation-required and generated-Ninja wording is
+neutral and precise in the requested catalogues. No supplied finding was
+stale.

@@ -180,7 +180,7 @@ ir.invalid_command = 命令中的插值无效：{ $snippet }。
 # Ninja 生成错误。
 ninja_gen.missing_action = 缺少构建边引用的动作“{ $id }”。
 ninja_gen.format = 无法格式化 Ninja 清单的输出。
-ninja_gen.dyndep_files_required = 此构建需要生成的 Ninja 捆绑包；请使用 `netsuke build`、`netsuke clean` 或 `netsuke generate` 以生成 dyndep 文件。
+ninja_gen.dyndep_files_required = 此操作需要生成的 Ninja dyndep 文件；请使用 `netsuke build`、`netsuke clean` 或 `netsuke generate` 以生成这些文件。
 ninja_gen.reserved_output_path = 路径“{ $path }”已保留给 Netsuke 的串行依赖状态。
 ninja_gen.unsupported_path_character = 路径“{ $path }”包含不支持的 Ninja 路径字符“{ $character }”。
 

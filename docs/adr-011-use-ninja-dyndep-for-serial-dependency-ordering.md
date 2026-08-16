@@ -80,9 +80,13 @@ to run through that other path.
 - `build`, `clean`, and `generate` each materialize sidecars relative to the
   effective Ninja working directory. `clean` may leave the immutable,
   content-addressed sidecars in place.
-- `src/ninja_gen/dyndep.rs` owns staging and naming. The runner's
-  `dyndep_files` module owns capability-scoped, atomic persistence. Neither
-  module may broaden the path-scoped guarantee with a global scheduler.
+- `src/ninja_gen/dyndep.rs` owns staging and naming. The command-boundary
+  module `src/runner/dyndep_publication.rs` opens the effective capability and
+  orchestrates publication and retention; `src/runner/process/dyndep_files.rs`
+  owns atomic sidecar writes and verification, while
+  `src/runner/process/dyndep_retention.rs` owns the lease and cleanup. Neither
+  side of the boundary may broaden the path-scoped guarantee with a global
+  scheduler.
 - Tests must continue to use real Ninja for ordered starts, failure
   short-circuiting, shared-work reuse, and unrelated-branch concurrency.
 
@@ -112,7 +116,7 @@ manifest policy. It requires a separately approved design.
 
 ## Implementation references
 
-- Manifest and IR contract: [`src/ast.rs`](../src/ast.rs),
+- Manifest and IR contract: [`src/ast/mod.rs`](../src/ast/mod.rs),
   [`src/ir/graph.rs`](../src/ir/graph.rs), and
   [`src/ir/from_manifest.rs`](../src/ir/from_manifest.rs)
 - Ninja bundle generation:

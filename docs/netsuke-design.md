@@ -2049,7 +2049,7 @@ This transformation involves several steps:
    traversal are logged, collected, and returned alongside any cycle to aid
    diagnostics.
 
-### 5.4 Ninja File Synthesis (`ninja_gen.rs`)
+### 5.4 Ninja File Synthesis (`ninja_gen/mod.rs`)
 
 The final step is to synthesize the `build.ninja` file from the `BuildGraph`
 IR. This process is a straightforward, mechanical translation from the IR data
@@ -3181,12 +3181,12 @@ goal.
     1. Implement the initial `clap` CLI structure for the `build` command.
 
     2. Implement the YAML parser using `serde_saphyr` and the AST data
-       structures (`ast.rs`).
+       structures (`ast/mod.rs`).
 
     3. Implement the AST-to-IR transformation logic, including basic validation
        like checking for rule existence.
 
-    4. Implement the IR-to-Ninja file generator (`ninja_gen.rs`).
+    4. Implement the IR-to-Ninja file generator (`ninja_gen/mod.rs`).
 
     5. Implement the `std::process::Command` logic to invoke `ninja`.
 

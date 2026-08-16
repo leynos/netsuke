@@ -182,7 +182,7 @@ ir.invalid_command = Interpolação de comando inválida: { $snippet }.
 # Erros de geração do Ninja.
 ninja_gen.missing_action = Falta a ação "{ $id }" referenciada por uma aresta de build.
 ninja_gen.format = Não foi possível formatar a saída do manifesto do Ninja.
-ninja_gen.dyndep_files_required = Esta operação de build requer um pacote Ninja gerado; use `netsuke build`, `netsuke clean` ou `netsuke generate` para materializar os arquivos dyndep.
+ninja_gen.dyndep_files_required = Esta operação requer um pacote Ninja gerado; use `netsuke build`, `netsuke clean` ou `netsuke generate` para materializar os arquivos dyndep.
 ninja_gen.reserved_output_path = O caminho '{ $path }' está reservado para o estado de dependências seriais do Netsuke.
 ninja_gen.unsupported_path_character = O caminho '{ $path }' contém o caractere de caminho do Ninja não compatível '{ $character }'.
 

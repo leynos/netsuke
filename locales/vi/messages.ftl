@@ -112,7 +112,7 @@ runner.io.flush_stdout = Không xả được bộ đệm đầu ra chuẩn.
 runner.io.dyndep.create_dir = Không thể tạo thư mục dyndep { $path }.
 runner.io.dyndep.read = Không thể đọc tệp dyndep đã tạo tại { $path }.
 runner.io.dyndep.write = Không thể ghi tệp dyndep đã tạo tại { $path }.
-runner.io.dyndep.rename = Không thể hoàn tất tệp dyndep đã tạo tại { $path }.
+runner.io.dyndep.rename = Không thể đổi tên tệp dyndep đã tạo tại { $path }.
 runner.io.dyndep.corrupt = Tệp dyndep đã tạo tại { $path } không khớp với nội dung mong đợi; chỉ xóa tệp đó rồi thử lại.
 runner.io.dyndep.temp_collisions = Không thể tạo tệp dyndep tạm thời duy nhất cho { $path } sau nhiều lần trùng tên.
 runner.io.dyndep.too_large = Tệp dyndep đã tạo tại { $path } vượt quá giới hạn xác minh { $limit } byte.
@@ -181,7 +181,7 @@ ir.invalid_command = Nội suy không hợp lệ trong lệnh: { $snippet }.
 # Lỗi khi tạo tệp Ninja.
 ninja_gen.missing_action = Thiếu hành động “{ $id }” mà một cạnh dựng tham chiếu.
 ninja_gen.format = Không định dạng được đầu ra của tệp kê khai Ninja.
-ninja_gen.dyndep_files_required = Bản dựng này yêu cầu gói Ninja đã tạo; hãy dùng `netsuke build`, `netsuke clean` hoặc `netsuke generate` để hiện thực hóa các tệp dyndep.
+ninja_gen.dyndep_files_required = Thao tác này yêu cầu gói Ninja đã tạo; hãy dùng `netsuke build`, `netsuke clean` hoặc `netsuke generate` để hiện thực hóa các tệp dyndep.
 ninja_gen.reserved_output_path = Đường dẫn '{ $path }' được dành riêng cho trạng thái phụ thuộc tuần tự của Netsuke.
 ninja_gen.unsupported_path_character = Đường dẫn '{ $path }' chứa ký tự đường dẫn Ninja không được hỗ trợ '{ $character }'.
 
