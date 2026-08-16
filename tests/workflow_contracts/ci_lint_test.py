@@ -25,6 +25,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -81,13 +82,13 @@ def _load() -> dict[str, object]:
         case dict() as workflow:
             pass
         case other:
-            raise AssertionError(
+            pytest.fail(
                 "the workflow must parse to a mapping, "
                 f"got {type(other).__name__}"
             )
     non_string_keys = sorted(repr(key) for key in workflow if not isinstance(key, str))
     if non_string_keys:
-        raise AssertionError(
+        pytest.fail(
             f"the workflow mapping must be string-keyed, got {non_string_keys}"
         )
     return workflow
@@ -99,17 +100,17 @@ def _steps(workflow: dict[str, object]) -> list[dict[str, object]]:
         case dict() as jobs:
             pass
         case _:
-            raise AssertionError("the workflow must declare a jobs mapping")
+            pytest.fail("the workflow must declare a jobs mapping")
     match jobs.get("build-test"):
         case dict() as job:
             pass
         case _:
-            raise AssertionError("the workflow must declare a build-test job")
+            pytest.fail("the workflow must declare a build-test job")
     match job.get("steps"):
         case list() as steps:
             return steps
         case _:
-            raise AssertionError("jobs.build-test.steps must be a list")
+            pytest.fail("jobs.build-test.steps must be a list")
 
 
 def _windows_job(workflow: dict[str, object]) -> dict[str, object]:
@@ -118,12 +119,12 @@ def _windows_job(workflow: dict[str, object]) -> dict[str, object]:
         case dict() as jobs:
             pass
         case _:
-            raise AssertionError("the workflow must declare a jobs mapping")
+            pytest.fail("the workflow must declare a jobs mapping")
     match jobs.get("build-test-windows"):
         case dict() as job:
             return job
         case _:
-            raise AssertionError(
+            pytest.fail(
                 "the workflow must declare a build-test-windows job"
             )
 
@@ -134,7 +135,7 @@ def _windows_steps(workflow: dict[str, object]) -> list[dict[str, object]]:
         case list() as steps:
             return steps
         case _:
-            raise AssertionError("jobs.build-test-windows.steps must be a list")
+            pytest.fail("jobs.build-test-windows.steps must be a list")
 
 
 def _windows_step(name: str) -> dict[str, object]:
@@ -164,7 +165,7 @@ def _test_shell_script() -> str:
         case str() as run:
             return run
         case _:
-            raise AssertionError(f"{TEST_SHELL_STEP} must declare a run script")
+            pytest.fail(f"{TEST_SHELL_STEP} must declare a run script")
 
 
 def test_test_shell_step_installs_gawk() -> None:
@@ -261,7 +262,7 @@ def test_nextest_version_declared_once_at_workflow_scope() -> None:
         case dict() as env:
             pass
         case _:
-            raise AssertionError(
+            pytest.fail(
                 "the workflow must declare a workflow-level env mapping"
             )
     assert env.get("NEXTEST_VERSION") == "0.9.133", (
@@ -274,12 +275,12 @@ def test_nextest_version_declared_once_at_workflow_scope() -> None:
             case dict() as jobs:
                 pass
             case _:
-                raise AssertionError("the workflow must declare a jobs mapping")
+                pytest.fail("the workflow must declare a jobs mapping")
         match jobs.get(job_name):
             case dict() as job:
                 pass
             case _:
-                raise AssertionError(f"the workflow must declare a {job_name} job")
+                pytest.fail(f"the workflow must declare a {job_name} job")
         assert "NEXTEST_VERSION" not in job.get("env", {}), (
             f"{job_name} must not redeclare NEXTEST_VERSION at job scope"
         )
@@ -315,14 +316,14 @@ def test_windows_job_uses_git_bash_for_recipes() -> None:
         case dict() as defaults:
             pass
         case _:
-            raise AssertionError(
+            pytest.fail(
                 "build-test-windows must declare a defaults mapping"
             )
     match defaults.get("run"):
         case dict() as run:
             pass
         case _:
-            raise AssertionError(
+            pytest.fail(
                 "build-test-windows must declare a defaults.run mapping"
             )
     assert run.get("shell") == "bash", (
@@ -346,7 +347,7 @@ def test_windows_setup_rust_keeps_warnings_and_polonius() -> None:
         case dict() as with_:
             pass
         case _:
-            raise AssertionError("Setup Rust must declare a with mapping")
+            pytest.fail("Setup Rust must declare a with mapping")
     assert with_.get("toolchain") == "${{ env.NETSUKE_RUST_TOOLCHAIN }}", (
         "Setup Rust must use the pinned NETSUKE_RUST_TOOLCHAIN, "
         f"got {with_.get('toolchain')!r}"
@@ -374,12 +375,12 @@ def test_setup_rust_does_not_pass_unsupported_components_input() -> None:
             case dict() as jobs:
                 pass
             case _:
-                raise AssertionError("the workflow must declare a jobs mapping")
+                pytest.fail("the workflow must declare a jobs mapping")
         match jobs.get(job_name):
             case dict() as job:
                 pass
             case _:
-                raise AssertionError(f"the workflow must declare a {job_name} job")
+                pytest.fail(f"the workflow must declare a {job_name} job")
         setup_steps = [
             step
             for step in job.get("steps", [])
@@ -391,7 +392,7 @@ def test_setup_rust_does_not_pass_unsupported_components_input() -> None:
                 case dict() as with_:
                     pass
                 case _:
-                    raise AssertionError(
+                    pytest.fail(
                         f"{job_name} Setup Rust must declare a with mapping"
                     )
             assert "components" not in with_, (
@@ -488,7 +489,7 @@ def test_coverage_report_is_produced_before_codescene_check() -> None:
         case dict() as with_:
             pass
         case _:
-            raise AssertionError(
+            pytest.fail(
                 "Test and Measure Coverage must declare a with mapping"
             )
     assert with_.get("output-path") == "lcov.info", (
@@ -505,7 +506,7 @@ def test_coverage_report_is_produced_before_codescene_check() -> None:
         case dict() as with_:
             pass
         case _:
-            raise AssertionError(
+            pytest.fail(
                 "Check coverage against CodeScene gates must declare a with "
                 "mapping"
             )
