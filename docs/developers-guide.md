@@ -452,7 +452,7 @@ their toolchain through the action's own `toolchain` input and a second,
 independently edited pin would let the two disagree.
 
 [`tests/polonius_toolchain_contract.rs`](../tests/polonius_toolchain_contract.rs)
-enforces all four callers. For each one it asserts:
+enforces all five callers. For each one it asserts:
 
 - the job uses the expected shared-action reference — path *and* pinned
   revision, the latter derived from the checked workflows themselves rather
@@ -2897,11 +2897,11 @@ signature again. Pinning both is what lets a behavioural test drive `which` and
 `tests/stdlib_which_pathext_tests.rs`, which is gated to Windows because
 `PATHEXT` governs resolution only there.
 
-That gating has a cost worth stating: CI runs `make test` on `ubuntu-latest`
-only, so a `#[cfg(windows)]` test does not gate a merge. Keep host-independent
-rules — normalization, the fallback — in the `#[cfg(any(windows, test))]` unit
-tests that the Linux suite executes, and reserve the Windows-gated suite for
-behaviour that genuinely cannot run elsewhere.
+That gating has a cost worth stating: the Windows-gated suite runs only on
+`build-test-windows`, so keep host-independent rules — normalization, the
+fallback — in the `#[cfg(any(windows, test))]` unit tests that every host
+executes, and reserve the Windows-gated suite for behaviour that genuinely
+cannot run elsewhere.
 
 The `build-test-windows` job in `.github/workflows/ci.yml` is a merge gate: it
 compiles, lints (Clippy and Whitaker), and tests the `#[cfg(windows)]` suite on
