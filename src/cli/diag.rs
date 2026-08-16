@@ -145,11 +145,9 @@ fn json_from_env(env: &impl EnvProvider) -> OrthoResult<Option<bool>> {
 
 #[cfg(test)]
 mod tests {
-<<<<<<< HEAD
     //! Unit tests for early JSON preference resolution.
 
     use super::*;
-    use crate::cli::discovery::assert_bounded_path_event;
     use crate::cli::{merge_with_cached_file_layers, test_support::TestEnv};
     use crate::test_tracing_capture::with_test_subscriber;
     use anyhow::{Context, ensure};
@@ -161,11 +159,6 @@ mod tests {
     use tempfile::tempdir;
     use tracing_subscriber::filter::LevelFilter;
 
-||||||| parent of a1edc55c (Repair rebase conflict coverage)
-    use tracing_subscriber::filter::LevelFilter;
-
-=======
->>>>>>> a1edc55c (Repair rebase conflict coverage)
     fn find_deferred_event<'a>(events: &'a [String], message: &str) -> anyhow::Result<&'a str> {
         events
             .iter()

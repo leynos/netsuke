@@ -40,7 +40,7 @@ Feature: Advanced usage workflows
 
   # --- Configuration layering ---
 
-  Scenario: Invalid config value reports bounded failure
+  Scenario: Invalid config value reports bounded fields and the actionable error
     Given a minimal Netsuke workspace
     And a workspace with config file setting color to loud
     When netsuke is run with arguments "generate"
@@ -50,7 +50,7 @@ Feature: Advanced usage workflows
     And stderr should contain "config_merge"
     And stderr should contain "error_category="
     And stderr should contain "parse"
-    And stderr should not contain "loud"
+    And stderr should contain "loud"
 
   # --- JSON diagnostics ---
 

@@ -2946,7 +2946,6 @@ from `discovery_event_assertions` rather than duplicating them. The `insta`
 snapshot calls themselves stay in the test modules because snapshot names bind
 to the test module's path, not to a shared helper module.
 
-
 ### Configuration-load observability
 
 Startup configuration loading is instrumented through the
@@ -3714,7 +3713,6 @@ the Proptest suite keep the `Utf8PathBuf` instantiation tied to production.
 
 **Cross-references:** [CLI design](netsuke-design.md) §8.4, for the
 application-owned recorder boundary and end-of-run snapshot policy.
-
 
 ### Configuration-load boundary contract
 

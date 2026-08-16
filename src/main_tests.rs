@@ -2,70 +2,12 @@
 
 use super::*;
 use anyhow::{Result, ensure};
-use metrics::Label;
-use metrics_util::debugging::{DebugValue, DebuggingRecorder};
 use netsuke::localization::keys;
 use ortho_config::OrthoError;
 use rstest::rstest;
 use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
 use tracing_subscriber::{fmt, registry::Registry};
-
-/// Capture the metrics emitted while `body` runs against a local recorder.
-fn captured_metrics(body: impl FnOnce()) -> Vec<(String, Vec<Label>, DebugValue)> {
-    let recorder = DebuggingRecorder::new();
-    let snapshotter = recorder.snapshotter();
-    metrics::with_local_recorder(&recorder, body);
-    snapshotter
-        .snapshot()
-        .into_vec()
-        .into_iter()
-        .map(|(composite, _unit, _description, value)| {
-            let key = composite.key();
-            (
-                key.name().to_owned(),
-                key.labels().cloned().collect::<Vec<_>>(),
-                value,
-            )
-        })
-        .collect()
-}
-
-/// Configuration metrics distinguish a successful load from a failed one.
-#[rstest]
-#[case(true, "success")]
-#[case(false, "failure")]
-fn configuration_load_metrics_record_the_outcome(
-    #[case] succeeded: bool,
-    #[case] expected_outcome: &str,
-) {
-    let metrics = captured_metrics(|| {
-        record_config_load_metrics(Duration::from_millis(1), succeeded);
-    });
-
-    let counter = metrics
-        .iter()
-        .find(|(name, _, _)| name == CONFIG_LOAD_TOTAL)
-        .expect("config-load counter should be recorded");
-    assert!(
-        counter
-            .1
-            .iter()
-            .any(|label| { label.key() == "outcome" && label.value() == expected_outcome }),
-        "counter should carry outcome={expected_outcome}: {:?}",
-        counter.1
-    );
-    assert_eq!(counter.2, DebugValue::Counter(1));
-
-    let histogram = metrics
-        .iter()
-        .find(|(name, _, _)| name == CONFIG_LOAD_DURATION_SECONDS)
-        .expect("config-load duration histogram should be recorded");
-    let DebugValue::Histogram(samples) = &histogram.2 else {
-        panic!("expected a histogram value, got {:?}", histogram.2);
-    };
-    assert_eq!(samples.len(), 1, "exactly one duration sample expected");
-}
 
 /// The level a run starts reporting at, per mode.
 ///

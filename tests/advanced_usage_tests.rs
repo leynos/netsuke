@@ -48,6 +48,26 @@ fn run_netsuke(
     })
 }
 
+/// Run `netsuke` with explicit extra environment and an optional `NINJA_ENV`.
+fn run_netsuke_with_env(
+    current_dir: &Path,
+    args: &[&str],
+    ninja_env: Option<&Path>,
+    extra_env: &[(&str, &str)],
+) -> Result<CommandOutput> {
+    let ninja_env_owned = ninja_env.map(|p| p.to_string_lossy().into_owned());
+    let mut env_vec: Vec<(&str, &str)> = extra_env.to_vec();
+    if let Some(ref s) = ninja_env_owned {
+        env_vec.push(("NETSUKE_NINJA", s.as_str()));
+    }
+    let run = run_netsuke_in_with_env(current_dir, args, &env_vec)?;
+    Ok(CommandOutput {
+        stdout: run.stdout,
+        stderr: run.stderr,
+        success: run.success,
+    })
+}
+
 fn assert_json_success(output: &CommandOutput, expected_command: &str) -> Result<()> {
     ensure!(output.success, "{expected_command} should succeed");
     ensure!(

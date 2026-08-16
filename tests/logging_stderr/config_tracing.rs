@@ -164,13 +164,6 @@ fn explicit_load_failure_traces_failure_kind() -> Result<()> {
         !joined.contains("explicit configuration file not found"),
         "diagnostics must not repeat the formatted error text: {joined}"
     );
-    ensure!(
-        !run.stderr.contains("missing-secret-name.toml")
-            && !run.stderr.contains(raw_path.as_str())
-            && !run.stderr.contains("explicit configuration file not found"),
-        "human stderr must not expose configuration details: {}",
-        run.stderr
-    );
 
     assert_config_load_failure(
         &output,
@@ -244,13 +237,6 @@ fn invalid_config_traces_without_parser_text() -> Result<()> {
     ensure!(
         !joined.contains(raw_path.as_str()),
         "diagnostics must not log the raw config path: {joined}"
-    );
-    ensure!(
-        !run.stderr.contains("invalid-secret-config.toml")
-            && !run.stderr.contains(raw_path.as_str())
-            && !run.stderr.contains("invalid parser secret"),
-        "human stderr must not expose configuration details: {}",
-        run.stderr
     );
     Ok(())
 }

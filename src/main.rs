@@ -44,9 +44,6 @@ mod startup_tracing;
 mod config_load;
 use startup_tracing::StartupWriter;
 
-
-
-
 /// Injectable dependencies for one invocation of the startup composition root.
 ///
 /// Production supplies process-backed adapters, while tests use in-memory
@@ -131,7 +128,10 @@ where
     let verbose = parsed_cli.verbose;
     if is_informational_help(&parsed_cli) {
         settle_startup_diagnostics(&startup_writer, startup_mode);
-        return finish_run(run_cli(&parsed_cli, dependencies.system_locale, startup_mode), verbose);
+        return finish_run(
+            run_cli(&parsed_cli, dependencies.system_locale, startup_mode),
+            verbose,
+        );
     }
 
     let configuration = config_load::ConfigurationLoadContext {
@@ -362,7 +362,3 @@ fn render_runtime_error_json(err: &anyhow::Error) -> serde_json::Result<String> 
 #[cfg(test)]
 #[path = "main_tests.rs"]
 mod tests;
-
-#[cfg(test)]
-#[path = "main_config_tests.rs"]
-mod config_tests;
