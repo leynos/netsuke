@@ -17,20 +17,18 @@ use time::{OffsetDateTime, format_description::well_known::Iso8601};
 
 const FALLBACK_DATE: &str = "1970-01-01";
 
-// The build script recompiles these library modules as its own crate so that
-// `cli::Cli::command()` (used for man-page generation) can be constructed. Only
-// a small slice of each module's public API is reachable from this binary, so
-// the compiler reports the remainder as unused. Those items are not dead: their
-// real call sites live in the library crate and are covered by its tests, where
-// dead-code and unused-import analysis applies normally. Each shared module
-// therefore carries an `#[expect]` for exactly the lints it triggers here, in
-// preference to anchoring the symbols with artificial references.
+// The build script recompiles the parser subset needed to construct
+// `cli::Cli::command()` for man-page generation. Runtime discovery is excluded:
+// the build script does not perform discovery, and compiling it here would pull
+// its ambient canonicalization boundary into this separate compilation unit.
+// The parser subset exposes more library API than this binary reaches, so the
+// compiler reports unused items that the library crate and its tests exercise.
 #[expect(
     dead_code,
     unused_imports,
     reason = "shared library source; the unreached API is exercised by the library crate"
 )]
-#[path = "src/cli/mod.rs"]
+#[path = "src/cli/build_support.rs"]
 mod cli;
 
 #[path = "src/cli_localization.rs"]
@@ -144,9 +142,8 @@ fn write_man_page(data: &[u8], dir: &Path, page_name: &str) -> std::io::Result<P
 }
 
 fn emit_rerun_directives() {
-    println!("cargo:rerun-if-changed=src/cli/mod.rs");
+    println!("cargo:rerun-if-changed=src/cli/build_support.rs");
     println!("cargo:rerun-if-changed=src/cli/config.rs");
-    println!("cargo:rerun-if-changed=src/cli/merge.rs");
     println!("cargo:rerun-if-changed=src/cli/parser.rs");
     println!("cargo:rerun-if-changed=src/cli/parsing.rs");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_VERSION");

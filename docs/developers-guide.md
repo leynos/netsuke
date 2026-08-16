@@ -520,16 +520,16 @@ discovery otherwise uses capability-scoped canonicalization. Its small,
 dedicated path-normalization module, `netsuke::cli::discovery::paths`, remains
 narrowly excluded because `std::fs::canonicalize` preserves the absolute
 comparison keys and cross-directory symlink behaviour that `cap_std` rejects.
-The build-script copy is scoped separately as
-`build_script_build::cli::discovery::paths`; neither the broader
-`netsuke::cli::discovery` module nor the entire `build_script_build` crate is
-exempt. The rest of `netsuke` stays under the capability policy. The behavioural
-step definitions, CLI integration tests, and shared workflow-reading helper
-that stage fixtures ambiently are scoped the same way. A crate-level entry is
-justified only when the ambient access lives in the crate root itself, where a
-path entry would be no narrower — that covers the enumerated integration-test
-crates. The `test_support` crate uses capability-backed fixture helpers and
-remains linted by Whitaker under its own narrow policy.
+For man-page generation, the build script compiles the `cli::build_support`
+parser subset and deliberately omits runtime discovery. The broader
+`netsuke::cli::discovery` module remains under the capability policy; no
+`build_script_build` exception is required. The behavioural step definitions,
+CLI integration tests, and shared workflow-reading helper that stage fixtures
+ambiently are scoped the same way. A crate-level entry is justified only when
+the ambient access lives in the crate root itself, where a path entry would be
+no narrower — that covers the enumerated integration-test crates. The
+`test_support` crate uses capability-backed fixture helpers and remains linted
+by Whitaker under its own narrow policy.
 
 `test_support` is a workspace member, but the root Whitaker invocation selects
 only the `netsuke-build` package (the Cargo package name behind the `netsuke`

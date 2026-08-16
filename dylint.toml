@@ -30,9 +30,6 @@ excluded_paths = [
     # filesystem policy at module boundaries, so this small path-normalization
     # module is the narrowest available exception.
     "netsuke::cli::discovery::paths",
-    # The build script compiles the same CLI modules into its own crate, where
-    # the module path differs from the library's path above.
-    "build_script_build::cli::discovery::paths",
     # Behavioural step definitions that stage scenario fixtures — manifests,
     # workspaces, and captured output — through ambient tempdir access.
     "bdd_tests::bdd::steps::advanced_usage",
@@ -57,8 +54,8 @@ excluded_paths = [
     # The build script's parsers, included by path so `cargo test` can reach
     # them (build scripts are not test targets). Each reads a file Cargo hands
     # it through the build script; these entries cover the copies compiled into
-    # the test crates. The path-normalization exception remains module-scoped
-    # at `build_script_build::cli::discovery::paths` above.
+    # the test crates. The build script compiles only the parser subset, so it
+    # does not include the discovery path normalizer.
     "build_l10n_keys_tests::keys",
     "build_l10n_parser_tests::ftl",
     "build_l10n_audit_rules_tests::ftl",

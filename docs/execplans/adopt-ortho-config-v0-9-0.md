@@ -258,12 +258,12 @@ implement it until the user explicitly approves the draft.
   `no_std_fs_operations` finding: `build.rs` and
   `build_l10n_audit::read_source` now use capability-scoped directory reads,
   while discovery retains only the dedicated path-normalization module
-  exclusions at `netsuke::cli::discovery::paths` and
-  `build_script_build::cli::discovery::paths`, needed for
-  OrthoConfig-compatible absolute comparison keys and cross-directory symlinks.
-  The focused `normalized_path_key_follows_cross_directory_symlinks` test
-  proves that compatibility. The broad discovery-module and build-script crate
-  exclusions were removed; the final gate evidence is recorded below.
+  exclusion at `netsuke::cli::discovery::paths`, needed for OrthoConfig-
+  compatible absolute comparison keys and cross-directory symlinks. The
+  focused `normalized_path_key_follows_cross_directory_symlinks` test proves
+  that compatibility. The copied build-script path exception and the broad
+  discovery-module and build-script crate exclusions were later rejected as
+  unnecessary; the final gate evidence is recorded below.
 - [x] (2026-08-15) Completed the post-remediation gates. The initial
   `make lint` run found only three Clippy `doc_markdown` backtick omissions in
   `discovery_paths` Rustdoc; after correction, `make check-fmt`, `make test`
@@ -274,9 +274,32 @@ implement it until the user explicitly approves the draft.
 - [x] (2026-08-16) Addressed the follow-up review findings. Man-page
   replacement now delegates directly to `Dir::rename`, avoiding a
   pre-delete gap so a failed replacement preserves the existing page. The
-  `dylint.toml` comment now accurately describes the module-scoped
+  then-current `dylint.toml` comment accurately described the module-scoped
   `build_script_build::cli::discovery::paths` exception rather than claiming
-  that the whole `build_script_build` crate is excluded.
+  that the whole `build_script_build` crate was excluded; that provisional
+  exception was superseded when the build script stopped compiling discovery.
+- [x] (2026-08-16) Rebased the branch onto `origin/main` at `6b6e9e64` with a
+  clean Weave replay. The replay incorporated mainline's command-list public
+  API, `Recipe::Command { command: StringOrList }`, and its direct-rustc
+  external fixture at `tests/ui/command_list_public_api_pass.rs`, wired by
+  `tests/command_env_ui_tests.rs`.
+- [x] (2026-08-16) Rechecked the compile-time API review warning against the
+  rebased tree. The upstream direct-rustc fixture now covers the intended
+  public `Recipe::Command` and `StringOrList` contract, so no duplicate local
+  fixture was added.
+- [x] (2026-08-16) Re-ran the post-rebase Whitaker check and found that the
+  build script compiled runtime discovery despite not needing it for man-page
+  generation. Replaced its full CLI import with `cli::build_support`, the
+  parser/configuration subset that provides `Cli::command()` but omits
+  discovery. The initial rerun also reported 11 existing excluded
+  `std::fs` sites because the staged suite came from stale checkout `692f654`,
+  which predates `excluded_paths`. Installed the CI-pinned
+  `whitaker-installer` 0.2.7, switched its source checkout to updated main
+  `6cb2f483`, and restaged the prebuilt lint suite. This repairs the validation
+  environment rather than expanding source-policy exceptions. After
+  restaging, `make check-fmt`, `make test` (2,063 passed, one skipped;
+  doctests passed), `make typecheck`, `make lint`, `make markdownlint`
+  (34 tests, 0 errors), `make nixie`, and `git diff --check` all passed.
 
 ## Surprises & discoveries
 
@@ -389,23 +412,24 @@ implement it until the user explicitly approves the draft.
   showed no pertinent overlap with the fixture no-clobber changes. Impact: no
   additional conflict resolution or plan amendment was needed.
 
-- Observation: the post-turn Whitaker lint found valid ambient filesystem I/O
-  in the build script, the localization audit's `read_source`, and the
-  discovery path normalizer. Evidence: the `no_std_fs_operations` report
-  identified those operations after the earlier migration gates. Impact:
+- Observation: the post-turn Whitaker lint initially found valid ambient
+  filesystem I/O in the build script, the localization audit's `read_source`,
+  and the discovery path normalizer. Evidence: the `no_std_fs_operations`
+  report identified those operations after the earlier migration gates. Impact:
   build-script and audit reads now open directory capabilities with `cap_std`,
-  and the stale build-script crate and broad discovery-module exclusions are
-  removed; only the dedicated path-normalization modules remain excluded.
+  and the library path normalizer remains a dedicated module-scoped exclusion.
+  The build script now omits discovery through `cli::build_support`, so no
+  copied build-script exception is needed.
 
-- Observation: capability-scoped canonicalization cannot replace the discovery
-  normalizer completely. Evidence: the focused Unix test
+- Observation (superseded): capability-scoped canonicalization cannot replace
+  the discovery normalizer completely. Evidence: the focused Unix test
   `normalized_path_key_follows_cross_directory_symlinks` requires an alias in
   one directory to resolve to its target in another, which `cap_std` rejects
-  when the symlink leaves the capability root. Impact: retain absolute
+  when the symlink leaves the capability root. The earlier proposed copied
+  build-script exception was unnecessary once man-page generation stopped
+  compiling discovery. The active impact is limited to retaining absolute
   canonical comparison keys and this cross-directory symlink behaviour through
-  `std::fs::canonicalize`, with exclusions limited to the dedicated
-  path-normalization modules in the library and build-script paths rather than
-  exempting the broader discovery module or build-script crate.
+  `std::fs::canonicalize` in the library's dedicated path-normalization module.
 
 - Observation: the first post-remediation gate set found only documentation
   lint omissions. Evidence: `make check-fmt`, `make test` (1,993 nextest tests
@@ -415,13 +439,15 @@ implement it until the user explicitly approves the draft.
   three omissions were corrected, and the final lint rerun passed with the
   documentation, Clippy, and Whitaker checks green.
 
-- Observation: Whitaker `excluded_paths` matches module boundaries rather than
+- Observation (superseded): Whitaker `excluded_paths` matches module
+  boundaries rather than
   arbitrary nested implementation scopes. Evidence: the attempted inner
   `ambient` submodule exclusion did not match the reported path, while the
-  dedicated `discovery::paths` module did. Impact: replace the unsupported
-  inner scope with the minimal library and build-script `discovery::paths`
-  exclusions; the broader discovery module and build-script crate remain
-  covered by the capability policy.
+  dedicated library `discovery::paths` module did, but the equivalent copied
+  build-script path still reported. Impact: retain the library module
+  exclusion. The copied build-script path was removed from the build graph by
+  the parser-only composition root, so neither a module nor crate exception is
+  active; the post-rebase full gate remains pending.
 
 - Observation: the man-page replacement path must not remove the existing page
   before installing the temporary output. Evidence: the review identified the
@@ -429,11 +455,21 @@ implement it until the user explicitly approves the draft.
   `build.rs`. Impact: direct `Dir::rename` leaves the current page in place if
   replacement fails, preserving the atomic replacement boundary.
 
-- Observation: the `dylint.toml` explanatory comment had drifted from the
-  configured scope. Evidence: `build_script_build` is not present in
-  `excluded_crates`; only `build_script_build::cli::discovery::paths` is
-  excluded by module path. Impact: revise the comment to describe the actual
-  narrow exception and avoid implying a broader capability-policy bypass.
+- Observation (superseded): the `dylint.toml` explanatory comment had drifted
+  from the configured scope. Evidence: `build_script_build` is not present in
+  `excluded_crates`; the then-configured
+  `build_script_build::cli::discovery::paths` entry was excluded by module
+  path. Impact: revise the comment to describe the actual narrow exception and
+  avoid implying a broader capability-policy bypass. The entry was later
+  removed when the build script stopped compiling discovery.
+
+- Observation: the compile-time API review warning was resolved by an
+  upstream fixture incorporated during the 2026-08-16 rebase. Evidence:
+  `tests/ui/command_list_public_api_pass.rs` exercises the public
+  `Recipe::Command { command: StringOrList }` contract through direct rustc,
+  and `tests/command_env_ui_tests.rs` wires it into the UI test harness.
+  Impact: retain the upstream fixture as the single contract test and avoid
+  duplicate coverage in this branch.
 
 ## Decision Log
 
@@ -546,14 +582,12 @@ implement it until the user explicitly approves the draft.
   stable parent-directory boundaries and do not require the ambient authority
   that the post-turn Whitaker finding exposed. Date/Author: 2026-08-15 / Codex.
 
-- Decision: retain narrowly scoped Whitaker exclusions for the dedicated
-  path-normalization modules at `netsuke::cli::discovery::paths` and
-  `build_script_build::cli::discovery::paths`. Rationale:
+- Decision: retain a narrowly scoped Whitaker exclusion for the library
+  path-normalization module at `netsuke::cli::discovery::paths`. Rationale:
   `std::fs::canonicalize` preserves the absolute comparison keys and
   cross-directory symlink behaviour required to match OrthoConfig, while
   `cap_std` rejects that symlink case. The focused existing path test is the
-  compatibility evidence; neither the discovery module nor build-script crate
-  is broadly exempt, and no Rust `#[expect]` is used for this Dylint lint.
+  compatibility evidence; no Rust `#[expect]` is used for this Dylint lint.
   Date/Author: 2026-08-15 / Codex.
 
 - Decision: record the final post-remediation gate result in this plan.
@@ -569,11 +603,30 @@ implement it until the user explicitly approves the draft.
   the current page when the rename fails, avoiding a window with no page.
   Date/Author: 2026-08-16 / Codex.
 
-- Decision: describe the build-script filesystem exception in `dylint.toml` as
-  module-scoped. Rationale: only
-  `build_script_build::cli::discovery::paths` is excluded; the
-  `build_script_build` crate remains subject to the capability policy.
-  Date/Author: 2026-08-16 / Codex.
+- Decision (superseded): describe the build-script filesystem exception in
+  `dylint.toml` as module-scoped. Rationale: the configured entry was
+  `build_script_build::cli::discovery::paths`. Date/Author: 2026-08-16 / Codex.
+
+- Decision (superseded): use a crate-level Whitaker exception for
+  `build_script_build` while
+  compiling the CLI for man-page generation. Rationale: the copied path
+  normalizer must preserve OrthoConfig-compatible cross-directory symlink
+  canonicalization, and Whitaker still reports it despite the exact module
+  entry. Keep the library normalizer module-scoped; rerun the gates before
+  treating this decision as validated. Date/Author: 2026-08-16 / Codex.
+
+- Decision: compile `cli::build_support` rather than the full CLI module in the
+  man-page build script. Rationale: `Cli::command()` needs parser,
+  configuration, and validation definitions but not runtime discovery. The
+  narrower composition root removes the copied canonicalization boundary, so
+  the build script needs no Whitaker exception. Date/Author: 2026-08-16 / Codex.
+
+- Decision: use the rebased upstream direct-rustc fixture as the compile-time
+  contract for the command-list public API. Rationale: mainline now provides
+  `tests/ui/command_list_public_api_pass.rs`, wired through
+  `tests/command_env_ui_tests.rs`, and it directly checks
+  `Recipe::Command { command: StringOrList }` without adding duplicate local
+  coverage. Date/Author: 2026-08-16 / Codex.
 
 ## Outcomes & retrospective
 
@@ -617,18 +670,44 @@ post-rebase gates (`make check-fmt`, `make test`, `make typecheck`, and
 PR #558 was published at final head `c12ce72a`.
 
 The post-turn Whitaker remediation is recorded above: build-script and
-localization-audit reads use `cap_std` directory capabilities, and the
-discovery normalizer retains only its focused `discovery::paths` module
-exclusions. The unsupported inner `ambient` scope was replaced after Whitaker
-path-match evidence; the broader discovery module and build-script crate remain
-under the capability policy.
+localization-audit reads use `cap_std` directory capabilities, and the library
+discovery normalizer retains its focused `discovery::paths` module exclusion.
+The unsupported inner `ambient` scope was replaced after Whitaker path-match
+evidence. The post-rebase run revealed that man-page generation compiled that
+normalizer unnecessarily, so the build script now uses the parser-only
+`cli::build_support` composition root. A later lint rerun exposed a stale
+staged Whitaker checkout rather than a source-policy gap: checkout `692f654`
+did not contain `excluded_paths`. The CI-pinned installer 0.2.7 was installed,
+its source was switched to updated main `6cb2f483`, and the prebuilt suite was
+restaged. Full validation remains pending.
 
-The first post-remediation lint run found only three Clippy `doc_markdown`
+The initial Whitaker run reported the 11 existing exclusions from stale
+checkout `692f654`; the restaged Whitaker run passed without any source-policy
+expansion. The final gate set passed: `make check-fmt`, `make test` (2,063
+passed, one skipped; doctests passed), `make typecheck`, `make lint`,
+`make markdownlint` (34 tests, 0 errors), `make nixie`, and
+`git diff --check`.
+
+The pre-rebase post-remediation lint run found only three Clippy `doc_markdown`
 backtick omissions in `discovery_paths` Rustdoc. After those corrections, the
-final gates passed: `make check-fmt`; `make test` with 1,993 nextest tests, one
-skipped test, and 100 doctests passed with 28 ignored; `make typecheck`;
+pre-rebase gates passed: `make check-fmt`; `make test` with 1,993 nextest
+tests, one skipped test, and 100 doctests passed with 28 ignored;
+`make typecheck`;
 `make lint` including docs, Clippy, and Whitaker; `make markdownlint` over 81
 files with 0 errors; `make nixie`; and `git diff --check`.
+
+Those results are historical evidence only after the 2026-08-16 rebase. The
+post-rebase Whitaker rerun found that the build script imported the unused
+discovery normalizer; the parser-only composition root now avoids it. After
+restaging the CI-pinned Whitaker suite, the final gate results recorded above
+are green.
+
+The 2026-08-16 rebase onto `origin/main` at `6b6e9e64` replayed cleanly with
+Weave and incorporated the upstream command-list public API and its direct-
+rustc compile-time fixture. That fixture, wired through
+`tests/command_env_ui_tests.rs`, resolves the review warning about coverage
+for `Recipe::Command { command: StringOrList }` without introducing a second
+fixture in this branch.
 
 ## Context and orientation
 
@@ -1210,25 +1289,34 @@ Green/refactor evidence:
 - prior final gates: passed after the final rebase; `make test` reported 1,992
   non-doctests and all doctests, before the post-turn remediation
 
-Post-turn Whitaker remediation:
+Post-turn Whitaker remediation (pre-rebase evidence):
 - `build.rs` and `build_l10n_audit::read_source` use `cap_std` directory
   capabilities for their stable parent-directory reads
-- stale build-script crate and broad discovery-module exclusions were removed
-- `netsuke::cli::discovery::paths` and
-  `build_script_build::cli::discovery::paths` remain the only discovery
-  exclusions, preserving `std::fs::canonicalize`'s absolute comparison keys
-  and cross-directory symlink behaviour; the attempted inner `ambient` scope
-  was replaced because Whitaker matches module boundaries
+- the stale broad discovery-module exclusion was removed
+- `netsuke::cli::discovery::paths` remains module-scoped, preserving
+  `std::fs::canonicalize`'s absolute comparison keys and cross-directory
+  symlink behaviour; the attempted inner `ambient` scope was replaced because
+  Whitaker matches module boundaries
 - `normalized_path_key_follows_cross_directory_symlinks` passed as focused
   compatibility evidence
 - initial `make lint` failed only on three Clippy `doc_markdown` backtick
   omissions in `discovery_paths` Rustdoc; the omissions were corrected
-- final post-remediation gates: `make check-fmt` passed; `make test` passed with
-  1,993 nextest tests, one skipped test, and 100 doctests passed with 28
-  ignored; `make typecheck` passed; `make lint` passed including docs, Clippy,
-  and Whitaker; `make markdownlint` passed over 81 files with 0 errors; and
+- pre-rebase post-remediation gates: `make check-fmt` passed; `make test`
+  passed with 1,993 nextest tests, one skipped test, and 100 doctests passed
+  with 28 ignored; `make typecheck` passed; `make lint` passed including docs,
+  Clippy, and Whitaker; `make markdownlint` passed over 81 files with 0 errors; and
   `make nixie` plus `git diff --check` passed
-- final all-green full-gate result confirmed after the documentation corrections
+- these pre-rebase results do not close the current validation: the post-rebase
+  Whitaker rerun found the build script compiling unused discovery code
+- current decision: use `cli::build_support` for man-page generation while the
+  library normalizer remains module-scoped; the initial rerun's 11 existing
+  excluded `std::fs` reports were caused by stale staged checkout `692f654`,
+  not by a source-policy expansion. After installing the CI-pinned
+  `whitaker-installer` 0.2.7, switching its source to `6cb2f483`, and
+  restaging, all final gates passed: `make check-fmt`, `make test` (2,063
+  passed, one skipped; doctests passed), `make typecheck`, `make lint`,
+  `make markdownlint` (34 tests, 0 errors), `make nixie`, and
+  `git diff --check`
 
 Review/rebase/publication evidence:
 - review correction: `project_scope_file(...) -> Option<PathBuf>` documented in
@@ -1342,23 +1430,24 @@ at `c12ce72a`.
 Revised, 2026-08-15: recorded the post-turn Whitaker ambient-I/O findings and
 the capability-scoped conversions in `build.rs` and
 `build_l10n_audit::read_source`. The broad discovery-module and build-script
-crate exclusions were removed, while the focused library and build-script
-`discovery::paths` module exclusions remain because the existing
-cross-directory symlink test proves that `std::fs::canonicalize` is required
-for OrthoConfig-compatible absolute comparison keys. Earlier gate results are
-marked as pre-remediation; the final all-green gate result is recorded below.
+crate exclusions were removed, while the focused library path-normalization
+module exclusion remains because the existing cross-directory symlink test
+proves that `std::fs::canonicalize` is required for OrthoConfig-compatible
+absolute comparison keys. Earlier gate results are marked as pre-remediation;
+the final all-green gate result is recorded below.
 
 Revised, 2026-08-15: recorded the post-remediation gate set, including 1,993
 nextest tests, one skipped test, 100 doctests passed with 28 ignored,
 `markdownlint` over 81 files with 0 errors, and the three Clippy `doc_markdown`
 backtick omissions found and corrected before the final lint rerun.
 
-Revised, 2026-08-15: corrected the Whitaker scope record after path-match
-evidence showed that `excluded_paths` applies at module boundaries. The
-unsupported inner `ambient` scope was replaced with the dedicated library and
-build-script `discovery::paths` module exclusions; the broader discovery module
-and build-script crate remain covered. The final post-remediation gates then
-passed, including docs, Clippy, Whitaker, Markdown, Mermaid, and diff checks.
+Revised, 2026-08-15 (superseded): corrected the provisional Whitaker scope
+record after path-match evidence showed that `excluded_paths` applies at module
+boundaries. The unsupported inner `ambient` scope was replaced with dedicated
+library and copied build-script `discovery::paths` module exclusions. The
+copied build-script path was later removed from the build graph, superseding
+that exception. The final post-remediation gates then passed, including docs,
+Clippy, Whitaker, Markdown, Mermaid, and diff checks.
 
 Revised, 2026-08-15: recorded the final all-green post-remediation gates:
 `make check-fmt`, `make test`, `make typecheck`, `make lint`,
@@ -1366,7 +1455,40 @@ Revised, 2026-08-15: recorded the final all-green post-remediation gates:
 and documentation counts captured in `Progress`, `Outcomes & retrospective`, and
 `Artefacts and notes`.
 
-Revised, 2026-08-16: recorded the review correction to use direct
+Revised, 2026-08-16 (superseded): recorded the review correction to use direct
 `Dir::rename` for man-page replacement, preserving the current page if the
-replacement fails, and corrected the `dylint.toml` comment to describe only the
-module-scoped `build_script_build::cli::discovery::paths` exception.
+replacement fails, and corrected the then-current `dylint.toml` comment to
+describe only the module-scoped
+`build_script_build::cli::discovery::paths` exception. That provisional
+exception was later removed when the build script stopped compiling discovery.
+
+Revised, 2026-08-16: recorded the clean Weave rebase onto `origin/main` at
+`6b6e9e64` and the resulting upstream direct-rustc coverage for the public
+command-list API. The existing mainline fixture resolves the review warning,
+so no duplicate compile-time fixture was added.
+
+Revised, 2026-08-16 (superseded): recorded the post-rebase Whitaker failure for
+the copied build-script path normalizer. The library path normalizer remains a
+module-scoped exception, but the exact copied build-script module entry was not
+honoured; a crate-level `build_script_build` exception was considered for
+man-page generation. Full validation was pending at that point.
+
+Revised, 2026-08-16: replaced the provisional build-script exception after
+verifying that neither the module nor crate configuration was honoured. The
+man-page build now compiles `cli::build_support`, which contains only the
+parser subset required for `Cli::command()` and omits discovery. The library
+normalizer remains the sole documented `std::fs::canonicalize` boundary; full
+validation is pending. The subsequent 11-site Whitaker report was traced to
+stale staged checkout `692f654`; installing `whitaker-installer` 0.2.7,
+switching its source to `6cb2f483`, and restaging repaired the validation
+environment without changing the source policy.
+
+Revised, 2026-08-16: recorded the repaired Whitaker validation environment
+and the final green gate set. The stale staged checkout `692f654` lacked
+`excluded_paths`; installing the CI-pinned `whitaker-installer` 0.2.7,
+switching its source to `6cb2f483`, and restaging made the configured existing
+exclusions effective. `make check-fmt`, `make test` (2,063 passed, one skipped;
+doctests passed), `make typecheck`, `make lint` (the stale-suite finding was
+followed by a passing restaged run), `make markdownlint` (34 tests, 0 errors),
+`make nixie`, and `git diff --check` all passed. No source-policy expansion was
+made.
