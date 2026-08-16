@@ -1,10 +1,7 @@
-//! CLI execution and command dispatch logic.
+//! CLI execution and command dispatch.
 //!
-//! This module keeps `main` minimal by providing a single entry point that
-//! handles command execution. It now delegates build requests to the Ninja
-//! subprocess, streaming its output back to the user. The executable defaults
-//! to `ninja` and may be overridden with `NETSUKE_NINJA` for systems that use a
-//! different binary name or require a full path.
+//! Provides execution orchestration; build work streams through Ninja (default
+//! `ninja`, overridable with `NETSUKE_NINJA`).
 
 mod dispatch;
 mod error;
@@ -57,12 +54,10 @@ use path_helpers::{ensure_manifest_exists_or_error, resolve_manifest_path, resol
 struct ExecutionContext<'a> {
     reporter: &'a dyn StatusReporter,
     progress_enabled: bool,
-    /// Resolved Ninja executable, passed unchanged to [`std::process::Command::new`].
+    /// Resolved Ninja executable passed unchanged to [`std::process::Command::new`].
     ///
-    /// UTF-8 conversion is confined to `NETSUKE_NINJA` resolution
-    /// (`process::resolve_ninja_program`); this field must stay a native
-    /// [`Path`] and must not be converted to a `String`, so that non-UTF-8
-    /// executable paths on platforms that allow them remain usable.
+    /// Keep a native [`Path`]: only `NETSUKE_NINJA` resolution performs UTF-8
+    /// conversion, preserving valid non-UTF-8 executable paths.
     ninja_program: &'a Path,
 }
 
@@ -87,9 +82,7 @@ impl NinjaContent {
     }
 }
 
-/// Target list passed through to Ninja.
-/// An empty slice means “use the defaults” emitted by IR generation
-/// (default targets).
+/// Target list passed through to Ninja; an empty slice uses IR defaults.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BuildTargets<'a>(&'a [String]);
 impl<'a> BuildTargets<'a> {
@@ -124,10 +117,7 @@ pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
     run_with_ninja_program_resolver(cli, prefs, None, process::resolve_ninja_program)
 }
 
-/// Execute parsed commands with an explicitly selected Ninja executable.
-///
-/// This is the injected process-program boundary used by adapters and tests
-/// that must not mutate the process environment to select Ninja.
+/// Execute parsed commands with a Ninja executable selected by the caller.
 ///
 /// # Errors
 ///
@@ -279,11 +269,7 @@ struct NinjaToolSpec<'a> {
     key: LocalizationKey,
 }
 
-/// Execute a Ninja tool (e.g., `ninja -t clean`) using a temporary build file.
-///
-/// Generates the Ninja manifest to a temporary file, then invokes Ninja with
-/// `-t <tool>` while preserving the CLI settings (working directory and job
-/// count).
+/// Execute a Ninja tool using a temporary build file and CLI settings.
 ///
 /// # Errors
 ///
@@ -332,10 +318,7 @@ fn handle_ninja_tool(
     Ok(())
 }
 
-/// Generate the Ninja manifest string from the Netsuke manifest referenced by `cli`.
-///
-/// Reports manifest and graph/synthesis pipeline stages via the provided
-/// [`StatusReporter`].
+/// Generate Ninja from the manifest referenced by `cli` and report pipeline stages.
 ///
 /// # Errors
 ///
