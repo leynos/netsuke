@@ -32,7 +32,7 @@ Table: documented v0.1.0 additions, including `netsuke help targets`, and their 
 | Command recipes | Existing scalar `command` recipes are unchanged. New YAML command lists are opt-in and run in declaration order with fail-fast semantics. | [Rules and recipes](users-guide.md#rules-and-recipes) |
 | Manifest discovery | Optional target/action `description` values are shown by the new `netsuke help targets` command. Manifests without them and existing build output are unchanged. | [Users' guide](users-guide.md) |
 | Serial dependencies | New opt-in `dependency_order: serial` runs an action or target's direct `deps` list in declaration order. | [Serial dependency ordering](users-guide.md#run-direct-dependencies-serially) |
-| Cached configuration discovery | New opt-in `netsuke::cli::resolve_json_and_layers_with_env`, `netsuke::cli::resolve_json_and_layers_outcome_with_env`, and `netsuke::cli::merge_with_cached_file_layers` APIs let callers reuse discovered file layers. | [Users' guide](users-guide.md) |
+| Cached configuration discovery | New opt-in `netsuke::cli::resolve_json_and_layers_outcome_with_env` and `netsuke::cli::merge_with_cached_file_layers` APIs let callers reuse discovered file layers. | [Users' guide](users-guide.md) |
 
 ## Nothing to change for existing callers
 
@@ -73,11 +73,12 @@ can serve several invocations. Worked examples live in the users' guide's
 ## Reusing cached configuration discovery
 
 The cached configuration APIs are an opt-in flow for callers of the unstable
-Rust API. Callers that adopt this composition boundary resolve JSON mode and
-discover file layers once, then pass the returned `DiscoveredLayers` to
-`merge_with_cached_file_layers`. The diagnostic variant returns a result and
-`DiscoveryOutcome`, which can emit diagnostics after a tracing filter is
-installed and can be consumed with `into_layers()` for the merge.
+Rust API. `resolve_json_and_layers_outcome_with_env` returns
+`(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics. Callers
+that adopt this composition boundary explicitly call
+`DiscoveryOutcome::emit_diagnostics()` after installing a tracing filter, then
+consume the outcome with `into_layers()` and pass the resulting
+`DiscoveredLayers` to `merge_with_cached_file_layers`.
 
 The standalone `resolve_merged_json_with_env` and
 `merge_with_config_and_env` functions retain their existing automatic

@@ -2610,11 +2610,14 @@ config-layer plumbing separate from the public CLI surface in `cli::mod`.
 environment and returns a `DiscoveryOutcome`. The outcome retains a
 `DiscoveredLayers` value that owns the discovered layers, discovery errors and
 bounded deferred diagnostics. The diagnostic-mode resolver,
-`resolve_json_and_layers_outcome_with_env`, resolves the JSON preference from
-those discovered layers and preserves the outcome for the startup boundary.
+`resolve_json_and_layers_outcome_with_env`, returns
+`(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics; it
+resolves the JSON preference from those discovered layers and preserves the
+outcome for the startup boundary.
 
 `DiscoveryOutcome::emit_diagnostics` replays the retained bounded diagnostics
-after tracing is configured. It does not repeat environment or filesystem
+after the composition boundary configures tracing. Callers must explicitly
+replay diagnostics there; the method does not repeat environment or filesystem
 access. `DiscoveryOutcome::into_layers` transfers the same
 `DiscoveredLayers` to `merge_with_cached_file_layers`, which consumes the
 cached layers for the full merge and prevents a second discovery pass.
@@ -2666,11 +2669,10 @@ Configuration merge helpers:
   the retained layers and discovery errors into the full merge composition.
 - `collect_file_layers_with_trace_and_env_source(directory, env_source)` runs
   the one discovery pass and retains bounded project-scope trace metadata.
-- `resolve_json_and_layers_with_env(cli, matches, env)` returns the JSON
-  decision together with the discovered layers for a cached full merge.
-- `resolve_json_and_layers_outcome_with_env(cli, matches, env)` retains the
-  `DiscoveryOutcome` so startup can emit diagnostics after tracing setup and
-  then call `into_layers()`.
+- `resolve_json_and_layers_outcome_with_env(cli, matches, env)` returns
+  `(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics; the
+  composition boundary must replay them after tracing setup and then call
+  `into_layers()`.
 - `merge_with_cached_file_layers(cli, matches, env, discovered)` consumes the
   discovered layers without rediscovery.
 - `is_empty_value(value: &serde_json::Value) -> bool` detects an empty CLI

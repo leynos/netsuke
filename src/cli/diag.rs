@@ -11,8 +11,7 @@ use ortho_config::{OrthoError, OrthoResult};
 use std::sync::Arc;
 
 use super::discovery::{
-    DiscoveredLayers, DiscoveryOutcome, EnvProvider, StdEnvProvider,
-    collect_diag_file_layers_with_env,
+    DiscoveryOutcome, EnvProvider, StdEnvProvider, collect_diag_file_layers_with_env,
 };
 use super::parser::Cli;
 
@@ -34,7 +33,7 @@ pub fn resolve_merged_json(cli: &Cli, matches: &ArgMatches) -> OrthoResult<bool>
 /// Resolve the JSON preference using an injected environment provider.
 ///
 /// This variant supports deterministic environment access without mutating
-/// process-global state.
+/// process-global state. It does not emit deferred discovery diagnostics.
 ///
 /// # Errors
 ///
@@ -45,38 +44,19 @@ pub fn resolve_merged_json_with_env(
     matches: &ArgMatches,
     env: &impl EnvProvider,
 ) -> OrthoResult<bool> {
-    let (json, _) = resolve_json_and_layers_with_env(cli, matches, env)?;
-    Ok(json)
-}
-
-/// Resolve diagnostic JSON mode and retain the discovered file layers.
-///
-/// The returned layers belong to this exact resolution pass and must be passed
-/// to [`super::merge::merge_with_cached_file_layers`] for the subsequent full
-/// merge. This standalone wrapper replays deferred discovery diagnostics before
-/// returning. Startup callers that must configure tracing first use
-/// [`resolve_json_and_layers_outcome_with_env`] instead.
-///
-/// # Errors
-///
-/// Returns the first discovery error immediately, or a validation error when
-/// `NETSUKE_JSON` contains an invalid boolean.
-pub fn resolve_json_and_layers_with_env(
-    cli: &Cli,
-    matches: &ArgMatches,
-    env: &impl EnvProvider,
-) -> OrthoResult<(bool, DiscoveredLayers)> {
     let (result, outcome) = resolve_json_and_layers_outcome_with_env(cli, matches, env);
-    outcome.emit_diagnostics();
-    result.map(|json| (json, outcome.into_layers()))
+    let json = result?;
+    drop(outcome);
+    Ok(json)
 }
 
 /// Resolve diagnostic JSON mode while retaining a discovery outcome.
 ///
-/// Startup uses this form to replay cached diagnostics after it enables its
-/// output filter, including when discovery or JSON validation fails. The
-/// outcome owns the discovered layers and deferred diagnostics. Standalone
-/// callers should usually prefer [`resolve_json_and_layers_with_env`].
+/// This side-effect-free function leaves diagnostic replay to its composition
+/// boundary. Startup uses the returned outcome to replay cached diagnostics
+/// after it enables its output filter, including when discovery or JSON
+/// validation fails. The outcome owns the discovered layers and deferred
+/// diagnostics.
 pub fn resolve_json_and_layers_outcome_with_env(
     cli: &Cli,
     matches: &ArgMatches,
@@ -231,7 +211,8 @@ mod tests {
     }
 
     #[rstest]
-    fn resolve_merged_json_replays_missing_explicit_config_diagnostics() -> anyhow::Result<()> {
+    fn resolve_merged_json_does_not_replay_missing_explicit_config_diagnostics()
+    -> anyhow::Result<()> {
         let dir = tempdir()?;
         let missing_config_path = dir.path().join("missing-netsuke.toml");
         let matches = Cli::command().get_matches_from(["netsuke"]);
@@ -246,30 +227,17 @@ mod tests {
             matches!(error.as_ref(), OrthoError::File { path, .. } if path == &missing_config_path),
             "expected missing explicit config error for {missing_config_path:?}, got {error:?}"
         );
-        let selector_event = find_deferred_event(&events, "resolved config path")?;
         ensure!(
-            selector_event.contains("selector=\"NETSUKE_CONFIG\"")
-                && selector_event.contains("path_present=true"),
-            "selector event should record the injected selector: {selector_event}"
+            events.is_empty(),
+            "JSON resolution must leave deferred diagnostics for its composition boundary: {events:?}"
         );
-        assert_bounded_path_event(selector_event, &missing_config_path)?;
-        assert_bounded_path_event(
-            find_deferred_event(&events, "using explicit config path")?,
-            &missing_config_path,
-        )?;
-        let failure_event = find_deferred_event(&events, "explicit config load failed")?;
-        ensure!(
-            failure_event.contains("failure_kind=Missing"),
-            "load failure should retain its bounded kind: {failure_event}"
-        );
-        assert_bounded_path_event(failure_event, &missing_config_path)?;
 
         Ok(())
     }
 
     #[rstest]
-    fn resolve_json_and_layers_replays_successful_explicit_config_diagnostics() -> anyhow::Result<()>
-    {
+    fn resolve_json_and_layers_outcome_replays_successful_explicit_config_diagnostics()
+    -> anyhow::Result<()> {
         let dir = tempdir()?;
         let config_path = dir.path().join("customer@example.com.toml");
         let config_dir = Dir::open_ambient_dir(dir.path(), ambient_authority())?;
@@ -280,14 +248,25 @@ mod tests {
             ..Cli::default()
         };
 
-        let (result, events) = with_test_subscriber(LevelFilter::TRACE, |captured| {
-            let result = resolve_json_and_layers_with_env(&cli, &matches, &TestEnv::default());
-            (result, captured.snapshot())
-        });
-        let (json, layers) = result?;
+        let ((result, outcome), resolution_events, replay_events) =
+            with_test_subscriber(LevelFilter::TRACE, |captured| {
+                let (result, outcome) =
+                    resolve_json_and_layers_outcome_with_env(&cli, &matches, &TestEnv::default());
+                let resolution_events = captured.snapshot();
+                outcome.emit_diagnostics();
+                ((result, outcome), resolution_events, captured.snapshot())
+            });
+        ensure!(
+            resolution_events.is_empty(),
+            "side-effect-free JSON resolution must not emit diagnostics: {resolution_events:?}"
+        );
+        let json = result?;
         ensure!(json, "explicit configuration should enable JSON mode");
-        drop(layers);
-        let selector_event = find_deferred_event(&events, "resolved config path")?;
+        ensure!(
+            !outcome.layers().is_empty(),
+            "successful resolution should retain file layers for the full merge"
+        );
+        let selector_event = find_deferred_event(&replay_events, "resolved config path")?;
         ensure!(
             selector_event.contains("selector=\"cli_flag\"")
                 && selector_event.contains("path_present=true"),
@@ -295,9 +274,10 @@ mod tests {
         );
         assert_bounded_path_event(selector_event, &config_path)?;
         assert_bounded_path_event(
-            find_deferred_event(&events, "using explicit config path")?,
+            find_deferred_event(&replay_events, "using explicit config path")?,
             &config_path,
         )?;
+        drop(outcome.into_layers());
 
         Ok(())
     }
