@@ -992,14 +992,16 @@ error. A broken discovered configuration is therefore not treated as absent.
 
 Normal command-line use requires no change. The Rust API remains an unstable
 beta surface, but callers that compose configuration themselves can avoid
-discovering and loading the same configuration files more than once. The
-`netsuke::cli::resolve_json_and_layers_outcome_with_env` returns
-`(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics. At the
-composition boundary, call `DiscoveryOutcome::emit_diagnostics()` after
-tracing is configured, then consume the outcome with `into_layers()` and pass
-the cached layers to `netsuke::cli::merge_with_cached_file_layers` for the
-full merge. This preserves diagnostics from the same discovery pass while
-avoiding repeated file loading.
+
+discovering and loading the same configuration files more than once. Both
+`netsuke::cli::resolve_json_and_layers_with_env` and
+`netsuke::cli::resolve_json_and_layers_outcome_with_env` return
+`(OrthoResult<bool>, DiscoveryOutcome)`. Callers may call
+`emit_diagnostics()` on the outcome, then call `into_layers()` before passing
+the layers to
+`netsuke::cli::merge_with_cached_file_layers` for the full merge. This
+preserves diagnostics from the same discovery pass while avoiding repeated
+file loading.
 
 All of these functions take an injected `&impl ConfigEnvProvider`. The public
 `ConfigEnvProvider` trait provides `get(&self, key: &str) -> Option<OsString>`
