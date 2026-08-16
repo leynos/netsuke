@@ -98,6 +98,45 @@ fn assert_help_targets_rejects_manifest(
     Ok(())
 }
 
+fn assert_help_targets_rejects_unsafe_manifest(
+    fixture_name: &str,
+    manifest: &[u8],
+    expected_diagnostic: &str,
+    forbidden_raw_text: &str,
+) -> Result<()> {
+    let temp =
+        tempfile::tempdir().with_context(|| format!("create {fixture_name} fixture directory"))?;
+    let temp_path = Utf8Path::from_path(temp.path())
+        .with_context(|| format!("{fixture_name} temporary path should be UTF-8"))?;
+    let manifest_path = temp_path.join("Netsukefile");
+    let workspace = Dir::open_ambient_dir(temp_path, ambient_authority())
+        .with_context(|| format!("open {fixture_name} fixture directory"))?;
+    workspace
+        .write("Netsukefile", manifest)
+        .with_context(|| format!("write {fixture_name} manifest"))?;
+    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
+        .arg("--file")
+        .arg(&manifest_path)
+        .arg("help")
+        .arg("targets")
+        .output()
+        .with_context(|| format!("run help targets against {fixture_name} manifest"))?;
+    ensure!(
+        !output.status.success(),
+        "{fixture_name} manifest should fail help targets"
+    );
+    let stderr = normalize_fluent_isolates(&String::from_utf8_lossy(&output.stderr));
+    ensure!(
+        stderr.contains(expected_diagnostic),
+        "{fixture_name} diagnostic should contain {expected_diagnostic:?}: {stderr}"
+    );
+    ensure!(
+        !stderr.contains(forbidden_raw_text),
+        "{fixture_name} diagnostic must not emit raw {forbidden_raw_text:?}: {stderr:?}"
+    );
+    Ok(())
+}
+
 #[rstest]
 fn help_targets_with_invalid_manifest_reports_error() -> Result<()> {
     let temp = tempfile::tempdir().context("temp dir")?;
@@ -137,39 +176,12 @@ fn help_targets_rejects_valid_manifest_with_missing_rule() -> Result<()> {
 
 #[test]
 fn help_targets_rejects_control_bearing_target_names_before_graph_validation() -> Result<()> {
-    let temp = tempfile::tempdir().context("create unsafe-target diagnostic fixture directory")?;
-    let temp_path = Utf8Path::from_path(temp.path())
-        .context("unsafe-target diagnostic temporary path should be UTF-8")?;
-    let manifest_path = temp_path.join("Netsukefile");
-    let workspace = Dir::open_ambient_dir(temp_path, ambient_authority())
-        .context("open unsafe-target diagnostic fixture directory")?;
-    workspace
-        .write(
-            "Netsukefile",
-            b"netsuke_version: \"1.0.0\"\ntargets:\n  - name: \"out/\\u001b[2Japp\"\n    rule: missing\n",
-        )
-        .context("write unsafe-target diagnostic manifest")?;
-    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
-        .arg("--file")
-        .arg(&manifest_path)
-        .arg("help")
-        .arg("targets")
-        .output()
-        .context("run help targets against unsafe target")?;
-    ensure!(
-        !output.status.success(),
-        "unsafe target should make help targets fail validation"
-    );
-    let stderr = normalize_fluent_isolates(&String::from_utf8_lossy(&output.stderr));
-    ensure!(
-        stderr.contains("terminal control characters"),
-        "diagnostic should reject terminal controls before graph validation: {stderr}"
-    );
-    ensure!(
-        !stderr.contains('\u{001b}'),
-        "diagnostic must not emit a raw terminal escape: {stderr:?}"
-    );
-    Ok(())
+    assert_help_targets_rejects_unsafe_manifest(
+        "unsafe-target",
+        b"netsuke_version: \"1.0.0\"\ntargets:\n  - name: \"out/\\u001b[2Japp\"\n    rule: missing\n",
+        "terminal control characters",
+        "\u{001b}",
+    )
 }
 
 #[test]
@@ -192,39 +204,12 @@ fn help_targets_escapes_manifest_defaults_in_diagnostics() -> Result<()> {
 
 #[test]
 fn help_targets_does_not_emit_raw_manifest_controls_in_diagnostics() -> Result<()> {
-    let temp = tempfile::tempdir().context("create unsafe-default diagnostic fixture directory")?;
-    let temp_path = Utf8Path::from_path(temp.path())
-        .context("unsafe-default diagnostic temporary path should be UTF-8")?;
-    let manifest_path = temp_path.join("Netsukefile");
-    let workspace = Dir::open_ambient_dir(temp_path, ambient_authority())
-        .context("open unsafe-default diagnostic fixture directory")?;
-    workspace
-        .write(
-            "Netsukefile",
-            b"netsuke_version: \"1.0.0\"\nactions:\n  - name: lint\n    command: cargo clippy\ntargets: []\ndefaults:\n  - \"bad\\nINJECTED\"\n",
-        )
-        .context("write unsafe-default diagnostic manifest")?;
-    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
-        .arg("--file")
-        .arg(&manifest_path)
-        .arg("help")
-        .arg("targets")
-        .output()
-        .context("run help targets against unsafe default")?;
-    ensure!(
-        !output.status.success(),
-        "unsafe default should make help targets fail validation"
-    );
-    let stderr = normalize_fluent_isolates(&String::from_utf8_lossy(&output.stderr));
-    ensure!(
-        stderr.contains(r"default 'bad\nINJECTED'"),
-        "diagnostic should show escaped manifest controls: {stderr}"
-    );
-    ensure!(
-        !stderr.contains("default 'bad\nINJECTED'"),
-        "diagnostic must not emit a raw manifest newline: {stderr}"
-    );
-    Ok(())
+    assert_help_targets_rejects_unsafe_manifest(
+        "unsafe-default",
+        b"netsuke_version: \"1.0.0\"\nactions:\n  - name: lint\n    command: cargo clippy\ntargets: []\ndefaults:\n  - \"bad\\nINJECTED\"\n",
+        r"default 'bad\nINJECTED'",
+        "default 'bad\nINJECTED'",
+    )
 }
 
 #[rstest]
