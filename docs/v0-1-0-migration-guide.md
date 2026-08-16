@@ -73,12 +73,13 @@ can serve several invocations. Worked examples live in the users' guide's
 ## Reusing cached configuration discovery
 
 The cached configuration APIs are an opt-in flow for callers of the unstable
-Rust API. `resolve_json_and_layers_outcome_with_env` returns
-`(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics. Callers
-that adopt this composition boundary explicitly call
-`DiscoveryOutcome::emit_diagnostics()` after installing a tracing filter, then
-consume the outcome with `into_layers()` and pass the resulting
-`DiscoveredLayers` to `merge_with_cached_file_layers`.
+
+Rust API. Callers that adopt this composition boundary resolve JSON mode and
+discover file layers once. Both `resolve_json_and_layers_with_env` and
+`resolve_json_and_layers_outcome_with_env` return
+`(OrthoResult<bool>, DiscoveryOutcome)`. Callers can call
+`emit_diagnostics()` after a tracing filter is installed, then call
+`into_layers()` before passing the layers to `merge_with_cached_file_layers`.
 
 The standalone `resolve_merged_json_with_env` and
 `merge_with_config_and_env` functions retain their existing automatic
