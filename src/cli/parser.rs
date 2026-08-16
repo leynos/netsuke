@@ -24,6 +24,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use super::config::CliConfig;
+use super::help::HelpArgs;
 use super::parsing::{
     parse_accessibility_policy, parse_color_policy, parse_emoji_policy, parse_host_pattern,
     parse_jobs, parse_locale, parse_progress_policy, parse_scheme,
@@ -33,25 +34,6 @@ use crate::cli_l10n::localize_command;
 pub use crate::cli_l10n::{json_hint_from_args, locale_hint_from_args};
 use crate::host_pattern::HostPattern;
 use crate::theme::ThemePreference;
-
-
-//! Clap-facing parser types and localisation helpers.
-//!
-//! This module owns the runtime-visible [`Cli`] struct and all associated
-//! Clap definitions ([`BuildArgs`], [`Commands`]).  It also provides
-//! [`parse_with_localizer_from`], which localises the Clap command, installs
-//! localisation-aware [`LocalizedValueParser`] instances for every typed
-//! argument, and returns `(Cli, ArgMatches)` for downstream processing.
-//!
-//! **Pipeline position:** parsing layer.
-//!
-//! - Receives raw `OsStr` arguments from the process entry point.
-//! - Delegates value validation to [`super::parsing`] helpers.
-//! - Returns a `Cli`/`ArgMatches` pair consumed by [`super::merge`].
-//!
-//! [`LocalizedValueParser`]: self::LocalizedValueParser
-};
-pub use crate::cli_l10n::{json_hint_from_args, locale_hint_from_args};
 
 #[derive(Clone)]
 struct LocalizedValueParser<F> {

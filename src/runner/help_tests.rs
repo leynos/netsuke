@@ -94,12 +94,13 @@ fn catalogue_rendering_releases_localizer_lock_before_snapshot_work() -> Result<
         let _lock = localizer_lock();
         acquired.send(()).ok();
     });
-    confirmed
+    let contender_acquired = confirmed
         .recv_timeout(Duration::from_secs(5))
-        .context("localizer contender should acquire the lock before snapshot work")?;
+        .context("localizer contender should acquire the lock before snapshot work");
     contender
         .join()
         .map_err(|_| anyhow::anyhow!("localizer contender should complete"))?;
+    contender_acquired?;
     anyhow::ensure!(
         rendered.contains("\"command\": \"help-targets\""),
         "rendered catalogue should remain available after localizer contention"

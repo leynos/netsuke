@@ -147,6 +147,7 @@ fn write_man_page(data: &[u8], dir: &Path, page_name: &str) -> std::io::Result<P
 fn emit_rerun_directives() {
     println!("cargo:rerun-if-changed=src/cli/build_support.rs");
     println!("cargo:rerun-if-changed=src/cli/config.rs");
+    println!("cargo:rerun-if-changed=src/cli/help.rs");
     println!("cargo:rerun-if-changed=src/cli/parser.rs");
     println!("cargo:rerun-if-changed=src/cli/parsing.rs");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_VERSION");
@@ -209,7 +210,8 @@ fn generate_man_page(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn generate_completions(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    fs::create_dir_all(out_dir)?;
+    let working_dir = Dir::open_ambient_dir(".", ambient_authority())?;
+    working_dir.create_dir_all(out_dir)?;
     let cli_command = cli::Cli::command();
     let name = cli_command
         .get_bin_name()

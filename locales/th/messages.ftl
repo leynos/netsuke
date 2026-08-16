@@ -33,12 +33,12 @@ cli.subcommand.graph.long_about = ฉายไฟล์รายการ Netsuk
 cli.subcommand.generate.about = สร้างไฟล์รายการ Ninja โดยไม่เรียกใช้ Ninja
 cli.subcommand.generate.long_about = เขียนไฟล์รายการ Ninja ที่สร้างขึ้นไปยังเอาต์พุตมาตรฐาน หรือไปยังไฟล์ที่เลือกด้วย `--output`
 cli.subcommand.help.about = พิมพ์ความช่วยเหลือระดับบนสุด หรือความช่วยเหลือสำหรับหัวข้อที่ระบุชื่อ
-cli.subcommand.help.long_about = หากไม่มีหัวข้อ คำสั่งนี้จะเหมือนกับ `--help` ใช้ `help targets` เพื่อพิมพ์แคตตาล็อกเป้าหมายและการดำเนินการสำหรับไฟล์ที่เลือก
+cli.subcommand.help.long_about = หากไม่มีหัวข้อ คำสั่งนี้จะเหมือนกับ `--help` ใช้ `help targets` เพื่อพิมพ์แคตตาล็อกเป้าหมายและการดำเนินการสำหรับไฟล์รายการที่เลือก
 
 # Help catalogue headings and markers.
 cli.help.actions_heading = การดำเนินการ:
 cli.help.targets_heading = เป้าหมาย:
-cli.help.targets.about = แสดงรายการเป้าหมายและการดำเนินการในไฟล์ที่เลือก
+cli.help.targets.about = แสดงรายการเป้าหมายและการดำเนินการในไฟล์รายการที่เลือก
 cli.help.default_marker = ค่าเริ่มต้น
 
 # ข้อความช่วยเหลือของตัวเลือกในคำสั่งย่อย build

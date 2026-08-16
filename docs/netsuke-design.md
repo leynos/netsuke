@@ -675,7 +675,6 @@ An Architecture Decision Record documents the migration rationale and
 compatibility results; no further action is required beyond monitoring upstream
 releases.
 
-
 ### 3.2 Core Data Structures (`ast/mod.rs`)
 
 The Rust structs that `serde_saphyr` deserializes into form the Abstract Syntax
@@ -706,6 +705,9 @@ pub struct NetsukeManifest {
 
     #[serde(default)]
     pub vars: HashMap<String, serde_json::Value>,
+
+    #[serde(default)]
+    pub macros: Vec<MacroDefinition>,
 
     #[serde(default)]
     pub rules: Vec<Rule>,
@@ -860,6 +862,9 @@ pub struct NetsukeManifest {
 
     #[serde(default)]
     pub vars: HashMap<String, serde_json::Value>,
+
+    #[serde(default)]
+    pub macros: Vec<MacroDefinition>,
 
     #[serde(default)]
     pub rules: Vec<Rule>,

@@ -33,12 +33,12 @@ cli.subcommand.graph.long_about = Ayrıştırılan Netsuke bildirimini kurallı 
 cli.subcommand.generate.about = Ninja'yı çalıştırmadan Ninja bildirimini üret.
 cli.subcommand.generate.long_about = Üretilen Ninja bildirimini standart çıktıya ya da `--output` ile seçilen dosyaya yaz.
 cli.subcommand.help.about = Üst düzey yardımı veya adlandırılmış bir konunun yardımını yazdır.
-cli.subcommand.help.long_about = Konu olmadan bu, `--help` ile aynıdır. Seçilen dosya için hedef ve eylem kataloğunu yazdırmak üzere `help targets` komutunu kullanın.
+cli.subcommand.help.long_about = Konu olmadan bu, `--help` ile aynıdır. Seçilen bildirim için hedef ve eylem kataloğunu yazdırmak üzere `help targets` komutunu kullanın.
 
 # Help catalogue headings and markers.
 cli.help.actions_heading = Eylemler:
 cli.help.targets_heading = Hedefler:
-cli.help.targets.about = Seçilen dosyadaki hedef ve eylemleri listele.
+cli.help.targets.about = Seçilen bildirimdeki hedef ve eylemleri listele.
 cli.help.default_marker = varsayılan
 
 # build alt komutunun seçenekleri için yardım metni.
