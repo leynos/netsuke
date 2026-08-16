@@ -198,7 +198,9 @@ fn create_unique_temp_file_with_source(
         if let Some(file) = create_temp_file(dir, &temp, rel)? {
             return Ok((temp, file));
         }
+        telemetry::record_temp_file_retry("retry");
     }
+    telemetry::record_temp_file_retry("exhausted");
     Err(anyhow!(
         localization::message(keys::RUNNER_IO_DYNDEP_TEMP_COLLISIONS)
             .with_arg("path", rel.as_str())

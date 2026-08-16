@@ -1,6 +1,7 @@
 //! Telemetry-contract tests for bounded dyndep retention.
 
 use super::*;
+use crate::runner::process::dyndep_telemetry::RETENTION_DURATION;
 use metrics::{SharedString, Unit};
 use metrics_util::{
     CompositeKey, MetricKind,
@@ -39,6 +40,22 @@ fn reclaimed_counter_value(snapshot: &[MetricSnapshotEntry], name: &str) -> Opti
     })
 }
 
+fn retention_duration_sample_count(snapshot: &[MetricSnapshotEntry]) -> usize {
+    snapshot
+        .iter()
+        .find_map(
+            |(key, _, _, debug_value)| match (key.kind(), key.key().name(), debug_value) {
+                (MetricKind::Histogram, name, DebugValue::Histogram(samples))
+                    if name == RETENTION_DURATION =>
+                {
+                    Some(samples.len())
+                }
+                _ => None,
+            },
+        )
+        .unwrap_or_default()
+}
+
 #[test]
 fn retention_records_only_a_bounded_success_outcome_and_reclaimed_totals() -> Result<()> {
     let temp = tempfile::tempdir()?;
@@ -70,6 +87,10 @@ fn retention_records_only_a_bounded_success_outcome_and_reclaimed_totals() -> Re
     ensure!(
         reclaimed_counter_value(&snapshot, RETAINED_BYTES_RECLAIMED) == Some(5),
         "retention must record reclaimed sidecar bytes"
+    );
+    ensure!(
+        retention_duration_sample_count(&snapshot) == 1,
+        "retention must record one duration sample"
     );
     Ok(())
 }

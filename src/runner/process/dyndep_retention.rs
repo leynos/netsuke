@@ -74,11 +74,19 @@ pub(crate) fn prune_dyndep_cache(
     dir: &Dir,
     current: &[GeneratedDyndep],
 ) -> Result<RetentionSummary> {
+    telemetry::instrument_retention(
+        || prune_dyndep_cache_inner(dir, current),
+        |summary| (summary.reclaimed_files, summary.reclaimed_bytes),
+    )
+}
+
+/// Prune an unleased cache after checking its directory and acquiring its lease.
+fn prune_dyndep_cache_inner(dir: &Dir, current: &[GeneratedDyndep]) -> Result<RetentionSummary> {
     if !dyndep_directory_exists(dir)? {
         return Ok(RetentionSummary::default());
     }
     let lease = DyndepPublicationLease::acquire(dir)?;
-    lease.prune(dir, current)
+    prune_dyndep_sidecars_inner(dir, &lease, current, RetentionPolicy::standard())
 }
 
 /// Fixed, deterministic budget for obsolete content-addressed sidecars.
@@ -198,7 +206,7 @@ fn retain_directory_entry(
     Ok(())
 }
 
-/// Bounded selection state used only while traversing one retention directory.
+/// Bounded lexical selection state used only while traversing one retention directory.
 struct RetentionSelection {
     policy: RetentionPolicy,
     paths: BTreeMap<Utf8PathBuf, u64>,
@@ -214,31 +222,33 @@ impl RetentionSelection {
         }
     }
 
-    const fn can_retain(&self, bytes: u64) -> bool {
-        bytes <= self.policy.max_bytes.saturating_sub(self.retained_bytes)
-    }
-
-    fn is_full(&self) -> bool {
-        self.paths.len() == self.policy.max_files
-    }
-
-    fn largest_path(&self) -> Option<&Utf8PathBuf> {
-        self.paths.last_key_value().map(|(path, _)| path)
-    }
-
-    fn insert(&mut self, path: Utf8PathBuf, bytes: u64) {
-        self.retained_bytes = self.retained_bytes.saturating_add(bytes);
+    /// Reapply lexical greedy selection to the retained paths and one candidate.
+    ///
+    /// A directory does not promise an entry order. Reconsidering the at-most
+    /// `max_files + 1` paths therefore lets an earlier path evict every later
+    /// path it displaces without retaining an unbounded candidate list.
+    fn select(&mut self, path: Utf8PathBuf, bytes: u64) -> Vec<(Utf8PathBuf, u64)> {
         self.paths.insert(path, bytes);
-    }
+        let candidates = std::mem::take(&mut self.paths);
+        self.retained_bytes = 0;
+        let mut reclaimed = Vec::with_capacity(candidates.len());
 
-    fn pop_largest(&mut self) -> Option<(Utf8PathBuf, u64)> {
-        let candidate = self.paths.pop_last()?;
-        self.retained_bytes = self.retained_bytes.saturating_sub(candidate.1);
-        Some(candidate)
+        for (candidate_path, candidate_bytes) in candidates {
+            let has_file_capacity = self.paths.len() < self.policy.max_files;
+            let has_byte_capacity =
+                candidate_bytes <= self.policy.max_bytes.saturating_sub(self.retained_bytes);
+            if has_file_capacity && has_byte_capacity {
+                self.retained_bytes = self.retained_bytes.saturating_add(candidate_bytes);
+                self.paths.insert(candidate_path, candidate_bytes);
+            } else {
+                reclaimed.push((candidate_path, candidate_bytes));
+            }
+        }
+        reclaimed
     }
 }
 
-/// Retain an obsolete sidecar or reclaim it immediately when it cannot fit.
+/// Retain an obsolete sidecar or reclaim paths rejected by lexical selection.
 fn retain_or_remove_sidecar(
     dir: &Dir,
     path: Utf8PathBuf,
@@ -246,36 +256,9 @@ fn retain_or_remove_sidecar(
     summary: &mut RetentionSummary,
 ) -> Result<()> {
     let bytes = candidate_size(dir, &path)?;
-    if !retained.is_full() && retained.can_retain(bytes) {
-        retained.insert(path, bytes);
-        return Ok(());
+    for (reclaimed_path, reclaimed_bytes) in retained.select(path, bytes) {
+        remove_candidate(dir, &reclaimed_path, reclaimed_bytes, summary)?;
     }
-    let Some(largest_path) = retained.largest_path() else {
-        remove_candidate(dir, &path, bytes, summary)?;
-        return Ok(());
-    };
-    let replaces_largest = path < *largest_path;
-    let bytes_after_replacement = retained
-        .retained_bytes
-        .saturating_sub(
-            retained
-                .paths
-                .get(largest_path)
-                .copied()
-                .unwrap_or_default(),
-        )
-        .saturating_add(bytes);
-    if !replaces_largest || bytes_after_replacement > retained.policy.max_bytes {
-        remove_candidate(dir, &path, bytes, summary)?;
-        return Ok(());
-    }
-
-    let Some((evicted_path, evicted_bytes)) = retained.pop_largest() else {
-        remove_candidate(dir, &path, bytes, summary)?;
-        return Ok(());
-    };
-    remove_candidate(dir, &evicted_path, evicted_bytes, summary)?;
-    retained.insert(path, bytes);
     Ok(())
 }
 

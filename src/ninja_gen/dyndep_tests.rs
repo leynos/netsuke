@@ -1,6 +1,6 @@
 //! Unit tests for staged dyndep bundle generation.
 
-use super::*;
+use super::{BuildEdge, GeneratedDyndep, NinjaGenError, generate_bundle};
 use crate::ast::{Recipe, StringOrList};
 use crate::ir::{Action, BuildGraph, DependencyOrder};
 use anyhow::{Context, Result, ensure};

@@ -13,10 +13,12 @@ pub(super) const MATERIALIZATIONS_TOTAL: &str = "netsuke_runner_dyndep_materiali
 pub(super) const MATERIALIZATION_DURATION: &str =
     "netsuke_runner_dyndep_materialization_duration_seconds";
 pub(super) const RETENTIONS_TOTAL: &str = "netsuke_runner_dyndep_retentions_total";
+pub(super) const RETENTION_DURATION: &str = "netsuke_runner_dyndep_retention_duration_seconds";
 pub(super) const RETAINED_FILES_RECLAIMED: &str =
     "netsuke_runner_dyndep_retained_files_reclaimed_total";
 pub(super) const RETAINED_BYTES_RECLAIMED: &str =
     "netsuke_runner_dyndep_retained_bytes_reclaimed_total";
+pub(super) const TEMP_FILE_RETRIES_TOTAL: &str = "netsuke_runner_dyndep_temp_file_retries_total";
 
 /// Record a complete dyndep materialization command.
 pub(super) fn instrument_materialization<T>(
@@ -66,15 +68,23 @@ pub(super) fn instrument_retention<T>(
         error_category = field::Empty,
     );
     let _guard = span.enter();
+    let started = Instant::now();
     let result = retain();
     let outcome = record_outcome(&span, &result, "dyndep retention failed");
     counter!(RETENTIONS_TOTAL, "outcome" => outcome).increment(1);
+    histogram!(RETENTION_DURATION).record(started.elapsed());
     if let Ok(summary) = &result {
         let (files, bytes) = reclaimed(summary);
         counter!(RETAINED_FILES_RECLAIMED).increment(files);
         counter!(RETAINED_BYTES_RECLAIMED).increment(bytes);
     }
     result
+}
+
+/// Record a bounded temporary-name retry outcome without identifying a sidecar.
+pub(super) fn record_temp_file_retry(outcome: &'static str) {
+    describe_metrics();
+    counter!(TEMP_FILE_RETRIES_TOTAL, "outcome" => outcome).increment(1);
 }
 
 /// Record a result with only bounded outcome and category fields.
@@ -110,6 +120,10 @@ fn describe_metrics() {
             RETENTIONS_TOTAL,
             "Counts bounded dyndep retention outcomes by fixed outcome."
         );
+        describe_histogram!(
+            RETENTION_DURATION,
+            "Measures bounded dyndep retention duration in seconds."
+        );
         describe_counter!(
             RETAINED_FILES_RECLAIMED,
             "Counts dyndep sidecar files reclaimed by retention."
@@ -117,6 +131,10 @@ fn describe_metrics() {
         describe_counter!(
             RETAINED_BYTES_RECLAIMED,
             "Counts dyndep sidecar bytes reclaimed by retention."
+        );
+        describe_counter!(
+            TEMP_FILE_RETRIES_TOTAL,
+            "Counts dyndep temporary-file collisions by fixed retry outcome."
         );
     });
 }
