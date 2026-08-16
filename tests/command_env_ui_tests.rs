@@ -43,6 +43,15 @@ fn command_list_public_api_fixture_compiles() -> io::Result<()> {
     )
 }
 
+/// The cached configuration-discovery API compiles for an external embedder.
+#[test]
+fn config_cached_discovery_embedder_fixture_compiles() -> io::Result<()> {
+    compile_public_api_fixture(
+        "tests/ui/config_cached_discovery_embedder_pass.rs",
+        "the cached configuration-discovery fixture should compile against the public API",
+    )
+}
+
 /// Compile one external public-API fixture through the direct-rustc harness.
 fn compile_public_api_fixture(source: &str, failure_message: &str) -> io::Result<()> {
     let rlib = NetsukeRlib::build()?;
