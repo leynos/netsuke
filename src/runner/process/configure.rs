@@ -73,6 +73,7 @@ mod tests {
     //! Unit tests for Ninja command configuration without spawning Ninja.
 
     use super::*;
+    use crate::runner::StderrMode;
     use anyhow::{Result, ensure};
     use rstest::{fixture, rstest};
     use std::ffi::{OsStr, OsString};
@@ -124,6 +125,7 @@ mod tests {
             build_file: build_file.path(),
             targets: &targets,
             env: &env,
+            stderr_mode: StderrMode::Forward,
         };
         let mut cmd = Command::new("ninja");
 
@@ -152,6 +154,7 @@ mod tests {
             build_file: build_file.path(),
             tool: "clean",
             env: &env,
+            stderr_mode: StderrMode::Forward,
         };
         let mut cmd = Command::new("ninja");
 

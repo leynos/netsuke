@@ -8,19 +8,17 @@ mod dyndep_generation_telemetry;
 mod dyndep_publication;
 mod error;
 mod reporter;
-
 pub use error::RunnerError;
-
+use anyhow::{Context, Result};
+use camino::Utf8PathBuf;
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::localization::{self, keys};
 use crate::output_mode;
 use crate::output_prefs::OutputPrefs;
 use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipeline_stage};
 use crate::{ir::BuildGraph, manifest, ninja_gen};
-use anyhow::{Context, Result};
-use camino::Utf8PathBuf;
 use std::borrow::Cow;
-use std::io::{self, IsTerminal};
+use std::io::IsTerminal;
 use std::path::Path;
 use tracing::{debug, info};
 
@@ -112,14 +110,6 @@ pub fn run_with_ninja_program(cli: &Cli, prefs: OutputPrefs, program: &Path) -> 
     run_with_ninja_program_resolver(cli, prefs, Some(program), || program.to_path_buf())
 }
 
-/// Translate CLI state into the narrow options consumed by the process layer.
-fn ninja_process_options(cli: &Cli) -> NinjaProcessOptions {
-    NinjaProcessOptions {
-        working_dir: cli.directory.clone(),
-        jobs: cli.jobs,
-    }
-}
-
 /// Dispatch a command after resolving Ninja only for commands that require it.
 fn run_with_ninja_program_resolver(
     cli: &Cli,
@@ -152,58 +142,6 @@ fn run_with_ninja_program_resolver(
         ninja_program: ninja_program.as_ref(),
     };
     dispatch::execute(cli, command, &context)
-}
-
-/// Invoke the Ninja executable with the provided CLI settings.
-///
-/// Forwards the job count and working directory and specifies the temporary
-/// build file. Child output follows the `stderr_mode` policy derived from the
-/// CLI's JSON diagnostic setting: `StderrMode::Suppress` drains both child
-/// streams to a sink so JSON output stays machine-readable, while
-/// `StderrMode::Forward` relays them to the user.
-///
-/// # Errors
-///
-/// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
-/// streams are unavailable, or when Ninja reports a non-zero exit status.
-pub fn run_ninja(
-    program: &Path,
-    cli: &Cli,
-    build_file: &Path,
-    targets: &BuildTargets<'_>,
-) -> io::Result<()> {
-    let options = ninja_process_options(cli);
-    run_ninja_with(&NinjaBuildRequest {
-        program,
-        options: &options,
-        build_file,
-        targets,
-        env: &CommandEnv::inherit(),
-        stderr_mode: StderrMode::from_json_enabled(cli.json),
-    })
-}
-
-/// Invoke a Ninja tool (e.g., `ninja -t clean`) with the provided CLI settings.
-///
-/// Forwards the job count and working directory and specifies the build file.
-/// Child output follows the `stderr_mode` policy derived from the CLI's JSON
-/// diagnostic setting: `StderrMode::Suppress` drains both child streams to a
-/// sink, while `StderrMode::Forward` relays them to the user.
-///
-/// # Errors
-///
-/// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
-/// streams are unavailable, or when Ninja reports a non-zero exit status.
-pub fn run_ninja_tool(program: &Path, cli: &Cli, build_file: &Path, tool: &str) -> io::Result<()> {
-    let options = ninja_process_options(cli);
-    run_ninja_tool_with(&NinjaToolRequest {
-        program,
-        options: &options,
-        build_file,
-        tool,
-        env: &CommandEnv::inherit(),
-        stderr_mode: StderrMode::from_json_enabled(cli.json),
-    })
 }
 
 fn on_task_progress_callback(reporter: &dyn StatusReporter) -> impl FnMut(u32, u32, &str) + '_ {

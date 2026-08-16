@@ -185,7 +185,7 @@ mod tests {
 
     fn captured_execution_event(operation: &str) -> String {
         crate::test_tracing_capture::with_test_subscriber(LevelFilter::INFO, |captured| {
-            log_command_execution(&logging_context(), operation, false);
+            log_command_execution(&logging_context(), operation, StderrMode::Forward);
             let events = captured.snapshot();
             let [event] = events.as_slice() else {
                 panic!("expected one command execution event, got {events:?}");
@@ -255,7 +255,12 @@ mod tests {
     fn exit_failure_logging_records_status_diagnostics() {
         let event =
             crate::test_tracing_capture::with_test_subscriber(LevelFilter::WARN, |captured| {
-                log_command_exit_failure(&logging_context(), "clean", true, failed_exit_status());
+                log_command_exit_failure(
+                    &logging_context(),
+                    "clean",
+                    StderrMode::Suppress,
+                    failed_exit_status(),
+                );
                 let events = captured.snapshot();
                 let [event] = events.as_slice() else {
                     panic!("expected one exit failure event, got {events:?}");

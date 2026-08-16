@@ -9,10 +9,9 @@
 
 use anyhow::{Context, Result, bail, ensure};
 use mockable::{DefaultEnv, Env};
-use netsuke::cli::Cli;
 use netsuke::runner::{
-    BuildTargets, CommandEnv, NinjaBuildRequest, NinjaToolRequest, StderrMode, run_ninja_tool_with,
-    run_ninja_with,
+    BuildTargets, CommandEnv, NinjaBuildRequest, NinjaProcessOptions, NinjaToolRequest, StderrMode,
+    run_ninja_tool_with, run_ninja_with,
 };
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -127,7 +126,7 @@ fn assert_routing_case(stderr_mode: StderrMode, tool: bool) -> Result<()> {
 }
 
 /// A request whose `cli.json` and `stderr_mode` deliberately disagree: the
-/// process layer must route streams by the explicit policy, not by `cli.json`.
+/// process layer must route streams by the explicit policy.
 #[cfg(unix)]
 #[test]
 #[ignore = "invoked as a stream-routing worker"]
@@ -145,18 +144,13 @@ fn routing_worker() -> Result<()> {
         "suppress" => StderrMode::Suppress,
         other => bail!("unknown routing job {other:?}"),
     };
-    // The JSON flag contradicts `stderr_mode` so routing can only come from
-    // the explicit policy field, not from the CLI JSON setting.
-    let cli = Cli {
-        json: !stderr_mode.is_suppress(),
-        ..Cli::default()
-    };
+    let options = NinjaProcessOptions::default();
     let targets = BuildTargets::default();
     let env = CommandEnv::inherit();
     let result = if tool {
         run_ninja_tool_with(&NinjaToolRequest {
             program: &ninja,
-            cli: &cli,
+            options: &options,
             build_file: Path::new("build.ninja"),
             tool: "clean",
             env: &env,
@@ -165,7 +159,7 @@ fn routing_worker() -> Result<()> {
     } else {
         run_ninja_with(&NinjaBuildRequest {
             program: &ninja,
-            cli: &cli,
+            options: &options,
             build_file: Path::new("build.ninja"),
             targets: &targets,
             env: &env,
