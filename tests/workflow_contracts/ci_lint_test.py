@@ -112,6 +112,43 @@ def _steps(workflow: dict[str, object]) -> list[dict[str, object]]:
             raise AssertionError("jobs.build-test.steps must be a list")
 
 
+def _windows_job(workflow: dict[str, object]) -> dict[str, object]:
+    """Return the build-test-windows job."""
+    match workflow.get("jobs"):
+        case dict() as jobs:
+            pass
+        case _:
+            raise AssertionError("the workflow must declare a jobs mapping")
+    match jobs.get("build-test-windows"):
+        case dict() as job:
+            return job
+        case _:
+            raise AssertionError(
+                "the workflow must declare a build-test-windows job"
+            )
+
+
+def _windows_steps(workflow: dict[str, object]) -> list[dict[str, object]]:
+    """Return the build-test-windows job's steps."""
+    match _windows_job(workflow).get("steps"):
+        case list() as steps:
+            return steps
+        case _:
+            raise AssertionError("jobs.build-test-windows.steps must be a list")
+
+
+def _windows_step(name: str) -> dict[str, object]:
+    """Return the uniquely named step from the build-test-windows job."""
+    matches = [
+        step for step in _windows_steps(_load()) if step.get("name") == name
+    ]
+    assert len(matches) == 1, (
+        f"expected exactly one build-test-windows step named {name!r}, "
+        f"found {len(matches)}"
+    )
+    return matches[0]
+
+
 def _step(name: str) -> dict[str, object]:
     """Return the uniquely named step from the build-test job."""
     matches = [step for step in _steps(_load()) if step.get("name") == name]
@@ -254,4 +291,125 @@ def test_nextest_version_declared_once_at_workflow_scope() -> None:
         assert installs == ["nextest@${{ env.NEXTEST_VERSION }}"], (
             f"{job_name} must install nextest via the workflow-scoped "
             f"${{{{ env.NEXTEST_VERSION }}}}, got {installs!r}"
+        )
+
+
+def test_windows_job_runs_on_windows_latest() -> None:
+    """The Windows job must actually run on a Windows runner."""
+    job = _windows_job(_load())
+    assert job.get("runs-on") == "windows-latest", (
+        "build-test-windows must run on windows-latest so the "
+        f"#[cfg(windows)] tree is compiled, got {job.get('runs-on')!r}"
+    )
+
+
+def test_windows_job_uses_git_bash_for_recipes() -> None:
+    """The job runs recipes under Git Bash, not cmd.exe.
+
+    The Makefile uses POSIX shell constructs throughout, and GNU Make's
+    default recipe shell on Windows is cmd.exe, so the job must default every
+    run step to bash.
+    """
+    job = _windows_job(_load())
+    match job.get("defaults"):
+        case dict() as defaults:
+            pass
+        case _:
+            raise AssertionError(
+                "build-test-windows must declare a defaults mapping"
+            )
+    match defaults.get("run"):
+        case dict() as run:
+            pass
+        case _:
+            raise AssertionError(
+                "build-test-windows must declare a defaults.run mapping"
+            )
+    assert run.get("shell") == "bash", (
+        "build-test-windows must run recipes under Git Bash "
+        f"(defaults.run.shell: bash), got {run.get('shell')!r}"
+    )
+
+
+def test_windows_setup_rust_keeps_warnings_and_polonius() -> None:
+    """The Windows toolchain setup preserves -D warnings and -Zpolonius=next.
+
+    The `#[cfg(windows)]` tree must be compiled under `-D warnings` to surface
+    findings, and the tree requires the Polonius analysis, so the shared
+    setup-rust action must receive both flags through its `rustflags` input.
+    """
+    step = _windows_step("Setup Rust")
+    assert "setup-rust" in step.get("uses", ""), (
+        f"Setup Rust must use the shared setup-rust action, got {step.get('uses')!r}"
+    )
+    match step.get("with"):
+        case dict() as with_:
+            pass
+        case _:
+            raise AssertionError("Setup Rust must declare a with mapping")
+    assert with_.get("toolchain") == "${{ env.NETSUKE_RUST_TOOLCHAIN }}", (
+        "Setup Rust must use the pinned NETSUKE_RUST_TOOLCHAIN, "
+        f"got {with_.get('toolchain')!r}"
+    )
+    assert with_.get("rustflags") == "-D warnings -Zpolonius=next", (
+        "Setup Rust must pass -D warnings -Zpolonius=next through rustflags "
+        f"so the #[cfg(windows)] tree compiles under warnings-as-errors, "
+        f"got {with_.get('rustflags')!r}"
+    )
+
+
+def test_windows_job_runs_check_fmt_lint_and_test() -> None:
+    """The Windows job runs check-fmt, lint, and test as merge gates.
+
+    Every quality gate must run through the Makefile with `SHELL=bash` so the
+    POSIX-shell recipes execute under Git Bash on the Windows runner.
+    """
+    runs = [step.get("run") for step in _windows_steps(_load())]
+    expected = [
+        "make SHELL=bash check-fmt",
+        "make SHELL=bash lint-clippy",
+        "make SHELL=bash lint-whitaker",
+        "make SHELL=bash test",
+    ]
+    for command in expected:
+        assert command in runs, (
+            f"build-test-windows must run {command!r}, got run steps: {runs!r}"
+        )
+
+
+def test_windows_job_does_not_duplicate_doc_and_audit_gates() -> None:
+    """The Windows job excludes platform-independent doc and audit gates.
+
+    `make spelling`, `make markdownlint`, `make nixie`, coverage generation,
+    the CodeScene gate, and `make test-workflow-contracts` are already covered
+    on Linux; duplicating them on Windows buys nothing.
+    """
+    runs = [step.get("run") for step in _windows_steps(_load())]
+    excluded = [
+        "make spelling",
+        "make markdownlint",
+        "make nixie",
+        "make test-workflow-contracts",
+    ]
+    for command in excluded:
+        assert command not in runs, (
+            f"build-test-windows must not run the platform-independent "
+            f"{command!r}, got run steps: {runs!r}"
+        )
+
+
+def test_windows_job_is_a_blocking_merge_gate() -> None:
+    """No step in the Windows job is allowed to fail silently.
+
+    A `continue-on-error: true` on the job or any step would let a Windows
+    lint or test failure pass the merge, defeating the gate.
+    """
+    job = _windows_job(_load())
+    assert job.get("continue-on-error") is not True, (
+        "build-test-windows must not set continue-on-error on the job"
+    )
+    for step in _windows_steps(_load()):
+        assert step.get("continue-on-error") is not True, (
+            f"build-test-windows step {step.get('name')!r} must not set "
+            "continue-on-error"
         )
