@@ -16,6 +16,7 @@
 
 pub mod check_ninja;
 pub mod command_helper;
+pub mod config_metrics;
 pub mod cwd_guard;
 
 #[cfg(unix)]

@@ -6,11 +6,11 @@
 
 use metrics::{counter, describe_counter, describe_histogram, histogram};
 use metrics_util::debugging::{DebuggingRecorder, Snapshotter};
+use monotony::MonotonicClock;
 use ortho_config::OrthoError;
 use std::{
     error::Error,
     sync::{Once, OnceLock},
-    time::Instant,
 };
 
 /// Counter recording configuration-load outcomes by bounded phase and outcome.
@@ -93,10 +93,11 @@ pub(crate) fn emit_metrics_snapshot() {
 /// Record the outcome and duration of one configuration-loading phase.
 pub(crate) fn record_config_load<T, E>(
     phase: ConfigLoadPhase,
+    clock: &impl MonotonicClock,
     load: impl FnOnce() -> Result<T, E>,
 ) -> Result<T, E> {
     describe_config_metrics();
-    let started = Instant::now();
+    let started = clock.now();
     let result = load();
     let outcome = ConfigLoadOutcome::from_is_ok(result.is_ok());
     counter!(
@@ -105,7 +106,8 @@ pub(crate) fn record_config_load<T, E>(
         "outcome" => outcome.as_label()
     )
     .increment(1);
-    histogram!(CONFIG_LOAD_DURATION, "phase" => phase.as_label()).record(started.elapsed());
+    histogram!(CONFIG_LOAD_DURATION, "phase" => phase.as_label())
+        .record(clock.now().duration_since(started));
     result
 }
 
@@ -309,10 +311,19 @@ mod tests {
     fn records_each_config_load_phase_and_outcome() {
         let recorder = DebuggingRecorder::new();
         let snapshotter = recorder.snapshotter();
+        let diag_mode_clock = monotony::test_util::FixedMonotonicClock::with_elapsed(
+            std::time::Duration::from_millis(10),
+        );
+        let merge_clock = monotony::test_util::FixedMonotonicClock::with_elapsed(
+            std::time::Duration::from_millis(20),
+        );
 
         metrics::with_local_recorder(&recorder, || {
-            let success = record_config_load(ConfigLoadPhase::DiagMode, || Ok::<_, ()>(()));
-            let failure = record_config_load(ConfigLoadPhase::Merge, || Err::<(), _>(()));
+            let success = record_config_load(ConfigLoadPhase::DiagMode, &diag_mode_clock, || {
+                Ok::<_, ()>(())
+            });
+            let failure =
+                record_config_load(ConfigLoadPhase::Merge, &merge_clock, || Err::<(), _>(()));
 
             assert!(success.is_ok());
             assert!(failure.is_err());

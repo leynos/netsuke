@@ -7,15 +7,14 @@
 
 use anyhow::{Context, Result, ensure};
 use tempfile::{TempDir, tempdir};
+use test_support::config_metrics::{MetricSnapshotRecord, assert_config_metrics_snapshot};
 use test_support::netsuke::{run_netsuke_in, run_netsuke_in_with_env};
 
 /// Lines emitted by the tracing subscriber, excluding the final error report.
 ///
-/// `config_err_to_exit` reports the failing configuration file by path and, for
-/// a malformed file, renders the parser's own diagnostic. A user cannot act on
-/// "configuration load failed" alone, so that report is the actionable error
-/// rather than a bounded diagnostic; the privacy assertions here apply to the
-/// diagnostic events, which is where the field policy is enforced.
+/// Human-mode configuration failures and tracing events share stderr. The
+/// terminal failure record carries only bounded operational fields; the privacy
+/// assertions below therefore inspect both it and the deferred diagnostics.
 ///
 /// Every tracing line begins with an ISO timestamp, whereas the error report's
 /// continuation lines do not. Matching the full `YYYY-` prefix rather than a
@@ -42,13 +41,6 @@ fn assert_config_load_failure(stderr: &str, operation: &str, error_category: &st
         "stderr should identify the config-load operation and category: {stderr}"
     );
     Ok(())
-}
-
-#[derive(Clone, Copy)]
-struct MetricSnapshotRecord {
-    name: &'static str,
-    labels: &'static [&'static str],
-    value: Option<&'static str>,
 }
 
 const DIAG_MODE_FAILURE_METRICS: &[MetricSnapshotRecord] = &[
@@ -95,31 +87,6 @@ const MERGE_FAILURE_METRICS: &[MetricSnapshotRecord] = &[
         value: None,
     },
 ];
-
-fn assert_config_metrics_snapshot(
-    stderr: &str,
-    expected_records: &[MetricSnapshotRecord],
-) -> Result<()> {
-    ensure!(
-        stderr.contains("metrics snapshot"),
-        "a verbose early exit should emit the configuration metrics snapshot: {stderr}"
-    );
-    for expected in expected_records {
-        let metric_name = format!("name: KeyName(\"{}\")", expected.name);
-        ensure!(
-            stderr.split("CompositeKey(").skip(1).any(|record| {
-                record.contains(&metric_name)
-                    && expected.labels.iter().all(|label| record.contains(label))
-                    && record.matches("Label(").count() == expected.labels.len()
-                    && expected.value.is_none_or(|value| record.contains(value))
-            }),
-            "expected configuration metric record {} with labels {:?} in stderr: {stderr}",
-            expected.name,
-            expected.labels,
-        );
-    }
-    Ok(())
-}
 
 fn workspace() -> Result<TempDir> {
     let temp = tempdir().context("create temp dir")?;
@@ -207,6 +174,13 @@ fn explicit_load_failure_traces_failure_kind() -> Result<()> {
         !joined.contains("explicit configuration file not found"),
         "diagnostics must not repeat the formatted error text: {joined}"
     );
+    ensure!(
+        !run.stderr.contains("missing-secret-name.toml")
+            && !run.stderr.contains(raw_path.as_str())
+            && !run.stderr.contains("explicit configuration file not found"),
+        "human stderr must not expose configuration details: {}",
+        run.stderr
+    );
     assert_config_load_failure(&run.stderr, "diag_mode_resolution", "io")?;
     assert_config_metrics_snapshot(&run.stderr, DIAG_MODE_FAILURE_METRICS)?;
     Ok(())
@@ -256,6 +230,13 @@ fn invalid_config_traces_without_parser_text() -> Result<()> {
     ensure!(
         !joined.contains(raw_path.as_str()),
         "diagnostics must not log the raw config path: {joined}"
+    );
+    ensure!(
+        !run.stderr.contains("invalid-secret-config.toml")
+            && !run.stderr.contains(raw_path.as_str())
+            && !run.stderr.contains("invalid parser secret"),
+        "human stderr must not expose configuration details: {}",
+        run.stderr
     );
     Ok(())
 }

@@ -4,6 +4,8 @@
 //! project `.netsuke.toml` outranks user-scope files. Path comparison and its
 //! fallback policy live here because that policy is a discovery decision.
 
+#[cfg(test)]
+use ortho_config::MapEnv;
 use ortho_config::{
     ConfigDiscovery, MergeLayer, MergeProvenance, OrthoResult, SharedEnvSource,
     load_config_file_as_chain,
@@ -124,12 +126,15 @@ pub(super) fn collect_file_layers_with_normalizer(
     directory: Option<&Path>,
     normalizer: &impl PathNormalizer,
 ) -> OrthoResult<Vec<MergeLayer<'static>>> {
-    collect_file_layers_with_normalizer_and_trace(
-        directory,
-        normalizer,
-        Arc::new(ortho_config::ProcessEnv),
-    )
-    .1
+    let isolated_config_dirs = directory.map_or_else(
+        || PathBuf::from(".netsuke-test-absent-xdg-config-dirs"),
+        |path| path.join(".netsuke-test-absent-xdg-config-dirs"),
+    );
+    let mut test_env = MapEnv::new();
+    // Leave selector and home variables unset so this test cannot inherit the
+    // host configuration; XDG_CONFIG_DIRS points at an isolated absent path.
+    test_env.insert("XDG_CONFIG_DIRS", isolated_config_dirs.into_os_string());
+    collect_file_layers_with_normalizer_and_trace(directory, normalizer, Arc::new(test_env)).1
 }
 
 /// Build the discovery chain and project-scope trace using `normalizer`.

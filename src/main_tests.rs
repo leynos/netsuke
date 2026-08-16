@@ -332,5 +332,9 @@ fn config_load_errors_include_operational_context() -> Result<()> {
             && recorded.contains("error_category=\"io\""),
         "merge failures must identify their operation and category: {recorded:?}"
     );
+    ensure!(
+        !recorded.contains("private.toml") && !recorded.contains("read failure"),
+        "human-readable config errors must not expose error details: {recorded:?}"
+    );
     Ok(())
 }

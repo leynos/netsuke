@@ -255,7 +255,6 @@ fn config_err_to_exit(
         tracing::error!(
             operation,
             error_category = observability::classify_error(err),
-            error = %err,
             "configuration load failed"
         );
         ExitCode::FAILURE
@@ -272,7 +271,12 @@ fn resolve_json_mode_or_exit(
         matches,
         &cli::ConfigStdEnvProvider,
     );
-    match observability::record_config_load(observability::ConfigLoadPhase::DiagMode, || result) {
+    let clock = monotony::StdMonotonicClock;
+    match observability::record_config_load(
+        observability::ConfigLoadPhase::DiagMode,
+        &clock,
+        || result,
+    ) {
         Ok(is_json_enabled) => {
             let mode = DiagMode::from_json_enabled(is_json_enabled);
             set_tracing_filter(startup_filter(mode, parsed_cli.verbose));
@@ -298,7 +302,8 @@ fn merge_cli_or_exit(
     mode: DiagMode,
     discovered_layers: cli::DiscoveredLayers,
 ) -> Result<cli::Cli, ExitCode> {
-    observability::record_config_load(observability::ConfigLoadPhase::Merge, || {
+    let clock = monotony::StdMonotonicClock;
+    observability::record_config_load(observability::ConfigLoadPhase::Merge, &clock, || {
         cli::merge_with_cached_file_layers(
             parsed_cli,
             matches,

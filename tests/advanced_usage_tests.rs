@@ -13,6 +13,7 @@ use tempfile::{TempDir, tempdir};
 use test_support::check_ninja::fake_ninja_check_build_file;
 #[cfg(unix)]
 use test_support::check_ninja::{ToolName, fake_ninja_expect_tool};
+use test_support::config_metrics::{MetricSnapshotRecord, assert_config_metrics_snapshot};
 use test_support::fs as test_fs;
 use test_support::netsuke::run_netsuke_in_with_env;
 
@@ -142,13 +143,6 @@ fn run_config_layer_build(
     )
 }
 
-#[derive(Clone, Copy)]
-struct MetricSnapshotRecord {
-    name: &'static str,
-    labels: &'static [&'static str],
-    value: Option<&'static str>,
-}
-
 const SUCCESSFUL_CONFIG_METRICS: &[MetricSnapshotRecord] = &[
     MetricSnapshotRecord {
         name: "config_load_total",
@@ -177,31 +171,6 @@ const SUCCESSFUL_CONFIG_METRICS: &[MetricSnapshotRecord] = &[
         value: None,
     },
 ];
-
-fn assert_config_metrics_snapshot(
-    stderr: &str,
-    expected_records: &[MetricSnapshotRecord],
-) -> Result<()> {
-    ensure!(
-        stderr.contains("metrics snapshot"),
-        "a verbose completion should emit the configuration metrics snapshot: {stderr}"
-    );
-    for expected in expected_records {
-        let metric_name = format!("name: KeyName(\"{}\")", expected.name);
-        ensure!(
-            stderr.split("CompositeKey(").skip(1).any(|record| {
-                record.contains(&metric_name)
-                    && expected.labels.iter().all(|label| record.contains(label))
-                    && record.matches("Label(").count() == expected.labels.len()
-                    && expected.value.is_none_or(|value| record.contains(value))
-            }),
-            "expected configuration metric record {} with labels {:?} in stderr: {stderr}",
-            expected.name,
-            expected.labels,
-        );
-    }
-    Ok(())
-}
 
 // -------------------------------------------------------------------------
 // Clean subcommand edge cases
@@ -432,10 +401,9 @@ fn generate_to_stdout_contains_ninja_rules() -> Result<()> {
     Ok(())
 }
 
-/// An invalid enum value in a config file produces a clear validation error
-/// rather than crashing with an unhelpful message.
+/// An invalid enum value in a config file produces a bounded merge failure.
 #[test]
-fn invalid_config_value_reports_validation_error() -> Result<()> {
+fn invalid_config_value_reports_bounded_merge_failure() -> Result<()> {
     let workspace = setup_minimal_workspace("invalid config value")?;
     let config = workspace.path().join(".netsuke.toml");
     test_fs::write(&config, "color = \"loud\"\n").context("write invalid config file")?;
@@ -446,17 +414,11 @@ fn invalid_config_value_reports_validation_error() -> Result<()> {
         !output.success,
         "expected generate with invalid config to fail"
     );
-    // The error message should mention the invalid value and valid options.
     ensure!(
-        output.stderr.contains("loud"),
-        "expected error to mention the invalid value 'loud', got:\n{}",
-        output.stderr
-    );
-    ensure!(
-        output.stderr.contains("auto")
-            && output.stderr.contains("always")
-            && output.stderr.contains("never"),
-        "expected error to list valid options (auto, always, never), got:\n{}",
+        output.stderr.contains("configuration load failed")
+            && output.stderr.contains("operation=\"config_merge\"")
+            && output.stderr.contains("error_category=\"parse\""),
+        "expected a human-mode config merge failure record, got:\n{}",
         output.stderr
     );
     Ok(())
