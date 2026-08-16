@@ -8,21 +8,19 @@
 
 mod dispatch;
 mod error;
+mod reporter;
 
 pub use error::RunnerError;
 
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::localization::{self, keys};
-use crate::output_mode::{self, OutputMode};
+use crate::output_mode;
 use crate::output_prefs::OutputPrefs;
-use crate::status::{
-    AccessibleReporter, IndicatifReporter, LocalizationKey, PipelineStage, SilentReporter,
-    StatusReporter, VerboseTimingReporter, report_pipeline_stage,
-};
+use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipeline_stage};
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
-use std::io::IsTerminal;
+use std::io::{self, IsTerminal};
 use std::path::Path;
 use tracing::{debug, info};
 
@@ -47,8 +45,8 @@ mod process;
 #[cfg(doctest)]
 pub use process::doc;
 pub use process::{
-    CommandEnv, NinjaBuildRequest, NinjaToolRequest, run_ninja, run_ninja_tool,
-    run_ninja_tool_with, run_ninja_with,
+    CommandEnv, NinjaBuildRequest, NinjaToolRequest, StderrMode, run_ninja_tool_with,
+    run_ninja_with,
 };
 
 use path_helpers::{ensure_manifest_exists_or_error, resolve_manifest_path, resolve_output_path};
@@ -115,43 +113,6 @@ impl Default for BuildTargets<'_> {
     }
 }
 
-/// Build the appropriate [`StatusReporter`] for the resolved output mode,
-/// progress preference, verbose preference, and output preferences.
-#[derive(Debug, Clone, Copy)]
-struct ReporterOptions {
-    mode: OutputMode,
-    progress_enabled: bool,
-    verbose: bool,
-    prefs: OutputPrefs,
-    stdout_is_tty: bool,
-}
-
-fn make_reporter(options: ReporterOptions) -> Box<dyn StatusReporter> {
-    let base: Box<dyn StatusReporter> = if options.progress_enabled {
-        let force_text_task_updates =
-            should_force_text_task_updates(options.mode, options.stdout_is_tty);
-        match options.mode {
-            OutputMode::Accessible => Box::new(AccessibleReporter::new(options.prefs)),
-            OutputMode::Standard => Box::new(IndicatifReporter::with_force_text_task_updates(
-                options.prefs,
-                force_text_task_updates,
-            )),
-        }
-    } else {
-        Box::new(SilentReporter)
-    };
-
-    if options.verbose {
-        Box::new(VerboseTimingReporter::new(base, options.prefs))
-    } else {
-        base
-    }
-}
-
-const fn should_force_text_task_updates(mode: OutputMode, stdout_is_tty: bool) -> bool {
-    mode.is_accessible() || !stdout_is_tty
-}
-
 /// Execute the parsed [`Cli`] commands with the given output preferences.
 ///
 /// # Errors
@@ -174,7 +135,7 @@ pub fn run_with_ninja_program(cli: &Cli, prefs: OutputPrefs, program: &Path) -> 
     let mode = output_mode::resolve(cli.accessibility_override(), Some(cli.color));
     let progress_enabled = cli.progress_enabled() && !cli.json;
     let stdout_is_tty = std::io::stdout().is_terminal();
-    let reporter = make_reporter(ReporterOptions {
+    let reporter = reporter::make_reporter(reporter::ReporterOptions {
         mode,
         progress_enabled,
         verbose: cli.verbose && !cli.json,
@@ -191,6 +152,56 @@ pub fn run_with_ninja_program(cli: &Cli, prefs: OutputPrefs, program: &Path) -> 
         ninja_program: program,
     };
     dispatch::execute(cli, command, &context)
+}
+
+/// Invoke the Ninja executable with the provided CLI settings.
+///
+/// Forwards the job count and working directory and specifies the temporary
+/// build file. Child output follows the `stderr_mode` policy derived from the
+/// CLI's JSON diagnostic setting: `StderrMode::Suppress` drains both child
+/// streams to a sink so JSON output stays machine-readable, while
+/// `StderrMode::Forward` relays them to the user.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
+/// streams are unavailable, or when Ninja reports a non-zero exit status.
+pub fn run_ninja(
+    program: &Path,
+    cli: &Cli,
+    build_file: &Path,
+    targets: &BuildTargets<'_>,
+) -> io::Result<()> {
+    run_ninja_with(&NinjaBuildRequest {
+        program,
+        cli,
+        build_file,
+        targets,
+        env: &CommandEnv::inherit(),
+        stderr_mode: StderrMode::from_json_enabled(cli.json),
+    })
+}
+
+/// Invoke a Ninja tool (e.g., `ninja -t clean`) with the provided CLI settings.
+///
+/// Forwards the job count and working directory and specifies the build file.
+/// Child output follows the `stderr_mode` policy derived from the CLI's JSON
+/// diagnostic setting: `StderrMode::Suppress` drains both child streams to a
+/// sink, while `StderrMode::Forward` relays them to the user.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
+/// streams are unavailable, or when Ninja reports a non-zero exit status.
+pub fn run_ninja_tool(program: &Path, cli: &Cli, build_file: &Path, tool: &str) -> io::Result<()> {
+    run_ninja_tool_with(&NinjaToolRequest {
+        program,
+        cli,
+        build_file,
+        tool,
+        env: &CommandEnv::inherit(),
+        stderr_mode: StderrMode::from_json_enabled(cli.json),
+    })
 }
 
 fn on_task_progress_callback(reporter: &dyn StatusReporter) -> impl FnMut(u32, u32, &str) + '_ {
@@ -231,6 +242,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> 
                 build_file: build_path,
                 targets: &targets,
                 env: &CommandEnv::inherit(),
+                stderr_mode: StderrMode::from_json_enabled(cli.json),
             },
             &mut on_task_progress,
         )
@@ -292,6 +304,7 @@ fn handle_ninja_tool(
                 build_file: build_path,
                 tool: tool.name,
                 env: &CommandEnv::inherit(),
+                stderr_mode: StderrMode::from_json_enabled(cli.json),
             },
             &mut on_task_progress,
         )

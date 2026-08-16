@@ -4,6 +4,7 @@
 //! for operators, while also attaching stable tracing fields for tools that
 //! consume structured diagnostics.
 
+use super::StderrMode;
 use super::command_env::env_names_eq;
 use super::redaction::{CommandArg, redact_sensitive_args};
 use camino::Utf8PathBuf;
@@ -89,7 +90,7 @@ impl CommandLogContext {
 pub(super) fn log_command_execution(
     context: &CommandLogContext,
     operation: &str,
-    suppress_stderr: bool,
+    stderr_mode: StderrMode,
 ) {
     info!(
         operation,
@@ -97,7 +98,7 @@ pub(super) fn log_command_execution(
         arg_count = context.arg_count,
         env_override_count = context.env_override_count,
         path_overridden = context.is_path_overridden,
-        suppress_stderr,
+        suppress_stderr = stderr_mode.is_suppress(),
         "Executing command: {}",
         context.redacted_command,
     );
@@ -109,7 +110,7 @@ pub(super) fn log_command_execution(
 pub(super) fn log_command_spawn_failure(
     context: &CommandLogContext,
     operation: &str,
-    suppress_stderr: bool,
+    stderr_mode: StderrMode,
     err: &io::Error,
 ) {
     warn!(
@@ -117,7 +118,7 @@ pub(super) fn log_command_spawn_failure(
         ninja_program = %context.program_display,
         env_override_count = context.env_override_count,
         path_overridden = context.is_path_overridden,
-        suppress_stderr,
+        suppress_stderr = stderr_mode.is_suppress(),
         failure_category = "spawn",
         error.kind = ?err.kind(),
         error = %err,
@@ -132,7 +133,7 @@ pub(super) fn log_command_spawn_failure(
 pub(super) fn log_command_exit_failure(
     context: &CommandLogContext,
     operation: &str,
-    suppress_stderr: bool,
+    stderr_mode: StderrMode,
     status: ExitStatus,
 ) {
     warn!(
@@ -140,7 +141,7 @@ pub(super) fn log_command_exit_failure(
         ninja_program = %context.program_display,
         env_override_count = context.env_override_count,
         path_overridden = context.is_path_overridden,
-        suppress_stderr,
+        suppress_stderr = stderr_mode.is_suppress(),
         failure_category = "exit_status",
         %status,
         "Ninja command exited unsuccessfully",
@@ -155,7 +156,7 @@ pub(super) fn log_command_exit_failure(
 pub(super) fn command_span(
     context: &CommandLogContext,
     operation: &str,
-    suppress_stderr: bool,
+    stderr_mode: StderrMode,
 ) -> tracing::Span {
     info_span!(
         "ninja_subprocess",
@@ -164,7 +165,7 @@ pub(super) fn command_span(
         arg_count = context.arg_count,
         env_override_count = context.env_override_count,
         path_overridden = context.is_path_overridden,
-        suppress_stderr,
+        suppress_stderr = stderr_mode.is_suppress(),
         failure_category = field::Empty,
     )
 }

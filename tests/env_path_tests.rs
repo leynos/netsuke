@@ -185,7 +185,7 @@ fn composed_path_reaches_the_spawned_process(
     probe_fixture: Result<(tempfile::TempDir, PathBuf, PathBuf)>,
 ) -> Result<()> {
     use netsuke::cli::Cli;
-    use netsuke::runner::{BuildTargets, NinjaBuildRequest, run_ninja_with};
+    use netsuke::runner::{BuildTargets, NinjaBuildRequest, StderrMode, run_ninja_with};
     use std::path::Path;
     let (dir, probe, build_file) = probe_fixture?;
     let parent_before = std::env::var_os("PATH");
@@ -200,6 +200,7 @@ fn composed_path_reaches_the_spawned_process(
         build_file: build_file.as_path(),
         targets: &targets,
         env: &CommandEnv::inherit().with_path(&composed),
+        stderr_mode: StderrMode::from_json_enabled(cli.json),
     })
     .context("run the probe")?;
 
@@ -230,7 +231,7 @@ fn unoverridden_parent_variables_are_inherited(
     probe_fixture: Result<(tempfile::TempDir, PathBuf, PathBuf)>,
 ) -> Result<()> {
     use netsuke::cli::Cli;
-    use netsuke::runner::{BuildTargets, NinjaBuildRequest, run_ninja_with};
+    use netsuke::runner::{BuildTargets, NinjaBuildRequest, StderrMode, run_ninja_with};
 
     // Baseline: the probe spawned directly, outside `CommandEnv`, records
     // the PATH a plainly inherited child sees. Comparing child against child
@@ -255,6 +256,7 @@ fn unoverridden_parent_variables_are_inherited(
         build_file: build_file.as_path(),
         targets: &targets,
         env: &CommandEnv::inherit().with_var("NETSUKE_PROBE_MARKER", "sentinel"),
+        stderr_mode: StderrMode::from_json_enabled(cli.json),
     })
     .context("run the probe")?;
 
@@ -282,7 +284,7 @@ fn general_overrides_reach_the_spawned_tool_process(
     )>,
 ) -> Result<()> {
     use netsuke::cli::Cli;
-    use netsuke::runner::{NinjaToolRequest, run_ninja_tool_with};
+    use netsuke::runner::{NinjaToolRequest, StderrMode, run_ninja_tool_with};
 
     let (dir, probe, build_file) = probe_fixture?;
     let cli = Cli::default();
@@ -293,6 +295,7 @@ fn general_overrides_reach_the_spawned_tool_process(
         build_file: build_file.as_path(),
         tool: "clean",
         env: &CommandEnv::inherit().with_var("NETSUKE_PROBE_MARKER", "sentinel"),
+        stderr_mode: StderrMode::from_json_enabled(cli.json),
     })
     .context("run the probe")?;
 

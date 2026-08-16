@@ -183,8 +183,8 @@ What shipped:
   - a deterministic stage-timing recorder,
   - a duration formatter (`ns`/`us`/`ms`/`s`),
   - `VerboseTimingReporter` wrapper with an injectable monotonic clock.
-- Wired reporter selection in `src/runner/mod.rs` so verbose mode wraps the
-  resolved base reporter (including silent progress mode).
+- Wired reporter selection in `src/runner/reporter.rs` so verbose mode
+  wraps the resolved base reporter (including silent progress mode).
 - Added localized timing summary runtime strings and updated verbose help copy
   in both locales.
 - Added `rstest` unit coverage for timing happy/unhappy/edge behaviour.
@@ -213,7 +213,8 @@ Primary implementation surfaces:
 
 - `src/status.rs`: reporter trait and concrete status reporters.
 - `src/status_pipeline.rs`: canonical six-stage order and labels.
-- `src/runner/mod.rs`: reporter construction and pipeline orchestration.
+- `src/runner/reporter.rs`: reporter construction.
+- `src/runner/mod.rs`: pipeline orchestration.
 - `src/cli/mod.rs`: OrthoConfig-derived `verbose` configuration.
 - `src/cli_l10n.rs`: localized clap help key mapping.
 - `src/localization/keys.rs`: Fluent key constants.
@@ -268,7 +269,7 @@ silent by default.
 
 Planned changes:
 
-- Update `runner::make_reporter(...)` to accept a verbose flag and wrap the
+- Update `reporter::make_reporter(...)` to accept a verbose flag and wrap the
   selected base reporter with timing support when `cli.verbose` is true.
 - Ensure behaviour by mode:
   - non-verbose: unchanged output (no timing summary),

@@ -4,7 +4,7 @@
 //! 400-line ceiling. These are data, not behaviour: the request types describe
 //! what an invocation needs; `mod` holds the functions that act on them.
 
-use super::{BuildTargets, CommandEnv};
+use super::{BuildTargets, CommandEnv, StderrMode};
 use crate::cli::Cli;
 use std::path::Path;
 
@@ -13,8 +13,7 @@ use std::path::Path;
 pub struct NinjaBuildRequest<'a> {
     /// Ninja executable to invoke.
     pub program: &'a Path,
-    /// Parsed CLI settings supplying the working directory, job count, and
-    /// diagnostics mode.
+    /// Parsed CLI settings supplying the working directory and job count.
     pub cli: &'a Cli,
     /// Generated build file passed with `-f`.
     pub build_file: &'a Path,
@@ -23,6 +22,9 @@ pub struct NinjaBuildRequest<'a> {
     /// Environment overrides applied to the child process. Use
     /// [`CommandEnv::inherit`] to leave the parent environment in place.
     pub env: &'a CommandEnv,
+    /// Policy routing the child's standard streams. [`StderrMode::Suppress`]
+    /// keeps JSON diagnostics machine-readable by draining both streams.
+    pub stderr_mode: StderrMode,
 }
 
 /// Borrowed parameter bundle for `ninja -t` tool execution helpers.
@@ -38,4 +40,7 @@ pub struct NinjaToolRequest<'a> {
     pub tool: &'a str,
     /// Environment overrides applied to the child process.
     pub env: &'a CommandEnv,
+    /// Policy routing the child's standard streams. [`StderrMode::Suppress`]
+    /// keeps JSON diagnostics machine-readable by draining both streams.
+    pub stderr_mode: StderrMode,
 }

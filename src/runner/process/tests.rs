@@ -6,6 +6,8 @@ use super::child_exit::finalize_streaming;
 use super::command_list_telemetry::COMMAND_LIST_FAILURE_DURATION;
 use super::streaming::ForwardStats;
 use super::*;
+use crate::cli::Cli;
+use crate::test_tracing_capture::with_test_subscriber;
 use camino::Utf8PathBuf;
 #[cfg(unix)]
 use metrics_util::{
@@ -18,6 +20,7 @@ use monotony::{StdMonotonicClock, test_util::FixedMonotonicClock};
 use proptest::prelude::*;
 use rstest::{fixture, rstest};
 use std::ffi::OsString;
+use std::path::Path;
 #[cfg(unix)]
 use std::path::PathBuf;
 #[cfg(unix)]
@@ -25,6 +28,7 @@ use std::process::Stdio;
 use std::thread;
 #[cfg(unix)]
 use std::time::Duration;
+use tracing_subscriber::filter::LevelFilter;
 
 /// A `MockEnv` answering exactly one `os_string` read of `NETSUKE_NINJA`.
 ///
@@ -165,7 +169,7 @@ fn command_list_failure_duration_uses_the_injected_monotonic_clock() {
 
     let execution = CommandExecutionContext {
         operation: "build",
-        suppress_stderr: true,
+        stderr_mode: StderrMode::Suppress,
         captures_ninja_failure_output: false,
         clock: &clock,
     };
@@ -211,7 +215,7 @@ fn large_stdout_cannot_supply_command_list_attribution() -> anyhow::Result<()> {
         .stderr(Stdio::piped());
     let execution = CommandExecutionContext {
         operation: "build",
-        suppress_stderr: true,
+        stderr_mode: StderrMode::Suppress,
         // Only a Ninja build can relay a subcommand's stderr through stdout.
         // An arbitrary command's large stdout must be forwarded untouched.
         captures_ninja_failure_output: false,
@@ -252,5 +256,55 @@ proptest! {
         let resolved = resolve_ninja_program_utf8_with(&ninja_env(Some(env_value)));
 
         prop_assert_eq!(resolved, expected);
+    }
+}
+
+/// Spawning a missing Ninja emits a spawn-failure warning whose
+/// `suppress_stderr` field follows the request's explicit `stderr_mode`, not
+/// the request's `cli.json` state. The mismatch in each case proves the process
+/// layer consumes the policy field and does not re-derive it from CLI JSON.
+#[test]
+fn spawn_failure_logging_honours_explicit_stderr_mode() {
+    let cases = [
+        (true, StderrMode::Forward, "suppress_stderr=false"),
+        (false, StderrMode::Suppress, "suppress_stderr=true"),
+    ];
+    for (json, mode, expected_field) in cases {
+        let cli = Cli {
+            json,
+            ..Cli::default()
+        };
+        let targets = BuildTargets::default();
+        let events = with_test_subscriber(LevelFilter::WARN, |captured| {
+            let result = run_ninja_with(&NinjaBuildRequest {
+                program: Path::new("netsuke-test-missing-ninja"),
+                cli: &cli,
+                build_file: Path::new("build.ninja"),
+                targets: &targets,
+                env: &CommandEnv::inherit(),
+                stderr_mode: mode,
+            });
+            assert!(
+                result.is_err(),
+                "spawning a missing Ninja should fail before any forwarding"
+            );
+            captured.snapshot()
+        });
+        assert_eq!(
+            events.len(),
+            1,
+            "exactly one warning should be captured for {mode:?} with cli.json={json}, \
+             got: {events:?}"
+        );
+        // The single captured warning is the spawn failure; inspect it alone so a
+        // stray event carrying the expected field cannot mask a missing frame.
+        let event = events
+            .first()
+            .expect("the exactly-one-warning assertion above guarantees a first event");
+        assert!(
+            event.contains("failure_category=\"spawn\"") && event.contains(expected_field),
+            "the captured warning should be a spawn failure recording {expected_field} for \
+             {mode:?} with cli.json={json}, got: {events:?}"
+        );
     }
 }

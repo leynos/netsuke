@@ -3225,6 +3225,42 @@ context rather than resolving output or process configuration again; tests
 should inject the program through `run_with_ninja_program` when they need a
 deterministic child executable.
 
+### Module: `runner::reporter`
+
+`src/runner/reporter.rs` owns construction of the run's `StatusReporter` from
+resolved output settings. `ReporterOptions` bundles the resolved output mode,
+progress preference, verbose preference, output preferences, and whether
+standard output is a TTY. `make_reporter(options)` selects the base reporter,
+`AccessibleReporter` or `IndicatifReporter` when progress is enabled and
+`SilentReporter` otherwise, then wraps it in `VerboseTimingReporter` when
+verbose mode is active. `should_force_text_task_updates` decides whether the
+indicatif reporter emits textual task updates, forcing them for accessible
+mode or non-TTY standard output.
+
+`run_with_ninja_program` (in `src/runner/mod.rs`) constructs the run's
+`StatusReporter` through `reporter::make_reporter` after resolving output mode
+and reporter settings, then shares it via the `ExecutionContext` it passes to
+`dispatch::execute`.
+
+#### Reuse boundary
+
+- **Ownership:** `runner::reporter` is an internal, non-public submodule of
+  the runner; it owns all `StatusReporter` construction and the
+  concrete-reporter selection rules. Nothing outside it builds the run's
+  reporter, and it is not part of the crate's public API.
+- **Permitted call-sites:** only the runner boundary in `src/runner/mod.rs`
+  may call `make_reporter` — today solely `run_with_ninja_program`.
+  `runner::process`, dispatch handlers, and external embedders never
+  construct reporters; handlers consume the already-built reporter through
+  the `ExecutionContext`/`&dyn StatusReporter` only.
+- **Composition rules:** the caller must resolve all `ReporterOptions` inputs
+  (output mode, progress, verbose, output prefs, stdout TTY) from
+  CLI/environment state before calling `make_reporter`; the module performs
+  no such resolution itself. The reporter is composed once per run and
+  shared immutably. New reporter kinds or selection policies belong in this
+  module beside the mode-selection logic, colocated with the output-mode
+  policy.
+
 ### Module: `runner::process::ninja_program`
 
 `src/runner/process/ninja_program.rs` owns the executable-resolution boundary.
@@ -3252,8 +3288,9 @@ All command events share these structured fields:
 
 - `operation`: caller-provided operation label such as `"build"` or tool name.
 - `ninja_program`: command program after UTF-8 normalization.
-- `suppress_stderr`: derived from `cli.json`, true when JSON output suppresses
-  direct child-process streams.
+- `suppress_stderr`: bool derived from the `StderrMode` policy via
+  `stderr_mode.is_suppress()`, true when the policy suppresses direct
+  child-process streams.
 
 Phase-specific fields supplement that shared set. The informational execution
 event includes `arg_count`. Spawn- and exit-failure events instead set
@@ -3276,9 +3313,14 @@ paths:
 1. Create `Command` with `Command::new(request.program)`.
 2. Pass it into a closure that applies operation-specific configuration.
 3. Call `run_command_and_stream_with_context` with optional status observer,
-   `cli.json` as `suppress_stderr`, and the chosen `operation`.
+   the request's `stderr_mode` policy, and the chosen `operation`.
 4. Let `run_command_and_stream_with_context` handle span creation, execution
    logging, failure logging, and exit-status enforcement via context helpers.
+
+The `StderrMode` policy type is independent of `Cli`; the runner derives the
+policy at request-build time with `StderrMode::from_json_enabled(cli.json)`,
+while the process layer consumes the request's `stderr_mode` field and never
+reads `cli.json` itself.
 
 ### Module: `runner::process::redaction`
 
@@ -3383,10 +3425,13 @@ through the child `PATH` is acceptable. What the injected `PATH` always
 governs is the environment Ninja's own child commands see when it shells out.
 
 The explicit request APIs compose on top of `CommandEnv`: `NinjaBuildRequest`/
-`NinjaToolRequest` carry an `env: &CommandEnv` field alongside the program, CLI
-settings, and build file, and are consumed by `run_ninja_with`/
-`run_ninja_tool_with`. The convenience wrappers `run_ninja`/`run_ninja_tool`
-call these with `CommandEnv::inherit()`, reproducing production behaviour;
+`NinjaToolRequest` carry `env: &CommandEnv` and `stderr_mode: StderrMode`
+fields alongside the program, CLI settings, and build file, and are consumed
+by `run_ninja_with`/`run_ninja_tool_with`. The convenience wrappers
+`run_ninja`/`run_ninja_tool` live at the runner boundary
+(`src/runner/mod.rs`), call these with `CommandEnv::inherit()`, and derive the
+`stderr_mode` policy from the CLI via
+`StderrMode::from_json_enabled(cli.json)`, reproducing production behaviour;
 tests reach for `run_ninja_with`/`run_ninja_tool_with` directly to supply a
 `CommandEnv` built with `with_path` instead. Section 6.1 of the
 [design document](netsuke-design.md) records the same architecture from the

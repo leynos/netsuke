@@ -279,6 +279,7 @@ fn run(world: &TestWorld) -> Result<()> {
                 build_file: Path::new("build.ninja"),
                 targets: &targets,
                 env: &world.command_env.borrow(),
+                stderr_mode: runner::StderrMode::from_json_enabled(cli.json),
             })
         })
         .ok_or_else(|| anyhow!("CLI configuration has not been initialised"))?

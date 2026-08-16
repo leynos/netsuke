@@ -22,7 +22,7 @@ Table: v0.1.0 child-environment API additions and their impact
 | --- | --- | --- |
 | Convenience wrappers | Unchanged. `run_ninja` and `run_ninja_tool` behave exactly as before, inheriting the process environment. | [Users' guide](users-guide.md) |
 | Child environment | New opt-in `netsuke::runner::CommandEnv` carries additive variable overrides and an injected `PATH` for Ninja child processes. | [Users' guide](users-guide.md) |
-| Request types | New `netsuke::runner::NinjaBuildRequest` and `netsuke::runner::NinjaToolRequest` name the program, build file, and targets or tool for the `*_with` run functions. | [Users' guide](users-guide.md) |
+| Request types | New `netsuke::runner::NinjaBuildRequest` and `netsuke::runner::NinjaToolRequest` name the program, build file, targets or tool, a child environment, and a required `stderr_mode: StderrMode` policy for the `*_with` run functions. | [Users' guide](users-guide.md) |
 | Glob expansion | Parent-relative patterns such as `glob('../shared/*.h')` now expand. Metadata checks use a capability rooted at the pattern's longest literal directory prefix; missing or non-directory prefixes return no matches, and unresolvable symlink matches are skipped. | [Users' guide](users-guide.md) and [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) |
 | Command recipes | Existing scalar `command` recipes are unchanged. New YAML command lists are opt-in and run in declaration order with fail-fast semantics. | [Rules and recipes](users-guide.md#rules-and-recipes) |
 
@@ -30,7 +30,10 @@ Table: v0.1.0 child-environment API additions and their impact
 
 The convenience wrappers keep their signatures and their behaviour: the
 child inherits the calling process's environment, and Ninja is resolved
-exactly as before. No caller needs to change to adopt this release.
+exactly as before. Callers of `run_ninja` or `run_ninja_tool` need no change;
+a caller that constructs `NinjaBuildRequest`/`NinjaToolRequest` directly must
+now supply the required `stderr_mode: StderrMode` field, derived from the CLI
+with `StderrMode::from_json_enabled(cli.json)`.
 
 ## Opting into ordered command lists
 
