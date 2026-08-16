@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::cli::test_support::TestEnv;
-use anyhow::ensure;
+use anyhow::{Context, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use rstest::rstest;
 use std::path::PathBuf;
@@ -60,7 +60,15 @@ fn collect_diag_file_layers_uses_injected_explicit_config() -> anyhow::Result<()
 
     let env = TestEnv::default().with_var(CONFIG_ENV_VAR, config_path.as_os_str());
     let discovered = collect_diag_file_layers_with_env(&Cli::default(), &env);
-    let expected_path = config_path.to_string_lossy().into_owned();
+    // `load_config_file_as_chain` canonicalises the layer path through the
+    // same normalizer discovery uses, so compare the injected path in that
+    // canonical form. On Windows this folds short-name and UNC-prefixed
+    // spellings into the long-name form the layer records.
+    let expected_path =
+        paths::normalized_path_key(&paths::FsPathNormalizer, &config_path.to_string_lossy())
+            .context("canonicalise injected config path")?
+            .to_string_lossy()
+            .into_owned();
 
     ensure!(
         discovered.layers().iter().any(|layer| layer

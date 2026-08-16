@@ -45,6 +45,16 @@ fn job<'a>(workflow: &'a Value, name: &'static str) -> Result<&'a Mapping> {
     value_mapping(job_value, name)
 }
 
+fn workflow_env(workflow: &Value, key: YamlKey) -> Result<&str> {
+    let root = value_mapping(workflow, "workflow")?;
+    let env = mapping_get(root, YamlKey("env"))
+        .context("workflow should define a workflow-level env")
+        .and_then(|value| value_mapping(value, "workflow-level env"))?;
+    mapping_get(env, key)
+        .and_then(Value::as_str)
+        .with_context(|| format!("workflow-level env should define {}", key.0))
+}
+
 fn steps(job: &Mapping) -> Result<&Vec<Value>> {
     mapping_get(job, YamlKey("steps"))
         .context("job should define steps")
@@ -161,32 +171,39 @@ fn unit_recognizes_exact_versions() {
 fn behavioural_ci_workflow_installs_pinned_cargo_nextest() -> Result<()> {
     let contents = workflow_contents("ci.yml").expect("CI workflow should be readable");
     let workflow: Value = serde_yaml::from_str(&contents).context("parse CI workflow YAML")?;
-    let build_test = job(&workflow, "build-test")?;
 
-    let version = job_env(build_test, YamlKey("NEXTEST_VERSION"))
-        .context("build-test job should pin NEXTEST_VERSION")?;
+    let version = workflow_env(&workflow, YamlKey("NEXTEST_VERSION"))
+        .context("workflow-level env should pin NEXTEST_VERSION")?;
     ensure!(
         is_exact_version(version),
         "NEXTEST_VERSION should pin an exact version, found {version:?}"
     );
 
-    let steps = steps(build_test)?;
-    let install = named_step(steps, "Install cargo-nextest")?;
-    let uses = mapping_get(install, YamlKey("uses"))
-        .and_then(Value::as_str)
-        .context("Install cargo-nextest step should reference an action")?;
-    ensure!(
-        is_pinned_action_ref(uses, "taiki-e/install-action"),
-        "cargo-nextest installer should be pinned to a full commit SHA, found {uses:?}"
-    );
-    ensure!(
-        step_input(install, YamlKey("tool")) == Some("nextest@${{ env.NEXTEST_VERSION }}"),
-        "cargo-nextest installer should resolve its pin from NEXTEST_VERSION"
-    );
-    ensure!(
-        !install.contains_key(Value::String("if".to_owned())),
-        "cargo-nextest should install on every matrix leg because every leg runs make test"
-    );
+    for job_name in ["build-test", "build-test-windows"] {
+        let build_test = job(&workflow, job_name)?;
+        ensure!(
+            job_env(build_test, YamlKey("NEXTEST_VERSION")).is_none(),
+            "{job_name} should not duplicate NEXTEST_VERSION at job scope"
+        );
+
+        let steps = steps(build_test)?;
+        let install = named_step(steps, "Install cargo-nextest")?;
+        let uses = mapping_get(install, YamlKey("uses"))
+            .and_then(Value::as_str)
+            .context("Install cargo-nextest step should reference an action")?;
+        ensure!(
+            is_pinned_action_ref(uses, "taiki-e/install-action"),
+            "cargo-nextest installer should be pinned to a full commit SHA, found {uses:?}"
+        );
+        ensure!(
+            step_input(install, YamlKey("tool")) == Some("nextest@${{ env.NEXTEST_VERSION }}"),
+            "cargo-nextest installer should resolve its pin from NEXTEST_VERSION"
+        );
+        ensure!(
+            !install.contains_key(Value::String("if".to_owned())),
+            "cargo-nextest should install on every matrix leg because every leg runs make test"
+        );
+    }
     Ok(())
 }
 

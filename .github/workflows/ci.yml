@@ -52,7 +52,6 @@ jobs:
         uses: leynos/shared-actions/.github/actions/setup-rust@8add2d99854a5b77548eae98cca59202e68fefc8
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
-          components: rustfmt, clippy
           # Preserve warnings-as-errors and Polonius through toolchain setup.
           rustflags: -D warnings -Zpolonius=next
       - name: Install cargo-nextest
@@ -158,7 +157,6 @@ jobs:
         uses: leynos/shared-actions/.github/actions/setup-rust@8add2d99854a5b77548eae98cca59202e68fefc8
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
-          components: rustfmt, clippy
           # Preserve warnings-as-errors and Polonius through toolchain setup.
           rustflags: -D warnings -Zpolonius=next
       - name: Install Ninja
