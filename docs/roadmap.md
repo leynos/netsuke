@@ -26,6 +26,9 @@ Each phase validates a product hypothesis:
   template standard library makes declarative build manifests markedly easier
   to write without weakening determinism or the capability boundary, including
   proportionate quality-gate selection from a deterministic Git changeset.
+- Phase 7 validates that Netsukefile authors adopt manifest-time testing when
+  it is deterministic, mock-friendly, and runs through the same compiler as
+  the build.
 
 Each phase carries one hypothesis, and Phase 6 is the capability track for
 template standard-library work. Phases 3 to 5 predate that separation: each
@@ -74,7 +77,7 @@ These command and flag spellings are the public grammar assumed by this
 roadmap. Examples must use this list unless a task explicitly extends it.
 
 - Top-level commands: `build`, `check`, `clean`, `generate`, `graph`,
-  `context`, `skill-path`, `runs`, `profile`, and `feedback`.
+  `context`, `skill-path`, `runs`, `profile`, `feedback`, and `test`.
 - Resource verbs: `list`, `get`, `save`, `delete`, `add`, `send`, and `prune`.
 - Structured output: `--json`.
 - Non-interactive execution: `--no-input`.
@@ -687,6 +690,154 @@ configuration, inspect run history, route artefacts, and report friction.
   - [ ] Cross-link the archive so reviewers can trace where historical work
     moved.
 
+
+## 6. Netsukefile testing framework
+
+Hypothesis: Netsukefile authors adopt manifest-time testing when it is
+deterministic, mock-friendly, and runs through the same compiler pipeline as
+the build.
+
+Objective: deliver the `netsuke test` command and YAML test dialect specified
+in [RFC 0001](rfcs/0001-netsukefile-testing-framework.md), the
+[UX and semantic design](netsuke-test-framework-ux-design.md), and the
+[technical design](netsuke-test-framework-technical-design.md).
+
+
+### 6.1. Seams and loader options
+
+- [ ] 6.1.1. Add the clock provider seam to the stdlib time module. See
+  [technical design §4.2](netsuke-test-framework-technical-design.md).
+  - [ ] Register `now()` through an injected `ClockProvider` closure held in
+    `StdlibConfig`.
+  - [ ] Preserve current behaviour when no provider is supplied.
+  - [ ] Record the seam classification per
+    [ADR-008](adr-008-environment-seam-taxonomy.md).
+
+- [ ] 6.1.2. Introduce the options-carrying manifest loader entry point. See
+  [technical design §3.3](netsuke-test-framework-technical-design.md).
+  - [ ] Add `ManifestLoadOptions` and `TemplateOverlays`, with existing
+    entry points as thin wrappers.
+  - [ ] Extend `StdlibRegistration` with a `Test` mode beside `Full` and
+    `ManifestQuery` rather than adding a parallel boundary mechanism.
+  - [ ] Reuse the `manifest_query_operation_error` diagnostic shape and
+    `disabled_env_reader` established by `netsuke help targets`.
+  - [ ] Register overlays after stdlib and manifest macros and before
+    `foreach` expansion.
+  - [ ] Add differential tests showing the build path is unchanged
+    (invariants I4 and I7).
+
+- [ ] 6.1.3. Spike MiniJinja overlay shadowing for macro substitution.
+  Requires: 6.1.2. See
+  [technical design §4.4](netsuke-test-framework-technical-design.md).
+  - [ ] Pin `add_function` replacement semantics with a test.
+  - [ ] Pin runner-side handle capture for spy passthrough.
+  - [ ] Fall back to filtered macro registration if shadowing fails.
+
+- [ ] 6.1.4. Dogfood the seams before dialect work begins. Requires:
+  6.1.1, 6.1.2.
+  - [ ] Run the differential fidelity suite over the repository's example
+    manifests.
+  - [ ] Record the evidence in the RFC before starting 6.2.
+
+
+### 6.2. Test dialect parsing and discovery
+
+- [ ] 6.2.1. Add the optional `tests` block to the manifest schema. See
+  [UX design §3](netsuke-test-framework-ux-design.md).
+  - [ ] Keep `deny_unknown_fields` semantics for the block itself.
+  - [ ] Verify build-path neutrality with differential snapshots.
+  - [ ] Document the minimum-version consequence for older parsers.
+
+- [ ] 6.2.2. Implement the test-suite AST and parser. See
+  [technical design §5](netsuke-test-framework-technical-design.md).
+  - [ ] Partition known keys from dynamic `test_*` keys.
+  - [ ] Enforce the closed-schema and nearest-known-key diagnostics.
+  - [ ] Enforce the expression/template field split at parse time.
+
+- [ ] 6.2.3. Implement discovery and imports. Requires: 6.2.1, 6.2.2.
+  - [ ] Resolve `tests.root`, include and exclude patterns, and support
+    files.
+  - [ ] Confine imports to the test tree.
+  - [ ] Fail empty selections without `--allow-empty`.
+
+
+### 6.3. Mock engine
+
+- [ ] 6.3.1. Implement doubles, matchers, and the journal. Requires: 6.1.2.
+  See [UX design §8](netsuke-test-framework-ux-design.md) and
+  [technical design §6](netsuke-test-framework-technical-design.md).
+  - [ ] Implement stub, mock, and spy kinds with first-match-wins entries.
+  - [ ] Compile the closed matcher vocabulary at parse time.
+  - [ ] Journal every call with per-case isolation (invariants I1 and I3).
+
+- [ ] 6.3.2. Implement verification and reporting hooks. Requires: 6.3.1.
+  - [ ] Fail unmet mock expectations at end of case.
+  - [ ] Warn on unused doubles with the `lenient` opt-out.
+  - [ ] Render unmatched-call reports with suggested YAML entries.
+
+- [ ] 6.3.3. Implement macro substitution doubles. Requires: 6.1.3, 6.3.1.
+  - [ ] Register journalling wrappers over compiled stand-in macros.
+  - [ ] Journal calls under `substitutes.<name>`.
+
+
+### 6.4. Fixture engine
+
+- [ ] 6.4.1. Implement the fixture lifecycle. See
+  [UX design §9](netsuke-test-framework-ux-design.md) and
+  [technical design §7](netsuke-test-framework-technical-design.md).
+  - [ ] Resolve `uses` dependencies with a topological sort.
+  - [ ] Run structured filesystem actions inside a `cap-std` sandbox.
+  - [ ] Guarantee reverse-order teardown on every exit path
+    (invariant I2, property-tested).
+
+- [ ] 6.4.2. Implement sandbox retention. Requires: 6.4.1.
+  - [ ] Support `--keep` for failing cases and print retained paths.
+
+
+### 6.5. Actions, assertions, and result views
+
+- [ ] 6.5.1. Implement pipeline actions. Requires: 6.1.2. See
+  [technical design §8](netsuke-test-framework-technical-design.md).
+  - [ ] Compose `load_manifest`, `build_graph`, and `generate_ninja` from
+    public library functions.
+  - [ ] Deny network, commands, and ambient environment under test
+    (invariant I5).
+
+- [ ] 6.5.2. Implement result views. Requires: 6.5.1.
+  - [ ] Expose manifest, graph, and Ninja views with the documented helper
+    surface.
+  - [ ] Keep views stable across internal IR changes.
+
+- [ ] 6.5.3. Implement assertion evaluation. Requires: 6.5.2.
+  - [ ] Normalize scalar and structured assertions.
+  - [ ] Distinguish failures from errors end to end.
+  - [ ] Implement `expect_failure` with named diagnostics.
+  - [ ] Render failing expressions with substituted actual values.
+
+
+### 6.6. Command, localization, and reporting
+
+- [ ] 6.6.1. Wire the `test` subcommand. Requires: 6.2.3, 6.5.3. See
+  [UX design §12](netsuke-test-framework-ux-design.md).
+  - [ ] Add filters, tags, `--list`, `--fail-fast`, `--timeout`, `--keep`,
+    and `--allow-empty`; consume the global `--json` and `--jobs`.
+  - [ ] Map exit codes 0 to 3 and 130 as specified.
+  - [ ] Implement per-case timeouts, interrupt handling, and
+    case-conservation reporting (invariant I9).
+
+- [ ] 6.6.2. Localize and report. Requires: 6.6.1.
+  - [ ] Add Fluent keys for report lines, diagnostics, and warnings.
+  - [ ] Emit one JSON document per run under the stream-purity contract
+    (invariant I8).
+
+- [ ] 6.6.3. Document the framework. Requires: 6.6.1.
+  - [ ] Add a users' guide chapter for authoring and running tests.
+  - [ ] Update `contents.md`, the quickstart, and `context --json` follow-on
+    notes.
+
+**Success criterion:** a Netsukefile author can write the worked example from
+[UX design §14](netsuke-test-framework-ux-design.md) and run it to a green
+result on a machine with no compiler, no network, and a fixed clock.
 ## 6. Template standard-library expansion
 
 Hypothesis: Netsuke manifests currently fall back to `shell()` whenever they
