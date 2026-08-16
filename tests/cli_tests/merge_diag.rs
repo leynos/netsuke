@@ -59,10 +59,18 @@ fn diag_and_merge_reuse_one_discovery_result() -> Result<()> {
         .return_const(None::<OsString>);
     env.expect_all().once().return_const(HashMap::new());
 
-    let (is_json, layers) = netsuke::cli::resolve_json_and_layers_with_env(&cli, &matches, &env)
-        .context("resolve diagnostic mode and discovered layers")?;
-    let merged = netsuke::cli::merge_with_layers(&cli, &matches, &env, layers)
-        .context("merge the cached layers")?;
+    let (result, snapshot) = recorded(|| {
+        let (is_json, layers) =
+            netsuke::cli::resolve_json_and_layers_with_env(&cli, &matches, &env)
+                .context("resolve diagnostic mode and discovered layers")?;
+        config_dir
+            .remove_file("netsuke.toml")
+            .context("remove config after discovery")?;
+        let merged = netsuke::cli::merge_with_layers(&cli, &matches, &env, layers)
+            .context("merge the cached layers")?;
+        Ok::<_, anyhow::Error>((is_json, merged))
+    });
+    let (is_json, merged) = result?;
 
     ensure!(
         is_json,
@@ -70,7 +78,11 @@ fn diag_and_merge_reuse_one_discovery_result() -> Result<()> {
     );
     ensure!(
         merged.jobs == Some(13),
-        "the merge should consume the discovered config layer"
+        "the merge should consume the cached config layer after its file is removed"
+    );
+    ensure!(
+        cache_outcomes(&snapshot) == vec![("reused".to_owned(), 1)],
+        "the cached handoff should record exactly one reuse"
     );
     Ok(())
 }

@@ -141,7 +141,6 @@ cap-std = "3.4.4"
 clap = { version = "4.5.0", features = ["derive"] }
 clap_complete = "4.5.0"
 clap_mangen = "0.3.0"
-mockable = "3.0"
 ortho_config = { version = "0.9.0", features = ["serde_json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }

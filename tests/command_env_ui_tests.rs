@@ -41,7 +41,9 @@ fn command_env_embedder_fixture_compiles() -> io::Result<()> {
 /// The CLI configuration fixture type-checks against the public cache API.
 #[test]
 fn cli_configuration_fixture_compiles() -> io::Result<()> {
-    let temporary_root = tempfile::tempdir_in(manifest_dir().join("target"))?;
+    let target_dir = manifest_dir().join("target");
+    test_fs::create_dir_all(&target_dir)?;
+    let temporary_root = tempfile::tempdir_in(target_dir)?;
     let fixture_dir = temporary_root.path().join("cli_configuration_pass");
     test_fs::create_dir_all(fixture_dir.join("src"))?;
     test_fs::copy(
