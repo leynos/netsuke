@@ -44,6 +44,7 @@ mod expand;
 mod glob;
 mod hints;
 mod jinja_macros;
+mod parse_with_config;
 mod render;
 
 /// JSON representation of a manifest node after YAML and Jinja evaluation.
@@ -58,6 +59,7 @@ pub use env_reader::{EnvReadError, EnvReader, process_env_reader};
 pub use glob::glob_paths;
 
 pub(crate) use expand::expand_foreach;
+pub use parse_with_config::from_str_with_env_and_config;
 pub use render::render_manifest;
 
 use self::{env_reader::env_var_with, jinja_macros::register_manifest_macros};

@@ -4,11 +4,10 @@
 //! output using `insta`, and validate it with the real `ninja`
 //! executable. The manifest uses a simple TOUCH rule so the build is
 //! fast and deterministic.
-
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use insta::{Settings, assert_snapshot};
-use netsuke::{ir::BuildGraph, manifest, ninja_gen};
+use netsuke::{ir::BuildGraph, manifest, ninja_gen, stdlib::StdlibConfig};
 use std::{fs, process::Command};
 use tempfile::tempdir;
 use test_support::ensure_binaries_available;
@@ -126,6 +125,61 @@ fn conditional_manifest_ninja_snapshot() -> Result<()> {
     ));
     settings.bind(|| {
         assert_snapshot!("conditional_manifest_ninja", ninja_content);
+    });
+
+    Ok(())
+}
+
+#[test]
+fn command_available_manifest_ninja_snapshot() -> Result<()> {
+    // Pin the `command_available` resolver to an empty PATH through the
+    // stdlib configuration seam, so a host or CI image with a binary named
+    // like the fixture cannot flip the guard. `cwd_mode="never"` additionally
+    // excludes the workspace root from the search; the absent command name
+    // alone is not sufficient for determinism.
+    let manifest_yaml = r#"
+        netsuke_version: "1.0.0"
+        actions:
+          - name: preferred-action
+            command: echo preferred
+            when: command_available("netsuke-command-that-should-not-exist", cwd_mode="never")
+          - name: fallback-action
+            command: echo fallback
+            when: not command_available("netsuke-command-that-should-not-exist", cwd_mode="never")
+        rules:
+          - name: touch
+            command: "touch $out"
+        targets:
+          - name: out/result
+            sources: in/source
+            rule: touch
+    "#;
+
+    let config = StdlibConfig::from_current_dir()?.with_path_override("");
+    let manifest = manifest::from_str_with_env_and_config(
+        manifest_yaml,
+        &manifest::process_env_reader(),
+        config,
+    )?;
+    let ir = BuildGraph::from_manifest(&manifest)?;
+    let ninja_content = ninja_gen::generate(&ir)?;
+
+    ensure!(
+        ninja_content.contains("fallback"),
+        "expected fallback action in Ninja output:\n{ninja_content}"
+    );
+    ensure!(
+        !ninja_content.contains("preferred"),
+        "preferred action guarded by an absent command should not appear:\n{ninja_content}"
+    );
+
+    let mut settings = Settings::new();
+    settings.set_snapshot_path(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/snapshots/ninja"
+    ));
+    settings.bind(|| {
+        assert_snapshot!("command_available_manifest_ninja", ninja_content);
     });
 
     Ok(())
