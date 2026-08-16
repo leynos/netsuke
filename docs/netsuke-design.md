@@ -2941,11 +2941,14 @@ which applies the precedence `--config` > `NETSUKE_CONFIG`.
 discovery errors and bounded deferred diagnostics.
 
 Diagnostic-mode resolution uses
-`resolve_json_and_layers_outcome_with_env(...)`, which returns
-`(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics. The
-composition boundary calls `DiscoveryOutcome::emit_diagnostics()` after
-tracing is configured, replaying the retained diagnostics without repeating
-environment or filesystem access.
+
+`resolve_json_and_layers_outcome_with_env(...)` to resolve JSON from those
+discovered layers and retain the outcome for the startup boundary.
+`resolve_json_and_layers_with_env(...)` is the equivalent side-effect-free
+query for callers that need to choose their own composition boundary. Both
+return deferred diagnostics instead of emitting tracing while resolving.
+`DiscoveryOutcome::emit_diagnostics()` replays the retained diagnostics after
+tracing is configured without repeating environment or filesystem access.
 `collect_file_layers_with_trace_and_env_source(...)` performs the underlying
 discovery scan and retains bounded project-scope trace metadata.
 `DiscoveryOutcome::into_layers()` transfers the same discovered layers to
@@ -2953,6 +2956,14 @@ discovery scan and retains bounded project-scope trace metadata.
 and prevents a second discovery pass. The standalone
 `merge_with_config_and_env(...)` path performs discovery, emits diagnostics
 and delegates to `merge_with_cached_file_layers(...)`.
+
+Because OrthoConfig 0.8.0 exposes only an owned `MergeLayer::into_value()`
+accessor, discovery derives its JSON preference while transferring each owned
+file value into the cached file layer. This preserves the cached values for
+the merge without cloning complete layers or JSON values. The startup
+composition root creates `ConfigStdEnvProvider`; `ConfigurationLoadContext`
+carries an injected `ConfigEnvProvider` through both early resolution and the
+cached merge.
 
 Deferred bounded discovery diagnostics are retained only for replay after the
 startup tracing boundary is configured. They do not contain raw paths or file

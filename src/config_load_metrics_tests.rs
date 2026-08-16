@@ -2,9 +2,11 @@
 //!
 //! This module captures metrics emitted by the `run_with_args` startup boundary
 //! and validates the configuration-load metrics contract for JSON-resolution
-//! failures, merge failures, and successful merges.
+//! failures, merge failures, and successful merges. It also verifies that the
+//! configuration-load context carries its injected environment through both
+//! early JSON resolution and the cached merge.
 
-use super::super::{locale_resolution, localization, run_with_args};
+use super::super::{RunWithArgsDependencies, locale_resolution, localization, run_with_args};
 use anyhow::{Context, Result, bail, ensure};
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
@@ -306,9 +308,15 @@ fn run_with_config_metrics(
         .map_err(|error| anyhow::anyhow!("localizer test lock poisoned: {error}"))?;
     let _restore = localization::set_localizer_for_tests(localization::localizer());
     let clock = configuration_clock(scenario, duration)?;
+    let dependencies = RunWithArgsDependencies {
+        locale_env: &EmptyEnv,
+        system_locale: &NoSystemLocale,
+        configuration_clock: &clock,
+        config_env: &context_env_tests::EmptyConfigEnv,
+    };
     let mut exit = None;
     let metrics = captured_metrics(|| {
-        exit = Some(run_with_args(args, &EmptyEnv, &NoSystemLocale, &clock));
+        exit = Some(run_with_args(args, &dependencies));
     });
     ensure!(
         exit == Some(ExitCode::FAILURE),
@@ -357,3 +365,6 @@ proptest! {
         }
     }
 }
+
+#[path = "config_load_context_env_tests.rs"]
+mod context_env_tests;

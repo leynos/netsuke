@@ -6,6 +6,7 @@
 
 use ortho_config::{
     MapEnv, MergeComposer, MergeLayer, OrthoResult, SharedEnvSource, load_config_file_as_chain,
+    MergeComposer, MergeLayer, MergeProvenance, OrthoResult, load_config_file_as_chain,
 };
 use std::borrow::Cow;
 use std::ffi::OsString;
@@ -15,15 +16,21 @@ use std::sync::Arc;
 
 use super::parser::Cli;
 
+use serde_json::Value;
+
+//! Configuration file discovery and loading helpers.
+//!
+//! This module locates `OrthoConfig` file layers by scanning for config files
+//! through [`ConfigDiscovery`], handling explicit paths from CLI flags and
+//! environment variables, and loading TOML chains into [`MergeLayer`] values.
+};
+
 #[path = "discovery_diagnostics.rs"]
 mod diagnostics;
-
 #[path = "discovery_paths.rs"]
 mod paths;
-
 #[path = "discovery_layers.rs"]
 mod layers;
-
 #[path = "discovery_trace.rs"]
 mod trace;
 use diagnostics::{BoundedConfigPath, ConfigLoadFailureKind, ConfigLoadWarning};
@@ -90,25 +97,9 @@ pub struct DiscoveredLayers {
 }
 
 impl DiscoveredLayers {
-    /// Borrow the file layers in discovery order.
-    #[cfg(test)]
-    pub(crate) fn layers(&self) -> &[MergeLayer<'static>] {
-        &self.layers
-    }
-
-    /// Borrow the first discovery error, if loading failed.
-    pub(crate) fn first_error(&self) -> Option<&Arc<ortho_config::OrthoError>> {
-        self.errors.first()
-    }
-
-    /// Return the JSON preference captured with these discovered layers.
-    pub(crate) const fn json_preference(&self) -> bool {
-        self.json_preference
-    }
-
-    /// Consume the result into its reusable layers and deferred errors.
     pub(crate) fn into_parts(
         self,
+
     ) -> (Vec<MergeLayer<'static>>, Vec<Arc<ortho_config::OrthoError>>) {
         (self.layers, self.errors)
     }
@@ -123,29 +114,19 @@ pub struct DiscoveryOutcome {
 }
 
 impl DiscoveryOutcome {
-    /// Borrow file layers in discovery order.
-    #[cfg(test)]
-    pub(crate) fn layers(&self) -> &[MergeLayer<'static>] {
-        self.layers.layers()
-    }
-
-    /// Borrow the first discovery error, if loading failed.
-    pub(crate) fn first_error(&self) -> Option<&Arc<ortho_config::OrthoError>> {
-        self.layers.first_error()
-    }
-
-    /// Return the JSON preference captured during the discovery pass.
     pub(crate) const fn json_preference(&self) -> bool {
         self.layers.json_preference()
     }
 
     /// Consume the outcome into the reusable file layers.
     #[must_use]
+
     pub fn into_layers(self) -> DiscoveredLayers {
         self.layers
     }
 
     /// Emit deferred diagnostics without repeating discovery.
+
     pub fn emit_diagnostics(&self) {
         self.layers.diagnostics.emit();
     }
@@ -176,6 +157,39 @@ pub(crate) fn discover_file_layers(cli: &Cli, env: &impl EnvProvider) -> Discove
     DiscoveryOutcome { layers }
 }
 
+/// Resolve JSON while transferring each owned file value into its cached layer.
+///
+/// `MergeLayer` 0.8.0 exposes only [`MergeLayer::into_value`], not a borrowed
+/// accessor. This transfer keeps the original values available for the cached
+/// merge without cloning a layer or JSON value.
+fn retain_layers_and_resolve_json(
+    layers: Vec<MergeLayer<'static>>,
+) -> (Vec<MergeLayer<'static>>, bool) {
+    let mut json = Cli::default().json;
+    let mut retained = Vec::with_capacity(layers.len());
+    for layer in layers {
+        debug_assert_eq!(
+            layer.provenance(),
+            MergeProvenance::File,
+            "discovery must retain only file layers"
+        );
+        let path = layer.path().map(ToOwned::to_owned);
+        let value = layer.into_value();
+        if let Some(layer_json) = json_from_value(&value) {
+            json = layer_json;
+        }
+        retained.push(MergeLayer::file(Cow::Owned(value), path));
+    }
+    (retained, json)
+}
+
+/// Read a Boolean JSON preference from one owned configuration-layer value.
+fn json_from_value(value: &Value) -> Option<bool> {
+    value
+        .as_object()
+        .and_then(|map| map.get("json"))
+        .and_then(Value::as_bool)
+}
 /// Add a discovered file layer result to a merge composition.
 ///
 /// Discovery errors join the merge error collection, retaining the normal

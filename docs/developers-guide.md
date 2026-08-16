@@ -2532,6 +2532,10 @@ access. `DiscoveryOutcome::into_layers` transfers the same
 `DiscoveredLayers` to `merge_with_cached_file_layers`, which consumes the
 cached layers for the full merge and prevents a second discovery pass.
 
+`make bench-config-load` exercises early JSON resolution and the cached merge
+with a large nested configuration payload. It protects the ownership transfer
+that avoids copying complete `MergeLayer` values before the cached merge.
+
 The standalone `merge_with_config_and_env` path performs discovery, emits the
 retained diagnostics and delegates to `merge_with_cached_file_layers`.
 `merge_with_config` is the process-environment wrapper around that path.
@@ -2578,16 +2582,20 @@ Configuration merge helpers:
   the retained layers and discovery errors into the full merge composition.
 - `collect_file_layers_with_trace_and_env_source(directory, env_source)` runs
   the one discovery pass and retains bounded project-scope trace metadata.
-- `resolve_json_and_layers_outcome_with_env(cli, matches, env)` returns
-  `(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics; the
-  composition boundary must replay them after tracing setup and then call
-  `into_layers()`.
+
+- `resolve_json_and_layers_with_env(cli, matches, env)` returns the JSON
+  result and its `DiscoveryOutcome` without emitting tracing, so the caller
+  can install the correct filter before replaying deferred diagnostics.
+- `resolve_json_and_layers_outcome_with_env(cli, matches, env)` retains the
+  `DiscoveryOutcome` so startup can emit diagnostics after tracing setup and
+  then call `into_layers()`.
 - `merge_with_cached_file_layers(cli, matches, env, discovered)` consumes the
   discovered layers without rediscovery.
 - `is_empty_value(value: &serde_json::Value) -> bool` detects an empty CLI
   override object.
-- `json_from_layer(value: &serde_json::Value) -> Option<bool>` extracts `json`
-  from a configuration value.
+- `retain_layers_and_resolve_json(layers)` transfers each owned file-layer
+  value into the cached layer while recording the last valid `json` value,
+  avoiding complete layer or JSON-value copies before the full merge.
 - `json_from_matches(cli, matches, discovered) -> bool` applies an explicit
   root `--json` override to the discovered value.
 - `cli_overrides_from_matches(matches: &ArgMatches) -> OrthoValue` extracts

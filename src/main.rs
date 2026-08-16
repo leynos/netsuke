@@ -43,6 +43,26 @@ mod startup_tracing;
 #[path = "config_load.rs"]
 mod config_load;
 use startup_tracing::StartupWriter;
+
+
+
+
+/// Injectable dependencies for one invocation of the startup composition root.
+///
+/// Production supplies process-backed adapters, while tests use in-memory
+/// adapters to keep locale and configuration environment access deterministic.
+struct RunWithArgsDependencies<'a, L, S, C, E>
+where
+    L: locale_resolution::LocaleEnvProvider,
+    S: locale_resolution::SystemLocale,
+    C: MonotonicClock,
+    E: cli::ConfigEnvProvider,
+{
+    locale_env: &'a L,
+    system_locale: &'a S,
+    configuration_clock: &'a C,
+    config_env: &'a E,
+}
 /// Send buffered startup diagnostics where `mode` says they belong.
 ///
 /// Human mode releases them to stderr; JSON mode drops them, so the diagnostic
@@ -65,22 +85,34 @@ fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().collect();
     let env = locale_resolution::SystemEnv;
     let system_locale = locale_resolution::SysLocale;
-    run_with_args(args, &env, &system_locale, &StdMonotonicClock)
+    let config_env = cli::ConfigStdEnvProvider;
+    let configuration_clock = StdMonotonicClock;
+    let dependencies = RunWithArgsDependencies {
+        locale_env: &env,
+        system_locale: &system_locale,
+        configuration_clock: &configuration_clock,
+        config_env: &config_env,
+    };
+    run_with_args(args, &dependencies)
 }
 
-/// Run one invocation with injectable locale and configuration-clock providers.
+/// Run one invocation with injectable locale, configuration, and clock providers.
 ///
 /// Uses the injected [`MonotonicClock`] to orchestrate timed configuration
 /// loading before running the selected command. Returns the command's process
 /// exit code, including failures from argument parsing, configuration loading,
 /// and runner execution.
-fn run_with_args(
+fn run_with_args<L, S, C, E>(
     args: Vec<OsString>,
-    env: &impl locale_resolution::LocaleEnvProvider,
-    system_locale: &impl locale_resolution::SystemLocale,
-    configuration_clock: &impl MonotonicClock,
-) -> ExitCode {
-    let json_hint = locale_resolution::resolve_startup_json(&args, env);
+    dependencies: &RunWithArgsDependencies<'_, L, S, C, E>,
+) -> ExitCode
+where
+    L: locale_resolution::LocaleEnvProvider,
+    S: locale_resolution::SystemLocale,
+    C: MonotonicClock,
+    E: cli::ConfigEnvProvider,
+{
+    let json_hint = locale_resolution::resolve_startup_json(&args, dependencies.locale_env);
     // Recorded at `WARN` but written to a buffer, not to stderr. `json_hint` is
     // only a hint — configuration can still turn JSON on — and the JSON
     // diagnostic goes to stderr, so an event emitted now could corrupt it.
@@ -89,7 +121,7 @@ fn run_with_args(
     init_tracing(LevelFilter::WARN, startup_writer.clone());
     let startup_mode = DiagMode::from_json_enabled(json_hint);
     observability::init_metrics();
-    let localizer = startup_localizer(&args, env, system_locale);
+    let localizer = startup_localizer(&args, dependencies.locale_env, dependencies.system_locale);
     let (parsed_cli, matches) =
         match parse_cli_or_exit(args, &localizer, startup_mode, &startup_writer) {
             Ok(parsed) => parsed,
@@ -99,25 +131,38 @@ fn run_with_args(
     let verbose = parsed_cli.verbose;
     if is_informational_help(&parsed_cli) {
         settle_startup_diagnostics(&startup_writer, startup_mode);
-        return finish_run(run_cli(&parsed_cli, system_locale, startup_mode), verbose);
+        return finish_run(run_cli(&parsed_cli, dependencies.system_locale, startup_mode), verbose);
     }
 
-    let configuration = config_load::ConfigurationLoadContext::new(
-        &parsed_cli,
-        &matches,
+    let configuration = config_load::ConfigurationLoadContext {
+        parsed_cli: &parsed_cli,
+        matches: &matches,
         startup_mode,
-        &startup_writer,
-    );
-    let merged_cli = match config_load::resolve_configuration(&configuration, configuration_clock) {
+        startup_writer: &startup_writer,
+        config_env: dependencies.config_env,
+    };
+    let merged_cli = match config_load::resolve_configuration(
+        &configuration,
+        dependencies.configuration_clock,
+    ) {
         Ok(merged) => merged,
         Err(code) => return finish_run(code, verbose),
     };
     let merged_verbose = merged_cli.verbose;
     let runtime_mode = DiagMode::from_json_enabled(merged_cli.json);
-    finish_run(
-        run_cli(&merged_cli, system_locale, runtime_mode),
-        merged_verbose,
-    )
+
+    configure_runtime(&merged_cli, dependencies.system_locale, runtime_mode);
+    let output_mode =
+        output_mode::resolve(merged_cli.accessibility_override(), Some(merged_cli.color));
+    let prefs = output_prefs::resolve_from_theme(
+        merged_cli.theme_preference(),
+        ThemeContext::new(None, Some(merged_cli.color), output_mode),
+    );
+    let exit_code = match runner::run(&merged_cli, prefs) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => handle_runner_error(err, prefs, runtime_mode),
+    };
+    finish_run(exit_code, merged_verbose)
 }
 
 /// Emit a development snapshot after the command has completed when requested.

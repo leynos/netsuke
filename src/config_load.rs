@@ -38,45 +38,30 @@ struct ResolvedDiagnosticMode {
 ///
 /// This context is private to startup orchestration; it groups the parsed
 /// inputs that must remain within the measured configuration-load interval.
-pub(super) struct ConfigurationLoadContext<'a> {
-    parsed_cli: &'a cli::Cli,
-    matches: &'a ArgMatches,
-    startup_mode: DiagMode,
-    startup_writer: &'a StartupWriter,
-}
-
-impl<'a> ConfigurationLoadContext<'a> {
-    /// Construct the input context for one configuration-load attempt.
-    pub(super) const fn new(
-        parsed_cli: &'a cli::Cli,
-        matches: &'a ArgMatches,
-        startup_mode: DiagMode,
-        startup_writer: &'a StartupWriter,
-    ) -> Self {
-        Self {
-            parsed_cli,
-            matches,
-            startup_mode,
-            startup_writer,
-        }
-    }
+pub(super) struct ConfigurationLoadContext<'a, E>
+where
+    E: cli::ConfigEnvProvider,
+{
+    pub(super) parsed_cli: &'a cli::Cli,
+    pub(super) matches: &'a ArgMatches,
+    pub(super) startup_mode: DiagMode,
+    pub(super) startup_writer: &'a StartupWriter,
+    pub(super) config_env: &'a E,
 }
 
 /// Resolve diagnostic mode and merge configuration while recording one metric.
 ///
 /// The measured interval starts immediately before diagnostic-mode resolution
 /// and ends after either that resolution or the full configuration merge.
-pub(super) fn resolve_configuration(
-    context: &ConfigurationLoadContext<'_>,
+pub(super) fn resolve_configuration<E>(
+    context: &ConfigurationLoadContext<'_, E>,
     clock: &impl MonotonicClock,
-) -> Result<cli::Cli, std::process::ExitCode> {
+) -> Result<cli::Cli, std::process::ExitCode>
+where
+    E: cli::ConfigEnvProvider,
+{
     let started_at = clock.now();
-    let resolution = match resolve_json_mode_or_exit(
-        context.parsed_cli,
-        context.matches,
-        context.startup_mode,
-        clock,
-    ) {
+    let resolution = match resolve_json_mode_or_exit(context, clock) {
         Ok(mode) => mode,
         Err(code) => {
             record_config_load_metrics(clock.now().duration_since(started_at), false);
@@ -87,8 +72,7 @@ pub(super) fn resolve_configuration(
     // The effective mode is known here, before configuration is merged, so the
     // startup warning reaches the user ahead of any configuration processing.
     settle_startup_diagnostics(context.startup_writer, resolution.mode);
-    let merged_cli = match merge_cli_or_exit(context.parsed_cli, context.matches, resolution, clock)
-    {
+    let merged_cli = match merge_cli_or_exit(context, resolution, clock) {
         Ok(merged) => merged,
         Err(code) => {
             record_config_load_metrics(clock.now().duration_since(started_at), false);
@@ -127,17 +111,18 @@ pub(super) fn config_err_to_exit(
 /// The diagnostic-mode phase is timed with the injected [`MonotonicClock`].
 /// Resolution failures select the fallback mode's filter and return a failure
 /// [`ExitCode`] through [`config_err_to_exit`].
-fn resolve_json_mode_or_exit(
-    parsed_cli: &cli::Cli,
-    matches: &ArgMatches,
-    fallback_mode: DiagMode,
+fn resolve_json_mode_or_exit<E>(
+    context: &ConfigurationLoadContext<'_, E>,
     clock: &impl MonotonicClock,
-) -> Result<ResolvedDiagnosticMode, ExitCode> {
+) -> Result<ResolvedDiagnosticMode, ExitCode>
+where
+    E: cli::ConfigEnvProvider,
+{
     match observability::record_config_load(observability::ConfigLoadPhase::DiagMode, clock, || {
         let (result, outcome) = cli::resolve_json_and_layers_outcome_with_env(
-            parsed_cli,
-            matches,
-            &cli::ConfigStdEnvProvider,
+            context.parsed_cli,
+            context.matches,
+            context.config_env,
         );
         match result {
             Ok(is_json_enabled) => Ok((is_json_enabled, outcome)),
@@ -146,7 +131,7 @@ fn resolve_json_mode_or_exit(
     }) {
         Ok((is_json_enabled, outcome)) => {
             let mode = DiagMode::from_json_enabled(is_json_enabled);
-            set_tracing_filter(startup_filter(mode, parsed_cli.verbose));
+            set_tracing_filter(startup_filter(mode, context.parsed_cli.verbose));
             outcome.emit_diagnostics();
             Ok(ResolvedDiagnosticMode {
                 mode,
@@ -155,12 +140,12 @@ fn resolve_json_mode_or_exit(
         }
         Err(error_and_outcome) => {
             let (err, outcome) = *error_and_outcome;
-            let fallback_filter = startup_filter(fallback_mode, parsed_cli.verbose);
+            let fallback_filter = startup_filter(context.startup_mode, context.parsed_cli.verbose);
             set_tracing_filter(fallback_filter);
             outcome.emit_diagnostics();
             Err(config_err_to_exit(
                 err.as_ref(),
-                fallback_mode,
+                context.startup_mode,
                 observability::DIAG_MODE_OPERATION,
             ))
         }
@@ -171,17 +156,19 @@ fn resolve_json_mode_or_exit(
 ///
 /// The merge is timed with the injected [`MonotonicClock`], applies the default
 /// command, and maps configuration failures to a failure [`ExitCode`].
-fn merge_cli_or_exit(
-    parsed_cli: &cli::Cli,
-    matches: &ArgMatches,
+fn merge_cli_or_exit<E>(
+    context: &ConfigurationLoadContext<'_, E>,
     resolution: ResolvedDiagnosticMode,
     clock: &impl MonotonicClock,
-) -> Result<cli::Cli, ExitCode> {
+) -> Result<cli::Cli, ExitCode>
+where
+    E: cli::ConfigEnvProvider,
+{
     observability::record_config_load(observability::ConfigLoadPhase::Merge, clock, || {
         cli::merge_with_cached_file_layers(
-            parsed_cli,
-            matches,
-            &cli::ConfigStdEnvProvider,
+            context.parsed_cli,
+            context.matches,
+            context.config_env,
             resolution.discovered_layers,
         )
     })
