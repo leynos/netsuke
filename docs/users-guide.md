@@ -591,14 +591,17 @@ its own process environment. `netsuke::runner::CommandEnv` carries child
 environment overrides as data — `inherit()` changes nothing, `with_var` and
 `with_path` set variables for the spawned command only — and the explicit
 request forms `run_ninja_with` and `run_ninja_tool_with` accept a request
-naming the program, build file, targets or tool, and that environment. The
-convenience wrappers `run_ninja` and `run_ninja_tool` behave identically
-with an inherited environment. Overrides are additive: variables not named
-are inherited from the calling process, and the injected `PATH` governs
-what commands Ninja launches will see. Relative program names remain valid
-and resolve through that child `PATH`; supply an absolute or otherwise
-resolved `program` only when executable selection must stay isolated from
-the injected `PATH`.
+naming the program, build file, targets or tool, that environment, and a
+`stderr_mode: StderrMode` policy routing the child's standard streams:
+`Suppress` drains both streams (keeping JSON diagnostics machine-readable),
+while `Forward` relays them to the caller. The convenience wrappers
+`run_ninja` and `run_ninja_tool` behave identically with an inherited
+environment, deriving the policy from the CLI's JSON setting. Overrides are
+additive: variables not named are inherited from the calling process, and
+the injected `PATH` governs what commands Ninja launches will see. Relative
+program names remain valid and resolve through that child `PATH`; supply an
+absolute or otherwise resolved `program` only when executable selection must
+stay isolated from the injected `PATH`.
 
 The request itself is a named type: `netsuke::runner::NinjaBuildRequest` for a
 build and `netsuke::runner::NinjaToolRequest` for `ninja -t <tool>`. Both
@@ -611,7 +614,7 @@ summarizes these additions and confirms the wrappers are unchanged.
 ```rust
 use netsuke::cli::Cli;
 use netsuke::runner::{
-    BuildTargets, CommandEnv, NinjaBuildRequest, NinjaToolRequest, run_ninja_tool_with,
+    BuildTargets, CommandEnv, NinjaBuildRequest, NinjaToolRequest, StderrMode, run_ninja_tool_with,
     run_ninja_with,
 };
 use std::path::Path;
@@ -632,6 +635,9 @@ let build = NinjaBuildRequest {
     build_file: Path::new("build.ninja"),
     targets: &targets,
     env: &env,
+    // `Suppress` in JSON diagnostics mode keeps the child's output out of
+    // the machine-readable streams; `Forward` relays it to the caller.
+    stderr_mode: StderrMode::from_json_enabled(cli.json),
 };
 let clean = NinjaToolRequest {
     program: Path::new("/usr/bin/ninja"),
@@ -639,6 +645,7 @@ let clean = NinjaToolRequest {
     build_file: Path::new("build.ninja"),
     tool: "clean",
     env: &env,
+    stderr_mode: StderrMode::from_json_enabled(cli.json),
 };
 
 if std::env::var_os("NETSUKE_GUIDE_RUN").is_some() {
@@ -647,11 +654,13 @@ if std::env::var_os("NETSUKE_GUIDE_RUN").is_some() {
 }
 ```
 
-These types are additive: `run_ninja` and `run_ninja_tool` keep their existing
-signatures and behaviour, so an existing caller needs no change. Each release
-records such additions in [`CHANGELOG.md`](../CHANGELOG.md), which is where
-Netsuke signposts Rust API changes — with no stability promise attached to
-them ahead of 1.0.
+The convenience wrappers `run_ninja` and `run_ninja_tool` keep their existing
+signatures and behaviour, so a caller that uses them needs no change; the
+request bundles gained the required `stderr_mode` field, so a caller that
+constructs `NinjaBuildRequest`/`NinjaToolRequest` directly must supply it.
+Each release records such additions in [`CHANGELOG.md`](../CHANGELOG.md),
+which is where Netsuke signposts Rust API changes — with no stability promise
+attached to them ahead of 1.0.
 
 ## Use the template standard library
 
