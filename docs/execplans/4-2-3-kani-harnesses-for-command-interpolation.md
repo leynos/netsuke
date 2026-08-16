@@ -7,7 +7,7 @@ This ExecPlan (execution plan) is a living document. The sections
 
 Status: DRAFT
 
-Revision 2. See `Revision note` at the foot of this document.
+Revision 2.1. See `Revision note` at the foot of this document.
 
 ## Purpose / big picture
 
@@ -174,12 +174,15 @@ you must follow:
   ```
 
   with bodies in the sibling `*_verification.rs`. See `src/ir/cycle.rs` lines
-  380-382. The split exists because AGENTS.md line 31 caps any code file at
-  400 lines. The repository's sibling-module convention for shared production
+  380-382 and `src/ir/from_manifest.rs` lines 163-165. The split exists because
+  AGENTS.md line 31 caps any code file at 400 lines. Note that line numbers in
+  documents this plan cites drift as those documents change; verify an anchor
+  by its heading or symbol name before trusting the number.
+  The repository's sibling-module convention for shared production
   helpers is `<module>_support.rs`; see `src/ir/cycle_support.rs`, which holds
   the `canonicalize_cycle_by` kernel that `src/ir/cycle.rs` re-exports.
 - **`cfg(kani)` is a build configuration, not a Cargo feature.** It is declared
-  in `Cargo.toml` line 252 under `[lints.rust] unexpected_cfgs`. There is no
+  in `Cargo.toml` line 254 under `[lints.rust] unexpected_cfgs`. There is no
   `kani` entry in `Cargo.toml`.
 - **Default unwind** is set in `Cargo.toml` lines 71-72:
   `[package.metadata.kani.flags] default-unwind = "6"`. The value must be a
@@ -203,7 +206,7 @@ you must follow:
 
 The existing inventory is thirteen harnesses across
 `src/ir/from_manifest_verification.rs` (four) and `src/ir/cycle_verification.rs`
-(nine), documented in `docs/developers-guide.md` lines 1244-1258. There are
+(nine), documented in `docs/developers-guide.md` lines 1323-1337. There are
 twelve mutation patches: the adapter harness
 `canonicalize_path_wrapper_matches_u8_kernel_for_two_nodes` has none.
 
@@ -252,8 +255,8 @@ Repository documents:
 - `AGENTS.md` — mandatory gates, file-size cap, commit style, spelling policy.
 - `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md` — the governing decision
   on Kani bounds and production-owned kernels.
-- `docs/developers-guide.md` lines 199-276 ("Command and recipe lowering") and
-  lines 1177-1310 ("Formal-verification tooling").
+- `docs/developers-guide.md` lines 266-343 ("Command and recipe lowering")
+  and lines 1256-1388 ("Formal-verification tooling").
 - `docs/formal-verification-methods-in-netsuke.md` — the design rationale.
 - `docs/execplans/4-2-2-kani-harnesses-for-cycle-canonicalization.md` — the
   closest comparable job. Its Decision log records the resource-cap wrapper and
@@ -280,7 +283,7 @@ Skills to load:
 
 There is no Terms of Reference document in this repository. Upstream artefacts:
 
-- `docs/roadmap.md` lines 426-432 — item 4.2.3 and its four sub-items, referred
+- `docs/roadmap.md` lines 428-434 — item 4.2.3 and its four sub-items, referred
   to as `RM-4.2.3.a` through `RM-4.2.3.d`.
 - `docs/formal-verification-methods-in-netsuke.md` lines 62-79 — the design
   basis, `FV-CMD`.
@@ -965,10 +968,10 @@ the next stage on a failing gate.
 
 - **Deliverables:**
   - `docs/developers-guide.md`: one inventory row per new harness in the table
-    at lines 1244-1258, matching the existing columns; extend the prose above
+    at lines 1323-1337, matching the existing columns; extend the prose above
     it to describe the `substitute_chars` seam and the `cfg(kani)` bindings
-    constructor as lines 1233-1242 describe the cycle kernel; add a subsection
-    under "Command and recipe lowering" (line 199) stating the placeholder
+    constructor as lines 1312-1321 describe the cycle kernel; add a subsection
+    under "Command and recipe lowering" (line 266) stating the placeholder
     contract now proved — supported placeholders, the boundary rule with the
     `x$in` and `$$in` behaviours, the marker-form asymmetry, backtick-region
     exclusion, and guard placement, including the explicit note that `OBL-ODD`
@@ -982,9 +985,9 @@ the next stage on a failing gate.
     Decision outcome, and Known risks with the 4.2.3 bound decision, the
     window-completeness argument, the harness-local oracle policy, and the
     residual gaps. Add this execplan to Related documents.
-  - `docs/roadmap.md` lines 426-432: change `- [ ] 4.2.3.` and all four
+  - `docs/roadmap.md` lines 428-434: change `- [ ] 4.2.3.` and all four
     sub-bullets to `- [x]`, then append evidence bullets in the style of the
-    completed 4.2.1 and 4.2.2 entries (lines 393-425).
+    completed 4.2.1 and 4.2.2 entries (lines 376-427).
   - `docs/users-guide.md`: **no change**, and say so here rather than leaving
     it unstated. This work adds no user-visible behaviour and no configuration.
 - **Acceptance evidence:** `make check-fmt`, `make lint`, `make test`,
@@ -1280,6 +1283,9 @@ This section is populated during implementation. It must contain, by EP-M6:
   which `make kani-ir` is 191-227s and roughly 45-75s is solving.
 - [x] (2026-08-17) Drafted revision 1.
 - [x] (2026-08-17) Six-lens design review; revision 2 rewritten in response.
+- [x] (2026-08-17) Rebased onto `origin/main` at `7e5c2679` ("Add target
+  descriptions and netsuke help targets"). No conflicts; line references
+  refreshed. See `Decision log` for the relevance assessment.
 - [ ] Plan approved by the maintainer, including the three decisions flagged
   below as requiring acceptance.
 - [ ] EP-M0 feasibility spike and bound decision.
@@ -1420,6 +1426,21 @@ are accepted.
   AGENTS.md and gives 4.4.1 its source material.
   **Date/Author:** 2026-08-17, planning agent.
 
+- **Decision:** Carry this plan forward unchanged in substance across the
+  rebase onto `origin/main` at `7e5c2679`.
+  **Rationale:** that commit adds target descriptions and `netsuke help
+  targets`. Its only change under `src/ir/` is a comment in
+  `src/ir/from_manifest.rs` recording that target descriptions are discovery
+  metadata and never take part in recipe resolution — which reinforces rather
+  than disturbs the boundary this plan verifies. It touches no file this plan
+  modifies, adds no shared helper or pattern relevant to command
+  interpolation, and leaves `src/ir/cmd_interpolate.rs`, `src/ir/cycle*.rs`,
+  the Makefile, and the CI workflow untouched. Its additions to
+  `docs/developers-guide.md` sit outside the formal-verification sections. The
+  only consequence is line-number drift in citations, refreshed in this
+  revision.
+  **Date/Author:** 2026-08-17, planning agent.
+
 - **Decision:** Extend `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md`
   rather than minting a new ADR number.
   **Rationale:** the same decision — how far to bound Kani harnesses and where
@@ -1493,3 +1514,12 @@ Effect on remaining work: the production change shrinks from a new type family
 to three lines, the harness count drops from six to five, one contract test is
 added, and three decisions now require explicit maintainer acceptance before
 their milestones start.
+
+**Revision 2.1 (2026-08-17).** Rebased onto `origin/main` at `7e5c2679`. No
+conflicts and no substantive change: that commit adds target descriptions and
+`netsuke help targets`, touches nothing this plan modifies, and its single
+`src/ir/` edit is a comment reinforcing that target descriptions stay out of
+recipe resolution. Line references into `docs/roadmap.md`,
+`docs/developers-guide.md`, `Cargo.toml`, and `src/ir/from_manifest.rs` were
+refreshed, and a note now warns that such numbers drift — verify an anchor by
+heading or symbol name before trusting it. Remaining work is unaffected.
