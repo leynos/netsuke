@@ -15,6 +15,14 @@ operator, user, and contributor references are easier to find.
   execution design document.
 - [netsuke-cli-design-document.md](netsuke-cli-design-document.md): Command-line
   interface design and user-experience requirements.
+- [netsuke-test-framework-ux-design.md](netsuke-test-framework-ux-design.md):
+  Test dialect, mocking model, and command surface for the Netsukefile
+  testing framework.
+- [netsuke-test-framework-technical-design.md](netsuke-test-framework-technical-design.md):
+  Implementation architecture for the Netsukefile testing framework.
+- [rfcs/0001-netsukefile-testing-framework.md](rfcs/0001-netsukefile-testing-framework.md):
+  Proposal introducing the Netsukefile testing framework and positioning it
+  within the product.
 - [roadmap.md](roadmap.md): Phased implementation plan and tracked delivery
   work.
 - [archive/roadmap-completed-foundations.md](archive/roadmap-completed-foundations.md):
