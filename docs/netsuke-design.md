@@ -2245,6 +2245,11 @@ construct `NinjaProcessOptions` directly.
 The adapter converts `Cli::directory` to the UTF-8 path at this boundary and
 returns `io::ErrorKind::InvalidData` if the CLI path is not valid UTF-8.
 
+The private `run_ninja_internal` helper takes a `NinjaInternalRequest`, a
+clock, and a `configure` closure. The request groups the resolved program,
+stderr policy, optional status observer, operation label, and failure-output
+capture setting before the closure configures the command.
+
 The command construction follows this pattern:
 
 1. A new `Command` is created via `Command::new(request.program)`. The program
