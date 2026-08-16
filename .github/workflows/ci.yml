@@ -5,6 +5,13 @@ on:
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 
+env:
+  # Single source of truth for the cargo-nextest pin. `make test` runs the
+  # non-doctest suite through nextest, so every job that installs it reads
+  # this value. Declared once at workflow scope so the documented
+  # AGENTS.md `sed` extraction yields exactly one version.
+  NEXTEST_VERSION: '0.9.133'
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
@@ -18,9 +25,6 @@ jobs:
       # the dated nightly pinned in rust-toolchain.toml.
       NETSUKE_RUST_TOOLCHAIN: nightly-2026-06-25
       WHITAKER_INSTALLER_VERSION: '0.2.7'
-      # Single source of truth for the cargo-nextest pin. `make test` runs the
-      # non-doctest suite through nextest, so the job installs it up front.
-      NEXTEST_VERSION: '0.9.133'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -138,9 +142,6 @@ jobs:
       # the dated nightly pinned in rust-toolchain.toml.
       NETSUKE_RUST_TOOLCHAIN: nightly-2026-06-25
       WHITAKER_INSTALLER_VERSION: '0.2.7'
-      # Single source of truth for the cargo-nextest pin. `make test` runs the
-      # non-doctest suite through nextest, so the job installs it up front.
-      NEXTEST_VERSION: '0.9.133'
     defaults:
       run:
         # The Makefile uses POSIX shell constructs throughout; Git Bash is
