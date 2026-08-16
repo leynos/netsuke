@@ -197,3 +197,61 @@ def test_makefile_clippy_flags_stay_workspace_wide() -> None:
         f"every workspace crate, target, and feature with warnings denied; "
         f"got {match.group(1).strip()!r}"
     )
+
+
+def test_nextest_version_declared_once_at_workflow_scope() -> None:
+    """NEXTEST_VERSION is declared once, at workflow scope.
+
+    AGENTS.md documents a local-install recipe that extracts the pin with:
+
+        sed -n "s/.*NEXTEST_VERSION: '\\(.*\\)'.*/\\1/p" \
+            .github/workflows/ci.yml
+
+    A job-scoped duplicate would make that command emit two newline-separated
+    values, which `cargo install --version "$NEXTEST_VERSION"` rejects. The pin
+    therefore lives in the workflow-level `env:` block — the only declaration
+    in the file — and both jobs read it via `${{ env.NEXTEST_VERSION }}`.
+    """
+    text = WORKFLOW_PATH.read_text(encoding="utf-8")
+    declarations = re.findall(r"^\s*NEXTEST_VERSION:\s*'([^']+)'", text, re.MULTILINE)
+    assert declarations == ["0.9.133"], (
+        "NEXTEST_VERSION must be declared exactly once at workflow scope "
+        f"with the pinned value, got {declarations!r}"
+    )
+
+    workflow = _load()
+    match workflow.get("env"):
+        case dict() as env:
+            pass
+        case _:
+            raise AssertionError(
+                "the workflow must declare a workflow-level env mapping"
+            )
+    assert env.get("NEXTEST_VERSION") == "0.9.133", (
+        "NEXTEST_VERSION must be pinned at workflow scope, "
+        f"got {env.get('NEXTEST_VERSION')!r}"
+    )
+
+    for job_name in ("build-test", "build-test-windows"):
+        match workflow.get("jobs"):
+            case dict() as jobs:
+                pass
+            case _:
+                raise AssertionError("the workflow must declare a jobs mapping")
+        match jobs.get(job_name):
+            case dict() as job:
+                pass
+            case _:
+                raise AssertionError(f"the workflow must declare a {job_name} job")
+        assert "NEXTEST_VERSION" not in job.get("env", {}), (
+            f"{job_name} must not redeclare NEXTEST_VERSION at job scope"
+        )
+        installs = [
+            step.get("with", {}).get("tool")
+            for step in job.get("steps", [])
+            if "nextest" in str(step.get("with", {}).get("tool", ""))
+        ]
+        assert installs == ["nextest@${{ env.NEXTEST_VERSION }}"], (
+            f"{job_name} must install nextest via the workflow-scoped "
+            f"${{{{ env.NEXTEST_VERSION }}}}, got {installs!r}"
+        )
