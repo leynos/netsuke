@@ -4,7 +4,9 @@
 //! through [`ConfigDiscovery`], handling explicit paths from CLI flags and
 //! environment variables, and loading TOML chains into [`MergeLayer`] values.
 
-use ortho_config::{MergeComposer, MergeLayer, OrthoResult, load_config_file_as_chain};
+use ortho_config::{
+    MapEnv, MergeComposer, MergeLayer, OrthoResult, SharedEnvSource, load_config_file_as_chain,
+};
 use std::borrow::Cow;
 use std::ffi::OsString;
 use std::io;
@@ -26,9 +28,18 @@ use diagnostics::{
     ConfigLoadFailureKind, debug_config_path, path_hash, trace_config_path_variable,
     warn_explicit_config_load_failed,
 };
-use layers::collect_file_layers;
+use layers::collect_file_layers_with_env_source;
 
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG";
+const DISCOVERY_ENV_KEYS: [&str; 7] = [
+    CONFIG_ENV_VAR,
+    "HOME",
+    "USERPROFILE",
+    "XDG_CONFIG_HOME",
+    "XDG_CONFIG_DIRS",
+    "APPDATA",
+    "LOCALAPPDATA",
+];
 
 /// Provides access to environment variables used during config discovery.
 ///
@@ -66,17 +77,32 @@ impl EnvProvider for StdEnvProvider {
     }
 }
 
-/// Load configuration layers with environment access supplied by `env`.
+/// Environment adapters consumed by configuration file discovery.
 ///
-/// Loading errors are appended to `errors`, matching the normal merge path
-/// without requiring callers to mutate the process environment.
-pub(crate) fn push_file_layers_with_env(
+/// The value adapter remains the Netsuke-owned [`EnvProvider`] port, whereas
+/// `discovery_env` is the deliberately narrow `OrthoConfig` adapter. Keeping
+/// them together makes every composition root choose both dependencies
+/// explicitly and prevents a test-only environment from leaking ambient reads.
+pub(crate) struct DiscoverySources<'a, E: EnvProvider + ?Sized> {
+    env: &'a E,
+    discovery_env: SharedEnvSource,
+}
+
+impl<'a, E: EnvProvider + ?Sized> DiscoverySources<'a, E> {
+    /// Construct the discovery adapters selected by one composition root.
+    pub(crate) fn new(env: &'a E, discovery_env: SharedEnvSource) -> Self {
+        Self { env, discovery_env }
+    }
+}
+
+/// Load configuration layers with explicit selector and discovery adapters.
+pub(crate) fn push_file_layers_with_sources(
     cli: &Cli,
     composer: &mut MergeComposer,
     errors: &mut Vec<Arc<ortho_config::OrthoError>>,
-    env: &impl EnvProvider,
+    sources: &DiscoverySources<'_, impl EnvProvider>,
 ) {
-    match collect_file_layers_with_env(cli, env) {
+    match collect_file_layers_with_env(cli, sources) {
         Ok(layers) => {
             for layer in layers {
                 composer.push_layer(layer);
@@ -92,20 +118,38 @@ pub(crate) fn push_file_layers_with_env(
 /// select the same file layers while retaining their own error handling.
 fn collect_file_layers_with_env(
     cli: &Cli,
-    env: &impl EnvProvider,
+    sources: &DiscoverySources<'_, impl EnvProvider>,
 ) -> OrthoResult<Vec<MergeLayer<'static>>> {
-    let resolution = resolve_config_selector(cli.config.clone(), env);
+    let resolution = resolve_config_selector(cli.config.clone(), sources.env);
     trace_config_path_resolution(&resolution);
     resolution.path.map_or_else(
         || {
             debug!("using config discovery");
-            collect_file_layers(cli.directory.as_deref())
+            collect_file_layers_with_env_source(
+                cli.directory.as_deref(),
+                Arc::clone(&sources.discovery_env),
+            )
         },
         |path| {
             debug_config_path("using explicit config path", &path);
             load_layers_from_path(&path)
         },
     )
+}
+
+/// Project the fixed discovery inputs from Netsuke's environment port.
+///
+/// This adapter is private to CLI configuration composition. It intentionally
+/// exposes only discovery's documented lookup keys: `EnvironmentLayer` remains
+/// the sole owner of complete `NETSUKE_*` enumeration for value merging.
+pub(crate) fn discovery_env_source(env: &impl EnvProvider) -> SharedEnvSource {
+    let mut source = MapEnv::new();
+    for key in DISCOVERY_ENV_KEYS {
+        if let Some(value) = env.get(key) {
+            source.insert(key, value);
+        }
+    }
+    Arc::new(source)
 }
 
 /// Select an explicit config path, giving `--config` precedence over `env`.
@@ -215,15 +259,22 @@ pub(crate) fn load_layers_from_path(
     }
 }
 
-/// Load file layers for early JSON resolution using injected environment access.
-///
-/// This delegates to the same precedence boundary as the normal merge path.
-pub(crate) fn collect_diag_file_layers_with_env(
+/// Load diagnostic file layers with the same discovery adapter as merging.
+pub(crate) fn collect_diag_file_layers_with_sources(
+    cli: &Cli,
+    sources: &DiscoverySources<'_, impl EnvProvider>,
+) -> OrthoResult<Vec<MergeLayer<'static>>> {
+    let _span = debug_span!("collect_diag_file_layers").entered();
+    collect_file_layers_with_env(cli, sources)
+}
+
+#[cfg(test)]
+fn collect_diag_file_layers_with_env(
     cli: &Cli,
     env: &impl EnvProvider,
 ) -> OrthoResult<Vec<MergeLayer<'static>>> {
-    let _span = debug_span!("collect_diag_file_layers").entered();
-    collect_file_layers_with_env(cli, env)
+    let sources = DiscoverySources::new(env, discovery_env_source(env));
+    collect_diag_file_layers_with_sources(cli, &sources)
 }
 
 #[cfg(test)]

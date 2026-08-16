@@ -2774,10 +2774,10 @@ flowchart LR
 ```
 
 Netsuke configuration discovery is implemented in `src/cli/discovery.rs`.
-Explicit file selection is handled by `explicit_config_path_with_env(...)`,
-which applies the precedence `--config` > `NETSUKE_CONFIG`. Layer loading and
-automatic discovery are handled by `push_file_layers(...)`, which also applies
-the `-C/--directory` flag as the project-discovery root.
+Explicit file selection is handled by `resolve_config_selector(...)`, which
+applies the precedence `--config` > `NETSUKE_CONFIG`. Layer loading and
+automatic discovery are handled by `push_file_layers_with_sources(...)`, which
+also applies the `-C/--directory` flag as the project-discovery root.
 
 **Figure: Explicit Config Selector Resolution** — This diagram shows how
 Netsuke chooses the configuration file before automatic discovery. Netsuke
@@ -2887,18 +2887,24 @@ manual flag repetition.
   project, and user file layers, merges them with defaults, adds environment
   variables via Figment, and finally applies CLI overrides extracted from
   `ArgMatches`.
-- The `config_discovery()` function uses OrthoConfig's builder API without
-  further customization beyond the application name and environment variable
-  override, relying on OrthoConfig's platform-specific defaults for standard
-  directory resolution.
+- The `config_discovery()` function uses OrthoConfig's builder API with the
+  application name, environment selector, and an environment source selected at
+  the CLI composition root. Ambient runs use `ProcessEnv`; injected runs use a
+  closed `MapEnv` projected from Netsuke's environment port, preventing tests
+  from falling through to host directories.
+- A missing optional candidate means no configuration layer and therefore
+  built-in defaults. A candidate that exists but cannot load is retained as an
+  error when no candidate succeeds, so malformed configuration and a missing
+  `extends` parent are never mistaken for absence.
 - Netsuke-owned environment reads for explicit config selection and early JSON
   resolution go through the `EnvProvider` port in `src/cli/discovery.rs`.
   Production code uses `StdEnvProvider`; tests can inject a map-backed provider
-  instead of mutating the process environment. OrthoConfig discovery remains an
-  external boundary and may still read platform environment variables directly.
-- Configuration files use TOML format by default. JSON5 (`.json`, `.json5`) and
-  YAML (`.yaml`, `.yml`) formats are supported when the corresponding Cargo
-  features are enabled.
+  instead of mutating the process environment. The v0.9.0 adapter projects only
+  the documented discovery keys into OrthoConfig, while `EnvironmentLayer`
+  retains the complete `NETSUKE_*` value merge boundary.
+- Configuration files use TOML. OrthoConfig's optional YAML provider remains
+  disabled; Netsukefile YAML continues to be parsed by the separate
+  `serde-saphyr` manifest boundary.
 - Explicit config selection is handled outside OrthoConfig's built-in discovery
   override surface so Netsuke keeps its custom two-pass project-over-user merge
   behaviour for automatic discovery. If an explicit selector is set, the
@@ -2935,9 +2941,10 @@ Release engineering is delegated to GitHub Actions workflows built on the
 SHAs so release automation remains reproducible. The tagging workflow first
 verifies that the Git ref matches `Cargo.toml` and records the crate's binary
 name once so all subsequent jobs operate on consistent metadata. Each build job
-installs `cargo-orthohelp = 0.8.0`, invokes the `rust-build-release` composite
+installs `cargo-orthohelp = 0.9.0`, invokes the `rust-build-release` composite
 action, and then runs `scripts/generate-release-help.sh` before staging or
-packaging.
+packaging. The pinned v0.9.0 executable is invoked by the helper as
+`cargo-orthohelp orthohelp`.
 
 Linux builds cross-compile for `x86_64` and `aarch64`, stage the binary and
 generated manual page through `.github/release-staging.toml`, and pass the

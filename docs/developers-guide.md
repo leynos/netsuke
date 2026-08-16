@@ -510,19 +510,24 @@ deviation from upstream" callout, and record Netsuke-specific policy here and in
 
 Prefer `excluded_paths` over `excluded_crates`: a path entry exempts one module
 and its descendants, whereas a crate entry exempts a whole compilation unit.
-The application crate is scoped this way — only
+The application crate's module-scoped exemptions include
 `netsuke::stdlib::which::lookup` (executable discovery through `PATH` and
 cross-directory symlink canonicalization, which `cap_std` cannot express) and
 `netsuke::runner::process::file_io::ambient_sync` (temporary-file
 synchronization, scoped to the submodule holding only that `sync_all` so the
-rest of `file_io` keeps writing through `cap_std` handles), and
-`netsuke::cli::discovery::paths` (canonicalizing an ambient `--directory` to
-match OrthoConfig's layer paths) are exempt; the rest of `netsuke` stays under
-the capability policy. The behavioural step definitions, CLI integration tests,
-and shared workflow-reading helper that stage fixtures ambiently are scoped the
-same way. A crate-level entry is justified only when the ambient access lives
-in the crate root itself, where a path entry would be no narrower — that covers
-the Cargo build script and the enumerated integration-test crates. The
+rest of `file_io` keeps writing through `cap_std` handles). Configuration
+discovery otherwise uses capability-scoped canonicalization. Its small,
+dedicated path-normalization module, `netsuke::cli::discovery::paths`, remains
+narrowly excluded because `std::fs::canonicalize` preserves the absolute
+comparison keys and cross-directory symlink behaviour that `cap_std` rejects.
+For man-page generation, the build script compiles the `cli::build_support`
+parser subset and deliberately omits runtime discovery. The broader
+`netsuke::cli::discovery` module remains under the capability policy; no
+`build_script_build` exception is required. The behavioural step definitions,
+CLI integration tests, and shared workflow-reading helper that stage fixtures
+ambiently are scoped the same way. A crate-level entry is justified only when
+the ambient access lives in the crate root itself, where a path entry would be
+no narrower — that covers the enumerated integration-test crates. The
 `test_support` crate uses capability-backed fixture helpers and remains linted
 by Whitaker under its own narrow policy.
 
@@ -541,12 +546,10 @@ configuration names only `test_support::fs` in `excluded_paths`. The root
 crate remains subject to the filesystem policy.
 
 Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
-allows. The lint does honour in-source lint attributes, but this repository
-denies `clippy::allow_attributes`, so `#[allow(no_std_fs_operations)]` will not
-compile here; an in-source exemption must be a *temporary*, item-level
-`#[expect(no_std_fs_operations, reason = "…")]` that states the reason and the
-route back to compliance. Prefer migrating to `cap_std` over any of these;
-reach for an exclusion only when the operation is irreducibly ambient.
+allows. Do not use Rust `#[allow]` or `#[expect]` for `no_std_fs_operations`:
+this Dylint lint is not known to `rustc`, so its exclusions must be configured
+there. Prefer migrating to `cap_std` over any of these; reach for an exclusion
+only when the operation is irreducibly ambient.
 
 To confirm the exclusions have not silently widened, add a temporary
 `std::fs::metadata` call to an unexcluded module — for example
@@ -785,7 +788,7 @@ rather than from `build.rs`. The build script remains responsible for the
 localization key audit only. Release automation installs the pinned tool with:
 
 ```bash
-cargo install cargo-orthohelp --version 0.8.0 --locked
+cargo install cargo-orthohelp --version 0.9.0 --locked
 ```
 
 The workflow then calls:
@@ -793,6 +796,10 @@ The workflow then calls:
 ```bash
 scripts/generate-release-help.sh <target> <bin-name> <out-dir> <ps-module-name>
 ```
+
+The script invokes `cargo-orthohelp orthohelp`; v0.9.0 reserves direct
+generator options for that subcommand. Keep its `rstest` script contract and
+the real Unix and Windows generation smoke aligned with this invocation.
 
 The script writes manual pages under
 `target/orthohelp/<target>/release/man/man1/` and, for Windows targets,
@@ -808,6 +815,10 @@ tests, plain `#[rstest]` parametrized cases for exhaustive state-enumeration
 unit tests, and `rstest-bdd` release-help scenarios.
 `src/cli/config_path_precedence_tests.rs` is the canonical exhaustive
 state-enumeration example.
+
+Use `googletest` matchers for structural or diagnostic assertions and
+`pretty_assertions` for ordered collection equality where its diff is useful.
+Do not rewrite established tests only to introduce either library.
 
 ## Local build acceleration
 
@@ -2376,7 +2387,7 @@ Because `MergeComposer` uses last-wins semantics, pushing the project layers
 after user layers gives them higher precedence.
 
 Early JSON resolution reuses this logic through
-`collect_diag_file_layers_with_env`, before full configuration merging.
+`collect_diag_file_layers_with_sources`, before full configuration merging.
 
 ### Layer precedence
 
@@ -2394,10 +2405,10 @@ Private helper functions for config discovery and JSON-output resolution.
 
 Configuration merge helpers:
 
-- `config_discovery(directory: Option<&PathBuf>) -> ConfigDiscovery` builds
-  the single-pass OrthoConfig discovery scanner with an optional project-root
-  anchor.
-- `project_scope_file_str(directory: Option<&Path>) -> Option<String>`
+- `config_discovery(directory, env_source) -> ConfigDiscovery` builds the
+  single-pass OrthoConfig discovery scanner with an optional project-root
+  anchor and the environment adapter selected at the composition root.
+- `project_scope_file(directory: Option<&Path>) -> Option<PathBuf>`
   resolves the expected project `.netsuke.toml` path for project-layer
   detection.
 - `project_scope_layers(directory)` loads the project-scope config directly,
@@ -2408,17 +2419,15 @@ Configuration merge helpers:
   `PathBuf`.
 - `explicit_config_path_with_env(cli, env) -> Option<PathBuf>` resolves explicit
   config selection from `--config` and `NETSUKE_CONFIG`.
-- `push_file_layers_with_env(cli, composer, errors, env) -> ()` pushes explicit
-  or discovered file layers onto a `MergeComposer`. The injected `env`
-  parameter follows the environment mandate: it supplies environment access
-  without requiring callers to mutate the process environment. Explicit load
+- `push_file_layers_with_sources(cli, composer, errors, sources) -> ()` pushes
+  explicit or discovered file layers onto a `MergeComposer`. Explicit load
   errors are pushed into `errors`, and automatic discovery is not attempted
   after an explicit selector fails.
-- `collect_diag_file_layers_with_env(cli, env)` reuses the same file-layer
-  precedence for early JSON resolution.
-- `collect_file_layers(directory)` builds the fallback discovery layer chain,
-  applies the project-layer second pass, and returns
-  `OrthoResult<Vec<MergeLayer<'static>>>`.
+- `collect_diag_file_layers_with_sources(cli, sources)` reuses the same
+  file-layer precedence for early JSON resolution.
+- `collect_file_layers_with_env_source(directory, env_source)` builds the
+  fallback discovery layer chain, applies the project-layer second pass, and
+  returns `OrthoResult<Vec<MergeLayer<'static>>>`.
 - `is_empty_value(value: &serde_json::Value) -> bool` detects an empty CLI
   override object.
 - `json_from_layer(value: &serde_json::Value) -> Option<bool>` extracts `json`
@@ -2453,6 +2462,15 @@ so discovery and value merging observe one environment. Keep this port scoped
 to CLI configuration; runner, manifest, locale, and stdlib environment seams
 remain separate because their input and lifetime contracts differ.
 
+`DiscoverySources` is a crate-private composition input owned by
+`src/cli/discovery.rs`. Only full merge and early JSON resolution may construct
+it. Ambient entry points pair `ConfigStdEnvProvider` with OrthoConfig
+`ProcessEnv`; injected entry points project the same `ConfigEnvProvider` into a
+closed `MapEnv` containing only `NETSUKE_CONFIG`, `HOME`, `USERPROFILE`,
+`XDG_CONFIG_HOME`, `XDG_CONFIG_DIRS`, `APPDATA`, and `LOCALAPPDATA`. Do not
+reuse this fixed-key projection as a general environment-copy helper;
+`EnvironmentLayer` alone enumerates the full `NETSUKE_*` value environment.
+
 `explicit_config_path_with_env` is the crate-internal seam for explicit
 config-file selection. It evaluates the precedence chain in this order:
 
@@ -2486,12 +2504,11 @@ The `cli` module re-exports this trait publicly as `ConfigEnvProvider` (and
 the unrelated `LocaleEnvProvider` in `locale_resolution`; crate-internal code
 uses the bare `EnvProvider` name.
 
-Discovery tests that exercise OrthoConfig's `ConfigDiscovery` must run the
-ambient adapter in an isolated child configured with `env_clear()` followed by
-`Command::env`. Tests for Netsuke's own environment port should inject a
-provider directly. `EnvLock` is reserved for tests that change the process
-working directory alongside `CwdGuard`; it does not justify environment
-mutation.
+Tests for injected configuration discovery should provide a map-backed
+`ConfigEnvProvider`. End-to-end tests of the ambient `ProcessEnv` adapter must
+run in an isolated child configured with `env_clear()` followed by
+`Command::env`. `EnvLock` is reserved for tests that change the process working
+directory alongside `CwdGuard`; it does not justify environment mutation.
 
 Unit tests that only need to verify explicit config path precedence should test
 `explicit_config_path_with_env` with an injected provider instead of mutating
@@ -2751,8 +2768,8 @@ split diagnostics, path comparison, and tests out of the main discovery flow:
   (`--config` versus `NETSUKE_CONFIG`), the removed legacy
   `NETSUKE_CONFIG_PATH` alias, and event-schema snapshots for both selection
   and explicit load failures.
-- `discovery_layer_tests.rs` — tests which branch
-  `collect_diag_file_layers_with_env` takes (explicit path versus automatic
+- `discovery_layer_tests.rs` — tests the test-only
+  `collect_diag_file_layers_with_env` wrapper (explicit path versus automatic
   discovery) and the project-scope second pass in `collect_file_layers`.
 
 Both test modules import `capture_events`, `find_event`, and `EventAssertion`

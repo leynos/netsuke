@@ -16,11 +16,12 @@ mod keys;
 mod metadata;
 
 use crate::locale_catalogues::{LocaleCatalogue, SOURCE_LOCALE, SUPPORTED_LOCALES};
+use cap_std::{ambient_authority, fs::Dir};
 use compare::{audit_catalogue, build_error_message};
 use ftl::MessageVariables;
 use metadata::parse_metadata_locales;
-use std::error::Error;
 use std::path::{Path, PathBuf};
+use std::{error::Error, io};
 
 const KEYS_PATH: &str = "src/localization/keys.rs";
 const CARGO_MANIFEST: &str = "Cargo.toml";
@@ -58,11 +59,24 @@ fn audit_cargo_metadata(root: &Path) -> Result<(), Box<dyn Error>> {
 
 /// Read `path`, naming it in the error.
 ///
-/// Every filesystem read the audit performs goes through here. The parsers
-/// below it take `&str`, so this module is the only one holding an ambient
-/// path, and they stay testable without staging files.
+/// Every filesystem read the audit performs goes through a directory capability
+/// here. The parsers below it take `&str`, so this module keeps the path-shaped
+/// test seam while limiting each read to its parent directory.
 fn read_source(path: &Path) -> Result<String, Box<dyn Error>> {
-    std::fs::read_to_string(path)
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let name = path.file_name().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("cannot read directory as source: {}", path.display()),
+        )
+    })?;
+    let directory = Dir::open_ambient_dir(parent, ambient_authority())
+        .map_err(|err| format!("failed to open {}: {err}", parent.display()))?;
+    directory
+        .read_to_string(name)
         .map_err(|err| format!("failed to read {}: {err}", path.display()).into())
 }
 

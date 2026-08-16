@@ -24,12 +24,12 @@ excluded_paths = [
     # handles — stays under the policy.
     "netsuke::runner::process::file_io::ambient_sync",
     # Canonicalises a caller-supplied `--directory` so it can be compared with
-    # the layer paths `ortho_config` records, which that crate canonicalises
-    # through `std::fs`. The comparison has to mirror it exactly, and the
-    # directory is ambient input that may be relative or symlinked, which
-    # `cap_std` refuses to resolve across directory boundaries.
+    # the layer paths `ortho_config` records. The comparison must mirror
+    # OrthoConfig exactly: `cap_std` rejects aliases that cross a directory
+    # boundary, while standard canonicalization resolves them. Whitaker scopes
+    # filesystem policy at module boundaries, so this small path-normalization
+    # module is the narrowest available exception.
     "netsuke::cli::discovery::paths",
-
     # Behavioural step definitions that stage scenario fixtures — manifests,
     # workspaces, and captured output — through ambient tempdir access.
     "bdd_tests::bdd::steps::advanced_usage",
@@ -53,8 +53,9 @@ excluded_paths = [
 
     # The build script's parsers, included by path so `cargo test` can reach
     # them (build scripts are not test targets). Each reads a file Cargo hands
-    # it through `build_script_build`, which is excluded below for the same
-    # reason; these entries cover the copies compiled into the test crates.
+    # it through the build script; these entries cover the copies compiled into
+    # the test crates. The build script compiles only the parser subset, so it
+    # does not include the discovery path normalizer.
     "build_l10n_keys_tests::keys",
     "build_l10n_parser_tests::ftl",
     "build_l10n_audit_rules_tests::ftl",
@@ -62,9 +63,6 @@ excluded_paths = [
 
 # Whole crates whose ambient filesystem access lives in the crate root, so a
 # path entry would be no narrower than a crate entry:
-# - build_script_build: the Cargo build script writes generated man pages and
-#   audit artefacts to ambient paths supplied by Cargo (`OUT_DIR`, `target/`),
-#   where capability-based handles offer no benefit.
 # - integration test crates (tests/*.rs): fixture management writes manifests,
 #   workspaces, and captured output with ambient tempdir access, which the
 #   Whitaker user's guide lists as a sanctioned exclusion.
@@ -77,7 +75,6 @@ excluded_paths = [
 # loaded by the crate-scoped `make lint-whitaker` pass. That configuration
 # narrows the exemption to `test_support::fs` rather than exempting the crate.
 excluded_crates = [
-    "build_script_build",
     # Stages the audit's inputs into a TempDir and runs the real audit over
     # them and over CARGO_MANIFEST_DIR. Both roots are ambient by
     # construction, and the audit modules it includes by path read files the

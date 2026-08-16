@@ -61,3 +61,16 @@ Feature: Configuration file discovery and precedence
     When the CLI is parsed with "--config cli.toml"
     Then parsing succeeds
     And the emoji policy is "always"
+
+  Scenario: No configuration file uses built-in defaults
+    Given a temporary workspace
+    When the CLI is parsed with no additional arguments
+    Then parsing succeeds
+    And the emoji policy is "auto"
+
+  Scenario: A malformed discovered configuration is an error
+    Given a temporary workspace
+    And a malformed project config file ".netsuke.toml"
+    When the CLI is parsed with no additional arguments
+    Then an error should be returned
+    And the error message should contain ".netsuke.toml"

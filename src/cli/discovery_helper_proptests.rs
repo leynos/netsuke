@@ -126,6 +126,35 @@ fn normalized_path_key_resolves_non_canonical_forms(
     Ok(())
 }
 
+/// Normalization follows a project alias into a different directory.
+///
+/// Discovery accepts user-supplied paths, so its capability root must cover
+/// the full absolute path rather than rejecting a symlink that leaves the
+/// alias's parent directory.
+#[cfg(unix)]
+#[test]
+fn normalized_path_key_follows_cross_directory_symlinks() -> Result<()> {
+    let temp = tempdir().context("create temp dir")?;
+    let target = temp.path().join("project");
+    let aliases = temp.path().join("aliases");
+    test_support::fs::create_dir(&target).context("create project dir")?;
+    test_support::fs::create_dir(&aliases).context("create aliases dir")?;
+
+    let alias = aliases.join("project-link");
+    test_support::fs::symlink(&target, &alias).context("create project alias")?;
+
+    let normalized = normalized_path_key(&FsPathNormalizer, &alias.to_string_lossy())
+        .context("normalize project alias")?;
+    let expected = normalized_path_key(&FsPathNormalizer, &target.to_string_lossy())
+        .context("normalize project path")?;
+
+    ensure!(
+        normalized == expected,
+        "project alias {alias:?} should normalize to {expected:?}, got {normalized:?}"
+    );
+    Ok(())
+}
+
 /// `normalized_path_key` propagates the normalizer's error unchanged.
 #[test]
 fn normalized_path_key_propagates_normalizer_failure() -> Result<()> {

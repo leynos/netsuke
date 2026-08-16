@@ -8,11 +8,13 @@
 use super::*;
 use crate::cli::test_support::TestEnv;
 use anyhow::{Context, Result, ensure};
+use googletest::prelude::*;
+use pretty_assertions::assert_eq;
 use rstest::rstest;
 use tempfile::{TempDir, tempdir};
 
 use super::event_assertions::{EventAssertion, capture_events, find_event};
-use super::layers::collect_file_layers_with_normalizer;
+use super::layers::{collect_file_layers, collect_file_layers_with_normalizer};
 use super::paths::FailingPathNormalizer;
 
 #[derive(Debug, Clone, Copy)]
@@ -79,6 +81,69 @@ fn collect_diag_file_layers_logs_selected_branch(
         );
     }
 
+    Ok(())
+}
+
+/// Automatic discovery must use the injected XDG directory, not the host.
+#[test]
+fn injected_automatic_discovery_uses_xdg_config_home() -> Result<()> {
+    let temp = tempdir().context("create temp dir")?;
+    let xdg_config_home = temp.path().join("xdg-config");
+    let config_path = xdg_config_home.join("netsuke/config.toml");
+    test_support::fs::create_dir(&xdg_config_home).context("create injected XDG directory")?;
+    test_support::fs::create_dir(config_path.parent().context("config parent")?)
+        .context("create injected config directory")?;
+    test_support::fs::write(&config_path, "json = true\n").context("write injected config")?;
+
+    let env = TestEnv::default().with_var("XDG_CONFIG_HOME", xdg_config_home.as_os_str());
+    let sources = DiscoverySources::new(&env, discovery_env_source(&env));
+    let layers = collect_file_layers_with_env(&Cli::default(), &sources)?;
+    let paths = layers
+        .iter()
+        .filter_map(|layer| layer.path().map(|path| path.as_str().to_owned()))
+        .collect::<Vec<_>>();
+
+    assert_eq!(paths, vec![config_path.to_string_lossy().into_owned()]);
+    Ok(())
+}
+
+/// Discovered configuration candidates retain the outcome that their content
+/// warrants; an unreadable candidate is never mistaken for an absent one.
+#[rstest]
+#[case::no_candidate(None, None, 0)]
+#[case::valid_candidate(Some("emoji = \"always\"\n"), None, 1)]
+#[case::malformed_candidate(Some("emoji = \"always\n"), Some(".netsuke.toml"), 0)]
+#[case::missing_parent(
+    Some("extends = \"missing-parent.toml\"\n"),
+    Some("missing-parent.toml"),
+    0
+)]
+fn discovered_project_config_retains_load_outcome(
+    #[case] contents: Option<&str>,
+    #[case] expected_error_fragment: Option<&str>,
+    #[case] expected_layer_count: usize,
+) -> Result<()> {
+    let temp = tempdir().context("create temp dir")?;
+    if let Some(config_contents) = contents {
+        test_support::fs::write(temp.path().join(".netsuke.toml"), config_contents)
+            .context("write project config")?;
+    }
+
+    let cli = Cli {
+        directory: Some(temp.path().to_path_buf()),
+        ..Cli::default()
+    };
+    let env = TestEnv::default();
+    let sources = DiscoverySources::new(&env, discovery_env_source(&env));
+    let result = collect_file_layers_with_env(&cli, &sources);
+
+    if let Some(fragment) = expected_error_fragment {
+        let error = result.expect_err("invalid discovered config must fail");
+        assert_that!(error.to_string(), contains_substring(fragment));
+    } else {
+        let layers = result.context("valid discovered config must load")?;
+        assert_eq!(layers.len(), expected_layer_count);
+    }
     Ok(())
 }
 

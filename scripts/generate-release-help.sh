@@ -130,7 +130,7 @@ run_cargo_orthohelp() {
   echo "::notice title=cargo-orthohelp invocation::$(annotation_context "$format")" >&2
 
   local output
-  if ! output="$(cargo-orthohelp "$@" 2>&1)"; then
+  if ! output="$(cargo-orthohelp orthohelp "$@" 2>&1)"; then
     if [[ -n "$output" ]]; then
       echo "$output" >&2
     fi
