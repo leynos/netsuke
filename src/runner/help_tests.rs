@@ -15,11 +15,11 @@ use anyhow::{Context, Result};
 use insta::assert_snapshot;
 use proptest::prelude::*;
 use semver::Version;
-use std::sync::{Arc, mpsc};
+use std::sync::{Arc, Mutex, TryLockError, mpsc};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use test_support::fluent::normalize_fluent_isolates;
-use test_support::localizer_test_lock;
+use test_support::{localizer::LOCALIZER_TEST_LOCK, localizer_test_lock};
 
 /// Parse the fixed fixture manifest used by the catalogue snapshots.
 fn fixture_manifest() -> Result<NetsukeManifest> {
@@ -51,6 +51,43 @@ defaults:
 /// tests that follow it.
 fn localizer_lock() -> std::sync::MutexGuard<'static, ()> {
     localizer_test_lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Probe the localizer lock until the contention assertion can report a result.
+fn localizer_lock_is_available_before_timeout() -> bool {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline {
+        if localizer_lock_is_available() {
+            return true;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    localizer_lock_is_available()
+}
+
+/// Return whether the localizer test lock can be acquired without blocking.
+fn localizer_lock_is_available() -> bool {
+    let lock = LOCALIZER_TEST_LOCK.get_or_init(|| Mutex::new(()));
+    match lock.try_lock() {
+        Ok(guard) => {
+            drop(guard);
+            true
+        }
+        Err(TryLockError::Poisoned(error)) => {
+            drop(error.into_inner());
+            true
+        }
+        Err(TryLockError::WouldBlock) => false,
+    }
+}
+
+/// Send the bounded contention result without waiting for the test receiver.
+fn send_localizer_lock_result(sender: &mpsc::SyncSender<bool>) -> Result<()> {
+    sender
+        .try_send(localizer_lock_is_available_before_timeout())
+        .map_err(|error| {
+            anyhow::anyhow!("localizer contender could not report its result: {error}")
+        })
 }
 
 /// Run one catalogue snapshot: install the locale, render through the closure,
@@ -89,18 +126,21 @@ fn catalogue_rendering_releases_localizer_lock_before_snapshot_work() -> Result<
     let rendered = render_catalogue_with_locale("en-US", &manifest, |parsed_manifest| {
         render_json(&build_catalogue(parsed_manifest))
     })?;
-    let (acquired, confirmed) = mpsc::sync_channel(0);
-    let contender = thread::spawn(move || {
-        let _lock = localizer_lock();
-        acquired.send(()).ok();
-    });
-    let contender_acquired = confirmed
-        .recv_timeout(Duration::from_secs(5))
-        .context("localizer contender should acquire the lock before snapshot work");
-    contender
-        .join()
-        .map_err(|_| anyhow::anyhow!("localizer contender should complete"))?;
-    contender_acquired?;
+    let (acquired, confirmed) = mpsc::sync_channel(1);
+    thread::scope(|scope| -> Result<()> {
+        let contender = scope.spawn(|| send_localizer_lock_result(&acquired));
+        let contender_acquired = confirmed
+            .recv_timeout(Duration::from_secs(5))
+            .context("localizer contender should acquire the lock before snapshot work")?;
+        contender
+            .join()
+            .map_err(|_| anyhow::anyhow!("localizer contender should complete"))??;
+        anyhow::ensure!(
+            contender_acquired,
+            "localizer contender should acquire the lock before snapshot work"
+        );
+        Ok(())
+    })?;
     anyhow::ensure!(
         rendered.contains("\"command\": \"help-targets\""),
         "rendered catalogue should remain available after localizer contention"

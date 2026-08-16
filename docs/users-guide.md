@@ -729,7 +729,7 @@ The commands are:
   to write it to a file instead. In JSON mode (`--json`) the manifest is
   carried in the result document's `result.content` field instead.
 - `help [TOPIC]`: print the top-level help, or the help for a named topic.
-  With no topic it matches `--help`. `help targets` prints the target and
+  With no topic, it matches `--help`. `help targets` prints the target and
   action catalogue for the selected manifest (see
   [Generate and inspect artefacts](#generate-and-inspect-artefacts)).
 
