@@ -2115,9 +2115,11 @@ structures to the Ninja file syntax.
    implicit dependency is an exception to this direct rendering. The generator
    lowers it into staged phony gates, with one content-addressed Ninja dyndep
    sidecar per dependency. A gate can reveal exactly one real dependency; the
-   edge producing the next sidecar depends on the preceding gate. This makes
-   each later dependency unavailable to Ninja until the previous one succeeds,
-   while preserving one Ninja scheduler and its shared-work memoization.
+   gate edge associated with the next sidecar depends on the preceding gate.
+   This makes each later dependency unavailable to Ninja until the previous one
+   succeeds, while preserving one Ninja scheduler and its shared-work
+   memoization. The runner materializes every sidecar file before Ninja starts;
+   no Ninja edge produces sidecar content.
 
    The generated result is a bundle, not merely a string: generation is an
    effect-free query that returns the main Ninja text and its

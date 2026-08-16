@@ -779,7 +779,8 @@ string. The first red assertion should require:
 
 - `ninja_required_version = 1.10` only for a multi-dependency serial edge;
 - one deterministic gate and sidecar per dependency;
-- each later sidecar-producing edge to depend explicitly on the previous gate;
+- the gate edge associated with each later sidecar to depend explicitly on the
+  previous gate;
 - one dyndep statement per gate with the matching real dependency;
 - every gate to appear on the annotated edge in declaration order; and
 - ordinary parallel snapshots to remain unchanged.
@@ -1422,3 +1423,10 @@ module separately. Hungarian, Russian, and Vietnamese rename messages now say
 rename explicitly; the operation-required and generated-Ninja wording is
 neutral and precise in the requested catalogues. No supplied finding was
 stale.
+
+2026-08-16: Replaced retention's enumeration-order-dependent replacement with
+bounded lexical reselection over the retained paths plus one candidate. This
+preserves the greedy count and byte policy without storing the directory's full
+contents; a mixed-size, deliberately nonlexical regression covers multiple
+evictions. Retention now records aggregate duration, and temporary-name
+collisions record fixed retry or exhausted outcomes without exposing paths.

@@ -1637,12 +1637,14 @@ Generated bundles need Ninja 1.10 or newer only when a serial direct-dependency
 list has at least two items and therefore needs staged ordering; parallel lists
 and serial lists with zero or one item retain the existing Ninja requirement.
 
-Each gate reveals one real dependency through a Ninja dyndep file. The next
-sidecar-producing edge depends on the preceding gate, which keeps later direct
-dependencies unavailable to the scheduler until earlier work succeeds. This is
-not an order-only chain or a Ninja pool: both leave the real dependencies
-visible to Ninja too early. Preserve one top-level Ninja invocation so shared
-nodes keep Ninja's normal execute-once memoization.
+Each gate reveals one real dependency through a pre-materialized Ninja dyndep
+file. The gate edge associated with the next sidecar depends on the preceding
+gate, which keeps later direct dependencies unavailable to the scheduler until
+earlier work succeeds. The runner materializes every sidecar file before Ninja
+starts; no Ninja edge produces sidecar content. This is not an order-only
+chain or a Ninja pool: both leave the real dependencies visible to Ninja too
+early. Preserve one top-level Ninja invocation so shared nodes keep Ninja's
+normal execute-once memoization.
 
 `GeneratedNinja` is the query-command boundary: generation may construct and
 return it, but it must not publish any filesystem state.

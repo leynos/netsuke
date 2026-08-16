@@ -33,8 +33,9 @@ state beneath `.netsuke`, and a path-scoped ordering guarantee.
 
 In the context of a `dependency_order: serial` manifest `deps` list, Netsuke
 will use staged Ninja dyndep sidecars to reveal one direct dependency at a time
-and will materialize those sidecars atomically beneath `.netsuke/dyndep` before
-writing or invoking the main build file.
+and will materialize those sidecars atomically beneath `.netsuke/dyndep`. The
+runner materializes every sidecar file before Ninja starts; no Ninja edge
+produces sidecar content.
 
 `dependency_order` is a closed `parallel`/`serial` enum on the shared action
 and target AST shape. It is copied to `BuildEdge`, where it remains a logical
@@ -42,6 +43,10 @@ graph annotation. Only the Ninja generator lowers a serial list containing two
 or more direct dependencies into synthetic phony gates beneath
 `.netsuke/serial` and content-addressed dyndep sidecars beneath
 `.netsuke/dyndep`.
+
+The gate edge associated with the next sidecar depends on the preceding gate,
+so each later direct dependency remains unavailable until earlier work
+succeeds.
 
 The main generated build file declares `ninja_required_version = 1.10` only
 when staged serial lowering is present. The generator exposes a complete bundle
