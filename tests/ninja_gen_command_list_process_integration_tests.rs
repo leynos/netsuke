@@ -36,7 +36,7 @@ fn run_command_list(
         return Ok(None);
     };
     let path = Utf8PathBuf::from_path_buf(tempdir.path().to_path_buf())
-        .map_err(|path| anyhow::anyhow!("temp dir path {:?} is not UTF-8", path))?;
+        .map_err(|path| anyhow::anyhow!("temp dir path {} is not UTF-8", path.display()))?;
     let action = Action {
         recipe: Recipe::Command {
             command: StringOrList::List(entries.iter().map(|entry| (*entry).into()).collect()),

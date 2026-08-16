@@ -156,7 +156,7 @@ fn open_temp_workspace(dir: &TempDir) -> Result<Dir> {
 
 fn temp_workspace_path(dir: &TempDir) -> Result<Utf8PathBuf> {
     let dir_path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
-        .map_err(|path| anyhow::anyhow!("temp dir path {path:?} is not UTF-8"))?;
+        .map_err(|path| anyhow::anyhow!("temp dir path {} is not UTF-8", path.display()))?;
     Ok(dir_path)
 }
 
