@@ -196,6 +196,11 @@ level keys.
 The E-R diagram below summarizes the structure of a `Netsukefile` and the
 relationships between its components.
 
+For screen readers: `NETSUKE_MANIFEST` contains reusable `RULE` definitions and
+`TARGET` entries, including actions. A `TARGET` has optional `description`
+metadata for target and action discovery through `netsuke help targets`; this
+is distinct from `RULE.description`, which supplies Ninja progress text.
+
 ```mermaid
 erDiagram
     NETSUKE_MANIFEST {
@@ -219,6 +224,7 @@ erDiagram
         StringOrList deps
         StringOrList order_only_deps
         map vars
+        string description
         bool phony
         bool always
     }
@@ -238,6 +244,8 @@ erDiagram
     TARGET }o--|| STRING_OR_LIST : uses
     RECIPE }o--|| STRING_OR_LIST : uses
 ```
+
+Figure 1: Entity-relationship view of the `Netsukefile` manifest.
 
 ### 2.3 Defining `rules`
 
@@ -344,10 +352,10 @@ rule:
 - `script`: A multi-line script passed to the interpreter. When present, it is
   defined using the YAML `|` block style.
 
-- `description`: A planned, target-local status string. When present on a target
-  or action, it overrides the referenced rule description for the concrete
-  build edge. This lets selected conditional actions explain what they are
-  doing without embedding `echo` statements in recipes.
+- `description`: Optional discovery metadata for a target or action. It is
+  rendered through the normal manifest context and displayed by
+  `netsuke help targets`. It does not affect Ninja progress output: that stays
+  driven by the referenced rule's `description`.
 
 - `env`: A planned mapping of environment variables to apply when this target or
   action runs. Target-level values override rule-level values after the rule is
@@ -599,14 +607,18 @@ splitting and reduces the need for `shell_escape` in ordinary recipes.
 
 #### Execution feedback
 
-The existing `description` field is the right primitive for normal status text.
-Netsuke should extend it to targets and actions, and should use the selected
-edge's description when emitting Ninja progress. Conditional branch-selection
-messages belong in Netsuke's verbose diagnostics, not in mandatory recipe
-output:
+Rule descriptions are the source of normal Ninja progress text. Target and
+action descriptions are discovery metadata displayed by `netsuke help targets`;
+they do not affect Ninja progress output. Ninja progress comes exclusively from
+the referenced `Rule::description`. Planned target/action environment mappings
+remain separate future work under roadmap item 3.14.9. Conditional
+branch-selection messages belong in Netsuke's verbose diagnostics, not in
+mandatory recipe output:
 
-- In normal output, the selected action's `description` explains the task being
-  run.
+- In `netsuke help targets`, target and action `description` values explain the
+  operations available in the manifest.
+- In normal Ninja output, the referenced rule's `description` explains the task
+  being run.
 - In verbose output, Netsuke reports why manifest-time conditional branches were
   included or skipped.
 - Netsuke should not add generic mutually exclusive `debug`, `info`, or `warn`
@@ -663,24 +675,25 @@ An Architecture Decision Record documents the migration rationale and
 compatibility results; no further action is required beyond monitoring upstream
 releases.
 
-### 3.2 Core Data Structures (`ast.rs`)
+### 3.2 Core Data Structures (`ast/mod.rs`)
 
 The Rust structs that `serde_saphyr` deserializes into form the Abstract Syntax
 Tree (AST) of the build manifest. These structs must precisely mirror the YAML
 schema defined in Section 2. They will be defined in a dedicated module,
-`src/ast.rs`, and annotated with `#[derive(Deserialize)]` (and `Debug`) to
+`src/ast/mod.rs`, and annotated with `#[derive(Deserialize)]` (and `Debug`) to
 enable automatic deserialization and easy debugging.
 
-The authoritative live AST contract is [src/ast.rs](../src/ast.rs). Fields and
-types marked `FUTURE` in the snippet below are forward-looking API sketches. In
-particular, `Rule.env`, `Target.description`, `Target.env`, `Recipe::Exec`,
-`ExecRecipe`, `EnvValue`, and `EnvOperation` describe the intended schema once
-the roadmap tasks land; they are not assertions about the current codebase.
+The authoritative live AST contract is
+[src/ast/mod.rs](../src/ast/mod.rs). Fields and types marked `FUTURE` in the
+snippet below are forward-looking API sketches.
+`Target.description` is implemented optional discovery metadata; the remaining
+forward-looking fields describe the intended schema once the roadmap tasks
+land and are not assertions about the current codebase.
 
 Rust
 
 ```rust
-// In src/ast.rs
+// In src/ast/mod.rs
 
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -692,6 +705,9 @@ pub struct NetsukeManifest {
 
     #[serde(default)]
     pub vars: HashMap<String, serde_json::Value>,
+
+    #[serde(default)]
+    pub macros: Vec<MacroDefinition>,
 
     #[serde(default)]
     pub rules: Vec<Rule>,
@@ -712,7 +728,7 @@ pub struct Rule {
     #[serde(flatten)]
     pub recipe: Recipe,
     pub description: Option<String>,
-    // FUTURE: planned Rule.env extension; not present in src/ast.rs yet.
+    // FUTURE: planned Rule.env extension; not present in src/ast/mod.rs yet.
     #[serde(default)]
     pub env: HashMap<String, EnvValue>,
     #[serde(default)]
@@ -727,7 +743,7 @@ pub enum Recipe {
     Command { command: StringOrList },
     Script { script: String },
     Rule { rule: StringOrList },
-    // FUTURE: planned Recipe::Exec extension; not present in src/ast.rs yet.
+    // FUTURE: planned Recipe::Exec extension; not present in src/ast/mod.rs yet.
     Exec { exec: ExecRecipe },
 }
 
@@ -758,10 +774,11 @@ pub struct Target {
     #[serde(default)]
     pub vars: HashMap<String, serde_json::Value>,
 
-    // FUTURE: planned Target.description extension; not present in src/ast.rs yet.
+    /// Optional discovery metadata shown by `netsuke help targets`.
+    #[serde(default)]
     pub description: Option<String>,
 
-    // FUTURE: planned Target.env extension; not present in src/ast.rs yet.
+    // FUTURE: planned Target.env extension; not present in src/ast/mod.rs yet.
     #[serde(default)]
     pub env: HashMap<String, EnvValue>,
 
@@ -812,7 +829,7 @@ and `as_single` build on it. Path conversion deliberately does not live here.
 The AST models the manifest's surface syntax, in which `sources`, `deps` and
 `order_only_deps` are plain strings; only manifest-to-IR lowering decides they
 name files on disk, so `src/ir/from_manifest_support.rs::to_paths` performs
-that interpretation at the boundary. Keeping `camino` out of `src/ast.rs`
+that interpretation at the boundary. Keeping `camino` out of `src/ast/mod.rs`
 stops filesystem concerns leaking into the domain model.
 
 #### Example Manifest and AST
@@ -850,6 +867,7 @@ let ast = NetsukeManifest {
         deps: StringOrList::Empty,
         order_only_deps: StringOrList::Empty,
         vars: HashMap::new(),
+        description: None,
         phony: false,
         always: false,
     }],
@@ -895,7 +913,7 @@ parsing and template evaluation cleanly separated.
 
 ### 3.4 Design Decisions
 
-The AST structures are implemented in `src/ast.rs` and derive `Deserialize`.
+The AST structures are implemented in `src/ast/mod.rs` and derive `Deserialize`.
 Unknown fields are rejected to surface user errors early. `StringOrList`
 provides a default `Empty` variant, so optional lists are trivial to represent.
 The manifest version is parsed using the `semver` crate to validate that it
@@ -1987,13 +2005,13 @@ This transformation involves several steps:
 
    FUTURE:
 
-   Roadmap tasks `3.14.9` and `3.14.11` will extend `ir::Action`, action
-   registration, and the `actions` map with target-level `description` and
-   `env` behaviour. Target-level `description` and `env` values will override
-   or extend the referenced rule for the concrete action. Env-aware action
-   hashing will include resolved environment bindings alongside the recipe and
-   file set so otherwise identical actions remain distinct when their execution
-   environment differs.
+   Roadmap task `3.14.9` will extend `ir::Action`, action registration, and the
+   `actions` map with target-level `env` behaviour. Target-level `description`
+   remains discovery-only metadata: it is not part of the IR and does not
+   replace the referenced rule's description for Ninja progress. Env-aware
+   action hashing will include resolved environment bindings alongside the
+   recipe and file set so otherwise identical actions remain distinct when their
+   execution environment differs.
 
 4. **Graph Validation:** As the graph is constructed, perform validation checks.
    This includes ensuring that every rule referenced by a target exists in the
@@ -2934,9 +2952,13 @@ manual flag repetition.
 
 The CLI definition doubles as the source for user documentation. Release
 automation now calls `cargo-orthohelp` explicitly through
-`scripts/generate-release-help.sh`; ordinary Cargo builds no longer write help
-artefacts. The build script remains in place only for the localization key
-audit against Fluent bundles.
+`scripts/generate-release-help.sh`; ordinary Cargo builds do not supply the
+release manual page or PowerShell help. `cargo-orthohelp` remains the release
+source for those artefacts. Separately, `build.rs` generates Bash, Elvish, Fish,
+PowerShell, and Zsh completion assets from `Cli::command()`. The completion
+files are staged as portable shell-completion sidecars under
+`completions/<shell>/` in release archives. The build script also performs the
+localization key audit against Fluent bundles.
 
 Manual pages are generated under
 `target/orthohelp/<target>/release/man/man1/netsuke.1`. Windows targets also
@@ -2966,7 +2988,9 @@ staged `man_path` output into the shared `linux-packages` composite. The
 resulting `.deb` and `.rpm` archives both declare a runtime dependency on
 `ninja-build`. Windows and macOS builds use the same staging composite from
 `leynos/shared-actions`; Windows staging also carries the PowerShell help files
-as release artefacts alongside the MSI package. The composite shells out to a
+as release artefacts alongside the MSI package. Every standalone release
+archive also carries the generated shell completion sidecars under
+`completions/<shell>/`. The composite shells out to a
 Cyclopts-driven script that reads the `.github/release-staging.toml`
 configuration (Tom's Obvious, Minimal Language (TOML)), merges the `[common]`
 configuration with the target-specific overrides, and copies the configured

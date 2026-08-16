@@ -32,6 +32,14 @@ cli.subcommand.graph.about = إخراج رسم اعتماديات البناء. 
 cli.subcommand.graph.long_about = إسقاط ملف بيانات Netsuke بعد تحليله إلى رسم بناء قياسي وكتابته بصيغة Graphviz DOT، أو صفحة HTML مكتفية بذاتها عند استخدام `--html`. استخدم `--output <ملف>` للكتابة إلى ملف؛ و`-` يكتب إلى المخرج القياسي.
 cli.subcommand.generate.about = توليد ملف بيانات Ninja دون تنفيذ Ninja.
 cli.subcommand.generate.long_about = كتابة ملف بيانات Ninja المولَّد إلى المخرج القياسي أو إلى ملف يُختار بـ `--output`.
+cli.subcommand.help.about = اطبع التعليمات العامة، أو التعليمات لموضوع محدد.
+cli.subcommand.help.long_about = بدون موضوع، يطابق هذا `--help`. استخدم `help targets` لطباعة كتالوج الأهداف والإجراءات للملف المحدد.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = الإجراءات:
+cli.help.targets_heading = الأهداف:
+cli.help.targets.about = سرد الأهداف والإجراءات في الملف المحدد.
+cli.help.default_marker = الافتراضي
 
 # نص المساعدة لخيارات الأمر الفرعي build.
 cli.subcommand.build.flag.targets.help = الأهداف المطلوب بناؤها (تُستخدم افتراضيات ملف البيانات عند الإغفال).
@@ -76,6 +84,7 @@ runner.manifest.path_utf8 = مسار ملف البيانات «{ $path }» لي�
 runner.manifest.directory_utf8 = مسار دليل ملف البيانات «{ $path }» ليس UTF-8 صالحًا.
 runner.manifest.directory_label = الدليل `{ $directory }`
 runner.manifest.current_directory_label = الدليل الحالي
+runner.manifest.default_not_declared = الافتراضي للبيان «{ $default }» لا يسمّي إجراءً أو هدفًا معلنًا.
 runner.context.network_policy = تعذّر بناء سياسة الشبكة.
 runner.context.load_manifest = تعذّر تحميل ملف البيانات من { $path }.
 runner.context.serialise_manifest = تعذّرت سَلسَلة ملف البيانات.
@@ -149,7 +158,7 @@ manifest.glob.invalid_pattern = نمط glob غير صالح «{ $pattern }»: { 
 manifest.glob.unknown_pattern_error = خطأ نمط غير معروف.
 manifest.glob.io_failed = فشل glob للنمط «{ $pattern }»: { $detail }.
 manifest.glob.unknown_io_error = خطأ إدخال/إخراج غير معروف.
-manifest.command_list_empty = يجب ألّا تكون قائمة الأوامر فارغة؛ قدِّم سلسلة أمر أو قائمة غير فارغة.
+manifest.command_list_empty = يجب ألّا يكون الحقل «command» فارغًا: قدِّم سلسلة أمر أو قائمة غير فارغة.
 
 # أخطاء التمثيل الوسيط.
 ir.rule_not_found = تعذّر العثور على القاعدة «{ $rule }» التي يشير إليها الهدف «{ $target }».
@@ -368,6 +377,7 @@ status.tool.clean = التنظيف
 status.tool.graph = الرسم
 status.tool.graph_html = الرسم (HTML)
 status.tool.generate = التوليد
+status.tool.help_targets = فهرس الأهداف
 
 # نصوص عرض الرسم بصيغة HTML.
 graph.html.title = رسم بناء Netsuke

@@ -8,6 +8,7 @@ use ortho_config::OrthoError;
 use std::sync::Arc;
 
 mod config;
+mod help;
 mod parser;
 mod parsing;
 

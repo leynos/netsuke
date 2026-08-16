@@ -32,6 +32,14 @@ cli.subcommand.graph.about = Skriv ut avhengighetsgrafen for byggingen. Standard
 cli.subcommand.graph.long_about = Overfør det innleste Netsuke-manifestet til en kanonisk byggegraf og skriv den som Graphviz DOT, eller som en frittstående HTML-side med `--html`. Bruk `--output <FIL>` for å skrive til en fil; `-` skriver til stdout.
 cli.subcommand.generate.about = Lag Ninja-manifestet uten å kjøre Ninja.
 cli.subcommand.generate.long_about = Skriv det genererte Ninja-manifestet til stdout eller til en fil valgt med `--output`.
+cli.subcommand.help.about = Skriv ut hjelpen på øverste nivå, eller hjelpen for et navngitt emne.
+cli.subcommand.help.long_about = Uten emne tilsvarer dette `--help`. Bruk `help targets` for å skrive ut katalogen over mål og handlinger for det valgte manifestet.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = Handlinger:
+cli.help.targets_heading = Mål:
+cli.help.targets.about = List opp mål og handlinger i det valgte manifestet.
+cli.help.default_marker = standard
 
 # Hjelpetekst for valg til underkommandoen build.
 cli.subcommand.build.flag.targets.help = Mål som skal bygges (bruker standardmålene fra manifestet hvis utelatt).
@@ -76,6 +84,7 @@ runner.manifest.path_utf8 = Manifeststien «{ $path }» er ikke gyldig UTF-8.
 runner.manifest.directory_utf8 = Stien til manifestkatalogen «{ $path }» er ikke gyldig UTF-8.
 runner.manifest.directory_label = katalogen `{ $directory }`
 runner.manifest.current_directory_label = gjeldende katalog
+runner.manifest.default_not_declared = Manifestets standardverdi '{ $default }' navngir ingen erklært handling eller mål.
 runner.context.network_policy = Nettverksregelen kunne ikke bygges.
 runner.context.load_manifest = Manifestet i { $path } kunne ikke lastes inn.
 runner.context.serialise_manifest = Manifestet kunne ikke serialiseres.
@@ -368,6 +377,7 @@ status.tool.clean = Opprydding
 status.tool.graph = Graf
 status.tool.graph_html = Graf (HTML)
 status.tool.generate = Generering
+status.tool.help_targets = Målhjelp
 
 # Tekster for HTML-gjengivelsen av grafen.
 graph.html.title = Netsuke-byggegraf

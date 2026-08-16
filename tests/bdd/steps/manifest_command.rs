@@ -29,7 +29,7 @@ impl fmt::Display for OutputType {
 }
 
 #[path = "manifest_command_helpers.rs"]
-mod manifest_command_helpers;
+pub(super) mod manifest_command_helpers;
 use manifest_command_helpers::{
     assert_file_existence, assert_output_contains, assert_output_not_contains,
     build_netsuke_command, create_directory_in_workspace, get_temp_path, netsuke_executable,

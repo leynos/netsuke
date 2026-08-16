@@ -12,7 +12,7 @@ use camino::Utf8PathBuf;
 use netsuke::{
     ast::Recipe,
     ir::{BuildGraph, IrGenError},
-    manifest,
+    manifest, ninja_gen,
 };
 use rstest::rstest;
 
@@ -269,6 +269,33 @@ fn manifest_deps_do_not_contribute_to_recipe_inputs() -> Result<()> {
     Ok(())
 }
 
+#[rstest]
+fn target_descriptions_do_not_replace_rule_progress_text() -> Result<()> {
+    let yaml = concat!(
+        "netsuke_version: '1.0.0'\n",
+        "rules:\n",
+        "  - name: compile\n",
+        "    description: Rule progress text\n",
+        "    command: echo compile\n",
+        "targets:\n",
+        "  - name: out/app\n",
+        "    description: Target discovery metadata\n",
+        "    rule: compile\n",
+    );
+    let manifest = manifest::from_str(yaml)?;
+    let graph = BuildGraph::from_manifest(&manifest).context("generate graph")?;
+    let ninja = ninja_gen::generate(&graph).context("generate Ninja manifest")?;
+
+    ensure!(
+        ninja.contains("description = Rule progress text"),
+        "Ninja progress should use the referenced rule description: {ninja}"
+    );
+    ensure!(
+        !ninja.contains("Target discovery metadata"),
+        "target discovery metadata must not appear in Ninja progress: {ninja}"
+    );
+    Ok(())
+}
 #[derive(Debug)]
 enum ExpectedError {
     DuplicateOutput(Vec<String>),

@@ -27,7 +27,7 @@ use crate::{
     localization::{self, keys},
     stdlib::{NetworkPolicy, StdlibConfig},
 };
-use anyhow::{Context, Result};
+use anyhow::Result;
 use minijinja::{Environment, UndefinedBehavior, value::Value};
 use serde::de::Error as _;
 use std::{path::Path, sync::Arc};
@@ -45,6 +45,7 @@ mod glob;
 mod hints;
 mod jinja_macros;
 mod parse_with_config;
+mod query;
 mod render;
 
 /// JSON representation of a manifest node after YAML and Jinja evaluation.
@@ -60,9 +61,11 @@ pub use glob::glob_paths;
 
 pub(crate) use expand::expand_foreach;
 pub use parse_with_config::from_str_with_env_and_config;
+pub(crate) use query::from_path_for_manifest_query;
 pub use render::render_manifest;
 
 use self::{env_reader::env_var_with, jinja_macros::register_manifest_macros};
+#[cfg(test)]
 use workspace::open_manifest_workspace;
 
 /// Stages in the manifest-loading sub-pipeline.
@@ -100,12 +103,19 @@ fn notify_stage(
 struct ManifestParse<'a> {
     /// Name reported in diagnostics.
     name: &'a ManifestName,
-    /// Optional stdlib configuration override.
-    stdlib_config: Option<StdlibConfig>,
+    /// Optional stdlib registration configuration.
+    stdlib_registration: Option<StdlibRegistration>,
     /// Environment reader backing the `env()` helper.
     env_reader: &'a EnvReader,
 }
 
+/// Selects the stdlib surface available while rendering a manifest.
+enum StdlibRegistration {
+    /// The complete stdlib used for a normal build manifest.
+    Full(Box<StdlibConfig>),
+    /// The read-only stdlib used to inspect manifest discovery metadata.
+    ManifestQuery,
+}
 fn from_str_named(
     yaml: &str,
     parse: ManifestParse<'_>,
@@ -113,7 +123,7 @@ fn from_str_named(
 ) -> Result<NetsukeManifest> {
     let ManifestParse {
         name,
-        stdlib_config,
+        stdlib_registration,
         env_reader,
     } = parse;
     notify_stage(on_stage, ManifestLoadStage::InitialYamlParsing);
@@ -135,8 +145,13 @@ fn from_str_named(
         glob::record_expansion(&expansion);
         Ok(expansion.into_paths())
     });
-    let _stdlib_state = match stdlib_config {
-        Some(config) => crate::stdlib::register_with_config(&mut jinja, config),
+    let _stdlib_state = match stdlib_registration {
+        Some(StdlibRegistration::Full(config)) => {
+            crate::stdlib::register_with_config(&mut jinja, *config)
+        }
+        Some(StdlibRegistration::ManifestQuery) => {
+            Ok(crate::stdlib::register_manifest_query(&mut jinja))
+        }
         None => crate::stdlib::register(&mut jinja),
     }?;
 
@@ -281,7 +296,7 @@ pub fn from_str_with_env(yaml: &str, env_reader: &EnvReader) -> Result<NetsukeMa
         yaml,
         ManifestParse {
             name: &ManifestName::new("Netsukefile"),
-            stdlib_config: None,
+            stdlib_registration: None,
             env_reader,
         },
         &mut None,
@@ -366,31 +381,9 @@ pub fn from_path_with_policy_and_env(
     path: impl AsRef<Path>,
     policy: NetworkPolicy,
     env_reader: &EnvReader,
-    mut on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
+    on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
-    notify_stage(&mut on_stage, ManifestLoadStage::ManifestIngestion);
-    let path_ref = path.as_ref();
-    let workspace = open_manifest_workspace(path_ref)?;
-    let data = workspace
-        .dir
-        .read_to_string(&workspace.manifest_file)
-        .with_context(|| {
-            localization::message(keys::MANIFEST_READ_FAILED)
-                .with_arg("path", path_ref.display().to_string())
-        })?;
-    let name = ManifestName::new(path_ref.display().to_string());
-    let config = StdlibConfig::new(workspace.dir)?
-        .with_workspace_root_path(workspace.root)?
-        .with_network_policy(policy);
-    from_str_named(
-        &data,
-        ManifestParse {
-            name: &name,
-            stdlib_config: Some(config),
-            env_reader,
-        },
-        &mut on_stage,
-    )
+    query::from_path_with_policy_and_env(path, policy, env_reader, on_stage)
 }
 
 mod env_reader;

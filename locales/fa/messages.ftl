@@ -32,6 +32,14 @@ cli.subcommand.graph.about = چاپ گراف وابستگی‌های ساخت. �
 cli.subcommand.graph.long_about = تصویرکردن مانیفست تجزیه‌شدهٔ Netsuke به یک گراف ساخت متعارف و نوشتن آن به شکل Graphviz DOT، یا با `--html` به شکل یک صفحهٔ HTML خودبسنده. برای نوشتن در پرونده از `--output <پرونده>` استفاده کنید؛ `-` در خروجی استاندارد می‌نویسد.
 cli.subcommand.generate.about = تولید مانیفست Ninja بدون اجرای Ninja.
 cli.subcommand.generate.long_about = نوشتن مانیفست Ninja تولیدشده در خروجی استاندارد یا در پرونده‌ای که با `--output` برگزیده می‌شود.
+cli.subcommand.help.about = راهنمای سطح بالا یا راهنمای یک موضوع مشخص را چاپ کنید.
+cli.subcommand.help.long_about = بدون موضوع، این با `--help` یکسان است. از `help targets` برای چاپ فهرست اهداف و اقدامات پرونده انتخاب‌شده استفاده کنید.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = اقدامات:
+cli.help.targets_heading = اهداف:
+cli.help.targets.about = فهرست کردن اهداف و اقدامات در پروندهٔ انتخاب‌شده.
+cli.help.default_marker = پیش‌فرض
 
 # متن راهنمای گزینه‌های زیرفرمان build.
 cli.subcommand.build.flag.targets.help = هدف‌هایی که باید ساخته شوند (در صورت نیامدن، پیش‌فرض‌های مانیفست به کار می‌روند).
@@ -76,6 +84,7 @@ runner.manifest.path_utf8 = مسیر مانیفست «{ $path }» ‏UTF-8 مع�
 runner.manifest.directory_utf8 = مسیر شاخهٔ مانیفست «{ $path }» ‏UTF-8 معتبر نیست.
 runner.manifest.directory_label = شاخهٔ `{ $directory }`
 runner.manifest.current_directory_label = شاخهٔ کنونی
+runner.manifest.default_not_declared = پیش‌فرض مانیفست «{ $default }» نام یک کنش یا هدف اعلام‌شده نیست.
 runner.context.network_policy = ساخت سیاست شبکه ممکن نشد.
 runner.context.load_manifest = بارگذاری مانیفست از { $path } ممکن نشد.
 runner.context.serialise_manifest = تبدیل مانیفست به داده‌های پیاپی ممکن نشد.
@@ -368,6 +377,7 @@ status.tool.clean = پاک‌سازی
 status.tool.graph = گراف
 status.tool.graph_html = گراف (HTML)
 status.tool.generate = تولید
+status.tool.help_targets = راهنمای اهداف
 
 # رشته‌های نمایش گراف به شکل HTML.
 graph.html.title = گراف ساخت Netsuke

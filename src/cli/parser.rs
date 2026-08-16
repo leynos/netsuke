@@ -24,6 +24,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use super::config::CliConfig;
+use super::help::HelpArgs;
 use super::parsing::{
     parse_accessibility_policy, parse_color_policy, parse_emoji_policy, parse_host_pattern,
     parse_jobs, parse_locale, parse_progress_policy, parse_scheme,
@@ -79,7 +80,14 @@ pub(super) fn validation_message(
 
 /// A modern, friendly build system that uses YAML and Jinja, powered by Ninja.
 #[derive(Debug, Parser, Serialize, Deserialize)]
-#[command(name = "netsuke", author, version, about, long_about = None)]
+#[command(
+    name = "netsuke",
+    author,
+    version,
+    about,
+    long_about = None,
+    disable_help_subcommand = true
+)]
 pub struct Cli {
     /// Path to the Netsuke manifest file to use.
     #[arg(
@@ -297,6 +305,12 @@ pub enum Commands {
         #[arg(long, value_name = "FILE")]
         output: Option<PathBuf>,
     },
+
+    /// Print the top-level help, or the help for a named topic such as `help targets`.
+    ///
+    /// With no topic this matches `--help`. `help targets` renders the
+    /// target and action catalogue for the selected manifest.
+    Help(HelpArgs),
 }
 
 /// Parse CLI arguments with localized clap output.

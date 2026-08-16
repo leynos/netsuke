@@ -121,3 +121,20 @@ fn manual_page_source_is_stamped_with_the_command_name() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn manual_page_documents_the_help_targets_topic() -> Result<()> {
+    let path = generated_man_page();
+    let page = test_fs::read_to_string(&path)
+        .with_context(|| format!("read generated manual page {}", path.display()))?;
+
+    ensure!(
+        page.contains("netsuke\\-help(1)"),
+        "manual page should list the help command: {page}"
+    );
+    ensure!(
+        page.contains("help targets"),
+        "manual page should document the targets topic: {page}"
+    );
+    Ok(())
+}

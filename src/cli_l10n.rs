@@ -115,9 +115,38 @@ fn localize_subcommands(command: &mut Command, localizer: &dyn Localizer) {
 
         // Localise subcommand argument help text.
         updated = localize_arguments(updated, localizer, known);
+        updated = localize_help_topics(updated, localizer, known);
 
         *subcommand = updated;
     }
+}
+
+/// Localise the topics nested beneath the `help` subcommand.
+fn localize_help_topics(
+    mut command: Command,
+    localizer: &dyn Localizer,
+    subcommand: Option<Subcommand>,
+) -> Command {
+    if !matches!(subcommand, Some(Subcommand::Help)) {
+        return command;
+    }
+
+    for topic in command.get_subcommands_mut() {
+        let known = HelpTopicName::from_name(topic.get_name());
+        let mut updated = std::mem::take(topic);
+        if let Some(localized) = localize_field(
+            localizer,
+            known.map(help_topic_about_key),
+            updated
+                .get_about()
+                .map(|s: &clap::builder::StyledStr| s.to_string()),
+        ) {
+            updated = updated.about(localized);
+        }
+        *topic = updated;
+    }
+
+    command
 }
 
 /// The set of known CLI subcommands.
@@ -130,6 +159,7 @@ enum Subcommand {
     Clean,
     Graph,
     Generate,
+    Help,
 }
 
 impl Subcommand {
@@ -139,8 +169,31 @@ impl Subcommand {
             "clean" => Some(Self::Clean),
             "graph" => Some(Self::Graph),
             "generate" => Some(Self::Generate),
+            "help" => Some(Self::Help),
             _ => None,
         }
+    }
+}
+
+/// The topics nested under the `help` subcommand.
+#[derive(Clone, Copy)]
+enum HelpTopicName {
+    Targets,
+    Subcommand(Subcommand),
+}
+
+impl HelpTopicName {
+    fn from_name(name: &str) -> Option<Self> {
+        if name == "targets" {
+            return Some(Self::Targets);
+        }
+
+        Subcommand::from_name(name).and_then(|subcommand| match subcommand {
+            Subcommand::Build | Subcommand::Clean | Subcommand::Graph | Subcommand::Generate => {
+                Some(Self::Subcommand(subcommand))
+            }
+            Subcommand::Help => None,
+        })
     }
 }
 
@@ -150,7 +203,7 @@ fn flag_help_key(arg_id: &str, subcommand: Option<Subcommand>) -> Option<&'stati
         Some(Subcommand::Build) => build_flag_help_key(arg_id),
         Some(Subcommand::Graph) => graph_flag_help_key(arg_id),
         Some(Subcommand::Generate) => generate_flag_help_key(arg_id),
-        Some(Subcommand::Clean) => None,
+        Some(Subcommand::Clean | Subcommand::Help) => None,
     }
 }
 
@@ -205,6 +258,7 @@ const fn subcommand_about_key(subcommand: Subcommand) -> &'static str {
         Subcommand::Clean => keys::CLI_SUBCOMMAND_CLEAN_ABOUT,
         Subcommand::Graph => keys::CLI_SUBCOMMAND_GRAPH_ABOUT,
         Subcommand::Generate => keys::CLI_SUBCOMMAND_GENERATE_ABOUT,
+        Subcommand::Help => keys::CLI_SUBCOMMAND_HELP_ABOUT,
     }
 }
 
@@ -214,6 +268,14 @@ const fn subcommand_long_about_key(subcommand: Subcommand) -> &'static str {
         Subcommand::Clean => keys::CLI_SUBCOMMAND_CLEAN_LONG_ABOUT,
         Subcommand::Graph => keys::CLI_SUBCOMMAND_GRAPH_LONG_ABOUT,
         Subcommand::Generate => keys::CLI_SUBCOMMAND_GENERATE_LONG_ABOUT,
+        Subcommand::Help => keys::CLI_SUBCOMMAND_HELP_LONG_ABOUT,
+    }
+}
+
+const fn help_topic_about_key(topic: HelpTopicName) -> &'static str {
+    match topic {
+        HelpTopicName::Targets => keys::CLI_HELP_TARGETS_ABOUT,
+        HelpTopicName::Subcommand(subcommand) => subcommand_about_key(subcommand),
     }
 }
 
@@ -272,4 +334,30 @@ pub fn json_hint_from_args(args: &[OsString]) -> Option<bool> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    //! Unit tests for CLI localization helper routing.
+
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case("targets", Some(keys::CLI_HELP_TARGETS_ABOUT))]
+    #[case("build", Some(keys::CLI_SUBCOMMAND_BUILD_ABOUT))]
+    #[case("clean", Some(keys::CLI_SUBCOMMAND_CLEAN_ABOUT))]
+    #[case("graph", Some(keys::CLI_SUBCOMMAND_GRAPH_ABOUT))]
+    #[case("generate", Some(keys::CLI_SUBCOMMAND_GENERATE_ABOUT))]
+    #[case("help", None)]
+    #[case("unknown", None)]
+    fn help_topic_names_map_to_supported_about_keys(
+        #[case] name: &str,
+        #[case] expected: Option<&str>,
+    ) {
+        assert_eq!(
+            HelpTopicName::from_name(name).map(help_topic_about_key),
+            expected
+        );
+    }
 }

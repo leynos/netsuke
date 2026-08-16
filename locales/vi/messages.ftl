@@ -32,6 +32,14 @@ cli.subcommand.graph.about = Xuất đồ thị phụ thuộc của quá trình 
 cli.subcommand.graph.long_about = Chiếu tệp kê khai Netsuke đã phân tích thành đồ thị dựng chuẩn tắc rồi ghi ở định dạng Graphviz DOT, hoặc thành trang HTML độc lập với `--html`. Dùng `--output <TỆP>` để ghi ra tệp; `-` ghi ra đầu ra chuẩn.
 cli.subcommand.generate.about = Tạo tệp kê khai Ninja mà không chạy Ninja.
 cli.subcommand.generate.long_about = Ghi tệp kê khai Ninja đã tạo ra đầu ra chuẩn hoặc ra tệp được chọn bằng `--output`.
+cli.subcommand.help.about = In trợ giúp cấp cao nhất hoặc trợ giúp cho một chủ đề cụ thể.
+cli.subcommand.help.long_about = Không có chủ đề, lệnh này tương ứng với `--help`. Dùng `help targets` để in danh mục mục tiêu và hành động cho tệp kê khai đã chọn.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = Hành động:
+cli.help.targets_heading = Mục tiêu:
+cli.help.targets.about = Liệt kê mục tiêu và hành động trong tệp kê khai đã chọn.
+cli.help.default_marker = mặc định
 
 # Văn bản trợ giúp cho tuỳ chọn của lệnh con build.
 cli.subcommand.build.flag.targets.help = Các đích cần dựng (nếu bỏ trống sẽ dùng đích mặc định của tệp kê khai).
@@ -76,6 +84,7 @@ runner.manifest.path_utf8 = Đường dẫn tệp kê khai “{ $path }” khôn
 runner.manifest.directory_utf8 = Đường dẫn thư mục tệp kê khai “{ $path }” không phải UTF-8 hợp lệ.
 runner.manifest.directory_label = thư mục `{ $directory }`
 runner.manifest.current_directory_label = thư mục hiện tại
+runner.manifest.default_not_declared = Giá trị mặc định của tệp kê khai '{ $default }' không nêu hành động hoặc mục tiêu đã khai báo.
 runner.context.network_policy = Không dựng được chính sách mạng.
 runner.context.load_manifest = Không nạp được tệp kê khai tại { $path }.
 runner.context.serialise_manifest = Không tuần tự hoá được tệp kê khai.
@@ -368,6 +377,7 @@ status.tool.clean = Dọn dẹp
 status.tool.graph = Đồ thị
 status.tool.graph_html = Đồ thị (HTML)
 status.tool.generate = Tạo
+status.tool.help_targets = Trợ giúp mục tiêu
 
 # Chuỗi của bộ kết xuất đồ thị sang HTML.
 graph.html.title = Đồ thị dựng của Netsuke

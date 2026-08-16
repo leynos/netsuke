@@ -32,6 +32,14 @@ cli.subcommand.graph.about = Keluarkan graf ketergantungan build. Format bawaann
 cli.subcommand.graph.long_about = Proyeksikan manifes Netsuke yang telah diurai menjadi graf build kanonis dan tulis sebagai Graphviz DOT, atau sebagai halaman HTML mandiri dengan `--html`. Gunakan `--output <BERKAS>` untuk menulis ke berkas; `-` menulis ke keluaran standar.
 cli.subcommand.generate.about = Hasilkan manifes Ninja tanpa menjalankan Ninja.
 cli.subcommand.generate.long_about = Tulis manifes Ninja yang dihasilkan ke keluaran standar atau ke berkas yang dipilih dengan `--output`.
+cli.subcommand.help.about = Cetak bantuan tingkat atas, atau bantuan untuk topik bernama.
+cli.subcommand.help.long_about = Tanpa topik, ini sama dengan `--help`. Gunakan `help targets` untuk mencetak katalog target dan tindakan untuk berkas yang dipilih.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = Tindakan:
+cli.help.targets_heading = Target:
+cli.help.targets.about = Mencetak target dan tindakan dalam berkas yang dipilih.
+cli.help.default_marker = bawaan
 
 # Teks bantuan untuk opsi subperintah build.
 cli.subcommand.build.flag.targets.help = Target yang akan dibangun (jika dihilangkan, memakai bawaan dari manifes).
@@ -76,6 +84,7 @@ runner.manifest.path_utf8 = Jalur manifes "{ $path }" bukan UTF-8 yang sah.
 runner.manifest.directory_utf8 = Jalur direktori manifes "{ $path }" bukan UTF-8 yang sah.
 runner.manifest.directory_label = direktori `{ $directory }`
 runner.manifest.current_directory_label = direktori saat ini
+runner.manifest.default_not_declared = Nilai bawaan manifes '{ $default }' tidak menamai tindakan atau target yang dinyatakan.
 runner.context.network_policy = Kebijakan jaringan tidak dapat dibangun.
 runner.context.load_manifest = Manifes di { $path } tidak dapat dimuat.
 runner.context.serialise_manifest = Manifes tidak dapat diserialkan.
@@ -368,6 +377,7 @@ status.tool.clean = Pembersihan
 status.tool.graph = Graf
 status.tool.graph_html = Graf (HTML)
 status.tool.generate = Pembuatan
+status.tool.help_targets = Bantuan target
 
 # Teks perender HTML untuk graf.
 graph.html.title = Graf build Netsuke

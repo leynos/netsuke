@@ -6,6 +6,8 @@
 #[cfg(unix)]
 use anyhow::bail;
 use anyhow::{Context, Result, ensure};
+use camino::Utf8Path;
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use rstest::rstest;
 use std::path::Path;
 #[cfg(unix)]
@@ -150,6 +152,29 @@ fn help_entry_points_are_novice_friendly(#[case] args: &[&str]) -> Result<()> {
         ],
         "stdout",
     )?;
+    Ok(())
+}
+
+#[rstest]
+#[case::root(&["help"])]
+#[case::build(&["help", "build"])]
+fn informational_help_ignores_malformed_project_config(#[case] args: &[&str]) -> Result<()> {
+    let workspace = tempdir().context("create informational-help workspace")?;
+    let workspace_path =
+        Utf8Path::from_path(workspace.path()).context("temporary path should be UTF-8")?;
+    let workspace_dir = Dir::open_ambient_dir(workspace_path, ambient_authority())
+        .context("open informational-help workspace")?;
+    workspace_dir
+        .write(".netsuke.toml", b"not valid TOML")
+        .context("write malformed project config")?;
+
+    let output = run_netsuke(workspace.path(), args, None)?;
+
+    ensure!(
+        output.success,
+        "informational help should bypass configuration errors: {}",
+        output.stderr
+    );
     Ok(())
 }
 

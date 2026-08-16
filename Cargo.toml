@@ -29,7 +29,7 @@ name = "netsuke"
 path = "src/main.rs"
 
 [package.metadata.ortho_config]
-root_type = "netsuke::cli::CliConfig"
+root_type = "netsuke::cli::ReleaseHelpCli"
 locales   = [
     "ar",
     "cs",
@@ -132,10 +132,12 @@ wait-timeout = "0.2"
 url = "^2.5.0"
 ortho_config = { version = "0.9.0", features = ["serde_json"] }
 sys-locale = "0.3.2"
+unicode-width = "0.2.1"
 
 [build-dependencies]
 cap-std = "3.4.4"
 clap = { version = "4.5.0", features = ["derive"] }
+clap_complete = "4.5.0"
 clap_mangen = "0.3.0"
 ortho_config = { version = "0.9.0", features = ["serde_json"] }
 serde = { version = "1", features = ["derive"] }

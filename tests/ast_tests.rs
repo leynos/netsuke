@@ -5,6 +5,9 @@
 
 #[path = "ast_tests/actions.rs"]
 mod actions;
+
+#[path = "ast_tests/descriptions.rs"]
+mod descriptions;
 #[path = "ast_tests/macros.rs"]
 mod macros;
 #[path = "ast_tests/manifest_files.rs"]

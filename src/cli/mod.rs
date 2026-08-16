@@ -13,9 +13,11 @@ mod constants;
 mod diag;
 mod discovery;
 mod environment;
+mod help;
 mod merge;
 mod parser;
 mod parsing;
+mod release_help;
 
 #[cfg(test)]
 pub(crate) mod test_support;
@@ -23,11 +25,13 @@ pub(crate) mod test_support;
 pub use config::{AccessibilityPolicy, CliConfig, ColourPolicy, EmojiPolicy, ProgressPolicy};
 pub use diag::{resolve_merged_json, resolve_merged_json_with_env};
 pub use discovery::{EnvProvider as ConfigEnvProvider, StdEnvProvider as ConfigStdEnvProvider};
+pub use help::{HelpArgs, HelpTopic};
 pub use merge::{merge_with_config, merge_with_config_and_env};
 pub use parser::{
     BuildArgs, Cli, Commands, GraphArgs, json_hint_from_args, locale_hint_from_args,
     parse_with_localizer_from,
 };
+pub use release_help::ReleaseHelpCli;
 
 /// Maximum number of jobs accepted by the CLI.
 pub(super) const MAX_JOBS: usize = 64;

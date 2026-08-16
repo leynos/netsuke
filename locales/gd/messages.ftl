@@ -32,6 +32,14 @@ cli.subcommand.graph.about = Cuir a-mach graf eisimeileachd an togail. Is e DOT 
 cli.subcommand.graph.long_about = Tilg am foirm-liosta Netsuke a chaidh a pharsadh gu graf togail bun-riaghailteach agus sgrìobh e mar Graphviz DOT, no mar dhuilleag HTML fhèin-chuimseach le `--html`. Cleachd `--output <FAIDHLE>` gus sgrìobhadh gu faidhle; sgrìobhaidh `-` don às-chur àbhaisteach.
 cli.subcommand.generate.about = Dèan am foirm-liosta Ninja gun a bhith a' ruith Ninja.
 cli.subcommand.generate.long_about = Sgrìobh am foirm-liosta Ninja a chaidh a dhèanamh don às-chur àbhaisteach, no gu faidhle a thaghar le `--output`.
+cli.subcommand.help.about = Clò-bhuail an cuideachadh aig an ìre as àirde, no an cuideachadh airson cuspair ainmichte.
+cli.subcommand.help.long_about = Às aonais cuspair, tha seo a' freagairt ri `--help`. Cleachd `help targets` gus catalog nan targaidean agus nan gnìomhan airson an fhaidhle a thaghadh a chlò-bhualadh.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = Gnìomhan:
+cli.help.targets_heading = Targaidean:
+cli.help.targets.about = Dèan liosta de na targaidean agus na gnìomhan anns an fhoirm-liosta a chaidh a thaghadh.
+cli.help.default_marker = bunaiteach
 
 # Teacsa taice roghainnean an fho-àithne build.
 cli.subcommand.build.flag.targets.help = Na targaidean ri thogail (thèid bun-roghainnean an fhoirm-liosta a chleachdadh mura h-eil gin ann).
@@ -76,6 +84,7 @@ runner.manifest.path_utf8 = Chan eil slighe an fhoirm-liosta “{ $path }” na 
 runner.manifest.directory_utf8 = Chan eil slighe pasgan an fhoirm-liosta “{ $path }” na UTF-8 dhligheach.
 runner.manifest.directory_label = pasgan `{ $directory }`
 runner.manifest.current_directory_label = am pasgan làithreach
+runner.manifest.default_not_declared = Chan eil bun-roghainn a’ mhanifest '{ $default }' ag ainmeachadh gnìomh no targaid dhearbhaichte.
 runner.context.network_policy = Cha b' urrainnear poileasaidh an lìonraidh a thogail.
 runner.context.load_manifest = Cha b' urrainnear am foirm-liosta a luchdachadh o { $path }.
 runner.context.serialise_manifest = Cha b' urrainnear am foirm-liosta a shreathachadh.
@@ -368,6 +377,7 @@ status.tool.clean = Glanadh
 status.tool.graph = Graf
 status.tool.graph_html = Graf (HTML)
 status.tool.generate = Dèanamh
+status.tool.help_targets = Cuideachadh thargaidean
 
 # Sreangan reandaraiche HTML a' ghraf.
 graph.html.title = Graf togail Netsuke

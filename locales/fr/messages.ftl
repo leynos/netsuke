@@ -32,6 +32,14 @@ cli.subcommand.graph.about = Émettre le graphe de dépendances de compilation. 
 cli.subcommand.graph.long_about = Projeter le manifeste Netsuke analysé en un graphe de compilation canonique et l'écrire au format Graphviz DOT, ou en page HTML autonome avec `--html`. Utilisez `--output <FICHIER>` pour écrire dans un fichier ; `-` écrit sur la sortie standard.
 cli.subcommand.generate.about = Générer le manifeste Ninja sans exécuter Ninja.
 cli.subcommand.generate.long_about = Écrire le manifeste Ninja généré sur la sortie standard, ou dans un fichier choisi avec `--output`.
+cli.subcommand.help.about = Afficher l'aide de premier niveau, ou l'aide d'un sujet nommé.
+cli.subcommand.help.long_about = Sans sujet, ceci correspond à `--help`. Utilisez `help targets` pour afficher le catalogue des cibles et actions du fichier sélectionné.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = Actions :
+cli.help.targets_heading = Cibles :
+cli.help.targets.about = Lister les cibles et actions du manifeste sélectionné.
+cli.help.default_marker = par défaut
 
 # Texte d'aide des options de la sous-commande build.
 cli.subcommand.build.flag.targets.help = Cibles à compiler (utilise celles du manifeste si omis).
@@ -77,6 +85,7 @@ runner.manifest.path_utf8 = Le chemin de manifeste « { $path } » n'est pas de 
 runner.manifest.directory_utf8 = Le chemin du répertoire de manifeste « { $path } » n'est pas de l'UTF-8 valide.
 runner.manifest.directory_label = répertoire `{ $directory }`
 runner.manifest.current_directory_label = le répertoire courant
+runner.manifest.default_not_declared = La valeur par défaut du manifeste '{ $default }' ne désigne aucune action ni cible déclarée.
 runner.context.network_policy = Impossible de construire la politique réseau.
 runner.context.load_manifest = Impossible de charger le manifeste depuis { $path }.
 runner.context.serialise_manifest = Impossible de sérialiser le manifeste.
@@ -369,6 +378,7 @@ status.tool.clean = Nettoyage
 status.tool.graph = Graphe
 status.tool.graph_html = Graphe (HTML)
 status.tool.generate = Génération
+status.tool.help_targets = Aide sur les cibles
 
 # Chaînes du moteur de rendu HTML du graphe.
 graph.html.title = Graphe de compilation Netsuke

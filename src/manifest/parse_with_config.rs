@@ -6,7 +6,7 @@
 //! as `command_available` resolution without mutating the process
 //! environment.
 
-use super::{EnvReader, ManifestName, ManifestParse, from_str_named};
+use super::{EnvReader, ManifestName, ManifestParse, StdlibRegistration, from_str_named};
 use crate::{ast::NetsukeManifest, stdlib::StdlibConfig};
 use anyhow::Result;
 
@@ -65,7 +65,7 @@ pub fn from_str_with_env_and_config(
         yaml,
         ManifestParse {
             name: &ManifestName::new("Netsukefile"),
-            stdlib_config: Some(stdlib_config),
+            stdlib_registration: Some(StdlibRegistration::Full(Box::new(stdlib_config))),
             env_reader,
         },
         &mut None,

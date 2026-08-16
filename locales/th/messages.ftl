@@ -32,6 +32,14 @@ cli.subcommand.graph.about = แสดงกราฟการพึ่งพา
 cli.subcommand.graph.long_about = ฉายไฟล์รายการ Netsuke ที่แจงแล้วให้เป็นกราฟการสร้างมาตรฐาน แล้วเขียนเป็น Graphviz DOT หรือเขียนเป็นหน้า HTML ที่สมบูรณ์ในตัวเมื่อใช้ `--html` ใช้ `--output <ไฟล์>` เพื่อเขียนลงไฟล์ ส่วน `-` จะเขียนไปยังเอาต์พุตมาตรฐาน
 cli.subcommand.generate.about = สร้างไฟล์รายการ Ninja โดยไม่เรียกใช้ Ninja
 cli.subcommand.generate.long_about = เขียนไฟล์รายการ Ninja ที่สร้างขึ้นไปยังเอาต์พุตมาตรฐาน หรือไปยังไฟล์ที่เลือกด้วย `--output`
+cli.subcommand.help.about = พิมพ์ความช่วยเหลือระดับบนสุด หรือความช่วยเหลือสำหรับหัวข้อที่ระบุชื่อ
+cli.subcommand.help.long_about = หากไม่มีหัวข้อ คำสั่งนี้จะเหมือนกับ `--help` ใช้ `help targets` เพื่อพิมพ์แคตตาล็อกเป้าหมายและการดำเนินการสำหรับไฟล์รายการที่เลือก
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = การดำเนินการ:
+cli.help.targets_heading = เป้าหมาย:
+cli.help.targets.about = แสดงรายการเป้าหมายและการดำเนินการในไฟล์รายการที่เลือก
+cli.help.default_marker = ค่าเริ่มต้น
 
 # ข้อความช่วยเหลือของตัวเลือกในคำสั่งย่อย build
 cli.subcommand.build.flag.targets.help = เป้าหมายที่จะสร้าง (หากละไว้ จะใช้ค่าโดยปริยายของไฟล์รายการ)
@@ -76,6 +84,7 @@ runner.manifest.path_utf8 = เส้นทางไฟล์รายการ 
 runner.manifest.directory_utf8 = เส้นทางไดเรกทอรีของไฟล์รายการ “{ $path }” ไม่ใช่ UTF-8 ที่ถูกต้อง
 runner.manifest.directory_label = ไดเรกทอรี `{ $directory }`
 runner.manifest.current_directory_label = ไดเรกทอรีปัจจุบัน
+runner.manifest.default_not_declared = ค่าเริ่มต้นของรายการ '{ $default }' ไม่ได้ระบุการดำเนินการหรือเป้าหมายที่ประกาศไว้
 runner.context.network_policy = สร้างนโยบายเครือข่ายไม่สำเร็จ
 runner.context.load_manifest = โหลดไฟล์รายการที่ { $path } ไม่สำเร็จ
 runner.context.serialise_manifest = ทำให้ไฟล์รายการเป็นลำดับข้อมูลไม่สำเร็จ
@@ -368,6 +377,7 @@ status.tool.clean = การล้าง
 status.tool.graph = กราฟ
 status.tool.graph_html = กราฟ (HTML)
 status.tool.generate = การสร้างไฟล์
+status.tool.help_targets = ความช่วยเหลือเป้าหมาย
 
 # ข้อความของตัวแสดงกราฟเป็น HTML
 graph.html.title = กราฟการสร้างของ Netsuke

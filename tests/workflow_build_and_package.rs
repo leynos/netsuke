@@ -274,6 +274,11 @@ fn behavioural_staging_runs_for_every_platform(#[case] step_name: &str) {
 #[case("target/orthohelp/{target}/release/powershell/Netsuke/Netsuke.psd1")]
 #[case("target/orthohelp/{target}/release/powershell/Netsuke/en-US/Netsuke-help.xml")]
 #[case("target/orthohelp/{target}/release/powershell/Netsuke/en-US/about_Netsuke.help.txt")]
+#[case("target/generated-completions/{target}/release/netsuke.bash")]
+#[case("target/generated-completions/{target}/release/netsuke.elv")]
+#[case("target/generated-completions/{target}/release/netsuke.fish")]
+#[case("target/generated-completions/{target}/release/_netsuke.ps1")]
+#[case("target/generated-completions/{target}/release/_netsuke")]
 fn release_staging_declares_orthohelp_outputs(#[case] expected_source: &str) -> Result<()> {
     let config = staging_config()?;
     let sources = artefact_sources(&config)?;

@@ -140,3 +140,29 @@ Feature: CLI parsing
     Then parsing succeeds
     And the command is build
     And the working directory is "work dir"
+
+  Scenario: Help command with targets topic
+    When the CLI is parsed with "help targets"
+    Then parsing succeeds
+    And the command is help
+    And the help topic is targets
+
+  Scenario: Help command with targets topic and alternate manifest
+    When the CLI is parsed with "--file alt.yml help targets"
+    Then parsing succeeds
+    And the command is help
+    And the help topic is targets
+    And the manifest path is "alt.yml"
+
+  Scenario: Help command with targets topic and working directory
+    When the CLI is parsed with "-C work help targets"
+    Then parsing succeeds
+    And the command is help
+    And the help topic is targets
+    And the working directory is "work"
+
+  Scenario: Bare help command has no topic
+    When the CLI is parsed with "help"
+    Then parsing succeeds
+    And the command is help
+    And the help has no topic

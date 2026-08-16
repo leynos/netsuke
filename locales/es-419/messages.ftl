@@ -32,6 +32,14 @@ cli.subcommand.graph.about = Emitir el grafo de dependencias de compilación. El
 cli.subcommand.graph.long_about = Proyectar el manifiesto de Netsuke analizado en un grafo de compilación canónico y escribirlo como Graphviz DOT, o como página HTML autónoma con `--html`. Use `--output <ARCHIVO>` para escribir en un archivo; `-` escribe en stdout.
 cli.subcommand.generate.about = Generar el manifiesto de Ninja sin ejecutar Ninja.
 cli.subcommand.generate.long_about = Escribir el manifiesto de Ninja generado en stdout o en el archivo elegido con `--output`.
+cli.subcommand.help.about = Imprima la ayuda de nivel superior o la ayuda de un tema determinado.
+cli.subcommand.help.long_about = Sin tema, esto coincide con `--help`. Use `help targets` para imprimir el catálogo de objetivos y acciones del archivo seleccionado.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = Acciones:
+cli.help.targets_heading = Objetivos:
+cli.help.targets.about = Enumerar objetivos y acciones en el manifiesto seleccionado.
+cli.help.default_marker = predeterminado
 
 # Texto de ayuda de las opciones del subcomando build.
 cli.subcommand.build.flag.targets.help = Objetivos que se van a compilar (si se omite, usa los predeterminados del manifiesto).
@@ -77,6 +85,7 @@ runner.manifest.path_utf8 = La ruta del manifiesto '{ $path }' no es UTF-8 váli
 runner.manifest.directory_utf8 = La ruta del directorio del manifiesto '{ $path }' no es UTF-8 válido.
 runner.manifest.directory_label = directorio `{ $directory }`
 runner.manifest.current_directory_label = el directorio actual
+runner.manifest.default_not_declared = El valor predeterminado del manifiesto '{ $default }' no nombra una acción ni un objetivo declarado.
 runner.context.network_policy = No se pudo construir la política de red.
 runner.context.load_manifest = No se pudo cargar el manifiesto en { $path }.
 runner.context.serialise_manifest = No se pudo serializar el manifiesto.
@@ -369,6 +378,7 @@ status.tool.clean = Limpieza
 status.tool.graph = Grafo
 status.tool.graph_html = Grafo (HTML)
 status.tool.generate = Generación
+status.tool.help_targets = Ayuda de objetivos
 
 # Cadenas del representador HTML del grafo.
 graph.html.title = Grafo de compilación de Netsuke

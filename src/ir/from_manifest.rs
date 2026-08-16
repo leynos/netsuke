@@ -53,10 +53,8 @@ impl BuildGraph {
     /// Rules are stored verbatim and expanded later when targets reference
     /// them. This allows each target's input and output paths to be embedded in
     /// the resulting command, meaning identical rule definitions may yield
-    /// distinct actions once interpolated. Should the manifest schema ever
-    /// permit targets to override recipe fields such as `command` or
-    /// `description`, those target-level values take precedence over the rule's
-    /// defaults.
+    /// distinct actions once interpolated. Target descriptions remain discovery
+    /// metadata and never take part in recipe resolution or Ninja progress.
     fn process_rules(manifest: &NetsukeManifest, rule_map: &mut IrHashMap<String, Arc<Rule>>) {
         for rule in &manifest.rules {
             rule_map.insert(rule.name.clone(), Arc::new(rule.clone()));
@@ -86,9 +84,9 @@ impl BuildGraph {
                 Recipe::Rule { rule } => {
                     let target_name = get_target_display_name(&outputs);
                     let tmpl = resolve_rule(rule, rule_map, &target_name)?;
-                    // Future schema versions may allow targets to override
-                    // recipe or description fields. If so, those values will
-                    // take precedence over the rule template.
+                    // Target descriptions are deliberately omitted: rule
+                    // descriptions remain the sole source of Ninja progress
+                    // text.
                     register_action(
                         actions,
                         tmpl.recipe.clone(),

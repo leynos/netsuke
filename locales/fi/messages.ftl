@@ -32,6 +32,14 @@ cli.subcommand.graph.about = Tulosta koonnin riippuvuusgraafi. Oletusmuoto on DO
 cli.subcommand.graph.long_about = Muunna luettu Netsuke-manifesti kanoniseksi koontigraafiksi ja kirjoita se Graphviz DOT -muodossa tai `--html`-valitsimella itsenäisenä HTML-sivuna. Kirjoita tiedostoon valitsimella `--output <TIEDOSTO>`; `-` kirjoittaa vakiotulosteeseen.
 cli.subcommand.generate.about = Luo Ninja-manifesti suorittamatta Ninjaa.
 cli.subcommand.generate.long_about = Kirjoita luotu Ninja-manifesti vakiotulosteeseen tai valitsimella `--output` valittuun tiedostoon.
+cli.subcommand.help.about = Tulosta ylimmän tason ohje tai nimetyn aiheen ohje.
+cli.subcommand.help.long_about = Ilman aihetta tämä vastaa `--help`-komentoa. Käytä `help targets` tulostaaksesi valitun tiedoston kohde- ja toimintaluettelon.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = Toiminnot:
+cli.help.targets_heading = Kohteet:
+cli.help.targets.about = Luettele valitun tiedoston kohteet ja toiminnot.
+cli.help.default_marker = oletus
 
 # build-alikomennon valitsimien ohjeteksti.
 cli.subcommand.build.flag.targets.help = Koostettavat kohteet (jos puuttuu, käytetään manifestin oletuskohteita).
@@ -76,6 +84,7 @@ runner.manifest.path_utf8 = Manifestipolku ”{ $path }” ei ole kelvollista UT
 runner.manifest.directory_utf8 = Manifestihakemiston polku ”{ $path }” ei ole kelvollista UTF-8:aa.
 runner.manifest.directory_label = hakemisto `{ $directory }`
 runner.manifest.current_directory_label = nykyinen hakemisto
+runner.manifest.default_not_declared = Manifestin oletus '{ $default }' ei nimeä ilmoitettua toimintoa tai kohdetta.
 runner.context.network_policy = Verkkokäytäntöä ei voitu muodostaa.
 runner.context.load_manifest = Manifestia ei voitu ladata polusta { $path }.
 runner.context.serialise_manifest = Manifestia ei voitu sarjallistaa.
@@ -368,6 +377,7 @@ status.tool.clean = Siivous
 status.tool.graph = Graafi
 status.tool.graph_html = Graafi (HTML)
 status.tool.generate = Luonti
+status.tool.help_targets = Kohdeohje
 
 # Graafin HTML-hahmonnuksen tekstit.
 graph.html.title = Netsuken koontigraafi

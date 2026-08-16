@@ -73,10 +73,19 @@ Because successive pre-releases share that numeric version, installing a
 later pre-release MSI replaces the existing installation for that version
 series rather than installing alongside it.
 
-SHA-256 checksum files accompany standalone binaries and staged help and
-licence files. Installer packages do not have checksum sidecars in
-v0.1.0-beta1. Windows PowerShell help files are published beside each MSI as
+SHA-256 checksum files accompany standalone binaries and staged help,
+completion, and licence files. Installer packages do not have checksum sidecars
+in v0.1.0-beta1. Windows PowerShell help files are published beside each MSI as
 sidecar artefacts rather than embedded in the installer.
+
+Each standalone release archive also contains generated shell completion
+sidecars under `completions/<shell>/` for Bash, Elvish, Fish, PowerShell, and
+Zsh. These files are portable and separate from the executable and installer
+payloads. To use one, extract the matching archive and copy the file for the
+chosen shell into that shell's normal completion directory, or load it through
+the shell's documented completion mechanism. The package installation
+commands above do not install completion files; completion directory names and
+activation steps vary by shell and platform.
 
 Install the current source checkout with Cargo. The clone supplies both the
 pinned nightly toolchain and `RUSTFLAGS=-Zpolonius=next`, so neither is given
@@ -296,6 +305,13 @@ A rule or target must provide exactly one recipe:
 
 Rules may also provide `description`, text used for Ninja's progress display.
 
+Targets and actions may also provide `description`, but with a different
+purpose: a target or action description is discovery metadata surfaced by
+`netsuke help targets` (see
+[Generate and inspect artefacts](#generate-and-inspect-artefacts)). It does
+not affect Ninja progress output, which stays driven by the referenced rule's
+`description`.
+
 A `command` list runs its entries in declaration order and stops at the first
 non-zero exit, so entries share the fail-fast behaviour of a handwritten
 `&&` chain. The command field is a `StringOrList`: a scalar remains one shell
@@ -376,6 +392,10 @@ A target supports these fields:
   and `glob` restriction above applies here too.
 - `phony`: marks a logical target that does not represent a file.
 - `always`: forces the recipe to run whenever the target is requested.
+- `description`: an optional human-readable summary of the public operation
+  the target performs. It is discovery metadata shown by `netsuke help
+  targets`; it never replaces a referenced rule's `description` in Ninja
+  progress output.
 
 `name`, `sources`, `deps`, and `order_only_deps` accept either one string or a
 list of strings.
@@ -708,6 +728,10 @@ The commands are:
   Ninja manifest is the only content written to stdout; use `--output <FILE>`
   to write it to a file instead. In JSON mode (`--json`) the manifest is
   carried in the result document's `result.content` field instead.
+- `help [TOPIC]`: print the top-level help, or the help for a named topic.
+  With no topic, it matches `--help`. `help targets` prints the target and
+  action catalogue for the selected manifest (see
+  [Generate and inspect artefacts](#generate-and-inspect-artefacts)).
 
 Running `netsuke` without a subcommand is the same as `netsuke build` with no
 explicit targets. A bare target such as `netsuke hello` is not accepted; use
@@ -833,6 +857,38 @@ manifest to that file and leaves stdout empty.
 
 `clean` removes file outputs tracked by Ninja. Phony targets and actions do not
 represent files and are not removed.
+
+`help targets` prints the target and action catalogue for the selected
+manifest — actions first, then targets — with a localized default marker such
+as `[★ default]` (or `[* default]` in accessible output) on manifest defaults
+and an empty description column for entries without a `description`:
+
+<!-- tested-example: guide-help-targets -->
+
+```sh
+netsuke help targets
+```
+
+The command loads, expands, renders, and validates the manifest through the
+same structural stages as a build, but performs no recipes and creates no
+build outputs. Rendering uses a restricted, side-effect-free Jinja surface.
+Queries allow only the lexical path filters `basename`, `dirname`,
+`with_suffix`, and `relative_to`, the collection filters `uniq`, `flatten`, and
+`group_by`, and the clock-independent `timedelta` function. Queries reject
+`env()` and `glob()`, file tests, filesystem metadata filters such as `size` and
+`linecount`, `hash`, `digest`, `contents`, `realpath`, and `expanduser`,
+executable discovery through `which` and `command_available`, network and
+command helpers (`fetch`, `shell`, and `grep`), and the clock-dependent `now()`
+function. Normal build manifest rendering retains the full standard library;
+this restriction applies only to query rendering. It honours the usual
+manifest-selection options (`--file`,
+`-C/--directory`) and the normal colour, accessibility, locale, and JSON-output
+conventions; with `--json` the catalogue is emitted as a versioned JSON
+document whose `result.command` is `help-targets`.
+
+The standard-library reference describes the full helper set available while
+rendering a normal build manifest. The query allowlist above is the deliberate
+exception for `netsuke help targets`.
 
 ## Configure Netsuke
 

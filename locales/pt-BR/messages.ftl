@@ -32,6 +32,14 @@ cli.subcommand.graph.about = Emitir o grafo de dependências do build. O formato
 cli.subcommand.graph.long_about = Projetar o manifesto do Netsuke analisado em um grafo de build canônico e gravá-lo como Graphviz DOT ou como página HTML autocontida com `--html`. Use `--output <ARQUIVO>` para gravar em um arquivo; `-` grava na stdout.
 cli.subcommand.generate.about = Gerar o manifesto do Ninja sem executar o Ninja.
 cli.subcommand.generate.long_about = Gravar o manifesto do Ninja gerado na stdout ou no arquivo escolhido com `--output`.
+cli.subcommand.help.about = Imprimir a ajuda de nível superior ou a ajuda de um tópico nomeado.
+cli.subcommand.help.long_about = Sem tópico, isto corresponde a `--help`. Use `help targets` para imprimir o catálogo de alvos e ações do manifesto selecionado.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = Ações:
+cli.help.targets_heading = Alvos:
+cli.help.targets.about = Listar alvos e ações no manifesto selecionado.
+cli.help.default_marker = padrão
 
 # Texto de ajuda das opções do subcomando build.
 cli.subcommand.build.flag.targets.help = Alvos a compilar (se omitido, usa os padrões do manifesto).
@@ -77,6 +85,7 @@ runner.manifest.path_utf8 = O caminho do manifesto "{ $path }" não é UTF-8 vá
 runner.manifest.directory_utf8 = O caminho do diretório do manifesto "{ $path }" não é UTF-8 válido.
 runner.manifest.directory_label = diretório `{ $directory }`
 runner.manifest.current_directory_label = o diretório atual
+runner.manifest.default_not_declared = O padrão do manifesto '{ $default }' não nomeia uma ação ou um alvo declarado.
 runner.context.network_policy = Não foi possível construir a política de rede.
 runner.context.load_manifest = Não foi possível carregar o manifesto em { $path }.
 runner.context.serialise_manifest = Não foi possível serializar o manifesto.
@@ -369,6 +378,7 @@ status.tool.clean = Limpeza
 status.tool.graph = Grafo
 status.tool.graph_html = Grafo (HTML)
 status.tool.generate = Geração
+status.tool.help_targets = Ajuda sobre alvos
 
 # Textos do renderizador HTML do grafo.
 graph.html.title = Grafo de build do Netsuke

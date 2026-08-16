@@ -1,5 +1,6 @@
 ---
 source: src/cli/parser_tests.rs
+assertion_line: 48
 expression: normalized_help
 ---
 Netsuke transforms YAML + Jinja manifests into reproducible Ninja graphs and runs Ninja with safe defaults.
@@ -11,7 +12,7 @@ Commands:
   clean     Remove build artefacts via Ninja.
   graph     Emit the build dependency graph. Default format is DOT.
   generate  Generate the Ninja manifest without running Ninja.
-  help      Print this message or the help of the given subcommand(s)
+  help      Print the top-level help, or the help for a named topic.
 
 Options:
   -f, --file <FILE>

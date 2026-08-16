@@ -106,6 +106,10 @@ fn generates_powershell_help_for_windows_target(
         log.contains("--ps-module-name CustomNetsuke"),
         "PowerShell module name should be pinned, got {log}"
     );
+    ensure!(
+        log.contains("--ps-split-subcommands true"),
+        "PowerShell help should include documented CLI subcommands, got {log}"
+    );
     let ps_module = fs::read_to_string(
         fixture
             .out_dir

@@ -32,6 +32,14 @@ cli.subcommand.graph.about = Allbynnu graff dibyniaethau'r adeiladu. DOT yw'r ff
 cli.subcommand.graph.long_about = Taflunio'r maniffest Netsuke a ddadansoddwyd yn graff adeiladu canonaidd a'i ysgrifennu fel Graphviz DOT, neu fel tudalen HTML hunangynhwysol gyda `--html`. Defnyddiwch `--output <FFEIL>` i ysgrifennu i ffeil; mae `-` yn ysgrifennu i'r allbwn safonol.
 cli.subcommand.generate.about = Creu'r maniffest Ninja heb redeg Ninja.
 cli.subcommand.generate.long_about = Ysgrifennu'r maniffest Ninja a gynhyrchwyd i'r allbwn safonol, neu i ffeil a ddewisir gyda `--output`.
+cli.subcommand.help.about = Argraffwch cymorth lefel uchaf, neu cymorth ar gyfer pwnc a enwir.
+cli.subcommand.help.long_about = Heb bwnc, mae hyn yn cyfateb i `--help`. Defnyddiwch `help targets` i argraffu catalog targedau a gweithredoedd ar gyfer y ffeil a ddewiswyd.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = Gweithredoedd:
+cli.help.targets_heading = Targedau:
+cli.help.targets.about = Rhestru targedau a gweithredoedd yn y maniffest a ddewiswyd.
+cli.help.default_marker = diofyn
 
 # Testun cymorth dewisiadau'r is-orchymyn build.
 cli.subcommand.build.flag.targets.help = Y targedau i'w hadeiladu (defnyddir rhagosodiadau'r maniffest os hepgorir hwy).
@@ -76,6 +84,7 @@ runner.manifest.path_utf8 = Nid yw llwybr y maniffest ‘{ $path }’ yn UTF-8 d
 runner.manifest.directory_utf8 = Nid yw llwybr cyfeiriadur y maniffest ‘{ $path }’ yn UTF-8 dilys.
 runner.manifest.directory_label = cyfeiriadur `{ $directory }`
 runner.manifest.current_directory_label = y cyfeiriadur cyfredol
+runner.manifest.default_not_declared = Nid yw rhagosodiad y maniffest '{ $default }' yn enwi gweithred neu darged datganedig.
 runner.context.network_policy = Methwyd â llunio'r polisi rhwydwaith.
 runner.context.load_manifest = Methwyd â llwytho'r maniffest o { $path }.
 runner.context.serialise_manifest = Methwyd â chyfresoli'r maniffest.
@@ -368,6 +377,7 @@ status.tool.clean = Glanhau
 status.tool.graph = Graff
 status.tool.graph_html = Graff (HTML)
 status.tool.generate = Cynhyrchu
+status.tool.help_targets = Cymorth targedau
 
 # Testunau rendrwr HTML y graff.
 graph.html.title = Graff adeiladu Netsuke

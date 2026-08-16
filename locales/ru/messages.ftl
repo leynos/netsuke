@@ -32,6 +32,14 @@ cli.subcommand.graph.about = Вывести граф зависимостей с
 cli.subcommand.graph.long_about = Преобразовать разобранный манифест Netsuke в канонический граф сборки и записать его в формате Graphviz DOT либо, с параметром `--html`, как самостоятельную HTML-страницу. Используйте `--output <ФАЙЛ>` для записи в файл; `-` выводит в стандартный поток.
 cli.subcommand.generate.about = Создать манифест Ninja, не запуская Ninja.
 cli.subcommand.generate.long_about = Записать созданный манифест Ninja в стандартный поток вывода либо в файл, выбранный параметром `--output`.
+cli.subcommand.help.about = Вывести справку верхнего уровня или справку по указанной теме.
+cli.subcommand.help.long_about = Без темы это соответствует `--help`. Используйте `help targets`, чтобы вывести каталог целей и действий для выбранного файла.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = Действия:
+cli.help.targets_heading = Цели:
+cli.help.targets.about = Вывести список целей и действий в выбранном файле.
+cli.help.default_marker = по умолчанию
 
 # Текст справки для параметров подкоманды build.
 cli.subcommand.build.flag.targets.help = Цели для сборки (если не указаны, берутся цели манифеста по умолчанию).
@@ -76,6 +84,7 @@ runner.manifest.path_utf8 = Путь к манифесту «{ $path }» не я
 runner.manifest.directory_utf8 = Путь к каталогу манифеста «{ $path }» не является корректным UTF-8.
 runner.manifest.directory_label = каталог `{ $directory }`
 runner.manifest.current_directory_label = текущий каталог
+runner.manifest.default_not_declared = Значение по умолчанию в манифесте '{ $default }' не называет объявленное действие или цель.
 runner.context.network_policy = Не удалось построить сетевую политику.
 runner.context.load_manifest = Не удалось загрузить манифест по пути { $path }.
 runner.context.serialise_manifest = Не удалось сериализовать манифест.
@@ -368,6 +377,7 @@ status.tool.clean = Очистка
 status.tool.graph = Граф
 status.tool.graph_html = Граф (HTML)
 status.tool.generate = Генерация
+status.tool.help_targets = Справка по целям
 
 # Строки HTML-представления графа.
 graph.html.title = Граф сборки Netsuke

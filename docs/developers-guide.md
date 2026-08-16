@@ -26,6 +26,73 @@ as the durable architecture record.
 
 [adr-003-cli]: adr-003-agent-consistent-human-first-cli.md
 
+## Ninja child-process APIs and help-runner boundary
+
+The public Ninja process helpers are re-exported from `netsuke::runner`.
+`CommandEnv` is an explicit, composable set of child-process overrides:
+`CommandEnv::inherit()` leaves the parent environment in place,
+`with_var` overrides one variable, and `with_path` replaces the child's
+`PATH`. The parent process is never mutated. `NinjaBuildRequest` and
+`NinjaToolRequest` borrow the program, CLI settings, generated build file,
+target list or tool name, and `CommandEnv` needed for one invocation.
+
+The legacy `run_ninja` and `run_ninja_tool` helpers retain their existing
+signatures and inherit the parent environment. Callers that need an isolated
+child use `run_ninja_with` or `run_ninja_tool_with` with one of the request
+types. Keep environment selection at this process boundary: do not add
+process-wide environment mutation to callers or tests.
+
+`netsuke help targets` is deliberately a different runner path. The dispatch
+layer routes `HelpTopic::Targets` to `src/runner/help.rs`, which resolves and
+runs the manifest loading, expansion, and rendering stages, then always builds
+and validates a `BuildGraph` before rendering the deterministic
+action-then-target catalogue. An invalid graph aborts before the catalogue is
+rendered. It must not generate a Ninja file, call a Ninja subprocess, execute a
+recipe, or create build outputs. Its Jinja environment is a restricted,
+side-effect-free query surface. It allowlists only the lexical path filters
+`basename`, `dirname`, `with_suffix`, and `relative_to`, the collection filters
+`uniq`, `flatten`, and `group_by`, and the clock-independent `timedelta`
+function. It rejects `env()` and `glob()`, file tests, filesystem metadata
+filters such as `size` and `linecount`, `hash`, `digest`, `contents`, `realpath`,
+and `expanduser`, executable discovery through `which` and
+`command_available`, network and command helpers (`fetch`, `shell`, and
+`grep`), and the clock-dependent `now()` function. Normal build manifest
+rendering still registers the full standard library; this restriction applies
+only to query rendering.
+
+The query allowlist has one owner: `register_manifest_query`. Query loading
+does not construct `StdlibConfig`; the registration function composes the
+allowlist directly. Reuse its lexical path, collection, and time registration
+helpers only when a helper's result depends on template inputs rather than the
+host. Do not add a host-observing helper to the shared query registration path;
+assess and record any future allowlist change here. The no-topic and
+named-command help paths render clap help directly and do not load a manifest.
+Keep future help topics within this boundary rather than coupling read-only
+inspection to `runner::process`.
+
+### Help-target query telemetry
+
+`src/runner/help_telemetry.rs` is the observability boundary around the pure
+manifest and catalogue query within `netsuke help targets`.
+`instrument_help_targets` wraps that query and records the fixed metrics
+`netsuke_runner_help_targets_total` and
+`netsuke_runner_help_targets_duration_seconds`. It also opens the
+`runner.help_targets` span and emits a bounded `Completed help targets query`
+event when the query finishes. The command boundary in `src/runner/help.rs`
+owns status reporting and rendering after the query succeeds.
+
+Telemetry labels use only the fixed `outcome` values `success` and `error`, and
+the fixed `error_category` values `none`, `manifest_not_found`, and `other`.
+The wrapper never records manifest-controlled names, descriptions, paths, or
+other details. Metric descriptions are registered once per process, through a
+`Once`, so repeated queries do not re-register them.
+
+Telemetry tests use `metrics::with_local_recorder` with a
+`metrics_util::DebuggingRecorder`, together with the local tracing subscriber
+capture helper. They assert the counter, duration sample, and completion event
+for a successful fixture query, a missing-manifest failure, and an invalid
+manifest failure classified as the non-`RunnerError` `other` category.
+
 ## Localization
 
 `src/locale_catalogues.rs` is the authoritative registry of shipped catalogues.
@@ -783,9 +850,14 @@ the policy, rejects tracked drift, and scans every tracked Markdown file.
 
 ## Release help tooling
 
-Release builds generate help artefacts explicitly with `cargo-orthohelp`,
-rather than from `build.rs`. The build script remains responsible for the
-localization key audit only. Release automation installs the pinned tool with:
+Release builds generate their manual and PowerShell help explicitly with
+`cargo-orthohelp`, rather than consuming the ordinary-build help artefacts from
+`build.rs`. The metadata root is `netsuke::cli::ReleaseHelpCli`, which combines
+`CliConfig` field metadata with the Clap command surface, including
+`help targets`, so the release manual and PowerShell help remain aligned with
+the CLI. During ordinary Cargo builds, `build.rs` generates the local manual
+page and shell completions, and audits the localization keys. Release
+automation installs the pinned tool with:
 
 ```bash
 cargo install cargo-orthohelp --version 0.9.0 --locked
@@ -807,6 +879,13 @@ PowerShell external help under
 `target/orthohelp/<target>/release/powershell/Netsuke/`. It computes the manual
 date from `SOURCE_DATE_EPOCH`, falling back to `1970-01-01` when unset or
 invalid.
+
+Shell completions are generated separately by `build.rs` from
+`Cli::command()` for Bash, Elvish, Fish, PowerShell, and Zsh. Release staging
+copies these portable completion sidecars into each standalone archive under
+`completions/<shell>/`. They remain separate files for users to copy into the
+completion location documented by their shell; package installation does not
+claim to install them.
 
 Keep `[package.metadata.ortho_config]` in `Cargo.toml` aligned with the CLI
 when adding, renaming, or removing user-facing options. Changes to CLI

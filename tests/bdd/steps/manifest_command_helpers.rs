@@ -166,7 +166,7 @@ pub(super) fn build_netsuke_command(
 }
 
 /// Run netsuke with the given arguments and store the result.
-pub(super) fn run_netsuke_and_store(world: &TestWorld, args: &[&str]) -> Result<()> {
+pub(crate) fn run_netsuke_and_store(world: &TestWorld, args: &[&str]) -> Result<()> {
     let mut cmd = build_netsuke_command(world, args)?;
 
     let output = cmd.output().context("run netsuke command")?;

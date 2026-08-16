@@ -32,6 +32,14 @@ cli.subcommand.graph.about = Den Build-Abhängigkeitsgraphen ausgeben. Standardf
 cli.subcommand.graph.long_about = Das eingelesene Netsuke-Manifest in einen kanonischen Build-Graphen überführen und als Graphviz-DOT ausgeben oder mit `--html` als eigenständige HTML-Seite. Mit `--output <DATEI>` in eine Datei schreiben; `-` schreibt nach stdout.
 cli.subcommand.generate.about = Das Ninja-Manifest erzeugen, ohne Ninja auszuführen.
 cli.subcommand.generate.long_about = Das erzeugte Ninja-Manifest nach stdout schreiben oder in eine mit `--output` gewählte Datei.
+cli.subcommand.help.about = Die Hilfe auf oberster Ebene oder die Hilfe für ein benanntes Thema anzeigen.
+cli.subcommand.help.long_about = Ohne Thema entspricht dies `--help`. Verwenden Sie `help targets`, um den Ziel- und Aktionskatalog für die ausgewählte Datei anzuzeigen.
+
+# Help catalogue headings and markers.
+cli.help.actions_heading = Aktionen:
+cli.help.targets_heading = Ziele:
+cli.help.targets.about = Ziele und Aktionen im ausgewählten Manifest auflisten.
+cli.help.default_marker = Standard
 
 # Hilfetext für Optionen des Unterbefehls build.
 cli.subcommand.build.flag.targets.help = Zu bauende Ziele (ohne Angabe gelten die Standardziele des Manifests).
@@ -76,6 +84,7 @@ runner.manifest.path_utf8 = Der Manifestpfad „{ $path }“ ist kein gültiges 
 runner.manifest.directory_utf8 = Der Pfad des Manifestverzeichnisses „{ $path }“ ist kein gültiges UTF-8.
 runner.manifest.directory_label = Verzeichnis `{ $directory }`
 runner.manifest.current_directory_label = das aktuelle Verzeichnis
+runner.manifest.default_not_declared = Der Manifest-Standardwert '{ $default }' bezeichnet keine deklarierte Aktion oder kein Ziel.
 runner.context.network_policy = Die Netzwerkrichtlinie konnte nicht erstellt werden.
 runner.context.load_manifest = Das Manifest unter { $path } konnte nicht geladen werden.
 runner.context.serialise_manifest = Das Manifest konnte nicht serialisiert werden.
@@ -368,6 +377,7 @@ status.tool.clean = Bereinigung
 status.tool.graph = Graph
 status.tool.graph_html = Graph (HTML)
 status.tool.generate = Erzeugung
+status.tool.help_targets = Zielhilfe
 
 # Zeichenketten des HTML-Graph-Renderers.
 graph.html.title = Netsuke-Build-Graph

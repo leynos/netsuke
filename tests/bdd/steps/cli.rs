@@ -10,7 +10,7 @@ use crate::bdd::helpers::parse_store::store_parse_outcome;
 use crate::bdd::helpers::tokens::build_tokens;
 use crate::bdd::types::{CliArgs, ErrorFragment, JobCount, PathString, TargetName, UrlString};
 use anyhow::{Context, Result, bail};
-use netsuke::cli::{Cli, Commands};
+use netsuke::cli::{Cli, Commands, HelpTopic};
 use netsuke::cli_localization;
 use netsuke::locale_resolution;
 use rstest_bdd_macros::then;
@@ -138,8 +138,8 @@ mod cli_verify;
 use cli_verify::{
     ExpectedCommand, verify_cli_policy_allows, verify_cli_policy_rejects, verify_command,
     verify_error_contains, verify_error_returned, verify_first_target, verify_generate_output_path,
-    verify_graph_html_set, verify_graph_output_path, verify_job_count, verify_manifest_path,
-    verify_parsing_succeeded, verify_working_directory,
+    verify_graph_html_set, verify_graph_output_path, verify_help_topic, verify_job_count,
+    verify_manifest_path, verify_parsing_succeeded, verify_working_directory,
 };
 
 // ---------------------------------------------------------------------------
@@ -173,6 +173,21 @@ fn the_command_is_graph(world: &TestWorld) -> Result<()> {
 #[then]
 fn the_command_is_generate(world: &TestWorld) -> Result<()> {
     verify_command(world, ExpectedCommand::Generate)
+}
+
+#[then]
+fn the_command_is_help(world: &TestWorld) -> Result<()> {
+    verify_command(world, ExpectedCommand::Help)
+}
+
+#[then]
+fn the_help_topic_is_targets(world: &TestWorld) -> Result<()> {
+    verify_help_topic(world, Some(&HelpTopic::Targets))
+}
+
+#[then]
+fn the_help_has_no_topic(world: &TestWorld) -> Result<()> {
+    verify_help_topic(world, None)
 }
 
 #[then("the manifest path is {path:string}")]
