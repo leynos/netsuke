@@ -1,6 +1,6 @@
 //! Pure manifest loading and catalogue construction for `netsuke help targets`.
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use std::{collections::HashSet, error::Error as StdError, fmt, sync::Arc};
 
 use crate::ast::{NetsukeManifest, Target};
@@ -65,6 +65,7 @@ fn query_entries(cli: &Cli, stages: &mut Vec<PipelineStage>) -> Result<Vec<HelpE
         return Err(error);
     }
     let manifest = load_manifest_for_query(&manifest_path, stages)?;
+    reject_terminal_controls_in_target_names(&manifest)?;
 
     // Building the IR validates the rendered manifest (duplicate outputs,
     // missing rules, cycles) exactly as a real build would, without generating
@@ -75,6 +76,23 @@ fn query_entries(cli: &Cli, stages: &mut Vec<PipelineStage>) -> Result<Vec<HelpE
     let entries = build_catalogue(&manifest);
     validate_defaults(&manifest.defaults, &entries)?;
     Ok(entries)
+}
+
+/// Reject control-bearing target names before IR errors can interpolate them.
+///
+/// The help query returns validation diagnostics directly to the terminal.
+/// Catalogue rendering escapes controls, but graph validation happens first and
+/// can include a target name in its localized errors. Reject such names before
+/// that boundary rather than allowing them to influence a diagnostic.
+fn reject_terminal_controls_in_target_names(manifest: &NetsukeManifest) -> Result<()> {
+    let targets = manifest.actions.iter().chain(&manifest.targets);
+    if targets
+        .flat_map(|target| target.name.to_string_vec())
+        .any(|name| name.chars().any(super::is_terminal_control))
+    {
+        bail!("help targets cannot validate a target name with terminal control characters");
+    }
+    Ok(())
 }
 
 fn record_missing_manifest_stage(error: &anyhow::Error, stages: &mut Vec<PipelineStage>) {
