@@ -33,12 +33,12 @@ cli.subcommand.graph.long_about = Przekształć wczytany manifest Netsuke w kano
 cli.subcommand.generate.about = Wygeneruj manifest Ninja bez uruchamiania Ninji.
 cli.subcommand.generate.long_about = Zapisz wygenerowany manifest Ninja na standardowe wyjście albo do pliku wybranego opcją `--output`.
 cli.subcommand.help.about = Wyświetl pomoc najwyższego poziomu lub pomoc dla nazwanego tematu.
-cli.subcommand.help.long_about = Bez tematu odpowiada to `--help`. Użyj `help targets`, aby wyświetlić katalog celów i akcji dla wybranego pliku.
+cli.subcommand.help.long_about = Bez tematu odpowiada to `--help`. Użyj `help targets`, aby wyświetlić katalog celów i akcji dla wybranego manifestu.
 
 # Help catalogue headings and markers.
 cli.help.actions_heading = Akcje:
 cli.help.targets_heading = Cele:
-cli.help.targets.about = Wyświetl cele i akcje w wybranym pliku.
+cli.help.targets.about = Wyświetl cele i akcje w wybranym manifeście.
 cli.help.default_marker = domyślny
 
 # Tekst pomocy opcji podpolecenia build.

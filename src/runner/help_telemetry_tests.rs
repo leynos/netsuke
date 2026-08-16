@@ -92,10 +92,46 @@ fn metric_value<'snapshot>(
                 .labels()
                 .map(|label| (label.key(), label.value()))
                 .collect();
-            let matches = labels.contains(&("outcome", expected.outcome))
+            let matches = labels.len() == 2
+                && labels.contains(&("outcome", expected.outcome))
                 && labels.contains(&("error_category", expected.error_category));
             matches.then_some(value)
         })
+}
+
+#[test]
+fn metric_value_rejects_metrics_with_extra_labels() {
+    let expected = ExpectedHelpTargetsTelemetry {
+        outcome: "success",
+        error_category: "none",
+        succeeds: true,
+    };
+    let snapshot = vec![(
+        metrics_util::CompositeKey::new(
+            MetricKind::Counter,
+            metrics::Key::from_parts(
+                HELP_TARGETS_TOTAL,
+                vec![
+                    metrics::Label::new("outcome", "success"),
+                    metrics::Label::new("error_category", "none"),
+                    metrics::Label::new("operation", "query"),
+                ],
+            ),
+        ),
+        None,
+        None,
+        DebugValue::Counter(1),
+    )];
+
+    assert!(
+        metric_value(
+            &snapshot,
+            MetricKind::Counter,
+            HELP_TARGETS_TOTAL,
+            &expected
+        )
+        .is_none()
+    );
 }
 
 /// Assert the complete bounded telemetry contract for one help-targets query.

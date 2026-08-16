@@ -32,7 +32,7 @@ cli.subcommand.graph.about = Вивести граф залежностей зб
 cli.subcommand.graph.long_about = Перетворити розібраний маніфест Netsuke на канонічний граф збирання та записати його у форматі Graphviz DOT або, з параметром `--html`, як самостійну сторінку HTML. Використайте `--output <ФАЙЛ>`, щоб записати у файл; `-` виводить у стандартний потік.
 cli.subcommand.generate.about = Створити маніфест Ninja, не запускаючи Ninja.
 cli.subcommand.generate.long_about = Записати створений маніфест Ninja у стандартний потік виводу або у файл, вибраний параметром `--output`.
-cli.subcommand.help.about = Друкує довідку верхнього рівня або довідку для вказаної теми.
+cli.subcommand.help.about = Друкувати довідку верхнього рівня або довідку для вказаної теми.
 cli.subcommand.help.long_about = Без теми це відповідає `--help`. Використовуйте `help targets`, щоб надрукувати каталог цілей і дій для вибраного маніфесту.
 
 # Help catalogue headings and markers.

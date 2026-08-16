@@ -33,12 +33,12 @@ cli.subcommand.graph.long_about = Projetar o manifesto do Netsuke analisado num 
 cli.subcommand.generate.about = Gerar o manifesto Ninja sem executar o Ninja.
 cli.subcommand.generate.long_about = Escrever o manifesto Ninja gerado no stdout ou num ficheiro escolhido com `--output`.
 cli.subcommand.help.about = Imprimir a ajuda de nível superior ou a ajuda de um tópico nomeado.
-cli.subcommand.help.long_about = Sem tópico, isto corresponde a `--help`. Use `help targets` para imprimir o catálogo de alvos e ações do ficheiro selecionado.
+cli.subcommand.help.long_about = Sem tópico, isto corresponde a `--help`. Use `help targets` para imprimir o catálogo de alvos e ações do manifesto selecionado.
 
 # Help catalogue headings and markers.
 cli.help.actions_heading = Ações:
 cli.help.targets_heading = Alvos:
-cli.help.targets.about = Listar alvos e ações no ficheiro selecionado.
+cli.help.targets.about = Listar alvos e ações no manifesto selecionado.
 cli.help.default_marker = predefinição
 
 # Texto de ajuda das opções do subcomando build.
