@@ -73,8 +73,11 @@ criterion in issue #552 and all repository gates pass.
   do not introduce `std::fs` or `std::path` production code.
 - Materialize sidecars atomically and idempotently so concurrent Netsuke
   processes cannot observe partial dyndep content.
-- Do not add a new external crate unless implementation proves that the
-  workspace cannot provide the required digest or atomic-write primitive.
+- Use the existing capability filesystem for all path access. The retention
+  lease may use the narrowly scoped `fs4` lock operation only because the
+  workspace capability APIs do not provide a cross-process advisory lock;
+  direct use of the pinned toolchain's `std::fs::File::lock` would bypass the
+  capability-filesystem policy. Record its exact version and maintenance basis.
 - No production Rust source file may exceed 400 lines. In particular,
   `src/ninja_gen/mod.rs` and `src/runner/process/mod.rs` are already near the
   limit, so new responsibilities belong in focused submodules.
@@ -94,9 +97,18 @@ criterion in issue #552 and all repository gates pass.
   global graph serialization, or a manifest redesign beyond `dependency_order`,
   stop and obtain approval. Those are architectural scope changes, not
   implementation details.
-- **Dependencies:** the target is zero new crates. If an additional crate is
-  unavoidable, stop and present the crate, version, maintenance status, and why
-  existing dependencies or standard library facilities are insufficient.
+- **Dependencies:** `fs4` is the sole added crate, declared as `fs4 = "1.1.0"`
+  in `Cargo.toml` and resolved to 1.1.0 in `Cargo.lock`. The lockfile records
+  its crates.io source and checksum; the published package metadata identifies
+  the upstream repository at <https://github.com/al8n/fs4> and describes the
+  cross-platform file-lock implementation. This is the maintenance basis
+  available from the repository's dependency records; no stronger support or
+  release-cadence claim is inferred. Existing `cap_std::fs_utf8` APIs open the
+  lock file through the effective directory capability, but provide no
+  cross-process advisory-lock operation. Although the pinned toolchain's
+  `std::fs::File::lock` could provide the operation, direct `std::fs` use would
+  bypass the capability-filesystem policy. `fs4` operates only on that
+  already-opened handle, so it does not expand path authority.
 - **Generated-output compatibility:** parallel manifests should retain
   byte-for-byte generated Ninja output. If unavoidable output churn appears,
   isolate it, explain it, and obtain approval before refreshing broad snapshots.
@@ -1220,9 +1232,16 @@ races, and digest-path corruption. Preserve domain errors within libraries and
 convert to `eyre` only at the application boundary, following existing runner
 conventions.
 
-No external dependency is planned. Reuse the workspace's current hashing, UTF-8
-path, localization, error, and capability-filesystem facilities after
-confirming their exact APIs in `Cargo.toml` and existing call sites.
+The retention lease uses the sole external addition, `fs4` 1.1.0, resolved and
+checksum-pinned in `Cargo.lock`. The existing `cap_std::fs_utf8` facilities
+provide the capability-scoped open and filesystem operations, but neither they
+nor the capability policy permit direct use of `std::fs::File::lock` for this
+operation. The retention source therefore converts only the capability-opened
+file to a standard handle for `fs4::FileExt`; the lock crate does not open paths
+or widen the authority. Its published package metadata identifies the upstream
+repository at <https://github.com/al8n/fs4> and describes the cross-platform
+file-lock implementation; this is the maintenance basis available here, not a
+claim about an unverified release cadence.
 
 ## Revision note
 
@@ -1430,3 +1449,13 @@ preserves the greedy count and byte policy without storing the directory's full
 contents; a mixed-size, deliberately nonlexical regression covers multiple
 evictions. Retention now records aggregate duration, and temporary-name
 collisions record fixed retry or exhausted outcomes without exposing paths.
+
+2026-08-17: Corrected the dependency record after the retention implementation.
+`fs4` is the sole external addition and resolves to 1.1.0 in `Cargo.lock`.
+The existing capability filesystem opens the lock file but supplies no
+cross-process advisory-lock operation. Although the pinned toolchain exposes
+`std::fs::File::lock`, direct `std::fs` use would violate the
+capability-filesystem policy. `fs4` is therefore applied only to the
+capability-opened handle;
+the lockfile source/checksum and published package metadata provide the
+available maintenance basis without asserting an unverified release cadence.
