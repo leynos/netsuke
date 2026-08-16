@@ -150,28 +150,50 @@ fn retain_obsolete_sidecars(
     policy: RetentionPolicy,
     summary: &mut RetentionSummary,
 ) -> Result<()> {
-    let mut retained = RetentionSelection::new(policy);
+    let mut pass = RetentionPass {
+        current_paths,
+        retained: RetentionSelection::new(policy),
+        summary,
+    };
     for entry_result in dir
         .read_dir(DYNDEP_DIR)
         .with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?
     {
-        let entry = entry_result.with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?;
-        let name = entry
-            .file_name()
-            .with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?;
-        let path = Utf8Path::new(DYNDEP_DIR).join(name);
-        if path.as_str() == DYNDEP_LOCK || current_paths.contains(path.as_str()) {
-            continue;
-        }
-        if has_extension(&path, "tmp") {
-            // Every current atomic writer owns the same exclusive lease, so a
-            // temporary file observed here cannot belong to an active Netsuke
-            // publication protocol.
-            let bytes = candidate_size(dir, &path)?;
-            remove_candidate(dir, &path, bytes, summary)?;
-        } else if is_obsolete_sidecar(&path, current_paths) {
-            retain_or_remove_sidecar(dir, path, &mut retained, summary)?;
-        }
+        retain_directory_entry(dir, entry_result, &mut pass)?;
+    }
+    Ok(())
+}
+
+/// Mutable state scoped to one leased directory traversal.
+struct RetentionPass<'current, 'summary> {
+    current_paths: &'current HashSet<&'current str>,
+    retained: RetentionSelection,
+    summary: &'summary mut RetentionSummary,
+}
+
+/// Apply retention policy to one directory entry while the lease is held.
+fn retain_directory_entry(
+    dir: &Dir,
+    entry_result: std::io::Result<cap_std::fs_utf8::DirEntry>,
+    pass: &mut RetentionPass<'_, '_>,
+) -> Result<()> {
+    let entry = entry_result.with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?;
+    let name = entry
+        .file_name()
+        .with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?;
+    let path = Utf8Path::new(DYNDEP_DIR).join(name);
+    if path.as_str() == DYNDEP_LOCK || pass.current_paths.contains(path.as_str()) {
+        return Ok(());
+    }
+    if has_extension(&path, "tmp") {
+        // Every current atomic writer owns the same exclusive lease, so a
+        // temporary file observed here cannot belong to an active Netsuke
+        // publication protocol.
+        let bytes = candidate_size(dir, &path)?;
+        return remove_candidate(dir, &path, bytes, pass.summary);
+    }
+    if is_obsolete_sidecar(&path, pass.current_paths) {
+        retain_or_remove_sidecar(dir, path, &mut pass.retained, pass.summary)?;
     }
     Ok(())
 }

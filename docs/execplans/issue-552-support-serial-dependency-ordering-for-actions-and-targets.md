@@ -1395,3 +1395,10 @@ target recipe placeholder coverage, public retention-budget reuse, and the
 requested documentation and catalogue corrections are complete. The focused
 retention, generator, and serial-CLI suites plus `make check-fmt`, `make test`,
 `make typecheck`, `make lint`, `make markdownlint`, and `make nixie` passed.
+
+2026-08-16: Extracted per-directory-entry retention handling after a valid
+CodeScene complexity finding. The traversal now only opens the directory,
+initializes its bounded pass state, and delegates each entry; the private
+handler retains the existing lock/current-path exclusions, stale temporary-file
+cleanup, obsolete-sidecar selection, and localized error contexts. Focused
+retention tests and all repository code gates passed.
