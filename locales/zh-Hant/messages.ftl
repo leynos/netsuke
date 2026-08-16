@@ -1,6 +1,6 @@
 # Netsuke 命令列的在地化資源（繁體中文）。
 
-runner.io.dyndep.retention = 無法套用 { $path } 下產生的 dyndep 保留設定。
+runner.io.dyndep.retention = 無法套用 { $path } 處產生的 dyndep 保留設定。
 cli.about = Netsuke 會將 YAML + Jinja 資訊清單編譯成 Ninja 建置計畫。
 cli.long_about = Netsuke 把 YAML + Jinja 資訊清單轉換成可重現的 Ninja 圖，並以安全的預設值執行 Ninja。
 cli.usage = { $usage }

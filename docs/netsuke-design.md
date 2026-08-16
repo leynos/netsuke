@@ -775,6 +775,9 @@ pub struct Target {
     pub deps: StringOrList,
 
     #[serde(default)]
+    pub dependency_order: DependencyOrder,
+
+    #[serde(default)]
     pub order_only_deps: StringOrList,
 
     #[serde(default)]
@@ -871,6 +874,7 @@ let ast = NetsukeManifest {
         },
         sources: StringOrList::Empty,
         deps: StringOrList::Empty,
+        dependency_order: DependencyOrder::Parallel,
         order_only_deps: StringOrList::Empty,
         vars: HashMap::new(),
         description: None,

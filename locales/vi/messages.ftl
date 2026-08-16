@@ -1,6 +1,6 @@
 # Tài nguyên bản địa hoá cho giao diện dòng lệnh Netsuke.
 
-runner.io.dyndep.retention = Không thể áp dụng việc giữ lại tệp dyndep đã tạo bên dưới { $path }.
+runner.io.dyndep.retention = Không thể áp dụng việc giữ lại tệp dyndep đã tạo tại { $path }.
 cli.about = Netsuke biên dịch tệp kê khai YAML + Jinja thành kế hoạch dựng Ninja.
 cli.long_about = Netsuke chuyển tệp kê khai YAML + Jinja thành đồ thị Ninja có thể tái lập rồi chạy Ninja với các giá trị mặc định an toàn.
 cli.usage = { $usage }

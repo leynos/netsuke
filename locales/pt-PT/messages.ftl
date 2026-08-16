@@ -113,7 +113,7 @@ runner.io.flush_stdout = Não foi possível esvaziar o buffer do stdout.
 runner.io.dyndep.create_dir = Não foi possível criar o diretório dyndep { $path }.
 runner.io.dyndep.read = Não foi possível ler o ficheiro dyndep gerado em { $path }.
 runner.io.dyndep.write = Não foi possível escrever o ficheiro dyndep gerado em { $path }.
-runner.io.dyndep.rename = Não foi possível finalizar o ficheiro dyndep gerado em { $path }.
+runner.io.dyndep.rename = Não foi possível renomear o ficheiro dyndep gerado em { $path }.
 runner.io.dyndep.corrupt = O ficheiro dyndep gerado em { $path } não corresponde ao conteúdo esperado; remova apenas esse ficheiro e tente novamente.
 runner.io.dyndep.temp_collisions = Não foi possível criar um ficheiro dyndep temporário exclusivo para { $path } após colisões de nomes repetidas.
 runner.io.dyndep.too_large = O ficheiro dyndep gerado em { $path } excede o limite de verificação de { $limit } bytes.
@@ -182,7 +182,7 @@ ir.invalid_command = Interpolação de comando inválida: { $snippet }.
 # Erros de geração do Ninja.
 ninja_gen.missing_action = Falta a ação «{ $id }» referenciada por uma aresta de compilação.
 ninja_gen.format = Não foi possível formatar a saída do manifesto Ninja.
-ninja_gen.dyndep_files_required = Esta compilação requer um pacote Ninja gerado; utilize `netsuke build`, `netsuke clean` ou `netsuke generate` para materializar os ficheiros dyndep.
+ninja_gen.dyndep_files_required = Esta operação requer um pacote Ninja gerado; utilize `netsuke build`, `netsuke clean` ou `netsuke generate` para materializar os ficheiros dyndep.
 ninja_gen.reserved_output_path = O caminho '{ $path }' está reservado para o estado de dependências seriais do Netsuke.
 ninja_gen.unsupported_path_character = O caminho '{ $path }' contém o carácter de caminho do Ninja não suportado '{ $character }'.
 

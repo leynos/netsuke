@@ -181,7 +181,7 @@ ir.invalid_command = Érvénytelen behelyettesítés a parancsban: { $snippet }.
 # A Ninja-fájlok előállításának hibái.
 ninja_gen.missing_action = Hiányzik a(z) „{ $id }” művelet, amelyre egy építési él hivatkozik.
 ninja_gen.format = A Ninja-jegyzék kimenetét nem sikerült formázni.
-ninja_gen.dyndep_files_required = Ehhez a buildhez generált Ninja-csomag szükséges; a dyndep fájlok létrehozásához használja a `netsuke build`, `netsuke clean` vagy `netsuke generate` parancsot.
+ninja_gen.dyndep_files_required = Ehhez a művelethez generált Ninja-csomag szükséges; a dyndep fájlok létrehozásához használja a `netsuke build`, `netsuke clean` vagy `netsuke generate` parancsot.
 ninja_gen.reserved_output_path = A(z) '{ $path }' útvonal a Netsuke soros függőségi állapota számára van fenntartva.
 ninja_gen.unsupported_path_character = A(z) '{ $path }' útvonal nem támogatott Ninja-útvonal-karaktert tartalmaz: '{ $character }'.
 
