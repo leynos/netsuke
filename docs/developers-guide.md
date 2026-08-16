@@ -2791,6 +2791,7 @@ This deferred contract is distinct from terminal `configuration load failed`
 records emitted by `src/main.rs`. Those terminal records identify the failed
 operation and coarse error category without rendering the source error.
 
+
 #### `json` contract
 
 Early JSON resolution reads only the boolean `json` field from each
