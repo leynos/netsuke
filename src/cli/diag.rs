@@ -145,6 +145,7 @@ fn json_from_env(env: &impl EnvProvider) -> OrthoResult<Option<bool>> {
 
 #[cfg(test)]
 mod tests {
+<<<<<<< HEAD
     //! Unit tests for early JSON preference resolution.
 
     use super::*;
@@ -160,6 +161,11 @@ mod tests {
     use tempfile::tempdir;
     use tracing_subscriber::filter::LevelFilter;
 
+||||||| parent of a1edc55c (Repair rebase conflict coverage)
+    use tracing_subscriber::filter::LevelFilter;
+
+=======
+>>>>>>> a1edc55c (Repair rebase conflict coverage)
     fn find_deferred_event<'a>(events: &'a [String], message: &str) -> anyhow::Result<&'a str> {
         events
             .iter()
