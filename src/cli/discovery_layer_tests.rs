@@ -267,6 +267,50 @@ fn existing_project_scope_layer_is_not_appended_twice() -> Result<()> {
     Ok(())
 }
 
+/// A project-scope layer is not appended twice when the `--directory` alias
+/// resolves to the same physical file through a different spelling.
+///
+/// On Windows the same file can be reached through a short-name form
+/// (`C:\Users\RUNNER~1\...`) and a long-name form (`C:\Users\runneradmin\...`),
+/// and `ortho_config` records the long-name canonical form. A symlink alias on
+/// Unix exercises the same shape: the layer path recorded by discovery and the
+/// key derived from the alias both canonicalise to the same physical file, so
+/// the project-scope pass must not append the layer twice.
+#[cfg(unix)]
+#[test]
+fn project_scope_layer_is_not_appended_twice_via_symlink_alias() -> Result<()> {
+    let temp = tempdir().context("create temp dir")?;
+    let project_dir = temp.path().join("project");
+    test_support::fs::create_dir(&project_dir).context("create project dir")?;
+    test_support::fs::write(
+        project_dir.join(".netsuke.toml"),
+        "default_targets = [\"alpha\"]\n",
+    )
+    .context("write project config")?;
+
+    // An alternate spelling of `project_dir` that resolves to the same file.
+    let alias = temp.path().join("project-alias");
+    test_support::fs::symlink(&project_dir, &alias).context("create project alias")?;
+
+    let (layers, events) = capture_events(|| {
+        collect_file_layers_with_normalizer(Some(alias.as_path()), &paths::FsPathNormalizer)
+    })?;
+
+    let project_layers = layers
+        .iter()
+        .filter(|layer| {
+            layer
+                .path()
+                .is_some_and(|path| path.as_str().ends_with(".netsuke.toml"))
+        })
+        .count();
+    ensure!(
+        project_layers == 1,
+        "project-scope layer should appear exactly once, found {project_layers}: {layers:?}"
+    );
+    find_event(&events, "discovery included project-scope layers")?;
+    Ok(())
+}
 /// Normalization failure must not fail configuration discovery.
 ///
 /// A missing project `.netsuke.toml` or an unreadable directory makes

@@ -101,6 +101,7 @@ cap-primitives = "3.4.4"
 cap-std = { version = "3.4.4", features = ["fs_utf8"] }
 fs4 = "1.1.0"
 camino = "1.2.0"
+dunce = "1.0.5"
 semver = { version = "1", features = ["serde"] }
 anyhow = "1"
 indicatif = "0.18.4"
@@ -141,6 +142,7 @@ cap-std = "3.4.4"
 clap = { version = "4.5.0", features = ["derive"] }
 clap_complete = "4.5.0"
 clap_mangen = "0.3.0"
+dunce = "1.0.5"
 ortho_config = { version = "0.9.0", features = ["serde_json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }

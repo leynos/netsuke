@@ -18,7 +18,13 @@ pub(super) struct FsPathNormalizer;
 
 impl PathNormalizer for FsPathNormalizer {
     fn normalize(&self, path: &Path) -> io::Result<PathBuf> {
-        std::fs::canonicalize(path)
+        // `ortho_config` canonicalises layer paths with `dunce` on Windows so
+        // diagnostics and comparisons stay free of UNC prefixes and short-name
+        // forms; mirror that here so the project-scope dedup key and the
+        // injected explicit config path compare equal to the recorded layer
+        // path. On other platforms `dunce` is a thin wrapper over
+        // `std::fs::canonicalize`, so the behaviour is unchanged.
+        dunce::canonicalize(path)
     }
 }
 

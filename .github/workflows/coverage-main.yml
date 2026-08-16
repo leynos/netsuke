@@ -29,7 +29,6 @@ jobs:
           # Match rust-toolchain.toml: the tree needs -Zpolonius=next (see
           # docs/adr-006-adopt-polonius-nightly-toolchain.md).
           toolchain: nightly-2026-06-25
-          components: rustfmt, clippy
           # Preserve warnings-as-errors and Polonius through toolchain setup;
           # cargo-llvm-cov appends its instrumentation flags to this value.
           rustflags: -D warnings -Zpolonius=next

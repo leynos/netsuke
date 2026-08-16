@@ -358,6 +358,48 @@ def test_windows_setup_rust_keeps_warnings_and_polonius() -> None:
     )
 
 
+def test_setup_rust_does_not_pass_unsupported_components_input() -> None:
+    """No setup-rust invocation passes the unsupported `components` input.
+
+    The shared `setup-rust` action installs `rustfmt` and `clippy` internally
+    through `actions-rust-lang/setup-rust-toolchain`; its declared inputs do not
+    include `components`, so passing one emits an "Unexpected input(s)
+    'components'" warning on every run. The contract is that every `Setup Rust`
+    step uses the shared action and passes only supported inputs, so `check-fmt`
+    and `lint-clippy` still find the components the action installs.
+    """
+    workflow = _load()
+    for job_name in ("build-test", "build-test-windows"):
+        match workflow.get("jobs"):
+            case dict() as jobs:
+                pass
+            case _:
+                raise AssertionError("the workflow must declare a jobs mapping")
+        match jobs.get(job_name):
+            case dict() as job:
+                pass
+            case _:
+                raise AssertionError(f"the workflow must declare a {job_name} job")
+        setup_steps = [
+            step
+            for step in job.get("steps", [])
+            if "setup-rust" in str(step.get("uses", ""))
+        ]
+        assert setup_steps, f"{job_name} must use the shared setup-rust action"
+        for step in setup_steps:
+            match step.get("with"):
+                case dict() as with_:
+                    pass
+                case _:
+                    raise AssertionError(
+                        f"{job_name} Setup Rust must declare a with mapping"
+                    )
+            assert "components" not in with_, (
+                f"{job_name} Setup Rust must not pass the unsupported "
+                f"'components' input, got {sorted(with_.keys())!r}"
+            )
+
+
 def test_windows_job_runs_check_fmt_lint_and_test() -> None:
     """The Windows job runs check-fmt, lint, and test as merge gates.
 
@@ -413,3 +455,65 @@ def test_windows_job_is_a_blocking_merge_gate() -> None:
             f"build-test-windows step {step.get('name')!r} must not set "
             "continue-on-error"
         )
+
+
+def test_coverage_report_is_produced_before_codescene_check() -> None:
+    """The CodeScene gate consumes the report the coverage step produces.
+
+    `generate-coverage` writes the report to `output-path` (lcov.info) and the
+    `upload-codescene-coverage` check step defaults to that same file for lcov
+    format. If the report path, format, or step ordering drifts, CodeScene
+    reports "No valid coverage report found in the build pipeline". This pins
+    the wiring: the coverage step runs after `make test` and the CodeScene
+    check runs after the coverage step, both with `format: lcov`.
+    """
+    workflow = _load()
+    steps = _steps(workflow)
+    names = [step.get("name") for step in steps]
+
+    coverage_index = names.index("Test and Measure Coverage")
+    codescene_index = names.index("Check coverage against CodeScene gates")
+    test_index = names.index("Test")
+    assert test_index < coverage_index, (
+        "coverage must be measured after the test run so the report reflects "
+        "the tested tree"
+    )
+    assert coverage_index < codescene_index, (
+        "the CodeScene check must run after the coverage step so the report "
+        "exists in the build pipeline"
+    )
+
+    coverage_step = steps[coverage_index]
+    match coverage_step.get("with"):
+        case dict() as with_:
+            pass
+        case _:
+            raise AssertionError(
+                "Test and Measure Coverage must declare a with mapping"
+            )
+    assert with_.get("output-path") == "lcov.info", (
+        "coverage must be written to lcov.info, "
+        f"got {with_.get('output-path')!r}"
+    )
+    assert with_.get("format") == "lcov", (
+        "coverage must be measured in lcov format, "
+        f"got {with_.get('format')!r}"
+    )
+
+    codescene_step = steps[codescene_index]
+    match codescene_step.get("with"):
+        case dict() as with_:
+            pass
+        case _:
+            raise AssertionError(
+                "Check coverage against CodeScene gates must declare a with "
+                "mapping"
+            )
+    assert with_.get("format") == "lcov", (
+        "the CodeScene check must consume lcov format, "
+        f"got {with_.get('format')!r}"
+    )
+    assert with_.get("mode") == "check", (
+        "the CodeScene check must run in check mode, "
+        f"got {with_.get('mode')!r}"
+    )
