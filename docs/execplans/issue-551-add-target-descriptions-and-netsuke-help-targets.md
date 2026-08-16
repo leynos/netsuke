@@ -72,7 +72,7 @@ default marker such as `[★ default]` on manifest defaults.
   `.disable_help_subcommand(true)` in the command-building path; verify
   `netsuke help` still matches `--help` via `tests/novice_flow_smoke_tests.rs`.
 - Risk: the l10n audit rejects the build when only some locales receive the new
-  keys. Severity: high Likelihood: high Mitigation: add all six new keys to
+  keys. Severity: high Likelihood: high Mitigation: add all eight new keys to
   every one of the 35 `locales/*/messages.ftl` files in the same commit as
   `keys.rs`.
 - Risk: snapshot tests for CLI help (`help_en_us`, `help_es_es`) change because
@@ -111,22 +111,29 @@ default marker such as `[★ default]` on manifest defaults.
 - [x] (2026-08-09) Branch renamed to
       `issue-551-add-target-descriptions-and-netsuke-help-targets`, pushed,
       PR opened: <https://github.com/leynos/netsuke/pull/555>.
-- [x] (2026-08-14, `099f70ac`) Documented the restricted, side-effect-free Jinja
+- [x] (2026-08-14, `7fc57169`) Documented the restricted, side-effect-free Jinja
       surface for `netsuke help targets` in the migration, users', developers',
       and CLI design guides.
-- [x] (2026-08-14, `98e6f95e`, `5d39023e`, `61afb7a6`) Routed target help through
-      a restricted manifest query path, escaped terminal control characters in
-      text output, and added end-to-end, IR, and property coverage for the
-      query and catalogue invariants.
-- [x] (2026-08-14, `49fb6bfe`, `0106a692`) Clarified that target and action
+- [x] (2026-08-14, `2891032c`, `ba6df590`, `eb76034b`) Routed target help
+      through a restricted manifest query path, escaped terminal control
+      characters in text output, and hardened catalogue coverage for the query
+      invariants.
+- [x] (2026-08-14, `90a7d4c3`, `5ca08e30`) Clarified that target and action
       descriptions remain discovery metadata and do not replace rule
-      descriptions in Ninja progress; added `cli.help.targets.about` to all 35
-      shipped locales.
-- [x] (2026-08-14, `0106a692`) Used a dedicated localized synopsis for the nested
-      `targets` help topic and aligned the localized help assertions with it.
+      descriptions in Ninja progress; added and localized the dedicated nested
+      `targets` help synopsis.
 - [x] (2026-08-14) Documented the complete query-mode allowlist, its excluded
       host-observing helpers, and the full standard library retained by normal
       manifest rendering.
+- [x] (2026-08-15, `c53a2a92`, `1e4b4d07`) Isolated help-query dependencies
+      and separated the pure manifest/catalogue query from status reporting,
+      telemetry, and rendering at the command boundary.
+- [x] (2026-08-15, `5a436620`, `0125986e`, `17b81845`, `74099972`) Added and
+      documented bounded help-target query telemetry, then consolidated its
+      tests and tightened its fixed labels and redaction contract.
+- [x] (2026-08-16, `0b5bb249`, `5ad71492`) Hardened rendered-graph and default
+      validation, including a localized, terminal-safe invalid-default
+      diagnostic across the shipped locales.
 
 ## Surprises & discoveries
 
@@ -137,9 +144,11 @@ default marker such as `[★ default]` on manifest defaults.
   `src/snapshots/cli/netsuke__cli__parser__tests__help_en_us.snap`. Impact:
   Phase 2 must regenerate these snapshots.
 - Observation: the l10n audit compares interpolation variables against the
-  English source, so the new keys must introduce no `$` variables to keep all
-  locale translations simple. Evidence: `build_l10n_audit/compare.rs`. Impact:
-  keep all six new keys free of Fluent variables.
+  English source. The catalogue keys introduce no variables, while
+  `runner.manifest.default_not_declared` intentionally uses `$default`, which
+  every locale must retain. Evidence: `build_l10n_audit/compare.rs`. Impact:
+  keep the eight new keys and their interpolation variables aligned across all
+  shipped locales.
 - Observation: `test_support::localizer::locale_localizer` does not affect the
   library's own global `LOCALIZER` static inside unit-test binaries (the crate
   is compiled twice). Unit tests must set the localizer directly via
@@ -160,7 +169,7 @@ default marker such as `[★ default]` on manifest defaults.
   Fixing the infrastructure properly is a separate concern from issue #551.
 - Observation: the target-help query path uses a dedicated localized
   synopsis for the nested `targets` help topic rather than the catalogue's
-  section heading. Evidence: `0106a692`. Impact: keep the
+  section heading. Evidence: `5ca08e30`. Impact: keep the
   `cli.help.targets.about` key separate from `actions_heading` and
   `targets_heading`.
 
@@ -190,10 +199,11 @@ artefacts and the completion sidecars.
 The follow-up additionally isolates discovery rendering from impure template
 helpers, keeps terminal text safe, preserves rule descriptions as the source
 of Ninja progress text, and supplies the nested help synopsis in all 35
-shipped locales. These outcomes are recorded by reachable commits `98e6f95e`,
-`5d39023e`, `61afb7a6`, `49fb6bfe`, and `0106a692`. Commits `036dc331` and
-`9f1f8603` subsequently tightened BuildGraph validation, query dependencies,
-and localization-lock scoping; their full gate runs passed.
+shipped locales. These outcomes are recorded by reachable commits `2891032c`,
+`ba6df590`, `eb76034b`, `90a7d4c3`, and `5ca08e30`. Later reachable commits
+`c53a2a92`, `1e4b4d07`, `5a436620`, `0125986e`, `5ad71492`, and `74099972`
+separate and instrument the pure query boundary, harden its dependencies and
+telemetry, and localize the invalid-default diagnostic.
 
 Lessons learned:
 
