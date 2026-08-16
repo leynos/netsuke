@@ -1,7 +1,7 @@
 //! Unit tests for staged dyndep bundle generation.
 
 use super::*;
-use crate::ast::Recipe;
+use crate::ast::{Recipe, StringOrList};
 use crate::ir::{Action, BuildGraph, DependencyOrder};
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
@@ -151,6 +151,27 @@ fn parallel_bundle_matches_string_generation() -> Result<()> {
     ensure!(
         bundle.build_file() == crate::ninja_gen::generate(&graph)?,
         "parallel bundle output must match string generation"
+    );
+    Ok(())
+}
+
+#[test]
+fn bundle_rejects_an_empty_command_recipe() -> Result<()> {
+    let mut graph = graph_with_edge(parallel_edge("all", &[]))?;
+    graph
+        .actions
+        .get_mut("a")
+        .context("test graph must contain its action")?
+        .recipe = Recipe::Command {
+        command: StringOrList::Empty,
+    };
+
+    let error = generate_bundle(&graph)
+        .err()
+        .context("bundle generation must reject an empty command")?;
+    ensure!(
+        matches!(error, NinjaGenError::EmptyCommandRecipe { action_index: 1 }),
+        "unexpected bundle-generation error: {error:?}"
     );
     Ok(())
 }

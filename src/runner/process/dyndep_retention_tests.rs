@@ -11,8 +11,9 @@ use camino::Utf8PathBuf;
 use cap_std::fs_utf8::Dir;
 use fs4::FileExt;
 use mockable::{DefaultEnv, Env};
+use rstest::{fixture, rstest};
 use std::{
-    io::{BufRead, BufReader, Read, Write},
+    io::{BufRead, BufReader, Write},
     path::PathBuf,
     process::{Command, Stdio},
 };
@@ -28,6 +29,35 @@ fn temporary_dir(temp: &tempfile::TempDir) -> Result<Dir> {
     let path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
         .map_err(|path| anyhow::anyhow!("temporary directory is not UTF-8: {}", path.display()))?;
     Dir::open_ambient_dir(path, cap_std::ambient_authority()).map_err(Into::into)
+}
+
+#[fixture]
+fn dyndep_workspace() -> Result<(tempfile::TempDir, Dir)> {
+    let workspace = tempfile::tempdir()?;
+    let dir = temporary_dir(&workspace)?;
+    Ok((workspace, dir))
+}
+
+struct PublishedCurrentSidecar {
+    _workspace: tempfile::TempDir,
+    dir: Dir,
+    current: GeneratedDyndep,
+    lease: DyndepPublicationLease,
+}
+
+#[fixture]
+fn published_current_sidecar(
+    dyndep_workspace: Result<(tempfile::TempDir, Dir)>,
+) -> Result<PublishedCurrentSidecar> {
+    let (workspace, dir) = dyndep_workspace?;
+    let current = sidecar(".netsuke/dyndep/current.dd", "current");
+    let lease = materialize_dyndep_files(&dir, std::slice::from_ref(&current))?;
+    Ok(PublishedCurrentSidecar {
+        _workspace: workspace,
+        dir,
+        current,
+        lease,
+    })
 }
 
 fn sidecar(name: &str, content: &str) -> GeneratedDyndep {
@@ -122,10 +152,11 @@ fn assert_lease_is_unavailable(dir: &Dir) -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn lease_blocks_other_processes_until_the_active_sidecar_is_released() -> Result<()> {
-    let temp = tempfile::tempdir()?;
-    let dir = temporary_dir(&temp)?;
+#[rstest]
+fn lease_blocks_other_processes_until_the_active_sidecar_is_released(
+    dyndep_workspace: Result<(tempfile::TempDir, Dir)>,
+) -> Result<()> {
+    let (temp, dir) = dyndep_workspace?;
     let active = sidecar(ACTIVE_SIDECAR_PATH, ACTIVE_SIDECAR_CONTENT);
     let publication_lease = materialize_dyndep_files(&dir, std::slice::from_ref(&active))?;
     drop(publication_lease);
@@ -136,20 +167,22 @@ fn lease_blocks_other_processes_until_the_active_sidecar_is_released() -> Result
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
-    let mut stdout = BufReader::new(child.stdout.take().context("capture lease-worker stdout")?);
-
-    wait_for_worker_marker(&mut stdout, "blocked")?;
-    drop(lease);
-    wait_for_worker_marker(&mut stdout, "completed")?;
-    let status = child.wait()?;
-    drop(stdout);
-    let mut stderr = String::new();
-    child
-        .stderr
-        .take()
-        .context("capture lease-worker stderr")?
-        .read_to_string(&mut stderr)?;
-    ensure!(status.success(), "lease worker failed: {stderr}");
+    {
+        let child_stdout = child
+            .stdout
+            .as_mut()
+            .context("capture lease-worker stdout")?;
+        let mut stdout = BufReader::new(child_stdout);
+        wait_for_worker_marker(&mut stdout, "blocked")?;
+        drop(lease);
+        wait_for_worker_marker(&mut stdout, "completed")?;
+    }
+    let output = child.wait_with_output()?;
+    ensure!(
+        output.status.success(),
+        "lease worker failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     ensure!(
         dir.open(active.relative_path()).is_ok(),
         "the original active sidecar must remain after the child retention pass"
@@ -173,10 +206,11 @@ fn dyndep_publication_lease_worker() -> Result<()> {
 #[path = "dyndep_retention_telemetry_tests.rs"]
 mod telemetry_tests;
 
-#[test]
-fn repeated_publication_respects_the_obsolete_file_count_budget() -> Result<()> {
-    let temp = tempfile::tempdir()?;
-    let dir = temporary_dir(&temp)?;
+#[rstest]
+fn repeated_publication_respects_the_obsolete_file_count_budget(
+    dyndep_workspace: Result<(tempfile::TempDir, Dir)>,
+) -> Result<()> {
+    let (_workspace, dir) = dyndep_workspace?;
     let policy = RetentionPolicy::new(2, 1024);
     let latest = publish_repeated_sidecars(&dir, "count", "content", policy)?;
     let count = sidecar_names(&dir)?
@@ -194,12 +228,16 @@ fn repeated_publication_respects_the_obsolete_file_count_budget() -> Result<()> 
     Ok(())
 }
 
-#[test]
-fn retention_scans_a_large_directory_in_deterministic_path_order() -> Result<()> {
-    let temp = tempfile::tempdir()?;
-    let dir = temporary_dir(&temp)?;
-    let current = sidecar(".netsuke/dyndep/current.dd", "current");
-    let lease = materialize_dyndep_files(&dir, std::slice::from_ref(&current))?;
+#[rstest]
+fn retention_scans_a_large_directory_in_deterministic_path_order(
+    published_current_sidecar: Result<PublishedCurrentSidecar>,
+) -> Result<()> {
+    let PublishedCurrentSidecar {
+        _workspace,
+        dir,
+        current,
+        lease,
+    } = published_current_sidecar?;
     for index in 0..1_000 {
         let path = format!(".netsuke/dyndep/stale-{index:04}.dd");
         dir.write(path, "x")?;
@@ -229,12 +267,16 @@ fn retention_scans_a_large_directory_in_deterministic_path_order() -> Result<()>
     Ok(())
 }
 
-#[test]
-fn retention_reclaims_many_sidecars_larger_than_the_remaining_budget() -> Result<()> {
-    let temp = tempfile::tempdir()?;
-    let dir = temporary_dir(&temp)?;
-    let current = sidecar(".netsuke/dyndep/current.dd", "current");
-    let lease = materialize_dyndep_files(&dir, std::slice::from_ref(&current))?;
+#[rstest]
+fn retention_reclaims_many_sidecars_larger_than_the_remaining_budget(
+    published_current_sidecar: Result<PublishedCurrentSidecar>,
+) -> Result<()> {
+    let PublishedCurrentSidecar {
+        _workspace,
+        dir,
+        current,
+        lease,
+    } = published_current_sidecar?;
     for index in 0..1_000 {
         dir.write(format!(".netsuke/dyndep/oversized-{index:04}.dd"), "xx")?;
     }
@@ -257,10 +299,11 @@ fn retention_reclaims_many_sidecars_larger_than_the_remaining_budget() -> Result
     Ok(())
 }
 
-#[test]
-fn repeated_publication_respects_the_obsolete_byte_budget() -> Result<()> {
-    let temp = tempfile::tempdir()?;
-    let dir = temporary_dir(&temp)?;
+#[rstest]
+fn repeated_publication_respects_the_obsolete_byte_budget(
+    dyndep_workspace: Result<(tempfile::TempDir, Dir)>,
+) -> Result<()> {
+    let (_workspace, dir) = dyndep_workspace?;
     let policy = RetentionPolicy::new(8, 12);
     let latest = publish_repeated_sidecars(&dir, "bytes", "12345678", policy)?;
     ensure!(
@@ -294,12 +337,16 @@ fn retention_preserves_sidecars_selected_by_overlapping_bundles() -> Result<()> 
     Ok(())
 }
 
-#[test]
-fn retention_removes_stale_temporary_files_after_the_lease_is_acquired() -> Result<()> {
-    let temp = tempfile::tempdir()?;
-    let dir = temporary_dir(&temp)?;
-    let current = sidecar(".netsuke/dyndep/current.dd", "current");
-    let lease = materialize_dyndep_files(&dir, std::slice::from_ref(&current))?;
+#[rstest]
+fn retention_removes_stale_temporary_files_after_the_lease_is_acquired(
+    published_current_sidecar: Result<PublishedCurrentSidecar>,
+) -> Result<()> {
+    let PublishedCurrentSidecar {
+        _workspace,
+        dir,
+        current,
+        lease,
+    } = published_current_sidecar?;
     let temporary = Utf8Path::new(".netsuke/dyndep/leftover.tmp");
     dir.write(temporary, "interrupted write")?;
 
@@ -317,12 +364,16 @@ fn retention_removes_stale_temporary_files_after_the_lease_is_acquired() -> Resu
     Ok(())
 }
 
-#[test]
-fn retention_cleanup_failure_has_localized_context() -> Result<()> {
-    let temp = tempfile::tempdir()?;
-    let dir = temporary_dir(&temp)?;
-    let current = sidecar(".netsuke/dyndep/current.dd", "current");
-    let lease = materialize_dyndep_files(&dir, std::slice::from_ref(&current))?;
+#[rstest]
+fn retention_cleanup_failure_has_localized_context(
+    published_current_sidecar: Result<PublishedCurrentSidecar>,
+) -> Result<()> {
+    let PublishedCurrentSidecar {
+        _workspace,
+        dir,
+        current,
+        lease,
+    } = published_current_sidecar?;
     let failing_path = Utf8Path::new(".netsuke/dyndep/unremovable.dd");
     dir.create_dir_all(failing_path)?;
 

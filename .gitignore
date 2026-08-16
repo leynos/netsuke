@@ -8,7 +8,6 @@ target/
 vtcode.toml
 .memdb/
 .grepai/
-.vtcode/
 build.ninja
 *:Zone.Identifier
 /graph.dot

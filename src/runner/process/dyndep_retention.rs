@@ -13,10 +13,13 @@ use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::{Dir, File, OpenOptions};
 use fs4::FileExt;
-use std::io::ErrorKind;
+use std::{
+    collections::{BTreeMap, HashSet},
+    io::ErrorKind,
+};
 
 /// Maximum number of obsolete sidecars retained after one publication.
-pub(super) const MAX_RETAINED_DYNDEP_FILES: usize = 32;
+pub const MAX_RETAINED_DYNDEP_FILES: usize = 32;
 /// Maximum bytes occupied by obsolete sidecars retained after one publication.
 pub(super) const MAX_RETAINED_DYNDEP_BYTES: u64 = 1024 * 1024;
 
@@ -41,7 +44,20 @@ impl DyndepPublicationLease {
             .open_with(DYNDEP_LOCK, &options)
             .with_context(|| retention_error(Utf8Path::new(DYNDEP_LOCK)))?;
         let std_file = file.into_std();
-        FileExt::lock(&std_file).with_context(|| retention_error(Utf8Path::new(DYNDEP_LOCK)))?;
+        match FileExt::try_lock(&std_file) {
+            Ok(()) => {}
+            Err(fs4::TryLockError::WouldBlock) => {
+                tracing::debug!(
+                    lock_path = DYNDEP_LOCK,
+                    "waiting for dyndep publication lease"
+                );
+                FileExt::lock(&std_file)
+                    .with_context(|| retention_error(Utf8Path::new(DYNDEP_LOCK)))?;
+            }
+            Err(fs4::TryLockError::Error(error)) => {
+                return Err(error).with_context(|| retention_error(Utf8Path::new(DYNDEP_LOCK)));
+            }
+        }
         Ok(Self {
             lock_file: Some(File::from_std(std_file)),
         })
@@ -121,37 +137,20 @@ fn prune_dyndep_sidecars_inner(
     let current_paths = current
         .iter()
         .map(|sidecar| sidecar.relative_path().as_str())
-        .collect::<std::collections::HashSet<_>>();
+        .collect::<HashSet<_>>();
     let mut summary = RetentionSummary::default();
-    remove_stale_temporary_files(dir, &current_paths, &mut summary)?;
-    let mut retained_paths = Vec::with_capacity(policy.max_files);
-    let mut retained_bytes = 0_u64;
-    let mut cursor = None;
-
-    while retained_paths.len() < policy.max_files {
-        let scan = RetentionScan {
-            current_paths: &current_paths,
-            cursor: cursor.as_deref(),
-            remaining_bytes: policy.max_bytes.saturating_sub(retained_bytes),
-        };
-        let Some((path, bytes)) = next_obsolete_sidecar_after(dir, &scan, &mut summary)? else {
-            break;
-        };
-        cursor = Some(path.clone());
-        retained_bytes = retained_bytes.saturating_add(bytes);
-        retained_paths.push(path);
-    }
-
-    remove_unretained_sidecars(dir, &current_paths, &retained_paths, &mut summary)?;
+    retain_obsolete_sidecars(dir, &current_paths, policy, &mut summary)?;
     Ok(summary)
 }
 
-/// Remove interrupted atomic-write files after acquiring the publication lease.
-fn remove_stale_temporary_files(
+/// Select obsolete sidecars during one directory traversal with bounded memory.
+fn retain_obsolete_sidecars(
     dir: &Dir,
-    current_paths: &std::collections::HashSet<&str>,
+    current_paths: &HashSet<&str>,
+    policy: RetentionPolicy,
     summary: &mut RetentionSummary,
 ) -> Result<()> {
+    let mut retained = RetentionSelection::new(policy);
     for entry_result in dir
         .read_dir(DYNDEP_DIR)
         .with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?
@@ -170,87 +169,95 @@ fn remove_stale_temporary_files(
             // publication protocol.
             let bytes = candidate_size(dir, &path)?;
             remove_candidate(dir, &path, bytes, summary)?;
+        } else if is_obsolete_sidecar(&path, current_paths) {
+            retain_or_remove_sidecar(dir, path, &mut retained, summary)?;
         }
     }
     Ok(())
 }
 
-/// Inputs for one bounded, lexicographic sidecar-selection pass.
-struct RetentionScan<'paths, 'cursor> {
-    current_paths: &'paths std::collections::HashSet<&'paths str>,
-    cursor: Option<&'cursor Utf8Path>,
-    remaining_bytes: u64,
+/// Bounded selection state used only while traversing one retention directory.
+struct RetentionSelection {
+    policy: RetentionPolicy,
+    paths: BTreeMap<Utf8PathBuf, u64>,
+    retained_bytes: u64,
 }
 
-/// Find the next obsolete sidecar without retaining the directory's full contents.
-fn next_obsolete_sidecar_after(
-    dir: &Dir,
-    scan: &RetentionScan<'_, '_>,
-    summary: &mut RetentionSummary,
-) -> Result<Option<(Utf8PathBuf, u64)>> {
-    let mut next: Option<(Utf8PathBuf, u64)> = None;
-    for entry_result in dir
-        .read_dir(DYNDEP_DIR)
-        .with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?
-    {
-        let entry = entry_result.with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?;
-        let name = entry
-            .file_name()
-            .with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?;
-        let path = Utf8Path::new(DYNDEP_DIR).join(name);
-        if !is_obsolete_sidecar(&path, scan.current_paths) {
-            continue;
-        }
-        if scan
-            .cursor
-            .is_some_and(|after| path.as_str() <= after.as_str())
-        {
-            continue;
-        }
-        let bytes = candidate_size(dir, &path)?;
-        if bytes > scan.remaining_bytes {
-            // Retention only reduces the remaining byte budget, so this
-            // candidate can never become eligible in a later pass.
-            remove_candidate(dir, &path, bytes, summary)?;
-            continue;
-        }
-        if next
-            .as_ref()
-            .is_none_or(|(candidate, _)| path.as_str() < candidate.as_str())
-        {
-            next = Some((path, bytes));
+impl RetentionSelection {
+    const fn new(policy: RetentionPolicy) -> Self {
+        Self {
+            policy,
+            paths: BTreeMap::new(),
+            retained_bytes: 0,
         }
     }
-    Ok(next)
+
+    const fn can_retain(&self, bytes: u64) -> bool {
+        bytes <= self.policy.max_bytes.saturating_sub(self.retained_bytes)
+    }
+
+    fn is_full(&self) -> bool {
+        self.paths.len() == self.policy.max_files
+    }
+
+    fn largest_path(&self) -> Option<&Utf8PathBuf> {
+        self.paths.last_key_value().map(|(path, _)| path)
+    }
+
+    fn insert(&mut self, path: Utf8PathBuf, bytes: u64) {
+        self.retained_bytes = self.retained_bytes.saturating_add(bytes);
+        self.paths.insert(path, bytes);
+    }
+
+    fn pop_largest(&mut self) -> Option<(Utf8PathBuf, u64)> {
+        let candidate = self.paths.pop_last()?;
+        self.retained_bytes = self.retained_bytes.saturating_sub(candidate.1);
+        Some(candidate)
+    }
 }
 
-/// Remove every obsolete sidecar that was not selected by the bounded policy.
-fn remove_unretained_sidecars(
+/// Retain an obsolete sidecar or reclaim it immediately when it cannot fit.
+fn retain_or_remove_sidecar(
     dir: &Dir,
-    current_paths: &std::collections::HashSet<&str>,
-    retained: &[Utf8PathBuf],
+    path: Utf8PathBuf,
+    retained: &mut RetentionSelection,
     summary: &mut RetentionSummary,
 ) -> Result<()> {
-    for entry_result in dir
-        .read_dir(DYNDEP_DIR)
-        .with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?
-    {
-        let entry = entry_result.with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?;
-        let name = entry
-            .file_name()
-            .with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?;
-        let path = Utf8Path::new(DYNDEP_DIR).join(name);
-        if is_obsolete_sidecar(&path, current_paths)
-            && !retained.iter().any(|retained_path| retained_path == &path)
-        {
-            let bytes = candidate_size(dir, &path)?;
-            remove_candidate(dir, &path, bytes, summary)?;
-        }
+    let bytes = candidate_size(dir, &path)?;
+    if !retained.is_full() && retained.can_retain(bytes) {
+        retained.insert(path, bytes);
+        return Ok(());
     }
+    let Some(largest_path) = retained.largest_path() else {
+        remove_candidate(dir, &path, bytes, summary)?;
+        return Ok(());
+    };
+    let replaces_largest = path < *largest_path;
+    let bytes_after_replacement = retained
+        .retained_bytes
+        .saturating_sub(
+            retained
+                .paths
+                .get(largest_path)
+                .copied()
+                .unwrap_or_default(),
+        )
+        .saturating_add(bytes);
+    if !replaces_largest || bytes_after_replacement > retained.policy.max_bytes {
+        remove_candidate(dir, &path, bytes, summary)?;
+        return Ok(());
+    }
+
+    let Some((evicted_path, evicted_bytes)) = retained.pop_largest() else {
+        remove_candidate(dir, &path, bytes, summary)?;
+        return Ok(());
+    };
+    remove_candidate(dir, &evicted_path, evicted_bytes, summary)?;
+    retained.insert(path, bytes);
     Ok(())
 }
 
-fn is_obsolete_sidecar(path: &Utf8Path, current_paths: &std::collections::HashSet<&str>) -> bool {
+fn is_obsolete_sidecar(path: &Utf8Path, current_paths: &HashSet<&str>) -> bool {
     has_extension(path, "dd") && !current_paths.contains(path.as_str())
 }
 

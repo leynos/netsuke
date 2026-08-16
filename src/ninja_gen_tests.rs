@@ -56,9 +56,9 @@ fn string_generation_apis_reject_reserved_paths() -> Result<()> {
     let edge = BuildEdge {
         action_id: "reserved".into(),
         inputs: Vec::new(),
-        implicit_deps: vec![Utf8PathBuf::from(".netsuke/dyndep/reserved")],
+        implicit_deps: Vec::new(),
         dependency_order: DependencyOrder::Parallel,
-        explicit_outputs: vec![Utf8PathBuf::from("out")],
+        explicit_outputs: vec![Utf8PathBuf::from(".netsuke/dyndep/reserved")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
         phony: false,
@@ -66,7 +66,9 @@ fn string_generation_apis_reject_reserved_paths() -> Result<()> {
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("reserved".into(), action);
-    graph.targets.insert(Utf8PathBuf::from("out"), edge);
+    graph
+        .targets
+        .insert(Utf8PathBuf::from(".netsuke/dyndep/reserved"), edge);
 
     let generate_error = generate(&graph)
         .err()

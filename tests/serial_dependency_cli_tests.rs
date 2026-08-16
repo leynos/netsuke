@@ -3,10 +3,9 @@
 use anyhow::{Context, Result, anyhow, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
+use netsuke::runner::MAX_RETAINED_DYNDEP_FILES;
 use std::{io::ErrorKind, path::Path, process::Command};
 use tempfile::TempDir;
-
-const MAX_OBSOLETE_DYNDEP_FILES: usize = 32;
 
 const SERIAL_MANIFEST: &str = concat!(
     "netsuke_version: '1.0.0'\n",
@@ -214,7 +213,7 @@ fn repeated_generate_bounds_sidecars_and_keeps_the_latest_manifest_loadable() ->
     let (directory, root) = cli_workspace(&serial_manifest(0))?;
     let mut latest_sidecar_count = 0;
 
-    for index in 0..=MAX_OBSOLETE_DYNDEP_FILES {
+    for index in 0..=MAX_RETAINED_DYNDEP_FILES {
         root.write("Netsukefile", serial_manifest(index))?;
         let output = run_netsuke(
             &directory,
@@ -233,7 +232,7 @@ fn repeated_generate_bounds_sidecars_and_keeps_the_latest_manifest_loadable() ->
         "the latest serial manifest must require dyndep sidecars"
     );
     ensure!(
-        latest_sidecar_count <= MAX_OBSOLETE_DYNDEP_FILES + 3,
+        latest_sidecar_count <= MAX_RETAINED_DYNDEP_FILES + 3,
         "retention must bound obsolete sidecars while preserving the three current stages"
     );
     let ninja = run_ninja_loading_probe(&directory)?;
@@ -259,7 +258,7 @@ fn clean_prunes_only_after_ninja_succeeds() -> Result<()> {
     );
     let current_sidecars = dyndep_sidecar_paths(&root)?;
     let current_sidecar_count = current_sidecars.len();
-    for index in 0..=MAX_OBSOLETE_DYNDEP_FILES {
+    for index in 0..=MAX_RETAINED_DYNDEP_FILES {
         root.write(
             format!(".netsuke/dyndep/stale-{index:02}.dd"),
             format!("stale-{index}"),
@@ -273,7 +272,7 @@ fn clean_prunes_only_after_ninja_succeeds() -> Result<()> {
         String::from_utf8_lossy(&output.stderr)
     );
     ensure!(
-        dyndep_sidecar_count(&root)? <= current_sidecar_count + MAX_OBSOLETE_DYNDEP_FILES,
+        dyndep_sidecar_count(&root)? <= current_sidecar_count + MAX_RETAINED_DYNDEP_FILES,
         "successful clean must apply the obsolete-sidecar retention policy"
     );
     for sidecar in &current_sidecars {

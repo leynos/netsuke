@@ -59,8 +59,8 @@ use crate::hex;
 use crate::ir::{BuildEdge, BuildGraph};
 use crate::localization::{self, keys};
 use crate::ninja_gen::{
-    NinjaGenError, edge_requires_gates, graph_requires_dyndep, join, path_key,
-    reject_unsupported_path_characters,
+    NamedAction, NinjaGenError, edge_requires_gates, graph_requires_dyndep, join, path_key,
+    reject_unsupported_path_characters, validate_action_recipe,
 };
 use camino::Utf8PathBuf;
 use sha2::{Digest, Sha256};
@@ -104,8 +104,8 @@ fn generate_bundle_inner(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenE
 
     let mut actions: Vec<_> = graph.actions.iter().collect();
     actions.sort_by_key(|(id, _)| *id);
-    for (id, action) in actions {
-        use crate::ninja_gen::NamedAction;
+    for (zero_based_action_index, (id, action)) in actions.into_iter().enumerate() {
+        validate_action_recipe(action, zero_based_action_index + 1)?;
         write!(out, "{}", NamedAction { id, action })?;
     }
 

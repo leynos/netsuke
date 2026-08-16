@@ -47,8 +47,8 @@ mod process;
 #[cfg(doctest)]
 pub use process::doc;
 pub use process::{
-    CommandEnv, NinjaBuildRequest, NinjaToolRequest, StderrMode, run_ninja_tool_with,
-    run_ninja_with,
+    CommandEnv, MAX_RETAINED_DYNDEP_FILES, NinjaBuildRequest, NinjaToolRequest, StderrMode,
+    run_ninja_tool_with, run_ninja_with,
 };
 
 use dyndep_publication::{materialize_dyndep_bundle, prune_dyndep_bundle};

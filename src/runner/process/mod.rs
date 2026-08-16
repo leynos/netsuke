@@ -28,6 +28,7 @@ use command_logging::{
     CommandLogContext, command_span, log_command_execution, log_command_spawn_failure,
 };
 pub(crate) use dyndep_files::materialize_dyndep_files;
+pub use dyndep_retention::MAX_RETAINED_DYNDEP_FILES;
 pub(crate) use dyndep_retention::{DyndepPublicationLease, prune_dyndep_cache};
 pub use file_io::*;
 pub use ninja_program::resolve_ninja_program;

@@ -1384,3 +1384,14 @@ date punctuation is template-compliant and remains unchanged; the four
 retention translations, users' guide sidecar location, and repository-layout
 telemetry attribution are corrected. The Polish rename request was invalid,
 and the Dutch rename request was already resolved; neither was changed.
+
+2026-08-16: Rebased the branch cleanly onto `origin/main` and verified the
+latest review round. Bundle rendering now validates actions through the same
+typed recipe boundary as string generation. Retention now uses one
+lease-protected directory traversal and stores no more than the fixed file
+budget while selecting deterministic path candidates; lease contention is
+observed before the existing blocking acquisition. Review-focused fixtures,
+target recipe placeholder coverage, public retention-budget reuse, and the
+requested documentation and catalogue corrections are complete. The focused
+retention, generator, and serial-CLI suites plus `make check-fmt`, `make test`,
+`make typecheck`, `make lint`, `make markdownlint`, and `make nixie` passed.
