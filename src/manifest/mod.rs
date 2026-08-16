@@ -44,8 +44,8 @@ mod expand;
 mod glob;
 mod hints;
 mod jinja_macros;
-mod query;
 mod parse_with_config;
+mod query;
 mod render;
 
 /// JSON representation of a manifest node after YAML and Jinja evaluation.
