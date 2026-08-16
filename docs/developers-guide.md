@@ -2612,6 +2612,7 @@ Table: Scenario state groups and fields
 Configuration merging lives in `src/cli/merge.rs`. The module keeps
 config-layer plumbing separate from the public CLI surface in `cli::mod`.
 
+
 ### Cached configuration discovery
 
 `discover_file_layers` performs one discovery pass through the injected
