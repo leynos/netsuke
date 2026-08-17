@@ -502,6 +502,22 @@ NEXTEST_VERSION="$(sed -n "s/.*NEXTEST_VERSION: '\(.*\)'.*/\1/p" \
 cargo install cargo-nextest --locked --version "$NEXTEST_VERSION"
 # or, for a prebuilt binary:
 cargo binstall --no-confirm --locked \
+  "cargo-nextest@$NEXTEST_VERSION"
+```
+
+CI pins the Whitaker installer version in `WHITAKER_INSTALLER_VERSION` in
+`.github/workflows/ci.yml`. Install that same version locally so local linting
+matches CI; read the pin from the workflow rather than copying the number, so
+the two cannot drift:
+
+```bash
+WHITAKER_INSTALLER_VERSION="$(sed -n \
+  "s/.*WHITAKER_INSTALLER_VERSION: '\(.*\)'.*/\1/p" \
+  .github/workflows/ci.yml)"
+cargo install --locked whitaker-installer \
+  --version "$WHITAKER_INSTALLER_VERSION"
+# or, for a prebuilt binary:
+cargo binstall --no-confirm --locked \
   "whitaker-installer@$WHITAKER_INSTALLER_VERSION"
 ```
 

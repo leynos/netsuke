@@ -13,7 +13,6 @@ use tempfile::{TempDir, tempdir};
 use test_support::check_ninja::fake_ninja_check_build_file;
 #[cfg(unix)]
 use test_support::check_ninja::{ToolName, fake_ninja_expect_tool};
-use test_support::config_metrics::{MetricSnapshotRecord, assert_config_metrics_snapshot};
 use test_support::fs as test_fs;
 use test_support::netsuke::run_netsuke_in_with_env;
 
@@ -38,31 +37,6 @@ fn run_netsuke(
         .map(|s| vec![("NETSUKE_NINJA", s.as_str())])
         .unwrap_or_default();
     let run = run_netsuke_in_with_env(current_dir, args, &extra_env)?;
-    Ok(CommandOutput {
-        stdout: run.stdout,
-        stderr: run.stderr,
-        success: run.success,
-    })
-}
-
-/// Run `netsuke` in `current_dir` with supplied args, optional `NINJA_ENV`,
-/// and explicit extra environment variables.
-///
-/// Unlike [`run_netsuke`], this variant passes env vars directly to the child
-/// process via `env_clear()` + explicit forwarding, avoiding process-level
-/// `VarGuard` mutations that race under parallel test execution.
-fn run_netsuke_with_env(
-    current_dir: &Path,
-    args: &[&str],
-    ninja_env: Option<&Path>,
-    extra_env: &[(&str, &str)],
-) -> Result<CommandOutput> {
-    let ninja_env_owned = ninja_env.map(|p| p.to_string_lossy().into_owned());
-    let mut env_vec: Vec<(&str, &str)> = extra_env.to_vec();
-    if let Some(ref s) = ninja_env_owned {
-        env_vec.push(("NETSUKE_NINJA", s.as_str()));
-    }
-    let run = run_netsuke_in_with_env(current_dir, args, &env_vec)?;
     Ok(CommandOutput {
         stdout: run.stdout,
         stderr: run.stderr,
@@ -119,58 +93,6 @@ fn assert_json_subcommand_success(
     )?;
     assert_json_success(&output, command)
 }
-
-/// Shared workspace setup for configuration-layering tests.
-///
-/// Creates a minimal workspace, writes `config_content` to `.netsuke.toml`,
-/// installs a fake ninja binary, and runs netsuke with the given `args` and
-/// `extra_env`.  Returns the captured [`CommandOutput`].
-fn run_config_layer_build(
-    context: &str,
-    config_content: &str,
-    args: &[&str],
-    extra_env: &[(&str, &str)],
-) -> Result<CommandOutput> {
-    let workspace = setup_minimal_workspace(context)?;
-    let config = workspace.path().join(".netsuke.toml");
-    std::fs::write(&config, config_content).context("write config file")?;
-    let (_ninja_dir, ninja_path) = fake_ninja_check_build_file()?;
-    run_netsuke_with_env(
-        workspace.path(),
-        args,
-        Some(ninja_path.as_path()),
-        extra_env,
-    )
-}
-
-const SUCCESSFUL_CONFIG_METRICS: &[MetricSnapshotRecord] = &[
-    MetricSnapshotRecord {
-        name: "config_load_total",
-        labels: &[
-            "Label(\"phase\", \"diag_mode\")",
-            "Label(\"outcome\", \"success\")",
-        ],
-        value: Some("Counter(1)"),
-    },
-    MetricSnapshotRecord {
-        name: "config_load_total",
-        labels: &[
-            "Label(\"phase\", \"merge\")",
-            "Label(\"outcome\", \"success\")",
-        ],
-        value: Some("Counter(1)"),
-    },
-    MetricSnapshotRecord {
-        name: "config_load_duration_seconds",
-        labels: &["Label(\"phase\", \"diag_mode\")"],
-        value: None,
-    },
-    MetricSnapshotRecord {
-        name: "config_load_duration_seconds",
-        labels: &["Label(\"phase\", \"merge\")"],
-        value: None,
-    },
-];
 
 // -------------------------------------------------------------------------
 // Clean subcommand edge cases
@@ -291,61 +213,6 @@ fn generate_to_missing_parent_directory_succeeds_by_creating_parents() -> Result
 }
 
 // -------------------------------------------------------------------------
-// Configuration layering precedence
-// -------------------------------------------------------------------------
-
-#[rstest]
-#[case::config_file_enables("verbose = true\n", &["build"], &[], true)]
-#[case::env_var_enables(
-    "verbose = false\n",
-    &["build"],
-    &[("NETSUKE_VERBOSE", "true")],
-    true
-)]
-#[case::env_var_overrides_config(
-    "verbose = true\n",
-    &["build"],
-    &[("NETSUKE_VERBOSE", "false")],
-    false
-)]
-#[case::cli_flag_overrides_env(
-    "verbose = true\n",
-    &["--verbose", "build"],
-    &[("NETSUKE_VERBOSE", "false")],
-    true
-)]
-fn verbose_config_precedence(
-    #[case] config_content: &str,
-    #[case] args: &[&str],
-    #[case] extra_env: &[(&str, &str)],
-    #[case] expect_verbose_diagnostics: bool,
-) -> Result<()> {
-    let output =
-        run_config_layer_build("verbose config precedence", config_content, args, extra_env)?;
-    ensure!(output.success, "expected build to succeed");
-    if expect_verbose_diagnostics {
-        ensure!(
-            output.stderr.contains("Timing"),
-            "expected verbose timing summary in stderr, got:\n{}",
-            output.stderr
-        );
-        assert_config_metrics_snapshot(&output.stderr, SUCCESSFUL_CONFIG_METRICS)?;
-    } else {
-        ensure!(
-            !output.stderr.contains("Timing"),
-            "expected no timing summary, got:\n{}",
-            output.stderr
-        );
-        ensure!(
-            !output.stderr.contains("metrics snapshot"),
-            "expected no metrics snapshot, got:\n{}",
-            output.stderr
-        );
-    }
-    Ok(())
-}
-
-// -------------------------------------------------------------------------
 // JSON diagnostics edge cases
 // -------------------------------------------------------------------------
 
@@ -396,29 +263,6 @@ fn generate_to_stdout_contains_ninja_rules() -> Result<()> {
     ensure!(
         !output.stderr.contains("rule "),
         "expected progress messages on stderr, not manifest content, got:\n{}",
-        output.stderr
-    );
-    Ok(())
-}
-
-/// An invalid enum value in a config file produces a bounded merge failure.
-#[test]
-fn invalid_config_value_reports_bounded_merge_failure() -> Result<()> {
-    let workspace = setup_minimal_workspace("invalid config value")?;
-    let config = workspace.path().join(".netsuke.toml");
-    test_fs::write(&config, "color = \"loud\"\n").context("write invalid config file")?;
-
-    let output = run_netsuke_with_env(workspace.path(), &["generate"], None, &[])?;
-
-    ensure!(
-        !output.success,
-        "expected generate with invalid config to fail"
-    );
-    ensure!(
-        output.stderr.contains("configuration load failed")
-            && output.stderr.contains("operation=\"config_merge\"")
-            && output.stderr.contains("error_category=\"parse\""),
-        "expected a human-mode config merge failure record, got:\n{}",
         output.stderr
     );
     Ok(())

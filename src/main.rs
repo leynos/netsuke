@@ -266,32 +266,76 @@ fn resolve_json_mode_or_exit(
     matches: &ArgMatches,
     fallback_mode: DiagMode,
 ) -> Result<(DiagMode, cli::DiscoveredLayers), ExitCode> {
-    let (result, outcome) = cli::resolve_json_and_layers_outcome_with_env(
+    let env = cli::ConfigStdEnvProvider;
+    let clock = monotony::StdMonotonicClock;
+    JsonModeResolutionContext {
         parsed_cli,
         matches,
-        &cli::ConfigStdEnvProvider,
-    );
-    let clock = monotony::StdMonotonicClock;
-    match observability::record_config_load(
-        observability::ConfigLoadPhase::DiagMode,
-        &clock,
-        || result,
-    ) {
-        Ok(is_json_enabled) => {
-            let mode = DiagMode::from_json_enabled(is_json_enabled);
-            set_tracing_filter(startup_filter(mode, parsed_cli.verbose));
-            outcome.emit_diagnostics();
-            Ok((mode, outcome.into_layers()))
-        }
-        Err(err) => {
-            let fallback_filter = startup_filter(fallback_mode, parsed_cli.verbose);
-            set_tracing_filter(fallback_filter);
-            outcome.emit_diagnostics();
-            Err(config_err_to_exit(
-                err.as_ref(),
-                fallback_mode,
-                observability::DIAG_MODE_OPERATION,
-            ))
+        fallback_mode,
+        env: &env,
+        clock: &clock,
+    }
+    .resolve_with(cli::resolve_json_and_layers_outcome_with_env)
+}
+
+/// Startup dependencies for one timed diagnostic-mode resolution.
+struct JsonModeResolutionContext<'a, E, C> {
+    parsed_cli: &'a cli::Cli,
+    matches: &'a ArgMatches,
+    fallback_mode: DiagMode,
+    env: &'a E,
+    clock: &'a C,
+}
+
+impl<E, C> JsonModeResolutionContext<'_, E, C>
+where
+    E: cli::ConfigEnvProvider,
+    C: monotony::MonotonicClock,
+{
+    /// Resolve JSON mode and replay retained diagnostics after filtering.
+    fn resolve_with<R>(self, resolver: R) -> Result<(DiagMode, cli::DiscoveredLayers), ExitCode>
+    where
+        R: FnOnce(
+            &cli::Cli,
+            &ArgMatches,
+            &E,
+        ) -> (ortho_config::OrthoResult<bool>, cli::DiscoveryOutcome),
+    {
+        let Self {
+            parsed_cli,
+            matches,
+            fallback_mode,
+            env,
+            clock,
+        } = self;
+        match observability::record_config_load(
+            observability::ConfigLoadPhase::DiagMode,
+            clock,
+            || {
+                let (result, outcome) = resolver(parsed_cli, matches, env);
+                match result {
+                    Ok(is_json_enabled) => Ok((is_json_enabled, outcome)),
+                    Err(error) => Err(Box::new((error, outcome))),
+                }
+            },
+        ) {
+            Ok((is_json_enabled, outcome)) => {
+                let mode = DiagMode::from_json_enabled(is_json_enabled);
+                set_tracing_filter(startup_filter(mode, parsed_cli.verbose));
+                outcome.emit_diagnostics();
+                Ok((mode, outcome.into_layers()))
+            }
+            Err(error) => {
+                let (err, outcome) = *error;
+                let fallback_filter = startup_filter(fallback_mode, parsed_cli.verbose);
+                set_tracing_filter(fallback_filter);
+                outcome.emit_diagnostics();
+                Err(config_err_to_exit(
+                    err.as_ref(),
+                    fallback_mode,
+                    observability::DIAG_MODE_OPERATION,
+                ))
+            }
         }
     }
 }
@@ -371,3 +415,7 @@ fn render_runtime_error_json(err: &anyhow::Error) -> serde_json::Result<String> 
 #[cfg(test)]
 #[path = "main_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "main_config_tests.rs"]
+mod config_tests;

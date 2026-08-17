@@ -220,6 +220,11 @@ fn invalid_config_traces_without_parser_text() -> Result<()> {
     let joined = diagnostic_lines(&run.stderr).join("\n");
 
     ensure!(
+        !run.success,
+        "an invalid explicit config file should fail the run"
+    );
+
+    ensure!(
         joined.contains("explicit config load failed") && joined.contains("failure_kind=LoadError"),
         "stderr should classify the parse failure: {joined}"
     );

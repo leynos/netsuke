@@ -243,11 +243,14 @@ mod tests {
     fn assert_one_single_sample_duration_record(
         snapshot: &[SnapshotEntry],
         expected_phase: LabelExpectation,
+        expected_seconds: f64,
     ) {
         assert_eq!(
             snapshot
                 .iter()
-                .filter(|entry| is_single_sample_duration_record(entry, expected_phase))
+                .filter(|entry| {
+                    is_single_sample_duration_record(entry, expected_phase, expected_seconds)
+                })
                 .count(),
             1,
             "expected one configuration-load duration record for phase {}",
@@ -283,11 +286,12 @@ mod tests {
     fn is_single_sample_duration_record(
         entry: &SnapshotEntry,
         expected_phase: LabelExpectation,
+        expected_seconds: f64,
     ) -> bool {
         entry.0.kind() == MetricKind::Histogram
             && entry.0.key().name() == CONFIG_LOAD_DURATION
             && has_exact_labels(entry, &[expected_phase])
-            && matches!(entry.3, DebugValue::Histogram(ref values) if values.len() == 1)
+            && matches!(entry.3, DebugValue::Histogram(ref values) if values.as_slice() == [expected_seconds])
     }
 
     #[rstest]
@@ -333,8 +337,8 @@ mod tests {
         assert_exact_config_metric_series(&snapshot);
         assert_one_counter_record(&snapshot, DIAG_MODE_SUCCESS);
         assert_one_counter_record(&snapshot, MERGE_FAILURE);
-        assert_one_single_sample_duration_record(&snapshot, DIAG_MODE_LABEL);
-        assert_one_single_sample_duration_record(&snapshot, MERGE_LABEL);
+        assert_one_single_sample_duration_record(&snapshot, DIAG_MODE_LABEL, 0.01);
+        assert_one_single_sample_duration_record(&snapshot, MERGE_LABEL, 0.02);
         assert_eq!(count_single_sample_duration_records(&snapshot), 2);
     }
 }
