@@ -2790,9 +2790,8 @@ enum instead of formatted error text. The unkeyed `path_hash` is a bounded
 correlation identifier, not confidential concealment of a guessable path.
 
 This deferred contract is distinct from terminal `configuration load failed`
-records emitted by `src/main.rs`. Their structured `error` field renders the
-source error and may therefore contain source details such as a configuration
-path.
+records emitted by `src/main.rs`. Those terminal records identify the failed
+operation and coarse error category without rendering the source error.
 
 #### `json` contract
 
@@ -3795,12 +3794,11 @@ aggregating them into buckets. Netsuke configures no custom buckets; a future
 exporter may choose its own bucket policy without changing this metric name or
 label contract.
 
-Human-readable `configuration load failed` events include three structured
+Human-readable `configuration load failed` events include two structured
 fields:
 
 - `operation`: `diag_mode_resolution` or `config_merge`.
 - `error_category`: `io`, `parse`, or `validation`.
-- `error`: the actionable rendered source error.
 
 The first two fields remain deliberately low-cardinality. Do not add paths,
 configuration values, or error text as metric labels.

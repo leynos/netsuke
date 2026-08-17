@@ -110,6 +110,10 @@ fn explicit_selection_traces_bounded_fields() -> Result<()> {
         temp.path(),
         &["--verbose", "--config", raw_path.as_str(), "generate"],
     )?;
+    ensure!(
+        run.success,
+        "an explicit configuration path should allow generate to succeed"
+    );
     let diagnostics = diagnostic_lines(&run.stderr);
     let joined = diagnostics.join("\n");
 
