@@ -475,8 +475,9 @@ successful `ninja -t clean`, and does not prune when clean fails.
 An older arbitrary manifest written with `generate --output` may lose its
 referenced sidecars after a later command. Regenerate that manifest before
 using it if retention has removed any of its sidecars.
-Do not define targets beneath `.netsuke/serial` or `.netsuke/dyndep`; Netsuke
-reserves both paths for this feature.
+The paths `.netsuke/serial` and `.netsuke/dyndep` must not occur in any user
+graph path, including outputs, inputs, implicit dependencies, and order-only
+dependencies; they are reserved for Netsuke-generated gates and sidecars.
 
 When migrating an existing manifest, see the
 [v0.1.0 migration guide](v0-1-0-migration-guide.md#opting-into-serial-dependency-ordering)

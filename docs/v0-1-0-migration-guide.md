@@ -88,8 +88,8 @@ Retention keeps the current bundle plus at most 32 obsolete `.dd` files and
 1 MiB of obsolete `.dd` bytes; stale `.tmp` files are cleaned while the
 exclusive sidecar-directory lease is held. `clean` prunes only after successful
 `ninja -t clean`, not after a failure. An old arbitrary `generate --output`
-manifest may lose sidecars after a later command and must be regenerated. See
-[ADR-012](adr-012-bound-dyndep-sidecar-retention.md).
+manifest needs regeneration only if retention has removed any of its referenced
+sidecars. See [ADR-012](adr-012-bound-dyndep-sidecar-retention.md).
 The [users' guide](users-guide.md#run-direct-dependencies-serially) documents
 the execution scope and the independent-reachability boundary.
 

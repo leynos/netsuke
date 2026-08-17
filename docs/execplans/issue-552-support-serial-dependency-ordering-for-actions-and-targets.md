@@ -18,7 +18,8 @@ The desired syntax is a closed `dependency_order` field on actions and targets:
 
 ```yaml
 actions:
-  all:
+  - name: all
+    command: ":"
     dependency_order: serial
     deps:
       - check-fmt
@@ -1467,3 +1468,13 @@ the empty-lease no-op is covered, and dyndep test modules share one
 capability-directory fixture. Hindi and Chinese rename diagnostics now name the
 operation explicitly. The follow-up gate run covers the rebased command
 dispatcher as well as these focused regressions before review is requested.
+
+2026-08-17: Re-verified the latest documentation, localization, and help-output
+review findings before making minimal corrections. The plan's manifest example
+now uses executable action-list syntax. User and migration guidance specify the
+reserved generated namespaces and conditional regeneration boundary. The design
+already described staged serial lowering, so that duplicate finding required no
+change. Catalogue corrections retain Fluent placeholders and name rename or
+operation-neutral behaviour where requested; Vietnamese rename wording was
+already correct. The help example now confirms the documented `hello.txt`
+target rather than accepting any non-empty target catalogue.

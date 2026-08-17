@@ -104,7 +104,7 @@ runner.io.write_ninja_file = Impossible d'écrire le fichier Ninja dans { $path 
 runner.io.flush_ninja_file = Impossible de vider le tampon du fichier Ninja dans { $path }.
 runner.io.sync_ninja_file = Impossible de synchroniser le fichier Ninja dans { $path }.
 runner.io.open_ambient_dir = Impossible d'ouvrir le répertoire ambiant.
-runner.io.non_utf8_working_directory = Le chemin du répertoire de travail n’est pas un UTF-8 valide.
+runner.io.non_utf8_working_directory = Le chemin du répertoire de travail n’est pas représentable en UTF-8.
 runner.io.no_existing_ancestor = Aucun répertoire ancêtre existant pour { $path }.
 runner.io.derive_relative_path = Impossible de déduire le chemin Ninja relatif.
 runner.io.non_utf8_path = Les chemins non UTF-8 ne sont pas pris en charge (chemin : { $path }).
@@ -182,7 +182,7 @@ ir.invalid_command = Interpolation de commande non valide : { $snippet }.
 # Erreurs de génération Ninja.
 ninja_gen.missing_action = Action « { $id } » manquante alors qu'une arête de compilation la référence.
 ninja_gen.format = Impossible de formater la sortie du manifeste Ninja.
-ninja_gen.dyndep_files_required = Cette compilation nécessite un bundle Ninja généré ; utilisez `netsuke build`, `netsuke clean` ou `netsuke generate` pour matérialiser les fichiers dyndep.
+ninja_gen.dyndep_files_required = Cette opération nécessite un bundle Ninja généré ; utilisez `netsuke build`, `netsuke clean` ou `netsuke generate` pour matérialiser les fichiers dyndep.
 ninja_gen.reserved_output_path = Le chemin '{ $path }' est réservé à l’état des dépendances séquentielles de Netsuke.
 ninja_gen.unsupported_path_character = Le chemin '{ $path }' contient le caractère de chemin Ninja non pris en charge '{ $character }'.
 

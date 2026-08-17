@@ -181,7 +181,7 @@ ir.invalid_command = Некоректна підстановка в команд
 # Помилки створення файлів Ninja.
 ninja_gen.missing_action = Відсутня дія «{ $id }», на яку посилається ребро збирання.
 ninja_gen.format = Не вдалося відформатувати вивід маніфесту Ninja.
-ninja_gen.dyndep_files_required = Для цієї збірки потрібен створений пакет Ninja; використовуйте `netsuke build`, `netsuke clean` або `netsuke generate`, щоб матеріалізувати файли dyndep.
+ninja_gen.dyndep_files_required = Для цієї операції потрібні згенеровані Ninja dyndep файли; використовуйте `netsuke build`, `netsuke clean` або `netsuke generate`, щоб матеріалізувати їх.
 ninja_gen.reserved_output_path = Шлях '{ $path }' зарезервовано для стану послідовних залежностей Netsuke.
 ninja_gen.unsupported_path_character = Шлях '{ $path }' містить непідтримуваний символ шляху Ninja: '{ $character }'.
 

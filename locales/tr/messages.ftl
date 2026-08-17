@@ -112,7 +112,7 @@ runner.io.flush_stdout = Standart çıktının arabelleği boşaltılamadı.
 runner.io.dyndep.create_dir = dyndep dizini { $path } oluşturulamadı.
 runner.io.dyndep.read = { $path } konumundaki oluşturulan dyndep dosyası okunamadı.
 runner.io.dyndep.write = { $path } konumundaki oluşturulan dyndep dosyasına yazılamadı.
-runner.io.dyndep.rename = { $path } konumundaki oluşturulan dyndep dosyası sonlandırılamadı.
+runner.io.dyndep.rename = { $path } konumundaki oluşturulan dyndep dosyası yeniden adlandırılamadı.
 runner.io.dyndep.corrupt = { $path } konumundaki oluşturulan dyndep dosyası beklenen içerikle eşleşmiyor; yalnızca bu dosyayı kaldırıp yeniden deneyin.
 runner.io.dyndep.temp_collisions = Tekrarlanan ad çakışmalarından sonra { $path } için benzersiz bir geçici dyndep dosyası oluşturulamadı.
 runner.io.dyndep.too_large = { $path } konumundaki oluşturulan dyndep dosyası { $limit } baytlık doğrulama sınırını aşıyor.
@@ -181,7 +181,7 @@ ir.invalid_command = Komutta geçersiz yerleştirme: { $snippet }.
 # Ninja üretimi hataları.
 ninja_gen.missing_action = Bir derleme kenarının başvurduğu "{ $id }" eylemi eksik.
 ninja_gen.format = Ninja bildiriminin çıktısı biçimlendirilemedi.
-ninja_gen.dyndep_files_required = Bu derleme oluşturulmuş bir Ninja paketi gerektiriyor; dyndep dosyalarını oluşturmak için `netsuke build`, `netsuke clean` veya `netsuke generate` kullanın.
+ninja_gen.dyndep_files_required = Bu işlem oluşturulmuş bir Ninja paketi gerektiriyor; dyndep dosyalarını oluşturmak için `netsuke build`, `netsuke clean` veya `netsuke generate` kullanın.
 ninja_gen.reserved_output_path = '{ $path }' yolu Netsuke'nin seri bağımlılık durumu için ayrılmıştır.
 ninja_gen.unsupported_path_character = '{ $path }' yolu, desteklenmeyen Ninja yol karakteri '{ $character }' içeriyor.
 

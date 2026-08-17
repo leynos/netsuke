@@ -305,6 +305,10 @@ fn help_targets_example_lists_described_targets() -> Result<()> {
         normalize_fluent_isolates(&run.stdout).contains("Targets:"),
         "help targets should print the Targets section"
     );
+    ensure!(
+        normalize_fluent_isolates(&run.stdout).contains("hello.txt"),
+        "help targets should list the documented target"
+    );
     Ok(())
 }
 #[test]

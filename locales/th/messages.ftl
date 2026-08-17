@@ -112,7 +112,7 @@ runner.io.flush_stdout = ล้างบัฟเฟอร์ของเอา�
 runner.io.dyndep.create_dir = ไม่สามารถสร้างไดเรกทอรี dyndep { $path } ได้
 runner.io.dyndep.read = ไม่สามารถอ่านไฟล์ dyndep ที่สร้างขึ้นที่ { $path } ได้
 runner.io.dyndep.write = ไม่สามารถเขียนไฟล์ dyndep ที่สร้างขึ้นไปยัง { $path } ได้
-runner.io.dyndep.rename = ไม่สามารถดำเนินการไฟล์ dyndep ที่สร้างขึ้นที่ { $path } ให้เสร็จสิ้นได้
+runner.io.dyndep.rename = ไม่สามารถเปลี่ยนชื่อไฟล์ dyndep ที่สร้างขึ้นที่ { $path } ได้
 runner.io.dyndep.corrupt = ไฟล์ dyndep ที่สร้างขึ้นที่ { $path } ไม่ตรงกับเนื้อหาที่คาดไว้ ให้ลบเฉพาะไฟล์นี้แล้วลองอีกครั้ง
 runner.io.dyndep.temp_collisions = ไม่สามารถสร้างไฟล์ dyndep ชั่วคราวที่ไม่ซ้ำกันสำหรับ { $path } ได้หลังเกิดชื่อชนกันหลายครั้ง
 runner.io.dyndep.too_large = ไฟล์ dyndep ที่สร้างขึ้นที่ { $path } มีขนาดเกินขีดจำกัดการตรวจสอบ { $limit } ไบต์
@@ -181,7 +181,7 @@ ir.invalid_command = การแทรกค่าในคำสั่งไ�
 # ข้อผิดพลาดในการสร้างไฟล์ Ninja
 ninja_gen.missing_action = ไม่มีการกระทำ “{ $id }” ที่เส้นเชื่อมของการสร้างอ้างถึง
 ninja_gen.format = จัดรูปแบบผลลัพธ์ของไฟล์รายการ Ninja ไม่สำเร็จ
-ninja_gen.dyndep_files_required = บิลด์นี้ต้องใช้บันเดิล Ninja ที่สร้างขึ้น ให้ใช้ `netsuke build`, `netsuke clean` หรือ `netsuke generate` เพื่อทำให้ไฟล์ dyndep พร้อมใช้งาน
+ninja_gen.dyndep_files_required = การดำเนินการนี้ต้องใช้บันเดิล Ninja ที่สร้างขึ้น ให้ใช้ `netsuke build`, `netsuke clean` หรือ `netsuke generate` เพื่อทำให้ไฟล์ dyndep พร้อมใช้งาน
 ninja_gen.reserved_output_path = เส้นทาง '{ $path }' สงวนไว้สำหรับสถานะการขึ้นต่อกันแบบลำดับของ Netsuke
 ninja_gen.unsupported_path_character = เส้นทาง '{ $path }' มีอักขระเส้นทาง Ninja ที่ไม่รองรับคือ '{ $character }'
 
