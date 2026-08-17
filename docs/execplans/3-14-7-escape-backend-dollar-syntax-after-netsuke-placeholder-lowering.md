@@ -151,7 +151,7 @@ Stop and escalate rather than improvising when any of these is reached.
    and `N` rules.
    Severity: medium. Likelihood: certain.
    Mitigation: accept and document. Command recipes already behave this way
-   (`src/ir/from_manifest.rs:55-58`), so the change makes scripts consistent
+   (`src/ir/from_manifest.rs:52-57`), so the change makes scripts consistent
    rather than novel. Record the generated-file growth in
    `Surprises & discoveries` if it proves material on the example manifests.
 
@@ -162,7 +162,7 @@ Stop and escalate rather than improvising when any of these is reached.
    Severity: low. Likelihood: certain.
    Mitigation: note it in the users' guide alongside the migration note.
 
-7. Risk: `docs/users-guide.md:1152-1153` currently instructs users that
+7. Risk: `docs/users-guide.md:1208-1209` currently instructs users that
    "Literal shell dollar expressions currently require Ninja-aware escaping,
    such as `$$PATH`." A manifest written to that instruction will, after this
    change, emit `$$$$PATH`, which Ninja renders as `$$PATH`, which the shell
@@ -190,6 +190,8 @@ Stop and escalate rather than improvising when any of these is reached.
 - [x] (2026-08-17) Adversarial design review completed; design revised (see
   `Decision log`).
 - [x] (2026-08-17) Plan drafted.
+- [x] (2026-08-17) Rebased onto `origin/main` at `7e5c2679`; no conflicts. All
+  line citations re-resolved and the affected plan steps rewritten.
 - [ ] Approval gate: awaiting explicit user approval.
 - [ ] EP-M0 — real-`ninja` differential oracle and red tests.
 - [ ] EP-M1 — lower `$in`/`$out` for `script:` recipes.
@@ -232,6 +234,21 @@ Stop and escalate rather than improvising when any of these is reached.
   Evidence: read of the strategy.
   Impact: that property is vacuous for this change and must be widened, not
   merely left passing.
+
+- Observation: rebasing onto `7e5c2679` restructured `src/manifest/render.rs`
+  in a way that makes milestone EP-M1 smaller, and it added a second consumer
+  of `description`.
+  Evidence: description and recipe rendering are now the shared helpers
+  `render_description` (`src/manifest/render.rs:62-72`) and `render_recipe`
+  (lines 81-94), each taking a `subject` for diagnostics; targets gained
+  descriptions, consumed by the new `netsuke help targets` catalogue; and
+  `src/ir/from_manifest.rs:87-93` deliberately excludes target descriptions
+  from the Ninja file so rule descriptions remain the sole progress source.
+  Impact: the EP-M1 render change becomes a one-arm edit to `render_recipe`
+  rather than two separate call sites, and decision `D-METADATA` gains a
+  further argument against escaping descriptions. The core finding is
+  untouched: `src/ir/from_manifest_support.rs:54` still passes scripts through
+  unlowered.
 
 - Observation: a scalar `command:` containing a newline injects raw Ninja
   syntax into the generated file, creating targets the manifest never declared.
@@ -290,7 +307,7 @@ Stop and escalate rather than improvising when any of these is reached.
   Options: (a) reject a residual `$in`/`$out`/placeholder token inside a
   backtick region with a typed `IrGenError` and a `miette` diagnostic naming
   the recipe; (b) substitute inside backtick regions, changing the behaviour
-  documented at `docs/netsuke-design.md:257`; (c) accept the silent change and
+  documented at `docs/netsuke-design.md:265`; (c) accept the silent change and
   document it.
   Recommendation: (a). It preserves the documented backtick contract, converts
   a silent wrong answer into an actionable error, and is the smallest change.
@@ -304,13 +321,21 @@ Stop and escalate rather than improvising when any of these is reached.
   Analysis: the roadmap bullet and `docs/netsuke-design.md` §§2.6 and 5.4 all
   scope the change to "command and script text". Descriptions are never
   `$in`/`$out`-lowered (`src/ir/from_manifest_support.rs:58`;
-  `src/manifest/render.rs:42-44` renders them against plain variables, not the
-  recipe context), so escaping them alone would remove the working
-  `description = CC $out` idiom shown at `docs/netsuke-design.md:2054-2058`
-  and give nothing back. `depfile = $out.d` is the canonical Ninja idiom and
-  roadmap 3.14.6 plans to populate `Action.depfile`; escaping it would
-  pre-break unlanded work. `deps` accepts only `gcc` or `msvc` and `pool`
-  accepts a pool name, so escaping either is inert.
+  `render_description` at `src/manifest/render.rs:62-72` renders them against
+  plain variables, not the recipe context), so escaping them alone would remove
+  the working `description = CC $out` idiom shown at
+  `docs/netsuke-design.md:2072-2076` and give nothing back. `depfile = $out.d`
+  is the canonical Ninja idiom and roadmap 3.14.6 plans to populate
+  `Action.depfile`; escaping it would pre-break unlanded work. `deps` accepts
+  only `gcc` or `msvc` and `pool` accepts a pool name, so escaping either is
+  inert.
+  Reinforced after rebasing onto `7e5c2679` (target descriptions and
+  `netsuke help targets`): descriptions now have a second, non-backend
+  consumer — the help catalogue — while `src/ir/from_manifest.rs:87-93`
+  deliberately keeps *target* descriptions out of the Ninja file, leaving rule
+  descriptions as the sole source of Ninja progress text. Applying a
+  Ninja-specific transform to a field that also feeds a non-Ninja consumer is
+  exactly the layering mistake this task exists to fix.
   Recommendation: scope this task to command and script text exactly as the
   approved design states. Record the description gap as a follow-up
   (lower `$in`/`$out` into descriptions first, then escape — the coherent
@@ -413,9 +438,11 @@ leaves backtick-delimited regions alone. `quote_paths` (lines 63-78)
 shell-quotes each substituted path with `shell_quote::Sh`.
 
 `src/manifest/render.rs` renders Jinja. `recipe_render_context`
-(lines 140-150) binds `ins` and `outs` to the placeholder tokens, but only
-command rendering uses it — script rendering at lines 49-50 and 69-70 passes
-the plain variable map, so `{{ ins }}` is undefined inside a script today.
+(lines 159-171) binds `ins` and `outs` to the placeholder tokens, and it is
+reached only through `render_recipe_string_or_list` (lines 128-152), which
+`render_recipe` (lines 81-94) calls for the `Recipe::Command` arm alone. The
+`Recipe::Script` arm at lines 88-90 renders against the plain variable map, so
+`{{ ins }}` is undefined inside a script today.
 
 Relevant existing behaviour worth knowing before touching anything: dollar-free
 manifests must keep producing byte-identical output; the command-list wrapper's
@@ -427,17 +454,19 @@ round trip leaves it unaffected.
 ## Conformance basis
 
 Upstream artefacts, at the revisions current on `origin/main` at commit
-`2e56d63f`:
+`7e5c2679` ("Add target descriptions and netsuke help targets"). All line
+citations in this plan were re-resolved against that commit on 2026-08-17; see
+`Decision log` for what moved.
 
 1. `docs/roadmap.md:212-219` — task 3.14.7 and its three acceptance bullets.
    Referred to below as `RM-3.14.7-a` (preserve shell variables by emitting
    `$$`), `RM-3.14.7-b` (keep the IR free of Ninja-specific escaping), and
    `RM-3.14.7-c` (command and script regression tests covering shell
    variables, `$in`/`$out`, and unrelated identifiers such as `$input`).
-2. `docs/netsuke-design.md:499-508` — §2.6 "Backend dollar escaping", the
+2. `docs/netsuke-design.md:507-516` — §2.6 "Backend dollar escaping", the
    normative statement of the required behaviour and of the IR boundary.
    Referred to as `DD-2.6`.
-3. `docs/netsuke-design.md:2041-2049` — §5.4, placing the conversion from IR
+3. `docs/netsuke-design.md:2059-2067` — §5.4, placing the conversion from IR
    text to backend text in the rule writer. Referred to as `DD-5.4`.
 4. `docs/archive/roadmap-completed-foundations.md:87` — archived task 1.3.2,
    the declared dependency, complete.
@@ -698,11 +727,14 @@ In `src/ir/from_manifest_support.rs`, extend the `match` in `register_action`
 (lines 32-55) so `Recipe::Script` is interpolated through the new entry point
 instead of falling through at line 54.
 
-In `src/manifest/render.rs`, switch script rendering at lines 49-50 and 69-70
-to `recipe_render_context` so `{{ ins }}` and `{{ outs }}` bind inside scripts
-as they already do inside commands. Note that `recipe_render_context` uses
-`or_insert_with` (lines 144-149), so a manifest that defines its own `ins` or
-`outs` variable silently wins; add a test pinning that precedence either way.
+In `src/manifest/render.rs`, give the `Recipe::Script` arm of `render_recipe`
+(lines 88-90) a context built by `recipe_render_context`, so `{{ ins }}` and
+`{{ outs }}` bind inside scripts as they already do inside commands. Main's
+`render_recipe`/`render_description` refactor made this a one-arm change rather
+than the two call sites the plan originally described. Note that
+`recipe_render_context` uses `or_insert_with` (lines 162-167), so a manifest
+that defines its own `ins` or `outs` variable silently wins; add a test pinning
+that precedence either way.
 
 Acceptance for EP-M1: rows B2 and B5 pass. Rows A1 to A4 still fail (escaping
 has not landed). Gates pass. Commit.
@@ -746,7 +778,7 @@ Gates pass. Commit.
 
 ### Stage F — EP-M4, documentation and roadmap
 
-Rewrite `docs/users-guide.md:1152-1153`, which currently tells users to write
+Rewrite `docs/users-guide.md:1208-1209`, which currently tells users to write
 `$$PATH`. Replace it with a statement that ordinary shell dollar syntax is
 written literally, plus a migration note explaining that a manifest previously
 written with `$$` must drop the doubling, and that action identifiers change
@@ -756,7 +788,7 @@ Update `docs/netsuke-design.md` §2.6 and §5.4 from planned to implemented, and
 record the path-emission and description scope boundaries there.
 
 Add a subsection to `docs/developers-guide.md` under "Command and recipe
-lowering" (around line 199) documenting the `ShellText`/`NinjaValue` seam: what
+lowering" (line 266) documenting the `ShellText`/`NinjaValue` seam: what
 each type means, that `ShellText` must not implement `Display`, that
 `escape_ninja_value` is the only constructor of `NinjaValue`, and that new
 emission sites must go through it. Per `AGENTS.md`, record the new
@@ -1033,3 +1065,31 @@ here so the omission is deliberate rather than overlooked.
 This plan must be approved before implementation begins. Do not treat silence
 as approval. On approval, start at stage A and settle `D-BACKTICK` and
 `D-METADATA` before any code changes.
+
+## Revision note
+
+2026-08-17 — rebased onto `origin/main` at `7e5c2679` ("Add target
+descriptions and netsuke help targets"). The rebase itself was clean: this
+branch adds only one file. However, that commit restructured
+`src/manifest/render.rs` and shifted every documentation section this plan
+cites, so all line references were re-resolved against the new tree.
+
+What changed. `render.rs` now routes description and recipe rendering through
+the shared helpers `render_description` and `render_recipe`, so the EP-M1 edit
+in stage C is a single-arm change to `render_recipe` rather than two separate
+call sites. Targets gained descriptions, consumed by the new
+`netsuke help targets` catalogue, while `src/ir/from_manifest.rs` deliberately
+keeps target descriptions out of the generated Ninja file. Documentation
+citations moved: users' guide 1152-1153 to 1208-1209, design §2.6 499-508 to
+507-516, design §5.4 2041-2049 to 2059-2067, the `description = CC $out`
+snippet 2054-2058 to 2072-2076, the backtick contract 257 to 265, and the
+developers' guide anchor 199 to 266.
+
+Why it matters. Decision `D-METADATA` is strengthened, not weakened:
+`description` now feeds a non-backend consumer, so applying a Ninja-specific
+transform to it would repeat the layering mistake this task exists to correct.
+The recommendation to scope escaping to command and script text stands.
+
+Effect on remaining work. None of the milestones, obligations, or open
+decisions change. EP-M1 gets slightly smaller. The plan remains DRAFT and
+still requires approval before stage A begins.
