@@ -302,6 +302,8 @@ def test_http_error_translation_handles_not_modified_and_stale_cache(
 ) -> None:
     """HTTP status handling distinguishes current, stale and absent data."""
     _, rollout, _ = rollout_modules
+    http = rollout.typos_rollout_http
+    validate = rollout._validate_dictionary_bytes
     cache = tmp_path / "cache.toml"
     cache.write_text(_dictionary_text(), encoding="utf-8")
     headers = email.message.Message()
@@ -311,13 +313,23 @@ def test_http_error_translation_handles_not_modified_and_stale_cache(
     unavailable = urllib.error.HTTPError(
         "https://example.test/base", 503, "unavailable", headers, None
     )
+    rate_limited = urllib.error.HTTPError(
+        "https://example.test/base", 429, "too many requests", headers, None
+    )
 
-    assert rollout._http_error_result(cache, not_modified).status == "current"
+    assert http._http_error_result(cache, not_modified, validate).status == "current", (
+        "the not-modified HTTP case should reuse the current cache"
+    )
+    assert (
+        http._http_error_result(cache, rate_limited, validate).status == "stale-cache"
+    ), "the rate-limited HTTP case should reuse the validated stale cache"
     with pytest.raises(urllib.error.HTTPError):
-        rollout._http_error_result(cache, unavailable)
+        http._http_error_result(cache, unavailable, validate)
     cache.unlink()
+    with pytest.raises(http.NetworkUnavailableError):
+        http._http_error_result(cache, rate_limited, validate)
     with pytest.raises(urllib.error.HTTPError):
-        rollout._http_error_result(cache, unavailable)
+        http._http_error_result(cache, unavailable, validate)
 
 
 def test_remote_freshness_uses_dates_and_falls_back_on_invalid_values(
