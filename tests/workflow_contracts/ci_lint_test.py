@@ -462,7 +462,7 @@ def test_coverage_report_is_produced_before_codescene_check() -> None:
     """The CodeScene gate consumes the report the coverage step produces.
 
     `generate-coverage` writes the report to `output-path` (lcov.info) and the
-    `upload-codescene-coverage` check step defaults to that same file for lcov
+    `upload-codescene-coverage` check step reads that exact path in lcov
     format. If the report path, format, or step ordering drifts, CodeScene
     reports "No valid coverage report found in the build pipeline". This pins
     the wiring: the coverage step runs after `make test` and the CodeScene
@@ -513,6 +513,10 @@ def test_coverage_report_is_produced_before_codescene_check() -> None:
     assert with_.get("format") == "lcov", (
         "the CodeScene check must consume lcov format, "
         f"got {with_.get('format')!r}"
+    )
+    assert with_.get("path") == "lcov.info", (
+        "the CodeScene check must read the report generated at lcov.info, "
+        f"got {with_.get('path')!r}"
     )
     assert with_.get("mode") == "check", (
         "the CodeScene check must run in check mode, "

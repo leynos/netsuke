@@ -121,6 +121,7 @@ jobs:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@8add2d99854a5b77548eae98cca59202e68fefc8
         with:
+          path: lcov.info
           format: lcov
           mode: check
           project-url: https://api.codescene.io/v2/projects/69281
