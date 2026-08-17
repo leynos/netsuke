@@ -1,7 +1,8 @@
 //! Unit tests for manifest template rendering.
 
-use super::*;
-use crate::ast::{DependencyOrder, Rule};
+use super::{ManifestValue, render_manifest};
+use crate::ast::{DependencyOrder, NetsukeManifest, Recipe, Rule, StringOrList, Target, Vars};
+use anyhow::{Context, Result};
 use minijinja::Environment;
 use semver::Version;
 

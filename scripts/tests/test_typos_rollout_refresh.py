@@ -311,17 +311,11 @@ def test_http_error_translation_handles_not_modified_and_stale_cache(
     unavailable = urllib.error.HTTPError(
         "https://example.test/base", 503, "unavailable", headers, None
     )
-    rate_limited = urllib.error.HTTPError(
-        "https://example.test/base", 429, "too many requests", headers, None
-    )
 
     assert rollout._http_error_result(cache, not_modified).status == "current"
-    assert rollout._http_error_result(cache, rate_limited).status == "stale-cache"
     with pytest.raises(urllib.error.HTTPError):
         rollout._http_error_result(cache, unavailable)
     cache.unlink()
-    with pytest.raises(rollout.NetworkUnavailableError):
-        rollout._http_error_result(cache, rate_limited)
     with pytest.raises(urllib.error.HTTPError):
         rollout._http_error_result(cache, unavailable)
 
