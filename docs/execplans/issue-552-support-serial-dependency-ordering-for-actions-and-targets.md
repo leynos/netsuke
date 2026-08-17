@@ -1478,3 +1478,10 @@ change. Catalogue corrections retain Fluent placeholders and name rename or
 operation-neutral behaviour where requested; Vietnamese rename wording was
 already correct. The help example now confirms the documented `hello.txt`
 target rather than accepting any non-empty target catalogue.
+
+2026-08-17: The authoritative shared spelling dictionary rate-limited the
+Markdown gate despite a valid checked-in cache. The refresh helper now treats
+only HTTP 429 as temporary authority unavailability and uses that cache only
+after revalidating it. HTTP 304 remains a current-cache success; other HTTP
+errors and an absent or invalid cache still fail. Focused refresh tests cover
+both rate-limited paths, and the full gate suite passed with the fallback.

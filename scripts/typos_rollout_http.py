@@ -21,6 +21,7 @@ import typos_rollout_cache
 ContentValidator = cabc.Callable[[bytes], None]
 Opener = cabc.Callable[..., typos_rollout_cache.RemoteResponse]
 HTTP_NOT_MODIFIED = 304
+HTTP_TOO_MANY_REQUESTS = 429
 
 
 @dc.dataclass(frozen=True, slots=True, kw_only=True)
@@ -300,6 +301,10 @@ def _http_error_result(
     """Translate an HTTP response into a current result or propagate it."""
     if error.code == HTTP_NOT_MODIFIED and _valid_cache(cache, validate):
         return typos_rollout_cache.RefreshResult("current", cache)
+    if error.code == HTTP_TOO_MANY_REQUESTS:
+        message = "shared dictionary authority is rate-limited"
+        unavailable = NetworkUnavailableError(message)
+        return _stale_cache_or_raise(cache, unavailable, validate)
     raise error
 
 
