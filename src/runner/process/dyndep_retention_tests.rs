@@ -1,5 +1,6 @@
 //! Focused tests for bounded dyndep sidecar retention.
 
+use super::super::tests::temporary_dir;
 use super::*;
 use crate::ninja_gen::GeneratedDyndep;
 use crate::runner::process::dyndep_telemetry::{
@@ -10,12 +11,6 @@ use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use cap_std::fs_utf8::Dir;
 use rstest::{fixture, rstest};
-
-fn temporary_dir(temp: &tempfile::TempDir) -> Result<Dir> {
-    let path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-        .map_err(|path| anyhow::anyhow!("temporary directory is not UTF-8: {}", path.display()))?;
-    Dir::open_ambient_dir(path, cap_std::ambient_authority()).map_err(Into::into)
-}
 
 #[fixture]
 fn dyndep_workspace() -> Result<(tempfile::TempDir, Dir)> {
@@ -256,6 +251,31 @@ fn retention_preserves_sidecars_selected_by_overlapping_bundles() -> Result<()> 
             "retention must not remove a sidecar selected by an active bundle"
         );
     }
+    Ok(())
+}
+
+#[test]
+fn empty_lease_leaves_obsolete_sidecars_untouched() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let dir = temporary_dir(&temp)?;
+    let stale = Utf8Path::new(".netsuke/dyndep/stale.dd");
+    dir.create_dir_all(DYNDEP_DIR)?;
+    dir.write(stale, "stale")?;
+
+    let summary = DyndepPublicationLease::empty().prune(&dir, &[])?;
+
+    ensure!(
+        dir.open(stale).is_ok(),
+        "an empty lease must not prune sidecars"
+    );
+    ensure!(
+        summary.reclaimed_files == 0,
+        "an empty lease must reclaim no files"
+    );
+    ensure!(
+        summary.reclaimed_bytes == 0,
+        "an empty lease must reclaim no bytes"
+    );
     Ok(())
 }
 

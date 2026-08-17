@@ -23,7 +23,6 @@ use std::borrow::Cow;
 use std::io::{self, IsTerminal};
 use std::path::Path;
 use tracing::{debug, info};
-use dyndep_publication::materialize_dyndep_bundle;
 
 /// Default Ninja executable to invoke.
 pub const NINJA_PROGRAM: &str = "ninja";
@@ -42,8 +41,10 @@ pub const NINJA_ENV: &str = "NETSUKE_NINJA";
 
 mod graph;
 mod help;
+mod ninja_content;
 mod path_helpers;
 mod process;
+pub use ninja_content::NinjaContent;
 #[cfg(doctest)]
 pub use process::doc;
 pub use process::{
@@ -63,27 +64,6 @@ struct ExecutionContext<'a> {
     /// Keep a native [`Path`]: only `NETSUKE_NINJA` resolution performs UTF-8
     /// conversion, preserving valid non-UTF-8 executable paths.
     ninja_program: &'a Path,
-}
-
-/// Wrapper around generated Ninja manifest text.
-#[derive(Debug, Clone)]
-pub struct NinjaContent(String);
-impl NinjaContent {
-    /// Store the provided Ninja manifest string.
-    #[must_use]
-    pub const fn new(content: String) -> Self {
-        Self(content)
-    }
-    /// Borrow the underlying manifest text.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-    /// Consume the wrapper returning the owned manifest string.
-    #[must_use]
-    pub fn into_string(self) -> String {
-        self.0
-    }
 }
 
 /// Target list passed through to Ninja; an empty slice uses IR defaults.

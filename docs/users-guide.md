@@ -411,7 +411,6 @@ v0.1.0-beta1.
 Cycle detection follows `sources` and `deps`. Order-only dependencies enforce
 ordering but do not participate in cycle detection.
 
-
 ### Run direct dependencies serially
 
 Actions and targets both accept `dependency_order`. Omit it, or set it to

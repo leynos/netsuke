@@ -1,25 +1,14 @@
 //! Dispatch parsed commands and emit their successful JSON result documents.
 
 use super::{
-    ExecutionContext, NinjaToolSpec, generate_ninja, graph, handle_build, handle_ninja_tool, help,
     ExecutionContext, NinjaContent, NinjaToolSpec, generate_ninja, graph, handle_build,
-    handle_ninja_tool, materialize_dyndep_bundle, process, prune_dyndep_bundle,
+    handle_ninja_tool, help, materialize_dyndep_bundle, process, prune_dyndep_bundle,
     resolve_output_path,
 };
 use crate::cli::{BuildArgs, Cli, Commands, HelpArgs, HelpTopic};
 use crate::localization::keys;
 use crate::result_json;
 use anyhow::{Context, Result};
-
-
-//! Dispatch parsed commands and emit their successful JSON result documents.
-};
-
-
-//! Dispatch parsed commands and emit their successful JSON result documents.
-};
-//! Dispatch parsed commands and emit their successful JSON result documents.
-};
 
 pub(super) fn execute(cli: &Cli, command: Commands, context: &ExecutionContext<'_>) -> Result<()> {
     match command {

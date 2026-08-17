@@ -78,9 +78,9 @@ dependencies after an earlier one fails, while shared work still executes at
 most once in the enclosing Ninja invocation.
 
 Serial lists containing two or more dependencies require Ninja 1.10 or newer.
-The `generate` command materialises its supporting dyndep sidecars beneath
+The `generate` command materializes its supporting dyndep sidecars beneath
 `.netsuke/dyndep` in the effective working directory while writing the
-generated Ninja manifest. The `build` and `clean` commands materialise the
+generated Ninja manifest. The `build` and `clean` commands materialize the
 sidecars before invoking Ninja with the generated Ninja file. User targets must
 not use `.netsuke/dyndep` or `.netsuke/serial`: both namespaces are reserved for
 Netsuke's generated state. Sidecars are immutable and content-addressed.

@@ -5,7 +5,7 @@ use super::*;
 #[test]
 fn materialization_records_success_metrics() -> Result<()> {
     let temp = tempfile::tempdir()?;
-    let dir = temp_dir(&temp)?;
+    let dir = temporary_dir(&temp)?;
     let dyndep = sidecar(".netsuke/dyndep/metrics.dd", "content");
 
     let (result, snapshot) = recorded(|| materialize_dyndep_files(&dir, &[dyndep]));
@@ -17,7 +17,7 @@ fn materialization_records_success_metrics() -> Result<()> {
 #[test]
 fn materialization_records_error_metrics() -> Result<()> {
     let temp = tempfile::tempdir()?;
-    let dir = temp_dir(&temp)?;
+    let dir = temporary_dir(&temp)?;
     let rel = ".netsuke/dyndep/metrics-error.dd";
     dir.create_dir_all(DYNDEP_DIR)?;
     dir.write(rel, "corrupt")?;

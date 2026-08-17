@@ -274,6 +274,7 @@ fn catalogue_target(names: Vec<String>, description: Option<String>, phony: bool
         },
         sources: crate::ast::StringOrList::Empty,
         deps: crate::ast::StringOrList::Empty,
+        dependency_order: crate::ast::DependencyOrder::Parallel,
         order_only_deps: crate::ast::StringOrList::Empty,
         vars: crate::ast::Vars::default(),
         phony,

@@ -49,7 +49,7 @@ pub struct Target {
     /// Optional human-friendly summary of the public operation this target
     /// performs.
     ///
-    /// Unlike [`Rule::description`], which explains work while Ninja executes
+    /// Unlike [`crate::ast::Rule::description`], which explains work while Ninja executes
     /// a recipe, a target description is discovery metadata for humans: it is
     /// surfaced by `netsuke help targets` and never replaces a referenced rule
     /// description in Ninja progress output.

@@ -1459,3 +1459,11 @@ capability-filesystem policy. `fs4` is therefore applied only to the
 capability-opened handle;
 the lockfile source/checksum and published package metadata provide the
 available maintenance basis without asserting an unverified release cadence.
+
+2026-08-17: Rebased onto the current `origin/main` and re-verified the next
+review round as code-level hypotheses. All supplied findings remained valid:
+the materialization telemetry assertion now requires the complete outcome set,
+the empty-lease no-op is covered, and dyndep test modules share one
+capability-directory fixture. Hindi and Chinese rename diagnostics now name the
+operation explicitly. The follow-up gate run covers the rebased command
+dispatcher as well as these focused regressions before review is requested.

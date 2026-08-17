@@ -1,5 +1,6 @@
 //! Unit tests for atomic dyndep sidecar materialization.
 
+use super::super::tests::temporary_dir;
 use super::*;
 use crate::ninja_gen::GeneratedDyndep;
 use crate::runner::process::dyndep_retention::{RetentionPolicy, prune_dyndep_sidecars};
@@ -19,12 +20,6 @@ fn sidecar(name: &str, content: &str) -> GeneratedDyndep {
     GeneratedDyndep::fixture(Utf8PathBuf::from(name), content.to_owned())
 }
 
-fn temp_dir(temp: &tempfile::TempDir) -> Result<Dir> {
-    let path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-        .map_err(|path| anyhow!("temporary directory is not UTF-8: {}", path.display()))?;
-    Dir::open_ambient_dir(path, cap_std::ambient_authority()).map_err(Into::into)
-}
-
 fn recorded<T>(invoke: impl FnOnce() -> T) -> (T, Snapshot) {
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
@@ -32,24 +27,24 @@ fn recorded<T>(invoke: impl FnOnce() -> T) -> (T, Snapshot) {
     (value, snapshotter.snapshot().into_vec())
 }
 
-fn counter_value(snapshot: &Snapshot, outcome: &str) -> Option<u64> {
-    snapshot
-        .iter()
-        .find_map(|(key, _unit, _description, value)| {
-            if key.kind() != MetricKind::Counter
-                || key.key().name() != telemetry::MATERIALIZATIONS_TOTAL
-            {
-                return None;
-            }
-            let has_outcome = key
+fn materialization_outcome_counters(
+    snapshot: &Snapshot,
+) -> std::collections::BTreeMap<Option<&str>, u64> {
+    let mut counters = std::collections::BTreeMap::new();
+    for (key, _unit, _description, value) in snapshot {
+        if let (MetricKind::Counter, name, DebugValue::Counter(count)) =
+            (key.kind(), key.key().name(), value)
+            && name == telemetry::MATERIALIZATIONS_TOTAL
+        {
+            let outcome = key
                 .key()
                 .labels()
-                .any(|label| label.key() == "outcome" && label.value() == outcome);
-            match value {
-                DebugValue::Counter(count) if has_outcome => Some(*count),
-                _ => None,
-            }
-        })
+                .find(|label| label.key() == "outcome")
+                .map(metrics::Label::value);
+            *counters.entry(outcome).or_default() += count;
+        }
+    }
+    counters
 }
 
 fn temporary_file_retry_count(snapshot: &Snapshot, outcome: &str) -> Option<u64> {
@@ -91,8 +86,9 @@ fn duration_sample_count(snapshot: &Snapshot) -> usize {
 
 fn assert_materialization_metrics(snapshot: &Snapshot, outcome: &str) -> Result<()> {
     ensure!(
-        counter_value(snapshot, outcome) == Some(1),
-        "materialization must record one {outcome} outcome"
+        materialization_outcome_counters(snapshot)
+            == std::collections::BTreeMap::from([(Some(outcome), 1)]),
+        "materialization must record exactly one {outcome} outcome"
     );
     ensure!(
         duration_sample_count(snapshot) == 1,
@@ -104,7 +100,7 @@ fn assert_materialization_metrics(snapshot: &Snapshot, outcome: &str) -> Result<
 #[test]
 fn materializes_nested_sidecar_and_reuses_it() -> Result<()> {
     let temp = tempfile::tempdir()?;
-    let dir = temp_dir(&temp)?;
+    let dir = temporary_dir(&temp)?;
     let dyndep = sidecar(".netsuke/dyndep/abc.dd", "ninja_dyndep_version = 1\n");
 
     materialize_dyndep_files(&dir, &[dyndep])?;
@@ -124,7 +120,7 @@ fn materializes_nested_sidecar_and_reuses_it() -> Result<()> {
 #[test]
 fn empty_sidecar_list_does_not_create_dyndep_directory() -> Result<()> {
     let temp = tempfile::tempdir()?;
-    let dir = temp_dir(&temp)?;
+    let dir = temporary_dir(&temp)?;
 
     materialize_dyndep_files(&dir, &[])?;
 
@@ -138,7 +134,7 @@ fn empty_sidecar_list_does_not_create_dyndep_directory() -> Result<()> {
 #[test]
 fn corrupt_existing_sidecar_is_reported() -> Result<()> {
     let temp = tempfile::tempdir()?;
-    let dir = temp_dir(&temp)?;
+    let dir = temporary_dir(&temp)?;
     dir.create_dir_all(DYNDEP_DIR)?;
     dir.write(".netsuke/dyndep/bad.dd", "corrupt")?;
 
@@ -150,7 +146,7 @@ fn corrupt_existing_sidecar_is_reported() -> Result<()> {
 #[test]
 fn oversized_existing_sidecar_is_rejected() -> Result<()> {
     let temp = tempfile::tempdir()?;
-    let dir = temp_dir(&temp)?;
+    let dir = temporary_dir(&temp)?;
     let rel = ".netsuke/dyndep/oversized.dd";
     dir.create_dir_all(DYNDEP_DIR)?;
     let oversized_size = usize::try_from(MAX_VERIFIED_DYNDEP_SIZE + 1)?;
@@ -173,7 +169,7 @@ fn oversized_existing_sidecar_is_rejected() -> Result<()> {
 #[test]
 fn sidecar_growth_during_verification_is_a_mismatch() -> Result<()> {
     let temp = tempfile::tempdir()?;
-    let dir = temp_dir(&temp)?;
+    let dir = temporary_dir(&temp)?;
     let rel = Utf8Path::new(".netsuke/dyndep/growing.dd");
     let expected = "expected";
     dir.create_dir_all(DYNDEP_DIR)?;
@@ -202,7 +198,7 @@ fn sidecar_growth_during_verification_is_a_mismatch() -> Result<()> {
 #[test]
 fn no_temp_files_left_behind() -> Result<()> {
     let temp = tempfile::tempdir()?;
-    let dir = temp_dir(&temp)?;
+    let dir = temporary_dir(&temp)?;
     materialize_dyndep_files(&dir, &[sidecar(".netsuke/dyndep/x.dd", "content")])?;
     ensure_no_temp_files(&dir)?;
     Ok(())
@@ -211,7 +207,7 @@ fn no_temp_files_left_behind() -> Result<()> {
 #[test]
 fn failed_atomic_write_removes_temp_file() -> Result<()> {
     let temp = tempfile::tempdir()?;
-    let dir = temp_dir(&temp)?;
+    let dir = temporary_dir(&temp)?;
     let rel = Utf8Path::new(".netsuke/dyndep/destination.dd");
     dir.create_dir_all(rel)?;
 
@@ -225,7 +221,7 @@ fn failed_atomic_write_removes_temp_file() -> Result<()> {
 #[test]
 fn stale_temp_file_does_not_block_materialization() -> Result<()> {
     let temp = tempfile::tempdir()?;
-    let dir = temp_dir(&temp)?;
+    let dir = temporary_dir(&temp)?;
     let rel = Utf8Path::new(".netsuke/dyndep/stale.dd");
     let content = "ninja_dyndep_version = 1\n";
     dir.create_dir_all(DYNDEP_DIR)?;
@@ -252,7 +248,7 @@ fn separate_temp_names_for_same_sidecar_differ() {
 #[test]
 fn temporary_name_collision_retries_are_bounded() -> Result<()> {
     let temp = tempfile::tempdir()?;
-    let dir = temp_dir(&temp)?;
+    let dir = temporary_dir(&temp)?;
     let rel = Utf8Path::new(".netsuke/dyndep/collisions.dd");
     dir.create_dir_all(DYNDEP_DIR)?;
     let mut occupied_names = TempNameSource::new("collisions".to_owned());
@@ -287,7 +283,7 @@ fn temporary_name_collision_retries_are_bounded() -> Result<()> {
 #[test]
 fn temporary_name_collision_retry_is_observed_before_success() -> Result<()> {
     let temp = tempfile::tempdir()?;
-    let dir = temp_dir(&temp)?;
+    let dir = temporary_dir(&temp)?;
     let rel = Utf8Path::new(".netsuke/dyndep/retry.dd");
     dir.create_dir_all(DYNDEP_DIR)?;
     let mut occupied_names = TempNameSource::new("retry".to_owned());
@@ -314,7 +310,7 @@ fn temporary_name_collision_retry_is_observed_before_success() -> Result<()> {
 #[test]
 fn matching_final_sidecar_succeeds_with_another_temp_file() -> Result<()> {
     let temp = tempfile::tempdir()?;
-    let dir = temp_dir(&temp)?;
+    let dir = temporary_dir(&temp)?;
     let rel = Utf8Path::new(".netsuke/dyndep/matching.dd");
     let content = "ninja_dyndep_version = 1\n";
     dir.create_dir_all(DYNDEP_DIR)?;
@@ -330,7 +326,7 @@ fn matching_final_sidecar_succeeds_with_another_temp_file() -> Result<()> {
 #[test]
 fn retention_prunes_historical_sidecars_but_keeps_the_current_bundle() -> Result<()> {
     let temp = tempfile::tempdir()?;
-    let dir = temp_dir(&temp)?;
+    let dir = temporary_dir(&temp)?;
     dir.create_dir_all(DYNDEP_DIR)?;
     dir.write(".netsuke/dyndep/stale-a.dd", "stale-a")?;
     dir.write(".netsuke/dyndep/stale-b.dd", "stale-b")?;
