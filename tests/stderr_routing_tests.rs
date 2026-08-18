@@ -9,6 +9,8 @@
 //! marker-emitting fake Ninja, and the parent asserts where the markers landed.
 #![cfg(unix)]
 
+#![cfg(unix)]
+
 use anyhow::{Context, Result, bail, ensure};
 use mockable::{DefaultEnv, Env};
 use netsuke::runner::{
