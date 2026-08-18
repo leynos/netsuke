@@ -31,6 +31,7 @@ Table: documented v0.1.0 additions, including `netsuke help targets`, and their 
 | Glob expansion | Parent-relative patterns such as `glob('../shared/*.h')` now expand. Metadata checks use a capability rooted at the pattern's longest literal directory prefix; missing or non-directory prefixes return no matches, and unresolvable symlink matches are skipped. | [Users' guide](users-guide.md) and [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) |
 | Command recipes | Existing scalar `command` recipes are unchanged. New YAML command lists are opt-in and run in declaration order with fail-fast semantics. | [Rules and recipes](users-guide.md#rules-and-recipes) |
 | Manifest discovery | Optional target/action `description` values are shown by the new `netsuke help targets` command. Manifests without them and existing build output are unchanged. | [Users' guide](users-guide.md) |
+| Serial dependencies | New opt-in `dependency_order: serial` runs an action or target's direct `deps` list in declaration order. | [Serial dependency ordering](users-guide.md#run-direct-dependencies-serially) |
 
 ## Nothing to change for existing callers
 
@@ -67,6 +68,30 @@ must stay isolated from the injected `PATH`.
 Both request types borrow their fields, so one `CommandEnv` and one `Cli`
 can serve several invocations. Worked examples live in the users' guide's
 "Drive Ninja with an explicit environment" section.
+
+## Opting into serial dependency ordering
+
+Set `dependency_order: serial` on an action or target to run its direct `deps`
+in declaration order. Omitting the field, or setting it to `parallel`, keeps
+the existing parallel behaviour. Serial ordering stops later direct
+dependencies after an earlier one fails, while shared work still executes at
+most once in the enclosing Ninja invocation.
+
+Serial lists containing two or more dependencies require Ninja 1.10 or newer.
+The `generate` command materializes its supporting dyndep sidecars beneath
+`.netsuke/dyndep` in the effective working directory while writing the
+generated Ninja manifest. The `build` and `clean` commands materialize the
+sidecars before invoking Ninja with the generated Ninja file. User targets must
+not use `.netsuke/dyndep` or `.netsuke/serial`: both namespaces are reserved for
+Netsuke's generated state. Sidecars are immutable and content-addressed.
+Retention keeps the current bundle plus at most 32 obsolete `.dd` files and
+1 MiB of obsolete `.dd` bytes; stale `.tmp` files are cleaned while the
+exclusive sidecar-directory lease is held. `clean` prunes only after successful
+`ninja -t clean`, not after a failure. An old arbitrary `generate --output`
+manifest needs regeneration only if retention has removed any of its referenced
+sidecars. See [ADR-012](adr-012-bound-dyndep-sidecar-retention.md).
+The [users' guide](users-guide.md#run-direct-dependencies-serially) documents
+the execution scope and the independent-reachability boundary.
 
 ## Discover targets and actions
 

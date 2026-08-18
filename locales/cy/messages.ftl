@@ -1,5 +1,6 @@
 # Adnoddau lleoleiddio ar gyfer llinell orchymyn Netsuke.
 
+runner.io.dyndep.retention = Methu gymhwyso cadw dyndep a gynhyrchwyd o dan { $path }.
 cli.about = Mae Netsuke yn trosi maniffestau YAML + Jinja yn gynlluniau adeiladu Ninja.
 cli.long_about = Mae Netsuke yn trawsnewid maniffestau YAML + Jinja yn graffiau Ninja atgynhyrchadwy ac yn rhedeg Ninja gyda rhagosodiadau diogel.
 cli.usage = { $usage }
@@ -102,11 +103,19 @@ runner.io.write_ninja_file = Methwyd ag ysgrifennu i'r ffeil Ninja yn { $path }.
 runner.io.flush_ninja_file = Methwyd â gwagio byffer y ffeil Ninja yn { $path }.
 runner.io.sync_ninja_file = Methwyd â chydamseru'r ffeil Ninja yn { $path }.
 runner.io.open_ambient_dir = Methwyd ag agor y cyfeiriadur amgylchynol.
+runner.io.non_utf8_working_directory = Nid yw llwybr y cyfeiriadur gweithio yn UTF-8 dilys.
 runner.io.no_existing_ancestor = Nid oes cyfeiriadur uwch yn bodoli ar gyfer { $path }.
 runner.io.derive_relative_path = Methwyd â deillio llwybr Ninja cymharol.
 runner.io.non_utf8_path = Ni chefnogir llwybrau nad ydynt yn UTF-8 (llwybr: { $path }).
 runner.io.write_stdout = Methwyd ag ysgrifennu'r maniffest Ninja i'r allbwn safonol.
 runner.io.flush_stdout = Methwyd â gwagio byffer yr allbwn safonol.
+runner.io.dyndep.create_dir = Methu creu cyfeiriadur dyndep { $path }.
+runner.io.dyndep.read = Methu darllen ffeil dyndep a gynhyrchwyd yn { $path }.
+runner.io.dyndep.write = Methu ysgrifennu ffeil dyndep a gynhyrchwyd at { $path }.
+runner.io.dyndep.rename = Methu cwblhau ffeil dyndep a gynhyrchwyd yn { $path }.
+runner.io.dyndep.corrupt = Nid yw'r ffeil dyndep a gynhyrchwyd yn { $path } yn cyfateb i'w chynnwys disgwyliedig; tynnwch y ffeil honno yn unig a cheisiwch eto.
+runner.io.dyndep.temp_collisions = Methwyd creu ffeil dyndep dros dro unigryw ar gyfer { $path } ar ôl gwrthdrawiadau enwau mynych.
+runner.io.dyndep.too_large = Mae'r ffeil dyndep a gynhyrchwyd yn { $path } yn fwy na'r terfyn dilysu o { $limit } beit.
 
 # Diagnosteg y maniffest.
 manifest.parse = Methodd dadansoddiad y maniffest.
@@ -172,6 +181,9 @@ ir.invalid_command = Mewnosodiad annilys yn y gorchymyn: { $snippet }.
 # Gwallau cynhyrchu Ninja.
 ninja_gen.missing_action = Mae'r weithred ‘{ $id }’ y cyfeirir ati gan ymyl adeiladu ar goll.
 ninja_gen.format = Methwyd â fformatio allbwn y maniffest Ninja.
+ninja_gen.dyndep_files_required = Mae'r adeilad hwn yn gofyn am fwndel Ninja a gynhyrchwyd; defnyddiwch `netsuke build`, `netsuke clean` neu `netsuke generate` er mwyn deunyddoli ffeiliau dyndep.
+ninja_gen.reserved_output_path = Mae'r llwybr '{ $path }' wedi'i gadw ar gyfer cyflwr dibyniaethau cyfresol Netsuke.
+ninja_gen.unsupported_path_character = Mae'r llwybr '{ $path }' yn cynnwys nod llwybr Ninja nas cynhelir, sef '{ $character }'.
 
 # Dilysu patrymau gwesteiwyr.
 host_pattern.empty = Rhaid i'r patrwm gwesteiwr beidio â bod yn wag.

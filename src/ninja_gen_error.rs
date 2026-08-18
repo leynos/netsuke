@@ -65,6 +65,31 @@ pub enum NinjaGenError {
         /// One-based stable position in the command list.
         entry_index: usize,
     },
+    /// A graph with serial dependencies cannot be represented by a single
+    /// build-file string; callers must use [`crate::ninja_gen::generate_bundle`].
+    #[error("{message}")]
+    DyndepFilesRequired {
+        /// Localized error message.
+        message: LocalizedMessage,
+    },
+    /// A user graph path collides with Netsuke's reserved state namespace.
+    #[error("{message}")]
+    ReservedOutputPath {
+        /// Colliding path.
+        path: camino::Utf8PathBuf,
+        /// Localized error message.
+        message: LocalizedMessage,
+    },
+    /// A path contains a character unsupported by Ninja path syntax.
+    #[error("{message}")]
+    UnsupportedPathCharacter {
+        /// Path containing the unsupported character.
+        path: camino::Utf8PathBuf,
+        /// Unsupported character.
+        character: char,
+        /// Localized error message.
+        message: LocalizedMessage,
+    },
     /// Formatting the Ninja output failed.
     #[error("{message}")]
     Format {

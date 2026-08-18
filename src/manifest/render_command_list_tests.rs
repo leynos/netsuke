@@ -1,6 +1,8 @@
 //! Regression tests for rendering command-list entries.
 
 use super::*;
+use crate::ast::{DependencyOrder, Target};
+use semver::Version;
 
 #[test]
 fn large_command_list_prepares_the_jinja_context_once() {
@@ -32,4 +34,48 @@ fn large_command_list_prepares_the_jinja_context_once() {
         rendered_entries.last().map(String::as_str),
         Some("echo rendered 63 __NETSUKE_INS_PLACEHOLDER__")
     );
+}
+
+#[test]
+fn target_recipe_context_reserves_ins_and_outs_placeholders() -> Result<()> {
+    let env = Environment::new();
+    let mut target_vars = Vars::new();
+    target_vars.insert("ins".into(), ManifestValue::String("caller-ins".into()));
+    target_vars.insert("outs".into(), ManifestValue::String("caller-outs".into()));
+    let manifest = NetsukeManifest {
+        netsuke_version: Version::parse("1.0.0")?,
+        vars: Vars::new(),
+        macros: Vec::new(),
+        rules: Vec::new(),
+        actions: Vec::new(),
+        targets: vec![Target {
+            name: "out".into(),
+            recipe: Recipe::Command {
+                command: StringOrList::List(vec!["{{ ins }}".into(), "{{ outs }}".into()]),
+            },
+            sources: StringOrList::Empty,
+            deps: StringOrList::Empty,
+            dependency_order: DependencyOrder::Parallel,
+            order_only_deps: StringOrList::Empty,
+            vars: target_vars,
+            phony: false,
+            always: false,
+            description: None,
+        }],
+        defaults: Vec::new(),
+    };
+
+    let rendered = render_manifest(manifest, &env)?;
+    let target = rendered
+        .targets
+        .first()
+        .context("rendered target missing")?;
+    let Recipe::Command { command } = &target.recipe else {
+        anyhow::bail!("expected target command recipe, got {:?}", target.recipe);
+    };
+    anyhow::ensure!(
+        command.to_string_vec() == [crate::ir::INS_TOKEN, crate::ir::OUTS_TOKEN],
+        "unexpected rendered target command list: {command:?}"
+    );
+    Ok(())
 }

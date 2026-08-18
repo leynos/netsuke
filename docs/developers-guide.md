@@ -285,7 +285,7 @@ The lowering stages have deliberately separate responsibilities:
   `$out` tokens are resolved per entry; tokens inside backticks are preserved.
   The resulting action contains ordinary command text and no Ninja
   placeholders.
-- `src/ninja_gen.rs` emits a scalar command unchanged. For a list, it puts
+- `src/ninja_gen/mod.rs` emits a scalar command unchanged. For a list, it puts
   each entry in a brace group and joins the groups with `&&`. Each group uses
   `eval` with a shell-quoted entry payload. This keeps an inline comment or a
   trailing control operator such as `&` inside the entry from consuming the
@@ -598,19 +598,19 @@ no narrower — that covers the enumerated integration-test crates. The
 `test_support` crate uses capability-backed fixture helpers and remains linted
 by Whitaker under its own narrow policy.
 
-`test_support` is a workspace member, but the root Whitaker invocation selects
-only the `netsuke-build` package (the Cargo package name behind the `netsuke`
-targets; see ADR-007) and disables Dylint dependency checks. It therefore
-compiles `test_support` as a dependency without applying the root
-`dylint.toml`. Its one sanctioned ambient boundary is configured per crate.
-Workspace membership makes Dylint discover the root configuration even when
-launched from `test_support/`, so the scoped recipe supplies the contents of
-`test_support/dylint.toml` explicitly through `DYLINT_TOML`. The second pass
-also uses `--package test_support` and `--no-deps`, because running from a
-member directory alone would otherwise check the parent workspace. That
-configuration names only `test_support::fs` in `excluded_paths`. The root
-`excluded_crates` must not contain `test_support`: every other module in the
-crate remains subject to the filesystem policy.
+The root Whitaker invocation selects only the `netsuke-build` package (the
+Cargo package name behind the `netsuke` targets; see ADR-007) and disables
+Dylint dependency checks. It supplies the root `dylint.toml` contents
+explicitly through `DYLINT_TOML`, so every invocation receives the same
+capability-boundary policy regardless of how Dylint resolves the current
+crate. `test_support` is a workspace member with one sanctioned ambient
+boundary configured per crate. Its second, scoped invocation supplies
+`test_support/dylint.toml` through `DYLINT_TOML`, and uses `--package
+test_support` and `--no-deps`, because running from a member directory alone
+would otherwise check the parent workspace. That configuration names only
+`test_support::fs` in `excluded_paths`. The root `excluded_crates` must not
+contain `test_support`: every other module in the crate remains subject to the
+filesystem policy.
 
 Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
 allows. Do not use Rust `#[allow]` or `#[expect]` for `no_std_fs_operations`:
@@ -1606,12 +1606,88 @@ unit tests where a small fixed set of cases must all be verified.
 manifest `deps` into `BuildEdge.implicit_deps`, and manifest `order_only_deps`
 into `BuildEdge.order_only_deps`. Keep those classes separate: recipe
 interpolation (`$in` and `{{ ins }}`) receives only `BuildEdge.inputs`, while
-`src/ninja_gen.rs` renders implicit deps with Ninja's single-pipe separator.
+`src/ninja_gen/mod.rs` renders implicit deps with Ninja's single-pipe separator.
+
+`ast::DependencyOrder` is the closed manifest enum responsible for YAML and
+Serde. `src/ir/from_manifest.rs` explicitly converts it to the
+serialization-free `ir::DependencyOrder` stored in
+`BuildEdge::dependency_order`; both types have matching `Parallel` and `Serial`
+variants, and `parallel` remains the default. The ordering policy applies only
+to a manifest `deps` list; never infer it from the number or shape of graph
+edges, and do not apply it to inputs or order-only dependencies.
 
 `src/ir/cycle.rs::CycleDetector::visit` traverses `inputs` and `implicit_deps`
 when detecting cycles. It intentionally does not traverse `order_only_deps`,
 because order-only dependencies express scheduling order rather than rebuild
 freshness.
+
+### Serial dependency bundles
+
+`src/ninja_gen/dyndep.rs` owns the Ninja-specific lowering for a serial list
+with more than one dependency. It produces a `GeneratedNinja` bundle: the main
+build-file text plus immutable, content-addressed `GeneratedDyndep` sidecars.
+The generated phony gates live under `.netsuke/serial`; sidecars live under
+`.netsuke/dyndep`. Those are reserved graph namespaces, validated before
+generation. User graph paths in outputs, inputs, implicit dependencies, and
+order-only dependencies cannot use either namespace. A string-only generator
+must return `DyndepFilesRequired` for a graph that needs sidecars rather than
+returning an incomplete build file.
+
+Generated bundles need Ninja 1.10 or newer only when a serial direct-dependency
+list has at least two items and therefore needs staged ordering; parallel lists
+and serial lists with zero or one item retain the existing Ninja requirement.
+
+Each gate reveals one real dependency through a pre-materialized Ninja dyndep
+file. The gate edge associated with the next sidecar depends on the preceding
+gate, which keeps later direct dependencies unavailable to the scheduler until
+earlier work succeeds. The runner materializes every sidecar file before Ninja
+starts; no Ninja edge produces sidecar content. This is not an order-only
+chain or a Ninja pool: both leave the real dependencies visible to Ninja too
+early. Preserve one top-level Ninja invocation so shared nodes keep Ninja's
+normal execute-once memoization.
+
+`GeneratedNinja` is the query-command boundary: generation may construct and
+return it, but it must not publish any filesystem state.
+`src/runner/dyndep_publication.rs` owns the `materialize_dyndep_bundle`
+command, which every `build`, `clean`, and `generate` boundary must call before
+writing or invoking the main file. That command opens the effective
+working-directory capability and injects it into
+`src/runner/process/dyndep_files.rs`, which owns atomic sidecar writes and
+content verification. The materializer may only use that injected `Dir`; it
+must not inspect CLI state or reopen ambient authority. It verifies existing
+content, then uses a same-directory temporary file plus atomic rename. Keep
+generated sidecars content-addressed and idempotent; corruption is an error,
+not a reason to overwrite an unknown file.
+
+`src/runner/process/dyndep_retention.rs` owns the publication lease and
+retention cleanup. The command-boundary module invokes it after materialization
+or successful clean while retaining the lease through bundle consumption.
+
+`DyndepPublicationLease` also coordinates retention. Sidecar-capable `build`,
+`generate`, and `clean` commands hold the capability-scoped exclusive
+`.netsuke/dyndep` directory lease through Ninja or generated-output
+consumption. While the lease is held, stale `.tmp` files are removed and
+obsolete `.dd` files are retained in deterministic path order up to 32 files
+and 1 MiB. The current bundle is always retained. `build` and `generate`
+prune after materialization; `clean` prunes only after successful
+`ninja -t clean`, never after a failed clean. Do not introduce age-based
+cleanup or mutate an existing content-addressed sidecar. See
+[ADR-012](adr-012-bound-dyndep-sidecar-retention.md) for the durable policy.
+
+`src/runner/dyndep_generation_telemetry.rs` owns runner-boundary generation
+telemetry, and `src/runner/process/dyndep_telemetry.rs` owns publication
+telemetry. They may wrap their respective boundaries with bounded
+outcome-and-duration metrics and spans. Do not put manifest paths, action IDs,
+sidecar names, or content in those fields; `src/ninja_gen` generation and
+rendering must remain telemetry-free so their query responsibilities stay
+explicit.
+
+The intended serial guarantee is path-scoped. A later dependency that is
+independently reachable elsewhere in the requested graph may start via that
+other path. Do not broaden the implementation with a global lock, pool, or
+new scheduler without an approved design change. See
+[ADR-011](adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md) for the
+durable decision and its alternatives.
 
 ### Recipe placeholder ownership
 

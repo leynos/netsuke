@@ -29,6 +29,7 @@ output and some leaf files so the long-lived structure remains visible.
 │   ├── ir/
 │   ├── localization/
 │   ├── manifest/
+│   ├── ninja_gen/
 │   ├── runner/
 │   ├── snapshots/
 │   └── stdlib/
@@ -85,8 +86,11 @@ output and some leaf files so the long-lived structure remains visible.
   support.
 - `src/manifest/`: Manifest parsing, expansion, rendering, diagnostics, and
   manifest-specific tests.
-- `src/runner/`: Process execution, path handling, runner errors, and runtime
-  command orchestration.
+- `src/ninja_gen/`: Ninja rendering and staged-dyndep bundle generation.
+- `src/runner/`: Process execution, path handling, runner errors, command
+  orchestration, capability-injected dyndep publication, and bounded
+  generation and publication telemetry, including
+  `dyndep_generation_telemetry.rs` and `process/dyndep_telemetry.rs`.
 - `src/snapshots/`: Checked-in `insta` snapshots for source-level snapshot
   tests.
 - `src/stdlib/`: Netsuke standard library modules exposed to manifest
@@ -134,3 +138,15 @@ Place feature files in `tests/features/` unless the behaviour depends on
 Unix-specific platform contracts, in which case use `tests/features_unix/`.
 Place generated or approved snapshot files under the existing `src/snapshots/`
 or `tests/snapshots/` hierarchy that matches the test owner.
+
+Netsuke runtime state belongs under `.netsuke/` in the effective working
+directory, never in the repository layout itself. In particular,
+`.netsuke/dyndep` contains immutable content-addressed sidecars for serial
+dependencies and `.netsuke/serial` is a reserved generated-gate namespace;
+manifest outputs must not claim either path. Sidecar-capable commands retain
+the current bundle, at most 32 obsolete `.dd` files, and 1 MiB of obsolete
+`.dd` bytes. They remove stale `.tmp` files while holding the exclusive
+directory lease; `clean` prunes only after successful `ninja -t clean`.
+An older arbitrary `generate --output` manifest may therefore need
+regeneration after a later command. See
+[ADR-012](adr-012-bound-dyndep-sidecar-retention.md).

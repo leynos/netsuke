@@ -1,5 +1,6 @@
 # Ресурси локалізації командного рядка Netsuke.
 
+runner.io.dyndep.retention = Не вдалося застосувати правила зберігання згенерованого файлу dyndep (шлях: { $path }).
 cli.about = Netsuke компілює маніфести YAML + Jinja у плани збирання Ninja.
 cli.long_about = Netsuke перетворює маніфести YAML + Jinja на відтворювані графи Ninja й запускає Ninja з безпечними типовими значеннями.
 cli.usage = { $usage }
@@ -102,11 +103,19 @@ runner.io.write_ninja_file = Не вдалося записати файл Ninja
 runner.io.flush_ninja_file = Не вдалося скинути буфер файлу Ninja у { $path }.
 runner.io.sync_ninja_file = Не вдалося синхронізувати файл Ninja у { $path }.
 runner.io.open_ambient_dir = Не вдалося відкрити навколишній каталог.
+runner.io.non_utf8_working_directory = Шлях робочого каталогу не є коректним UTF-8.
 runner.io.no_existing_ancestor = Для { $path } не існує батьківського каталогу.
 runner.io.derive_relative_path = Не вдалося вивести відносний шлях Ninja.
 runner.io.non_utf8_path = Шляхи, відмінні від UTF-8, не підтримуються (шлях: { $path }).
 runner.io.write_stdout = Не вдалося записати маніфест Ninja у стандартний потік виводу.
 runner.io.flush_stdout = Не вдалося скинути буфер стандартного потоку виводу.
+runner.io.dyndep.create_dir = Не вдалося створити каталог dyndep { $path }.
+runner.io.dyndep.read = Не вдалося прочитати створений файл dyndep (шлях: { $path }).
+runner.io.dyndep.write = Не вдалося записати створений файл dyndep (шлях: { $path }).
+runner.io.dyndep.rename = Не вдалося перейменувати створений файл dyndep (шлях: { $path }).
+runner.io.dyndep.corrupt = Створений файл dyndep (шлях: { $path }) не відповідає очікуваному вмісту; видаліть лише цей файл і повторіть спробу.
+runner.io.dyndep.temp_collisions = Не вдалося створити унікальний тимчасовий файл dyndep (шлях: { $path }) після повторних колізій імен.
+runner.io.dyndep.too_large = Створений файл dyndep (шлях: { $path }) перевищує межу перевірки в { $limit } байтів.
 
 # Діагностика маніфесту.
 manifest.parse = Не вдалося розібрати маніфест.
@@ -172,6 +181,9 @@ ir.invalid_command = Некоректна підстановка в команд
 # Помилки створення файлів Ninja.
 ninja_gen.missing_action = Відсутня дія «{ $id }», на яку посилається ребро збирання.
 ninja_gen.format = Не вдалося відформатувати вивід маніфесту Ninja.
+ninja_gen.dyndep_files_required = Для цієї операції потрібні згенеровані Ninja dyndep файли; використовуйте `netsuke build`, `netsuke clean` або `netsuke generate`, щоб матеріалізувати їх.
+ninja_gen.reserved_output_path = Шлях '{ $path }' зарезервовано для стану послідовних залежностей Netsuke.
+ninja_gen.unsupported_path_character = Шлях '{ $path }' містить непідтримуваний символ шляху Ninja: '{ $character }'.
 
 # Перевірка шаблонів вузлів.
 host_pattern.empty = Шаблон вузла не повинен бути порожнім.

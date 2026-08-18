@@ -1,5 +1,6 @@
 # Ресурсы локализации командной строки Netsuke.
 
+runner.io.dyndep.retention = Не удалось применить правила хранения сгенерированного файла dyndep (путь: { $path }).
 cli.about = Netsuke компилирует манифесты YAML + Jinja в планы сборки Ninja.
 cli.long_about = Netsuke преобразует манифесты YAML + Jinja в воспроизводимые графы Ninja и запускает Ninja с безопасными значениями по умолчанию.
 cli.usage = { $usage }
@@ -102,11 +103,19 @@ runner.io.write_ninja_file = Не удалось записать файл Ninja
 runner.io.flush_ninja_file = Не удалось сбросить буфер файла Ninja в { $path }.
 runner.io.sync_ninja_file = Не удалось синхронизировать файл Ninja в { $path }.
 runner.io.open_ambient_dir = Не удалось открыть окружающий каталог.
-runner.io.no_existing_ancestor = Для { $path } не существует родительского каталога.
+runner.io.non_utf8_working_directory = Путь рабочего каталога не является допустимым UTF-8.
+runner.io.no_existing_ancestor = Не найден существующий каталог-предок (путь: { $path }).
 runner.io.derive_relative_path = Не удалось вывести относительный путь Ninja.
-runner.io.non_utf8_path = Пути, отличные от UTF-8, не поддерживаются (путь: { $path }).
+runner.io.non_utf8_path = Путь не закодирован в UTF-8 и не поддерживается (путь: { $path }).
 runner.io.write_stdout = Не удалось записать манифест Ninja в стандартный поток вывода.
 runner.io.flush_stdout = Не удалось сбросить буфер стандартного потока вывода.
+runner.io.dyndep.create_dir = Не удалось создать каталог dyndep (путь: { $path }).
+runner.io.dyndep.read = Не удалось прочитать созданный файл dyndep (путь: { $path }).
+runner.io.dyndep.write = Не удалось записать созданный файл dyndep (путь: { $path }).
+runner.io.dyndep.rename = Не удалось переименовать созданный файл dyndep (путь: { $path }).
+runner.io.dyndep.corrupt = Созданный файл dyndep (путь: { $path }) не соответствует ожидаемому содержимому; удалите только этот файл и повторите попытку.
+runner.io.dyndep.temp_collisions = После повторных коллизий имён не удалось создать уникальный временный файл dyndep (путь: { $path }).
+runner.io.dyndep.too_large = Созданный файл dyndep (путь: { $path }) превышает предел проверки в { $limit } байт.
 
 # Диагностика манифеста.
 manifest.parse = Не удалось разобрать манифест.
@@ -172,6 +181,9 @@ ir.invalid_command = Некорректная подстановка в кома
 # Ошибки генерации файлов Ninja.
 ninja_gen.missing_action = Отсутствует действие «{ $id }», на которое ссылается ребро сборки.
 ninja_gen.format = Не удалось отформатировать вывод манифеста Ninja.
+ninja_gen.dyndep_files_required = Для этой операции требуется созданный пакет Ninja; используйте `netsuke build`, `netsuke clean` или `netsuke generate`, чтобы материализовать файлы dyndep.
+ninja_gen.reserved_output_path = Путь '{ $path }' зарезервирован для состояния последовательных зависимостей Netsuke.
+ninja_gen.unsupported_path_character = Путь '{ $path }' содержит неподдерживаемый символ пути Ninja: '{ $character }'.
 
 # Проверка шаблонов узлов.
 host_pattern.empty = Шаблон узла не должен быть пустым.

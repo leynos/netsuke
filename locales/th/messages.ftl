@@ -1,5 +1,6 @@
 # ทรัพยากรการแปลภาษาสำหรับบรรทัดคำสั่งของ Netsuke
 
+runner.io.dyndep.retention = ไม่สามารถใช้การเก็บรักษา dyndep ที่สร้างขึ้นใต้ { $path } ได้
 cli.about = Netsuke คอมไพล์ไฟล์รายการ YAML + Jinja ให้เป็นแผนการสร้างของ Ninja
 cli.long_about = Netsuke แปลงไฟล์รายการ YAML + Jinja ให้เป็นกราฟ Ninja ที่สร้างซ้ำได้ แล้วเรียกใช้ Ninja ด้วยค่าเริ่มต้นที่ปลอดภัย
 cli.usage = { $usage }
@@ -102,11 +103,19 @@ runner.io.write_ninja_file = เขียนไฟล์ Ninja ที่ { $path
 runner.io.flush_ninja_file = ล้างบัฟเฟอร์ของไฟล์ Ninja ที่ { $path } ไม่สำเร็จ
 runner.io.sync_ninja_file = ประสานข้อมูลไฟล์ Ninja ที่ { $path } ไม่สำเร็จ
 runner.io.open_ambient_dir = เปิดไดเรกทอรีโดยรอบไม่สำเร็จ
+runner.io.non_utf8_working_directory = เส้นทางไดเรกทอรีทำงานไม่ใช่ UTF-8 ที่ถูกต้อง
 runner.io.no_existing_ancestor = ไม่มีไดเรกทอรีระดับบนที่มีอยู่จริงสำหรับ { $path }
 runner.io.derive_relative_path = อนุมานเส้นทางสัมพัทธ์ของ Ninja ไม่สำเร็จ
 runner.io.non_utf8_path = ไม่รองรับเส้นทางที่ไม่ใช่ UTF-8 (เส้นทาง: { $path })
 runner.io.write_stdout = เขียนไฟล์รายการ Ninja ไปยังเอาต์พุตมาตรฐานไม่สำเร็จ
 runner.io.flush_stdout = ล้างบัฟเฟอร์ของเอาต์พุตมาตรฐานไม่สำเร็จ
+runner.io.dyndep.create_dir = ไม่สามารถสร้างไดเรกทอรี dyndep { $path } ได้
+runner.io.dyndep.read = ไม่สามารถอ่านไฟล์ dyndep ที่สร้างขึ้นที่ { $path } ได้
+runner.io.dyndep.write = ไม่สามารถเขียนไฟล์ dyndep ที่สร้างขึ้นไปยัง { $path } ได้
+runner.io.dyndep.rename = ไม่สามารถเปลี่ยนชื่อไฟล์ dyndep ที่สร้างขึ้นที่ { $path } ได้
+runner.io.dyndep.corrupt = ไฟล์ dyndep ที่สร้างขึ้นที่ { $path } ไม่ตรงกับเนื้อหาที่คาดไว้ ให้ลบเฉพาะไฟล์นี้แล้วลองอีกครั้ง
+runner.io.dyndep.temp_collisions = ไม่สามารถสร้างไฟล์ dyndep ชั่วคราวที่ไม่ซ้ำกันสำหรับ { $path } ได้หลังเกิดชื่อชนกันหลายครั้ง
+runner.io.dyndep.too_large = ไฟล์ dyndep ที่สร้างขึ้นที่ { $path } มีขนาดเกินขีดจำกัดการตรวจสอบ { $limit } ไบต์
 
 # การวินิจฉัยไฟล์รายการ
 manifest.parse = การแจงไฟล์รายการล้มเหลว
@@ -172,6 +181,9 @@ ir.invalid_command = การแทรกค่าในคำสั่งไ�
 # ข้อผิดพลาดในการสร้างไฟล์ Ninja
 ninja_gen.missing_action = ไม่มีการกระทำ “{ $id }” ที่เส้นเชื่อมของการสร้างอ้างถึง
 ninja_gen.format = จัดรูปแบบผลลัพธ์ของไฟล์รายการ Ninja ไม่สำเร็จ
+ninja_gen.dyndep_files_required = การดำเนินการนี้ต้องใช้บันเดิล Ninja ที่สร้างขึ้น ให้ใช้ `netsuke build`, `netsuke clean` หรือ `netsuke generate` เพื่อทำให้ไฟล์ dyndep พร้อมใช้งาน
+ninja_gen.reserved_output_path = เส้นทาง '{ $path }' สงวนไว้สำหรับสถานะการขึ้นต่อกันแบบลำดับของ Netsuke
+ninja_gen.unsupported_path_character = เส้นทาง '{ $path }' มีอักขระเส้นทาง Ninja ที่ไม่รองรับคือ '{ $character }'
 
 # การตรวจสอบรูปแบบโฮสต์
 host_pattern.empty = รูปแบบโฮสต์ต้องไม่ว่างเปล่า

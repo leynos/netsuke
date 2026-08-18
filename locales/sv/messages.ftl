@@ -1,5 +1,6 @@
 # Lokaliseringsresurser för Netsukes kommandoradsgränssnitt.
 
+runner.io.dyndep.retention = Det gick inte att behålla den genererade dyndep-filen (sökväg: { $path }).
 cli.about = Netsuke kompilerar YAML- + Jinja-manifest till Ninja-byggplaner.
 cli.long_about = Netsuke omvandlar YAML- + Jinja-manifest till reproducerbara Ninja-grafer och kör Ninja med säkra standardvärden.
 cli.usage = { $usage }
@@ -102,11 +103,19 @@ runner.io.write_ninja_file = Ninja-filen i { $path } kunde inte skrivas.
 runner.io.flush_ninja_file = Bufferten för Ninja-filen i { $path } kunde inte tömmas.
 runner.io.sync_ninja_file = Ninja-filen i { $path } kunde inte synkroniseras.
 runner.io.open_ambient_dir = Den omgivande katalogen kunde inte öppnas.
+runner.io.non_utf8_working_directory = Sökvägen till arbetskatalogen är inte giltig UTF-8.
 runner.io.no_existing_ancestor = Det finns ingen överordnad katalog för { $path }.
 runner.io.derive_relative_path = Den relativa Ninja-sökvägen kunde inte härledas.
-runner.io.non_utf8_path = Sökvägar som inte är UTF-8 stöds inte (sökväg: { $path }).
+runner.io.non_utf8_path = Sökvägen är inte kodad i UTF-8 och stöds inte (sökväg: { $path }).
 runner.io.write_stdout = Ninja-manifestet kunde inte skrivas till stdout.
 runner.io.flush_stdout = Bufferten för stdout kunde inte tömmas.
+runner.io.dyndep.create_dir = Det gick inte att skapa dyndep-katalogen { $path }.
+runner.io.dyndep.read = Det gick inte att läsa den genererade dyndep-filen på { $path }.
+runner.io.dyndep.write = Det gick inte att skriva den genererade dyndep-filen på { $path }.
+runner.io.dyndep.rename = Det gick inte att byta namn på den genererade dyndep-filen på { $path }.
+runner.io.dyndep.corrupt = Den genererade dyndep-filen på { $path } stämmer inte med det förväntade innehållet; ta endast bort denna fil och försök igen.
+runner.io.dyndep.temp_collisions = Det gick inte att skapa en unik tillfällig dyndep-fil för { $path } efter upprepade namnkonflikter.
+runner.io.dyndep.too_large = Den genererade dyndep-filen på { $path } överskrider verifieringsgränsen på { $limit } byte.
 
 # Manifestdiagnostik.
 manifest.parse = Tolkningen av manifestet misslyckades.
@@ -172,6 +181,9 @@ ir.invalid_command = Ogiltig interpolering i kommandot: { $snippet }.
 # Fel vid generering av Ninja.
 ninja_gen.missing_action = Åtgärden ”{ $id }” som en byggbåge hänvisar till saknas.
 ninja_gen.format = Ninja-manifestets utdata kunde inte formateras.
+ninja_gen.dyndep_files_required = Den här åtgärden kräver ett genererat Ninja-paket; använd `netsuke build`, `netsuke clean` eller `netsuke generate` för att materialisera dyndep-filerna.
+ninja_gen.reserved_output_path = Sökvägen '{ $path }' är reserverad för Netsukes seriella beroendetillstånd.
+ninja_gen.unsupported_path_character = Sökvägen '{ $path }' innehåller ett tecken som inte stöds i Ninja-sökvägar: '{ $character }'.
 
 # Validering av värdmönster.
 host_pattern.empty = Värdmönstret får inte vara tomt.

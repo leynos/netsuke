@@ -1,5 +1,6 @@
 # Recursos de localización para la CLI de Netsuke (español de América Latina).
 
+runner.io.dyndep.retention = No se pudo aplicar la retención del dyndep generado bajo { $path }.
 cli.about = Netsuke compila manifiestos YAML + Jinja en planes de compilación de Ninja.
 cli.long_about = Netsuke transforma manifiestos YAML + Jinja en grafos de Ninja reproducibles y ejecuta Ninja con valores predeterminados seguros.
 cli.usage = { $usage }
@@ -103,11 +104,19 @@ runner.io.write_ninja_file = No se pudo escribir el archivo Ninja en { $path }.
 runner.io.flush_ninja_file = No se pudo vaciar el archivo Ninja en { $path }.
 runner.io.sync_ninja_file = No se pudo sincronizar el archivo Ninja en { $path }.
 runner.io.open_ambient_dir = No se pudo abrir el directorio del entorno.
+runner.io.non_utf8_working_directory = La ruta del directorio de trabajo no es un UTF-8 válido.
 runner.io.no_existing_ancestor = No existe un directorio antecesor para { $path }.
 runner.io.derive_relative_path = No se pudo derivar la ruta relativa de Ninja.
 runner.io.non_utf8_path = No se admiten rutas que no sean UTF-8 (ruta: { $path }).
 runner.io.write_stdout = No se pudo escribir el manifiesto de Ninja en stdout.
 runner.io.flush_stdout = No se pudo vaciar stdout.
+runner.io.dyndep.create_dir = No se pudo crear el directorio dyndep { $path }.
+runner.io.dyndep.read = No se pudo leer el archivo dyndep generado en { $path }.
+runner.io.dyndep.write = No se pudo escribir el archivo dyndep generado en { $path }.
+runner.io.dyndep.rename = No se pudo finalizar el archivo dyndep generado en { $path }.
+runner.io.dyndep.corrupt = El archivo dyndep generado en { $path } no coincide con el contenido esperado; elimine solo ese archivo y vuelva a intentarlo.
+runner.io.dyndep.temp_collisions = No se pudo crear un archivo dyndep temporal único para { $path } tras repetidas colisiones de nombres.
+runner.io.dyndep.too_large = El archivo dyndep generado en { $path } supera el límite de verificación de { $limit } bytes.
 
 # Diagnósticos del manifiesto.
 manifest.parse = Falló el análisis del manifiesto.
@@ -173,6 +182,9 @@ ir.invalid_command = Interpolación de comando no válida: { $snippet }.
 # Errores de generación de Ninja.
 ninja_gen.missing_action = Falta la acción '{ $id }' referenciada por una arista de compilación.
 ninja_gen.format = No se pudo dar formato a la salida del manifiesto de Ninja.
+ninja_gen.dyndep_files_required = Esta compilación requiere un paquete Ninja generado; use `netsuke build`, `netsuke clean` o `netsuke generate` para materializar los archivos dyndep.
+ninja_gen.reserved_output_path = La ruta '{ $path }' está reservada para el estado de dependencias seriales de Netsuke.
+ninja_gen.unsupported_path_character = La ruta '{ $path }' contiene el carácter de ruta de Ninja no admitido '{ $character }'.
 
 # Validación de patrones de host.
 host_pattern.empty = El patrón de host no debe estar vacío.

@@ -1,5 +1,6 @@
 # Tài nguyên bản địa hoá cho giao diện dòng lệnh Netsuke.
 
+runner.io.dyndep.retention = Không thể áp dụng việc giữ lại tệp dyndep đã tạo tại { $path }.
 cli.about = Netsuke biên dịch tệp kê khai YAML + Jinja thành kế hoạch dựng Ninja.
 cli.long_about = Netsuke chuyển tệp kê khai YAML + Jinja thành đồ thị Ninja có thể tái lập rồi chạy Ninja với các giá trị mặc định an toàn.
 cli.usage = { $usage }
@@ -102,11 +103,19 @@ runner.io.write_ninja_file = Không ghi được tệp Ninja tại { $path }.
 runner.io.flush_ninja_file = Không xả được bộ đệm của tệp Ninja tại { $path }.
 runner.io.sync_ninja_file = Không đồng bộ được tệp Ninja tại { $path }.
 runner.io.open_ambient_dir = Không mở được thư mục xung quanh.
+runner.io.non_utf8_working_directory = Đường dẫn thư mục làm việc không phải là UTF-8 hợp lệ.
 runner.io.no_existing_ancestor = Không có thư mục cha nào tồn tại cho { $path }.
 runner.io.derive_relative_path = Không suy ra được đường dẫn Ninja tương đối.
 runner.io.non_utf8_path = Không hỗ trợ đường dẫn không phải UTF-8 (đường dẫn: { $path }).
 runner.io.write_stdout = Không ghi được tệp kê khai Ninja ra đầu ra chuẩn.
 runner.io.flush_stdout = Không xả được bộ đệm đầu ra chuẩn.
+runner.io.dyndep.create_dir = Không thể tạo thư mục dyndep { $path }.
+runner.io.dyndep.read = Không thể đọc tệp dyndep đã tạo tại { $path }.
+runner.io.dyndep.write = Không thể ghi tệp dyndep đã tạo tại { $path }.
+runner.io.dyndep.rename = Không thể đổi tên tệp dyndep đã tạo tại { $path }.
+runner.io.dyndep.corrupt = Tệp dyndep đã tạo tại { $path } không khớp với nội dung mong đợi; chỉ xóa tệp đó rồi thử lại.
+runner.io.dyndep.temp_collisions = Không thể tạo tệp dyndep tạm thời duy nhất cho { $path } sau nhiều lần trùng tên.
+runner.io.dyndep.too_large = Tệp dyndep đã tạo tại { $path } vượt quá giới hạn xác minh { $limit } byte.
 
 # Chẩn đoán tệp kê khai.
 manifest.parse = Phân tích tệp kê khai thất bại.
@@ -172,6 +181,9 @@ ir.invalid_command = Nội suy không hợp lệ trong lệnh: { $snippet }.
 # Lỗi khi tạo tệp Ninja.
 ninja_gen.missing_action = Thiếu hành động “{ $id }” mà một cạnh dựng tham chiếu.
 ninja_gen.format = Không định dạng được đầu ra của tệp kê khai Ninja.
+ninja_gen.dyndep_files_required = Thao tác này yêu cầu các tệp Ninja dyndep đã tạo; hãy dùng `netsuke build`, `netsuke clean` hoặc `netsuke generate` để hiện thực hóa chúng.
+ninja_gen.reserved_output_path = Đường dẫn '{ $path }' được dành riêng cho trạng thái phụ thuộc tuần tự của Netsuke.
+ninja_gen.unsupported_path_character = Đường dẫn '{ $path }' chứa ký tự đường dẫn Ninja không được hỗ trợ '{ $character }'.
 
 # Kiểm tra mẫu máy chủ.
 host_pattern.empty = Mẫu máy chủ không được để trống.

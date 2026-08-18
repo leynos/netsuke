@@ -1,5 +1,6 @@
 # A Netsuke parancssorának honosítási erőforrásai.
 
+runner.io.dyndep.retention = A generált dyndep { $path } alatti megőrzését nem sikerült alkalmazni.
 cli.about = A Netsuke YAML- és Jinja-jegyzékeket fordít Ninja-építési tervekké.
 cli.long_about = A Netsuke a YAML- és Jinja-jegyzékeket reprodukálható Ninja-gráfokká alakítja, majd biztonságos alapértelmezésekkel futtatja a Ninját.
 cli.usage = { $usage }
@@ -102,11 +103,19 @@ runner.io.write_ninja_file = A Ninja-fájlt nem sikerült megírni itt: { $path 
 runner.io.flush_ninja_file = A Ninja-fájl pufferét nem sikerült üríteni itt: { $path }.
 runner.io.sync_ninja_file = A Ninja-fájlt nem sikerült szinkronizálni itt: { $path }.
 runner.io.open_ambient_dir = A környező könyvtárat nem sikerült megnyitni.
+runner.io.non_utf8_working_directory = A munkakönyvtár útvonala nem érvényes UTF-8.
 runner.io.no_existing_ancestor = A(z) { $path } útvonalhoz nincs létező szülőkönyvtár.
 runner.io.derive_relative_path = A viszonylagos Ninja-útvonalat nem sikerült levezetni.
 runner.io.non_utf8_path = A nem UTF-8 útvonalak nem támogatottak (útvonal: { $path }).
 runner.io.write_stdout = A Ninja-jegyzéket nem sikerült a szabványos kimenetre írni.
 runner.io.flush_stdout = A szabványos kimenet pufferét nem sikerült üríteni.
+runner.io.dyndep.create_dir = A dyndep könyvtár létrehozása sikertelen: { $path }.
+runner.io.dyndep.read = A generált dyndep fájl olvasása sikertelen innen: { $path }.
+runner.io.dyndep.write = A generált dyndep fájl írása sikertelen ide: { $path }.
+runner.io.dyndep.rename = A generált dyndep fájl átnevezése sikertelen itt: { $path }.
+runner.io.dyndep.corrupt = A(z) { $path } helyen található generált dyndep fájl tartalma nem egyezik a várt tartalommal; csak ezt a fájlt törölje, majd próbálja újra.
+runner.io.dyndep.temp_collisions = Ismételt névütközések után nem sikerült egyedi ideiglenes dyndep fájlt létrehozni a(z) { $path } útvonalhoz.
+runner.io.dyndep.too_large = A létrehozott dyndep fájl ({ $path }) meghaladja a(z) { $limit } bájtos ellenőrzési korlátot.
 
 # Jegyzékdiagnosztika.
 manifest.parse = A jegyzék feldolgozása sikertelen.
@@ -172,6 +181,9 @@ ir.invalid_command = Érvénytelen behelyettesítés a parancsban: { $snippet }.
 # A Ninja-fájlok előállításának hibái.
 ninja_gen.missing_action = Hiányzik a(z) „{ $id }” művelet, amelyre egy építési él hivatkozik.
 ninja_gen.format = A Ninja-jegyzék kimenetét nem sikerült formázni.
+ninja_gen.dyndep_files_required = Ehhez a művelethez generált Ninja-csomag szükséges; a dyndep fájlok létrehozásához használja a `netsuke build`, `netsuke clean` vagy `netsuke generate` parancsot.
+ninja_gen.reserved_output_path = A(z) '{ $path }' útvonal a Netsuke soros függőségi állapota számára van fenntartva.
+ninja_gen.unsupported_path_character = A(z) '{ $path }' útvonal nem támogatott Ninja-útvonal-karaktert tartalmaz: '{ $character }'.
 
 # A gépminták ellenőrzése.
 host_pattern.empty = A gépminta nem lehet üres.

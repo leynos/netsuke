@@ -1,5 +1,6 @@
 # משאבי לוקליזציה לשורת הפקודה של Netsuke.
 
+runner.io.dyndep.retention = ‏לא ניתן להחיל את שמירת קובץ dyndep שנוצר מתחת ל־‏{ $path }.
 cli.about = ‏Netsuke מהדר מניפסטים של YAML + Jinja לתוכניות בנייה של Ninja.
 cli.long_about = ‏Netsuke ממיר מניפסטים של YAML + Jinja לגרפים ברי‑שחזור של Ninja ומריץ את Ninja עם ברירות מחדל בטוחות.
 cli.usage = { $usage }
@@ -102,11 +103,19 @@ runner.io.write_ninja_file = לא ניתן היה לכתוב לקובץ Ninja ב
 runner.io.flush_ninja_file = לא ניתן היה לרוקן את החוצץ של קובץ Ninja ב‑{ $path }.
 runner.io.sync_ninja_file = לא ניתן היה לסנכרן את קובץ Ninja ב‑{ $path }.
 runner.io.open_ambient_dir = לא ניתן היה לפתוח את הספרייה הסובבת.
+runner.io.non_utf8_working_directory = ‏נתיב ספריית העבודה אינו UTF-8 חוקי.
 runner.io.no_existing_ancestor = אין ספריית אב קיימת עבור { $path }.
 runner.io.derive_relative_path = לא ניתן היה לגזור את נתיב Ninja היחסי.
 runner.io.non_utf8_path = נתיבים שאינם UTF-8 אינם נתמכים (נתיב: { $path }).
 runner.io.write_stdout = לא ניתן היה לכתוב את מניפסט Ninja לפלט התקני.
 runner.io.flush_stdout = לא ניתן היה לרוקן את החוצץ של הפלט התקני.
+runner.io.dyndep.create_dir = ‏לא ניתן ליצור את תיקיית dyndep ‏{ $path }.
+runner.io.dyndep.read = ‏לא ניתן לקרוא את קובץ dyndep שנוצר ב־‏{ $path }.
+runner.io.dyndep.write = ‏לא ניתן לכתוב את קובץ dyndep שנוצר ב־‏{ $path }.
+runner.io.dyndep.rename = ‏לא ניתן להשלים את קובץ dyndep שנוצר ב־‏{ $path }.
+runner.io.dyndep.corrupt = ‏קובץ dyndep שנוצר ב־‏{ $path } אינו תואם לתוכן הצפוי; הסירו קובץ זה בלבד ונסו שוב.
+runner.io.dyndep.temp_collisions = ‏לא ניתן ליצור קובץ dyndep זמני וייחודי עבור ‏{ $path } לאחר התנגשויות שמות חוזרות.
+runner.io.dyndep.too_large = ‏קובץ dyndep שנוצר ב־‏{ $path } חורג ממגבלת האימות של ‏{ $limit } בתים.
 
 # אבחון המניפסט.
 manifest.parse = ניתוח המניפסט נכשל.
@@ -172,6 +181,9 @@ ir.invalid_command = שיבוץ לא תקין בפקודה: { $snippet }.
 # שגיאות ביצירת קובצי Ninja.
 ninja_gen.missing_action = הפעולה „{ $id }” שאליה מפנה קשת בנייה חסרה.
 ninja_gen.format = לא ניתן היה לעצב את פלט מניפסט Ninja.
+ninja_gen.dyndep_files_required = ‏בנייה זו דורשת חבילת Ninja שנוצרה; השתמשו ב־`netsuke build`, ב־`netsuke clean` או ב־`netsuke generate` כדי ליצור את קובצי dyndep.
+ninja_gen.reserved_output_path = ‏הנתיב '{ $path }' שמור למצב התלויות הסדרתיות של Netsuke.
+ninja_gen.unsupported_path_character = ‏הנתיב '{ $path }' מכיל את תו הנתיב הלא נתמך של Ninja, '{ $character }'.
 
 # אימות תבניות מארח.
 host_pattern.empty = תבנית המארח אינה יכולה להיות ריקה.
