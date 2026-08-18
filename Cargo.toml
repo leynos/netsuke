@@ -95,7 +95,7 @@ legacy-digests = ["sha1", "md5"]
 [dependencies]
 clap = { version = "4.5.0", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
-serde-saphyr = "0.0.6"
+serde-saphyr = "1.0.0"
 minijinja = { version = "2.12.0", features = ["loader"] }
 cap-primitives = "3.4.4"
 cap-std = { version = "3.4.4", features = ["fs_utf8"] }
