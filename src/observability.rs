@@ -5,13 +5,18 @@
 //! composition root records its outcomes and duration around that query.
 
 use metrics::{counter, describe_counter, describe_histogram, histogram};
-use metrics_util::debugging::{DebuggingRecorder, Snapshotter};
+use metrics_util::debugging::Snapshotter;
 use monotony::MonotonicClock;
 use ortho_config::OrthoError;
 use std::{
     error::Error,
     sync::{Once, OnceLock},
 };
+
+#[path = "observability_recorder.rs"]
+mod recorder;
+
+use self::recorder::ConfigMetricsRecorder;
 
 /// Counter recording configuration-load outcomes by bounded phase and outcome.
 pub(crate) const CONFIG_LOAD_COUNTER: &str = "config_load_total";
@@ -70,17 +75,20 @@ impl ConfigLoadOutcome {
 }
 
 static SNAPSHOTTER: OnceLock<Snapshotter> = OnceLock::new();
+static METRICS_INITIALIZED: Once = Once::new();
 
 /// Install the process metrics recorder once the tracing subscriber is ready.
 ///
 /// The binary owns global recorder installation. Tests use local recorders so
 /// their samples stay isolated from each other and the process-wide recorder.
 pub(crate) fn init_metrics() {
-    let recorder = DebuggingRecorder::new();
-    let snapshotter = recorder.snapshotter();
-    if recorder.install().is_ok() {
-        drop(SNAPSHOTTER.set(snapshotter));
-    }
+    METRICS_INITIALIZED.call_once(|| {
+        let recorder = ConfigMetricsRecorder::new();
+        let snapshotter = recorder.snapshotter();
+        if metrics::set_global_recorder(recorder).is_ok() {
+            drop(SNAPSHOTTER.set(snapshotter));
+        }
+    });
 }
 
 /// Emit the recorder's drained aggregate at process shutdown.
@@ -292,6 +300,53 @@ mod tests {
             && entry.0.key().name() == CONFIG_LOAD_DURATION
             && has_exact_labels(entry, &[expected_phase])
             && matches!(entry.3, DebugValue::Histogram(ref values) if values.as_slice() == [expected_seconds])
+    }
+
+    #[test]
+    fn configuration_metrics_recorder_discards_unrelated_metrics() {
+        let recorder = ConfigMetricsRecorder::new();
+        let snapshotter = recorder.snapshotter();
+
+        metrics::with_local_recorder(&recorder, || {
+            counter!(CONFIG_LOAD_COUNTER, "phase" => DIAG_MODE_PHASE, "outcome" => "success")
+                .increment(1);
+            histogram!(CONFIG_LOAD_DURATION, "phase" => DIAG_MODE_PHASE).record(0.01);
+            counter!("help_targets_total", "topic" => "help").increment(1);
+            for _ in 0..1_000 {
+                histogram!("template_render_duration_seconds", "template" => "unbounded")
+                    .record(0.5);
+            }
+        });
+
+        let snapshot = snapshotter.snapshot().into_vec();
+        assert_eq!(
+            snapshot.len(),
+            2,
+            "only configuration metrics should be retained"
+        );
+        assert_one_counter_record(&snapshot, DIAG_MODE_SUCCESS);
+        assert_one_single_sample_duration_record(&snapshot, DIAG_MODE_LABEL, 0.01);
+        assert!(
+            snapshot.iter().all(|entry| {
+                matches!(
+                    entry.0.key().name(),
+                    CONFIG_LOAD_COUNTER | CONFIG_LOAD_DURATION
+                )
+            }),
+            "snapshot must retain only configuration metric series",
+        );
+        assert!(
+            !snapshot
+                .iter()
+                .any(|entry| entry.0.key().name() == "help_targets_total"),
+            "rejected counter must not appear in the snapshot",
+        );
+        assert!(
+            !snapshot
+                .iter()
+                .any(|entry| entry.0.key().name() == "template_render_duration_seconds"),
+            "rejected histogram samples must not be retained",
+        );
     }
 
     #[rstest]

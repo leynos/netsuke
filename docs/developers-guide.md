@@ -3779,14 +3779,15 @@ The bounded metric contract is:
 - Histogram `config_load_duration_seconds` records one duration for each of
   those phases and carries only the same bounded `phase` label.
 
-`init_metrics()` installs the process-wide
-`metrics_util::debugging::DebuggingRecorder` after tracing starts. This
-recorder is intentionally application-owned; tests must use
+`init_metrics()` installs an application-owned filtering recorder around the
+process-wide `metrics_util::debugging::DebuggingRecorder` after tracing starts.
+It retains only the two configuration-load metric names above, so unrelated
+workload histograms cannot accumulate samples until shutdown. Tests must use
 `metrics::with_local_recorder` with a local recorder instead.
-`emit_metrics_snapshot()` drains and logs the aggregate snapshot at command
-completion. After a successful configuration merge, `finish_run` gates it on
-merged `verbose`; if diagnostic-mode resolution or the full merge fails before
-a merged configuration exists, it uses parsed CLI `verbose` instead. JSON
+`emit_metrics_snapshot()` drains and logs that configuration-load aggregate at
+command completion. After a successful configuration merge, `finish_run` gates
+it on merged `verbose`; if diagnostic-mode resolution or the full merge fails
+before a merged configuration exists, it uses parsed CLI `verbose` instead. JSON
 sets tracing to `OFF`, so JSON runs suppress this snapshot.
 
 The debugging recorder preserves raw histogram observations rather than
