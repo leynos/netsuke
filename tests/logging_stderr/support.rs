@@ -106,7 +106,21 @@ pub(super) fn fake_ninja_name(stem: &str) -> String {
     }
 }
 
+/// Build a PATH that prefers the fake-Ninja directory.
+///
+/// Windows keeps the inherited entries after the fake directory. Its process
+/// launcher resolves the unqualified fallback `ninja` as an executable, while
+/// the deterministic fake is a `.cmd` script used by the explicit-override
+/// cases. The Windows CI job provisions Ninja, so the fallback case exercises
+/// the same executable resolution users receive.
 pub(super) fn path_containing(dir: &Path) -> Result<std::ffi::OsString> {
+    #[cfg(windows)]
+    {
+        let inherited = std::env::var_os("PATH").context("read inherited PATH")?;
+        return std::env::join_paths([dir, Path::new(&inherited)])
+            .context("build PATH containing fake and system Ninja executables");
+    }
+    #[cfg(not(windows))]
     std::env::join_paths([dir]).context("build PATH containing fake ninja")
 }
 
