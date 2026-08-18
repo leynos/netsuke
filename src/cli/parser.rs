@@ -82,6 +82,7 @@ pub(super) fn validation_message(
 #[derive(Debug, Parser, Serialize, Deserialize)]
 #[command(
     name = "netsuke",
+    bin_name = "netsuke",
     author,
     version,
     about,

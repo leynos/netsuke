@@ -13,6 +13,12 @@ use insta::assert_snapshot;
 use rstest::rstest;
 use test_support::fluent::normalize_fluent_isolates;
 
+/// Pins the public CLI name independently of the platform executable suffix.
+#[test]
+fn cli_command_uses_documented_binary_name() {
+    assert_eq!(Cli::command().get_bin_name(), Some("netsuke"));
+}
+
 /// Verifies localized long-help includes `--config <FILE>` and its
 /// Fluent-resolved description, then matches the complete output snapshot.
 #[rstest]
