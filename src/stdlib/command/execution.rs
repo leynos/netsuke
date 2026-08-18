@@ -1,5 +1,7 @@
 //! Shell execution helpers shared by `shell` and `grep` filters.
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use std::{
     io::{self, Write},
     process::{Child, Command, ExitStatus, Stdio},
@@ -103,7 +105,7 @@ pub(super) fn run_command(
     run_configured_command(
         SHELL,
         |cmd| {
-            cmd.args(SHELL_ARGS).arg(command);
+            configure_shell_command(cmd, command);
         },
         ChildInvocation {
             input,
@@ -111,6 +113,23 @@ pub(super) fn run_command(
             operation: CommandOperation::Shell,
         },
     )
+}
+
+/// Configure the host shell to execute one already-composed command string.
+///
+/// Windows `cmd.exe` parses its command argument itself, rather than using
+/// the usual C-runtime argument rules. Passing a quoted command through
+/// [`Command::arg`] would escape its quotes into literal backslashes, so pass
+/// the shell text verbatim inside `cmd /C`'s required outer quote pair.
+fn configure_shell_command(cmd: &mut Command, command: &str) {
+    #[cfg(windows)]
+    {
+        cmd.args(SHELL_ARGS).raw_arg(format!("\"{command}\""));
+    }
+    #[cfg(not(windows))]
+    {
+        cmd.args(SHELL_ARGS).arg(command);
+    }
 }
 
 #[cfg(windows)]
