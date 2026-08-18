@@ -295,11 +295,13 @@ impl StdlibConfig {
             .components()
             .any(|component| matches!(component, std::path::Component::ParentDir));
 
-        let has_prefix = relative
-            .as_std_path()
-            .components()
-            .any(|component| matches!(component, std::path::Component::Prefix(_)));
-        if has_parent_directory || has_prefix {
+        let has_rooted_component = relative.as_std_path().components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::Prefix(_) | std::path::Component::RootDir
+            )
+        });
+        if has_parent_directory || has_rooted_component {
             bail!(
                 "{}",
                 localization::message(keys::STDLIB_FETCH_CACHE_ESCAPES)
