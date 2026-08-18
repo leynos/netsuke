@@ -34,9 +34,10 @@ fn test_cache_after_removal(
         .first()
         .context("cache-removal fixture should contain a tool path")?
         .clone();
+    let expected_path = expected_which_output_path(&removed_path);
     ensure!(
-        first == removed_path.as_str(),
-        "initial which lookup should resolve {removed_path}, got {first}"
+        first == expected_path,
+        "initial which lookup should resolve {expected_path}, got {first}"
     );
 
     fs::remove_file(&removed_path)?;
@@ -55,8 +56,8 @@ fn test_cache_after_removal(
     } else {
         let second = second_result?;
         ensure!(
-            second == removed_path.as_str(),
-            "cached lookup should preserve {removed_path}, got {second}"
+            second == expected_path,
+            "cached lookup should preserve {expected_path}, got {second}"
         );
     }
 
@@ -92,10 +93,15 @@ fn test_duplicate_paths(
 
     let output = render_and_assert_pure(fixture, &template)?;
     let parts: Vec<&str> = output.split('|').collect();
-    let expected_path = fixture
+    let fixture_path = fixture
         .paths
         .first()
         .context("duplicate-path fixture should contain a tool path")?;
+    let expected_output_path = if canonical {
+        expected_canonical_which_output_path(fixture_path)?
+    } else {
+        expected_which_output_path(fixture_path)
+    };
 
     ensure!(
         parts.len() == expected_count,
@@ -104,8 +110,8 @@ fn test_duplicate_paths(
     );
     for part in &parts {
         ensure!(
-            *part == expected_path.as_str(),
-            "expected duplicate path {expected_path}, got {part}"
+            *part == expected_output_path,
+            "expected duplicate path {expected_output_path}, got {part}"
         );
     }
 
@@ -127,9 +133,10 @@ fn test_cwd_mode_resolution(cwd_mode_value: &str) -> Result<()> {
         "{{{{ which('local', cwd_mode='{cwd_mode_value}') }}}}"
     ));
     let output = render(&mut env, &template)?;
+    let expected_path = expected_which_output_path(&tool);
     ensure!(
-        output == tool.as_str(),
-        "cwd_mode {cwd_mode_value} should resolve {tool}, got {output}"
+        output == expected_path,
+        "cwd_mode {cwd_mode_value} should resolve {expected_path}, got {output}"
     );
     Ok(())
 }
@@ -230,9 +237,10 @@ fn which_resolver_honours_workspace_root_override() -> Result<()> {
     let (mut env, _state) =
         fallible::stdlib_env_with_config(config.with_path_override(path.into_inner()))?;
     let output = render(&mut env, &Template::from("{{ 'helper' | which }}"))?;
+    let expected_path = expected_which_output_path(&tool);
     ensure!(
-        output == tool.as_str(),
-        "workspace override should resolve {tool}, got {output}"
+        output == expected_path,
+        "workspace override should resolve {expected_path}, got {output}"
     );
     Ok(())
 }

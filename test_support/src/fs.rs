@@ -18,7 +18,7 @@
 
 use std::fs;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 /// The state observed when inspecting a filesystem path.
@@ -106,6 +106,23 @@ pub fn remove_file(path: impl AsRef<Path>) -> io::Result<()> {
 #[must_use]
 pub fn exists(path: impl AsRef<Path>) -> bool {
     fs::metadata(path).is_ok()
+}
+
+/// Resolve `path` to the filesystem's canonical spelling.
+///
+/// # Errors
+///
+/// Propagates the underlying `std::fs::canonicalize` failure.
+///
+/// # Examples
+///
+/// ```
+/// let dir = tempfile::tempdir().expect("create tempdir");
+/// let path = test_support::fs::canonicalize(dir.path()).expect("canonicalize fixture");
+/// assert!(path.is_absolute());
+/// ```
+pub fn canonicalize(path: impl AsRef<Path>) -> io::Result<PathBuf> {
+    fs::canonicalize(path)
 }
 
 /// Return `true` when `path` is a directory (following symlinks).

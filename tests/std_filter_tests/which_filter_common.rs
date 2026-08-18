@@ -110,6 +110,33 @@ pub(crate) fn write_tool(dir: &Utf8Path, name: &ToolName) -> Result<Utf8PathBuf>
     Ok(path)
 }
 
+/// Format a fixture path as the public `which` result renders it.
+///
+/// This is deliberately limited to the shared `which` integration fixtures:
+/// callers select whether they expect the resolver's raw or canonical mode,
+/// while this helper preserves the output contract common to both modes.
+pub(crate) fn expected_which_output_path(path: &Utf8Path) -> String {
+    #[cfg(windows)]
+    {
+        path.as_str().replace('\\', "/")
+    }
+    #[cfg(not(windows))]
+    {
+        path.as_str().to_owned()
+    }
+}
+
+/// Canonicalize a fixture path and format it as a canonical `which` result.
+pub(crate) fn expected_canonical_which_output_path(path: &Utf8Path) -> Result<String> {
+    let canonical_path = fs::canonicalize(path.as_std_path())
+        .with_context(|| format!("canonicalize fixture path {path}"))?;
+    let canonical_utf8_path =
+        Utf8PathBuf::from_path_buf(canonical_path).map_err(|non_utf8_path| {
+            anyhow!("canonical fixture path is not valid UTF-8: {non_utf8_path:?}")
+        })?;
+    Ok(expected_which_output_path(&canonical_utf8_path))
+}
+
 #[cfg(unix)]
 fn mark_executable(path: &Utf8Path) -> Result<()> {
     fs::set_mode(path, 0o755).with_context(|| format!("chmod {path:?}"))
