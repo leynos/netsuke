@@ -42,8 +42,8 @@ fn validate_cache_relative_rejects_invalid_inputs(
 #[rstest]
 #[case("../escape")]
 #[case(r"..\escape")]
-fn validate_cache_relative_rejects_windows_parent_separator(#[case] path: &str) {
-    let path = Utf8Path::new(path);
+fn validate_cache_relative_rejects_windows_parent_separator(#[case] spelling: &str) {
+    let path = Utf8Path::new(spelling);
     let err = StdlibConfig::validate_cache_relative(path)
         .expect_err("Windows parent-directory spelling should fail");
     let expected = localization::message(keys::STDLIB_FETCH_CACHE_ESCAPES)
