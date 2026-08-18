@@ -36,6 +36,20 @@ fn validate_cache_relative_rejects_invalid_inputs(
     assert_eq!(err.to_string(), expected);
 }
 
+/// Windows accepts either separator, so both parent-directory spellings must
+/// be rejected before a cache path can escape the workspace capability.
+#[cfg(windows)]
+#[test]
+fn validate_cache_relative_rejects_windows_parent_separator() {
+    let path = Utf8Path::new(r"..\escape");
+    let err = StdlibConfig::validate_cache_relative(path)
+        .expect_err("Windows parent-directory spelling should fail");
+    let expected = localization::message(keys::STDLIB_FETCH_CACHE_ESCAPES)
+        .with_arg("path", path.as_str())
+        .to_string();
+    assert_eq!(err.to_string(), expected);
+}
+
 #[rstest]
 fn validate_cache_relative_accepts_workspace_relative_paths() {
     StdlibConfig::validate_cache_relative(Utf8Path::new("nested/cache"))

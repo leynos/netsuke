@@ -121,7 +121,7 @@ mod tests {
             ("foo\"bar\"baz", "\"foo^\"bar^\"baz\""),
             ("!DELAYED!", "\"^!DELAYED^!\""),
             ("\"!VAR!\"", "\"^\"^!VAR^!^\"\""),
-            (r#"C:\\path\\\"ending"#, r#""C:\\path\^"ending""#),
+            (r#"C:\\path\\\"ending"#, r#""C:\\path\\\^"ending""#),
         ];
 
         for (input, expected) in success_cases {
