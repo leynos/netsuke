@@ -3,20 +3,21 @@
 //! These cover which branch the shared file-layer boundary takes — explicit path
 //! versus automatic discovery — and the project-scope second pass. Selector
 //! precedence and event-schema snapshots live in the tracing test module.
-use super::*;
-use crate::cli::test_support::TestEnv;
 use anyhow::{Context, Result, ensure};
+use crate::cli::test_support::TestEnv;
 use googletest::prelude::*;
 use pretty_assertions::assert_eq;
 use rstest::rstest;
+use super::*;
+use super::paths::{FailingPathNormalizer, FsPathNormalizer, normalized_path_key};
 use tempfile::{TempDir, tempdir};
 
-use super::event_assertions::{EventAssertion, capture_events, find_event};
-use super::layers::collect_file_layers_with_normalizer;
-use super::paths::{FailingPathNormalizer, PathNormalizer};
 use std::cell::Cell;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use super::event_assertions::{EventAssertion, capture_events, find_event};
+use super::layers::collect_file_layers_with_normalizer;
+use super::paths::{FailingPathNormalizer, PathNormalizer};
 
 #[derive(Debug, Clone, Copy)]
 pub(super) enum LayerScenario {
@@ -200,7 +201,12 @@ fn injected_automatic_discovery_uses_xdg_config_home() -> Result<()> {
         .filter_map(|layer| layer.path().map(|path| path.as_str().to_owned()))
         .collect::<Vec<_>>();
 
-    assert_eq!(paths, vec![config_path.to_string_lossy().into_owned()]);
+    let expected_path = normalized_path_key(&FsPathNormalizer, &config_path.to_string_lossy())
+        .context("canonicalise injected XDG config path")?
+        .to_string_lossy()
+        .into_owned();
+
+    assert_eq!(paths, vec![expected_path]);
     Ok(())
 }
 
