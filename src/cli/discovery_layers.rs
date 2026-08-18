@@ -177,10 +177,25 @@ fn collect_file_layers_with_normalizer_and_trace(
 
     let trace = ProjectScopeTrace::Appended(project_trace_path);
     let result = project_scope_layers(project_file.as_deref()).map(|project_layers| {
+        let discovered_paths = file_layers
+            .value
+            .iter()
+            .filter_map(|layer| layer.path().map(camino::Utf8Path::as_str))
+            .collect::<Vec<_>>();
+        let project_layers_to_append = project_layers
+            .into_iter()
+            .filter(|layer| {
+                layer.path().is_none_or(|path| {
+                    !discovered_paths
+                        .iter()
+                        .any(|discovered| *discovered == path.as_str())
+                })
+            })
+            .collect::<Vec<_>>();
         file_layers
             .value
             .into_iter()
-            .chain(project_layers)
+            .chain(project_layers_to_append)
             .collect()
     });
     (Some(trace), result)
