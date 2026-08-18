@@ -12,13 +12,16 @@ use ortho_config::{
 };
 use serde_json::Value;
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 #[cfg(test)]
 use std::sync::Arc;
 
 use super::super::parser::Cli;
 use super::CONFIG_ENV_VAR;
-use super::diagnostics::{BoundedConfigPath, debug_optional_config_path_from_fields};
+use super::diagnostics::{
+    BoundedConfigPath, debug_optional_config_path_from_fields, debug_project_layer_deduplication,
+};
 use super::paths::{FsPathNormalizer, PathNormalizer, normalized_path_key};
 
 /// Preserve discovered layers while extracting their final JSON preference.
@@ -62,6 +65,8 @@ pub(super) enum ProjectScopeTrace {
     Included(BoundedConfigPath),
     /// The project configuration was loaded by the second pass.
     Appended(BoundedConfigPath),
+    /// The second pass found only layers already returned by discovery.
+    Deduplicated(BoundedConfigPath),
 }
 
 impl ProjectScopeTrace {
@@ -76,6 +81,12 @@ impl ProjectScopeTrace {
             }
             Self::Appended(path) => {
                 debug_optional_config_path_from_fields("appending project-scope layers", path);
+            }
+            Self::Deduplicated(path) => {
+                debug_optional_config_path_from_fields(
+                    "project-scope layers already discovered",
+                    path,
+                );
             }
         }
     }
@@ -114,8 +125,8 @@ pub(super) fn collect_file_layers_with_trace_and_env_source(
 /// frequently does not exist, or a directory the process cannot read — is
 /// compared literally with `OrthoConfig`'s already-canonicalized layer path
 /// rather than failing discovery. An exact textual match still identifies the layer;
-/// otherwise the project-scope pass appends it and retains its normal debug
-/// event for the composition boundary.
+/// otherwise the project-scope pass de-duplicates loaded layers and retains
+/// its bounded outcome for the composition boundary.
 fn comparison_key(normalizer: &impl PathNormalizer, path: &str) -> PathBuf {
     normalized_path_key(normalizer, path).unwrap_or_else(|_| PathBuf::from(path))
 }
@@ -175,30 +186,45 @@ fn collect_file_layers_with_normalizer_and_trace(
         );
     }
 
-    let trace = ProjectScopeTrace::Appended(project_trace_path);
+    let error_trace = ProjectScopeTrace::Appended(project_trace_path.clone());
     let result = project_scope_layers(project_file.as_deref()).map(|project_layers| {
         let discovered_paths = file_layers
             .value
             .iter()
             .filter_map(|layer| layer.path().map(camino::Utf8Path::as_str))
-            .collect::<Vec<_>>();
+            .collect::<HashSet<_>>();
+        let discovered_layer_count = discovered_paths.len();
+        let project_layer_count = project_layers.len();
         let project_layers_to_append = project_layers
             .into_iter()
             .filter(|layer| {
-                layer.path().is_none_or(|path| {
-                    !discovered_paths
-                        .iter()
-                        .any(|discovered| *discovered == path.as_str())
-                })
+                layer
+                    .path()
+                    .is_none_or(|path| !discovered_paths.contains(path.as_str()))
             })
             .collect::<Vec<_>>();
-        file_layers
+        let appended_layer_count = project_layers_to_append.len();
+        debug_project_layer_deduplication(
+            discovered_layer_count,
+            project_layer_count,
+            appended_layer_count,
+        );
+        let trace = if appended_layer_count == 0 {
+            ProjectScopeTrace::Deduplicated(project_trace_path)
+        } else {
+            ProjectScopeTrace::Appended(project_trace_path)
+        };
+        let layers = file_layers
             .value
             .into_iter()
             .chain(project_layers_to_append)
-            .collect()
+            .collect();
+        (trace, layers)
     });
-    (Some(trace), result)
+    match result {
+        Ok((trace, layers)) => (Some(trace), Ok(layers)),
+        Err(err) => (Some(error_trace), Err(err)),
+    }
 }
 
 fn project_scope_file(directory: Option<&Path>) -> Option<PathBuf> {

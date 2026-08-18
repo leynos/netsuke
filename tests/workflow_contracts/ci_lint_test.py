@@ -50,6 +50,15 @@ class _WorkflowLoader(yaml.SafeLoader):
     """
 
 
+def _is_string(value: object) -> bool:
+    """Return whether a parsed YAML key has the required string shape."""
+    match value:
+        case str():
+            return True
+        case _:
+            return False
+
+
 # Drop the inherited YAML 1.1 bool resolver, then reinstate the 1.2 word set.
 _WorkflowLoader.yaml_implicit_resolvers = {
     initial: [
@@ -86,7 +95,7 @@ def _load() -> dict[str, object]:
                 "the workflow must parse to a mapping, "
                 f"got {type(other).__name__}"
             )
-    non_string_keys = sorted(repr(key) for key in workflow if not isinstance(key, str))
+    non_string_keys = sorted(repr(key) for key in workflow if not _is_string(key))
     if non_string_keys:
         pytest.fail(
             f"the workflow mapping must be string-keyed, got {non_string_keys}"

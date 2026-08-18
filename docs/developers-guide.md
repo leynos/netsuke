@@ -2950,13 +2950,15 @@ split diagnostics, path comparison, and tests out of the main discovery flow:
 
 - `discovery_diagnostics.rs` — bounded tracing helpers (`path_hash`,
   `short_hash`, `debug_config_path`, `debug_optional_config_path`,
-  `warn_explicit_config_load_failed`) and the `ConfigLoadFailureKind` enum used
-  to classify a load failure without retaining error text.
+  `debug_project_layer_deduplication`, `warn_explicit_config_load_failed`) and
+  the `ConfigLoadFailureKind` enum used to classify a load failure without
+  retaining error text. The de-duplication event records discovered, project,
+  and appended layer counts after filtering without exposing paths.
 - `discovery_paths.rs` — `normalized_path_key` resolves a path to a
   comparable, canonicalized form and returns canonicalization errors to its
   caller. The discovery-side `comparison_key` fallback uses the original path
-  literally when resolution fails, continues discovery, and emits only the
-  normal append debug event. This lets relative or symlinked `--directory`
+  literally when resolution fails, continues discovery, and emits a bounded
+  post-filter layer-count event. This lets relative or symlinked `--directory`
   values match OrthoConfig's canonicalized layer paths without making an
   unresolved path fatal. `FsPathNormalizer` is confined to this comparison
   boundary: selectors remain pure path queries, OrthoConfig supplies the layer
