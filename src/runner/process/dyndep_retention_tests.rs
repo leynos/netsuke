@@ -11,6 +11,7 @@ use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use cap_std::fs_utf8::Dir;
 use rstest::{fixture, rstest};
+use std::path::Path;
 
 #[fixture]
 fn dyndep_workspace() -> Result<(tempfile::TempDir, Dir)> {
@@ -328,12 +329,26 @@ fn retention_cleanup_failure_has_localized_context(
     let Err(error) = result else {
         anyhow::bail!("retention must report an unremovable candidate");
     };
+    let native_failing_path = Path::new(DYNDEP_DIR).join("unremovable.dd");
+    let native_failing_path_display = native_failing_path.to_string_lossy().into_owned();
     let expected = localization::message(keys::RUNNER_IO_DYNDEP_RETENTION)
-        .with_arg("path", failing_path.as_str())
+        .with_arg("path", native_failing_path_display)
         .to_string();
     ensure!(
         format!("{error:#}").contains(&expected),
         "retention failures must retain localized context: {error:#}"
     );
     Ok(())
+}
+
+#[cfg(windows)]
+#[test]
+fn current_sidecar_paths_match_native_directory_entries() {
+    let generated_path = Utf8Path::new(".netsuke/dyndep/current.dd");
+    let directory_entry_path = Utf8Path::new(".netsuke\\dyndep\\current.dd");
+
+    assert_eq!(
+        generated_path.as_std_path(),
+        directory_entry_path.as_std_path()
+    );
 }

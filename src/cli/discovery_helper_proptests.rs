@@ -8,17 +8,17 @@
 //! `DefaultHasher`'s algorithm is explicitly not stable across Rust releases,
 //! so nothing here asserts a specific hash value — only width, charset, and
 //! determinism within the run.
-
 use super::MergeLayer;
 use super::diagnostics::{path_hash, short_hash};
 use super::json::json_from_value;
+use super::layers::collect_file_layers;
 use super::paths::{FailingPathNormalizer, FsPathNormalizer, normalized_path_key};
 use anyhow::{Context, Result, ensure};
 use proptest::prelude::*;
 use rstest::rstest;
 use serde_json::{Map, Value};
 use std::borrow::Cow;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tempfile::tempdir;
 
 /// Generate arbitrary byte strings, including empty and non-UTF-8 sequences.
@@ -29,6 +29,15 @@ fn hash_input() -> impl Strategy<Value = Vec<u8>> {
 /// Generate path-like strings from characters that are legal on both platforms.
 fn path_string() -> impl Strategy<Value = String> {
     "[A-Za-z0-9._/-]{0,64}"
+}
+
+fn project_alias(temp: &Path, project_name: &str, spelling: u8) -> PathBuf {
+    let project = temp.join(project_name);
+    match spelling {
+        0 => project,
+        1 => project.join("."),
+        _ => temp.join(project_name).join("..").join(project_name),
+    }
 }
 
 /// Assert `hash` is the bounded correlation identifier the log fields rely on.
