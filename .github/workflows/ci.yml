@@ -91,10 +91,10 @@ jobs:
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
         with:
           python-version: '3.13'
-          enable-cache: true
-          # `make spelling` installs its Python tool through uv; Makefile pins
-          # the tool version and therefore controls cache invalidation.
-          cache-dependency-glob: Makefile
+          # This Rust workspace has no Python dependency manifest. Cache the
+          # shared spelling dictionary below rather than a uv cache with no
+          # durable dependency key.
+          enable-cache: 'false'
       - name: Cache shared spelling dictionary
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:

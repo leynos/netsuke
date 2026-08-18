@@ -301,7 +301,14 @@ impl StdlibConfig {
                 std::path::Component::Prefix(_) | std::path::Component::RootDir
             )
         });
-        if has_parent_directory || has_rooted_component {
+        if has_rooted_component {
+            bail!(
+                "{}",
+                localization::message(keys::STDLIB_FETCH_CACHE_NOT_RELATIVE)
+                    .with_arg("path", relative.as_str())
+            );
+        }
+        if has_parent_directory {
             bail!(
                 "{}",
                 localization::message(keys::STDLIB_FETCH_CACHE_ESCAPES)
