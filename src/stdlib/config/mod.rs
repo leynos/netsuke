@@ -12,7 +12,7 @@ pub use super::config_types::{
 use super::{command, network::NetworkPolicy, which::WORKSPACE_SKIP_DIRS};
 use crate::localization::{self, keys};
 use anyhow::{anyhow, bail, ensure};
-use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::Dir;
 use std::{ffi::OsString, num::NonZeroUsize, sync::Arc};
 
@@ -284,10 +284,10 @@ impl StdlibConfig {
             );
         }
 
-        for component in relative.components() {
+        for component in relative.as_std_path().components() {
             if matches!(
                 component,
-                Utf8Component::ParentDir | Utf8Component::Prefix(_)
+                std::path::Component::ParentDir | std::path::Component::Prefix(_)
             ) {
                 bail!(
                     "{}",
