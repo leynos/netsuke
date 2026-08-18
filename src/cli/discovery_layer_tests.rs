@@ -390,11 +390,22 @@ fn normalization_failure_does_not_fail_discovery() -> Result<()> {
     )
     .context("write project config")?;
 
-    let layers =
-        collect_file_layers_with_normalizer(Some(project_dir.as_path()), &FailingPathNormalizer)
-            .context("discovery must succeed despite normalization failure")?;
+    // The dot component differs from OrthoConfig's canonical layer path, so
+    // the failing normalizer must take the fallback de-duplication branch.
+    let alias = project_dir.join(".");
+    let (layers, events) = capture_events(|| {
+        collect_file_layers_with_normalizer(Some(alias.as_path()), &FailingPathNormalizer)
+    })
+    .context("discovery must succeed despite normalization failure")?;
 
     ensure!(layers.len() == 1, "expected one project layer: {layers:?}");
+    let deduplication = find_event(&events, "resolved project-scope layer deduplication")?;
+    ensure!(
+        deduplication.contains("discovered_layer_count=1")
+            && deduplication.contains("project_layer_count=1")
+            && deduplication.contains("appended_layer_count=0"),
+        "fallback de-duplication outcome should record its counts: {deduplication}"
+    );
     Ok(())
 }
 

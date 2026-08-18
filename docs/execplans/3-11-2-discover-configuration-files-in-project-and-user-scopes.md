@@ -238,9 +238,17 @@ implementation was verified as correct and needed no adjustment.
 
 ### Platform-specific constraints
 
-None. OrthoConfig handles platform differences (Unix XDG paths vs. Windows
-AppData directories) transparently. The tests use platform-agnostic temp
-directories and $HOME overrides for reproducibility.
+OrthoConfig handles scope selection (Unix XDG paths versus Windows AppData
+directories) transparently, but path identity requires an explicit boundary
+policy. On Windows, a temporary directory may be spelled with a short path
+while OrthoConfig records a long canonical path. Discovery therefore
+canonicalizes both sides with `dunce` before comparing them, and the fallback
+pass de-duplicates the loaded project layers by their canonical path. This
+prevents one physical `.netsuke.toml` from entering the merge chain twice.
+
+Unix tests exercise equivalent `.` and symlink aliases; Windows CI exercises
+the native short/long-path spelling. The property test generates additional
+project-directory spellings and requires one canonical layer.
 
 ### Validation results
 

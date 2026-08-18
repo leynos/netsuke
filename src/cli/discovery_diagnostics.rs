@@ -22,6 +22,18 @@ pub(super) enum ConfigLoadFailureKind {
     LoadError,
 }
 
+/// Emit the bounded outcome of project-scope layer de-duplication.
+pub(super) fn debug_project_layer_deduplication(
+    discovered_layer_count: usize,
+    project_layer_count: usize,
+    appended_layer_count: usize,
+) {
+    debug!(
+        discovered_layer_count,
+        project_layer_count, appended_layer_count, "resolved project-scope layer deduplication"
+    );
+}
+
 /// Bounded warning metadata retained when an explicit config load fails.
 #[derive(Clone, Debug)]
 pub(super) struct ConfigLoadWarning {
