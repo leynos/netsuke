@@ -123,8 +123,9 @@ pub(crate) fn assert_stdlib_output_is_root(world: &TestWorld) -> Result<()> {
 pub(crate) fn assert_stdlib_output_is_workspace_path(world: &TestWorld, path: &str) -> Result<()> {
     let (root, output) = stdlib_root_and_output(world)?;
     let expected = root.join(path);
+    let actual = camino::Utf8Path::new(&output);
     ensure!(
-        output == expected.as_str(),
+        actual == expected,
         "expected output '{}', got '{output}'",
         expected
     );
