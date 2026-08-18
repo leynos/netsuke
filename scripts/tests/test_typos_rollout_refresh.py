@@ -323,13 +323,14 @@ def test_http_error_translation_handles_not_modified_and_stale_cache(
     assert (
         http._http_error_result(cache, rate_limited, validate).status == "stale-cache"
     ), "the rate-limited HTTP case should reuse the validated stale cache"
+    cache.write_bytes(b"not = [valid")
+    with pytest.raises(http.NetworkUnavailableError):
+        http._http_error_result(cache, rate_limited, validate)
     with pytest.raises(urllib.error.HTTPError):
         http._http_error_result(cache, unavailable, validate)
     cache.unlink()
     with pytest.raises(http.NetworkUnavailableError):
         http._http_error_result(cache, rate_limited, validate)
-    with pytest.raises(urllib.error.HTTPError):
-        http._http_error_result(cache, unavailable, validate)
 
 
 def test_remote_freshness_uses_dates_and_falls_back_on_invalid_values(
