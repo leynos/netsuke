@@ -215,8 +215,8 @@ fn shell_preserves_cmd_meta_characters() -> Result<()> {
         .render(context!(cmd => command))
         .context("render shell meta template")?;
     ensure!(
-        rendered.trim() == "literal %^!",
-        "expected literal %^! but rendered {rendered}"
+        rendered.trim() == "literal %%^!",
+        "expected literal %%^! but rendered {rendered}"
     );
     ensure!(
         state.is_impure(),
