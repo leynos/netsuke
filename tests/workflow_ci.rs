@@ -223,6 +223,11 @@ fn behavioural_ci_workflow_runs_tests_through_the_make_target() -> Result<()> {
         step_index(steps, "Install cargo-nextest")? < step_index(steps, "Test")?,
         "cargo-nextest should be installed before make test runs"
     );
+    let setup_uv = named_step(steps, "Setup uv")?;
+    ensure!(
+        step_input(setup_uv, YamlKey("cache-dependency-glob")) == Some("Makefile"),
+        "the uv cache should invalidate when the Makefile changes its pinned tooling"
+    );
     Ok(())
 }
 
