@@ -1,5 +1,7 @@
 //! Public-CLI end-to-end tests for serial dependency sidecar publication.
 
+#![cfg(unix)]
+
 use anyhow::{Context, Result, anyhow, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
