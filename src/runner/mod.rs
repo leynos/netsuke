@@ -167,7 +167,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> 
     };
 
     let build_file = process::create_temp_ninja_file(&ninja)?;
-    let build_path = build_file.path();
+    let build_path: &Path = build_file.as_ref();
 
     let ctx = || {
         format!(
@@ -230,7 +230,7 @@ fn handle_ninja_tool(
     let ninja = NinjaContent::new(ninja_file);
 
     let tmp = process::create_temp_ninja_file(&ninja)?;
-    let build_path = tmp.path();
+    let build_path: &Path = tmp.as_ref();
 
     let ctx = || {
         format!(
