@@ -144,6 +144,27 @@ pub fn canonicalize(path: impl AsRef<Path>) -> io::Result<PathBuf> {
 pub fn is_dir(path: impl AsRef<Path>) -> bool {
     fs::metadata(path).is_ok_and(|metadata| metadata.is_dir())
 }
+/// Read metadata without allowing a descendant of a regular file to alias it.
+fn metadata(path: &Path) -> io::Result<fs::Metadata> {
+    for ancestor in path
+        .ancestors()
+        .skip(1)
+        .filter(|ancestor| !ancestor.as_os_str().is_empty())
+    {
+        match fs::metadata(ancestor) {
+            Ok(metadata) if !metadata.is_dir() => {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotADirectory,
+                    format!("non-directory path ancestor: {}", ancestor.display()),
+                ));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+    }
+    fs::metadata(path)
+}
 
 /// Inspect whether `path` is absent, a directory, or another target.
 ///
@@ -174,7 +195,7 @@ pub fn is_dir(path: impl AsRef<Path>) -> bool {
 /// );
 /// ```
 pub fn inspect_path(path: impl AsRef<Path>) -> io::Result<PathState> {
-    match fs::metadata(path) {
+    match metadata(path.as_ref()) {
         Ok(metadata) if metadata.is_dir() => Ok(PathState::Directory),
         Ok(_) => Ok(PathState::NonDirectory),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(PathState::Absent),
@@ -203,7 +224,7 @@ pub fn inspect_path(path: impl AsRef<Path>) -> io::Result<PathState> {
 /// assert!(!test_support::fs::try_is_file(dir.path().join("absent")).expect("inspect absent"));
 /// ```
 pub fn try_is_file(path: impl AsRef<Path>) -> io::Result<bool> {
-    match fs::metadata(path) {
+    match metadata(path.as_ref()) {
         Ok(metadata) => Ok(metadata.is_file()),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
         Err(error) => Err(error),
