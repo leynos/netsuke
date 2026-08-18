@@ -16,6 +16,7 @@ use fs4::FileExt;
 use std::{
     collections::{BTreeMap, HashSet},
     io::ErrorKind,
+    path::Path,
 };
 
 /// Maximum number of obsolete sidecars retained after one publication.
@@ -144,7 +145,7 @@ fn prune_dyndep_sidecars_inner(
     }
     let current_paths = current
         .iter()
-        .map(|sidecar| sidecar.relative_path().as_str())
+        .map(|sidecar| sidecar.relative_path().as_std_path())
         .collect::<HashSet<_>>();
     let mut summary = RetentionSummary::default();
     retain_obsolete_sidecars(dir, &current_paths, policy, &mut summary)?;
@@ -154,7 +155,7 @@ fn prune_dyndep_sidecars_inner(
 /// Select obsolete sidecars during one directory traversal with bounded memory.
 fn retain_obsolete_sidecars(
     dir: &Dir,
-    current_paths: &HashSet<&str>,
+    current_paths: &HashSet<&Path>,
     policy: RetentionPolicy,
     summary: &mut RetentionSummary,
 ) -> Result<()> {
@@ -174,7 +175,7 @@ fn retain_obsolete_sidecars(
 
 /// Mutable state scoped to one leased directory traversal.
 struct RetentionPass<'current, 'summary> {
-    current_paths: &'current HashSet<&'current str>,
+    current_paths: &'current HashSet<&'current Path>,
     retained: RetentionSelection,
     summary: &'summary mut RetentionSummary,
 }
@@ -190,7 +191,9 @@ fn retain_directory_entry(
         .file_name()
         .with_context(|| retention_error(Utf8Path::new(DYNDEP_DIR)))?;
     let path = Utf8Path::new(DYNDEP_DIR).join(name);
-    if path.as_str() == DYNDEP_LOCK || pass.current_paths.contains(path.as_str()) {
+    if Path::new(DYNDEP_LOCK) == path.as_std_path()
+        || pass.current_paths.contains(path.as_std_path())
+    {
         return Ok(());
     }
     if has_extension(&path, "tmp") {
@@ -262,8 +265,8 @@ fn retain_or_remove_sidecar(
     Ok(())
 }
 
-fn is_obsolete_sidecar(path: &Utf8Path, current_paths: &HashSet<&str>) -> bool {
-    has_extension(path, "dd") && !current_paths.contains(path.as_str())
+fn is_obsolete_sidecar(path: &Utf8Path, current_paths: &HashSet<&Path>) -> bool {
+    has_extension(path, "dd") && !current_paths.contains(path.as_std_path())
 }
 
 fn has_extension(path: &Utf8Path, extension: &str) -> bool {

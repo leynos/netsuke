@@ -10,11 +10,12 @@
 //! determinism within the run.
 
 use super::diagnostics::{path_hash, short_hash};
+use super::layers::collect_file_layers;
 use super::paths::{FailingPathNormalizer, FsPathNormalizer, normalized_path_key};
 use anyhow::{Context, Result, ensure};
 use proptest::prelude::*;
 use rstest::rstest;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tempfile::tempdir;
 
 /// Generate arbitrary byte strings, including empty and non-UTF-8 sequences.
@@ -25,6 +26,15 @@ fn hash_input() -> impl Strategy<Value = Vec<u8>> {
 /// Generate path-like strings from characters that are legal on both platforms.
 fn path_string() -> impl Strategy<Value = String> {
     "[A-Za-z0-9._/-]{0,64}"
+}
+
+fn project_alias(temp: &Path, project_name: &str, spelling: u8) -> PathBuf {
+    let project = temp.join(project_name);
+    match spelling {
+        0 => project,
+        1 => project.join("."),
+        _ => temp.join(project_name).join("..").join(project_name),
+    }
 }
 
 /// Assert `hash` is the bounded correlation identifier the log fields rely on.
@@ -95,6 +105,33 @@ proptest! {
         let twice = normalized_path_key(&FsPathNormalizer, &once.to_string_lossy())
             .expect("an already-resolved path must normalize again");
         prop_assert_eq!(once, twice);
+    }
+
+    /// Every generated spelling of one project directory produces one layer.
+    #[test]
+    fn project_config_aliases_have_one_canonical_layer(
+        project_name in "[A-Za-z0-9][A-Za-z0-9_-]{0,31}",
+        spelling in 0_u8..3,
+    ) {
+        let temp = tempdir().expect("create temp dir for project alias");
+        let project = temp.path().join(&project_name);
+        test_support::fs::create_dir(&project).expect("create generated project directory");
+        let config = project.join(".netsuke.toml");
+        test_support::fs::write(&config, "default_targets = [\"alpha\"]\n")
+            .expect("write generated project config");
+
+        let layers = collect_file_layers(Some(&project_alias(temp.path(), &project_name, spelling)))
+            .expect("discover generated project config");
+        let discovered = layers
+            .iter()
+            .filter_map(|layer| layer.path().map(|path| path.as_str().to_owned()))
+            .collect::<Vec<_>>();
+        let canonical = normalized_path_key(&FsPathNormalizer, &config.to_string_lossy())
+            .expect("canonicalize generated project config")
+            .to_string_lossy()
+            .into_owned();
+
+        prop_assert_eq!(discovered, vec![canonical]);
     }
 }
 
