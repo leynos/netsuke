@@ -106,36 +106,24 @@ pub(super) fn fake_ninja_name(stem: &str) -> String {
     }
 }
 
-/// Build a PATH that prefers the fake-Ninja directory.
-///
-/// Windows keeps the inherited entries after the fake directory. Its process
-/// launcher resolves the unqualified fallback `ninja` as an executable, while
-/// the deterministic fake is a `.cmd` script used by the explicit-override
-/// cases. The Windows CI job provisions Ninja, so the fallback case exercises
-/// the same executable resolution users receive.
 pub(super) fn path_containing(dir: &Path) -> Result<std::ffi::OsString> {
-    #[cfg(windows)]
-    {
-        let inherited = std::env::var_os("PATH").context("read inherited PATH")?;
-        return std::env::join_paths([dir, Path::new(&inherited)])
-            .context("build PATH containing fake and system Ninja executables");
-    }
-    #[cfg(not(windows))]
     std::env::join_paths([dir]).context("build PATH containing fake ninja")
 }
 
 pub(super) fn run_verbose_build_with_ninja_env(
     current_dir: &Path,
-    path_env: std::ffi::OsString,
+    path_env: Option<std::ffi::OsString>,
     ninja_env: Option<&Path>,
 ) -> Result<String> {
     let mut command = assert_cmd::cargo::cargo_bin_cmd!("netsuke");
     command
         .current_dir(current_dir)
-        .env("PATH", path_env)
         .env_remove(NINJA_ENV)
         .arg("--verbose")
         .arg("build");
+    if let Some(path) = path_env {
+        command.env("PATH", path);
+    }
     if let Some(ninja) = ninja_env {
         command.env(NINJA_ENV, ninja);
     }
