@@ -415,8 +415,9 @@ def test_windows_job_runs_check_fmt_lint_and_test() -> None:
         "make SHELL=bash test",
     ]
     for command in expected:
-        assert command in runs, (
-            f"build-test-windows must run {command!r}, got run steps: {runs!r}"
+        assert runs.count(command) == 1, (
+            f"build-test-windows must run {command!r} exactly once, "
+            f"got run steps: {runs!r}"
         )
 
 
@@ -438,6 +439,19 @@ def test_windows_job_does_not_duplicate_doc_and_audit_gates() -> None:
         assert command not in runs, (
             f"build-test-windows must not run the platform-independent "
             f"{command!r}, got run steps: {runs!r}"
+        )
+
+    action_steps = [
+        str(step.get("uses", "")) for step in _windows_steps(_load())
+    ]
+    excluded_actions = (
+        "leynos/shared-actions/.github/actions/generate-coverage",
+        "leynos/shared-actions/.github/actions/upload-codescene-coverage",
+    )
+    for action in excluded_actions:
+        assert all(action not in step for step in action_steps), (
+            f"build-test-windows must not use the Linux-only audit action "
+            f"{action!r}, got action steps: {action_steps!r}"
         )
 
 

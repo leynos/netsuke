@@ -431,6 +431,9 @@ confusing `E0499` rather than an obvious configuration error.
 
 Five CI jobs across four workflows carry the contract:
 
+**Triage:** [type:docstyle] Count CI jobs, rather than workflow files, because
+`ci.yml` contains distinct Linux and Windows jobs.
+
 | Workflow | Job | Shared action | `with.rustflags` |
 | --- | --- | --- | --- |
 | [`ci.yml`](../.github/workflows/ci.yml) | `build-test` | `setup-rust` | `-D warnings -Zpolonius=next` |
@@ -2910,6 +2913,17 @@ blocks a merge. The split still stands: host-independent rules stay in the
 `#[cfg(any(windows, test))]` unit tests so every host — including a developer
 on Unix — exercises them, while the Windows-gated suite covers the behaviour
 that only exists there.
+
+The Windows job installs GNU Make through Chocolatey and Ninja through the
+setup action, then runs every Make target through Git Bash with `SHELL=bash`.
+That override is required because GNU Make otherwise selects `cmd.exe` on
+Windows, while Netsuke's recipes use POSIX shell syntax. It installs the
+workflow-pinned `cargo-nextest`; the shared Rust setup action supplies
+`rustfmt` and Clippy. `whitaker-installer` produces a PowerShell wrapper on
+Windows, so the job adds a Bash shim that invokes it through PowerShell before
+running `make SHELL=bash lint-whitaker`. To reproduce the platform gate, use a
+Windows environment with those tools provisioned and run the four Windows Make
+commands from the workflow in that order.
 
 #### `PATHEXT` normalization
 
