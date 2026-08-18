@@ -70,7 +70,8 @@ fn run_verbose_build_with_fake_ninja_and_assert_log(
     let stderr = run_verbose_build_with_ninja_env(workspace, path_env, ninja_env)?;
 
     let expected = match override_mode {
-        NinjaOverride::Unset | NinjaOverride::Name => format!("Executing command: {ninja_stem} "),
+        NinjaOverride::Unset => format!("Executing command: {ninja_stem} "),
+        NinjaOverride::Name => format!("Executing command: {ninja_name} "),
         NinjaOverride::FullPath => format!("Executing command: {} ", ninja_path.display()),
     };
     ensure!(stderr.contains(&expected), "{description}, got:\n{stderr}");

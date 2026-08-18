@@ -129,6 +129,11 @@ pub(super) fn run_verbose_build_with_ninja_env(
     }
 
     let output = command.output().context("run verbose netsuke build")?;
-    ensure!(output.status.success(), "expected verbose build to succeed");
+    ensure!(
+        output.status.success(),
+        "expected verbose build to succeed with status {}: {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
     String::from_utf8(output.stderr).context("stderr should be valid UTF-8")
 }
