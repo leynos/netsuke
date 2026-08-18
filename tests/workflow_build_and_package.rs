@@ -230,8 +230,13 @@ fn goreleaser_fallback_uses_rust_target_triple_orthohelp_paths() -> Result<()> {
         contents.contains("target/orthohelp/${RUST_TARGET}/release/man/man1/netsuke.1"),
         "GoReleaser fallback should resolve orthohelp output through RUST_TARGET"
     );
+    let lines = contents.lines().collect::<Vec<_>>();
+    let has_build_pre_hook = lines
+        .windows(2)
+        .any(|pair| pair == ["    hooks:", "      pre:"]);
+    let has_global_before_hook = lines.contains(&"before:");
     ensure!(
-        contents.contains("    hooks:\n      pre:") && !contents.contains("\nbefore:\n  hooks:"),
+        has_build_pre_hook && !has_global_before_hook,
         "GoReleaser fallback should run where GOOS and GOARCH are defined"
     );
     Ok(())
