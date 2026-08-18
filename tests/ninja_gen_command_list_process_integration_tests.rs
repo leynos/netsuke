@@ -4,6 +4,8 @@
 //! generated Ninja file, separately from the broader generator integration
 //! scenarios.
 
+#![cfg(unix)]
+
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
