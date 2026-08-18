@@ -252,9 +252,12 @@ fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
         .iter()
         .find_map(|step| step_name(step, "Install uv"))
         .context("Kani smoke job should include the Install uv step")?;
+    let uv_cache_enabled = mapping_get(install_uv_step, YamlKey("with"))
+        .and_then(Value::as_mapping)
+        .and_then(|with| mapping_get(with, YamlKey("enable-cache")));
     ensure!(
-        !install_uv_step.contains_key(Value::String("with".to_owned())),
-        "Install uv step should not include a with configuration"
+        uv_cache_enabled == Some(&Value::Bool(false)),
+        "Install uv step should disable automatic caching because Kani uses an explicit cache"
     );
 
     let cache_step = steps
