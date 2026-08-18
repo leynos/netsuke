@@ -284,17 +284,27 @@ impl StdlibConfig {
             );
         }
 
-        for component in relative.as_std_path().components() {
-            if matches!(
-                component,
-                std::path::Component::ParentDir | std::path::Component::Prefix(_)
-            ) {
-                bail!(
-                    "{}",
-                    localization::message(keys::STDLIB_FETCH_CACHE_ESCAPES)
-                        .with_arg("path", relative.as_str())
-                );
-            }
+        #[cfg(windows)]
+        let has_parent_directory = relative
+            .as_str()
+            .split(['/', '\\'])
+            .any(|component| component == "..");
+        #[cfg(not(windows))]
+        let has_parent_directory = relative
+            .as_std_path()
+            .components()
+            .any(|component| matches!(component, std::path::Component::ParentDir));
+
+        let has_prefix = relative
+            .as_std_path()
+            .components()
+            .any(|component| matches!(component, std::path::Component::Prefix(_)));
+        if has_parent_directory || has_prefix {
+            bail!(
+                "{}",
+                localization::message(keys::STDLIB_FETCH_CACHE_ESCAPES)
+                    .with_arg("path", relative.as_str())
+            );
         }
 
         Ok(())
