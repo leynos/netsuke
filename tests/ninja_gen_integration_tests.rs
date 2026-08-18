@@ -11,7 +11,9 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use netsuke::ast::Recipe;
 use netsuke::ir::{Action, BuildEdge, BuildGraph};
 use netsuke::ninja_gen::{NinjaGenError, generate, generate_into};
-use rstest::{fixture, rstest};
+#[cfg(unix)]
+use rstest::fixture;
+use rstest::rstest;
 #[cfg(unix)]
 use std::process::Command;
 #[cfg(unix)]
