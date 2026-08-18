@@ -72,11 +72,12 @@ impl ShellFlag {
 /// Shared plumbing for the fake-Ninja factories below: creates the temp
 /// directory, writes `script` via [`write_exec_with_content`], and returns
 /// both so callers keep the directory alive for the script's lifetime.
+#[cfg(unix)]
 fn write_fake_ninja_script(script: &str, context: &str) -> Result<(TempDir, PathBuf)> {
     let dir = TempDir::new().with_context(|| format!("{context}: create temp dir"))?;
     write_fake_ninja_script_in_dir(script, context, dir)
 }
-
+#[cfg(unix)]
 fn write_fake_ninja_script_in_dir(
     script: &str,
     context: &str,
@@ -131,7 +132,9 @@ pub(crate) fn fake_ninja_check_build_file_in(
 ///
 /// Returns an error if the temporary directory or fake executable cannot be created.
 pub fn fake_ninja_check_build_file() -> Result<(TempDir, PathBuf)> {
-    write_fake_ninja_script(
+    #[cfg(unix)]
+    let (name, content) = (
+        "ninja",
         concat!(
             "#!/bin/sh\n",
             "if [ \"$1\" = \"-f\" ] && [ ! -f \"$2\" ]; then\n",
@@ -140,8 +143,23 @@ pub fn fake_ninja_check_build_file() -> Result<(TempDir, PathBuf)> {
             "fi\n",
             "exit 0\n"
         ),
-        "fake_ninja_check_build_file",
-    )
+    );
+    #[cfg(windows)]
+    let (name, content) = (
+        "ninja.cmd",
+        concat!(
+            "@echo off\r\n",
+            "if /I \"%~1\"==\"-f\" if not exist \"%~2\" (\r\n",
+            "  echo missing build file: %~2 1>&2\r\n",
+            "  exit /B 1\r\n",
+            ")\r\n",
+            "exit /B 0\r\n",
+        ),
+    );
+    let dir = TempDir::new().context("fake_ninja_check_build_file: create temp dir")?;
+    let path = write_exec_with_content(dir.path(), name, content)
+        .context("fake_ninja_check_build_file: write executable")?;
+    Ok((dir, path))
 }
 
 /// Create a fake Ninja that validates `-t <tool>` was invoked with the expected tool name.
