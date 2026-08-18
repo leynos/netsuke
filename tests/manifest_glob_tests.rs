@@ -318,12 +318,20 @@ fn glob_accepts_windows_path_separators(temp_dir: tempfile::TempDir) -> Result<(
         pattern = pattern,
     ));
     let manifest = manifest::from_str(&yaml)?;
-    let prefix_fwd = format!("{dir_fwd}/");
     let names: Vec<_> = target_names(&manifest)?
         .into_iter()
-        .map(|n| n.replace(&prefix_fwd, "").replace(".txt", ".out"))
-        .collect();
-    ensure!(names == ["a.out", "b.out"]);
+        .map(|name| {
+            let file_name = Path::new(&name)
+                .file_name()
+                .with_context(|| format!("glob target name should include a file name: {name}"))?
+                .to_string_lossy();
+            Ok(file_name.replace(".txt", ".out"))
+        })
+        .collect::<Result<_>>()?;
+    ensure!(
+        names == ["a.out", "b.out"],
+        "unexpected target names: {names:?}"
+    );
     Ok(())
 }
 
