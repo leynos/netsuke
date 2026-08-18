@@ -70,14 +70,19 @@ fn packaged_manifest_retains_build_script_sources() {
     let packaged_manifest = String::from_utf8_lossy(&list_output.stdout);
     let packaged_paths = packaged_manifest
         .lines()
-        .map(str::trim)
+        .map(|path| normalize_packaged_path(path.trim()))
         .collect::<BTreeSet<_>>();
 
     assert_required_paths_present(&packaged_paths);
     assert_forbidden_roots_absent(&packaged_paths);
 }
 
-fn assert_required_paths_present(packaged_paths: &BTreeSet<&str>) {
+/// Normalize Cargo's platform-native package-list separators for comparison.
+fn normalize_packaged_path(path: &str) -> String {
+    path.replace('\\', "/")
+}
+
+fn assert_required_paths_present(packaged_paths: &BTreeSet<String>) {
     for required_path in REQUIRED_PACKAGED_FILES {
         assert!(
             packaged_paths.contains(required_path),
@@ -93,7 +98,7 @@ fn assert_required_paths_present(packaged_paths: &BTreeSet<&str>) {
     }
 }
 
-fn assert_forbidden_roots_absent(packaged_paths: &BTreeSet<&str>) {
+fn assert_forbidden_roots_absent(packaged_paths: &BTreeSet<String>) {
     for forbidden_root in FORBIDDEN_PACKAGED_ROOTS {
         // Name the offending entry: knowing only the forbidden root leaves the
         // reader grepping the packaged manifest by hand.
@@ -109,7 +114,7 @@ fn assert_forbidden_roots_absent(packaged_paths: &BTreeSet<&str>) {
         assert!(
             offender.is_none(),
             "packaged manifest should not contain `{forbidden_root}`, found `{}`",
-            offender.copied().unwrap_or_default()
+            offender.map(String::as_str).unwrap_or_default()
         );
     }
 
@@ -118,5 +123,13 @@ fn assert_forbidden_roots_absent(packaged_paths: &BTreeSet<&str>) {
             .components()
             .all(|component| { component.as_str() != "ninja_env" })),
         "packaged manifest should not contain stale `ninja_env` paths"
+    );
+}
+
+#[test]
+fn normalized_packaged_path_accepts_windows_separator_spelling() {
+    assert_eq!(
+        normalize_packaged_path("build_l10n_audit\\mod.rs"),
+        normalize_packaged_path("build_l10n_audit/mod.rs")
     );
 }
