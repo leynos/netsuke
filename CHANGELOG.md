@@ -95,7 +95,7 @@
 - Build with the Polonius borrow checker (`-Zpolonius=next`) on the pinned
   `nightly-2026-06-25` toolchain; checkout builds pick this up automatically via
   `rustup`, while registry installs must pass the toolchain and flag explicitly
-  (`RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke`)
+  (`RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke-build`)
   ([#465](https://github.com/leynos/netsuke/issues/465))
 - Remove the `rust-version = "1.89.0"` minimum-supported-Rust-version
   declaration from `Cargo.toml`; `rust-toolchain.toml` is now the single source
