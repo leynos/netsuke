@@ -2,7 +2,7 @@
 //!
 //! Kept separate from [`super`]'s clock and arithmetic helpers so the module
 //! stays within the repository's 400-line cap. The renders round-trip through
-//! MiniJinja as lightweight objects so predicates can downcast them later
+//! `MiniJinja` as lightweight objects so predicates can downcast them later
 //! without reparsing strings.
 
 use std::fmt;
