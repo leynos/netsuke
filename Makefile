@@ -58,7 +58,9 @@ SPELLING_HELPER_FILES = scripts/generate_typos_config.py \
 # to AGENTS.md, so `-type f` skips it and avoids double-checking the same prose.
 MD_FILES_FIND = find . -type f -name '*.md' \
 	-not -path './target/*' -not -path './.venv/*' \
-	-not -path './.uv-cache/*' -not -path './.uv-tools/*' \
+	-not -path './.vtcode/*' -not -path './memories/*' \
+	-not -path './.uv-cache/*' \
+	-not -path './.uv-tools/*' \
 	-not -path './node_modules/*' -print0
 PROVER_TOOLS_SOURCE ?= git+https://github.com/leynos/rust-prover-tools@b07ef696f8373d54ae68e517d39d47a5d27a5bd5
 PROVER_TOOLS ?= uv tool run --from $(PROVER_TOOLS_SOURCE) prover-tools
