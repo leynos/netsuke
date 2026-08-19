@@ -17,6 +17,8 @@ use super::{
     value_from_bytes,
 };
 
+/// Run `command` in the platform shell with `value` on standard input and
+/// return its output.
 pub(super) fn execute_shell(
     state: &State,
     value: &Value,
@@ -40,6 +42,8 @@ pub(super) fn execute_shell(
     }
 }
 
+/// Run `grep` with the pattern and flags in `call` over `value` and return
+/// its output.
 pub(super) fn execute_grep(
     state: &State,
     value: &Value,
@@ -73,6 +77,12 @@ pub(super) fn execute_grep(
     }
 }
 
+/// Collect filter flag values into a list of string arguments.
+///
+/// # Errors
+///
+/// Returns an error when a present, non-sequence flag value is not a string
+/// or when a sequence contains a non-string item.
 fn collect_flag_args(flags: Option<Value>) -> Result<Vec<String>, Error> {
     let Some(value) = flags else {
         return Ok(Vec::new());
@@ -102,6 +112,13 @@ fn collect_flag_args(flags: Option<Value>) -> Result<Vec<String>, Error> {
     }
 }
 
+/// Assemble a base command and its quoted arguments into a single shell
+/// string.
+///
+/// # Errors
+///
+/// Returns an error when an argument cannot be quoted, such as when it
+/// contains a line break.
 fn format_command(base: &str, args: &[String]) -> Result<String, Error> {
     let mut command = String::from(base);
     for arg in args {
@@ -120,6 +137,12 @@ fn format_command(base: &str, args: &[String]) -> Result<String, Error> {
     Ok(command)
 }
 
+/// Convert a filter input value into bytes, using its raw bytes when
+/// available and falling back to its string form.
+///
+/// # Errors
+///
+/// Returns an error when the value is `undefined`.
 fn to_bytes(value: &Value) -> Result<Vec<u8>, Error> {
     if value.is_undefined() {
         return Err(Error::new(

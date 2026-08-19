@@ -29,8 +29,11 @@ use crate::host_pattern::{HostCandidate, HostPattern, HostPatternError};
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NetworkPolicy {
+    /// URL schemes the policy permits.
     allowed_schemes: BTreeSet<String>,
+    /// Host patterns the policy permits; `None` permits every host.
     allowed_hosts: Option<Vec<HostPattern>>,
+    /// Host patterns the policy always denies, regardless of the allowlist.
     blocked_hosts: Vec<HostPattern>,
 }
 
@@ -139,6 +142,8 @@ impl NetworkPolicy {
         Ok(self)
     }
 
+    /// Extend the host allowlist with pre-parsed patterns, enabling default-deny.
+    /// Errors when the resulting allowlist would be empty.
     fn extend_allowed_hosts<I>(mut self, patterns_iter: I) -> Result<Self, NetworkPolicyConfigError>
     where
         I: IntoIterator<Item = HostPattern>,

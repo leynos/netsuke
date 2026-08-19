@@ -27,18 +27,26 @@ pub(crate) use options::WhichOptions;
 use crate::localization::{self, LocalizedMessage, keys};
 use resolve_error::ResolveError;
 
+/// Error code prefix that tags `which` not-found diagnostics.
 const NOT_FOUND_CODE: &str = "netsuke::jinja::which::not_found";
 
+/// Resolver configuration shared by the filters, functions, and cache.
 #[derive(Clone, Debug)]
 pub(crate) struct WhichConfig {
+    /// Override for the working directory resolutions run from.
     pub(crate) cwd_override: Option<Arc<Utf8PathBuf>>,
+    /// Override for the `PATH` value used by lookups.
     pub(crate) path_override: Option<OsString>,
+    /// Override for the `PATHEXT` value used on Windows lookups.
     pub(crate) pathext_override: Option<OsString>,
+    /// Directory basenames excluded from the workspace fallback search.
     pub(crate) workspace_skips: WorkspaceSkipList,
+    /// Maximum number of resolutions kept in the cache.
     pub(crate) cache_capacity: NonZeroUsize,
 }
 
 impl WhichConfig {
+    /// Build a configuration with no `PATHEXT` override.
     pub(crate) const fn new(
         cwd_override: Option<Arc<Utf8PathBuf>>,
         path_override: Option<OsString>,
@@ -66,6 +74,7 @@ impl WhichConfig {
     }
 }
 
+/// Register the `which` filter, function, and `command_available` predicate.
 pub(crate) fn register(env: &mut Environment<'_>, config: WhichConfig) {
     let resolver = Arc::new(WhichResolver::new(config));
     {
@@ -97,6 +106,7 @@ pub(crate) fn register(env: &mut Environment<'_>, config: WhichConfig) {
     }
 }
 
+/// Parse the command argument and keyword options into a resolution request.
 fn resolve_command_name_and_options<'v>(
     command: &'v Value,
     kwargs: &Kwargs,
@@ -114,6 +124,7 @@ fn resolve_command_name_and_options<'v>(
     Ok((name, options))
 }
 
+/// Resolve the command and render its executable matches.
 fn resolve_with(
     resolver: &WhichResolver,
     command: &Value,
@@ -124,6 +135,7 @@ fn resolve_with(
     Ok(render_value(&matches, &options))
 }
 
+/// Resolve the command and report whether any executable was found.
 fn command_available_with(
     resolver: &WhichResolver,
     command: &Value,
@@ -136,6 +148,8 @@ fn command_available_with(
         .map_err(Error::from)
 }
 
+/// Map a resolution outcome to a boolean availability verdict.
+/// Search and direct-path misses count as `false`; other errors propagate.
 pub(super) fn is_command_available(
     result: Result<Vec<Utf8PathBuf>, ResolveError>,
 ) -> Result<bool, ResolveError> {
@@ -146,6 +160,7 @@ pub(super) fn is_command_available(
     }
 }
 
+/// Render the matches as a single path or a list, per `options.all`.
 fn render_value(matches: &[Utf8PathBuf], options: &WhichOptions) -> Value {
     if options.all {
         let rendered: Vec<String> = matches
@@ -168,6 +183,7 @@ impl From<ResolveError> for Error {
     }
 }
 
+/// Translate a resolver error into a template error kind and message.
 fn resolve_error_parts(error: &ResolveError) -> (ErrorKind, String) {
     match error {
         ResolveError::NotFound {
@@ -215,10 +231,12 @@ fn resolve_error_parts(error: &ResolveError) -> (ErrorKind, String) {
     }
 }
 
+/// Prefix a not-found message with the not-found error code.
 fn with_not_found_code(message: &str) -> String {
     format!("{NOT_FOUND_CODE}: {message}")
 }
 
+/// Build the localised not-found message for a PATH search miss.
 fn not_found_message(command: &str, dirs: &[Utf8PathBuf], mode: options::CwdMode) -> String {
     let mut message = localization::message(keys::STDLIB_WHICH_NOT_FOUND)
         .with_arg("command", command)
@@ -232,6 +250,7 @@ fn not_found_message(command: &str, dirs: &[Utf8PathBuf], mode: options::CwdMode
     message
 }
 
+/// Build the localised message for a direct-path lookup miss.
 fn direct_not_found_message(command: &str, path: &Utf8Path) -> String {
     localization::message(keys::STDLIB_WHICH_DIRECT_NOT_FOUND)
         .with_arg("command", command)
@@ -239,12 +258,14 @@ fn direct_not_found_message(command: &str, path: &Utf8Path) -> String {
         .to_string()
 }
 
+/// Build the localised message for an invalid argument or option.
 fn args_message(detail: impl std::fmt::Display) -> String {
     localization::message(keys::STDLIB_WHICH_ARGS_ERROR)
         .with_arg("details", detail.to_string())
         .to_string()
 }
 
+/// Build the localised message for a canonicalisation failure.
 fn canonicalize_message(path: &Utf8Path, source: &std::io::Error) -> String {
     localization::message(keys::STDLIB_WHICH_CANONICALIZE_FAILED)
         .with_arg("path", path.as_str())
@@ -252,6 +273,7 @@ fn canonicalize_message(path: &Utf8Path, source: &std::io::Error) -> String {
         .to_string()
 }
 
+/// Build the localised message for an executable-probe failure.
 fn is_executable_message(path: &Utf8Path, source: &std::io::Error) -> String {
     localization::message(keys::STDLIB_WHICH_IS_EXECUTABLE)
         .with_arg("path", path.as_str())
@@ -259,6 +281,7 @@ fn is_executable_message(path: &Utf8Path, source: &std::io::Error) -> String {
         .to_string()
 }
 
+/// Build the localised message for a non-UTF-8 workspace path.
 fn workspace_non_utf8_message(command: &str, path: &str) -> String {
     localization::message(keys::STDLIB_WHICH_WORKSPACE_NON_UTF8)
         .with_arg("command", command)
@@ -266,12 +289,14 @@ fn workspace_non_utf8_message(command: &str, path: &str) -> String {
         .to_string()
 }
 
+/// Build the localised message for a workspace traversal failure.
 fn walkdir_error_message(source: &walkdir::Error) -> String {
     localization::message(keys::STDLIB_WHICH_WALKDIR_ERROR)
         .with_arg("details", source.to_string())
         .to_string()
 }
 
+/// Render a bounded, comma-separated preview of the searched directories.
 fn path_preview(dirs: &[Utf8PathBuf]) -> String {
     const LIMIT: usize = 4;
     if dirs.is_empty() {
@@ -309,6 +334,7 @@ const fn hint_for_mode(mode: options::CwdMode) -> Option<LocalizedMessage> {
     }
 }
 
+/// Render a path for template output, normalising separators on Windows.
 pub(super) fn format_path_for_output(path: &Utf8Path) -> String {
     #[cfg(windows)]
     {

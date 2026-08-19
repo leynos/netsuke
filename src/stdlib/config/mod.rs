@@ -19,18 +19,31 @@ use std::{ffi::OsString, num::NonZeroUsize, sync::Arc};
 /// Configuration for registering Netsuke's standard library helpers.
 #[derive(Debug, Clone)]
 pub struct StdlibConfig {
+    /// Capability-scoped handle to the workspace root shared by helpers.
     workspace_root: Arc<Dir>,
+    /// Optional absolute UTF-8 workspace path for host-side filesystem access.
     workspace_root_path: Option<Utf8PathBuf>,
+    /// Cache directory for network fetches, relative to the workspace root.
     fetch_cache_relative: Utf8PathBuf,
+    /// Policy governing which network operations helpers may perform.
     network_policy: NetworkPolicy,
+    /// Maximum size (in bytes) of HTTP responses fetched by network helpers.
     fetch_max_response_bytes: u64,
+    /// Maximum captured stdout size (in bytes) for command helpers.
     command_max_output_bytes: u64,
+    /// Maximum streamed stdout size (in bytes) for command helpers.
     command_max_stream_bytes: u64,
+    /// Capacity of the executable-resolution cache used by `which` helpers.
     which_cache_capacity: NonZeroUsize,
+    /// Directory basenames skipped during `which` fallback workspace scans.
     workspace_skip_dirs: Vec<String>,
+    /// Optional `PATH` override used in `which` lookups.
     path_override: Option<OsString>,
+    /// Optional `PATHEXT` override used in `which` lookups on Windows.
     pathext_override: Option<OsString>,
+    /// Optional deterministic `PATH` supplied to spawned command helpers.
     command_path_override: Option<OsString>,
+    /// Home directory source used by the `expanduser` filter.
     home_directory: HomeDirectory,
 }
 
@@ -228,6 +241,7 @@ impl StdlibConfig {
         self
     }
 
+    /// Return the configured home directory source.
     pub(crate) const fn home_directory(&self) -> &HomeDirectory {
         &self.home_directory
     }
@@ -271,6 +285,13 @@ impl StdlibConfig {
         (network, command)
     }
 
+    /// Validate that a cache path is a non-empty relative path which stays
+    /// within the workspace.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the path is empty, absolute, or contains parent
+    /// or prefix components.
     pub(crate) fn validate_cache_relative(relative: &Utf8Path) -> anyhow::Result<()> {
         if relative.as_str().is_empty() {
             bail!("{}", localization::message(keys::STDLIB_FETCH_CACHE_EMPTY));
@@ -300,6 +321,7 @@ impl StdlibConfig {
         Ok(())
     }
 
+    /// Return the absolute workspace root path, if one was configured.
     pub(crate) fn workspace_root_path(&self) -> Option<&Utf8Path> {
         self.workspace_root_path.as_deref()
     }

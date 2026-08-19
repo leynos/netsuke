@@ -19,6 +19,12 @@ use crate::hex::to_lower_hex;
 use crate::localization::{self, keys};
 use crate::stdlib::io_helpers::io_to_error;
 
+/// Hash the file at `path` with the named algorithm, returning lowercase hex.
+///
+/// # Errors
+///
+/// Returns an error when the algorithm is unsupported, is gated behind the
+/// `legacy-digests` feature when unavailable, or the file cannot be read.
 pub(super) fn compute_hash(path: &Utf8Path, alg: &str) -> Result<String, Error> {
     if alg.eq_ignore_ascii_case("sha256") {
         hash_stream::<Sha256>(path)
@@ -63,6 +69,7 @@ pub(super) fn compute_hash(path: &Utf8Path, alg: &str) -> Result<String, Error> 
         ))
     }
 }
+/// Hash the file and truncate the hex digest to `len` characters.
 pub(super) fn compute_digest(path: &Utf8Path, len: usize, alg: &str) -> Result<String, Error> {
     let mut hash = compute_hash(path, alg)?;
     if len < hash.len() {
@@ -71,6 +78,7 @@ pub(super) fn compute_digest(path: &Utf8Path, len: usize, alg: &str) -> Result<S
     Ok(hash)
 }
 
+/// Stream the file through a hasher in fixed-size chunks, returning lowercase hex.
 fn hash_stream<H>(path: &Utf8Path) -> Result<String, Error>
 where
     H: Digest,

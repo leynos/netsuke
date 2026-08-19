@@ -19,17 +19,23 @@ use metrics::{counter, describe_counter, describe_histogram, histogram};
 use tracing::field;
 use wait_timeout::ChildExt;
 
+/// Metric name counting configured command executions by operation and outcome.
 const COMMAND_EXECUTIONS_TOTAL: &str = "netsuke_stdlib_command_executions_total";
+/// Metric name recording configured command execution duration in seconds.
 const COMMAND_EXECUTION_DURATION: &str = "netsuke_stdlib_command_execution_duration_seconds";
 
+/// The kind of configured command executed, used as a metric label.
 #[derive(Clone, Copy)]
 enum CommandOperation {
+    /// A command evaluated through the platform shell.
     Shell,
+    /// An executable invoked directly by name.
     #[cfg(windows)]
     Program,
 }
 
 impl CommandOperation {
+    /// Return the metric label for this operation.
     const fn as_str(self) -> &'static str {
         match self {
             Self::Shell => "shell",
@@ -39,16 +45,21 @@ impl CommandOperation {
     }
 }
 
+/// Platform shell used to evaluate command strings on Windows.
 #[cfg(windows)]
 pub(super) const SHELL: &str = "cmd";
+/// Argument making `cmd` evaluate a command string on Windows.
 #[cfg(windows)]
 pub(super) const SHELL_ARGS: &[&str] = &["/C"];
 
+/// Platform shell used to evaluate command strings on Unix.
 #[cfg(not(windows))]
 pub(super) const SHELL: &str = "sh";
+/// Argument making `sh` evaluate a command string on Unix.
 #[cfg(not(windows))]
 pub(super) const SHELL_ARGS: &[&str] = &["-c"];
 
+/// Maximum time a configured child may run before being killed.
 pub(super) const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Pipe the child's standard input, output, and error streams.
@@ -68,8 +79,11 @@ fn configure_piped_stdio(command: &mut Command) {
 /// varying step, and this bundle.
 #[derive(Clone, Copy)]
 struct ChildInvocation<'a> {
+    /// Bytes fed to the child's standard input.
     input: &'a [u8],
+    /// Shared command configuration consulted during execution.
     context: &'a CommandContext,
+    /// Metric label identifying how the command is invoked.
     operation: CommandOperation,
 }
 
@@ -95,6 +109,13 @@ fn run_configured_command(
     )
 }
 
+/// Run `command` through the platform shell with `input` on its standard
+/// input and return the captured output.
+///
+/// # Errors
+///
+/// Returns a `CommandFailure` when the process cannot be spawned, exceeds a
+/// configured output limit, times out, or exits unsuccessfully.
 pub(super) fn run_command(
     command: &str,
     input: &[u8],
@@ -113,6 +134,13 @@ pub(super) fn run_command(
     )
 }
 
+/// Run `program` directly with `args` and `input` on its standard input and
+/// return the captured output.
+///
+/// # Errors
+///
+/// Returns a `CommandFailure` when the process cannot be spawned, exceeds a
+/// configured output limit, times out, or exits unsuccessfully.
 #[cfg(windows)]
 pub(super) fn run_program(
     program: &str,
@@ -133,6 +161,8 @@ pub(super) fn run_program(
     )
 }
 
+/// Run a configured child, recording metrics and a trace span for the
+/// execution and its outcome.
 fn run_child(
     command: Command,
     input: &[u8],
@@ -179,6 +209,7 @@ fn run_child(
     result
 }
 
+/// Register metric descriptions for command counters and histograms once.
 fn describe_metrics() {
     static DESCRIBE: Once = Once::new();
     DESCRIBE.call_once(|| {
@@ -193,6 +224,8 @@ fn describe_metrics() {
     });
 }
 
+/// Spawn the child, pipe its standard streams, and wait for completion within
+/// the configured timeout.
 fn run_child_inner(
     mut command: Command,
     input: &[u8],
@@ -256,6 +289,13 @@ fn run_child_inner(
     }
 }
 
+/// Wait for a child to exit within `timeout`, killing and reaping it when the
+/// deadline passes.
+///
+/// # Errors
+///
+/// Returns a `CommandFailure` on a wait error, when killing the timed-out
+/// child fails, or a timeout when the child does not exit in time.
 pub(super) fn wait_for_exit(
     child: &mut Child,
     timeout: Duration,

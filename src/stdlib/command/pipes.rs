@@ -16,8 +16,11 @@ use super::{
 use camino::Utf8PathBuf;
 use tempfile::NamedTempFile;
 
+/// Chunk size (in bytes) used when draining pipes.
 const PIPE_CHUNK_SIZE: usize = 8192;
 
+/// Spawn a thread that drains `pipe` according to `spec`, returning its join
+/// handle, or `None` when the pipe was not supplied.
 pub(super) fn spawn_pipe_reader<R>(
     pipe: Option<R>,
     spec: PipeSpec,
@@ -29,6 +32,12 @@ where
     pipe.map(|reader| thread::spawn(move || read_pipe(reader, spec, config.as_ref())))
 }
 
+/// Join a reader thread and return its outcome, producing an empty outcome
+/// when the stream was never piped.
+///
+/// # Errors
+///
+/// Returns a `CommandFailure` when the reader thread panicked.
 pub(super) fn join_reader(
     reader_handle: Option<thread::JoinHandle<Result<PipeOutcome, CommandFailure>>>,
     spec: PipeSpec,
@@ -53,6 +62,8 @@ fn empty_outcome(spec: PipeSpec, config: &CommandConfig) -> Result<PipeOutcome, 
     }
 }
 
+/// Join outstanding pipe and stdin threads during error handling, logging
+/// failures rather than propagating them.
 pub(super) fn cleanup_readers(
     stdout_reader: &mut Option<thread::JoinHandle<Result<PipeOutcome, CommandFailure>>>,
     stderr_reader: &mut Option<thread::JoinHandle<Result<PipeOutcome, CommandFailure>>>,
@@ -67,6 +78,14 @@ pub(super) fn cleanup_readers(
     }
 }
 
+/// Join the stdin writer thread and translate its outcome into a command
+/// result, tolerating a `BrokenPipe` when the child exited successfully.
+///
+/// # Errors
+///
+/// Returns a `CommandFailure` when the child exited non-zero after a
+/// `BrokenPipe`, when the writer reported a different I/O error, or when the
+/// writer thread panicked.
 pub(super) fn handle_stdin_result(
     stdin_handle: Option<thread::JoinHandle<io::Result<()>>>,
     status: Option<i32>,
@@ -97,6 +116,8 @@ pub(super) fn handle_stdin_result(
     }
 }
 
+/// Drain a reader honouring `spec`, capturing in memory or streaming to a
+/// tempfile.
 fn read_pipe<R>(
     reader: R,
     spec: PipeSpec,
@@ -114,6 +135,11 @@ where
     }
 }
 
+/// Read a pipe into memory, enforcing the capture limit.
+///
+/// # Errors
+///
+/// Returns a `CommandFailure` on a read error or when the limit is exceeded.
 fn read_pipe_capture<R>(mut reader: R, mut limit: PipeLimit) -> Result<PipeOutcome, CommandFailure>
 where
     R: Read,
@@ -131,6 +157,12 @@ where
     Ok(PipeOutcome::Bytes(buf))
 }
 
+/// Stream a pipe into a persisted tempfile, enforcing the stream limit.
+///
+/// # Errors
+///
+/// Returns a `CommandFailure` on a read, write, or persistence error, or when
+/// the limit is exceeded.
 fn read_pipe_tempfile<R>(
     mut reader: R,
     mut limit: PipeLimit,
@@ -161,6 +193,7 @@ where
     Ok(PipeOutcome::Tempfile(path))
 }
 
+/// Create and persist an empty tempfile representing an unproduced stream.
 fn create_empty_tempfile(
     config: &CommandConfig,
     label: &str,
@@ -170,6 +203,7 @@ fn create_empty_tempfile(
     persist_tempfile(tempfile)
 }
 
+/// Join a single pipe reader thread during cleanup, logging any failure.
 fn join_pipe_for_cleanup(
     label: &str,
     reader_handle: &mut Option<thread::JoinHandle<Result<PipeOutcome, CommandFailure>>>,
@@ -187,6 +221,12 @@ fn join_pipe_for_cleanup(
     }
 }
 
+/// Persist a named tempfile and return its absolute UTF-8 path.
+///
+/// # Errors
+///
+/// Returns a `CommandFailure` when the tempfile cannot be kept or its path is
+/// not valid UTF-8.
 fn persist_tempfile(tempfile: NamedTempFile) -> Result<Utf8PathBuf, CommandFailure> {
     let temp_path = tempfile.into_temp_path();
     let path = temp_path

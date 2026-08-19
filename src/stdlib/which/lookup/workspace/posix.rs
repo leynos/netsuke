@@ -10,6 +10,7 @@ use super::{
 };
 use crate::stdlib::which::{env::EnvSnapshot, resolve_error::ResolveError};
 
+/// Walk the working directory tree collecting up to all executable matches.
 pub(super) fn search_workspace(
     env: &EnvSnapshot,
     command: &str,
@@ -28,6 +29,7 @@ pub(super) fn search_workspace(
     Ok(matches)
 }
 
+/// Collect matching executables from a sequential walkdir iterator.
 fn collect_matching_executables(
     walker: impl Iterator<Item = Result<walkdir::DirEntry, walkdir::Error>>,
     command: &str,
@@ -50,6 +52,7 @@ fn collect_matching_executables(
     Ok(matches)
 }
 
+/// Inspect one walkdir entry, returning its path when it matches `command` and is executable.
 fn process_workspace_entry(
     entry: walkdir::DirEntry,
     command: &str,
