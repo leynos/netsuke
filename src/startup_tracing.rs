@@ -53,7 +53,9 @@ enum Sink {
 /// once however many writes follow.
 #[derive(Default)]
 struct BoundedBuffer {
+    /// Bytes held so far, bounded by `MAX_BUFFERED_BYTES`.
     bytes: Vec<u8>,
+    /// Whether the bound was reached and the truncation marker appended.
     truncated: bool,
 }
 
@@ -88,6 +90,7 @@ impl BoundedBuffer {
         self.truncated = true;
     }
 
+    /// Drain the held bytes, resetting the truncation state.
     fn take(&mut self) -> Vec<u8> {
         self.truncated = false;
         std::mem::take(&mut self.bytes)
@@ -105,6 +108,7 @@ impl BoundedBuffer {
 /// `Arc`; every clone observes the same state and the same buffer.
 #[derive(Clone)]
 pub struct StartupWriter {
+    /// Shared sink state visible to every clone of the writer.
     sink: Arc<Mutex<Sink>>,
 }
 
@@ -128,6 +132,7 @@ impl StartupWriter {
         }
     }
 
+    /// Lock the shared sink, recovering from a poisoned mutex.
     fn lock(&self) -> MutexGuard<'_, Sink> {
         // A panic while formatting an event must not cascade into losing the
         // rest of the diagnostics.
@@ -197,6 +202,7 @@ impl StartupWriter {
 
 /// The per-event handle the `fmt` layer writes through.
 pub struct StartupWriterHandle {
+    /// Shared sink state this handle forwards events to.
     sink: Arc<Mutex<Sink>>,
 }
 

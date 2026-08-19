@@ -17,6 +17,7 @@ pub(crate) struct GeneratorInfo {
 }
 
 impl GeneratorInfo {
+    /// Build the generator identity for the running Netsuke build.
     pub(crate) const fn current() -> Self {
         Self {
             name: "netsuke",

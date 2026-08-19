@@ -32,10 +32,15 @@ pub(super) struct ConfigurationLoadContext<'a, E>
 where
     E: cli::ConfigEnvProvider,
 {
+    /// CLI values parsed before configuration was discovered.
     pub(super) parsed_cli: &'a cli::Cli,
+    /// Clap argument matches backing the parsed CLI values.
     pub(super) matches: &'a ArgMatches,
+    /// Diagnostic mode used when startup configuration resolution fails.
     pub(super) startup_mode: DiagMode,
+    /// Writes startup diagnostics before tracing is configured.
     pub(super) startup_writer: &'a StartupWriter,
+    /// Environment provider consulted during configuration discovery and merge.
     pub(super) config_env: &'a E,
 }
 
