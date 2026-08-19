@@ -21,7 +21,9 @@ use super::IrGenError;
 /// each command.
 #[derive(Debug, Clone)]
 pub(crate) struct CommandBindings {
+    /// Quoted and joined input paths for `$in` substitution.
     ins: String,
+    /// Quoted and joined output paths for `$out` substitution.
     outs: String,
 }
 
@@ -48,6 +50,7 @@ fn record_binding_preparation() {
 }
 
 #[cfg(not(test))]
+/// No-op counter guard for non-test builds.
 const fn record_binding_preparation() {}
 
 #[cfg(test)]
@@ -60,6 +63,7 @@ pub(crate) fn binding_preparations() -> usize {
     BINDING_PREPARATIONS.with(Cell::get)
 }
 
+/// Shell-quote each path, producing one quoted string per path.
 fn quote_paths(paths: &[Utf8PathBuf]) -> Vec<String> {
     paths
         .iter()
@@ -210,6 +214,7 @@ fn find_substitution<'a>(
     })
 }
 
+/// Return the replacement and matched length when `token` starts at `pos`.
 fn try_match_token<'a>(
     chars: &[char],
     pos: usize,
@@ -232,6 +237,7 @@ fn try_match_token<'a>(
     Some((replacement, matched_len))
 }
 
+/// Replace input and output tokens in a template, preserving backtick regions.
 fn substitute(template: &str, ins: &str, outs: &str) -> String {
     let chars: Vec<char> = template.chars().collect();
     let mut out = String::with_capacity(template.len());

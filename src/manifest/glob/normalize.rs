@@ -1,5 +1,6 @@
 //! Separator and escape normalisation for glob patterns.
 
+/// Normalise separators and backslash escapes onto the platform native form.
 pub(crate) fn normalize_separators(pattern: &str) -> String {
     let native = std::path::MAIN_SEPARATOR;
     #[cfg(unix)]
@@ -28,6 +29,7 @@ pub(crate) fn normalize_separators(pattern: &str) -> String {
 }
 
 #[cfg(unix)]
+/// Push the normalised form of a backslash and its following character.
 fn push_normalized_backslash(
     it: &mut std::iter::Peekable<std::str::Chars<'_>>,
     out: &mut String,
@@ -64,6 +66,7 @@ fn push_normalized_backslash(
     dead_code,
     reason = "stub keeps cfg alignment; unused on non-Unix targets"
 )]
+/// Stub that pushes a literal backslash, keeping cfg alignment on other platforms.
 fn push_normalized_backslash(
     _it: &mut std::iter::Peekable<std::str::Chars<'_>>,
     out: &mut String,
@@ -76,6 +79,7 @@ fn push_normalized_backslash(
 }
 
 #[cfg(unix)]
+/// Rewrite backslash-escaped metacharacters as the matching bracket class.
 pub(super) fn force_literal_escapes(pattern: &str) -> String {
     let mut out = String::with_capacity(pattern.len());
     let mut it = pattern.chars().peekable();
@@ -98,6 +102,7 @@ pub(super) fn force_literal_escapes(pattern: &str) -> String {
 }
 
 #[cfg(unix)]
+/// Push the bracket-class form of an escaped metacharacter.
 fn handle_escaped_char(it: &mut std::iter::Peekable<std::str::Chars<'_>>, out: &mut String) {
     let Some(next) = it.peek().copied() else {
         out.push('\\');
@@ -134,6 +139,7 @@ fn handle_escaped_char(it: &mut std::iter::Peekable<std::str::Chars<'_>>, out: &
 }
 
 #[cfg(unix)]
+/// Report whether a character continues a wildcard token.
 fn is_wildcard_continuation_char(ch: char) -> bool {
     ch.is_alphanumeric() || ch == '-' || ch == '_'
 }

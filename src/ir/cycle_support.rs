@@ -12,6 +12,7 @@ use super::super::graph::{BuildEdge, IrHashMap};
 use super::VisitState;
 
 #[cfg(not(kani))]
+/// Look up the target entry for `path`, returning its path and edge.
 pub(super) fn target_entry_for_path<'targets>(
     targets: &'targets IrHashMap<Utf8PathBuf, BuildEdge>,
     path: &Utf8Path,
@@ -114,12 +115,14 @@ pub(super) fn compare_cycle_paths(left: &Utf8PathBuf, right: &Utf8PathBuf) -> Or
     path_cmp(left.as_path(), right.as_path())
 }
 
+/// Rotate `offset` forward from `start` within a cycle of length `len`.
 pub(super) const fn rotate_index(start: usize, offset: usize, len: usize) -> usize {
     let index = start + offset;
     if index >= len { index - len } else { index }
 }
 
 #[cfg(not(kani))]
+/// Look up the visit state recorded for `path`.
 pub(super) fn state_for_path(
     states: &IrHashMap<&Utf8Path, VisitState>,
     path: &Utf8Path,
@@ -145,6 +148,7 @@ pub(super) fn state_for_path(
 }
 
 #[cfg(not(kani))]
+/// Compare two paths for equality.
 pub(super) fn path_eq(left: &Utf8Path, right: &Utf8Path) -> bool {
     left == right
 }
@@ -157,6 +161,7 @@ pub(super) fn path_eq(left: &Utf8Path, right: &Utf8Path) -> bool {
 }
 
 #[cfg(not(kani))]
+/// Order two paths.
 pub(super) fn path_cmp(left: &Utf8Path, right: &Utf8Path) -> Ordering {
     left.cmp(right)
 }
