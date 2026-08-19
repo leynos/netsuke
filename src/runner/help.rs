@@ -135,6 +135,7 @@ fn render_text(entries: &[HelpEntry], prefs: OutputPrefs) -> String {
     out
 }
 
+/// Render one aligned catalogue section, omitting it entirely when empty.
 fn render_section(
     out: &mut String,
     entries: &[&HelpEntry],
@@ -222,25 +223,41 @@ fn default_marker(prefs: OutputPrefs) -> String {
 /// envelope shape while carrying the listing payload instead of free text.
 #[derive(Debug, Serialize)]
 struct HelpTargetsDocument<'a> {
+    /// Schema version of the JSON result envelope.
     schema_version: u32,
+    /// Versioned generator details for the envelope.
     generator: GeneratorInfo,
+    /// The catalogue payload of the result document.
     result: HelpTargetsResult<'a>,
 }
 
 #[derive(Debug, Serialize)]
+/// Rendered actions and targets sections of the help-targets catalogue.
 struct HelpTargetsResult<'a> {
+    /// Name of the producing subcommand, identifying the payload.
     command: &'static str,
+    /// JSON rows for the manifest action targets.
     actions: Vec<HelpEntryJson<'a>>,
+    /// JSON rows for the manifest build targets.
     targets: Vec<HelpEntryJson<'a>>,
 }
 
 #[derive(Debug, Serialize)]
+/// One serialized catalogue row for the JSON help-targets document.
 struct HelpEntryJson<'a> {
+    /// Resolved target name.
     name: &'a str,
+    /// Manifest-controlled description, when present.
     description: Option<&'a str>,
+    /// Whether the entry is one of the manifest's default targets.
     default: bool,
 }
 
+/// Serialize the catalogue into a pretty-printed versioned JSON document.
+///
+/// # Errors
+///
+/// Returns an error when the catalogue cannot be serialized.
 fn render_json(entries: &[HelpEntry]) -> Result<String> {
     serde_json::to_string_pretty(&HelpTargetsDocument {
         schema_version: SCHEMA_VERSION,
@@ -254,6 +271,7 @@ fn render_json(entries: &[HelpEntry]) -> Result<String> {
     .context("serialize help targets catalogue")
 }
 
+/// Project catalogue entries into the JSON row shape, retaining only safe fields.
 fn json_entries<'entry>(
     entries: impl Iterator<Item = &'entry HelpEntry>,
 ) -> Vec<HelpEntryJson<'entry>> {

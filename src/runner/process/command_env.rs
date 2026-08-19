@@ -59,6 +59,7 @@ pub(super) fn env_names_eq(left: &OsStr, right: &OsStr) -> bool {
 /// ```
 #[derive(Default, Clone, PartialEq, Eq)]
 pub struct CommandEnv {
+    /// Ordered `(name, value)` overrides applied to the spawned command.
     vars: Vec<(OsString, OsString)>,
 }
 

@@ -57,7 +57,9 @@ use path_helpers::{ensure_manifest_exists_or_error, resolve_manifest_path, resol
 
 /// Runtime dependencies shared by command dispatch handlers.
 struct ExecutionContext<'a> {
+    /// Status reporter shared by every stage of command dispatch.
     reporter: &'a dyn StatusReporter,
+    /// Whether the command may stream task-progress updates.
     progress_enabled: bool,
     /// Resolved Ninja executable passed unchanged to [`std::process::Command::new`].
     ///
@@ -144,6 +146,7 @@ fn run_with_ninja_program_resolver(
     dispatch::execute(cli, command, &context)
 }
 
+/// Adapt the reporter's task-progress method into a mutable callback.
 fn on_task_progress_callback(reporter: &dyn StatusReporter) -> impl FnMut(u32, u32, &str) + '_ {
     move |current: u32, total: u32, description: &str| {
         reporter.report_task_progress(current, total, description);
@@ -204,8 +207,11 @@ fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> 
 /// Specification for a Ninja tool invocation: name and localization key.
 #[derive(Clone, Copy)]
 struct NinjaToolSpec<'a> {
+    /// Ninja tool name passed to `-t`, e.g. `clean`.
     name: &'a str,
+    /// Localization key for the completion status message.
     key: LocalizationKey,
+    /// Whether to prune the dyndep bundle after a successful invocation.
     prune_after_success: bool,
 }
 
@@ -312,6 +318,7 @@ fn generate_ninja(
     .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))
 }
 
+/// Load the manifest, reporting each loading stage through `reporter`.
 pub(super) fn load_manifest_with_stage_reporting(
     manifest_path: &Utf8PathBuf,
     policy: crate::stdlib::NetworkPolicy,

@@ -9,15 +9,22 @@ use metrics::{counter, describe_counter, describe_histogram, histogram};
 use std::{sync::Once, time::Instant};
 use tracing::field;
 
+/// Metric name counting dyndep materialization outcomes.
 pub(super) const MATERIALIZATIONS_TOTAL: &str = "netsuke_runner_dyndep_materializations_total";
+/// Metric name measuring dyndep materialization duration in seconds.
 pub(super) const MATERIALIZATION_DURATION: &str =
     "netsuke_runner_dyndep_materialization_duration_seconds";
+/// Metric name counting bounded dyndep retention outcomes.
 pub(super) const RETENTIONS_TOTAL: &str = "netsuke_runner_dyndep_retentions_total";
+/// Metric name measuring bounded dyndep retention duration in seconds.
 pub(super) const RETENTION_DURATION: &str = "netsuke_runner_dyndep_retention_duration_seconds";
+/// Metric name counting sidecar files reclaimed by retention.
 pub(super) const RETAINED_FILES_RECLAIMED: &str =
     "netsuke_runner_dyndep_retained_files_reclaimed_total";
+/// Metric name counting sidecar bytes reclaimed by retention.
 pub(super) const RETAINED_BYTES_RECLAIMED: &str =
     "netsuke_runner_dyndep_retained_bytes_reclaimed_total";
+/// Metric name counting dyndep temporary-file collisions.
 pub(super) const TEMP_FILE_RETRIES_TOTAL: &str = "netsuke_runner_dyndep_temp_file_retries_total";
 
 /// Record a complete dyndep materialization command.

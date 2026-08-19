@@ -3,8 +3,11 @@
 /// Parsed task progress from a Ninja status line.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct NinjaTaskProgress {
+    /// Completed task count from the status line.
     current: u32,
+    /// Total task count from the status line.
     total: u32,
+    /// Trailing human-readable status text.
     description: String,
 }
 
@@ -37,7 +40,9 @@ impl NinjaTaskProgress {
 /// Tracks task updates and filters regressive or inconsistent lines.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(super) struct NinjaTaskProgressTracker {
+    /// Total count accepted so far, fixed once the first update is accepted.
     total: Option<u32>,
+    /// Highest accepted current count, for monotonicity checks.
     last_current: u32,
 }
 
@@ -63,6 +68,7 @@ impl NinjaTaskProgressTracker {
     }
 }
 
+/// Return whether `value` is a non-empty string of ASCII digits.
 fn is_valid_numeric_string(value: &str) -> bool {
     !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit())
 }

@@ -10,7 +10,9 @@ use tracing::{field, info};
 
 use super::super::RunnerError;
 
+/// Metric name counting catalogue queries by bounded outcome and error category.
 pub(super) const HELP_TARGETS_TOTAL: &str = "netsuke_runner_help_targets_total";
+/// Metric name measuring complete catalogue query duration in seconds.
 pub(super) const HELP_TARGETS_DURATION: &str = "netsuke_runner_help_targets_duration_seconds";
 
 /// Record bounded telemetry around the complete `help targets` query.
