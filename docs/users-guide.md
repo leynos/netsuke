@@ -1,10 +1,10 @@
 # Netsuke user's guide
 
-This guide is for people evaluating or using Netsuke v0.1.0-beta1. It covers
+This guide is for people evaluating or using Netsuke v0.1.0-beta2. It covers
 the first build, the manifest format, templating, command-line usage,
 configuration, diagnostics, accessibility, and the current safety boundary.
 
-Netsuke v0.1.0-beta1 is an early-adopter release. The compiler pipeline is
+Netsuke v0.1.0-beta2 is an early-adopter release. The compiler pipeline is
 useful, but command names, flags, diagnostic schemas, and some manifest details
 may change before 1.0. Pin the Netsuke version in automated workflows.
 
@@ -18,7 +18,7 @@ Inside a checkout both settings are inherited automatically: `rustup` installs
 the pinned toolchain, and the repository's `.cargo/config.toml` supplies
 `RUSTFLAGS=-Zpolonius=next`. Neither has to be passed on the command line.
 
-Netsuke v0.1.0-beta1 is available from crates.io. Where
+Netsuke v0.1.0-beta2 is available from crates.io. Where
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) is available,
 prefer it: it fetches a prebuilt release binary and avoids the toolchain
 requirement below.
@@ -41,7 +41,7 @@ RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke-build
 ```
 
 Pre-built installers are available from the
-[v0.1.0-beta1 GitHub release](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta1):
+[v0.1.0-beta2 GitHub release](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta2):
 
 | Platform | Architectures                        | Packages                         |
 | -------- | ------------------------------------ | -------------------------------- |
@@ -66,7 +66,7 @@ installer. The Windows MSI installs to `C:\Program Files\netsuke` and does not
 update `PATH`.
 
 The MSI installer supports pre-release SemVer versions such as
-`0.1.0-beta1`: the pre-release suffix cannot be represented in an MSI
+`0.1.0-beta2`: the pre-release suffix cannot be represented in an MSI
 product version, so the installer carries the numeric release triple
 (`0.1.0`) while the full version remains in the package and release names.
 Because successive pre-releases share that numeric version, installing a
@@ -75,7 +75,7 @@ series rather than installing alongside it.
 
 SHA-256 checksum files accompany standalone binaries and staged help,
 completion, and licence files. Installer packages do not have checksum sidecars
-in v0.1.0-beta1. Windows PowerShell help files are published beside each MSI as
+in v0.1.0-beta2. Windows PowerShell help files are published beside each MSI as
 sidecar artefacts rather than embedded in the installer.
 
 Each standalone release archive also contains generated shell completion
@@ -132,7 +132,7 @@ MSI:
 
 ```powershell
 $architecture = 'amd64' # Use 'arm64' for the Arm64 MSI.
-$releaseUri = 'https://api.github.com/repos/leynos/netsuke/releases/tags/v0.1.0-beta1'
+$releaseUri = 'https://api.github.com/repos/leynos/netsuke/releases/tags/v0.1.0-beta2'
 $release = Invoke-RestMethod -Uri $releaseUri
 
 $documents = [Environment]::GetFolderPath('MyDocuments')
@@ -142,7 +142,7 @@ $editionDirectory = if ($PSVersionTable.PSEdition -eq 'Desktop') {
     'PowerShell'
 }
 $moduleRoot = Join-Path $documents "$editionDirectory\Modules"
-$moduleDirectory = Join-Path $moduleRoot 'Netsuke\0.1.0-beta1'
+$moduleDirectory = Join-Path $moduleRoot 'Netsuke\0.1.0-beta2'
 $helpDirectory = Join-Path $moduleDirectory 'en-US'
 New-Item -ItemType Directory -Path $helpDirectory -Force | Out-Null
 
@@ -285,7 +285,7 @@ The top-level fields are:
 - `defaults`: target or action names used when `build` receives no explicit
   targets.
 
-`defaults` entries are literal names in v0.1.0-beta1; Jinja expressions are not
+`defaults` entries are literal names in v0.1.0-beta2; Jinja expressions are not
 rendered in this field.
 
 `vars` keys named `env` or `glob` are rejected because those names identify
@@ -371,7 +371,7 @@ Prefer a `command` list for a short, ordered sequence of distinct commands.
 Prefer `script` when the logic needs multi-line structure or shell
 constructs such as loops, conditionals, or variable assignment.
 
-The v0.1.0-beta1 `script` implementation invokes `/bin/sh -e`; it is not
+The v0.1.0-beta2 `script` implementation invokes `/bin/sh -e`; it is not
 currently a portable PowerShell abstraction. Prefer `command` or
 platform-selected actions when a manifest must work on Windows.
 
@@ -385,7 +385,7 @@ A target supports these fields:
 - `deps`: implicit dependencies. They affect freshness but do not become
   recipe arguments. Declare them on each target; reusable rules reject `deps`.
   The planned rule-level `deps_from` contract is not implemented in
-  v0.1.0-beta1.
+  v0.1.0-beta2.
 - `dependency_order`: scheduling policy for the `deps` list. `parallel` is the
   default; `serial` runs a list with more than one dependency in declaration
   order.
@@ -406,7 +406,7 @@ list of strings.
 Netsuke quotes paths inserted through `{{ ins }}` and `{{ outs }}`. Other Jinja
 values render as ordinary command text and are not automatically shell-quoted.
 The `shell_escape` filter described in older drafts is not implemented in
-v0.1.0-beta1.
+v0.1.0-beta2.
 
 Cycle detection follows `sources` and `deps`. Order-only dependencies enforce
 ordering but do not participate in cycle detection.
@@ -633,7 +633,7 @@ Both helpers accept:
 - `cwd_mode="auto"|"always"|"never"`: control bounded project-directory
   fallback searching.
 
-The `env(name)` function reads one required environment variable. v0.1.0-beta1
+The `env(name)` function reads one required environment variable. v0.1.0-beta2
 does not accept a default argument; an absent or non-Unicode value is an error.
 
 ### Inject the environment reader for tests
@@ -1172,7 +1172,7 @@ colour alone. Emoji policy values are:
 - `auto`: Unicode in standard output and ASCII in accessible output.
 
 The colour policy is separate. Colour rendering is not implemented in
-v0.1.0-beta1, so `color` currently affects mode selection but does not add
+v0.1.0-beta2, so `color` currently affects mode selection but does not add
 coloured terminal text.
 
 Verbose mode adds per-stage timing after a successful command. Failed commands
@@ -1213,7 +1213,7 @@ stderr has this shape:
   "schema_version": 1,
   "generator": {
     "name": "netsuke",
-    "version": "0.1.0-beta1"
+    "version": "0.1.0-beta2"
   },
   "diagnostics": [
     {
@@ -1253,7 +1253,7 @@ Exactly one outcome branch is present:
   - `source`, `primary_span`, and `labels`: optional source locations.
   - `related`: nested diagnostics using the same shape.
 
-**Triage:** Treat schema version `1` as pre-stable for v0.1.0-beta1 and check
+**Triage:** Treat schema version `1` as pre-stable for v0.1.0-beta2 and check
 `schema_version` before parsing other fields.
 
 ## Configure network access
@@ -1305,7 +1305,7 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
 - `{{ ins }}` and `{{ outs }}` are quoted as path arguments.
 - Arbitrary Jinja values in `command` and `script` are not automatically
   shell-quoted.
-- `script` uses `/bin/sh -e` in v0.1.0-beta1.
+- `script` uses `/bin/sh -e` in v0.1.0-beta2.
 - `shell`, `grep`, `fetch`, filesystem helpers, and ordinary recipes interact
   with the host.
 - `glob` restricts its filesystem metadata access to a capability handle
