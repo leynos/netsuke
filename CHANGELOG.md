@@ -64,6 +64,7 @@
 
 ## [0.1.0-beta1] - 2026-08-05
 
+<!-- markdownlint-disable-next-line MD024 -->
 ### Added
 
 - Ship 33 further locale catalogues, so `--locale` now selects any of `ar`,
@@ -73,6 +74,7 @@
   `zh-Hant`, with `en-US` remaining the source and fallback locale
   ([#466](https://github.com/leynos/netsuke/issues/466))
 
+<!-- markdownlint-disable-next-line MD024 -->
 ### Changed
 
 - Select catalogues by exact locale tag with deliberate per-language fallback
