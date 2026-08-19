@@ -170,6 +170,11 @@ fn verbose_informational_help_emits_empty_config_metrics_snapshot() -> Result<()
         &["metrics snapshot", "metrics=[]"],
         "stderr",
     )?;
+    ensure!(
+        output.stderr.matches("metrics snapshot").count() == 1,
+        "informational help should emit exactly one human-mode metrics snapshot, got:\n{}",
+        output.stderr
+    );
     Ok(())
 }
 
