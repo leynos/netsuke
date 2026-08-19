@@ -992,10 +992,8 @@ error. A broken discovered configuration is therefore not treated as absent.
 
 Normal command-line use requires no change. The Rust API remains an unstable
 beta surface, but callers that compose configuration themselves can avoid
-
-discovering and loading the same configuration files more than once. Both
-`netsuke::cli::resolve_json_and_layers_with_env` and
-`netsuke::cli::resolve_json_and_layers_outcome_with_env` return
+discovering and loading the same configuration files more than once.
+`netsuke::cli::resolve_json_and_layers_outcome_with_env` returns
 `(OrthoResult<bool>, DiscoveryOutcome)`. Callers may call
 `emit_diagnostics()` on the outcome, then call `into_layers()` before passing
 the layers to

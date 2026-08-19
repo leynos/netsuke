@@ -11,7 +11,7 @@ extern crate test;
 use cap_std::{ambient_authority, fs::Dir};
 use clap::CommandFactory;
 use netsuke::cli::{
-    Cli, ConfigEnvProvider, merge_with_cached_file_layers, resolve_json_and_layers_with_env,
+    Cli, ConfigEnvProvider, merge_with_cached_file_layers, resolve_json_and_layers_outcome_with_env,
 };
 use std::ffi::OsString;
 use tempfile::TempDir;
@@ -57,7 +57,7 @@ fn resolves_json_then_merges_cached_large_config(bencher: &mut Bencher) {
     let env = BenchmarkEnv;
 
     bencher.iter(|| {
-        let (json_result, outcome) = resolve_json_and_layers_with_env(&cli, &matches, &env);
+        let (json_result, outcome) = resolve_json_and_layers_outcome_with_env(&cli, &matches, &env);
         let json =
             json_result.unwrap_or_else(|error| panic!("resolve benchmark JSON mode: {error}"));
         let merged = merge_with_cached_file_layers(&cli, &matches, &env, outcome.into_layers())

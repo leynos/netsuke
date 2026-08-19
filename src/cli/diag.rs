@@ -34,7 +34,8 @@ pub fn resolve_merged_json(cli: &Cli, matches: &ArgMatches) -> OrthoResult<bool>
 ///
 /// This command-facing convenience boundary replays deferred discovery
 /// diagnostics before returning. Query callers should use
-/// [`resolve_json_and_layers_with_env`] and choose when to emit its outcome.
+/// [`resolve_json_and_layers_outcome_with_env`] and choose when to emit its
+/// outcome.
 ///
 /// # Errors
 ///
@@ -50,32 +51,11 @@ pub fn resolve_merged_json_with_env(
     result
 }
 
-/// Resolve diagnostic JSON mode and retain the discovery outcome.
-///
-/// This pure query returns the JSON result beside the same [`DiscoveryOutcome`]
-/// that owns the cached file layers and deferred diagnostics. A composition
-/// boundary must call [`DiscoveryOutcome::emit_diagnostics`] only after it
-/// installs the appropriate tracing filter, then pass `into_layers()` to
-/// [`super::merge::merge_with_cached_file_layers`].
-///
-/// # Errors
-///
-/// Returns the first discovery error immediately, or a validation error when
-/// `NETSUKE_JSON` contains an invalid boolean.
-pub fn resolve_json_and_layers_with_env(
-    cli: &Cli,
-    matches: &ArgMatches,
-    env: &impl EnvProvider,
-) -> (OrthoResult<bool>, DiscoveryOutcome) {
-    resolve_json_and_layers_outcome_with_env(cli, matches, env)
-}
-
 /// Resolve diagnostic JSON mode while retaining a discovery outcome.
 ///
 /// Startup uses this form to replay cached diagnostics after it enables its
 /// output filter, including when discovery or JSON validation fails. The
-/// outcome owns the discovered layers and deferred diagnostics. Standalone
-/// callers should usually prefer [`resolve_json_and_layers_with_env`].
+/// outcome owns the discovered layers and deferred diagnostics.
 pub fn resolve_json_and_layers_outcome_with_env(
     cli: &Cli,
     matches: &ArgMatches,
@@ -310,7 +290,8 @@ mod tests {
         let env = TestEnv::default().with_var("NETSUKE_CONFIG", &missing_config_path);
         let ((result, outcome), query_events) =
             with_test_subscriber(LevelFilter::TRACE, |captured| {
-                let resolution = resolve_json_and_layers_with_env(&Cli::default(), &matches, &env);
+                let resolution =
+                    resolve_json_and_layers_outcome_with_env(&Cli::default(), &matches, &env);
                 (resolution, captured.snapshot())
             });
         let ((), after_emission) = with_test_subscriber(LevelFilter::TRACE, |captured| {
@@ -343,7 +324,7 @@ mod tests {
         let matches = Cli::command().get_matches_from(["netsuke"]);
         let env = TestEnv::default();
 
-        let (json, outcome) = resolve_json_and_layers_with_env(&cli, &matches, &env);
+        let (json, outcome) = resolve_json_and_layers_outcome_with_env(&cli, &matches, &env);
         ensure!(json?, "cached file layer should set JSON mode");
         config_dir.remove_file("netsuke.toml")?;
 

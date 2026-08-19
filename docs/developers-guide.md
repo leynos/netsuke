@@ -2583,9 +2583,6 @@ Configuration merge helpers:
 - `collect_file_layers_with_trace_and_env_source(directory, env_source)` runs
   the one discovery pass and retains bounded project-scope trace metadata.
 
-- `resolve_json_and_layers_with_env(cli, matches, env)` returns the JSON
-  result and its `DiscoveryOutcome` without emitting tracing, so the caller
-  can install the correct filter before replaying deferred diagnostics.
 - `resolve_json_and_layers_outcome_with_env(cli, matches, env)` retains the
   `DiscoveryOutcome` so startup can emit diagnostics after tracing setup and
   then call `into_layers()`.

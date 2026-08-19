@@ -24,8 +24,7 @@ pub(crate) mod test_support;
 
 pub use config::{AccessibilityPolicy, CliConfig, ColourPolicy, EmojiPolicy, ProgressPolicy};
 pub use diag::{
-    resolve_json_and_layers_outcome_with_env, resolve_json_and_layers_with_env,
-    resolve_merged_json, resolve_merged_json_with_env,
+    resolve_json_and_layers_outcome_with_env, resolve_merged_json, resolve_merged_json_with_env,
 };
 /// Cached file layers, discovery errors, and deferred diagnostics from one
 /// configuration discovery pass.
