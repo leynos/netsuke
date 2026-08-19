@@ -24,9 +24,12 @@ impl ToolName {
     }
 }
 
+/// Compile-time sample tool name exercised by the assertion below.
 const COMPILE_TIME_TOOL_NAME: ToolName = ToolName::new("compdb");
+/// String form of the sample tool name, computed at compile time.
 const COMPILE_TIME_TOOL_NAME_TEXT: &str = COMPILE_TIME_TOOL_NAME.as_str();
 
+/// Compile-time assertion that `ToolName` stays const-evaluable.
 const _: () = assert!(
     COMPILE_TIME_TOOL_NAME_TEXT.len() == "compdb".len(),
     "ToolName::new and ToolName::as_str must remain const-evaluable"
@@ -42,26 +45,32 @@ impl From<&'static str> for ToolName {
 #[cfg(unix)]
 #[derive(Debug, Clone, Copy)]
 struct ShellFlag {
+    /// The command-line flag text, e.g. `-j`.
     flag: &'static str,
+    /// The shell variable name the flag is validated as, e.g. `jobs`.
     var_name: &'static str,
 }
 
 #[cfg(unix)]
 impl ShellFlag {
+    /// The `-j` job-count flag.
     const JOBS: Self = Self {
         flag: "-j",
         var_name: "jobs",
     };
 
+    /// The `-C` working-directory flag.
     const DIRECTORY: Self = Self {
         flag: "-C",
         var_name: "dir",
     };
 
+    /// The flag text.
     const fn flag(&self) -> &str {
         self.flag
     }
 
+    /// The associated shell variable name.
     const fn var_name(&self) -> &str {
         self.var_name
     }
@@ -77,6 +86,11 @@ fn write_fake_ninja_script(script: &str, context: &str) -> Result<(TempDir, Path
     let dir = TempDir::new().with_context(|| format!("{context}: create temp dir"))?;
     write_fake_ninja_script_in_dir(script, context, dir)
 }
+/// Write `script` as an executable `ninja` inside `dir`, returning both.
+///
+/// # Errors
+///
+/// Returns an error if the script cannot be written or made executable.
 #[cfg(unix)]
 fn write_fake_ninja_script_in_dir(
     script: &str,
@@ -181,12 +195,14 @@ pub fn fake_ninja_check_build_file() -> Result<(TempDir, PathBuf)> {
 /// // ninja_path will succeed only when invoked with `-t clean`
 /// ```
 #[cfg(unix)]
+/// Stub for non-Unix platforms that returns an error.
 ///
 /// # Errors
 ///
-/// Returns an error if the temporary directory or fake executable cannot be created.
-pub fn fake_ninja_expect_tool(expected_tool: ToolName) -> Result<(TempDir, PathBuf)> {
-    fake_ninja_expect_tool_with_jobs(expected_tool, None, None)
+/// Always returns an error: this factory is only supported on Unix platforms.
+#[cfg(not(unix))]
+pub fn fake_ninja_expect_tool(_expected_tool: ToolName) -> Result<(TempDir, PathBuf)> {
+    anyhow::bail!("fake_ninja_expect_tool is only supported on Unix platforms")
 }
 
 /// Convert a Rust string to a shell-safe single-quoted literal.
@@ -319,18 +335,18 @@ fn build_tool_validation_script(
 /// // ninja_path will succeed only when invoked with `-t clean -j 4 -C /path/to/build`
 /// ```
 #[cfg(unix)]
+/// Stub for non-Unix platforms that returns an error.
 ///
 /// # Errors
 ///
-/// Returns an error if the temporary directory or fake executable cannot be created.
+/// Always returns an error: this factory is only supported on Unix platforms.
+#[cfg(not(unix))]
 pub fn fake_ninja_expect_tool_with_jobs(
-    expected_tool: ToolName,
-    expected_jobs: Option<u32>,
-    expected_directory: Option<&Path>,
+    _expected_tool: ToolName,
+    _expected_jobs: Option<u32>,
+    _expected_directory: Option<&Path>,
 ) -> Result<(TempDir, PathBuf)> {
-    let script_content =
-        build_tool_validation_script(expected_tool, expected_jobs, expected_directory)?;
-    write_fake_ninja_script(&script_content, "fake_ninja_expect_tool_with_jobs")
+    anyhow::bail!("fake_ninja_expect_tool_with_jobs is only supported on Unix platforms")
 }
 
 /// Stub for non-Unix platforms that returns an error.

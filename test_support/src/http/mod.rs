@@ -13,8 +13,11 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Override for the timeout in milliseconds within which a client must connect.
 pub(crate) const ENV_HTTP_ACCEPT_TIMEOUT_MS: &str = "NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS";
+/// Override for the timeout in milliseconds within which the request must arrive.
 pub(crate) const ENV_HTTP_READ_TIMEOUT_MS: &str = "NETSUKE_TEST_HTTP_READ_TIMEOUT_MS";
+/// Override for the polling interval in milliseconds used while waiting.
 pub(crate) const ENV_HTTP_POLL_INTERVAL_MS: &str = "NETSUKE_TEST_HTTP_POLL_INTERVAL_MS";
 
 #[cfg(test)]
@@ -28,8 +31,11 @@ thread_local! {
 /// Configuration for HTTP fixtures, including timeouts used during polling.
 #[derive(Debug, Clone)]
 pub struct HttpServerConfig {
+    /// Deadline for a client to connect.
     accept_timeout: Duration,
+    /// Deadline for the request to finish arriving.
     read_timeout: Duration,
+    /// Interval between readiness polls.
     poll_interval: Duration,
 }
 
@@ -53,6 +59,7 @@ impl HttpServerConfig {
         Self::from_env_provider(&DefaultEnv)
     }
 
+    /// Load the configuration from `env`, clamping the poll interval to 1 ms.
     fn from_env_provider(env: &impl Env) -> Self {
         let mut config = Self::default();
         config.accept_timeout =
@@ -67,10 +74,12 @@ impl HttpServerConfig {
         config
     }
 
+    /// The instant by which a client must connect.
     fn accept_deadline(&self) -> Instant {
         Instant::now() + self.accept_timeout
     }
 
+    /// The instant by which the request must be read.
     fn read_deadline(&self) -> Instant {
         Instant::now() + self.read_timeout
     }
@@ -96,7 +105,9 @@ impl Default for HttpServerConfig {
 #[derive(Debug)]
 #[must_use]
 pub struct HttpServer {
+    /// The fixture thread's join handle.
     handle: Option<thread::JoinHandle<()>>,
+    /// The bound listener address, used to unblock the accept loop.
     addr: SocketAddr,
 }
 
@@ -113,6 +124,7 @@ impl HttpServer {
             .map_or_else(|| Ok(()), std::thread::JoinHandle::join)
     }
 
+    /// Connect once to unblock a blocked accept loop, ignoring the outcome.
     fn shutdown_listener(&self) {
         // Connect to unblock the accept loop; the outcome is irrelevant.
         drop(TcpStream::connect(self.addr));
@@ -178,6 +190,7 @@ pub fn spawn_http_server_with_config(
     ))
 }
 
+/// Serve a single request from `listener`, responding with `body`.
 #[expect(
     clippy::panic,
     reason = "test HTTP helper should fail fast when networking fails"
@@ -200,10 +213,12 @@ fn run_http_server(listener: &TcpListener, body: &str, config: &HttpServerConfig
     }
 }
 
+/// Whether `deadline` has passed.
 fn is_past_deadline(deadline: Instant) -> bool {
     Instant::now() >= deadline
 }
 
+/// Whether an accept error is transient and still within the deadline.
 fn should_retry_accept(
     err: &io::Error,
     deadline: Instant,
@@ -221,6 +236,7 @@ fn should_retry_accept(
     )
 }
 
+/// Time remaining until `deadline`, never negative.
 fn remaining_until_deadline(deadline: Instant) -> Duration {
     let now = Instant::now();
     if deadline > now {
@@ -230,6 +246,7 @@ fn remaining_until_deadline(deadline: Instant) -> Duration {
     }
 }
 
+/// Accept a client, retrying transient errors until `deadline`.
 #[expect(
     clippy::panic,
     reason = "tests panic when the helper cannot accept a client"
@@ -252,6 +269,7 @@ fn accept_connection(
     }
 }
 
+/// Read available request bytes, reporting `WouldBlock` as not-yet-ready.
 #[expect(clippy::panic, reason = "tests panic to surface unexpected IO errors")]
 fn try_read(stream: &mut TcpStream) -> Option<usize> {
     let mut buf = [0u8; 512];
@@ -263,6 +281,7 @@ fn try_read(stream: &mut TcpStream) -> Option<usize> {
     }
 }
 
+/// Read the request from `stream`, returning `0` once `deadline` passes.
 fn read_request(stream: &mut TcpStream, deadline: Instant, poll_interval: Duration) -> usize {
     loop {
         if let Some(bytes_read) = try_read(stream) {
@@ -275,6 +294,7 @@ fn read_request(stream: &mut TcpStream, deadline: Instant, poll_interval: Durati
     }
 }
 
+/// Write a `200 OK` response carrying `body` to `stream`.
 fn write_response(stream: &mut TcpStream, body: &str) -> io::Result<()> {
     let response = format!(
         "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -284,6 +304,8 @@ fn write_response(stream: &mut TcpStream, body: &str) -> io::Result<()> {
     stream.write_all(response.as_bytes())
 }
 
+/// Read `var` as whole milliseconds, falling back to `default` when unset or
+/// unparsable.
 fn duration_from_env(env: &impl Env, var: &str, default: Duration) -> Duration {
     env.raw(var).map_or(default, |value| {
         let trimmed = value.trim();

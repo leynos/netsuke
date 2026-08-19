@@ -102,6 +102,7 @@ pub(super) fn parse_catalogue(source: &str) -> Result<MessageVariables, Box<dyn 
     Ok(messages)
 }
 
+/// Fold `trimmed`'s variables into the message named by `current`.
 fn append_continuation(messages: &mut MessageVariables, current: Option<&str>, trimmed: &str) {
     let Some(variables) = current.and_then(|id| messages.get_mut(id)) else {
         return;

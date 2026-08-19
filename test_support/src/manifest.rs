@@ -61,6 +61,11 @@ pub fn ensure_manifest_exists(temp_dir: &Utf8Path, cli_file: &Utf8Path) -> io::R
     Ok(manifest_path)
 }
 
+/// Inspect `manifest_path`, wrapping metadata errors with path context.
+///
+/// # Errors
+///
+/// Returns an error if the path cannot be inspected.
 fn inspect_manifest_target(manifest_path: &Utf8Path) -> io::Result<fs::PathState> {
     fs::inspect_path(manifest_path).map_err(|error| {
         io::Error::new(
@@ -70,6 +75,7 @@ fn inspect_manifest_target(manifest_path: &Utf8Path) -> io::Result<fs::PathState
     })
 }
 
+/// Build the `IsADirectory` error reported for a directory manifest target.
 fn manifest_path_is_directory_error(manifest_path: &Utf8Path) -> io::Error {
     io::Error::new(
         io::ErrorKind::IsADirectory,
@@ -77,6 +83,13 @@ fn manifest_path_is_directory_error(manifest_path: &Utf8Path) -> io::Error {
     )
 }
 
+/// Re-inspect `manifest_path` after a no-clobber persist reports a collision.
+///
+/// # Errors
+///
+/// Returns `IsADirectory` for a directory target, `AlreadyExists` if the
+/// target vanished, and `Ok(())` when a non-directory target already fulfils
+/// the manifest-exists contract.
 fn handle_raced_manifest_target(manifest_path: &Utf8Path) -> io::Result<()> {
     match inspect_manifest_target(manifest_path)? {
         fs::PathState::Directory => Err(manifest_path_is_directory_error(manifest_path)),
@@ -106,6 +119,11 @@ fn install_before_persist_hook(
     BeforePersistHookGuard { previous }
 }
 
+/// Resolve `cli_file` against `temp_dir`, requiring a file name.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` if the resolved path has no file name.
 fn resolve_manifest_path(temp_dir: &Utf8Path, cli_file: &Utf8Path) -> io::Result<Utf8PathBuf> {
     let manifest_path = if cli_file.is_absolute() {
         cli_file.to_owned()
@@ -123,6 +141,11 @@ fn resolve_manifest_path(temp_dir: &Utf8Path, cli_file: &Utf8Path) -> io::Result
     Ok(manifest_path)
 }
 
+/// Stage and atomically persist a manifest at `manifest_path`.
+///
+/// # Errors
+///
+/// Returns an error if staging or persistence fails.
 fn create_manifest_file(temp_dir: &Utf8Path, manifest_path: &Utf8Path) -> io::Result<()> {
     let dest_dir = manifest_path.parent().unwrap_or(temp_dir);
     ensure_parent_directory(manifest_path, dest_dir)?;
@@ -139,6 +162,11 @@ fn create_manifest_file(temp_dir: &Utf8Path, manifest_path: &Utf8Path) -> io::Re
     }
 }
 
+/// Create a temporary file in `dest_dir` for staging a manifest.
+///
+/// # Errors
+///
+/// Returns an error if the temporary file cannot be created.
 fn create_temp_file(dest_dir: &Utf8Path, manifest_path: &Utf8Path) -> io::Result<NamedTempFile> {
     NamedTempFile::new_in(dest_dir.as_std_path()).map_err(|e| {
         io::Error::new(
@@ -148,6 +176,11 @@ fn create_temp_file(dest_dir: &Utf8Path, manifest_path: &Utf8Path) -> io::Result
     })
 }
 
+/// Write the standard manifest content into `file`.
+///
+/// # Errors
+///
+/// Returns an error if the content cannot be written.
 fn write_manifest_content(file: &mut NamedTempFile, manifest_path: &Utf8Path) -> io::Result<()> {
     crate::env::write_manifest(file).map_err(|e| {
         io::Error::new(
@@ -179,6 +212,12 @@ fn persist_manifest_file(file: NamedTempFile, manifest_path: &Utf8Path) -> io::R
     }
 }
 
+/// Ensure `dest_dir` exists, creating any missing ancestor directories.
+///
+/// # Errors
+///
+/// Returns `NotADirectory` if an ancestor is a non-directory, or an I/O error
+/// if creation fails.
 fn ensure_parent_directory(manifest_path: &Utf8Path, dest_dir: &Utf8Path) -> io::Result<()> {
     match fs::inspect_path(dest_dir).map_err(|error| {
         io::Error::new(
@@ -221,6 +260,12 @@ fn ensure_parent_directory(manifest_path: &Utf8Path, dest_dir: &Utf8Path) -> io:
     })
 }
 
+/// Locate the nearest existing ancestor directory of `dest_dir`.
+///
+/// # Errors
+///
+/// Returns `NotADirectory` if an ancestor is a non-directory, or `NotFound`
+/// if no ancestor exists.
 fn find_existing_ancestor<'a>(
     dest_dir: &'a Utf8Path,
     manifest_path: &Utf8Path,

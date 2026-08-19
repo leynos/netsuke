@@ -17,9 +17,13 @@ use crate::fs;
 
 /// A published fake release, ready for the installer to fetch.
 pub struct FakeRelease {
+    /// The version the release is published under.
     version: String,
+    /// The sandbox directory holding the published artefacts.
     directory: Utf8PathBuf,
+    /// The artefact's file name, e.g. `mold-1.0.0-x86_64-linux.tar.gz`.
     name: String,
+    /// The artefact's SHA-256 digest, hex-encoded.
     sha256: String,
 }
 
@@ -99,6 +103,11 @@ impl FakeRelease {
         Self::write_checksum_file(sandbox, &other)
     }
 
+    /// Write `contents` into the sandbox's `SHA256SUMS` and return its path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the checksum file cannot be written.
     fn write_checksum_file(sandbox: &Sandbox, contents: &str) -> Result<Utf8PathBuf> {
         let path = sandbox.home().join("SHA256SUMS");
         fs::write(&path, contents).context("write test checksum file")?;
@@ -113,6 +122,11 @@ fn stage_release_tree(root: &Utf8Path) -> Result<()> {
     fs::write(root.join("bin/mold"), "#!/bin/sh\necho fake\n").context("write staged mold")
 }
 
+/// Tar and gzip the staged release tree into `name` within `directory`.
+///
+/// # Errors
+///
+/// Returns an error if `tar` cannot run or exits unsuccessfully.
 fn build_archive(
     sandbox: &Sandbox,
     directory: &Utf8Path,
@@ -130,6 +144,11 @@ fn build_archive(
     Ok(directory.join(name))
 }
 
+/// Hash `path` with `sha256sum`, returning the hex digest.
+///
+/// # Errors
+///
+/// Returns an error if `sha256sum` cannot run or exits unsuccessfully.
 fn sha256_of(sandbox: &Sandbox, path: &Utf8Path) -> Result<String> {
     let output = Command::new(sandbox.bin().join("sha256sum").as_std_path())
         .arg(path.as_std_path())
@@ -144,6 +163,11 @@ fn sha256_of(sandbox: &Sandbox, path: &Utf8Path) -> Result<String> {
         .to_owned())
 }
 
+/// Copy `archive` into `directory`/`v{version}`/`name`.
+///
+/// # Errors
+///
+/// Returns an error if the versioned directory or the copy fail.
 fn publish_under_version_path(
     directory: &Utf8Path,
     archive: &Utf8Path,
