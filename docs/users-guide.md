@@ -1002,6 +1002,28 @@ defaults. When it finds a candidate that cannot be loaded, such as malformed
 TOML or a file whose `extends` parent is missing, Netsuke reports the load
 error. A broken discovered configuration is therefore not treated as absent.
 
+### Reuse discovered configuration layers
+
+Normal command-line use requires no change. The Rust API remains an unstable
+beta surface, but callers that compose configuration themselves can avoid
+discovering and loading the same configuration files more than once. The
+`netsuke::cli::resolve_json_and_layers_outcome_with_env` returns
+`(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics. At the
+composition boundary, call `DiscoveryOutcome::emit_diagnostics()` after
+tracing is configured, then consume the outcome with `into_layers()` and pass
+the cached layers to `netsuke::cli::merge_with_cached_file_layers` for the
+full merge. This preserves diagnostics from the same discovery pass while
+avoiding repeated file loading.
+
+All of these functions take an injected `&impl ConfigEnvProvider`. The public
+`ConfigEnvProvider` trait provides `get(&self, key: &str) -> Option<OsString>`
+for selector and environment lookups, plus
+`entries(&self) -> Vec<(OsString, OsString)>` for the complete configuration
+environment layer. `entries()` defaults to an empty vector.
+`ConfigStdEnvProvider` is the process-backed implementation; tests and other
+adapters can provide an implementation without mutating the process
+environment.
+
 ### Diagnose configuration selection
 
 Pass `--verbose` to see how Netsuke selected its configuration. Structured
@@ -1010,14 +1032,34 @@ whether a path was present, and which environment lookups were attempted.
 Events then identify whether Netsuke uses an explicit file or discovered layers.
 
 If an explicit file cannot be loaded, the warning records `failure_kind` as
-`Missing` or `LoadError`. Path fields are bounded to `path_hash` and
-`path_file_name`; full paths and formatted parser errors are not tracing
-fields. The file name is visible, and the unkeyed hash is only a correlation
-identifier: it does not confidentially conceal a guessable path.
+`Missing` or `LoadError`. Discovery diagnostics expose bounded `path_hash` and
+presence fields. They do not expose raw configuration paths or configuration
+file names. The unkeyed `path_hash` is a bounded correlation identifier; it
+does not confidentially conceal a guessable path.
 
 Configuration tracing is disabled in JSON mode, including when `json = true`
 comes from a configuration file. This keeps stderr empty for successful JSON
 commands and reserves it for the single diagnostic document on failure.
+
+Verbose human-mode runs also emit a `metrics snapshot` aggregate after command
+completion. Verbosity can come from `--verbose`, `NETSUKE_VERBOSE`, or
+`verbose = true` in a configuration file. After a successful configuration
+merge, the merged verbosity controls the snapshot; if configuration fails
+before that merge completes, the parsed CLI verbosity is used instead. JSON
+mode suppresses tracing and metrics snapshots so that its diagnostic document
+remains the only stderr output.
+
+#### Bounded configuration metrics
+
+Configuration loading is recorded as two bounded metric series, both emitted
+in the drained `metrics snapshot`:
+
+- `config_load_total` — a counter with the `phase` and `outcome` labels that
+  counts each configuration-loading phase. `phase` is `diag_mode` for the
+  early diagnostic JSON preference resolution or `merge` for the full
+  configuration merge; `outcome` is `success` or `failure`.
+- `config_load_duration_seconds` — a histogram with the `phase` label only,
+  recording each phase's duration in seconds.
 
 The annotated [sample configuration](sample-netsuke.toml) lists every key. A
 small project configuration looks like this:
@@ -1245,6 +1287,13 @@ Netsuke reports failures at the earliest stage that can identify them:
 
 Human diagnostics include remediation hints where one is available. JSON mode
 exposes the same information as fields.
+
+Human-mode configuration-load failures include structured `operation` and
+`error_category` fields. `operation` is `diag_mode_resolution` for the early
+diagnostic JSON preference pass or `config_merge` for the full merge;
+`error_category` is `io`, `validation`, or `parse`. Paths and display text are
+never recorded. JSON mode preserves the diagnostic document as the
+machine-readable failure output.
 
 The `--verbose` flag enables diagnostic tracing and successful timing
 summaries. It is suppressed in JSON mode so stderr remains parseable.

@@ -34,10 +34,12 @@ impl DiagMode {
         matches!(self, Self::Json)
     }
 }
-
+mod config_resolution;
+mod observability;
 #[path = "startup_tracing.rs"]
 mod startup_tracing;
 
+use config_resolution::{merge_cli_or_exit, resolve_json_mode_or_exit};
 use startup_tracing::StartupWriter;
 
 /// Send buffered startup diagnostics where `mode` says they belong.
@@ -76,6 +78,7 @@ fn run_with_args(
     // Buffering keeps the locale fallback report without taking that risk.
     let startup_writer = StartupWriter::buffering();
     init_tracing(LevelFilter::WARN, startup_writer.clone());
+    observability::init_metrics();
     let localizer = startup_localizer(&args, env, system_locale);
     let startup_mode = DiagMode::from_json_enabled(json_hint);
     let (parsed_cli, matches) =
@@ -84,28 +87,41 @@ fn run_with_args(
             // The buffer was settled inside, before the branch that exits.
             Err(code) => return code,
         };
-
+    let verbose = parsed_cli.verbose;
     if is_informational_help(&parsed_cli) {
         settle_startup_diagnostics(&startup_writer, startup_mode);
-        return run_cli(&parsed_cli, system_locale, startup_mode);
+        return finish_run(run_cli(&parsed_cli, system_locale, startup_mode), verbose);
     }
 
-    let mode = match resolve_json_mode_or_exit(&parsed_cli, &matches, startup_mode) {
-        Ok(mode) => mode,
-        Err(code) => {
-            settle_startup_diagnostics(&startup_writer, startup_mode);
-            return code;
-        }
-    };
+    let (mode, discovered_layers) =
+        match resolve_json_mode_or_exit(&parsed_cli, &matches, startup_mode) {
+            Ok(resolved) => resolved,
+            Err(code) => {
+                settle_startup_diagnostics(&startup_writer, startup_mode);
+                return finish_run(code, verbose);
+            }
+        };
     // The effective mode is known here, before configuration is merged, so the
     // startup warning reaches the user ahead of any configuration processing.
     settle_startup_diagnostics(&startup_writer, mode);
-    let merged_cli = match merge_cli_or_exit(&parsed_cli, &matches, mode) {
+    let merged_cli = match merge_cli_or_exit(&parsed_cli, &matches, mode, discovered_layers) {
         Ok(merged) => merged,
-        Err(code) => return code,
+        Err(code) => return finish_run(code, verbose),
     };
+    let merged_verbose = merged_cli.verbose;
     let runtime_mode = DiagMode::from_json_enabled(merged_cli.json);
-    run_cli(&merged_cli, system_locale, runtime_mode)
+    finish_run(
+        run_cli(&merged_cli, system_locale, runtime_mode),
+        merged_verbose,
+    )
+}
+
+/// Emit a development snapshot after the command has completed when requested.
+fn finish_run(exit_code: ExitCode, verbose: bool) -> ExitCode {
+    if verbose {
+        observability::emit_metrics_snapshot();
+    }
+    exit_code
 }
 
 const fn is_informational_help(cli: &cli::Cli) -> bool {
@@ -230,49 +246,6 @@ fn parse_cli_or_exit(
     }
 }
 
-fn config_err_to_exit(err: &(dyn std::error::Error + 'static), mode: DiagMode) -> ExitCode {
-    if mode.is_json() {
-        diagnostic_json::emit_or_fallback(diagnostic_json::render_error_json(err))
-    } else {
-        tracing::error!(error = %err, "configuration load failed");
-        ExitCode::FAILURE
-    }
-}
-
-fn resolve_json_mode_or_exit(
-    parsed_cli: &cli::Cli,
-    matches: &ArgMatches,
-    fallback_mode: DiagMode,
-) -> Result<DiagMode, ExitCode> {
-    match cli::resolve_merged_json(parsed_cli, matches) {
-        Ok(is_json_enabled) => {
-            let mode = DiagMode::from_json_enabled(is_json_enabled);
-            set_tracing_filter(startup_filter(mode, parsed_cli.verbose));
-            Ok(mode)
-        }
-        Err(err) => {
-            let fallback_filter = startup_filter(fallback_mode, parsed_cli.verbose);
-            set_tracing_filter(fallback_filter);
-            // Resolution failed before its diagnostics could be emitted. Replay
-            // only for human output after enabling its filter; JSON remains OFF.
-            if fallback_filter != LevelFilter::OFF {
-                drop(cli::resolve_merged_json(parsed_cli, matches));
-            }
-            Err(config_err_to_exit(err.as_ref(), fallback_mode))
-        }
-    }
-}
-
-fn merge_cli_or_exit(
-    parsed_cli: &cli::Cli,
-    matches: &ArgMatches,
-    mode: DiagMode,
-) -> Result<cli::Cli, ExitCode> {
-    cli::merge_with_config(parsed_cli, matches)
-        .map(cli::Cli::with_default_command)
-        .map_err(|err| config_err_to_exit(err.as_ref(), mode))
-}
-
 fn configure_runtime(
     merged_cli: &cli::Cli,
     system_locale: &impl locale_resolution::SystemLocale,
@@ -329,3 +302,7 @@ fn render_runtime_error_json(err: &anyhow::Error) -> serde_json::Result<String> 
 #[cfg(test)]
 #[path = "main_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "main_config_tests.rs"]
+mod config_tests;

@@ -32,6 +32,7 @@ Table: documented v0.1.0 additions, including `netsuke help targets`, and their 
 | Command recipes | Existing scalar `command` recipes are unchanged. New YAML command lists are opt-in and run in declaration order with fail-fast semantics. | [Rules and recipes](users-guide.md#rules-and-recipes) |
 | Manifest discovery | Optional target/action `description` values are shown by the new `netsuke help targets` command. Manifests without them and existing build output are unchanged. | [Users' guide](users-guide.md) |
 | Serial dependencies | New opt-in `dependency_order: serial` runs an action or target's direct `deps` list in declaration order. | [Serial dependency ordering](users-guide.md#run-direct-dependencies-serially) |
+| Cached configuration discovery | New opt-in `netsuke::cli::resolve_json_and_layers_outcome_with_env` and `netsuke::cli::merge_with_cached_file_layers` APIs let callers reuse discovered file layers. | [Users' guide](users-guide.md) |
 
 ## Nothing to change for existing callers
 
@@ -68,6 +69,29 @@ must stay isolated from the injected `PATH`.
 Both request types borrow their fields, so one `CommandEnv` and one `Cli`
 can serve several invocations. Worked examples live in the users' guide's
 "Drive Ninja with an explicit environment" section.
+
+## Reusing cached configuration discovery
+
+The cached configuration APIs are an opt-in flow for callers of the unstable
+Rust API. `resolve_json_and_layers_outcome_with_env` returns
+`(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics. Callers
+that adopt this composition boundary explicitly call
+`DiscoveryOutcome::emit_diagnostics()` after installing a tracing filter, then
+consume the outcome with `into_layers()` and pass the resulting
+`DiscoveredLayers` to `merge_with_cached_file_layers`.
+
+The standalone `resolve_merged_json_with_env` and
+`merge_with_config_and_env` functions retain their existing automatic
+discovery behaviour. The former resolves JSON mode, while the latter
+discovers and merges configuration in one call, so callers that do not need
+the cached flow require no migration.
+
+v0.1.0 also instruments configuration loading itself: bounded metrics named
+`config_load_total` and `config_load_duration_seconds`, and structured
+`operation` and `error_category` fields on configuration-load failures.
+Neither exposes configuration paths. See the users' guide's
+[bounded configuration metrics](users-guide.md#bounded-configuration-metrics)
+and [interpret failures](users-guide.md#interpret-failures) sections.
 
 ## Opting into serial dependency ordering
 

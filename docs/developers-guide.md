@@ -501,27 +501,14 @@ NEXTEST_VERSION="$(sed -n "s/.*NEXTEST_VERSION: '\(.*\)'.*/\1/p" \
   .github/workflows/ci.yml)"
 cargo install cargo-nextest --locked --version "$NEXTEST_VERSION"
 # or, for a prebuilt binary:
-cargo binstall --no-confirm "cargo-nextest@$NEXTEST_VERSION"
+cargo binstall --no-confirm --locked \
+  "cargo-nextest@$NEXTEST_VERSION"
 ```
 
-See [Test execution](#test-execution) for what the checked-in nextest
-configuration does and does not cover.
-
-`make lint` starts with workspace-wide rustdoc through
-`RUSTDOCFLAGS="$(RUSTDOC_FLAGS)"` and
-`RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)"`. This
-denies warnings, enables Polonius, and preserves any `RUSTFLAGS` supplied by
-the caller. It then runs workspace-wide
-`cargo clippy --workspace --all-targets --all-features` and the
-[Whitaker](whitaker-users-guide.md) Dylint suite
-(`whitaker --all -- --all-targets --all-features`). Install Whitaker through
-the standalone installer described in the
-[Whitaker user's guide](whitaker-users-guide.md) so local linting matches
-continuous integration (CI); `make lint-clippy` runs the Clippy-only subset. CI
-pins the installer version in `WHITAKER_INSTALLER_VERSION` in
-`.github/workflows/ci.yml`. Install that same version locally so local runs
-match CI; read the pin from the workflow rather than copying the number, so the
-two cannot drift:
+CI pins the Whitaker installer version in `WHITAKER_INSTALLER_VERSION` in
+`.github/workflows/ci.yml`. Install that same version locally so local linting
+matches CI; read the pin from the workflow rather than copying the number, so
+the two cannot drift:
 
 ```bash
 WHITAKER_INSTALLER_VERSION="$(sed -n \
@@ -1588,6 +1575,12 @@ all valid inputs.
   `resolve_config_path_obeys_precedence_invariant` asserts the
   `explicit_config_path` selector-precedence invariant for generated optional
   paths.
+- Layer-precedence and replay transitions are also property-tested:
+  `tests/cli_tests/merge_precedence_proptests.rs` asserts scalar precedence
+  and list appending for arbitrary file, environment, and CLI layer
+  combinations, and `src/cli/discovery_replay_proptests.rs` proves repeated
+  discovery-diagnostic replays stay identical without re-reading the
+  environment.
 
 ### Parametrized unit tests with rstest
 
@@ -2521,35 +2514,40 @@ Table: Scenario state groups and fields
 Configuration merging lives in `src/cli/merge.rs`. The module keeps
 config-layer plumbing separate from the public CLI surface in `cli::mod`.
 
-### Two-pass file discovery
+### Cached configuration discovery
 
-OrthoConfig's `ConfigDiscovery::compose_layers()` returns only the **first**
-matching config file it finds. Because user-scope locations (XDG Base
-Directory, HOME) are checked before the project root, a user config can shadow
-a project config.
+`discover_file_layers` performs one discovery pass through the injected
+environment and returns a `DiscoveryOutcome`. The outcome retains a
+`DiscoveredLayers` value that owns the discovered layers, discovery errors and
+bounded deferred diagnostics. The diagnostic-mode resolver,
+`resolve_json_and_layers_outcome_with_env`, returns
+`(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics; it
+resolves the JSON preference from those discovered layers and preserves the
+outcome for the startup boundary.
 
-To enforce **project scope > user scope** precedence, `merge_with_config` uses
-a two-pass approach when no explicit config path is provided:
+`DiscoveryOutcome::emit_diagnostics` replays the retained bounded diagnostics
+after the composition boundary configures tracing. Callers must explicitly
+replay diagnostics there; the method does not repeat environment or filesystem
+access. `DiscoveryOutcome::into_layers` transfers the same
+`DiscoveredLayers` to `merge_with_cached_file_layers`, which consumes the
+cached layers for the full merge and prevents a second discovery pass.
 
-1. **First pass** — run `config_discovery()` to find whatever file exists
-   first (typically user-scope).
-2. **Second pass** — if the first pass did not find the project-scope file
-   and there is no explicit config path (`--config` or `NETSUKE_CONFIG`), load
-   `.netsuke.toml` from the project root directly via
-   `load_config_file_as_chain` and push its layers last.
+The standalone `merge_with_config_and_env` path performs discovery, emits the
+retained diagnostics and delegates to `merge_with_cached_file_layers`.
+`merge_with_config` is the process-environment wrapper around that path.
 
-Because `MergeComposer` uses last-wins semantics, pushing the project layers
-after user layers gives them higher precedence.
-
-Early JSON resolution reuses this logic through
-`collect_diag_file_layers_with_sources`, before full configuration merging.
+Deferred bounded discovery diagnostics are replay metadata only. Discovery
+errors remain owned by `DiscoveredLayers` and are handled by the diagnostic
+JSON resolver and the full-merge caller according to their respective error
+policies.
 
 ### Layer precedence
 
 The final merge order is:
 
 1. **Defaults** — `Cli::default()` serialized as a base layer.
-2. **File layers** — discovered config files in the two-pass order above.
+2. **File layers** — discovered config files in discovery order, with project
+   scope taking precedence over user and system scope.
 3. **Environment** — `NETSUKE_*` environment variables via the Figment Env
    provider.
 4. **CLI flags** — values explicitly passed on the command line.
@@ -2560,29 +2558,32 @@ Private helper functions for config discovery and JSON-output resolution.
 
 Configuration merge helpers:
 
-- `config_discovery(directory, env_source) -> ConfigDiscovery` builds the
-  single-pass OrthoConfig discovery scanner with an optional project-root
-  anchor and the environment adapter selected at the composition root.
-- `project_scope_file(directory: Option<&Path>) -> Option<PathBuf>`
-  resolves the expected project `.netsuke.toml` path for project-layer
-  detection.
-- `project_scope_layers(directory)` loads the project-scope config directly,
-  bypassing automatic discovery, and returns
+- `config_discovery(directory: Option<&PathBuf>, env_source: SharedEnvSource)`
+  builds the single-pass OrthoConfig discovery scanner with an optional
+  project-root anchor and the injected environment source.
+- `project_scope_file(directory: Option<&Path>) -> Option<PathBuf>` resolves
+  the expected project `.netsuke.toml` path for project-layer detection.
+- `project_scope_layers(project_file: Option<&Path>)` loads the project-scope
+  config directly, bypassing automatic discovery, and returns
   `OrthoResult<Vec<MergeLayer<'static>>>`.
 - `env_config_path(env, var_name) -> Option<PathBuf>` reads one config
   environment variable, ignores empty values, and converts the value into a
   `PathBuf`.
 - `explicit_config_path_with_env(cli, env) -> Option<PathBuf>` resolves explicit
   config selection from `--config` and `NETSUKE_CONFIG`.
-- `push_file_layers_with_sources(cli, composer, errors, sources) -> ()` pushes
-  explicit or discovered file layers onto a `MergeComposer`. Explicit load
-  errors are pushed into `errors`, and automatic discovery is not attempted
-  after an explicit selector fails.
-- `collect_diag_file_layers_with_sources(cli, sources)` reuses the same
-  file-layer precedence for early JSON resolution.
-- `collect_file_layers_with_env_source(directory, env_source)` builds the
-  fallback discovery layer chain, applies the project-layer second pass, and
-  returns `OrthoResult<Vec<MergeLayer<'static>>>`.
+- `discover_file_layers(cli, env) -> DiscoveryOutcome` performs one discovery
+  pass and retains the discovered layers, discovery errors and bounded
+  deferred diagnostics for the diagnostic and merge callers.
+- `push_discovered_file_layers(composer, errors, discovered) -> ()` transfers
+  the retained layers and discovery errors into the full merge composition.
+- `collect_file_layers_with_trace_and_env_source(directory, env_source)` runs
+  the one discovery pass and retains bounded project-scope trace metadata.
+- `resolve_json_and_layers_outcome_with_env(cli, matches, env)` returns
+  `(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics; the
+  composition boundary must replay them after tracing setup and then call
+  `into_layers()`.
+- `merge_with_cached_file_layers(cli, matches, env, discovered)` consumes the
+  discovered layers without rediscovery.
 - `is_empty_value(value: &serde_json::Value) -> bool` detects an empty CLI
   override object.
 - `json_from_layer(value: &serde_json::Value) -> Option<bool>` extracts `json`
@@ -2617,13 +2618,14 @@ so discovery and value merging observe one environment. Keep this port scoped
 to CLI configuration; runner, manifest, locale, and stdlib environment seams
 remain separate because their input and lifetime contracts differ.
 
-`DiscoverySources` is a crate-private composition input owned by
-`src/cli/discovery.rs`. Only full merge and early JSON resolution may construct
-it. Ambient entry points pair `ConfigStdEnvProvider` with OrthoConfig
-`ProcessEnv`; injected entry points project the same `ConfigEnvProvider` into a
-closed `MapEnv` containing only `NETSUKE_CONFIG`, `HOME`, `USERPROFILE`,
-`XDG_CONFIG_HOME`, `XDG_CONFIG_DIRS`, `APPDATA`, and `LOCALAPPDATA`. Do not
-reuse this fixed-key projection as a general environment-copy helper;
+`discovery_env_source(env)` is the crate-private adapter that projects
+Netsuke's `ConfigEnvProvider` port into the `SharedEnvSource` OrthoConfig
+discovery accepts. Ambient and injected entry points alike pass through this
+one adapter: `ConfigStdEnvProvider` backs ambient runs, while injected entry
+points pass the same `ConfigEnvProvider` value that drives selector and
+`NETSUKE_*` lookups. The projection is closed — only `NETSUKE_CONFIG`, `HOME`,
+`USERPROFILE`, `XDG_CONFIG_HOME`, `XDG_CONFIG_DIRS`, `APPDATA`, and
+`LOCALAPPDATA` appear — so it is not a general environment-copy helper;
 `EnvironmentLayer` alone enumerates the full `NETSUKE_*` value environment.
 
 `explicit_config_path_with_env` is the crate-internal seam for explicit
@@ -2660,10 +2662,11 @@ the unrelated `LocaleEnvProvider` in `locale_resolution`; crate-internal code
 uses the bare `EnvProvider` name.
 
 Tests for injected configuration discovery should provide a map-backed
-`ConfigEnvProvider`. End-to-end tests of the ambient `ProcessEnv` adapter must
-run in an isolated child configured with `env_clear()` followed by
-`Command::env`. `EnvLock` is reserved for tests that change the process working
-directory alongside `CwdGuard`; it does not justify environment mutation.
+`ConfigEnvProvider`. End-to-end tests of the ambient `ConfigStdEnvProvider`
+adapter must run in an isolated child configured with `env_clear()` followed
+by `Command::env`. `EnvLock` is reserved for tests that change the process
+working directory alongside `CwdGuard`; it does not justify environment
+mutation.
 
 Unit tests that only need to verify explicit config path precedence should test
 `explicit_config_path_with_env` with an injected provider instead of mutating
@@ -2671,15 +2674,19 @@ the process environment.
 
 Config selector resolution remains a pure query: `resolve_config_selector`
 records the winning selector, its optional path, and every environment lookup
-evaluated, and emits no tracing itself. Structured diagnostics are emitted only
-at the file-layer boundary, where `collect_file_layers_with_env` calls
-`trace_config_path_resolution` after resolution completes.
+evaluated, and emits no tracing itself. `discover_file_layers` retains the
+bounded diagnostics produced by that resolution and by layer loading;
+`DiscoveryOutcome::emit_diagnostics` replays them after tracing is configured.
 
-Tracing never logs full paths or formatted parser errors. Path values are
-bounded to a `path_hash` correlation identifier plus `path_file_name`, and load
-failures are classified with the `ConfigLoadFailureKind` enum instead of the
-formatted error text. `path_hash` is a bounded identifier for correlating
-events, not a cryptographic guarantee.
+Deferred discovery diagnostics never log raw configuration paths, configuration
+file names or formatted parser errors. They expose bounded `path_hash` and
+presence fields, and classify load failures with the `ConfigLoadFailureKind`
+enum instead of formatted error text. The unkeyed `path_hash` is a bounded
+correlation identifier, not confidential concealment of a guessable path.
+
+This deferred contract is distinct from terminal `configuration load failed`
+records emitted by `src/main.rs`. Those terminal records identify the failed
+operation and coarse error category without rendering the source error.
 
 #### `json` contract
 
@@ -2916,16 +2923,15 @@ split diagnostics, path comparison, and tests out of the main discovery flow:
 - `discovery_event_assertions.rs` — shared test-only helpers:
   `capture_events` runs a closure under a TRACE capturing subscriber,
   `find_event` locates one emitted event by substring, and `EventAssertion`
-  bundles an event with its path to assert bounded `path_hash`/`path_file_name`
-  fields, the absence of the raw path or formatted error text, and to normalize
-  the hash before an `insta` snapshot.
+  bundles an event with its path to assert bounded `path_hash` and presence
+  fields, the absence of raw paths, file names and formatted error text, and to
+  normalize the hash before an `insta` snapshot.
 - `discovery_tracing_tests.rs` — tests selector precedence
   (`--config` versus `NETSUKE_CONFIG`), the removed legacy
   `NETSUKE_CONFIG_PATH` alias, and event-schema snapshots for both selection
   and explicit load failures.
-- `discovery_layer_tests.rs` — tests the test-only
-  `collect_diag_file_layers_with_env` wrapper (explicit path versus automatic
-  discovery) and the project-scope second pass in `collect_file_layers`.
+- `discovery_layer_tests.rs` — tests the explicit-path versus automatic
+  discovery branches and project-scope handling in the one discovery pass.
 
 Both test modules import `capture_events`, `find_event`, and `EventAssertion`
 from `discovery_event_assertions` rather than duplicating them. The `insta`
@@ -3647,6 +3653,63 @@ small integer cycles of length two through four; a direct adapter harness and
 the Proptest suite keep the `Utf8PathBuf` instantiation tied to production.
 
 **Cross-references:** `docs/netsuke-design.md` §5.3.
+
+## Configuration observability
+
+**Cross-references:** [CLI design](netsuke-design.md) §8.4, for the
+application-owned recorder boundary and end-of-run snapshot policy.
+
+`src/observability.rs` owns the application-level instrumentation for the two
+configuration-loading boundaries in `src/main.rs`. Keep configuration loading
+itself as a plain query: compose this instrumentation only at the CLI
+composition root. Other subsystem boundaries retain their local telemetry
+modules and must not add unbounded configuration detail to these series.
+
+The bounded metric contract is:
+
+- Counter `config_load_total` records exactly one outcome for each logical
+  configuration-load phase. Its `phase` label is `diag_mode` for early
+  diagnostic-mode resolution or `merge` for the full configuration merge. Its
+  `outcome` label is `success` or `failure`.
+- Histogram `config_load_duration_seconds` records one duration for each of
+  those phases and carries only the same bounded `phase` label.
+
+`init_metrics()` installs an application-owned filtering recorder around the
+process-wide `metrics_util::debugging::DebuggingRecorder` after tracing starts.
+It retains only the two configuration-load metric names above, so unrelated
+workload histograms cannot accumulate samples until shutdown. Tests must use
+`metrics::with_local_recorder` with a local recorder instead.
+`emit_metrics_snapshot()` drains and logs that configuration-load aggregate at
+command completion. After a successful configuration merge, `finish_run` gates
+it on merged `verbose`; if diagnostic-mode resolution or the full merge fails
+before a merged configuration exists, it uses parsed CLI `verbose` instead. JSON
+sets tracing to `OFF`, so JSON runs suppress this snapshot.
+
+The lifecycle is exactly-once: a `Once` guards global recorder installation and
+a `OnceLock` stores the snapshotter, so a second `init_metrics()` call is a
+no-op. If `set_global_recorder` fails — it can be called once per process — the
+recorder is dropped, the snapshotter stays unset, and `emit_metrics_snapshot()`
+becomes a no-op. `snapshot()` drains: counters swap to zero and histogram
+samples clear while the bounded series remain, so a snapshot taken while work
+is still recording would lose those samples. `finish_run` returns on every exit
+path, so the audit snapshot is emitted once per process. The in-crate unit
+tests cover draining and concurrent recording against local recorders, and the
+binary-level suite exercises the process-wide install through the compiled
+executable.
+
+The debugging recorder preserves raw histogram observations rather than
+aggregating them into buckets. Netsuke configures no custom buckets; a future
+exporter may choose its own bucket policy without changing this metric name or
+label contract.
+
+Human-readable `configuration load failed` events include two structured
+fields:
+
+- `operation`: `diag_mode_resolution` or `config_merge`.
+- `error_category`: `io`, `parse`, or `validation`.
+
+The first two fields remain deliberately low-cardinality. Do not add paths,
+configuration values, or error text as metric labels.
 
 ## Documentation upkeep
 
