@@ -270,11 +270,13 @@ impl Default for CliConfig {
 }
 
 impl CliConfig {
+    /// Return the default manifest file path used when no file is supplied.
     pub(super) fn default_manifest_path() -> PathBuf {
         default_manifest_path()
     }
 }
 
+/// Maximum number of parallel build jobs accepted by the CLI.
 const MAX_JOBS: usize = super::MAX_JOBS;
 
 const fn jobs_out_of_bounds(jobs: usize) -> bool {
@@ -289,10 +291,19 @@ impl PostMergeHook for CliConfig {
     }
 }
 
+/// Return the default manifest file path, `Netsukefile` in the working directory.
 fn default_manifest_path() -> PathBuf {
     PathBuf::from("Netsukefile")
 }
 
+/// Validate that non-interactive mode stays enabled after merging.
+///
+/// Netsuke has no interactive mode, so a merged `no_input = false` is
+/// unsupported and rejected by the post-merge hook.
+///
+/// # Errors
+///
+/// Returns a validation error when `no_input` resolves to false.
 fn validate_non_interactive(config: &CliConfig) -> OrthoResult<()> {
     if config.no_input.is_enabled() {
         Ok(())
@@ -304,6 +315,11 @@ fn validate_non_interactive(config: &CliConfig) -> OrthoResult<()> {
     }
 }
 
+/// Validate that the merged job count falls within the supported range.
+///
+/// # Errors
+///
+/// Returns a validation error when `jobs` is zero or greater than `MAX_JOBS`.
 fn validate_jobs(config: &CliConfig) -> OrthoResult<()> {
     let Some(jobs) = config.jobs else {
         return Ok(());

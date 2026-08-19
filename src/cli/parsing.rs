@@ -20,6 +20,10 @@ use super::{AccessibilityPolicy, ColourPolicy, EmojiPolicy, ProgressPolicy};
 use crate::host_pattern::HostPattern;
 use crate::localization::keys;
 
+/// Parse and validate a jobs argument.
+///
+/// The accepted range is 1 to `MAX_JOBS`; any other value yields a localised
+/// error.
 pub(super) fn parse_jobs(localizer: &dyn Localizer, s: &str) -> Result<usize, String> {
     let value: usize = s.parse().map_err(|_| {
         let mut args = LocalizationArgs::default();
@@ -84,6 +88,7 @@ pub(super) fn parse_scheme(localizer: &dyn Localizer, s: &str) -> Result<String,
     Ok(trimmed.to_ascii_lowercase())
 }
 
+/// Parse and normalise a locale tag, rejecting empty and malformed values.
 pub(super) fn parse_locale(localizer: &dyn Localizer, s: &str) -> Result<String, String> {
     let trimmed = s.trim();
     if trimmed.is_empty() {
@@ -108,6 +113,7 @@ pub(super) fn parse_locale(localizer: &dyn Localizer, s: &str) -> Result<String,
         })
 }
 
+/// Parse a colour policy, yielding a localised error for invalid values.
 pub(super) fn parse_color_policy(
     localizer: &dyn Localizer,
     s: &str,
@@ -122,6 +128,7 @@ pub(super) fn parse_color_policy(
     )
 }
 
+/// Parse an emoji policy, yielding a localised error for invalid values.
 pub(super) fn parse_emoji_policy(
     localizer: &dyn Localizer,
     s: &str,
@@ -136,6 +143,7 @@ pub(super) fn parse_emoji_policy(
     )
 }
 
+/// Parse a progress policy, yielding a localised error for invalid values.
 pub(super) fn parse_progress_policy(
     localizer: &dyn Localizer,
     s: &str,
@@ -150,6 +158,7 @@ pub(super) fn parse_progress_policy(
     )
 }
 
+/// Parse an accessibility policy, yielding a localised error for invalid values.
 pub(super) fn parse_accessibility_policy(
     localizer: &dyn Localizer,
     s: &str,
@@ -167,10 +176,13 @@ pub(super) fn parse_accessibility_policy(
 /// Bundles the static localisation metadata needed by [`parse_value_enum`].
 #[derive(Copy, Clone)]
 struct ParseEnumSpec {
+    /// Localisation key naming the invalid-value message.
     key: &'static str,
+    /// Interpolation argument that carries the rejected value.
     arg_name: &'static str,
 }
 
+/// Parse a value-enum member, yielding a localised error for invalid input.
 fn parse_value_enum<T>(localizer: &dyn Localizer, s: &str, spec: ParseEnumSpec) -> Result<T, String>
 where
     T: ValueEnum,

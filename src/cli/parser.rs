@@ -35,13 +35,17 @@ pub use crate::cli_l10n::{json_hint_from_args, locale_hint_from_args};
 use crate::host_pattern::HostPattern;
 use crate::theme::ThemePreference;
 
+/// Clap value parser that routes validation through a localiser-aware function.
 #[derive(Clone)]
 struct LocalizedValueParser<F> {
+    /// Shared localiser used to format validation messages.
     localizer: Arc<dyn Localizer>,
+    /// Localiser-aware function validating each raw value.
     parser: F,
 }
 
 impl<F> LocalizedValueParser<F> {
+    /// Construct a localised value parser around `parser`.
     fn new(localizer: Arc<dyn Localizer>, parser: F) -> Self {
         Self { localizer, parser }
     }
@@ -69,6 +73,7 @@ where
     }
 }
 
+/// Return the localised message for `key`, or `fallback` when no translation exists.
 pub(super) fn validation_message(
     localizer: &dyn Localizer,
     key: &'static str,
@@ -78,7 +83,6 @@ pub(super) fn validation_message(
     localizer.message(key, args, fallback)
 }
 
-/// A modern, friendly build system that uses YAML and Jinja, powered by Ninja.
 #[derive(Debug, Parser, Serialize, Deserialize)]
 #[command(
     name = "netsuke",
@@ -88,14 +92,15 @@ pub(super) fn validation_message(
     long_about = None,
     disable_help_subcommand = true
 )]
+/// A modern, friendly build system that uses YAML and Jinja, powered by Ninja.
 pub struct Cli {
-    /// Path to the Netsuke manifest file to use.
     #[arg(
         short,
         long,
         value_name = "FILE",
         default_value_os_t = CliConfig::default_manifest_path()
     )]
+    /// Path to the Netsuke manifest file to use.
     pub file: PathBuf,
 
     /// Run as if started in this directory.
@@ -336,6 +341,7 @@ where
     parse_localized_command(command, iter, localizer.as_ref())
 }
 
+/// Install localised value parsers on every typed CLI argument.
 fn configure_validation_parsers(
     mut command: clap::Command,
     localizer: &Arc<dyn Localizer>,

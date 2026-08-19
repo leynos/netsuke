@@ -9,6 +9,11 @@ use crate::graph_view::render_dot::DotRenderer;
 
 use super::escape::escape_text;
 
+/// Write the `<noscript>` block restating the graph as DOT source.
+///
+/// # Errors
+///
+/// Returns an error when writing fails or the embedded DOT is not valid UTF-8.
 pub(super) fn write_noscript(
     sink: &mut dyn Write,
     view: &GraphView,

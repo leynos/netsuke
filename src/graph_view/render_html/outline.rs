@@ -18,6 +18,7 @@ use super::escape::escape_text;
 use super::layout::collect_predecessors;
 use super::localized;
 
+/// Write the `<details>` outline listing every target and its inputs.
 pub(super) fn write_outline(
     sink: &mut dyn Write,
     view: &GraphView,
@@ -82,6 +83,7 @@ fn write_outline_inputs(
     Ok(())
 }
 
+/// Return every node's direct inputs, keyed by target path.
 fn collect_inputs_by_target(view: &GraphView) -> BTreeMap<&Utf8Path, Vec<&Utf8Path>> {
     collect_predecessors(&view.edges)
 }

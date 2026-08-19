@@ -138,9 +138,12 @@ impl GraphView {
     }
 }
 
+/// Metadata carried for target nodes while projecting the graph.
 #[derive(Debug, Default, Clone)]
 struct NodeMetadata {
+    /// Identifier of the producing action.
     action_id: Option<String>,
+    /// Human-readable description from the producing action, when present.
     description: Option<String>,
 }
 
@@ -150,6 +153,7 @@ struct NodeMetadata {
 /// callers work with references instead of cloning keys defensively.
 #[derive(Debug, Default)]
 struct NodePathRegistry {
+    /// Map of node paths to their kind classification.
     paths: HashMap<Utf8PathBuf, NodeKind>,
 }
 
@@ -190,6 +194,7 @@ fn collect_unique_edges(graph: &BuildGraph) -> Vec<BuildEdge> {
     by_key.into_values().collect()
 }
 
+/// Record every output of `edge` as a target node with its action metadata.
 fn register_outputs(
     graph: &BuildGraph,
     edge: &BuildEdge,
@@ -230,8 +235,11 @@ fn all_outputs(edge: &BuildEdge) -> impl Iterator<Item = &Utf8PathBuf> {
 /// Groups the edge with the mutable projection state so the per-class
 /// helpers share one borrow of the registry and edge set.
 struct EdgeRegistrar<'a> {
+    /// Build edge contributing its nodes and edges.
     edge: &'a BuildEdge,
+    /// Registry receiving the node registrations.
     registry: &'a mut NodePathRegistry,
+    /// Edge set receiving the transcribed edges.
     edges: &'a mut BTreeSet<EdgeView>,
 }
 
