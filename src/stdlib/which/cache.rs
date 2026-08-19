@@ -22,7 +22,7 @@ use super::{
 
 /// Name of the counter tallying cache outcomes labelled hit, miss, or bypass.
 const WHICH_CACHE_TOTAL: &str = "netsuke_stdlib_which_cache_total";
-/// Name of the counter tallying resolution outcomes labelled found, not_found, or error.
+/// Name of the counter tallying resolution outcomes labelled found, `not_found`, or error.
 const WHICH_RESOLUTION_TOTAL: &str = "netsuke_stdlib_which_resolution_total";
 
 /// Shared resolver that caches `which` lookups under an LRU bound.
