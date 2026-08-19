@@ -5,6 +5,7 @@ mod common;
 use anyhow::{Context, Result, ensure};
 use common::workflow_contents;
 use rstest::rstest;
+use serde_yaml::Value as YamlValue;
 use std::{fs, path::PathBuf};
 use toml::Value;
 
@@ -20,6 +21,56 @@ fn goreleaser_contents() -> Result<String> {
     let path = root.join(".goreleaser.yaml");
     fs::read_to_string(&path)
         .with_context(|| format!("read GoReleaser contents from {}", path.display()))
+}
+
+fn goreleaser_config() -> Result<YamlValue> {
+    serde_yaml::from_str(&goreleaser_contents()?).context("parse GoReleaser YAML")
+}
+
+/// The fallback build whose `pre` hook maps GOOS/GOARCH to Rust target
+/// triples. Identified by `skip_build: true` plus the `id`, because the
+/// platform-defined build variables (`GOOS`/`GOARCH`) are only meaningful to
+/// `GoReleaser` at packaging time — the very hook this contract pins.
+fn fallback_build(config: &YamlValue) -> Result<&YamlValue> {
+    config
+        .get("builds")
+        .and_then(YamlValue::as_sequence)
+        .context("GoReleaser config should declare builds")?
+        .iter()
+        .find(|build| {
+            build.get("skip_build").and_then(YamlValue::as_bool) == Some(true)
+                && build.get("id").and_then(YamlValue::as_str) == Some("netsuke")
+        })
+        .context("GoReleaser config should declare the netsuke fallback build")
+}
+
+/// Count the builds declaring a non-empty build-scoped `pre` hook.
+fn build_pre_hook_count(config: &YamlValue) -> usize {
+    config
+        .get("builds")
+        .and_then(YamlValue::as_sequence)
+        .iter()
+        .flat_map(|builds| builds.iter())
+        .filter(|build| {
+            build
+                .get("hooks")
+                .and_then(|hooks| hooks.get("pre"))
+                .and_then(YamlValue::as_sequence)
+                .is_some_and(|hooks| !hooks.is_empty())
+        })
+        .count()
+}
+
+/// The fallback build is the only build allowed to carry a build-scoped `pre`
+/// hook. A second build-level hook anywhere in the file would satisfy a
+/// whole-file line scan without the fallback hook being reachable.
+fn ensure_only_fallback_build_has_pre_hook(config: &YamlValue) -> Result<()> {
+    let build_pre_hooks = build_pre_hook_count(config);
+    ensure!(
+        build_pre_hooks == 1,
+        "the netsuke fallback build should be the only build declaring a pre hook, found {build_pre_hooks}"
+    );
+    Ok(())
 }
 
 fn staging_config() -> Result<Value> {
@@ -215,29 +266,96 @@ fn behavioural_build_and_package_validates_release_help_tooling() {
 
 #[test]
 fn goreleaser_fallback_uses_rust_target_triple_orthohelp_paths() -> Result<()> {
-    let contents = goreleaser_contents()?;
+    let config = goreleaser_config()?;
+    let fallback = fallback_build(&config)?;
+    let pre_hook = fallback
+        .get("hooks")
+        .and_then(|hooks| hooks.get("pre"))
+        .and_then(YamlValue::as_sequence)
+        .and_then(|hooks| hooks.first())
+        .and_then(YamlValue::as_str)
+        .context("the netsuke fallback build should declare a pre hook")?;
 
     ensure!(
-        !contents.contains("target/orthohelp/${{GOOS}-${GOARCH}}")
-            && !contents.contains("target/orthohelp/${GOOS}-${GOARCH}"),
+        !pre_hook.contains("target/orthohelp/${{GOOS}-${GOARCH}}")
+            && !pre_hook.contains("target/orthohelp/${GOOS}-${GOARCH}"),
         "GoReleaser fallback must not use raw GOOS/GOARCH orthohelp paths"
     );
     ensure!(
-        contents.contains("x86_64-unknown-linux-gnu"),
+        pre_hook.contains("x86_64-unknown-linux-gnu"),
         "GoReleaser fallback should map linux/amd64 to the Rust target triple"
     );
     ensure!(
-        contents.contains("target/orthohelp/${RUST_TARGET}/release/man/man1/netsuke.1"),
+        pre_hook.contains("target/orthohelp/${RUST_TARGET}/release/man/man1/netsuke.1"),
         "GoReleaser fallback should resolve orthohelp output through RUST_TARGET"
     );
-    let lines = contents.lines().collect::<Vec<_>>();
-    let has_build_pre_hook = lines
-        .windows(2)
-        .any(|pair| pair == ["    hooks:", "      pre:"]);
-    let has_global_before_hook = lines.contains(&"before:");
     ensure!(
-        has_build_pre_hook && !has_global_before_hook,
-        "GoReleaser fallback should run where GOOS and GOARCH are defined"
+        pre_hook.contains("${GOOS}/${GOARCH}"),
+        "GoReleaser fallback hook should branch on GOOS/GOARCH so it runs where those are defined"
+    );
+
+    ensure_only_fallback_build_has_pre_hook(&config)?;
+
+    ensure!(
+        !config
+            .as_mapping()
+            .is_some_and(|root| root.contains_key(YamlValue::String("before".to_owned()))),
+        "GoReleaser config must not fall back to the deprecated global before hook"
+    );
+    Ok(())
+}
+#[test]
+fn goreleaser_fallback_pre_hook_guards_an_unrelated_build_level_hook() -> Result<()> {
+    // Reconstruct the file as parsed, with a second build that carries its own
+    // build-level `pre` hook. A line-scanning assertion would see the second
+    // `hooks: pre:` pair and pass even if the fallback hook were missing; the
+    // structural contract must reject that configuration.
+    let config = goreleaser_config()?;
+    let mut builds = config
+        .get("builds")
+        .and_then(YamlValue::as_sequence)
+        .cloned()
+        .unwrap_or_default();
+    let mut unrelated = serde_yaml::Mapping::new();
+    unrelated.insert(
+        YamlValue::String("id".to_owned()),
+        YamlValue::String("unrelated-package".to_owned()),
+    );
+    let mut hooks = serde_yaml::Mapping::new();
+    hooks.insert(
+        YamlValue::String("pre".to_owned()),
+        YamlValue::Sequence(vec![YamlValue::String("echo unrelated".to_owned())]),
+    );
+    unrelated.insert(
+        YamlValue::String("hooks".to_owned()),
+        YamlValue::Mapping(hooks),
+    );
+    builds.push(YamlValue::Mapping(unrelated));
+    let mut edited = serde_yaml::Mapping::new();
+    for (key, value) in config
+        .as_mapping()
+        .context("GoReleaser config should be a mapping")?
+    {
+        edited.insert(key.clone(), value.clone());
+    }
+    edited.insert(
+        YamlValue::String("builds".to_owned()),
+        YamlValue::Sequence(builds),
+    );
+    let edited_config = YamlValue::Mapping(edited);
+
+    ensure!(
+        build_pre_hook_count(&edited_config) == 2,
+        "the regression fixture should contain exactly two build-level pre hooks"
+    );
+    let Err(error) = ensure_only_fallback_build_has_pre_hook(&edited_config) else {
+        anyhow::bail!("the structural guard should reject a second unrelated build-level pre hook");
+    };
+    ensure!(
+        error
+            .to_string()
+            .contains("only build declaring a pre hook"),
+        "the guard should diagnose the unrelated build-level hook, got: {error}"
     );
     Ok(())
 }

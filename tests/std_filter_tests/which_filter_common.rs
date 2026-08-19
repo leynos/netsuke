@@ -128,13 +128,9 @@ pub(crate) fn expected_which_output_path(path: &Utf8Path) -> String {
 
 /// Canonicalize a fixture path and format it as a canonical `which` result.
 pub(crate) fn expected_canonical_which_output_path(path: &Utf8Path) -> Result<String> {
-    let canonical_path = fs::canonicalize(path.as_std_path())
-        .with_context(|| format!("canonicalize fixture path {path}"))?;
-    let canonical_utf8_path =
-        Utf8PathBuf::from_path_buf(canonical_path).map_err(|non_utf8_path| {
-            anyhow!("canonical fixture path is not valid UTF-8: {non_utf8_path:?}")
-        })?;
-    Ok(expected_which_output_path(&canonical_utf8_path))
+    let canonical_path =
+        fs::canonicalize(path).with_context(|| format!("canonicalize fixture path {path}"))?;
+    Ok(expected_which_output_path(&canonical_path))
 }
 
 #[cfg(unix)]
