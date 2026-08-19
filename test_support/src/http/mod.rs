@@ -74,12 +74,12 @@ impl HttpServerConfig {
         config
     }
 
-    /// The instant by which a client must connect.
+    /// Return the instant by which a client must connect.
     fn accept_deadline(&self) -> Instant {
         Instant::now() + self.accept_timeout
     }
 
-    /// The instant by which the request must be read.
+    /// Return the instant by which the request must be read.
     fn read_deadline(&self) -> Instant {
         Instant::now() + self.read_timeout
     }
@@ -213,12 +213,12 @@ fn run_http_server(listener: &TcpListener, body: &str, config: &HttpServerConfig
     }
 }
 
-/// Whether `deadline` has passed.
+/// Return whether `deadline` has passed.
 fn is_past_deadline(deadline: Instant) -> bool {
     Instant::now() >= deadline
 }
 
-/// Whether an accept error is transient and still within the deadline.
+/// Return whether an accept error is transient and still within the deadline.
 fn should_retry_accept(
     err: &io::Error,
     deadline: Instant,
@@ -236,7 +236,7 @@ fn should_retry_accept(
     )
 }
 
-/// Time remaining until `deadline`, never negative.
+/// Return the time remaining until `deadline`, never negative.
 fn remaining_until_deadline(deadline: Instant) -> Duration {
     let now = Instant::now();
     if deadline > now {
