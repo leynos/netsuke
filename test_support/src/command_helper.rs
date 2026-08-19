@@ -9,6 +9,7 @@ use camino::Utf8PathBuf;
 use cap_std::fs_utf8::Dir;
 use mockable::{DefaultEnv, Env};
 
+/// A helper `main` that upper-cases stdin to stdout.
 const UPPERCASE_SOURCE: &str = concat!(
     "use std::io::{self, Read};\n",
     "fn main() {\n",
@@ -18,6 +19,7 @@ const UPPERCASE_SOURCE: &str = concat!(
     "}\n",
 );
 
+/// A helper `main` that exits with status `1`.
 const FAILURE_SOURCE: &str = concat!(
     "use std::io::{self, Read};\n",
     "fn main() {\n",
@@ -27,6 +29,7 @@ const FAILURE_SOURCE: &str = concat!(
     "}\n",
 );
 
+/// A helper `main` that streams 128 KiB of `x` bytes to stdout.
 const LARGE_OUTPUT_SOURCE: &str = concat!(
     "use std::io::{self, Write};\n",
     "fn main() {\n",
@@ -44,7 +47,9 @@ const LARGE_OUTPUT_SOURCE: &str = concat!(
 /// avoiding a wider public API solely for test injection.
 #[derive(Clone, Copy)]
 struct RustHelperSource<'a> {
+    /// Executable file name for the compiled helper.
     name: &'a str,
+    /// Rust source to compile.
     source: &'a str,
 }
 /// Compile a helper binary that converts stdin to upper case and return the
@@ -159,6 +164,12 @@ pub fn compile_rust_helper(
     compile_rust_helper_with_env(&DefaultEnv, dir, root, RustHelperSource { name, source })
 }
 
+/// Compile `helper` inside `dir` using `env`, reporting the executable path.
+///
+/// # Errors
+///
+/// Returns an error if the source cannot be written or the compiler exits
+/// unsuccessfully.
 fn compile_rust_helper_with_env(
     env: &impl Env,
     dir: &Dir,
@@ -190,6 +201,7 @@ fn compile_rust_helper_with_env(
     Ok(exe_path)
 }
 
+/// Return the configured `RUSTC` path, defaulting to `rustc` on `PATH`.
 fn rust_compiler(env: &impl Env) -> OsString {
     env.os_string("RUSTC")
         .unwrap_or_else(|| OsString::from("rustc"))

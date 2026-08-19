@@ -23,7 +23,9 @@ use std::collections::HashMap;
 /// [`StubEnv::without_locale`] makes that intent explicit at compile time.
 #[derive(Debug, Clone)]
 pub struct StubEnv {
+    /// Values the stub answers with, keyed by variable name.
     values: HashMap<String, String>,
+    /// Variable names whose reads are permitted, possibly answering unset.
     allowed: Vec<String>,
 }
 

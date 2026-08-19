@@ -19,7 +19,9 @@ const RECORD_SEPARATOR: &str = "--dev-fast-record--";
 
 /// A `cargo` stand-in installed on the sandbox `PATH`, plus its log.
 pub struct RecordingCargo {
+    /// The fake `cargo` executable installed in the sandbox.
     executable: Utf8PathBuf,
+    /// The invocation log file under the sandbox's `HOME`.
     log: Utf8PathBuf,
 }
 
@@ -127,11 +129,17 @@ pub enum TargetState {
 
 /// One recorded `cargo` call.
 pub struct CargoInvocation {
+    /// Arguments passed to the fake Cargo, split on whitespace.
     arguments: Vec<String>,
+    /// `RUSTUP_TOOLCHAIN` in force during the invocation.
     toolchain: String,
+    /// The `PATH` the invocation saw, recorded verbatim.
     path: String,
+    /// The `CARGO_TARGET_DIR` value, empty when unset.
     target_dir: String,
+    /// Whether the target directory existed at invocation start.
     target_state: TargetState,
+    /// The benchmark touch file's modification time, when one was configured.
     touch_mtime: Option<i64>,
 }
 

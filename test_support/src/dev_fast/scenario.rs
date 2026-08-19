@@ -36,8 +36,11 @@ pub const WRONG_SHA256: &str = "000000000000000000000000000000000000000000000000
 /// Grouping them keeps the pin path, checksum path, and URL travelling together
 /// as one value instead of as a handful of interchangeable strings.
 pub struct InstallerFixture {
+    /// Path to the version pin file the installer reads.
     version_pin: Utf8PathBuf,
+    /// Path to the checksum file the installer verifies against.
     checksums: Utf8PathBuf,
+    /// Base URL the installer fetches releases from.
     base_url: String,
 }
 
@@ -55,7 +58,9 @@ impl InstallerFixture {
 
 /// A sandbox with a published fake release and a usable `rustup`.
 pub struct InstallerScenario {
+    /// The sandbox the release is published into.
     sandbox: Sandbox,
+    /// The published fake release under test.
     release: FakeRelease,
 }
 
@@ -119,7 +124,9 @@ impl InstallerScenario {
 
 /// A sandbox whose prerequisites all pass, with a recording `cargo` installed.
 pub struct BuildScenario {
+    /// The sandbox whose prerequisites all pass.
     sandbox: Sandbox,
+    /// Records the Cargo invocations the targets make.
     cargo: RecordingCargo,
 }
 

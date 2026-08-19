@@ -20,11 +20,14 @@ pub(crate) use byte_index::ByteIndex;
 /// both on one value keeps them paired, so no caller can pass a byte slice
 /// belonging to a different string from the one it slices.
 pub(super) struct DefineKeysParser<'source> {
+    /// The body as `str`, for slicing literal contents without re-decoding.
     source: &'source str,
+    /// The body as raw bytes, for character-at-a-time scanning.
     bytes: &'source [u8],
 }
 
 impl<'source> DefineKeysParser<'source> {
+    /// Construct a scanner over `source`.
     pub(super) const fn new(source: &'source str) -> Self {
         Self {
             source,
@@ -36,15 +39,14 @@ impl<'source> DefineKeysParser<'source> {
     pub(super) const fn is_exhausted(&self, index: ByteIndex) -> bool {
         index.get() >= self.bytes.len()
     }
-
+    /// The byte at `index`, if any.
     fn byte_at(&self, index: ByteIndex) -> Option<&u8> {
         self.bytes.get(index.get())
     }
-
+    /// Whether the byte at `index` equals `expected`.
     fn byte_is(&self, index: ByteIndex, expected: u8) -> bool {
         self.byte_at(index) == Some(&expected)
     }
-
     /// Parse the string literal starting at `start`, returning its value and
     /// the position just past it.
     fn parse_string_literal(
@@ -56,7 +58,7 @@ impl<'source> DefineKeysParser<'source> {
         }
         self.parse_raw_string_literal(start)
     }
-
+    /// Parse an escaped `"..."` literal starting at `start`.
     fn parse_regular_string_literal(
         &self,
         start: ByteIndex,
@@ -82,7 +84,7 @@ impl<'source> DefineKeysParser<'source> {
         }
         Err("unterminated string literal in localization keys".into())
     }
-
+    /// Parse a raw `r#*"..."#*` literal starting at `start`.
     fn parse_raw_string_literal(
         &self,
         start: ByteIndex,
@@ -105,7 +107,6 @@ impl<'source> DefineKeysParser<'source> {
             .ok_or_else(|| "raw string slice invalid".to_owned())?;
         Ok((content.to_owned(), end))
     }
-
     /// Consume an optional `b` prefix and the mandatory `r`, reporting whether
     /// the literal was a byte string.
     fn parse_raw_prefix(&self, start: ByteIndex) -> Result<(ByteIndex, bool), Box<dyn Error>> {
@@ -120,7 +121,6 @@ impl<'source> DefineKeysParser<'source> {
         }
         Ok((raw_marker.advance(1), has_byte_prefix))
     }
-
     /// Count the run of `#` characters at `start`, returning the count and the
     /// position just past the run.
     fn count_hashes(&self, start: ByteIndex) -> (usize, ByteIndex) {
@@ -132,7 +132,7 @@ impl<'source> DefineKeysParser<'source> {
         }
         (count, index)
     }
-
+    /// Offset just past the `"` and `#`es closing the raw literal from `start`.
     fn find_raw_string_end(&self, start: ByteIndex, hash_count: usize) -> Option<ByteIndex> {
         let mut index = start;
         while let Some(byte) = self.byte_at(index) {
@@ -143,19 +143,19 @@ impl<'source> DefineKeysParser<'source> {
         }
         None
     }
-
+    /// Whether `count` `#` characters follow `start`.
     fn raw_hashes_match(&self, start: ByteIndex, count: usize) -> bool {
         (0..count).all(|offset| self.byte_is(start.advance(offset), b'#'))
     }
-
+    /// Whether `//` opens at `index`.
     fn is_line_comment(&self, index: ByteIndex) -> bool {
         self.byte_is(index, b'/') && self.byte_is(index.advance(1), b'/')
     }
-
+    /// Whether `/*` opens at `index`.
     fn is_block_comment(&self, index: ByteIndex) -> bool {
         self.byte_is(index, b'/') && self.byte_is(index.advance(1), b'*')
     }
-
+    /// Offset just past the newline ending the line comment at `start`.
     fn skip_line_comment(&self, start: ByteIndex) -> ByteIndex {
         let mut index = start;
         while let Some(byte) = self.byte_at(index) {
@@ -201,6 +201,7 @@ impl<'source> DefineKeysParser<'source> {
         self.byte_is(index, b'*') && self.byte_is(index.advance(1), b'/')
     }
 
+    /// Offset of the first non-whitespace byte at or after `start`.
     fn skip_whitespace(&self, start: ByteIndex) -> ByteIndex {
         let mut index = start;
         while self.byte_at(index).is_some_and(u8::is_ascii_whitespace) {

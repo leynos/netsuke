@@ -31,6 +31,12 @@ fn cleanup_timed_out_child(child: &mut std::process::Child) {
     drop(child.wait());
 }
 
+/// Probe `ninja --version`, timing out after two seconds.
+///
+/// # Errors
+///
+/// Returns an error if the probe cannot spawn, exits unsuccessfully, or times
+/// out.
 fn probe_ninja() -> Result<(), NinjaWorkspaceError> {
     let mut child = Command::new("ninja")
         .arg("--version")
