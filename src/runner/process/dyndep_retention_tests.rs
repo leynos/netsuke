@@ -343,12 +343,37 @@ fn retention_cleanup_failure_has_localized_context(
 
 #[cfg(windows)]
 #[test]
-fn current_sidecar_paths_match_native_directory_entries() {
-    let generated_path = Utf8Path::new(".netsuke/dyndep/current.dd");
-    let directory_entry_path = Utf8Path::new(".netsuke\\dyndep\\current.dd");
+fn windows_retention_removes_stale_sidecars_by_native_path_identity() -> Result<()> {
+    // Regression for the Windows path-identity bug fixed by comparing
+    // sidecar paths as `Path` values rather than `str` spellings: pruning
+    // must preserve the bundle that produced the lease and remove a stale
+    // sidecar even when the stale path is addressed through the native
+    // Windows separator spelling. The assertion resolves both paths through
+    // the capability directory, so NTFS treats them as the files on disk.
+    let temp = tempfile::tempdir()?;
+    let dir = temporary_dir(&temp)?;
+    let current = sidecar(".netsuke/dyndep/current.dd", "current");
+    let lease = materialize_dyndep_files(&dir, std::slice::from_ref(&current))?;
 
-    assert_eq!(
-        generated_path.as_std_path(),
-        directory_entry_path.as_std_path()
+    // A stale sidecar is materialised by the same writer, so spell its path
+    // the way the NTFS directory entry reports it: backslash separators.
+    let stale_native = ".netsuke\\dyndep\\stale-candidate.dd";
+    dir.write(stale_native, "stale")?;
+
+    prune_dyndep_sidecars(
+        &dir,
+        &lease,
+        std::slice::from_ref(&current),
+        RetentionPolicy::new(0, 0),
+    )?;
+
+    ensure!(
+        dir.open(current.relative_path()).is_ok(),
+        "retention must preserve the current bundle's sidecar under native path identity"
     );
+    ensure!(
+        dir.open(stale_native).is_err(),
+        "retention must remove a stale sidecar reported with native separators"
+    );
+    Ok(())
 }
