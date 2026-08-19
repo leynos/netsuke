@@ -19,12 +19,16 @@ use std::io::Read;
 
 /// A single cache entry addressed relative to the cache directory.
 pub(super) struct CacheEntry<'a> {
+    /// The capability-scoped directory the entry lives in.
     dir: &'a Dir,
+    /// The entry name, relative to the cache directory.
     name: &'a str,
+    /// The entry's file name as a path.
     path: Utf8PathBuf,
 }
 
 impl<'a> CacheEntry<'a> {
+    /// Build an entry for a name within a cache directory.
     pub(super) fn new(dir: &'a Dir, name: &'a str) -> Self {
         Self {
             dir,
@@ -33,18 +37,22 @@ impl<'a> CacheEntry<'a> {
         }
     }
 
+    /// Return the entry's file path.
     pub(super) fn path(&self) -> &Utf8Path {
         self.path.as_path()
     }
 
+    /// Open the entry for writing, truncating any existing content.
     pub(super) fn open_writer(&self) -> Result<File, Error> {
         open_cache_writer(self.dir, self.path())
     }
 
+    /// Remove the entry file from the cache directory.
     fn remove_file(&self) -> io::Result<()> {
         self.dir.remove_file(self.path())
     }
 
+    /// Return the entry's name.
     pub(super) const fn name(&self) -> &str {
         self.name
     }
@@ -63,6 +71,10 @@ pub(super) fn discard_partial_cache(cache: &CacheEntry<'_>) {
     }
 }
 
+/// Open the cache directory at `relative` under `root`, creating it as needed.
+///
+/// The relative path is validated against the cache-boundary rules before any
+/// directory is created.
 pub(super) fn open_cache_dir(root: &Dir, relative: &Utf8Path) -> Result<Dir, Error> {
     tracing::debug!(cache_dir = %relative, "opening fetch cache directory");
     if let Err(err) = StdlibConfig::validate_cache_relative(relative) {
@@ -79,6 +91,9 @@ pub(super) fn open_cache_dir(root: &Dir, relative: &Utf8Path) -> Result<Dir, Err
     })
 }
 
+/// Read a cached entry, returning `None` when it does not exist.
+///
+/// Enforces the response size limit on the exact bytes read from the entry.
 pub(super) fn read_cached(dir: &Dir, name: &str, limit: u64) -> Result<Option<Vec<u8>>, Error> {
     let path = Utf8Path::new(name);
     let mut options = OpenOptions::new();
@@ -145,6 +160,7 @@ fn read_cached_file(name: &str, mut file: File, limit: u64) -> Result<Vec<u8>, E
     Ok(buf)
 }
 
+/// Open a cache entry for writing, creating and truncating it.
 fn open_cache_writer(dir: &Dir, path: &Utf8Path) -> Result<File, Error> {
     let mut options = OpenOptions::new();
     options.create(true).truncate(true).write(true);
@@ -154,6 +170,7 @@ fn open_cache_writer(dir: &Dir, path: &Utf8Path) -> Result<File, Error> {
     })
 }
 
+/// Hash a URL into a SHA-256 cache entry key.
 pub(super) fn cache_key(url: &str) -> String {
     to_lower_hex(&Sha256::digest(url.as_bytes()))
 }
@@ -161,11 +178,14 @@ pub(super) fn cache_key(url: &str) -> String {
 /// Internal cache configuration and directory handle.
 #[derive(Clone)]
 pub(super) struct FetchCache {
+    /// The capability-scoped cache root directory.
     root: Arc<Dir>,
+    /// The cache subdirectory relative to the root.
     relative: Utf8PathBuf,
 }
 
 impl FetchCache {
+    /// Build the cache handle from the network configuration.
     pub(super) fn new(config: &NetworkConfig) -> Self {
         Self {
             root: Arc::clone(&config.cache_root),
@@ -173,6 +193,7 @@ impl FetchCache {
         }
     }
 
+    /// Open the configured cache directory.
     #[rustfmt::skip]
     pub(super) fn open_dir(&self) -> Result<Dir, Error> { open_cache_dir(&self.root, &self.relative) }
 }

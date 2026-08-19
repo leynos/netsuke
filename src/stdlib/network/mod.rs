@@ -60,6 +60,7 @@ pub(crate) fn register_functions(
     });
 }
 
+/// Fetch a URL for the `fetch` template function, applying policy and optional caching.
 fn fetch(
     url: &str,
     kwargs: &Kwargs,
@@ -112,11 +113,13 @@ fn fetch(
     Ok(value_from_bytes(bytes))
 }
 
+/// Fetch a URL's response body, enforcing the response size limit.
 fn fetch_remote(url: &Url, impure: &Arc<AtomicBool>, limit: u64) -> Result<Vec<u8>, Error> {
     let response = dispatch_request(url, impure)?;
     read_response(url, response.into_reader(), limit, None)
 }
 
+/// Fetch a URL, streaming the response into the cache entry.
 fn fetch_remote_with_cache(
     url: &Url,
     impure: &Arc<AtomicBool>,
@@ -139,6 +142,7 @@ fn fetch_remote_with_cache(
     }
 }
 
+/// Dispatch a GET request with bounded timeouts, marking the template impure.
 fn dispatch_request(url: &Url, impure: &Arc<AtomicBool>) -> Result<ureq::Response, Error> {
     impure.store(true, Ordering::Relaxed);
     let agent = ureq::AgentBuilder::new()
@@ -160,6 +164,7 @@ fn dispatch_request(url: &Url, impure: &Arc<AtomicBool>) -> Result<ureq::Respons
     })
 }
 
+/// Read a response body up to the size limit, mirroring bytes to an optional cache sink.
 fn read_response(
     url: &Url,
     mut reader: impl Read,
@@ -225,6 +230,7 @@ fn copy_to_sink(url: &Url, bytes: &[u8], sink: &mut Option<&mut dyn Write>) -> R
     })
 }
 
+/// Build the error for a live response that exceeds the size limit.
 fn response_limit_error(url: &Url, limit: u64) -> Error {
     Error::new(
         ErrorKind::InvalidOperation,
@@ -235,6 +241,7 @@ fn response_limit_error(url: &Url, limit: u64) -> Error {
     )
 }
 
+/// Build the error for a cached entry that exceeds the size limit.
 fn response_limit_error_from_cache(name: &str, limit: u64) -> Error {
     Error::new(
         ErrorKind::InvalidOperation,
@@ -245,6 +252,7 @@ fn response_limit_error_from_cache(name: &str, limit: u64) -> Error {
     )
 }
 
+/// Translate an I/O failure into a localised template error.
 fn io_error(action_key: &'static str, path: &Utf8Path, err: io::Error) -> Error {
     io_action_error(
         keys::STDLIB_FETCH_IO_FAILED,
@@ -257,12 +265,16 @@ fn io_error(action_key: &'static str, path: &Utf8Path, err: io::Error) -> Error 
 /// Encapsulates fetch cache and network policy for template function registration.
 #[derive(Clone)]
 struct FetchContext {
+    /// The on-disk cache used when `cache=true` is requested.
     cache: FetchCache,
+    /// The policy every fetch is validated against.
     policy: Arc<NetworkPolicy>,
+    /// The maximum response body size in bytes.
     max_response_bytes: u64,
 }
 
 impl FetchContext {
+    /// Build a context from the network configuration.
     fn new(config: NetworkConfig) -> Self {
         Self {
             cache: FetchCache::new(&config),
@@ -271,12 +283,15 @@ impl FetchContext {
         }
     }
 
+    /// Open the configured cache directory.
     #[rustfmt::skip]
     fn open_cache_dir(&self) -> Result<Dir, Error> { self.cache.open_dir() }
 
+    /// Return the context's network policy.
     #[rustfmt::skip]
     fn policy(&self) -> &NetworkPolicy { self.policy.as_ref() }
 
+    /// Return the context's response size limit.
     #[rustfmt::skip]
     const fn max_response_bytes(&self) -> u64 { self.max_response_bytes }
 }

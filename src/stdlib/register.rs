@@ -23,6 +23,8 @@ use std::sync::Arc;
 
 use crate::localization::{self, keys};
 
+/// A template file test: a registration name paired with a capability file
+/// type predicate.
 type FileTest = (&'static str, fn(fs::FileType) -> bool);
 
 /// Register standard library helpers with the `MiniJinja` environment.
@@ -202,6 +204,7 @@ pub fn value_from_bytes(bytes: Vec<u8>) -> Value {
     }
 }
 
+/// The file tests registered as template tests on Unix.
 #[cfg(unix)]
 const FILE_TESTS: &[FileTest] = &[
     ("dir", is_dir),
@@ -213,6 +216,7 @@ const FILE_TESTS: &[FileTest] = &[
     ("device", is_device),
 ];
 
+/// The file tests registered as template tests on non-Unix platforms.
 #[cfg(not(unix))]
 const FILE_TESTS: &[FileTest] = &[
     ("dir", is_dir),
@@ -224,6 +228,8 @@ const FILE_TESTS: &[FileTest] = &[
     ("device", is_device),
 ];
 
+/// Register the `is <kind>` file tests, treating non-string inputs as a
+/// negative match.
 fn register_file_tests(env: &mut Environment<'_>) {
     for &(name, pred) in FILE_TESTS {
         env.add_test(name, move |val: Value| -> Result<bool, Error> {
@@ -238,51 +244,62 @@ fn register_file_tests(env: &mut Environment<'_>) {
     }
 }
 
+/// Test whether a file type is a directory.
 fn is_dir(ft: fs::FileType) -> bool {
     ft.is_dir()
 }
+/// Test whether a file type is a regular file.
 fn is_file(ft: fs::FileType) -> bool {
     ft.is_file()
 }
+/// Test whether a file type is a symbolic link.
 fn is_symlink(ft: fs::FileType) -> bool {
     ft.is_symlink()
 }
 
+/// Test whether a file type is a named pipe (FIFO).
 #[cfg(unix)]
 fn is_fifo(ft: fs::FileType) -> bool {
     ft.is_fifo()
 }
 
+/// Report whether a file type is a named pipe, always `false` off Unix.
 #[cfg(not(unix))]
 const fn is_fifo(_ft: fs::FileType) -> bool {
     false
 }
 
+/// Test whether a file type is a block device.
 #[cfg(unix)]
 fn is_block_device(ft: fs::FileType) -> bool {
     ft.is_block_device()
 }
 
+/// Report whether a file type is a block device, always `false` off Unix.
 #[cfg(not(unix))]
 const fn is_block_device(_ft: fs::FileType) -> bool {
     false
 }
 
+/// Test whether a file type is a character device.
 #[cfg(unix)]
 fn is_char_device(ft: fs::FileType) -> bool {
     ft.is_char_device()
 }
 
+/// Report whether a file type is a character device, always `false` off Unix.
 #[cfg(not(unix))]
 const fn is_char_device(_ft: fs::FileType) -> bool {
     false
 }
 
+/// Test whether a file type is a block or character device.
 #[cfg(unix)]
 fn is_device(ft: fs::FileType) -> bool {
     is_block_device(ft) || is_char_device(ft)
 }
 
+/// Report whether a file type is a device, always `false` off Unix.
 #[cfg(not(unix))]
 const fn is_device(_ft: fs::FileType) -> bool {
     false

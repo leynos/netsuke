@@ -65,6 +65,7 @@ pub(crate) fn register_query_filters(env: &mut Environment<'_>) {
     register_lexical_filters(env);
 }
 
+/// Register the file-inspecting path filters and the `expanduser` filter.
 pub(crate) fn register_filters(env: &mut Environment<'_>, home_directory: HomeDirectory) {
     register_lexical_filters(env);
     env.add_filter("realpath", |raw: String| -> Result<String, Error> {

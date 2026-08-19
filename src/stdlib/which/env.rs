@@ -49,12 +49,18 @@ fn capture_workspace_switch(env: &impl Env) -> WorkspaceSwitch {
     switch
 }
 
+/// Snapshot of the environment inputs one `which` resolution consults.
 #[derive(Clone, Debug)]
 pub(super) struct EnvSnapshot {
+    /// The working directory resolutions run from.
     pub(super) cwd: Utf8PathBuf,
+    /// The raw `PATH` value, when one was present.
     pub(super) raw_path: Option<OsString>,
+    /// The raw `PATHEXT` value, when one was present.
     pub(super) raw_pathext: Option<OsString>,
+    /// The parsed `PATH` directory entries in search order.
     entries: Vec<PathEntry>,
+    /// The parsed executable extensions, on Windows.
     #[cfg(windows)]
     pathext: Vec<String>,
     /// The `NETSUKE_WHICH_WORKSPACE` state captured for this snapshot.
@@ -153,6 +159,7 @@ impl EnvSnapshot {
         Self::capture(cwd_override, path_override)
     }
 
+    /// Capture a snapshot on platforms without `PATHEXT` semantics.
     #[cfg(not(windows))]
     fn capture_impl(
         cwd_override: Option<&Utf8Path>,
@@ -170,6 +177,7 @@ impl EnvSnapshot {
         })
     }
 
+    /// Capture a snapshot on Windows, including the parsed extension list.
     #[cfg(windows)]
     fn capture_impl(
         cwd_override: Option<&Utf8Path>,
@@ -222,6 +230,7 @@ impl EnvSnapshot {
         dirs
     }
 
+    /// Return the parsed executable extensions.
     #[cfg(windows)]
     pub(super) fn pathext(&self) -> &[String] {
         &self.pathext
@@ -249,6 +258,7 @@ impl EnvSnapshot {
     }
 }
 
+/// Read the working directory, `PATH`, and directory entries shared by all snapshots.
 fn capture_common(
     cwd_override: Option<&Utf8Path>,
     path_override: Option<&OsStr>,
@@ -266,12 +276,17 @@ fn capture_common(
     Ok((cwd, raw_path, entries))
 }
 
+/// One parsed `PATH` component in search order.
 #[derive(Clone, Debug)]
 enum PathEntry {
+    /// A directory to search, resolved against the working directory when relative.
     Dir(Utf8PathBuf),
+    /// An empty component that searches the current working directory.
     CurrentDir,
 }
 
+/// Parse a raw `PATH` value into directory entries.
+/// Errors when a path component is not valid UTF-8.
 fn parse_path_entries(raw: Option<&OsStr>, cwd: &Utf8Path) -> Result<Vec<PathEntry>, ResolveError> {
     let mut entries = Vec::new();
     let Some(raw_value) = raw else {
@@ -358,11 +373,13 @@ pub(super) fn parse_pathext(raw: Option<&OsStr>) -> Vec<String> {
     }
 }
 
+/// Read the current directory as a UTF-8 path, failing when it is not.
 pub(super) fn current_dir_utf8() -> Result<Utf8PathBuf, ResolveError> {
     let cwd = std::env::current_dir().map_err(|source| ResolveError::CwdResolve { source })?;
     Utf8PathBuf::from_path_buf(cwd).map_err(|_| ResolveError::CwdNonUtf8)
 }
 
+/// Build the Windows candidate paths for `command` within one directory.
 #[cfg(windows)]
 pub(super) fn candidate_paths(
     dir: &Utf8Path,

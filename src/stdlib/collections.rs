@@ -10,6 +10,8 @@ use minijinja::{
 
 use crate::localization::{self, keys};
 
+/// Register the collection filters (`uniq`, `flatten`, `group_by`) on an
+/// environment.
 pub(crate) fn register_filters(env: &mut Environment<'_>) {
     env.add_filter("uniq", |values: Value| uniq_filter(&values));
     env.add_filter("flatten", |values: Value| flatten_filter(&values));
@@ -18,13 +20,19 @@ pub(crate) fn register_filters(env: &mut Environment<'_>) {
     });
 }
 
+/// Object exposing grouped filter results to templates as a map keyed by the
+/// original group keys.
 #[derive(Debug)]
 struct GroupedValues {
+    /// Groups keyed by their original `Value` keys.
     groups: IndexMap<Value, Vec<Value>>,
+    /// String labels mapped to their canonical group keys for template access.
     string_keys: IndexMap<String, Value>,
 }
 
 impl GroupedValues {
+    /// Construct the object, indexing string keys for attribute access while
+    /// preserving the original key types.
     fn new(groups: IndexMap<Value, Vec<Value>>) -> Self {
         let mut string_keys = IndexMap::new();
         // POLONIUS-REFUSED(miss-dominant): group keys are unique, so this
@@ -71,6 +79,7 @@ impl Object for GroupedValues {
     }
 }
 
+/// Deduplicate sequence items, preserving first-seen order.
 fn uniq_filter(values: &Value) -> Result<Value, Error> {
     let iter = values.try_iter()?;
     let mut uniques: IndexSet<Value> = IndexSet::new();
@@ -83,6 +92,11 @@ fn uniq_filter(values: &Value) -> Result<Value, Error> {
     Ok(Value::from_serialize(items))
 }
 
+/// Flatten nested sequences within `values` into a single flat sequence.
+///
+/// # Errors
+///
+/// Returns an error when a top-level item is not a sequence or iterable.
 fn flatten_filter(values: &Value) -> Result<Value, Error> {
     let iter = values.try_iter()?;
     let mut flattened = Vec::new();
@@ -106,6 +120,7 @@ fn flatten_filter(values: &Value) -> Result<Value, Error> {
     Ok(Value::from_serialize(flattened))
 }
 
+/// Recursively append the leaves of `value` to `output`.
 fn collect_flattened_values(value: Value, output: &mut Vec<Value>) -> Result<(), Error> {
     match value.kind() {
         ValueKind::Seq | ValueKind::Iterable => {
@@ -121,6 +136,13 @@ fn collect_flattened_values(value: Value, output: &mut Vec<Value>) -> Result<(),
     }
 }
 
+/// Cluster items of `values` by the resolved value of `attr`, preserving
+/// first-key-seen order.
+///
+/// # Errors
+///
+/// Returns an error when `attr` is empty or an item has no resolvable value
+/// for it.
 fn group_by_filter(values: &Value, attr: &str) -> Result<Value, Error> {
     if attr.trim().is_empty() {
         return Err(Error::new(
@@ -140,6 +162,8 @@ fn group_by_filter(values: &Value, attr: &str) -> Result<Value, Error> {
     Ok(Value::from_object(GroupedValues::new(groups)))
 }
 
+/// Resolve the grouping key for an item, trying attribute access and
+/// falling back to item access.
 fn resolve_group_key(item: &Value, attr: &str) -> Result<Value, Error> {
     match item.get_attr(attr) {
         Ok(value) => ensure_resolved(value, attr, item),
@@ -151,6 +175,8 @@ fn resolve_group_key(item: &Value, attr: &str) -> Result<Value, Error> {
     }
 }
 
+/// Return `value` when defined, otherwise raise an unresolved-key error for
+/// `item`.
 fn ensure_resolved(value: Value, attr: &str, item: &Value) -> Result<Value, Error> {
     if value.is_undefined() {
         Err(Error::new(

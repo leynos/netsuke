@@ -36,10 +36,16 @@ pub(crate) struct CommandConfig {
 
 /// Owned inputs needed to construct command-helper configuration.
 pub(crate) struct CommandConfigInit {
+    /// Maximum number of bytes buffered in memory when capturing `stdout`.
     pub(crate) max_capture_bytes: u64,
+    /// Maximum number of bytes streamed into a tempfile when `stdout` or
+    /// `stderr` run in streaming mode.
     pub(crate) max_stream_bytes: u64,
+    /// Capability-scoped workspace root used to create temp directories.
     pub(crate) workspace_root: Arc<Dir>,
+    /// Absolute UTF-8 workspace root path for host-side filesystem access.
     pub(crate) workspace_root_path: Option<Arc<Utf8PathBuf>>,
+    /// Optional deterministic `PATH` supplied to spawned command helpers.
     pub(crate) command_path_override: Option<OsString>,
 }
 
@@ -103,6 +109,8 @@ impl CommandConfig {
     }
 }
 
+/// Sanitise a label into a filesystem-safe tempfile prefix, replacing
+/// disallowed characters with `-` and falling back to `t` when empty.
 fn sanitize_label(label: &str) -> String {
     let mut sanitized = String::with_capacity(label.len());
     for ch in label.chars() {
@@ -122,7 +130,9 @@ fn sanitize_label(label: &str) -> String {
 /// via a tempfile).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum OutputMode {
+    /// Buffer output in memory.
     Capture,
+    /// Stream output through a tempfile.
     Tempfile,
 }
 
@@ -140,7 +150,9 @@ impl OutputMode {
 /// can be recorded accurately.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum OutputStream {
+    /// The standard output pipe.
     Stdout,
+    /// The standard error pipe.
     Stderr,
 }
 
@@ -174,8 +186,11 @@ impl OutputStream {
 /// Encapsulates the stream, mode, and byte budget for a single pipe reader.
 #[derive(Clone, Copy)]
 pub(super) struct PipeSpec {
+    /// The pipe (`stdout` or `stderr`) governed by this spec.
     stream: OutputStream,
+    /// Whether the spec captures output in memory or streams to disk.
     mode: OutputMode,
+    /// The configured byte ceiling for this stream.
     limit: u64,
 }
 
@@ -216,7 +231,9 @@ impl PipeSpec {
 
 /// Tracks how many bytes have been consumed relative to a `PipeSpec`.
 pub(super) struct PipeLimit {
+    /// The specification this tracker enforces.
     spec: PipeSpec,
+    /// Bytes consumed so far towards the ceiling.
     consumed: u64,
 }
 
@@ -255,6 +272,7 @@ const fn add_saturating(current: u64, delta: u64) -> u64 {
 /// Parsed view of the filter options provided by the template author.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct CommandOptions {
+    /// The requested output mode for the stdout pipe.
     stdout_mode: OutputMode,
 }
 
@@ -301,6 +319,12 @@ impl CommandOptions {
         }
     }
 
+    /// Parse a mode string into an `OutputMode`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when `mode` is not `capture`, `tempfile`, `stream`, or
+    /// `streaming`.
     fn from_mode_str(mode: &str) -> Result<Self, Error> {
         match mode {
             "capture" => Ok(Self {
