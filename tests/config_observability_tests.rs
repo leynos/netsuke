@@ -1,8 +1,8 @@
 //! Binary-level configuration observability integration tests.
 
 use anyhow::{Context, Result, ensure};
+use camino::Utf8Path;
 use rstest::rstest;
-use std::path::Path;
 use tempfile::{TempDir, tempdir};
 use test_support::check_ninja::fake_ninja_check_build_file;
 use test_support::config_metrics::{MetricSnapshotRecord, assert_config_metrics_snapshot};
@@ -18,9 +18,9 @@ struct CommandOutput {
 fn setup_minimal_workspace(context: &str) -> Result<TempDir> {
     let temp = tempdir().with_context(|| format!("create temp dir for {context}"))?;
     let manifest = temp.path().join("Netsukefile");
-    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/minimal.yml");
+    let source = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/minimal.yml");
     test_fs::copy(&source, &manifest)
-        .with_context(|| format!("copy {} to {}", source.display(), manifest.display()))?;
+        .with_context(|| format!("copy {source} to {}", manifest.display()))?;
     Ok(temp)
 }
 
