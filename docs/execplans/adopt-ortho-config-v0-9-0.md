@@ -628,6 +628,19 @@ implement it until the user explicitly approves the draft.
   `Recipe::Command { command: StringOrList }` without adding duplicate local
   coverage. Date/Author: 2026-08-16 / Codex.
 
+- Decision: record the architectural change introduced by #304, which replaced
+  the manual two-pass, `DiscoverySources`-based discovery design with cached
+  one-pass discovery and bounded configuration metrics. Rationale: the current
+  pipeline performs one discovery pass through the injected environment
+  provider and returns a `DiscoveryOutcome`; after tracing is configured,
+  `emit_diagnostics` replays the deferred diagnostics once, and `into_layers`
+  hands the same `DiscoveredLayers` to `merge_with_cached_file_layers` for the
+  full merge, with early JSON resolution sharing that pass through
+  `resolve_json_and_layers_outcome_with_env`. Bounded configuration metrics
+  (`config_load_total`, `config_load_duration_seconds`) record each phase
+  without exposing paths. This plan's earlier two-pass records are therefore
+  historical. Date/Author: 2026-08-19 / Codex.
+
 ## Outcomes & retrospective
 
 The migration is complete. Runtime and build-time dependencies now resolve

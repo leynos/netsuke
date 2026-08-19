@@ -86,6 +86,13 @@ discovery behaviour. The former resolves JSON mode, while the latter
 discovers and merges configuration in one call, so callers that do not need
 the cached flow require no migration.
 
+v0.1.0 also instruments configuration loading itself: bounded metrics named
+`config_load_total` and `config_load_duration_seconds`, and structured
+`operation` and `error_category` fields on configuration-load failures.
+Neither exposes configuration paths. See the users' guide's
+[bounded configuration metrics](users-guide.md#bounded-configuration-metrics)
+and [interpret failures](users-guide.md#interpret-failures) sections.
+
 ## Opting into serial dependency ordering
 
 Set `dependency_order: serial` on an action or target to run its direct `deps`

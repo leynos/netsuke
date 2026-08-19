@@ -18,16 +18,19 @@ Netsuke needs an explicit configuration selector for operators who want one
 known configuration file to control a run. The public selector order is
 `--config` > `NETSUKE_CONFIG` > automatic discovery.
 
-The existing merge pipeline is deliberately two-pass. It first resolves early
-diagnostic JSON preferences from file layers, so startup errors can be emitted
-in the requested format. It then runs the full OrthoConfig-backed merge for the
-final `Cli` value. Automatic discovery also has Netsuke-specific precedence
+The merge pipeline is a cached one-pass model. A single discovery pass through
+the injected environment provider produces a `DiscoveryOutcome` whose
+side-effect-free diagnostics are replayed once after tracing is configured;
+the full OrthoConfig-backed merge then reuses the already-discovered
+`DiscoveredLayers` for the final `Cli` value, with no second environment or
+filesystem pass. Automatic discovery also has Netsuke-specific precedence
 requirements: project configuration must outrank user configuration, and a
-missed project `.netsuke.toml` requires a direct second-pass project load.
+missed project `.netsuke.toml` is appended to the layer stack when present,
+because OrthoConfig's own scan can miss it.
 
 OrthoConfig can discover configuration files, but its built-in discovery
 attribute does not own Netsuke's `--config` spelling, early diagnostic merge,
-or project-over-user second pass. Putting explicit selection into OrthoConfig
+or project-over-user fallback. Putting explicit selection into OrthoConfig
 would either expose Netsuke-specific policy through a generic library API or
 force Netsuke to work around library-owned behaviour in the CLI adapter.
 
@@ -35,8 +38,8 @@ force Netsuke to work around library-owned behaviour in the CLI adapter.
 
 - Keep Netsuke's command-line contract in the CLI adapter that owns the
   command-line spelling.
-- Preserve the existing two-pass merge pipeline for early diagnostic JSON
-  resolution and final configuration merging.
+- Preserve the cached one-pass merge pipeline: early diagnostic JSON
+  resolution and final configuration merging share one discovery pass.
 - Keep `OrthoConfig` responsible for generic layer composition, not
   Netsuke-specific selector precedence.
 - Keep `NETSUKE_CONFIG` as the only environment selector.
@@ -51,9 +54,10 @@ This would let OrthoConfig own the config-path selector and merge discovered
 files as part of its normal derived merge behaviour.
 
 It was rejected because Netsuke needs the public spelling `--config`, the
-`NETSUKE_CONFIG` environment selector, and the two-pass diagnostic path.
-OrthoConfig's generic discovery machinery cannot express those Netsuke-specific
-semantics without broadening its API around one consumer's policy.
+`NETSUKE_CONFIG` environment selector, and its cached one-pass diagnostic
+path. OrthoConfig's generic discovery machinery cannot express those
+Netsuke-specific semantics without broadening its API around one consumer's
+policy.
 
 ### Option B: add Netsuke-specific explicit selection to OrthoConfig
 
@@ -85,10 +89,14 @@ Netsuke resolves explicit configuration paths in `src/cli/discovery.rs`.
 - `env_config_path(env, var_name)` reads through Netsuke's injected
   `EnvProvider` port. Production supplies `StdEnvProvider`; tests use a
   map-backed provider without mutating process-global state.
-- `push_file_layers_with_sources` drains successful layer loads into the merge
-  composer, or records the load error for final diagnostics. Its private
-  `DiscoverySources` input pairs that port with the selected OrthoConfig
-  discovery adapter.
+- Discovery is one pass through the injected environment provider that
+  produces a `DiscoveryOutcome`. Its `emit_diagnostics` replays the retained,
+  side-effect-free diagnostics once after tracing is configured, and its
+  `into_layers` hands the same `DiscoveredLayers` to the full merge, so early
+  diagnostic JSON resolution and final merging share one pass.
+- The project-scope fallback is preserved: when OrthoConfig's own scan misses
+  a project `.netsuke.toml`, `project_scope_file` detects it and
+  `project_scope_layers` appends it to the layer stack.
 - Automatic discovery remains the fallback only when no explicit selector is
   present.
 
@@ -97,8 +105,9 @@ Netsuke resolves explicit configuration paths in `src/cli/discovery.rs`.
 - The CLI adapter has a small amount of Netsuke-specific orchestration logic,
   but the rules are visible and testable where the public contract is defined.
 - OrthoConfig does not gain Netsuke-specific configuration selector semantics.
-- Ambient composition uses OrthoConfig `ProcessEnv`; injected composition uses
-  a closed `MapEnv` containing only documented discovery keys. This keeps
+- Ambient and injected composition drive discovery through the same
+  `discovery_env_source` adapter, which projects the `ConfigEnvProvider` port
+  into a closed `MapEnv` containing only documented discovery keys. This keeps
   automatic discovery hermetic in tests while retaining platform home fallback
   for users.
 - Explicit selected files fail closed. A missing or invalid file reports the

@@ -2552,14 +2552,13 @@ Private helper functions for config discovery and JSON-output resolution.
 
 Configuration merge helpers:
 
-- `config_discovery(directory: Option<&PathBuf>) -> ConfigDiscovery` builds
-  the single-pass OrthoConfig discovery scanner with an optional project-root
-  anchor.
-- `project_scope_file_str(directory: Option<&Path>) -> Option<String>`
-  resolves the expected project `.netsuke.toml` path for project-layer
-  detection.
-- `project_scope_layers(directory)` loads the project-scope config directly,
-  bypassing automatic discovery, and returns
+- `config_discovery(directory: Option<&PathBuf>, env_source: SharedEnvSource)`
+  builds the single-pass OrthoConfig discovery scanner with an optional
+  project-root anchor and the injected environment source.
+- `project_scope_file(directory: Option<&Path>) -> Option<PathBuf>` resolves
+  the expected project `.netsuke.toml` path for project-layer detection.
+- `project_scope_layers(project_file: Option<&Path>)` loads the project-scope
+  config directly, bypassing automatic discovery, and returns
   `OrthoResult<Vec<MergeLayer<'static>>>`.
 - `env_config_path(env, var_name) -> Option<PathBuf>` reads one config
   environment variable, ignores empty values, and converts the value into a
@@ -2613,13 +2612,14 @@ so discovery and value merging observe one environment. Keep this port scoped
 to CLI configuration; runner, manifest, locale, and stdlib environment seams
 remain separate because their input and lifetime contracts differ.
 
-`DiscoverySources` is a crate-private composition input owned by
-`src/cli/discovery.rs`. Only full merge and early JSON resolution may construct
-it. Ambient entry points pair `ConfigStdEnvProvider` with OrthoConfig
-`ProcessEnv`; injected entry points project the same `ConfigEnvProvider` into a
-closed `MapEnv` containing only `NETSUKE_CONFIG`, `HOME`, `USERPROFILE`,
-`XDG_CONFIG_HOME`, `XDG_CONFIG_DIRS`, `APPDATA`, and `LOCALAPPDATA`. Do not
-reuse this fixed-key projection as a general environment-copy helper;
+`discovery_env_source(env)` is the crate-private adapter that projects
+Netsuke's `ConfigEnvProvider` port into the `SharedEnvSource` OrthoConfig
+discovery accepts. Ambient and injected entry points alike pass through this
+one adapter: `ConfigStdEnvProvider` backs ambient runs, while injected entry
+points pass the same `ConfigEnvProvider` value that drives selector and
+`NETSUKE_*` lookups. The projection is closed — only `NETSUKE_CONFIG`, `HOME`,
+`USERPROFILE`, `XDG_CONFIG_HOME`, `XDG_CONFIG_DIRS`, `APPDATA`, and
+`LOCALAPPDATA` appear — so it is not a general environment-copy helper;
 `EnvironmentLayer` alone enumerates the full `NETSUKE_*` value environment.
 
 `explicit_config_path_with_env` is the crate-internal seam for explicit
@@ -2656,10 +2656,11 @@ the unrelated `LocaleEnvProvider` in `locale_resolution`; crate-internal code
 uses the bare `EnvProvider` name.
 
 Tests for injected configuration discovery should provide a map-backed
-`ConfigEnvProvider`. End-to-end tests of the ambient `ProcessEnv` adapter must
-run in an isolated child configured with `env_clear()` followed by
-`Command::env`. `EnvLock` is reserved for tests that change the process working
-directory alongside `CwdGuard`; it does not justify environment mutation.
+`ConfigEnvProvider`. End-to-end tests of the ambient `ConfigStdEnvProvider`
+adapter must run in an isolated child configured with `env_clear()` followed
+by `Command::env`. `EnvLock` is reserved for tests that change the process
+working directory alongside `CwdGuard`; it does not justify environment
+mutation.
 
 Unit tests that only need to verify explicit config path precedence should test
 `explicit_config_path_with_env` with an injected provider instead of mutating

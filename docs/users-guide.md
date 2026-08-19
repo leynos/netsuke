@@ -1049,6 +1049,18 @@ before that merge completes, the parsed CLI verbosity is used instead. JSON
 mode suppresses tracing and metrics snapshots so that its diagnostic document
 remains the only stderr output.
 
+#### Bounded configuration metrics
+
+Configuration loading is recorded as two bounded metric series, both emitted
+in the drained `metrics snapshot`:
+
+- `config_load_total` — a counter with the `phase` and `outcome` labels that
+  counts each configuration-loading phase. `phase` is `diag_mode` for the
+  early diagnostic JSON preference resolution or `merge` for the full
+  configuration merge; `outcome` is `success` or `failure`.
+- `config_load_duration_seconds` — a histogram with the `phase` label only,
+  recording each phase's duration in seconds.
+
 The annotated [sample configuration](sample-netsuke.toml) lists every key. A
 small project configuration looks like this:
 
@@ -1277,7 +1289,10 @@ Human diagnostics include remediation hints where one is available. JSON mode
 exposes the same information as fields.
 
 Human-mode configuration-load failures include structured `operation` and
-`error_category` fields. JSON mode preserves the diagnostic document as the
+`error_category` fields. `operation` is `diag_mode_resolution` for the early
+diagnostic JSON preference pass or `config_merge` for the full merge;
+`error_category` is `io`, `validation`, or `parse`. Paths and display text are
+never recorded. JSON mode preserves the diagnostic document as the
 machine-readable failure output.
 
 The `--verbose` flag enables diagnostic tracing and successful timing
