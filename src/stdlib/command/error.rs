@@ -11,6 +11,10 @@ use super::{
 };
 use crate::localization::{self, keys};
 
+#[path = "error_support.rs"]
+mod support;
+use self::support::{ExitDetails, LimitExceeded, append_exit_status, append_stderr};
+
 /// Represents command execution failures that can be surfaced to `MiniJinja`
 /// callers.
 #[derive(Debug)]
@@ -96,6 +100,7 @@ pub(super) fn command_error(err: CommandFailure, template: &str, command: &str) 
     }
 }
 
+/// Build the spawn-failure error from the location and OS error.
 fn spawn_error(location: CommandLocation<'_>, err: &io::Error) -> Error {
     Error::new(
         ErrorKind::InvalidOperation,
@@ -106,6 +111,7 @@ fn spawn_error(location: CommandLocation<'_>, err: &io::Error) -> Error {
     )
 }
 
+/// Build the I/O error, noting a closed input stream on `BrokenPipe`.
 fn io_error(location: CommandLocation<'_>, err: &io::Error) -> Error {
     let mut message = localization::message(keys::COMMAND_IO_FAILED)
         .with_arg("location", location.describe())
@@ -118,6 +124,7 @@ fn io_error(location: CommandLocation<'_>, err: &io::Error) -> Error {
     Error::new(ErrorKind::InvalidOperation, message)
 }
 
+/// Build the broken-pipe error, suffixing exit status and captured stderr.
 fn broken_pipe_error(
     location: CommandLocation<'_>,
     err: &io::Error,
@@ -132,6 +139,7 @@ fn broken_pipe_error(
     Error::new(ErrorKind::InvalidOperation, message)
 }
 
+/// Build the exit error, distinguishing signal termination from a status code.
 fn exit_error(location: CommandLocation<'_>, details: ExitDetails<'_>) -> Error {
     let mut message = details.status.map_or_else(
         || {
@@ -150,6 +158,7 @@ fn exit_error(location: CommandLocation<'_>, details: ExitDetails<'_>) -> Error 
     Error::new(ErrorKind::InvalidOperation, message)
 }
 
+/// Build the output-limit error from the exceeded stream and mode.
 fn output_limit_error(location: CommandLocation<'_>, exceeded: LimitExceeded) -> Error {
     let stream_label = localization::message(exceeded.stream.label_key()).to_string();
     let mode_label = localization::message(exceeded.mode.label_key()).to_string();
@@ -164,6 +173,7 @@ fn output_limit_error(location: CommandLocation<'_>, exceeded: LimitExceeded) ->
     )
 }
 
+/// Build the timeout error carrying the elapsed seconds.
 fn timeout_error(location: CommandLocation<'_>, duration: Duration) -> Error {
     Error::new(
         ErrorKind::InvalidOperation,
@@ -172,57 +182,6 @@ fn timeout_error(location: CommandLocation<'_>, duration: Duration) -> Error {
             .with_arg("seconds", duration.as_secs_f64())
             .to_string(),
     )
-}
-
-fn append_exit_status(message: &mut String, status: Option<i32>) {
-    if let Some(code) = status {
-        let suffix = localization::message(keys::COMMAND_EXIT_STATUS_SUFFIX)
-            .with_arg("status", code)
-            .to_string();
-        message.push(' ');
-        message.push_str(&suffix);
-    } else {
-        message.push(' ');
-        message.push_str(&localization::message(keys::COMMAND_SIGNAL_SUFFIX).to_string());
-    }
-}
-
-fn append_stderr(message: &mut String, stderr: &[u8]) {
-    let stderr_text = String::from_utf8_lossy(stderr);
-    let trimmed = stderr_text.trim();
-    if !trimmed.is_empty() {
-        message.push_str(": ");
-        message.push_str(trimmed);
-    }
-}
-
-#[derive(Clone, Copy)]
-struct ExitDetails<'a> {
-    status: Option<i32>,
-    stderr: &'a [u8],
-}
-
-impl<'a> ExitDetails<'a> {
-    const fn new(status: Option<i32>, stderr: &'a [u8]) -> Self {
-        Self { status, stderr }
-    }
-}
-
-#[derive(Clone, Copy)]
-struct LimitExceeded {
-    stream: OutputStream,
-    mode: OutputMode,
-    limit: u64,
-}
-
-impl LimitExceeded {
-    const fn new(stream: OutputStream, mode: OutputMode, limit: u64) -> Self {
-        Self {
-            stream,
-            mode,
-            limit,
-        }
-    }
 }
 
 #[cfg(test)]
