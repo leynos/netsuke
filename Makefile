@@ -1,4 +1,12 @@
-.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-typos-config build release lint lint-clippy lint-whitaker fmt check-fmt typecheck markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load
+.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-typos-config build release lint lint-clippy lint-whitaker doc-coverage fmt check-fmt typecheck markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load
+
+PYTHON ?= python3
+# Threshold and toolchain for the Rustdoc doc-comment coverage gate. The
+# threshold mirrors the 80% bar stated in AGENTS.md; the toolchain recollects
+# the channel from rust-toolchain.toml the same way the dev-fast variables do,
+# so overriding either stays independent.
+DOC_COVERAGE_THRESHOLD ?= 80
+DOC_COVERAGE_TOOLCHAIN ?= $$(awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/ { print $$2; exit }' '$(RUST_TOOLCHAIN_FILE)')
 
 APP ?= netsuke
 CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$$HOME/.cargo/bin/cargo")
@@ -106,6 +114,10 @@ lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 	# Run from the crate directory as well so Whitaker loads the narrow
 	# `test_support::fs` exemption from test_support/dylint.toml.
 	cd test_support && DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(WHITAKER) --all --no-deps --package test_support -- --all-targets --all-features
+
+doc-coverage: ## Verify aggregate Rustdoc doc-comment coverage meets the threshold
+	@RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }$(POLONIUS_FLAGS)" RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" \
+		$(PYTHON) scripts/doc-coverage.py --toolchain "$(DOC_COVERAGE_TOOLCHAIN)" --threshold "$(DOC_COVERAGE_THRESHOLD)"
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all

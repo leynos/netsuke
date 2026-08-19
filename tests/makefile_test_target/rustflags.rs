@@ -77,6 +77,7 @@ impl RustflagsCase {
             inheritance_policy: InheritancePolicy::Conditional,
         }
     }
+
     const fn doctest() -> Self {
         Self {
             target: "doctest",
@@ -85,6 +86,7 @@ impl RustflagsCase {
             inheritance_policy: InheritancePolicy::Conditional,
         }
     }
+
     const fn binary_build() -> Self {
         Self {
             target: "target/%/$(APP)",
@@ -93,6 +95,7 @@ impl RustflagsCase {
             inheritance_policy: InheritancePolicy::Plain,
         }
     }
+
     const fn lint_rustdoc() -> Self {
         Self {
             target: "lint-clippy",
@@ -101,6 +104,7 @@ impl RustflagsCase {
             inheritance_policy: InheritancePolicy::Conditional,
         }
     }
+
     const fn lint_clippy() -> Self {
         Self {
             target: "lint-clippy",
@@ -109,6 +113,7 @@ impl RustflagsCase {
             inheritance_policy: InheritancePolicy::Conditional,
         }
     }
+
     const fn lint_whitaker() -> Self {
         Self {
             target: "lint-whitaker",
@@ -117,6 +122,7 @@ impl RustflagsCase {
             inheritance_policy: InheritancePolicy::Conditional,
         }
     }
+
     const fn lint_whitaker_test_support() -> Self {
         Self {
             target: "lint-whitaker",
@@ -125,6 +131,7 @@ impl RustflagsCase {
             inheritance_policy: InheritancePolicy::Conditional,
         }
     }
+
     const fn typecheck() -> Self {
         Self {
             target: "typecheck",
@@ -133,6 +140,7 @@ impl RustflagsCase {
             inheritance_policy: InheritancePolicy::Conditional,
         }
     }
+
     const fn kani_full() -> Self {
         Self {
             target: "kani-full",
@@ -141,10 +149,19 @@ impl RustflagsCase {
             inheritance_policy: InheritancePolicy::Conditional,
         }
     }
+
+    const fn doc_coverage() -> Self {
+        Self {
+            target: "doc-coverage",
+            line_marker: "RUSTDOCFLAGS",
+            warning_policy: WarningPolicy::Default,
+            inheritance_policy: InheritancePolicy::Conditional,
+        }
+    }
 }
 
 /// Every `RUSTFLAGS`-setting recipe line under contract.
-const RUSTFLAGS_CASES: [RustflagsCase; 10] = [
+const RUSTFLAGS_CASES: [RustflagsCase; 11] = [
     RustflagsCase::test_nextest(),
     RustflagsCase::doctest(),
     RustflagsCase::binary_build(),
@@ -154,6 +171,7 @@ const RUSTFLAGS_CASES: [RustflagsCase; 10] = [
     RustflagsCase::lint_whitaker_test_support(),
     RustflagsCase::typecheck(),
     RustflagsCase::kani_full(),
+    RustflagsCase::doc_coverage(),
     RustflagsCase {
         target: "bench-config-load",
         line_marker: "bench --bench config_load_cached_merge",

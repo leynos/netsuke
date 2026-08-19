@@ -155,9 +155,9 @@ references, clone keys only on insertion, and build error context lazily.
 - When adding a new borrow-centric API, verify it with and without
   `-Zpolonius=next` and record the classification in `docs/polonius.md`.
 
-- Run `make check-fmt`, `make lint`, and `make test` before committing. These
-  targets wrap the following commands, so contributors understand the exact
-  behaviour and policy enforced:
+- Run `make check-fmt`, `make lint`, `make doc-coverage`, and `make test`
+  before committing. These targets wrap the following commands, so
+  contributors understand the exact behaviour and policy enforced:
   - `make check-fmt` executes:
 
     ```sh
@@ -195,6 +195,18 @@ references, clone keys only on insertion, and build error context lazily.
     fails if either does. `make test-nextest` and `make doctest` run the
     individual passes. Use `make fmt` (`cargo fmt --workspace`) to apply
     formatting fixes reported by the formatter check.
+  - `make doc-coverage` executes:
+
+    ```sh
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Zpolonius=next" \
+    RUSTDOCFLAGS="--cfg docsrs -D warnings" \
+    python3 scripts/doc-coverage.py --threshold 80
+    ```
+
+    measuring the share of documented items across every workspace library
+    and binary target and failing when the aggregate drops below
+    `DOC_COVERAGE_THRESHOLD` (default 80), the bar stated under *Doc-comment
+    coverage* below.
 - Clippy warnings MUST be disallowed.
 - Fix any warnings emitted during tests in the code itself rather than
   silencing them.
@@ -223,8 +235,34 @@ references, clone keys only on insertion, and build error context lazily.
   end-to-end suites before and after making any change.
 - Every module **must** begin with a module level (`//!`) comment explaining the
   module's purpose and utility.
-- Document public APIs using Rustdoc comments (`///`) so documentation can be
-  generated with cargo doc.
+- Every public and private function and method **must** carry a `///` doc
+  comment: an imperative one-line summary starting with a verb, a rationale
+  paragraph only where a design choice is non-obvious, and a `# Errors`
+  section on functions returning `Result` whose failure semantics are not
+  obvious from the summary. Do not add `# Arguments` or `# Returns`
+  boilerplate; it is not used in this codebase. See *Doc-comment coverage*
+  below for the metric and its exemptions.
+
+### Doc-comment coverage
+
+The aggregate doc-comment coverage of the workspace stays at or above 80% of
+the items Rustdoc counts; `make doc-coverage` measures and enforces the bar.
+The metric runs `cargo rustdoc --show-coverage` over every library and binary
+target, counts private items too, and sums the documented share across the
+workspace. The threshold is overridable with `DOC_COVERAGE_THRESHOLD`.
+
+- Public **and** private functions and methods carry `///` docs per the
+  style above; there is no private-helper carve-out.
+- Rustdoc's own counting excludes trait-implementation items (`Display::fmt`,
+  `FromStr::from_str`, `Serialize`, `Deserialize`, `Drop::drop`, and
+  siblings) and inherent `impl`-block methods, so those do not need `///`
+  docs to satisfy the metric. Add them only when they add real clarity.
+- Test functions (`#[test]` / `#[rstest]`) live in `cfg(test)` modules that
+  Rustdoc does not compile, so they are not counted; do not add `///` docs to
+  them.
+- Doc-comment exemptions are last resort only, tightly scoped, and justified
+  at the point of use, mirroring the narrowly-scoped rationale pattern in
+  `.codescene/code-health-rules.json`.
 - Prefer immutable data and avoid unnecessary `mut` bindings.
 - Use explicit version ranges in `Cargo.toml` and keep dependencies up-to-date.
 - Avoid `unsafe` code unless absolutely necessary, and document any usage
