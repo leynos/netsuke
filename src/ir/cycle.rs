@@ -38,12 +38,14 @@ use support::target_entry_for_path;
 
 #[path = "cycle_detector.rs"]
 mod detector;
-// Plain re-import: the bindings stay private to `cycle` but remain reachable
+// Plain re-imports: the bindings stay private to `cycle` but remain reachable
 // from its `#[cfg(test)]`/`#[cfg(kani)]` children through `super::*`.
 use self::detector::CycleDetector;
 use self::detector::VisitState;
-#[cfg(any(test, kani))]
+#[cfg(test)]
 use self::detector::{CycleSearch, CycleVisitResult};
+#[cfg(kani)]
+use camino::Utf8Path;
 
 #[cfg(test)]
 #[path = "cycle_tests.rs"]
