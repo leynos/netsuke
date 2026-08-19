@@ -61,6 +61,19 @@ impl BuildGraph {
         }
     }
 
+    /// Build an action and edge for every manifest target.
+    ///
+    /// Rule-backed targets resolve a single template first; command and script
+    /// targets interpolate their command directly. Each resolved action is
+    /// registered once under its content hash, and the resulting edge is
+    /// attached to every explicit output.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IrGenError`] when a target writes an output already claimed by
+    /// an earlier target or by a sibling output in the same target, when a
+    /// rule selector does not resolve to exactly one rule, or when command
+    /// interpolation fails.
     fn process_targets(
         manifest: &NetsukeManifest,
         actions: &mut IrHashMap<String, Action>,
@@ -125,10 +138,20 @@ impl BuildGraph {
         Ok(())
     }
 
+    /// Append the manifest's default targets to `defaults`.
     fn process_defaults(manifest: &NetsukeManifest, defaults: &mut Vec<Utf8PathBuf>) {
         defaults.extend(manifest.defaults.iter().map(Utf8PathBuf::from));
     }
 
+    /// Detect dependency cycles and unresolved dependencies in the built graph.
+    ///
+    /// Unresolved dependencies are logged and treated as external files; a
+    /// detected cycle fails the whole lowering.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IrGenError::CircularDependency`] when the target graph
+    /// contains a dependency cycle.
     fn detect_cycles(&self) -> Result<(), IrGenError> {
         let CycleDetectionReport {
             cycle,
