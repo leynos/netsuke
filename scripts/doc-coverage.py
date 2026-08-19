@@ -92,17 +92,29 @@ def doc_targets(metadata: dict) -> list[DocTarget]:
     repo convention (see AGENTS.md).
     """
     members = set(metadata["workspace_members"])
-    targets: list[DocTarget] = []
-    for package in metadata["packages"]:
-        if package["id"] not in members:
-            continue
-        for target in package["targets"]:
-            kinds: list[str] = target["kind"]
-            if "lib" in kinds:
-                targets.append(DocTarget(package["name"], "lib", None))
-            elif "bin" in kinds:
-                targets.append(DocTarget(package["name"], "bin", target["name"]))
-    return targets
+    return [
+        doc
+        for package in metadata["packages"]
+        if package["id"] in members
+        for ordinal in package["targets"]
+        for doc in doc_able_targets(package, ordinal)
+    ]
+
+
+def doc_able_targets(package: dict, target: dict) -> list[DocTarget]:
+    """Map one package ordinal target to a doc target, or none.
+
+    Returns an empty list for targets that do not count toward Rustdoc
+    coverage: build scripts, tests, examples, and benches. Cargo reports a
+    target's kinds as a list, so both `lib` and `bin` can be matched without
+    guessing at the shape of a single-kind target.
+    """
+    kinds: list[str] = target["kind"]
+    if "lib" in kinds:
+        return [DocTarget(package["name"], "lib", None)]
+    if "bin" in kinds:
+        return [DocTarget(package["name"], "bin", target["name"])]
+    return []
 
 
 def measure(target: DocTarget, toolchain: str, manifest_root: pathlib.Path) -> Coverage:
