@@ -4,7 +4,7 @@
 //! 400-line ceiling. These are data, not behaviour: the request types describe
 //! what an invocation needs; `mod` holds the functions that act on them.
 
-use super::{BuildTargets, CommandEnv, StderrMode};
+use super::{BuildTargets, CommandEnv, NinjaJobCount, StderrMode};
 use camino::Utf8PathBuf;
 use std::path::Path;
 
@@ -14,7 +14,7 @@ pub struct NinjaProcessOptions {
     /// Optional UTF-8 working directory passed to the child process.
     pub working_dir: Option<Utf8PathBuf>,
     /// Optional maximum number of parallel Ninja jobs.
-    pub jobs: Option<usize>,
+    pub jobs: Option<NinjaJobCount>,
 }
 
 /// Borrowed parameter bundle for `ninja` build execution helpers.

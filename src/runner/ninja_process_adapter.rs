@@ -18,7 +18,8 @@ use std::{
 /// # Errors
 ///
 /// Returns [`io::ErrorKind::InvalidData`] when the CLI working directory is
-/// not valid UTF-8.
+/// not valid UTF-8, or [`io::ErrorKind::InvalidInput`] when the job count lies
+/// outside the supported `1..=64` range.
 pub(super) fn ninja_process_options(cli: &Cli) -> io::Result<process::NinjaProcessOptions> {
     let working_dir = cli
         .directory
@@ -34,10 +35,8 @@ pub(super) fn ninja_process_options(cli: &Cli) -> io::Result<process::NinjaProce
                 ),
             )
         })?;
-    Ok(process::NinjaProcessOptions {
-        working_dir,
-        jobs: cli.jobs,
-    })
+    let jobs = cli.jobs.map(process::NinjaJobCount::try_new).transpose()?;
+    Ok(process::NinjaProcessOptions { working_dir, jobs })
 }
 
 /// Invoke the Ninja executable with the provided CLI settings.
@@ -117,6 +116,43 @@ mod tests {
             error.kind() == ErrorKind::InvalidData,
             "invalid working directory returned {:?}, not InvalidData",
             error.kind()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn ninja_process_options_rejects_out_of_range_job_counts() -> Result<()> {
+        // 0 and 65 sit just outside the supported 1..=64 bound; the CLI's own
+        // boundary tests assert the same values.
+        for jobs in [0, 65] {
+            let cli = Cli {
+                jobs: Some(jobs),
+                ..Cli::default()
+            };
+            let Err(error) = ninja_process_options(&cli) else {
+                anyhow::bail!("job count {jobs} should be rejected");
+            };
+            ensure!(
+                error.kind() == ErrorKind::InvalidInput,
+                "job count {jobs} returned {:?}, not InvalidInput",
+                error.kind()
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn ninja_process_options_preserves_a_valid_job_count() -> Result<()> {
+        let cli = Cli {
+            jobs: Some(8),
+            ..Cli::default()
+        };
+        let options = ninja_process_options(&cli)?;
+        let expected = process::NinjaJobCount::try_new(8)?;
+        ensure!(
+            options.jobs == Some(expected),
+            "a present valid job count should be preserved, got {:?}",
+            options.jobs
         );
         Ok(())
     }

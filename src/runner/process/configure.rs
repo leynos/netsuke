@@ -73,7 +73,7 @@ mod tests {
     //! Unit tests for Ninja command configuration without spawning Ninja.
 
     use super::*;
-    use crate::runner::StderrMode;
+    use crate::runner::{NinjaJobCount, StderrMode};
     use anyhow::{Result, ensure};
     use rstest::{fixture, rstest};
     use std::ffi::{OsStr, OsString};
@@ -85,11 +85,11 @@ mod tests {
     }
 
     #[fixture]
-    fn options() -> NinjaProcessOptions {
-        NinjaProcessOptions {
-            jobs: Some(4),
+    fn options() -> io::Result<NinjaProcessOptions> {
+        Ok(NinjaProcessOptions {
+            jobs: Some(NinjaJobCount::try_new(4)?),
             ..NinjaProcessOptions::default()
-        }
+        })
     }
 
     #[fixture]
@@ -113,15 +113,16 @@ mod tests {
     #[rstest]
     fn build_configuration_preserves_argument_order(
         temp_file: Result<NamedTempFile>,
-        options: NinjaProcessOptions,
+        options: io::Result<NinjaProcessOptions>,
         env: CommandEnv,
     ) -> Result<()> {
         let build_file = temp_file?;
+        let resolved_options = options?;
         let target_names = vec![String::from("default")];
         let targets = super::super::BuildTargets::new(&target_names);
         let request = NinjaBuildRequest {
             program: Path::new("ninja"),
-            options: &options,
+            options: &resolved_options,
             build_file: build_file.path(),
             targets: &targets,
             env: &env,
@@ -144,13 +145,14 @@ mod tests {
     #[rstest]
     fn tool_configuration_preserves_argument_order(
         temp_file: Result<NamedTempFile>,
-        options: NinjaProcessOptions,
+        options: io::Result<NinjaProcessOptions>,
         env: CommandEnv,
     ) -> Result<()> {
         let build_file = temp_file?;
+        let resolved_options = options?;
         let request = NinjaToolRequest {
             program: Path::new("ninja"),
-            options: &options,
+            options: &resolved_options,
             build_file: build_file.path(),
             tool: "clean",
             env: &env,

@@ -291,7 +291,7 @@ fn run(world: &TestWorld) -> Result<()> {
                 program,
                 options: &runner::NinjaProcessOptions {
                     working_dir,
-                    jobs: cli.jobs,
+                    jobs: cli.jobs.map(runner::NinjaJobCount::try_new).transpose()?,
                 },
                 build_file: Path::new("build.ninja"),
                 targets: &targets,

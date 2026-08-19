@@ -48,8 +48,8 @@ pub use ninja_process_adapter::{run_ninja, run_ninja_tool};
 #[cfg(doctest)]
 pub use process::doc;
 pub use process::{
-    CommandEnv, MAX_RETAINED_DYNDEP_FILES, NinjaBuildRequest, NinjaProcessOptions, NinjaToolRequest,
-    StderrMode, run_ninja_tool_with, run_ninja_with,
+    CommandEnv, MAX_RETAINED_DYNDEP_FILES, NinjaBuildRequest, NinjaJobCount, NinjaProcessOptions,
+    NinjaToolRequest, StderrMode, run_ninja_tool_with, run_ninja_with,
 };
 
 use dyndep_publication::{materialize_dyndep_bundle, prune_dyndep_bundle};

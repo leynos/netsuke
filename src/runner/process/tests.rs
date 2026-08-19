@@ -267,6 +267,57 @@ proptest! {
     }
 }
 
+/// The child process runs in the requested working directory.
+///
+/// The fake Ninja records its effective current directory to a file whose path
+/// travels via an injected environment variable (mirroring the shared
+/// run-marker pattern), so no path is interpolated into the shell script. The
+/// recorded value is compared against the canonicalised working directory,
+/// which is the path the process layer passes to the child.
+#[cfg(unix)]
+#[test]
+fn run_ninja_with_runs_in_the_requested_working_directory() -> anyhow::Result<()> {
+    use test_support::exec::write_exec_with_content;
+
+    let working_dir = tempfile::tempdir()?;
+    // `configure_ninja_base` canonicalises the build file before spawning, so
+    // the manifest must already exist in the working directory.
+    test_support::fs::write(working_dir.path().join("build.ninja"), "# empty manifest\n")?;
+    let record_dir = tempfile::tempdir()?;
+    let observed_file = record_dir.path().join("observed-cwd");
+    let fake_ninja = write_exec_with_content(
+        record_dir.path(),
+        "fake-ninja",
+        "#!/bin/sh\npwd > \"${RECORD_CWD_TO}\"\nexit 0\n",
+    )?;
+
+    let working_dir_utf8 = Utf8PathBuf::from_path_buf(working_dir.path().to_path_buf())
+        .map_err(|path| anyhow::anyhow!("tempdir path is not UTF-8: {}", path.display()))?;
+    let options = NinjaProcessOptions {
+        working_dir: Some(working_dir_utf8),
+        ..NinjaProcessOptions::default()
+    };
+    let targets = BuildTargets::default();
+    let env = CommandEnv::inherit().with_var("RECORD_CWD_TO", &observed_file);
+    run_ninja_with(&NinjaBuildRequest {
+        program: &fake_ninja,
+        options: &options,
+        build_file: working_dir.path().join("build.ninja").as_path(),
+        targets: &targets,
+        env: &env,
+        stderr_mode: StderrMode::Forward,
+    })?;
+
+    let expected = working_dir.path().canonicalize()?;
+    let recorded = test_support::fs::read_to_string(&observed_file)?;
+    anyhow::ensure!(
+        Path::new(recorded.trim()) == expected,
+        "Ninja should run in the requested working directory: expected {expected:?}, \
+         recorded {recorded:?}"
+    );
+    Ok(())
+}
+
 /// Spawning a missing Ninja emits a spawn-failure warning whose
 /// `suppress_stderr` field follows the request's explicit `stderr_mode`.
 #[test]

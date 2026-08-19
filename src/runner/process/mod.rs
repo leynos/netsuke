@@ -42,10 +42,12 @@ use output_forwarding::{StatusObserver, spawn_and_stream_output};
 
 mod command_env;
 mod configure;
+mod job_count;
 mod request;
 mod stderr_mode;
 pub use command_env::CommandEnv;
 use configure::{configure_ninja_build_command, configure_ninja_tool_command};
+pub use job_count::NinjaJobCount;
 pub use paths::*;
 pub use request::{NinjaBuildRequest, NinjaProcessOptions, NinjaToolRequest};
 pub use stderr_mode::StderrMode;
