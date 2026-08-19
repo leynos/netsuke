@@ -102,6 +102,10 @@ fn missing_rule_shape_is_rejected() {
     }
 }
 
+/// Generate one of two single-byte symbolic output names.
+///
+/// The two small values keep the verifier's state space bounded while still
+/// exercising both branches of equality in the duplicate-output scan.
 fn symbolic_path_name() -> String {
     if kani::any::<bool>() {
         "a".to_owned()
@@ -110,6 +114,7 @@ fn symbolic_path_name() -> String {
     }
 }
 
+/// Generate one of two single-byte symbolic rule names.
 fn symbolic_rule_name() -> String {
     if kani::any::<bool>() {
         "m".to_owned()
