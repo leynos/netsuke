@@ -83,7 +83,7 @@ fn write_outline_inputs(
     Ok(())
 }
 
-/// Return every node's direct inputs, keyed by target path.
+/// Return direct inputs keyed by edge-destination path.
 fn collect_inputs_by_target(view: &GraphView) -> BTreeMap<&Utf8Path, Vec<&Utf8Path>> {
     collect_predecessors(&view.edges)
 }

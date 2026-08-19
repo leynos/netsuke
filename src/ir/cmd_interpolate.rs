@@ -50,7 +50,7 @@ fn record_binding_preparation() {
 }
 
 #[cfg(not(test))]
-/// No-op counter guard for non-test builds.
+/// Skip binding-preparation counting outside test builds.
 const fn record_binding_preparation() {}
 
 #[cfg(test)]

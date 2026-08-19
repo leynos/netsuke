@@ -86,7 +86,8 @@ fn write_fake_ninja_script(script: &str, context: &str) -> Result<(TempDir, Path
     let dir = TempDir::new().with_context(|| format!("{context}: create temp dir"))?;
     write_fake_ninja_script_in_dir(script, context, dir)
 }
-/// Write `script` as an executable `ninja` inside `dir`, returning both.
+/// Write `script` as an executable `ninja` inside `dir`, returning the
+/// directory and the path of the written script.
 ///
 /// # Errors
 ///

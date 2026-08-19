@@ -44,6 +44,11 @@ impl<'a> ValidationContext<'a> {
 
     /// Validate a single DNS label, returning the error for each kind of
     /// violation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for empty labels, invalid characters, invalid label
+    /// edges, or labels longer than 63 characters.
     fn validate_label(&self, label: &str) -> Result<(), HostPatternError> {
         let original = self.original.as_str();
         if label.is_empty() {
@@ -155,6 +160,11 @@ pub enum HostPatternError {
 
 /// Normalize and validate a host pattern, returning the lowercased body and
 /// wildcard flag.
+///
+/// # Errors
+///
+/// Returns an error for empty patterns, embedded scheme-like prefixes, or
+/// labels that fail the DNS-label checks.
 fn normalise_host_pattern(input: HostPatternInput<'_>) -> Result<(String, bool), HostPatternError> {
     let trimmed = input.as_str().trim();
     if trimmed.is_empty() {

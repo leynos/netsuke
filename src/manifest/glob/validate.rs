@@ -8,8 +8,11 @@ struct ValidationState {
     depth: i32,
     /// Whether the scan is inside a character class.
     in_class: bool,
-    /// Byte position of the last unclosed opening brace.
-    last_open_pos: Option<usize>,
+    /// Byte positions of unclosed opening braces, outermost first.
+    ///
+    /// A matching closing brace pops the innermost entry, so an unmatched
+    /// `{` nested under a closed pair keeps its own position for the error.
+    open_positions: Vec<usize>,
     #[cfg(unix)]
     /// Whether the previous character was a backslash escape.
     escaped: bool,
@@ -21,7 +24,7 @@ impl ValidationState {
         Self {
             depth: 0,
             in_class: false,
-            last_open_pos: None,
+            open_positions: Vec::new(),
             #[cfg(unix)]
             escaped: false,
         }
@@ -85,7 +88,7 @@ impl ValidationState {
         match ch {
             '{' => {
                 self.depth += 1;
-                self.last_open_pos = Some(pos);
+                self.open_positions.push(pos);
                 Ok(())
             }
             '}' if self.depth == 0 => Err(create_unmatched_brace_error(&GlobErrorContext {
@@ -96,6 +99,7 @@ impl ValidationState {
             })),
             '}' => {
                 self.depth -= 1;
+                self.open_positions.pop();
                 Ok(())
             }
             _ => Ok(()),
@@ -107,7 +111,7 @@ impl ValidationState {
         if self.depth == 0 {
             return Ok(());
         }
-        let pos = self.last_open_pos.unwrap_or(0);
+        let pos = self.open_positions.first().copied().unwrap_or(0);
         Err(create_unmatched_brace_error(&GlobErrorContext {
             pattern: pattern.to_owned(),
             error_char: '{',
