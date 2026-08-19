@@ -11,12 +11,17 @@ use ortho_config::LanguageIdentifier;
 use ortho_config::{FluentLocalizer, FluentLocalizerBuilder, Localizer, NoOpLocalizer};
 use std::str::FromStr;
 
+/// Localizer that consults a primary catalogue before falling back to a
+/// secondary one.
 struct LayeredLocalizer {
+    /// First tier of the lookup, consulted before the fallback.
     primary: Box<dyn Localizer>,
+    /// Second tier consulted when the primary has no message.
     fallback: Box<dyn Localizer>,
 }
 
 impl LayeredLocalizer {
+    /// Build a localizer layering `primary` over `fallback`.
     fn new(primary: Box<dyn Localizer>, fallback: Box<dyn Localizer>) -> Self {
         Self { primary, fallback }
     }
@@ -34,10 +39,13 @@ impl Localizer for LayeredLocalizer {
     }
 }
 
+/// Parse a locale tag into a `LanguageIdentifier`, returning `None` when invalid.
 fn parse_locale_identifier(locale: &str) -> Option<LanguageIdentifier> {
     LanguageIdentifier::from_str(locale).ok()
 }
 
+/// Build a localizer over the English source catalogue, degrading to a no-op
+/// localizer when the embedded resources fail to load.
 fn build_en_localizer() -> Box<dyn Localizer> {
     match FluentLocalizer::with_en_us_defaults([locales::source_catalogue().resource()]) {
         Ok(localizer) => Box::new(localizer) as Box<dyn Localizer>,
@@ -48,6 +56,8 @@ fn build_en_localizer() -> Box<dyn Localizer> {
     }
 }
 
+/// Build a localizer from a consumer catalogue, returning `None` when the
+/// resource fails to parse.
 fn build_consumer_localizer(
     builder: FluentLocalizerBuilder,
     tag: &'static str,

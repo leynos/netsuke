@@ -8,33 +8,42 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use thiserror::Error;
 
+/// Wrapper around a raw host pattern string awaiting normalisation.
 #[derive(Copy, Clone)]
 struct HostPatternInput<'a>(&'a str);
 
 impl<'a> HostPatternInput<'a> {
+    /// Return the wrapped pattern string.
     const fn as_str(self) -> &'a str {
         self.0
     }
 }
 
+/// Host name presented for matching against a `HostPattern`.
 #[derive(Copy, Clone)]
 pub(crate) struct HostCandidate<'a>(pub(crate) &'a str);
 
 impl<'a> HostCandidate<'a> {
+    /// Return the wrapped host name.
     const fn as_str(self) -> &'a str {
         self.0
     }
 }
 
+/// Shared validation state for one host pattern.
 struct ValidationContext<'a> {
+    /// Original pattern, used in error messages.
     original: HostPatternInput<'a>,
 }
 
 impl<'a> ValidationContext<'a> {
+    /// Build a validation context around the original pattern.
     const fn new(original: HostPatternInput<'a>) -> Self {
         Self { original }
     }
 
+    /// Validate a single DNS label, returning the error for each kind of
+    /// violation.
     fn validate_label(&self, label: &str) -> Result<(), HostPatternError> {
         let original = self.original.as_str();
         if label.is_empty() {
@@ -144,6 +153,8 @@ pub enum HostPatternError {
     },
 }
 
+/// Normalise and validate a host pattern, returning the lowercased body and
+/// wildcard flag.
 fn normalise_host_pattern(input: HostPatternInput<'_>) -> Result<(String, bool), HostPatternError> {
     let trimmed = input.as_str().trim();
     if trimmed.is_empty() {
@@ -200,7 +211,9 @@ fn normalise_host_pattern(input: HostPatternInput<'_>) -> Result<(String, bool),
 /// Canonical host pattern storing the normalised body and wildcard flag.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HostPattern {
+    /// Normalised lowercase host body, without the wildcard prefix.
     pub(crate) pattern: String,
+    /// Whether the pattern matches any subdomain of the body.
     pub(crate) wildcard: bool,
 }
 
@@ -219,6 +232,8 @@ impl HostPattern {
         })
     }
 
+    /// Return whether a candidate host matches this pattern. Wildcard patterns
+    /// match subdomains only, never the apex domain itself.
     pub(crate) fn matches(&self, candidate: HostCandidate<'_>) -> bool {
         let host = candidate.as_str().to_ascii_lowercase();
         if self.wildcard {

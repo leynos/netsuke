@@ -87,6 +87,7 @@ pub fn normalize_locale_tag(raw: &str) -> Option<String> {
         .map(|lang| lang.to_string())
 }
 
+/// Return the first candidate that normalises into a valid BCP 47 tag.
 fn select_locale<'a>(candidates: impl IntoIterator<Item = Option<&'a str>>) -> Option<String> {
     for raw in candidates.into_iter().flatten() {
         if let Some(normalized) = normalize_locale_tag(raw) {

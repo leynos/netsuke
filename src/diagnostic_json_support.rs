@@ -16,19 +16,28 @@ use crate::json_envelope::{GeneratorInfo, SCHEMA_VERSION};
 /// The named source file a diagnostic's primary span points into.
 #[derive(Debug, Serialize, PartialEq, Eq)]
 pub(super) struct DiagnosticSource {
+    /// The source file's display name.
     pub(super) name: String,
 }
 
 /// One labelled span within the diagnostic source, ready for serialisation.
 #[derive(Debug, Serialize, PartialEq, Eq, Clone)]
 pub(super) struct DiagnosticSpan {
+    /// The label rendered beside the span, when the diagnostic provides one.
     pub(super) label: Option<String>,
+    /// Byte offset of the span's start within the source.
     pub(super) offset: usize,
+    /// Length of the span in bytes.
     pub(super) length: usize,
+    /// One-based line of the span's start.
     pub(super) line: u32,
+    /// One-based column of the span's start.
     pub(super) column: u32,
+    /// One-based line of the span's end.
     pub(super) end_line: u32,
+    /// One-based column of the span's end.
     pub(super) end_column: u32,
+    /// First line of the span's text, when it can be decoded.
     pub(super) snippet: Option<String>,
 }
 

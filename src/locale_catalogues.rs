@@ -19,7 +19,9 @@ pub const SOURCE_LOCALE: &str = "en-US";
 /// A Fluent catalogue embedded in the binary.
 #[derive(Debug, Clone, Copy)]
 pub struct LocaleCatalogue {
+    /// BCP 47 tag naming this catalogue, for example `pt-BR`.
     tag: &'static str,
+    /// Fluent source text embedded from `locales/<tag>/messages.ftl`.
     resource: &'static str,
 }
 
@@ -191,6 +193,7 @@ pub fn source_catalogue() -> &'static LocaleCatalogue {
     catalogue(SOURCE_LOCALE).unwrap_or(&EMPTY_SOURCE)
 }
 
+/// Return the fallback policy declared for a language, when one exists.
 fn fallback_for(language: &str) -> Option<&'static LanguageFallback> {
     LANGUAGE_FALLBACKS
         .iter()
@@ -213,6 +216,8 @@ pub(crate) fn tag_language(tag: &str) -> &str {
     tag.split('-').next().unwrap_or(tag)
 }
 
+/// Resolve the catalogue for a script or region subtag within a fallback
+/// policy.
 fn subtag_catalogue(
     fallback: &LanguageFallback,
     subtag: Option<&str>,
@@ -269,6 +274,8 @@ pub fn resolve_catalogue(locale: &LanguageIdentifier) -> &'static LocaleCatalogu
     unique_language_catalogue(language).unwrap_or_else(source_catalogue)
 }
 
+/// Resolve a catalogue through a language's fallback policy, ending at the
+/// source catalogue when nothing matches.
 fn resolve_via_fallback(
     fallback: &LanguageFallback,
     script: Option<&str>,
