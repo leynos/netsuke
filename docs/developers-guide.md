@@ -1575,6 +1575,12 @@ all valid inputs.
   `resolve_config_path_obeys_precedence_invariant` asserts the
   `explicit_config_path` selector-precedence invariant for generated optional
   paths.
+- Layer-precedence and replay transitions are also property-tested:
+  `tests/cli_tests/merge_precedence_proptests.rs` asserts scalar precedence
+  and list appending for arbitrary file, environment, and CLI layer
+  combinations, and `src/cli/discovery_replay_proptests.rs` proves repeated
+  discovery-diagnostic replays stay identical without re-reading the
+  environment.
 
 ### Parametrized unit tests with rstest
 
@@ -3678,6 +3684,18 @@ command completion. After a successful configuration merge, `finish_run` gates
 it on merged `verbose`; if diagnostic-mode resolution or the full merge fails
 before a merged configuration exists, it uses parsed CLI `verbose` instead. JSON
 sets tracing to `OFF`, so JSON runs suppress this snapshot.
+
+The lifecycle is exactly-once: a `Once` guards global recorder installation and
+a `OnceLock` stores the snapshotter, so a second `init_metrics()` call is a
+no-op. If `set_global_recorder` fails — it can be called once per process — the
+recorder is dropped, the snapshotter stays unset, and `emit_metrics_snapshot()`
+becomes a no-op. `snapshot()` drains: counters swap to zero and histogram
+samples clear while the bounded series remain, so a snapshot taken while work
+is still recording would lose those samples. `finish_run` returns on every exit
+path, so the audit snapshot is emitted once per process. The in-crate unit
+tests cover draining and concurrent recording against local recorders, and the
+binary-level suite exercises the process-wide install through the compiled
+executable.
 
 The debugging recorder preserves raw histogram observations rather than
 aggregating them into buckets. Netsuke configures no custom buckets; a future
