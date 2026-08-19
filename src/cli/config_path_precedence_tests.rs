@@ -6,7 +6,7 @@
 //! same invariant over generated path values.
 
 use super::*;
-use crate::cli::test_support::{empty_mock_env, mock_env_with};
+use crate::cli::test_support::TestEnv;
 use proptest::prelude::*;
 use rstest::rstest;
 use std::path::PathBuf;
@@ -22,9 +22,10 @@ fn resolve_config_path_with_selectors(
     cli_config: Option<PathBuf>,
     env_config: Option<&PathBuf>,
 ) -> Option<PathBuf> {
-    let env = env_config.map_or_else(empty_mock_env, |value| {
-        mock_env_with([(CONFIG_ENV_VAR, value.as_os_str().to_owned())])
-    });
+    let mut env = TestEnv::default();
+    if let Some(value) = env_config {
+        env = env.with_var(CONFIG_ENV_VAR, value.as_os_str());
+    }
     let cli = Cli {
         config: cli_config,
         ..Cli::default()

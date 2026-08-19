@@ -10,7 +10,6 @@ use ortho_config::{
     ConfigDiscovery, MergeLayer, MergeProvenance, OrthoResult, SharedEnvSource,
     load_config_file_as_chain,
 };
-use serde_json::Value;
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 #[cfg(test)]
@@ -19,6 +18,7 @@ use std::sync::Arc;
 use super::super::parser::Cli;
 use super::CONFIG_ENV_VAR;
 use super::diagnostics::{BoundedConfigPath, debug_optional_config_path_from_fields};
+use super::json::json_from_value;
 use super::paths::{FsPathNormalizer, PathNormalizer, normalized_path_key};
 
 /// Preserve discovered layers while extracting their final JSON preference.
@@ -45,14 +45,6 @@ pub(super) fn retain_layers_and_resolve_json(
         retained.push(MergeLayer::file(Cow::Owned(value), path));
     }
     (retained, json)
-}
-
-/// Read a Boolean JSON preference from one configuration-layer value.
-fn json_from_value(value: &Value) -> Option<bool> {
-    value
-        .as_object()
-        .and_then(|map| map.get("json"))
-        .and_then(Value::as_bool)
 }
 
 /// Project-scope outcome retained for a later trace replay.

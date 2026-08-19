@@ -23,10 +23,9 @@ mod layers;
 mod paths;
 #[path = "discovery_trace.rs"]
 mod trace;
-use diagnostics::{BoundedConfigPath, ConfigLoadFailureKind, ConfigLoadWarning};
-use layers::collect_file_layers_with_trace_and_env_source;
-use trace::{DiscoveryDiagnostics, DiscoveryTrace, FileLayerTrace};
 
+#[path = "discovery_telemetry.rs"]
+mod telemetry;
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG";
 const DISCOVERY_ENV_KEYS: [&str; 7] = [
     CONFIG_ENV_VAR,
@@ -148,27 +147,29 @@ impl DiscoveryOutcome {
 
 /// Discover configuration layers once through the injected environment.
 pub(crate) fn discover_file_layers(cli: &Cli, env: &impl EnvProvider) -> DiscoveryOutcome {
-    let (trace, load_warning, outcome) = collect_file_layers_with_env(cli, env);
-    let diagnostics = DiscoveryDiagnostics::new(trace, load_warning);
-    let layers = match outcome {
-        Ok(discovered_layers) => {
-            let (layers, json_preference) =
-                layers::retain_layers_and_resolve_json(discovered_layers);
-            DiscoveredLayers {
-                layers,
-                json_preference,
-                errors: Vec::new(),
-                diagnostics,
+    telemetry::instrument_discovery(|| {
+        let (trace, load_warning, outcome) = collect_file_layers_with_env(cli, env);
+        let diagnostics = DiscoveryDiagnostics::new(trace, load_warning);
+        let layers = match outcome {
+            Ok(discovered_layers) => {
+                let (layers, json_preference) =
+                    layers::retain_layers_and_resolve_json(discovered_layers);
+                DiscoveredLayers {
+                    layers,
+                    json_preference,
+                    errors: Vec::new(),
+                    diagnostics,
+                }
             }
-        }
-        Err(error) => DiscoveredLayers {
-            layers: Vec::new(),
-            json_preference: Cli::default().json,
-            errors: vec![error],
-            diagnostics,
-        },
-    };
-    DiscoveryOutcome { layers }
+            Err(error) => DiscoveredLayers {
+                layers: Vec::new(),
+                json_preference: Cli::default().json,
+                errors: vec![error],
+                diagnostics,
+            },
+        };
+        DiscoveryOutcome { layers }
+    })
 }
 
 /// Add a discovered file layer result to a merge composition.
@@ -390,3 +391,6 @@ mod config_path_precedence_tests;
 #[cfg(test)]
 #[path = "discovery_unit_tests.rs"]
 mod unit_tests;
+
+#[path = "discovery_json.rs"]
+mod json;

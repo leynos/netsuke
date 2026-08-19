@@ -1,14 +1,13 @@
 //! Tests for configuration discovery tracing.
 //!
-//! Selection is exercised through an injected [`mockable::MockEnv`], so these
+//! Selection is exercised through the injected [`EnvProvider`] double, so these
 //! tests never mutate the process environment and need no lock.
 
 use super::*;
-use crate::cli::test_support::{empty_mock_env, mock_env_with};
+use crate::cli::test_support::TestEnv;
 use crate::snapshot_test_support::snapshot_settings;
 use anyhow::{Context, Result, ensure};
 use insta::assert_snapshot;
-use mockable::MockEnv;
 use rstest::rstest;
 use tempfile::tempdir;
 
@@ -29,7 +28,7 @@ fn snapshot_failure_event(assertion: &EventAssertion<'_>, snapshot_name: &str) -
 /// Resolve `cli_config`/`env_config` and trace the result, returning both.
 fn resolve_and_trace(
     cli_config: Option<PathBuf>,
-    env: &MockEnv,
+    env: &TestEnv,
 ) -> Result<(ConfigPathResolution, Vec<String>)> {
     capture_events(|| {
         let resolution = resolve_config_selector(cli_config, env);
@@ -93,9 +92,10 @@ struct ConfigPathScenario {
     expected_env_trace: Some((CONFIG_ENV_VAR, false)),
 })]
 fn explicit_config_path_logs_selected_selector(#[case] scenario: ConfigPathScenario) -> Result<()> {
-    let env = scenario.config_env.map_or_else(empty_mock_env, |value| {
-        mock_env_with([(CONFIG_ENV_VAR, value)])
-    });
+    let mut env = TestEnv::default();
+    if let Some(value) = scenario.config_env {
+        env = env.with_var(CONFIG_ENV_VAR, value);
+    }
 
     let (resolution, events) = resolve_and_trace(scenario.cli_config.map(PathBuf::from), &env)?;
     let selector_event = find_event(&events, "resolved config path")?;
@@ -153,7 +153,7 @@ fn explicit_config_path_logs_selected_selector(#[case] scenario: ConfigPathScena
 /// only `NETSUKE_CONFIG` is ever looked up.
 #[test]
 fn legacy_config_path_variable_is_not_a_selector() -> Result<()> {
-    let env = mock_env_with([("NETSUKE_CONFIG_PATH", "legacy-should-be-ignored.toml")]);
+    let env = TestEnv::default().with_var("NETSUKE_CONFIG_PATH", "legacy-should-be-ignored.toml");
 
     let (resolution, events) = resolve_and_trace(None, &env)?;
 
@@ -179,7 +179,7 @@ fn legacy_config_path_variable_is_not_a_selector() -> Result<()> {
 fn selector_resolution_event_schema_snapshot() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
     let config_path = temp.path().join("selector.toml");
-    let env = mock_env_with([(CONFIG_ENV_VAR, config_path.as_os_str().to_owned())]);
+    let env = TestEnv::default().with_var(CONFIG_ENV_VAR, config_path.as_os_str());
 
     let (resolution, events) = resolve_and_trace(None, &env)?;
     ensure!(
@@ -208,19 +208,17 @@ fn load_layers_from_path_logs_bounded_failure_fields() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
     let missing_path = temp.path().join("missing-secret-name.toml");
 
-    let (warning, load_result) = load_layers_from_path_with_warning(&missing_path);
-    let (load_error, events) = capture_events(|| {
-        warning
-            .as_ref()
-            .expect("missing explicit config should retain a warning")
-            .emit();
-        Ok::<_, anyhow::Error>(load_result.expect_err("missing explicit config file should fail"))
+    let (error, events) = capture_events(|| {
+        Ok::<_, anyhow::Error>(
+            load_layers_from_path(&missing_path)
+                .expect_err("missing explicit config file should fail"),
+        )
     })?;
     let warn_event = find_event(&events, "explicit config load failed")?;
     let assertion = EventAssertion::new(warn_event, &missing_path);
 
     ensure!(
-        load_error.to_string().contains("missing-secret-name.toml"),
+        error.to_string().contains("missing-secret-name.toml"),
         "returned error should retain the diagnostic path"
     );
     ensure!(
@@ -232,7 +230,7 @@ fn load_layers_from_path_logs_bounded_failure_fields() -> Result<()> {
         !warn_event.contains("error="),
         "warn event should not include full formatted error text: {warn_event}"
     );
-    assertion.ensure_private_event_fields(&load_error.to_string())?;
+    assertion.ensure_private_event_fields(&error.to_string())?;
     snapshot_failure_event(&assertion, "explicit_load_missing_event_schema")?;
     Ok(())
 }
@@ -244,16 +242,14 @@ fn load_layers_from_path_logs_invalid_toml_failure() -> Result<()> {
     test_support::fs::write(&config_path, "theme = [invalid parser secret\n")
         .with_context(|| format!("write {}", config_path.display()))?;
 
-    let (warning, load_result) = load_layers_from_path_with_warning(&config_path);
-    let (load_error, events) = capture_events(|| {
-        warning
-            .as_ref()
-            .expect("invalid explicit config should retain a warning")
-            .emit();
-        Ok::<_, anyhow::Error>(load_result.expect_err("invalid explicit config file should fail"))
+    let (error, events) = capture_events(|| {
+        Ok::<_, anyhow::Error>(
+            load_layers_from_path(&config_path)
+                .expect_err("invalid explicit config file should fail"),
+        )
     })?;
     let warn_event = find_event(&events, "explicit config load failed")?;
-    let formatted_error = load_error.to_string();
+    let formatted_error = error.to_string();
 
     ensure!(
         warn_event.contains("failure_kind=LoadError"),

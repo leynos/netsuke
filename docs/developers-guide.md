@@ -2793,6 +2793,35 @@ records emitted by `src/main.rs`. Those terminal records identify the failed
 operation and coarse error category without rendering the source error.
 
 
+#### Discovery pass telemetry
+
+The file-layer discovery pass that feeds both diagnostics and the full merge
+opens a `trace_span!("collect_diag_file_layers")` whose bounded fields record
+the pass outcome and, on failure, a coarse error category from the closed set
+`file`, `validation`, `cyclic_extends`, `cli_parsing`, `gathering`, `merge`,
+`aggregate`, and `other`. The span carries only those two bounded fields and
+no selectors, paths, or configuration values.
+
+Alongside the span, each discovery pass increments
+`netsuke_cli_config_discovery_total` with an `outcome` label of `success` or
+`error`, and records its elapsed time on the
+`netsuke_cli_config_discovery_duration_seconds` histogram. The counter and
+histogram share the span's privacy contract: labels come from the closed sets
+above and never from user input, so the series count is fixed by the code
+rather than by the environment. The workspace's recorder-backed tests exercise
+both outcomes, the bounded failure classification, and the single duration
+sample through local `metrics_util::DebuggingRecorder` instances.
+
+Deferred configuration-discovery diagnostics never log full paths, file names,
+or formatted parser errors. Path values in those events are bounded to a
+`path_hash` correlation identifier plus a presence indicator. Load failures are
+classified with the `ConfigLoadFailureKind` enum instead of the formatted error
+text. The terminal human-mode `configuration load failed` event emitted by
+`config_err_to_exit` is separate: it emits the formatted error in its `error`
+field so the failure is actionable. It does not add the `operation` or
+`error_category` fields used by other telemetry. `path_hash` is a bounded
+identifier for correlating events, not a cryptographic guarantee.
+
 #### `json` contract
 
 Early JSON resolution reads only the boolean `json` field from each
