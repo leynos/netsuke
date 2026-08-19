@@ -131,6 +131,9 @@ struct CommandEvaluator {
     exec_success_fragment: &'static str,
 }
 
+/// Build the shell wrapper that supervises one command-list entry's `exec`.
+/// Build the evaluator for one entry, retaining subprocess replacement on a
+/// direct `exec`.
 fn command_evaluator(command: CommandListEntry<'_>) -> CommandEvaluator {
     let quoted = shell_single_quote(command);
     if exec_boundary(command) == ExecBoundary::Direct {
@@ -146,6 +149,8 @@ fn command_evaluator(command: CommandListEntry<'_>) -> CommandEvaluator {
     }
 }
 
+/// How an `exec` keyword sits within a command-list entry.
+/// The supported positions of `exec` within a command-list entry.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ExecBoundary {
     /// The entry does not contain `exec` in a shell command position.
@@ -178,6 +183,9 @@ impl ShellWords {
             .unwrap_or(ExecBoundary::None)
     }
 
+    /// Classify `exec` at `index`: `Direct` when it is the first simple command,
+    /// `Unsupported` when a wrapper position hides it, else `None`.
+    /// Classify `exec` in `word` against the first non-assignment index.
     fn exec_boundary_at(
         &self,
         index: usize,
@@ -232,6 +240,8 @@ impl ShellWords {
         self.background_job_count_at_depth(0)
     }
 
+    /// Count background jobs nested below the current `eval` depth.
+    /// Count background jobs reachable at `depth`, recursing into static `eval` payloads.
     fn background_job_count_at_depth(&self, depth: usize) -> Result<usize, UnanalyzableEval> {
         self.0
             .iter()
@@ -245,6 +255,8 @@ impl ShellWords {
             })
     }
 
+    /// Count background jobs spawned by the `eval` at `index`, to `depth`.
+    /// Count background jobs in the static payload of the `eval` at `index`.
     fn background_jobs_from_eval(
         &self,
         index: usize,
