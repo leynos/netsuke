@@ -56,7 +56,7 @@ fn documented_subcommand(root: &DocMetadata, name: &str, about_id: &str) -> DocM
     }
 }
 
-/// Return the localisation key for `name`'s about text, or `None` when the
+/// Return the localization key for `name`'s about text, or `None` when the
 /// subcommand has no release documentation.
 fn release_help_about_key(name: &str) -> Option<&'static str> {
     match name {

@@ -20,7 +20,7 @@ pub(super) struct DiagnosticSource {
     pub(super) name: String,
 }
 
-/// One labelled span within the diagnostic source, ready for serialisation.
+/// One labelled span within the diagnostic source, ready for serialization.
 #[derive(Debug, Serialize, PartialEq, Eq, Clone)]
 pub(super) struct DiagnosticSpan {
     /// The label rendered beside the span, when the diagnostic provides one.
@@ -125,11 +125,11 @@ pub(super) fn extract_source_and_labels(
     (source, primary_span, spans)
 }
 
-/// Build the minimal schema-compatible payload emitted when serialisation fails.
+/// Build the minimal schema-compatible payload emitted when serialization fails.
 ///
 /// The stderr diagnostic must remain valid JSON even when the document render
 /// itself errors, so the fallback hard-codes a `diagnostics` array and only
-/// interpolates the generator identity and the serialisation error text.
+/// interpolates the generator identity and the serialization error text.
 pub(super) fn fallback_payload(error: &serde_json::Error) -> String {
     let document = serde_json::json!({
         "schema_version": SCHEMA_VERSION,
@@ -194,7 +194,7 @@ pub(super) fn source_name_for(label: &LabeledSpan, source_code: &dyn SourceCode)
     contents.name().map(ToOwned::to_owned)
 }
 
-/// Build a serialisable span from a miette label and its source contents.
+/// Build a serializable span from a miette label and its source contents.
 pub(super) fn build_span(
     label: &LabeledSpan,
     source_code: &dyn SourceCode,

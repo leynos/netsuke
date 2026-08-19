@@ -18,10 +18,10 @@ use ortho_config::{LocalizationArgs, Localizer};
 use std::fmt;
 use std::sync::{Arc, OnceLock, RwLock};
 
-/// Process-global localizer storage, initialised on first use.
+/// Process-global localizer storage, initialized on first use.
 static LOCALIZER: OnceLock<RwLock<Arc<dyn Localizer>>> = OnceLock::new();
 
-/// Return the process-global localizer storage, initialising it with the
+/// Return the process-global localizer storage, initializing it with the
 /// system default when first accessed.
 fn localizer_storage() -> &'static RwLock<Arc<dyn Localizer>> {
     // Keep the key registry referenced so dead-code lints do not discard it.

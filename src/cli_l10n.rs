@@ -14,7 +14,7 @@ fn usage_body(usage: &str) -> &str {
     usage.strip_prefix("Usage: ").unwrap_or(usage)
 }
 
-/// Localise a command's usage, about text, argument help, and subcommands.
+/// Localize a command's usage, about text, argument help, and subcommands.
 pub(crate) fn localize_command(mut command: Command, localizer: &dyn Localizer) -> Command {
     let rendered_usage = command.clone().render_usage().to_string();
     let fallback_usage = usage_body(&rendered_usage).to_owned();
@@ -50,7 +50,7 @@ pub(crate) fn localize_command(mut command: Command, localizer: &dyn Localizer) 
     command
 }
 
-/// Localise help text for all arguments in a command.
+/// Localize help text for all arguments in a command.
 ///
 /// When `subcommand` is `None`, keys are looked up as `cli.flag.{arg_id}.help`.
 /// When a subcommand is provided, keys are
@@ -79,7 +79,7 @@ fn localize_arguments(
     })
 }
 
-/// Localise a single help field, returning translated text when a key exists.
+/// Localize a single help field, returning translated text when a key exists.
 fn localize_field(
     localizer: &dyn Localizer,
     key: Option<&'static str>,
@@ -92,7 +92,7 @@ fn localize_field(
     localizer.lookup(key_id, None)
 }
 
-/// Localise the about text, argument help, and help topics of every subcommand.
+/// Localize the about text, argument help, and help topics of every subcommand.
 fn localize_subcommands(command: &mut Command, localizer: &dyn Localizer) {
     for subcommand in command.get_subcommands_mut() {
         let known = Subcommand::from_name(subcommand.get_name());
@@ -125,7 +125,7 @@ fn localize_subcommands(command: &mut Command, localizer: &dyn Localizer) {
     }
 }
 
-/// Localise the topics nested beneath the `help` subcommand.
+/// Localize the topics nested beneath the `help` subcommand.
 fn localize_help_topics(
     mut command: Command,
     localizer: &dyn Localizer,
@@ -155,7 +155,7 @@ fn localize_help_topics(
 
 /// The set of known CLI subcommands.
 ///
-/// Replaces raw `&str` subcommand-name parameters in localisation helpers to
+/// Replaces raw `&str` subcommand-name parameters in localization helpers to
 /// eliminate primitive obsession.
 #[derive(Clone, Copy)]
 enum Subcommand {
@@ -328,7 +328,7 @@ pub fn locale_hint_from_args(args: &[OsString]) -> Option<String> {
     hint
 }
 
-/// Parse a user-supplied boolean value, returning `None` for unrecognised input.
+/// Parse a user-supplied boolean value, returning `None` for unrecognized input.
 pub(crate) fn parse_bool_hint(value: &str) -> Option<bool> {
     match value.to_ascii_lowercase().as_str() {
         "1" | "true" | "yes" | "on" => Some(true),

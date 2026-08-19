@@ -1,9 +1,9 @@
-//! Clap-facing parser types and localisation helpers.
+//! Clap-facing parser types and localization helpers.
 //!
 //! This module owns the runtime-visible [`Cli`] struct and all associated
 //! Clap definitions ([`BuildArgs`], [`Commands`]).  It also provides
-//! [`parse_with_localizer_from`], which localises the Clap command, installs
-//! localisation-aware [`LocalizedValueParser`] instances for every typed
+//! [`parse_with_localizer_from`], which localizes the Clap command, installs
+//! localization-aware [`LocalizedValueParser`] instances for every typed
 //! argument, and returns `(Cli, ArgMatches)` for downstream processing.
 //!
 //! **Pipeline position:** parsing layer.
@@ -45,7 +45,7 @@ struct LocalizedValueParser<F> {
 }
 
 impl<F> LocalizedValueParser<F> {
-    /// Construct a localised value parser around `parser`.
+    /// Construct a localized value parser around `parser`.
     fn new(localizer: Arc<dyn Localizer>, parser: F) -> Self {
         Self { localizer, parser }
     }
@@ -73,7 +73,7 @@ where
     }
 }
 
-/// Return the localised message for `key`, or `fallback` when no translation exists.
+/// Return the localized message for `key`, or `fallback` when no translation exists.
 pub(super) fn validation_message(
     localizer: &dyn Localizer,
     key: &'static str,
@@ -311,7 +311,7 @@ pub enum Commands {
     /// Remove build artefacts and intermediate files.
     Clean,
 
-    /// Display the build dependency graph in DOT format for visualisation.
+    /// Display the build dependency graph in DOT format for visualization.
     Graph(GraphArgs),
 
     /// Generate the Ninja manifest without invoking Ninja.
@@ -351,7 +351,7 @@ where
     parse_localized_command(command, iter, localizer.as_ref())
 }
 
-/// Install localised value parsers on every typed CLI argument.
+/// Install localized value parsers on CLI arguments with localized validation.
 fn configure_validation_parsers(
     mut command: clap::Command,
     localizer: &Arc<dyn Localizer>,

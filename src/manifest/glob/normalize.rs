@@ -1,4 +1,4 @@
-//! Separator and escape normalisation for glob patterns.
+//! Separator and escape normalization for glob patterns.
 
 /// Normalise separators and backslash escapes onto the platform native form.
 pub(crate) fn normalize_separators(pattern: &str) -> String {
@@ -29,7 +29,7 @@ pub(crate) fn normalize_separators(pattern: &str) -> String {
 }
 
 #[cfg(unix)]
-/// Push the normalised form of a backslash and its following character.
+/// Push the normalized form of a backslash and its following character.
 fn push_normalized_backslash(
     it: &mut std::iter::Peekable<std::str::Chars<'_>>,
     out: &mut String,
@@ -73,7 +73,7 @@ fn push_normalized_backslash(
     _native: char,
 ) {
     // On non-Unix targets the function is never invoked because the
-    // normalisation path uses the `replace` branch. Provide a stub to keep
+    // normalization path uses the `replace` branch. Provide a stub to keep
     // cfg alignment in sync for future callers.
     out.push('\\');
 }

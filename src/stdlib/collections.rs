@@ -175,7 +175,7 @@ fn resolve_group_key(item: &Value, attr: &str) -> Result<Value, Error> {
     }
 }
 
-/// Return `value` when defined, otherwise raise an unresolved-key error for
+/// Return `value` when defined, otherwize raize an unresolved-key error for
 /// `item`.
 fn ensure_resolved(value: Value, attr: &str, item: &Value) -> Result<Value, Error> {
     if value.is_undefined() {

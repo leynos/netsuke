@@ -106,7 +106,7 @@ impl GraphRenderer for HtmlRenderer {
     }
 }
 
-/// Return the localised message text for `key` in the process locale.
+/// Return the localized message text for `key` in the process locale.
 pub(super) fn localized(key: &'static str) -> String {
     localization::message(key).to_string()
 }

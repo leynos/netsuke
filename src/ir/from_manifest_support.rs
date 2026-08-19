@@ -36,7 +36,7 @@ pub(super) struct ActionBindings<'a> {
 /// # Errors
 ///
 /// Returns [`IrGenError::ActionSerialisation`] when the action cannot be
-/// hashed or serialised.
+/// hashed or serialized.
 pub(super) fn register_action(
     actions: &mut IrHashMap<String, Action>,
     recipe: Recipe,
@@ -132,7 +132,7 @@ fn duplicate_outputs_message(dups: &[Utf8PathBuf]) -> localization::LocalizedMes
     )
 }
 
-/// Attach one named argument to a localised message.
+/// Attach one named argument to a localized message.
 #[cfg(not(kani))]
 fn add_arg<T: ToString + ?Sized>(
     message: localization::LocalizedMessage,
@@ -142,7 +142,7 @@ fn add_arg<T: ToString + ?Sized>(
     message.with_arg(key, value.to_string())
 }
 
-/// Attach one named argument to a localised message; a no-op in the Kani
+/// Attach one named argument to a localized message; a no-op in the Kani
 /// build.
 #[cfg(kani)]
 fn add_arg<T: ?Sized>(
@@ -153,7 +153,7 @@ fn add_arg<T: ?Sized>(
     message
 }
 
-/// Attach one debug-formatted argument to a localised message.
+/// Attach one debug-formatted argument to a localized message.
 #[cfg(not(kani))]
 fn add_debug_arg(
     message: localization::LocalizedMessage,
@@ -164,7 +164,7 @@ fn add_debug_arg(
     add_arg(message, key, &rendered)
 }
 
-/// Attach one debug-formatted argument to a localised message; a no-op in
+/// Attach one debug-formatted argument to a localized message; a no-op in
 /// the Kani build.
 #[cfg(kani)]
 fn add_debug_arg<T: ?Sized>(

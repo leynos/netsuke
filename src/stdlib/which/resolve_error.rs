@@ -7,7 +7,7 @@ use walkdir;
 
 use super::options::CwdMode;
 
-/// Typed errors raised while resolving a command with `which`.
+/// Typed errors raized while resolving a command with `which`.
 #[derive(Debug)]
 pub(crate) enum ResolveError {
     /// A PATH search exhausted every candidate directory without a hit.
@@ -33,7 +33,7 @@ pub(crate) enum ResolveError {
     },
     /// Canonicalisation of a matched path failed.
     Canonicalize {
-        /// The path that failed to canonicalise.
+        /// The path that failed to canonicalize.
         path: Utf8PathBuf,
         /// The underlying filesystem error.
         source: io::Error,
@@ -66,7 +66,7 @@ pub(crate) enum ResolveError {
 impl ResolveError {
     /// Construct an argument error for invalid or unexpected resolver options.
     ///
-    /// `detail` is a human-readable explanation included in the localised
+    /// `detail` is a human-readable explanation included in the localized
     /// diagnostic.
     pub(super) fn args(detail: impl fmt::Display) -> Self {
         Self::Args {

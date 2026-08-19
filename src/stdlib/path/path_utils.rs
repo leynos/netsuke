@@ -19,7 +19,7 @@ pub(super) fn basename(path: &Utf8Path) -> String {
     path.file_name().unwrap_or(path.as_str()).to_owned()
 }
 
-/// Return the parent directory, normalised to `.` when there is none.
+/// Return the parent directory, normalized to `.` when there is none.
 pub(super) fn dirname(path: &Utf8Path) -> String {
     normalise_parent(path.parent()).into_string()
 }
@@ -84,7 +84,7 @@ pub(super) fn relative_to(path: &Utf8Path, root: &Utf8Path) -> Result<String, Er
 /// Resolve `path` to an absolute canonical path, treating `.` as the current directory.
 ///
 /// Roots and the current directory are returned without filesystem access; any
-/// other path is canonicalised through its parent directory handle.
+/// other path is canonicalized through its parent directory handle.
 pub(super) fn canonicalize_any(path: &Utf8Path) -> Result<Utf8PathBuf, Error> {
     if path.as_str().is_empty() || path == Utf8Path::new(".") {
         return current_dir_utf8().map_err(|err| {
@@ -344,7 +344,7 @@ where
 ///
 /// Holds no platform-selection logic of its own — that lives solely in
 /// [`home_from_env`] — so the `test` arm of the gate below makes it reachable
-/// from any host. That arm is what lets the Unix CI host exercise this ladder,
+/// from any host. That arm is what lets the Unix CI host exercize this ladder,
 /// the more intricate of the two.
 ///
 /// # Examples

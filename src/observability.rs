@@ -78,7 +78,7 @@ impl ConfigLoadOutcome {
     }
 }
 
-/// Process-global metrics snapshotter, installed when metrics initialise.
+/// Process-global metrics snapshotter, installed when metrics initialize.
 static SNAPSHOTTER: OnceLock<Snapshotter> = OnceLock::new();
 /// Guards one-time installation of the process metrics recorder.
 static METRICS_INITIALIZED: Once = Once::new();

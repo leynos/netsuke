@@ -2,7 +2,7 @@
 
 use camino::Utf8PathBuf;
 
-/// The materialised standard output of a completed command helper.
+/// The materialized standard output of a completed command helper.
 #[derive(Debug)]
 pub(super) enum StdoutResult {
     /// Output captured in memory as raw bytes.

@@ -22,7 +22,7 @@ pub struct StdEnvProvider;
 impl EnvProvider for StdEnvProvider {
     #[expect(
         clippy::disallowed_methods,
-        reason = "composition root: StdEnvProvider is the process-backed adapter behind the EnvProvider seam"
+        reason = "composition root: reads the process environment behind the EnvProvider seam"
     )]
     fn get(&self, key: &str) -> Option<OsString> {
         std::env::var_os(key)
@@ -30,7 +30,7 @@ impl EnvProvider for StdEnvProvider {
 
     #[expect(
         clippy::disallowed_methods,
-        reason = "composition root: StdEnvProvider is the process-backed adapter behind the EnvProvider seam"
+        reason = "composition root: reads all process environment entries behind the EnvProvider seam"
     )]
     fn entries(&self) -> Vec<(OsString, OsString)> {
         std::env::vars_os().collect()

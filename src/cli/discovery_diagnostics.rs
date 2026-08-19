@@ -81,7 +81,7 @@ impl ConfigLoadWarning {
 /// diagnostic event. It deliberately excludes the full path and file name.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct BoundedConfigPath {
-    /// Stable correlation hash of the original path.
+    /// Correlation hash of the original path, meaningful only within one run.
     pub(super) hash: Option<String>,
     /// Whether a concrete path was captured.
     pub(super) is_present: bool,
