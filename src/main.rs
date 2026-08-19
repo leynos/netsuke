@@ -34,10 +34,12 @@ impl DiagMode {
         matches!(self, Self::Json)
     }
 }
+mod config_resolution;
 mod observability;
 #[path = "startup_tracing.rs"]
 mod startup_tracing;
 
+use config_resolution::{merge_cli_or_exit, resolve_json_mode_or_exit};
 use startup_tracing::StartupWriter;
 
 /// Send buffered startup diagnostics where `mode` says they belong.
@@ -242,121 +244,6 @@ fn parse_cli_or_exit(
             }
         }
     }
-}
-
-fn config_err_to_exit(
-    err: &(dyn std::error::Error + 'static),
-    mode: DiagMode,
-    operation: &'static str,
-) -> ExitCode {
-    if mode.is_json() {
-        diagnostic_json::emit_or_fallback(diagnostic_json::render_error_json(err))
-    } else {
-        tracing::error!(
-            operation,
-            error_category = observability::classify_error(err),
-            "configuration load failed"
-        );
-        ExitCode::FAILURE
-    }
-}
-
-fn resolve_json_mode_or_exit(
-    parsed_cli: &cli::Cli,
-    matches: &ArgMatches,
-    fallback_mode: DiagMode,
-) -> Result<(DiagMode, cli::DiscoveredLayers), ExitCode> {
-    let env = cli::ConfigStdEnvProvider;
-    let clock = monotony::StdMonotonicClock;
-    JsonModeResolutionContext {
-        parsed_cli,
-        matches,
-        fallback_mode,
-        env: &env,
-        clock: &clock,
-    }
-    .resolve_with(cli::resolve_json_and_layers_outcome_with_env)
-}
-
-/// Startup dependencies for one timed diagnostic-mode resolution.
-struct JsonModeResolutionContext<'a, E, C> {
-    parsed_cli: &'a cli::Cli,
-    matches: &'a ArgMatches,
-    fallback_mode: DiagMode,
-    env: &'a E,
-    clock: &'a C,
-}
-
-impl<E, C> JsonModeResolutionContext<'_, E, C>
-where
-    E: cli::ConfigEnvProvider,
-    C: monotony::MonotonicClock,
-{
-    /// Resolve JSON mode and replay retained diagnostics after filtering.
-    fn resolve_with<R>(self, resolver: R) -> Result<(DiagMode, cli::DiscoveredLayers), ExitCode>
-    where
-        R: FnOnce(
-            &cli::Cli,
-            &ArgMatches,
-            &E,
-        ) -> (ortho_config::OrthoResult<bool>, cli::DiscoveryOutcome),
-    {
-        let Self {
-            parsed_cli,
-            matches,
-            fallback_mode,
-            env,
-            clock,
-        } = self;
-        match observability::record_config_load(
-            observability::ConfigLoadPhase::DiagMode,
-            clock,
-            || {
-                let (result, outcome) = resolver(parsed_cli, matches, env);
-                match result {
-                    Ok(is_json_enabled) => Ok((is_json_enabled, outcome)),
-                    Err(error) => Err(Box::new((error, outcome))),
-                }
-            },
-        ) {
-            Ok((is_json_enabled, outcome)) => {
-                let mode = DiagMode::from_json_enabled(is_json_enabled);
-                set_tracing_filter(startup_filter(mode, parsed_cli.verbose));
-                outcome.emit_diagnostics();
-                Ok((mode, outcome.into_layers()))
-            }
-            Err(error) => {
-                let (err, outcome) = *error;
-                let fallback_filter = startup_filter(fallback_mode, parsed_cli.verbose);
-                set_tracing_filter(fallback_filter);
-                outcome.emit_diagnostics();
-                Err(config_err_to_exit(
-                    err.as_ref(),
-                    fallback_mode,
-                    observability::DIAG_MODE_OPERATION,
-                ))
-            }
-        }
-    }
-}
-
-fn merge_cli_or_exit(
-    parsed_cli: &cli::Cli,
-    matches: &ArgMatches,
-    mode: DiagMode,
-    discovered_layers: cli::DiscoveredLayers,
-) -> Result<cli::Cli, ExitCode> {
-    let clock = monotony::StdMonotonicClock;
-    observability::record_config_load(observability::ConfigLoadPhase::Merge, &clock, || {
-        cli::merge_with_cached_file_layers(
-            parsed_cli,
-            matches,
-            &cli::ConfigStdEnvProvider,
-            discovered_layers,
-        )
-    })
-    .map(cli::Cli::with_default_command)
-    .map_err(|err| config_err_to_exit(err.as_ref(), mode, observability::MERGE_OPERATION))
 }
 
 fn configure_runtime(

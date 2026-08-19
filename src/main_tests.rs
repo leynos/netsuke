@@ -1,6 +1,7 @@
 //! Tests for startup diagnostics and the level they are gated by.
 
 use super::*;
+use crate::config_resolution::config_err_to_exit;
 use anyhow::{Result, ensure};
 use netsuke::localization::keys;
 use ortho_config::OrthoError;

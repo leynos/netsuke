@@ -1,6 +1,7 @@
 //! Regression tests for startup configuration-resolution orchestration.
 
 use super::*;
+use crate::config_resolution::JsonModeResolutionContext;
 use anyhow::{Result, anyhow, bail, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use clap::CommandFactory;
