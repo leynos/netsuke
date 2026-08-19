@@ -7,10 +7,12 @@ and reports the aggregate against a pass threshold. Private items are counted
 because the coverage bar applies to them too: the metric feeds the
 ``make doc-coverage`` gate described in AGENTS.md.
 
-Rustdoc's own counting excludes trait-implementation items (``Display::fmt``,
-``FromStr::from_str``, ``Serialize``, ``Deserialize``, ``Drop::drop`` and
-friends) and inherent `impl`-block methods, so those never need a ``///``
-doc comment to satisfy the metric.
+Rustdoc's own counting excludes trait-implementation items, so a concrete
+``Display::fmt``, ``FromStr::from_str``, ``Serialize``, ``Deserialize``,
+``Drop::drop`` or similar override never needs a ``///`` doc comment to
+satisfy the metric. Inherent `impl`-block methods count like any other
+function. Every module also counts, so a missing ``//!`` header on a module
+lowers the aggregate.
 
 The command returns non-zero when the aggregate falls below ``--threshold``,
 which is what CI gates on. It also prints a per-target breakdown so a

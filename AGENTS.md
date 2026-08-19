@@ -253,10 +253,11 @@ workspace. The threshold is overridable with `DOC_COVERAGE_THRESHOLD`.
 
 - Public **and** private functions and methods carry `///` docs per the
   style above; there is no private-helper carve-out.
-- Rustdoc's own counting excludes trait-implementation items (`Display::fmt`,
-  `FromStr::from_str`, `Serialize`, `Deserialize`, `Drop::drop`, and
-  siblings) and inherent `impl`-block methods, so those do not need `///`
-  docs to satisfy the metric. Add them only when they add real clarity.
+- Rustdoc's own counting excludes trait-implementation overrides, so a
+  concrete `Display::fmt`, `FromStr::from_str`, `Serialize`, `Deserialize`,
+  `Drop::drop`, or similar does not need `///` docs to satisfy the metric.
+  Inherent `impl`-block methods and modules count like any other item; add
+  `///` docs only when they add real clarity.
 - Test functions (`#[test]` / `#[rstest]`) live in `cfg(test)` modules that
   Rustdoc does not compile, so they are not counted; do not add `///` docs to
   them.
