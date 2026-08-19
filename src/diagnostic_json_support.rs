@@ -249,7 +249,7 @@ fn byte_index_for_column(text: &str, column: usize) -> Option<usize> {
     )
 }
 
-/// Return whether the char starts a CRLF pair, consuming it from `chars`.
+/// Return whether `current` starts a CRLF pair, peeking without consuming.
 fn should_skip_crlf(current: char, chars: &mut Peekable<Chars<'_>>) -> bool {
     current == '\r' && chars.peek().is_some_and(|next| *next == '\n')
 }
