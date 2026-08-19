@@ -49,6 +49,12 @@ fn configure_ninja_base(
     Ok(())
 }
 
+/// Configure a Ninja build command from `request`, appending its targets.
+///
+/// # Errors
+///
+/// Returns an error when the working directory or build file cannot be
+/// canonicalized.
 pub(super) fn configure_ninja_build_command(
     cmd: &mut Command,
     request: &NinjaBuildRequest<'_>,
@@ -59,6 +65,12 @@ pub(super) fn configure_ninja_build_command(
     Ok(())
 }
 
+/// Configure a Ninja tool command from `request`, appending the tool name.
+///
+/// # Errors
+///
+/// Returns an error when the working directory or build file cannot be
+/// canonicalized.
 pub(super) fn configure_ninja_tool_command(
     cmd: &mut Command,
     request: &NinjaToolRequest<'_>,

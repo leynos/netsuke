@@ -22,10 +22,15 @@ use tracing::{field, info, info_span, warn};
 /// so individual logging paths do not reconstruct command metadata
 /// inconsistently.
 pub(super) struct CommandLogContext {
+    /// Displayable program name, lossy for non-UTF-8 paths.
     pub(super) program_display: String,
+    /// Redacted command line, safe to log verbatim.
     redacted_command: String,
+    /// Number of redacted arguments shown on the command line.
     arg_count: usize,
+    /// Number of environment overrides applied to the child.
     env_override_count: usize,
+    /// Whether `PATH` itself is among the overrides.
     is_path_overridden: bool,
 }
 
