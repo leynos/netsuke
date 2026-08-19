@@ -131,7 +131,6 @@ struct CommandEvaluator {
     exec_success_fragment: &'static str,
 }
 
-/// Build the shell wrapper that supervises one command-list entry's `exec`.
 /// Build the evaluator for one entry, retaining subprocess replacement on a
 /// direct `exec`.
 fn command_evaluator(command: CommandListEntry<'_>) -> CommandEvaluator {
@@ -150,7 +149,6 @@ fn command_evaluator(command: CommandListEntry<'_>) -> CommandEvaluator {
 }
 
 /// How an `exec` keyword sits within a command-list entry.
-/// The supported positions of `exec` within a command-list entry.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ExecBoundary {
     /// The entry does not contain `exec` in a shell command position.
@@ -185,7 +183,6 @@ impl ShellWords {
 
     /// Classify `exec` at `index`: `Direct` when it is the first simple command,
     /// `Unsupported` when a wrapper position hides it, else `None`.
-    /// Classify `exec` in `word` against the first non-assignment index.
     fn exec_boundary_at(
         &self,
         index: usize,
