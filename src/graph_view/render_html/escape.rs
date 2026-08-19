@@ -1,5 +1,6 @@
 //! HTML escaping helpers shared by the SVG, outline, and `<noscript>` writers.
 
+/// Escape `input` for HTML, quoting quotes only when `attr` is set.
 fn escape_html(input: &str, attr: bool) -> String {
     let mut out = String::with_capacity(input.len());
     for ch in input.chars() {
@@ -15,10 +16,12 @@ fn escape_html(input: &str, attr: bool) -> String {
     out
 }
 
+/// Escape `input` for HTML text content.
 pub(super) fn escape_text(input: &str) -> String {
     escape_html(input, false)
 }
 
+/// Escape `input` for a double-quoted HTML attribute value.
 pub(super) fn escape_attr(input: &str) -> String {
     escape_html(input, true)
 }

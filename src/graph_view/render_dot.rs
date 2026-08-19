@@ -51,6 +51,7 @@ impl GraphRenderer for DotRenderer {
     }
 }
 
+/// Write one node statement with its label and class-specific style.
 fn write_node(
     sink: &mut dyn Write,
     path: &Utf8Path,
@@ -82,6 +83,7 @@ fn write_node(
     Ok(())
 }
 
+/// Write one directed edge statement with class-specific styling.
 fn write_edge(
     sink: &mut dyn Write,
     from: &Utf8Path,

@@ -17,10 +17,12 @@ const NON_UTF8_VALUE: &str = "non-UTF-8 environment value";
 
 /// Environment layer backed by an owned, injected snapshot.
 pub(super) struct EnvironmentLayer {
+    /// Owned snapshot of the environment entries this layer presents.
     entries: Vec<(OsString, OsString)>,
 }
 
 impl EnvironmentLayer {
+    /// Construct a layer from an owned snapshot of environment entries.
     pub(super) const fn new(entries: Vec<(OsString, OsString)>) -> Self {
         Self { entries }
     }
@@ -132,6 +134,7 @@ fn claims_config_prefix(key: &OsStr) -> bool {
         .is_some_and(|candidate| candidate.eq_ignore_ascii_case(ENV_PREFIX.as_bytes()))
 }
 
+/// Return `value` with `prefix` removed when it matches ignoring ASCII case.
 fn strip_prefix_uncased<'a>(value: &'a str, prefix: &str) -> Option<&'a str> {
     value
         .get(..prefix.len())
@@ -139,6 +142,12 @@ fn strip_prefix_uncased<'a>(value: &'a str, prefix: &str) -> Option<&'a str> {
         .and_then(|_| value.get(prefix.len()..))
 }
 
+/// Insert `value` into `target` at the nested path `components`, creating
+/// intermediate dicts as needed.
+///
+/// # Errors
+///
+/// Returns an error when `components` conflicts with an existing scalar key.
 fn insert_nested(target: &mut Dict, components: &[String], value: Value) -> Result<(), String> {
     let Some((head, tail)) = components.split_first() else {
         return Ok(());

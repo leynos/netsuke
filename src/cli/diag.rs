@@ -15,6 +15,7 @@ use super::discovery::{
 };
 use super::parser::Cli;
 
+/// Environment variable carrying an explicit JSON-output preference.
 const JSON_ENV_VAR: &str = "NETSUKE_JSON";
 
 /// Resolve the effective JSON preference from the raw config layers.

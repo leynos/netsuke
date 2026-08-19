@@ -54,7 +54,9 @@ impl ProjectLayerDeduplication {
 /// Bounded warning metadata retained when an explicit config load fails.
 #[derive(Clone, Debug)]
 pub(super) struct ConfigLoadWarning {
+    /// Bounded path of the configuration file that failed to load.
     path: BoundedConfigPath,
+    /// Classification of the load failure.
     failure_kind: ConfigLoadFailureKind,
 }
 
@@ -79,7 +81,9 @@ impl ConfigLoadWarning {
 /// diagnostic event. It deliberately excludes the full path and file name.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct BoundedConfigPath {
+    /// Stable correlation hash of the original path.
     pub(super) hash: Option<String>,
+    /// Whether a concrete path was captured.
     pub(super) is_present: bool,
 }
 

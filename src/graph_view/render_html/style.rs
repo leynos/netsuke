@@ -8,6 +8,11 @@ use std::io::Write;
 
 use crate::graph_view::render::GraphRenderError;
 
+/// Write the inline `<style>` stylesheet for the graph document.
+///
+/// # Errors
+///
+/// Returns a `GraphRenderError` when writing to `sink` fails.
 pub(super) fn write_inline_style(sink: &mut dyn Write) -> Result<(), GraphRenderError> {
     writeln!(sink, "  <style>")?;
     writeln!(

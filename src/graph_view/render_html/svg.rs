@@ -16,12 +16,16 @@ use crate::graph_view::{EdgeClass, EdgeView, GraphView, NodeKind, NodeView};
 use super::escape::{escape_attr, escape_text};
 use super::layout::{MARGIN, NODE_HEIGHT, NODE_HEIGHT_HALF, NODE_WIDTH, Position};
 
+/// Accessible heading metadata applied to the SVG document.
 #[derive(Clone, Copy)]
 pub(super) struct SvgHeader<'a> {
+    /// Short accessible title for the SVG.
     pub title: &'a str,
+    /// Long-form accessible description of the graph.
     pub description: &'a str,
 }
 
+/// Write the SVG document, drawing edges before nodes so bodies overlay connectors.
 pub(super) fn write_svg(
     sink: &mut dyn Write,
     view: &GraphView,
@@ -55,6 +59,7 @@ pub(super) fn write_svg(
     Ok(())
 }
 
+/// Return the canvas size enclosing every node plus the surrounding margin.
 fn canvas_extent(positions: &BTreeMap<&Utf8Path, Position>) -> (i32, i32) {
     let max_x = positions
         .values()
@@ -69,6 +74,7 @@ fn canvas_extent(positions: &BTreeMap<&Utf8Path, Position>) -> (i32, i32) {
     (max_x + MARGIN, max_y + MARGIN)
 }
 
+/// Write one node group with its body rect, label, and optional description.
 fn write_svg_node(
     sink: &mut dyn Write,
     node: &NodeView,
@@ -125,6 +131,7 @@ fn write_svg_node(
     Ok(())
 }
 
+/// Write one edge group with a descriptive title and orthogonal connector.
 fn write_svg_edge(
     sink: &mut dyn Write,
     edge: &EdgeView,
