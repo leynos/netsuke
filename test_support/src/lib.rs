@@ -24,6 +24,7 @@ pub mod dev_fast;
 pub mod env;
 pub mod env_lock;
 pub mod exec;
+pub mod fixture;
 pub mod fluent;
 pub mod fs;
 pub mod hash;

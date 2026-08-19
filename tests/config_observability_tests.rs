@@ -3,9 +3,9 @@
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
 use rstest::rstest;
-use tempfile::{TempDir, tempdir};
 use test_support::check_ninja::fake_ninja_check_build_file;
 use test_support::config_metrics::{MetricSnapshotRecord, assert_config_metrics_snapshot};
+use test_support::fixture::setup_minimal_workspace;
 use test_support::fs as test_fs;
 use test_support::netsuke::run_netsuke_in_with_env;
 
@@ -15,22 +15,13 @@ struct CommandOutput {
     success: bool,
 }
 
-fn setup_minimal_workspace(context: &str) -> Result<TempDir> {
-    let temp = tempdir().with_context(|| format!("create temp dir for {context}"))?;
-    let manifest = temp.path().join("Netsukefile");
-    let source = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/minimal.yml");
-    test_fs::copy(&source, &manifest)
-        .with_context(|| format!("copy {source} to {}", manifest.display()))?;
-    Ok(temp)
-}
-
 fn run_config_layer_build(
     context: &str,
     config_content: &str,
     args: &[&str],
     extra_env: &[(&str, &str)],
 ) -> Result<CommandOutput> {
-    let workspace = setup_minimal_workspace(context)?;
+    let workspace = setup_minimal_workspace(Utf8Path::new(env!("CARGO_MANIFEST_DIR")), context)?;
     test_fs::write(workspace.path().join(".netsuke.toml"), config_content)
         .context("write config file")?;
     let (_ninja_dir, ninja_path) = fake_ninja_check_build_file()?;
@@ -127,7 +118,10 @@ fn verbose_config_precedence(
 /// An invalid enum value in a config file produces a bounded merge failure.
 #[test]
 fn invalid_config_value_reports_bounded_merge_failure() -> Result<()> {
-    let workspace = setup_minimal_workspace("invalid config value")?;
+    let workspace = setup_minimal_workspace(
+        Utf8Path::new(env!("CARGO_MANIFEST_DIR")),
+        "invalid config value",
+    )?;
     test_fs::write(workspace.path().join(".netsuke.toml"), "color = \"loud\"\n")
         .context("write invalid config file")?;
     let run = run_netsuke_in_with_env(workspace.path(), &["generate"], &[])?;

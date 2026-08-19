@@ -13,6 +13,7 @@ use tempfile::{TempDir, tempdir};
 use test_support::check_ninja::fake_ninja_check_build_file;
 #[cfg(unix)]
 use test_support::check_ninja::{ToolName, fake_ninja_expect_tool};
+use test_support::fixture::setup_minimal_workspace;
 use test_support::fs as test_fs;
 use test_support::netsuke::run_netsuke_in_with_env;
 
@@ -42,15 +43,6 @@ fn run_netsuke(
         stderr: run.stderr,
         success: run.success,
     })
-}
-
-fn setup_minimal_workspace(context: &str) -> Result<TempDir> {
-    let temp = tempdir().with_context(|| format!("create temp dir for {context}"))?;
-    let manifest = temp.path().join("Netsukefile");
-    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/minimal.yml");
-    std::fs::copy(&source, &manifest)
-        .with_context(|| format!("copy {} to {}", source.display(), manifest.display()))?;
-    Ok(temp)
 }
 
 fn assert_json_success(output: &CommandOutput, expected_command: &str) -> Result<()> {
@@ -84,7 +76,7 @@ fn assert_json_subcommand_success(
     command: &str,
     make_ninja: impl FnOnce() -> Result<(TempDir, std::path::PathBuf)>,
 ) -> Result<()> {
-    let workspace = setup_minimal_workspace(context)?;
+    let workspace = setup_minimal_workspace(Path::new(env!("CARGO_MANIFEST_DIR")), context)?;
     let (_ninja_dir, ninja_path) = make_ninja()?;
     let output = run_netsuke(
         workspace.path(),
@@ -101,7 +93,10 @@ fn assert_json_subcommand_success(
 #[cfg(unix)]
 #[rstest]
 fn clean_without_prior_build_handles_gracefully() -> Result<()> {
-    let workspace = setup_minimal_workspace("clean without prior build")?;
+    let workspace = setup_minimal_workspace(
+        Path::new(env!("CARGO_MANIFEST_DIR")),
+        "clean without prior build",
+    )?;
     let (_ninja_dir, ninja_path) = fake_ninja_expect_tool(ToolName::new("clean"))?;
 
     let output = run_netsuke(workspace.path(), &["clean"], Some(ninja_path.as_path()))?;
@@ -156,7 +151,10 @@ fn graph_with_invalid_manifest_fails_with_actionable_error() -> Result<()> {
 
 #[test]
 fn generate_to_unwritable_path_fails_with_path_error() -> Result<()> {
-    let workspace = setup_minimal_workspace("generate to unwritable path")?;
+    let workspace = setup_minimal_workspace(
+        Path::new(env!("CARGO_MANIFEST_DIR")),
+        "generate to unwritable path",
+    )?;
     // Create a regular file that blocks the parent directory creation.
     let blocker = workspace.path().join("blocker");
     test_fs::write(&blocker, "").context("create blocker file")?;
@@ -186,7 +184,10 @@ fn generate_to_unwritable_path_fails_with_path_error() -> Result<()> {
 
 #[test]
 fn generate_to_missing_parent_directory_succeeds_by_creating_parents() -> Result<()> {
-    let workspace = setup_minimal_workspace("generate to missing parent")?;
+    let workspace = setup_minimal_workspace(
+        Path::new(env!("CARGO_MANIFEST_DIR")),
+        "generate to missing parent",
+    )?;
     // Netsuke automatically creates missing parent directories.
     let nested_path = workspace.path().join("missing_parent").join("out.ninja");
 
@@ -249,7 +250,8 @@ fn json_diagnostics_with_verbose_produces_valid_json() -> Result<()> {
 
 #[test]
 fn generate_to_stdout_contains_ninja_rules() -> Result<()> {
-    let workspace = setup_minimal_workspace("generate to stdout")?;
+    let workspace =
+        setup_minimal_workspace(Path::new(env!("CARGO_MANIFEST_DIR")), "generate to stdout")?;
 
     let output = run_netsuke(workspace.path(), &["generate"], None)?;
 
