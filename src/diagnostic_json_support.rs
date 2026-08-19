@@ -59,7 +59,7 @@ pub(super) fn collect_diagnostic_causes(diagnostic: &dyn Diagnostic) -> Vec<Stri
 }
 
 /// Collect the full miette diagnostic-source chain as strings.
-pub(super) fn collect_diagnostic_chain(diagnostic: &dyn Diagnostic) -> Vec<String> {
+fn collect_diagnostic_chain(diagnostic: &dyn Diagnostic) -> Vec<String> {
     let mut causes = vec![diagnostic.to_string()];
     if let Some(source) = diagnostic.diagnostic_source() {
         causes.extend(collect_diagnostic_chain(source));
@@ -75,9 +75,7 @@ pub(super) fn collect_error_causes(error: &(dyn StdError + 'static)) -> Vec<Stri
 }
 
 /// Collect every remaining link in a standard-error source chain.
-pub(super) fn collect_error_causes_from_option(
-    mut current: Option<&(dyn StdError + 'static)>,
-) -> Vec<String> {
+fn collect_error_causes_from_option(mut current: Option<&(dyn StdError + 'static)>) -> Vec<String> {
     let mut causes = Vec::new();
     while let Some(error) = current {
         causes.push(error.to_string());
@@ -178,7 +176,7 @@ pub(super) fn diagnostic_url(diagnostic: &dyn Diagnostic) -> Option<String> {
 }
 
 /// Find the outermost diagnostic in the chain that still carries labels.
-pub(super) fn diagnostic_with_labels(diagnostic: &dyn Diagnostic) -> Option<&dyn Diagnostic> {
+fn diagnostic_with_labels(diagnostic: &dyn Diagnostic) -> Option<&dyn Diagnostic> {
     if diagnostic.source_code().is_some() && diagnostic.labels().is_some() {
         Some(diagnostic)
     } else {
@@ -189,16 +187,13 @@ pub(super) fn diagnostic_with_labels(diagnostic: &dyn Diagnostic) -> Option<&dyn
 }
 
 /// Return the source name a label points into, when the span has one.
-pub(super) fn source_name_for(label: &LabeledSpan, source_code: &dyn SourceCode) -> Option<String> {
+fn source_name_for(label: &LabeledSpan, source_code: &dyn SourceCode) -> Option<String> {
     let contents = source_code.read_span(label.inner(), 0, 0).ok()?;
     contents.name().map(ToOwned::to_owned)
 }
 
 /// Build a serializable span from a miette label and its source contents.
-pub(super) fn build_span(
-    label: &LabeledSpan,
-    source_code: &dyn SourceCode,
-) -> Option<DiagnosticSpan> {
+fn build_span(label: &LabeledSpan, source_code: &dyn SourceCode) -> Option<DiagnosticSpan> {
     let contents = source_code.read_span(label.inner(), 0, 0).ok()?;
     let snippet = span_snippet(contents.as_ref());
     let (line, column, end_line, end_column) = span_position(contents.as_ref(), label.inner());
@@ -215,17 +210,14 @@ pub(super) fn build_span(
 }
 
 /// Return the first line of a span's snippet, with the CRLF terminator removed.
-pub(super) fn span_snippet(contents: &dyn SpanContents<'_>) -> Option<String> {
+fn span_snippet(contents: &dyn SpanContents<'_>) -> Option<String> {
     let data = std::str::from_utf8(contents.data()).ok()?;
     let first_line = data.lines().next()?.trim_end_matches('\r');
     Some(first_line.to_owned())
 }
 
 /// Return the 1-based (start line, column) and (end line, column) positions.
-pub(super) fn span_position(
-    contents: &dyn SpanContents<'_>,
-    span: &SourceSpan,
-) -> (u32, u32, u32, u32) {
+fn span_position(contents: &dyn SpanContents<'_>, span: &SourceSpan) -> (u32, u32, u32, u32) {
     let start_line = contents.line();
     let start_column = contents.column();
     let line = to_u32(start_line + 1);
@@ -239,10 +231,7 @@ pub(super) fn span_position(
 }
 
 /// Return the exact text a span covers within the contents.
-pub(super) fn exact_span_text(
-    contents: &dyn SpanContents<'_>,
-    span: &SourceSpan,
-) -> Option<String> {
+fn exact_span_text(contents: &dyn SpanContents<'_>, span: &SourceSpan) -> Option<String> {
     let data = std::str::from_utf8(contents.data()).ok()?;
     let start = byte_index_for_column(data, contents.column())?;
     let end = start.checked_add(span.len())?;
@@ -250,7 +239,7 @@ pub(super) fn exact_span_text(
 }
 
 /// Return the byte index of a column within a one-line text.
-pub(super) fn byte_index_for_column(text: &str, column: usize) -> Option<usize> {
+fn byte_index_for_column(text: &str, column: usize) -> Option<usize> {
     let line_end = text.find('\n').unwrap_or(text.len());
     let line = text.get(..line_end)?;
     Some(
@@ -261,12 +250,12 @@ pub(super) fn byte_index_for_column(text: &str, column: usize) -> Option<usize> 
 }
 
 /// Return whether the char starts a CRLF pair, consuming it from `chars`.
-pub(super) fn should_skip_crlf(current: char, chars: &mut Peekable<Chars<'_>>) -> bool {
+fn should_skip_crlf(current: char, chars: &mut Peekable<Chars<'_>>) -> bool {
     current == '\r' && chars.peek().is_some_and(|next| *next == '\n')
 }
 
 /// Advance the walking position over `text`, counting lines and columns.
-pub(super) fn end_position(start_line: usize, start_column: usize, text: &str) -> (u32, u32) {
+fn end_position(start_line: usize, start_column: usize, text: &str) -> (u32, u32) {
     let mut line = start_line;
     let mut column = start_column;
     let mut chars = text.chars().peekable();
@@ -287,6 +276,6 @@ pub(super) fn end_position(start_line: usize, start_column: usize, text: &str) -
 }
 
 /// Convert a `usize` to `u32`, saturating at the maximum value.
-pub(super) fn to_u32(value: usize) -> u32 {
+fn to_u32(value: usize) -> u32 {
     u32::try_from(value).unwrap_or(u32::MAX)
 }

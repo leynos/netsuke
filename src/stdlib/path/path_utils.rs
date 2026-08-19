@@ -123,7 +123,7 @@ pub(super) fn canonicalize_any(path: &Utf8Path) -> Result<Utf8PathBuf, Error> {
         })
 }
 
-/// Whether a `~`-remainder names another user rather than the current home.
+/// Determine whether a `~`-remainder names another user rather than the current home.
 pub(super) fn is_user_specific_expansion(stripped: &str) -> bool {
     matches!(
         stripped.chars().next(),
@@ -219,7 +219,7 @@ where
     })
 }
 
-/// Whether `path` is a filesystem root.
+/// Determine whether `path` is a filesystem root.
 fn is_root(path: &Utf8Path) -> bool {
     path.parent().is_none() && path.file_name().is_none() && !path.as_str().is_empty()
 }

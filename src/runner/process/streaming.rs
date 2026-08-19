@@ -112,7 +112,7 @@ where
     }
 }
 
-/// Saturating conversion of a byte count to `usize`.
+/// Convert a byte count to `usize` with saturation.
 fn clamp_u64_to_usize(value: u64) -> usize {
     usize::try_from(value).unwrap_or(usize::MAX)
 }

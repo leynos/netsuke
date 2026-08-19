@@ -17,6 +17,7 @@ use super::super::{
     graph::{Action, BuildEdge, IrGenError, IrHashMap},
 };
 
+#[path = "sort_utils.rs"]
 mod sort_utils;
 
 /// The `$in`/`$out` substitution views for one action under construction.

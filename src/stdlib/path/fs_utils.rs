@@ -62,7 +62,7 @@ where
         .map_err(|err| io_to_error(path, &localization::message(action_key), err))
 }
 
-/// Whether the path's file type satisfies `predicate`, counting missing paths as non-matching.
+/// Determine whether the path's file type satisfies `predicate`, counting missing paths as non-matching.
 pub(crate) fn file_type_matches<F>(path: &Utf8Path, predicate: F) -> Result<bool, Error>
 where
     F: Fn(fs::FileType) -> bool,

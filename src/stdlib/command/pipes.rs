@@ -118,6 +118,11 @@ pub(super) fn handle_stdin_result(
 
 /// Drain a reader honouring `spec`, capturing in memory or streaming to a
 /// tempfile.
+///
+/// # Errors
+///
+/// Returns a `CommandFailure` on a read error, on a capture-limit
+/// exceedance, or when tempfile routing cannot be completed.
 fn read_pipe<R>(
     reader: R,
     spec: PipeSpec,

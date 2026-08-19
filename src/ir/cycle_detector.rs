@@ -316,10 +316,9 @@ impl<'targets> CycleDetector<'targets> {
         analyse(targets).cycle
     }
 
-    /// Record `dep` as missing and return `true` if `dep` is absent from the
-    /// target map; return `false` if it is present.
+    /// Record `dep` as a missing dependency, emitting a debug tracing event.
     ///
-    /// Missing dependencies are also emitted as debug-level tracing events.
+    /// Callers establish absence from the target map before recording.
     fn record_missing_dependency(&mut self, node: &Utf8Path, dep: &Utf8Path) {
         tracing::debug!(
             missing = %dep,

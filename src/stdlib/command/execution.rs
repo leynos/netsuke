@@ -163,6 +163,11 @@ pub(super) fn run_program(
 
 /// Run a configured child, recording metrics and a trace span for the
 /// execution and its outcome.
+///
+/// # Errors
+///
+/// Returns a [`CommandFailure`] for spawn, I/O, broken-pipe, exit, output-limit,
+/// or timeout conditions.
 fn run_child(
     command: Command,
     input: &[u8],
@@ -226,6 +231,11 @@ fn describe_metrics() {
 
 /// Spawn the child, pipe its standard streams, and wait for completion within
 /// the configured timeout.
+///
+/// # Errors
+///
+/// Returns a [`CommandFailure`] for spawn, I/O, broken-pipe, output-limit,
+/// or timeout conditions.
 fn run_child_inner(
     mut command: Command,
     input: &[u8],

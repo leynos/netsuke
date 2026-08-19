@@ -11,8 +11,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 use super::super::graph::{BuildEdge, IrHashMap};
 use super::VisitState;
 
-#[cfg(not(kani))]
 /// Look up the target entry for `path`, returning its path and edge.
+#[cfg(not(kani))]
 pub(super) fn target_entry_for_path<'targets>(
     targets: &'targets IrHashMap<Utf8PathBuf, BuildEdge>,
     path: &Utf8Path,
@@ -121,8 +121,8 @@ pub(super) const fn rotate_index(start: usize, offset: usize, len: usize) -> usi
     if index >= len { index - len } else { index }
 }
 
-#[cfg(not(kani))]
 /// Look up the visit state recorded for `path`.
+#[cfg(not(kani))]
 pub(super) fn state_for_path(
     states: &IrHashMap<&Utf8Path, VisitState>,
     path: &Utf8Path,
@@ -147,8 +147,8 @@ pub(super) fn state_for_path(
     None
 }
 
-#[cfg(not(kani))]
 /// Compare two paths for equality.
+#[cfg(not(kani))]
 pub(super) fn path_eq(left: &Utf8Path, right: &Utf8Path) -> bool {
     left == right
 }
@@ -160,8 +160,8 @@ pub(super) fn path_eq(left: &Utf8Path, right: &Utf8Path) -> bool {
     left.len() == 1 && right.len() == 1 && left[0] == right[0]
 }
 
-#[cfg(not(kani))]
 /// Order two paths.
+#[cfg(not(kani))]
 pub(super) fn path_cmp(left: &Utf8Path, right: &Utf8Path) -> Ordering {
     left.cmp(right)
 }

@@ -68,7 +68,7 @@ fn now(kwargs: &Kwargs) -> Result<Value, Error> {
     Ok(Value::from_object(TimestampValue::new(timestamp)))
 }
 
-/// Parse an offset string into a UTC offset, rejecting anything not signed.
+/// Parse an offset string into a UTC offset, accepting `Z`/`z` for UTC, then a signed numeric offset.
 fn parse_offset(raw: &str) -> Result<UtcOffset, Error> {
     let trimmed = raw.trim();
     if trimmed.eq_ignore_ascii_case("z") {
