@@ -67,111 +67,72 @@ struct RustflagsCase {
     )]
     inheritance_policy: InheritancePolicy,
 }
-
-impl RustflagsCase {
-    const fn test_nextest() -> Self {
-        Self {
-            target: "test-nextest",
-            line_marker: "nextest run",
-            warning_policy: WarningPolicy::Deny,
-            inheritance_policy: InheritancePolicy::Conditional,
-        }
-    }
-
-    const fn doctest() -> Self {
-        Self {
-            target: "doctest",
-            line_marker: "--doc",
-            warning_policy: WarningPolicy::Deny,
-            inheritance_policy: InheritancePolicy::Conditional,
-        }
-    }
-
-    const fn binary_build() -> Self {
-        Self {
-            target: "target/%/$(APP)",
-            line_marker: "build",
-            warning_policy: WarningPolicy::Default,
-            inheritance_policy: InheritancePolicy::Plain,
-        }
-    }
-
-    const fn lint_rustdoc() -> Self {
-        Self {
-            target: "lint-clippy",
-            line_marker: "doc --workspace",
-            warning_policy: WarningPolicy::Deny,
-            inheritance_policy: InheritancePolicy::Conditional,
-        }
-    }
-
-    const fn lint_clippy() -> Self {
-        Self {
-            target: "lint-clippy",
-            line_marker: "clippy",
-            warning_policy: WarningPolicy::Deny,
-            inheritance_policy: InheritancePolicy::Conditional,
-        }
-    }
-
-    const fn lint_whitaker() -> Self {
-        Self {
-            target: "lint-whitaker",
-            line_marker: "$(WHITAKER)",
-            warning_policy: WarningPolicy::Deny,
-            inheritance_policy: InheritancePolicy::Conditional,
-        }
-    }
-
-    const fn lint_whitaker_test_support() -> Self {
-        Self {
-            target: "lint-whitaker",
-            line_marker: "cd test_support",
-            warning_policy: WarningPolicy::Deny,
-            inheritance_policy: InheritancePolicy::Conditional,
-        }
-    }
-
-    const fn typecheck() -> Self {
-        Self {
-            target: "typecheck",
-            line_marker: "check",
-            warning_policy: WarningPolicy::Deny,
-            inheritance_policy: InheritancePolicy::Conditional,
-        }
-    }
-
-    const fn kani_full() -> Self {
-        Self {
-            target: "kani-full",
-            line_marker: "$(KANI)",
-            warning_policy: WarningPolicy::Default,
-            inheritance_policy: InheritancePolicy::Conditional,
-        }
-    }
-
-    const fn doc_coverage() -> Self {
-        Self {
-            target: "doc-coverage",
-            line_marker: "RUSTDOCFLAGS",
-            warning_policy: WarningPolicy::Default,
-            inheritance_policy: InheritancePolicy::Conditional,
-        }
-    }
-}
-
 /// Every `RUSTFLAGS`-setting recipe line under contract.
+///
+/// The cases are inline literals rather than constructor helpers so the file
+/// stays within the repository's 400-line module cap while covering every
+/// recipe that assigns `RUSTFLAGS`.
 const RUSTFLAGS_CASES: [RustflagsCase; 11] = [
-    RustflagsCase::test_nextest(),
-    RustflagsCase::doctest(),
-    RustflagsCase::binary_build(),
-    RustflagsCase::lint_rustdoc(),
-    RustflagsCase::lint_clippy(),
-    RustflagsCase::lint_whitaker(),
-    RustflagsCase::lint_whitaker_test_support(),
-    RustflagsCase::typecheck(),
-    RustflagsCase::kani_full(),
-    RustflagsCase::doc_coverage(),
+    RustflagsCase {
+        target: "test-nextest",
+        line_marker: "nextest run",
+        warning_policy: WarningPolicy::Deny,
+        inheritance_policy: InheritancePolicy::Conditional,
+    },
+    RustflagsCase {
+        target: "doctest",
+        line_marker: "--doc",
+        warning_policy: WarningPolicy::Deny,
+        inheritance_policy: InheritancePolicy::Conditional,
+    },
+    RustflagsCase {
+        target: "target/%/$(APP)",
+        line_marker: "build",
+        warning_policy: WarningPolicy::Default,
+        inheritance_policy: InheritancePolicy::Plain,
+    },
+    RustflagsCase {
+        target: "lint-clippy",
+        line_marker: "doc --workspace",
+        warning_policy: WarningPolicy::Deny,
+        inheritance_policy: InheritancePolicy::Conditional,
+    },
+    RustflagsCase {
+        target: "lint-clippy",
+        line_marker: "clippy",
+        warning_policy: WarningPolicy::Deny,
+        inheritance_policy: InheritancePolicy::Conditional,
+    },
+    RustflagsCase {
+        target: "lint-whitaker",
+        line_marker: "$(WHITAKER)",
+        warning_policy: WarningPolicy::Deny,
+        inheritance_policy: InheritancePolicy::Conditional,
+    },
+    RustflagsCase {
+        target: "lint-whitaker",
+        line_marker: "cd test_support",
+        warning_policy: WarningPolicy::Deny,
+        inheritance_policy: InheritancePolicy::Conditional,
+    },
+    RustflagsCase {
+        target: "typecheck",
+        line_marker: "check",
+        warning_policy: WarningPolicy::Deny,
+        inheritance_policy: InheritancePolicy::Conditional,
+    },
+    RustflagsCase {
+        target: "kani-full",
+        line_marker: "$(KANI)",
+        warning_policy: WarningPolicy::Default,
+        inheritance_policy: InheritancePolicy::Conditional,
+    },
+    RustflagsCase {
+        target: "doc-coverage",
+        line_marker: "RUSTDOCFLAGS",
+        warning_policy: WarningPolicy::Default,
+        inheritance_policy: InheritancePolicy::Conditional,
+    },
     RustflagsCase {
         target: "bench-config-load",
         line_marker: "bench --bench config_load_cached_merge",
@@ -179,6 +140,7 @@ const RUSTFLAGS_CASES: [RustflagsCase; 11] = [
         inheritance_policy: InheritancePolicy::Conditional,
     },
 ];
+
 
 /// Resolves `POLONIUS_FLAGS`, rejecting a missing or empty definition.
 ///
