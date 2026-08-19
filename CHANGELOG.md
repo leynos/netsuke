@@ -102,10 +102,5 @@
   of truth for the compiler contract
   ([#465](https://github.com/leynos/netsuke/issues/465))
 
-## [0.1.0] - 2026-07-28
-
-_Initial release._
-
 [0.1.0-beta2]: https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta2
 [0.1.0-beta1]: https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta1
-[0.1.0]: https://github.com/leynos/netsuke/releases/tag/v0.1.0
