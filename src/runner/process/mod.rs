@@ -9,11 +9,11 @@ mod child_exit;
 mod command_list_telemetry;
 mod command_logging;
 
-#[cfg(test)]
-mod exit_status_tests;
 mod dyndep_files;
 mod dyndep_retention;
 mod dyndep_telemetry;
+#[cfg(test)]
+mod exit_status_tests;
 mod failure_attribution;
 mod file_io;
 mod ninja_program;
