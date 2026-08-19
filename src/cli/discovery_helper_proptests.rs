@@ -166,7 +166,7 @@ proptest! {
             .iter()
             .filter_map(json_from_value)
             .next_back()
-            .unwrap_or(crate::cli::parser::Cli::default().json);
+            .unwrap_or_else(|| crate::cli::parser::Cli::default().json);
         prop_assert_eq!(json_preference, expected);
         prop_assert_eq!(final_layers.len(), source_len);
     }
