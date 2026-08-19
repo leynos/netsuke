@@ -24,13 +24,18 @@ pub(super) fn background_operator_count(command: CommandListEntry<'_>) -> usize 
 
 /// Minimal shell scanner state used only to detect background operators.
 struct ShellScanState {
+    /// Active quoting delimiter, when inside a quoted run.
     quote: Option<char>,
+    /// Whether the previous character escaped the current one.
     escaped: bool,
+    /// Whether the current character sits at a shell word boundary.
     word_boundary: bool,
+    /// Whether `&` directly followed a redirection operator.
     pending_redirection_ampersand: bool,
 }
 
 impl ShellScanState {
+    /// Start a scan at a word boundary outside any quote.
     const fn new() -> Self {
         Self {
             quote: None,
@@ -40,6 +45,7 @@ impl ShellScanState {
         }
     }
 
+    /// Consume an escaped character, leaving the escape state.
     const fn consume_escaped(&mut self) -> bool {
         if self.escaped {
             self.escaped = false;
@@ -50,6 +56,7 @@ impl ShellScanState {
         }
     }
 
+    /// Consume a character inside an active quote, or report none.
     const fn consume_quoted(&mut self, character: char) -> bool {
         let Some(delimiter) = self.quote else {
             return false;
@@ -63,6 +70,7 @@ impl ShellScanState {
         true
     }
 
+    /// Return whether `character` starts a comment at a word boundary.
     const fn starts_comment(&self, character: char) -> bool {
         character == '#' && self.word_boundary
     }
