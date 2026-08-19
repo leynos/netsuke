@@ -8,7 +8,6 @@ use ortho_config::{
     MapEnv, MergeComposer, MergeLayer, OrthoResult, SharedEnvSource, load_config_file_as_chain,
 };
 use std::borrow::Cow;
-use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -17,62 +16,19 @@ use super::parser::Cli;
 
 #[path = "discovery_diagnostics.rs"]
 mod diagnostics;
+#[path = "discovery_env.rs"]
+mod env;
 #[path = "discovery_layers.rs"]
 mod layers;
 #[path = "discovery_paths.rs"]
 mod paths;
 #[path = "discovery_trace.rs"]
 mod trace;
+use self::env::{CONFIG_ENV_VAR, DISCOVERY_ENV_KEYS};
+pub use self::env::{EnvProvider, StdEnvProvider};
 use diagnostics::{BoundedConfigPath, ConfigLoadFailureKind, ConfigLoadWarning};
 use layers::collect_file_layers_with_trace_and_env_source;
 use trace::{DiscoveryDiagnostics, DiscoveryTrace, FileLayerTrace};
-
-const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG";
-const DISCOVERY_ENV_KEYS: [&str; 7] = [
-    CONFIG_ENV_VAR,
-    "HOME",
-    "USERPROFILE",
-    "XDG_CONFIG_HOME",
-    "XDG_CONFIG_DIRS",
-    "APPDATA",
-    "LOCALAPPDATA",
-];
-
-/// Provides access to environment variables used during config discovery.
-///
-/// Production code uses [`StdEnvProvider`]. Tests can provide an in-memory
-/// implementation so config-selection logic does not mutate process-global
-/// environment state.
-pub trait EnvProvider {
-    /// Return the value of `key`, or `None` when the key is unset.
-    fn get(&self, key: &str) -> Option<OsString>;
-
-    /// Return all values available to the configuration environment layer.
-    ///
-    /// Providers concerned only with selector lookup may retain the empty
-    /// default. Full merge providers override this method.
-    fn entries(&self) -> Vec<(OsString, OsString)> {
-        Vec::new()
-    }
-}
-
-/// Environment provider backed by [`std::env::var_os`].
-#[derive(Debug, Default, Clone, Copy)]
-pub struct StdEnvProvider;
-
-#[expect(
-    clippy::disallowed_methods,
-    reason = "composition root: StdEnvProvider is the process-backed adapter behind the EnvProvider seam"
-)]
-impl EnvProvider for StdEnvProvider {
-    fn get(&self, key: &str) -> Option<OsString> {
-        std::env::var_os(key)
-    }
-
-    fn entries(&self) -> Vec<(OsString, OsString)> {
-        std::env::vars_os().collect()
-    }
-}
 
 /// File layers and loading errors produced by one discovery pass.
 ///
@@ -80,9 +36,13 @@ impl EnvProvider for StdEnvProvider {
 /// full merge consumes the same result. Keeping errors beside the layers lets
 /// those phases retain their distinct error policies without rediscovery.
 pub struct DiscoveredLayers {
+    /// File layers in discovery order.
     layers: Vec<MergeLayer<'static>>,
+    /// Whether JSON output is preferred for the resolved configuration.
     json_preference: bool,
+    /// Discovery failures deferred to the merge error collection.
     errors: Vec<Arc<ortho_config::OrthoError>>,
+    /// Bounded events a composition boundary may emit after discovery.
     diagnostics: DiscoveryDiagnostics,
 }
 
@@ -115,6 +75,7 @@ impl DiscoveredLayers {
 /// The diagnostic pre-pass reads the layers while retaining the bounded events
 /// for a composition boundary to emit after it installs the tracing filter.
 pub struct DiscoveryOutcome {
+    /// The file layers and deferred discovery diagnostics.
     layers: DiscoveredLayers,
 }
 
@@ -261,8 +222,11 @@ pub(crate) fn explicit_config_path_with_env(cli: &Cli, env: &impl EnvProvider) -
 /// afterwards without giving the query tracing side effects.
 #[derive(Debug, PartialEq, Eq)]
 struct ConfigPathResolution {
+    /// The name of the winning selector, for diagnostics.
     selector: &'static str,
+    /// The explicit config path that won, when any.
     path: Option<PathBuf>,
+    /// Every environment lookup evaluated, in evaluation order.
     environment_lookups: Vec<(&'static str, Option<PathBuf>)>,
 }
 
