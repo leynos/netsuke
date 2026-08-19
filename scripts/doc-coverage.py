@@ -78,8 +78,12 @@ class DocTarget:
 
 def pinned_toolchain(manifest_root: pathlib.Path) -> str:
     """Return the ``channel`` pinned in the repository's toolchain file."""
-    with (manifest_root / "rust-toolchain.toml").open("rb") as toolchain:
-        return tomllib.load(toolchain)["toolchain"]["channel"]
+    try:
+        with (manifest_root / "rust-toolchain.toml").open("rb") as toolchain:
+            return tomllib.load(toolchain)["toolchain"]["channel"]
+    except (OSError, tomllib.TOMLDecodeError, KeyError) as error:
+        detail = f"cannot read the pinned toolchain from rust-toolchain.toml: {error}"
+        raise RuntimeError(detail) from error
 
 
 def doc_targets(metadata: dict) -> list[DocTarget]:
@@ -220,7 +224,24 @@ def load_metadata(toolchain: str, manifest_root: pathlib.Path) -> dict:
     if result.returncode != 0:
         detail = f"cargo metadata failed: {result.stderr}"
         raise RuntimeError(detail)
-    return json.loads(result.stdout)
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        detail = f"cargo metadata emitted invalid JSON: {error}"
+        raise RuntimeError(detail) from error
+
+
+def parse_threshold(value: str) -> float:
+    """Parse a coverage threshold, rejecting NaN and out-of-range values."""
+    try:
+        threshold = float(value)
+    except ValueError as error:
+        detail = f"invalid threshold {value!r}"
+        raise argparse.ArgumentTypeError(detail) from error
+    if not 0.0 <= threshold <= 100.0:
+        detail = f"threshold must be in [0, 100], got {threshold}"
+        raise argparse.ArgumentTypeError(detail)
+    return threshold
 
 
 def main(argv: cabc.Sequence[str] | None = None) -> int:
@@ -228,7 +249,7 @@ def main(argv: cabc.Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--threshold",
-        type=float,
+        type=parse_threshold,
         default=80.0,
         help="minimum aggregate percentage; exit non-zero below this (default: 80)",
     )
@@ -240,8 +261,8 @@ def main(argv: cabc.Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     manifest_root = REPO_ROOT
-    toolchain = args.toolchain or pinned_toolchain(manifest_root)
     try:
+        toolchain = args.toolchain or pinned_toolchain(manifest_root)
         totals, rows = run_measurements(toolchain, manifest_root)
     except RuntimeError as error:
         print(f"error: {error}", file=sys.stderr)

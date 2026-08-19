@@ -66,7 +66,7 @@ impl WhichConfig {
     ///
     /// Kept off [`Self::new`] because the override is rare: only callers that
     /// deliberately pin the extension list supply one, and every other call
-    /// site would otherwise pass `None`.
+    /// site would otherwize pass `None`.
     #[must_use]
     pub(crate) fn with_pathext_override(mut self, pathext: Option<OsString>) -> Self {
         self.pathext_override = pathext;
@@ -236,7 +236,7 @@ fn with_not_found_code(message: &str) -> String {
     format!("{NOT_FOUND_CODE}: {message}")
 }
 
-/// Build the localised not-found message for a PATH search miss.
+/// Build the localized not-found message for a PATH search miss.
 fn not_found_message(command: &str, dirs: &[Utf8PathBuf], mode: options::CwdMode) -> String {
     let mut message = localization::message(keys::STDLIB_WHICH_NOT_FOUND)
         .with_arg("command", command)
@@ -250,7 +250,7 @@ fn not_found_message(command: &str, dirs: &[Utf8PathBuf], mode: options::CwdMode
     message
 }
 
-/// Build the localised message for a direct-path lookup miss.
+/// Build the localized message for a direct-path lookup miss.
 fn direct_not_found_message(command: &str, path: &Utf8Path) -> String {
     localization::message(keys::STDLIB_WHICH_DIRECT_NOT_FOUND)
         .with_arg("command", command)
@@ -258,14 +258,14 @@ fn direct_not_found_message(command: &str, path: &Utf8Path) -> String {
         .to_string()
 }
 
-/// Build the localised message for an invalid argument or option.
+/// Build the localized message for an invalid argument or option.
 fn args_message(detail: impl std::fmt::Display) -> String {
     localization::message(keys::STDLIB_WHICH_ARGS_ERROR)
         .with_arg("details", detail.to_string())
         .to_string()
 }
 
-/// Build the localised message for a canonicalisation failure.
+/// Build the localized message for a canonicalization failure.
 fn canonicalize_message(path: &Utf8Path, source: &std::io::Error) -> String {
     localization::message(keys::STDLIB_WHICH_CANONICALIZE_FAILED)
         .with_arg("path", path.as_str())
@@ -273,7 +273,7 @@ fn canonicalize_message(path: &Utf8Path, source: &std::io::Error) -> String {
         .to_string()
 }
 
-/// Build the localised message for an executable-probe failure.
+/// Build the localized message for an executable-probe failure.
 fn is_executable_message(path: &Utf8Path, source: &std::io::Error) -> String {
     localization::message(keys::STDLIB_WHICH_IS_EXECUTABLE)
         .with_arg("path", path.as_str())
@@ -281,7 +281,7 @@ fn is_executable_message(path: &Utf8Path, source: &std::io::Error) -> String {
         .to_string()
 }
 
-/// Build the localised message for a non-UTF-8 workspace path.
+/// Build the localized message for a non-UTF-8 workspace path.
 fn workspace_non_utf8_message(command: &str, path: &str) -> String {
     localization::message(keys::STDLIB_WHICH_WORKSPACE_NON_UTF8)
         .with_arg("command", command)
@@ -289,7 +289,7 @@ fn workspace_non_utf8_message(command: &str, path: &str) -> String {
         .to_string()
 }
 
-/// Build the localised message for a workspace traversal failure.
+/// Build the localized message for a workspace traversal failure.
 fn walkdir_error_message(source: &walkdir::Error) -> String {
     localization::message(keys::STDLIB_WHICH_WALKDIR_ERROR)
         .with_arg("details", source.to_string())
@@ -334,7 +334,7 @@ const fn hint_for_mode(mode: options::CwdMode) -> Option<LocalizedMessage> {
     }
 }
 
-/// Render a path for template output, normalising separators on Windows.
+/// Render a path for template output, normalizing separators on Windows.
 pub(super) fn format_path_for_output(path: &Utf8Path) -> String {
     #[cfg(windows)]
     {

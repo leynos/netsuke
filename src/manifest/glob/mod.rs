@@ -11,7 +11,7 @@
 //! - `validate` rejects unbalanced braces before any filesystem access.
 //! - `normalize` maps separators onto the platform's and, on Unix, rewrites
 //!   backslash escapes into the bracket classes the `glob` crate understands.
-//!   [`GlobPattern`] pairs the caller's text with that normalised form.
+//!   [`GlobPattern`] pairs the caller's text with that normalized form.
 //! - `walk` owns the filesystem side: it computes the pattern's literal
 //!   directory prefix, opens a capability-scoped `cap_std` handle there, and
 //!   runs the metadata check that filters each match.
@@ -40,11 +40,11 @@ use walk::{open_root_dir, process_glob_entry};
 use normalize::force_literal_escapes;
 
 #[derive(Debug, Clone)]
-/// A glob pattern and its normalised representation.
+/// A glob pattern and its normalized representation.
 struct GlobPattern {
     /// Pattern text as provided by the caller.
     raw: String,
-    /// Platform-normalised pattern used for globbing.
+    /// Platform-normalized pattern used for globbing.
     normalized: String,
 }
 
@@ -59,7 +59,7 @@ impl GlobPattern {
         self.raw.as_str()
     }
 
-    /// Access the platform-normalised pattern suitable for globbing.
+    /// Access the platform-normalized pattern suitable for globbing.
     #[must_use]
     #[expect(
         clippy::missing_const_for_fn,
@@ -69,7 +69,7 @@ impl GlobPattern {
         self.normalized.as_str()
     }
 
-    /// Validate and normalise a glob pattern, preventing inconsistent state.
+    /// Validate and normalize a glob pattern, preventing inconsistent state.
     ///
     /// # Errors
     ///
@@ -154,7 +154,7 @@ impl GlobSkippedEntries {
 /// Entry selected by the capability-scoped metadata query.
 #[derive(Debug)]
 pub(super) enum GlobEntry {
-    /// A matched regular file path with separators normalised to `/`.
+    /// A matched regular file path with separators normalized to `/`.
     Path(String),
     /// A symlink the capability cannot resolve, given relative to the prefix.
     UnreachableSymlink(camino::Utf8PathBuf),

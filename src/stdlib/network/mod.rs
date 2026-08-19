@@ -197,7 +197,7 @@ fn read_response(
     Ok(buffer)
 }
 
-/// Read one chunk from the response body, localising read failures.
+/// Read one chunk from the response body, localizing read failures.
 fn read_response_chunk(
     url: &Url,
     reader: &mut impl Read,
@@ -252,7 +252,7 @@ fn response_limit_error_from_cache(name: &str, limit: u64) -> Error {
     )
 }
 
-/// Translate an I/O failure into a localised template error.
+/// Translate an I/O failure into a localized template error.
 fn io_error(action_key: &'static str, path: &Utf8Path, err: io::Error) -> Error {
     io_action_error(
         keys::STDLIB_FETCH_IO_FAILED,

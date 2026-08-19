@@ -61,7 +61,7 @@ impl OutputPrefs {
         self.resolved_theme.tokens.spacing.timing_indent
     }
 
-    /// Substitute the symbol and localised label into the rendered prefix
+    /// Substitute the symbol and localized label into the rendered prefix
     /// template.
     fn render_prefix(symbol: &'static str, label_key: &'static str) -> String {
         let label = localization::message(label_key).to_string();

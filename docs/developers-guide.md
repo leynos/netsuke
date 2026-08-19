@@ -483,6 +483,7 @@ Run these commands before finalizing any change:
 
 - `make check-fmt`
 - `make lint`
+- `make doc-coverage`
 - `make test`
 
 When the change touches any Markdown file — documentation, ADRs, execplans, or
@@ -491,6 +492,15 @@ the README — also run:
 - `make fmt`
 - `make markdownlint`
 - `make nixie`
+
+`make doc-coverage` verifies the aggregate Rustdoc doc-comment coverage of
+every workspace library and binary target, counting private items, and fails
+when the documented share drops below `DOC_COVERAGE_THRESHOLD` (default
+80%). The toolchain the metric measures with is `DOC_COVERAGE_TOOLCHAIN`,
+defaulting to the channel pinned in `rust-toolchain.toml`. See *Doc-comment
+coverage* in `AGENTS.md` for the counting rules and the exemptions (Rustdoc
+excludes trait-implementation overrides, and `cfg(test)` items are not
+compiled into the doc build).
 
 `make test` runs the non-doctest suite through
 [cargo-nextest](https://nexte.st/) and then runs the doctests separately. CI

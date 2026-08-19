@@ -1,7 +1,7 @@
 //! Filesystem search utilities for resolving commands for the `which` feature.
 //!
 //! PATH lookup is deliberately ambient, so executable probes and
-//! canonicalisation cannot use the capability-based handles mandated elsewhere
+//! canonicalization cannot use the capability-based handles mandated elsewhere
 //! in Netsuke.
 
 use std::{fs, io};
@@ -23,10 +23,10 @@ use workspace::search_workspace;
 pub(crate) use workspace::{WORKSPACE_SKIP_DIRS, WorkspaceSkipList};
 
 /// Resolve `command` either as a direct path or by searching the environment's
-/// PATH, optionally canonicalising or collecting all matches.
+/// PATH, optionally canonicalizing or collecting all matches.
 ///
 /// When `options.all` is `true`, every executable candidate is returned;
-/// otherwise resolution stops at the first match. The current working directory
+/// otherwize resolution stops at the first match. The current working directory
 /// is injected according to `options.cwd_mode`. Results are canonicalized when
 /// requested, and cache-friendly options (such as `fresh`) are respected
 /// upstream by the resolver.
@@ -105,7 +105,7 @@ pub(super) fn resolve_direct(
 
 /// Resolve a path-like command to one executable path.
 ///
-/// On POSIX the candidate must already be executable; canonicalisation is
+/// On POSIX the candidate must already be executable; canonicalization is
 /// applied when requested in `options`.
 #[cfg(not(windows))]
 pub(super) fn resolve_direct(
@@ -156,7 +156,7 @@ fn direct_candidates(resolved: &Utf8PathBuf, env: &EnvSnapshot) -> Vec<Utf8PathB
 ///
 /// Returns `true` when at least one candidate was added and `collect_all` is
 /// `false`, signalling to callers that the search can stop; returns `false`
-/// otherwise.
+/// otherwize.
 ///
 /// # Errors
 ///

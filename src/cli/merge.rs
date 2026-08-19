@@ -4,12 +4,12 @@
 //! and the OrthoConfig-derived [`CliConfig`] schema from [`super::config`].
 //! It implements the full four-layer merge pipeline:
 //!
-//! 1. **Defaults** — `CliConfig::default()` serialised to JSON.
+//! 1. **Defaults** — `CliConfig::default()` serialized to JSON.
 //! 2. **File layers** — discovered and loaded by [`super::discovery`].
-//! 3. **Environment layer** — `NETSUKE_`-prefixed variables normalised via
+//! 3. **Environment layer** — `NETSUKE_`-prefixed variables normalized via
 //!    `Uncased` and merged through Figment.
 //! 4. **CLI override layer** — fields explicitly supplied on the command line
-//!    (as determined by `ArgMatches::value_source`) serialised to JSON.
+//!    (as determined by `ArgMatches::value_source`) serialized to JSON.
 //!
 //! **Pipeline position:** merge layer.
 //!
@@ -121,7 +121,7 @@ fn is_empty_value(value: &Value) -> bool {
 ///
 /// # Errors
 ///
-/// Returns a validation error when a supplied value cannot be serialised.
+/// Returns a validation error when a supplied value cannot be serialized.
 fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Value> {
     let mut root = Map::new();
 
@@ -191,7 +191,7 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Va
 ///
 /// # Errors
 ///
-/// Returns a validation error when a supplied value cannot be serialised.
+/// Returns a validation error when a supplied value cannot be serialized.
 fn build_cli_overrides(args: &BuildArgs, matches: &ArgMatches) -> OrthoResult<Map<String, Value>> {
     let mut build = Map::new();
     maybe_insert_explicit(matches, "targets", &args.targets, &mut build)?;
@@ -203,7 +203,7 @@ fn build_cli_overrides(args: &BuildArgs, matches: &ArgMatches) -> OrthoResult<Ma
 ///
 /// # Errors
 ///
-/// Returns a validation error when `value` cannot be serialised.
+/// Returns a validation error when `value` cannot be serialized.
 fn maybe_insert_explicit<T>(
     matches: &ArgMatches,
     field: &str,
@@ -223,7 +223,7 @@ where
 ///
 /// # Errors
 ///
-/// Returns a validation error when serialisation fails.
+/// Returns a validation error when serialization fails.
 fn serialize_value<T>(field: &str, value: &T) -> OrthoResult<Value>
 where
     T: Serialize,

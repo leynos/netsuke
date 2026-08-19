@@ -54,7 +54,7 @@ pub(super) fn task_progress_update(current: u32, total: u32, description: &str) 
         .to_string()
 }
 
-/// Render the completion line with the tool-localised message and prefix.
+/// Render the completion line with the tool-localized message and prefix.
 pub(super) fn format_completion_line(prefs: OutputPrefs, tool_key: LocalizationKey) -> String {
     let tool = localization::message(tool_key.as_str());
     let prefix = prefs.success_prefix();

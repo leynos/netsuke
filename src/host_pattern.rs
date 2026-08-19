@@ -1,6 +1,6 @@
 //! Shared host pattern validation helpers.
 //!
-//! The module centralises normalisation and matching logic so CLI parsing and
+//! The module centralizes normalization and matching logic so CLI parsing and
 //! runtime policy evaluation agree on allowable host syntax.
 
 use crate::localization::{self, LocalizedMessage, keys};
@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use thiserror::Error;
 
-/// Wrapper around a raw host pattern string awaiting normalisation.
+/// Wrapper around a raw host pattern string awaiting normalization.
 #[derive(Copy, Clone)]
 struct HostPatternInput<'a>(&'a str);
 
@@ -153,7 +153,7 @@ pub enum HostPatternError {
     },
 }
 
-/// Normalise and validate a host pattern, returning the lowercased body and
+/// Normalize and validate a host pattern, returning the lowercased body and
 /// wildcard flag.
 fn normalise_host_pattern(input: HostPatternInput<'_>) -> Result<(String, bool), HostPatternError> {
     let trimmed = input.as_str().trim();
@@ -190,10 +190,10 @@ fn normalise_host_pattern(input: HostPatternInput<'_>) -> Result<(String, bool),
         (false, trimmed)
     };
 
-    let normalised = host_body.to_ascii_lowercase();
+    let normalized = host_body.to_ascii_lowercase();
     let mut total_len = 0usize;
     let ctx = ValidationContext::new(HostPatternInput(trimmed));
-    for (index, label) in normalised.split('.').enumerate() {
+    for (index, label) in normalized.split('.').enumerate() {
         ctx.validate_label(label)?;
         total_len += label.len() + usize::from(index > 0);
     }
@@ -205,13 +205,13 @@ fn normalise_host_pattern(input: HostPatternInput<'_>) -> Result<(String, bool),
         });
     }
 
-    Ok((normalised, wildcard))
+    Ok((normalized, wildcard))
 }
 
-/// Canonical host pattern storing the normalised body and wildcard flag.
+/// Canonical host pattern storing the normalized body and wildcard flag.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HostPattern {
-    /// Normalised lowercase host body, without the wildcard prefix.
+    /// Normalized lowercase host body, without the wildcard prefix.
     pub(crate) pattern: String,
     /// Whether the pattern matches any subdomain of the body.
     pub(crate) wildcard: bool,
@@ -225,9 +225,9 @@ impl HostPattern {
     /// Returns an error when the pattern is empty, includes invalid
     /// characters, or uses a wildcard without a suffix.
     pub fn parse(pattern: &str) -> Result<Self, HostPatternError> {
-        let (normalised, wildcard) = normalise_host_pattern(HostPatternInput(pattern))?;
+        let (normalized, wildcard) = normalise_host_pattern(HostPatternInput(pattern))?;
         Ok(Self {
-            pattern: normalised,
+            pattern: normalized,
             wildcard,
         })
     }
