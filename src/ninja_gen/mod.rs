@@ -224,11 +224,14 @@ pub(crate) fn edge_requires_gates(edge: &BuildEdge) -> bool {
 }
 /// Wrapper struct to display a rule with its identifier.
 pub(crate) struct NamedAction<'a> {
+    /// The rule identifier bound to the action.
     id: &'a str,
+    /// The IR action whose recipe and metadata are rendered.
     action: &'a crate::ir::Action,
 }
 
 impl NamedAction<'_> {
+    /// Write the `command =` binding for the action, dispatching on recipe kind.
     fn write_recipe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.action.recipe {
             Recipe::Command {
@@ -248,6 +251,7 @@ impl NamedAction<'_> {
         }
     }
 
+    /// Emit a single-line `command =` binding that reconstructs `script` verbatim.
     fn write_script_command(f: &mut Formatter<'_>, script: &str) -> fmt::Result {
         // Ninja commands must be single-line. Encode newlines and reconstruct the
         // original script with `printf %b` piped into a fresh shell to preserve
@@ -277,6 +281,7 @@ impl NamedAction<'_> {
         writeln!(f, "  command = {command_line}")
     }
 
+    /// Write the action's optional metadata bindings followed by a blank line.
     fn write_metadata(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write_kv!(f, "description", &self.action.description);
         write_kv!(f, "depfile", &self.action.depfile);
@@ -286,6 +291,7 @@ impl NamedAction<'_> {
         writeln!(f)
     }
 
+    /// Panic in debug builds when `command` is not POSIX-shell parseable.
     fn assert_shell_command(command: &str) {
         // `shlex::split` approximates POSIX shell parsing; keep this debug-only
         // sanity guard to catch obviously malformed commands during development.
@@ -304,6 +310,7 @@ impl NamedAction<'_> {
         clippy::manual_assert,
         reason = "debug-only guard escalates to panic for visibility"
     )]
+    /// Reject a recipe that references another rule.
     fn reject_rule_recipe() -> fmt::Result {
         if cfg!(debug_assertions) {
             panic!("rules do not reference other rules");
@@ -333,8 +340,11 @@ impl Display for NamedAction<'_> {
 
 /// Wrapper struct to display a build edge.
 pub(crate) struct DisplayEdge<'a> {
+    /// The build edge whose inputs and outputs are rendered.
     edge: &'a BuildEdge,
+    /// Whether the action sets `restat`, suppressing the edge-level override.
     action_restat: bool,
+    /// Dependencies rendered after `|`, either the edge's implicit deps or lowered serial gates.
     implicit_deps: &'a [Utf8PathBuf],
 }
 

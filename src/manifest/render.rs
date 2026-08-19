@@ -38,12 +38,14 @@ pub fn render_manifest(
     Ok(manifest)
 }
 
+/// Render a rule's description and recipe, substituting template expressions.
 fn render_rule(rule: &mut crate::ast::Rule, env: &Environment, vars: &Vars) -> Result<()> {
     render_description(&mut rule.description, env, vars, "rule")?;
     render_recipe(&mut rule.recipe, env, vars, "rule")?;
     Ok(())
 }
 
+/// Render a target's vars, paths, and recipe against `env`.
 fn render_target(target: &mut Target, env: &Environment) -> Result<()> {
     render_vars(&mut target.vars, env)?;
     render_description(&mut target.description, env, &target.vars, "target")?;
@@ -92,6 +94,7 @@ fn render_recipe(recipe: &mut Recipe, env: &Environment, vars: &Vars, subject: &
     }
     Ok(())
 }
+/// Render each string variable against a snapshot of the original `vars`.
 fn render_vars(vars: &mut Vars, env: &Environment) -> Result<()> {
     let snapshot = vars.clone();
     for (key, value) in vars.iter_mut() {
@@ -102,6 +105,7 @@ fn render_vars(vars: &mut Vars, env: &Environment) -> Result<()> {
     Ok(())
 }
 
+/// Render every string inside a `StringOrList` against `ctx`.
 fn render_string_or_list(value: &mut StringOrList, env: &Environment, ctx: &Vars) -> Result<()> {
     match value {
         StringOrList::String(s) => {
@@ -187,6 +191,7 @@ pub(super) fn recipe_context_preparations() -> usize {
     RECIPE_CONTEXT_PREPARATIONS.with(Cell::get)
 }
 
+/// Render one template string, attaching `what` to any error context.
 fn render_str_with(
     env: &Environment,
     tpl: &str,

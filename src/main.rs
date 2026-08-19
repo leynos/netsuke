@@ -21,17 +21,22 @@ use tracing_subscriber::prelude::*;
 use tracing_subscriber::{Registry, fmt, reload};
 
 use monotony::{MonotonicClock, StdMonotonicClock};
+/// Selects whether diagnostics render as human text or JSON documents.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DiagMode {
+    /// Human-readable diagnostics written to stderr.
     Human,
+    /// Versioned JSON diagnostic documents written to stderr.
     Json,
 }
 
 impl DiagMode {
+    /// Build the diagnostic mode from a JSON-enabled flag.
     const fn from_json_enabled(enabled: bool) -> Self {
         if enabled { Self::Json } else { Self::Human }
     }
 
+    /// Return whether JSON diagnostics are selected.
     const fn is_json(self) -> bool {
         matches!(self, Self::Json)
     }
@@ -185,6 +190,7 @@ const fn is_informational_help(cli: &cli::Cli) -> bool {
     )
 }
 
+/// Configure the runtime and dispatch the selected command through the runner.
 fn run_cli(
     cli: &cli::Cli,
     system_locale: &impl locale_resolution::SystemLocale,

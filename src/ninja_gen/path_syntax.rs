@@ -49,6 +49,7 @@ pub(crate) fn reject_unsupported_path_characters(graph: &BuildGraph) -> Result<(
     Ok(())
 }
 
+/// Ensure `path` contains no character Ninja cannot represent.
 fn validate_path(path: &str) -> Result<(), NinjaGenError> {
     if let Some(character) = unsupported_character(path) {
         return Err(unsupported_path_character(path, character));
@@ -56,11 +57,13 @@ fn validate_path(path: &str) -> Result<(), NinjaGenError> {
     Ok(())
 }
 
+/// Return the first Ninja-unsupported character in `path`, if any.
 fn unsupported_character(path: &str) -> Option<char> {
     path.chars()
         .find(|character| matches!(character, '|' | '\t' | '\r' | '\n'))
 }
 
+/// Build the error naming `path` and the single unsupported `character`.
 fn unsupported_path_character(path: &str, character: char) -> NinjaGenError {
     NinjaGenError::UnsupportedPathCharacter {
         path: Utf8PathBuf::from(path),

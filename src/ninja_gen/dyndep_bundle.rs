@@ -13,7 +13,9 @@ use camino::Utf8PathBuf;
 /// Ninja-syntax dyndep document.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GeneratedDyndep {
+    /// Sidecar path relative to the effective Ninja working directory.
     pub(super) relative_path: Utf8PathBuf,
+    /// Ninja-syntax dyndep document written to the sidecar file.
     pub(super) content: String,
 }
 
@@ -40,7 +42,9 @@ impl GeneratedDyndep {
 /// [`GeneratedNinja::dyndep_files`] has been materialized beside it.
 #[derive(Debug, Clone)]
 pub struct GeneratedNinja {
+    /// Main Ninja build file text.
     pub(super) build_file: String,
+    /// Dyndep sidecars `build_file` requires, in generation order.
     pub(super) dyndep_files: Vec<GeneratedDyndep>,
 }
 
