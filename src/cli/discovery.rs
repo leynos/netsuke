@@ -8,13 +8,18 @@ use ortho_config::{
     MapEnv, MergeComposer, MergeLayer, OrthoResult, SharedEnvSource, load_config_file_as_chain,
 };
 use std::borrow::Cow;
-use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use super::parser::Cli;
 
+#[path = "discovery_environment.rs"]
+mod environment;
+pub use environment::{EnvProvider, StdEnvProvider};
+
+#[path = "discovery_json.rs"]
+mod json;
 #[path = "discovery_diagnostics.rs"]
 mod diagnostics;
 #[path = "discovery_layers.rs"]
@@ -36,42 +41,6 @@ const DISCOVERY_ENV_KEYS: [&str; 7] = [
     "APPDATA",
     "LOCALAPPDATA",
 ];
-
-/// Provides access to environment variables used during config discovery.
-///
-/// Production code uses [`StdEnvProvider`]. Tests can provide an in-memory
-/// implementation so config-selection logic does not mutate process-global
-/// environment state.
-pub trait EnvProvider {
-    /// Return the value of `key`, or `None` when the key is unset.
-    fn get(&self, key: &str) -> Option<OsString>;
-
-    /// Return all values available to the configuration environment layer.
-    ///
-    /// Providers concerned only with selector lookup may retain the empty
-    /// default. Full merge providers override this method.
-    fn entries(&self) -> Vec<(OsString, OsString)> {
-        Vec::new()
-    }
-}
-
-/// Environment provider backed by [`std::env::var_os`].
-#[derive(Debug, Default, Clone, Copy)]
-pub struct StdEnvProvider;
-
-#[expect(
-    clippy::disallowed_methods,
-    reason = "composition root: StdEnvProvider is the process-backed adapter behind the EnvProvider seam"
-)]
-impl EnvProvider for StdEnvProvider {
-    fn get(&self, key: &str) -> Option<OsString> {
-        std::env::var_os(key)
-    }
-
-    fn entries(&self) -> Vec<(OsString, OsString)> {
-        std::env::vars_os().collect()
-    }
-}
 
 /// File layers and loading errors produced by one discovery pass.
 ///
@@ -147,29 +116,32 @@ impl DiscoveryOutcome {
 
 /// Discover configuration layers once through the injected environment.
 pub(crate) fn discover_file_layers(cli: &Cli, env: &impl EnvProvider) -> DiscoveryOutcome {
-    telemetry::instrument_discovery(|| {
-        let (trace, load_warning, outcome) = collect_file_layers_with_env(cli, env);
-        let diagnostics = DiscoveryDiagnostics::new(trace, load_warning);
-        let layers = match outcome {
-            Ok(discovered_layers) => {
-                let (layers, json_preference) =
-                    layers::retain_layers_and_resolve_json(discovered_layers);
-                DiscoveredLayers {
-                    layers,
-                    json_preference,
-                    errors: Vec::new(),
-                    diagnostics,
-                }
-            }
-            Err(error) => DiscoveredLayers {
-                layers: Vec::new(),
-                json_preference: Cli::default().json,
-                errors: vec![error],
+    telemetry::instrument_discovery(|| collect_outcome(cli, env))
+}
+
+/// Run one discovery pass and retain its outcome, including deferred errors.
+fn collect_outcome(cli: &Cli, env: &impl EnvProvider) -> DiscoveryOutcome {
+    let (trace, load_warning, outcome) = collect_file_layers_with_env(cli, env);
+    let diagnostics = DiscoveryDiagnostics::new(trace, load_warning);
+    let layers = match outcome {
+        Ok(discovered_layers) => {
+            let (layers, json_preference) =
+                layers::retain_layers_and_resolve_json(discovered_layers);
+            DiscoveredLayers {
+                layers,
+                json_preference,
+                errors: Vec::new(),
                 diagnostics,
-            },
-        };
-        DiscoveryOutcome { layers }
-    })
+            }
+        }
+        Err(error) => DiscoveredLayers {
+            layers: Vec::new(),
+            json_preference: Cli::default().json,
+            errors: vec![error],
+            diagnostics,
+        },
+    };
+    DiscoveryOutcome { layers }
 }
 
 /// Add a discovered file layer result to a merge composition.

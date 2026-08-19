@@ -49,6 +49,7 @@ extend-ignore-re = [
     "(?m)^      should_upload_workflow_artifacts: \\$\\{\\{ steps\\.release_modes\\.outputs\\['should-upload-workflow-artifacts'\\] \\}\\}$",
     "(?m)^      should_upload_workflow_artifacts:$",
     "(?s)```.*?```",
+    "NETSUKE_COLOR",
     "\\bNETSUKE_COLOR\\b",
     "\\bartifact-dir\\b",
     "\\bartifact-name\\b",
@@ -60,6 +61,7 @@ extend-ignore-re = [
 
 [default.extend-words]
 "ASO" = "ASO"
+"MOLD" = "MOLD"
 "absolutisable" = "absolutizable"
 "absolutisably" = "absolutizably"
 "absolutisation" = "absolutization"
