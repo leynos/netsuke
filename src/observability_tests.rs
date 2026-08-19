@@ -303,3 +303,86 @@ fn records_each_config_load_phase_and_outcome() {
     assert_one_single_sample_duration_record(&snapshot, MERGE_LABEL, 0.02);
     assert_eq!(count_single_sample_duration_records(&snapshot), 2);
 }
+
+/// A snapshot drains the recorder: a later snapshot keeps the bounded series
+/// but resets every recorded sample.
+#[test]
+fn emitting_a_snapshot_drains_recorded_samples() {
+    let recorder = ConfigMetricsRecorder::new();
+    let snapshotter = recorder.snapshotter();
+
+    metrics::with_local_recorder(&recorder, || {
+        counter!(
+            CONFIG_LOAD_COUNTER,
+            "phase" => DIAG_MODE_PHASE,
+            "outcome" => "success"
+        )
+        .increment(1);
+        histogram!(CONFIG_LOAD_DURATION, "phase" => DIAG_MODE_PHASE).record(0.01);
+    });
+
+    let first = snapshotter.snapshot().into_vec();
+    assert_one_counter_record(&first, DIAG_MODE_SUCCESS);
+    assert_one_single_sample_duration_record(&first, DIAG_MODE_LABEL, 0.01);
+
+    let second = snapshotter.snapshot().into_vec();
+    assert!(
+        !second
+            .iter()
+            .any(|entry| is_counter_record(entry, DIAG_MODE_SUCCESS)),
+        "the drained snapshot must not retain the counter sample: {second:?}",
+    );
+    assert!(
+        !second
+            .iter()
+            .any(|entry| is_single_sample_duration_record(entry, DIAG_MODE_LABEL, 0.01)),
+        "the drained snapshot must not retain the histogram sample: {second:?}",
+    );
+    assert_eq!(
+        count_config_load_counter_records(&second),
+        1,
+        "the drained snapshot keeps the counter series",
+    );
+    assert_eq!(
+        count_config_load_duration_records(&second),
+        1,
+        "the drained snapshot keeps the duration series",
+    );
+}
+
+/// Concurrent threads incrementing a shared configuration counter accumulate
+/// every increment without interference.
+#[test]
+fn concurrent_increments_accumulate_on_the_shared_recorder() {
+    let recorder = ConfigMetricsRecorder::new();
+    let snapshotter = recorder.snapshotter();
+    let counter = std::sync::Arc::new(metrics::with_local_recorder(&recorder, || {
+        metrics::counter!(
+            CONFIG_LOAD_COUNTER,
+            "phase" => DIAG_MODE_PHASE,
+            "outcome" => "success"
+        )
+    }));
+
+    let threads: Vec<_> = (0..8)
+        .map(|_| {
+            let handle = std::sync::Arc::clone(&counter);
+            std::thread::spawn(move || handle.increment(1))
+        })
+        .collect();
+    for thread in threads {
+        thread.join().expect("increment thread");
+    }
+
+    let snapshot = snapshotter.snapshot().into_vec();
+    let accumulated = snapshot
+        .iter()
+        .find(|entry| entry.0.key().name() == CONFIG_LOAD_COUNTER);
+    let Some(sample) = accumulated else {
+        panic!("expected an accumulated configuration counter: {snapshot:?}");
+    };
+    assert!(
+        matches!(sample.3, DebugValue::Counter(8)),
+        "all eight increments should reach the shared counter: {sample:?}",
+    );
+}

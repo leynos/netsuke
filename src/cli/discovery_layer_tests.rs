@@ -18,20 +18,20 @@ use std::cell::Cell;
 use std::ffi::OsString;
 
 #[derive(Debug, Clone, Copy)]
-enum LayerScenario {
+pub(super) enum LayerScenario {
     ExplicitConfig,
     Discovery,
 }
 
 /// Environment double that records discovery lookups for replay assertions.
 #[derive(Default)]
-struct CountingEnv {
+pub(super) struct CountingEnv {
     get_calls: Cell<usize>,
 }
 
 impl CountingEnv {
     /// Return the number of selector reads performed so far.
-    fn get_calls(&self) -> usize {
+    pub(super) fn get_calls(&self) -> usize {
         self.get_calls.get()
     }
 }
@@ -46,7 +46,7 @@ impl EnvProvider for CountingEnv {
 ///
 /// The explicit case writes a config file and selects it through `--config`; the
 /// discovery case only anchors the project root, so discovery finds nothing.
-fn scenario_cli(scenario: LayerScenario, temp: &TempDir) -> Result<Cli> {
+pub(super) fn scenario_cli(scenario: LayerScenario, temp: &TempDir) -> Result<Cli> {
     match scenario {
         LayerScenario::ExplicitConfig => {
             let config_path = temp.path().join("config.toml");
@@ -64,7 +64,7 @@ fn scenario_cli(scenario: LayerScenario, temp: &TempDir) -> Result<Cli> {
     }
 }
 
-fn replay_events(discovered: &DiscoveryOutcome) -> Result<Vec<String>> {
+pub(super) fn replay_events(discovered: &DiscoveryOutcome) -> Result<Vec<String>> {
     let ((), events) = capture_events(|| {
         discovered.emit_diagnostics();
         Ok::<_, anyhow::Error>(())

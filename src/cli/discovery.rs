@@ -371,10 +371,7 @@ pub(crate) fn collect_diag_file_layers_with_env(
 mod event_assertions;
 
 #[cfg(test)]
-/// Assert a deferred diagnostic carries the expected bounded path fields.
-pub(crate) fn assert_bounded_path_event(event: &str, path: &Path) -> anyhow::Result<()> {
-    event_assertions::EventAssertion::new(event, path).ensure_bounded_path_fields()
-}
+pub(crate) use event_assertions::assert_bounded_path_event;
 
 #[cfg(test)]
 #[path = "discovery_tracing_tests.rs"]
@@ -387,6 +384,10 @@ mod layer_tests;
 #[cfg(test)]
 #[path = "discovery_helper_proptests.rs"]
 mod helper_proptests;
+
+#[cfg(test)]
+#[path = "discovery_replay_proptests.rs"]
+mod replay_proptests;
 
 /// Tests for explicit config-path precedence. Enumerated cases cover every
 /// combination of `--config` and `NETSUKE_CONFIG` presence; a proptest property
