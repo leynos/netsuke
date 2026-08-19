@@ -49,22 +49,22 @@ struct GlobPattern {
 }
 
 impl GlobPattern {
+    /// Access the pattern text as provided by the caller.
     #[must_use]
     #[expect(
         clippy::missing_const_for_fn,
         reason = "const String::as_str() not available on all MSRV targets"
     )]
-    /// Access the pattern text as provided by the caller.
     fn raw(&self) -> &str {
         self.raw.as_str()
     }
 
+    /// Access the platform-normalised pattern suitable for globbing.
     #[must_use]
     #[expect(
         clippy::missing_const_for_fn,
         reason = "const String::as_str() not available on all MSRV targets"
     )]
-    /// Access the platform-normalised pattern suitable for globbing.
     fn normalized(&self) -> &str {
         self.normalized.as_str()
     }

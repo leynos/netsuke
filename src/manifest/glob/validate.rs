@@ -27,12 +27,12 @@ impl ValidationState {
         }
     }
 
+    /// Consume a backslash escape, reporting whether the character was part of one.
     #[cfg(unix)]
     #[expect(
         clippy::missing_const_for_fn,
         reason = "mutating runtime state; const would not improve clarity"
     )]
-    /// Consume a backslash escape, reporting whether the character was part of one.
     fn process_escape(&mut self, ch: char) -> bool {
         if self.escaped {
             self.escaped = false;
@@ -55,11 +55,11 @@ impl ValidationState {
         false
     }
 
+    /// Track character-class boundaries and report membership.
     #[expect(
         clippy::missing_const_for_fn,
         reason = "mutating runtime state; const would not improve clarity"
     )]
-    /// Track character-class boundaries and report membership.
     fn process_character_class(&mut self, ch: char) -> bool {
         match (self.in_class, ch) {
             (true, ']') => {

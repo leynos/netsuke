@@ -301,6 +301,7 @@ impl NamedAction<'_> {
         );
     }
 
+    /// Reject a recipe that references another rule.
     #[cold]
     #[expect(
         clippy::panic_in_result_fn,
@@ -310,7 +311,6 @@ impl NamedAction<'_> {
         clippy::manual_assert,
         reason = "debug-only guard escalates to panic for visibility"
     )]
-    /// Reject a recipe that references another rule.
     fn reject_rule_recipe() -> fmt::Result {
         if cfg!(debug_assertions) {
             panic!("rules do not reference other rules");
