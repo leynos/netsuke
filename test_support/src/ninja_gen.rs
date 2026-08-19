@@ -81,7 +81,7 @@ pub fn ninja_integration_setup() -> Option<TempDir> {
     ninja::ninja_integration_workspace().ok()
 }
 
-/// Strategy generating a single `<prefix><index>` path for indexes 0..100.
+/// Generate a single `<prefix><index>` path for indexes 0..100.
 fn path_strategy(prefix: &'static str) -> impl Strategy<Value = Utf8PathBuf> {
     (0usize..100).prop_map(move |index| Utf8PathBuf::from(format!("{prefix}{index}")))
 }
