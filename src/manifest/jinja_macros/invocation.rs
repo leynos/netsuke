@@ -8,9 +8,12 @@ use minijinja::{
     value::{Kwargs, Rest, Value},
 };
 
+/// Template and macro names resolved for one invocation.
 #[derive(Clone, Copy)]
 struct MacroReference<'a> {
+    /// Template that defines the macro.
     template_name: &'a str,
+    /// Macro exported by that template.
     macro_name: &'a str,
 }
 
@@ -40,6 +43,7 @@ pub(super) fn make_macro_fn(
     }
 }
 
+/// Invoke a resolved macro reference against state, forwarding args and kwargs.
 fn invoke_macro(
     state: &State,
     args: &[Value],
@@ -68,6 +72,7 @@ pub(super) fn validate_macro(
     Ok(())
 }
 
+/// Load a template and capture its rendered state for a named macro.
 fn capture_macro<'source>(
     env: &'source Environment<'source>,
     template_name: &str,
@@ -102,6 +107,7 @@ fn capture_macro<'source>(
     Ok((captured, value))
 }
 
+/// Collect keyword arguments into a fresh `Kwargs`, or `None` when empty.
 fn collect_kwargs(macro_kwargs: &Kwargs) -> Result<Option<Kwargs>, Error> {
     let mut entries = Vec::new();
     for key in macro_kwargs.args() {

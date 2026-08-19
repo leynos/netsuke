@@ -2,6 +2,7 @@
 
 use crate::localization::keys;
 
+/// Error-substring to localization-key hints for common YAML mistakes.
 pub(crate) const YAML_HINTS: [(&str, &str); 5] = [
     (
         "did not find expected '-'",

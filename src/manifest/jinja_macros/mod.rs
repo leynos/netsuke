@@ -22,6 +22,7 @@ mod telemetry;
 pub(crate) use call::call_macro_value;
 use invocation::{make_macro_fn, validate_macro};
 
+/// Global name holding accumulated import statements for manifest macros.
 const MACRO_IMPORTS_GLOBAL: &str = "__netsuke_manifest_macro_imports";
 
 /// Extract the macro identifier from a signature string.
@@ -153,12 +154,14 @@ pub(crate) fn render_template(
     })
 }
 
+/// Append a `from ... import` statement for one macro to the import global.
 fn register_macro_import(env: &mut Environment<'static>, template_name: &str, macro_name: &str) {
     let existing = macro_imports(env).unwrap_or_default();
     let import = format!("{{% from '{template_name}' import {macro_name} %}}");
     env.add_global(MACRO_IMPORTS_GLOBAL, [existing, import].concat());
 }
 
+/// Read the accumulated macro-import statements from the environment, if any.
 fn macro_imports(env: &Environment) -> Option<String> {
     env.globals().find_map(|(name, value)| {
         (name == MACRO_IMPORTS_GLOBAL)
