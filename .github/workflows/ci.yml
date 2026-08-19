@@ -87,6 +87,11 @@ jobs:
           whitaker-installer
       - name: Lint
         run: make lint
+      - name: Doc coverage
+        # Rustdoc doc-comment coverage across every workspace lib and bin
+        # target, gated on the 80% threshold stated in AGENTS.md. Runs after
+        # `make lint` so it reuses the freshly built doc database.
+        run: make doc-coverage
       - name: Setup uv
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
         with:
