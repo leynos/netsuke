@@ -35,7 +35,6 @@ class RemoteResponse(typ.Protocol):
 
     def read(self) -> bytes:
         """Read the response body."""
-        ...
 
 
 def atomic_write(path: pathlib.Path, content: bytes) -> None:
@@ -54,7 +53,10 @@ def atomic_write(path: pathlib.Path, content: bytes) -> None:
     same filesystem. Cleanup removes the temporary path after every outcome.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    stream = tempfile.NamedTemporaryFile(
+    # SIM115 is suppressed because the stream is closed by the `with` below; it
+    # cannot be opened by that `with` directly, since the temporary path must be
+    # bound before the block so the `finally` can remove it after the rename.
+    stream = tempfile.NamedTemporaryFile(  # noqa: SIM115
         delete=False, dir=path.parent, prefix=f".{path.name}."
     )
     temporary = pathlib.Path(stream.name)

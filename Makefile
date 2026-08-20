@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-typos-config build release lint lint-clippy lint-whitaker fmt check-fmt typecheck markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build
+.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-typos-config build release lint lint-clippy lint-whitaker lint-python fmt check-fmt typecheck markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build
 
 APP ?= netsuke
 CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$$HOME/.cargo/bin/cargo")
@@ -42,7 +42,37 @@ NIXIE ?= nixie
 TYPOS_VERSION ?= 1.48.0
 UV ?= uv
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
+# Pin Ruff so `make` invokes the same version everywhere; floating the version
+# causes version-skew lint failures because rule sets differ between releases.
 RUFF_VERSION ?= 0.15.12
+RUFF = $(UV_ENV) $(UV) tool run --from ruff==$(RUFF_VERSION) ruff
+# Every Python source the repository owns. Ruff resolves its own configuration
+# from pyproject.toml, so these paths only bound the walk.
+PYTHON_SOURCES = scripts tests/workflow_contracts
+# Pylint runs on PyPy through a shim because CPython start-up dominates the
+# wall-clock cost of a whole-tree pass. `--load-plugins=` clears the shim's
+# default plugin list so this pass runs exactly the messages pyproject.toml
+# enables.
+PYLINT_PYTHON ?= pypy
+PYLINT_TARGETS ?= $(PYTHON_SOURCES)
+PYLINT_PYPY_SHIM_REF ?= 726d09f968b4d729ee4b29c71fc732e744854f3b
+PYLINT_PYPY_SHIM = git+https://github.com/leynos/pylint-pypy-shim.git@$(PYLINT_PYPY_SHIM_REF)
+PYLINT = $(UV_ENV) $(UV) tool run --python $(PYLINT_PYTHON) \
+	--from '$(PYLINT_PYPY_SHIM)' pylint-pypy --load-plugins=
+# The df12 house lints need CPython: they parse syntax PyPy's 3.11 runtime
+# cannot. They run through `uv tool run` rather than `uv run` so the repository
+# never needs a project virtual environment for a Rust contributor's sake.
+DF12_PYTHON_LINTS_REF ?= v0.1.0
+DF12_PYTHON_LINTS = git+https://github.com/leynos/df12-python-lints.git@$(DF12_PYTHON_LINTS_REF)
+DF12_PYTHON ?= 3.14
+DF12_PYLINT_MESSAGES = R9101,C9102,R9103,R9104,C9105,C9106,C9107,R9108,R9109,R9110,R9111
+DF12_PYLINT_BASE = $(UV_ENV) $(UV) tool run --python $(DF12_PYTHON) \
+	--from pylint --with '$(DF12_PYTHON_LINTS)' pylint \
+	--disable=all --load-plugins=df12_python_lints
+DF12_PYLINT = $(DF12_PYLINT_BASE) --enable=$(DF12_PYLINT_MESSAGES)
+DF12_FUTURE_ANNOTATIONS = $(DF12_PYLINT_BASE) --enable=C9112
+AMBRLEAKS = $(UV_ENV) $(UV) tool run --python $(DF12_PYTHON) \
+	--from '$(DF12_PYTHON_LINTS)' ambrleaks
 SPELLING_HELPER_COVERAGE = --cov=generate_typos_config --cov=typos_rollout_check --cov=typos_rollout \
 	--cov=typos_rollout_cache --cov=typos_rollout_http
 SPELLING_HELPER_FILES = scripts/generate_typos_config.py \
@@ -86,14 +116,21 @@ doctest: ## Run doctests, which cargo-nextest cannot execute
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)
 
 test-workflow-contracts: ## Validate the mutation-testing caller contract
-	uv run --with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' pytest tests/workflow_contracts -q
+	$(UV_ENV) $(UV) run --no-project --python 3.13 --with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' pytest tests/workflow_contracts -q
 
 test-typos-config: spelling-helper-test ## Verify the shared spelling-policy integration
 
 target/%/$(APP): ## Build binary in debug or release mode
 	RUSTFLAGS="$${RUSTFLAGS-} $(POLONIUS_FLAGS)" $(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP)
 
-lint: lint-clippy lint-whitaker ## Run Clippy and the Whitaker Dylint suite with warnings denied
+lint: lint-clippy lint-whitaker lint-python ## Run the Rust and Python lint suites with warnings denied
+
+lint-python: ## Run Ruff, Pylint, and the df12 house lints over the Python sources
+	$(RUFF) check
+	$(PYLINT) $(PYLINT_TARGETS)
+	$(DF12_PYLINT) $(PYLINT_TARGETS)
+	$(DF12_FUTURE_ANNOTATIONS) $(PYLINT_TARGETS)
+	$(AMBRLEAKS) tests
 
 lint-clippy: ## Run rustdoc and Clippy with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) doc --workspace --no-deps
@@ -105,12 +142,15 @@ lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 	# `test_support::fs` exemption from test_support/dylint.toml.
 	cd test_support && DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(WHITAKER) --all --no-deps --package test_support -- --all-targets --all-features
 
-fmt: ## Format Rust and Markdown sources
+fmt: ## Format Rust, Python, and Markdown sources
 	$(CARGO) fmt --all
+	$(RUFF) format $(PYTHON_SOURCES)
+	$(RUFF) check --select I --fix $(PYTHON_SOURCES)
 	mdformat-all
 
 check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
+	$(RUFF) format --check $(PYTHON_SOURCES)
 
 typecheck: ## Typecheck all targets and features
 	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) check --all-targets --all-features $(BUILD_JOBS)
@@ -124,12 +164,15 @@ spelling: spelling-config ## Enforce en-GB-oxendict spelling in Markdown prose
 		$(UV) tool run typos@$(TYPOS_VERSION) --config typos.toml --force-exclude
 
 spelling-config: spelling-helper-test ## Generate and validate the spelling configuration
-	@$(UV_ENV) $(UV) run scripts/generate_typos_config.py
+	@$(UV_ENV) $(UV) run --no-project scripts/generate_typos_config.py
 	@git ls-files --error-unmatch typos.toml >/dev/null
 	@git diff --exit-code -- typos.toml
 
 spelling-helper-test: ## Validate the shared spelling-policy integration
-	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) format --isolated --target-version py313 --check $(SPELLING_HELPER_FILES)
+	# `--isolated` keeps this gate independent of the repository configuration so
+	# the spelling helpers stay self-contained, but `--preview` must match the
+	# `preview = true` in pyproject.toml or the two formatters would disagree.
+	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) format --isolated --preview --target-version py313 --check $(SPELLING_HELPER_FILES)
 	@$(UV_ENV) $(UV) tool run ruff@$(RUFF_VERSION) check --isolated --target-version py313 $(SPELLING_HELPER_FILES)
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python 3.13 --with pytest==9.0.2 --with pytest-cov==7.0.0 python -m pytest scripts/tests/test_typos_rollout*.py -c /dev/null --rootdir=. -p no:cacheprovider $(SPELLING_HELPER_COVERAGE) --cov-fail-under=90
 

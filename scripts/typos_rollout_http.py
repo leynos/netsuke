@@ -18,8 +18,8 @@ from collections import abc as cabc
 
 import typos_rollout_cache
 
-ContentValidator = cabc.Callable[[bytes], None]
-Opener = cabc.Callable[..., typos_rollout_cache.RemoteResponse]
+type ContentValidator = cabc.Callable[[bytes], None]
+type Opener = cabc.Callable[..., typos_rollout_cache.RemoteResponse]
 HTTP_NOT_MODIFIED = 304
 
 
@@ -205,6 +205,17 @@ class _HttpsRedirectHandler(urllib.request.HTTPRedirectHandler):
         The variadic tail preserves the standard library's positional override
         contract without making transport-library parameters part of this
         helper's domain-facing interface.
+
+        Returns
+        -------
+        urllib.request.Request | None
+            The request to follow, or ``None`` when the standard handler
+            declines the redirect.
+
+        Raises
+        ------
+        InsecureSourceError
+            If the redirect target does not use HTTPS.
         """
         file_pointer, code, message, headers, new_url = redirect
         if urllib.parse.urlsplit(new_url).scheme != "https":
@@ -231,7 +242,7 @@ def _https_request(
     if urllib.parse.urlsplit(source).scheme != "https":
         message = f"shared dictionary URL must use HTTPS: {source}"
         raise InsecureSourceError(message)
-    return urllib.request.Request(source, headers=dict(headers))
+    return urllib.request.Request(source, headers=dict(headers))  # noqa: S310 -- HTTPS guarded above, and redirects are re-checked by _HttpsRedirectHandler
 
 
 def _write_remote_cache(

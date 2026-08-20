@@ -99,17 +99,20 @@ def _steps(workflow: dict[str, object]) -> list[dict[str, object]]:
         case dict() as jobs:
             pass
         case _:
-            raise AssertionError("the workflow must declare a jobs mapping")
+            message = "the workflow must declare a jobs mapping"
+            raise AssertionError(message)
     match jobs.get("build-test"):
         case dict() as job:
             pass
         case _:
-            raise AssertionError("the workflow must declare a build-test job")
+            message = "the workflow must declare a build-test job"
+            raise AssertionError(message)
     match job.get("steps"):
         case list() as steps:
             return steps
         case _:
-            raise AssertionError("jobs.build-test.steps must be a list")
+            message = "jobs.build-test.steps must be a list"
+            raise AssertionError(message)
 
 
 def _step(name: str) -> dict[str, object]:
@@ -127,7 +130,8 @@ def _test_shell_script() -> str:
         case str() as run:
             return run
         case _:
-            raise AssertionError(f"{TEST_SHELL_STEP} must declare a run script")
+            message = f"{TEST_SHELL_STEP} must declare a run script"
+            raise AssertionError(message)
 
 
 def test_test_shell_step_installs_gawk() -> None:
@@ -139,22 +143,24 @@ def test_test_shell_step_installs_gawk() -> None:
 
 
 def test_test_shell_step_copies_gawk_to_a_regular_awk_executable() -> None:
-    """gawk is copied — not linked — to ${RUNNER_TEMP}/netsuke-test-bin/awk.
+    """Gawk is copied — not linked — to ${RUNNER_TEMP}/netsuke-test-bin/awk.
 
     The sandbox probe cannot follow a symlink out of its directory handle, so
     the destination must be a regular executable file.
     """
     script = _test_shell_script()
-    assert 'install --mode=0755 "$(command -v gawk)"' in script, (
-        f"{TEST_SHELL_STEP} must copy $(command -v gawk) as a regular "
-        f"executable, got:\n{script}"
+    # One assertion over the whole fragment set, so a failure names every
+    # missing piece at once rather than stopping at the first.
+    required = (
+        'test_shell_bin="${RUNNER_TEMP}/netsuke-test-bin"',
+        'install --mode=0755 "$(command -v gawk)"',
+        '"${test_shell_bin}/awk"',
     )
-    assert '"${test_shell_bin}/awk"' in script, (
-        f"{TEST_SHELL_STEP} must install the copy as awk, got:\n{script}"
-    )
-    assert 'test_shell_bin="${RUNNER_TEMP}/netsuke-test-bin"' in script, (
-        f"{TEST_SHELL_STEP} must stage the copy in "
-        f"${{RUNNER_TEMP}}/netsuke-test-bin, got:\n{script}"
+    absent = [fragment for fragment in required if fragment not in script]
+    assert not absent, (
+        f"{TEST_SHELL_STEP} must copy $(command -v gawk) into "
+        f"${{RUNNER_TEMP}}/netsuke-test-bin as a regular awk executable; "
+        f"missing {absent}, got:\n{script}"
     )
 
 

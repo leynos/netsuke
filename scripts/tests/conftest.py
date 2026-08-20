@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import importlib
-import types
+import typing as typ
 from pathlib import Path
 
 import pytest
+
+if typ.TYPE_CHECKING:
+    import types
 
 SCRIPT_DIRECTORY = Path(__file__).resolve().parents[1]
 
