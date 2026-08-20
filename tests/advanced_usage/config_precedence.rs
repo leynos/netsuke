@@ -1,4 +1,9 @@
 //! Configuration-layer precedence and verbose metrics-snapshot coverage.
+//!
+//! This sibling of `advanced_usage_tests` exercises the parent module's
+//! workspace builder with configuration files, CLI arguments, and child-only
+//! environment settings. Its assertions prove both precedence behaviour and
+//! the bounded metrics snapshot emitted by verbose successful invocations.
 
 use super::{ConfigLayerBuildRequest, run_config_layer_build};
 use anyhow::{Result, ensure};

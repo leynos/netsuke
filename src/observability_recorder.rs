@@ -1,6 +1,9 @@
 //! Bounded process recorder for configuration observability.
 
-use super::{CONFIG_LOAD_COUNTER, CONFIG_LOAD_DURATION, DIAG_MODE_PHASE, MERGE_PHASE};
+use super::{
+    CONFIG_LOAD_COUNTER, CONFIG_LOAD_DURATION, DIAG_MODE_PHASE, MERGE_PHASE,
+    STARTUP_CONFIG_LOAD_COUNTER, STARTUP_CONFIG_LOAD_DURATION,
+};
 use metrics::{Counter, Gauge, Histogram, Key, KeyName, Metadata, SharedString, Unit};
 use metrics_util::MetricKind;
 use metrics_util::debugging::{DebuggingRecorder, Snapshotter};
@@ -36,7 +39,13 @@ impl ConfigMetricsRecorder {
 
     /// Name filtering for describes, which carry no labels to validate.
     fn accepts_name(name: &str) -> bool {
-        matches!(name, CONFIG_LOAD_COUNTER | CONFIG_LOAD_DURATION)
+        matches!(
+            name,
+            CONFIG_LOAD_COUNTER
+                | CONFIG_LOAD_DURATION
+                | STARTUP_CONFIG_LOAD_COUNTER
+                | STARTUP_CONFIG_LOAD_DURATION
+        )
     }
 
     /// Admit only the exact bounded series expected of `kind`.
@@ -46,18 +55,21 @@ impl ConfigMetricsRecorder {
     fn accepts_registration(key: &Key, kind: MetricKind) -> bool {
         match kind {
             MetricKind::Counter => {
-                key.name() == CONFIG_LOAD_COUNTER
+                (key.name() == CONFIG_LOAD_COUNTER
                     && exact_labels(
                         key,
                         &[
                             (PHASE_LABEL, &PHASE_VALUES),
                             (OUTCOME_LABEL, &OUTCOME_VALUES),
                         ],
-                    )
+                    ))
+                    || (key.name() == STARTUP_CONFIG_LOAD_COUNTER
+                        && exact_labels(key, &[(OUTCOME_LABEL, &OUTCOME_VALUES)]))
             }
             MetricKind::Histogram => {
-                key.name() == CONFIG_LOAD_DURATION
-                    && exact_labels(key, &[(PHASE_LABEL, &PHASE_VALUES)])
+                (key.name() == CONFIG_LOAD_DURATION
+                    && exact_labels(key, &[(PHASE_LABEL, &PHASE_VALUES)]))
+                    || (key.name() == STARTUP_CONFIG_LOAD_DURATION && exact_labels(key, &[]))
             }
             MetricKind::Gauge => false,
         }

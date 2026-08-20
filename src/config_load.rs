@@ -18,16 +18,6 @@ use super::{
     settle_startup_diagnostics, startup_filter,
 };
 
-/// Counter recording the outcome of each configuration-load attempt.
-///
-/// Labelled by `outcome` (`success` or `failure`) so operators can track the
-/// startup configuration-load failure rate.
-const CONFIG_LOAD_TOTAL: &str = "netsuke_config_load_total";
-
-/// Histogram recording the elapsed duration of the configuration-load
-/// phase (diagnostic-mode resolution through layer merge) in seconds.
-const CONFIG_LOAD_DURATION_SECONDS: &str = "netsuke_config_load_duration_seconds";
-
 /// Cached diagnostic resolution carried into the full configuration merge.
 struct ResolvedDiagnosticMode {
     mode: DiagMode,
@@ -188,8 +178,9 @@ where
 /// in-process `DebuggingRecorder`.
 fn record_config_load_metrics(elapsed: Duration, succeeded: bool) {
     let outcome = if succeeded { "success" } else { "failure" };
-    metrics::histogram!(CONFIG_LOAD_DURATION_SECONDS).record(elapsed.as_secs_f64());
-    metrics::counter!(CONFIG_LOAD_TOTAL, "outcome" => outcome).increment(1);
+    metrics::histogram!(observability::STARTUP_CONFIG_LOAD_DURATION).record(elapsed.as_secs_f64());
+    metrics::counter!(observability::STARTUP_CONFIG_LOAD_COUNTER, "outcome" => outcome)
+        .increment(1);
 }
 
 #[cfg(test)]

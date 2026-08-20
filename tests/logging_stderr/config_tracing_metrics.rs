@@ -1,4 +1,9 @@
 //! Snapshot expectations for configuration-resolution tracing tests.
+//!
+//! This helper module supplies record-level expectations and assertion
+//! functions to its `config_tracing` parent. It keeps snapshot parsing beside
+//! the configuration observability contract, while the parent remains
+//! responsible for executing the binary and checking human and JSON output.
 
 use anyhow::{Result, ensure};
 

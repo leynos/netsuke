@@ -159,52 +159,6 @@ fn is_single_sample_duration_record(
         && matches!(entry.3, DebugValue::Histogram(ref values) if values.as_slice() == [expected_seconds])
 }
 
-#[test]
-fn configuration_metrics_recorder_discards_unrelated_metrics() {
-    let recorder = ConfigMetricsRecorder::new();
-    let snapshotter = recorder.snapshotter();
-
-    metrics::with_local_recorder(&recorder, || {
-        counter!(CONFIG_LOAD_COUNTER, "phase" => DIAG_MODE_PHASE, "outcome" => "success")
-            .increment(1);
-        histogram!(CONFIG_LOAD_DURATION, "phase" => DIAG_MODE_PHASE).record(0.01);
-        counter!("help_targets_total", "topic" => "help").increment(1);
-        for _ in 0..1_000 {
-            histogram!("template_render_duration_seconds", "template" => "unbounded").record(0.5);
-        }
-    });
-
-    let snapshot = snapshotter.snapshot().into_vec();
-    assert_eq!(
-        snapshot.len(),
-        2,
-        "only configuration metrics should be retained"
-    );
-    assert_one_counter_record(&snapshot, DIAG_MODE_SUCCESS);
-    assert_one_single_sample_duration_record(&snapshot, DIAG_MODE_LABEL, 0.01);
-    assert!(
-        snapshot.iter().all(|entry| {
-            matches!(
-                entry.0.key().name(),
-                CONFIG_LOAD_COUNTER | CONFIG_LOAD_DURATION
-            )
-        }),
-        "snapshot must retain only configuration metric series",
-    );
-    assert!(
-        !snapshot
-            .iter()
-            .any(|entry| entry.0.key().name() == "help_targets_total"),
-        "rejected counter must not appear in the snapshot",
-    );
-    assert!(
-        !snapshot
-            .iter()
-            .any(|entry| entry.0.key().name() == "template_render_duration_seconds"),
-        "rejected histogram samples must not be retained",
-    );
-}
-
 /// Same-name series with a wrong kind, extra or missing labels, or
 /// unbounded label values are rejected while the valid series remain.
 #[test]

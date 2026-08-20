@@ -32,10 +32,9 @@ pub fn resolve_merged_json(cli: &Cli, matches: &ArgMatches) -> OrthoResult<bool>
 
 /// Resolve the JSON preference using an injected environment provider.
 ///
-/// This command-facing convenience boundary replays deferred discovery
-/// diagnostics before returning. Query callers should use
-/// [`resolve_json_and_layers_outcome_with_env`] and choose when to emit its
-/// outcome.
+/// This query does not emit deferred discovery diagnostics. Callers that need
+/// them should use [`resolve_json_and_layers_outcome_with_env`] and emit its
+/// returned outcome after configuring tracing.
 ///
 /// # Errors
 ///
@@ -46,8 +45,7 @@ pub fn resolve_merged_json_with_env(
     matches: &ArgMatches,
     env: &impl EnvProvider,
 ) -> OrthoResult<bool> {
-    let (result, outcome) = resolve_json_and_layers_outcome_with_env(cli, matches, env);
-    outcome.emit_diagnostics();
+    let (result, _) = resolve_json_and_layers_outcome_with_env(cli, matches, env);
     result
 }
 
@@ -130,22 +128,13 @@ mod tests {
     use super::*;
     use crate::cli::{merge_with_cached_file_layers, test_support::TestEnv};
     use crate::test_tracing_capture::with_test_subscriber;
-    use anyhow::{Context, ensure};
+    use anyhow::ensure;
     use cap_std::{ambient_authority, fs::Dir};
     use clap::CommandFactory;
     use clap::Parser;
     use rstest::rstest;
-    use std::path::Path;
     use tempfile::tempdir;
     use tracing_subscriber::filter::LevelFilter;
-
-    fn find_deferred_event<'a>(events: &'a [String], message: &str) -> anyhow::Result<&'a str> {
-        events
-            .iter()
-            .find(|event| event.contains(message))
-            .map(String::as_str)
-            .with_context(|| format!("expected event containing {message:?} in {events:?}"))
-    }
 
     #[test]
 
@@ -194,7 +183,7 @@ mod tests {
 
     #[rstest]
 
-    fn resolve_merged_json_replays_missing_explicit_config_diagnostics() -> anyhow::Result<()> {
+    fn resolve_merged_json_defers_missing_explicit_config_diagnostics() -> anyhow::Result<()> {
         let dir = tempdir()?;
         let missing_config_path = dir.path().join("missing-netsuke.toml");
         let matches = Cli::command().get_matches_from(["netsuke"]);
@@ -209,23 +198,10 @@ mod tests {
             matches!(error.as_ref(), OrthoError::File { path, .. } if path == &missing_config_path),
             "expected missing explicit config error for {missing_config_path:?}, got {error:?}"
         );
-        let selector_event = find_deferred_event(&events, "resolved config path")?;
         ensure!(
-            selector_event.contains("selector=\"NETSUKE_CONFIG\"")
-                && selector_event.contains("path_present=true"),
-            "selector event should record the injected selector: {selector_event}"
+            events.is_empty(),
+            "query resolution must defer discovery diagnostics: {events:?}"
         );
-        assert_bounded_path_event(selector_event, &missing_config_path)?;
-        assert_bounded_path_event(
-            find_deferred_event(&events, "using explicit config path")?,
-            &missing_config_path,
-        )?;
-        let failure_event = find_deferred_event(&events, "explicit config load failed")?;
-        ensure!(
-            failure_event.contains("failure_kind=Missing"),
-            "load failure should retain its bounded kind: {failure_event}"
-        );
-        assert_bounded_path_event(failure_event, &missing_config_path)?;
 
         Ok(())
     }
@@ -250,24 +226,6 @@ mod tests {
             "CLI --json should override malformed JSON env"
         );
 
-        Ok(())
-    }
-
-    fn assert_bounded_path_event(event: &str, path: &Path) -> anyhow::Result<()> {
-        ensure!(
-            event.contains("path_hash="),
-            "event should contain a bounded path hash: {event}"
-        );
-        ensure!(
-            !event.contains(path.to_string_lossy().as_ref()),
-            "event should not expose the raw configuration path: {event}"
-        );
-        if let Some(file_name) = path.file_name() {
-            ensure!(
-                !event.contains(file_name.to_string_lossy().as_ref()),
-                "event should not expose the configuration file name: {event}"
-            );
-        }
         Ok(())
     }
 
