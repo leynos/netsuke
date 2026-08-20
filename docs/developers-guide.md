@@ -2948,11 +2948,14 @@ to the test module's path, not to a shared helper module.
 Startup configuration loading is instrumented through the
 [`metrics`](https://docs.rs/metrics) façade so operators can detect failure
 trends and startup-latency regressions in production. Overall startup-attempt
-metrics are recorded around `resolve_json_mode_or_exit` and
-`merge_cli_or_exit`, spanning diagnostic-mode resolution
-(`cli::resolve_merged_json`) through the full layer merge
-(`cli::merge_with_config`); phase-level metrics are composed in
-`src/observability.rs` around those same boundaries.
+metrics are recorded by `config_load::resolve_configuration`, which receives a
+`ConfigurationLoadContext` and measures one attempt across
+`resolve_json_mode_or_exit` and `merge_cli_or_exit`. The diagnostic-mode helper
+resolves and caches discovered layers with
+`cli::resolve_json_and_layers_outcome_with_env`; the merge helper passes those
+cached layers to `cli::merge_with_cached_file_layers` for the full merge.
+Phase-level metrics are composed in `src/observability.rs` around those two
+operations.
 
 Both aggregate and phase-level configuration-load timing use the same
 injected elapsed-time seam: each boundary receives
@@ -2975,7 +2978,7 @@ Instruments emitted by `record_config_load_metrics`:
 - `netsuke_config_load_total` — a counter incremented once per startup
   configuration-load attempt. It carries a single label `outcome` with values
   `success` or `failure`, where `failure` corresponds to diagnostic-mode
-  resolution or a `merge_with_config` error. Use it to compute the
+  resolution or a `merge_with_cached_file_layers` error. Use it to compute the
   configuration-load failure rate.
 - `netsuke_config_load_duration_seconds` — a histogram recording the
   elapsed duration of the configuration-load phase in seconds (one sample per

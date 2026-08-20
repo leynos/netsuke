@@ -6,6 +6,7 @@
 
 use anyhow::{Context, Result, ensure};
 use assert_cmd::cargo::cargo_bin_cmd;
+use camino::{Utf8Path, Utf8PathBuf};
 use tempfile::{TempDir, tempdir};
 use test_support::fs as test_fs;
 
@@ -16,16 +17,22 @@ fn workspace(context: &str) -> Result<TempDir> {
     Ok(temp)
 }
 
-fn isolated_netsuke_command(current_dir: &std::path::Path) -> assert_cmd::Command {
+fn isolated_netsuke_command(current_dir: &Utf8Path) -> assert_cmd::Command {
     let mut command = cargo_bin_cmd!("netsuke");
-    command.current_dir(current_dir).env_clear();
+    command.current_dir(current_dir.as_std_path()).env_clear();
     command
+}
+
+fn utf8_workspace_path(temp: &TempDir) -> Result<Utf8PathBuf> {
+    Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+        .map_err(|path| anyhow::anyhow!("workspace path {} is not UTF-8", path.display()))
 }
 
 #[test]
 fn no_discovered_config_allows_the_graph_workflow() -> Result<()> {
     let temp = workspace("no discovered configuration")?;
-    let output = isolated_netsuke_command(temp.path())
+    let workspace_path = utf8_workspace_path(&temp)?;
+    let output = isolated_netsuke_command(&workspace_path)
         .arg("graph")
         .output()
         .context("run graph without configuration")?;
@@ -40,7 +47,8 @@ fn malformed_discovered_config_fails_the_binary_workflow() -> Result<()> {
     test_fs::write(temp.path().join(".netsuke.toml"), "emoji = \"always\n")
         .context("write malformed discovered config")?;
 
-    let output = isolated_netsuke_command(temp.path())
+    let workspace_path = utf8_workspace_path(&temp)?;
+    let output = isolated_netsuke_command(&workspace_path)
         .arg("graph")
         .output()
         .context("run graph with malformed configuration")?;

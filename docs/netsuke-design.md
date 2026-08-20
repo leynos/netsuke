@@ -2744,11 +2744,13 @@ depends on how much a run emits.
 Configuration-load observability belongs to the application composition root;
 this decision is recorded in
 [ADR-013](adr-013-application-owned-configuration-observability.md).
-The query functions `cli::resolve_merged_json` and
-`cli::merge_with_config` do not install a recorder or own configuration-load
-metrics; `run_with_args` composes the phase and startup-attempt measurements
-around those queries. `src/observability.rs` owns the bounded phase vocabulary,
-while `src/main.rs` owns the process recorder and the startup-attempt series.
+`config_load::resolve_configuration` owns the startup-attempt measurement: it
+resolves diagnostic mode with `cli::resolve_json_and_layers_outcome_with_env`,
+then passes the cached layers to `cli::merge_with_cached_file_layers` for the
+full merge. Those query functions do not install a recorder or own
+configuration-load metrics. `src/observability.rs` owns the phase recorder and
+bounded phase/outcome vocabulary, while `src/config_load.rs` owns the
+startup-attempt series.
 The application installs an in-process `DebuggingRecorder`; it does not open a
 metrics listener as a side effect of a command invocation.
 
