@@ -154,9 +154,8 @@ fn collect_file_layers_with_normalizer_and_trace(
         .map(|path| comparison_key(normalizer, &path.to_string_lossy()));
     let has_project_layer = file_layers.value.iter().any(|layer| {
         layer.path().is_some_and(|path| {
-            project_key
-                .as_deref()
-                .is_some_and(|key| key.to_string_lossy() == path.as_str())
+            let layer_key = comparison_key(normalizer, path.as_str());
+            project_key.as_deref().is_some_and(|key| *key == layer_key)
         })
     });
     let project_trace_path = BoundedConfigPath::from_path(project_file.as_deref());

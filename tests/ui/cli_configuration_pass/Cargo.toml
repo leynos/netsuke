@@ -7,5 +7,4 @@ publish = false
 [workspace]
 
 [dependencies]
-mockable = "3.0"
 netsuke = { package = "netsuke-build", path = "../../.." }

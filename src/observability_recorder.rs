@@ -8,6 +8,8 @@ use metrics::{Counter, Gauge, Histogram, Key, KeyName, Metadata, SharedString, U
 use metrics_util::MetricKind;
 use metrics_util::debugging::{DebuggingRecorder, Snapshotter};
 
+use netsuke::cli::{DISCOVERY_DURATION, DISCOVERY_OUTCOME_VALUES, DISCOVERY_TOTAL};
+
 /// Label key naming the configuration-load phase on every series.
 const PHASE_LABEL: &str = "phase";
 /// Label key naming the outcome on configuration-load counter series.
@@ -17,7 +19,7 @@ const PHASE_VALUES: [&str; 2] = [DIAG_MODE_PHASE, MERGE_PHASE];
 /// The bounded outcome values accepted on configuration-load counter series.
 const OUTCOME_VALUES: [&str; 2] = ["success", "failure"];
 
-/// Application recorder that retains only bounded configuration-load metrics.
+/// Application recorder that retains only bounded configuration observability.
 ///
 /// The process-wide debugging recorder is a shutdown-only diagnostic aid. It
 /// must not retain workload-proportional observations from unrelated metrics.
@@ -45,6 +47,8 @@ impl ConfigMetricsRecorder {
                 | CONFIG_LOAD_DURATION
                 | STARTUP_CONFIG_LOAD_COUNTER
                 | STARTUP_CONFIG_LOAD_DURATION
+                | DISCOVERY_TOTAL
+                | DISCOVERY_DURATION
         )
     }
 
@@ -65,11 +69,14 @@ impl ConfigMetricsRecorder {
                     ))
                     || (key.name() == STARTUP_CONFIG_LOAD_COUNTER
                         && exact_labels(key, &[(OUTCOME_LABEL, &OUTCOME_VALUES)]))
+                    || (key.name() == DISCOVERY_TOTAL
+                        && exact_labels(key, &[(OUTCOME_LABEL, &DISCOVERY_OUTCOME_VALUES)]))
             }
             MetricKind::Histogram => {
                 (key.name() == CONFIG_LOAD_DURATION
                     && exact_labels(key, &[(PHASE_LABEL, &PHASE_VALUES)]))
                     || (key.name() == STARTUP_CONFIG_LOAD_DURATION && exact_labels(key, &[]))
+                    || (key.name() == DISCOVERY_DURATION && exact_labels(key, &[]))
             }
             MetricKind::Gauge => false,
         }

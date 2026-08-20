@@ -285,25 +285,24 @@ The lowering stages have deliberately separate responsibilities:
   binding set for the recipe, then interpolates every scalar or list entry with
   that set. `{{ ins }}` and `{{ outs }}` markers and standalone `$in` and
   `$out` tokens are resolved per entry; tokens inside backticks are preserved.
-  The resulting action contains ordinary command text and no Ninja
-  placeholders.
-- `src/ninja_gen/mod.rs` emits a scalar command unchanged. For a list, it puts
+  The resulting action contains ordinary command text and no Ninja placeholders.
+- `src/ninja_gen.rs` emits a scalar command unchanged. For a list, it puts
   each entry in a brace group and joins the groups with `&&`. Each group uses
   `eval` with a shell-quoted entry payload. This keeps an inline comment or a
   trailing control operator such as `&` inside the entry from consuming the
-  generated group terminator. Braces run in the current shell, not a
-  subshell, so directory changes, environment assignments, and shell
-  variables can carry from one entry to the next. The `&&` chain remains
-  fail-fast. Each entry may start at most one background job; the generated
-  wrapper waits for that job before it evaluates a later entry. Ninja
-  generation rejects entries that start more than one background job. It also
-  rejects entries whose nested `eval` payload makes the background-job count
-  dynamic, because the wrapper cannot safely determine which jobs to wait for.
-  A direct simple `exec`, optionally prefixed by shell assignments, is
-  evaluated in a retaining subshell so its success or failure remains visible
-  to the wrapper; a successful `exec` ends the remaining chain. Structured or
-  nested `exec` forms are rejected during Ninja generation because the wrapper
-  cannot supervise them without changing their shell semantics.
+  generated group terminator. Braces run in the current shell, not a subshell,
+  so directory changes, environment assignments, and shell variables can carry
+  from one entry to the next. The `&&` chain remains fail-fast. Each entry may
+  start at most one background job; the generated wrapper waits for that job
+  before it evaluates a later entry. Ninja generation rejects entries that
+  start more than one background job. It also rejects entries whose nested
+  `eval` payload makes the background-job count dynamic, because the wrapper
+  cannot safely determine which jobs to wait for. A direct simple `exec`,
+  optionally prefixed by shell assignments, is evaluated in a retaining
+  subshell so its success or failure remains visible to the wrapper; a
+  successful `exec` ends the remaining chain. Structured or nested `exec` forms
+  are rejected during Ninja generation because the wrapper cannot supervise
+  them without changing their shell semantics.
 - `src/runner/process` forwards the command's output and recognizes the
   bounded `netsuke command-list failure: action HASH, entry M` marker. A failed
   list therefore retains the original exit status while adding the fixed-width
@@ -322,26 +321,25 @@ fragmented shell quoting, which is appropriate for a literal shell word but not
 for the command-list `eval` payload. That renderer requires a canonical
 single-quoted payload so existing generated Ninja list text remains
 byte-for-byte stable, and the delimiter/boundary tests continue to hold. Keep
-that quoting in the deliberately local `shell_single_quote` function; it is
-not a general-purpose helper. Neither quoting path is the platform-specific
+that quoting in the deliberately local `shell_single_quote` function; it is not
+a general-purpose helper. Neither quoting path is the platform-specific
 `src/stdlib/command/quote.rs` implementation behind the `command.quote`
 template wrapper, which must retain its `cmd.exe` quoting behaviour on Windows.
 
-Attributed list failures emit the bounded tracing fields
-`command_list_action` (a fixed-width action fingerprint) and
-`command_list_entry` (the one-based entry index), plus the matching
-`command_list_failure` marker. The process boundary records
-`netsuke_ninja_command_list_failures_total` and
-`netsuke_ninja_command_list_failure_duration_seconds`, with an `outcome`
-label of `failure`. Elapsed failure duration is measured through the injected
-`monotony::MonotonicClock`; production uses `StdMonotonicClock`, while tests use
-deterministic test clocks. These diagnostics and metrics contain no command
+Attributed list failures emit the bounded tracing fields `command_list_action`
+(a fixed-width action fingerprint) and `command_list_entry` (the one-based
+entry index), plus the matching `command_list_failure` marker. The process
+boundary records `netsuke_ninja_command_list_failures_total` and
+`netsuke_ninja_command_list_failure_duration_seconds`, with an `outcome` label
+of `failure`. Elapsed failure duration is measured through the injected
+`monotony::MonotonicClock`; production uses `StdMonotonicClock`, while tests
+use deterministic test clocks. These diagnostics and metrics contain no command
 text.
 
 Changes to this pipeline must preserve the scalar/list distinction, per-entry
 rendering, current-shell state sharing, and failure attribution. The focused
-rendering, lowering, Ninja-generation, and real-Ninja integration tests are
-the behavioural contract for these boundaries.
+rendering, lowering, Ninja-generation, and real-Ninja integration tests are the
+behavioural contract for these boundaries.
 
 ## Package and target naming
 
@@ -377,13 +375,12 @@ from the `bin-name` field that
   sidecar, per `[common.binstall]` in `.github/release-staging.toml`, and the
   "Hoist cargo-binstall archives" step in `.github/workflows/release.yml` runs
   `scripts/hoist_binstall_archives.py` under a pinned Python 3.13 installed by
-  `setup-uv`. The script validates that every target's archive and checksum
-  are present, are regular files rather than symlinks, and have a free
-  destination before moving them to the release root for upload; the read-only
-  discovery and validation half lives in `scripts/hoist_binstall_discovery.py`.
+  `setup-uv`. The script validates that every target's archive and checksum are
+  present, are regular files rather than symlinks, and have a free destination
+  before moving them to the release root for upload; the read-only discovery
+  and validation half lives in `scripts/hoist_binstall_discovery.py`.
   `tests/binstall_metadata_tests.rs` and
-  `tests/workflow_contracts/hoist_binstall_archives_test.py` hold this
-  contract.
+  `tests/workflow_contracts/hoist_binstall_archives_test.py` hold this contract.
 
 Only the two registry installation commands name `netsuke-build`, and
 `tests/documentation_installation_tests.rs` pins both. When adding a release
@@ -434,12 +431,12 @@ confusing `E0499` rather than an obvious configuration error.
 
 Four workflows carry the contract:
 
-| Workflow | Job | Shared action | `with.rustflags` |
-| --- | --- | --- | --- |
-| [`ci.yml`](../.github/workflows/ci.yml) | `build-test` | `setup-rust` | `-D warnings -Zpolonius=next` |
-| [`coverage-main.yml`](../.github/workflows/coverage-main.yml) | `coverage-upload` | `setup-rust` | `-D warnings -Zpolonius=next` |
-| [`netsukefile-test.yml`](../.github/workflows/netsukefile-test.yml) | `netsukefile` | `setup-rust` | `-Zpolonius=next` |
-| [`build-and-package.yml`](../.github/workflows/build-and-package.yml) | `build` | `rust-build-release` | `-Zpolonius=next` |
+| Workflow                                                              | Job               | Shared action        | `with.rustflags`              |
+| --------------------------------------------------------------------- | ----------------- | -------------------- | ----------------------------- |
+| [`ci.yml`](../.github/workflows/ci.yml)                               | `build-test`      | `setup-rust`         | `-D warnings -Zpolonius=next` |
+| [`coverage-main.yml`](../.github/workflows/coverage-main.yml)         | `coverage-upload` | `setup-rust`         | `-D warnings -Zpolonius=next` |
+| [`netsukefile-test.yml`](../.github/workflows/netsukefile-test.yml)   | `netsukefile`     | `setup-rust`         | `-Zpolonius=next`             |
+| [`build-and-package.yml`](../.github/workflows/build-and-package.yml) | `build`           | `rust-build-release` | `-Zpolonius=next`             |
 
 CI and coverage add `-D warnings` because those jobs gate on a warning-free
 build; the Netsukefile and packaging jobs carry the Polonius flag alone, so a
@@ -771,30 +768,30 @@ so pinning the SHA in a test buys nothing and costs a manual edit per bump.
 
 #### Exception: the Polonius shared-action contract
 
-The four workflows described under [Polonius CI shared-action
-contract](#polonius-ci-shared-action-contract) do depend on a specific
-revision. The `rustflags` input they rely on was introduced at a known commit
-in `leynos/shared-actions`. A revision that predates it does not fail the run —
-an unrecognized `with:` key on a composite action is a warning, not an error —
-it simply never exports the flag, so the build fails later as a borrow-check
-error rather than as a configuration error.
+The four workflows described under
+[Polonius CI shared-action contract](#polonius-ci-shared-action-contract) do
+depend on a specific revision. The `rustflags` input they rely on was
+introduced at a known commit in `leynos/shared-actions`. A revision that
+predates it does not fail the run — an unrecognized `with:` key on a composite
+action is a warning, not an error — it simply never exports the flag, so the
+build fails later as a borrow-check error rather than as a configuration error.
 
 `tests/polonius_toolchain_contract.rs` therefore requires the four workflows'
 shared-action references to agree, rather than restating the expected pin as a
 constant. It extracts every `leynos/shared-actions` reference from the checked
 workflows with the shared YAML-parsing helper in
-`tests/support/shared_actions.rs`, validates that each is a full
-40-character lowercase-hex commit SHA, and derives the pin the workflows must
-share from that set. A complete bump — Dependabot's or a manual one — moves
-every reference together and passes with no test edit. A partial bump, where
-some workflows move and others are left behind, fails on the disagreement
-between references: the same failure that previously broke `main` when a bump
-missed the hand-maintained constants this contract used to hold. The
-revision-level dependency on the `rustflags` input is now protected by that
-agreement requirement together with `shared-actions`' own contract tests
-upstream, rather than by a constant edited by hand here. Restrict this
-exception to callers with a genuine revision-level dependency; everywhere
-else, the shape-only policy applies.
+`tests/support/shared_actions.rs`, validates that each is a full 40-character
+lowercase-hex commit SHA, and derives the pin the workflows must share from
+that set. A complete bump — Dependabot's or a manual one — moves every
+reference together and passes with no test edit. A partial bump, where some
+workflows move and others are left behind, fails on the disagreement between
+references: the same failure that previously broke `main` when a bump missed
+the hand-maintained constants this contract used to hold. The revision-level
+dependency on the `rustflags` input is now protected by that agreement
+requirement together with `shared-actions`' own contract tests upstream, rather
+than by a constant edited by hand here. Restrict this exception to callers with
+a genuine revision-level dependency; everywhere else, the shape-only policy
+applies.
 
 If a workflow's behaviour does not depend on a feature from a particular commit
 onwards, do not assert its SHA — express any advisory note as a comment or a
@@ -965,9 +962,9 @@ PowerShell external help under
 date from `SOURCE_DATE_EPOCH`, falling back to `1970-01-01` when unset or
 invalid.
 
-Shell completions are generated separately by `build.rs` from
-`Cli::command()` for Bash, Elvish, Fish, PowerShell, and Zsh. Release staging
-copies these portable completion sidecars into each standalone archive under
+Shell completions are generated separately by `build.rs` from `Cli::command()`
+for Bash, Elvish, Fish, PowerShell, and Zsh. Release staging copies these
+portable completion sidecars into each standalone archive under
 `completions/<shell>/`. They remain separate files for users to copy into the
 completion location documented by their shell; package installation does not
 claim to install them.
@@ -1591,16 +1588,15 @@ the package-versus-target naming split described in
 [package and target naming](#package-and-target-naming). The first asserts the
 manual page `build.rs` generates; the second pins the single
 `[package.metadata.binstall]` `pkg-url` template against the release staging
-configuration and the workflow target matrix, and fails if per-target
-overrides reappear.
+configuration and the workflow target matrix, and fails if per-target overrides
+reappear.
 
 The hoist step that makes that template resolvable is covered by
 `tests/workflow_contracts/hoist_binstall_archives_test.py`, which combines
 example-based cases with Hypothesis property tests over generated target sets
 and staging states. Run it with `make test-workflow-contracts`; the target
 provisions `pytest`, `pyyaml`, and `hypothesis` through `uv run --with`, so
-`uv` is the only prerequisite and no virtual environment needs creating by
-hand.
+`uv` is the only prerequisite and no virtual environment needs creating by hand.
 
 ### Temporary executable test helpers
 
@@ -1910,9 +1906,9 @@ Glob expansion lives in `src/manifest/glob/`, and `glob_paths` is its only
 boundary. `src/manifest/mod.rs` declares `mod glob;` privately and re-exports
 just that function, so nothing else in the module — `GlobPattern`, the error
 helpers in `glob/errors.rs`, the `walk` submodule, or the `GlobEntryResult`
-alias — is reachable from the crate root. `GlobEntryResult` in particular
-stays private to `manifest::glob`: only `glob_paths` and `walk` consume it, and
-it names a `glob` crate type that callers should never have to depend on.
+alias — is reachable from the crate root. `GlobEntryResult` in particular stays
+private to `manifest::glob`: only `glob_paths` and `walk` consume it, and it
+names a `glob` crate type that callers should never have to depend on.
 
 Two compile-time guards hold that boundary:
 
@@ -1922,14 +1918,15 @@ Two compile-time guards hold that boundary:
   because `src/manifest/mod.rs` deliberately re-exports it, making it genuinely
   reachable; every item here that is not re-exported stays guarded.
 - A pair of doctests attached to the public `glob_paths` documentation: a
-  `compile_fail,E0603` block importing `netsuke::manifest::glob::GlobEntryResult`
-  and a passing block importing `netsuke::manifest::glob_paths`. Together they
-  validate the downstream view — the alias has no public path, while the entry
-  point does. The passing block is the control: if the rustdoc harness wiring
-  breaks, it fails rather than letting the rejection pass vacuously. Both are
-  attached to `glob_paths` rather than to the private items they describe
-  because rustdoc renders and runs the examples of public items, which also
-  makes the boundary discoverable from the published API documentation.
+  `compile_fail,E0603` block importing
+  `netsuke::manifest::glob::GlobEntryResult` and a passing block importing
+  `netsuke::manifest::glob_paths`. Together they validate the downstream view —
+  the alias has no public path, while the entry point does. The passing block
+  is the control: if the rustdoc harness wiring breaks, it fails rather than
+  letting the rejection pass vacuously. Both are attached to `glob_paths`
+  rather than to the private items they describe because rustdoc renders and
+  runs the examples of public items, which also makes the boundary discoverable
+  from the published API documentation.
 
 When adding to this module, keep new items private, or `pub(super)` when a
 sibling submodule needs them; widen the boundary only by adding a deliberate
@@ -1942,8 +1939,8 @@ The metadata check that filters directories out of a glob's results goes
 through a `cap_std::fs::Dir` handle rather than a raw filesystem call.
 `walk::open_root_dir` opens that handle at the pattern's longest literal
 directory prefix, computed by `walk::literal_dir_prefix`: the pattern text up
-to the first `*`, `?`, `[`, or `{`, trimmed back to the last path separator.
-For `src/**/*.c` that prefix is `src/`.
+to the first `*`, `?`, `[`, or `{`, trimmed back to the last path separator. For
+`src/**/*.c` that prefix is `src/`.
 
 `walk::open_literal_prefix` owns the opening policy: it opens the lexical root
 or current directory ambiently once, then opens each normal literal component
@@ -1952,38 +1949,36 @@ metadata lookups remain the responsibility of that root.
 
 - **Bracketed literal escapes do not stop the scan.** The `[*]`, `[?]`,
   `[[]`, `[]]`, `[{]`, and `[}]` forms that `normalize::force_literal_escapes`
-  produces from `\*`, `\?`, and the like name a literal character rather than
-  a wildcard, so `src/[*]x/generated/*.c` reaches `src/[*]x/generated/`, not
+  produces from `\*`, `\?`, and the like name a literal character rather than a
+  wildcard, so `src/[*]x/generated/*.c` reaches `src/[*]x/generated/`, not
   `src/`. A genuine character class such as `[ab]` is still a wildcard and
   still stops the scan. The resulting prefix is still pattern text, so
   `walk::unescape_literal_escapes` resolves it to the path it names
-  (`src/[*]x/` becomes the directory `src/*x/`) before the capability is
-  opened and before any match is stripped of it.
+  (`src/[*]x/` becomes the directory `src/*x/`) before the capability is opened
+  and before any match is stripped of it.
 - **`GlobRoot` couples the handle with the prefix.** Matches keep the
   pattern's own rooting as they arrive from the `glob` crate's walker — an
   absolute pattern yields absolute matches, while a parent-relative pattern
   such as `../*.txt` yields matches like `../out.txt` — so
-  `GlobRoot::relativise` rebases each one onto the prefix before the
-  metadata lookup. A path that does not start with the prefix is rejected
-  outright rather than resolved through a wider capability.
+  `GlobRoot::relativise` rebases each one onto the prefix before the metadata
+  lookup. A path that does not start with the prefix is rejected outright
+  rather than resolved through a wider capability.
 - **No literal directory component falls back to the working directory.** A
   pattern such as `*.c` yields a prefix of `.`. `walk::prefix_is_unopenable`
   treats a missing prefix, and a prefix that names something other than a
-  directory, as no capability at all; `glob_paths` then returns an empty
-  match set rather than an error. Any other failure to open the prefix
-  propagates.
+  directory, as no capability at all; `glob_paths` then returns an empty match
+  set rather than an error. Any other failure to open the prefix propagates.
 - **`walk::is_unresolvable_link` governs which failed lookups are skipped
   rather than fatal.** Only `io::ErrorKind::PermissionDenied` (an escape from
-  the capability's tree, or a genuine permission failure the capability
-  cannot distinguish from one) and `io::ErrorKind::NotFound` (a dangling
-  link) count, and only when some component of the matched path is actually
-  a symbolic link. A `FilesystemLoop` is a broken tree rather than an absent
-  file, so it propagates instead of being skipped.
+  the capability's tree, or a genuine permission failure the capability cannot
+  distinguish from one) and `io::ErrorKind::NotFound` (a dangling link) count,
+  and only when some component of the matched path is actually a symbolic link.
+  A `FilesystemLoop` is a broken tree rather than an absent file, so it
+  propagates instead of being skipped.
 - **The boundary that remains.** The match walk itself is the `glob` crate's,
-  and that crate traverses the filesystem ambiently. Only the metadata check
-  is capability-scoped, so narrowing the capability's opening point narrows
-  what the metadata check can resolve, not what the walk itself can see on
-  disk.
+  and that crate traverses the filesystem ambiently. Only the metadata check is
+  capability-scoped, so narrowing the capability's opening point narrows what
+  the metadata check can resolve, not what the walk itself can see on disk.
 
 [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) records the
 decision to scope the capability this way and the alternatives it rejected.
@@ -1996,12 +1991,11 @@ neither reaches the top-level diagnostics: a literal prefix that names no
 directory, and matches dropped because a symbolic link cannot be resolved
 through the capability, including an unreadable link within the prefix. It
 aggregates every skipped entry while retaining at most the first four
-unreachable-symlink paths as a trace sample. The
-`src/manifest/mod.rs` adapter records those observations after the query at the
-Jinja `glob` helper's orchestration boundary, via `glob::record_expansion`.
-Keeping recording there leaves the expansion query free of metrics and tracing
-side effects while keeping a degraded expansion visible without having to
-reproduce it.
+unreachable-symlink paths as a trace sample. The `src/manifest/mod.rs` adapter
+records those observations after the query at the Jinja `glob` helper's
+orchestration boundary, via `glob::record_expansion`. Keeping recording there
+leaves the expansion query free of metrics and tracing side effects while
+keeping a degraded expansion visible without having to reproduce it.
 
 - **Metrics** — `netsuke_manifest_glob_expansions_total`, labelled
   `outcome` (`matched`, `unopenable_prefix`), and
@@ -2013,9 +2007,9 @@ reproduce it.
 - **Tracing** — every caller-controlled path field is replaced with the stable
   `<redacted>` marker: patterns, prefixes, and sampled relative matches. A
   skipped unreachable-symlink event is emitted only for the retained sample,
-  with no more than four such events per expansion. Metrics retain only
-  bounded aggregate status and reason data; errors may retain the caller's
-  original pattern so invalid input can be explained precisely.
+  with no more than four such events per expansion. Metrics retain only bounded
+  aggregate status and reason data; errors may retain the caller's original
+  pattern so invalid input can be explained precisely.
 
 ## Test isolation utilities
 
@@ -2098,8 +2092,8 @@ at the controlled pre-persist point, returns `io::ErrorKind::IsADirectory`.
 
 When a manifest is missing, its generated contents are written to a temporary
 file staged in the destination directory before persistence. The tests inject
-the pre-persist action to cover controlled creation orderings; they do not claim
-to model arbitrary scheduler or filesystem interleavings. The fallible
+the pre-persist action to cover controlled creation orderings; they do not
+claim to model arbitrary scheduler or filesystem interleavings. The fallible
 `test_support::fs::inspect_path` probe treats `NotFound` as absence and
 propagates every other metadata error.
 
@@ -2186,20 +2180,20 @@ modules share. It reads the `POLONIUS_FLAGS` variable and rejects two states:
   only, reported as "POLONIUS_FLAGS should not be empty".
 
 The rejection matters because every assertion built on the resolved value uses
-`contains`, which an empty needle satisfies vacuously. Returning an empty string
-would silently void the Polonius contract instead of failing it. On success the
-resolver returns the trimmed value, and a bounded proptest in
+`contains`, which an empty needle satisfies vacuously. Returning an empty
+string would silently void the Polonius contract instead of failing it. On
+success the resolver returns the trimmed value, and a bounded proptest in
 `rustflags_polonius_tests` pins that acceptance invariant: resolution succeeds
 exactly when a definition exists whose value is non-empty after trimming, and
 the resolved text is the trimmed value. Its generator emits absent,
-whitespace-only, and whitespace-padded flag tokens, so an untrimmed return fails
-the property rather than slipping past.
+whitespace-only, and whitespace-padded flag tokens, so an untrimmed return
+fails the property rather than slipping past.
 
 Because `rustflags.rs` and `rustflags_polonius_tests.rs` are children of the
 `makefile_test_target` test binary rather than files under `tests/`, Cargo does
-not compile them as separate targets. The root declares them, and they reach the
-shared helpers through `use super::{read_repo_file, target_recipe}`. Keep this
-shape for further Makefile contract work: general parsing helpers belong in
+not compile them as separate targets. The root declares them, and they reach
+the shared helpers through `use super::{read_repo_file, target_recipe}`. Keep
+this shape for further Makefile contract work: general parsing helpers belong in
 `tests/support/makefile.rs` once a second contract test needs them, whereas
 model types such as `RustflagsCase` stay private to the contract they describe.
 
@@ -2263,9 +2257,9 @@ boundary policy.
 The seams described in this section follow one of three sanctioned shapes —
 narrow closures, `mockable::Env`, or `EnvReader` — chosen by call-site count,
 expected growth, and `Send + Sync` registration requirements: use
-`mockable::Env` when a boundary is expected to acquire more inputs, even
-before its call-site count grows. See
-[ADR-008](adr-008-environment-seam-taxonomy.md) for the taxonomy.
+`mockable::Env` when a boundary is expected to acquire more inputs, even before
+its call-site count grows. See [ADR-008](adr-008-environment-seam-taxonomy.md)
+for the taxonomy.
 
 `manifest::EnvReader` owns environment lookup for the manifest `env()` helper.
 Production constructs the process-backed adapter at the manifest loading
@@ -2359,9 +2353,9 @@ returning `None` for anything unrecognized — hides exactly the regression a
 test double should catch: if the code under test starts reading a differently
 named variable, through a rename, a typo, or a new precedence rung, a
 permissive stub answers `None` and the test still passes, asserting nothing
-about the new read. Recognize the panic message, `"which the test did not
-declare"`, when a test starts failing after a rename; it means the test's
-declarations need updating, not that the stub is broken.
+about the new read. Recognize the panic message,
+`"which the test did not declare"`, when a test starts failing after a rename;
+it means the test's declarations need updating, not that the stub is broken.
 
 Three distinct states are representable for a key: **declared with a value**
 (`with_var`), **declared but unset** (`allowing`, which reports `None`), and
@@ -2371,48 +2365,48 @@ distinguishable from a variable the test never expected to be read at all.
 `StubEnv::with_locale` and `StubEnv::without_locale` are the common
 constructors for `NETSUKE_LOCALE`; `strict()` starts from nothing declared.
 
-Declaring the same key twice is well-defined: the most recent declaration
-wins, in either order. `allowing` after `with_var` clears the value; `with_var`
-after `allowing` restores one. Were `allowing` merely to append to the
-permitted-keys list rather than clearing the stored value, it would read as
-declaring the key unset while still answering with the earlier value.
+Declaring the same key twice is well-defined: the most recent declaration wins,
+in either order. `allowing` after `with_var` clears the value; `with_var` after
+`allowing` restores one. Were `allowing` merely to append to the permitted-keys
+list rather than clearing the stored value, it would read as declaring the key
+unset while still answering with the earlier value.
 
 `Default` is deliberately **not** implemented for `StubEnv`. On a strict stub,
 "default" would have to mean "deny every read", so `StubEnv::default()` would
 compile and then panic at run time for the common "no locale set" case;
 requiring `StubEnv::without_locale()` instead makes that intent explicit at
 compile time. This refusal is itself a tested contract:
-`tests/locale_stub_ui_tests.rs` compiles a fixture calling
-`StubEnv::default()` directly with `rustc` and asserts the compile fails with
-`E0599` naming the missing `default` item, guarding against the constraint
-regressing to a doc-comment promise. `tests/locale_stub_strictness_tests.rs`
-covers the panic, the trichotomy, and the last-declaration-wins rule with
-both example-based and property tests.
+`tests/locale_stub_ui_tests.rs` compiles a fixture calling `StubEnv::default()`
+directly with `rustc` and asserts the compile fails with `E0599` naming the
+missing `default` item, guarding against the constraint regressing to a
+doc-comment promise. `tests/locale_stub_strictness_tests.rs` covers the panic,
+the trichotomy, and the last-declaration-wins rule with both example-based and
+property tests.
 
 #### Locale-stub UI harness and split build directories
 
-`tests/locale_stub_ui_tests.rs` builds `test_support` with `cargo build
---message-format=json` and parses the resulting Cargo JSON messages rather
-than assuming its dependencies sit beside the uplifted `test_support` rlib.
-For every `compiler-artifact` message it records the parent directory of each
-rlib the message names, and passes the whole set to `rustc` as `-L
-dependency=` directories when compiling the UI fixtures. This keeps the
-harness correct when Cargo's `build.build-dir` setting splits intermediate
-artefacts — where dependency rlibs live — from the final, uplifted ones;
-deriving the directories from what Cargo actually reports, rather than from a
-single assumed location, means the harness does not need to special-case that
-split.
+`tests/locale_stub_ui_tests.rs` builds `test_support` with
+`cargo build --message-format=json` and parses the resulting Cargo JSON
+messages rather than assuming its dependencies sit beside the uplifted
+`test_support` rlib. For every `compiler-artifact` message it records the
+parent directory of each rlib the message names, and passes the whole set to
+`rustc` as `-L dependency=` directories when compiling the UI fixtures. This
+keeps the harness correct when Cargo's `build.build-dir` setting splits
+intermediate artefacts — where dependency rlibs live — from the final, uplifted
+ones; deriving the directories from what Cargo actually reports, rather than
+from a single assumed location, means the harness does not need to special-case
+that split.
 
-`harness_compiles_under_a_split_build_dir` is the regression test for this:
-it forces a split layout with its own private `CARGO_TARGET_DIR` and
+`harness_compiles_under_a_split_build_dir` is the regression test for this: it
+forces a split layout with its own private `CARGO_TARGET_DIR` and
 `CARGO_BUILD_BUILD_DIR` roots, confirms the collected dependency directories
-span the split, and then compiles a fixture against them. The roots are
-private to the test rather than the ambient target directory because the
-`#[once]` `test_support_rlib` fixture builds concurrently for
+span the split, and then compiles a fixture against them. The roots are private
+to the test rather than the ambient target directory because the `#[once]`
+`test_support_rlib` fixture builds concurrently for
 `stub_env_default_does_not_compile` and
-`stub_env_builders_compile_under_the_same_harness`. Sharing a target
-directory would make `harness_compiles_under_a_split_build_dir` race that
-build on the uplifted rlibs and fail with version-skew errors (`E0460`).
+`stub_env_builders_compile_under_the_same_harness`. Sharing a target directory
+would make `harness_compiles_under_a_split_build_dir` race that build on the
+uplifted rlibs and fail with version-skew errors (`E0460`).
 
 ### Manifest `env()` reader
 
@@ -2661,6 +2655,7 @@ Private helper functions for config discovery and JSON-output resolution.
 
 Configuration merge helpers:
 
+// hint: Logic changed on both sides. Requires understanding intent of each change.
 - `config_discovery(directory: Option<&PathBuf>, env_source: SharedEnvSource)`
   builds the single-pass OrthoConfig discovery scanner with an optional
   project-root anchor and the injected environment source.
@@ -2782,45 +2777,34 @@ evaluated, and emits no tracing itself. `discover_file_layers` retains the
 bounded diagnostics produced by that resolution and by layer loading;
 `DiscoveryOutcome::emit_diagnostics` replays them after tracing is configured.
 
-Deferred discovery diagnostics never log raw configuration paths, configuration
-file names or formatted parser errors. They expose bounded `path_hash` and
-presence fields, and classify load failures with the `ConfigLoadFailureKind`
-enum instead of formatted error text. The unkeyed `path_hash` is a bounded
-correlation identifier, not confidential concealment of a guessable path.
-
-This deferred contract is distinct from terminal `configuration load failed`
-records emitted by `src/main.rs`. Those terminal records identify the failed
-operation and coarse error category without rendering the source error.
-
-
 #### Discovery pass telemetry
 
-The file-layer discovery pass that feeds both diagnostics and the full merge
-opens a `trace_span!("collect_diag_file_layers")` whose bounded fields record
-the pass outcome and, on failure, a coarse error category from the closed set
-`file`, `validation`, `cyclic_extends`, `cli_parsing`, `gathering`, `merge`,
-`aggregate`, and `other`. The span carries only those two bounded fields and
-no selectors, paths, or configuration values.
+The composition boundary records each file-layer discovery pass after the pure
+query returns. `DISCOVERY_TOTAL` has a bounded `outcome` label of `success` or
+`error`, and `DISCOVERY_DURATION` records the elapsed duration. A failed pass
+also emits a bounded `error_category` from the closed set `file`,
+`validation`, `cyclic_extends`, `cli_parsing`, `gathering`, `merge`,
+`aggregate`, and `other`. These metrics and events never include selectors,
+paths, or configuration values.
 
-Alongside the span, each discovery pass increments
-`netsuke_cli_config_discovery_total` with an `outcome` label of `success` or
-`error`, and records its elapsed time on the
-`netsuke_cli_config_discovery_duration_seconds` histogram. The counter and
-histogram share the span's privacy contract: labels come from the closed sets
-above and never from user input, so the series count is fixed by the code
-rather than by the environment. The workspace's recorder-backed tests exercise
-both outcomes, the bounded failure classification, and the single duration
-sample through local `metrics_util::DebuggingRecorder` instances.
+The workspace's recorder-backed tests exercise both outcomes, the bounded
+failure classification, and the single duration sample through local
+`metrics_util::DebuggingRecorder` instances.
 
 Deferred configuration-discovery diagnostics never log full paths, file names,
 or formatted parser errors. Path values in those events are bounded to a
 `path_hash` correlation identifier plus a presence indicator. Load failures are
 classified with the `ConfigLoadFailureKind` enum instead of the formatted error
 text. The terminal human-mode `configuration load failed` event emitted by
-`config_err_to_exit` is separate: it emits the formatted error in its `error`
-field so the failure is actionable. It does not add the `operation` or
-`error_category` fields used by other telemetry. `path_hash` is a bounded
-identifier for correlating events, not a cryptographic guarantee.
+`config_err_to_exit` is separate: it emits bounded `operation` and
+`error_category` fields. It does not emit formatted error text or paths.
+`path_hash` is a bounded identifier for correlating events, not a cryptographic
+guarantee.
+
+This deferred contract is distinct from terminal `configuration load failed`
+records emitted by `config_load::config_err_to_exit`. Those terminal records
+identify the failed operation and coarse error category without rendering the
+source error.
 
 #### `json` contract
 
@@ -2834,13 +2818,13 @@ explicit root `--json` flag bypasses environment parsing.
 #### Workspace fallback switch seam
 
 `src/stdlib/which/workspace_switch.rs` is a leaf module holding the
-`NETSUKE_WHICH_WORKSPACE` name and the domain state `WorkspaceSwitch`
-(`Value`, `Absent`, `NotUnicode`) with its `enabled()` decision. The variable
-is read by `EnvSnapshot::capture` through the injected `mockable::Env`
-provider and stored as snapshot data; the enable/disable decision is derived
-from that snapshot on demand. The cache fingerprint hashes the state —
-`WorkspaceSwitch` derives `Hash` for exactly that purpose — so two resolutions
-differing only in this switch never share a cache entry.
+`NETSUKE_WHICH_WORKSPACE` name and the domain state `WorkspaceSwitch` (`Value`,
+`Absent`, `NotUnicode`) with its `enabled()` decision. The variable is read by
+`EnvSnapshot::capture` through the injected `mockable::Env` provider and stored
+as snapshot data; the enable/disable decision is derived from that snapshot on
+demand. The cache fingerprint hashes the state — `WorkspaceSwitch` derives
+`Hash` for exactly that purpose — so two resolutions differing only in this
+switch never share a cache entry.
 
 The adapter owns everything platform-specific. `env.rs` holds the
 `From<Result<String, std::env::VarError>>` conversion, the single point at
@@ -2852,14 +2836,14 @@ nor `tracing`, and consulting the switch afterwards is silent. See
 
 #### Ninja program resolver seam
 
-`resolve_ninja_program_utf8_with` in `src/runner/process/ninja_program.rs`
-takes `&impl mockable::Env`, with `mockable::DefaultEnv` as the production
-adapter supplied by the ambient `resolve_ninja_program_utf8` wrapper. The unit
-tests inject a `MockEnv` that pins the `NETSUKE_NINJA` key, so every override
-branch runs without process mutation.
+`resolve_ninja_program_utf8_with` in `src/runner/process/ninja_program.rs` takes
+`&impl mockable::Env`, with `mockable::DefaultEnv` as the production adapter
+supplied by the ambient `resolve_ninja_program_utf8` wrapper. The unit tests
+inject a `MockEnv` that pins the `NETSUKE_NINJA` key, so every override branch
+runs without process mutation.
 
-`resolve_ninja_program_with`, in the same module, takes the identical `&impl
-mockable::Env` seam and converts the UTF-8 result into a general platform
+`resolve_ninja_program_with`, in the same module, takes the identical
+`&impl mockable::Env` seam and converts the UTF-8 result into a general platform
 `PathBuf`. It is compiled only under `#[cfg(test)]`: production reaches the
 platform-path form through `resolve_ninja_program`, which itself calls the
 UTF-8 resolver and converts its result, so no production path constructs a
@@ -2867,9 +2851,9 @@ platform `PathBuf` independently of `resolve_ninja_program_utf8_with`.
 
 #### `which` environment capture
 
-`EnvSnapshot::capture` (`stdlib::which::env`) reads `PATH` on every
-platform, and `PATHEXT` on Windows only, through an injected
-`mockable::Env` provider rather than straight from the process:
+`EnvSnapshot::capture` (`stdlib::which::env`) reads `PATH` on every platform,
+and `PATHEXT` on Windows only, through an injected `mockable::Env` provider
+rather than straight from the process:
 
 - `capture` is the production entry point. It delegates to `capture_with_env`
   with `mockable::DefaultEnv`, so it is the single site that binds the
@@ -2894,10 +2878,10 @@ process: `StdlibConfig::with_path_override` and
 `StdlibConfig::with_pathext_override` are copied into `WhichConfig`, which
 `WhichResolver::new` consumes whole — the resolver takes the configuration
 rather than its fields so a new environment seam does not lengthen the
-signature again. Pinning both is what lets a behavioural test drive `which`
-and `command_available` over a temporary directory with a chosen extension
-list; see `tests/stdlib_which_pathext_tests.rs`, which is gated to Windows
-because `PATHEXT` governs resolution only there.
+signature again. Pinning both is what lets a behavioural test drive `which` and
+`command_available` over a temporary directory with a chosen extension list; see
+`tests/stdlib_which_pathext_tests.rs`, which is gated to Windows because
+`PATHEXT` governs resolution only there.
 
 That gating has a cost worth stating: CI runs `make test` on `ubuntu-latest`
 only, so a `#[cfg(windows)]` test does not gate a merge. Keep host-independent
@@ -2952,9 +2936,9 @@ ladders — POSIX (`HOME`, then `USERPROFILE`) and Windows (those two, then the
 `HOMEDRIVE`/`HOMEPATH` pair, then `HOMESHARE`). Both take an injected
 `read_env` closure. `home_from_env` remains the sole platform-*selection*
 point, and each ladder is gated to its own platform plus `test`
-(`posix_home_from` is `#[cfg(any(not(windows), test))]`, `windows_home_from`
-is `#[cfg(any(windows, test))]`), so a release build compiles only the ladder
-it uses while the `test` arm keeps both reachable from any host.
+(`posix_home_from` is `#[cfg(any(not(windows), test))]`, `windows_home_from` is
+`#[cfg(any(windows, test))]`), so a release build compiles only the ladder it
+uses while the `test` arm keeps both reachable from any host.
 
 #### Ladder ownership and call sites
 
@@ -2965,50 +2949,49 @@ it uses while the `test` arm keeps both reachable from any host.
   environment, and `Ambient` drives `home_from_env` with whatever reader the
   caller supplied. The composition root lives at the registration boundary —
   filter registration in `stdlib::path::filters` captures the process-backed
-  reader once, carrying the sanctioned site-level expectation — so
-  `path_utils` holds no process access at all. Tests inject their own reader,
-  covering the `Ambient` path without touching the process environment.
+  reader once, carrying the sanctioned site-level expectation — so `path_utils`
+  holds no process access at all. Tests inject their own reader, covering the
+  `Ambient` path without touching the process environment.
 
 #### Ladder composition rules
 
 - Keep each ladder free of platform *selection logic*, leaving that to
   `home_from_env`. Gating decides only whether a ladder compiles, never which
-  one applies — that separation is what lets the `test` arm expose both
-  ladders to the CI host.
+  one applies — that separation is what lets the `test` arm expose both ladders
+  to the CI host.
 - Gate each ladder `#[cfg(any(windows, test))]` or its inverse, and have
   `home_from_env` name only the ladder it selects. Compiling both
   unconditionally would leave the inapplicable one dead in a release build,
   which `-D warnings` rejects; the previous workaround — binding both as a
   `(posix, windows)` function-pointer pair so the unused one counted as
-  referenced — was an artificial dead-code anchor and has been removed.
-  Bounded constants used by only one ladder (`HOME_SOURCE_DRIVE_PATH` and
-  `HOME_SOURCE_HOMESHARE`, both Windows-only) carry the same gate as the
-  ladder that reads them.
+  referenced — was an artificial dead-code anchor and has been removed. Bounded
+  constants used by only one ladder (`HOME_SOURCE_DRIVE_PATH` and
+  `HOME_SOURCE_HOMESHARE`, both Windows-only) carry the same gate as the ladder
+  that reads them.
 - The ladders report what the environment says. An empty value is passed
-  through rather than treated as unset for the single-variable readings
-  (`HOME`, `USERPROFILE`, `HOMESHARE`), and interpreting that is
-  `expanduser`'s concern, not theirs. The `HOMEDRIVE`/`HOMEPATH` pair is the
-  exception: it counts only when both halves are non-empty, since a bare
-  drive or a bare relative path is not a home directory; an incomplete pair
-  falls through to `HOMESHARE`.
+  through rather than treated as unset for the single-variable readings (`HOME`,
+  `USERPROFILE`, `HOMESHARE`), and interpreting that is `expanduser`'s
+  concern, not theirs. The `HOMEDRIVE`/`HOMEPATH` pair is the exception: it
+  counts only when both halves are non-empty, since a bare drive or a bare
+  relative path is not a home directory; an incomplete pair falls through to
+  `HOMESHARE`.
 
 #### Home-resolution telemetry
 
 The ladders stay pure: each *returns* the resolved home paired with a bounded
 `&'static str` label naming the rung that supplied it, and emits nothing.
-`resolve_home` is the sole telemetry boundary, emitting a
-`tracing::debug!` event for every resolution, plus an additional
-`tracing::debug!` failure event when no home was available, with these
-fields:
+`resolve_home` is the sole telemetry boundary, emitting a `tracing::debug!`
+event for every resolution, plus an additional `tracing::debug!` failure event
+when no home was available, with these fields:
 
 Table: Home-resolution telemetry fields.
 
-| Field | Meaning |
-| --- | --- |
-| `event` | Always `stdlib.expanduser.home`, so the events are filterable. |
-| `source` | The bounded label naming what supplied the home. |
-| `found` | Whether a home was resolved at all. |
-| `outcome` | Present only on the failure event: `home_unavailable`. |
+| Field     | Meaning                                                        |
+| --------- | -------------------------------------------------------------- |
+| `event`   | Always `stdlib.expanduser.home`, so the events are filterable. |
+| `source`  | The bounded label naming what supplied the home.               |
+| `found`   | Whether a home was resolved at all.                            |
+| `outcome` | Present only on the failure event: `home_unavailable`.         |
 
 `source` is drawn from a closed set and is never derived from a value:
 
@@ -3026,14 +3009,14 @@ Table: Home-resolution telemetry fields.
 the series count is fixed by the code, never by the environment: `outcome` is
 `found` or `home_unavailable`; `source` is the same bounded label set listed
 above. It increments exactly once per resolution whatever the outcome, so the
-counter totals resolutions rather than events — the failure path emits a
-second *debug event* but no second sample. Both the success and failure cases
-are pinned by tests in `src/stdlib/path/home_tests.rs`, which capture samples
+counter totals resolutions rather than events — the failure path emits a second
+*debug event* but no second sample. Both the success and failure cases are
+pinned by tests in `src/stdlib/path/home_tests.rs`, which capture samples
 through a local `metrics_util` `DebuggingRecorder` rather than the global one.
 
-The events carry no paths and no environment values: neither the resolved
-home, nor a variable's contents, nor the expanded result. Adding a rung means
-adding a label to the closed set above and pinning it in the ladder tests, not
+The events carry no paths and no environment values: neither the resolved home,
+nor a variable's contents, nor the expanded result. Adding a rung means adding
+a label to the closed set above and pinning it in the ladder tests, not
 recording the value that distinguished it.
 
 ### Configuration discovery module layout
@@ -3058,6 +3041,7 @@ split diagnostics, path comparison, and tests out of the main discovery flow:
   `capture_events` runs a closure under a TRACE capturing subscriber,
   `find_event` locates one emitted event by substring, and `EventAssertion`
   bundles an event with its path to assert bounded `path_hash` and presence
+// hint: Logic changed on both sides. Requires understanding intent of each change.
   fields, the absence of raw paths, file names and formatted error text, and to
   normalize the hash before an `insta` snapshot.
 - `discovery_tracing_tests.rs` — tests selector precedence
@@ -3384,8 +3368,8 @@ admits string keys, so such a mapping fails earlier, inside
 `serde_saphyr::from_str`, and surfaces as the YAML parse diagnostic rather than
 the `vars` one.
 
-`register_manifest_vars` also rejects a key that collides with `env` or
-`glob`, the two helper functions the manifest loader registers directly (the
+`register_manifest_vars` also rejects a key that collides with `env` or `glob`,
+the two helper functions the manifest loader registers directly (the
 `RESERVED_VAR_NAMES` constant), with the localized
 `manifest.vars.reserved_name` message. This check is necessary because
 MiniJinja keeps functions and global variables in a single namespace —
@@ -3470,8 +3454,8 @@ credentials. This mirrors the redaction rule `env_var_with` already applies to
 `env()` lookup failures; see [Manifest `env()` reader](#manifest-env-reader).
 
 `describe_macro_metrics` and `describe_render_metrics` register each metric's
-description exactly once, guarded by `std::sync::Once`. Neither is called from a
-query function: `describe_macro_metrics` runs when `make_macro_fn` builds a
+description exactly once, guarded by `std::sync::Once`. Neither is called from
+a query function: `describe_macro_metrics` runs when `make_macro_fn` builds a
 macro's registration, which is setup rather than evaluation, so the guard never
 sits on the invocation hot path; `describe_render_metrics` runs inside
 `instrument_template_render`, so `render_template` names only the
@@ -3579,8 +3563,8 @@ standard output is a TTY. `make_reporter(options)` selects the base reporter,
 `AccessibleReporter` or `IndicatifReporter` when progress is enabled and
 `SilentReporter` otherwise, then wraps it in `VerboseTimingReporter` when
 verbose mode is active. `should_force_text_task_updates` decides whether the
-indicatif reporter emits textual task updates, forcing them for accessible
-mode or non-TTY standard output.
+indicatif reporter emits textual task updates, forcing them for accessible mode
+or non-TTY standard output.
 
 `run_with_ninja_program` (in `src/runner/mod.rs`) constructs the run's
 `StatusReporter` through `reporter::make_reporter` after resolving output mode
@@ -3595,16 +3579,15 @@ and reporter settings, then shares it via the `ExecutionContext` it passes to
   reporter, and it is not part of the crate's public API.
 - **Permitted call-sites:** only the runner boundary in `src/runner/mod.rs`
   may call `make_reporter` — today solely `run_with_ninja_program`.
-  `runner::process`, dispatch handlers, and external embedders never
-  construct reporters; handlers consume the already-built reporter through
-  the `ExecutionContext`/`&dyn StatusReporter` only.
+  `runner::process`, dispatch handlers, and external embedders never construct
+  reporters; handlers consume the already-built reporter through the
+  `ExecutionContext`/`&dyn StatusReporter` only.
 - **Composition rules:** the caller must resolve all `ReporterOptions` inputs
   (output mode, progress, verbose, output prefs, stdout TTY) from
-  CLI/environment state before calling `make_reporter`; the module performs
-  no such resolution itself. The reporter is composed once per run and
-  shared immutably. New reporter kinds or selection policies belong in this
-  module beside the mode-selection logic, colocated with the output-mode
-  policy.
+  CLI/environment state before calling `make_reporter`; the module performs no
+  such resolution itself. The reporter is composed once per run and shared
+  immutably. New reporter kinds or selection policies belong in this module
+  beside the mode-selection logic, colocated with the output-mode policy.
 
 ### Module: `runner::process::ninja_program`
 
@@ -3685,34 +3668,33 @@ command-line argument string; it gives the redaction helpers a dedicated type
 to operate on instead of passing bare `String` values around.
 
 `CommandArg` carries no redaction guarantee of its own. The same type holds
-both the raw arguments read from `Command::get_args` and the values returned
-by the redaction helpers, and `as_str` is available on either. The invariant
-is therefore a discipline on the call site, not a property of the type:
-logging paths must render only what `redact_argument` or
-`redact_sensitive_args` returned. `CommandLogContext::from_command` is the
-one place that observes this, redacting the collected arguments before it
-builds `redacted_command`.
+both the raw arguments read from `Command::get_args` and the values returned by
+the redaction helpers, and `as_str` is available on either. The invariant is
+therefore a discipline on the call site, not a property of the type: logging
+paths must render only what `redact_argument` or `redact_sensitive_args`
+returned. `CommandLogContext::from_command` is the one place that observes
+this, redacting the collected arguments before it builds `redacted_command`.
 
-An argument is treated as sensitive when it is a `key=value` pair whose
-trimmed key case-insensitively matches `password`, `token`, `secret`,
-`api_key`, `apikey`, `auth`, or `authorization`. Matching arguments keep the
-key and replace the value with `***REDACTED***`; positional arguments with no
-`=` are passed through unchanged, so a path such as `secrets.yml` is not
-mangled. Widen the keyword list rather than adding a second redaction path if
-new sensitive arguments appear.
+An argument is treated as sensitive when it is a `key=value` pair whose trimmed
+key case-insensitively matches `password`, `token`, `secret`, `api_key`,
+`apikey`, `auth`, or `authorization`. Matching arguments keep the key and
+replace the value with `***REDACTED***`; positional arguments with no `=` are
+passed through unchanged, so a path such as `secrets.yml` is not mangled. Widen
+the keyword list rather than adding a second redaction path if new sensitive
+arguments appear.
 
-The module's doc examples are marked `ignore`. `CommandArg` and the helpers
-are crate-private, and the `cfg(doctest)` re-export in `runner::process::doc`
-is compiled out of the library that doctests link against, so no doctest can
+The module's doc examples are marked `ignore`. `CommandArg` and the helpers are
+crate-private, and the `cfg(doctest)` re-export in `runner::process::doc` is
+compiled out of the library that doctests link against, so no doctest can
 import them. Behaviour is covered by the unit tests in the module instead.
 
 ### Module: `runner` target selection
 
 `BuildTargets<'a>` is a borrowing newtype over the requested target list,
 constructed by `BuildTargets::new` and read through `as_slice`. It exposes no
-`is_empty`: the accessor existed but had no callers anywhere in the
-workspace, so it was removed; call `as_slice().is_empty()` where that
-question needs asking.
+`is_empty`: the accessor existed but had no callers anywhere in the workspace,
+so it was removed; call `as_slice().is_empty()` where that question needs
+asking.
 
 ### Module: `runner::process::command_env`
 

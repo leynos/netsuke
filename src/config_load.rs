@@ -108,6 +108,7 @@ fn resolve_json_mode_or_exit<E>(
 where
     E: cli::ConfigEnvProvider,
 {
+    let discovery_started = clock.now();
     match observability::record_config_load(observability::ConfigLoadPhase::DiagMode, clock, || {
         let (result, outcome) = cli::resolve_json_and_layers_outcome_with_env(
             context.parsed_cli,
@@ -120,6 +121,7 @@ where
         }
     }) {
         Ok((is_json_enabled, outcome)) => {
+            cli::record_discovery_outcome(clock, discovery_started, &outcome);
             let mode = DiagMode::from_json_enabled(is_json_enabled);
             set_tracing_filter(startup_filter(mode, context.parsed_cli.verbose));
             outcome.emit_diagnostics();
@@ -130,6 +132,7 @@ where
         }
         Err(error_and_outcome) => {
             let (err, outcome) = *error_and_outcome;
+            cli::record_discovery_outcome(clock, discovery_started, &outcome);
             let fallback_filter = startup_filter(context.startup_mode, context.parsed_cli.verbose);
             set_tracing_filter(fallback_filter);
             outcome.emit_diagnostics();

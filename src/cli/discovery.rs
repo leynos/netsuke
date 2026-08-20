@@ -4,6 +4,7 @@
 //! through [`ConfigDiscovery`], handling explicit paths from CLI flags and
 //! environment variables, and loading TOML chains into [`MergeLayer`] values.
 
+use monotony::MonotonicClock;
 use ortho_config::{
     MapEnv, MergeComposer, MergeLayer, OrthoResult, SharedEnvSource, load_config_file_as_chain,
 };
@@ -18,10 +19,10 @@ use super::parser::Cli;
 mod environment;
 pub use environment::{EnvProvider, StdEnvProvider};
 
-#[path = "discovery_json.rs"]
-mod json;
 #[path = "discovery_diagnostics.rs"]
 mod diagnostics;
+#[path = "discovery_json.rs"]
+mod json;
 #[path = "discovery_layers.rs"]
 mod layers;
 #[path = "discovery_paths.rs"]
@@ -31,6 +32,11 @@ mod trace;
 
 #[path = "discovery_telemetry.rs"]
 mod telemetry;
+use diagnostics::{BoundedConfigPath, ConfigLoadFailureKind, ConfigLoadWarning};
+use layers::collect_file_layers_with_trace_and_env_source;
+/// Record the discovery series for an already-timed phase at the boundary.
+pub use telemetry::record_discovery_outcome;
+use trace::{DiscoveryDiagnostics, DiscoveryTrace, FileLayerTrace};
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG";
 const DISCOVERY_ENV_KEYS: [&str; 7] = [
     CONFIG_ENV_VAR,
@@ -116,7 +122,19 @@ impl DiscoveryOutcome {
 
 /// Discover configuration layers once through the injected environment.
 pub(crate) fn discover_file_layers(cli: &Cli, env: &impl EnvProvider) -> DiscoveryOutcome {
-    telemetry::instrument_discovery(|| collect_outcome(cli, env))
+    collect_outcome(cli, env)
+}
+
+/// Discover layers once, recording telemetry at the composition boundary.
+///
+/// The query itself stays side-effect free; this wrapper is for composition
+/// roots that already hold a `MonotonicClock`.
+pub(crate) fn discover_file_layers_timed<C: MonotonicClock>(
+    cli: &Cli,
+    env: &impl EnvProvider,
+    clock: &C,
+) -> DiscoveryOutcome {
+    telemetry::timed_discovery(clock, || discover_file_layers(cli, env))
 }
 
 /// Run one discovery pass and retain its outcome, including deferred errors.

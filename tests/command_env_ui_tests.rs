@@ -6,8 +6,8 @@
 //! embedder would, so a visibility or signature regression fails this suite
 //! rather than only the crate's own tests.
 //! The cached CLI configuration fixture exercises the equivalent public
-//! boundary for `mockable::Env` and `DiscoveredLayers` through Cargo, which
-//! resolves the identical `mockable` crate instance expected by Netsuke.
+//! boundary for `ConfigEnvProvider` and `DiscoveredLayers` through Cargo,
+//! which resolves the identical implementation expected by Netsuke.
 //!
 //! There is deliberately no compile-fail case for the removed APIs
 //! (`EnvMut`, `PathGuard`, `prepend_dir_to_path`, `override_ninja_env`): the

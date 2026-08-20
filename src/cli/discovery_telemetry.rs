@@ -11,14 +11,13 @@
 //! coarse pass outcome, never selectors, paths, or error text.
 
 use super::DiscoveryOutcome;
+use crate::cli::{DISCOVERY_DURATION, DISCOVERY_TOTAL};
 use metrics::{counter, describe_counter, describe_histogram, histogram};
+use monotony::MonotonicClock;
 use ortho_config::OrthoError;
 use std::sync::Once;
 use std::time::Instant;
 use tracing::field;
-
-const DISCOVERY_TOTAL: &str = "netsuke_cli_config_discovery_total";
-const DISCOVERY_DURATION: &str = "netsuke_cli_config_discovery_duration_seconds";
 
 /// Register the discovery metric descriptions exactly once per process.
 pub(super) fn describe_metrics() {
@@ -52,12 +51,15 @@ const fn error_category(error: &OrthoError) -> &'static str {
     }
 }
 
-/// Run `discover` inside a bounded discovery span, recording outcome/duration.
+/// Run `discover` inside a bounded discovery span at the composition boundary.
 ///
-/// The span and metrics carry only the pass outcome and, on failure, a coarse
-/// error category. Selectors, paths, and configuration values never become
+/// Discovery is a query; instrumentation belongs at the composition boundary
+/// where a monotonic clock is available, never inside the query. The span and
+/// metrics carry only the pass outcome and, on failure, a coarse error
+/// category. Selectors, paths, and configuration values never become
 /// telemetry, matching the path-safe field policy of the deferred diagnostics.
-pub(super) fn instrument_discovery(
+pub(super) fn timed_discovery<C: MonotonicClock>(
+    clock: &C,
     discover: impl FnOnce() -> DiscoveryOutcome,
 ) -> DiscoveryOutcome {
     describe_metrics();
@@ -67,7 +69,7 @@ pub(super) fn instrument_discovery(
         error_category = field::Empty,
     );
     let _guard = span.enter();
-    let started = Instant::now();
+    let started = clock.now();
     let outcome = discover();
     let first_error = outcome.first_error().cloned();
     if let Some(error) = first_error.as_deref() {
@@ -80,8 +82,29 @@ pub(super) fn instrument_discovery(
         span.record("outcome", "success");
         counter!(DISCOVERY_TOTAL, "outcome" => "success").increment(1);
     }
-    histogram!(DISCOVERY_DURATION).record(started.elapsed());
+    histogram!(DISCOVERY_DURATION).record(clock.now().duration_since(started));
     outcome
+}
+
+/// Record the discovery outcome series at the composition boundary.
+///
+/// This is for boundaries that already timed the phase (for example the
+/// startup diagnostic resolution) and only need the discovery counter plus
+/// error-category span from the retained outcome.
+pub fn record_discovery_outcome<C: MonotonicClock>(
+    clock: &C,
+    started: Instant,
+    outcome: &DiscoveryOutcome,
+) {
+    describe_metrics();
+    histogram!(DISCOVERY_DURATION).record(clock.now().duration_since(started));
+    if let Some(error) = outcome.first_error() {
+        let category = error_category(error);
+        tracing::debug!(error_category = category, "configuration discovery failed");
+        counter!(DISCOVERY_TOTAL, "outcome" => "error").increment(1);
+    } else {
+        counter!(DISCOVERY_TOTAL, "outcome" => "success").increment(1);
+    }
 }
 
 #[cfg(test)]
@@ -91,10 +114,50 @@ mod tests {
     use super::*;
     use crate::cli::discovery::{DiscoveredLayers, DiscoveryDiagnostics, DiscoveryOutcome};
     use metrics_util::{
-        MetricKind,
+        CompositeKey, MetricKind,
         debugging::{DebugValue, DebuggingRecorder},
     };
     use std::sync::Arc;
+
+    type Snapshot = Vec<(
+        CompositeKey,
+        Option<metrics::Unit>,
+        Option<metrics::SharedString>,
+        DebugValue,
+    )>;
+
+    /// Assert that one discovery counter has the expected bounded outcome.
+    fn assert_discovery_counter(snapshot: &Snapshot, expected_outcome: &str) {
+        let matches = snapshot
+            .iter()
+            .filter(|(key, _, _, value)| {
+                key.kind() == MetricKind::Counter
+                    && key.key().name() == DISCOVERY_TOTAL
+                    && key
+                        .key()
+                        .labels()
+                        .any(|label| label.key() == "outcome" && label.value() == expected_outcome)
+                    && matches!(value, DebugValue::Counter(1))
+            })
+            .count();
+        assert_eq!(
+            matches, 1,
+            "discovery counter should record {expected_outcome:?} exactly once"
+        );
+    }
+
+    /// Assert that one discovery-duration histogram contains one sample.
+    fn assert_discovery_duration(snapshot: &Snapshot) {
+        let matches = snapshot
+            .iter()
+            .filter(|(key, _, _, value)| {
+                key.kind() == MetricKind::Histogram
+                    && key.key().name() == DISCOVERY_DURATION
+                    && matches!(value, DebugValue::Histogram(samples) if samples.len() == 1)
+            })
+            .count();
+        assert_eq!(matches, 1, "duration histogram should record one sample");
+    }
 
     /// A discovery outcome with no errors and no pending load warnings.
     fn outcome_without_error() -> DiscoveryOutcome {
@@ -177,45 +240,26 @@ mod tests {
     fn instrument_discovery_records_success_counter_and_duration() {
         let recorder = DebuggingRecorder::new();
         let snapshotter = recorder.snapshotter();
+        let clock = monotony::StdMonotonicClock;
         metrics::with_local_recorder(&recorder, || {
-            let _ = instrument_discovery(outcome_without_error);
+            let _ = timed_discovery(&clock, outcome_without_error);
         });
         let snapshot = snapshotter.snapshot().into_vec();
-        let success = snapshot.iter().any(|(key, _, _, value)| {
-            key.kind() == MetricKind::Counter
-                && key.key().name() == DISCOVERY_TOTAL
-                && key
-                    .key()
-                    .labels()
-                    .any(|l| l.key() == "outcome" && l.value() == "success")
-                && matches!(value, DebugValue::Counter(1))
-        });
-        let duration = snapshot.iter().any(|(key, _, _, value)| {
-            key.kind() == MetricKind::Histogram
-                && key.key().name() == DISCOVERY_DURATION
-                && matches!(value, DebugValue::Histogram(samples) if samples.len() == 1)
-        });
-        assert!(success, "success counter should record exactly once");
-        assert!(duration, "duration histogram should record one sample");
+
+        assert_discovery_counter(&snapshot, "success");
+        assert_discovery_duration(&snapshot);
     }
 
     #[test]
     fn instrument_discovery_records_error_counter() {
         let recorder = DebuggingRecorder::new();
         let snapshotter = recorder.snapshotter();
+        let clock = monotony::StdMonotonicClock;
         metrics::with_local_recorder(&recorder, || {
-            let _ = instrument_discovery(outcome_with_error);
+            let _ = timed_discovery(&clock, outcome_with_error);
         });
         let snapshot = snapshotter.snapshot().into_vec();
-        let error = snapshot.iter().any(|(key, _, _, value)| {
-            key.kind() == MetricKind::Counter
-                && key.key().name() == DISCOVERY_TOTAL
-                && key
-                    .key()
-                    .labels()
-                    .any(|l| l.key() == "outcome" && l.value() == "error")
-                && matches!(value, DebugValue::Counter(1))
-        });
-        assert!(error, "error counter should record exactly once");
+
+        assert_discovery_counter(&snapshot, "error");
     }
 }
