@@ -76,11 +76,11 @@ Don't:
 
 ## Misc
 
-Consult the [Netsuke glossary](locize-glossary.md) for terminology and the
-[translator guide](translators-guide.md) for Fluent structure, fallback rules,
-variables, plurals, bidirectional text, and catalogue validation. When a source
-message is ambiguous, inspect its code context and record the question for
-review instead of guessing or silently broadening its meaning.
+Consult the [Netsuke glossary](localization-glossary.md) for terminology and
+the [translator guide](translators-guide.md) for Fluent structure, fallback
+rules, variables, plurals, bidirectional text, and catalogue validation. When
+a source message is ambiguous, inspect its code context and record the question
+for review instead of guessing or silently broadening its meaning.
 
 The Locize project currently labels `en` as its reference language, whereas
 Netsuke's source catalogue is `en-US`. Treat `en-US` as authoritative for
