@@ -18,7 +18,8 @@ output and some leaf files so the long-lived structure remains visible.
 ├── cyclopts/
 ├── docs/
 │   ├── archive/
-│   └── execplans/
+│   ├── execplans/
+│   └── rfcs/
 ├── examples/
 │   └── hello-world/
 ├── installer/
@@ -68,6 +69,8 @@ output and some leaf files so the long-lived structure remains visible.
   after active roadmap work moves on.
 - `docs/execplans/`: Execution plans used as implementation handoff documents
   for scoped tasks.
+- `docs/rfcs/`: Numbered Requests for Comments that propose reviewable changes
+  before they become binding decisions.
 - `examples/`: Example Netsuke manifests and minimal runnable sample projects.
 - `installer/`: Installer packaging assets and platform-specific packaging
   definitions.
@@ -125,6 +128,10 @@ that users or operators need to understand,
 Place new production Rust modules under the `src/` subtree that owns the
 feature boundary. Use `test_support/` for reusable integration-test helpers and
 keep one-off fixtures close to the tests that consume them.
+
+Place proposed, cross-cutting changes under `docs/rfcs/` using the numbering
+and status conventions in the documentation style guide. Link each RFC from
+`docs/contents.md` when it is first committed.
 
 The crates.io package is named `netsuke-build`, while its library and binary
 targets remain named `netsuke`. Keep command-line help, manual pages, release
