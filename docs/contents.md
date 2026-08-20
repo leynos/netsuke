@@ -24,6 +24,13 @@ operator, user, and contributor references are easier to find.
   Recommended scope and delivery order for Kani, Proptest, and optional Verus
   checks.
 
+
+## Requests for comments
+
+- [rfcs/0001-structured-command-blocks.md](rfcs/0001-structured-command-blocks.md):
+  Proposed structured command blocks, shell-free argv templates, typed Jinja
+  interpolation, stream routing, and pipeline semantics.
+
 ## Decision records
 
 - [adr-001-replace-serde-yml-with-serde-saphyr.md](adr-001-replace-serde-yml-with-serde-saphyr.md):
