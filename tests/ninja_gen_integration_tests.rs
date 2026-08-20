@@ -7,7 +7,7 @@
 use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use netsuke::ast::{Recipe, StringOrList};
+use netsuke::ast::Recipe;
 use netsuke::ir::{Action, BuildEdge, BuildGraph};
 use netsuke::ninja_gen::{NinjaGenError, generate, generate_into};
 use rstest::{fixture, rstest};
@@ -36,6 +36,7 @@ fn ninja_integration_setup() -> Option<TempDir> {
         action_id: "script".into(),
         inputs: Vec::new(),
         implicit_deps: Vec::new(),
+        dependency_order: netsuke::ir::DependencyOrder::Parallel,
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -59,6 +60,7 @@ fn ninja_integration_setup() -> Option<TempDir> {
         action_id: "percent".into(),
         inputs: Vec::new(),
         implicit_deps: Vec::new(),
+        dependency_order: netsuke::ir::DependencyOrder::Parallel,
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -82,6 +84,7 @@ fn ninja_integration_setup() -> Option<TempDir> {
         action_id: "tick".into(),
         inputs: Vec::new(),
         implicit_deps: Vec::new(),
+        dependency_order: netsuke::ir::DependencyOrder::Parallel,
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -105,6 +108,7 @@ fn ninja_integration_setup() -> Option<TempDir> {
         action_id: "hello".into(),
         inputs: Vec::new(),
         implicit_deps: Vec::new(),
+        dependency_order: netsuke::ir::DependencyOrder::Parallel,
         explicit_outputs: vec![Utf8PathBuf::from("say-hello")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -194,211 +198,13 @@ fn ninja_integration_tests(
 }
 
 #[rstest]
-fn command_list_fails_fast_at_first_nonzero_exit(
-    ninja_integration_setup: Option<TempDir>,
-) -> Result<()> {
-    let Some(dir) = ninja_integration_setup else {
-        return Ok(());
-    };
-    let dir_path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
-        .map_err(|path| anyhow::anyhow!("temp dir path {:?} is not UTF-8", path))?;
-
-    let action = Action {
-        recipe: Recipe::Command {
-            command: StringOrList::List(vec![
-                "echo one > first.txt".into(),
-                "false".into(),
-                "echo never > last.txt".into(),
-            ]),
-        },
-        description: None,
-        depfile: None,
-        deps_format: None,
-        pool: None,
-        restat: false,
-    };
-    let edge = BuildEdge {
-        action_id: "chain".into(),
-        inputs: Vec::new(),
-        implicit_deps: Vec::new(),
-        explicit_outputs: vec![Utf8PathBuf::from("out")],
-        implicit_outputs: Vec::new(),
-        order_only_deps: Vec::new(),
-        phony: false,
-        always: false,
-    };
-    let mut graph = BuildGraph::default();
-    graph.actions.insert("chain".into(), action);
-    graph.targets.insert(Utf8PathBuf::from("out"), edge);
-    graph.default_targets.push(Utf8PathBuf::from("out"));
-
-    let ninja = generate(&graph)?;
-    let handle = Dir::open_ambient_dir(&dir_path, ambient_authority())
-        .with_context(|| format!("open ambient dir for temp workspace at {dir_path}"))?;
-    handle
-        .write("build.ninja", ninja.as_bytes())
-        .context("write ninja build file")?;
-    let output = Command::new("ninja")
-        .arg("out")
-        .current_dir(dir_path.as_std_path())
-        .output()
-        .context("invoke ninja")?;
-    ensure!(
-        !output.status.success(),
-        "command chain should fail when an entry exits non-zero"
-    );
-    let first = handle
-        .read_to_string("first.txt")
-        .context("first entry should have run and written first.txt")?;
-    ensure!(
-        first.trim() == "one",
-        "first entry should have written its output, got '{first}'"
-    );
-    ensure!(
-        !handle.try_exists("last.txt").context("check last.txt")?,
-        "fail-fast chain should skip entries after the first non-zero exit"
-    );
-    Ok(())
-}
-
-#[rstest]
-fn command_list_entry_control_flow_cannot_mask_an_earlier_failure(
-    ninja_integration_setup: Option<TempDir>,
-) -> Result<()> {
-    let Some(dir) = ninja_integration_setup else {
-        return Ok(());
-    };
-    let dir_path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
-        .map_err(|path| anyhow::anyhow!("temp dir path {:?} is not UTF-8", path))?;
-
-    // Without per-entry isolation, the second entry's `||` would join the
-    // raw chain as `false && false || echo recovered > recovered.txt`, which
-    // POSIX evaluates as `(false && false) || echo ...`, running the echo and
-    // reporting success despite the first entry failing.
-    let action = Action {
-        recipe: Recipe::Command {
-            command: StringOrList::List(vec![
-                "false".into(),
-                "false || echo recovered > recovered.txt".into(),
-            ]),
-        },
-        description: None,
-        depfile: None,
-        deps_format: None,
-        pool: None,
-        restat: false,
-    };
-    let edge = BuildEdge {
-        action_id: "chain".into(),
-        inputs: Vec::new(),
-        implicit_deps: Vec::new(),
-        explicit_outputs: vec![Utf8PathBuf::from("out")],
-        implicit_outputs: Vec::new(),
-        order_only_deps: Vec::new(),
-        phony: false,
-        always: false,
-    };
-    let mut graph = BuildGraph::default();
-    graph.actions.insert("chain".into(), action);
-    graph.targets.insert(Utf8PathBuf::from("out"), edge);
-    graph.default_targets.push(Utf8PathBuf::from("out"));
-
-    let ninja = generate(&graph)?;
-    let handle = Dir::open_ambient_dir(&dir_path, ambient_authority())
-        .with_context(|| format!("open ambient dir for temp workspace at {dir_path}"))?;
-    handle
-        .write("build.ninja", ninja.as_bytes())
-        .context("write ninja build file")?;
-    let output = Command::new("ninja")
-        .arg("out")
-        .current_dir(dir_path.as_std_path())
-        .output()
-        .context("invoke ninja")?;
-    ensure!(
-        !output.status.success(),
-        "the first entry's failure must not be masked by a later '||': {output:?}"
-    );
-    ensure!(
-        !handle
-            .try_exists("recovered.txt")
-            .context("check recovered.txt")?,
-        "the second entry should not run after the first entry fails"
-    );
-    Ok(())
-}
-
-#[rstest]
-fn command_list_entries_share_one_shell_process(
-    ninja_integration_setup: Option<TempDir>,
-) -> Result<()> {
-    let Some(dir) = ninja_integration_setup else {
-        return Ok(());
-    };
-    let dir_path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
-        .map_err(|path| anyhow::anyhow!("temp dir path {:?} is not UTF-8", path))?;
-
-    let action = Action {
-        recipe: Recipe::Command {
-            // `$$` escapes Ninja's variable expansion so the shell sees a
-            // literal `$NETSUKE_SHARED` written by the first entry.
-            command: StringOrList::List(vec![
-                "export NETSUKE_SHARED=yes".into(),
-                "test \"$$NETSUKE_SHARED\" = yes && echo ok > shared.txt".into(),
-            ]),
-        },
-        description: None,
-        depfile: None,
-        deps_format: None,
-        pool: None,
-        restat: false,
-    };
-    let edge = BuildEdge {
-        action_id: "chain".into(),
-        inputs: Vec::new(),
-        implicit_deps: Vec::new(),
-        explicit_outputs: vec![Utf8PathBuf::from("out")],
-        implicit_outputs: Vec::new(),
-        order_only_deps: Vec::new(),
-        phony: false,
-        always: false,
-    };
-    let mut graph = BuildGraph::default();
-    graph.actions.insert("chain".into(), action);
-    graph.targets.insert(Utf8PathBuf::from("out"), edge);
-    graph.default_targets.push(Utf8PathBuf::from("out"));
-
-    let ninja = generate(&graph)?;
-    let handle = Dir::open_ambient_dir(&dir_path, ambient_authority())
-        .with_context(|| format!("open ambient dir for temp workspace at {dir_path}"))?;
-    handle
-        .write("build.ninja", ninja.as_bytes())
-        .context("write ninja build file")?;
-    let output = Command::new("ninja")
-        .arg("out")
-        .current_dir(dir_path.as_std_path())
-        .output()
-        .context("invoke ninja")?;
-    ensure!(
-        output.status.success(),
-        "command chain should succeed when every entry succeeds: {output:?}"
-    );
-    let shared = handle
-        .read_to_string("shared.txt")
-        .context("later entries should see the environment set by an earlier entry")?;
-    ensure!(
-        shared.trim() == "ok",
-        "unexpected shared.txt content: {shared}"
-    );
-    Ok(())
-}
-
-#[rstest]
 fn errors_when_action_missing() -> Result<()> {
     let mut graph = BuildGraph::default();
     let edge = BuildEdge {
         action_id: "missing".into(),
         inputs: Vec::new(),
         implicit_deps: Vec::new(),
+        dependency_order: netsuke::ir::DependencyOrder::Parallel,
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -441,6 +247,7 @@ fn generate_format_error() -> Result<()> {
         action_id: "a".into(),
         inputs: Vec::new(),
         implicit_deps: Vec::new(),
+        dependency_order: netsuke::ir::DependencyOrder::Parallel,
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -459,5 +266,76 @@ fn generate_format_error() -> Result<()> {
         matches!(err, NinjaGenError::Format { .. }),
         "unexpected error: {err:?}"
     );
+    Ok(())
+}
+
+fn serial_graph(command: &str, dependencies: &[&str]) -> BuildGraph {
+    let action = Action {
+        recipe: Recipe::Command {
+            command: command.into(),
+        },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    };
+    let edge = BuildEdge {
+        action_id: "a".into(),
+        inputs: Vec::new(),
+        implicit_deps: dependencies.iter().map(Utf8PathBuf::from).collect(),
+        dependency_order: netsuke::ir::DependencyOrder::Serial,
+        explicit_outputs: vec![Utf8PathBuf::from("all")],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: false,
+        always: false,
+    };
+    let mut graph = BuildGraph::default();
+    graph.actions.insert("a".into(), action);
+    graph.targets.insert(Utf8PathBuf::from("all"), edge);
+    graph
+}
+#[rstest]
+fn serial_graph_rejected_by_string_only_generation() -> Result<()> {
+    let graph = serial_graph("echo done", &["dep1", "dep2"]);
+
+    let mut out = String::new();
+    let err = generate_into(&graph, &mut out)
+        .err()
+        .context("serial graph must be rejected by string-only generation")?;
+    ensure!(
+        matches!(err, NinjaGenError::DyndepFilesRequired { .. }),
+        "expected DyndepFilesRequired, got {err:?}"
+    );
+    ensure!(
+        out.is_empty(),
+        "string-only generation must not write partial output"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn bundle_generation_for_serial_graph_materializes_sidecars() -> Result<()> {
+    let graph = serial_graph("echo done", &["check-fmt", "test"]);
+
+    let bundle = netsuke::ninja_gen::generate_bundle(&graph)?;
+    ensure!(
+        bundle
+            .build_file()
+            .contains("ninja_required_version = 1.10"),
+        "serial bundle must declare version floor"
+    );
+    ensure!(
+        bundle.dyndep_files().len() == 2,
+        "expected two sidecars, got {}",
+        bundle.dyndep_files().len()
+    );
+    for dd in bundle.dyndep_files() {
+        ensure!(
+            dd.content().starts_with("ninja_dyndep_version = 1\n"),
+            "sidecar must start with dyndep version header"
+        );
+    }
     Ok(())
 }

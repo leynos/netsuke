@@ -65,14 +65,20 @@ operator, user, and contributor references are easier to find.
 - [adr-010-scope-glob-capability-to-literal-prefix.md](adr-010-scope-glob-capability-to-literal-prefix.md):
   Glob capability-scoping decision record, opening the metadata capability at
   a pattern's literal directory prefix instead of an ambient root.
+- [adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md](adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md):
+  Serial `deps` ordering decision record, covering staged Ninja dyndep bundles,
+  their scoped execution guarantee, and generated-state ownership.
+- [ADR-012](adr-012-bound-dyndep-sidecar-retention.md):
+  Deterministic retention, lease, and failure-boundary policy for generated
+  dyndep sidecars.
 
 ## User and operator guides
 
 - [quickstart.md](quickstart.md): First-run walkthrough for building with
   Netsuke.
 - [v0-1-0-migration-guide.md](v0-1-0-migration-guide.md): Migration notes for
-  the v0.1.0 child-environment API additions and glob behaviour, and the
-  stability caveat that covers them.
+  the v0.1.0 child-environment API, glob behaviour, and serial-dependency
+  additions, plus the stability caveat that covers them.
 - [users-guide.md](users-guide.md): End-user reference for authoring and
   running Netsuke manifests, including executable discovery and
   `command_available` branch selection.

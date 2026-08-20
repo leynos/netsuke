@@ -1,5 +1,6 @@
 # Risorse di localizzazione per la CLI di Netsuke.
 
+runner.io.dyndep.retention = Impossibile applicare la conservazione del dyndep generato sotto { $path }.
 cli.about = Netsuke compila manifest YAML + Jinja in piani di build Ninja.
 cli.long_about = Netsuke trasforma manifest YAML + Jinja in grafi Ninja riproducibili ed esegue Ninja con impostazioni predefinite sicure.
 cli.usage = { $usage }
@@ -103,11 +104,19 @@ runner.io.write_ninja_file = Impossibile scrivere il file Ninja in { $path }.
 runner.io.flush_ninja_file = Impossibile svuotare il buffer del file Ninja in { $path }.
 runner.io.sync_ninja_file = Impossibile sincronizzare il file Ninja in { $path }.
 runner.io.open_ambient_dir = Impossibile aprire la directory ambientale.
+runner.io.non_utf8_working_directory = Il percorso della directory di lavoro non è UTF-8 valido.
 runner.io.no_existing_ancestor = Nessuna directory antenata esistente per { $path }.
 runner.io.derive_relative_path = Impossibile derivare il percorso Ninja relativo.
 runner.io.non_utf8_path = I percorsi non UTF-8 non sono supportati (percorso: { $path }).
 runner.io.write_stdout = Impossibile scrivere il manifest Ninja su stdout.
 runner.io.flush_stdout = Impossibile svuotare il buffer di stdout.
+runner.io.dyndep.create_dir = Impossibile creare la directory dyndep { $path }.
+runner.io.dyndep.read = Impossibile leggere il file dyndep generato in { $path }.
+runner.io.dyndep.write = Impossibile scrivere il file dyndep generato in { $path }.
+runner.io.dyndep.rename = Impossibile finalizzare il file dyndep generato in { $path }.
+runner.io.dyndep.corrupt = Il file dyndep generato in { $path } non corrisponde al contenuto previsto; rimuovere solo quel file e riprovare.
+runner.io.dyndep.temp_collisions = Impossibile creare un file dyndep temporaneo univoco per { $path } dopo collisioni ripetute dei nomi.
+runner.io.dyndep.too_large = Il file dyndep generato in { $path } supera il limite di verifica di { $limit } byte.
 
 # Diagnostica del manifest.
 manifest.parse = Analisi del manifest non riuscita.
@@ -173,6 +182,9 @@ ir.invalid_command = Interpolazione del comando non valida: { $snippet }.
 # Errori di generazione Ninja.
 ninja_gen.missing_action = Manca l'azione «{ $id }» referenziata da un arco di build.
 ninja_gen.format = Impossibile formattare l'output del manifest Ninja.
+ninja_gen.dyndep_files_required = Questa operazione richiede un bundle Ninja generato; usare `netsuke build`, `netsuke clean` o `netsuke generate` per materializzare i file dyndep.
+ninja_gen.reserved_output_path = Il percorso '{ $path }' è riservato allo stato delle dipendenze seriali di Netsuke.
+ninja_gen.unsupported_path_character = Il percorso '{ $path }' contiene il carattere di percorso Ninja non supportato '{ $character }'.
 
 # Validazione dei pattern host.
 host_pattern.empty = Il pattern host non deve essere vuoto.

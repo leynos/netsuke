@@ -32,7 +32,13 @@ fn resolve_and_trace(
 ) -> Result<(ConfigPathResolution, Vec<String>)> {
     capture_events(|| {
         let resolution = resolve_config_selector(cli_config, env);
-        trace_config_path_resolution(&resolution);
+        DiscoveryTrace::new(
+            &resolution,
+            FileLayerTrace::Automatic {
+                project_scope: None,
+            },
+        )
+        .emit();
         Ok::<_, anyhow::Error>(resolution)
     })
 }
@@ -109,11 +115,8 @@ fn explicit_config_path_logs_selected_selector(#[case] scenario: ConfigPathScena
     );
     match resolved.as_deref() {
         Some(path) => EventAssertion::new(selector_event, path).ensure_bounded_path_fields()?,
-        // `Option<T>: Value::record` omits `None`, while `record_debug` renders
-        // it as `path_file_name=None`; that asymmetry explains these checks.
         None => ensure!(
-            !selector_event.contains("path_hash=")
-                && selector_event.contains("path_file_name=None"),
+            !selector_event.contains("path_hash=") && selector_event.contains("path_present=false"),
             "empty selection should not include path details: {selector_event}"
         ),
     }

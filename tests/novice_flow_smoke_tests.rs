@@ -155,6 +155,29 @@ fn help_entry_points_are_novice_friendly(#[case] args: &[&str]) -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn verbose_informational_help_emits_empty_config_metrics_snapshot() -> Result<()> {
+    let output = run_netsuke(Path::new("."), &["--verbose", "help"], None)?;
+
+    ensure!(output.success, "verbose informational help should succeed");
+    assert_contains_all(
+        &output.stdout,
+        &["Netsuke transforms", "YAML + Jinja", "Commands:", "build"],
+        "stdout",
+    )?;
+    assert_contains_all(
+        &output.stderr,
+        &["metrics snapshot", "metrics=[]"],
+        "stderr",
+    )?;
+    ensure!(
+        output.stderr.matches("metrics snapshot").count() == 1,
+        "informational help should emit exactly one human-mode metrics snapshot, got:\n{}",
+        output.stderr
+    );
+    Ok(())
+}
+
 #[rstest]
 #[case::root(&["help"])]
 #[case::build(&["help", "build"])]

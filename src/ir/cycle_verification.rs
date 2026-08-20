@@ -341,6 +341,7 @@ fn edge(output: &str, inputs: Vec<Utf8PathBuf>, implicit_deps: Vec<Utf8PathBuf>)
         action_id: "id".to_owned(),
         inputs,
         implicit_deps,
+        dependency_order: crate::ir::DependencyOrder::Parallel,
         explicit_outputs: vec![path(output)],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),

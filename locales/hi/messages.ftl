@@ -1,5 +1,6 @@
 # Netsuke की कमांड लाइन के लिए स्थानीयकरण संसाधन।
 
+runner.io.dyndep.retention = बनाई गई dyndep को { $path } के नीचे बनाए रखने की प्रक्रिया लागू नहीं की जा सकी।
 cli.about = Netsuke YAML + Jinja मैनिफ़ेस्ट को Ninja की बिल्ड योजनाओं में संकलित करता है।
 cli.long_about = Netsuke YAML + Jinja मैनिफ़ेस्ट को पुनरुत्पादनीय Ninja ग्राफ़ में बदलता है और सुरक्षित डिफ़ॉल्ट मानों के साथ Ninja चलाता है।
 cli.usage = { $usage }
@@ -102,11 +103,19 @@ runner.io.write_ninja_file = { $path } की Ninja फ़ाइल में �
 runner.io.flush_ninja_file = { $path } की Ninja फ़ाइल का बफ़र खाली नहीं किया जा सका।
 runner.io.sync_ninja_file = { $path } की Ninja फ़ाइल समकालिक नहीं की जा सकी।
 runner.io.open_ambient_dir = आसपास की निर्देशिका नहीं खोली जा सकी।
+runner.io.non_utf8_working_directory = कार्य निर्देशिका का पथ मान्य UTF-8 नहीं है।
 runner.io.no_existing_ancestor = { $path } के लिए कोई विद्यमान पूर्वज निर्देशिका नहीं है।
 runner.io.derive_relative_path = सापेक्ष Ninja पथ नहीं निकाला जा सका।
 runner.io.non_utf8_path = UTF-8 से भिन्न पथ समर्थित नहीं हैं (पथ: { $path })।
 runner.io.write_stdout = Ninja मैनिफ़ेस्ट मानक निर्गम पर नहीं लिखा जा सका।
 runner.io.flush_stdout = मानक निर्गम का बफ़र खाली नहीं किया जा सका।
+runner.io.dyndep.create_dir = dyndep निर्देशिका { $path } नहीं बनाई जा सकी।
+runner.io.dyndep.read = { $path } पर बनाई गई dyndep फ़ाइल पढ़ी नहीं जा सकी।
+runner.io.dyndep.write = { $path } पर बनाई गई dyndep फ़ाइल लिखी नहीं जा सकी।
+runner.io.dyndep.rename = { $path } पर बनाई गई dyndep फ़ाइल का नाम नहीं बदला जा सका।
+runner.io.dyndep.corrupt = { $path } पर बनाई गई dyndep फ़ाइल अपेक्षित सामग्री से मेल नहीं खाती; केवल उसी फ़ाइल को हटाकर फिर प्रयास करें।
+runner.io.dyndep.temp_collisions = बार-बार नाम टकराने के बाद { $path } के लिए एक अद्वितीय अस्थायी dyndep फ़ाइल नहीं बनाई जा सकी।
+runner.io.dyndep.too_large = { $path } पर बनाई गई dyndep फ़ाइल { $limit } बाइट की सत्यापन सीमा से बड़ी है।
 
 # मैनिफ़ेस्ट के निदान।
 manifest.parse = मैनिफ़ेस्ट का विश्लेषण विफल रहा।
@@ -172,6 +181,9 @@ ir.invalid_command = आदेश में अमान्य प्रक्�
 # Ninja निर्माण की त्रुटियाँ।
 ninja_gen.missing_action = किसी बिल्ड कोर द्वारा संदर्भित क्रिया “{ $id }” अनुपस्थित है।
 ninja_gen.format = Ninja मैनिफ़ेस्ट का निर्गम स्वरूपित नहीं किया जा सका।
+ninja_gen.dyndep_files_required = इस बिल्ड के लिए जनरेट किया गया Ninja बंडल आवश्यक है; dyndep फ़ाइलों को मूर्त रूप देने के लिए `netsuke build`, `netsuke clean` या `netsuke generate` का उपयोग करें।
+ninja_gen.reserved_output_path = पथ '{ $path }' Netsuke की क्रमिक निर्भरता स्थिति के लिए आरक्षित है।
+ninja_gen.unsupported_path_character = पथ '{ $path }' में असमर्थित Ninja पथ वर्ण '{ $character }' है।
 
 # होस्ट प्रतिरूपों का सत्यापन।
 host_pattern.empty = होस्ट प्रतिरूप रिक्त नहीं होना चाहिए।

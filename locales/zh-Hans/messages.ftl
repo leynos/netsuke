@@ -1,5 +1,6 @@
 # Netsuke 命令行的本地化资源（简体中文）。
 
+runner.io.dyndep.retention = 无法应用 { $path } 处生成的 dyndep 保留设置。
 cli.about = Netsuke 将 YAML + Jinja 清单编译为 Ninja 构建计划。
 cli.long_about = Netsuke 把 YAML + Jinja 清单转换为可复现的 Ninja 图，并以安全的默认设置运行 Ninja。
 cli.usage = { $usage }
@@ -101,11 +102,19 @@ runner.io.write_ninja_file = 无法写入 { $path } 处的 Ninja 文件。
 runner.io.flush_ninja_file = 无法刷新 { $path } 处 Ninja 文件的缓冲区。
 runner.io.sync_ninja_file = 无法同步 { $path } 处的 Ninja 文件。
 runner.io.open_ambient_dir = 无法打开周围目录。
+runner.io.non_utf8_working_directory = 工作目录路径不是有效的 UTF-8。
 runner.io.no_existing_ancestor = { $path } 没有已存在的上级目录。
 runner.io.derive_relative_path = 无法推导 Ninja 的相对路径。
 runner.io.non_utf8_path = 不支持非 UTF-8 路径（路径：{ $path }）。
 runner.io.write_stdout = 无法将 Ninja 清单写入标准输出。
 runner.io.flush_stdout = 无法刷新标准输出的缓冲区。
+runner.io.dyndep.create_dir = 无法创建 dyndep 目录 { $path }。
+runner.io.dyndep.read = 无法读取 { $path } 处生成的 dyndep 文件。
+runner.io.dyndep.write = 无法写入 { $path } 处生成的 dyndep 文件。
+runner.io.dyndep.rename = 无法重命名在 { $path } 处生成的 dyndep 文件。
+runner.io.dyndep.corrupt = { $path } 处生成的 dyndep 文件与预期内容不匹配；请仅删除该文件后重试。
+runner.io.dyndep.temp_collisions = 多次发生名称冲突后，仍无法为 { $path } 创建唯一的临时 dyndep 文件。
+runner.io.dyndep.too_large = { $path } 处生成的 dyndep 文件超过 { $limit } 字节的验证上限。
 
 # 清单诊断。
 manifest.parse = 清单解析失败。
@@ -171,6 +180,9 @@ ir.invalid_command = 命令中的插值无效：{ $snippet }。
 # Ninja 生成错误。
 ninja_gen.missing_action = 缺少构建边引用的动作“{ $id }”。
 ninja_gen.format = 无法格式化 Ninja 清单的输出。
+ninja_gen.dyndep_files_required = 此操作需要生成的 Ninja dyndep 文件；请使用 `netsuke build`、`netsuke clean` 或 `netsuke generate` 以生成这些文件。
+ninja_gen.reserved_output_path = 路径“{ $path }”已保留给 Netsuke 的串行依赖状态。
+ninja_gen.unsupported_path_character = 路径“{ $path }”包含不支持的 Ninja 路径字符“{ $character }”。
 
 # 主机模式校验。
 host_pattern.empty = 主机模式不能为空。

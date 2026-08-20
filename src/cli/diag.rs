@@ -8,12 +8,10 @@
 use clap::ArgMatches;
 use clap::parser::ValueSource;
 use ortho_config::{OrthoError, OrthoResult};
-use serde_json::Value;
 use std::sync::Arc;
 
 use super::discovery::{
-    DiscoverySources, EnvProvider, StdEnvProvider, collect_diag_file_layers_with_sources,
-    discovery_env_source,
+    DiscoveryOutcome, EnvProvider, StdEnvProvider, collect_diag_file_layers_with_env,
 };
 use super::parser::Cli;
 
@@ -29,18 +27,13 @@ const JSON_ENV_VAR: &str = "NETSUKE_JSON";
 /// Returns an [`ortho_config::OrthoError`] when a selected config file cannot
 /// be loaded, or when `NETSUKE_JSON` contains an invalid boolean.
 pub fn resolve_merged_json(cli: &Cli, matches: &ArgMatches) -> OrthoResult<bool> {
-    resolve_merged_json_with_sources(
-        cli,
-        matches,
-        &StdEnvProvider,
-        Arc::new(ortho_config::ProcessEnv),
-    )
+    resolve_merged_json_with_env(cli, matches, &StdEnvProvider)
 }
 
 /// Resolve the JSON preference using an injected environment provider.
 ///
 /// This variant supports deterministic environment access without mutating
-/// process-global state.
+/// process-global state. It does not emit deferred discovery diagnostics.
 ///
 /// # Errors
 ///
@@ -51,31 +44,46 @@ pub fn resolve_merged_json_with_env(
     matches: &ArgMatches,
     env: &impl EnvProvider,
 ) -> OrthoResult<bool> {
-    resolve_merged_json_with_sources(cli, matches, env, discovery_env_source(env))
+    let (result, outcome) = resolve_json_and_layers_outcome_with_env(cli, matches, env);
+    let json = result?;
+    drop(outcome);
+    Ok(json)
 }
 
-/// Resolve JSON using the same selector and discovery adapters as merging.
-fn resolve_merged_json_with_sources(
+/// Resolve diagnostic JSON mode while retaining a discovery outcome.
+///
+/// This side-effect-free function leaves diagnostic replay to its composition
+/// boundary. Startup uses the returned outcome to replay cached diagnostics
+/// after it enables its output filter, including when discovery or JSON
+/// validation fails. The outcome owns the discovered layers and deferred
+/// diagnostics.
+pub fn resolve_json_and_layers_outcome_with_env(
     cli: &Cli,
     matches: &ArgMatches,
     env: &impl EnvProvider,
-    discovery_env: ortho_config::SharedEnvSource,
-) -> OrthoResult<bool> {
-    let sources = DiscoverySources::new(env, discovery_env);
-    let mut json = json_from_file_layers(cli, &sources)?;
-    if !has_cli_json_override(matches)
-        && let Some(env_json) = json_from_env(env)?
-    {
-        json = env_json;
-    }
-    Ok(json_from_matches(cli, matches, json))
+) -> (OrthoResult<bool>, DiscoveryOutcome) {
+    let outcome = collect_diag_file_layers_with_env(cli, env);
+    let result = (|| {
+        if let Some(error) = outcome.first_error() {
+            return Err(Arc::clone(error));
+        }
+        let mut json = json_from_layers(&outcome);
+        if !has_cli_json_override(matches)
+            && let Some(env_json) = json_from_env(env)?
+        {
+            json = env_json;
+        }
+        Ok(json_from_matches(cli, matches, json))
+    })();
+    (result, outcome)
 }
 
-fn json_from_layer(value: &Value) -> Option<bool> {
+#[cfg(test)]
+fn json_from_layer(value: &serde_json::Value) -> Option<bool> {
     value
         .as_object()
         .and_then(|map| map.get("json"))
-        .and_then(Value::as_bool)
+        .and_then(serde_json::Value::as_bool)
 }
 
 /// Apply the command-line JSON override to a discovered preference.
@@ -92,22 +100,10 @@ fn has_cli_json_override(matches: &ArgMatches) -> bool {
     matches.value_source("json") == Some(ValueSource::CommandLine)
 }
 
-/// Resolve the last valid JSON preference from the selected config layers.
-fn json_from_file_layers(
-    cli: &Cli,
-    sources: &DiscoverySources<'_, impl EnvProvider>,
-) -> OrthoResult<bool> {
-    let default = Cli::default().json;
-    let layers = collect_diag_file_layers_with_sources(cli, sources)?;
-    let mut json = default;
-    for layer in layers {
-        if let Some(layer_json) = json_from_layer(&layer.into_value()) {
-            json = layer_json;
-        }
-    }
-    Ok(json)
+/// Resolve the last valid JSON preference from discovered config layers.
+const fn json_from_layers(outcome: &DiscoveryOutcome) -> bool {
+    outcome.json_preference()
 }
-
 /// Parse the optional `NETSUKE_JSON` value supplied by `env`.
 ///
 /// Invalid or non-Unicode values are validation errors rather than silently
@@ -140,13 +136,25 @@ mod tests {
     //! Unit tests for early JSON preference resolution.
 
     use super::*;
+    use crate::cli::discovery::assert_bounded_path_event;
     use crate::cli::test_support::TestEnv;
-    use anyhow::ensure;
+    use crate::test_tracing_capture::with_test_subscriber;
+    use anyhow::{Context, ensure};
     use cap_std::{ambient_authority, fs::Dir};
     use clap::CommandFactory;
     use clap::Parser;
+    use rstest::rstest;
     use serde_json::json;
     use tempfile::tempdir;
+    use tracing_subscriber::filter::LevelFilter;
+
+    fn find_deferred_event<'a>(events: &'a [String], message: &str) -> anyhow::Result<&'a str> {
+        events
+            .iter()
+            .find(|event| event.contains(message))
+            .map(String::as_str)
+            .with_context(|| format!("expected event containing {message:?} in {events:?}"))
+    }
 
     #[test]
     fn json_from_layer_reads_json_bool() {
@@ -202,19 +210,74 @@ mod tests {
         );
     }
 
-    #[test]
-    fn resolve_merged_json_rejects_missing_injected_explicit_config() -> anyhow::Result<()> {
+    #[rstest]
+    fn resolve_merged_json_does_not_replay_missing_explicit_config_diagnostics()
+    -> anyhow::Result<()> {
         let dir = tempdir()?;
         let missing_config_path = dir.path().join("missing-netsuke.toml");
         let matches = Cli::command().get_matches_from(["netsuke"]);
         let env = TestEnv::default().with_var("NETSUKE_CONFIG", &missing_config_path);
 
-        let error = resolve_merged_json_with_env(&Cli::default(), &matches, &env)
-            .expect_err("missing injected explicit config should fail");
+        let (result, events) = with_test_subscriber(LevelFilter::TRACE, |captured| {
+            let result = resolve_merged_json_with_env(&Cli::default(), &matches, &env);
+            (result, captured.snapshot())
+        });
+        let error = result.expect_err("missing injected explicit config should fail");
         ensure!(
             matches!(error.as_ref(), OrthoError::File { path, .. } if path == &missing_config_path),
             "expected missing explicit config error for {missing_config_path:?}, got {error:?}"
         );
+        ensure!(
+            events.is_empty(),
+            "JSON resolution must leave deferred diagnostics for its composition boundary: {events:?}"
+        );
+
+        Ok(())
+    }
+
+    #[rstest]
+    fn resolve_json_and_layers_outcome_replays_successful_explicit_config_diagnostics()
+    -> anyhow::Result<()> {
+        let dir = tempdir()?;
+        let config_path = dir.path().join("customer@example.com.toml");
+        let config_dir = Dir::open_ambient_dir(dir.path(), ambient_authority())?;
+        config_dir.write("customer@example.com.toml", b"json = true\n")?;
+        let matches = Cli::command().get_matches_from(["netsuke"]);
+        let cli = Cli {
+            config: Some(config_path.clone()),
+            ..Cli::default()
+        };
+
+        let ((result, outcome), resolution_events, replay_events) =
+            with_test_subscriber(LevelFilter::TRACE, |captured| {
+                let (result, outcome) =
+                    resolve_json_and_layers_outcome_with_env(&cli, &matches, &TestEnv::default());
+                let resolution_events = captured.snapshot();
+                outcome.emit_diagnostics();
+                ((result, outcome), resolution_events, captured.snapshot())
+            });
+        ensure!(
+            resolution_events.is_empty(),
+            "side-effect-free JSON resolution must not emit diagnostics: {resolution_events:?}"
+        );
+        let json = result?;
+        ensure!(json, "explicit configuration should enable JSON mode");
+        ensure!(
+            !outcome.layers().is_empty(),
+            "successful resolution should retain file layers for the full merge"
+        );
+        let selector_event = find_deferred_event(&replay_events, "resolved config path")?;
+        ensure!(
+            selector_event.contains("selector=\"cli_flag\"")
+                && selector_event.contains("path_present=true"),
+            "selector event should record the CLI selector: {selector_event}"
+        );
+        assert_bounded_path_event(selector_event, &config_path)?;
+        assert_bounded_path_event(
+            find_deferred_event(&replay_events, "using explicit config path")?,
+            &config_path,
+        )?;
+        drop(outcome.into_layers());
 
         Ok(())
     }

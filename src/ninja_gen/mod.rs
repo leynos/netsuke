@@ -6,6 +6,13 @@
 //! generated Ninja file is written by the runner and `generate` command for
 //! downstream execution by the Ninja build system.
 
+pub mod dyndep;
+mod path_syntax;
+
+use dyndep::reject_reserved_paths;
+pub use dyndep::{GeneratedDyndep, GeneratedNinja, generate_bundle};
+pub(crate) use path_syntax::{escape_ninja_path, reject_unsupported_path_characters};
+
 use crate::ast::{Recipe, StringOrList};
 use crate::ir::{BuildEdge, BuildGraph};
 use crate::localization::{self, keys};
@@ -14,11 +21,11 @@ use itertools::Itertools;
 use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter, Write};
 
-#[path = "ninja_gen_command_list.rs"]
+#[path = "../ninja_gen_command_list.rs"]
 pub(crate) mod ninja_gen_command_list;
-#[path = "ninja_gen_error.rs"]
+#[path = "../ninja_gen_error.rs"]
 mod ninja_gen_error;
-#[path = "ninja_gen_validation.rs"]
+#[path = "../ninja_gen_validation.rs"]
 mod ninja_gen_validation;
 
 use ninja_gen_command_list::{ActionId, CommandListEntry, command_list_entry};
@@ -56,6 +63,7 @@ macro_rules! write_flag {
 /// graph.targets.insert(Utf8PathBuf::from("out"), BuildEdge {
 ///     action_id: "a".into(), inputs: Vec::new(),
 ///     implicit_deps: Vec::new(),
+///     dependency_order: netsuke::ir::DependencyOrder::Parallel,
 ///     explicit_outputs: vec![Utf8PathBuf::from("out")],
 ///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
 ///     phony: false, always: false
@@ -74,7 +82,8 @@ macro_rules! write_flag {
 /// programmatic action has an empty command recipe, a command-list entry starts
 /// multiple background jobs, a command-list entry uses an unsupported `exec`
 /// structure, a command-list `eval` payload cannot be analysed, a command-list
-/// entry contains a Ninja control character, or writing to the output fails.
+/// entry contains a Ninja control character, a graph path uses Netsuke's
+/// reserved serial-ordering namespace, or writing to the output fails.
 pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
     let mut out = String::new();
     generate_into(graph, &mut out)?;
@@ -97,6 +106,7 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 /// graph.targets.insert(Utf8PathBuf::from("out"), BuildEdge {
 ///     action_id: "a".into(), inputs: Vec::new(),
 ///     implicit_deps: Vec::new(),
+///     dependency_order: netsuke::ir::DependencyOrder::Parallel,
 ///     explicit_outputs: vec![Utf8PathBuf::from("out")],
 ///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
 ///     phony: false, always: false
@@ -116,8 +126,16 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 /// programmatic action has an empty command recipe, a command-list entry starts
 /// multiple background jobs, a command-list entry uses an unsupported `exec`
 /// structure, a command-list `eval` payload cannot be analysed, a command-list
-/// entry contains a Ninja control character, or writing to the output fails.
+/// entry contains a Ninja control character, a graph path uses Netsuke's
+/// reserved serial-ordering namespace, or writing to the output fails.
 pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), NinjaGenError> {
+    reject_unsupported_path_characters(graph)?;
+    reject_reserved_paths(graph)?;
+    if graph_requires_dyndep(graph) {
+        return Err(NinjaGenError::DyndepFilesRequired {
+            message: localization::message(keys::NINJA_GEN_DYNDEP_FILES_REQUIRED),
+        });
+    }
     let mut actions: Vec<_> = graph.actions.iter().collect();
     actions.sort_by_key(|(id, _)| *id);
     for (zero_based_action_index, (id, action)) in actions.into_iter().enumerate() {
@@ -149,6 +167,7 @@ pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), Ni
             DisplayEdge {
                 edge,
                 action_restat: action.restat,
+                implicit_deps: &edge.implicit_deps,
             }
         )?;
     }
@@ -163,12 +182,15 @@ pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), Ni
 }
 
 /// Convert a slice of paths into a space-separated string.
-fn join(paths: &[Utf8PathBuf]) -> String {
-    paths.iter().map(|p| p.as_str()).join(" ")
+pub(crate) fn join(paths: &[Utf8PathBuf]) -> String {
+    paths
+        .iter()
+        .map(|path| path_syntax::escape_validated_ninja_path(path.as_str()))
+        .join(" ")
 }
 
 /// Generate a stable key for a list of paths.
-fn path_key(paths: &[Utf8PathBuf]) -> String {
+pub(crate) fn path_key(paths: &[Utf8PathBuf]) -> String {
     let mut parts: Vec<String> = paths.iter().map(|p| p.as_str().to_owned()).collect();
     parts.sort_unstable();
     let separator = char::from(0).to_string();
@@ -191,9 +213,17 @@ fn escape_script(script: &str) -> String {
         .replace('\'', "'\"'\"'")
         .replace('\n', "\\n")
 }
+/// Whether the graph contains an edge whose serial list needs dyndep gates.
+pub(crate) fn graph_requires_dyndep(graph: &BuildGraph) -> bool {
+    graph.targets.values().any(edge_requires_gates)
+}
 
+/// Whether one edge's serial dependency list needs staged dyndep gates.
+pub(crate) fn edge_requires_gates(edge: &BuildEdge) -> bool {
+    edge.dependency_order == crate::ir::DependencyOrder::Serial && edge.implicit_deps.len() > 1
+}
 /// Wrapper struct to display a rule with its identifier.
-struct NamedAction<'a> {
+pub(crate) struct NamedAction<'a> {
     id: &'a str,
     action: &'a crate::ir::Action,
 }
@@ -302,9 +332,10 @@ impl Display for NamedAction<'_> {
 }
 
 /// Wrapper struct to display a build edge.
-struct DisplayEdge<'a> {
+pub(crate) struct DisplayEdge<'a> {
     edge: &'a BuildEdge,
     action_restat: bool,
+    implicit_deps: &'a [Utf8PathBuf],
 }
 
 impl Display for DisplayEdge<'_> {
@@ -317,8 +348,8 @@ impl Display for DisplayEdge<'_> {
         if !self.edge.inputs.is_empty() {
             write!(f, " {}", join(&self.edge.inputs))?;
         }
-        if !self.edge.implicit_deps.is_empty() {
-            write!(f, " | {}", join(&self.edge.implicit_deps))?;
+        if !self.implicit_deps.is_empty() {
+            write!(f, " | {}", join(self.implicit_deps))?;
         }
         if !self.edge.order_only_deps.is_empty() {
             write!(f, " || {}", join(&self.edge.order_only_deps))?;
@@ -329,11 +360,11 @@ impl Display for DisplayEdge<'_> {
     }
 }
 #[cfg(test)]
-#[path = "ninja_gen_property_tests.rs"]
+#[path = "../ninja_gen_property_tests.rs"]
 mod property_tests;
 #[cfg(test)]
-#[path = "ninja_gen_test_support.rs"]
+#[path = "../ninja_gen_test_support.rs"]
 mod test_support;
 #[cfg(test)]
-#[path = "ninja_gen_tests.rs"]
+#[path = "../ninja_gen_tests.rs"]
 mod tests;

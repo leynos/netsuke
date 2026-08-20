@@ -1,10 +1,10 @@
 # Netsuke user's guide
 
-This guide is for people evaluating or using Netsuke v0.1.0-beta1. It covers
+This guide is for people evaluating or using Netsuke v0.1.0-beta2. It covers
 the first build, the manifest format, templating, command-line usage,
 configuration, diagnostics, accessibility, and the current safety boundary.
 
-Netsuke v0.1.0-beta1 is an early-adopter release. The compiler pipeline is
+Netsuke v0.1.0-beta2 is an early-adopter release. The compiler pipeline is
 useful, but command names, flags, diagnostic schemas, and some manifest details
 may change before 1.0. Pin the Netsuke version in automated workflows.
 
@@ -18,7 +18,7 @@ Inside a checkout both settings are inherited automatically: `rustup` installs
 the pinned toolchain, and the repository's `.cargo/config.toml` supplies
 `RUSTFLAGS=-Zpolonius=next`. Neither has to be passed on the command line.
 
-Netsuke v0.1.0-beta1 is available from crates.io. Where
+Netsuke v0.1.0-beta2 is available from crates.io. Where
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) is available,
 prefer it: it fetches a prebuilt release binary and avoids the toolchain
 requirement below.
@@ -41,7 +41,7 @@ RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke-build
 ```
 
 Pre-built installers are available from the
-[v0.1.0-beta1 GitHub release](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta1):
+[v0.1.0-beta2 GitHub release](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta2):
 
 | Platform | Architectures                        | Packages                         |
 | -------- | ------------------------------------ | -------------------------------- |
@@ -66,7 +66,7 @@ installer. The Windows MSI installs to `C:\Program Files\netsuke` and does not
 update `PATH`.
 
 The MSI installer supports pre-release SemVer versions such as
-`0.1.0-beta1`: the pre-release suffix cannot be represented in an MSI
+`0.1.0-beta2`: the pre-release suffix cannot be represented in an MSI
 product version, so the installer carries the numeric release triple
 (`0.1.0`) while the full version remains in the package and release names.
 Because successive pre-releases share that numeric version, installing a
@@ -75,7 +75,7 @@ series rather than installing alongside it.
 
 SHA-256 checksum files accompany standalone binaries and staged help,
 completion, and licence files. Installer packages do not have checksum sidecars
-in v0.1.0-beta1. Windows PowerShell help files are published beside each MSI as
+in v0.1.0-beta2. Windows PowerShell help files are published beside each MSI as
 sidecar artefacts rather than embedded in the installer.
 
 Each standalone release archive also contains generated shell completion
@@ -132,7 +132,7 @@ MSI:
 
 ```powershell
 $architecture = 'amd64' # Use 'arm64' for the Arm64 MSI.
-$releaseUri = 'https://api.github.com/repos/leynos/netsuke/releases/tags/v0.1.0-beta1'
+$releaseUri = 'https://api.github.com/repos/leynos/netsuke/releases/tags/v0.1.0-beta2'
 $release = Invoke-RestMethod -Uri $releaseUri
 
 $documents = [Environment]::GetFolderPath('MyDocuments')
@@ -142,7 +142,7 @@ $editionDirectory = if ($PSVersionTable.PSEdition -eq 'Desktop') {
     'PowerShell'
 }
 $moduleRoot = Join-Path $documents "$editionDirectory\Modules"
-$moduleDirectory = Join-Path $moduleRoot 'Netsuke\0.1.0-beta1'
+$moduleDirectory = Join-Path $moduleRoot 'Netsuke\0.1.0-beta2'
 $helpDirectory = Join-Path $moduleDirectory 'en-US'
 New-Item -ItemType Directory -Path $helpDirectory -Force | Out-Null
 
@@ -285,7 +285,7 @@ The top-level fields are:
 - `defaults`: target or action names used when `build` receives no explicit
   targets.
 
-`defaults` entries are literal names in v0.1.0-beta1; Jinja expressions are not
+`defaults` entries are literal names in v0.1.0-beta2; Jinja expressions are not
 rendered in this field.
 
 `vars` keys named `env` or `glob` are rejected because those names identify
@@ -371,7 +371,7 @@ Prefer a `command` list for a short, ordered sequence of distinct commands.
 Prefer `script` when the logic needs multi-line structure or shell
 constructs such as loops, conditionals, or variable assignment.
 
-The v0.1.0-beta1 `script` implementation invokes `/bin/sh -e`; it is not
+The v0.1.0-beta2 `script` implementation invokes `/bin/sh -e`; it is not
 currently a portable PowerShell abstraction. Prefer `command` or
 platform-selected actions when a manifest must work on Windows.
 
@@ -385,7 +385,10 @@ A target supports these fields:
 - `deps`: implicit dependencies. They affect freshness but do not become
   recipe arguments. Declare them on each target; reusable rules reject `deps`.
   The planned rule-level `deps_from` contract is not implemented in
-  v0.1.0-beta1.
+  v0.1.0-beta2.
+- `dependency_order`: scheduling policy for the `deps` list. `parallel` is the
+  default; `serial` runs a list with more than one dependency in declaration
+  order.
 - `order_only_deps`: ordering dependencies. Their changes do not rebuild the
   dependent target.
 - `vars`: values that override global variables for this target. The `env`
@@ -403,10 +406,83 @@ list of strings.
 Netsuke quotes paths inserted through `{{ ins }}` and `{{ outs }}`. Other Jinja
 values render as ordinary command text and are not automatically shell-quoted.
 The `shell_escape` filter described in older drafts is not implemented in
-v0.1.0-beta1.
+v0.1.0-beta2.
 
 Cycle detection follows `sources` and `deps`. Order-only dependencies enforce
 ordering but do not participate in cycle detection.
+
+### Run direct dependencies serially
+
+Actions and targets both accept `dependency_order`. Omit it, or set it to
+`parallel`, to retain Ninja's ordinary concurrent scheduling. Set it to
+`serial` when the direct `deps` list is an ordered workflow:
+
+<!-- tested-example: guide-serial-dependency-order-manifest -->
+
+```yaml
+netsuke_version: "1.0.0"
+
+actions:
+  - name: check-fmt
+    command: "echo checking format"
+  - name: lint
+    command: "echo linting"
+  - name: test
+    command: "echo testing"
+  - name: all
+    command: ":"
+    dependency_order: serial
+    deps:
+      - check-fmt
+      - lint
+      - test
+
+targets:
+  - name: release-notes
+    command: "echo preparing release notes"
+  - name: release
+    command: "./package-release"
+    dependency_order: serial
+    deps:
+      - check-fmt
+      - test
+      - release-notes
+```
+
+For a serial list, Netsuke starts each direct dependency only after the
+preceding one succeeds. If an earlier dependency fails, later dependencies in
+that list do not start through the serial path. Repeated or shared dependencies
+are still owned by the one Ninja invocation and execute at most once.
+
+Serial ordering applies only to the direct `deps` list. It does not serialize
+`sources`, `order_only_deps`, or unrelated work. An independently requested or
+otherwise reachable later dependency can still start through that separate
+path; use a dedicated aggregate action when the whole workflow must share the
+same ordered entry point.
+
+Netsuke uses Ninja's `dyndep` support for serial lists with two or more
+dependencies, and generated builds containing staged serial ordering require
+Ninja 1.10 or newer.
+`netsuke generate`, `build`, and `clean` materialize the generated sidecars
+under `.netsuke/dyndep` in the effective working directory before writing or
+invoking the generated Ninja file. The sidecars are immutable and
+content-addressed. Each sidecar-capable command retains the current bundle,
+then at most 32 obsolete `.dd` files and 1 MiB of obsolete `.dd` bytes. Stale
+`.tmp` files are removed while the exclusive sidecar-directory lease is held.
+`build` and `generate` prune after materialization; `clean` prunes only after
+successful `ninja -t clean`, and does not prune when clean fails.
+
+An older arbitrary manifest written with `generate --output` may lose its
+referenced sidecars after a later command. Regenerate that manifest before
+using it if retention has removed any of its sidecars.
+The paths `.netsuke/serial` and `.netsuke/dyndep` must not occur in any user
+graph path, including outputs, inputs, implicit dependencies, and order-only
+dependencies; they are reserved for Netsuke-generated gates and sidecars.
+
+When migrating an existing manifest, see the
+[v0.1.0 migration guide](v0-1-0-migration-guide.md#opting-into-serial-dependency-ordering)
+for the opt-in syntax, Ninja version requirement, and generated-state
+reservation.
 
 ## Use Jinja safely
 
@@ -557,7 +633,7 @@ Both helpers accept:
 - `cwd_mode="auto"|"always"|"never"`: control bounded project-directory
   fallback searching.
 
-The `env(name)` function reads one required environment variable. v0.1.0-beta1
+The `env(name)` function reads one required environment variable. v0.1.0-beta2
 does not accept a default argument; an absent or non-Unicode value is an error.
 
 ### Inject the environment reader for tests
@@ -853,7 +929,12 @@ textual outline and a `<noscript>` DOT representation.
 
 `generate` writes Ninja without running it. With no `--output`, stdout contains
 only the generated Ninja manifest. With `--output <FILE>`, Netsuke writes the
-manifest to that file and leaves stdout empty.
+manifest to that file and leaves stdout empty. For a serial dependency list,
+both forms also materialize the referenced sidecars under `.netsuke/dyndep` in
+the effective Ninja working directory, so the emitted manifest is executable
+at that point. Retention is bounded: a later Netsuke command may remove
+sidecars referenced by an older arbitrary output file. Regenerate the file
+when that happens.
 
 `clean` removes file outputs tracked by Ninja. Phony targets and actions do not
 represent files and are not removed.
@@ -921,6 +1002,28 @@ defaults. When it finds a candidate that cannot be loaded, such as malformed
 TOML or a file whose `extends` parent is missing, Netsuke reports the load
 error. A broken discovered configuration is therefore not treated as absent.
 
+### Reuse discovered configuration layers
+
+Normal command-line use requires no change. The Rust API remains an unstable
+beta surface, but callers that compose configuration themselves can avoid
+discovering and loading the same configuration files more than once. The
+`netsuke::cli::resolve_json_and_layers_outcome_with_env` returns
+`(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics. At the
+composition boundary, call `DiscoveryOutcome::emit_diagnostics()` after
+tracing is configured, then consume the outcome with `into_layers()` and pass
+the cached layers to `netsuke::cli::merge_with_cached_file_layers` for the
+full merge. This preserves diagnostics from the same discovery pass while
+avoiding repeated file loading.
+
+All of these functions take an injected `&impl ConfigEnvProvider`. The public
+`ConfigEnvProvider` trait provides `get(&self, key: &str) -> Option<OsString>`
+for selector and environment lookups, plus
+`entries(&self) -> Vec<(OsString, OsString)>` for the complete configuration
+environment layer. `entries()` defaults to an empty vector.
+`ConfigStdEnvProvider` is the process-backed implementation; tests and other
+adapters can provide an implementation without mutating the process
+environment.
+
 ### Diagnose configuration selection
 
 Pass `--verbose` to see how Netsuke selected its configuration. Structured
@@ -929,14 +1032,34 @@ whether a path was present, and which environment lookups were attempted.
 Events then identify whether Netsuke uses an explicit file or discovered layers.
 
 If an explicit file cannot be loaded, the warning records `failure_kind` as
-`Missing` or `LoadError`. Path fields are bounded to `path_hash` and
-`path_file_name`; full paths and formatted parser errors are not tracing
-fields. The file name is visible, and the unkeyed hash is only a correlation
-identifier: it does not confidentially conceal a guessable path.
+`Missing` or `LoadError`. Discovery diagnostics expose bounded `path_hash` and
+presence fields. They do not expose raw configuration paths or configuration
+file names. The unkeyed `path_hash` is a bounded correlation identifier; it
+does not confidentially conceal a guessable path.
 
 Configuration tracing is disabled in JSON mode, including when `json = true`
 comes from a configuration file. This keeps stderr empty for successful JSON
 commands and reserves it for the single diagnostic document on failure.
+
+Verbose human-mode runs also emit a `metrics snapshot` aggregate after command
+completion. Verbosity can come from `--verbose`, `NETSUKE_VERBOSE`, or
+`verbose = true` in a configuration file. After a successful configuration
+merge, the merged verbosity controls the snapshot; if configuration fails
+before that merge completes, the parsed CLI verbosity is used instead. JSON
+mode suppresses tracing and metrics snapshots so that its diagnostic document
+remains the only stderr output.
+
+#### Bounded configuration metrics
+
+Configuration loading is recorded as two bounded metric series, both emitted
+in the drained `metrics snapshot`:
+
+- `config_load_total` — a counter with the `phase` and `outcome` labels that
+  counts each configuration-loading phase. `phase` is `diag_mode` for the
+  early diagnostic JSON preference resolution or `merge` for the full
+  configuration merge; `outcome` is `success` or `failure`.
+- `config_load_duration_seconds` — a histogram with the `phase` label only,
+  recording each phase's duration in seconds.
 
 The annotated [sample configuration](sample-netsuke.toml) lists every key. A
 small project configuration looks like this:
@@ -1049,7 +1172,7 @@ colour alone. Emoji policy values are:
 - `auto`: Unicode in standard output and ASCII in accessible output.
 
 The colour policy is separate. Colour rendering is not implemented in
-v0.1.0-beta1, so `color` currently affects mode selection but does not add
+v0.1.0-beta2, so `color` currently affects mode selection but does not add
 coloured terminal text.
 
 Verbose mode adds per-stage timing after a successful command. Failed commands
@@ -1090,7 +1213,7 @@ stderr has this shape:
   "schema_version": 1,
   "generator": {
     "name": "netsuke",
-    "version": "0.1.0-beta1"
+    "version": "0.1.0-beta2"
   },
   "diagnostics": [
     {
@@ -1130,7 +1253,7 @@ Exactly one outcome branch is present:
   - `source`, `primary_span`, and `labels`: optional source locations.
   - `related`: nested diagnostics using the same shape.
 
-**Triage:** Treat schema version `1` as pre-stable for v0.1.0-beta1 and check
+**Triage:** Treat schema version `1` as pre-stable for v0.1.0-beta2 and check
 `schema_version` before parsing other fields.
 
 ## Configure network access
@@ -1165,6 +1288,13 @@ Netsuke reports failures at the earliest stage that can identify them:
 Human diagnostics include remediation hints where one is available. JSON mode
 exposes the same information as fields.
 
+Human-mode configuration-load failures include structured `operation` and
+`error_category` fields. `operation` is `diag_mode_resolution` for the early
+diagnostic JSON preference pass or `config_merge` for the full merge;
+`error_category` is `io`, `validation`, or `parse`. Paths and display text are
+never recorded. JSON mode preserves the diagnostic document as the
+machine-readable failure output.
+
 The `--verbose` flag enables diagnostic tracing and successful timing
 summaries. It is suppressed in JSON mode so stderr remains parseable.
 
@@ -1175,7 +1305,7 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
 - `{{ ins }}` and `{{ outs }}` are quoted as path arguments.
 - Arbitrary Jinja values in `command` and `script` are not automatically
   shell-quoted.
-- `script` uses `/bin/sh -e` in v0.1.0-beta1.
+- `script` uses `/bin/sh -e` in v0.1.0-beta2.
 - `shell`, `grep`, `fetch`, filesystem helpers, and ordinary recipes interact
   with the host.
 - `glob` restricts its filesystem metadata access to a capability handle

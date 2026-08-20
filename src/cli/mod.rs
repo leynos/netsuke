@@ -23,10 +23,20 @@ mod release_help;
 pub(crate) mod test_support;
 
 pub use config::{AccessibilityPolicy, CliConfig, ColourPolicy, EmojiPolicy, ProgressPolicy};
-pub use diag::{resolve_merged_json, resolve_merged_json_with_env};
-pub use discovery::{EnvProvider as ConfigEnvProvider, StdEnvProvider as ConfigStdEnvProvider};
+pub use diag::{
+    resolve_json_and_layers_outcome_with_env, resolve_merged_json, resolve_merged_json_with_env,
+};
+/// Cached file layers, discovery errors, and deferred diagnostics from one
+/// configuration discovery pass.
+pub use discovery::DiscoveredLayers;
+/// Side-effect-free diagnostic-mode resolution paired with cached discovery.
+pub use discovery::DiscoveryOutcome;
+/// Environment access seam for configuration discovery and merging.
+pub use discovery::EnvProvider as ConfigEnvProvider;
+/// Process-backed configuration environment adapter for production callers.
+pub use discovery::StdEnvProvider as ConfigStdEnvProvider;
 pub use help::{HelpArgs, HelpTopic};
-pub use merge::{merge_with_config, merge_with_config_and_env};
+pub use merge::{merge_with_cached_file_layers, merge_with_config, merge_with_config_and_env};
 pub use parser::{
     BuildArgs, Cli, Commands, GraphArgs, json_hint_from_args, locale_hint_from_args,
     parse_with_localizer_from,

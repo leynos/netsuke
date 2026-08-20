@@ -16,6 +16,7 @@
 
 pub mod check_ninja;
 pub mod command_helper;
+pub mod config_metrics;
 pub mod cwd_guard;
 
 #[cfg(unix)]
@@ -23,6 +24,7 @@ pub mod dev_fast;
 pub mod env;
 pub mod env_lock;
 pub mod exec;
+pub mod fixture;
 pub mod fluent;
 pub mod fs;
 pub mod hash;

@@ -815,6 +815,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fs4"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e72ed92b67c146290f88e9c89d60ca163ea417a446f61ffd7b72df3e7f1dfd5"
+dependencies = [
+ "rustix",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "futures-core"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1561,7 +1571,7 @@ checksum = "c07971c6281a9a50979e8426fa6c6c618a42b729180847cb4363a794fdc4e607"
 
 [[package]]
 name = "netsuke-build"
-version = "0.1.0-beta1"
+version = "0.1.0-beta2"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1573,6 +1583,7 @@ dependencies = [
  "clap_mangen",
  "digest 0.11.3",
  "fluent-bundle",
+ "fs4",
  "glob",
  "googletest",
  "hashbrown 0.17.1",
@@ -2849,7 +2860,7 @@ checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 
 [[package]]
 name = "test_support"
-version = "0.1.0"
+version = "0.1.0-beta2"
 dependencies = [
  "anyhow",
  "assert_cmd",

@@ -1,5 +1,6 @@
 # Lokalisatiebronnen voor de opdrachtregel van Netsuke.
 
+runner.io.dyndep.retention = De retentie van het gegenereerde dyndep-bestand onder { $path } kon niet worden toegepast.
 cli.about = Netsuke compileert YAML- en Jinja-manifesten tot Ninja-bouwplannen.
 cli.long_about = Netsuke zet YAML- en Jinja-manifesten om in reproduceerbare Ninja-grafen en voert Ninja uit met veilige standaardwaarden.
 cli.usage = { $usage }
@@ -102,11 +103,19 @@ runner.io.write_ninja_file = Het Ninja-bestand in { $path } kon niet worden gesc
 runner.io.flush_ninja_file = De buffer van het Ninja-bestand in { $path } kon niet worden geleegd.
 runner.io.sync_ninja_file = Het Ninja-bestand in { $path } kon niet worden gesynchroniseerd.
 runner.io.open_ambient_dir = De omliggende map kon niet worden geopend.
+runner.io.non_utf8_working_directory = Het pad van de werkmap is geen geldige UTF-8.
 runner.io.no_existing_ancestor = Er bestaat geen bovenliggende map voor { $path }.
 runner.io.derive_relative_path = Het relatieve Ninja-pad kon niet worden afgeleid.
 runner.io.non_utf8_path = Paden die geen UTF-8 zijn, worden niet ondersteund (pad: { $path }).
 runner.io.write_stdout = Het Ninja-manifest kon niet naar stdout worden geschreven.
 runner.io.flush_stdout = De buffer van stdout kon niet worden geleegd.
+runner.io.dyndep.create_dir = De dyndep-map { $path } kon niet worden aangemaakt.
+runner.io.dyndep.read = Het gegenereerde dyndep-bestand op { $path } kon niet worden gelezen.
+runner.io.dyndep.write = Het gegenereerde dyndep-bestand op { $path } kon niet worden geschreven.
+runner.io.dyndep.rename = Het gegenereerde dyndep-bestand op { $path } kon niet worden hernoemd.
+runner.io.dyndep.corrupt = Het gegenereerde dyndep-bestand op { $path } komt niet overeen met de verwachte inhoud; verwijder alleen dit bestand en probeer het opnieuw.
+runner.io.dyndep.temp_collisions = Er kon na herhaalde naamconflicten geen uniek tijdelijk dyndep-bestand voor { $path } worden gemaakt.
+runner.io.dyndep.too_large = Het gegenereerde dyndep-bestand op { $path } overschrijdt de verificatielimiet van { $limit } bytes.
 
 # Manifestdiagnostiek.
 manifest.parse = Het inlezen van het manifest is mislukt.
@@ -172,6 +181,9 @@ ir.invalid_command = Ongeldige interpolatie in de opdracht: { $snippet }.
 # Fouten bij het genereren van Ninja.
 ninja_gen.missing_action = De actie ‘{ $id }’ waarnaar een bouwtak verwijst, ontbreekt.
 ninja_gen.format = De uitvoer van het Ninja-manifest kon niet worden opgemaakt.
+ninja_gen.dyndep_files_required = Deze bewerking vereist een gegenereerde Ninja-bundel; gebruik `netsuke build`, `netsuke clean` of `netsuke generate` om de dyndep-bestanden te materialiseren.
+ninja_gen.reserved_output_path = Het pad '{ $path }' is gereserveerd voor de seriële afhankelijkheidsstatus van Netsuke.
+ninja_gen.unsupported_path_character = Het pad '{ $path }' bevat het niet-ondersteunde Ninja-padteken '{ $character }'.
 
 # Validatie van hostpatronen.
 host_pattern.empty = Het hostpatroon mag niet leeg zijn.

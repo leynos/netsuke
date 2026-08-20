@@ -48,8 +48,14 @@ fn malformed_discovered_config_fails_the_binary_workflow() -> Result<()> {
 
     ensure!(!output.status.success(), "malformed config must fail");
     ensure!(
-        stderr.contains(".netsuke.toml"),
-        "configuration failure should identify the discovered file: {stderr}",
+        stderr.contains("configuration load failed")
+            && stderr.contains("operation=\"diag_mode_resolution\"")
+            && stderr.contains("error_category=\"io\""),
+        "configuration failure should retain bounded operational context: {stderr}",
+    );
+    ensure!(
+        !stderr.contains(".netsuke.toml"),
+        "configuration failure must not expose the discovered file name: {stderr}",
     );
     Ok(())
 }

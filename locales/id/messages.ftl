@@ -1,5 +1,6 @@
 # Sumber daya pelokalan untuk antarmuka baris perintah Netsuke.
 
+runner.io.dyndep.retention = Gagal menerapkan retensi dyndep yang dibuat di bawah { $path }.
 cli.about = Netsuke mengompilasi manifes YAML + Jinja menjadi rencana build Ninja.
 cli.long_about = Netsuke mengubah manifes YAML + Jinja menjadi graf Ninja yang dapat direproduksi dan menjalankan Ninja dengan nilai bawaan yang aman.
 cli.usage = { $usage }
@@ -102,11 +103,19 @@ runner.io.write_ninja_file = Berkas Ninja di { $path } tidak dapat ditulis.
 runner.io.flush_ninja_file = Penyangga berkas Ninja di { $path } tidak dapat dikosongkan.
 runner.io.sync_ninja_file = Berkas Ninja di { $path } tidak dapat disinkronkan.
 runner.io.open_ambient_dir = Direktori sekitar tidak dapat dibuka.
+runner.io.non_utf8_working_directory = Jalur direktori kerja bukan UTF-8 yang valid.
 runner.io.no_existing_ancestor = Tidak ada direktori induk yang ada untuk { $path }.
 runner.io.derive_relative_path = Jalur Ninja relatif tidak dapat diturunkan.
 runner.io.non_utf8_path = Jalur yang bukan UTF-8 tidak didukung (jalur: { $path }).
 runner.io.write_stdout = Manifes Ninja tidak dapat ditulis ke keluaran standar.
 runner.io.flush_stdout = Penyangga keluaran standar tidak dapat dikosongkan.
+runner.io.dyndep.create_dir = Gagal membuat direktori dyndep { $path }.
+runner.io.dyndep.read = Gagal membaca berkas dyndep yang dibuat di { $path }.
+runner.io.dyndep.write = Gagal menulis berkas dyndep yang dibuat ke { $path }.
+runner.io.dyndep.rename = Gagal mengganti nama berkas dyndep yang dibuat di { $path }.
+runner.io.dyndep.corrupt = Berkas dyndep yang dibuat di { $path } tidak cocok dengan isi yang diharapkan; hapus hanya berkas tersebut lalu coba lagi.
+runner.io.dyndep.temp_collisions = Gagal membuat berkas dyndep sementara yang unik untuk { $path } setelah benturan nama berulang.
+runner.io.dyndep.too_large = Berkas dyndep yang dihasilkan di { $path } melebihi batas verifikasi { $limit } bita.
 
 # Diagnostik manifes.
 manifest.parse = Penguraian manifes gagal.
@@ -172,6 +181,9 @@ ir.invalid_command = Penyisipan tidak sah pada perintah: { $snippet }.
 # Galat pembuatan berkas Ninja.
 ninja_gen.missing_action = Tindakan "{ $id }" yang dirujuk sebuah sisi build tidak ada.
 ninja_gen.format = Keluaran manifes Ninja tidak dapat diformat.
+ninja_gen.dyndep_files_required = Build ini memerlukan bundel Ninja yang dibuat; gunakan `netsuke build`, `netsuke clean`, atau `netsuke generate` agar berkas dyndep diwujudkan.
+ninja_gen.reserved_output_path = Jalur '{ $path }' dicadangkan untuk status dependensi serial Netsuke.
+ninja_gen.unsupported_path_character = Jalur '{ $path }' berisi karakter jalur Ninja yang tidak didukung, yaitu '{ $character }'.
 
 # Validasi pola host.
 host_pattern.empty = Pola host tidak boleh kosong.

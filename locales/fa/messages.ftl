@@ -1,5 +1,6 @@
 # منابع بومی‌سازی خط فرمان Netsuke.
 
+runner.io.dyndep.retention = ‏ اعمال نگه‌داری dyndep تولیدشده در زیر ‏{ $path } ممکن نبود.
 cli.about = ‏Netsuke مانیفست‌های YAML + Jinja را به طرح‌های ساخت Ninja ترجمه می‌کند.
 cli.long_about = ‏Netsuke مانیفست‌های YAML + Jinja را به گراف‌های تکرارپذیر Ninja تبدیل می‌کند و Ninja را با پیش‌فرض‌های ایمن اجرا می‌کند.
 cli.usage = { $usage }
@@ -102,11 +103,19 @@ runner.io.write_ninja_file = نوشتن در پروندهٔ Ninja در { $path }
 runner.io.flush_ninja_file = تخلیهٔ میان‌گیر پروندهٔ Ninja در { $path } ممکن نشد.
 runner.io.sync_ninja_file = همگام‌سازی پروندهٔ Ninja در { $path } ممکن نشد.
 runner.io.open_ambient_dir = گشودن شاخهٔ پیرامون ممکن نشد.
+runner.io.non_utf8_working_directory = ‏ مسیر شاخهٔ کاری UTF-8 معتبر نیست.
 runner.io.no_existing_ancestor = برای { $path } هیچ شاخهٔ والد موجودی نیست.
 runner.io.derive_relative_path = استخراج مسیر نسبی Ninja ممکن نشد.
 runner.io.non_utf8_path = مسیرهایی که UTF-8 نیستند پشتیبانی نمی‌شوند (مسیر: { $path }).
 runner.io.write_stdout = نوشتن مانیفست Ninja در خروجی استاندارد ممکن نشد.
 runner.io.flush_stdout = تخلیهٔ میان‌گیر خروجی استاندارد ممکن نشد.
+runner.io.dyndep.create_dir = ‏ ایجاد پوشهٔ dyndep در ‏{ $path } ممکن نبود.
+runner.io.dyndep.read = ‏ خواندن فایل dyndep تولیدشده در ‏{ $path } ممکن نبود.
+runner.io.dyndep.write = ‏ نوشتن فایل dyndep تولیدشده در ‏{ $path } ممکن نبود.
+runner.io.dyndep.rename = ‏ نهایی‌کردن فایل dyndep تولیدشده در ‏{ $path } ممکن نبود.
+runner.io.dyndep.corrupt = ‏ فایل dyndep تولیدشده در ‏{ $path } با محتوای مورد انتظار مطابقت ندارد؛ فقط همان فایل را حذف کنید و دوباره تلاش کنید.
+runner.io.dyndep.temp_collisions = ‏ پس از برخوردهای مکرر نام‌ها، ایجاد فایل موقت و یکتای dyndep برای ‏{ $path } ممکن نشد.
+runner.io.dyndep.too_large = ‏ فایل dyndep تولیدشده در ‏{ $path } از حدّ تأیید ‏{ $limit } بایت فراتر می‌رود.
 
 # تشخیص‌های مانیفست.
 manifest.parse = تجزیهٔ مانیفست ناکام ماند.
@@ -172,6 +181,9 @@ ir.invalid_command = درج نامعتبر در فرمان: { $snippet }.
 # خطاهای تولید پرونده‌های Ninja.
 ninja_gen.missing_action = کنش «{ $id }» که یک یال ساخت به آن ارجاع می‌دهد وجود ندارد.
 ninja_gen.format = قالب‌بندی خروجی مانیفست Ninja ممکن نشد.
+ninja_gen.dyndep_files_required = ‏ این ساخت به بستهٔ تولیدشدهٔ Ninja نیاز دارد؛ از `netsuke build`، `netsuke clean` یا `netsuke generate` استفاده کنید تا فایل‌های dyndep ایجاد شوند.
+ninja_gen.reserved_output_path = ‏ مسیر '{ $path }' برای وضعیت وابستگی‌های ترتیبی Netsuke رزرو شده است.
+ninja_gen.unsupported_path_character = ‏ مسیر '{ $path }' شامل نویسهٔ مسیر پشتیبانی‌نشدهٔ Ninja یعنی '{ $character }' است.
 
 # اعتبارسنجی الگوهای میزبان.
 host_pattern.empty = الگوی میزبان نباید تهی باشد.

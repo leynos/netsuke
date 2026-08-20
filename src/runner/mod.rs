@@ -4,6 +4,8 @@
 //! `ninja`, overridable with `NETSUKE_NINJA`).
 
 mod dispatch;
+mod dyndep_generation_telemetry;
+mod dyndep_publication;
 mod error;
 mod reporter;
 
@@ -39,15 +41,18 @@ pub const NINJA_ENV: &str = "NETSUKE_NINJA";
 
 mod graph;
 mod help;
+mod ninja_content;
 mod path_helpers;
 mod process;
+pub use ninja_content::NinjaContent;
 #[cfg(doctest)]
 pub use process::doc;
 pub use process::{
-    CommandEnv, NinjaBuildRequest, NinjaToolRequest, StderrMode, run_ninja_tool_with,
-    run_ninja_with,
+    CommandEnv, MAX_RETAINED_DYNDEP_FILES, NinjaBuildRequest, NinjaToolRequest, StderrMode,
+    run_ninja_tool_with, run_ninja_with,
 };
 
+use dyndep_publication::{materialize_dyndep_bundle, prune_dyndep_bundle};
 use path_helpers::{ensure_manifest_exists_or_error, resolve_manifest_path, resolve_output_path};
 
 /// Runtime dependencies shared by command dispatch handlers.
@@ -59,27 +64,6 @@ struct ExecutionContext<'a> {
     /// Keep a native [`Path`]: only `NETSUKE_NINJA` resolution performs UTF-8
     /// conversion, preserving valid non-UTF-8 executable paths.
     ninja_program: &'a Path,
-}
-
-/// Wrapper around generated Ninja manifest text.
-#[derive(Debug, Clone)]
-pub struct NinjaContent(String);
-impl NinjaContent {
-    /// Store the provided Ninja manifest string.
-    #[must_use]
-    pub const fn new(content: String) -> Self {
-        Self(content)
-    }
-    /// Borrow the underlying manifest text.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-    /// Consume the wrapper returning the owned manifest string.
-    #[must_use]
-    pub fn into_string(self) -> String {
-        self.0
-    }
 }
 
 /// Target list passed through to Ninja; an empty slice uses IR defaults.
@@ -222,7 +206,10 @@ fn on_task_progress_callback(reporter: &dyn StatusReporter) -> impl FnMut(u32, u
 ///
 /// Returns an error if manifest generation or Ninja execution fails.
 fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> Result<()> {
-    let ninja = generate_ninja(cli, context.reporter, Some(keys::STATUS_TOOL_BUILD.into()))?;
+    let bundle = generate_ninja(cli, context.reporter, Some(keys::STATUS_TOOL_BUILD.into()))?;
+    let publication = materialize_dyndep_bundle(cli, &bundle)?;
+    prune_dyndep_bundle(cli, bundle.dyndep_files(), &publication)?;
+    let ninja = NinjaContent::new(bundle.into_parts().0);
     let targets = if args.targets.is_empty() {
         BuildTargets::new(&cli.default_targets)
     } else {
@@ -259,6 +246,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> 
     context
         .reporter
         .report_complete(keys::STATUS_TOOL_BUILD.into());
+    drop(publication);
     Ok(())
 }
 
@@ -267,6 +255,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> 
 struct NinjaToolSpec<'a> {
     name: &'a str,
     key: LocalizationKey,
+    prune_after_success: bool,
 }
 
 /// Execute a Ninja tool using a temporary build file and CLI settings.
@@ -284,7 +273,10 @@ fn handle_ninja_tool(
         subcommand = tool.name,
         "Preparing Ninja tool invocation"
     );
-    let ninja = generate_ninja(cli, context.reporter, Some(tool.key))?;
+    let bundle = generate_ninja(cli, context.reporter, Some(tool.key))?;
+    let publication = materialize_dyndep_bundle(cli, &bundle)?;
+    let (ninja_file, dyndep_files) = bundle.into_parts();
+    let ninja = NinjaContent::new(ninja_file);
 
     let tmp = process::create_temp_ninja_file(&ninja)?;
     let build_path = tmp.path();
@@ -314,11 +306,15 @@ fn handle_ninja_tool(
     } else {
         run_ninja_tool(context.ninja_program, cli, build_path, tool.name).with_context(ctx)?;
     }
+    if tool.prune_after_success {
+        prune_dyndep_bundle(cli, &dyndep_files, &publication)?;
+    }
     context.reporter.report_complete(tool.key);
+    drop(publication);
     Ok(())
 }
 
-/// Generate Ninja from the manifest referenced by `cli` and report pipeline stages.
+/// Generate a Ninja bundle from the manifest referenced by `cli`.
 ///
 /// # Errors
 ///
@@ -327,17 +323,14 @@ fn handle_ninja_tool(
 /// # Examples
 /// ```ignore
 /// use netsuke::cli::Cli;
-/// use netsuke::runner::generate_ninja;
-/// use netsuke::status::SilentReporter;
-/// let cli = Cli::default();
-/// let ninja = generate_ninja(&cli, &SilentReporter, None).expect("generate");
-/// assert!(ninja.as_str().contains("rule"));
+/// use netsuke::ninja_gen::GeneratedNinja;
+/// # let _: Option<GeneratedNinja> = None;
 /// ```
 fn generate_ninja(
     cli: &Cli,
     reporter: &dyn StatusReporter,
     tool_key: Option<LocalizationKey>,
-) -> Result<NinjaContent> {
+) -> Result<ninja_gen::GeneratedNinja> {
     let manifest_path = resolve_manifest_path(cli)?;
     ensure_manifest_exists_or_error(cli, reporter, &manifest_path)?;
 
@@ -361,9 +354,10 @@ fn generate_ninja(
         PipelineStage::NinjaSynthesisAndExecution,
         tool_key,
     );
-    let ninja = ninja_gen::generate(&graph)
-        .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))?;
-    Ok(NinjaContent::new(ninja))
+    dyndep_generation_telemetry::instrument_bundle_generation(&graph, || {
+        ninja_gen::generate_bundle(&graph)
+    })
+    .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))
 }
 
 pub(super) fn load_manifest_with_stage_reporting(

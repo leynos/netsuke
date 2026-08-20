@@ -6,6 +6,9 @@
 #[path = "ast_tests/actions.rs"]
 mod actions;
 
+#[path = "ast_tests/dependency_order.rs"]
+mod dependency_order;
+
 #[path = "ast_tests/descriptions.rs"]
 mod descriptions;
 #[path = "ast_tests/macros.rs"]

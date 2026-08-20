@@ -1,13 +1,12 @@
 ---
 source: src/runner/help_tests.rs
-assertion_line: 103
 expression: rendered
 ---
 {
   "schema_version": 1,
   "generator": {
     "name": "netsuke",
-    "version": "0.1.0-beta1"
+    "version": "0.1.0-beta2"
   },
   "result": {
     "command": "help-targets",

@@ -1,5 +1,6 @@
 # Πόροι τοπικοποίησης για τη γραμμή εντολών του Netsuke.
 
+runner.io.dyndep.retention = Δεν ήταν δυνατή η εφαρμογή της διατήρησης του παραγόμενου dyndep κάτω από τη διαδρομή { $path }.
 cli.about = Το Netsuke μεταγλωττίζει δηλωτικά YAML + Jinja σε σχέδια δόμησης Ninja.
 cli.long_about = Το Netsuke μετατρέπει δηλωτικά YAML + Jinja σε αναπαραγώγιμα γραφήματα Ninja και εκτελεί το Ninja με ασφαλείς προεπιλογές.
 cli.usage = { $usage }
@@ -103,11 +104,19 @@ runner.io.write_ninja_file = Δεν ήταν δυνατή η εγγραφή το
 runner.io.flush_ninja_file = Δεν ήταν δυνατή η εκκένωση της ενδιάμεσης μνήμης του αρχείου Ninja στο { $path }.
 runner.io.sync_ninja_file = Δεν ήταν δυνατός ο συγχρονισμός του αρχείου Ninja στο { $path }.
 runner.io.open_ambient_dir = Δεν ήταν δυνατό το άνοιγμα του περιβάλλοντος καταλόγου.
+runner.io.non_utf8_working_directory = Η διαδρομή του καταλόγου εργασίας δεν είναι έγκυρη UTF-8.
 runner.io.no_existing_ancestor = Δεν υπάρχει γονικός κατάλογος για το { $path }.
 runner.io.derive_relative_path = Δεν ήταν δυνατή η εξαγωγή της σχετικής διαδρομής Ninja.
 runner.io.non_utf8_path = Οι διαδρομές που δεν είναι UTF-8 δεν υποστηρίζονται (διαδρομή: { $path }).
 runner.io.write_stdout = Δεν ήταν δυνατή η εγγραφή του δηλωτικού Ninja στην τυπική έξοδο.
 runner.io.flush_stdout = Δεν ήταν δυνατή η εκκένωση της τυπικής εξόδου.
+runner.io.dyndep.create_dir = Δεν ήταν δυνατή η δημιουργία του καταλόγου dyndep στη διαδρομή { $path }.
+runner.io.dyndep.read = Δεν ήταν δυνατή η ανάγνωση του παραγόμενου αρχείου dyndep στη διαδρομή { $path }.
+runner.io.dyndep.write = Δεν ήταν δυνατή η εγγραφή του παραγόμενου αρχείου dyndep στη διαδρομή { $path }.
+runner.io.dyndep.rename = Δεν ήταν δυνατή η οριστικοποίηση του παραγόμενου αρχείου dyndep στη διαδρομή { $path }.
+runner.io.dyndep.corrupt = Το παραγόμενο αρχείο dyndep στη διαδρομή { $path } δεν ταιριάζει με το αναμενόμενο περιεχόμενο· αφαιρέστε μόνο αυτό το αρχείο και δοκιμάστε ξανά.
+runner.io.dyndep.temp_collisions = Δεν ήταν δυνατή η δημιουργία μοναδικού προσωρινού αρχείου dyndep για τη διαδρομή { $path } μετά από επανειλημμένες συγκρούσεις ονομάτων.
+runner.io.dyndep.too_large = Το παραγόμενο αρχείο dyndep στη διαδρομή { $path } υπερβαίνει το όριο επαλήθευσης των { $limit } byte.
 
 # Διαγνωστικά δηλωτικού.
 manifest.parse = Η ανάλυση του δηλωτικού απέτυχε.
@@ -173,6 +182,9 @@ ir.invalid_command = Μη έγκυρη παρεμβολή στην εντολή:
 # Σφάλματα παραγωγής αρχείων Ninja.
 ninja_gen.missing_action = Λείπει η ενέργεια «{ $id }» στην οποία παραπέμπει ακμή δόμησης.
 ninja_gen.format = Δεν ήταν δυνατή η μορφοποίηση της εξόδου του δηλωτικού Ninja.
+ninja_gen.dyndep_files_required = Αυτή η δόμηση απαιτεί παραγόμενο πακέτο Ninja· χρησιμοποιήστε `netsuke build`, `netsuke clean` ή `netsuke generate`, ώστε να δημιουργηθούν τα αρχεία dyndep.
+ninja_gen.reserved_output_path = Η διαδρομή '{ $path }' είναι δεσμευμένη για την κατάσταση σειριακών εξαρτήσεων του Netsuke.
+ninja_gen.unsupported_path_character = Η διαδρομή '{ $path }' περιέχει τον μη υποστηριζόμενο χαρακτήρα διαδρομής Ninja '{ $character }'.
 
 # Έλεγχος μοτίβων κόμβων.
 host_pattern.empty = Το μοτίβο κόμβου δεν πρέπει να είναι κενό.

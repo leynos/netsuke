@@ -159,12 +159,8 @@ fn render_recipe_string_or_list(
 fn recipe_render_context(ctx: &Vars) -> Vars {
     record_recipe_context_preparation();
     let mut recipe_ctx = ctx.clone();
-    recipe_ctx
-        .entry("ins".into())
-        .or_insert_with(|| ManifestValue::String(INS_TOKEN.into()));
-    recipe_ctx
-        .entry("outs".into())
-        .or_insert_with(|| ManifestValue::String(OUTS_TOKEN.into()));
+    recipe_ctx.insert("ins".into(), ManifestValue::String(INS_TOKEN.into()));
+    recipe_ctx.insert("outs".into(), ManifestValue::String(OUTS_TOKEN.into()));
     recipe_ctx
 }
 

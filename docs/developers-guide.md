@@ -285,7 +285,7 @@ The lowering stages have deliberately separate responsibilities:
   `$out` tokens are resolved per entry; tokens inside backticks are preserved.
   The resulting action contains ordinary command text and no Ninja
   placeholders.
-- `src/ninja_gen.rs` emits a scalar command unchanged. For a list, it puts
+- `src/ninja_gen/mod.rs` emits a scalar command unchanged. For a list, it puts
   each entry in a brace group and joins the groups with `&&`. Each group uses
   `eval` with a shell-quoted entry payload. This keeps an inline comment or a
   trailing control operator such as `&` inside the entry from consuming the
@@ -501,27 +501,14 @@ NEXTEST_VERSION="$(sed -n "s/.*NEXTEST_VERSION: '\(.*\)'.*/\1/p" \
   .github/workflows/ci.yml)"
 cargo install cargo-nextest --locked --version "$NEXTEST_VERSION"
 # or, for a prebuilt binary:
-cargo binstall --no-confirm "cargo-nextest@$NEXTEST_VERSION"
+cargo binstall --no-confirm --locked \
+  "cargo-nextest@$NEXTEST_VERSION"
 ```
 
-See [Test execution](#test-execution) for what the checked-in nextest
-configuration does and does not cover.
-
-`make lint` starts with workspace-wide rustdoc through
-`RUSTDOCFLAGS="$(RUSTDOC_FLAGS)"` and
-`RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)"`. This
-denies warnings, enables Polonius, and preserves any `RUSTFLAGS` supplied by
-the caller. It then runs workspace-wide
-`cargo clippy --workspace --all-targets --all-features` and the
-[Whitaker](whitaker-users-guide.md) Dylint suite
-(`whitaker --all -- --all-targets --all-features`). Install Whitaker through
-the standalone installer described in the
-[Whitaker user's guide](whitaker-users-guide.md) so local linting matches
-continuous integration (CI); `make lint-clippy` runs the Clippy-only subset. CI
-pins the installer version in `WHITAKER_INSTALLER_VERSION` in
-`.github/workflows/ci.yml`. Install that same version locally so local runs
-match CI; read the pin from the workflow rather than copying the number, so the
-two cannot drift:
+CI pins the Whitaker installer version in `WHITAKER_INSTALLER_VERSION` in
+`.github/workflows/ci.yml`. Install that same version locally so local linting
+matches CI; read the pin from the workflow rather than copying the number, so
+the two cannot drift:
 
 ```bash
 WHITAKER_INSTALLER_VERSION="$(sed -n \
@@ -598,19 +585,19 @@ no narrower — that covers the enumerated integration-test crates. The
 `test_support` crate uses capability-backed fixture helpers and remains linted
 by Whitaker under its own narrow policy.
 
-`test_support` is a workspace member, but the root Whitaker invocation selects
-only the `netsuke-build` package (the Cargo package name behind the `netsuke`
-targets; see ADR-007) and disables Dylint dependency checks. It therefore
-compiles `test_support` as a dependency without applying the root
-`dylint.toml`. Its one sanctioned ambient boundary is configured per crate.
-Workspace membership makes Dylint discover the root configuration even when
-launched from `test_support/`, so the scoped recipe supplies the contents of
-`test_support/dylint.toml` explicitly through `DYLINT_TOML`. The second pass
-also uses `--package test_support` and `--no-deps`, because running from a
-member directory alone would otherwise check the parent workspace. That
-configuration names only `test_support::fs` in `excluded_paths`. The root
-`excluded_crates` must not contain `test_support`: every other module in the
-crate remains subject to the filesystem policy.
+The root Whitaker invocation selects only the `netsuke-build` package (the
+Cargo package name behind the `netsuke` targets; see ADR-007) and disables
+Dylint dependency checks. It supplies the root `dylint.toml` contents
+explicitly through `DYLINT_TOML`, so every invocation receives the same
+capability-boundary policy regardless of how Dylint resolves the current
+crate. `test_support` is a workspace member with one sanctioned ambient
+boundary configured per crate. Its second, scoped invocation supplies
+`test_support/dylint.toml` through `DYLINT_TOML`, and uses `--package
+test_support` and `--no-deps`, because running from a member directory alone
+would otherwise check the parent workspace. That configuration names only
+`test_support::fs` in `excluded_paths`. The root `excluded_crates` must not
+contain `test_support`: every other module in the crate remains subject to the
+filesystem policy.
 
 Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
 allows. Do not use Rust `#[allow]` or `#[expect]` for `no_std_fs_operations`:
@@ -1588,6 +1575,12 @@ all valid inputs.
   `resolve_config_path_obeys_precedence_invariant` asserts the
   `explicit_config_path` selector-precedence invariant for generated optional
   paths.
+- Layer-precedence and replay transitions are also property-tested:
+  `tests/cli_tests/merge_precedence_proptests.rs` asserts scalar precedence
+  and list appending for arbitrary file, environment, and CLI layer
+  combinations, and `src/cli/discovery_replay_proptests.rs` proves repeated
+  discovery-diagnostic replays stay identical without re-reading the
+  environment.
 
 ### Parametrized unit tests with rstest
 
@@ -1606,12 +1599,88 @@ unit tests where a small fixed set of cases must all be verified.
 manifest `deps` into `BuildEdge.implicit_deps`, and manifest `order_only_deps`
 into `BuildEdge.order_only_deps`. Keep those classes separate: recipe
 interpolation (`$in` and `{{ ins }}`) receives only `BuildEdge.inputs`, while
-`src/ninja_gen.rs` renders implicit deps with Ninja's single-pipe separator.
+`src/ninja_gen/mod.rs` renders implicit deps with Ninja's single-pipe separator.
+
+`ast::DependencyOrder` is the closed manifest enum responsible for YAML and
+Serde. `src/ir/from_manifest.rs` explicitly converts it to the
+serialization-free `ir::DependencyOrder` stored in
+`BuildEdge::dependency_order`; both types have matching `Parallel` and `Serial`
+variants, and `parallel` remains the default. The ordering policy applies only
+to a manifest `deps` list; never infer it from the number or shape of graph
+edges, and do not apply it to inputs or order-only dependencies.
 
 `src/ir/cycle.rs::CycleDetector::visit` traverses `inputs` and `implicit_deps`
 when detecting cycles. It intentionally does not traverse `order_only_deps`,
 because order-only dependencies express scheduling order rather than rebuild
 freshness.
+
+### Serial dependency bundles
+
+`src/ninja_gen/dyndep.rs` owns the Ninja-specific lowering for a serial list
+with more than one dependency. It produces a `GeneratedNinja` bundle: the main
+build-file text plus immutable, content-addressed `GeneratedDyndep` sidecars.
+The generated phony gates live under `.netsuke/serial`; sidecars live under
+`.netsuke/dyndep`. Those are reserved graph namespaces, validated before
+generation. User graph paths in outputs, inputs, implicit dependencies, and
+order-only dependencies cannot use either namespace. A string-only generator
+must return `DyndepFilesRequired` for a graph that needs sidecars rather than
+returning an incomplete build file.
+
+Generated bundles need Ninja 1.10 or newer only when a serial direct-dependency
+list has at least two items and therefore needs staged ordering; parallel lists
+and serial lists with zero or one item retain the existing Ninja requirement.
+
+Each gate reveals one real dependency through a pre-materialized Ninja dyndep
+file. The gate edge associated with the next sidecar depends on the preceding
+gate, which keeps later direct dependencies unavailable to the scheduler until
+earlier work succeeds. The runner materializes every sidecar file before Ninja
+starts; no Ninja edge produces sidecar content. This is not an order-only
+chain or a Ninja pool: both leave the real dependencies visible to Ninja too
+early. Preserve one top-level Ninja invocation so shared nodes keep Ninja's
+normal execute-once memoization.
+
+`GeneratedNinja` is the query-command boundary: generation may construct and
+return it, but it must not publish any filesystem state.
+`src/runner/dyndep_publication.rs` owns the `materialize_dyndep_bundle`
+command, which every `build`, `clean`, and `generate` boundary must call before
+writing or invoking the main file. That command opens the effective
+working-directory capability and injects it into
+`src/runner/process/dyndep_files.rs`, which owns atomic sidecar writes and
+content verification. The materializer may only use that injected `Dir`; it
+must not inspect CLI state or reopen ambient authority. It verifies existing
+content, then uses a same-directory temporary file plus atomic rename. Keep
+generated sidecars content-addressed and idempotent; corruption is an error,
+not a reason to overwrite an unknown file.
+
+`src/runner/process/dyndep_retention.rs` owns the publication lease and
+retention cleanup. The command-boundary module invokes it after materialization
+or successful clean while retaining the lease through bundle consumption.
+
+`DyndepPublicationLease` also coordinates retention. Sidecar-capable `build`,
+`generate`, and `clean` commands hold the capability-scoped exclusive
+`.netsuke/dyndep` directory lease through Ninja or generated-output
+consumption. While the lease is held, stale `.tmp` files are removed and
+obsolete `.dd` files are retained in deterministic path order up to 32 files
+and 1 MiB. The current bundle is always retained. `build` and `generate`
+prune after materialization; `clean` prunes only after successful
+`ninja -t clean`, never after a failed clean. Do not introduce age-based
+cleanup or mutate an existing content-addressed sidecar. See
+[ADR-012](adr-012-bound-dyndep-sidecar-retention.md) for the durable policy.
+
+`src/runner/dyndep_generation_telemetry.rs` owns runner-boundary generation
+telemetry, and `src/runner/process/dyndep_telemetry.rs` owns publication
+telemetry. They may wrap their respective boundaries with bounded
+outcome-and-duration metrics and spans. Do not put manifest paths, action IDs,
+sidecar names, or content in those fields; `src/ninja_gen` generation and
+rendering must remain telemetry-free so their query responsibilities stay
+explicit.
+
+The intended serial guarantee is path-scoped. A later dependency that is
+independently reachable elsewhere in the requested graph may start via that
+other path. Do not broaden the implementation with a global lock, pool, or
+new scheduler without an approved design change. See
+[ADR-011](adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md) for the
+durable decision and its alternatives.
 
 ### Recipe placeholder ownership
 
@@ -2445,35 +2514,40 @@ Table: Scenario state groups and fields
 Configuration merging lives in `src/cli/merge.rs`. The module keeps
 config-layer plumbing separate from the public CLI surface in `cli::mod`.
 
-### Two-pass file discovery
+### Cached configuration discovery
 
-OrthoConfig's `ConfigDiscovery::compose_layers()` returns only the **first**
-matching config file it finds. Because user-scope locations (XDG Base
-Directory, HOME) are checked before the project root, a user config can shadow
-a project config.
+`discover_file_layers` performs one discovery pass through the injected
+environment and returns a `DiscoveryOutcome`. The outcome retains a
+`DiscoveredLayers` value that owns the discovered layers, discovery errors and
+bounded deferred diagnostics. The diagnostic-mode resolver,
+`resolve_json_and_layers_outcome_with_env`, returns
+`(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics; it
+resolves the JSON preference from those discovered layers and preserves the
+outcome for the startup boundary.
 
-To enforce **project scope > user scope** precedence, `merge_with_config` uses
-a two-pass approach when no explicit config path is provided:
+`DiscoveryOutcome::emit_diagnostics` replays the retained bounded diagnostics
+after the composition boundary configures tracing. Callers must explicitly
+replay diagnostics there; the method does not repeat environment or filesystem
+access. `DiscoveryOutcome::into_layers` transfers the same
+`DiscoveredLayers` to `merge_with_cached_file_layers`, which consumes the
+cached layers for the full merge and prevents a second discovery pass.
 
-1. **First pass** — run `config_discovery()` to find whatever file exists
-   first (typically user-scope).
-2. **Second pass** — if the first pass did not find the project-scope file
-   and there is no explicit config path (`--config` or `NETSUKE_CONFIG`), load
-   `.netsuke.toml` from the project root directly via
-   `load_config_file_as_chain` and push its layers last.
+The standalone `merge_with_config_and_env` path performs discovery, emits the
+retained diagnostics and delegates to `merge_with_cached_file_layers`.
+`merge_with_config` is the process-environment wrapper around that path.
 
-Because `MergeComposer` uses last-wins semantics, pushing the project layers
-after user layers gives them higher precedence.
-
-Early JSON resolution reuses this logic through
-`collect_diag_file_layers_with_sources`, before full configuration merging.
+Deferred bounded discovery diagnostics are replay metadata only. Discovery
+errors remain owned by `DiscoveredLayers` and are handled by the diagnostic
+JSON resolver and the full-merge caller according to their respective error
+policies.
 
 ### Layer precedence
 
 The final merge order is:
 
 1. **Defaults** — `Cli::default()` serialized as a base layer.
-2. **File layers** — discovered config files in the two-pass order above.
+2. **File layers** — discovered config files in discovery order, with project
+   scope taking precedence over user and system scope.
 3. **Environment** — `NETSUKE_*` environment variables via the Figment Env
    provider.
 4. **CLI flags** — values explicitly passed on the command line.
@@ -2484,29 +2558,32 @@ Private helper functions for config discovery and JSON-output resolution.
 
 Configuration merge helpers:
 
-- `config_discovery(directory, env_source) -> ConfigDiscovery` builds the
-  single-pass OrthoConfig discovery scanner with an optional project-root
-  anchor and the environment adapter selected at the composition root.
-- `project_scope_file(directory: Option<&Path>) -> Option<PathBuf>`
-  resolves the expected project `.netsuke.toml` path for project-layer
-  detection.
-- `project_scope_layers(directory)` loads the project-scope config directly,
-  bypassing automatic discovery, and returns
+- `config_discovery(directory: Option<&PathBuf>, env_source: SharedEnvSource)`
+  builds the single-pass OrthoConfig discovery scanner with an optional
+  project-root anchor and the injected environment source.
+- `project_scope_file(directory: Option<&Path>) -> Option<PathBuf>` resolves
+  the expected project `.netsuke.toml` path for project-layer detection.
+- `project_scope_layers(project_file: Option<&Path>)` loads the project-scope
+  config directly, bypassing automatic discovery, and returns
   `OrthoResult<Vec<MergeLayer<'static>>>`.
 - `env_config_path(env, var_name) -> Option<PathBuf>` reads one config
   environment variable, ignores empty values, and converts the value into a
   `PathBuf`.
 - `explicit_config_path_with_env(cli, env) -> Option<PathBuf>` resolves explicit
   config selection from `--config` and `NETSUKE_CONFIG`.
-- `push_file_layers_with_sources(cli, composer, errors, sources) -> ()` pushes
-  explicit or discovered file layers onto a `MergeComposer`. Explicit load
-  errors are pushed into `errors`, and automatic discovery is not attempted
-  after an explicit selector fails.
-- `collect_diag_file_layers_with_sources(cli, sources)` reuses the same
-  file-layer precedence for early JSON resolution.
-- `collect_file_layers_with_env_source(directory, env_source)` builds the
-  fallback discovery layer chain, applies the project-layer second pass, and
-  returns `OrthoResult<Vec<MergeLayer<'static>>>`.
+- `discover_file_layers(cli, env) -> DiscoveryOutcome` performs one discovery
+  pass and retains the discovered layers, discovery errors and bounded
+  deferred diagnostics for the diagnostic and merge callers.
+- `push_discovered_file_layers(composer, errors, discovered) -> ()` transfers
+  the retained layers and discovery errors into the full merge composition.
+- `collect_file_layers_with_trace_and_env_source(directory, env_source)` runs
+  the one discovery pass and retains bounded project-scope trace metadata.
+- `resolve_json_and_layers_outcome_with_env(cli, matches, env)` returns
+  `(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics; the
+  composition boundary must replay them after tracing setup and then call
+  `into_layers()`.
+- `merge_with_cached_file_layers(cli, matches, env, discovered)` consumes the
+  discovered layers without rediscovery.
 - `is_empty_value(value: &serde_json::Value) -> bool` detects an empty CLI
   override object.
 - `json_from_layer(value: &serde_json::Value) -> Option<bool>` extracts `json`
@@ -2541,13 +2618,14 @@ so discovery and value merging observe one environment. Keep this port scoped
 to CLI configuration; runner, manifest, locale, and stdlib environment seams
 remain separate because their input and lifetime contracts differ.
 
-`DiscoverySources` is a crate-private composition input owned by
-`src/cli/discovery.rs`. Only full merge and early JSON resolution may construct
-it. Ambient entry points pair `ConfigStdEnvProvider` with OrthoConfig
-`ProcessEnv`; injected entry points project the same `ConfigEnvProvider` into a
-closed `MapEnv` containing only `NETSUKE_CONFIG`, `HOME`, `USERPROFILE`,
-`XDG_CONFIG_HOME`, `XDG_CONFIG_DIRS`, `APPDATA`, and `LOCALAPPDATA`. Do not
-reuse this fixed-key projection as a general environment-copy helper;
+`discovery_env_source(env)` is the crate-private adapter that projects
+Netsuke's `ConfigEnvProvider` port into the `SharedEnvSource` OrthoConfig
+discovery accepts. Ambient and injected entry points alike pass through this
+one adapter: `ConfigStdEnvProvider` backs ambient runs, while injected entry
+points pass the same `ConfigEnvProvider` value that drives selector and
+`NETSUKE_*` lookups. The projection is closed — only `NETSUKE_CONFIG`, `HOME`,
+`USERPROFILE`, `XDG_CONFIG_HOME`, `XDG_CONFIG_DIRS`, `APPDATA`, and
+`LOCALAPPDATA` appear — so it is not a general environment-copy helper;
 `EnvironmentLayer` alone enumerates the full `NETSUKE_*` value environment.
 
 `explicit_config_path_with_env` is the crate-internal seam for explicit
@@ -2584,10 +2662,11 @@ the unrelated `LocaleEnvProvider` in `locale_resolution`; crate-internal code
 uses the bare `EnvProvider` name.
 
 Tests for injected configuration discovery should provide a map-backed
-`ConfigEnvProvider`. End-to-end tests of the ambient `ProcessEnv` adapter must
-run in an isolated child configured with `env_clear()` followed by
-`Command::env`. `EnvLock` is reserved for tests that change the process working
-directory alongside `CwdGuard`; it does not justify environment mutation.
+`ConfigEnvProvider`. End-to-end tests of the ambient `ConfigStdEnvProvider`
+adapter must run in an isolated child configured with `env_clear()` followed
+by `Command::env`. `EnvLock` is reserved for tests that change the process
+working directory alongside `CwdGuard`; it does not justify environment
+mutation.
 
 Unit tests that only need to verify explicit config path precedence should test
 `explicit_config_path_with_env` with an injected provider instead of mutating
@@ -2595,15 +2674,19 @@ the process environment.
 
 Config selector resolution remains a pure query: `resolve_config_selector`
 records the winning selector, its optional path, and every environment lookup
-evaluated, and emits no tracing itself. Structured diagnostics are emitted only
-at the file-layer boundary, where `collect_file_layers_with_env` calls
-`trace_config_path_resolution` after resolution completes.
+evaluated, and emits no tracing itself. `discover_file_layers` retains the
+bounded diagnostics produced by that resolution and by layer loading;
+`DiscoveryOutcome::emit_diagnostics` replays them after tracing is configured.
 
-Tracing never logs full paths or formatted parser errors. Path values are
-bounded to a `path_hash` correlation identifier plus `path_file_name`, and load
-failures are classified with the `ConfigLoadFailureKind` enum instead of the
-formatted error text. `path_hash` is a bounded identifier for correlating
-events, not a cryptographic guarantee.
+Deferred discovery diagnostics never log raw configuration paths, configuration
+file names or formatted parser errors. They expose bounded `path_hash` and
+presence fields, and classify load failures with the `ConfigLoadFailureKind`
+enum instead of formatted error text. The unkeyed `path_hash` is a bounded
+correlation identifier, not confidential concealment of a guessable path.
+
+This deferred contract is distinct from terminal `configuration load failed`
+records emitted by `src/main.rs`. Those terminal records identify the failed
+operation and coarse error category without rendering the source error.
 
 #### `json` contract
 
@@ -2840,16 +2923,15 @@ split diagnostics, path comparison, and tests out of the main discovery flow:
 - `discovery_event_assertions.rs` — shared test-only helpers:
   `capture_events` runs a closure under a TRACE capturing subscriber,
   `find_event` locates one emitted event by substring, and `EventAssertion`
-  bundles an event with its path to assert bounded `path_hash`/`path_file_name`
-  fields, the absence of the raw path or formatted error text, and to normalize
-  the hash before an `insta` snapshot.
+  bundles an event with its path to assert bounded `path_hash` and presence
+  fields, the absence of raw paths, file names and formatted error text, and to
+  normalize the hash before an `insta` snapshot.
 - `discovery_tracing_tests.rs` — tests selector precedence
   (`--config` versus `NETSUKE_CONFIG`), the removed legacy
   `NETSUKE_CONFIG_PATH` alias, and event-schema snapshots for both selection
   and explicit load failures.
-- `discovery_layer_tests.rs` — tests the test-only
-  `collect_diag_file_layers_with_env` wrapper (explicit path versus automatic
-  discovery) and the project-scope second pass in `collect_file_layers`.
+- `discovery_layer_tests.rs` — tests the explicit-path versus automatic
+  discovery branches and project-scope handling in the one discovery pass.
 
 Both test modules import `capture_events`, `find_event`, and `EventAssertion`
 from `discovery_event_assertions` rather than duplicating them. The `insta`
@@ -3571,6 +3653,63 @@ small integer cycles of length two through four; a direct adapter harness and
 the Proptest suite keep the `Utf8PathBuf` instantiation tied to production.
 
 **Cross-references:** `docs/netsuke-design.md` §5.3.
+
+## Configuration observability
+
+**Cross-references:** [CLI design](netsuke-design.md) §8.4, for the
+application-owned recorder boundary and end-of-run snapshot policy.
+
+`src/observability.rs` owns the application-level instrumentation for the two
+configuration-loading boundaries in `src/main.rs`. Keep configuration loading
+itself as a plain query: compose this instrumentation only at the CLI
+composition root. Other subsystem boundaries retain their local telemetry
+modules and must not add unbounded configuration detail to these series.
+
+The bounded metric contract is:
+
+- Counter `config_load_total` records exactly one outcome for each logical
+  configuration-load phase. Its `phase` label is `diag_mode` for early
+  diagnostic-mode resolution or `merge` for the full configuration merge. Its
+  `outcome` label is `success` or `failure`.
+- Histogram `config_load_duration_seconds` records one duration for each of
+  those phases and carries only the same bounded `phase` label.
+
+`init_metrics()` installs an application-owned filtering recorder around the
+process-wide `metrics_util::debugging::DebuggingRecorder` after tracing starts.
+It retains only the two configuration-load metric names above, so unrelated
+workload histograms cannot accumulate samples until shutdown. Tests must use
+`metrics::with_local_recorder` with a local recorder instead.
+`emit_metrics_snapshot()` drains and logs that configuration-load aggregate at
+command completion. After a successful configuration merge, `finish_run` gates
+it on merged `verbose`; if diagnostic-mode resolution or the full merge fails
+before a merged configuration exists, it uses parsed CLI `verbose` instead. JSON
+sets tracing to `OFF`, so JSON runs suppress this snapshot.
+
+The lifecycle is exactly-once: a `Once` guards global recorder installation and
+a `OnceLock` stores the snapshotter, so a second `init_metrics()` call is a
+no-op. If `set_global_recorder` fails — it can be called once per process — the
+recorder is dropped, the snapshotter stays unset, and `emit_metrics_snapshot()`
+becomes a no-op. `snapshot()` drains: counters swap to zero and histogram
+samples clear while the bounded series remain, so a snapshot taken while work
+is still recording would lose those samples. `finish_run` returns on every exit
+path, so the audit snapshot is emitted once per process. The in-crate unit
+tests cover draining and concurrent recording against local recorders, and the
+binary-level suite exercises the process-wide install through the compiled
+executable.
+
+The debugging recorder preserves raw histogram observations rather than
+aggregating them into buckets. Netsuke configures no custom buckets; a future
+exporter may choose its own bucket policy without changing this metric name or
+label contract.
+
+Human-readable `configuration load failed` events include two structured
+fields:
+
+- `operation`: `diag_mode_resolution` or `config_merge`.
+- `error_category`: `io`, `parse`, or `validation`.
+
+The first two fields remain deliberately low-cardinality. Do not add paths,
+configuration values, or error text as metric labels.
 
 ## Documentation upkeep
 

@@ -416,3 +416,6 @@ fn manifest_error_cases(
     }
     Ok(())
 }
+
+#[path = "ir_from_manifest_tests/dependency_order.rs"]
+mod dependency_order;

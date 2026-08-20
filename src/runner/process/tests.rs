@@ -30,6 +30,13 @@ use std::thread;
 use std::time::Duration;
 use tracing_subscriber::filter::LevelFilter;
 
+/// Open a capability directory rooted at an owned UTF-8 temporary directory.
+pub(super) fn temporary_dir(temp: &tempfile::TempDir) -> anyhow::Result<cap_std::fs_utf8::Dir> {
+    let path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+        .map_err(|path| anyhow::anyhow!("temporary directory is not UTF-8: {}", path.display()))?;
+    cap_std::fs_utf8::Dir::open_ambient_dir(path, cap_std::ambient_authority()).map_err(Into::into)
+}
+
 /// A `MockEnv` answering exactly one `os_string` read of `NETSUKE_NINJA`.
 ///
 /// The key expectation is part of the contract (#488): a resolver that reads

@@ -9,6 +9,9 @@ use std::{io, path::Path, process::Command};
 mod child_exit;
 mod command_list_telemetry;
 mod command_logging;
+mod dyndep_files;
+mod dyndep_retention;
+mod dyndep_telemetry;
 mod failure_attribution;
 mod file_io;
 mod ninja_program;
@@ -24,6 +27,9 @@ use child_exit::{ExitFailureContext, check_exit_status_with_context};
 use command_logging::{
     CommandLogContext, command_span, log_command_execution, log_command_spawn_failure,
 };
+pub(crate) use dyndep_files::materialize_dyndep_files;
+pub use dyndep_retention::MAX_RETAINED_DYNDEP_FILES;
+pub(crate) use dyndep_retention::{DyndepPublicationLease, prune_dyndep_cache};
 pub use file_io::*;
 pub use ninja_program::resolve_ninja_program;
 #[cfg(doctest)]
@@ -268,3 +274,6 @@ pub(crate) fn run_ninja_tool_with_status(
 ) -> io::Result<()> {
     run_ninja_tool_internal(request, Some(status_observer), &StdMonotonicClock)
 }
+
+/// Namespace for generated dyndep sidecar files.
+pub(super) const DYNDEP_DIR: &str = ".netsuke/dyndep";

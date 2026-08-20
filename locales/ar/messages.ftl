@@ -1,5 +1,6 @@
 # موارد التوطين لواجهة سطر الأوامر في Netsuke.
 
+runner.io.dyndep.retention = ‏ تعذّر تطبيق الاحتفاظ بـ dyndep المُنشأ أسفل ‏{ $path }.
 cli.about = يصرّف Netsuke بيانات YAML + Jinja إلى خطط بناء بصيغة Ninja.
 cli.long_about = يحوّل Netsuke بيانات YAML + Jinja إلى رسوم Ninja قابلة لإعادة الإنتاج، ثم ينفّذ Ninja بإعدادات افتراضية آمنة.
 cli.usage = { $usage }
@@ -102,11 +103,19 @@ runner.io.write_ninja_file = تعذّرت الكتابة إلى ملف Ninja ف�
 runner.io.flush_ninja_file = تعذّر إفراغ ذاكرة ملف Ninja في { $path }.
 runner.io.sync_ninja_file = تعذّرت مزامنة ملف Ninja في { $path }.
 runner.io.open_ambient_dir = تعذّر فتح الدليل المحيط.
+runner.io.non_utf8_working_directory = ‏ مسار دليل العمل غير صالح بترميز UTF-8.
 runner.io.no_existing_ancestor = لا يوجد دليل أعلى قائم للمسار { $path }.
 runner.io.derive_relative_path = تعذّر اشتقاق مسار Ninja النسبي.
 runner.io.non_utf8_path = المسارات غير المرمّزة بـ UTF-8 غير مدعومة (المسار: { $path }).
 runner.io.write_stdout = تعذّرت كتابة ملف بيانات Ninja إلى المخرج القياسي.
 runner.io.flush_stdout = تعذّر إفراغ ذاكرة المخرج القياسي.
+runner.io.dyndep.create_dir = ‏ تعذّر إنشاء دليل dyndep ‏{ $path }.
+runner.io.dyndep.read = ‏ تعذّرت قراءة ملف dyndep المُنشأ في ‏{ $path }.
+runner.io.dyndep.write = ‏ تعذّرت كتابة ملف dyndep المُنشأ في ‏{ $path }.
+runner.io.dyndep.rename = ‏ تعذّر إنهاء ملف dyndep المُنشأ في ‏{ $path }.
+runner.io.dyndep.corrupt = ‏ ملف dyndep المُنشأ في ‏{ $path } لا يطابق المحتوى المتوقع؛ أزل ذلك الملف وحده وأعد المحاولة.
+runner.io.dyndep.temp_collisions = ‏ تعذّر إنشاء ملف dyndep مؤقت وفريد لـ ‏{ $path } بعد اصطدامات متكرّرة في الأسماء.
+runner.io.dyndep.too_large = ‏ يتجاوز ملف dyndep المُنشأ في ‏{ $path } حدّ التحقّق البالغ ‏{ $limit } بايت.
 
 # تشخيصات ملف البيانات.
 manifest.parse = فشل تحليل ملف البيانات.
@@ -172,6 +181,9 @@ ir.invalid_command = إقحام غير صالح داخل الأمر: { $snippet 
 # أخطاء توليد ملفات Ninja.
 ninja_gen.missing_action = الإجراء «{ $id }» الذي تشير إليه حافة بناء مفقود.
 ninja_gen.format = تعذّر تنسيق مخرجات ملف بيانات Ninja.
+ninja_gen.dyndep_files_required = ‏ يتطلّب هذا البناء حزمة Ninja مُنشأة؛ استخدم `netsuke build` أو `netsuke clean` أو `netsuke generate` لتجهيز ملفات dyndep.
+ninja_gen.reserved_output_path = ‏ المسار '{ $path }' محجوز لحالة تبعيات Netsuke التسلسلية.
+ninja_gen.unsupported_path_character = ‏ يحتوي المسار '{ $path }' على محرف مسار Ninja غير مدعوم هو '{ $character }'.
 
 # التحقق من أنماط المضيفين.
 host_pattern.empty = يجب ألّا يكون نمط المضيف فارغًا.

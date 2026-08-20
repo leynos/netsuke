@@ -1,6 +1,6 @@
 [package]
 name = "netsuke-build"
-version = "0.1.0-beta1"
+version = "0.1.0-beta2"
 edition = "2024"
 include = [
     "/src/**",
@@ -99,6 +99,7 @@ serde-saphyr = "0.0.6"
 minijinja = { version = "2.12.0", features = ["loader"] }
 cap-primitives = "3.4.4"
 cap-std = { version = "3.4.4", features = ["fs_utf8"] }
+fs4 = "1.1.0"
 camino = "1.2.0"
 semver = { version = "1", features = ["serde"] }
 anyhow = "1"
@@ -118,6 +119,7 @@ hashbrown = "0.17.1"
 walkdir = "2.5"
 metrics = "0.24.6"
 monotony = "0.1.0"
+metrics-util = { version = "0.20", features = ["debugging"] }
 mockable = "3.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
@@ -153,9 +155,6 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"], default-featu
 insta = { version = "1", features = ["yaml", "filters"] }
 assert_cmd = "2.0.0"
 predicates = "3"
-# Provides the DebuggingRecorder used to assert bounded telemetry without a
-# global recorder; constrained to the family that pairs with metrics 0.24.
-metrics-util = { version = "0.20", features = ["debugging"] }
 mockable = { version = "3.0", features = ["mock"] }
 monotony = { version = "0.1.0", features = ["test-util"] }
 serial_test = "3"

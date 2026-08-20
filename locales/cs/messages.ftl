@@ -1,5 +1,6 @@
 # Lokalizační zdroje příkazové řádky Netsuke.
 
+runner.io.dyndep.retention = Nepodařilo se použít uchování vygenerovaného dyndep (cesta: { $path }).
 cli.about = Netsuke překládá manifesty YAML + Jinja na plány sestavení pro Ninju.
 cli.long_about = Netsuke převádí manifesty YAML + Jinja na reprodukovatelné grafy Ninja a spouští Ninju s bezpečným výchozím nastavením.
 cli.usage = { $usage }
@@ -102,11 +103,19 @@ runner.io.write_ninja_file = Soubor Ninja v { $path } se nepodařilo zapsat.
 runner.io.flush_ninja_file = Vyrovnávací paměť souboru Ninja v { $path } se nepodařilo vyprázdnit.
 runner.io.sync_ninja_file = Soubor Ninja v { $path } se nepodařilo synchronizovat.
 runner.io.open_ambient_dir = Okolní adresář se nepodařilo otevřít.
+runner.io.non_utf8_working_directory = Cesta pracovního adresáře není platná v UTF-8.
 runner.io.no_existing_ancestor = Pro { $path } neexistuje žádný nadřazený adresář.
 runner.io.derive_relative_path = Relativní cestu pro Ninju se nepodařilo odvodit.
 runner.io.non_utf8_path = Cesty, které nejsou v UTF-8, nejsou podporovány (cesta: { $path }).
 runner.io.write_stdout = Manifest Ninja se nepodařilo zapsat na standardní výstup.
 runner.io.flush_stdout = Vyrovnávací paměť standardního výstupu se nepodařilo vyprázdnit.
+runner.io.dyndep.create_dir = Nepodařilo se vytvořit adresář dyndep { $path }.
+runner.io.dyndep.read = Nepodařilo se přečíst vygenerovaný soubor dyndep (cesta: { $path }).
+runner.io.dyndep.write = Nepodařilo se zapsat vygenerovaný soubor dyndep (cesta: { $path }).
+runner.io.dyndep.rename = Nepodařilo se dokončit vygenerovaný soubor dyndep (cesta: { $path }).
+runner.io.dyndep.corrupt = Vygenerovaný soubor dyndep (cesta: { $path }) neodpovídá očekávanému obsahu; odstraňte pouze tento soubor a zkuste to znovu.
+runner.io.dyndep.temp_collisions = Po opakovaných kolizích názvů se nepodařilo vytvořit jedinečný dočasný soubor dyndep (cesta: { $path }).
+runner.io.dyndep.too_large = Vygenerovaný soubor dyndep (cesta: { $path }) překračuje limit ověření { $limit } bajtů.
 
 # Diagnostika manifestu.
 manifest.parse = Zpracování manifestu selhalo.
@@ -172,6 +181,9 @@ ir.invalid_command = Neplatné vložení v příkazu: { $snippet }.
 # Chyby při generování souborů Ninja.
 ninja_gen.missing_action = Chybí akce „{ $id }“, na kterou odkazuje hrana sestavení.
 ninja_gen.format = Výstup manifestu Ninja se nepodařilo naformátovat.
+ninja_gen.dyndep_files_required = Toto sestavení vyžaduje vygenerovaný balíček Ninja; použijte `netsuke build`, `netsuke clean` nebo `netsuke generate`, aby se soubory dyndep materializovaly.
+ninja_gen.reserved_output_path = Cesta '{ $path }' je vyhrazena pro stav sériových závislostí Netsuke.
+ninja_gen.unsupported_path_character = Cesta '{ $path }' obsahuje nepodporovaný znak cesty Ninja '{ $character }'.
 
 # Ověření vzorů hostitelů.
 host_pattern.empty = Vzor hostitele nesmí být prázdný.

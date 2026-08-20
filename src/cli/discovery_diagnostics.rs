@@ -1,9 +1,8 @@
 //! Bounded diagnostics for configuration discovery.
 //!
 //! These helpers keep tracing output free of full paths and formatted parser
-//! errors: a path contributes only a correlation hash and its file name, and a
-//! load failure contributes a [`ConfigLoadFailureKind`] rather than the error
-//! text.
+//! errors: a path contributes only a correlation hash, and a load failure
+//! contributes a [`ConfigLoadFailureKind`] rather than the error text.
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -23,45 +22,88 @@ pub(super) enum ConfigLoadFailureKind {
     LoadError,
 }
 
-/// Trace one environment lookup using bounded path fields.
-pub(super) fn trace_config_path_variable(var_name: &str, path: Option<&Path>) {
+/// Bounded warning metadata retained when an explicit config load fails.
+#[derive(Clone, Debug)]
+pub(super) struct ConfigLoadWarning {
+    path: BoundedConfigPath,
+    failure_kind: ConfigLoadFailureKind,
+}
+
+impl ConfigLoadWarning {
+    /// Capture a load failure without retaining its raw path or error text.
+    pub(super) fn new(path: &Path, failure_kind: ConfigLoadFailureKind) -> Self {
+        Self {
+            path: BoundedConfigPath::from_path(Some(path)),
+            failure_kind,
+        }
+    }
+
+    /// Emit the fixed explicit-load warning from bounded metadata.
+    pub(super) fn emit(&self) {
+        warn_explicit_config_load_failed_from_fields(&self.path, self.failure_kind);
+    }
+}
+
+/// Bounded path fields retained for deferred discovery diagnostics.
+///
+/// This stores only the correlation hash and presence bit needed to replay a
+/// diagnostic event. It deliberately excludes the full path and file name.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct BoundedConfigPath {
+    pub(super) hash: Option<String>,
+    pub(super) is_present: bool,
+}
+
+impl BoundedConfigPath {
+    /// Capture bounded fields from an optional path without retaining it.
+    pub(super) fn from_path(path: Option<&Path>) -> Self {
+        Self {
+            hash: path.map(path_hash),
+            is_present: path.is_some(),
+        }
+    }
+}
+
+/// Replay one environment lookup from retained bounded fields.
+pub(super) fn trace_config_path_variable_from_fields(var_name: &str, path: &BoundedConfigPath) {
     trace!(
         var_name,
-        found = path.is_some(),
-        path_hash = path.map(path_hash).as_deref(),
-        path_file_name = ?path.and_then(Path::file_name),
+        found = path.is_present,
+        path_hash = path.hash.as_deref(),
         "read config path variable"
     );
 }
 
-/// Warn that an explicit `path` failed with `failure_kind`.
-///
-/// The event exposes the failure class, file name, and correlation hash, but
-/// neither the full path nor the formatted parser or I/O error.
-pub(super) fn warn_explicit_config_load_failed(path: &Path, failure_kind: ConfigLoadFailureKind) {
+/// Replay the unchanged explicit-load warning from bounded metadata.
+pub(super) fn warn_explicit_config_load_failed_from_fields(
+    path: &BoundedConfigPath,
+    failure_kind: ConfigLoadFailureKind,
+) {
+    let path_hash = path.hash.as_deref().unwrap_or_default();
     warn!(
-        path_hash = %path_hash(path),
-        path_file_name = ?path.file_name(),
+        path_hash = %path_hash,
         failure_kind = ?failure_kind,
         "explicit config load failed"
     );
 }
 
-/// Emit `message` with bounded fields identifying `path`.
-pub(super) fn debug_config_path(message: &'static str, path: &Path) {
+/// Replay an explicit-path diagnostic from retained bounded fields.
+pub(super) fn debug_config_path_from_fields(message: &'static str, path: &BoundedConfigPath) {
+    let path_hash = path.hash.as_deref().unwrap_or_default();
     debug!(
-        path_hash = %path_hash(path),
-        path_file_name = ?path.file_name(),
+        path_hash = %path_hash,
         message
     );
 }
 
-/// Emit `message` with presence and bounded fields for an optional path string.
-pub(super) fn debug_optional_config_path(message: &'static str, path: Option<&str>) {
+/// Replay an optional project-scope path diagnostic from bounded fields.
+pub(super) fn debug_optional_config_path_from_fields(
+    message: &'static str,
+    path: &BoundedConfigPath,
+) {
     debug!(
-        path_hash = path.map(|value| short_hash(value.as_bytes())).as_deref(),
-        path_file_name = ?path.and_then(|value| Path::new(value).file_name()),
-        path_present = path.is_some(),
+        path_hash = path.hash.as_deref(),
+        path_present = path.is_present,
         message
     );
 }

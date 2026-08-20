@@ -1,5 +1,6 @@
 # Netsuke 명령줄의 지역화 리소스.
 
+runner.io.dyndep.retention = { $path } 아래에 생성된 dyndep 보존을 적용하지 못했습니다.
 cli.about = Netsuke는 YAML + Jinja 매니페스트를 Ninja 빌드 계획으로 컴파일합니다.
 cli.long_about = Netsuke는 YAML + Jinja 매니페스트를 재현 가능한 Ninja 그래프로 변환한 뒤 안전한 기본값으로 Ninja를 실행합니다.
 cli.usage = { $usage }
@@ -102,11 +103,19 @@ runner.io.write_ninja_file = { $path }의 Ninja 파일에 쓰지 못했습니다
 runner.io.flush_ninja_file = { $path }의 Ninja 파일 버퍼를 비우지 못했습니다.
 runner.io.sync_ninja_file = { $path }의 Ninja 파일을 동기화하지 못했습니다.
 runner.io.open_ambient_dir = 주변 디렉터리를 열지 못했습니다.
+runner.io.non_utf8_working_directory = 작업 디렉터리 경로가 올바른 UTF-8이 아닙니다.
 runner.io.no_existing_ancestor = { $path }에 해당하는 상위 디렉터리가 없습니다.
 runner.io.derive_relative_path = 상대 Ninja 경로를 유도하지 못했습니다.
 runner.io.non_utf8_path = UTF-8이 아닌 경로는 지원하지 않습니다(경로: { $path }).
 runner.io.write_stdout = Ninja 매니페스트를 표준 출력에 쓰지 못했습니다.
 runner.io.flush_stdout = 표준 출력의 버퍼를 비우지 못했습니다.
+runner.io.dyndep.create_dir = dyndep 디렉터리 { $path }을(를) 만들지 못했습니다.
+runner.io.dyndep.read = { $path }의 생성된 dyndep 파일을 읽지 못했습니다.
+runner.io.dyndep.write = { $path }에 생성된 dyndep 파일을 쓰지 못했습니다.
+runner.io.dyndep.rename = { $path }의 생성된 dyndep 파일 이름을 바꾸거나 최종 확정하지 못했습니다.
+runner.io.dyndep.corrupt = { $path }의 생성된 dyndep 파일이 예상 콘텐츠와 일치하지 않습니다. 해당 파일만 삭제한 후 다시 시도하세요.
+runner.io.dyndep.temp_collisions = 이름 충돌이 반복되어 { $path }에 대한 고유한 임시 dyndep 파일을 만들지 못했습니다.
+runner.io.dyndep.too_large = { $path }의 생성된 dyndep 파일이 { $limit }바이트 검증 제한을 초과합니다.
 
 # 매니페스트 진단.
 manifest.parse = 매니페스트 해석에 실패했습니다.
@@ -172,6 +181,9 @@ ir.invalid_command = 명령의 보간이 잘못되었습니다: { $snippet }.
 # Ninja 생성 오류.
 ninja_gen.missing_action = 빌드 간선이 참조하는 동작 '{ $id }'이(가) 없습니다.
 ninja_gen.format = Ninja 매니페스트 출력의 서식을 지정하지 못했습니다.
+ninja_gen.dyndep_files_required = 이 작업에는 생성된 Ninja 번들이 필요합니다. dyndep 파일을 생성하려면 `netsuke build`, `netsuke clean` 또는 `netsuke generate`를 사용하세요.
+ninja_gen.reserved_output_path = 경로 '{ $path }'은(는) Netsuke의 직렬 종속성 상태용으로 예약되어 있습니다.
+ninja_gen.unsupported_path_character = 경로 '{ $path }'에 지원되지 않는 Ninja 경로 문자 '{ $character }'이(가) 포함되어 있습니다.
 
 # 호스트 패턴 검증.
 host_pattern.empty = 호스트 패턴은 비어 있을 수 없습니다.
