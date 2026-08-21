@@ -30,6 +30,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+COVERAGE_MAIN_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "coverage-main.yml"
 MAKEFILE_PATH = REPO_ROOT / "Makefile"
 
 TEST_SHELL_STEP = "Install test shell dependencies"
@@ -75,7 +76,7 @@ _WorkflowLoader.add_implicit_resolver(
 )
 
 
-def _load() -> dict[str, object]:
+def _load(workflow_path: Path = WORKFLOW_PATH) -> dict[str, object]:
     """Parse the workflow file, rejecting anything but a mapping root.
 
     ``yaml.safe_load`` happily returns ``None`` for an empty document, or a
@@ -86,7 +87,7 @@ def _load() -> dict[str, object]:
     # `yaml.load` is safe here: `_WorkflowLoader` derives from `SafeLoader`, so
     # it constructs no arbitrary Python objects.
     match yaml.load(
-        WORKFLOW_PATH.read_text(encoding="utf-8"), Loader=_WorkflowLoader
+        workflow_path.read_text(encoding="utf-8"), Loader=_WorkflowLoader
     ):
         case dict() as workflow:
             pass
@@ -120,6 +121,25 @@ def _steps(workflow: dict[str, object]) -> list[dict[str, object]]:
             return steps
         case _:
             pytest.fail("jobs.build-test.steps must be a list")
+
+
+def _coverage_upload_steps(workflow: dict[str, object]) -> list[dict[str, object]]:
+    """Return the main-branch coverage-upload job's steps."""
+    match workflow.get("jobs"):
+        case dict() as jobs:
+            pass
+        case _:
+            pytest.fail("the workflow must declare a jobs mapping")
+    match jobs.get("coverage-upload"):
+        case dict() as job:
+            pass
+        case _:
+            pytest.fail("the workflow must declare a coverage-upload job")
+    match job.get("steps"):
+        case list() as steps:
+            return steps
+        case _:
+            pytest.fail("jobs.coverage-upload.steps must be a list")
 
 
 def _windows_job(workflow: dict[str, object]) -> dict[str, object]:
@@ -544,4 +564,52 @@ def test_coverage_report_is_produced_before_codescene_check() -> None:
     assert with_.get("mode") == "check", (
         "the CodeScene check must run in check mode, "
         f"got {with_.get('mode')!r}"
+    )
+
+
+def test_main_coverage_upload_reads_the_generated_lcov_report() -> None:
+    """Main uploads the LCOV report it produces before calling CodeScene."""
+    steps = _coverage_upload_steps(_load(COVERAGE_MAIN_WORKFLOW_PATH))
+    names = [step.get("name") for step in steps]
+    coverage_index = names.index("Test and Measure Coverage")
+    upload_index = names.index("Upload coverage data to CodeScene")
+    assert coverage_index < upload_index, (
+        "main must generate coverage before uploading it to CodeScene"
+    )
+
+    coverage_step = steps[coverage_index]
+    upload_step = steps[upload_index]
+    assert str(coverage_step.get("uses", "")).startswith(
+        "leynos/shared-actions/.github/actions/generate-coverage@"
+    ), "main coverage production must use generate-coverage"
+    assert str(upload_step.get("uses", "")).startswith(
+        "leynos/shared-actions/.github/actions/upload-codescene-coverage@"
+    ), "main coverage upload must use upload-codescene-coverage"
+
+    match coverage_step.get("with"):
+        case dict() as coverage_with:
+            pass
+        case _:
+            pytest.fail("main coverage production must declare a with mapping")
+    assert coverage_with.get("output-path") == "lcov.info", (
+        "main coverage must write lcov.info, "
+        f"got {coverage_with.get('output-path')!r}"
+    )
+    assert coverage_with.get("format") == "lcov", (
+        "main coverage must use lcov format, "
+        f"got {coverage_with.get('format')!r}"
+    )
+
+    match upload_step.get("with"):
+        case dict() as upload_with:
+            pass
+        case _:
+            pytest.fail("main CodeScene upload must declare a with mapping")
+    assert upload_with.get("path") == "lcov.info", (
+        "main CodeScene upload must read lcov.info, "
+        f"got {upload_with.get('path')!r}"
+    )
+    assert upload_with.get("format") == "lcov", (
+        "main CodeScene upload must consume lcov format, "
+        f"got {upload_with.get('format')!r}"
     )
