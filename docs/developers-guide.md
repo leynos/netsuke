@@ -2074,7 +2074,7 @@ is not obvious from the name:
   failure with lossy conversion. Because the operation is host-native, tests
   that compare native path identity should use this helper, including when
   Windows short-name and long-name spellings refer to the same file; identity
-  follows the filesystem's canonical form rather than hand-written separator
+  follows the filesystem's canonical form rather than handwritten separator
   or string normalisation. Keep this exception in `test_support::fs`; production
   code remains capability-scoped or uses its dedicated normalizer.
 - `copy(from, to) -> io::Result<u64>` forwards to `std::fs::copy`, returning
