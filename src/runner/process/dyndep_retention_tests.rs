@@ -371,9 +371,12 @@ fn windows_retention_removes_stale_sidecars_by_native_path_identity() -> Result<
         dir.open(current.relative_path()).is_ok(),
         "retention must preserve the current bundle's sidecar under native path identity"
     );
+    let stale_open_error = dir
+        .open(stale_native)
+        .expect_err("retention must remove a stale sidecar reported with native separators");
     ensure!(
-        dir.open(stale_native).is_err(),
-        "retention must remove a stale sidecar reported with native separators"
+        stale_open_error.kind() == std::io::ErrorKind::NotFound,
+        "stale sidecar must be absent rather than inaccessible: {stale_open_error}"
     );
     Ok(())
 }

@@ -126,9 +126,9 @@ fn replay_logs_explicit_config_branch_without_environment_access() -> Result<()>
     Ok(())
 }
 
-/// Cached automatic discovery replays its appended project-scope decision.
+/// Cached automatic discovery replays its deduplicated project-scope decision.
 #[test]
-fn replay_logs_discovery_and_appended_project_scope_without_environment_access() -> Result<()> {
+fn replay_logs_discovery_and_deduplicated_project_scope_without_environment_access() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
     let cli = scenario_cli(LayerScenario::Discovery, &temp)?;
     let env = CountingEnv::default();
@@ -147,11 +147,35 @@ fn replay_logs_discovery_and_appended_project_scope_without_environment_access()
     find_event(&events, "read config path variable")?;
     find_event(&events, "resolved config path")?;
     find_event(&events, "using config discovery")?;
-    find_event(&events, "appending project-scope layers")?;
+    find_event(&events, "project-scope layers already discovered")?;
 
     Ok(())
 }
+/// Cached automatic discovery replays its deduplicated project-scope decision.
+#[test]
+fn replay_logs_discovery_and_deduplicated_project_scope_without_environment_access() -> Result<()> {
+    let temp = tempdir().context("create temp dir")?;
+    let cli = scenario_cli(LayerScenario::Discovery, &temp)?;
+    let env = CountingEnv::default();
+    let discovered = collect_diag_file_layers_with_env(&cli, &env);
+    let discovery_get_calls = env.get_calls();
+    ensure!(
+        discovery_get_calls > 0,
+        "discovery should read the injected environment"
+    );
 
+    let events = replay_events(&discovered)?;
+    ensure!(
+        env.get_calls() == discovery_get_calls,
+        "replay must not access the environment again"
+    );
+    find_event(&events, "read config path variable")?;
+    find_event(&events, "resolved config path")?;
+    find_event(&events, "using config discovery")?;
+    find_event(&events, "project-scope layers already discovered")?;
+
+    Ok(())
+}
 /// Cached automatic discovery replays its included project-scope decision.
 #[test]
 fn replay_logs_included_project_scope_without_environment_access() -> Result<()> {
@@ -323,9 +347,8 @@ fn project_scope_layer_is_not_appended_twice_via_symlink_alias() -> Result<()> {
     let alias = temp.path().join("project-alias");
     test_support::fs::symlink(&project_dir, &alias).context("create project alias")?;
 
-    let (layers, events) = capture_events(|| {
-        collect_file_layers_with_normalizer(Some(alias.as_path()), &paths::FsPathNormalizer)
-    })?;
+    let layers =
+        collect_file_layers_with_normalizer(Some(alias.as_path()), &paths::FsPathNormalizer)?;
 
     let project_layers = layers
         .iter()
@@ -339,7 +362,6 @@ fn project_scope_layer_is_not_appended_twice_via_symlink_alias() -> Result<()> {
         project_layers == 1,
         "project-scope layer should appear exactly once, found {project_layers}: {layers:?}"
     );
-    find_event(&events, "discovery included project-scope layers")?;
     Ok(())
 }
 
