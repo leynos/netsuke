@@ -3052,12 +3052,12 @@ rooted by that directory, with an optional project-scope fallback. The
 
 ```mermaid
 flowchart LR
-  A[Start Netsuke] --> B[Parse CLI and --directory]
+  A[Start Netsuke] --> B["Parse CLI and --directory"]
   B --> C[Resolve JSON mode and DiscoveryOutcome]
   C --> D{Explicit config selector?}
 
   D -->|Yes| E[Load explicit config]
-  D -->|No| F[Run OrthoConfig discovery rooted by --directory]
+  D -->|No| F["Run OrthoConfig discovery rooted by --directory"]
 
   F --> G{Project-scope layer already included?}
   G -->|Yes| H[Retain discovered layers]
