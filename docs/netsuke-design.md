@@ -3052,25 +3052,25 @@ below.
 
 ```mermaid
 flowchart LR
-  A[Start Netsuke] --> B[Parse CLI into Cli]
-  B --> C{Project config exists?}
+  A[Start Netsuke] --> B[Parse CLI and --directory]
+  B --> C[Resolve JSON mode and DiscoveryOutcome]
+  C --> D{Explicit config selector?}
 
-  C -->|Yes| D[Load project config via ConfigDiscovery]
-  C -->|No| E[No project config layer]
+  D -->|Yes| E[Load explicit config]
+  D -->|No| F[Run OrthoConfig discovery rooted by --directory]
 
-  D --> F{User config exists?}
-  E --> F
+  F --> G{Project-scope layer already included?}
+  G -->|Yes| H[Retain discovered layers]
+  G -->|No| I[Append project-scope file only when omitted]
+  I --> H
+  E --> H
 
-  F -->|Yes| G[Load user config via ConfigDiscovery]
-  F -->|No| H[No user config layer]
-
-  G --> I[Merge defaults + project + user]
-  H --> I[Merge defaults + project + user]
-
-  I --> J[Apply environment NETSUKE_... overrides]
-  J --> K[Apply CLI flag overrides]
-  K --> L[Resolved merged config]
-  L --> M[Run Netsuke with final behaviour]
+  H --> J[Retain DiscoveryOutcome layers, errors, and diagnostics]
+  J --> K[Configure tracing]
+  K --> L[emit_diagnostics()]
+  L --> M[into_layers()]
+  M --> N[merge_with_cached_file_layers()]
+  N --> O[Run Netsuke with final behaviour]
 ```
 
 Netsuke configuration discovery is implemented in `src/cli/discovery.rs`.
