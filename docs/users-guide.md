@@ -65,13 +65,12 @@ licence. Ninja must be installed separately when using the macOS or Windows
 installer. The Windows MSI installs to `C:\Program Files\netsuke` and does not
 update `PATH`.
 
-The MSI installer supports pre-release SemVer versions such as
-`0.1.0-beta2`: the pre-release suffix cannot be represented in an MSI
-product version, so the installer carries the numeric release triple
-(`0.1.0`) while the full version remains in the package and release names.
-Because successive pre-releases share that numeric version, installing a
-later pre-release MSI replaces the existing installation for that version
-series rather than installing alongside it.
+The MSI installer supports pre-release SemVer versions such as `0.1.0-beta2`:
+the pre-release suffix cannot be represented in an MSI product version, so the
+installer carries the numeric release triple (`0.1.0`) while the full version
+remains in the package and release names. Because successive pre-releases share
+that numeric version, installing a later pre-release MSI replaces the existing
+installation for that version series rather than installing alongside it.
 
 SHA-256 checksum files accompany standalone binaries and staged help,
 completion, and licence files. Installer packages do not have checksum sidecars
@@ -83,8 +82,8 @@ sidecars under `completions/<shell>/` for Bash, Elvish, Fish, PowerShell, and
 Zsh. These files are portable and separate from the executable and installer
 payloads. To use one, extract the matching archive and copy the file for the
 chosen shell into that shell's normal completion directory, or load it through
-the shell's documented completion mechanism. The package installation
-commands above do not install completion files; completion directory names and
+the shell's documented completion mechanism. The package installation commands
+above do not install completion files; completion directory names and
 activation steps vary by shell and platform.
 
 Install the current source checkout with Cargo. The clone supplies both the
@@ -1038,15 +1037,16 @@ Configuration tracing is disabled in JSON mode, including when `json = true`
 comes from a configuration file. This keeps stderr empty for successful JSON
 commands and reserves it for the single diagnostic document on failure.
 
-For a terminal human-mode failure in either the early diagnostic-mode preference
-pass or the full `config_merge` phase, the `configuration load failed` event
-includes bounded `operation` and `error_category` fields. JSON mode instead
-emits the diagnostic document. Passing `--verbose` additionally emits one final
-`metrics snapshot` debug event before Netsuke exits. The snapshot is an
-in-process diagnostic record, not a metrics listener or a Prometheus endpoint.
-After a successful configuration merge, verbosity can also come from
-`NETSUKE_VERBOSE` or `verbose = true` in a configuration file. A configuration
-failure before that merge uses only CLI `--verbose`.
+For a terminal human-mode failure in either the early diagnostic-mode
+preference pass or the full `config_merge` phase, the
+`configuration load failed` event includes bounded `operation` and
+`error_category` fields. JSON mode instead emits the diagnostic document.
+Passing `--verbose` additionally emits one final `metrics snapshot` debug event
+before Netsuke exits. The snapshot is an in-process diagnostic record, not a
+metrics listener or a Prometheus endpoint. After a successful configuration
+merge, verbosity can also come from `NETSUKE_VERBOSE` or `verbose = true` in a
+configuration file. A configuration failure before that merge uses only CLI
+`--verbose`.
 
 It includes the bounded configuration-load series:
 

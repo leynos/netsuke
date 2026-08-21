@@ -2046,7 +2046,6 @@ This transformation involves several steps:
    traversal are logged, collected, and returned alongside any cycle to aid
    diagnostics.
 
-
 ### 5.4 Ninja File Synthesis (`src/ninja_gen.rs`)
 
 The final step is to synthesize the `build.ninja` file from the `BuildGraph`
@@ -2889,21 +2888,20 @@ then passes the cached layers to `cli::merge_with_cached_file_layers` for the
 full merge. Those query functions do not install a recorder or own
 configuration-load metrics. `src/observability.rs` owns the phase recorder and
 bounded phase/outcome vocabulary, while `src/config_load.rs` owns the
-startup-attempt series.
-The application installs an in-process `DebuggingRecorder`; it does not open a
-metrics listener as a side effect of a command invocation.
+startup-attempt series. The application installs an in-process
+`DebuggingRecorder`; it does not open a metrics listener as a side effect of a
+command invocation.
 
 Metric labels are closed sets: phase-level series use `diag_mode` or `merge`,
 and both phase-level and startup-attempt counters use `success` or `failure`.
 Recorder-snapshot tests assert these labels through the same closed phase and
-outcome vocabulary.
-The startup-attempt duration has no labels. Paths, configuration values, and
-formatted source errors remain in user-facing diagnostics where appropriate;
-they must not become metric labels. When a run reaches configuration loading,
-the recorder emits its aggregate snapshot only for verbose runs, after command
-completion or a configuration-load exit.
-The full metric names, phase boundaries, and test-recorder rules are documented
-in the configuration-load observability section of the
+outcome vocabulary. The startup-attempt duration has no labels. Paths,
+configuration values, and formatted source errors remain in user-facing
+diagnostics where appropriate; they must not become metric labels. When a run
+reaches configuration loading, the recorder emits its aggregate snapshot only
+for verbose runs, after command completion or a configuration-load exit. The
+full metric names, phase boundaries, and test-recorder rules are documented in
+the configuration-load observability section of the
 [developer's guide](developers-guide.md).
 
 `src/locale_catalogues.rs` is the authoritative registry of shipped catalogues.

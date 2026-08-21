@@ -381,6 +381,3 @@ mod config_path_precedence_tests;
 #[cfg(test)]
 #[path = "discovery_unit_tests.rs"]
 mod unit_tests;
-
-#[path = "discovery_json.rs"]
-mod json;

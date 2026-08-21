@@ -116,6 +116,7 @@ also records `netsuke_cli_config_discovery_total`, labelled
 without labels. Neither exposes configuration paths. See the users' guide's
 [bounded configuration metrics](users-guide.md#bounded-configuration-metrics)
 and [interpret failures](users-guide.md#interpret-failures) sections.
+
 ## Opting into serial dependency ordering
 
 Set `dependency_order: serial` on an action or target to run its direct `deps`
