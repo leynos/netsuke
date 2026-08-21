@@ -186,10 +186,25 @@ fn collect_file_layers_with_normalizer_and_trace(
         );
     }
 
+    merge_project_scope_layers(
+        file_layers.value,
+        project_file.as_deref(),
+        project_trace_path,
+    )
+}
+
+/// Load project layers, filter aliases already yielded by discovery, and trace the outcome.
+fn merge_project_scope_layers(
+    discovered_layers: Vec<MergeLayer<'static>>,
+    project_file: Option<&Path>,
+    project_trace_path: BoundedConfigPath,
+) -> (
+    Option<ProjectScopeTrace>,
+    OrthoResult<Vec<MergeLayer<'static>>>,
+) {
     let error_trace = ProjectScopeTrace::Appended(project_trace_path.clone());
-    let result = project_scope_layers(project_file.as_deref()).map(|project_layers| {
-        let discovered_paths = file_layers
-            .value
+    let result = project_scope_layers(project_file).map(|project_layers| {
+        let discovered_paths = discovered_layers
             .iter()
             .filter_map(|layer| layer.path().map(camino::Utf8Path::as_str))
             .collect::<HashSet<_>>();
@@ -214,8 +229,7 @@ fn collect_file_layers_with_normalizer_and_trace(
         } else {
             ProjectScopeTrace::Appended(project_trace_path)
         };
-        let layers = file_layers
-            .value
+        let layers = discovered_layers
             .into_iter()
             .chain(project_layers_to_append)
             .collect();
