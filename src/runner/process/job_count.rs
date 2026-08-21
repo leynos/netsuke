@@ -53,6 +53,7 @@ mod tests {
     //! Boundary coverage for the job-count invariant.
 
     use super::*;
+    use proptest::prelude::*;
 
     #[test]
     fn accepts_the_supported_range_boundaries() {
@@ -78,6 +79,21 @@ mod tests {
                 io::ErrorKind::InvalidInput,
                 "an out-of-range count should be an invalid-input error"
             );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn validates_every_job_count(value in any::<usize>()) {
+            let result = NinjaJobCount::try_new(value);
+
+            if (1..=MAX_JOBS).contains(&value) {
+                let count = result.expect("supported job counts should be accepted");
+                prop_assert_eq!(count.to_string(), value.to_string());
+            } else {
+                let error = result.expect_err("out-of-range job counts should be rejected");
+                prop_assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+            }
         }
     }
 }
