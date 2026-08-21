@@ -5,6 +5,7 @@ target/
 .crush/
 .claude/
 .vtcode/
+memories/
 vtcode.toml
 .memdb/
 .grepai/
