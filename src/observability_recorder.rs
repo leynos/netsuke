@@ -52,32 +52,39 @@ impl ConfigMetricsRecorder {
         )
     }
 
+    /// Admit exact bounded counter series by their registered name.
+    fn accepts_counter_registration(key: &Key) -> bool {
+        match key.name() {
+            CONFIG_LOAD_COUNTER => exact_labels(
+                key,
+                &[
+                    (PHASE_LABEL, &PHASE_VALUES),
+                    (OUTCOME_LABEL, &OUTCOME_VALUES),
+                ],
+            ),
+            STARTUP_CONFIG_LOAD_COUNTER => exact_labels(key, &[(OUTCOME_LABEL, &OUTCOME_VALUES)]),
+            DISCOVERY_TOTAL => exact_labels(key, &[(OUTCOME_LABEL, &DISCOVERY_OUTCOME_VALUES)]),
+            _ => false,
+        }
+    }
+
+    /// Admit exact bounded histogram series by their registered name.
+    fn accepts_histogram_registration(key: &Key) -> bool {
+        match key.name() {
+            CONFIG_LOAD_DURATION => exact_labels(key, &[(PHASE_LABEL, &PHASE_VALUES)]),
+            STARTUP_CONFIG_LOAD_DURATION | DISCOVERY_DURATION => exact_labels(key, &[]),
+            _ => false,
+        }
+    }
+
     /// Admit only the exact bounded series expected of `kind`.
     ///
     /// Rejects gauges (neither vocabulary name is a gauge) and same-name
     /// series whose label set is missing, extra, or unbounded.
     fn accepts_registration(key: &Key, kind: MetricKind) -> bool {
         match kind {
-            MetricKind::Counter => {
-                (key.name() == CONFIG_LOAD_COUNTER
-                    && exact_labels(
-                        key,
-                        &[
-                            (PHASE_LABEL, &PHASE_VALUES),
-                            (OUTCOME_LABEL, &OUTCOME_VALUES),
-                        ],
-                    ))
-                    || (key.name() == STARTUP_CONFIG_LOAD_COUNTER
-                        && exact_labels(key, &[(OUTCOME_LABEL, &OUTCOME_VALUES)]))
-                    || (key.name() == DISCOVERY_TOTAL
-                        && exact_labels(key, &[(OUTCOME_LABEL, &DISCOVERY_OUTCOME_VALUES)]))
-            }
-            MetricKind::Histogram => {
-                (key.name() == CONFIG_LOAD_DURATION
-                    && exact_labels(key, &[(PHASE_LABEL, &PHASE_VALUES)]))
-                    || (key.name() == STARTUP_CONFIG_LOAD_DURATION && exact_labels(key, &[]))
-                    || (key.name() == DISCOVERY_DURATION && exact_labels(key, &[]))
-            }
+            MetricKind::Counter => Self::accepts_counter_registration(key),
+            MetricKind::Histogram => Self::accepts_histogram_registration(key),
             MetricKind::Gauge => false,
         }
     }
