@@ -3067,9 +3067,9 @@ flowchart LR
 
   H --> J[Retain DiscoveryOutcome layers, errors, and diagnostics]
   J --> K[Configure tracing]
-  K --> L[emit_diagnostics()]
-  L --> M[into_layers()]
-  M --> N[merge_with_cached_file_layers()]
+  K --> L["emit_diagnostics()"]
+  L --> M["into_layers()"]
+  M --> N["merge_with_cached_file_layers()"]
   N --> O[Run Netsuke with final behaviour]
 ```
 
