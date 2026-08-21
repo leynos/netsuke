@@ -10,7 +10,7 @@
 //! determinism within the run.
 
 use super::diagnostics::{path_hash, short_hash};
-use super::layers::collect_file_layers;
+use super::layers::collect_file_layers_with_normalizer;
 use super::paths::{FailingPathNormalizer, FsPathNormalizer, normalized_path_key};
 use anyhow::{Context, Result, ensure};
 use proptest::prelude::*;
@@ -85,7 +85,7 @@ proptest! {
 
     /// An absent path reports the failure rather than absorbing it.
     ///
-    /// The caller owns the fallback; see `collect_file_layers`.
+    /// The caller owns the fallback; see `comparison_key`.
     #[test]
     fn normalized_path_key_reports_absent_paths(value in path_string()) {
         let absent = format!("/nonexistent-netsuke-proptest/{value}");
@@ -120,8 +120,11 @@ proptest! {
         test_support::fs::write(&config, "default_targets = [\"alpha\"]\n")
             .expect("write generated project config");
 
-        let layers = collect_file_layers(Some(&project_alias(temp.path(), &project_name, spelling)))
-            .expect("discover generated project config");
+        let layers = collect_file_layers_with_normalizer(
+            Some(&project_alias(temp.path(), &project_name, spelling)),
+            &FsPathNormalizer,
+        )
+        .expect("discover generated project config");
         let discovered = layers
             .iter()
             .filter_map(|layer| layer.path().map(|path| path.as_str().to_owned()))
