@@ -313,7 +313,7 @@ fn stdlib_file_test_example_identifies_unix_fixture_types() -> Result<()> {
     assert_success(&run, "stdlib file-test example")?;
     ensure!(
         test_fs::read_to_string(workspace.path().join("stdlib-file-tests.txt"))?
-            == "true\ntrue\ntrue\ntrue\nfalse\ntrue\ntrue\n",
+            == "True\nTrue\nTrue\nTrue\nFalse\nTrue\nTrue\n",
         "stdlib file tests should report the documented Unix fixture types"
     );
     Ok(())
@@ -386,7 +386,7 @@ fn stdlib_host_context_example_uses_controlled_process_state() -> Result<()> {
     ensure!(
         output
             == format!(
-                "HELLO\nbeta\n{stub_directory}/guide-tool\ntrue\nfrom-env\nfixtures/a.txt,fixtures/b.txt\n"
+                "HELLO\nbeta\n{stub_directory}/guide-tool\nTrue\nfrom-env\nfixtures/a.txt,fixtures/b.txt\n"
             ),
         "stdlib host-context output should use only controlled fixtures: {output}"
     );

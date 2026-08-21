@@ -17,23 +17,6 @@ use netsuke::{
 use rstest::rstest;
 
 #[rstest]
-fn minimal_manifest_to_ir() -> Result<()> {
-    let manifest = manifest::from_path("tests/data/minimal.yml")?;
-    let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
-    ensure!(
-        graph.actions.len() == 1,
-        "expected one action, got {}",
-        graph.actions.len()
-    );
-    ensure!(
-        graph.targets.len() == 1,
-        "expected one target, got {}",
-        graph.targets.len()
-    );
-    Ok(())
-}
-
-#[rstest]
 fn command_list_entries_are_interpolated_in_order() -> Result<()> {
     let yaml = r#"
         netsuke_version: "1.0.0"
@@ -63,24 +46,6 @@ fn command_list_entries_are_interpolated_in_order() -> Result<()> {
     );
     Ok(())
 }
-
-#[rstest]
-fn duplicate_rules_emit_distinct_actions() -> Result<()> {
-    let manifest = manifest::from_path("tests/data/duplicate_rules.yml")?;
-    let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
-    ensure!(
-        graph.actions.len() == 2,
-        "expected two actions, got {}",
-        graph.actions.len()
-    );
-    ensure!(
-        graph.targets.len() == 2,
-        "expected two targets, got {}",
-        graph.targets.len()
-    );
-    Ok(())
-}
-
 #[rstest]
 fn missing_rule_fails() -> Result<()> {
     let manifest = manifest::from_path("tests/data/missing_rule.yml")?;
@@ -270,6 +235,108 @@ fn manifest_deps_do_not_contribute_to_recipe_inputs() -> Result<()> {
 }
 
 #[rstest]
+fn conditional_action_deps_populate_distinct_ir_classes() -> Result<()> {
+    let manifest = manifest::from_path("tests/data/conditional_action_deps.yml")?;
+    let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
+
+    assert_conditional_edge(
+        &graph,
+        "fallback-alpha",
+        &ExpectedEdge {
+            inputs: &["src/alpha.in"],
+            implicit_deps: &["build/alpha.o", "shared/action.cfg"],
+            order_only_deps: &["order/alpha.stamp"],
+            is_phony: true,
+        },
+    )?;
+    assert_conditional_edge(
+        &graph,
+        "fallback-beta",
+        &ExpectedEdge {
+            inputs: &["src/beta.in"],
+            implicit_deps: &["build/beta.o", "shared/action.cfg"],
+            order_only_deps: &["order/beta.stamp"],
+            is_phony: true,
+        },
+    )?;
+    assert_conditional_edge(
+        &graph,
+        "out/fallback",
+        &ExpectedEdge {
+            inputs: &["src/target.in"],
+            implicit_deps: &["include/fallback.h"],
+            order_only_deps: &["order/target.stamp"],
+            is_phony: false,
+        },
+    )?;
+
+    let rendered_paths = graph
+        .targets
+        .iter()
+        .flat_map(|(output, edge)| {
+            std::iter::once(output)
+                .chain(&edge.inputs)
+                .chain(&edge.implicit_deps)
+                .chain(&edge.order_only_deps)
+        })
+        .map(|path| path.as_str())
+        .collect::<Vec<_>>();
+    ensure!(
+        rendered_paths
+            .iter()
+            .all(|path| !path.starts_with("preferred")),
+        "filtered branches should not contribute paths to the IR: {rendered_paths:?}"
+    );
+    Ok(())
+}
+
+struct ExpectedEdge<'a> {
+    inputs: &'a [&'a str],
+    implicit_deps: &'a [&'a str],
+    order_only_deps: &'a [&'a str],
+    is_phony: bool,
+}
+
+fn assert_conditional_edge(
+    graph: &BuildGraph,
+    output: &str,
+    expected: &ExpectedEdge<'_>,
+) -> Result<()> {
+    let edge = graph
+        .targets
+        .get(&Utf8PathBuf::from(output))
+        .with_context(|| format!("expected edge for {output}"))?;
+    let expected_paths = |paths: &[&str]| {
+        paths
+            .iter()
+            .copied()
+            .map(Utf8PathBuf::from)
+            .collect::<Vec<_>>()
+    };
+    ensure!(
+        edge.inputs == expected_paths(expected.inputs),
+        "unexpected explicit inputs for {output}: {:?}",
+        edge.inputs
+    );
+    ensure!(
+        edge.implicit_deps == expected_paths(expected.implicit_deps),
+        "unexpected implicit deps for {output}: {:?}",
+        edge.implicit_deps
+    );
+    ensure!(
+        edge.order_only_deps == expected_paths(expected.order_only_deps),
+        "unexpected order-only deps for {output}: {:?}",
+        edge.order_only_deps
+    );
+    ensure!(
+        edge.phony == expected.is_phony,
+        "unexpected phony flag for {output}: {}",
+        edge.phony
+    );
+    Ok(())
+}
+
+#[rstest]
 fn target_descriptions_do_not_replace_rule_progress_text() -> Result<()> {
     let yaml = concat!(
         "netsuke_version: '1.0.0'\n",
@@ -351,9 +418,7 @@ fn manifest_error_cases(
         ) => {
             ensure!(
                 outputs == exp_outputs,
-                "unexpected duplicate outputs: got {:?}, expected {:?}",
-                outputs,
-                exp_outputs
+                "unexpected duplicate outputs: got {outputs:?}, expected {exp_outputs:?}"
             );
         }
         (
@@ -371,9 +436,7 @@ fn manifest_error_cases(
             );
             ensure!(
                 rules == exp_rules,
-                "unexpected rules: got {:?}, expected {:?}",
-                rules,
-                exp_rules
+                "unexpected rules: got {rules:?}, expected {exp_rules:?}"
             );
         }
         (IrGenError::EmptyRule { target_name, .. }, ExpectedError::EmptyRule(exp_target)) => {
@@ -407,9 +470,7 @@ fn manifest_error_cases(
             actual.sort();
             ensure!(
                 actual == expected_cycle,
-                "unexpected dependency cycle: got {:?}, expected {:?}",
-                actual,
-                expected_cycle
+                "unexpected dependency cycle: got {actual:?}, expected {expected_cycle:?}"
             );
         }
         (other, exp) => bail!("expected {exp:?} but got {other:?}"),
@@ -419,3 +480,26 @@ fn manifest_error_cases(
 
 #[path = "ir_from_manifest_tests/dependency_order.rs"]
 mod dependency_order;
+
+#[rstest]
+#[case::minimal_manifest("tests/data/minimal.yml", 1, 1)]
+#[case::duplicate_rules("tests/data/duplicate_rules.yml", 2, 2)]
+fn manifest_file_generates_expected_graph(
+    #[case] manifest_path: &str,
+    #[case] expected_actions: usize,
+    #[case] expected_targets: usize,
+) -> Result<()> {
+    let manifest = manifest::from_path(manifest_path)?;
+    let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
+    let actual_actions = graph.actions.len();
+    ensure!(
+        actual_actions == expected_actions,
+        "expected {expected_actions} actions, got {actual_actions}"
+    );
+    let actual_targets = graph.targets.len();
+    ensure!(
+        actual_targets == expected_targets,
+        "expected {expected_targets} targets, got {actual_targets}"
+    );
+    Ok(())
+}

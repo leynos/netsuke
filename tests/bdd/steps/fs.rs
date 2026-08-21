@@ -15,7 +15,7 @@ use std::os::unix::fs::FileTypeExt;
 fn setup_workspace() -> Result<(tempfile::TempDir, Utf8PathBuf, Dir)> {
     let temp = tempfile::tempdir().context("create tempdir for file-type workspace")?;
     let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-        .map_err(|path| anyhow!("workspace path is not valid UTF-8: {path:?}"))?;
+        .map_err(|path| anyhow!("workspace path is not valid UTF-8: {}", path.display()))?;
     let handle = Dir::open_ambient_dir(&root, ambient_authority())
         .context("open ambient dir for file-type workspace")?;
     Ok((temp, root, handle))
@@ -55,7 +55,7 @@ fn find_block_device_fallback() -> Result<Utf8PathBuf> {
         if file_type.is_block_device() {
             let path = entry.path();
             let utf8 = Utf8PathBuf::from_path_buf(path)
-                .map_err(|p| anyhow!("block device path is not valid UTF-8: {p:?}"))?;
+                .map_err(|p| anyhow!("block device path is not valid UTF-8: {}", p.display()))?;
             return Ok(utf8);
         }
     }

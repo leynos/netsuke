@@ -37,8 +37,12 @@ impl CommandFixture {
         F: FnOnce(StdlibConfig) -> Result<StdlibConfig>,
     {
         let temp = tempdir().context("create command fixture tempdir")?;
-        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-            .map_err(|path| anyhow!("command fixture root is not valid UTF-8: {path:?}"))?;
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).map_err(|path| {
+            anyhow!(
+                "command fixture root is not valid UTF-8: {}",
+                path.display()
+            )
+        })?;
         let helper_dir = Dir::open_ambient_dir(&root, ambient_authority())
             .context("open command fixture directory")?;
         let helper = compiler(&helper_dir, &root, binary)?;

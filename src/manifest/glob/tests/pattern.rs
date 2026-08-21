@@ -12,7 +12,7 @@ use rstest::rstest;
 /// Helper to assert that a pattern produces a syntax error.
 fn assert_syntax_error(pattern: &str, context_msg: &str) -> Result<()> {
     match validate_brace_matching(pattern) {
-        Ok(()) => Err(anyhow!("{}", context_msg)),
+        Ok(()) => Err(anyhow!("{context_msg}")),
         Err(err) => {
             ensure!(
                 err.kind() == ErrorKind::SyntaxError,

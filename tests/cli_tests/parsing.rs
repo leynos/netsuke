@@ -172,7 +172,7 @@ fn parse_cli(#[case] case: CliCase) -> Result<()> {
         cli.locale.as_deref() == case.locale,
         "locale should match input",
     );
-    ensure!(cli.json == case.json, "json flag should match input",);
+    ensure!(cli.json == case.json, "json flag should match input");
     ensure!(cli.no_input(), "no-input should remain enabled");
     ensure!(
         cli.fetch_allow_scheme == case.allow_scheme,
@@ -206,8 +206,8 @@ fn parse_cli(#[case] case: CliCase) -> Result<()> {
         cli.fetch_default_deny == case.default_deny,
         "default-deny flag should match input",
     );
-    ensure!(cli.color == case.color, "color policy should match input",);
-    ensure!(cli.emoji == case.emoji, "emoji policy should match input",);
+    ensure!(cli.color == case.color, "color policy should match input");
+    ensure!(cli.emoji == case.emoji, "emoji policy should match input");
     ensure!(
         cli.progress == case.progress,
         "progress policy should match input",
