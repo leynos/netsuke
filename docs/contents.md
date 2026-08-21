@@ -38,7 +38,7 @@ operator, user, and contributor references are easier to find.
   Kani IR harness bound and Proptest hand-off decision record.
 - [adr-004-graph-subcommand-in-process-rendering.md](adr-004-graph-subcommand-in-process-rendering.md):
   Graph rendering architecture decision record.
-- [adr-004-explicit-config-selection-outside-orthoconfig.md](adr-004-explicit-config-selection-outside-orthoconfig.md):
+- [ADR-004](adr-004-explicit-config-selection-outside-orthoconfig.md):
   Explicit configuration selector ownership decision record.
 - [adr-005-typed-which-resolve-error.md](adr-005-typed-which-resolve-error.md):
   Typed executable resolver error decision record for `which` and
