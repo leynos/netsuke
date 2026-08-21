@@ -71,8 +71,7 @@ pub(super) fn timed_discovery<C: MonotonicClock>(
     let _guard = span.enter();
     let started = clock.now();
     let outcome = discover();
-    let first_error = outcome.first_error().cloned();
-    if let Some(error) = first_error.as_deref() {
+    if let Some(error) = outcome.first_error() {
         let category = error_category(error);
         span.record("outcome", "error");
         span.record("error_category", category);
@@ -127,7 +126,12 @@ mod tests {
         CompositeKey, MetricKind,
         debugging::{DebugValue, DebuggingRecorder},
     };
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex, PoisonError};
+    use tracing::{Subscriber, field::Visit, span::Id};
+    use tracing_subscriber::{
+        Layer, filter::LevelFilter, layer::Context as LayerContext, prelude::*,
+        registry::LookupSpan,
+    };
 
     type Snapshot = Vec<(
         CompositeKey,
@@ -135,6 +139,56 @@ mod tests {
         Option<metrics::SharedString>,
         DebugValue,
     )>;
+
+    /// Captures fields recorded on the bounded discovery span.
+    #[derive(Clone, Default)]
+    struct DiscoverySpanCapture {
+        fields: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl DiscoverySpanCapture {
+        /// Return every field recorded on the discovery span.
+        fn fields(&self) -> Vec<String> {
+            self.fields
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clone()
+        }
+    }
+
+    impl<S> Layer<S> for DiscoverySpanCapture
+    where
+        S: Subscriber + for<'span> LookupSpan<'span>,
+    {
+        fn on_record(&self, id: &Id, values: &tracing::span::Record<'_>, ctx: LayerContext<'_, S>) {
+            let Some(span) = ctx.span(id) else {
+                return;
+            };
+            if span.metadata().name() != "collect_diag_file_layers" {
+                return;
+            }
+            let mut visitor = SpanFieldVisitor::default();
+            values.record(&mut visitor);
+            self.fields
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .extend(visitor.0);
+        }
+    }
+
+    /// Renders recorded span fields with stable string values for assertions.
+    #[derive(Default)]
+    struct SpanFieldVisitor(Vec<String>);
+
+    impl Visit for SpanFieldVisitor {
+        fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+            self.0.push(format!("{}={value:?}", field.name()));
+        }
+
+        fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+            self.0.push(format!("{}={value:?}", field.name()));
+        }
+    }
 
     /// Assert that one discovery counter has the expected bounded outcome.
     fn assert_discovery_counter(snapshot: &Snapshot, expected_outcome: &str) {
@@ -169,6 +223,37 @@ mod tests {
         assert_eq!(matches, 1, "duration histogram should record one sample");
     }
 
+    /// Assert the discovery span records only the expected bounded fields.
+    fn assert_discovery_span(
+        fields: &[String],
+        expected_outcome: &str,
+        expected_category: Option<&str>,
+    ) {
+        assert!(
+            fields
+                .iter()
+                .all(|field| field.starts_with("outcome=") || field.starts_with("error_category=")),
+            "discovery span must record only bounded fields: {fields:?}"
+        );
+        assert!(
+            fields.contains(&format!("outcome={expected_outcome:?}")),
+            "discovery span must record {expected_outcome:?}: {fields:?}"
+        );
+        if let Some(category) = expected_category {
+            assert!(
+                fields.contains(&format!("error_category={category:?}")),
+                "discovery span must record {category:?}: {fields:?}"
+            );
+        } else {
+            assert!(
+                fields
+                    .iter()
+                    .all(|field| !field.starts_with("error_category=")),
+                "successful discovery must not record an error category: {fields:?}"
+            );
+        }
+    }
+
     /// Run one timed discovery under an isolated recorder and return its snapshot.
     fn snapshot_timed_discovery(discover: impl FnOnce() -> DiscoveryOutcome) -> Snapshot {
         let recorder = DebuggingRecorder::new();
@@ -178,6 +263,23 @@ mod tests {
             drop(timed_discovery(&clock, discover));
         });
         snapshotter.snapshot().into_vec()
+    }
+
+    /// Record one retained discovery outcome under isolated metrics and tracing capture.
+    fn snapshot_recorded_outcome(outcome: &DiscoveryOutcome) -> (Snapshot, Vec<String>) {
+        let recorder = DebuggingRecorder::new();
+        let snapshotter = recorder.snapshotter();
+        let clock = monotony::StdMonotonicClock;
+        let started = clock.now();
+        let capture = DiscoverySpanCapture::default();
+        let subscriber =
+            tracing_subscriber::registry().with(capture.clone().with_filter(LevelFilter::TRACE));
+        metrics::with_local_recorder(&recorder, || {
+            tracing::subscriber::with_default(subscriber, || {
+                record_discovery_outcome(&clock, started, outcome);
+            });
+        });
+        (snapshotter.snapshot().into_vec(), capture.fields())
     }
 
     /// A discovery outcome with no errors and no pending load warnings.
@@ -270,5 +372,25 @@ mod tests {
         let snapshot = snapshot_timed_discovery(outcome_with_error);
 
         assert_discovery_counter(&snapshot, "error");
+    }
+
+    #[test]
+    fn record_discovery_outcome_records_success_metrics_and_span() {
+        let outcome = outcome_without_error();
+        let (snapshot, fields) = snapshot_recorded_outcome(&outcome);
+
+        assert_discovery_counter(&snapshot, "success");
+        assert_discovery_duration(&snapshot);
+        assert_discovery_span(&fields, "success", None);
+    }
+
+    #[test]
+    fn record_discovery_outcome_records_file_error_metrics_and_span() {
+        let outcome = outcome_with_error();
+        let (snapshot, fields) = snapshot_recorded_outcome(&outcome);
+
+        assert_discovery_counter(&snapshot, "error");
+        assert_discovery_duration(&snapshot);
+        assert_discovery_span(&fields, "error", Some("file"));
     }
 }

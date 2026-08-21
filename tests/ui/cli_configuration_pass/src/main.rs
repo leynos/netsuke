@@ -38,5 +38,5 @@ fn compose_cached_configuration_flow() {
 }
 
 fn main() {
-    let _ = compose_cached_configuration_flow;
+    compose_cached_configuration_flow();
 }

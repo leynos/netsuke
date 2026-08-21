@@ -131,9 +131,13 @@ fn configuration_context_uses_its_injected_environment_for_both_phases() -> Resu
         ConfigurationLoadScenario::SuccessfulMerge,
         Duration::from_millis(1),
     )?;
+    let capture = DiscoverySpanCapture::default();
+    let subscriber =
+        tracing_subscriber::registry().with(capture.clone().with_filter(LevelFilter::TRACE));
 
-    let merged = resolve_configuration(&context, &clock)
-        .map_err(|code| anyhow::anyhow!("configuration should succeed, got {code:?}"))?;
+    let merged =
+        tracing::subscriber::with_default(subscriber, || resolve_configuration(&context, &clock))
+            .map_err(|code| anyhow::anyhow!("configuration should succeed, got {code:?}"))?;
 
     ensure!(
         config_env.json_reads.get() == 1,
@@ -146,6 +150,17 @@ fn configuration_context_uses_its_injected_environment_for_both_phases() -> Resu
     ensure!(
         merged.jobs == Some(7),
         "cached merge should apply the injected NETSUKE_JOBS value"
+    );
+    let fields = capture.fields();
+    ensure!(
+        fields.contains(&"outcome=\"success\"".to_owned()),
+        "startup must record a successful discovery outcome: {fields:?}"
+    );
+    ensure!(
+        !fields
+            .iter()
+            .any(|field| field.starts_with("error_category=")),
+        "successful discovery must not record an error category: {fields:?}"
     );
     Ok(())
 }
