@@ -33,8 +33,10 @@ The public Ninja process helpers are re-exported from `netsuke::runner`.
 `CommandEnv::inherit()` leaves the parent environment in place,
 `with_var` overrides one variable, and `with_path` replaces the child's
 `PATH`. The parent process is never mutated. `NinjaBuildRequest` and
-`NinjaToolRequest` borrow the program, CLI settings, generated build file,
-target list or tool name, and `CommandEnv` needed for one invocation.
+`NinjaToolRequest` borrow the program, `NinjaProcessOptions` (`working_dir` and
+`jobs`), generated build file, target list or tool name, and `CommandEnv`
+needed for one invocation. The process boundary is parser-independent; callers
+without CLI state construct `NinjaProcessOptions` directly.
 
 The legacy `run_ninja` and `run_ninja_tool` helpers retain their existing
 signatures and inherit the parent environment. Callers that need an isolated
