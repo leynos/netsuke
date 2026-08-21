@@ -3043,12 +3043,12 @@ when the variable is unset, empty, or non-UTF-8.
 ### 8.4.1 Configuration File Discovery
 
 **Figure: Configuration Discovery and Merge Flow** — This diagram illustrates
-how Netsuke discovers and merges configuration from multiple sources. The flow
-begins with CLI parsing, checks for project and user configuration files, and
-applies layered merging with increasing precedence: defaults < discovered
-config files < environment variables < CLI flags. The final merged
-configuration determines runtime behaviour. Accessible text description follows
-below.
+the cached single-pass configuration flow. Netsuke parses the CLI and directory
+option, then either loads an explicit selection or runs OrthoConfig discovery
+rooted by that directory, with an optional project-scope fallback. The
+`DiscoveryOutcome` retains layers and diagnostics for replay before
+`into_layers()` hands the cached layers to the full merge via
+`merge_with_cached_file_layers()`. Accessible text description follows below.
 
 ```mermaid
 flowchart LR
