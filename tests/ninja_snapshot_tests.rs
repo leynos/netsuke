@@ -8,8 +8,14 @@ use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use insta::{Settings, assert_snapshot};
 use netsuke::{ir::BuildGraph, manifest, ninja_gen, stdlib::StdlibConfig};
-use std::{fs, io::Write, process::Command, time::Duration};
-use tempfile::tempdir;
+use std::{
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+    process::Command,
+    time::Duration,
+};
+use tempfile::{TempDir, tempdir};
 use test_support::ensure_binaries_available;
 
 fn run_ok(cmd: &mut Command) -> Result<String> {
@@ -334,6 +340,13 @@ fn validate_conditional_ninja(ninja_content: &str) -> Result<()> {
         return Ok(());
     }
 
+    let (dir, build_file) = prepare_conditional_ninja_workspace(ninja_content)?;
+    assert_conditional_ninja_selection(&dir, &build_file)?;
+    mark_conditional_ninja_output_up_to_date(&dir)?;
+    assert_conditional_ninja_no_op(&dir, &build_file)
+}
+
+fn prepare_conditional_ninja_workspace(ninja_content: &str) -> Result<(TempDir, PathBuf)> {
     let dir = tempdir().context("create temp dir for conditional Ninja validation")?;
     let build_file = dir.path().join("build.ninja");
     fs::write(&build_file, ninja_content)
@@ -349,20 +362,29 @@ fn validate_conditional_ninja(ninja_content: &str) -> Result<()> {
             .with_context(|| format!("write Ninja dependency {}", dependency_path.display()))?;
     }
 
-    let ninja_cmd = |args: &[&str]| {
-        let mut cmd = Command::new("ninja");
-        cmd.arg("-f").arg(&build_file).args(args);
-        cmd.current_dir(dir.path());
-        run_ok(&mut cmd)
-    };
-    ninja_cmd(&["-t", "query", "fallback-alpha"])?;
-    ninja_cmd(&["-t", "query", "out/fallback"])?;
-    let first = ninja_cmd(&["-n", "out/fallback"])?;
+    Ok((dir, build_file))
+}
+
+fn run_conditional_ninja(dir: &TempDir, build_file: &Path, args: &[&str]) -> Result<String> {
+    let mut cmd = Command::new("ninja");
+    cmd.arg("-f").arg(build_file).args(args);
+    cmd.current_dir(dir.path());
+    run_ok(&mut cmd)
+}
+
+fn assert_conditional_ninja_selection(dir: &TempDir, build_file: &Path) -> Result<()> {
+    run_conditional_ninja(dir, build_file, &["-t", "query", "fallback-alpha"])?;
+    run_conditional_ninja(dir, build_file, &["-t", "query", "out/fallback"])?;
+    let first = run_conditional_ninja(dir, build_file, &["-n", "out/fallback"])?;
     ensure!(
         first.contains("echo fallback"),
         "expected dry run to reach selected target, got:\n{first}"
     );
 
+    Ok(())
+}
+
+fn mark_conditional_ninja_output_up_to_date(dir: &TempDir) -> Result<()> {
     let output = dir.path().join("out/fallback");
     let output_dir = output.parent().context("output path should have parent")?;
     fs::create_dir_all(output_dir)
@@ -381,8 +403,13 @@ fn validate_conditional_ninja(ninja_content: &str) -> Result<()> {
         .with_context(|| format!("open output {}", output.display()))?
         .set_times(fs::FileTimes::new().set_modified(output_modified))
         .with_context(|| format!("set output time {}", output.display()))?;
-    ninja_cmd(&["out/fallback"])?;
-    let second = ninja_cmd(&["-n", "out/fallback"])?;
+
+    Ok(())
+}
+
+fn assert_conditional_ninja_no_op(dir: &TempDir, build_file: &Path) -> Result<()> {
+    run_conditional_ninja(dir, build_file, &["out/fallback"])?;
+    let second = run_conditional_ninja(dir, build_file, &["-n", "out/fallback"])?;
     ensure!(
         second.contains("no work to do"),
         "expected no-op second pass, got:\n{second}"
