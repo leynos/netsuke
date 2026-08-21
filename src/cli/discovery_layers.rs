@@ -223,10 +223,12 @@ fn merge_project_scope_layers(
             project_layer_count,
             appended_layer_count,
         );
-        let trace = if appended_layer_count == 0 {
-            ProjectScopeTrace::Deduplicated(project_trace_path)
+        let trace = if project_layer_count == 0 {
+            None
+        } else if appended_layer_count == 0 {
+            Some(ProjectScopeTrace::Deduplicated(project_trace_path))
         } else {
-            ProjectScopeTrace::Appended(project_trace_path)
+            Some(ProjectScopeTrace::Appended(project_trace_path))
         };
         let layers = discovered_layers
             .into_iter()
@@ -235,7 +237,7 @@ fn merge_project_scope_layers(
         (trace, layers)
     });
     match result {
-        Ok((trace, layers)) => (Some(trace), Ok(layers)),
+        Ok((trace, layers)) => (trace, Ok(layers)),
         Err(err) => (Some(error_trace), Err(err)),
     }
 }
