@@ -2075,7 +2075,7 @@ is not obvious from the name:
   that compare native path identity should use this helper, including when
   Windows short-name and long-name spellings refer to the same file; identity
   follows the filesystem's canonical form rather than handwritten separator
-  or string normalisation. Keep this exception in `test_support::fs`; production
+  or string normalization. Keep this exception in `test_support::fs`; production
   code remains capability-scoped or uses its dedicated normalizer.
 - `copy(from, to) -> io::Result<u64>` forwards to `std::fs::copy`, returning
   the number of bytes copied and propagating its failure. The `dev_fast`
@@ -2117,7 +2117,7 @@ propagates every other metadata error.
 
 ### Temporary Ninja build files
 
-`runner::process::create_temp_ninja_file` writes, flushes, and synchronises a
+`runner::process::create_temp_ninja_file` writes, flushes, and synchronizes a
 generated Ninja file, then converts the `NamedTempFile` into a
 `tempfile::TempPath`. Returning `TempPath` is deliberate: it retains automatic
 cleanup while releasing the writer before Ninja reopens the file by path. On
