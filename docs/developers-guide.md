@@ -2064,6 +2064,18 @@ is not obvious from the name:
   regular file with any execute bit set, and `false` for an absent or
   unreadable path. It is the inverse of `set_mode`, and exists for probing a
   sandbox `PATH` the way an executable lookup would.
+- `canonicalize(path: &Utf8Path) -> io::Result<Utf8PathBuf>` is the deliberate
+  ambient boundary for fixture paths. It delegates to `std::fs::canonicalize`:
+  `cap_std::fs::Dir::canonicalize` is scoped to a directory handle and returns
+  a relative path, so it cannot provide the absolute canonical spelling needed
+  for fixtures in an ambient temporary directory. The helper propagates the
+  underlying I/O error and returns `io::ErrorKind::InvalidData` when the
+  canonical path cannot be represented as UTF-8; callers must not hide that
+  failure with lossy conversion. Because the operation is host-native,
+  Windows fixture identity follows the filesystem's canonical form rather than
+  hand-written separator or string normalisation. Keep this exception in
+  `test_support::fs`; production code remains capability-scoped or uses its
+  dedicated normalizer.
 - `copy(from, to) -> io::Result<u64>` forwards to `std::fs::copy`, returning
   the number of bytes copied and propagating its failure. The `dev_fast`
   release fixtures use it to place a built archive under its versioned name.
@@ -2100,6 +2112,23 @@ the pre-persist action to cover controlled creation orderings; they do not
 claim to model arbitrary scheduler or filesystem interleavings. The fallible
 `test_support::fs::inspect_path` probe treats `NotFound` as absence and
 propagates every other metadata error.
+
+
+### Temporary Ninja build files
+
+`runner::process::create_temp_ninja_file` writes, flushes, and synchronises a
+generated Ninja file, then converts the `NamedTempFile` into a
+`tempfile::TempPath`. Returning `TempPath` is deliberate: it retains automatic
+cleanup while releasing the writer before Ninja reopens the file by path. On
+Windows, leaving the original writer open can make Ninja's read fail. Keep the
+returned `TempPath` alive until the Ninja invocation completes; dropping it
+removes the temporary file.
+
+The regression test
+`create_temp_ninja_file_releases_writer_before_external_read` is the lifecycle
+contract. It opens the returned path through an independent handle, reads it
+back, and checks its contents, length, and `.ninja` suffix. Changes to the
+helper must preserve that writer-release and path-lifetime behaviour.
 
 ### Shared Makefile contract helpers
 
@@ -3083,9 +3112,12 @@ split diagnostics, path comparison, and tests out of the main discovery flow:
   literally when resolution fails, continues discovery, and emits a bounded
   post-filter layer-count event. This lets relative or symlinked `--directory`
   values match OrthoConfig's canonicalized layer paths without making an
-  unresolved path fatal. `FsPathNormalizer` is confined to this comparison
-  boundary: selectors remain pure path queries, OrthoConfig supplies the layer
-  path, and tracing remains at the orchestration boundary.
+  unresolved path fatal. `FsPathNormalizer` uses `dunce::canonicalize` to
+  mirror OrthoConfig's native Windows identity (without UNC-prefix or
+  short-name divergence); on other platforms it follows
+  `std::fs::canonicalize`. Keep it confined to this comparison boundary:
+  selectors remain pure path queries, OrthoConfig supplies the layer path, and
+  tracing remains at the orchestration boundary.
 - `discovery_event_assertions.rs` — shared test-only helpers:
   `capture_events` runs a closure under a TRACE capturing subscriber,
   `find_event` locates one emitted event by substring, and `EventAssertion`
