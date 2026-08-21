@@ -159,6 +159,17 @@ mod tests {
         assert_eq!(matches, 1, "duration histogram should record one sample");
     }
 
+    /// Run one timed discovery under an isolated recorder and return its snapshot.
+    fn snapshot_timed_discovery(discover: impl FnOnce() -> DiscoveryOutcome) -> Snapshot {
+        let recorder = DebuggingRecorder::new();
+        let snapshotter = recorder.snapshotter();
+        let clock = monotony::StdMonotonicClock;
+        metrics::with_local_recorder(&recorder, || {
+            drop(timed_discovery(&clock, discover));
+        });
+        snapshotter.snapshot().into_vec()
+    }
+
     /// A discovery outcome with no errors and no pending load warnings.
     fn outcome_without_error() -> DiscoveryOutcome {
         let (layers, errors, diagnostics) = empty_parts();
@@ -238,13 +249,7 @@ mod tests {
 
     #[test]
     fn instrument_discovery_records_success_counter_and_duration() {
-        let recorder = DebuggingRecorder::new();
-        let snapshotter = recorder.snapshotter();
-        let clock = monotony::StdMonotonicClock;
-        metrics::with_local_recorder(&recorder, || {
-            let _ = timed_discovery(&clock, outcome_without_error);
-        });
-        let snapshot = snapshotter.snapshot().into_vec();
+        let snapshot = snapshot_timed_discovery(outcome_without_error);
 
         assert_discovery_counter(&snapshot, "success");
         assert_discovery_duration(&snapshot);
@@ -252,13 +257,7 @@ mod tests {
 
     #[test]
     fn instrument_discovery_records_error_counter() {
-        let recorder = DebuggingRecorder::new();
-        let snapshotter = recorder.snapshotter();
-        let clock = monotony::StdMonotonicClock;
-        metrics::with_local_recorder(&recorder, || {
-            let _ = timed_discovery(&clock, outcome_with_error);
-        });
-        let snapshot = snapshotter.snapshot().into_vec();
+        let snapshot = snapshot_timed_discovery(outcome_with_error);
 
         assert_discovery_counter(&snapshot, "error");
     }
