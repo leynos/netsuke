@@ -100,9 +100,9 @@ fn replay_logs_explicit_config_branch_without_environment_access() -> Result<()>
     Ok(())
 }
 
-/// Cached automatic discovery replays its deduplicated project-scope decision.
+/// Cached automatic discovery emits no project-scope trace without a project layer.
 #[test]
-fn replay_logs_discovery_and_deduplicated_project_scope_without_environment_access() -> Result<()> {
+fn replay_logs_discovery_without_project_scope_trace_without_environment_access() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
     let cli = scenario_cli(LayerScenario::Discovery, &temp)?;
     let env = CountingEnv::default();
@@ -121,7 +121,12 @@ fn replay_logs_discovery_and_deduplicated_project_scope_without_environment_acce
     find_event(&events, "read config path variable")?;
     find_event(&events, "resolved config path")?;
     find_event(&events, "using config discovery")?;
-    find_event(&events, "project-scope layers already discovered")?;
+    ensure!(
+        !events
+            .iter()
+            .any(|event| event.contains("project-scope layers")),
+        "discovery without a project layer must not report a project-scope outcome: {events:?}"
+    );
 
     Ok(())
 }
