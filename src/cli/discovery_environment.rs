@@ -12,12 +12,7 @@ pub trait EnvProvider {
     fn get(&self, key: &str) -> Option<OsString>;
 
     /// Return all values available to the configuration environment layer.
-    ///
-    /// Providers concerned only with selector lookup may retain the empty
-    /// default. Full merge providers override this method.
-    fn entries(&self) -> Vec<(OsString, OsString)> {
-        Vec::new()
-    }
+    fn entries(&self) -> Vec<(OsString, OsString)>;
 }
 
 /// Environment provider backed by [`std::env::var_os`].

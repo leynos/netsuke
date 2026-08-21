@@ -5,7 +5,19 @@
 //! layers, then merge from the cached outcome.
 
 use netsuke::{cli, cli_localization};
-use std::sync::Arc;
+use std::{ffi::OsString, sync::Arc};
+
+struct FixtureEnvProvider;
+
+impl cli::ConfigEnvProvider for FixtureEnvProvider {
+    fn get(&self, _: &str) -> Option<OsString> {
+        None
+    }
+
+    fn entries(&self) -> Vec<(OsString, OsString)> {
+        Vec::new()
+    }
+}
 
 fn compose_cached_configuration_flow() {
     let localizer = Arc::from(cli_localization::build_localizer(None));
@@ -14,7 +26,7 @@ fn compose_cached_configuration_flow() {
             Ok(parsed) => parsed,
             Err(_) => return,
         };
-    let env = cli::ConfigStdEnvProvider;
+    let env = FixtureEnvProvider;
 
     drop(cli::resolve_merged_json_with_env(&parsed, &matches, &env));
     let (result, outcome) = cli::resolve_json_and_layers_outcome_with_env(&parsed, &matches, &env);

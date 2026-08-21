@@ -296,7 +296,7 @@ The lowering stages have deliberately separate responsibilities:
   start at most one background job; the generated wrapper waits for that job
   before it evaluates a later entry. Ninja generation rejects entries that
   start more than one background job. It also rejects entries whose nested
-  `eval` payload makes the background-job count dynamic, because the wrapper
+  `eval` payload makes the background-job count dynamic because the wrapper
   cannot safely determine which jobs to wait for. A direct simple `exec`,
   optionally prefixed by shell assignments, is evaluated in a retaining
   subshell so its success or failure remains visible to the wrapper; a

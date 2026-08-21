@@ -42,6 +42,10 @@ impl EnvProvider for CountingEnv {
         self.get_calls.set(self.get_calls.get() + 1);
         None
     }
+
+    fn entries(&self) -> Vec<(OsString, OsString)> {
+        Vec::new()
+    }
 }
 
 /// Path normalizer that records project-key normalization calls.

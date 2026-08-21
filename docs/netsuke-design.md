@@ -2046,7 +2046,8 @@ This transformation involves several steps:
    traversal are logged, collected, and returned alongside any cycle to aid
    diagnostics.
 
-### 5.4 Ninja File Synthesis (`src/ninja_gen.rs`)
+
+### 5.4 Ninja file synthesis (`src/ninja_gen.rs`)
 
 The final step is to synthesize the `build.ninja` file from the `BuildGraph`
 IR. This process is a straightforward, mechanical translation from the IR data
@@ -2178,7 +2179,139 @@ paths from `graph.default_targets`.
 default my_app
 ```
 
-### 5.4 Ninja File Synthesis (`src/ninja_gen.rs`)
+### 5.4 Ninja file synthesis (`src/ninja_gen.rs`)
+
+The final step is to synthesize the `build.ninja` file from the `BuildGraph`
+IR. This process is a straightforward, mechanical translation from the IR data
+structures to the Ninja file syntax.
+
+1. **Write Variables:** Any global variables that need to be passed to Ninja can
+   be written at the top of the file (e.g., `msvc_deps_prefix` for Windows
+
+2. **Write Rules:** Iterate through the `graph.actions` map. For each
+   `ir::Action`, write a corresponding Ninja `rule` statement. The IR already
+   contains ordinary command text: its input and output paths have replaced
+   Netsuke's `ins`/`outs` and `$in`/`$out` placeholders during lowering. Scalar
+   commands are emitted as-is. List commands are emitted as the brace-group,
+   `eval`, and `&&` chain described in §2.3, including the bounded failure
+   marker for each one-based entry.
+
+   When an action's `recipe` is a script, the generated rule wraps the script
+   in an invocation of `/bin/sh -e -c` so that multi-line scripts execute
+   consistently across platforms.
+
+   Command and script text must be converted from IR text to backend text at
+   this stage. After Netsuke placeholders have been resolved, remaining literal
+   dollar signs are escaped as `$$` for Ninja so shell variables survive to the
+   shell. Structured `exec` recipes are rendered by quoting each argv element
+   as one argument for the selected backend.
+
+   Resolved environment bindings are emitted as backend-specific command
+   prefixes or generated wrapper script assignments. The implementation must
+   avoid exposing Ninja variables as the user-facing environment API.
+
+   Code snippet
+
+   ```ninja
+   # Generated from an ir::Action
+   rule cc
+     command = gcc -c -o $out $in
+     description = CC $out
+   ```
+
+   The planned `deps_from` manifest field will populate `ir::Action.depfile` and
+   `ir::Action.deps_format`, allowing this rule writer to emit Ninja's
+   `depfile` and `deps` attributes without overloading target prerequisites.
+
+3. **Write Build Edges:** Iterate through the `graph.targets` map. For each
+   `ir::BuildEdge`, write a corresponding Ninja `build` statement. This
+   involves formatting the lists of explicit outputs, implicit outputs, inputs,
+   implicit dependencies, and order-only dependencies using the correct Ninja
+   syntax (`:`, `|`, and `||`).[^7] Use Ninja's built-in `phony` rule when
+   `phony` is `true`. For an `always` edge, either generate a `phony` build
+   with no outputs or emit a dummy output marked `restat = 1` and depend on a
+   permanently dirty target so the command runs on each invocation.
+
+   Code snippet
+
+   ```ninja
+   # Generated from an ir::BuildEdge
+   build foo.o: cc foo.c
+   build bar.o: cc bar.c
+   build my_app: link foo.o bar.o | lib_dependency.a
+   ```
+
+   A `BuildEdge` whose `dependency_order` is `serial` and has more than one
+   implicit dependency is an exception to this direct rendering. The generator
+   lowers it into staged phony gates, with one content-addressed Ninja dyndep
+   sidecar per dependency. A gate can reveal exactly one real dependency; the
+   gate edge associated with the next sidecar depends on the preceding gate.
+   This makes each later dependency unavailable to Ninja until the previous one
+   succeeds, while preserving one Ninja scheduler and its shared-work
+   memoization. The runner materializes every sidecar file before Ninja starts;
+   no Ninja edge produces sidecar content.
+
+   The generated result is a bundle, not merely a string: generation is an
+   effect-free query that returns the main Ninja text and its `.netsuke/dyndep`
+   sidecars. Each runner command then materializes those sidecars through an
+   injected effective-working-directory capability before it writes or runs the
+   main file. The main file declares `ninja_required_version = 1.10` only when
+   it contains such staged serial ordering. `.netsuke/serial` and
+   `.netsuke/dyndep` are reserved for generated state. `serial` applies only to
+   direct implicit dependencies; it does not delay an independently reachable
+   node elsewhere in the graph.
+
+Figure: Runner-owned serial dyndep bundle generation and execution.
+
+```mermaid
+sequenceDiagram
+    accTitle: Runner-owned serial dependency generation and execution
+    accDescr {
+      The runner generates a Ninja bundle and materializes its dyndep sidecars.
+      Generate writes the manifest without invoking Ninja. Build invokes Ninja
+      for execution, and clean invokes Ninja in clean tool mode.
+    }
+    actor User
+    participant Runner as runner.generate_ninja
+    participant NinjaGen as ninja_gen.generate_bundle
+    participant Dyndep as runner.materialize_dyndep_bundle
+    participant Ninja
+
+    User->>Runner: netsuke build / clean / generate
+    Runner->>NinjaGen: generate_bundle(graph)
+    NinjaGen-->>Runner: GeneratedNinja (build_file, dyndep_files)
+    Runner->>Dyndep: materialize_dyndep_bundle(cli, bundle)
+    Dyndep-->>Runner: dyndep sidecars materialized
+    alt generate
+        Runner-->>User: write generated Ninja manifest without invoking Ninja
+    else build
+        Runner->>Ninja: invoke with bundle.build_file()
+        Ninja-->>User: serial deps run in order, parallel elsewhere
+    else clean
+        Runner->>Ninja: invoke with bundle.build_file() in clean tool mode
+        Ninja-->>User: clean completed
+    end
+```
+
+The runner holds a capability-scoped exclusive lease on the dyndep directory
+from sidecar materialization through Ninja consumption or generated-output
+consumption. While the lease is held, stale `.tmp` files are removed and
+retention preserves the current bundle plus at most 32 obsolete `.dd` files and
+1 MiB of obsolete `.dd` bytes. `build` and `generate` prune after
+materialization; `clean` prunes only after successful `ninja -t clean` and not
+on failure. Sidecars remain immutable and content-addressed. Consequently, an
+older arbitrary `generate --output` manifest may lose its sidecars after a
+later command and must be regenerated. See
+[ADR-012](adr-012-bound-dyndep-sidecar-retention.md) for this policy.
+
+4\. **Write Defaults:** Finally, write the `default` statement, listing all
+paths from `graph.default_targets`.
+
+```ninja
+default my_app
+```
+
+### 5.4 Ninja file synthesis (`src/ninja_gen.rs`)
 
 The final step is to synthesize the `build.ninja` file from the `BuildGraph`
 IR. This process is a straightforward, mechanical translation from the IR data

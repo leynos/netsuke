@@ -89,20 +89,30 @@ pub(super) fn timed_discovery<C: MonotonicClock>(
 /// Record the discovery outcome series at the composition boundary.
 ///
 /// This is for boundaries that already timed the phase (for example the
-/// startup diagnostic resolution) and only need the discovery counter plus
-/// error-category span from the retained outcome.
+/// startup diagnostic resolution). It recreates the documented
+/// `collect_diag_file_layers` span from the retained outcome, then records the
+/// discovery counter and duration without repeating discovery.
 pub fn record_discovery_outcome<C: MonotonicClock>(
     clock: &C,
     started: Instant,
     outcome: &DiscoveryOutcome,
 ) {
     describe_metrics();
+    let span = tracing::trace_span!(
+        "collect_diag_file_layers",
+        outcome = field::Empty,
+        error_category = field::Empty,
+    );
+    let _guard = span.enter();
     histogram!(DISCOVERY_DURATION).record(clock.now().duration_since(started));
     if let Some(error) = outcome.first_error() {
         let category = error_category(error);
+        span.record("outcome", "error");
+        span.record("error_category", category);
         tracing::debug!(error_category = category, "configuration discovery failed");
         counter!(DISCOVERY_TOTAL, "outcome" => "error").increment(1);
     } else {
+        span.record("outcome", "success");
         counter!(DISCOVERY_TOTAL, "outcome" => "success").increment(1);
     }
 }

@@ -120,6 +120,10 @@ impl netsuke::cli::ConfigEnvProvider for TestEnv {
     fn get(&self, key: &str) -> Option<OsString> {
         self.values.get(key).cloned()
     }
+
+    fn entries(&self) -> Vec<(OsString, OsString)> {
+        Vec::new()
+    }
 }
 
 /// [`ConfigEnvProvider`] that counts `NETSUKE_CONFIG` selector lookups.
@@ -150,6 +154,10 @@ impl netsuke::cli::ConfigEnvProvider for CountingConfigEnv {
             self.config_lookups.set(self.config_lookups.get() + 1);
         }
         self.values.get(key).cloned()
+    }
+
+    fn entries(&self) -> Vec<(OsString, OsString)> {
+        Vec::new()
     }
 }
 
