@@ -1981,11 +1981,12 @@ is not obvious from the name:
   for fixtures in an ambient temporary directory. The helper propagates the
   underlying I/O error and returns `io::ErrorKind::InvalidData` when the
   canonical path cannot be represented as UTF-8; callers must not hide that
-  failure with lossy conversion. Because the operation is host-native,
-  Windows fixture identity follows the filesystem's canonical form rather than
-  hand-written separator or string normalisation. Keep this exception in
-  `test_support::fs`; production code remains capability-scoped or uses its
-  dedicated normalizer.
+  failure with lossy conversion. Because the operation is host-native, tests
+  that compare native path identity should use this helper, including when
+  Windows short-name and long-name spellings refer to the same file; identity
+  follows the filesystem's canonical form rather than hand-written separator
+  or string normalisation. Keep this exception in `test_support::fs`; production
+  code remains capability-scoped or uses its dedicated normalizer.
 - `copy(from, to) -> io::Result<u64>` forwards to `std::fs::copy`, returning
   the number of bytes copied and propagating its failure. The `dev_fast`
   release fixtures use it to place a built archive under its versioned name.
