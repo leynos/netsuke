@@ -1020,8 +1020,8 @@ Events then identify whether Netsuke uses an explicit file or discovered layers.
 If an explicit file cannot be loaded, the warning records `failure_kind` as
 `Missing` or `LoadError`. Verbose tracing uses only `path_hash` and
 `path_present`; it never exposes a file name or full path. The unkeyed
-`path_hash` is only a correlation identifier: it does not confidentially
-conceal a guessable path.
+`path_hash` is only a correlation identifier: it does not protect a guessable
+path from disclosure.
 
 Configuration tracing is disabled in JSON mode, including when `json = true`
 comes from a configuration file. This keeps stderr empty for successful JSON
