@@ -1012,11 +1012,24 @@ cached layers to `netsuke::cli::merge_with_cached_file_layers` for the full
 merge. This preserves diagnostics from the same discovery pass while avoiding
 repeated file loading.
 
+If the composition boundary times discovery itself, call the public
+`netsuke::cli::record_discovery_outcome(&clock, started, &outcome)` after the
+pass completes. `started` is the `std::time::Instant` captured from the same
+injected `monotony::MonotonicClock` immediately before discovery; the function
+records the elapsed duration and the retained outcome without rediscovering.
+It records `DISCOVERY_TOTAL`
+(`netsuke_cli_config_discovery_total`) with the bounded `outcome=success` or
+`outcome=error` label, and `DISCOVERY_DURATION`
+(`netsuke_cli_config_discovery_duration_seconds`) with no labels. The
+`DISCOVERY_OUTCOME_VALUES` constant lists the admitted outcome labels.
+
 All of these functions take an injected `&impl ConfigEnvProvider`. The public
 `ConfigEnvProvider` trait provides `get(&self, key: &str) -> Option<OsString>`
 for selector and environment lookups, plus
 `entries(&self) -> Vec<(OsString, OsString)>` for the complete configuration
-environment layer. `entries()` defaults to an empty vector.
+environment layer. Implementations must provide `entries()` explicitly; an
+empty vector is appropriate only for providers that support selector lookup
+without a complete environment layer.
 `ConfigStdEnvProvider` is the process-backed implementation; tests and other
 adapters can provide an implementation without mutating the process environment.
 
