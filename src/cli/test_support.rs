@@ -26,4 +26,11 @@ impl EnvProvider for TestEnv {
     fn get(&self, key: &str) -> Option<OsString> {
         self.values.get(key).cloned()
     }
+
+    fn entries(&self) -> Vec<(OsString, OsString)> {
+        self.values
+            .iter()
+            .map(|(key, value)| (OsString::from(*key), value.clone()))
+            .collect()
+    }
 }

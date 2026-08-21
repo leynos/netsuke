@@ -6,6 +6,8 @@
 //! layering, and JSON diagnostics.
 
 use anyhow::{Context, Result, ensure};
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use rstest::rstest;
 use serde_json::Value;
 use std::path::Path;
@@ -16,6 +18,9 @@ use test_support::check_ninja::{ToolName, fake_ninja_expect_tool};
 use test_support::fixture::setup_minimal_workspace;
 use test_support::fs as test_fs;
 use test_support::netsuke::run_netsuke_in_with_env;
+
+#[path = "advanced_usage/config_precedence.rs"]
+mod config_precedence;
 
 /// Captured output from a netsuke invocation.
 struct CommandOutput {
@@ -38,6 +43,26 @@ fn run_netsuke(
         .map(|s| vec![("NETSUKE_NINJA", s.as_str())])
         .unwrap_or_default();
     let run = run_netsuke_in_with_env(current_dir, args, &extra_env)?;
+    Ok(CommandOutput {
+        stdout: run.stdout,
+        stderr: run.stderr,
+        success: run.success,
+    })
+}
+
+/// Run `netsuke` with explicit extra environment and an optional `NINJA_ENV`.
+fn run_netsuke_with_env(
+    current_dir: &Path,
+    args: &[&str],
+    ninja_env: Option<&Path>,
+    extra_env: &[(&str, &str)],
+) -> Result<CommandOutput> {
+    let ninja_env_owned = ninja_env.map(|p| p.to_string_lossy().into_owned());
+    let mut env_vec: Vec<(&str, &str)> = extra_env.to_vec();
+    if let Some(ref s) = ninja_env_owned {
+        env_vec.push(("NETSUKE_NINJA", s.as_str()));
+    }
+    let run = run_netsuke_in_with_env(current_dir, args, &env_vec)?;
     Ok(CommandOutput {
         stdout: run.stdout,
         stderr: run.stderr,
@@ -71,19 +96,94 @@ fn assert_json_success(output: &CommandOutput, expected_command: &str) -> Result
     Ok(())
 }
 
-fn assert_json_subcommand_success(
-    context: &str,
-    command: &str,
-    make_ninja: impl FnOnce() -> Result<(TempDir, std::path::PathBuf)>,
-) -> Result<()> {
-    let workspace = setup_minimal_workspace(Path::new(env!("CARGO_MANIFEST_DIR")), context)?;
+type NinjaSetup = fn() -> Result<(TempDir, Utf8PathBuf)>;
+
+struct JsonSubcommandRequest {
+    context: &'static str,
+    command: &'static str,
+    make_ninja: NinjaSetup,
+}
+
+impl JsonSubcommandRequest {
+    const fn into_parts(self) -> (&'static str, &'static str, NinjaSetup) {
+        (self.context, self.command, self.make_ninja)
+    }
+}
+
+fn assert_json_subcommand_success(request: JsonSubcommandRequest) -> Result<()> {
+    let (context, command, make_ninja) = request.into_parts();
+    let workspace = setup_minimal_workspace(
+        Utf8Path::new(env!("CARGO_MANIFEST_DIR")).as_std_path(),
+        context,
+    )?;
+    let workspace_path = utf8_temp_path(&workspace)?;
     let (_ninja_dir, ninja_path) = make_ninja()?;
     let output = run_netsuke(
-        workspace.path(),
+        workspace_path.as_std_path(),
         &["--json", command],
-        Some(ninja_path.as_path()),
+        Some(ninja_path.as_std_path()),
     )?;
     assert_json_success(&output, command)
+}
+
+#[cfg(unix)]
+fn make_clean_ninja() -> Result<(TempDir, Utf8PathBuf)> {
+    let (ninja_dir, ninja_path) = fake_ninja_expect_tool(ToolName::new("clean"))?;
+    Ok((ninja_dir, utf8_path(ninja_path)?))
+}
+
+fn make_build_ninja() -> Result<(TempDir, Utf8PathBuf)> {
+    let (ninja_dir, ninja_path) = fake_ninja_check_build_file()?;
+    Ok((ninja_dir, utf8_path(ninja_path)?))
+}
+
+fn utf8_temp_path(temp: &TempDir) -> Result<Utf8PathBuf> {
+    utf8_path(temp.path().to_path_buf())
+}
+
+fn utf8_path(path: std::path::PathBuf) -> Result<Utf8PathBuf> {
+    Utf8PathBuf::from_path_buf(path).map_err(|invalid_path| {
+        anyhow::anyhow!("test path {} is not UTF-8", invalid_path.display())
+    })
+}
+
+struct ConfigLayerBuildRequest<'a> {
+    context: &'a str,
+    config_content: &'a str,
+    args: &'a [&'a str],
+    extra_env: &'a [(&'a str, &'a str)],
+}
+
+impl<'a> ConfigLayerBuildRequest<'a> {
+    const fn into_parts(self) -> (&'a str, &'a str, &'a [&'a str], &'a [(&'a str, &'a str)]) {
+        (self.context, self.config_content, self.args, self.extra_env)
+    }
+}
+
+/// Shared workspace setup for configuration-layering tests.
+///
+/// Creates a minimal workspace, writes `config_content` to `.netsuke.toml`,
+/// installs a fake ninja binary, and runs netsuke with the given `args` and
+/// `extra_env`.  Returns the captured [`CommandOutput`].
+fn run_config_layer_build(request: ConfigLayerBuildRequest<'_>) -> Result<CommandOutput> {
+    let (context, config_content, args, extra_env) = request.into_parts();
+    let workspace = setup_minimal_workspace(
+        Utf8Path::new(env!("CARGO_MANIFEST_DIR")).as_std_path(),
+        context,
+    )?;
+    let workspace_path = utf8_temp_path(&workspace)?;
+    let workspace_dir = Dir::open_ambient_dir(&workspace_path, ambient_authority())
+        .context("open test workspace")?;
+    workspace_dir
+        .write(".netsuke.toml", config_content)
+        .context("write config file")?;
+    let (_ninja_dir, ninja_path) = make_build_ninja()?;
+    run_netsuke_with_env(
+        workspace_path.as_std_path(),
+        args,
+        Some(ninja_path.as_std_path()),
+        extra_env,
+    )
 }
 
 // -------------------------------------------------------------------------
@@ -111,14 +211,20 @@ fn clean_without_prior_build_handles_gracefully() -> Result<()> {
 
 #[rstest]
 fn build_json_emits_success_result() -> Result<()> {
-    assert_json_subcommand_success("JSON build success", "build", fake_ninja_check_build_file)
+    assert_json_subcommand_success(JsonSubcommandRequest {
+        context: "JSON build success",
+        command: "build",
+        make_ninja: make_build_ninja,
+    })
 }
 
 #[cfg(unix)]
 #[rstest]
 fn clean_json_dispatches_tool_and_emits_success_result() -> Result<()> {
-    assert_json_subcommand_success("JSON clean success", "clean", || {
-        fake_ninja_expect_tool(ToolName::new("clean"))
+    assert_json_subcommand_success(JsonSubcommandRequest {
+        context: "JSON clean success",
+        command: "clean",
+        make_ninja: make_clean_ninja,
     })
 }
 
@@ -214,6 +320,7 @@ fn generate_to_missing_parent_directory_succeeds_by_creating_parents() -> Result
 }
 
 // -------------------------------------------------------------------------
+
 // JSON diagnostics edge cases
 // -------------------------------------------------------------------------
 

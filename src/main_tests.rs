@@ -1,7 +1,6 @@
 //! Tests for startup diagnostics and the level they are gated by.
 
 use super::*;
-use crate::config_resolution::config_err_to_exit;
 use anyhow::{Result, ensure};
 use netsuke::localization::keys;
 use ortho_config::OrthoError;
@@ -307,7 +306,7 @@ fn config_load_errors_include_operational_context() -> Result<()> {
 
     tracing::subscriber::with_default(subscriber, || -> Result<()> {
         ensure!(
-            config_err_to_exit(
+            config_load::config_err_to_exit(
                 &validation_error,
                 DiagMode::Human,
                 observability::DIAG_MODE_OPERATION,
@@ -315,8 +314,11 @@ fn config_load_errors_include_operational_context() -> Result<()> {
             "a diagnostic-mode config error must fail the command"
         );
         ensure!(
-            config_err_to_exit(&file_error, DiagMode::Human, observability::MERGE_OPERATION)
-                == ExitCode::FAILURE,
+            config_load::config_err_to_exit(
+                &file_error,
+                DiagMode::Human,
+                observability::MERGE_OPERATION,
+            ) == ExitCode::FAILURE,
             "a merge config error must fail the command"
         );
         Ok(())
@@ -334,8 +336,10 @@ fn config_load_errors_include_operational_context() -> Result<()> {
         "merge failures must identify their operation and category: {recorded:?}"
     );
     ensure!(
-        !recorded.contains("private.toml") && !recorded.contains("read failure"),
-        "human-readable config errors must not expose error details: {recorded:?}"
+        !recorded.contains("private.toml")
+            && !recorded.contains("read failure")
+            && !recorded.contains("must be positive"),
+        "configuration tracing must not expose raw errors or paths: {recorded:?}"
     );
     Ok(())
 }

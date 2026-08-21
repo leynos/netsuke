@@ -2532,6 +2532,10 @@ access. `DiscoveryOutcome::into_layers` transfers the same
 `DiscoveredLayers` to `merge_with_cached_file_layers`, which consumes the
 cached layers for the full merge and prevents a second discovery pass.
 
+`make bench-config-load` exercises early JSON resolution and the cached merge
+with a large nested configuration payload. It protects the ownership transfer
+that avoids copying complete `MergeLayer` values before the cached merge.
+
 The standalone `merge_with_config_and_env` path performs discovery, emits the
 retained diagnostics and delegates to `merge_with_cached_file_layers`.
 `merge_with_config` is the process-environment wrapper around that path.
@@ -2578,16 +2582,17 @@ Configuration merge helpers:
   the retained layers and discovery errors into the full merge composition.
 - `collect_file_layers_with_trace_and_env_source(directory, env_source)` runs
   the one discovery pass and retains bounded project-scope trace metadata.
-- `resolve_json_and_layers_outcome_with_env(cli, matches, env)` returns
-  `(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics; the
-  composition boundary must replay them after tracing setup and then call
-  `into_layers()`.
+
+- `resolve_json_and_layers_outcome_with_env(cli, matches, env)` retains the
+  `DiscoveryOutcome` so startup can emit diagnostics after tracing setup and
+  then call `into_layers()`.
 - `merge_with_cached_file_layers(cli, matches, env, discovered)` consumes the
   discovered layers without rediscovery.
 - `is_empty_value(value: &serde_json::Value) -> bool` detects an empty CLI
   override object.
-- `json_from_layer(value: &serde_json::Value) -> Option<bool>` extracts `json`
-  from a configuration value.
+- `retain_layers_and_resolve_json(layers)` transfers each owned file-layer
+  value into the cached layer while recording the last valid `json` value,
+  avoiding complete layer or JSON-value copies before the full merge.
 - `json_from_matches(cli, matches, discovered) -> bool` applies an explicit
   root `--json` override to the discovered value.
 - `cli_overrides_from_matches(matches: &ArgMatches) -> OrthoValue` extracts
@@ -2937,6 +2942,56 @@ Both test modules import `capture_events`, `find_event`, and `EventAssertion`
 from `discovery_event_assertions` rather than duplicating them. The `insta`
 snapshot calls themselves stay in the test modules because snapshot names bind
 to the test module's path, not to a shared helper module.
+
+### Configuration-load observability
+
+Startup configuration loading is instrumented through the
+[`metrics`](https://docs.rs/metrics) façade so operators can detect failure
+trends and startup-latency regressions in production. Overall startup-attempt
+metrics are recorded by `config_load::resolve_configuration`, which receives a
+`ConfigurationLoadContext` and measures one attempt across
+`resolve_json_mode_or_exit` and `merge_cli_or_exit`. The diagnostic-mode helper
+resolves and caches discovered layers with
+`cli::resolve_json_and_layers_outcome_with_env`; the merge helper passes those
+cached layers to `cli::merge_with_cached_file_layers` for the full merge.
+Phase-level metrics are composed in `src/observability.rs` around those two
+operations.
+
+Both aggregate and phase-level configuration-load timing use the same
+injected elapsed-time seam: each boundary receives
+`&impl monotony::MonotonicClock`. Production supplies
+`monotony::StdMonotonicClock`; tests use deterministic clocks from
+`monotony::test_util`, such as `FixedMonotonicClock` and
+`QueuedMonotonicClock`. Do not add a local `ConfigurationLoadClock` or
+`SystemConfigurationLoadClock`, or call `Instant::now` directly at these
+boundaries. Whenever a mockable monotonic clock is introduced, use
+`monotony` as the repository-approved mechanism. The dependency choice is
+`monotony = "0.1.0"`; its public contract keeps the production clock
+abstraction dependency-free while its `test-util` feature provides
+deterministic test clocks.
+
+By default, Netsuke installs its in-process `DebuggingRecorder`; verbose runs
+can emit its snapshot through the debug log.
+
+Instruments emitted by `record_config_load_metrics`:
+
+- `netsuke_config_load_total` — a counter incremented once per startup
+  configuration-load attempt. It carries a single label `outcome` with values
+  `success` or `failure`, where `failure` corresponds to diagnostic-mode
+  resolution or a `merge_with_cached_file_layers` error. Use it to compute the
+  configuration-load failure rate.
+- `netsuke_config_load_duration_seconds` — a histogram recording the
+  elapsed duration of the configuration-load phase in seconds (one sample per
+  startup that reaches configuration resolution). Suggested operator bucket
+  boundaries: `0.001, 0.005, 0.01,
+  0.05, 0.1, 0.5, 1.0` seconds; configuration loading is expected to complete
+  in single-digit milliseconds, so buckets above one second exist only to
+  catch pathological filesystem or environment stalls.
+
+Naming convention: metric names use the `netsuke_` prefix and a `snake_case`
+unit suffix (`_total` for counters, `_seconds` for duration histograms),
+matching Prometheus conventions. Label values are bounded constant strings
+(`success`/`failure`) to keep cardinality fixed.
 
 ## BDD command helpers and environment handling
 
@@ -3659,13 +3714,32 @@ the Proptest suite keep the `Utf8PathBuf` instantiation tied to production.
 **Cross-references:** [CLI design](netsuke-design.md) §8.4, for the
 application-owned recorder boundary and end-of-run snapshot policy.
 
-`src/observability.rs` owns the application-level instrumentation for the two
+### Configuration-load boundary contract
+
+`ConfigurationLoadContext` in `src/config_load.rs` is the private
+startup-orchestration input bundle: parsed `cli::Cli`, parsed `ArgMatches`,
+fallback `DiagMode`, and `StartupWriter`. `resolve_configuration` owns one
+configuration-load attempt. It starts the injected clock immediately before
+diagnostic-mode resolution, measures through cached-layer merging, and records
+one startup-attempt success or failure when the attempt ends. A diagnostic
+resolution or merge failure returns the `ExitCode` selected by
+`config_err_to_exit`: JSON mode emits the structured diagnostic, while human
+mode logs bounded operation and error-category fields and writes the
+user-facing error.
+
+The boundary receives `&impl monotony::MonotonicClock`. Production passes
+`StdMonotonicClock`; tests pass deterministic clocks from
+`monotony::test_util`. Keep elapsed-time measurement on this injected
+contract; do not call `Instant::now` or introduce a configuration-specific
+clock abstraction.
+
+`src/observability.rs` owns the phase-level instrumentation for the two
 configuration-loading boundaries in `src/main.rs`. Keep configuration loading
 itself as a plain query: compose this instrumentation only at the CLI
 composition root. Other subsystem boundaries retain their local telemetry
 modules and must not add unbounded configuration detail to these series.
 
-The bounded metric contract is:
+The phase-level metric contract is:
 
 - Counter `config_load_total` records exactly one outcome for each logical
   configuration-load phase. Its `phase` label is `diag_mode` for early
@@ -3674,10 +3748,16 @@ The bounded metric contract is:
 - Histogram `config_load_duration_seconds` records one duration for each of
   those phases and carries only the same bounded `phase` label.
 
+These internal phase metrics are separate from the operator-facing
+startup-attempt metrics documented above: `netsuke_config_load_total` carries
+only the `outcome` label, and `netsuke_config_load_duration_seconds` has no
+labels. The `netsuke_` prefix identifies the public startup-attempt family.
+
 `init_metrics()` installs an application-owned filtering recorder around the
 process-wide `metrics_util::debugging::DebuggingRecorder` after tracing starts.
-It retains only the two configuration-load metric names above, so unrelated
-workload histograms cannot accumulate samples until shutdown. Tests must use
+It retains only the bounded configuration-load series above (phase-level and
+startup-attempt), so unrelated workload histograms cannot accumulate samples
+until shutdown. Tests must use
 `metrics::with_local_recorder` with a local recorder instead.
 `emit_metrics_snapshot()` drains and logs that configuration-load aggregate at
 command completion. After a successful configuration merge, `finish_run` gates
@@ -3702,14 +3782,16 @@ aggregating them into buckets. Netsuke configures no custom buckets; a future
 exporter may choose its own bucket policy without changing this metric name or
 label contract.
 
-Human-readable `configuration load failed` events include two structured
-fields:
+Human-readable `configuration load failed` events include two bounded
+structured fields:
 
 - `operation`: `diag_mode_resolution` or `config_merge`.
 - `error_category`: `io`, `parse`, or `validation`.
 
-The first two fields remain deliberately low-cardinality. Do not add paths,
-configuration values, or error text as metric labels.
+For human and JSON output, detailed source error text remains in the
+user-facing diagnostic path (stderr for human output and structured JSON for
+JSON output), not in a structured tracing field or metric label. Do not add
+paths, configuration values, or error text as metric labels.
 
 ## Documentation upkeep
 

@@ -2711,6 +2711,10 @@ successful configuration merge, merged verbosity gates that snapshot; a
 pre-merge failure uses parsed CLI verbosity. JSON mode suppresses tracing,
 including the snapshot, so its diagnostic document remains uncorrupted.
 
+Deferred configuration-discovery tracing retains only correlation hashes and
+presence bits for path metadata so events can be replayed after discovery.
+Those deferred trace events never retain or emit filenames or raw paths.
+
 CLI help and clap errors are localized via Fluent resources; locale resolution
 is handled in `src/locale_resolution.rs` in two phases. Before the
 configuration merge, `startup_localizer` (`src/main.rs`) resolves the locale
@@ -2736,6 +2740,32 @@ configuration processing, and on the paths where clap terminates the process it
 happens before that exit. The buffer is bounded: it keeps the earliest bytes,
 appends a truncation marker once, and drops the remainder, so its size never
 depends on how much a run emits.
+
+Configuration-load observability belongs to the application composition root;
+this decision is recorded in
+[ADR-013](adr-013-application-owned-configuration-observability.md).
+`config_load::resolve_configuration` owns the startup-attempt measurement: it
+resolves diagnostic mode with `cli::resolve_json_and_layers_outcome_with_env`,
+then passes the cached layers to `cli::merge_with_cached_file_layers` for the
+full merge. Those query functions do not install a recorder or own
+configuration-load metrics. `src/observability.rs` owns the phase recorder and
+bounded phase/outcome vocabulary, while `src/config_load.rs` owns the
+startup-attempt series.
+The application installs an in-process `DebuggingRecorder`; it does not open a
+metrics listener as a side effect of a command invocation.
+
+Metric labels are closed sets: phase-level series use `diag_mode` or `merge`,
+and both phase-level and startup-attempt counters use `success` or `failure`.
+Recorder-snapshot tests assert these labels through the same closed phase and
+outcome vocabulary.
+The startup-attempt duration has no labels. Paths, configuration values, and
+formatted source errors remain in user-facing diagnostics where appropriate;
+they must not become metric labels. When a run reaches configuration loading,
+the recorder emits its aggregate snapshot only for verbose runs, after command
+completion or a configuration-load exit.
+The full metric names, phase boundaries, and test-recorder rules are documented
+in the configuration-load observability section of the
+[developer's guide](developers-guide.md).
 
 `src/locale_catalogues.rs` is the authoritative registry of shipped catalogues.
 A `define_locales!` macro embeds `locales/<tag>/messages.ftl` for each declared
@@ -2913,11 +2943,13 @@ which applies the precedence `--config` > `NETSUKE_CONFIG`.
 discovery errors and bounded deferred diagnostics.
 
 Diagnostic-mode resolution uses
-`resolve_json_and_layers_outcome_with_env(...)`, which returns
-`(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics. The
-composition boundary calls `DiscoveryOutcome::emit_diagnostics()` after
-tracing is configured, replaying the retained diagnostics without repeating
-environment or filesystem access.
+
+`resolve_json_and_layers_outcome_with_env(...)` to resolve JSON from those
+discovered layers and retain the outcome for the startup boundary.
+It
+returns deferred diagnostics instead of emitting tracing while resolving.
+`DiscoveryOutcome::emit_diagnostics()` replays the retained diagnostics after
+tracing is configured without repeating environment or filesystem access.
 `collect_file_layers_with_trace_and_env_source(...)` performs the underlying
 discovery scan and retains bounded project-scope trace metadata.
 `DiscoveryOutcome::into_layers()` transfers the same discovered layers to
@@ -2925,6 +2957,14 @@ discovery scan and retains bounded project-scope trace metadata.
 and prevents a second discovery pass. The standalone
 `merge_with_config_and_env(...)` path performs discovery, emits diagnostics
 and delegates to `merge_with_cached_file_layers(...)`.
+
+Because OrthoConfig 0.9.0 exposes only an owned `MergeLayer::into_value()`
+accessor, discovery derives its JSON preference while transferring each owned
+file value into the cached file layer. This preserves the cached values for
+the merge without cloning complete layers or JSON values. The startup
+composition root creates `ConfigStdEnvProvider`; `ConfigurationLoadContext`
+carries an injected `ConfigEnvProvider` through both early resolution and the
+cached merge.
 
 Deferred bounded discovery diagnostics are retained only for replay after the
 startup tracing boundary is configured. They do not contain raw paths or file

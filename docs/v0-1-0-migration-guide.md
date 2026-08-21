@@ -73,12 +73,12 @@ can serve several invocations. Worked examples live in the users' guide's
 ## Reusing cached configuration discovery
 
 The cached configuration APIs are an opt-in flow for callers of the unstable
-Rust API. `resolve_json_and_layers_outcome_with_env` returns
-`(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics. Callers
-that adopt this composition boundary explicitly call
-`DiscoveryOutcome::emit_diagnostics()` after installing a tracing filter, then
-consume the outcome with `into_layers()` and pass the resulting
-`DiscoveredLayers` to `merge_with_cached_file_layers`.
+
+Rust API. Callers that adopt this composition boundary resolve JSON mode and
+discover file layers once. `resolve_json_and_layers_outcome_with_env` returns
+`(OrthoResult<bool>, DiscoveryOutcome)`. Callers can call
+`emit_diagnostics()` after a tracing filter is installed, then call
+`into_layers()` before passing the layers to `merge_with_cached_file_layers`.
 
 The standalone `resolve_merged_json_with_env` and
 `merge_with_config_and_env` functions retain their existing automatic
@@ -86,10 +86,14 @@ discovery behaviour. The former resolves JSON mode, while the latter
 discovers and merges configuration in one call, so callers that do not need
 the cached flow require no migration.
 
-v0.1.0 also instruments configuration loading itself: bounded metrics named
-`config_load_total` and `config_load_duration_seconds`, and structured
-`operation` and `error_category` fields on configuration-load failures.
-Neither exposes configuration paths. See the users' guide's
+v0.1.0 also instruments configuration loading itself. The internal
+phase-level series are `config_load_total`, labelled `phase=diag_mode|merge`
+and `outcome=success|failure`, and `config_load_duration_seconds`, labelled
+only `phase=diag_mode|merge`. The operator-facing startup-attempt series are
+`netsuke_config_load_total`, labelled only `outcome=success|failure`, and
+`netsuke_config_load_duration_seconds`, with no labels. Configuration-load
+failures add bounded `operation` and `error_category` fields. Neither
+exposes configuration paths. See the users' guide's
 [bounded configuration metrics](users-guide.md#bounded-configuration-metrics)
 and [interpret failures](users-guide.md#interpret-failures) sections.
 

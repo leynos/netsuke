@@ -109,8 +109,3 @@ impl<'a> EventAssertion<'a> {
         Ok(self.event.replace(&path_hash(self.path), "[path_hash]"))
     }
 }
-
-/// Assert a deferred diagnostic carries the expected bounded path fields.
-pub(crate) fn assert_bounded_path_event(event: &str, path: &Path) -> Result<()> {
-    EventAssertion::new(event, path).ensure_bounded_path_fields()
-}

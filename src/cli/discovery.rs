@@ -17,13 +17,10 @@ use super::parser::Cli;
 
 #[path = "discovery_diagnostics.rs"]
 mod diagnostics;
-
-#[path = "discovery_paths.rs"]
-mod paths;
-
 #[path = "discovery_layers.rs"]
 mod layers;
-
+#[path = "discovery_paths.rs"]
+mod paths;
 #[path = "discovery_trace.rs"]
 mod trace;
 use diagnostics::{BoundedConfigPath, ConfigLoadFailureKind, ConfigLoadWarning};
@@ -101,12 +98,11 @@ impl DiscoveredLayers {
         self.errors.first()
     }
 
-    /// Return the JSON preference captured with these discovered layers.
+    /// Return the last valid JSON preference from the discovered file layers.
     pub(crate) const fn json_preference(&self) -> bool {
         self.json_preference
     }
 
-    /// Consume the result into its reusable layers and deferred errors.
     pub(crate) fn into_parts(
         self,
     ) -> (Vec<MergeLayer<'static>>, Vec<Arc<ortho_config::OrthoError>>) {
@@ -134,7 +130,6 @@ impl DiscoveryOutcome {
         self.layers.first_error()
     }
 
-    /// Return the JSON preference captured during the discovery pass.
     pub(crate) const fn json_preference(&self) -> bool {
         self.layers.json_preference()
     }
@@ -369,9 +364,6 @@ pub(crate) fn collect_diag_file_layers_with_env(
 #[cfg(test)]
 #[path = "discovery_event_assertions.rs"]
 mod event_assertions;
-
-#[cfg(test)]
-pub(crate) use event_assertions::assert_bounded_path_event;
 
 #[cfg(test)]
 #[path = "discovery_tracing_tests.rs"]

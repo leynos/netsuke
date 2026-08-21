@@ -34,11 +34,11 @@ operator, user, and contributor references are easier to find.
   Human-first, agent-consistent CLI doctrine decision record.
 - [adr-003-actions-foreach-when-scope.md](adr-003-actions-foreach-when-scope.md):
   Manifest control-key scoping decision record.
-- [adr-004-bound-kani-ir-harnesses-to-small-n.md](adr-004-bound-kani-ir-harnesses-to-small-n.md):
+- [ADR-004: Kani IR harnesses](adr-004-bound-kani-ir-harnesses-to-small-n.md):
   Kani IR harness bound and Proptest hand-off decision record.
 - [adr-004-graph-subcommand-in-process-rendering.md](adr-004-graph-subcommand-in-process-rendering.md):
   Graph rendering architecture decision record.
-- [adr-004-explicit-config-selection-outside-orthoconfig.md](adr-004-explicit-config-selection-outside-orthoconfig.md):
+- [ADR-004](adr-004-explicit-config-selection-outside-orthoconfig.md):
   Explicit configuration selector ownership decision record.
 - [adr-005-typed-which-resolve-error.md](adr-005-typed-which-resolve-error.md):
   Typed executable resolver error decision record for `which` and
@@ -63,6 +63,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-012](adr-012-bound-dyndep-sidecar-retention.md):
   Deterministic retention, lease, and failure-boundary policy for generated
   dyndep sidecars.
+- [ADR-013](adr-013-application-owned-configuration-observability.md):
+  Application-owned configuration-load metrics, verbose snapshots, and bounded
+  label vocabulary.
 
 ## User and operator guides
 

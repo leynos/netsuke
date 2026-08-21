@@ -539,20 +539,6 @@ Matching is case-sensitive. `*` and `?` do not cross directory separators; use
 are returned. The [quick-start guide](quickstart.md) shows a complete runnable
 example.
 
-Patterns may be absolute or relative to the working directory, including
-parent-relative patterns such as `glob('../shared/*.h')`. Expansion is scoped
-to the pattern's longest literal directory prefix — the text up to the first
-`*`, `?`, `[` or `{`, trimmed back to the last separator, so `src/` for
-`src/**/*.c`. If that prefix does not exist, or names something that is not a
-directory, the call returns an empty list rather than failing. A symbolic-link
-literal prefix, such as `src/link/*.c`, cannot establish the capability and
-causes expansion to fail. A match is skipped rather than reported as an error
-when the metadata lookup cannot resolve a symbolic link — the match itself or
-a directory reached on the way to it — because it is unreadable within the
-prefix, dangling, or resolves outside that prefix. A cyclic symbolic link is
-reported as an error rather than skipped, since it describes a broken tree
-rather than a missing file.
-
 ### Define reusable macros
 
 Macros return rendered text and can accept default arguments:
@@ -1006,14 +992,14 @@ error. A broken discovered configuration is therefore not treated as absent.
 
 Normal command-line use requires no change. The Rust API remains an unstable
 beta surface, but callers that compose configuration themselves can avoid
-discovering and loading the same configuration files more than once. The
+discovering and loading the same configuration files more than once.
 `netsuke::cli::resolve_json_and_layers_outcome_with_env` returns
-`(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics. At the
-composition boundary, call `DiscoveryOutcome::emit_diagnostics()` after
-tracing is configured, then consume the outcome with `into_layers()` and pass
-the cached layers to `netsuke::cli::merge_with_cached_file_layers` for the
-full merge. This preserves diagnostics from the same discovery pass while
-avoiding repeated file loading.
+`(OrthoResult<bool>, DiscoveryOutcome)`. Callers may call
+`emit_diagnostics()` on the outcome, then call `into_layers()` before passing
+the layers to
+`netsuke::cli::merge_with_cached_file_layers` for the full merge. This
+preserves diagnostics from the same discovery pass while avoiding repeated
+file loading.
 
 All of these functions take an injected `&impl ConfigEnvProvider`. The public
 `ConfigEnvProvider` trait provides `get(&self, key: &str) -> Option<OsString>`
@@ -1032,22 +1018,49 @@ whether a path was present, and which environment lookups were attempted.
 Events then identify whether Netsuke uses an explicit file or discovered layers.
 
 If an explicit file cannot be loaded, the warning records `failure_kind` as
-`Missing` or `LoadError`. Discovery diagnostics expose bounded `path_hash` and
-presence fields. They do not expose raw configuration paths or configuration
-file names. The unkeyed `path_hash` is a bounded correlation identifier; it
-does not confidentially conceal a guessable path.
+`Missing` or `LoadError`. Verbose tracing uses only `path_hash` and
+`path_present`; it never exposes a file name or full path. The unkeyed
+`path_hash` is only a correlation identifier: it does not protect a guessable
+path from disclosure.
 
 Configuration tracing is disabled in JSON mode, including when `json = true`
 comes from a configuration file. This keeps stderr empty for successful JSON
 commands and reserves it for the single diagnostic document on failure.
 
-Verbose human-mode runs also emit a `metrics snapshot` aggregate after command
-completion. Verbosity can come from `--verbose`, `NETSUKE_VERBOSE`, or
-`verbose = true` in a configuration file. After a successful configuration
-merge, the merged verbosity controls the snapshot; if configuration fails
-before that merge completes, the parsed CLI verbosity is used instead. JSON
-mode suppresses tracing and metrics snapshots so that its diagnostic document
-remains the only stderr output.
+In human mode, every configuration failure includes bounded `operation` and
+`error_category` fields in its tracing event. Passing `--verbose` additionally
+emits one final `metrics snapshot` debug event before Netsuke exits. The
+snapshot is an in-process diagnostic record, not a metrics listener or a
+Prometheus endpoint.
+After a successful configuration merge, verbosity can also come from
+`NETSUKE_VERBOSE` or `verbose = true` in a configuration file. A configuration
+failure before that merge uses only CLI `--verbose`.
+
+It includes the bounded configuration-load series:
+
+- `netsuke_config_load_total`, with `outcome=success` or `outcome=failure`.
+- `netsuke_config_load_duration_seconds`, with one sample for the startup
+  configuration-load attempt.
+- The phase-level `config_load_total` and
+  `config_load_duration_seconds` entries, labelled with `phase=diag_mode` or
+  `phase=merge`; the counter also carries the bounded outcome value.
+
+For example, a missing explicit file reports the actionable error first, then
+the bounded tracing fields and the snapshot (timestamps and metric values vary):
+
+<!-- tested-example: guide-configuration-observability -->
+
+```plaintext
+Configuration file error in 'missing.toml': explicit configuration file not found
+ERROR ... configuration load failed operation="diag_mode_resolution" error_category="io"
+DEBUG ... metrics snapshot metrics=[...]
+```
+
+The snapshot is available for a configuration failure when `--verbose` was
+supplied on the command line. A `verbose = true` setting in a file that cannot
+be loaded cannot enable diagnostics because configuration merging has not
+completed. JSON mode suppresses the tracing and snapshot so stderr remains one
+machine-readable diagnostic document.
 
 #### Bounded configuration metrics
 
@@ -1295,8 +1308,10 @@ diagnostic JSON preference pass or `config_merge` for the full merge;
 never recorded. JSON mode preserves the diagnostic document as the
 machine-readable failure output.
 
-The `--verbose` flag enables diagnostic tracing and successful timing
-summaries. It is suppressed in JSON mode so stderr remains parseable.
+The `--verbose` flag enables diagnostic tracing, successful timing summaries,
+and the final metrics snapshot described in
+[Diagnose configuration selection](#diagnose-configuration-selection). It is
+suppressed in JSON mode so stderr remains parseable.
 
 ## Review the safety boundary
 
@@ -1308,33 +1323,8 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
 - `script` uses `/bin/sh -e` in v0.1.0-beta2.
 - `shell`, `grep`, `fetch`, filesystem helpers, and ordinary recipes interact
   with the host.
-- `glob` restricts its filesystem metadata access to a capability handle
-  scoped to the pattern's literal directory prefix, so it cannot inspect
-  anything outside the subtree the pattern can match; the pattern match walk
-  itself still uses ambient filesystem access.
-- Verbose glob tracing replaces every caller-controlled path field — patterns,
-  prefixes, and sampled relative matches — with the stable `<redacted>` marker.
-  Aggregate metrics retain only bounded status and reason data. Error messages
-  may retain the original input so invalid patterns can be explained.
 - `raw` template output and handwritten shell fragments remain the manifest
   author's responsibility.
-- Each `command` list entry is joined into a single shell chain; a later
-  entry inherits the working directory, environment, and shell variables
-  left by an earlier entry, and runs only when that earlier entry exits with
-  status zero. A failed entry may still leave side effects behind before it
-  halts the chain. The generated brace/eval boundary keeps comments and
-  trailing control operators inside an entry from changing the chain's
-  structure. An entry may start at most one background job; Netsuke waits for
-  that job before moving to a later entry, and rejects an entry that starts
-  more than one background job during Ninja generation. It also rejects an
-  entry whose nested `eval` payload makes the background-job count dynamic,
-  because the wrapper cannot safely determine which jobs to wait for. A direct
-  simple `exec`, optionally prefixed by shell assignments, is supervised so
-  its success or failure retains the list's status semantics: a successful
-  `exec` ends the remaining chain, while structured or nested `exec` forms are
-  rejected during Ninja generation. Failure diagnostics include the action
-  fingerprint and one-based entry position when Netsuke can attribute the
-  failed list entry.
 - Literal shell dollar expressions currently require Ninja-aware escaping,
   such as `$$PATH`.
 

@@ -22,6 +22,10 @@ use self::recorder::ConfigMetricsRecorder;
 pub(crate) const CONFIG_LOAD_COUNTER: &str = "config_load_total";
 /// Histogram recording configuration-load duration in seconds by bounded phase.
 pub(crate) const CONFIG_LOAD_DURATION: &str = "config_load_duration_seconds";
+/// Counter recording the outcome of a complete startup configuration load.
+pub(crate) const STARTUP_CONFIG_LOAD_COUNTER: &str = "netsuke_config_load_total";
+/// Histogram recording the duration of a complete startup configuration load.
+pub(crate) const STARTUP_CONFIG_LOAD_DURATION: &str = "netsuke_config_load_duration_seconds";
 /// Label value for the diagnostic-mode configuration resolution phase.
 pub(crate) const DIAG_MODE_PHASE: &str = "diag_mode";
 /// Label value for the full configuration merge phase.
@@ -146,3 +150,7 @@ fn describe_config_metrics() {
 #[cfg(test)]
 #[path = "observability_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "observability_recorder_tests.rs"]
+mod recorder_tests;
