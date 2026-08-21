@@ -543,3 +543,26 @@ fn manifest_error_cases(
 
 #[path = "ir_from_manifest_tests/dependency_order.rs"]
 mod dependency_order;
+
+#[rstest]
+#[case::minimal_manifest("tests/data/minimal.yml", 1, 1)]
+#[case::duplicate_rules("tests/data/duplicate_rules.yml", 2, 2)]
+fn manifest_file_generates_expected_graph(
+    #[case] manifest_path: &str,
+    #[case] expected_actions: usize,
+    #[case] expected_targets: usize,
+) -> Result<()> {
+    let manifest = manifest::from_path(manifest_path)?;
+    let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
+    let actual_actions = graph.actions.len();
+    ensure!(
+        actual_actions == expected_actions,
+        "expected {expected_actions} actions, got {actual_actions}"
+    );
+    let actual_targets = graph.targets.len();
+    ensure!(
+        actual_targets == expected_targets,
+        "expected {expected_targets} targets, got {actual_targets}"
+    );
+    Ok(())
+}
