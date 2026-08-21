@@ -17,23 +17,6 @@ use netsuke::{
 use rstest::rstest;
 
 #[rstest]
-fn minimal_manifest_to_ir() -> Result<()> {
-    let manifest = manifest::from_path("tests/data/minimal.yml")?;
-    let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
-    ensure!(
-        graph.actions.len() == 1,
-        "expected one action, got {}",
-        graph.actions.len()
-    );
-    ensure!(
-        graph.targets.len() == 1,
-        "expected one target, got {}",
-        graph.targets.len()
-    );
-    Ok(())
-}
-
-#[rstest]
 fn command_list_entries_are_interpolated_in_order() -> Result<()> {
     let yaml = r#"
         netsuke_version: "1.0.0"
@@ -63,24 +46,6 @@ fn command_list_entries_are_interpolated_in_order() -> Result<()> {
     );
     Ok(())
 }
-
-#[rstest]
-fn duplicate_rules_emit_distinct_actions() -> Result<()> {
-    let manifest = manifest::from_path("tests/data/duplicate_rules.yml")?;
-    let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
-    ensure!(
-        graph.actions.len() == 2,
-        "expected two actions, got {}",
-        graph.actions.len()
-    );
-    ensure!(
-        graph.targets.len() == 2,
-        "expected two targets, got {}",
-        graph.targets.len()
-    );
-    Ok(())
-}
-
 #[rstest]
 fn missing_rule_fails() -> Result<()> {
     let manifest = manifest::from_path("tests/data/missing_rule.yml")?;
@@ -515,3 +480,26 @@ fn manifest_error_cases(
 
 #[path = "ir_from_manifest_tests/dependency_order.rs"]
 mod dependency_order;
+
+#[rstest]
+#[case::minimal_manifest("tests/data/minimal.yml", 1, 1)]
+#[case::duplicate_rules("tests/data/duplicate_rules.yml", 2, 2)]
+fn manifest_file_generates_expected_graph(
+    #[case] manifest_path: &str,
+    #[case] expected_actions: usize,
+    #[case] expected_targets: usize,
+) -> Result<()> {
+    let manifest = manifest::from_path(manifest_path)?;
+    let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
+    let actual_actions = graph.actions.len();
+    ensure!(
+        actual_actions == expected_actions,
+        "expected {expected_actions} actions, got {actual_actions}"
+    );
+    let actual_targets = graph.targets.len();
+    ensure!(
+        actual_targets == expected_targets,
+        "expected {expected_targets} targets, got {actual_targets}"
+    );
+    Ok(())
+}
