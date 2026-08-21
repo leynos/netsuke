@@ -13,9 +13,10 @@ use tempfile::{TempDir, tempdir};
 
 use super::event_assertions::{EventAssertion, capture_events, find_event};
 use super::layers::collect_file_layers_with_normalizer;
-use super::paths::FailingPathNormalizer;
+use super::paths::{FailingPathNormalizer, PathNormalizer};
 use std::cell::Cell;
 use std::ffi::OsString;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy)]
 pub(super) enum LayerScenario {
@@ -40,6 +41,26 @@ impl EnvProvider for CountingEnv {
     fn get(&self, _key: &str) -> Option<OsString> {
         self.get_calls.set(self.get_calls.get() + 1);
         None
+    }
+}
+
+/// Path normalizer that records project-key normalization calls.
+#[derive(Default)]
+struct CountingPathNormalizer {
+    calls: Cell<usize>,
+}
+
+impl CountingPathNormalizer {
+    /// Return the number of normalization calls performed so far.
+    fn calls(&self) -> usize {
+        self.calls.get()
+    }
+}
+
+impl PathNormalizer for CountingPathNormalizer {
+    fn normalize(&self, path: &Path) -> std::io::Result<PathBuf> {
+        self.calls.set(self.calls.get() + 1);
+        Ok(path.to_path_buf())
     }
 }
 /// Build a [`Cli`] for `scenario`, rooted in the isolated `temp` directory.
@@ -264,6 +285,36 @@ fn existing_project_scope_layer_is_not_appended_twice() -> Result<()> {
     );
     let events = replay_events(&discovered)?;
     find_event(&events, "discovery included project-scope layers")?;
+    Ok(())
+}
+
+/// Scanning stored canonical layer paths does not normalize each inherited layer.
+#[test]
+fn project_layer_scan_normalizes_only_the_project_key() -> Result<()> {
+    let temp = tempdir().context("create temp dir")?;
+    let project_dir = temp.path().join("project");
+    test_support::fs::create_dir(&project_dir).context("create project dir")?;
+    test_support::fs::write(project_dir.join("base.toml"), "jobs = 7\n")
+        .context("write inherited config")?;
+    test_support::fs::write(
+        project_dir.join(".netsuke.toml"),
+        "extends = \"base.toml\"\njson = true\n",
+    )
+    .context("write project config")?;
+    let normalizer = CountingPathNormalizer::default();
+
+    let layers = collect_file_layers_with_normalizer(Some(project_dir.as_path()), &normalizer)
+        .context("collect inherited project layers")?;
+
+    ensure!(
+        layers.len() == 2,
+        "expected inherited and project layers: {layers:?}"
+    );
+    ensure!(
+        normalizer.calls() == 1,
+        "only the expected project path should be normalized, got {} calls",
+        normalizer.calls()
+    );
     Ok(())
 }
 

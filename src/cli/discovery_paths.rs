@@ -25,9 +25,9 @@ impl PathNormalizer for FsPathNormalizer {
 /// Return the canonical comparison key for `path`.
 ///
 /// `OrthoConfig` canonicalizes every layer path it records, whereas the expected
-/// project path is joined from the caller's `--directory` verbatim. Passing both
-/// sides through the same normalizer keeps a relative or symlinked directory
-/// from looking like a different file.
+/// project path is joined from the caller's `--directory` verbatim. Normalizing
+/// the expected project path keeps a relative or symlinked directory from
+/// looking like a different file without re-reading each stored layer path.
 ///
 /// Resolution failure is reported rather than absorbed: the caller decides what
 /// an unresolvable path means. See `collect_file_layers`, which compares such a

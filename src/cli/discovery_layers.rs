@@ -99,7 +99,7 @@ pub(super) fn collect_file_layers_with_trace_and_env_source(
     collect_file_layers_with_normalizer_and_trace(directory, &FsPathNormalizer, env_source)
 }
 
-/// Return the key used to compare `path` against the expected project file.
+/// Return the key used to compare the expected project file against a layer.
 ///
 /// This is the discovery-side fallback policy for [`normalized_path_key`]. A
 /// path that cannot be resolved — most often the expected `.netsuke.toml`, which
@@ -152,10 +152,18 @@ fn collect_file_layers_with_normalizer_and_trace(
     let project_key = project_file
         .as_deref()
         .map(|path| comparison_key(normalizer, &path.to_string_lossy()));
-    let has_project_layer = file_layers.value.iter().any(|layer| {
-        layer.path().is_some_and(|path| {
-            let layer_key = comparison_key(normalizer, path.as_str());
-            project_key.as_deref().is_some_and(|key| *key == layer_key)
+    let lossy_project_key = project_key
+        .as_deref()
+        .filter(|path| path.to_str().is_none())
+        .map(Path::to_string_lossy);
+    let has_project_layer = project_key.as_deref().is_some_and(|key| {
+        file_layers.value.iter().any(|layer| {
+            layer.path().is_some_and(|path| {
+                key == path.as_std_path()
+                    || lossy_project_key
+                        .as_deref()
+                        .is_some_and(|lossy_key| lossy_key == path.as_str())
+            })
         })
     });
     let project_trace_path = BoundedConfigPath::from_path(project_file.as_deref());
