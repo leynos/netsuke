@@ -12,6 +12,22 @@ use metrics_util::{CompositeKey, MetricKind, debugging::DebugValue};
 
 type SnapshotEntry = (CompositeKey, Option<Unit>, Option<SharedString>, DebugValue);
 
+/// Record the valid, invalid, and unrelated series used to verify filtering.
+fn record_mixed_metric_series(recorder: &ConfigMetricsRecorder) {
+    metrics::with_local_recorder(recorder, || {
+        counter!(CONFIG_LOAD_COUNTER, "phase" => DIAG_MODE_PHASE, "outcome" => "success")
+            .increment(1);
+        histogram!(CONFIG_LOAD_DURATION, "phase" => DIAG_MODE_PHASE).record(0.01);
+        counter!(STARTUP_CONFIG_LOAD_COUNTER, "outcome" => "failure").increment(1);
+        histogram!(STARTUP_CONFIG_LOAD_DURATION).record(0.02);
+        counter!(STARTUP_CONFIG_LOAD_COUNTER).increment(1);
+        histogram!(STARTUP_CONFIG_LOAD_DURATION, "phase" => DIAG_MODE_PHASE).record(0.03);
+        counter!("help_targets_total", "topic" => "help").increment(1);
+        histogram!("template_render_duration_seconds", "template" => "unbounded").record(0.5);
+    });
+}
+
+/// Assert the retained startup counter has its sole bounded failure label.
 fn assert_retained_startup_counter(snapshot: &[SnapshotEntry]) {
     assert!(
         snapshot.iter().any(|entry| {
@@ -27,6 +43,7 @@ fn assert_retained_startup_counter(snapshot: &[SnapshotEntry]) {
     );
 }
 
+/// Assert the retained startup duration is unlabelled with one expected sample.
 fn assert_retained_startup_duration(snapshot: &[SnapshotEntry]) {
     assert!(
         snapshot.iter().any(|entry| {
@@ -39,6 +56,7 @@ fn assert_retained_startup_duration(snapshot: &[SnapshotEntry]) {
     );
 }
 
+/// Assert every retained series belongs to the bounded configuration vocabulary.
 fn assert_only_configuration_metric_names(snapshot: &[SnapshotEntry]) {
     assert!(
         snapshot.iter().all(|entry| {
@@ -59,17 +77,7 @@ fn configuration_metrics_recorder_retains_bounded_startup_and_phase_series() {
     let recorder = ConfigMetricsRecorder::new();
     let snapshotter = recorder.snapshotter();
 
-    metrics::with_local_recorder(&recorder, || {
-        counter!(CONFIG_LOAD_COUNTER, "phase" => DIAG_MODE_PHASE, "outcome" => "success")
-            .increment(1);
-        histogram!(CONFIG_LOAD_DURATION, "phase" => DIAG_MODE_PHASE).record(0.01);
-        counter!(STARTUP_CONFIG_LOAD_COUNTER, "outcome" => "failure").increment(1);
-        histogram!(STARTUP_CONFIG_LOAD_DURATION).record(0.02);
-        counter!(STARTUP_CONFIG_LOAD_COUNTER).increment(1);
-        histogram!(STARTUP_CONFIG_LOAD_DURATION, "phase" => DIAG_MODE_PHASE).record(0.03);
-        counter!("help_targets_total", "topic" => "help").increment(1);
-        histogram!("template_render_duration_seconds", "template" => "unbounded").record(0.5);
-    });
+    record_mixed_metric_series(&recorder);
 
     let snapshot = snapshotter.snapshot().into_vec();
     assert_eq!(
