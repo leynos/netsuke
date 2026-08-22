@@ -54,8 +54,8 @@ Publish as `netsuke-build`, and keep every user-facing name as `netsuke`.
   target's archive to the same shape. Without the template `cargo binstall`
   would probe its default asset-name patterns, which place the target before
   the version, fail to find any matching asset, and fall back to a source
-  build that needs the pinned nightly and the Polonius flag — the very
-  fallback the documented command exists to avoid.
+  build that needs the pinned nightly — the very fallback the documented
+  command exists to avoid.
 - Update the crates.io installation guidance in the README, the users' guide,
   and the quickstart to install `netsuke-build`.
 

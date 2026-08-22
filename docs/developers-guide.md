@@ -396,19 +396,26 @@ names diverge.
 ## Toolchain and borrow checker
 
 Netsuke builds on the dated nightly toolchain pinned in `rust-toolchain.toml`
-with the Polonius alpha borrow-checking analysis (`-Zpolonius=next`) enabled.
-`rustup` provisions the toolchain automatically, and `.cargo/config.toml`
-supplies the flag by default, covering Cargo invocations such as rust-analyzer
-that run without `RUSTFLAGS` in the environment. Makefile recipes that set
-`RUSTFLAGS` re-state the flag through the `POLONIUS_FLAGS` variable because an
-inherited `RUSTFLAGS` environment variable overrides `.cargo/config.toml`. The
-recipes that add `-D warnings` and `$(POLONIUS_FLAGS)` build the value as
-`RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)"`; the
+with the Polonius alpha borrow-checking analysis enabled. Nightly toolchains
+dated 2026-08-04 and later run Polonius by default, so the pin carries the
+requirement on its own: **no `-Zpolonius` directive is passed anywhere, and
+none should be added.** The directive is being retired upstream, and a build
+that restates it is a build that can silently drop it. A contract test
+(described below) fails if one reappears.
+
+`rustup` provisions the toolchain automatically inside a checkout, which covers
+every consumer — plain Cargo invocations, rust-analyzer, Clippy, Whitaker, and
+Kani alike — without any Cargo configuration. The repository has no
+`.cargo/config.toml`; carrying the flag was that file's only purpose, and it
+was deleted when the pin moved past 2026-08-04.
+
+Makefile recipes still set `RUSTFLAGS`, but only to deny warnings. Each builds
+the value as `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings"`; the
 `$${RUSTFLAGS:+$$RUSTFLAGS }` expansion prepends any `RUSTFLAGS` already set by
 the caller (for example a CI wrapper), so those flags survive rather than being
-silently discarded. `cargo kani` sets `CARGO_ENCODED_RUSTFLAGS` itself, which
-also overrides the table, so `make kani-full` passes the flag through
-`RUSTFLAGS` as well.
+silently discarded. `make kani-full` and the binary-build recipe set no
+`RUSTFLAGS` at all: Kani compiles third-party crates the workspace lint policy
+does not govern, and a plain binary build is not a lint gate.
 
 [ADR-006](adr-006-adopt-polonius-nightly-toolchain.md) records the policy
 decision, and the [polonius migration notes](polonius.md) track every site
@@ -420,36 +427,44 @@ fails to compile, consult the migration notes before restructuring.
 
 ### Polonius CI shared-action contract
 
-GitHub Actions jobs do not read `.cargo/config.toml` for every build they
-launch, and the shared Rust setup actions export their own `RUSTFLAGS`. The
-Polonius flags therefore travel as *action inputs*, not as job environment
-variables: each affected workflow passes them through the relevant shared
-action's `with.rustflags` input, and none of them may set a job-level
-`env.RUSTFLAGS`. A job-level override would win over the action's exported
-value and silently drop the flag, so the tree would fail to borrow-check with a
-confusing `E0499` rather than an obvious configuration error.
+Continuous integration gets Polonius the same way a checkout does: from the
+pinned toolchain. What the shared-action contract still governs is the
+*toolchain selection* and the warning policy that travels beside it.
+
+The shared Rust setup actions export their own `RUSTFLAGS`, so anything a job
+needs travels as an *action input*, not as a job environment variable: each
+affected workflow passes it through the relevant shared action's
+`with.rustflags` input, and none of them may set a job-level `env.RUSTFLAGS`. A
+job-level override would win over the action's exported value and silently drop
+whatever the action set.
 
 Five CI jobs across four workflows carry the contract:
 
-| Workflow                                                              | Job                  | Shared action        | `with.rustflags`              |
-| --------------------------------------------------------------------- | -------------------- | -------------------- | ----------------------------- |
-| [`ci.yml`](../.github/workflows/ci.yml)                               | `build-test`         | `setup-rust`         | `-D warnings -Zpolonius=next` |
-| [`ci.yml`](../.github/workflows/ci.yml)                               | `build-test-windows` | `setup-rust`         | `-D warnings -Zpolonius=next` |
-| [`coverage-main.yml`](../.github/workflows/coverage-main.yml)         | `coverage-upload`    | `setup-rust`         | `-D warnings -Zpolonius=next` |
-| [`netsukefile-test.yml`](../.github/workflows/netsukefile-test.yml)   | `netsukefile`        | `setup-rust`         | `-Zpolonius=next`             |
-| [`build-and-package.yml`](../.github/workflows/build-and-package.yml) | `build`              | `rust-build-release` | `-Zpolonius=next`             |
+| Workflow | Job | Shared action | `with.rustflags` |
+| --- | --- | --- | --- |
+| [`ci.yml`](../.github/workflows/ci.yml) | `build-test` | `setup-rust` | `-D warnings` |
+| [`ci.yml`](../.github/workflows/ci.yml) | `build-test-windows` | `setup-rust` | `-D warnings` |
+| [`coverage-main.yml`](../.github/workflows/coverage-main.yml) | `coverage-upload` | `setup-rust` | `-D warnings` |
+| [`netsukefile-test.yml`](../.github/workflows/netsukefile-test.yml) | `netsukefile` | `setup-rust` | *(none)* |
+| [`build-and-package.yml`](../.github/workflows/build-and-package.yml) | `build` | `rust-build-release` | *(none)* |
 
-CI and coverage add `-D warnings` because those jobs gate on a warning-free
-build; the Netsukefile and packaging jobs carry the Polonius flag alone, so a
-new upstream warning cannot break a release build. The coverage action's
-`cargo-llvm-cov` invocation inherits the flags `setup-rust` exports and appends
-its own instrumentation flags.
+The CI jobs and coverage add `-D warnings` because those jobs gate on a
+warning-free build — on Windows that is what surfaces findings in the
+`#[cfg(windows)]` tree at all. The Netsukefile and packaging jobs pass no
+`rustflags`, so a new upstream warning cannot break a release build. The
+coverage action's `cargo-llvm-cov` invocation inherits the flags `setup-rust`
+exports and appends its own instrumentation flags.
 
-`NETSUKE_RUST_TOOLCHAIN` follows a separate rule. CI and Netsukefile pin it to
-the channel in `rust-toolchain.toml` so those jobs provision the dated nightly
-explicitly; coverage and packaging must leave it unset, because they select
-their toolchain through the action's own `toolchain` input and a second,
-independently edited pin would let the two disagree.
+No `setup-rust` call passes a `components` input. The shared action is not
+declared to accept one and installs rustfmt and clippy itself, so passing it
+only emitted an "Unexpected input(s)" warning on every run;
+`tests/workflow_contracts/ci_lint_test.py` holds that.
+
+`NETSUKE_RUST_TOOLCHAIN` follows a separate rule. The CI jobs and Netsukefile
+pin it to the channel in `rust-toolchain.toml` so those jobs provision the
+dated nightly explicitly; coverage and packaging must leave it unset, because
+they select their toolchain through the action's own `toolchain` input and a
+second, independently edited pin would let the two disagree.
 
 [`tests/polonius_toolchain_contract.rs`](../tests/polonius_toolchain_contract.rs)
 enforces all five callers. For each one it asserts:
@@ -458,12 +473,18 @@ enforces all five callers. For each one it asserts:
   revision, the latter derived from the checked workflows themselves rather
   than restated in the test (see "Workflow pins and Dependabot" below for why
   the revision is asserted here);
-- the `with.rustflags` value matches the table above in full, not merely that
-  it contains `-Zpolonius=next`, so a dropped `-D warnings` is caught too;
+- the `with.rustflags` value matches the table above exactly, including the
+  two jobs that must pass no `rustflags` input at all;
 - the job declares no `env.RUSTFLAGS`;
 - the `NETSUKE_RUST_TOOLCHAIN` policy above — pinned to the
-  `rust-toolchain.toml` channel for CI and Netsukefile, absent for coverage and
-  packaging.
+  `rust-toolchain.toml` channel for the CI jobs and Netsukefile, absent for
+  coverage and packaging.
+
+The same test carries the two toolchain-level assertions: that the pinned
+channel is a dated nightly at or after 2026-08-04, the first nightly on which
+Polonius is the default analysis, and that no build configuration — the
+Makefile, a Cargo configuration fragment, a workflow, or a recreated
+`.cargo/config.toml` — passes a `-Zpolonius` directive.
 
 Run it with:
 
@@ -512,20 +533,116 @@ NEXTEST_VERSION="$(sed -n "s/.*NEXTEST_VERSION: '\(.*\)'.*/\1/p" \
 cargo install cargo-nextest --locked --version "$NEXTEST_VERSION"
 # or, for a prebuilt binary:
 cargo binstall --no-confirm --locked \
-  "cargo-nextest@$NEXTEST_VERSION"
+  "whitaker-installer@$WHITAKER_INSTALLER_VERSION"
 ```
 
-CI pins the Whitaker installer version in `WHITAKER_INSTALLER_VERSION` in
-`.github/workflows/ci.yml`. Install that same version locally so local linting
-matches CI; read the pin from the workflow rather than copying the number, so
-the two cannot drift:
+`whitaker-installer` and the lint libraries are separate artefacts with
+separate versions. `WHITAKER_INSTALLER_VERSION` pins the installer — the tool
+that stages libraries — and nothing else. The installer keeps its own checkout
+of the Whitaker repository under `~/.local/share/whitaker`, updates it with
+`git pull`, and stages the libraries from its default branch. Lint behaviour
+therefore tracks Whitaker HEAD.
+
+**Running the lint libraries at HEAD is deliberate.** Netsuke follows the suite
+as it develops, so new lints and fixes arrive without a version bump here. Do
+not add a `[workspace.metadata.dylint]` block pinning `whitaker_suite` to a
+`tag` or `rev`. The [Whitaker user's guide](whitaker-users-guide.md) documents
+that form, and it is the right answer for a project wanting reproducible lint
+results, but adopting it here would reverse a standing decision rather than fix
+a defect.
+
+The cost is worth stating plainly: a change upstream can alter lint results
+between two runs with no change in this repository, and a local checkout that
+has not been restaged will disagree with CI, which stages fresh on every job.
+Restaging is what reconciles them.
+
+What the module-scoped exemptions in `dylint.toml` actually depend on is
+[Whitaker PR #315][whitaker-pr-315], which added the `excluded_paths` option,
+so the staged libraries must be recent enough to include it. Libraries staged
+from an older checkout ignore `excluded_paths` silently — the exemptions stop
+applying with no error, and the lint reports the modules they covered. Re-run
+`whitaker-installer` to restage from HEAD. If that checkout has been left on a
+detached HEAD, the install fails at its `git pull`; put it back on the default
+branch and re-run.
+
+[whitaker-pr-315]: https://github.com/leynos/whitaker/pull/315
+
+Whitaker is configured by `dylint.toml` at the repository root, where each
+sanctioned ambient-filesystem scope for `no_std_fs_operations` carries a
+documented rationale. `docs/whitaker-users-guide.md` is a near-verbatim import
+of the [upstream Whitaker user's guide][whitaker-upstream-guide]; refresh it
+from that URL rather than editing it in place, preserving the "Netsuke
+deviation from upstream" callout, and record Netsuke-specific policy here and in
+`dylint.toml`.
+
+[whitaker-upstream-guide]: https://raw.githubusercontent.com/leynos/whitaker/refs/heads/main/docs/users-guide.md
+
+Prefer `excluded_paths` over `excluded_crates`: a path entry exempts one module
+and its descendants, whereas a crate entry exempts a whole compilation unit.
+The application crate's module-scoped exemptions include
+`netsuke::stdlib::which::lookup` (executable discovery through `PATH` and
+cross-directory symlink canonicalization, which `cap_std` cannot express) and
+`netsuke::runner::process::file_io::ambient_sync` (temporary-file
+synchronization, scoped to the submodule holding only that `sync_all` so the
+rest of `file_io` keeps writing through `cap_std` handles). Configuration
+discovery otherwise uses capability-scoped canonicalization. Its small,
+dedicated path-normalization module, `netsuke::cli::discovery::paths`, remains
+narrowly excluded because `std::fs::canonicalize` preserves the absolute
+comparison keys and cross-directory symlink behaviour that `cap_std` rejects.
+For man-page generation, the build script compiles the `cli::build_support`
+parser subset and deliberately omits runtime discovery. The broader
+`netsuke::cli::discovery` module remains under the capability policy; no
+`build_script_build` exception is required. The behavioural step definitions,
+CLI integration tests, and shared workflow-reading helper that stage fixtures
+ambiently are scoped the same way. A crate-level entry is justified only when
+the ambient access lives in the crate root itself, where a path entry would be
+no narrower — that covers the enumerated integration-test crates. The
+`test_support` crate uses capability-backed fixture helpers and remains linted
+by Whitaker under its own narrow policy.
+
+The root Whitaker invocation selects only the `netsuke-build` package (the
+Cargo package name behind the `netsuke` targets; see ADR-007) and disables
+Dylint dependency checks. It supplies the root `dylint.toml` contents
+explicitly through `DYLINT_TOML`, so every invocation receives the same
+capability-boundary policy regardless of how Dylint resolves the current crate.
+`test_support` is a workspace member with one sanctioned ambient boundary
+configured per crate. Its second, scoped invocation supplies
+`test_support/dylint.toml` through `DYLINT_TOML`, and uses
+`--package test_support` and `--no-deps` because running from a member
+directory alone would otherwise check the parent workspace. That configuration
+names only `test_support::fs` in `excluded_paths`. The root `excluded_crates`
+must not contain `test_support`: every other module in the crate remains
+subject to the filesystem policy.
+
+Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
+allows. Do not use Rust `#[allow]` or `#[expect]` for `no_std_fs_operations`:
+this Dylint lint is not known to `rustc`, so its exclusions must be configured
+there. Prefer migrating to `cap_std` over any of these; reach for an exclusion
+only when the operation is irreducibly ambient.
+
+To confirm the exclusions have not silently widened, add a temporary
+`std::fs::metadata` call to an unexcluded module — for example
+`src/stdlib/which/cache.rs`, a sibling of the excluded `lookup` module, or the
+body of `src/runner/process/file_io.rs` outside `ambient_sync` — then run
+`make lint-whitaker`. Both sites must still be reported; revert the probe
+afterwards. The same check applies to `test_support`: a `std::fs` call in, say,
+`test_support/src/exec.rs` must be reported even though `test_support::fs` is
+exempt.
+
+When command output is long, preserve exit codes and logs:
 
 ```bash
-WHITAKER_INSTALLER_VERSION="$(sed -n \
-  "s/.*WHITAKER_INSTALLER_VERSION: '\(.*\)'.*/\1/p" \
-  .github/workflows/ci.yml)"
-cargo install --locked whitaker-installer \
-  --version "$WHITAKER_INSTALLER_VERSION"
+set -o pipefail
+make test 2>&1 | tee /tmp/netsuke-make-test.log
+```
+
+These gates always use the repository toolchain and the default codegen
+backend. For a faster inner loop between gate runs, see
+[local build acceleration](#local-build-acceleration).
+
+For documentation changes, also run `make fmt`, `make markdownlint`, and
+`make nixie`.
+
 # or, for a prebuilt binary:
 cargo binstall --no-confirm --locked \
   "whitaker-installer@$WHITAKER_INSTALLER_VERSION"
@@ -933,10 +1050,10 @@ rather than silently becoming an empty version.
 
 - `rust-toolchain.toml` supplies the toolchain. dev-fast deliberately shares
   the repository's own dated nightly rather than pinning a second one: the tree
-  borrow-checks only under Polonius on that nightly (ADR-006), so a separate
-  pin would let the accelerated loop and the gates disagree about which borrows
-  are legal. `make install-dev-fast` adds `rustc-codegen-cranelift-preview` to
-  that toolchain.
+  borrow-checks only under Polonius, which that nightly enables (ADR-006), so a
+  separate pin could let the accelerated loop and the gates disagree about
+  which borrows are legal. `make install-dev-fast` adds
+  `rustc-codegen-cranelift-preview` to that toolchain.
 - `tools/mold/VERSION` holds the `mold` release tag.
 - `tools/mold/SHA256SUMS` holds the SHA-256 checksum of each supported `mold`
   release artefact. `make install-dev-fast` refuses to install an artefact that
@@ -1007,17 +1124,16 @@ and formal-verification builds. The fragment is instead passed explicitly with
 `cargo --config tools/dev-fast/config.toml` from the `make dev-*` targets, and
 must not be sourced from any target that CI invokes.
 
-A repository-root `.cargo/config.toml` does exist, and legitimately so: it
-carries the Polonius flag (`[build] rustflags = ["-Zpolonius=next"]`, see
-Polonius under Composition rules) needed by every build in the repository. The
-rule is about what belongs in that file, not about whether it may exist:
-settings needed everywhere may go there; settings that are only safe for the
-accelerated dev loop must not.
+No repository-root `.cargo/config.toml` exists any more. It once carried the
+Polonius flag, and was deleted when the pinned nightly began enabling the
+analysis by default. The rule is about what would belong in that file if it
+returned, not about whether it may exist: settings needed everywhere may go
+there; settings that are only safe for the accelerated dev loop must not.
 
 The fragment sets the `codegen-backend` unstable flag,
 `codegen-backend = "cranelift"` on the `dev` profile, and a
-`cfg(target_os = "linux")`-gated rustflags list carrying both `-Zpolonius=next`
-and `-Clink-arg=-fuse-ld=mold`.
+`cfg(target_os = "linux")`-gated rustflags list carrying
+`-Clink-arg=-fuse-ld=mold`.
 
 ### Composition rules
 
@@ -1029,8 +1145,8 @@ and `-Clink-arg=-fuse-ld=mold`.
   described below. Run the ordinary gates before proposing a change;
   `make dev-test` is a faster inner-loop proxy, not a substitute.
 - **`RUSTFLAGS`.** `make test-nextest`, `make doctest`, `make typecheck`, and
-  the rustdoc stage of `make lint` append `-D warnings` and `$(POLONIUS_FLAGS)`
-  to any flags inherited from the caller. An externally set `RUSTFLAGS`
+  the rustdoc stage of `make lint` append `-D warnings` to any flags inherited
+  from the caller. An externally set `RUSTFLAGS`
   overrides the `[target.*]` `rustflags` in a Cargo configuration file, so the
   `dev-*` targets deliberately do not set it. Exporting `RUSTFLAGS` in the
   shell silently disables `mold` for these targets.
@@ -1064,13 +1180,12 @@ and `-Clink-arg=-fuse-ld=mold`.
   rust-analyzer into Cranelift is a personal, machine-local choice; it needs a
   separate target directory to avoid thrashing the cache shared with
   `make test`.
-- **Polonius.** `.cargo/config.toml` applies `-Zpolonius=next` to every Cargo
-  invocation, and the tree does not borrow-check without it (ADR-006). Cargo
-  picks a single rustflags source rather than merging them, and a `[target.*]`
-  table outranks that `[build]` table, so the dev-fast fragment restates the
-  flag alongside the `mold` link argument. Anything that adds a rustflag there
-  must restate it too: omitting it does not merely diverge from the gate, it
-  stops the tree compiling.
+- **Polonius.** The analysis comes from the pinned nightly (ADR-006), and the
+  `dev-*` targets use that same toolchain, so the fragment needs no
+  Polonius-specific cooperation and must not add a `-Zpolonius` directive.
+  Cargo does still pick a single rustflags source rather than merging them, so
+  anything the fragment's `[target.*]` table must carry has to be named there
+  in full.
 
 ### Fallback behaviour
 
@@ -1227,7 +1342,8 @@ run ends, including on interrupt. To benchmark two things at once, override
 directory behind, remove it.
 
 Results below were recorded on a 24-core x86_64 Linux host, with both variants
-on the repository's own `nightly-2026-06-25` supplying Cranelift 0.132.0, and
+on the repository's then-pinned `nightly-2026-06-25` supplying Cranelift
+0.132.0, and
 `mold` 2.41.0. Regenerate the table verbatim with `make bench-build`. Absolute
 figures move with machine load, so the ratio between the two rows is the
 durable signal, not the seconds; the run below is representative of three
@@ -1269,9 +1385,13 @@ make install-kani
 `cargo kani setup`, and verifies that `cargo kani` is callable. Kani may manage
 its own supporting Rust nightly toolchain during setup. That toolchain must not
 replace the repository's pinned nightly workflow (see
-[ADR-006](adr-006-adopt-polonius-nightly-toolchain.md)). Kani builds pick up
-`-Zpolonius=next` from `.cargo/config.toml`, so Polonius-dependent code
-verifies unchanged.
+[ADR-006](adr-006-adopt-polonius-nightly-toolchain.md)). Kani 0.67.0's
+supporting nightly is `nightly-2025-11-21`, which predates the Polonius
+default, so Kani borrow-checks under NLL. That is currently harmless — the tree
+has no `POLONIUS(...)`-tagged sites — but a future tagged site could fail to
+verify under Kani while compiling everywhere else. If that happens, move Kani
+to a build whose nightly is 2026-08-04 or later rather than reinstating a
+`-Zpolonius` directive.
 
 Delegated prover targets print maintainer diagnostics to standard error before
 invoking `rust-prover-tools`. Expect `prover-tools:` lines containing the
@@ -1389,16 +1509,15 @@ Cargo home plus Kani support-file home.
 
 - `make test-nextest` —
   `cargo nextest run --workspace --all-targets --all-features`, with
-  `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)"` (the
-    Makefile re-states the Polonius flag because a set `RUSTFLAGS` overrides
-    `.cargo/config.toml`, and the `$${RUSTFLAGS:+$$RUSTFLAGS }` prefix preserves
-  any `RUSTFLAGS` inherited from the caller). This runs every unit, integration,
-  `rstest`, and `rstest-bdd` test.
+  `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings"` (the
+  `$${RUSTFLAGS:+$$RUSTFLAGS }` prefix preserves any `RUSTFLAGS` inherited from
+  the caller). This runs every unit, integration, `rstest`, and `rstest-bdd`
+  test.
 - `make doctest` — `cargo test --workspace --doc --all-features`, with
-  `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)"`. This
-  preserves flags inherited from the caller and restores Polonius while denying
-  warnings. nextest cannot execute doctests, so they need their own pass; the
-  separate target is what makes a broken documentation example fail the gate.
+  `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings"`. This preserves flags
+  inherited from the caller while denying warnings. nextest cannot execute
+  doctests, so they need their own pass; the separate target is what makes a
+  broken documentation example fail the gate.
 
 If either pass fails, `make test` fails. Run the individual targets when
 iterating, but treat `make test` as the gate.
@@ -2100,7 +2219,7 @@ is not obvious from the name:
   boolean predicates: `Ok(true)` when the path is a regular file, `Ok(false)`
   when it is absent (`NotFound` is folded into the boolean result), and `Err`
   for any other metadata failure, so callers can distinguish absence from
-  inaccessibility. The binary locator in `test_support/src/netsuke.rs`
+  inaccessibility. The binary locator in `test_support/src/netsuke/locator.rs`
   (`netsuke_executable_from`, see
   [Locating the netsuke binary](#locating-the-netsuke-binary)) relies on it to
   surface unexpected filesystem errors while probing candidate paths.
@@ -2225,52 +2344,36 @@ runs Make, runs Cargo, or writes anything.
 `tests/makefile_test_target.rs` is the crate root for the Makefile contract
 tests. It includes `tests/support/makefile.rs` for the capability-scoped read
 and recipe-lookup helpers, pins the `make test` runner contract, and declares
-two child modules that together own the `RUSTFLAGS` contract:
+one child module that owns the `RUSTFLAGS` contract:
+`tests/makefile_test_target/rustflags.rs` models every recipe line that assigns
+`RUSTFLAGS` as a `RustflagsCase` — the Make target and the substring selecting
+the line.
 
-- `tests/makefile_test_target/rustflags.rs` models every recipe line that
-  assigns `RUSTFLAGS` as a `RustflagsCase` — the Make target, the substring
-  selecting the line, and the warning and inheritance policies the line must
-  uphold.
-- `tests/makefile_test_target/rustflags_polonius_tests.rs` covers the
-  `POLONIUS_FLAGS` resolution guard directly, against synthetic Makefile text.
+Every recipe that sets `RUSTFLAGS` now does so for the same reason: to deny
+warnings while conditionally preserving an inherited value. Both contracts are
+therefore asserted for every case rather than being carried as per-case policy
+fields. A recipe needing a different policy fails the assertions instead of
+slipping through, which is the signal to reintroduce a policy field rather than
+to relax the test.
 
 The tests assert on what a shell would produce, not on recipe text. For each
-case, `rustflags.rs` extracts the double-quoted assignment, resolves
-`$(POLONIUS_FLAGS)`, reduces Make's `$$` escape to the single `$` the shell
-receives, and — on Unix only — expands the resulting expression with
-`printf '%s'` under `sh`. Only the assignment is expanded; the command the
-recipe would run is never executed, so no test here invokes Cargo, Kani,
-nextest, or Dylint. Expansion needs a shell, so the behavioural tests and the
-policy fields they read are gated on `#[cfg(unix)]`; the parsing tests are not.
-Two guards keep the model honest: `shell_expression` refuses an expression
-still naming an unresolved Make variable or embedding a shell command
-substitution, and a completeness test walks the Makefile and fails when a line
-sets `RUSTFLAGS` without a matching case, so a new recipe joins the contract or
+case, `rustflags.rs` extracts the double-quoted assignment, reduces Make's `$$`
+escape to the single `$` the shell receives, and — on Unix only — expands the
+resulting expression with `printf '%s'` under `sh`. Only the assignment is
+expanded; the command the recipe would run is never executed, so no test here
+invokes Cargo, Kani, nextest, or Dylint. Expansion needs a shell, so the
+behavioural tests are gated on `#[cfg(unix)]`; the parsing tests are not. Two
+guards keep the model honest: `shell_expression` refuses an expression still
+naming an unresolved Make variable or embedding a shell command substitution,
+and a completeness test walks the Makefile and fails when a line sets
+`RUSTFLAGS` without a matching case, so a new recipe joins the contract or
 breaks the build.
 
-`polonius_flags(makefile) -> Result<String>` is the crate-visible resolver both
-modules share. It reads the `POLONIUS_FLAGS` variable and rejects two states:
-
-- **Missing** — no `POLONIUS_FLAGS ?= …` or `POLONIUS_FLAGS = …` line, reported
-  as "Makefile should define POLONIUS_FLAGS".
-- **Empty after trimming** — a definition whose value is blank or whitespace
-  only, reported as "POLONIUS_FLAGS should not be empty".
-
-The rejection matters because every assertion built on the resolved value uses
-`contains`, which an empty needle satisfies vacuously. Returning an empty
-string would silently void the Polonius contract instead of failing it. On
-success the resolver returns the trimmed value, and a bounded proptest in
-`rustflags_polonius_tests` pins that acceptance invariant: resolution succeeds
-exactly when a definition exists whose value is non-empty after trimming, and
-the resolved text is the trimmed value. Its generator emits absent,
-whitespace-only, and whitespace-padded flag tokens, so an untrimmed return
-fails the property rather than slipping past.
-
-Because `rustflags.rs` and `rustflags_polonius_tests.rs` are children of the
-`makefile_test_target` test binary rather than files under `tests/`, Cargo does
-not compile them as separate targets. The root declares them, and they reach
-the shared helpers through `use super::{read_repo_file, target_recipe}`. Keep
-this shape for further Makefile contract work: general parsing helpers belong in
+Because `rustflags.rs` is a child of the `makefile_test_target` test binary
+rather than a file under `tests/`, Cargo does not compile it as a separate
+target. The root declares it, and it reaches the shared helpers through
+`use super::{read_repo_file, target_recipe}`. Keep this shape for further
+Makefile contract work: general parsing helpers belong in
 `tests/support/makefile.rs` once a second contract test needs them, whereas
 model types such as `RustflagsCase` stay private to the contract they describe.
 
@@ -2462,28 +2565,39 @@ property tests.
 
 #### Locale-stub UI harness and split build directories
 
-`tests/locale_stub_ui_tests.rs` builds `test_support` with
-`cargo build --message-format=json` and parses the resulting Cargo JSON
-messages rather than assuming its dependencies sit beside the uplifted
-`test_support` rlib. For every `compiler-artifact` message it records the
-parent directory of each rlib the message names, and passes the whole set to
-`rustc` as `-L dependency=` directories when compiling the UI fixtures. This
-keeps the harness correct when Cargo's `build.build-dir` setting splits
-intermediate artefacts — where dependency rlibs live — from the final, uplifted
-ones; deriving the directories from what Cargo actually reports, rather than
-from a single assumed location, means the harness does not need to special-case
-that split.
+`tests/locale_stub_ui_tests.rs` builds `test_support` with `cargo build
+--message-format=json` and parses the resulting Cargo JSON messages rather
+than assuming its dependencies sit beside the uplifted `test_support` rlib.
+For every `compiler-artifact` message it records the parent directory of each
+loadable artefact the message names, and passes the whole set to `rustc` as
+`-L dependency=` directories when compiling the UI fixtures. This keeps the
+harness correct when Cargo's `build.build-dir` setting splits intermediate
+artefacts — where dependency rlibs live — from the final, uplifted ones, and
+when Cargo gives each crate its own build directory instead of one shared
+`deps/`, as the Cargo shipped with the 1.99 nightlies does. Deriving the
+directories from what Cargo actually reports, rather than from a single
+assumed location, means the harness does not need to special-case either
+layout.
 
-`harness_compiles_under_a_split_build_dir` is the regression test for this: it
-forces a split layout with its own private `CARGO_TARGET_DIR` and
+"Loadable artefact" means an rlib *or* a file with the platform's
+dynamic-library extension. The second half matters: proc-macro crates emit a
+host dynamic library rather than an rlib. A shared `deps/` directory used to
+pick them up for free, so an rlib-only filter went unnoticed; once each crate
+has its own directory, a filtered-out proc macro is simply absent from the
+search path and its dependents fail with `E0463`. The same rule and the same
+reasoning apply to `tests/command_env_ui_tests.rs`, which builds the `netsuke`
+rlib and derives its search path the same way.
+
+`harness_compiles_under_a_split_build_dir` is the regression test for this:
+it forces a split layout with its own private `CARGO_TARGET_DIR` and
 `CARGO_BUILD_BUILD_DIR` roots, confirms the collected dependency directories
-span the split, and then compiles a fixture against them. The roots are private
-to the test rather than the ambient target directory because the `#[once]`
-`test_support_rlib` fixture builds concurrently for
+span the split, and then compiles a fixture against them. The roots are
+private to the test rather than the ambient target directory because the
+`#[once]` `test_support_rlib` fixture builds concurrently for
 `stub_env_default_does_not_compile` and
-`stub_env_builders_compile_under_the_same_harness`. Sharing a target directory
-would make `harness_compiles_under_a_split_build_dir` race that build on the
-uplifted rlibs and fail with version-skew errors (`E0460`).
+`stub_env_builders_compile_under_the_same_harness`. Sharing a target
+directory would make `harness_compiles_under_a_split_build_dir` race that
+build on the uplifted rlibs and fail with version-skew errors (`E0460`).
 
 ### Manifest `env()` reader
 
@@ -3402,7 +3516,11 @@ any scenario that requires a hermetic child environment.
 #### Locating the netsuke binary
 
 Both `run_netsuke_in` and `run_netsuke_in_with_env` depend on a private locator,
-`netsuke_executable()`, to find the built `netsuke` binary.
+`netsuke_executable()`, to find the built `netsuke` binary. It lives in
+`test_support/src/netsuke/locator.rs`, separate from the parent
+`test_support::netsuke` module that runs the binary: the locator is pure path
+reasoning over an injected environment, with a single existence probe as its
+only filesystem contact, whereas the parent spawns processes.
 `netsuke_executable()` converts `std::env::current_exe()` to a
 `camino::Utf8PathBuf` and delegates to `netsuke_executable_from`, which takes
 an injected `mockable::Env` — the same injectable-environment pattern used by
@@ -3412,21 +3530,32 @@ environment.
 
 The locator checks candidate paths in order:
 
-1. beside the test executable, using its directory with any trailing `deps`
-   component stripped;
+1. the profile directory above the test executable, derived by `profile_dir`;
 2. `CARGO_TARGET_DIR/<profile>/`, needed when Cargo's `build.build-dir`
    configuration splits intermediate artefacts — where test executables run —
    from the uplifted binary, which lands under the target directory;
 3. `CARGO_TARGET_DIR/<triple>/<profile>/`, for `--target` builds where the
    profile directory nests under the target triple.
 
+`profile_dir` exists because Cargo has moved integration-test executables
+between two layouts, and the binary is uplifted to the profile directory in
+both. It strips a trailing `deps` component, the long-standing layout; or a
+trailing `build/<package>/<hash>/out`, the layout used by the Cargo shipped
+with the 1.99 nightlies, which has no `deps` directory at all. Any other shape
+is left alone, so an unrecognized layout degrades to looking beside the
+executable rather than failing outright. The same derived directory supplies
+the `<profile>` component of the two fallbacks, so both layouts spell them
+identically.
+
 Filesystem errors other than "not found" are surfaced rather than treated as a
 missing candidate, via the [`test_support::fs`](#test_supportfs) wrapper
 `try_is_file`. When every candidate misses, the resulting error lists all
 attempted paths.
 
-The locator's unit tests live in `test_support/src/netsuke.rs` and cover the
-primary lookup, both fallback paths, and the missing-binary case.
+The locator's unit tests live beside it in
+`test_support/src/netsuke/locator.rs` and cover the primary lookup under both
+executable layouts, an `out` directory that is *not* the Cargo build layout,
+both fallback paths, and the missing-binary case.
 
 ## Digest rendering
 
@@ -3503,13 +3632,12 @@ is what distinguishes the versions, and it is what these guards check.
 
 This guard replaced an earlier `trybuild` compile-fail harness. Trybuild always
 builds the host crate as a fixture dependency while discarding workspace
-`build.rustflags`, so once `main` adopted the Polonius nightly toolchain it
-rebuilt `netsuke` without `-Zpolonius=next`; see the "Harness consequences"
-section of `docs/polonius.md`, which asks that trybuild cases depending on the
-`netsuke` crate not be reintroduced while the tree is Polonius-only. The
-compile-time probe is also strictly better on its own merits: no subprocess, no
-scratch project, and no toolchain-sensitive `.stderr` snapshot to re-bless on
-every compiler bump.
+`build.rustflags`, so while Polonius was flag-gated it rebuilt `netsuke`
+without the analysis; see the "Harness consequences" section of
+`docs/polonius.md`. The pinned nightly now enables Polonius by default, so that
+specific hazard is gone, but the compile-time probe is better on its own
+merits: no subprocess, no scratch project, and no toolchain-sensitive `.stderr`
+snapshot to re-bless on every compiler bump.
 
 `stdlib::path::hash_utils` unit-tests the chunked streaming loop against a
 one-shot digest for inputs that span more than one 8192-byte read, plus a

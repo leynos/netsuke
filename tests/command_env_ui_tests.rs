@@ -15,12 +15,15 @@
 //! diagnostic wording for a missing item would make the suite fail on
 //! compiler upgrades without guarding anything extra.
 //!
-//! Trybuild cannot drive this: it removes ambient `RUSTFLAGS` and overrides
-//! workspace `build.rustflags` outright, so it would rebuild the `netsuke`
-//! dependency without `-Zpolonius=next` and reject the crate's `POLONIUS(...)`
-//! sites (see docs/polonius.md). Instead the `netsuke` rlib is built by Cargo
-//! — which does inherit the ambient flags — and the fixture is compiled
-//! directly with the workspace `rustc` against that rlib.
+//! Trybuild drove this during the Polonius migration and could not: it removes
+//! ambient `RUSTFLAGS` and overrides workspace `build.rustflags` outright, so
+//! while Polonius was flag-gated it rebuilt the `netsuke` dependency without
+//! the analysis and rejected the crate's `POLONIUS(...)` sites (see
+//! docs/polonius.md). The pinned nightly now enables Polonius by default, so
+//! that hazard is gone, but the direct-compile harness is kept: it needs no
+//! scratch project and no toolchain-sensitive `.stderr` snapshot. The `netsuke`
+//! rlib is built by Cargo, and the fixture is compiled directly with the
+//! workspace `rustc` against it.
 
 use std::{
     io,
@@ -127,18 +130,18 @@ fn compile_public_api_fixture(source: &str, failure_message: &str) -> io::Result
     Ok(())
 }
 
-/// The `netsuke` rlib and the deps directory holding its dependencies.
+/// The `netsuke` rlib and every directory holding its dependencies.
 struct NetsukeRlib {
     rlib: PathBuf,
-    deps_dir: PathBuf,
+    deps_dirs: Vec<PathBuf>,
 }
 
 impl NetsukeRlib {
     /// Build the `netsuke` library with Cargo and locate the resulting rlib.
     ///
-    /// Cargo inherits the ambient `RUSTFLAGS`, so the rlib is borrow-checked
-    /// with the same Polonius flags as the rest of the suite. The package is
-    /// named `netsuke-build`, but the lib target — and therefore the
+    /// Cargo inherits the ambient `RUSTFLAGS` and the pinned toolchain, so the
+    /// rlib is borrow-checked exactly as the rest of the suite is. The package
+    /// is named `netsuke-build`, but the lib target — and therefore the
     /// `--extern` name — is `netsuke`.
     fn build() -> io::Result<Self> {
         let output = Command::new(cargo())
@@ -161,18 +164,24 @@ impl NetsukeRlib {
             .filter_map(netsuke_rlib_in_message)
             .next_back()
             .ok_or_else(|| io::Error::other("cargo reported no netsuke rlib artefact"))?;
-        // Cargo uplifts the top-level package's artefacts out of `deps/` into
-        // the profile directory, so the rlib's own parent is not necessarily
-        // where the dependency rlibs live.
-        let parent = rlib
-            .parent()
-            .ok_or_else(|| io::Error::other("the rlib path should have a parent"))?;
-        let deps_dir = if parent.file_name() == Some(std::ffi::OsStr::new("deps")) {
-            parent.to_path_buf()
-        } else {
-            parent.join("deps")
-        };
-        Ok(Self { rlib, deps_dir })
+        // Dependencies do not sit in one predictable directory. Cargo uplifts
+        // the top-level package's artefacts into the profile directory, and
+        // the Cargo shipped with the 1.99 nightlies gives every crate its own
+        // build directory rather than one shared `deps/`. Each
+        // compiler-artifact message names where its own artefacts really
+        // landed, so derive the search path from what Cargo reports.
+        let mut deps_dirs: Vec<PathBuf> = Vec::new();
+        for parent in stdout.lines().flat_map(dependency_dirs_in_message) {
+            if !deps_dirs.contains(&parent) {
+                deps_dirs.push(parent);
+            }
+        }
+        if deps_dirs.is_empty() {
+            return Err(io::Error::other(
+                "cargo reported no library artefacts to derive dependency dirs from",
+            ));
+        }
+        Ok(Self { rlib, deps_dirs })
     }
 
     /// Type-check `source` with or without the `netsuke` rlib.
@@ -198,8 +207,11 @@ impl NetsukeRlib {
         }
 
         command
-            .arg("-L")
-            .arg(format!("dependency={}", self.deps_dir.display()))
+            .args(
+                self.deps_dirs
+                    .iter()
+                    .flat_map(|dir| [String::from("-L"), format!("dependency={}", dir.display())]),
+            )
             .arg("-o")
             .arg(output_dir.path().join("command-env-ui.rmeta"))
             .output()
@@ -231,6 +243,40 @@ fn netsuke_rlib_in_message(line: &str) -> Option<PathBuf> {
         .next()
 }
 
+/// Whether `filename` is an artefact `rustc` can load from a `-L dependency=`
+/// directory.
+///
+/// Rlibs cover ordinary library dependencies; the platform's dynamic-library
+/// extension covers proc-macro crates, which `rustc` loads as host dynamic
+/// libraries. A shared `deps/` directory used to pick proc macros up for free;
+/// with a directory per crate, omitting them makes their dependents fail with
+/// `E0463`.
+fn is_dependency_artefact(filename: &str) -> bool {
+    Path::new(filename).extension().is_some_and(|extension| {
+        extension.eq_ignore_ascii_case("rlib")
+            || extension.eq_ignore_ascii_case(std::env::consts::DLL_EXTENSION)
+    })
+}
+
+/// Extract the parent directory of every loadable artefact in one Cargo JSON
+/// message.
+fn dependency_dirs_in_message(line: &str) -> Vec<PathBuf> {
+    let Ok(message) = serde_json::from_str::<serde_json::Value>(line) else {
+        return Vec::new();
+    };
+    if message.get("reason").map(serde_json::Value::as_str) != Some(Some("compiler-artifact")) {
+        return Vec::new();
+    }
+    message
+        .get("filenames")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(serde_json::Value::as_str)
+        .filter(|filename| is_dependency_artefact(filename))
+        .filter_map(|filename| Path::new(filename).parent().map(Path::to_path_buf))
+        .collect()
+}
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }

@@ -135,11 +135,12 @@ project:
 
 ### Borrow checker: Polonius, not NLL
 
-Netsuke compiles with the Polonius alpha analysis (`-Zpolonius=next`) on the
-dated nightly pinned in `rust-toolchain.toml` (see
-`docs/adr-006-adopt-polonius-nightly-toolchain.md` and `docs/polonius.md`).
-Internal APIs are borrow-centric: lookups and get-or-create accessors return
-references, clone keys only on insertion, and build error context lazily.
+Netsuke compiles with the Polonius alpha analysis, which the dated nightly
+pinned in `rust-toolchain.toml` enables by default (see
+`docs/adr-006-adopt-polonius-nightly-toolchain.md` and `docs/polonius.md`). No
+`-Z` directive is needed, or wanted: do not add one. Internal APIs are
+borrow-centric: lookups and get-or-create accessors return references, clone
+keys only on insertion, and build error context lazily.
 
 - **Never** rewrite a site tagged `POLONIUS(...)` into a double lookup
   (`contains_key` + `get_mut`), an `entry(key.clone())` call, or an id/index
@@ -152,8 +153,8 @@ references, clone keys only on insertion, and build error context lazily.
 - Respect `POLONIUS-REFUSED(...)` tags: the named constraint (persistent
   identity, lock boundaries, aliasing, suspension points, thread boundaries) is
   permanent. Do not convert those sites to reference-returning forms.
-- When adding a new borrow-centric API, verify it with and without
-  `-Zpolonius=next` and record the classification in `docs/polonius.md`.
+- When adding a new borrow-centric API, record the classification in
+  `docs/polonius.md`.
 
 - Run `make check-fmt`, `make lint`, `make doc-coverage`, and `make test`
   before committing. These targets wrap the following commands, so contributors
@@ -168,9 +169,9 @@ references, clone keys only on insertion, and build error context lazily.
   - `make lint` executes:
 
     ```sh
-    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zpolonius=next" \
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings" \
     RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo doc --workspace --no-deps
-    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zpolonius=next" \
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings" \
     cargo clippy --workspace --all-targets --all-features -- -D warnings
     whitaker --all -- --all-targets --all-features
     ```
@@ -183,9 +184,9 @@ references, clone keys only on insertion, and build error context lazily.
   - `make test` executes:
 
     ```sh
-    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zpolonius=next" \
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings" \
     cargo nextest run --workspace --all-targets --all-features
-    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zpolonius=next" \
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings" \
     cargo test --workspace --doc --all-features
     ```
 

@@ -5,14 +5,16 @@
 //! then panic at run time for the common "no locale set" case. These tests
 //! keep that a compile-time contract rather than a doc-comment promise.
 //!
-//! Trybuild cannot drive them: it removes ambient `RUSTFLAGS` and overrides
-//! workspace `build.rustflags` outright (`env_remove("RUSTFLAGS")` plus
-//! `--config=build.rustflags=…` in its cargo invocations), so it would
-//! rebuild the `netsuke` dependency without `-Zpolonius=next` and reject the
-//! crate's `POLONIUS(...)` sites (see docs/polonius.md). Instead the
-//! `test_support` rlib is built by Cargo — which does inherit the ambient
-//! flags — and the fixtures are compiled directly with the workspace `rustc`
-//! against that rlib.
+//! Trybuild drove these during the Polonius migration and could not: it
+//! removes ambient `RUSTFLAGS` and overrides workspace `build.rustflags`
+//! outright (`env_remove("RUSTFLAGS")` plus `--config=build.rustflags=…` in
+//! its cargo invocations), so while Polonius was flag-gated it rebuilt the
+//! `test_support` dependency without the analysis and rejected the crate's
+//! `POLONIUS(...)` sites (see docs/polonius.md). The pinned nightly now
+//! enables Polonius by default, so that hazard is gone, but the direct-compile
+//! harness is kept: it needs no scratch project and no toolchain-sensitive
+//! `.stderr` snapshot. The `test_support` rlib is built by Cargo, and the
+//! fixtures are compiled directly with the workspace `rustc` against it.
 
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::{fixture, rstest};
@@ -86,9 +88,8 @@ struct TestSupportRlib {
 impl TestSupportRlib {
     /// Build `test_support` with Cargo and locate the resulting rlib.
     ///
-    /// Cargo inherits the ambient `RUSTFLAGS`, so the rlib is borrow-checked
-    /// with the same Polonius flags as the rest of the suite — the property
-    /// trybuild could not preserve.
+    /// Cargo inherits the ambient `RUSTFLAGS` and the pinned toolchain, so the
+    /// rlib is borrow-checked exactly as the rest of the suite is.
     fn build() -> io::Result<Self> {
         Self::build_with(&[])
     }
@@ -121,11 +122,13 @@ impl TestSupportRlib {
             .filter_map(test_support_rlib_in_message)
             .next_back()
             .ok_or_else(|| io::Error::other("cargo reported no test_support rlib artefact"))?;
-        // Dependency rlibs do not necessarily sit beside the uplifted
+        // Dependencies do not necessarily sit beside the uplifted
         // `test_support` rlib: Cargo's `build.build-dir` setting splits
-        // intermediate artefacts (where dependencies live) from final ones.
-        // Every compiler-artifact message names its rlib's real location, so
-        // collect each artefact's parent directory for `-L dependency=`.
+        // intermediate artefacts (where dependencies live) from final ones,
+        // and the Cargo shipped with the 1.99 nightlies gives every crate its
+        // own directory rather than one shared `deps/`. Every
+        // compiler-artifact message names where its own artefacts really
+        // landed, so collect each parent directory for `-L dependency=`.
         let mut deps_dirs: Vec<Utf8PathBuf> = Vec::new();
         for parent in stdout.lines().flat_map(rlib_parents_in_message) {
             if !deps_dirs.contains(&parent) {
@@ -164,11 +167,31 @@ impl TestSupportRlib {
     }
 }
 
-/// Extract a compiler-artifact message's target name and rlib paths.
+/// Whether `filename` is an artefact `rustc` can load from a `-L dependency=`
+/// directory.
+///
+/// Both extensions matter. Rlibs cover ordinary library dependencies, and the
+/// platform's dynamic-library extension covers proc-macro crates, which `rustc`
+/// loads as host dynamic libraries. Cargo once placed every dependency in one
+/// shared `deps/` directory, so collecting rlib directories happened to pick
+/// proc macros up as a side effect; the Cargo shipped with the 1.99 nightlies
+/// gives each crate its own directory, so a proc macro whose extension is
+/// filtered out is never on the search path and its dependents fail with
+/// `E0463`.
+fn is_dependency_artefact(filename: &str) -> bool {
+    Utf8Path::new(filename)
+        .extension()
+        .is_some_and(|extension| {
+            extension.eq_ignore_ascii_case("rlib")
+                || extension.eq_ignore_ascii_case(std::env::consts::DLL_EXTENSION)
+        })
+}
+
+/// Extract a compiler-artifact message's target name and library paths.
 ///
 /// Returns `None` for lines that are not valid JSON, not compiler-artifact
-/// messages, or that lack a target name; the rlib list may be empty for
-/// artefacts that emit no rlib.
+/// messages, or that lack a target name; the library list may be empty for
+/// artefacts that emit nothing loadable.
 fn compiler_artifact_rlibs(line: &str) -> Option<(String, Vec<Utf8PathBuf>)> {
     let message: serde_json::Value = serde_json::from_str(line).ok()?;
     if message.get("reason")? != "compiler-artifact" {
@@ -181,11 +204,7 @@ fn compiler_artifact_rlibs(line: &str) -> Option<(String, Vec<Utf8PathBuf>)> {
         .into_iter()
         .flatten()
         .filter_map(serde_json::Value::as_str)
-        .filter(|filename| {
-            Utf8Path::new(filename)
-                .extension()
-                .is_some_and(|extension| extension.eq_ignore_ascii_case("rlib"))
-        })
+        .filter(|filename| is_dependency_artefact(filename))
         .map(Utf8PathBuf::from)
         .collect();
     Some((name, rlibs))
@@ -204,11 +223,17 @@ fn rlib_parents_in_message(line: &str) -> Vec<Utf8PathBuf> {
 }
 
 /// Extract the `test_support` rlib path from one Cargo JSON message, if any.
+///
+/// Restricted to rlibs even though the collector accepts dynamic libraries
+/// too: this path is passed as `--extern test_support=…`, which must name the
+/// rlib.
 fn test_support_rlib_in_message(line: &str) -> Option<Utf8PathBuf> {
-    let (name, rlibs) = compiler_artifact_rlibs(line)?;
-    (name == "test_support")
-        .then(|| rlibs.into_iter().next_back())
-        .flatten()
+    let (name, libs) = compiler_artifact_rlibs(line)?;
+    if name != "test_support" {
+        return None;
+    }
+    libs.into_iter()
+        .rfind(|lib| lib.extension().is_some_and(|ext| ext == "rlib"))
 }
 
 fn manifest_dir() -> Utf8PathBuf {
@@ -249,6 +274,21 @@ fn parser_collects_every_rlib_directory_from_a_message() {
             Utf8PathBuf::from("/target/debug"),
         ],
         "both rlib directories should be collected in message order"
+    );
+}
+
+/// Proc-macro crates emit a host dynamic library rather than an rlib, and
+/// each one now has its own directory, so its parent must be collected too.
+#[rstest]
+fn parser_collects_proc_macro_dynamic_library_directories() {
+    let message = format!(
+        r#"{{"reason":"compiler-artifact","target":{{"name":"tracing_attributes"}},"filenames":["/build/tracing-attributes/1/out/libtracing_attributes-1.{}"]}}"#,
+        std::env::consts::DLL_EXTENSION
+    );
+    assert_eq!(
+        rlib_parents_in_message(&message),
+        vec![Utf8PathBuf::from("/build/tracing-attributes/1/out")],
+        "a proc-macro dylib directory should join the dependency search path"
     );
 }
 

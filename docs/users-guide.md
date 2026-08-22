@@ -11,12 +11,12 @@ may change before 1.0. Pin the Netsuke version in automated workflows.
 ## Install Netsuke
 
 Netsuke requires [Ninja](https://ninja-build.org/) on `PATH`. A source build
-also requires the dated Rust nightly toolchain pinned in `rust-toolchain.toml`
-because Netsuke builds with the Polonius borrow checker (`-Zpolonius=next`).
+also requires the dated Rust nightly toolchain pinned in `rust-toolchain.toml`,
+because Netsuke builds with the Polonius borrow checker, which nightly enables
+by default.
 
-Inside a checkout both settings are inherited automatically: `rustup` installs
-the pinned toolchain, and the repository's `.cargo/config.toml` supplies
-`RUSTFLAGS=-Zpolonius=next`. Neither has to be passed on the command line.
+Inside a checkout that is inherited automatically: `rustup` installs the pinned
+toolchain, and nothing has to be passed on the command line.
 
 Netsuke v0.1.0-beta2 is available from crates.io. Where
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) is available,
@@ -29,15 +29,14 @@ requirement below.
 cargo binstall netsuke-build
 ```
 
-Building from the registry instead runs outside a repository checkout, so
-neither the pinned toolchain nor the Polonius flag is picked up automatically;
-supply both explicitly:
+Building from the registry instead runs outside a repository checkout, so the
+pinned toolchain is not picked up automatically; select it explicitly:
 
 <!-- tested-example: guide-crates-io-install -->
 
 ```sh
-rustup toolchain install nightly-2026-06-25
-RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke-build
+rustup toolchain install nightly-2026-08-13
+cargo +nightly-2026-08-13 install netsuke-build
 ```
 
 Pre-built installers are available from the
@@ -86,9 +85,9 @@ the shell's documented completion mechanism. The package installation commands
 above do not install completion files; completion directory names and
 activation steps vary by shell and platform.
 
-Install the current source checkout with Cargo. The clone supplies both the
-pinned nightly toolchain and `RUSTFLAGS=-Zpolonius=next`, so neither is given
-here — unlike the registry install above, which runs outside a checkout:
+Install the current source checkout with Cargo. The clone supplies the pinned
+nightly toolchain, so it is not given here — unlike the registry install above,
+which runs outside a checkout:
 
 <!-- tested-example: guide-source-install -->
 
