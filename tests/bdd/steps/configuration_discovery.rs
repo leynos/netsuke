@@ -18,9 +18,7 @@ fn a_temporary_workspace(world: &TestWorld) -> Result<()> {
 }
 
 /// Write `content` to `file_name` inside `world`'s temp directory.
-/// Set `chdir` to `true` for project-scope configs so discovery works
-/// without an explicit path override.
-fn write_config_file(world: &TestWorld, file_name: &str, content: &str, chdir: bool) -> Result<()> {
+fn write_config_file(world: &TestWorld, file_name: &str, content: &str) -> Result<()> {
     let temp_dir = world
         .temp_dir
         .borrow()
@@ -36,12 +34,6 @@ fn write_config_file(world: &TestWorld, file_name: &str, content: &str, chdir: b
         .with_context(|| format!("open workspace {temp_dir_utf8} to write {file_name}"))?;
     dir.write(file_name, content.as_bytes())
         .with_context(|| format!("failed to write {file_name} in {temp_dir_utf8}"))?;
-
-    if chdir {
-        // Acquire scenario-scoped lock before process-global CWD mutation
-        world.ensure_global_state_lock()?;
-        std::env::set_current_dir(&temp_dir).context("failed to change to temp directory")?;
-    }
 
     Ok(())
 }
@@ -59,12 +51,12 @@ emoji = "{emoji}"
 jobs = {jobs}
 "#
     );
-    write_config_file(world, file_name.as_str(), &content, true)
+    write_config_file(world, file_name.as_str(), &content)
 }
 
 #[given("a malformed project config file {file_name:string}")]
 fn malformed_project_config(world: &TestWorld, file_name: FileName) -> Result<()> {
-    write_config_file(world, file_name.as_str(), "emoji = \"always\n", true)
+    write_config_file(world, file_name.as_str(), "emoji = \"always\n")
 }
 
 /// Returns the TOML snippet for a config file that sets only `emoji`.
@@ -78,12 +70,7 @@ fn project_config_with_emoji(
     file_name: FileName,
     emoji: EmojiPolicy,
 ) -> Result<()> {
-    write_config_file(
-        world,
-        file_name.as_str(),
-        &emoji_config_content(emoji),
-        true,
-    )
+    write_config_file(world, file_name.as_str(), &emoji_config_content(emoji))
 }
 
 #[given("a project config file {file_name:string} with emoji {emoji:string} and JSON {json}")]
@@ -99,7 +86,7 @@ emoji = "{emoji}"
 json = {json}
 "#
     );
-    write_config_file(world, file_name.as_str(), &content, true)
+    write_config_file(world, file_name.as_str(), &content)
 }
 
 #[given("a project config file {file_name:string} with default targets {targets:string}")]
@@ -123,7 +110,7 @@ fn project_config_with_default_targets(
 default_targets = {targets_toml}
 "
     );
-    write_config_file(world, file_name.as_str(), &content, true)
+    write_config_file(world, file_name.as_str(), &content)
 }
 
 #[given("a custom config file {file_name:string} with emoji {emoji:string}")]
@@ -132,12 +119,7 @@ fn custom_config_with_emoji(
     file_name: FileName,
     emoji: EmojiPolicy,
 ) -> Result<()> {
-    write_config_file(
-        world,
-        file_name.as_str(),
-        &emoji_config_content(emoji),
-        false,
-    )
+    write_config_file(world, file_name.as_str(), &emoji_config_content(emoji))
 }
 
 #[given("the environment variable {var_name:string} is set to {value:string}")]
