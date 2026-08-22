@@ -91,15 +91,15 @@ mod theme;
 
 mod build_l10n_audit;
 
-#[expect(
-    clippy::disallowed_methods,
-    reason = "SOURCE_DATE_EPOCH is the reproducible-builds contract: the build system supplies it to the build script's process, so there is no seam to inject it through"
-)]
 /// Compute the manual page date from `SOURCE_DATE_EPOCH`.
 ///
 /// Returns the epoch parsed as a Unix timestamp formatted as an ISO 8601 date;
 /// when the variable is unset or malformed the [`FALLBACK_DATE`] is returned so
 /// the generated page stays deterministic.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "SOURCE_DATE_EPOCH is the reproducible-builds contract: the build system supplies it to the build script's process, so there is no seam to inject it through"
+)]
 fn manual_date() -> String {
     let Ok(raw) = env::var("SOURCE_DATE_EPOCH") else {
         return FALLBACK_DATE.into();
@@ -127,14 +127,14 @@ fn manual_date() -> String {
     })
 }
 
-#[expect(
-    clippy::disallowed_methods,
-    reason = "TARGET and PROFILE are set by Cargo for the build script alone; nothing else knows the triple and profile being built, so they cannot be passed in"
-)]
 /// Return the generated-artefact directory for this build's target triple and profile.
 ///
 /// Mirrors Cargo's own `target/<triple>/<profile>` layout so man pages and
 /// completions never mix between host and cross builds.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "TARGET and PROFILE are set by Cargo for the build script alone; nothing else knows the triple and profile being built, so they cannot be passed in"
+)]
 fn out_dir_for_target_profile(artefact: &str) -> PathBuf {
     let target = env::var("TARGET").unwrap_or_else(|_| "unknown-target".into());
     let profile = env::var("PROFILE").unwrap_or_else(|_| "unknown-profile".into());
@@ -190,14 +190,14 @@ fn emit_rerun_directives() {
     }
 }
 
-#[expect(
-    clippy::disallowed_methods,
-    reason = "CARGO_PKG_VERSION and OUT_DIR are Cargo's own build-script inputs; they describe the crate being compiled and Cargo provides them only through the environment"
-)]
 /// Generate and install the CLI manual page under `out_dir`.
 ///
 /// The page is rendered from the same Clap command tree used at runtime, so the
 /// installed documentation cannot drift from the actual CLI.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "CARGO_PKG_VERSION and OUT_DIR are Cargo's own build-script inputs; they describe the crate being compiled and Cargo provides them only through the environment"
+)]
 fn generate_man_page(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let cmd = cli::Cli::command();
     let name = cmd
