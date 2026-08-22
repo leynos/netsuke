@@ -35,15 +35,15 @@ impl<'source> DefineKeysParser<'source> {
         }
     }
 
-    /// Whether `index` has run past the end of the body.
+    /// Return whether `index` has run past the end of the body.
     pub(super) const fn is_exhausted(&self, index: ByteIndex) -> bool {
         index.get() >= self.bytes.len()
     }
-    /// The byte at `index`, if any.
+    /// Return the byte at `index`, if any.
     fn byte_at(&self, index: ByteIndex) -> Option<&u8> {
         self.bytes.get(index.get())
     }
-    /// Whether the byte at `index` equals `expected`.
+    /// Check whether the byte at `index` equals `expected`.
     fn byte_is(&self, index: ByteIndex, expected: u8) -> bool {
         self.byte_at(index) == Some(&expected)
     }
@@ -132,7 +132,7 @@ impl<'source> DefineKeysParser<'source> {
         }
         (count, index)
     }
-    /// Offset just past the `"` and `#`es closing the raw literal from `start`.
+    /// Find the offset just past the `"` and `#`es closing the raw literal from `start`.
     fn find_raw_string_end(&self, start: ByteIndex, hash_count: usize) -> Option<ByteIndex> {
         let mut index = start;
         while let Some(byte) = self.byte_at(index) {
@@ -143,19 +143,19 @@ impl<'source> DefineKeysParser<'source> {
         }
         None
     }
-    /// Whether `count` `#` characters follow `start`.
+    /// Check whether `count` `#` characters follow `start`.
     fn raw_hashes_match(&self, start: ByteIndex, count: usize) -> bool {
         (0..count).all(|offset| self.byte_is(start.advance(offset), b'#'))
     }
-    /// Whether `//` opens at `index`.
+    /// Check whether `//` opens at `index`.
     fn is_line_comment(&self, index: ByteIndex) -> bool {
         self.byte_is(index, b'/') && self.byte_is(index.advance(1), b'/')
     }
-    /// Whether `/*` opens at `index`.
+    /// Check whether `/*` opens at `index`.
     fn is_block_comment(&self, index: ByteIndex) -> bool {
         self.byte_is(index, b'/') && self.byte_is(index.advance(1), b'*')
     }
-    /// Offset just past the newline ending the line comment at `start`.
+    /// Skip to just past the newline ending the line comment at `start`.
     fn skip_line_comment(&self, start: ByteIndex) -> ByteIndex {
         let mut index = start;
         while let Some(byte) = self.byte_at(index) {
@@ -196,12 +196,12 @@ impl<'source> DefineKeysParser<'source> {
         ByteIndex::from_offset(self.bytes.len())
     }
 
-    /// Whether a `*/` sits at `index`.
+    /// Check whether a `*/` sits at `index`.
     fn closes_block_comment(&self, index: ByteIndex) -> bool {
         self.byte_is(index, b'*') && self.byte_is(index.advance(1), b'/')
     }
 
-    /// Offset of the first non-whitespace byte at or after `start`.
+    /// Skip to the first non-whitespace byte at or after `start`.
     fn skip_whitespace(&self, start: ByteIndex) -> ByteIndex {
         let mut index = start;
         while self.byte_at(index).is_some_and(u8::is_ascii_whitespace) {
@@ -210,8 +210,8 @@ impl<'source> DefineKeysParser<'source> {
         index
     }
 
-    /// Attempts to parse a key-value pair starting at the given index.
-    /// Returns the extracted key and the next index to continue parsing.
+    /// Parse a key-value pair starting at the given index, returning the key
+    /// and the next parse index.
     fn try_parse_key_at_arrow(
         &self,
         index: ByteIndex,
