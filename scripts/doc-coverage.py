@@ -94,11 +94,23 @@ def doc_targets(metadata: dict) -> list[DocTarget]:
     tests, examples, and benches are skipped: Rustdoc coverage is defined for
     the shipped library and binary surfaces, and test code is excluded by
     repo convention (see AGENTS.md).
+
+    The expected shape comes from ``cargo metadata --format-version 1``. A
+    response that is valid JSON but lacks the workspace keys is a broken
+    measurement, so it is rejected with an explicit error rather than crashing
+    on a ``KeyError``. An individual package record that omits its ``id`` or
+    ``targets`` keys simply contributes no targets to the aggregate.
     """
-    members = set(metadata["workspace_members"])
+    try:
+        members = set(metadata["workspace_members"])
+        packages = metadata["packages"]
+    except (KeyError, TypeError) as error:
+        detail = "cargo metadata response lacks the workspace packages or members"
+        raise RuntimeError(detail) from error
     return [
         doc
-        for package in metadata["packages"]
+        for package in packages
+        if "id" in package and "targets" in package
         if package["id"] in members
         for ordinal in package["targets"]
         for doc in doc_able_targets(package, ordinal)
@@ -113,7 +125,7 @@ def doc_able_targets(package: dict, target: dict) -> list[DocTarget]:
     target's kinds as a list, so both `lib` and `bin` can be matched without
     guessing at the shape of a single-kind target.
     """
-    kinds: list[str] = target["kind"]
+    kinds: list[str] = target.get("kind", [])
     if "lib" in kinds:
         return [DocTarget(package["name"], "lib", None)]
     if "bin" in kinds:
@@ -144,13 +156,20 @@ def measure(target: DocTarget, toolchain: str, manifest_root: pathlib.Path) -> C
     ]
     # With no shell involved and argv built from workspace metadata plus
     # constant flags, there is no untrusted input to inject.
-    result = subprocess.run(  # noqa: S603
-        args,
-        cwd=manifest_root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(  # noqa: S603
+            args,
+            cwd=manifest_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as error:
+        detail = (
+            f"cannot run cargo rustdoc for {target.package} {target.kind}"
+            f" ({target.name or 'lib'}): {error}"
+        )
+        raise RuntimeError(detail) from error
     if result.returncode != 0:
         detail = (
             f"cargo rustdoc failed for {target.package} {target.kind}"
@@ -214,13 +233,20 @@ def load_metadata(toolchain: str, manifest_root: pathlib.Path) -> dict:
     ]
     # The argv is a static command with the pinned toolchain and metadata
     # flags; there is no shell or injection surface.
-    result = subprocess.run(  # noqa: S603
-        args,
-        cwd=manifest_root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(  # noqa: S603
+            args,
+            cwd=manifest_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as error:
+        # Missing or non-executable cargo must surface as an explicit
+        # measurement error with the script's controlled exit code rather
+        # than escaping as a bare traceback.
+        detail = f"cannot run cargo metadata: {error}"
+        raise RuntimeError(detail) from error
     if result.returncode != 0:
         detail = f"cargo metadata failed: {result.stderr}"
         raise RuntimeError(detail)
@@ -258,9 +284,16 @@ def main(argv: cabc.Sequence[str] | None = None) -> int:
         default=None,
         help="override the channel pinned in rust-toolchain.toml",
     )
+    parser.add_argument(
+        "--manifest-root",
+        type=pathlib.Path,
+        default=REPO_ROOT,
+        help="measure the workspace rooted here instead of the repository root "
+        "(testing seam)",
+    )
     args = parser.parse_args(argv)
 
-    manifest_root = REPO_ROOT
+    manifest_root = args.manifest_root
     try:
         toolchain = args.toolchain or pinned_toolchain(manifest_root)
         totals, rows = run_measurements(toolchain, manifest_root)

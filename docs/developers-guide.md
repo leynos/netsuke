@@ -1710,6 +1710,61 @@ used in those strategy signatures, including `proptest`, must be regular
 `test_support` dependencies. Property tests local to the main crate continue to
 use the root crate's development dependency.
 
+## Internal support module boundaries
+
+The repository caps every source file at 400 lines (Whitaker's
+`module_max_lines`, see `docs/whitaker-users-guide.md`). When a production
+module approaches that cap, the established pattern is to split its private
+helpers into a sibling `#[path]` module rather than restructure the public
+surface. Each such module is a pure implementation seam: it keeps the parent
+below the cap while preserving `pub(super)` visibility for the helpers the
+parent needs, and nothing outside the parent module may reach it. These split
+modules record their ownership and caller contract in their `//!` header; the
+following list is the authoritative indexing of the current ones.
+
+### `src/ir/sort_utils.rs`
+
+Kani-friendly deterministic sorting and comparison helpers, owned by
+`src/ir/from_manifest_support.rs` (which declares `#[path = "sort_utils.rs"]
+mod sort_utils;`). It provides `insertion_sort_by`, `sort_strings`,
+`sort_paths`, and `has_seen_output`, which the manifest-to-IR rule-resolution
+and duplicate-output detection paths consume. The implementations avoid
+`std::slice::sort` and full-width comparisons so the Kani harnesses in
+`src/ir/from_manifest_verification.rs` can verify orderings with bounded
+symbolic input; keep these helpers dependency-free and deterministic, and do
+not move them out to a shared utility crate.
+
+### `src/diagnostic_json_support.rs`
+
+Private helpers for the machine-readable diagnostic document in
+`src/diagnostic_json.rs`. It owns the span extraction, cause collection, help
+and URL rendering, and fallback-payload machinery, exposing them as
+`pub(super)` items re-imported by the parent. Only `src/diagnostic_json.rs` may
+call into it. The schema remains defined by the parent module; this file is a
+size split, not a second schema owner.
+
+### `src/stdlib/command/error_support.rs`
+
+Detail types and message-append helpers for command-failure rendering in
+`src/stdlib/command/error.rs`, which declares `#[path = "error_support.rs"]
+mod support;`. It owns `ExitDetails`, `LimitExceeded`, `append_exit_status`,
+and `append_stderr`, and is reachable only from that error module. Keep the
+localized-message keys it uses alongside the other stdlib command keys rather
+than introducing a separate key namespace.
+
+### `src/stdlib/time/format.rs`
+
+ISO-8601 rendering for the standard-library time values, owned by
+`src/stdlib/time/mod.rs` (which declares `mod format;`). It renders offset
+datetimes and UTC offsets to ISO-8601 while stripping the zero fractional
+part, and exposes the `TimeDeltaValue` and `TimestampValue` MiniJinja object
+types the parent predicates downcast. Only the time module may import it.
+
+When adding a new `#[path]` support module, follow the same shape: keep it
+private to its parent, give it a `//!` header stating the split reason and
+ownership, cap its public surface at `pub(super)`, and document it here so the
+boundary inventory stays complete.
+
 ## Behavioural testing strategy
 
 Behavioural tests use `rstest-bdd`, not a bespoke runner, and are executed by
