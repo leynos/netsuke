@@ -173,9 +173,6 @@ fn routing_worker() -> Result<()> {
 #[case::forward_tool(StderrMode::Forward, true)]
 #[case::suppress_build(StderrMode::Suppress, false)]
 #[case::suppress_tool(StderrMode::Suppress, true)]
-fn request_routes_child_streams(
-    #[case] stderr_mode: StderrMode,
-    #[case] tool: bool,
-) -> Result<()> {
+fn request_routes_child_streams(#[case] stderr_mode: StderrMode, #[case] tool: bool) -> Result<()> {
     assert_routing_case(stderr_mode, tool)
 }
