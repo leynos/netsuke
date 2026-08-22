@@ -84,6 +84,19 @@ impl Visit for FieldVisitor {
 ///
 /// Events emitted by threads spawned within `test` are not captured because
 /// `tracing::subscriber::with_default` scopes the subscriber to this thread.
+///
+/// # Examples
+///
+/// ```
+/// use test_support::tracing_capture::with_test_subscriber;
+/// use tracing_subscriber::filter::LevelFilter;
+///
+/// let events = with_test_subscriber(LevelFilter::DEBUG, |captured| {
+///     tracing::debug!(layer = "defaults", "applied configuration layer");
+///     captured.snapshot()
+/// });
+/// assert!(events.iter().any(|event| event.contains("layer=\"defaults\"")));
+/// ```
 pub fn with_test_subscriber<T>(
     level_filter: LevelFilter,
     test: impl FnOnce(CapturedEvents) -> T,
