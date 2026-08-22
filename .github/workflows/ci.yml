@@ -13,10 +13,10 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       BUILD_PROFILE: debug
-      # The tree requires -Zpolonius=next (see
-      # docs/adr-006-adopt-polonius-nightly-toolchain.md), so CI builds with
-      # the dated nightly pinned in rust-toolchain.toml.
-      NETSUKE_RUST_TOOLCHAIN: nightly-2026-06-25
+      # The tree requires the Polonius borrow checker, which nightly enables by
+      # default (see docs/adr-006-adopt-polonius-nightly-toolchain.md), so CI
+      # builds with the dated nightly pinned in rust-toolchain.toml.
+      NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-13
       WHITAKER_INSTALLER_VERSION: '0.2.7'
       # Single source of truth for the cargo-nextest pin. `make test` runs the
       # non-doctest suite through nextest, so the job installs it up front.
@@ -49,8 +49,8 @@ jobs:
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           components: rustfmt, clippy
-          # Preserve warnings-as-errors and Polonius through toolchain setup.
-          rustflags: -D warnings -Zpolonius=next
+          # Preserve warnings-as-errors through toolchain setup.
+          rustflags: -D warnings
       - name: Install cargo-nextest
         uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
         with:

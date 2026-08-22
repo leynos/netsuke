@@ -76,9 +76,9 @@ mold_version() { read_pin "$MOLD_VERSION_FILE"; }
 # The repository's toolchain, read from `rust-toolchain.toml`.
 #
 # Deliberately the same toolchain the ordinary gates use, not a second pin.
-# The tree borrow-checks only under Polonius on that dated nightly (ADR-006),
-# so a separate dev-fast nightly would let the fast loop and the gate disagree
-# about which borrows are legal.
+# The tree borrow-checks only under Polonius, which that dated nightly enables
+# by default (ADR-006), so a separate dev-fast nightly could let the fast loop
+# and the gate disagree about which borrows are legal.
 cranelift_toolchain() {
   local file=$RUST_TOOLCHAIN_FILE value
   [ -f "$file" ] || fail "missing version pin: $file"
