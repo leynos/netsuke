@@ -1017,6 +1017,9 @@ If the composition boundary times discovery itself, call the public
 pass completes. `started` is the `std::time::Instant` captured from the same
 injected `monotony::MonotonicClock` immediately before discovery; the function
 records the elapsed duration and the retained outcome without rediscovering.
+It also recreates the bounded `collect_diag_file_layers` tracing span, recording
+`outcome=success` or `outcome=error`; a discovery failure records
+`error_category=file` for an `OrthoError::File` error.
 It records `DISCOVERY_TOTAL`
 (`netsuke_cli_config_discovery_total`) with the bounded `outcome=success` or
 `outcome=error` label, and `DISCOVERY_DURATION`
