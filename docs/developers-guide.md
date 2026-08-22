@@ -3443,6 +3443,37 @@ context rather than resolving output or process configuration again; tests
 should inject the program through `run_with_ninja_program` when they need a
 deterministic child executable.
 
+### Module: `runner::generation`
+
+`src/runner/generation.rs` owns the runner's reusable, in-memory generation
+pipeline. It separates manifest loading, IR construction, and Ninja bundle
+synthesis from command reporting and process execution. The pipeline is
+`load_manifest` (optionally observing manifest stages), then `build_graph`,
+then `ninja_text`. Its final value is `GeneratedNinja`, including any dyndep
+sidecars, rather than a materialized file or a running Ninja process.
+
+#### Generation reuse boundary
+
+- **Ownership:** `runner::generation` is a private runner submodule. It owns
+  the three generation steps, their input/output hand-offs, and the manifest
+  and IR error contexts. It does not own `StatusReporter` updates, command
+  dispatch, dyndep publication, or Ninja execution.
+- **Permitted call-sites:** `runner::generate_ninja` composes the complete
+  pipeline for build, clean, and generate commands. `runner::graph::handle_graph`
+  may stop after `build_graph` to render the graph. Runner unit tests may
+  compose the steps directly. New dry-run or background-generation work may
+  reuse the steps only within the runner boundary; a public or cross-subsystem
+  consumer requires an explicit application boundary rather than widening
+  these internal helpers.
+- **Composition rules:** command adapters report stages before or after the
+  relevant step and wrap `ninja_text` with runner-owned generation telemetry.
+  Only `load_manifest_with_stage_reporting` translates `StageObserver` events
+  into status updates. Consumers must not call manifest parsing, IR generation,
+  or `ninja_gen::generate_bundle` directly in parallel with this pipeline.
+  Before an adapter writes or executes a returned bundle, it must use the
+  existing capability-injected dyndep-publication path to materialize its
+  sidecars; the pure steps never write files or start processes.
+
 ### Module: `runner::reporter`
 
 `src/runner/reporter.rs` owns construction of the run's `StatusReporter` from
