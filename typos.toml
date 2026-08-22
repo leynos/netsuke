@@ -13,6 +13,7 @@ extend-exclude = [
     ".uv-cache",
     ".uv-tools",
     ".venv",
+    ".vtcode/**",
     "Cargo.lock",
     "bun.lock",
     "data/typos-oxendict-base.toml",
