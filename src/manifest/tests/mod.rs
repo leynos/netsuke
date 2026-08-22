@@ -9,4 +9,5 @@ mod vars_reserved_property;
 mod workspace;
 
 mod env_function;
+mod glob_security;
 mod glob_telemetry;
