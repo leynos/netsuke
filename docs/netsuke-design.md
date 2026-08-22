@@ -2960,8 +2960,12 @@ It
 returns deferred diagnostics instead of emitting tracing while resolving.
 `DiscoveryOutcome::emit_diagnostics()` replays the retained diagnostics after
 tracing is configured without repeating environment or filesystem access.
-`collect_file_layers_with_trace_and_env_source(...)` performs the underlying
-discovery scan and retains bounded project-scope trace metadata.
+`collect_file_layers_with_normalizer_and_trace(directory, normalizer,
+env_source)` performs the underlying discovery scan with the path normalizer
+and environment source, and retains bounded project-scope trace metadata. The
+normalizer canonicalizes comparison keys so equivalent project path spellings
+de-duplicate to one layer; `DiscoveryOutcome::emit_diagnostics()` is the
+production boundary that replays the retained, bounded diagnostic.
 `DiscoveryOutcome::into_layers()` transfers the same discovered layers to
 `merge_with_cached_file_layers(...)`, which consumes them for the full merge
 and prevents a second discovery pass. The standalone

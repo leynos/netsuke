@@ -2612,8 +2612,12 @@ Configuration merge helpers:
   deferred diagnostics for the diagnostic and merge callers.
 - `push_discovered_file_layers(composer, errors, discovered) -> ()` transfers
   the retained layers and discovery errors into the full merge composition.
-- `collect_file_layers_with_trace_and_env_source(directory, env_source)` runs
-  the one discovery pass and retains bounded project-scope trace metadata.
+- `collect_file_layers_with_normalizer_and_trace(directory, normalizer,
+  env_source)` runs the one discovery pass with the injected path normalizer
+  and environment source, and retains bounded project-scope trace metadata for
+  deferred diagnostics. The normalizer canonicalizes comparison keys so
+  project layers are de-duplicated across equivalent path spellings;
+  `DiscoveryOutcome::emit_diagnostics()` is the production emission boundary.
 
 - `resolve_json_and_layers_outcome_with_env(cli, matches, env)` retains the
   `DiscoveryOutcome` so startup can emit diagnostics after tracing setup and

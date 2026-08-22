@@ -189,7 +189,7 @@ The implementation must finish by marking roadmap item 3.11.2 done only after
 
 Roadmap item 3.11.2 is complete as of 2026-04-03. The discovery contract was
 documented, integration tests were added, and the then-current validation gates
-passed. Later PR #562 follow-up changes are described above and require current
+passed. Later follow-up changes are described above and require current
 revision evidence from the focused and complete gates.
 
 ### Search order (documented in netsuke-design.md § 8.4.1)
@@ -276,7 +276,7 @@ project-directory spellings and requires one canonical layer.
 
 The following results are historical milestone evidence captured on 2026-04-03;
 the suite counts reflect that earlier repository state and are not current
-results for PR #562:
+results for the follow-up:
 
 - `make check-fmt`: **PASS**
 - `make lint`: **PASS** (all Clippy warnings resolved)
@@ -287,9 +287,9 @@ results for PR #562:
 - `make test`: **PASS** (the then-current unit, BDD, and integration suites
   passed)
 
-Current PR #562 validation must be reported from the focused and complete gates
-run against the current revision; this historical record does not substitute
-for that evidence.
+Validation for the follow-up must be reported from the focused and complete
+gates run against the current revision; this historical record does not
+substitute for that evidence.
 
 ### Documentation updates
 
@@ -590,5 +590,5 @@ Expected evidence:
 
 This plan has been completed as indicated by the "Status: COMPLETED" header.
 The original stages were implemented, tested, and integrated into the codebase;
-the historical validation record above must not be read as current PR #562 gate
-evidence.
+the historical validation record above must not be read as current follow-up
+gate evidence.
