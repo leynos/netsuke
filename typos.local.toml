@@ -31,6 +31,15 @@ accepted = [
 ]
 
 [words.corrections]
+exercize = "exercise"
+exercized = "exercised"
+exercizes = "exercises"
+exercizing = "exercising"
+otherwize = "otherwise"
+raize = "raise"
+raized = "raised"
+raizes = "raises"
+raizing = "raising"
 
 [patterns]
 # The tokenizer splits the valid hyphenated prefix in `mis-grouping`.
