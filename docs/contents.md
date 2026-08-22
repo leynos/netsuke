@@ -15,6 +15,8 @@ operator, user, and contributor references are easier to find.
   execution design document.
 - [netsuke-cli-design-document.md](netsuke-cli-design-document.md): Command-line
   interface design and user-experience requirements.
+- [git-change-detection-helpers-design.md](git-change-detection-helpers-design.md):
+  Commit-range changed-path and glob-filter standard-library design.
 - [roadmap.md](roadmap.md): Phased implementation plan and tracked delivery
   work.
 - [archive/roadmap-completed-foundations.md](archive/roadmap-completed-foundations.md):
@@ -66,6 +68,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-013](adr-013-application-owned-configuration-observability.md):
   Application-owned configuration-load metrics, verbose snapshots, and bounded
   label vocabulary.
+- [ADR-014](adr-014-use-bounded-git-cli-for-change-detection.md):
+  Feature-private, bounded Git CLI queries for standard-library change
+  detection.
 
 ## User and operator guides
 
