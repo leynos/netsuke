@@ -344,7 +344,8 @@ pub fn pinned_mold_version() -> Result<String> {
 /// The repository's toolchain, read from `rust-toolchain.toml`.
 ///
 /// dev-fast deliberately shares it rather than pinning a second nightly, so the
-/// accelerated loop and the gates borrow-check identically under Polonius.
+/// accelerated loop and the gates borrow-check identically; the pinned nightly
+/// is what enables Polonius.
 ///
 /// # Errors
 ///

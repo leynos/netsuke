@@ -28,13 +28,12 @@ fn installation_examples_match_source_and_release_contracts() -> Result<()> {
 }
 
 #[test]
-fn registry_install_examples_pin_toolchain_and_polonius() -> Result<()> {
-    // Registry installs build outside a checkout, where neither
-    // rust-toolchain.toml nor .cargo/config.toml applies, so every tagged
-    // example installing from crates.io must select the pinned nightly and
-    // pass the Polonius flag itself. `cargo binstall` fetches a prebuilt
-    // binary and `cargo install --path .` runs inside a checkout, so both
-    // are exempt.
+fn registry_install_examples_pin_the_toolchain() -> Result<()> {
+    // Registry installs build outside a checkout, where rust-toolchain.toml
+    // does not apply, so every tagged example installing from crates.io must
+    // select the pinned nightly itself; that nightly is what enables Polonius.
+    // `cargo binstall` fetches a prebuilt binary and `cargo install --path .`
+    // runs inside a checkout, so both are exempt.
     let mut registry_install_ids = Vec::new();
     for example in load_documented_examples()? {
         let mut example_matches = false;
@@ -43,13 +42,8 @@ fn registry_install_examples_pin_toolchain_and_polonius() -> Result<()> {
                 continue;
             }
             ensure!(
-                line.contains("cargo +nightly-2026-06-25 install netsuke-build"),
+                line.contains("cargo +nightly-2026-08-13 install netsuke-build"),
                 "{id} must install with the pinned nightly toolchain: {line}",
-                id = example.id
-            );
-            ensure!(
-                line.contains("RUSTFLAGS=-Zpolonius=next"),
-                "{id} must pass the Polonius borrow-checker flag: {line}",
                 id = example.id
             );
             example_matches = true;
@@ -88,12 +82,12 @@ fn assert_release_installation_contract() -> Result<()> {
     );
     let readme_release = documented_example("readme-crates-io-install")?;
     let guide_release = documented_example("guide-crates-io-install")?;
-    // Registry installs run outside a checkout, so the packaged source sees
-    // neither rust-toolchain.toml nor .cargo/config.toml; the documented
-    // command must select the pinned nightly and the Polonius flag itself.
+    // Registry installs run outside a checkout, so the packaged source does
+    // not see rust-toolchain.toml; the documented command must select the
+    // pinned nightly itself, which is what enables Polonius.
     let expected_release = concat!(
-        "rustup toolchain install nightly-2026-06-25\n",
-        "RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke-build\n"
+        "rustup toolchain install nightly-2026-08-13\n",
+        "cargo +nightly-2026-08-13 install netsuke-build\n"
     );
     ensure!(readme_release.body == expected_release, "README drifted");
     ensure!(guide_release.body == expected_release, "user guide drifted");

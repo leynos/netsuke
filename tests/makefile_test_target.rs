@@ -7,23 +7,17 @@
 //! because nextest cannot execute them.
 //!
 //! They also pin the `RUSTFLAGS` contract shared by every recipe that sets the
-//! variable. Setting `RUSTFLAGS` at all overrides the `[build] rustflags`
-//! table in `.cargo/config.toml`, so each such recipe re-states the Polonius
-//! flag, and each prepends any value the caller already exported rather than
-//! discarding it. `test-nextest`, `lint-clippy`'s Clippy line, `lint-whitaker`,
-//! and `typecheck` additionally add `-D warnings`;
-//! `kani-full` adds only the Polonius flag, because Kani compiles third-party
-//! crates the workspace lint policy does not govern. The binary-build recipe
-//! preserves the caller's value through a different expansion and adds
-//! Polonius, but not `-D warnings`. Rustdoc and doctests inherit caller flags,
-//! deny warnings, and explicitly restore Polonius like the other checked
-//! recipes.
+//! variable. Each such recipe adds `-D warnings` and prepends any value the
+//! caller already exported rather than discarding it. `kani-full`,
+//! `bench-config-load`, and the binary-build recipe deliberately set nothing:
+//! Kani compiles third-party crates the workspace lint policy does not govern,
+//! and neither a benchmark nor a plain binary build is a lint gate.
 //!
-//! The `RUSTFLAGS` tests extract each assignment from the Makefile, resolve
-//! the Make variables it names, and expand the result in a shell. They assert
-//! on the flags that expansion yields rather than on recipe text, so they stay
-//! valid when the command a recipe runs changes. A guard test fails if a
-//! recipe starts setting `RUSTFLAGS` without joining the covered set.
+//! The `RUSTFLAGS` tests extract each assignment from the Makefile and expand
+//! it in a shell. They assert on the flags that expansion yields rather than
+//! on recipe text, so they stay valid when the command a recipe runs changes.
+//! A guard test fails if a recipe starts setting `RUSTFLAGS` without joining
+//! the covered set.
 
 #[path = "support/makefile.rs"]
 mod makefile;
@@ -65,9 +59,8 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
         "test-nextest should cover the workspace, found {nextest_recipe:?}"
     );
     ensure!(
-        nextest_recipe
-            .contains(r#"RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)""#),
-        "test-nextest should deny warnings and enable Polonius, found {nextest_recipe:?}"
+        nextest_recipe.contains(r#"RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings""#),
+        "test-nextest should preserve inherited flags and deny warnings, found {nextest_recipe:?}"
     );
 
     let doctest_recipe =
@@ -81,9 +74,8 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
         "doctests cannot run under nextest, found {doctest_recipe:?}"
     );
     ensure!(
-        doctest_recipe
-            .contains(r#"RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)""#,),
-        "doctest should preserve inherited flags, deny warnings, and enable Polonius; found {doctest_recipe:?}"
+        doctest_recipe.contains(r#"RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings""#),
+        "doctest should preserve inherited flags and deny warnings; found {doctest_recipe:?}"
     );
     ensure!(
         doctest_recipe.contains("--workspace"),
@@ -94,8 +86,6 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
 
 #[path = "makefile_test_target/rustflags.rs"]
 mod rustflags;
-#[path = "makefile_test_target/rustflags_polonius_tests.rs"]
-mod rustflags_polonius_tests;
 
 /// Returns every nextest profile override.
 fn all_profile_overrides(config: &Value) -> impl Iterator<Item = &Value> {

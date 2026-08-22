@@ -182,10 +182,7 @@ fn a_drifting_mold_invokes_cargo_not_at_all(#[case] target: &str) -> Result<()> 
 #[case::unstable_flag("unstable.codegen-backend", "unstable.codegen-backend = true")]
 #[case::linux_rustflags(
     "target",
-    concat!(
-        "target.'cfg(target_os = \"linux\")'.rustflags = ",
-        "[\"-Zpolonius=next\", \"-Clink-arg=-fuse-ld=mold\"]",
-    )
+    "target.'cfg(target_os = \"linux\")'.rustflags = [\"-Clink-arg=-fuse-ld=mold\"]"
 )]
 fn cargo_resolves_the_fragment_to_the_intended_settings(
     #[case] query: &str,
@@ -257,17 +254,6 @@ fn the_cargo_fragment_selects_cranelift_and_mold() -> Result<()> {
             .filter_map(toml::Value::as_str)
             .any(|flag| flag.contains("-fuse-ld=mold")),
         "the Linux target must select mold, got `{linux:?}`"
-    );
-    // Cargo picks one rustflags source rather than merging, and this table
-    // outranks `.cargo/config.toml`'s `[build]` table. Dropping the Polonius
-    // flag here does not merely diverge from the gate: the tree does not
-    // borrow-check without it, so `make dev-build` stops compiling.
-    ensure!(
-        linux
-            .iter()
-            .filter_map(toml::Value::as_str)
-            .any(|flag| flag == "-Zpolonius=next"),
-        "the Linux target must restate the Polonius flag it shadows, got `{linux:?}`"
     );
     Ok(())
 }

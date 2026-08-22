@@ -29,10 +29,11 @@
 //!
 //! This replaced a `trybuild` harness during the Polonius migration. Trybuild
 //! always builds the host crate as a fixture dependency while discarding
-//! workspace `build.rustflags`, so it rebuilt `netsuke` without
-//! `-Zpolonius=next`; see the "Harness consequences" section of
-//! `docs/polonius.md`. These probes need no subprocess, no scratch project, and
-//! no toolchain-sensitive `.stderr` snapshot.
+//! workspace `build.rustflags`, so while Polonius was flag-gated it rebuilt
+//! `netsuke` without the analysis; see the "Harness consequences" section of
+//! `docs/polonius.md`. The pinned nightly now enables Polonius by default, but
+//! these probes still need no subprocess, no scratch project, and no
+//! toolchain-sensitive `.stderr` snapshot.
 
 /// Define a compile-time probe module for one trait bound.
 ///

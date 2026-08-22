@@ -2,9 +2,6 @@
 
 APP ?= netsuke
 CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$$HOME/.cargo/bin/cargo")
-# The Polonius borrow-checker flag normally flows from .cargo/config.toml, but
-# any recipe that sets RUSTFLAGS overrides that table and must re-state it.
-POLONIUS_FLAGS ?= -Zpolonius=next
 # Extra build-parallelism flags for plain Cargo invocations, e.g. `-j 4`.
 BUILD_JOBS ?=
 # The same concept for cargo-nextest, which spells build parallelism
@@ -18,12 +15,11 @@ KANI_FLAGS ?=
 KANI_INSTALL_FLAGS ?=
 KANI_CHECK_FLAGS ?=
 KANI_VERSION_FILE ?= tools/kani/VERSION
-# Opt-in local build acceleration. The Cargo fragment is deliberately separate
-# from `.cargo/config.toml`: that file is auto-discovered and carries the
-# repository-wide Polonius flag, whereas Cranelift and mold must stay opt-in so
-# release, packaging, coverage, and formal-verification paths keep the
-# supported LLVM backend and platform linker. The toolchain is not pinned
-# separately — dev-fast uses the repository's own nightly.
+# Opt-in local build acceleration. The Cargo fragment is deliberately kept out
+# of an auto-discovered `.cargo/config.toml`, because Cranelift and mold must
+# stay opt-in so release, packaging, coverage, and formal-verification paths
+# keep the supported LLVM backend and platform linker. The toolchain is not
+# pinned separately — dev-fast uses the repository's own nightly.
 MOLD_VERSION_FILE ?= tools/mold/VERSION
 MOLD_SHA256SUMS_FILE ?= tools/mold/SHA256SUMS
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
@@ -82,10 +78,10 @@ clean: ## Remove build artefacts
 test: test-nextest doctest ## Run every Rust test with warnings treated as errors
 
 test-nextest: ## Run all non-doctest Rust tests through cargo-nextest
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) nextest run --workspace --all-targets --all-features $(NEXTEST_BUILD_JOBS)
+	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) nextest run --workspace --all-targets --all-features $(NEXTEST_BUILD_JOBS)
 
 doctest: ## Run doctests, which cargo-nextest cannot execute
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)
+	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)
 
 test-workflow-contracts: ## Validate the mutation-testing caller contract
 	uv run --with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' pytest tests/workflow_contracts -q
@@ -93,19 +89,19 @@ test-workflow-contracts: ## Validate the mutation-testing caller contract
 test-typos-config: spelling-helper-test ## Verify the shared spelling-policy integration
 
 target/%/$(APP): ## Build binary in debug or release mode
-	RUSTFLAGS="$${RUSTFLAGS-} $(POLONIUS_FLAGS)" $(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP)
+	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP)
 
 lint: lint-clippy lint-whitaker ## Run Clippy and the Whitaker Dylint suite with warnings denied
 
 lint-clippy: ## Run rustdoc and Clippy with warnings denied
-	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) doc --workspace --no-deps
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) clippy $(CLIPPY_FLAGS)
+	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) doc --workspace --no-deps
+	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) clippy $(CLIPPY_FLAGS)
 
 lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
-	DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(WHITAKER) --all --no-deps --package netsuke-build -- --all-targets --all-features
+	DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(WHITAKER) --all --no-deps --package netsuke-build -- --all-targets --all-features
 	# Run from the crate directory as well so Whitaker loads the narrow
 	# `test_support::fs` exemption from test_support/dylint.toml.
-	cd test_support && DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(WHITAKER) --all --no-deps --package test_support -- --all-targets --all-features
+	cd test_support && DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(WHITAKER) --all --no-deps --package test_support -- --all-targets --all-features
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all
@@ -115,7 +111,7 @@ check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
 
 typecheck: ## Typecheck all targets and features
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) check --all-targets --all-features $(BUILD_JOBS)
+	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(CARGO) check --all-targets --all-features $(BUILD_JOBS)
 
 markdownlint: spelling ## Lint Markdown and enforce en-GB-oxendict spelling
 	$(MDLINT) "**/*.md"
@@ -151,7 +147,7 @@ kani-check: ## Check the installed Kani verifier version
 	@$(PROVER_TOOLS) kani check-version --kani-command "$(KANI)" $(KANI_CHECK_FLAGS) || { status=$$?; printf 'prover-tools: target=kani-check failed exit=%s\n' "$$status" >&2; exit "$$status"; }
 
 kani-full: ## Run the full Kani verification suite
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }$(POLONIUS_FLAGS)" $(KANI) $(KANI_FLAGS)
+	$(KANI) $(KANI_FLAGS)
 
 kani-ir: kani-full ## Run the IR Kani verification suite
 
@@ -193,7 +189,7 @@ bench-build: dev-fast-check ## Time clean and incremental debug builds for both 
 	@CARGO="$(CARGO)" scripts/bench-build.sh
 
 bench-config-load: ## Benchmark cached configuration loading without layer copies
-	RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }$(POLONIUS_FLAGS)" $(CARGO) bench --bench config_load_cached_merge
+	$(CARGO) bench --bench config_load_cached_merge
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \
