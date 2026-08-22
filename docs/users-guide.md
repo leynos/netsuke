@@ -1026,9 +1026,9 @@ It records `DISCOVERY_TOTAL`
 (`netsuke_cli_config_discovery_duration_seconds`) with no labels. The
 `DISCOVERY_OUTCOME_VALUES` constant lists the admitted outcome labels.
 
-All of these functions take an injected `&impl ConfigEnvProvider`. The public
-`ConfigEnvProvider` trait provides `get(&self, key: &str) -> Option<OsString>`
-for selector and environment lookups, plus
+The discovery and merge entry points take an injected `&impl ConfigEnvProvider`.
+The public `ConfigEnvProvider` trait provides `get(&self, key: &str) ->
+Option<OsString>` for selector and environment lookups, plus
 `entries(&self) -> Vec<(OsString, OsString)>` for the complete configuration
 environment layer. Implementations must provide `entries()` explicitly; an
 empty vector is appropriate only for providers that support selector lookup

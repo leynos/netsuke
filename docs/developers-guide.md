@@ -2589,8 +2589,6 @@ Configuration merge helpers:
 - `retain_layers_and_resolve_json(layers)` transfers each owned file-layer
   value into the cached layer while recording the last valid `json` value,
   avoiding complete layer or JSON-value copies before the full merge.
-- `json_from_matches(cli, matches, discovered) -> bool` applies an explicit
-  root `--json` override to the discovered value.
 - `cli_overrides_from_matches(matches: &ArgMatches) -> OrthoValue` extracts
   CLI-supplied fields, stripping defaults and non-CLI sources.
 - `EnvironmentLayer` converts an injected snapshot of `NETSUKE_*` values into
@@ -2613,8 +2611,8 @@ pub trait ConfigEnvProvider {
 ```
 
 `get` owns selector lookup, while `entries` supplies the complete snapshot for
-the layered `NETSUKE_*` merge. A selector-only provider may retain the empty
-default for `entries`. Full-merge adapters must return a stable owned snapshot
+the layered `NETSUKE_*` merge. A selector-only provider may return an empty
+vector from `entries`; full-merge adapters must return a stable owned snapshot
 so discovery and value merging observe one environment. Keep this port scoped
 to CLI configuration; runner, manifest, locale, and stdlib environment seams
 remain separate because their input and lifetime contracts differ.
