@@ -33,6 +33,7 @@ pub(super) struct NinjaFailureOutputTail<W> {
 }
 
 impl<W> NinjaFailureOutputTail<W> {
+    /// Maximum number of trailing output bytes retained for a failure report.
     const MAX_TAIL_BYTES: usize = 512;
 
     /// Wrap `inner`, retaining an initially empty output tail.
@@ -132,6 +133,7 @@ impl std::fmt::Display for CommandListFailure {
 }
 
 impl<W> FailureAttributionWriter<W> {
+    /// Maximum length of one retained snippet line, in bytes.
     const MAX_LINE_BYTES: usize = 128;
 
     /// Wrap `inner` with no attribution observed yet.

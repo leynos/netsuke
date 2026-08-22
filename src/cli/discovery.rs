@@ -77,6 +77,7 @@ impl DiscoveredLayers {
         self.json_preference
     }
 
+    /// Consume into the raw layers and deferred discovery errors.
     pub(crate) fn into_parts(
         self,
     ) -> (Vec<MergeLayer<'static>>, Vec<Arc<ortho_config::OrthoError>>) {
@@ -104,6 +105,7 @@ impl DiscoveryOutcome {
         self.layers.first_error()
     }
 
+    /// Return the last valid JSON preference from the discovered file layers.
     pub(crate) const fn json_preference(&self) -> bool {
         self.layers.json_preference()
     }

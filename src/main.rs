@@ -64,9 +64,13 @@ where
     C: MonotonicClock,
     E: cli::ConfigEnvProvider,
 {
+    /// Environment provider used for locale resolution.
     locale_env: &'a L,
+    /// System-locale provider used for default-language detection.
     system_locale: &'a S,
+    /// Monotonic clock used to time configuration loading.
     configuration_clock: &'a C,
+    /// Environment provider consulted during configuration discovery and merge.
     config_env: &'a E,
 }
 /// Send buffered startup diagnostics where `mode` says they belong.
@@ -182,6 +186,10 @@ fn finish_run(exit_code: ExitCode, verbose: bool) -> ExitCode {
     exit_code
 }
 
+/// Return whether the parsed CLI asks only for informational help.
+///
+/// Help for a specific topic is informational; the general help listing may
+/// instead require configuration, so it is not counted here.
 const fn is_informational_help(cli: &cli::Cli) -> bool {
     matches!(
         &cli.command,

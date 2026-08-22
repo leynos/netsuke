@@ -313,6 +313,7 @@ fn path_preview(dirs: &[Utf8PathBuf]) -> String {
     parts.join(", ")
 }
 
+/// Return a localized user hint for the given `CwdMode`, when one exists.
 const fn hint_for_mode(mode: options::CwdMode) -> Option<LocalizedMessage> {
     #[cfg(windows)]
     {

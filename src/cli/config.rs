@@ -279,6 +279,7 @@ impl CliConfig {
 /// Maximum number of parallel build jobs accepted by the CLI.
 const MAX_JOBS: usize = super::MAX_JOBS;
 
+/// Return whether `jobs` falls outside the accepted range.
 const fn jobs_out_of_bounds(jobs: usize) -> bool {
     jobs == 0 || jobs > MAX_JOBS
 }

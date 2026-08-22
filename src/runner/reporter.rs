@@ -45,6 +45,7 @@ pub(super) fn make_reporter(options: ReporterOptions) -> Box<dyn StatusReporter>
     }
 }
 
+/// Whether task updates must render as plain text rather than live UI.
 const fn should_force_text_task_updates(mode: OutputMode, stdout_is_tty: bool) -> bool {
     mode.is_accessible() || !stdout_is_tty
 }
