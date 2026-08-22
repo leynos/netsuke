@@ -270,6 +270,40 @@ fn verbose_timing_reporter_suppresses_progress_updates_after_complete(test_prefs
 }
 
 #[rstest]
+fn verbose_timing_reporter_writes_summary_to_injected_sink(en_localizer: EnLocalizer) {
+    let _localizer = en_localizer;
+    let clock = Arc::new(FakeClock::from_millis(&[0, 12, 23]));
+    let injected_clock = Arc::clone(&clock);
+    let reporter = VerboseTimingReporter::with_clock_and_writer(
+        Box::new(crate::status::SilentReporter),
+        test_prefs(),
+        Box::new(move || injected_clock.now()),
+        Vec::new(),
+    );
+    reporter.report_stage(
+        StageNumber::new_unchecked(1),
+        StageNumber::new_unchecked(6),
+        "Reading manifest file",
+    );
+    reporter.report_stage(
+        StageNumber::new_unchecked(2),
+        StageNumber::new_unchecked(6),
+        "Parsing YAML document",
+    );
+    reporter.report_complete(LocalizationKey::new(keys::STATUS_TOOL_GENERATE));
+
+    let output = reporter
+        .writer
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let rendered = normalize_fluent_isolates(&String::from_utf8_lossy(&output));
+    assert!(rendered.contains("Stage timing summary:"));
+    assert!(rendered.contains("Stage 1/6: Reading manifest file"));
+    assert!(rendered.contains("Stage 2/6: Parsing YAML document"));
+    assert!(rendered.contains("Total pipeline time"));
+}
+
+#[rstest]
 #[case::unicode(crate::theme::ThemePreference::Unicode, "timing_summary_unicode")]
 #[case::ascii(crate::theme::ThemePreference::Ascii, "timing_summary_ascii")]
 fn timing_summary_snapshot(

@@ -90,7 +90,10 @@ impl TimingState {
 
 /// Status reporter wrapper that emits per-stage timings on successful
 /// completion.
-pub struct VerboseTimingReporter {
+///
+/// The writer defaults to [`io::Stderr`]; tests can supply a `Vec<u8>`
+/// via the test-only writer-and-clock constructor for output capture.
+pub struct VerboseTimingReporter<W: Write + Send = io::Stderr> {
     /// Reporter receiving forwarded status events.
     inner: Box<dyn StatusReporter>,
     /// Output preferences controlling summary formatting.
@@ -99,6 +102,8 @@ pub struct VerboseTimingReporter {
     clock: Box<MonotonicClock>,
     /// Timing state shared across reporting threads.
     state: Mutex<TimingState>,
+    /// Sink receiving the rendered timing summary.
+    writer: Mutex<W>,
 }
 
 impl VerboseTimingReporter {
@@ -109,22 +114,37 @@ impl VerboseTimingReporter {
         Self::with_clock(inner, prefs, Box::new(move || start.elapsed()))
     }
 
-    /// Build a timing reporter that uses the given clock.
+    /// Wrap an existing reporter with verbose timing summary support and an
+    /// injected monotonic clock.
     fn with_clock(
         inner: Box<dyn StatusReporter>,
         prefs: OutputPrefs,
         clock: Box<MonotonicClock>,
+    ) -> Self {
+        Self::with_clock_and_writer(inner, prefs, clock, io::stderr())
+    }
+}
+
+impl<W: Write + Send> VerboseTimingReporter<W> {
+    /// Wrap an existing reporter with verbose timing summary support, an
+    /// injected monotonic clock, and an injected timing summary sink.
+    fn with_clock_and_writer(
+        inner: Box<dyn StatusReporter>,
+        prefs: OutputPrefs,
+        clock: Box<MonotonicClock>,
+        writer: W,
     ) -> Self {
         Self {
             inner,
             prefs,
             clock,
             state: Mutex::new(TimingState::default()),
+            writer: Mutex::new(writer),
         }
     }
 }
 
-impl StatusReporter for VerboseTimingReporter {
+impl<W: Write + Send> StatusReporter for VerboseTimingReporter<W> {
     fn report_stage(&self, current: StageNumber, total: StageNumber, description: &str) {
         let should_forward = {
             let mut state = self
@@ -173,12 +193,15 @@ impl StatusReporter for VerboseTimingReporter {
 
         self.inner.report_complete(tool_key);
 
+        let mut writer = self
+            .writer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         for line in lines {
-            drop(writeln!(io::stderr(), "{line}"));
+            drop(writeln!(writer, "{line}"));
         }
     }
 }
-
 /// Render the timing summary header, per-stage lines, and total duration.
 fn render_summary_lines(prefs: OutputPrefs, entries: &[CompletedStage]) -> Vec<String> {
     if entries.is_empty() {
