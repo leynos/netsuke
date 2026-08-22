@@ -179,6 +179,34 @@ fn injected_automatic_discovery_uses_xdg_config_home() -> Result<()> {
     Ok(())
 }
 
+/// An explicit relative configuration file uses the CLI working directory.
+#[test]
+fn explicit_relative_config_uses_cli_directory() -> Result<()> {
+    let temp = tempdir().context("create temp dir")?;
+    let config_path = temp.path().join("cli.toml");
+    test_support::fs::write(&config_path, "emoji = \"always\"\n")
+        .context("write explicit config")?;
+    let cli = Cli {
+        config: Some("cli.toml".into()),
+        directory: Some(temp.path().to_path_buf()),
+        ..Cli::default()
+    };
+
+    let discovered = discover_file_layers(&cli, &TestEnv::default());
+
+    ensure!(
+        discovered.first_error().is_none(),
+        "explicit relative config should load from the CLI directory"
+    );
+    let paths = discovered
+        .layers()
+        .iter()
+        .filter_map(|layer| layer.path().map(|path| path.as_str().to_owned()))
+        .collect::<Vec<_>>();
+    assert_eq!(paths, vec![config_path.to_string_lossy().into_owned()]);
+    Ok(())
+}
+
 /// Discovered configuration candidates retain the outcome that their content
 /// warrants; an unreadable candidate is never mistaken for an absent one.
 #[rstest]
