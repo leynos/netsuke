@@ -53,8 +53,14 @@ mod tests {
     use super::canonicalize;
     use anyhow::{Context, Result, anyhow, ensure};
     use camino::{Utf8Path, Utf8PathBuf};
+    use rstest::{fixture, rstest};
     use std::path::Path;
-    use tempfile::tempdir;
+    use tempfile::{TempDir, tempdir};
+
+    #[fixture]
+    fn temporary_fixture_directory() -> Result<TempDir> {
+        tempdir().context("create temporary fixture directory")
+    }
 
     fn utf8_path(path: &Path) -> Result<&Utf8Path> {
         Utf8Path::from_path(path).context("fixture path must be valid UTF-8")
@@ -67,9 +73,11 @@ mod tests {
         })
     }
 
-    #[test]
-    fn canonicalize_resolves_dot_component_in_fixture_path() -> Result<()> {
-        let temporary = tempdir().context("create temporary fixture directory")?;
+    #[rstest]
+    fn canonicalize_resolves_dot_component_in_fixture_path(
+        temporary_fixture_directory: Result<TempDir>,
+    ) -> Result<()> {
+        let temporary = temporary_fixture_directory?;
         let fixture_directory = temporary.path().join("fixture");
         super::super::create_dir(&fixture_directory).context("create fixture directory")?;
         let fixture = fixture_directory.join("config.toml");
@@ -87,11 +95,13 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn canonicalize_reports_a_missing_utf8_fixture_path() -> Result<()> {
+    #[rstest]
+    fn canonicalize_reports_a_missing_utf8_fixture_path(
+        temporary_fixture_directory: Result<TempDir>,
+    ) -> Result<()> {
         use std::io::ErrorKind;
 
-        let temporary = tempdir().context("create temporary fixture directory")?;
+        let temporary = temporary_fixture_directory?;
         let missing_fixture = temporary.path().join("missing-config.toml");
 
         let error = canonicalize(utf8_path(&missing_fixture)?)
@@ -104,9 +114,11 @@ mod tests {
     }
 
     #[cfg(unix)]
-    #[test]
-    fn canonicalize_resolves_unix_symlink_alias_to_target() -> Result<()> {
-        let temporary = tempdir().context("create temporary fixture directory")?;
+    #[rstest]
+    fn canonicalize_resolves_unix_symlink_alias_to_target(
+        temporary_fixture_directory: Result<TempDir>,
+    ) -> Result<()> {
+        let temporary = temporary_fixture_directory?;
         let target = temporary.path().join("target.toml");
         super::super::write(&target, "jobs = 1\n").context("write target fixture")?;
         let alias = temporary.path().join("alias.toml");
@@ -123,13 +135,15 @@ mod tests {
     }
 
     #[cfg(unix)]
-    #[test]
-    fn canonicalize_rejects_non_utf8_resolved_unix_path() -> Result<()> {
+    #[rstest]
+    fn canonicalize_rejects_non_utf8_resolved_unix_path(
+        temporary_fixture_directory: Result<TempDir>,
+    ) -> Result<()> {
         use std::ffi::OsString;
         use std::io::ErrorKind;
         use std::os::unix::ffi::OsStringExt;
 
-        let temporary = tempdir().context("create temporary fixture directory")?;
+        let temporary = temporary_fixture_directory?;
         let non_utf8_name = OsString::from_vec(b"fixture-\xFF.toml".to_vec());
         let non_utf8_fixture = temporary.path().join(non_utf8_name);
         super::super::write(&non_utf8_fixture, "jobs = 1\n").context("write non-UTF-8 fixture")?;

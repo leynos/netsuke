@@ -101,6 +101,30 @@ def _load(workflow_path: Path = WORKFLOW_PATH) -> dict[str, object]:
         pytest.fail(
             f"the workflow mapping must be string-keyed, got {non_string_keys}"
         )
+    match workflow.get("jobs"):
+        case dict() as jobs:
+            pass
+        case _:
+            pytest.fail("the workflow must declare a jobs mapping")
+    for job_name, job in jobs.items():
+        if not _is_string(job_name):
+            pytest.fail(f"the jobs mapping must be string-keyed, got {job_name!r}")
+        match job:
+            case dict() as job_mapping:
+                pass
+            case _:
+                pytest.fail(f"jobs.{job_name} must be a mapping")
+        if "env" not in job_mapping:
+            continue
+        match job_mapping["env"]:
+            case dict() as env:
+                pass
+            case _:
+                pytest.fail(f"jobs.{job_name}.env must be a mapping")
+        if "NEXTEST_VERSION" in env:
+            pytest.fail(
+                f"jobs.{job_name}.env must not redeclare NEXTEST_VERSION"
+            )
     return workflow
 
 
@@ -299,20 +323,17 @@ def test_nextest_version_declared_once_at_workflow_scope() -> None:
         f"got {env.get('NEXTEST_VERSION')!r}"
     )
 
+    match workflow.get("jobs"):
+        case dict() as jobs:
+            pass
+        case _:
+            pytest.fail("the workflow must declare a jobs mapping")
     for job_name in ("build-test", "build-test-windows"):
-        match workflow.get("jobs"):
-            case dict() as jobs:
-                pass
-            case _:
-                pytest.fail("the workflow must declare a jobs mapping")
         match jobs.get(job_name):
             case dict() as job:
                 pass
             case _:
                 pytest.fail(f"the workflow must declare a {job_name} job")
-        assert "NEXTEST_VERSION" not in job.get("env", {}), (
-            f"{job_name} must not redeclare NEXTEST_VERSION at job scope"
-        )
         installs = [
             step.get("with", {}).get("tool")
             for step in job.get("steps", [])
