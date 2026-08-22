@@ -263,19 +263,19 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   with space-separated, POSIX-shell-quoted input and output paths using the
   [`shell-quote`](https://docs.rs/shell-quote/latest/shell_quote/) crate (Sh
   mode) before hashing the action. Standalone `$in` and `$out` tokens are
-  resolved at the same boundary, while tokens inside backticks are preserved.
-  A scalar command is emitted unchanged. A list is lowered to brace groups
-  that evaluate each entry through a shell-quoted `eval` payload and are joined
-  by `&&`. The groups run in declaration order in one shell process and stop
-  at the first non-zero exit, so working directory, environment, and shell
-  variables carry forward. The `eval` boundary keeps an entry's inline
-  comments or trailing control operators from consuming the generated group
-  terminator. A failed entry emits a bounded action/entry marker for the
-  runner to include in the failure diagnostic. The resulting command must be
-  parsable by [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode). An
-  empty command list is rejected during manifest deserialization. Plain command
-  strings remain shell text; authors should use structured recipes or explicit
-  quoting helpers for arbitrary variables.
+  resolved at the same boundary, while tokens inside backticks are preserved. A
+  scalar command is emitted unchanged. A list is lowered to brace groups that
+  evaluate each entry through a shell-quoted `eval` payload and are joined by
+  `&&`. The groups run in declaration order in one shell process and stop at
+  the first non-zero exit, so working directory, environment, and shell
+  variables carry forward. The `eval` boundary keeps an entry's inline comments
+  or trailing control operators from consuming the generated group terminator.
+  A failed entry emits a bounded action/entry marker for the runner to include
+  in the failure diagnostic. The resulting command must be parsable by
+  [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode). An empty command
+  list is rejected during manifest deserialization. Plain command strings
+  remain shell text; authors should use structured recipes or explicit quoting
+  helpers for arbitrary variables.
 
 - `script`: A multi-line script declared with the YAML `|` block style. The
   entire block is passed to an interpreter. If the first line begins with `#!`
@@ -689,12 +689,11 @@ schema defined in Section 2. They will be defined in a dedicated module,
 `src/ast/mod.rs`, and annotated with `#[derive(Deserialize)]` (and `Debug`) to
 enable automatic deserialization and easy debugging.
 
-The authoritative live AST contract is
-[src/ast/mod.rs](../src/ast/mod.rs). Fields and types marked `FUTURE` in the
-snippet below are forward-looking API sketches.
-`Target.description` is implemented optional discovery metadata; the remaining
-forward-looking fields describe the intended schema once the roadmap tasks
-land and are not assertions about the current codebase.
+The authoritative live AST contract is [src/ast/mod.rs](../src/ast/mod.rs).
+Fields and types marked `FUTURE` in the snippet below are forward-looking API
+sketches. `Target.description` is implemented optional discovery metadata; the
+remaining forward-looking fields describe the intended schema once the roadmap
+tasks land and are not assertions about the current codebase.
 
 Rust
 
@@ -833,9 +832,9 @@ selectors; command lists are executed in order, while path-like fields are
 interpreted only at the manifest-to-IR boundary.*
 
 `StringOrList` owns the conversions that only need to know its own shape:
-`map_each` applies a function to every contained string, and `to_string_vec`
-and `as_single` build on it. Path conversion deliberately does not live here.
-The AST models the manifest's surface syntax, in which `sources`, `deps` and
+`map_each` applies a function to every contained string, and `to_string_vec` and
+`as_single` build on it. Path conversion deliberately does not live here. The
+AST models the manifest's surface syntax, in which `sources`, `deps` and
 `order_only_deps` are plain strings; only manifest-to-IR lowering decides they
 name files on disk, so `src/ir/from_manifest_support.rs::to_paths` performs
 that interpretation at the boundary. Keeping `camino` out of `src/ast/mod.rs`
@@ -923,12 +922,12 @@ parsing and template evaluation cleanly separated.
 
 ### 3.4 Design Decisions
 
-The AST structures are implemented in `src/ast/mod.rs` and derive `Deserialize`.
-Unknown fields are rejected to surface user errors early. `StringOrList`
-provides a default `Empty` variant, so optional lists are trivial to represent.
-The manifest version is parsed using the `semver` crate to validate that it
-follows semantic versioning rules. Global and target variable maps now share the
-`ManifestMap` alias:
+The AST structures are implemented in `src/ast/mod.rs` and derive
+`Deserialize`. Unknown fields are rejected to surface user errors early.
+`StringOrList` provides a default `Empty` variant, so optional lists are
+trivial to represent. The manifest version is parsed using the `semver` crate
+to validate that it follows semantic versioning rules. Global and target
+variable maps now share the `ManifestMap` alias:
 
 ```rust
 type ManifestMap = serde_json::Map<String, serde_json::Value>;
@@ -1124,15 +1123,13 @@ providing a secure bridge to the underlying system.
   supported. This provides globbing support not available in Ninja itself,
   which does not support globbing.[^3]
 
-  The metadata check that filters directories out of the results runs
-  through a capability opened at the pattern's literal directory prefix
-  (`src/` for `src/**/*.c`) rather than at an ambient root; the match walk
-  itself remains the `glob` crate's own, which traverses the filesystem
-  ambiently.
+  The metadata check that filters directories out of the results runs through a
+  capability opened at the pattern's literal directory prefix (`src/` for
+  `src/**/*.c`) rather than at an ambient root; the match walk itself remains
+  the `glob` crate's own, which traverses the filesystem ambiently.
   [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) records this
-  decision; see the
-  [developer's guide](developers-guide.md#capability-scope) for the prefix
-  computation and symlink-handling rules.
+  decision; see the [developer's guide](developers-guide.md#capability-scope)
+  for the prefix computation and symlink-handling rules.
 - `python_version(requirement: &str) -> Result<bool, Error>`: An example of a
   domain-specific helper function that demonstrates the extensibility of this
   architecture. This function would execute `python --version` or
@@ -1276,9 +1273,9 @@ Implementation notes:
   registration boundary: `register_expanduser` in `stdlib::path::filters`
   captures a process-backed reader closure once and injects it into the pure
   resolution ladders in `path_utils`. Those ladders never touch the ambient
-  environment directly; they only consult whatever reader they are given.
-  Tests supply their own readers, exercising the ladders without reaching the
-  process environment.
+  environment directly; they only consult whatever reader they are given. Tests
+  supply their own readers, exercising the ladders without reaching the process
+  environment.
 - `with_suffix` removes dotted suffix segments (default `n = 1`) before
   appending the provided suffix.
 
@@ -1346,13 +1343,13 @@ state, and the cache-relevant options (`all`, `canonical`, `cwd_mode`).
 Including the workspace switch keeps a fallback hit cached while the search was
 enabled from answering a resolution made with it disabled. Entries are
 validated once at insertion; cache reads no longer re-probe executability,
-keeping the hot path lean. Because `fresh` only controls bypass behaviour, it is
-stripped from the cache key so fresh lookups still repopulate the cache for
+keeping the hot path lean. Because `fresh` only controls bypass behaviour, it
+is stripped from the cache key so fresh lookups still repopulate the cache for
 subsequent calls. The fingerprint means environment changes invalidate keys
 without cloning large strings, and the helper remains pure because all inputs
 still derive from the manifest, the stdlib configuration, or the captured
-environment. Callers can request a bypass with `fresh=true` when they
-need to observe recent toolchain changes during a long session.
+environment. Callers can request a bypass with `fresh=true` when they need to
+observe recent toolchain changes during a long session.
 
 Cache capacity defaults to 64 entries, covering typical PATH sizes without
 overcommitting memory, and can be tuned via
@@ -2012,10 +2009,10 @@ This transformation involves several steps:
    `ir::BuildEdge` linking the target to the action identifier and transfer the
    `phony` and `always` flags. `sources` are lowered into the edge's explicit
    input list so recipe interpolation and Ninja `$in` see only material inputs.
-   `deps` are lowered into a separate `implicit_deps` list, which maps to Ninja's
-   implicit dependency syntax (`|`) so Ninja orders and rebuilds them without
-   exposing them as recipe arguments; `order_only_deps` remains separate and
-   maps to Ninja's `||` class.
+   `deps` are lowered into a separate `implicit_deps` list, which maps to
+   Ninja's implicit dependency syntax (`|`) so Ninja orders and rebuilds them
+   without exposing them as recipe arguments; `order_only_deps` remains
+   separate and maps to Ninja's `||` class.
 
    FUTURE:
 
@@ -2024,8 +2021,8 @@ This transformation involves several steps:
    remains discovery-only metadata: it is not part of the IR and does not
    replace the referenced rule's description for Ninja progress. Env-aware
    action hashing will include resolved environment bindings alongside the
-   recipe and file set so otherwise identical actions remain distinct when their
-   execution environment differs.
+   recipe and file set so otherwise identical actions remain distinct when
+   their execution environment differs.
 
 4. **Graph Validation:** As the graph is constructed, perform validation checks.
    This includes ensuring that every rule referenced by a target exists in the
@@ -2047,9 +2044,9 @@ This transformation involves several steps:
    and visitation map. Keys are cloned from the `targets` map so traversal
    leaves the input graph untouched. Missing dependencies encountered during
    traversal are logged, collected, and returned alongside any cycle to aid
-   diagnostics.
+diagnostics.
 
-### 5.4 Ninja File Synthesis (`ninja_gen/mod.rs`)
+### 5.4 Ninja file synthesis (`src/ninja_gen.rs`)
 
 The final step is to synthesize the `build.ninja` file from the `BuildGraph`
 IR. This process is a straightforward, mechanical translation from the IR data
@@ -2122,14 +2119,14 @@ structures to the Ninja file syntax.
    no Ninja edge produces sidecar content.
 
    The generated result is a bundle, not merely a string: generation is an
-   effect-free query that returns the main Ninja text and its
-   `.netsuke/dyndep` sidecars. Each runner command then materializes those
-   sidecars through an injected effective-working-directory capability before
-   it writes or runs the main file. The main file declares
-   `ninja_required_version = 1.10` only when it contains such staged serial
-   ordering. `.netsuke/serial` and `.netsuke/dyndep` are reserved for generated
-   state. `serial` applies only to direct implicit dependencies; it does not
-   delay an independently reachable node elsewhere in the graph.
+   effect-free query that returns the main Ninja text and its `.netsuke/dyndep`
+   sidecars. Each runner command then materializes those sidecars through an
+   injected effective-working-directory capability before it writes or runs the
+   main file. The main file declares `ninja_required_version = 1.10` only when
+   it contains such staged serial ordering. `.netsuke/serial` and
+   `.netsuke/dyndep` are reserved for generated state. `serial` applies only to
+   direct implicit dependencies; it does not delay an independently reachable
+   node elsewhere in the graph.
 
 Figure: Runner-owned serial dyndep bundle generation and execution.
 
@@ -2166,11 +2163,11 @@ sequenceDiagram
 The runner holds a capability-scoped exclusive lease on the dyndep directory
 from sidecar materialization through Ninja consumption or generated-output
 consumption. While the lease is held, stale `.tmp` files are removed and
-retention preserves the current bundle plus at most 32 obsolete `.dd` files
-and 1 MiB of obsolete `.dd` bytes. `build` and `generate` prune after
+retention preserves the current bundle plus at most 32 obsolete `.dd` files and
+1 MiB of obsolete `.dd` bytes. `build` and `generate` prune after
 materialization; `clean` prunes only after successful `ninja -t clean` and not
-on failure. Sidecars remain immutable and content-addressed. Consequently,
-an older arbitrary `generate --output` manifest may lose its sidecars after a
+on failure. Sidecars remain immutable and content-addressed. Consequently, an
+older arbitrary `generate --output` manifest may lose its sidecars after a
 later command and must be regenerated. See
 [ADR-012](adr-012-bound-dyndep-sidecar-retention.md) for this policy.
 
@@ -2209,9 +2206,9 @@ representation portable.
   optional key-value pairs or flags, keeping the generator easy to scan.
 - Integration tests snapshot the generated Ninja file with `insta` and
   execute the Ninja binary to validate structure and no-op behaviour.
-  Serial-ordering tests additionally use real Ninja to prove declaration
-  order, failure short-circuiting, shared-work reuse, and unrelated-branch
-  concurrency. [ADR-011](adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md)
+  Serial-ordering tests additionally use real Ninja to prove declaration order,
+  failure short-circuiting, shared-work reuse, and unrelated-branch concurrency.
+  [ADR-011](adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md)
   records why staged dyndep is used instead of order-only gates, pools, or
   recursive Ninja invocations.
 
@@ -2272,10 +2269,10 @@ The command construction follows this pattern:
 4. The request's `CommandEnv` is applied. Overrides are **additive**: each pair
    is written with `Command::env` and nothing is cleared, because Ninja needs
    the ambient environment to function and `env_clear` would make a test
-   environment diverge from production in ways unrelated to what the test
-   pins. `CommandEnv::inherit()` sets nothing at all, so production spawns
-   exactly the environment Netsuke itself received. This is the only supported
-   way to vary a child's environment: Netsuke never mutates its own process
+   environment diverge from production in ways unrelated to what the test pins.
+   `CommandEnv::inherit()` sets nothing at all, so production spawns exactly
+   the environment Netsuke itself received. This is the only supported way to
+   vary a child's environment: Netsuke never mutates its own process
    environment to influence a subprocess.
 
 5. Standard I/O streams (`stdin`, `stdout`, `stderr`) are configured using
@@ -2284,20 +2281,19 @@ The command construction follows this pattern:
    to the user's console, potentially with additional formatting or status
    updates from Netsuke itself.
 
-Stream routing follows the `stderr_mode` policy carried by the request.
-Outside JSON mode (`StderrMode::Forward`) the child's standard output and
-error are piped and forwarded to Netsuke's own streams concurrently: stdout is
-drained on the main thread while a separate thread forwards stderr, so users
-see Ninja's messages as it produces them. No relative ordering is guaranteed
-between the two streams. In JSON diagnostics mode the request
-carries `StderrMode::Suppress`, which drains both streams to `io::sink()`:
-stdout carries only the versioned result document and stderr only the
-diagnostic document, keeping both machine-readable. The runner derives the
-policy from the CLI's JSON setting via
-`StderrMode::from_json_enabled(cli.json)`; the process layer consumes the
-request's `stderr_mode` field and never re-derives it. A non-zero exit status
-or failure to spawn the process is reported as an `io::Error` for the CLI to
-surface.
+Stream routing follows the `stderr_mode` policy carried by the request. Outside
+JSON mode (`StderrMode::Forward`) the child's standard output and error are
+piped and forwarded to Netsuke's own streams concurrently: stdout is drained on
+the main thread while a separate thread forwards stderr, so users see Ninja's
+messages as it produces them. No relative ordering is guaranteed between the
+two streams. In JSON diagnostics mode the request carries
+`StderrMode::Suppress`, which drains both streams to `io::sink()`: stdout
+carries only the versioned result document and stderr only the diagnostic
+document, keeping both machine-readable. The runner derives the policy from the
+CLI's JSON setting via `StderrMode::from_json_enabled(cli.json)`; the process
+layer consumes the request's `stderr_mode` field and never re-derives it. A
+non-zero exit status or failure to spawn the process is reported as an
+`io::Error` for the CLI to surface.
 
 The `ninja_subprocess` span and its spawn and exit events carry
 `env_override_count` and `path_overridden`, derived from the prepared
@@ -2355,11 +2351,11 @@ error-prone task that requires specialized knowledge.
 Netsuke's design makes identified path substitution safe by default. Netsuke
 quotes the `ins`/`outs` path values before action hashing and Ninja synthesis;
 arbitrary Jinja values and handwritten shell fragments remain the manifest
-author's responsibility. By integrating `shell-quote` into IR command
-lowering, before action hashing and Ninja file synthesis,
-Netsuke protects users from a common and dangerous class of errors by default.
-This approach embodies a deeper form of user-friendliness: one that anticipates
-and mitigates risks on the user's behalf.
+author's responsibility. By integrating `shell-quote` into IR command lowering,
+before action hashing and Ninja file synthesis, Netsuke protects users from a
+common and dangerous class of errors by default. This approach embodies a
+deeper form of user-friendliness: one that anticipates and mitigates risks on
+the user's behalf.
 
 ## Section 7: A Framework for Friendly and Actionable Error Reporting
 
@@ -2760,21 +2756,20 @@ then passes the cached layers to `cli::merge_with_cached_file_layers` for the
 full merge. Those query functions do not install a recorder or own
 configuration-load metrics. `src/observability.rs` owns the phase recorder and
 bounded phase/outcome vocabulary, while `src/config_load.rs` owns the
-startup-attempt series.
-The application installs an in-process `DebuggingRecorder`; it does not open a
-metrics listener as a side effect of a command invocation.
+startup-attempt series. The application installs an in-process
+`DebuggingRecorder`; it does not open a metrics listener as a side effect of a
+command invocation.
 
 Metric labels are closed sets: phase-level series use `diag_mode` or `merge`,
 and both phase-level and startup-attempt counters use `success` or `failure`.
 Recorder-snapshot tests assert these labels through the same closed phase and
-outcome vocabulary.
-The startup-attempt duration has no labels. Paths, configuration values, and
-formatted source errors remain in user-facing diagnostics where appropriate;
-they must not become metric labels. When a run reaches configuration loading,
-the recorder emits its aggregate snapshot only for verbose runs, after command
-completion or a configuration-load exit.
-The full metric names, phase boundaries, and test-recorder rules are documented
-in the configuration-load observability section of the
+outcome vocabulary. The startup-attempt duration has no labels. Paths,
+configuration values, and formatted source errors remain in user-facing
+diagnostics where appropriate; they must not become metric labels. When a run
+reaches configuration loading, the recorder emits its aggregate snapshot only
+for verbose runs, after command completion or a configuration-load exit. The
+full metric names, phase boundaries, and test-recorder rules are documented in
+the configuration-load observability section of the
 [developer's guide](developers-guide.md).
 
 `src/locale_catalogues.rs` is the authoritative registry of shipped catalogues.
@@ -2914,74 +2909,65 @@ when the variable is unset, empty, or non-UTF-8.
 ### 8.4.1 Configuration File Discovery
 
 **Figure: Configuration Discovery and Merge Flow** — This diagram illustrates
-how Netsuke discovers and merges configuration from multiple sources. The flow
-begins with CLI parsing, checks for project and user configuration files, and
-applies layered merging with increasing precedence: defaults < discovered
-config files < environment variables < CLI flags. The final merged
-configuration determines runtime behaviour. Accessible text description follows
-below.
+the cached single-pass configuration flow. Netsuke parses the CLI and directory
+option, then either loads an explicit selection or runs OrthoConfig discovery
+rooted by that directory, with an optional project-scope fallback. The
+`DiscoveryOutcome` retains layers and diagnostics for replay before
+`into_layers()` hands the cached layers to the full merge via
+`merge_with_cached_file_layers()`. Accessible text description follows below.
 
 ```mermaid
 flowchart LR
-  A[Start Netsuke] --> B[Parse CLI into Cli]
-  B --> C{Project config exists?}
+  A[Start Netsuke] --> B["Parse CLI and --directory"]
+  B --> C[Resolve JSON mode and DiscoveryOutcome]
+  C --> D{Explicit config selector?}
 
-  C -->|Yes| D[Load project config via ConfigDiscovery]
-  C -->|No| E[No project config layer]
+  D -->|Yes| E[Load explicit config]
+  D -->|No| F["Run OrthoConfig discovery rooted by --directory"]
 
-  D --> F{User config exists?}
-  E --> F
+  F --> G{Project-scope layer already included?}
+  G -->|Yes| H[Retain discovered layers]
+  G -->|No| I[Append project-scope file only when omitted]
+  I --> H
+  E --> H
 
-  F -->|Yes| G[Load user config via ConfigDiscovery]
-  F -->|No| H[No user config layer]
-
-  G --> I[Merge defaults + project + user]
-  H --> I[Merge defaults + project + user]
-
-  I --> J[Apply environment NETSUKE_... overrides]
-  J --> K[Apply CLI flag overrides]
-  K --> L[Resolved merged config]
-  L --> M[Run Netsuke with final behaviour]
+  H --> J[Retain DiscoveryOutcome layers, errors, and diagnostics]
+  J --> K[Configure tracing]
+  K --> L["emit_diagnostics()"]
+  L --> M["into_layers()"]
+  M --> N["merge_with_cached_file_layers()"]
+  N --> O[Run Netsuke with final behaviour]
 ```
 
 Netsuke configuration discovery is implemented in `src/cli/discovery.rs`.
 Explicit file selection is handled by `explicit_config_path_with_env(...)`,
 which applies the precedence `--config` > `NETSUKE_CONFIG`.
-`discover_file_layers(...)` performs one discovery pass, applying the
-`-C/--directory` flag as the project-discovery root, and returns a
-`DiscoveryOutcome`. Its `DiscoveredLayers` owns the discovered layers,
-discovery errors and bounded deferred diagnostics.
+`discover_file_layers(...)` performs one overall discovery pass, applying the
+`-C/--directory` flag as the project-discovery root. Its automatic path first
+runs the OrthoConfig scan, then loads the project-scope file as a second pass
+when the scan did not include it. The function returns a `DiscoveryOutcome`; its
+`DiscoveredLayers` owns the discovered layers, discovery errors, and bounded
+deferred diagnostics.
 
 Diagnostic-mode resolution uses
-
-`resolve_json_and_layers_outcome_with_env(...)` to resolve JSON from those
-discovered layers and retain the outcome for the startup boundary.
-It
-returns deferred diagnostics instead of emitting tracing while resolving.
-`DiscoveryOutcome::emit_diagnostics()` replays the retained diagnostics after
-tracing is configured without repeating environment or filesystem access.
-`collect_file_layers_with_trace_and_env_source(...)` performs the underlying
-discovery scan and retains bounded project-scope trace metadata.
-`DiscoveryOutcome::into_layers()` transfers the same discovered layers to
-`merge_with_cached_file_layers(...)`, which consumes them for the full merge
-and prevents a second discovery pass. The standalone
-`merge_with_config_and_env(...)` path performs discovery, emits diagnostics
-and delegates to `merge_with_cached_file_layers(...)`.
-
-Because OrthoConfig 0.9.0 exposes only an owned `MergeLayer::into_value()`
-accessor, discovery derives its JSON preference while transferring each owned
-file value into the cached file layer. This preserves the cached values for
-the merge without cloning complete layers or JSON values. The startup
-composition root creates `ConfigStdEnvProvider`; `ConfigurationLoadContext`
-carries an injected `ConfigEnvProvider` through both early resolution and the
-cached merge.
+`resolve_json_and_layers_outcome_with_env(...)`, which returns
+`(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics. The
+composition boundary calls `DiscoveryOutcome::emit_diagnostics()` after tracing
+is configured, replaying the retained diagnostics without repeating environment
+or filesystem access. `collect_file_layers_with_trace_and_env_source(...)`
+performs the underlying discovery scan and retains bounded project-scope trace
+metadata. `DiscoveryOutcome::into_layers()` transfers the same discovered
+layers to `merge_with_cached_file_layers(...)`, which consumes them for the
+full merge and prevents a second discovery pass. The standalone
+`merge_with_config_and_env(...)` path performs discovery, emits diagnostics and
+delegates to `merge_with_cached_file_layers(...)`.
 
 Deferred bounded discovery diagnostics are retained only for replay after the
 startup tracing boundary is configured. They do not contain raw paths or file
 names and replay does not repeat environment or filesystem access. Discovery
 and configuration errors remain separate: diagnostic-mode resolution returns
-its discovery or JSON-validation error, while the full merge caller handles
-the retained discovery errors together with merge errors.
+its discovery or JSON-validation error, while the full merge caller handles the
+retained discovery errors together with merge errors.
 
 **Figure: Explicit Config Selector Resolution** — This diagram shows how
 Netsuke chooses the configuration file before automatic discovery. Netsuke
@@ -3023,12 +3009,12 @@ flowchart TD
 
 #### Discovery scopes and layered merging
 
-Configuration discovery searches multiple scopes and composes all discovered
-files into layers using OrthoConfig's `compose_layers()`. The single
-`discover_file_layers` pass retains the resulting layers and ensures that
-project-scope layers have higher precedence than user- and system-scope
-layers. After file layers are merged, environment variables and CLI arguments
-override the merged result, ensuring explicit user intent always wins.
+Automatic configuration discovery first calls OrthoConfig's `compose_layers()`
+to retain its primary automatic match. If that match does not include the
+project-scope file, a second pass loads that file directly and appends its
+layers. Thus, `compose_layers()` does not merge every scope, and it does not by
+itself establish project/user/system precedence. Environment variables and CLI
+arguments then override the file layers.
 
 1. **Explicit override**: `--config <PATH>` and `NETSUKE_CONFIG` are evaluated
    in that precedence order before discovery. These explicit selectors bypass
@@ -3057,15 +3043,10 @@ override the merged result, ensuring explicit user intent always wins.
        Directory system config directories, defaults to
        `/etc/xdg/netsuke/config.toml` when `XDG_CONFIG_DIRS` is unset)
 
-**Scope precedence**: When configuration files exist in multiple scopes,
-OrthoConfig's discovery order gives **project scope highest precedence**, then
-user scope, then system scope (project > user > system). This matches user
-expectations: project-local configuration should override user-global defaults,
-which in turn override system-wide settings. The `-C/--directory` flag anchors
-project-scope discovery to the specified directory while leaving user-scope and
-system-scope lookup unchanged, ensuring user-global and system-wide
-configuration remain available even when operating on a project in a different
-directory.
+The primary scanner's platform-specific search determines which automatic file
+is retained first. The `-C/--directory` flag anchors the project-scope fallback
+to the specified directory while leaving the scanner's user- and system-scope
+lookups unchanged.
 
 **Layer merge precedence** (lowest to highest):
 
@@ -3091,29 +3072,26 @@ manual flag repetition.
   environment variables via Figment and CLI overrides extracted from
   `ArgMatches`.
 - The `config_discovery()` function uses OrthoConfig's builder API with the
-  application name, environment selector, and an environment source selected at
-  the CLI composition root. Ambient runs use `ProcessEnv`; injected runs use a
-  closed `MapEnv` projected from Netsuke's environment port, preventing tests
-  from falling through to host directories.
-- A missing optional candidate means no configuration layer and therefore
-  built-in defaults. A candidate that exists but cannot load is retained as an
-  error when no candidate succeeds, so malformed configuration and a missing
-  `extends` parent are never mistaken for absence.
+  application name, injected discovery environment, and optional project-root
+  anchor, relying on OrthoConfig's platform-specific defaults for standard
+  directory resolution.
 - Netsuke-owned environment reads for explicit config selection and early JSON
-  resolution go through the `EnvProvider` port in `src/cli/discovery.rs`.
-  Production code uses `StdEnvProvider`; tests can inject a map-backed provider
-  instead of mutating the process environment. The v0.9.0 adapter projects only
-  the documented discovery keys into OrthoConfig, while `EnvironmentLayer`
-  retains the complete `NETSUKE_*` value merge boundary.
-- Configuration files use TOML. OrthoConfig's optional YAML provider remains
-  disabled; Netsukefile YAML continues to be parsed by the separate
-  `serde-saphyr` manifest boundary.
+  resolution take an injected `&impl ConfigEnvProvider` in the public
+  `*_with_env` entry points. Production wrappers supply `ConfigStdEnvProvider`;
+  tests supply an in-memory `ConfigEnvProvider` without mutating the process
+  environment. Startup obtains a `DiscoveryOutcome` from
+  `resolve_json_and_layers_outcome_with_env`, emits its deferred diagnostics,
+  then passes `into_layers()` to `merge_with_cached_file_layers`, so file
+  discovery and loading happen once. OrthoConfig discovery remains an external
+  boundary and may still read platform environment variables directly.
+- Configuration files use TOML format by default. JSON5 (`.json`, `.json5`) and
+  YAML (`.yaml`, `.yml`) formats are supported when the corresponding Cargo
+  features are enabled.
 - Explicit config selection is handled outside OrthoConfig's built-in discovery
   override surface so Netsuke keeps its custom project-over-user precedence for
-  automatic discovery. If an explicit selector is set, the
-  selected file is loaded directly and bypasses discovery, but still
-  participates in the normal precedence ladder: defaults < file < environment <
-  CLI.
+  automatic discovery. If an explicit selector is set, the selected file is
+  loaded directly and bypasses discovery, but still participates in the normal
+  precedence ladder: defaults < file < environment < CLI.
 - Relative paths passed to `--config` are resolved against the process current
   working directory, not the `-C/--directory` anchor. This keeps config-file
   selection aligned with normal shell path semantics while `-C` continues to
@@ -3125,9 +3103,9 @@ The CLI definition doubles as the source for user documentation. Release
 automation now calls `cargo-orthohelp` explicitly through
 `scripts/generate-release-help.sh`; ordinary Cargo builds do not supply the
 release manual page or PowerShell help. `cargo-orthohelp` remains the release
-source for those artefacts. Separately, `build.rs` generates Bash, Elvish, Fish,
-PowerShell, and Zsh completion assets from `Cli::command()`. The completion
-files are staged as portable shell-completion sidecars under
+source for those artefacts. Separately, `build.rs` generates Bash, Elvish,
+Fish, PowerShell, and Zsh completion assets from `Cli::command()`. The
+completion files are staged as portable shell-completion sidecars under
 `completions/<shell>/` in release archives. The build script also performs the
 localization key audit against Fluent bundles.
 
@@ -3161,19 +3139,18 @@ resulting `.deb` and `.rpm` archives both declare a runtime dependency on
 `leynos/shared-actions`; Windows staging also carries the PowerShell help files
 as release artefacts alongside the MSI package. Every standalone release
 archive also carries the generated shell completion sidecars under
-`completions/<shell>/`. The composite shells out to a
-Cyclopts-driven script that reads the `.github/release-staging.toml`
-configuration (Tom's Obvious, Minimal Language (TOML)), merges the `[common]`
-configuration with the target-specific overrides, and copies the configured
-artefacts into a fresh `dist/{bin}_{platform}_{arch}` directory. It installs
-Astral's Python package manager (uv) with `astral-sh/setup-uv`, double-checks
-the tool is present, and only then launches the Python entry point so workflows
-stay declarative. The helper writes SHA-256 sums for every staged file and
-exports a JSON map of the artefact outputs, allowing the workflow to hydrate
-downstream steps without hard-coded path logic. Figure 8.1 summarizes the
-configuration entities, including optional keys reserved for templated
-directories and explicit artefact destinations that the helper can adopt
-without breaking compatibility.
+`completions/<shell>/`. The composite shells out to a Cyclopts-driven script
+that reads the `.github/release-staging.toml` configuration (Tom's Obvious,
+Minimal Language (TOML)), merges the `[common]` configuration with the
+target-specific overrides, and copies the configured artefacts into a fresh
+`dist/{bin}_{platform}_{arch}` directory. It installs Astral's Python package
+manager (uv) with `astral-sh/setup-uv`, double-checks the tool is present, and
+only then launches the Python entry point so workflows stay declarative. The
+helper writes SHA-256 sums for every staged file and exports a JSON map of the
+artefact outputs, allowing the workflow to hydrate downstream steps without
+hard-coded path logic. Figure 8.1 summarizes the configuration entities,
+including optional keys reserved for templated directories and explicit
+artefact destinations that the helper can adopt without breaking compatibility.
 
 Figure 8.1: Entity relationship for the staging configuration schema.
 
@@ -3277,7 +3254,7 @@ goal.
     3. Implement the AST-to-IR transformation logic, including basic validation
        like checking for rule existence.
 
-    4. Implement the IR-to-Ninja file generator (`ninja_gen/mod.rs`).
+    4. Implement the IR-to-Ninja file generator (`src/ninja_gen.rs`).
 
     5. Implement the `std::process::Command` logic to invoke `ninja`.
 

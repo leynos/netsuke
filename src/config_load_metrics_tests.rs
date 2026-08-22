@@ -264,7 +264,14 @@ fn configuration_clock(
         .context("diagnostic-mode phase duration must fit in an Instant")?;
     let instants = match scenario {
         ConfigurationLoadScenario::JsonResolutionFailure => {
-            vec![started_at, started_at, diag_finished_at, diag_finished_at]
+            vec![
+                started_at,
+                started_at,
+                started_at,
+                diag_finished_at,
+                diag_finished_at,
+                diag_finished_at,
+            ]
         }
         ConfigurationLoadScenario::MergeFailure | ConfigurationLoadScenario::SuccessfulMerge => {
             let merge_finished_at = diag_finished_at
@@ -273,6 +280,8 @@ fn configuration_clock(
             vec![
                 started_at,
                 started_at,
+                started_at,
+                diag_finished_at,
                 diag_finished_at,
                 diag_finished_at,
                 merge_finished_at,

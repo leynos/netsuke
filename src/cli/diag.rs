@@ -60,28 +60,25 @@ pub fn resolve_json_and_layers_outcome_with_env(
     env: &impl EnvProvider,
 ) -> (OrthoResult<bool>, DiscoveryOutcome) {
     let outcome = collect_diag_file_layers_with_env(cli, env);
-    let result = (|| {
-        if let Some(error) = outcome.first_error() {
-            return Err(Arc::clone(error));
-        }
-        let mut json = json_from_layers(&outcome);
-        if !has_cli_json_override(matches)
-            && let Some(env_json) = json_from_env(env)?
-        {
-            json = env_json;
-        }
-        Ok(json_from_matches(cli, matches, json))
-    })();
+    let has_cli_override = has_cli_json_override(matches);
+    let result = resolve_json_preference(cli, env, &outcome, has_cli_override);
     (result, outcome)
 }
 
-/// Apply the command-line JSON override to a discovered preference.
-fn json_from_matches(cli: &Cli, matches: &ArgMatches, discovered: bool) -> bool {
-    if has_cli_json_override(matches) {
-        cli.json
-    } else {
-        discovered
+/// Resolve JSON preference after file-layer discovery has completed.
+fn resolve_json_preference(
+    cli: &Cli,
+    env: &impl EnvProvider,
+    outcome: &DiscoveryOutcome,
+    has_cli_override: bool,
+) -> OrthoResult<bool> {
+    if let Some(error) = outcome.first_error() {
+        return Err(Arc::clone(error));
     }
+    if has_cli_override {
+        return Ok(cli.json);
+    }
+    json_from_env(env)?.map_or_else(|| Ok(json_from_layers(outcome)), Ok)
 }
 
 /// Determine whether `--json` was supplied on the command line.
@@ -187,7 +184,9 @@ mod tests {
         let dir = tempdir()?;
         let missing_config_path = dir.path().join("missing-netsuke.toml");
         let matches = Cli::command().get_matches_from(["netsuke"]);
-        let env = TestEnv::default().with_var("NETSUKE_CONFIG", &missing_config_path);
+        let env = TestEnv::default()
+            .with_var("NETSUKE_CONFIG", &missing_config_path)
+            .with_var(JSON_ENV_VAR, "yes");
 
         let (result, events) = with_test_subscriber(LevelFilter::TRACE, |captured| {
             let result = resolve_merged_json_with_env(&Cli::default(), &matches, &env);
@@ -196,7 +195,7 @@ mod tests {
         let error = result.expect_err("missing injected explicit config should fail");
         ensure!(
             matches!(error.as_ref(), OrthoError::File { path, .. } if path == &missing_config_path),
-            "expected missing explicit config error for {missing_config_path:?}, got {error:?}"
+            "missing explicit config should take precedence over malformed {JSON_ENV_VAR}: {error:?}"
         );
         ensure!(
             events.is_empty(),

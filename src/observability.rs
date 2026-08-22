@@ -152,5 +152,9 @@ fn describe_config_metrics() {
 mod tests;
 
 #[cfg(test)]
+#[path = "observability_discovery_tests.rs"]
+mod discovery_tests;
+
+#[cfg(test)]
 #[path = "observability_recorder_tests.rs"]
 mod recorder_tests;

@@ -31,13 +31,20 @@ accepted = [
 ]
 
 [words.corrections]
+# `mold` names the linker binary (https://github.com/rui314/mold), and `MOLD`
+# appears in the associated environment-variable names; neither is prose.
+mold = "mold"
+MOLD = "MOLD"
 
 [patterns]
 # The tokenizer splits the valid hyphenated prefix in `mis-grouping`.
 # Inline code spans quote identifiers verbatim (e.g. tokio's `flavor`
 # attribute argument), so they are not en-GB prose and must stay exempt.
+# The scanner tokenizes the `COLOR` suffix in this environment variable
+# separately, so ignore the complete identifier rather than accepting `COLOR`.
 ignore = ["mis-grouping",
   "`[^`\\n]+`",
+  "NETSUKE_COLOR",
   "(?m)^            dist/\\$\\{\\{ inputs\\['bin-name'\\] \\}\\}-\\$\\{\\{ inputs\\.version \\}\\}-\\$\\{\\{ inputs\\['artifact-suffix'\\] \\}\\}\\.pkg$",
   "(?m)^          ARCHIVE_SUFFIX: \\$\\{\\{ inputs\\['artifact-suffix'\\] \\}\\}$",
   "(?m)^          name: \\$\\{\\{ inputs\\['artifact-name'\\] \\}\\}$",

@@ -1,10 +1,13 @@
-//! Compile-time tests for the explicit Ninja environment API.
+//! Compile-time tests for public environment-injection APIs.
 //!
 //! The fixture in `tests/ui/command_env_embedder_pass.rs` imports and
 //! constructs `CommandEnv`, `NinjaBuildRequest`, and `NinjaToolRequest`, and
 //! references `run_ninja_with`/`run_ninja_tool_with`, exactly as an external
 //! embedder would, so a visibility or signature regression fails this suite
 //! rather than only the crate's own tests.
+//! The cached CLI configuration fixture exercises the equivalent public
+//! boundary for `ConfigEnvProvider` and `DiscoveredLayers` through Cargo,
+//! which resolves the identical implementation expected by Netsuke.
 //!
 //! There is deliberately no compile-fail case for the removed APIs
 //! (`EnvMut`, `PathGuard`, `prepend_dir_to_path`, `override_ninja_env`): the
@@ -24,6 +27,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Output},
 };
+use test_support::fs as test_fs;
 
 /// The embedder fixture type-checks against the public API.
 #[test]
@@ -34,6 +38,42 @@ fn command_env_embedder_fixture_compiles() -> io::Result<()> {
     )
 }
 
+/// The CLI configuration fixture type-checks against the public cache API.
+#[test]
+fn cli_configuration_fixture_compiles() -> io::Result<()> {
+    let target_dir = manifest_dir().join("target");
+    test_fs::create_dir_all(&target_dir)?;
+    let temporary_root = tempfile::tempdir_in(target_dir)?;
+    let fixture_dir = temporary_root.path().join("cli_configuration_pass");
+    test_fs::create_dir_all(fixture_dir.join("src"))?;
+    test_fs::copy(
+        manifest_dir().join("tests/ui/cli_configuration_pass/Cargo.toml"),
+        fixture_dir.join("Cargo.toml"),
+    )?;
+    test_fs::copy(
+        manifest_dir().join("tests/ui/cli_configuration_pass/src/main.rs"),
+        fixture_dir.join("src/main.rs"),
+    )?;
+
+    let manifest = fixture_dir.join("Cargo.toml");
+    let output = Command::new(cargo())
+        .arg("check")
+        .arg("--manifest-path")
+        .arg(manifest)
+        .env(
+            "CARGO_TARGET_DIR",
+            manifest_dir().join("target/cli-configuration-ui"),
+        )
+        .output()?;
+
+    if !output.status.success() {
+        return Err(io::Error::other(format!(
+            "the CLI configuration fixture should compile against the public API:\n{}",
+            stderr(&output),
+        )));
+    }
+    Ok(())
+}
 /// The public command-list constructors compile for an external embedder.
 #[test]
 fn command_list_public_api_fixture_compiles() -> io::Result<()> {
