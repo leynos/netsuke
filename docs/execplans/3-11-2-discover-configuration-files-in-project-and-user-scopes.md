@@ -245,6 +245,9 @@ while OrthoConfig records a long canonical path. Discovery therefore
 canonicalizes both sides with `dunce` before comparing them, and the fallback
 pass de-duplicates the loaded project layers by their canonical path. This
 prevents one physical `.netsuke.toml` from entering the merge chain twice.
+The three bounded layer-count fields (discovered, project, and appended) are
+retained for deferred diagnostic replay and emitted only through
+`DiscoveryOutcome::emit_diagnostics`, not during collection.
 
 Unix tests exercise equivalent `.` and symlink aliases; Windows CI exercises
 the native short/long-path spelling. The property test generates additional
