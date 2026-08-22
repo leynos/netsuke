@@ -28,6 +28,11 @@ Feature: Progress output
     When netsuke is run with arguments "--accessibility off --progress always generate"
     Then the command should succeed
     And stderr should contain "Stage 1/6"
+    And stderr should contain "Stage 1/6" before "Stage 2/6"
+    And stderr should contain "Stage 2/6" before "Stage 3/6"
+    And stderr should contain "Stage 3/6" before "Stage 4/6"
+    And stderr should contain "Stage 4/6" before "Stage 5/6"
+    And stderr should contain "Stage 5/6" before "Stage 6/6"
     And stderr should contain "Stage 6/6"
     And stderr should contain "Success:"
     And stderr should contain "Generate complete."
