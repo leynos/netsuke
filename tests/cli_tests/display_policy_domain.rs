@@ -1,21 +1,18 @@
 //! Exhaustive display-policy resolution coverage across the consolidated
 //! enum domain.
 //!
-//! This module verifies that the consolidated display-policy resolution in
-//! `src/theme.rs` and `src/output_prefs.rs` honours the established
-//! precedence (explicit theme preference > emoji policy > `NO_COLOR` >
-//! output mode) over the full domain of `EmojiPolicy`, `ProgressPolicy`,
-//! `AccessibilityPolicy`, `ColourPolicy`, `OutputMode` and `json`
-//! combinations.
+//! Verifies that the consolidated display-policy resolution in `src/theme.rs`
+//! and `src/output_prefs.rs` honours the established precedence (explicit
+//! theme preference > emoji policy > `NO_COLOR` > output mode) over the full
+//! domain of `EmojiPolicy`, `ProgressPolicy`, `AccessibilityPolicy`,
+//! `ColourPolicy`, `OutputMode` and `json` combinations.
 //!
-//! Coverage is threefold:
+//! Coverage is twofold:
 //! - `exhaustive_domain_sweep_matches_truth_model`: a deterministic sweep of
 //!   every policy combination across the `NO_COLOR` toggle, checked against a
 //!   handwritten truth model.
-//! - `output_mode_inference_matches_truth_model`: a deterministic sweep over
-//!   `OutputMode` and `TERM` across the `NO_COLOR` toggle.
-//! - `policy_domain_proptest`: probabilistic combinations covering the same
-//!   invariants.
+//! - `policy_domain_proptest` (`consolidated_display_policies_resolve_correctly`):
+//!   probabilistic combinations, including the `TERM`/output-mode dimension.
 //!
 //! These tests add coverage only; they do not change any production
 //! resolution logic (`src/theme.rs` / `src/output_prefs.rs` are left
@@ -84,12 +81,9 @@ fn accessibility_strategy() -> impl Strategy<Value = AccessibilityPolicy> {
     ])
 }
 
-/// One `DomainCase` for every combination of the finite policy domain.
-///
-/// The 162 cases are enumerated as the Cartesian product of the finite
-/// `EmojiPolicy` x `ColourPolicy` x `ProgressPolicy` x `AccessibilityPolicy` x
-/// `NO_COLOR` domain via one flat ``iproduct!`` expression, so the sweep avoids
-/// deep control-flow nesting while remaining deterministic and exhaustive.
+/// One `DomainCase` for every combination of the finite policy domain: the
+/// Cartesian product via one flat ``iproduct!`` expression, avoiding deep
+/// control-flow nesting while remaining deterministic and exhaustive.
 fn all_domain_cases() -> Vec<DomainCase> {
     let emojis = [EmojiPolicy::Auto, EmojiPolicy::Always, EmojiPolicy::Never];
     let colours = [
