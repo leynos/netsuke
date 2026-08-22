@@ -3,7 +3,7 @@
 //! Composition is pure (`test_support::env::prepend_path_value`) and the
 //! runner applies the result as data via `CommandEnv`, so nothing here
 //! mutates the parent process: no test carries `#[serial]` and none needs
-//! `EnvLock`.
+//! process-global environment or working-directory coordination.
 //!
 //! These are the named cases; the invariants they instantiate live in
 //! `env_path_property_tests.rs`, which Cargo builds as its own target.
