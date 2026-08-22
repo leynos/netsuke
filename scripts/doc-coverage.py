@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import dataclasses as dc
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -34,6 +35,18 @@ if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+
+def cargo_executable() -> str:
+    """Return the configured Cargo executable.
+
+    The Makefile exposes a ``CARGO`` override that every Cargo-backed target
+    honours, so the coverage script reads it from the environment and falls
+    back to ``cargo`` on ``PATH``. Hard-coding the program would run the wrong
+    wrapper or tool installation wherever the Makefile is invoked with a
+    custom executable.
+    """
+    return os.environ.get("CARGO") or "cargo"
 
 
 @dc.dataclass(frozen=True)
@@ -133,14 +146,24 @@ def doc_able_targets(package: dict, target: dict) -> list[DocTarget]:
     return []
 
 
-def measure(target: DocTarget, toolchain: str, manifest_root: pathlib.Path) -> Coverage:
-    """Run Rustdoc's coverage meter for one target and sum its per-file counts.
+def rustdoc_args(target: DocTarget, toolchain: str) -> list[str]:
+    """Build the cargo rustdoc coverage command for one target.
 
-    ``RUSTFLAGS`` and ``RUSTDOCFLAGS`` flow through from the environment so
-    the Makefile can thread the Polonius flag and the docsrs/deny-warnings
-    policy that the rest of the tree builds with.
+    Parameters
+    ----------
+    target
+        The library or binary target to measure.
+    toolchain
+        The ``+channel`` selector passed to Cargo.
+
+    Returns
+    -------
+    list[str]
+        The complete argument vector, starting with the ``cargo +<toolchain>
+        rustdoc -p <package>`` invocation, followed by the library or binary
+        selector and then the Rustdoc coverage flags in their fixed order.
     """
-    args = ["cargo", f"+{toolchain}", "rustdoc", "-p", target.package]
+    args = [cargo_executable(), f"+{toolchain}", "rustdoc", "-p", target.package]
     if target.kind == "bin":
         args += ["--bin", target.name]
     else:
@@ -154,11 +177,62 @@ def measure(target: DocTarget, toolchain: str, manifest_root: pathlib.Path) -> C
         "json",
         "--document-private-items",
     ]
+    return args
+
+
+def parse_coverage_output(target: DocTarget, output: str) -> Coverage:
+    """Decode one rustdoc coverage payload and sum its per-file counts.
+
+    Parameters
+    ----------
+    target
+        The target whose JSON payload is parsed; named only in the error
+        diagnostic so failures identify the measured crate.
+    output
+        The ``--show-coverage --output-format json`` document rustdoc wrote
+        to stdout.
+
+    Returns
+    -------
+    Coverage
+        The aggregate ``total`` and ``with_docs`` counts across every file
+        entry in the payload.
+
+    Raises
+    ------
+    RuntimeError
+        When ``output`` is not valid JSON, with the existing
+        ``did not emit coverage JSON`` diagnostic naming the target.
+    """
+    try:
+        per_file = json.loads(output)
+    except json.JSONDecodeError as error:
+        detail = (
+            f"cargo rustdoc for {target.package} {target.kind}"
+            f" ({target.name or 'lib'}) did not emit coverage JSON: {error}"
+        )
+        raise RuntimeError(detail) from error
+    return sum(
+        (
+            Coverage(int(entry["total"]), int(entry["with_docs"]))
+            for entry in per_file.values()
+        ),
+        Coverage(0, 0),
+    )
+
+
+def measure(target: DocTarget, toolchain: str, manifest_root: pathlib.Path) -> Coverage:
+    """Run Rustdoc's coverage meter for one target and sum its per-file counts.
+
+    ``RUSTFLAGS`` and ``RUSTDOCFLAGS`` flow through from the environment so
+    the Makefile can thread the Polonius flag and the docsrs/deny-warnings
+    policy that the rest of the tree builds with.
+    """
     # With no shell involved and argv built from workspace metadata plus
     # constant flags, there is no untrusted input to inject.
     try:
         result = subprocess.run(  # noqa: S603
-            args,
+            rustdoc_args(target, toolchain),
             cwd=manifest_root,
             capture_output=True,
             text=True,
@@ -176,21 +250,7 @@ def measure(target: DocTarget, toolchain: str, manifest_root: pathlib.Path) -> C
             f" ({target.name or 'lib'}):\n{result.stderr}"
         )
         raise RuntimeError(detail)
-    try:
-        per_file = json.loads(result.stdout)
-    except json.JSONDecodeError as error:
-        detail = (
-            f"cargo rustdoc for {target.package} {target.kind}"
-            f" ({target.name or 'lib'}) did not emit coverage JSON: {error}"
-        )
-        raise RuntimeError(detail) from error
-    return sum(
-        (
-            Coverage(int(entry["total"]), int(entry["with_docs"]))
-            for entry in per_file.values()
-        ),
-        Coverage(0, 0),
-    )
+    return parse_coverage_output(target, result.stdout)
 
 
 def label(target: DocTarget) -> str:
@@ -224,7 +284,7 @@ def run_measurements(
 def load_metadata(toolchain: str, manifest_root: pathlib.Path) -> dict:
     """Return the ``cargo metadata`` document for the workspace."""
     args = [
-        "cargo",
+        cargo_executable(),
         f"+{toolchain}",
         "metadata",
         "--no-deps",
