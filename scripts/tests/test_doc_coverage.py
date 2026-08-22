@@ -342,9 +342,12 @@ def test_label_names_libraries_and_binaries(script: types.ModuleType) -> None:
     assert script.label(binary) == "netsuke bin (netsuke-bin)"
 
 
-def test_rustdoc_args_for_library_target(script: types.ModuleType) -> None:
+def test_rustdoc_args_for_library_target(
+    script: types.ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A library target selects `--lib` and keeps the coverage flags in order."""
     target = script.DocTarget("netsuke", "lib", None)
+    monkeypatch.setenv("CARGO", "cargo")
 
     args = script.rustdoc_args(target, "nightly-x")
 
@@ -365,9 +368,12 @@ def test_rustdoc_args_for_library_target(script: types.ModuleType) -> None:
     ]
 
 
-def test_rustdoc_args_for_binary_target(script: types.ModuleType) -> None:
+def test_rustdoc_args_for_binary_target(
+    script: types.ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A binary target selects `--bin <name>` after the package selector."""
     target = script.DocTarget("netsuke", "bin", "netsuke-bin")
+    monkeypatch.setenv("CARGO", "cargo")
 
     args = script.rustdoc_args(target, "nightly-x")
 
