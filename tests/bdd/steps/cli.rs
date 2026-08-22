@@ -34,6 +34,14 @@ use test_support::locale_stubs::{StubEnv, StubSystemLocale};
 /// Tests that do not explicitly set up configuration or environment variables
 /// may be affected by ambient host configuration.
 pub(super) fn apply_cli(world: &TestWorld, args: &CliArgs) {
+    apply_cli_tokens(world, build_tokens(args.as_str()));
+}
+
+/// Apply parsed CLI argument tokens, storing the result or error in world state.
+///
+/// This accepts fully formed arguments for scenarios whose temporary-resource
+/// paths cannot be represented as static feature text.
+pub(super) fn apply_cli_tokens(world: &TestWorld, mut tokens: Vec<std::ffi::OsString>) {
     let env = world
         .locale_env
         .get()
@@ -44,7 +52,6 @@ pub(super) fn apply_cli(world: &TestWorld, args: &CliArgs) {
 
     // If there's a temp_dir set and the args don't already contain an
     // explicit -C or --directory flag, prepend -C <temp_dir> for config discovery.
-    let mut tokens = build_tokens(args.as_str());
     if let Some(temp_dir) = world.temp_dir.borrow().as_ref() {
         let is_directory_flag = |t: &std::ffi::OsString| {
             t.to_str().is_some_and(|s| {
