@@ -55,7 +55,7 @@ fn from_path_with_registration(
 ) -> Result<NetsukeManifest> {
     notify_stage(&mut on_stage, ManifestLoadStage::ManifestIngestion);
     let path_ref = path.as_ref();
-    let workspace = open_manifest_workspace(path_ref)?;
+    let workspace = open_manifest_workspace(path_ref, None)?;
     let data = workspace
         .dir
         .read_to_string(&workspace.manifest_file)
