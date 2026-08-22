@@ -5,6 +5,7 @@
 mod config_discovery;
 mod config_precedence_ladder;
 mod config_selection;
+mod display_policy_domain;
 mod helpers;
 mod locale;
 mod merge;
