@@ -4,7 +4,6 @@
 //! and merging. It captures global CLI settings plus per-subcommand defaults
 //! under the `cmds` namespace.
 
-use clap::ValueEnum;
 use ortho_config::{OrthoConfig, OrthoResult, PostMergeContext, PostMergeHook};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -34,7 +33,7 @@ impl Default for NoInput {
 }
 
 /// Colour-output policy accepted by layered configuration.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum ColourPolicy {
     /// Follow the host environment.
@@ -60,12 +59,19 @@ impl FromStr for ColourPolicy {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        <Self as ValueEnum>::from_str(s, true).map_err(|_| format!("invalid color policy '{s}'"))
+        // Mirror the case-insensitive matching previously provided by
+        // `clap::ValueEnum::from_str(s, true)`.
+        match s.to_ascii_lowercase().as_str() {
+            "auto" => Ok(Self::Auto),
+            "always" => Ok(Self::Always),
+            "never" => Ok(Self::Never),
+            _ => Err(format!("invalid color policy '{s}'")),
+        }
     }
 }
 
 /// Progress rendering policy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum ProgressPolicy {
     /// Follow Netsuke's default progress behaviour.
@@ -91,12 +97,19 @@ impl FromStr for ProgressPolicy {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        <Self as ValueEnum>::from_str(s, true).map_err(|_| format!("invalid progress policy '{s}'"))
+        // Mirror the case-insensitive matching previously provided by
+        // `clap::ValueEnum::from_str(s, true)`.
+        match s.to_ascii_lowercase().as_str() {
+            "auto" => Ok(Self::Auto),
+            "always" => Ok(Self::Always),
+            "never" => Ok(Self::Never),
+            _ => Err(format!("invalid progress policy '{s}'")),
+        }
     }
 }
 
 /// Emoji rendering policy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum EmojiPolicy {
     /// Follow the host environment and accessibility mode.
@@ -122,12 +135,19 @@ impl FromStr for EmojiPolicy {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        <Self as ValueEnum>::from_str(s, true).map_err(|_| format!("invalid emoji policy '{s}'"))
+        // Mirror the case-insensitive matching previously provided by
+        // `clap::ValueEnum::from_str(s, true)`.
+        match s.to_ascii_lowercase().as_str() {
+            "auto" => Ok(Self::Auto),
+            "always" => Ok(Self::Always),
+            "never" => Ok(Self::Never),
+            _ => Err(format!("invalid emoji policy '{s}'")),
+        }
     }
 }
 
 /// Accessible-output policy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum AccessibilityPolicy {
     /// Follow terminal and environment detection.
@@ -153,8 +173,14 @@ impl FromStr for AccessibilityPolicy {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        <Self as ValueEnum>::from_str(s, true)
-            .map_err(|_| format!("invalid accessibility policy '{s}'"))
+        // Mirror the case-insensitive matching previously provided by
+        // `clap::ValueEnum::from_str(s, true)`.
+        match s.to_ascii_lowercase().as_str() {
+            "auto" => Ok(Self::Auto),
+            "on" => Ok(Self::On),
+            "off" => Ok(Self::Off),
+            _ => Err(format!("invalid accessibility policy '{s}'")),
+        }
     }
 }
 

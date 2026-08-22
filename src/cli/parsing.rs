@@ -12,7 +12,6 @@
 //! - Shared dispatch logic lives in [`parse_value_enum`] (called by the three
 //!   enum-valued parsers via [`ParseEnumSpec`]).
 
-use clap::ValueEnum;
 use ortho_config::{LanguageIdentifier, LocalizationArgs, Localizer};
 use std::str::FromStr;
 
@@ -173,9 +172,9 @@ struct ParseEnumSpec {
 
 fn parse_value_enum<T>(localizer: &dyn Localizer, s: &str, spec: ParseEnumSpec) -> Result<T, String>
 where
-    T: ValueEnum,
+    T: FromStr,
 {
-    T::from_str(s, true).map_err(|_| {
+    s.parse::<T>().map_err(|_| {
         let mut args = LocalizationArgs::default();
         args.insert(spec.arg_name, s.to_owned().into());
         super::parser::validation_message(
