@@ -25,6 +25,17 @@ pub(super) type StageObserver<'a> = Option<&'a mut dyn FnMut(manifest::ManifestL
 
 /// Load and render the Netsuke manifest at `path`.
 ///
+/// # Examples
+///
+/// ```rust,ignore
+/// let manifest = load_manifest(
+///     Utf8Path::new("Netsukefile"),
+///     NetworkPolicy::default(),
+///     None,
+/// )?;
+/// // `manifest` is rendered and ready for `build_graph`.
+/// ```
+///
 /// # Errors
 ///
 /// Returns an error when the manifest cannot be read, parsed, or rendered.
@@ -40,6 +51,13 @@ pub(super) fn load_manifest(
 
 /// Translate a manifest into the build graph intermediate representation.
 ///
+/// # Examples
+///
+/// ```rust,ignore
+/// let graph = build_graph(&manifest)?;
+/// // `graph` contains the validated targets and actions for `ninja_text`.
+/// ```
+///
 /// # Errors
 ///
 /// Returns an error when graph construction or validation fails (for example
@@ -50,6 +68,15 @@ pub(super) fn build_graph(manifest: &NetsukeManifest) -> Result<BuildGraph> {
 }
 
 /// Generate the Ninja bundle for a build graph.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let generated = ninja_text(&graph)?;
+/// let (text, sidecars) = generated.into_parts();
+/// assert!(text.contains("build hello:"));
+/// assert!(sidecars.is_empty());
+/// ```
 ///
 /// # Errors
 ///
