@@ -11,6 +11,8 @@ mod config;
 mod help;
 mod parser;
 mod parsing;
+mod policy_values;
+mod value_parser;
 
 pub use config::{AccessibilityPolicy, CliConfig, ColourPolicy, EmojiPolicy, ProgressPolicy};
 pub use parser::Cli;
