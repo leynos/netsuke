@@ -11,7 +11,7 @@ DOC_COVERAGE_TOOLCHAIN ?= $(shell awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/
 # through the environment means a toolchain or threshold containing a quote
 # cannot inject commands into the shell command line; the child script reads
 # them from its environment instead.
-export DOC_COVERAGE_THRESHOLD DOC_COVERAGE_TOOLCHAIN
+export CARGO DOC_COVERAGE_THRESHOLD DOC_COVERAGE_TOOLCHAIN
 
 APP ?= netsuke
 CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$$HOME/.cargo/bin/cargo")

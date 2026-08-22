@@ -17,10 +17,12 @@ import argparse
 import importlib.util
 import pathlib
 import sys
-import types
+import typing as typ
 
 import pytest
 
+if typ.TYPE_CHECKING:
+    import types
 
 SCRIPT_DIRECTORY = pathlib.Path(__file__).resolve().parents[1]
 
@@ -31,7 +33,8 @@ def script_fixture() -> types.ModuleType:
     spec = importlib.util.spec_from_file_location(
         "doc_coverage_module", SCRIPT_DIRECTORY / "doc-coverage.py"
     )
-    assert spec is not None and spec.loader is not None
+    assert spec is not None
+    assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
@@ -277,7 +280,8 @@ def test_missing_cargo_maps_to_measurement_error(
     """An OSError from Cargo exits 2 with a message, not a traceback."""
 
     def fail(argv: list[str], **_kwargs: object) -> FakeResult:
-        raise OSError("cargo: not found")
+        message = "cargo: not found"
+        raise OSError(message)
 
     monkeypatch.setattr(script.subprocess, "run", fail)
     monkeypatch.chdir(tmp_path)
@@ -336,3 +340,74 @@ def test_label_names_libraries_and_binaries(script: types.ModuleType) -> None:
 
     assert script.label(lib) == "netsuke lib"
     assert script.label(binary) == "netsuke bin (netsuke-bin)"
+
+
+def test_rustdoc_args_for_library_target(script: types.ModuleType) -> None:
+    """A library target selects `--lib` and keeps the coverage flags in order."""
+    target = script.DocTarget("netsuke", "lib", None)
+
+    args = script.rustdoc_args(target, "nightly-x")
+
+    assert args == [
+        "cargo",
+        "+nightly-x",
+        "rustdoc",
+        "-p",
+        "netsuke",
+        "--lib",
+        "--",
+        "-Z",
+        "unstable-options",
+        "--show-coverage",
+        "--output-format",
+        "json",
+        "--document-private-items",
+    ]
+
+
+def test_rustdoc_args_for_binary_target(script: types.ModuleType) -> None:
+    """A binary target selects `--bin <name>` after the package selector."""
+    target = script.DocTarget("netsuke", "bin", "netsuke-bin")
+
+    args = script.rustdoc_args(target, "nightly-x")
+
+    assert args == [
+        "cargo",
+        "+nightly-x",
+        "rustdoc",
+        "-p",
+        "netsuke",
+        "--bin",
+        "netsuke-bin",
+        "--",
+        "-Z",
+        "unstable-options",
+        "--show-coverage",
+        "--output-format",
+        "json",
+        "--document-private-items",
+    ]
+
+
+def test_parse_coverage_output_aggregates_multiple_files(
+    script: types.ModuleType,
+) -> None:
+    """Per-file totals and with_docs counts roll up across the payload."""
+    target = script.DocTarget("netsuke", "lib", None)
+    payload = (
+        '{"src/a.rs": {"total": 10, "with_docs": 8}, '
+        '"src/b.rs": {"total": 5, "with_docs": 3}}'
+    )
+
+    coverage = script.parse_coverage_output(target, payload)
+
+    assert coverage.total == 15
+    assert coverage.with_docs == 11
+
+
+def test_parse_coverage_output_rejects_malformed_json(script: types.ModuleType) -> None:
+    """Non-JSON output surfaces as a RuntimeError naming the coverage gate."""
+    target = script.DocTarget("netsuke", "lib", None)
+
+    with pytest.raises(RuntimeError, match="did not emit coverage JSON"):
+        script.parse_coverage_output(target, "not json at all")
