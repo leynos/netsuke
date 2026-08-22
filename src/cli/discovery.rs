@@ -4,9 +4,7 @@
 //! through [`ConfigDiscovery`], handling explicit paths from CLI flags and
 //! environment variables, and loading TOML chains into [`MergeLayer`] values.
 
-use ortho_config::{
-    MapEnv, MergeComposer, MergeLayer, OrthoResult, SharedEnvSource, load_config_file_as_chain,
-};
+use ortho_config::{MapEnv, MergeLayer, OrthoResult, SharedEnvSource, load_config_file_as_chain};
 use std::borrow::Cow;
 use std::ffi::OsString;
 use std::io;
@@ -27,7 +25,12 @@ use diagnostics::{BoundedConfigPath, ConfigLoadFailureKind, ConfigLoadWarning};
 use layers::collect_file_layers_with_trace_and_env_source;
 use trace::{DiscoveryDiagnostics, DiscoveryTrace, FileLayerTrace};
 
+#[path = "discovery_merge_layers.rs"]
+mod merge_layers;
+pub(crate) use merge_layers::push_discovered_file_layers;
+
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG";
+
 const DISCOVERY_ENV_KEYS: [&str; 7] = [
     CONFIG_ENV_VAR,
     "HOME",
@@ -169,22 +172,6 @@ pub(crate) fn discover_file_layers(cli: &Cli, env: &impl EnvProvider) -> Discove
         },
     };
     DiscoveryOutcome { layers }
-}
-
-/// Add a discovered file layer result to a merge composition.
-///
-/// Discovery errors join the merge error collection, retaining the normal
-/// merge path's accumulated-error behaviour.
-pub(crate) fn push_discovered_file_layers(
-    composer: &mut MergeComposer,
-    errors: &mut Vec<Arc<ortho_config::OrthoError>>,
-    discovered: DiscoveredLayers,
-) {
-    let (layers, discovery_errors) = discovered.into_parts();
-    errors.extend(discovery_errors);
-    for layer in layers {
-        composer.push_layer(layer);
-    }
 }
 
 /// Load layers through the shared explicit-config precedence boundary.

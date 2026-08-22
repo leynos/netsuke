@@ -86,30 +86,98 @@ pub fn merge_with_cached_file_layers(
     let mut errors = Vec::new();
     let mut composer = MergeComposer::with_capacity(4);
 
-    match sanitize_value(&CliConfig::default()) {
-        Ok(value) => composer.push_defaults(value),
-        Err(err) => errors.push(err),
-    }
-
+    push_defaults_layer(&mut composer, &mut errors);
     push_discovered_file_layers(&mut composer, &mut errors, discovered);
-
-    match Figment::from(EnvironmentLayer::new(env.entries()))
-        .extract::<Value>()
-        .into_ortho_merge()
-    {
-        Ok(value) => composer.push_environment(value),
-        Err(err) => errors.push(err),
-    }
-
-    match cli_overrides_from_matches(cli, matches) {
-        Ok(value) if !is_empty_value(&value) => composer.push_cli(value),
-        Ok(_) => {}
-        Err(err) => errors.push(err),
-    }
+    push_environment_layer(env, &mut composer, &mut errors);
+    push_cli_layer(cli, matches, &mut composer, &mut errors);
 
     let composition = LayerComposition::new(composer.layers(), errors);
     let merged = composition.into_merge_result(CliConfig::merge_from_layers)?;
     Ok(apply_config(cli, merged))
+}
+
+/// Push the default configuration layer and retain any serialization failure.
+///
+/// This helper belongs only to the cached merge boundary: it must append to the
+/// caller's shared composer and error collection rather than finish a merge.
+fn push_defaults_layer(
+    composer: &mut MergeComposer,
+    errors: &mut Vec<std::sync::Arc<ortho_config::OrthoError>>,
+) {
+    match sanitize_value(&CliConfig::default()) {
+        Ok(value) => {
+            tracing::debug!(layer = "defaults", "applied default configuration layer");
+            composer.push_defaults(value);
+        }
+        Err(err) => {
+            tracing::debug!(layer = "defaults", "default configuration layer failed");
+            errors.push(err);
+        }
+    }
+}
+
+/// Push the injected environment layer and retain extraction failures.
+///
+/// This helper belongs only to the cached merge boundary and never reads the
+/// process environment: callers supply the environment adapter explicitly.
+fn push_environment_layer(
+    env: &impl EnvProvider,
+    composer: &mut MergeComposer,
+    errors: &mut Vec<std::sync::Arc<ortho_config::OrthoError>>,
+) {
+    match Figment::from(EnvironmentLayer::new(env.entries()))
+        .extract::<Value>()
+        .into_ortho_merge()
+    {
+        Ok(value) => {
+            tracing::debug!(
+                layer = "environment",
+                is_empty = is_empty_value(&value),
+                "merged environment configuration layer"
+            );
+            composer.push_environment(value);
+        }
+        Err(err) => {
+            tracing::debug!(
+                layer = "environment",
+                "environment configuration layer failed"
+            );
+            errors.push(err);
+        }
+    }
+}
+
+/// Push explicit CLI overrides and log their keys without recording values.
+///
+/// This helper is limited to the cached merge boundary because only that
+/// boundary owns the shared layer order and accumulated error collection.
+fn push_cli_layer(
+    cli: &Cli,
+    matches: &ArgMatches,
+    composer: &mut MergeComposer,
+    errors: &mut Vec<std::sync::Arc<ortho_config::OrthoError>>,
+) {
+    match cli_overrides_from_matches(cli, matches) {
+        Ok(value) if !is_empty_value(&value) => {
+            // Values may echo user-supplied paths or host lists, so records
+            // identify only the keys that were explicitly overridden.
+            let override_keys = value
+                .as_object()
+                .map(|map| map.keys().cloned().collect::<Vec<_>>())
+                .unwrap_or_default();
+            tracing::debug!(
+                layer = "cli",
+                override_keys = ?override_keys,
+                "applied CLI override layer"
+            );
+            composer.push_cli(value);
+        }
+        Ok(_) => tracing::debug!(layer = "cli", "no explicit CLI overrides supplied"),
+        Err(err) => {
+            tracing::debug!(layer = "cli", "CLI override layer failed");
+            errors.push(err);
+        }
+    }
 }
 
 fn is_empty_value(value: &Value) -> bool {
