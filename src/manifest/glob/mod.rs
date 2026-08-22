@@ -280,13 +280,17 @@ pub(super) fn expand_glob(
 
     let pattern_state = GlobPattern::new(pattern)?;
     let normalized = pattern_state.normalized();
-    let (search, strip) = match base.filter(|_| !Path::new(normalized).is_absolute()) {
-        Some(dir) => (
-            dir.join(normalized).to_string_lossy().into_owned(),
-            Some(dir.to_path_buf()),
-        ),
-        None => (normalized.to_owned(), None),
-    };
+    let (search, strip) = base
+        .filter(|_| !Path::new(normalized).is_absolute())
+        .map_or_else(
+            || (normalized.to_owned(), None),
+            |dir| {
+                (
+                    dir.join(normalized).to_string_lossy().into_owned(),
+                    Some(dir.to_path_buf()),
+                )
+            },
+        );
     let entries = glob_with(&search, opts).map_err(|e| {
         create_glob_error(
             &GlobErrorContext {

@@ -59,7 +59,7 @@ fn parent_relative_pattern_expands(temp_dir: tempfile::TempDir) -> Result<()> {
     test_support::fs::create_dir(&sub)?;
     test_support::fs::write(temp_dir.path().join("out.txt"), "out")?;
     let manifest_path = sub.join("Netsukefile");
-    test_support::fs::write(&manifest_path, &glob_manifest("../*.txt"))?;
+    test_support::fs::write(&manifest_path, glob_manifest("../*.txt"))?;
 
     let manifest = netsuke::manifest::from_path(&manifest_path)?;
     ensure!(
