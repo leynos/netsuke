@@ -1,18 +1,19 @@
-//! Request-level stream-routing tests with deliberately mismatched requests.
+//! Request-level stream-routing tests with explicit policies.
 //!
-//! The process layer must honour the request's explicit `stderr_mode` field
-//! rather than whatever `cli.json` happens to say. The routing happens on real
-//! child streams, so the worker runs in a dedicated subprocess whose stdout
-//! and stderr the parent captures: the worker builds a request whose
-//! `cli.json` contradicts its `stderr_mode`, runs a marker-emitting fake
-//! Ninja, and the parent asserts where the markers landed.
+//! The process layer routes the child's stdout and stderr by the request's
+//! explicit `stderr_mode` field alone. Converting CLI state into a policy
+//! (`StderrMode::from_json_enabled`) happens upstream of these request types
+//! and never reaches this layer. The routing happens on real child streams, so
+//! the worker runs in a dedicated subprocess whose stdout and stderr the parent
+//! captures: the worker builds a request carrying a fixed `stderr_mode`, runs a
+//! marker-emitting fake Ninja, and the parent asserts where the markers landed.
+#![cfg(unix)]
 
 use anyhow::{Context, Result, bail, ensure};
 use mockable::{DefaultEnv, Env};
-use netsuke::cli::Cli;
 use netsuke::runner::{
-    BuildTargets, CommandEnv, NinjaBuildRequest, NinjaToolRequest, StderrMode, run_ninja_tool_with,
-    run_ninja_with,
+    BuildTargets, CommandEnv, NinjaBuildRequest, NinjaProcessOptions, NinjaToolRequest, StderrMode,
+    run_ninja_tool_with, run_ninja_with,
 };
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -36,7 +37,6 @@ const STDERR_MARKER: &str = "NETSUKE_ROUTING_STDERR_MARKER";
 /// the shell script. The run-marker file is written directly by the child,
 /// independent of any stream routing; it proves a suppression assertion
 /// observed output *because the child ran*, not because it never spawned.
-#[cfg(unix)]
 fn marker_emitting_ninja() -> Result<(TempDir, PathBuf)> {
     let dir = tempdir().context("create fake-ninja directory")?;
     let script = format!(
@@ -49,7 +49,6 @@ fn marker_emitting_ninja() -> Result<(TempDir, PathBuf)> {
 }
 
 /// Spawn the routing worker (this test binary) and capture its output.
-#[cfg(unix)]
 fn run_routing_worker(job: &str, tool: bool, ninja: &Path, ran_file: &Path) -> Result<Command> {
     let mut command = Command::new(std::env::current_exe().context("locate test binary")?);
     command
@@ -66,10 +65,9 @@ fn run_routing_worker(job: &str, tool: bool, ninja: &Path, ran_file: &Path) -> R
 /// Execute one request-level routing case selected by `stderr_mode` and the
 /// request path (`tool` selects the `ninja -t` request).
 ///
-/// The request's `cli.json` deliberately contradicts `stderr_mode` (see the
-/// `routing_worker` description), so the marker assertions prove the process
-/// layer routes child streams by the explicit policy, not by the JSON setting.
-#[cfg(unix)]
+/// The request carries the explicit policy, so the marker assertions prove the
+/// process layer routes child streams by the request field and never consults
+/// CLI state to derive it.
 fn assert_routing_case(stderr_mode: StderrMode, tool: bool) -> Result<()> {
     let job = match stderr_mode {
         StderrMode::Forward => "forward",
@@ -80,7 +78,6 @@ fn assert_routing_case(stderr_mode: StderrMode, tool: bool) -> Result<()> {
     } else {
         "build request"
     };
-    let json = matches!(stderr_mode, StderrMode::Forward);
 
     let ran_dir = tempdir().context("create run-marker directory")?;
     let ran_file = ran_dir.path().join("ran");
@@ -100,35 +97,31 @@ fn assert_routing_case(stderr_mode: StderrMode, tool: bool) -> Result<()> {
         StderrMode::Forward => {
             ensure!(
                 stdout.contains(STDOUT_MARKER),
-                "{path_label} with StderrMode::Forward should forward child stdout despite \
-                 cli.json={json}, got: {stdout}"
+                "{path_label} with StderrMode::Forward should forward child stdout, got: {stdout}"
             );
             ensure!(
                 stderr.contains(STDERR_MARKER),
-                "{path_label} with StderrMode::Forward should forward child stderr despite \
-                 cli.json={json}, got: {stderr}"
+                "{path_label} with StderrMode::Forward should forward child stderr, got: {stderr}"
             );
         }
         StderrMode::Suppress => {
             ensure!(ran_file.exists(), "fake Ninja should have run");
             ensure!(
                 !stdout.contains(STDOUT_MARKER) && !stdout.contains(STDERR_MARKER),
-                "{path_label} with StderrMode::Suppress should drain child stdout despite \
-                 cli.json={json}, got: {stdout}"
+                "{path_label} with StderrMode::Suppress should drain child stdout, got: {stdout}"
             );
             ensure!(
                 !stderr.contains(STDOUT_MARKER) && !stderr.contains(STDERR_MARKER),
-                "{path_label} with StderrMode::Suppress should drain child stderr despite \
-                 cli.json={json}, got: {stderr}"
+                "{path_label} with StderrMode::Suppress should drain child stderr, got: {stderr}"
             );
         }
     }
     Ok(())
 }
 
-/// A request whose `cli.json` and `stderr_mode` deliberately disagree: the
-/// process layer must route streams by the explicit policy, not by `cli.json`.
-#[cfg(unix)]
+/// Worker body: build a request carrying the explicit `stderr_mode` selected
+/// by the parent, run it against the fake Ninja, and let the parent assert the
+/// stream routing from the captured child markers.
 #[test]
 #[ignore = "invoked as a stream-routing worker"]
 fn routing_worker() -> Result<()> {
@@ -145,18 +138,13 @@ fn routing_worker() -> Result<()> {
         "suppress" => StderrMode::Suppress,
         other => bail!("unknown routing job {other:?}"),
     };
-    // The JSON flag contradicts `stderr_mode` so routing can only come from
-    // the explicit policy field, not from the CLI JSON setting.
-    let cli = Cli {
-        json: !stderr_mode.is_suppress(),
-        ..Cli::default()
-    };
+    let options = NinjaProcessOptions::default();
     let targets = BuildTargets::default();
     let env = CommandEnv::inherit();
     let result = if tool {
         run_ninja_tool_with(&NinjaToolRequest {
             program: &ninja,
-            cli: &cli,
+            options: &options,
             build_file: Path::new("build.ninja"),
             tool: "clean",
             env: &env,
@@ -165,7 +153,7 @@ fn routing_worker() -> Result<()> {
     } else {
         run_ninja_with(&NinjaBuildRequest {
             program: &ninja,
-            cli: &cli,
+            options: &options,
             build_file: Path::new("build.ninja"),
             targets: &targets,
             env: &env,
@@ -175,36 +163,30 @@ fn routing_worker() -> Result<()> {
     result.context("run Ninja invocation in routing worker")
 }
 
-/// cli.json=true with `stderr_mode=Forward` on a build request: the child
-/// markers must reach the user's stdout and stderr, proving routing ignores
-/// the JSON setting.
-#[cfg(unix)]
+/// A build request carrying `stderr_mode=Forward`: the child markers must
+/// reach the user's stdout and stderr.
 #[test]
-fn forward_request_routes_child_streams_despite_json_cli() -> Result<()> {
+fn forward_request_routes_child_streams() -> Result<()> {
     assert_routing_case(StderrMode::Forward, false)
 }
 
-/// cli.json=true with `stderr_mode=Forward` on the tool request: the child
-/// markers must reach the user, proving the tool path also ignores cli.json.
-#[cfg(unix)]
+/// A tool request carrying `stderr_mode=Forward`: the child markers must
+/// reach the user's stdout and stderr.
 #[test]
-fn forward_tool_request_routes_child_streams_despite_json_cli() -> Result<()> {
+fn forward_tool_request_routes_child_streams() -> Result<()> {
     assert_routing_case(StderrMode::Forward, true)
 }
 
-/// cli.json=false with `stderr_mode=Suppress` on a build request: both child
-/// markers must be drained even though the human CLI would otherwise forward
-/// them, and the run marker proves the child really executed.
-#[cfg(unix)]
+/// A build request carrying `stderr_mode=Suppress`: both child markers must be
+/// drained, and the run marker proves the child really executed.
 #[test]
-fn suppress_request_drains_child_streams_despite_human_cli() -> Result<()> {
+fn suppress_request_drains_child_streams() -> Result<()> {
     assert_routing_case(StderrMode::Suppress, false)
 }
 
-/// cli.json=false with `stderr_mode=Suppress` on the tool request: both child
-/// markers must be drained, with the run marker proving the child executed.
-#[cfg(unix)]
+/// A tool request carrying `stderr_mode=Suppress`: both child markers must be
+/// drained, with the run marker proving the child executed.
 #[test]
-fn suppress_tool_request_drains_child_streams_despite_human_cli() -> Result<()> {
+fn suppress_tool_request_drains_child_streams() -> Result<()> {
     assert_routing_case(StderrMode::Suppress, true)
 }

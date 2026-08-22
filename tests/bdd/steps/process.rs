@@ -2,7 +2,7 @@
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use anyhow::{Context, Result, anyhow, ensure};
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use mockable::{DefaultEnv, Env};
 use netsuke::output_prefs;
 use netsuke::runner::{self, BuildTargets, CommandEnv, NINJA_PROGRAM};
@@ -273,9 +273,26 @@ fn run(world: &TestWorld) -> Result<()> {
     let result = world
         .cli
         .with_ref(|cli| {
+            let working_dir = cli
+                .directory
+                .clone()
+                .map(Utf8PathBuf::from_path_buf)
+                .transpose()
+                .map_err(|path| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "CLI working directory {} is not valid UTF-8",
+                            path.display()
+                        ),
+                    )
+                })?;
             runner::run_ninja_with(&runner::NinjaBuildRequest {
                 program,
-                cli,
+                options: &runner::NinjaProcessOptions {
+                    working_dir,
+                    jobs: cli.jobs.map(runner::NinjaJobCount::try_new).transpose()?,
+                },
                 build_file: Path::new("build.ninja"),
                 targets: &targets,
                 env: &world.command_env.borrow(),

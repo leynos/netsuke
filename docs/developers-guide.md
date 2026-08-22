@@ -33,8 +33,10 @@ The public Ninja process helpers are re-exported from `netsuke::runner`.
 `CommandEnv::inherit()` leaves the parent environment in place,
 `with_var` overrides one variable, and `with_path` replaces the child's
 `PATH`. The parent process is never mutated. `NinjaBuildRequest` and
-`NinjaToolRequest` borrow the program, CLI settings, generated build file,
-target list or tool name, and `CommandEnv` needed for one invocation.
+`NinjaToolRequest` borrow the program, `NinjaProcessOptions` (`working_dir` and
+`jobs`), generated build file, target list or tool name, and `CommandEnv`
+needed for one invocation. The process boundary is parser-independent; callers
+without CLI state construct `NinjaProcessOptions` directly.
 
 The legacy `run_ninja` and `run_ninja_tool` helpers retain their existing
 signatures and inherit the parent environment. Callers that need an isolated
@@ -3486,6 +3488,13 @@ selected source at debug level. Process construction uses the resolved path
 exported by this module and must not interpret the environment override
 independently.
 
+`src/runner/ninja_process_adapter.rs` owns the one-way translation from `Cli`
+to `NinjaProcessOptions` and the public CLI-facing wrappers. It converts
+`Cli::directory` to the options' UTF-8 `working_dir`, returning
+`io::ErrorKind::InvalidData` for a non-UTF-8 path. The process module remains
+parser-independent; callers without CLI state construct `NinjaProcessOptions`
+directly.
+
 ### Module: `runner::process::command_logging`
 
 `src/runner/process/command_logging.rs` owns the structured logging contract
@@ -3502,7 +3511,9 @@ high-cardinality payload to a debug companion event.
 
 All command events share these structured fields:
 
-- `operation`: caller-provided operation label such as `"build"` or tool name.
+- `operation`: `run_ninja_build_internal` supplies the fixed label `"build"`
+  before command configuration, while `run_ninja_tool_internal` supplies the
+  label from `NinjaToolRequest::tool`.
 - `ninja_program`: command program after UTF-8 normalization.
 - `suppress_stderr`: bool derived from the `StderrMode` policy via
   `stderr_mode.is_suppress()`, true when the policy suppresses direct
@@ -3524,12 +3535,13 @@ exits, which lets downstream filtering distinguish spawn failures from
 exit-status failures.
 
 `run_ninja_internal` is the shared execution pattern used by build and tool
-paths:
+paths. It takes a `NinjaInternalRequest`, a clock, and a configuration closure;
+the request groups the execution fields:
 
 1. Create `Command` with `Command::new(request.program)`.
 2. Pass it into a closure that applies operation-specific configuration.
-3. Call `run_command_and_stream_with_context` with optional status observer,
-   the request's `stderr_mode` policy, and the chosen `operation`.
+3. Call `run_command_and_stream_with_context` with the request's optional
+   status observer and execution context.
 4. Let `run_command_and_stream_with_context` handle span creation, execution
    logging, failure logging, and exit-status enforcement via context helpers.
 
@@ -3642,11 +3654,11 @@ governs is the environment Ninja's own child commands see when it shells out.
 
 The explicit request APIs compose on top of `CommandEnv`: `NinjaBuildRequest`/
 `NinjaToolRequest` carry `env: &CommandEnv` and `stderr_mode: StderrMode`
-fields alongside the program, CLI settings, and build file, and are consumed
-by `run_ninja_with`/`run_ninja_tool_with`. The convenience wrappers
-`run_ninja`/`run_ninja_tool` live at the runner boundary
-(`src/runner/mod.rs`), call these with `CommandEnv::inherit()`, and derive the
-`stderr_mode` policy from the CLI via
+fields alongside the program, `NinjaProcessOptions`, and build file, and are
+consumed by `run_ninja_with`/`run_ninja_tool_with`. The convenience wrappers
+`run_ninja`/`run_ninja_tool` live in `src/runner/ninja_process_adapter.rs`,
+call these with `CommandEnv::inherit()`, and derive the `stderr_mode` policy
+from the CLI via
 `StderrMode::from_json_enabled(cli.json)`, reproducing production behaviour;
 tests reach for `run_ninja_with`/`run_ninja_tool_with` directly to supply a
 `CommandEnv` built with `with_path` instead. Section 6.1 of the

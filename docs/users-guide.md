@@ -687,21 +687,21 @@ stay isolated from the injected `PATH`.
 
 The request itself is a named type: `netsuke::runner::NinjaBuildRequest` for a
 build and `netsuke::runner::NinjaToolRequest` for `ninja -t <tool>`. Both
-borrow their fields, so one `CommandEnv` and one `Cli` can serve several
+borrow their fields, so one `CommandEnv` and one `NinjaProcessOptions` can
+serve several
 invocations. The [v0.1.0 migration guide](v0-1-0-migration-guide.md)
 summarizes these additions and confirms the wrappers are unchanged.
 
 <!-- tested-example: guide-ninja-request-snippet -->
 
 ```rust
-use netsuke::cli::Cli;
 use netsuke::runner::{
-    BuildTargets, CommandEnv, NinjaBuildRequest, NinjaToolRequest, StderrMode, run_ninja_tool_with,
-    run_ninja_with,
+    BuildTargets, CommandEnv, NinjaBuildRequest, NinjaProcessOptions, NinjaToolRequest,
+    StderrMode, run_ninja_tool_with, run_ninja_with,
 };
 use std::path::Path;
 
-let cli = Cli::default();
+let options = NinjaProcessOptions::default();
 let targets = BuildTargets::default();
 // `with_path` replaces the child's `PATH` outright, so compose the whole
 // value first. The calling process is never modified.
@@ -713,21 +713,21 @@ let env = CommandEnv::inherit()
 
 let build = NinjaBuildRequest {
     program: Path::new("/usr/bin/ninja"),
-    cli: &cli,
+    options: &options,
     build_file: Path::new("build.ninja"),
     targets: &targets,
     env: &env,
     // `Suppress` in JSON diagnostics mode keeps the child's output out of
     // the machine-readable streams; `Forward` relays it to the caller.
-    stderr_mode: StderrMode::from_json_enabled(cli.json),
+    stderr_mode: StderrMode::Forward,
 };
 let clean = NinjaToolRequest {
     program: Path::new("/usr/bin/ninja"),
-    cli: &cli,
+    options: &options,
     build_file: Path::new("build.ninja"),
     tool: "clean",
     env: &env,
-    stderr_mode: StderrMode::from_json_enabled(cli.json),
+    stderr_mode: StderrMode::Forward,
 };
 
 if std::env::var_os("NETSUKE_GUIDE_RUN").is_some() {
@@ -738,8 +738,9 @@ if std::env::var_os("NETSUKE_GUIDE_RUN").is_some() {
 
 The convenience wrappers `run_ninja` and `run_ninja_tool` keep their existing
 signatures and behaviour, so a caller that uses them needs no change; the
-request bundles gained the required `stderr_mode` field, so a caller that
-constructs `NinjaBuildRequest`/`NinjaToolRequest` directly must supply it.
+request bundles use `options: &options` instead of `cli: &cli` and gained the
+required `stderr_mode` field, so a caller that constructs
+`NinjaBuildRequest`/`NinjaToolRequest` directly must supply both.
 Each release records such additions in [`CHANGELOG.md`](../CHANGELOG.md),
 which is where Netsuke signposts Rust API changes — with no stability promise
 attached to them ahead of 1.0.

@@ -4,17 +4,26 @@
 //! 400-line ceiling. These are data, not behaviour: the request types describe
 //! what an invocation needs; `mod` holds the functions that act on them.
 
-use super::{BuildTargets, CommandEnv, StderrMode};
-use crate::cli::Cli;
+use super::{BuildTargets, CommandEnv, NinjaJobCount, StderrMode};
+use camino::Utf8PathBuf;
 use std::path::Path;
+
+/// Process settings needed to configure a Ninja invocation.
+#[derive(Debug, Clone, Default)]
+pub struct NinjaProcessOptions {
+    /// Optional UTF-8 working directory passed to the child process.
+    pub working_dir: Option<Utf8PathBuf>,
+    /// Optional maximum number of parallel Ninja jobs.
+    pub jobs: Option<NinjaJobCount>,
+}
 
 /// Borrowed parameter bundle for `ninja` build execution helpers.
 #[derive(Clone, Copy)]
 pub struct NinjaBuildRequest<'a> {
     /// Ninja executable to invoke.
     pub program: &'a Path,
-    /// Parsed CLI settings supplying the working directory and job count.
-    pub cli: &'a Cli,
+    /// Process settings supplying the working directory and job count.
+    pub options: &'a NinjaProcessOptions,
     /// Generated build file passed with `-f`.
     pub build_file: &'a Path,
     /// Targets appended after the base flags.
@@ -32,8 +41,8 @@ pub struct NinjaBuildRequest<'a> {
 pub struct NinjaToolRequest<'a> {
     /// Ninja executable to invoke.
     pub program: &'a Path,
-    /// Parsed CLI settings.
-    pub cli: &'a Cli,
+    /// Process settings supplying the working directory and job count.
+    pub options: &'a NinjaProcessOptions,
     /// Generated build file passed with `-f`.
     pub build_file: &'a Path,
     /// Tool name passed to `ninja -t`.

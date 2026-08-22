@@ -8,9 +8,6 @@ mod dyndep_generation_telemetry;
 mod dyndep_publication;
 mod error;
 mod reporter;
-
-pub use error::RunnerError;
-
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::localization::{self, keys};
 use crate::output_mode;
@@ -19,8 +16,9 @@ use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipel
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
+pub use error::RunnerError;
 use std::borrow::Cow;
-use std::io::{self, IsTerminal};
+use std::io::IsTerminal;
 use std::path::Path;
 use tracing::{debug, info};
 
@@ -42,14 +40,16 @@ pub const NINJA_ENV: &str = "NETSUKE_NINJA";
 mod graph;
 mod help;
 mod ninja_content;
+mod ninja_process_adapter;
 mod path_helpers;
 mod process;
 pub use ninja_content::NinjaContent;
+pub use ninja_process_adapter::{run_ninja, run_ninja_tool};
 #[cfg(doctest)]
 pub use process::doc;
 pub use process::{
-    CommandEnv, MAX_RETAINED_DYNDEP_FILES, NinjaBuildRequest, NinjaToolRequest, StderrMode,
-    run_ninja_tool_with, run_ninja_with,
+    CommandEnv, MAX_RETAINED_DYNDEP_FILES, NinjaBuildRequest, NinjaJobCount, NinjaProcessOptions,
+    NinjaToolRequest, StderrMode, run_ninja_tool_with, run_ninja_with,
 };
 
 use dyndep_publication::{materialize_dyndep_bundle, prune_dyndep_bundle};
@@ -144,56 +144,6 @@ fn run_with_ninja_program_resolver(
     dispatch::execute(cli, command, &context)
 }
 
-/// Invoke the Ninja executable with the provided CLI settings.
-///
-/// Forwards the job count and working directory and specifies the temporary
-/// build file. Child output follows the `stderr_mode` policy derived from the
-/// CLI's JSON diagnostic setting: `StderrMode::Suppress` drains both child
-/// streams to a sink so JSON output stays machine-readable, while
-/// `StderrMode::Forward` relays them to the user.
-///
-/// # Errors
-///
-/// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
-/// streams are unavailable, or when Ninja reports a non-zero exit status.
-pub fn run_ninja(
-    program: &Path,
-    cli: &Cli,
-    build_file: &Path,
-    targets: &BuildTargets<'_>,
-) -> io::Result<()> {
-    run_ninja_with(&NinjaBuildRequest {
-        program,
-        cli,
-        build_file,
-        targets,
-        env: &CommandEnv::inherit(),
-        stderr_mode: StderrMode::from_json_enabled(cli.json),
-    })
-}
-
-/// Invoke a Ninja tool (e.g., `ninja -t clean`) with the provided CLI settings.
-///
-/// Forwards the job count and working directory and specifies the build file.
-/// Child output follows the `stderr_mode` policy derived from the CLI's JSON
-/// diagnostic setting: `StderrMode::Suppress` drains both child streams to a
-/// sink, while `StderrMode::Forward` relays them to the user.
-///
-/// # Errors
-///
-/// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
-/// streams are unavailable, or when Ninja reports a non-zero exit status.
-pub fn run_ninja_tool(program: &Path, cli: &Cli, build_file: &Path, tool: &str) -> io::Result<()> {
-    run_ninja_tool_with(&NinjaToolRequest {
-        program,
-        cli,
-        build_file,
-        tool,
-        env: &CommandEnv::inherit(),
-        stderr_mode: StderrMode::from_json_enabled(cli.json),
-    })
-}
-
 fn on_task_progress_callback(reporter: &dyn StatusReporter) -> impl FnMut(u32, u32, &str) + '_ {
     move |current: u32, total: u32, description: &str| {
         reporter.report_task_progress(current, total, description);
@@ -227,11 +177,12 @@ fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> 
         )
     };
     if context.progress_enabled {
+        let options = ninja_process_adapter::ninja_process_options(cli)?;
         let mut on_task_progress = on_task_progress_callback(context.reporter);
         process::run_ninja_with_status(
             process::NinjaBuildRequest {
                 program: context.ninja_program,
-                cli,
+                options: &options,
                 build_file: build_path,
                 targets: &targets,
                 env: &CommandEnv::inherit(),
@@ -290,11 +241,12 @@ fn handle_ninja_tool(
         )
     };
     if context.progress_enabled {
+        let options = ninja_process_adapter::ninja_process_options(cli)?;
         let mut on_task_progress = on_task_progress_callback(context.reporter);
         process::run_ninja_tool_with_status(
             process::NinjaToolRequest {
                 program: context.ninja_program,
-                cli,
+                options: &options,
                 build_file: build_path,
                 tool: tool.name,
                 env: &CommandEnv::inherit(),
