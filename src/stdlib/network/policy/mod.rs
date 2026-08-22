@@ -143,7 +143,10 @@ impl NetworkPolicy {
     }
 
     /// Extend the host allowlist with pre-parsed patterns, enabling default-deny.
-    /// Errors when the resulting allowlist would be empty.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the resulting allowlist would be empty.
     fn extend_allowed_hosts<I>(mut self, patterns_iter: I) -> Result<Self, NetworkPolicyConfigError>
     where
         I: IntoIterator<Item = HostPattern>,

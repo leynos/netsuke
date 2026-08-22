@@ -10,7 +10,7 @@
 //! Traversal state is owned by the private [`CycleDetector`] struct in the
 //! sibling `cycle_detector` module; the iteration walks every node in the
 //! target map and delegates depth-first visiting to the detector.  Detected
-//! cycles are normalized by [`canonicalize_cycle`] to produce deterministic
+//! cycles are normalized by [`support::canonicalize_cycle`] to produce deterministic
 //! error messages regardless of traversal order.  Consumed by
 //! [`super::from_manifest`] after the full target map is constructed.
 

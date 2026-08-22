@@ -27,8 +27,8 @@ pub(super) enum VisitState {
 /// The mode a detection pass runs in.
 #[derive(Clone, Copy, Debug)]
 pub(super) enum CycleSearch {
-    #[cfg(kani)]
     /// Lightweight presence probing that avoids allocating cycle paths.
+    #[cfg(kani)]
     Presence,
     /// Full enumeration that materializes a cycle path on a back-edge.
     Path,
@@ -39,8 +39,8 @@ pub(super) enum CycleSearch {
 pub(super) enum CycleVisitResult {
     /// No cycle was found below this node.
     None,
-    #[cfg(kani)]
     /// A cycle exists, without its path.
+    #[cfg(kani)]
     Present,
     /// A cycle path, in canonical order with the start repeated last.
     Path(Vec<Utf8PathBuf>),

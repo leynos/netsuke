@@ -45,7 +45,8 @@ pub(super) fn execute_help(
     }
 }
 
-/// Run the build through Ninja and emit its successful JSON result.
+/// Run the build through Ninja and emit its successful JSON result when
+/// `cli.json` is enabled.
 ///
 /// # Errors
 ///

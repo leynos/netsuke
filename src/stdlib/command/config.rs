@@ -109,7 +109,7 @@ impl CommandConfig {
     }
 }
 
-/// Sanitise a label into a filesystem-safe tempfile prefix, replacing
+/// Sanitize a label into a filesystem-safe tempfile prefix, replacing
 /// disallowed characters with `-` and falling back to `t` when empty.
 fn sanitize_label(label: &str) -> String {
     let mut sanitized = String::with_capacity(label.len());

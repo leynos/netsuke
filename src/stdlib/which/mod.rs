@@ -66,7 +66,7 @@ impl WhichConfig {
     ///
     /// Kept off [`Self::new`] because the override is rare: only callers that
     /// deliberately pin the extension list supply one, and every other call
-    /// site would otherwize pass `None`.
+    /// site would otherwise pass `None`.
     #[must_use]
     pub(crate) fn with_pathext_override(mut self, pathext: Option<OsString>) -> Self {
         self.pathext_override = pathext;

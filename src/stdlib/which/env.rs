@@ -160,6 +160,7 @@ impl EnvSnapshot {
     }
 
     /// Capture a snapshot on platforms without `PATHEXT` semantics.
+    /// # Errors: returns a [`ResolveError`] when the working directory, `PATH`, or directory entries cannot be read.
     #[cfg(not(windows))]
     fn capture_impl(
         cwd_override: Option<&Utf8Path>,
@@ -178,6 +179,7 @@ impl EnvSnapshot {
     }
 
     /// Capture a snapshot on Windows, including the parsed extension list.
+    /// # Errors: returns a [`ResolveError`] when the working directory, `PATH`, directory entries, or Windows candidate paths cannot be read or derived.
     #[cfg(windows)]
     fn capture_impl(
         cwd_override: Option<&Utf8Path>,
@@ -259,6 +261,7 @@ impl EnvSnapshot {
 }
 
 /// Read the working directory, `PATH`, and directory entries shared by all snapshots.
+/// # Errors: returns a [`ResolveError`] when the working directory cannot be resolved, the `PATH` values cannot be read or parsed, or a directory cannot be read.
 fn capture_common(
     cwd_override: Option<&Utf8Path>,
     path_override: Option<&OsStr>,
@@ -374,6 +377,7 @@ pub(super) fn parse_pathext(raw: Option<&OsStr>) -> Vec<String> {
 }
 
 /// Read the current directory as a UTF-8 path, failing when it is not.
+/// # Errors: returns a [`ResolveError`] when the current directory cannot be read or is not valid UTF-8.
 pub(super) fn current_dir_utf8() -> Result<Utf8PathBuf, ResolveError> {
     let cwd = std::env::current_dir().map_err(|source| ResolveError::CwdResolve { source })?;
     Utf8PathBuf::from_path_buf(cwd).map_err(|_| ResolveError::CwdNonUtf8)

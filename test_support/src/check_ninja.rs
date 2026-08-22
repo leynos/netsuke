@@ -24,7 +24,7 @@ impl ToolName {
     }
 }
 
-/// Compile-time sample tool name exercized by the assertion below.
+/// Compile-time sample tool name exercised by the assertion below.
 const COMPILE_TIME_TOOL_NAME: ToolName = ToolName::new("compdb");
 /// String form of the sample tool name, computed at compile time.
 const COMPILE_TIME_TOOL_NAME_TEXT: &str = COMPILE_TIME_TOOL_NAME.as_str();
@@ -141,7 +141,7 @@ pub(crate) fn fake_ninja_check_build_file_in(
 /// Create a fake Ninja that validates the build file path provided via `-f`.
 ///
 /// The script exits with status `1` if the file is missing or not a regular
-/// file, otherwize `0`.
+/// file, otherwise `0`.
 ///
 /// # Errors
 ///
@@ -180,7 +180,7 @@ pub fn fake_ninja_check_build_file() -> Result<(TempDir, PathBuf)> {
 /// Create a fake Ninja that validates `-t <tool>` was invoked with the expected tool name.
 ///
 /// The script scans command-line arguments for `-t <tool>` and exits with status `0`
-/// if the expected tool is found, otherwize `1`. It also validates that `-f <file>`
+/// if the expected tool is found, otherwise `1`. It also validates that `-f <file>`
 /// is present.
 ///
 /// # Arguments
@@ -314,7 +314,7 @@ fn build_tool_validation_script(
 ///
 /// The script scans command-line arguments for `-t <tool>`, `-f <file>`, and
 /// optionally `-j <jobs>` and `-C <directory>`. It exits with status `0` if all
-/// expected arguments are found, otherwize `1`.
+/// expected arguments are found, otherwise `1`.
 ///
 /// # Arguments
 ///

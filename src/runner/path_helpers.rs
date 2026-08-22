@@ -75,11 +75,13 @@ pub(super) fn resolve_output_path<'a>(cli: &Cli, path: &'a Path) -> Cow<'a, Path
     }
 }
 
-/// Verify the selected manifest exists, reporting the ingestion stage on failure.
+/// Verify the selected manifest exists, reporting `PipelineStage::ManifestIngestion`
+/// when the manifest is not found.
 ///
 /// # Errors
 ///
-/// Returns an error when the manifest cannot be inspected or does not exist.
+/// Returns an error when the manifest cannot be read or does not exist; the
+/// ingestion stage is reported only for a not-found manifest.
 pub(super) fn ensure_manifest_exists_or_error(
     cli: &Cli,
     reporter: &dyn StatusReporter,

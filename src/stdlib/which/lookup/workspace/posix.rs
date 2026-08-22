@@ -10,7 +10,14 @@ use super::{
 };
 use crate::stdlib::which::{env::EnvSnapshot, resolve_error::ResolveError};
 
-/// Walk the working directory tree collecting up to all executable matches.
+/// Walk the working directory tree collecting executable matches, stopping
+/// at the first match in first-match mode (`collect_all` is false) or
+/// collecting every match in collect-all mode.
+///
+/// # Errors
+///
+/// Returns a [`ResolveError`] when directory traversal or an executable-probe
+/// fails.
 pub(super) fn search_workspace(
     env: &EnvSnapshot,
     command: &str,
@@ -30,6 +37,11 @@ pub(super) fn search_workspace(
 }
 
 /// Collect matching executables from a sequential walkdir iterator.
+///
+/// # Errors
+///
+/// Returns a [`ResolveError`] when a walkdir iteration fails or an entry
+/// cannot be probed for executability.
 fn collect_matching_executables(
     walker: impl Iterator<Item = Result<walkdir::DirEntry, walkdir::Error>>,
     command: &str,
@@ -53,6 +65,11 @@ fn collect_matching_executables(
 }
 
 /// Inspect one walkdir entry, returning its path when it matches `command` and is executable.
+///
+/// # Errors
+///
+/// Returns a [`ResolveError`] when the entry path is not valid UTF-8 or the
+/// executability probe fails.
 fn process_workspace_entry(
     entry: walkdir::DirEntry,
     command: &str,

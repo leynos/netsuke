@@ -94,8 +94,9 @@ pub fn write_text_file_utf8(dir: &cap_fs::Dir, path: &Utf8Path, content: &str) -
 ///
 /// # Errors
 ///
-/// Returns an error when `path` is not valid UTF-8 or no ancestor directory
-/// can be opened.
+/// Returns an error when the current directory (for a relative path) or no
+/// pre-existing ancestor directory (for an absolute path) can be opened, or
+/// when the relative remainder cannot be derived from the selected base.
 fn derive_dir_and_relative(path: &Utf8Path) -> AnyResult<(cap_fs::Dir, Utf8PathBuf)> {
     if path.is_relative() {
         let dir = cap_fs::Dir::open_ambient_dir(".", ambient_authority())

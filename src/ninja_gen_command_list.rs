@@ -237,7 +237,6 @@ impl ShellWords {
         self.background_job_count_at_depth(0)
     }
 
-    /// Count background jobs nested below the current `eval` depth.
     /// Count background jobs reachable at `depth`, recursing into static `eval` payloads.
     fn background_job_count_at_depth(&self, depth: usize) -> Result<usize, UnanalyzableEval> {
         self.0
@@ -252,7 +251,6 @@ impl ShellWords {
             })
     }
 
-    /// Count background jobs spawned by the `eval` at `index`, to `depth`.
     /// Count background jobs in the static payload of the `eval` at `index`.
     fn background_jobs_from_eval(
         &self,

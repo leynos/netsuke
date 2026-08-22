@@ -26,7 +26,7 @@ pub(crate) use workspace::{WORKSPACE_SKIP_DIRS, WorkspaceSkipList};
 /// PATH, optionally canonicalizing or collecting all matches.
 ///
 /// When `options.all` is `true`, every executable candidate is returned;
-/// otherwize resolution stops at the first match. The current working directory
+/// otherwise resolution stops at the first match. The current working directory
 /// is injected according to `options.cwd_mode`. Results are canonicalized when
 /// requested, and cache-friendly options (such as `fresh`) are respected
 /// upstream by the resolver.
@@ -156,7 +156,7 @@ fn direct_candidates(resolved: &Utf8PathBuf, env: &EnvSnapshot) -> Vec<Utf8PathB
 ///
 /// Returns `true` when at least one candidate was added and `collect_all` is
 /// `false`, signalling to callers that the search can stop; returns `false`
-/// otherwize.
+/// otherwise.
 ///
 /// # Errors
 ///
@@ -253,7 +253,8 @@ struct HandleMissContext<'a> {
     workspace_skips: &'a WorkspaceSkipList,
 }
 
-/// Handle a PATH-search miss, falling back to a workspace search when `PATH` is empty.
+/// Handle a PATH-search miss, falling back to a workspace search only when
+/// `PATH` is empty and `ctx.options.cwd_mode` is not [`CwdMode::Never`].
 fn handle_miss(ctx: HandleMissContext<'_>) -> Result<Vec<Utf8PathBuf>, ResolveError> {
     let path_empty = ctx.env.raw_path.as_ref().is_none_or(|path| path.is_empty());
 
