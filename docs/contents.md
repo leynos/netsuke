@@ -75,6 +75,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-014](adr-014-backend-text-escaping-seam.md):
   Ninja backend escaping boundary decision record, preserving ordinary shell
   dollar syntax in manifests without coupling the IR to Ninja.
+- [ADR-015](adr-015-use-bounded-git-cli-for-change-detection.md):
+  Feature-private, bounded Git CLI queries for standard-library change
+  detection.
 
 ## Proposals
 
