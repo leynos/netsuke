@@ -11,10 +11,13 @@ DOC_COVERAGE_TOOLCHAIN ?= $(shell awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/
 # through the environment means a toolchain or threshold containing a quote
 # cannot inject commands into the shell command line; the child script reads
 # them from its environment instead.
-export CARGO DOC_COVERAGE_THRESHOLD DOC_COVERAGE_TOOLCHAIN
+export DOC_COVERAGE_THRESHOLD DOC_COVERAGE_TOOLCHAIN
 
 APP ?= netsuke
 CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$$HOME/.cargo/bin/cargo")
+# CARGO is resolved above before it is exported: `export` alone would define
+# the variable empty and shadow the `?=` fallback for every recipe.
+export CARGO
 # The Polonius borrow-checker flag normally flows from .cargo/config.toml, but
 # any recipe that sets RUSTFLAGS overrides that table and must re-state it.
 POLONIUS_FLAGS ?= -Zpolonius=next
