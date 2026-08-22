@@ -283,7 +283,7 @@ pub(super) fn open_root_dir(search: &str, base: Option<&Path>) -> io::Result<Opt
 /// use `open_dir_nofollow`, while `..` deliberately moves through the
 /// parent-directory capability so parent-relative patterns retain their
 /// existing behaviour.
-fn open_literal_prefix(prefix: &Utf8Path, base: Option<&Path>) -> io::Result<Dir> {
+fn open_literal_prefix(prefix: &Utf8Path, injected_base: Option<&Path>) -> io::Result<Dir> {
     let (base, remainder) = if prefix.is_absolute() {
         let root = prefix.ancestors().last().ok_or_else(|| {
             io::Error::new(
@@ -299,7 +299,7 @@ fn open_literal_prefix(prefix: &Utf8Path, base: Option<&Path>) -> io::Result<Dir
         })?;
         (root, remainder)
     } else {
-        let anchor = base
+        let anchor = injected_base
             .and_then(|dir| Utf8Path::from_path(dir))
             .unwrap_or_else(|| Utf8Path::new("."));
         (anchor, prefix)
