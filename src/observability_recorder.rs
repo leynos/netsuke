@@ -23,16 +23,19 @@ const OUTCOME_VALUES: [&str; 2] = ["success", "failure"];
 /// must not retain workload-proportional observations from unrelated metrics.
 #[derive(Debug)]
 pub(super) struct ConfigMetricsRecorder {
+    /// Inner recorder storing accepted observations for later snapshots.
     inner: DebuggingRecorder,
 }
 
 impl ConfigMetricsRecorder {
+    /// Build a recorder over a fresh debugging recorder.
     pub(super) fn new() -> Self {
         Self {
             inner: DebuggingRecorder::new(),
         }
     }
 
+    /// Return a snapshotter draining the recorder's observations.
     pub(super) fn snapshotter(&self) -> Snapshotter {
         self.inner.snapshotter()
     }

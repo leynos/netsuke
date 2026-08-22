@@ -17,16 +17,21 @@ use posix::search_workspace as platform_search_workspace;
 #[cfg(windows)]
 use windows::search_workspace as platform_search_workspace;
 
+/// Maximum directory depth the workspace fallback search descends to.
 pub(super) const WORKSPACE_MAX_DEPTH: usize = 6;
+/// Directory basenames skipped by default during the workspace fallback search.
 pub(crate) const WORKSPACE_SKIP_DIRS: &[&str] =
     &[".git", "target", "node_modules", "dist", "build"];
 
+/// Set of directory basenames excluded from the workspace fallback search.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct WorkspaceSkipList {
+    /// The excluded basenames.
     dirs: IndexSet<String>,
 }
 
 impl WorkspaceSkipList {
+    /// Build a skip list from the default set of directory names.
     fn from_defaults() -> Self {
         let mut dirs = IndexSet::new();
         for dir in WORKSPACE_SKIP_DIRS {
@@ -35,6 +40,7 @@ impl WorkspaceSkipList {
         Self { dirs }
     }
 
+    /// Whether a directory basename is excluded.
     fn contains(&self, name: &str) -> bool {
         self.dirs.contains(name)
     }
@@ -70,6 +76,7 @@ impl Default for WorkspaceSkipList {
     }
 }
 
+/// Search the working directory tree for `command`, honouring the fallback switch.
 pub(super) fn search_workspace(
     env: &EnvSnapshot,
     command: &str,
@@ -93,6 +100,8 @@ pub(super) fn search_workspace(
     platform_search_workspace(env, command, collect_all, skip_dirs)
 }
 
+/// Decide whether a walkdir entry should be visited, skipping listed
+/// directories.
 pub(super) fn should_visit_entry(entry: &walkdir::DirEntry, skip_dirs: &WorkspaceSkipList) -> bool {
     if !entry.file_type().is_dir() {
         return true;
@@ -128,11 +137,13 @@ pub(super) fn log_if_no_matches(matches: &[Utf8PathBuf], skip_dirs: &WorkspaceSk
     }
 }
 
+/// Normalize a directory basename for skip matching on Windows.
 #[cfg(windows)]
 fn normalise_name(name: &str) -> String {
     name.to_ascii_lowercase()
 }
 
+/// Normalize a directory basename for skip matching on POSIX.
 #[cfg(not(windows))]
 fn normalise_name(name: &str) -> String {
     name.to_owned()

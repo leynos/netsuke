@@ -1,7 +1,23 @@
-.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-typos-config build release lint lint-clippy lint-whitaker fmt check-fmt typecheck markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load
+.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-typos-config build release lint lint-clippy lint-whitaker doc-coverage doc-coverage-test fmt check-fmt typecheck markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load
+
+PYTHON ?= python3
+# Threshold and toolchain for the Rustdoc doc-comment coverage gate. The
+# threshold mirrors the 80% bar stated in AGENTS.md; the toolchain recollects
+# the channel from rust-toolchain.toml the same way the dev-fast variables do,
+# so overriding either stays independent.
+DOC_COVERAGE_THRESHOLD ?= 80
+DOC_COVERAGE_TOOLCHAIN ?= $(shell awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/ { print $$2; exit }' '$(RUST_TOOLCHAIN_FILE)')
+# Exported rather than interpolated into the recipe line. Passing the values
+# through the environment means a toolchain or threshold containing a quote
+# cannot inject commands into the shell command line; the child script reads
+# them from its environment instead.
+export DOC_COVERAGE_THRESHOLD DOC_COVERAGE_TOOLCHAIN
 
 APP ?= netsuke
 CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$$HOME/.cargo/bin/cargo")
+# CARGO is resolved above before it is exported: `export` alone would define
+# the variable empty and shadow the `?=` fallback for every recipe.
+export CARGO
 # The Polonius borrow-checker flag normally flows from .cargo/config.toml, but
 # any recipe that sets RUSTFLAGS overrides that table and must re-state it.
 POLONIUS_FLAGS ?= -Zpolonius=next
@@ -106,6 +122,16 @@ lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 	# Run from the crate directory as well so Whitaker loads the narrow
 	# `test_support::fs` exemption from test_support/dylint.toml.
 	cd test_support && DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(WHITAKER) --all --no-deps --package test_support -- --all-targets --all-features
+
+doc-coverage: doc-coverage-test ## Verify aggregate Rustdoc doc-comment coverage meets the threshold
+	@RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }$(POLONIUS_FLAGS)" RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" \
+		$(PYTHON) scripts/doc-coverage.py --toolchain "$$DOC_COVERAGE_TOOLCHAIN" --threshold "$$DOC_COVERAGE_THRESHOLD"
+
+doc-coverage-test: ## Run the pytest suite for scripts/doc-coverage.py
+	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python 3.13 \
+		--with pytest==9.0.2 --with pytest-cov==7.0.0 \
+		python -m pytest scripts/tests/test_doc_coverage.py -c /dev/null \
+		--rootdir=. -p no:cacheprovider --cov=doc_coverage_module
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all

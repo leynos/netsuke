@@ -92,6 +92,7 @@ pub fn generate_bundle(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenErr
     generate_bundle_inner(graph)
 }
 
+/// Construct the [`GeneratedNinja`] bundle for `graph`.
 fn generate_bundle_inner(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenError> {
     reject_unsupported_path_characters(graph)?;
     reject_reserved_paths(graph)?;
@@ -201,7 +202,9 @@ fn render_display_edge(
 /// Mutable staging state shared while lowering one serial edge.
 #[derive(Default)]
 struct SerialStages {
+    /// Dyndep sidecars collected while lowering serial edges.
     dyndep_files: Vec<GeneratedDyndep>,
+    /// Sidecar paths already staged, deduplicating shared dependencies.
     staged_sidecars: HashSet<Utf8PathBuf>,
 }
 

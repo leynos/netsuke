@@ -37,6 +37,7 @@ use std::{
 /// Captures mutable state shared between stdlib helpers.
 #[derive(Clone, Default, Debug)]
 pub struct StdlibState {
+    /// Shared flag tracking whether any impure helper ran during a render.
     impure: Arc<AtomicBool>,
 }
 
@@ -52,6 +53,7 @@ impl StdlibState {
         self.impure.store(false, Ordering::Relaxed);
     }
 
+    /// Return a handle to the shared impurity flag for helper registration.
     pub(crate) fn impure_flag(&self) -> Arc<AtomicBool> {
         Arc::clone(&self.impure)
     }

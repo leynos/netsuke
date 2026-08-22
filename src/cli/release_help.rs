@@ -30,6 +30,7 @@ impl OrthoConfigDocs for ReleaseHelpCli {
     }
 }
 
+/// Return documentation metadata for every Clap subcommand with an about key.
 fn documented_clap_subcommands(root: &DocMetadata) -> Vec<DocMetadata> {
     Cli::command()
         .get_subcommands()
@@ -40,6 +41,7 @@ fn documented_clap_subcommands(root: &DocMetadata) -> Vec<DocMetadata> {
         .collect()
 }
 
+/// Build documentation metadata for `name`, reusing the root's shared fields.
 fn documented_subcommand(root: &DocMetadata, name: &str, about_id: &str) -> DocMetadata {
     DocMetadata {
         ir_version: root.ir_version.clone(),
@@ -54,6 +56,8 @@ fn documented_subcommand(root: &DocMetadata, name: &str, about_id: &str) -> DocM
     }
 }
 
+/// Return the localization key for `name`'s about text, or `None` when the
+/// subcommand has no release documentation.
 fn release_help_about_key(name: &str) -> Option<&'static str> {
     match name {
         "build" => Some(keys::CLI_SUBCOMMAND_BUILD_ABOUT),

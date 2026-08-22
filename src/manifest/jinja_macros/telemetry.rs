@@ -16,9 +16,13 @@ use minijinja::Error;
 use std::{sync::Once, time::Instant};
 use tracing::field;
 
+/// Metric name counting macro-invocation outcomes.
 const MACRO_INVOCATIONS_TOTAL: &str = "netsuke_manifest_macro_invocations_total";
+/// Metric name for macro-invocation duration histograms.
 const MACRO_INVOCATION_DURATION: &str = "netsuke_manifest_macro_invocation_duration_seconds";
+/// Metric name counting template-render outcomes.
 const TEMPLATE_RENDERS_TOTAL: &str = "netsuke_manifest_template_renders_total";
+/// Metric name for template-render duration histograms.
 const TEMPLATE_RENDER_DURATION: &str = "netsuke_manifest_template_render_duration_seconds";
 
 /// Register the macro-invocation metric descriptions exactly once.

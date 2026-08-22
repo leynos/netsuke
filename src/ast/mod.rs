@@ -54,6 +54,7 @@ pub type Vars = HashMap<String, serde_json::Value, BuildHasherDefault<DefaultHas
 /// Stable schema error that the manifest adapter translates for its users.
 pub(crate) const EMPTY_COMMAND_LIST_ERROR: &str = "command list must not be empty";
 
+/// Deserialize an action sequence, marking each target as `phony`.
 fn deserialize_actions<'de, D>(deserializer: D) -> Result<Vec<Target>, D::Error>
 where
     D: Deserializer<'de>,
@@ -170,11 +171,15 @@ pub enum Recipe {
     },
 }
 
+/// Flattened recipe fields before deserialization selects a variant.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawRecipe {
+    /// Optional command line or ordered command list.
     command: Option<StringOrList>,
+    /// Optional embedded script.
     script: Option<String>,
+    /// Optional referenced rule name or names.
     rule: Option<StringOrList>,
 }
 

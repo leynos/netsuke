@@ -11,7 +11,9 @@ use metrics::{counter, describe_counter, describe_histogram, histogram};
 use std::{sync::Once, time::Instant};
 use tracing::field;
 
+/// Metric name counting runner-owned bundle generation outcomes.
 const BUNDLE_GENERATIONS_TOTAL: &str = "netsuke_ninja_dyndep_bundle_generations_total";
+/// Metric name measuring runner-owned bundle generation duration in seconds.
 const BUNDLE_GENERATION_DURATION: &str = "netsuke_ninja_dyndep_bundle_generation_duration_seconds";
 
 /// Record one runner-owned bundle-generation operation.
@@ -42,6 +44,7 @@ pub(super) fn instrument_bundle_generation<T>(
     result
 }
 
+/// Record the bounded outcome and error category on the span and return it.
 fn record_outcome<T>(span: &tracing::Span, result: &Result<T, NinjaGenError>) -> &'static str {
     match result {
         Ok(_) => {
@@ -58,6 +61,7 @@ fn record_outcome<T>(span: &tracing::Span, result: &Result<T, NinjaGenError>) ->
     }
 }
 
+/// Return the broad failure category for a Ninja-generation error.
 const fn error_category(error: &NinjaGenError) -> &'static str {
     match error {
         NinjaGenError::MissingAction { .. } => "missing_action",
@@ -73,6 +77,7 @@ const fn error_category(error: &NinjaGenError) -> &'static str {
     }
 }
 
+/// Register the bundle-generation metric descriptions once per process.
 fn describe_metrics() {
     static DESCRIBE: Once = Once::new();
     DESCRIBE.call_once(|| {

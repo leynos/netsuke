@@ -116,6 +116,7 @@ enum StdlibRegistration {
     /// The read-only stdlib used to inspect manifest discovery metadata.
     ManifestQuery,
 }
+/// Parse a manifest string, running the full YAML, Jinja and expansion pipeline.
 fn from_str_named(
     yaml: &str,
     parse: ManifestParse<'_>,

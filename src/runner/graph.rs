@@ -26,6 +26,15 @@ use super::path_helpers::{
 };
 use super::{load_manifest_with_stage_reporting, process};
 
+/// Render the build graph in-process and write the selected artefact.
+///
+/// Loads and validates the manifest, projects it through the IR, renders DOT
+/// or HTML per the `--html` flag, and reports the rendering stage.
+///
+/// # Errors
+///
+/// Returns an error when the manifest cannot be resolved, loaded, or validated,
+/// when rendering fails, or when the artefact cannot be written.
 pub(super) fn handle_graph(
     cli: &Cli,
     args: &GraphArgs,
@@ -73,6 +82,11 @@ pub(super) fn handle_graph(
     Ok(())
 }
 
+/// Write the rendered graph to stdout, an output file, or a JSON envelope.
+///
+/// # Errors
+///
+/// Returns an error when the output cannot be written.
 fn write_graph_artefact(cli: &Cli, output: Option<&Path>, content: &str) -> Result<()> {
     if cli.json {
         return write_json_graph_artefact(cli, output, content);
@@ -87,6 +101,14 @@ fn write_graph_artefact(cli: &Cli, output: Option<&Path>, content: &str) -> Resu
     }
 }
 
+/// Write the rendered graph and its JSON result document under `--json`.
+///
+/// A real output path receives the rendered graph while the JSON client
+/// document goes to stdout; a stdout path embeds the graph in the result.
+///
+/// # Errors
+///
+/// Returns an error when the output cannot be written.
 fn write_json_graph_artefact(cli: &Cli, output: Option<&Path>, content: &str) -> Result<()> {
     match output.filter(|path| !process::is_stdout_path(path)) {
         Some(path) => {
@@ -98,6 +120,11 @@ fn write_json_graph_artefact(cli: &Cli, output: Option<&Path>, content: &str) ->
     }
 }
 
+/// Render the `graph` JSON result envelope and write it to stdout.
+///
+/// # Errors
+///
+/// Returns an error when JSON serialization or the stdout write fails.
 fn write_json_result(content: Option<&str>) -> Result<()> {
     let rendered = result_json::render_result_json("graph", content)
         .context(localization::message(keys::RUNNER_CONTEXT_RENDER_GRAPH))?;

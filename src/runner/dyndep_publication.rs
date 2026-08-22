@@ -15,7 +15,9 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 
 /// Publication lease that protects one serial bundle while a command consumes it.
 pub(super) struct DyndepPublication {
+    /// Effective Ninja working directory opened for a sidecar-bearing bundle.
     dir: Option<Dir>,
+    /// Advisory lease holding sidecar publication for command consumption.
     lease: DyndepPublicationLease,
 }
 

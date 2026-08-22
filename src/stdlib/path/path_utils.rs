@@ -14,14 +14,21 @@ use crate::localization::{self, keys};
 use crate::stdlib::config_types::HomeDirectory;
 use crate::stdlib::io_helpers::io_to_error;
 
+/// Return the final path component, or the whole path when it has no file name.
 pub(super) fn basename(path: &Utf8Path) -> String {
     path.file_name().unwrap_or(path.as_str()).to_owned()
 }
 
+/// Return the parent directory, normalized to `.` when there is none.
 pub(super) fn dirname(path: &Utf8Path) -> String {
     normalise_parent(path.parent()).into_string()
 }
 
+/// Replace the trailing `sep`-separated segments of the file name with `suffix`.
+///
+/// # Errors
+///
+/// Returns an error when the separator is empty.
 pub(super) fn with_suffix(
     path: &Utf8Path,
     suffix: &str,
@@ -55,6 +62,11 @@ pub(super) fn with_suffix(
     Ok(base)
 }
 
+/// Return `path` relative to `root`, when `root` prefixes it.
+///
+/// # Errors
+///
+/// Returns an error when `root` does not prefix `path`.
 pub(super) fn relative_to(path: &Utf8Path, root: &Utf8Path) -> Result<String, Error> {
     path.strip_prefix(root)
         .map(|p| p.as_str().to_owned())
@@ -69,6 +81,11 @@ pub(super) fn relative_to(path: &Utf8Path, root: &Utf8Path) -> Result<String, Er
         })
 }
 
+/// Resolve `path` to an absolute canonical path, treating `.` as the current directory.
+///
+/// Roots return without filesystem access; an empty path or `.` resolves the
+/// current directory with filesystem access; any other path is canonicalized
+/// through its parent directory handle.
 pub(super) fn canonicalize_any(path: &Utf8Path) -> Result<Utf8PathBuf, Error> {
     if path.as_str().is_empty() || path == Utf8Path::new(".") {
         return current_dir_utf8().map_err(|err| {
@@ -107,6 +124,7 @@ pub(super) fn canonicalize_any(path: &Utf8Path) -> Result<Utf8PathBuf, Error> {
         })
 }
 
+/// Determine whether a `~`-remainder names another user rather than the current home.
 pub(super) fn is_user_specific_expansion(stripped: &str) -> bool {
     matches!(
         stripped.chars().next(),
@@ -114,6 +132,11 @@ pub(super) fn is_user_specific_expansion(stripped: &str) -> bool {
     )
 }
 
+/// Expand a leading `~` to the configured home directory.
+///
+/// # Errors
+///
+/// Returns an error for other-user expansions or when no home can be resolved.
 pub(super) fn expanduser<F>(
     raw: &str,
     home_directory: &HomeDirectory,
@@ -136,6 +159,7 @@ where
     }
 }
 
+/// Return the parent path, falling back to `.` when there is none.
 pub(super) fn normalise_parent(parent: Option<&Utf8Path>) -> Utf8PathBuf {
     parent
         .filter(|p| !p.as_str().is_empty())
@@ -196,10 +220,12 @@ where
     })
 }
 
+/// Determine whether `path` is a filesystem root.
 fn is_root(path: &Utf8Path) -> bool {
     path.parent().is_none() && path.file_name().is_none() && !path.as_str().is_empty()
 }
 
+/// Resolve the current directory to an absolute, canonical UTF-8 path.
 fn current_dir_utf8() -> Result<Utf8PathBuf, io::Error> {
     let dir = Dir::open_ambient_dir(".", ambient_authority())?;
     dir.canonicalize(Utf8Path::new("."))

@@ -24,8 +24,11 @@ use super::{GlobExpansion, GlobOutcome, GlobSkippedEntries};
 use metrics::{counter, describe_counter};
 use std::sync::Once;
 
+/// Metric name counting glob expansions by outcome.
 const EXPANSIONS_TOTAL: &str = "netsuke_manifest_glob_expansions_total";
+/// Metric name counting entries dropped from a glob expansion.
 const ENTRIES_SKIPPED_TOTAL: &str = "netsuke_manifest_glob_entries_skipped_total";
+/// Stable marker replacing caller-controlled paths in tracing events.
 const REDACTED_PATH: &str = "<redacted>";
 
 /// Register the metric descriptions once per process.

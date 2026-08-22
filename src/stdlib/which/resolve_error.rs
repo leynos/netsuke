@@ -7,48 +7,71 @@ use walkdir;
 
 use super::options::CwdMode;
 
+/// Typed errors raised while resolving a command with `which`.
 #[derive(Debug)]
 pub(crate) enum ResolveError {
+    /// A PATH search exhausted every candidate directory without a hit.
     NotFound {
+        /// The command that was searched for.
         command: String,
+        /// The directories searched, kept for the diagnostic preview.
         dirs: Vec<Utf8PathBuf>,
+        /// How the current directory contributed to the search.
         cwd_mode: CwdMode,
     },
+    /// A direct-path lookup found no executable at the resolved path.
     DirectNotFound {
+        /// The path-like command that was looked up.
         command: String,
+        /// The resolved candidate that was not executable.
         path: Utf8PathBuf,
     },
+    /// An invalid argument or option value was supplied.
     Args {
+        /// Human-readable explanation of the invalid input.
         detail: String,
     },
+    /// Canonicalization of a matched path failed.
     Canonicalize {
+        /// The path that failed to canonicalize.
         path: Utf8PathBuf,
+        /// The underlying filesystem error.
         source: io::Error,
     },
     /// `fs::metadata` failed whilst checking whether a path is executable.
     IsExecutable {
+        /// The path whose executable bit could not be probed.
         path: Utf8PathBuf,
+        /// The metadata error that prevented the probe.
         source: io::Error,
     },
+    /// A canonical path could not be represented as UTF-8.
     CanonicalizeNonUtf8,
+    /// A workspace fallback path could not be represented as UTF-8.
     WorkspaceNonUtf8 {
+        /// The command being searched for.
         command: String,
+        /// The non-UTF-8 path, rendered lossily for the diagnostic.
         path: String,
     },
     /// A `walkdir` traversal error encountered during workspace fallback search.
     WalkDir {
+        /// The traversal error from the workspace fallback walk.
         source: walkdir::Error,
     },
+    /// The working directory could not be read.
     CwdResolve {
+        /// The underlying filesystem error.
         source: io::Error,
     },
+    /// The working directory path is not valid UTF-8.
     CwdNonUtf8,
 }
 
 impl ResolveError {
     /// Construct an argument error for invalid or unexpected resolver options.
     ///
-    /// `detail` is a human-readable explanation included in the localised
+    /// `detail` is a human-readable explanation included in the localized
     /// diagnostic.
     pub(super) fn args(detail: impl fmt::Display) -> Self {
         Self::Args {

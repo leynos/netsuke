@@ -24,9 +24,12 @@ impl ToolName {
     }
 }
 
+/// Compile-time sample tool name exercised by the assertion below.
 const COMPILE_TIME_TOOL_NAME: ToolName = ToolName::new("compdb");
+/// String form of the sample tool name, computed at compile time.
 const COMPILE_TIME_TOOL_NAME_TEXT: &str = COMPILE_TIME_TOOL_NAME.as_str();
 
+/// Compile-time assertion that `ToolName` stays const-evaluable.
 const _: () = assert!(
     COMPILE_TIME_TOOL_NAME_TEXT.len() == "compdb".len(),
     "ToolName::new and ToolName::as_str must remain const-evaluable"
@@ -42,26 +45,32 @@ impl From<&'static str> for ToolName {
 #[cfg(unix)]
 #[derive(Debug, Clone, Copy)]
 struct ShellFlag {
+    /// The command-line flag text, e.g. `-j`.
     flag: &'static str,
+    /// The shell variable name the flag is validated as, e.g. `jobs`.
     var_name: &'static str,
 }
 
 #[cfg(unix)]
 impl ShellFlag {
+    /// The `-j` job-count flag.
     const JOBS: Self = Self {
         flag: "-j",
         var_name: "jobs",
     };
 
+    /// The `-C` working-directory flag.
     const DIRECTORY: Self = Self {
         flag: "-C",
         var_name: "dir",
     };
 
+    /// The flag text.
     const fn flag(&self) -> &str {
         self.flag
     }
 
+    /// The associated shell variable name.
     const fn var_name(&self) -> &str {
         self.var_name
     }
@@ -77,6 +86,12 @@ fn write_fake_ninja_script(script: &str, context: &str) -> Result<(TempDir, Path
     write_fake_ninja_script_in_dir(script, context, dir)
 }
 
+/// Write `script` as an executable `ninja` inside `dir`, returning the
+/// directory and the path of the written script.
+///
+/// # Errors
+///
+/// Returns an error if the script cannot be written or made executable.
 fn write_fake_ninja_script_in_dir(
     script: &str,
     context: &str,

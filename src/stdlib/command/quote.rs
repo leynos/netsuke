@@ -7,8 +7,10 @@ use shell_quote::{QuoteRefExt, Sh};
 
 use crate::localization::{self, keys};
 
+/// Failure modes for shell argument quoting.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum QuoteError {
+    /// The argument contains a line break, which cannot be quoted safely.
     ContainsLineBreak,
 }
 
@@ -26,6 +28,7 @@ impl fmt::Display for QuoteError {
     }
 }
 
+/// Quote an argument for the platform shell, rejecting line breaks.
 #[cfg(windows)]
 pub(super) fn quote(arg: &str) -> Result<String, QuoteError> {
     if arg.chars().any(|ch| matches!(ch, '\n' | '\r')) {
@@ -73,6 +76,7 @@ pub(super) fn quote(arg: &str) -> Result<String, QuoteError> {
     Ok(buf)
 }
 
+/// Quote an argument for the platform shell, rejecting line breaks.
 #[cfg(not(windows))]
 pub(super) fn quote(arg: &str) -> Result<String, QuoteError> {
     if arg.chars().any(|ch| matches!(ch, '\n' | '\r')) {

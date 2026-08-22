@@ -23,10 +23,12 @@ pub const MAX_RETAINED_DYNDEP_FILES: usize = 32;
 /// Maximum bytes occupied by obsolete sidecars retained after one publication.
 pub(super) const MAX_RETAINED_DYNDEP_BYTES: u64 = 1024 * 1024;
 
+/// Relative path of the advisory lock file guarding sidecar publication.
 const DYNDEP_LOCK: &str = ".netsuke/dyndep/.netsuke-publication.lock";
 
 /// Exclusive sidecar-directory lease held while a serial command consumes a bundle.
 pub(crate) struct DyndepPublicationLease {
+    /// Held lock file, absent for a sidecar-free bundle.
     lock_file: Option<File>,
 }
 
@@ -92,11 +94,14 @@ fn prune_dyndep_cache_inner(dir: &Dir, current: &[GeneratedDyndep]) -> Result<Re
 /// Fixed, deterministic budget for obsolete content-addressed sidecars.
 #[derive(Clone, Copy)]
 pub(super) struct RetentionPolicy {
+    /// Maximum number of obsolete sidecars kept after one publication.
     max_files: usize,
+    /// Maximum bytes of obsolete sidecars kept after one publication.
     max_bytes: u64,
 }
 
 impl RetentionPolicy {
+    /// Return the repository-standard retention budget.
     const fn standard() -> Self {
         Self {
             max_files: MAX_RETAINED_DYNDEP_FILES,
@@ -116,7 +121,9 @@ impl RetentionPolicy {
 /// Aggregate, non-sensitive result of one retention pass.
 #[derive(Default)]
 pub(crate) struct RetentionSummary {
+    /// Number of obsolete sidecar files removed by the retention pass.
     reclaimed_files: u64,
+    /// Number of bytes reclaimed across the removed sidecars.
     reclaimed_bytes: u64,
 }
 
@@ -133,6 +140,12 @@ pub(super) fn prune_dyndep_sidecars(
     )
 }
 
+/// Prune obsolete sidecars under an active lease, if the lease holds a lock.
+///
+/// # Errors
+///
+/// Returns an error when the sidecar directory cannot be traversed or a
+/// candidate cannot be inspected or removed.
 fn prune_dyndep_sidecars_inner(
     dir: &Dir,
     lease: &DyndepPublicationLease,
@@ -174,8 +187,11 @@ fn retain_obsolete_sidecars(
 
 /// Mutable state scoped to one leased directory traversal.
 struct RetentionPass<'current, 'summary> {
+    /// Relative paths of the sidecars the current command still consumes.
     current_paths: &'current HashSet<&'current str>,
+    /// Lexical selection state for obsolete sidecar retention.
     retained: RetentionSelection,
+    /// Aggregate counts of removed candidates so far.
     summary: &'summary mut RetentionSummary,
 }
 
@@ -208,12 +224,16 @@ fn retain_directory_entry(
 
 /// Bounded lexical selection state used only while traversing one retention directory.
 struct RetentionSelection {
+    /// Budget constraining which obsolete sidecars survive selection.
     policy: RetentionPolicy,
+    /// Retained `${path} -> bytes` pairs under lexical order.
     paths: BTreeMap<Utf8PathBuf, u64>,
+    /// Bytes consumed by the currently retained pairs.
     retained_bytes: u64,
 }
 
 impl RetentionSelection {
+    /// Construct empty selection state from a retention policy.
     const fn new(policy: RetentionPolicy) -> Self {
         Self {
             policy,
@@ -262,21 +282,33 @@ fn retain_or_remove_sidecar(
     Ok(())
 }
 
+/// Return whether `path` is an obsolete `.dd` sidecar not in current use.
 fn is_obsolete_sidecar(path: &Utf8Path, current_paths: &HashSet<&str>) -> bool {
     has_extension(path, "dd") && !current_paths.contains(path.as_str())
 }
 
+/// Return whether `path`'s extension matches `extension` case-insensitively.
 fn has_extension(path: &Utf8Path, extension: &str) -> bool {
     path.extension()
         .is_some_and(|actual| actual.eq_ignore_ascii_case(extension))
 }
 
+/// Return a candidate's byte length from its metadata.
+///
+/// # Errors
+///
+/// Returns an error when the candidate's metadata cannot be read.
 fn candidate_size(dir: &Dir, path: &Utf8Path) -> Result<u64> {
     dir.metadata(path)
         .map(|metadata| metadata.len())
         .with_context(|| retention_error(path))
 }
 
+/// Remove a reclaimed sidecar and accumulate its size into the summary.
+///
+/// # Errors
+///
+/// Returns an error when the sidecar cannot be removed.
 fn remove_candidate(
     dir: &Dir,
     path: &Utf8Path,
@@ -290,6 +322,12 @@ fn remove_candidate(
     Ok(())
 }
 
+/// Return whether the dyndep sidecar directory exists under `dir`.
+///
+/// # Errors
+///
+/// Returns an error when the directory cannot be opened for a reason other
+/// than its absence.
 fn dyndep_directory_exists(dir: &Dir) -> Result<bool> {
     match dir.open_dir(DYNDEP_DIR) {
         Ok(_) => Ok(true),
@@ -298,6 +336,7 @@ fn dyndep_directory_exists(dir: &Dir) -> Result<bool> {
     }
 }
 
+/// Build the localized retention error message for a dyndep `path`.
 fn retention_error(path: &Utf8Path) -> crate::localization::LocalizedMessage {
     localization::message(keys::RUNNER_IO_DYNDEP_RETENTION).with_arg("path", path.as_str())
 }

@@ -4,12 +4,12 @@
 //! and the OrthoConfig-derived [`CliConfig`] schema from [`super::config`].
 //! It implements the full four-layer merge pipeline:
 //!
-//! 1. **Defaults** — `CliConfig::default()` serialised to JSON.
+//! 1. **Defaults** — `CliConfig::default()` serialized to JSON.
 //! 2. **File layers** — discovered and loaded by [`super::discovery`].
-//! 3. **Environment layer** — `NETSUKE_`-prefixed variables normalised via
+//! 3. **Environment layer** — `NETSUKE_`-prefixed variables normalized via
 //!    `Uncased` and merged through Figment.
 //! 4. **CLI override layer** — fields explicitly supplied on the command line
-//!    (as determined by `ArgMatches::value_source`) serialised to JSON.
+//!    (as determined by `ArgMatches::value_source`) serialized to JSON.
 //!
 //! **Pipeline position:** merge layer.
 //!
@@ -112,10 +112,16 @@ pub fn merge_with_cached_file_layers(
     Ok(apply_config(cli, merged))
 }
 
+/// Return whether `value` is an empty JSON object and so contributes no CLI overrides.
 fn is_empty_value(value: &Value) -> bool {
     matches!(value, Value::Object(map) if map.is_empty())
 }
 
+/// Collect CLI-layer overrides from arguments explicitly supplied on the command line.
+///
+/// # Errors
+///
+/// Returns a validation error when a supplied value cannot be serialized.
 fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Value> {
     let mut root = Map::new();
 
@@ -181,12 +187,23 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Va
     Ok(Value::Object(root))
 }
 
+/// Collect the `build` subcommand's overrides from explicitly supplied arguments.
+///
+/// # Errors
+///
+/// Returns a validation error when a supplied value cannot be serialized.
 fn build_cli_overrides(args: &BuildArgs, matches: &ArgMatches) -> OrthoResult<Map<String, Value>> {
     let mut build = Map::new();
     maybe_insert_explicit(matches, "targets", &args.targets, &mut build)?;
     Ok(build)
 }
 
+/// Insert `field` into `target` when `matches` reports it was supplied on the
+/// command line.
+///
+/// # Errors
+///
+/// Returns a validation error when `value` cannot be serialized.
 fn maybe_insert_explicit<T>(
     matches: &ArgMatches,
     field: &str,
@@ -202,6 +219,11 @@ where
     Ok(())
 }
 
+/// Serialize `value` for the named configuration field.
+///
+/// # Errors
+///
+/// Returns a validation error when serialization fails.
 fn serialize_value<T>(field: &str, value: &T) -> OrthoResult<Value>
 where
     T: Serialize,
@@ -209,6 +231,8 @@ where
     serde_json::to_value(value).map_err(|err| validation_error(field, &err.to_string()))
 }
 
+/// Apply the merged configuration over the parsed CLI input, producing the
+/// resolved runtime `Cli`.
 fn apply_config(parsed: &Cli, config: CliConfig) -> Cli {
     let build_defaults = resolved_build_config(&config);
     Cli {
@@ -235,6 +259,8 @@ fn apply_config(parsed: &Cli, config: CliConfig) -> Cli {
     }
 }
 
+/// Resolve the effective build defaults, combining root-level default targets
+/// with subcommand-level targets.
 fn resolved_build_config(config: &CliConfig) -> BuildConfig {
     let mut build = config.cmds.build.clone();
     if build.targets.is_empty() {
@@ -247,6 +273,7 @@ fn resolved_build_config(config: &CliConfig) -> BuildConfig {
     build
 }
 
+/// Resolve the final command, substituting default targets when none were given.
 fn resolve_command(parsed: Option<&Commands>, build_defaults: &BuildConfig) -> Commands {
     match parsed {
         Some(Commands::Build(args)) => Commands::Build(BuildArgs {

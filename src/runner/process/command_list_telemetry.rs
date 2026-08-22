@@ -4,7 +4,9 @@ use super::failure_attribution::CommandListFailure;
 use metrics::{counter, describe_counter, describe_histogram, histogram};
 use std::{sync::Once, time::Duration};
 
+/// Metric name counting attributed command-list entry failures.
 const COMMAND_LIST_FAILURES_TOTAL: &str = "netsuke_ninja_command_list_failures_total";
+/// Metric name measuring elapsed build time before an attributed failure.
 pub(super) const COMMAND_LIST_FAILURE_DURATION: &str =
     "netsuke_ninja_command_list_failure_duration_seconds";
 
@@ -21,6 +23,7 @@ pub(super) fn record_failure(failure: &CommandListFailure, elapsed: Duration) {
     histogram!(COMMAND_LIST_FAILURE_DURATION, "outcome" => "failure").record(elapsed);
 }
 
+/// Register the command-list failure metric descriptions once per process.
 fn describe_metrics() {
     static DESCRIBE: Once = Once::new();
     DESCRIBE.call_once(|| {

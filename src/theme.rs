@@ -220,6 +220,7 @@ const COLOURS: ColourTokens = ColourTokens {
 /// Environment signals that may force ASCII symbols.
 #[derive(Debug, Clone, Copy)]
 struct EnvSignals {
+    /// Whether the `NO_COLOR` environment signal is set.
     no_color: bool,
 }
 

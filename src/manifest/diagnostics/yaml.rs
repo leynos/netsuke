@@ -24,10 +24,12 @@ use miette::{Diagnostic, NamedSource, SourceSpan};
 use serde_saphyr::{Error as YamlError, Location};
 use thiserror::Error;
 
+/// Convert a `serde_saphyr` location to a byte index within the source.
 fn location_to_index(src: &ManifestSource, loc: Location) -> usize {
     byte_index(src, loc)
 }
 
+/// Resolve a `serde_saphyr` line and column location to a byte offset.
 fn byte_index(src: &ManifestSource, loc: Location) -> usize {
     byte_index_components(src.as_ref(), loc.line(), loc.column())
 }
@@ -59,6 +61,7 @@ fn byte_index_components(src: &str, line: u64, column: u64) -> usize {
     src.len()
 }
 
+/// Build the `SourceSpan` covering the character at a location.
 fn to_span(src: &ManifestSource, loc: Location) -> SourceSpan {
     let at = location_to_index(src, loc);
     let bytes = src.as_ref().as_bytes();
@@ -79,22 +82,30 @@ fn to_span(src: &ManifestSource, loc: Location) -> SourceSpan {
     SourceSpan::new(start.into(), len.into())
 }
 
+/// Diagnostic for a `serde_saphyr` YAML parse error.
 #[derive(Debug, Error, Diagnostic)]
 #[error("{message}")]
 #[diagnostic(code(netsuke::yaml::parse))]
 struct YamlDiagnostic {
+    /// Manifest source text labelled with the manifest name.
     #[source_code]
     src: NamedSource<String>,
+    /// Byte span of the offending location, when reported.
     #[label("{label}")]
     span: Option<SourceSpan>,
+    /// Localized span label.
     label: LocalizedMessage,
+    /// Optional localized hint, such as the tab-indentation suggestion.
     #[help]
     help: Option<LocalizedMessage>,
+    /// Underlying `serde_saphyr` error.
     #[source]
     source: YamlError,
+    /// Localized parse summary.
     message: LocalizedMessage,
 }
 
+/// Report whether the error's line begins with tab whitespace.
 fn has_tab_indent(src: &ManifestSource, location: Option<Location>) -> bool {
     let Some(actual_loc) = location else {
         return false;
@@ -106,6 +117,7 @@ fn has_tab_indent(src: &ManifestSource, location: Option<Location>) -> bool {
         .any(|c| c == '\t')
 }
 
+/// Return a localized hint for the error, preferring the tab-indent suggestion.
 fn hint_for(
     err_str: &str,
     src: &ManifestSource,

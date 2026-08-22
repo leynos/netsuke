@@ -16,7 +16,9 @@ use super::layers::ProjectScopeTrace;
 /// Bounded selector and layer-branch diagnostics retained after discovery.
 #[derive(Clone, Debug)]
 pub(super) struct DiscoveryTrace {
+    /// Bounded trace of selector resolution and its environment reads.
     resolution: ConfigPathTrace,
+    /// Bounded trace of the adopted file-layer branch.
     file_layers: FileLayerTrace,
 }
 
@@ -39,8 +41,11 @@ impl DiscoveryTrace {
 /// Bounded diagnostics for selector resolution and its environment reads.
 #[derive(Clone, Debug)]
 struct ConfigPathTrace {
+    /// Configuration selector that resolved the path.
     selector: &'static str,
+    /// Bounded resolved configuration path.
     path: BoundedConfigPath,
+    /// Environment variables consulted for path resolution, with bounded results.
     environment_lookups: Vec<(&'static str, BoundedConfigPath)>,
 }
 
@@ -76,9 +81,13 @@ impl ConfigPathTrace {
 #[derive(Clone, Debug)]
 pub(super) enum FileLayerTrace {
     /// An explicit CLI or environment selector chose a configuration path.
-    Explicit { path: BoundedConfigPath },
+    Explicit {
+        /// The explicitly selected configuration path.
+        path: BoundedConfigPath,
+    },
     /// Selector-free discovery, with any project-scope second-pass outcome.
     Automatic {
+        /// Trail of the project-scope second pass, when one ran.
         project_scope: Option<ProjectScopeTrace>,
     },
 }
@@ -103,7 +112,9 @@ impl FileLayerTrace {
 /// Diagnostics deferred until a composition boundary enables its filter.
 #[derive(Clone, Debug)]
 pub(super) struct DiscoveryDiagnostics {
+    /// Discovery events to emit on replay.
     trace: DiscoveryTrace,
+    /// Warning to emit on replay when an explicit config load failed.
     load_warning: Option<ConfigLoadWarning>,
 }
 

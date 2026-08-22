@@ -38,6 +38,7 @@ use svg::{SvgHeader, write_svg};
 /// Render adapter producing a self-contained HTML page.
 #[derive(Debug, Clone)]
 pub struct HtmlRenderer {
+    /// BCP-47 language tag stamped on the page's `<html lang>` attribute.
     locale: String,
 }
 
@@ -105,6 +106,7 @@ impl GraphRenderer for HtmlRenderer {
     }
 }
 
+/// Return the localized message text for `key` in the process locale.
 pub(super) fn localized(key: &'static str) -> String {
     localization::message(key).to_string()
 }

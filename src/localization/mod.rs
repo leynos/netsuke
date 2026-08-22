@@ -18,8 +18,11 @@ use ortho_config::{LocalizationArgs, Localizer};
 use std::fmt;
 use std::sync::{Arc, OnceLock, RwLock};
 
+/// Process-global localizer storage, initialized on first use.
 static LOCALIZER: OnceLock<RwLock<Arc<dyn Localizer>>> = OnceLock::new();
 
+/// Return the process-global localizer storage, initializing it with the
+/// system default when first accessed.
 fn localizer_storage() -> &'static RwLock<Arc<dyn Localizer>> {
     // Keep the key registry referenced so dead-code lints do not discard it.
     let _ = keys::ALL_KEYS;
@@ -50,6 +53,7 @@ pub fn localizer() -> Arc<dyn Localizer> {
 
 /// Scoped helper that restores the previous localizer when dropped.
 pub struct LocalizerGuard {
+    /// Localizer in effect before the guard was created.
     previous: Arc<dyn Localizer>,
 }
 
@@ -68,13 +72,17 @@ pub fn set_localizer_for_tests(new_localizer: Arc<dyn Localizer>) -> LocalizerGu
 }
 
 // Compile-time assertions that the public setters keep their signatures.
+/// Compile-time assertion that `set_localizer` keeps its signature.
 const _: fn(Arc<dyn Localizer>) = set_localizer;
+/// Compile-time assertion that `set_localizer_for_tests` keeps its signature.
 const _: fn(Arc<dyn Localizer>) -> LocalizerGuard = set_localizer_for_tests;
 
 /// Render a Fluent message key with optional arguments.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalizedMessage {
+    /// Fluent message key to look up.
     key: &'static str,
+    /// Named arguments to interpolate into the message.
     args: Vec<(&'static str, String)>,
 }
 
@@ -99,6 +107,8 @@ impl LocalizedMessage {
         self
     }
 
+    /// Build the `LocalizationArgs` map, returning `None` when no arguments
+    /// are attached.
     fn args_map(&self) -> Option<LocalizationArgs<'_>> {
         if self.args.is_empty() {
             return None;

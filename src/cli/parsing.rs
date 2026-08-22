@@ -1,6 +1,6 @@
 //! Clap value-parser helpers, invoked exclusively from [`super::parser`].
 //!
-//! Each `parse_*` function implements a localisation-aware validator for one
+//! Each `parse_*` function implements a localization-aware validator for one
 //! typed CLI argument.  They are registered as [`super::parser::LocalizedValueParser`]
 //! instances inside `parse_with_localizer_from` and are never called directly
 //! from outside the `cli` module tree.
@@ -8,7 +8,7 @@
 //! **Pipeline position:** argument-validation layer, below [`super::parser`].
 //!
 //! - Receives raw `&str` slices from Clap's argument machinery.
-//! - Emits localised error strings via [`super::parser::validation_message`].
+//! - Emits localized error strings via [`super::parser::validation_message`].
 //! - Shared dispatch logic lives in [`parse_value_enum`] (called by the three
 //!   enum-valued parsers via [`ParseEnumSpec`]).
 
@@ -20,6 +20,10 @@ use super::{AccessibilityPolicy, ColourPolicy, EmojiPolicy, ProgressPolicy};
 use crate::host_pattern::HostPattern;
 use crate::localization::keys;
 
+/// Parse and validate a jobs argument.
+///
+/// The accepted range is 1 to `MAX_JOBS`; any other value yields a localized
+/// error.
 pub(super) fn parse_jobs(localizer: &dyn Localizer, s: &str) -> Result<usize, String> {
     let value: usize = s.parse().map_err(|_| {
         let mut args = LocalizationArgs::default();
@@ -46,7 +50,7 @@ pub(super) fn parse_jobs(localizer: &dyn Localizer, s: &str) -> Result<usize, St
     }
 }
 
-/// Parse and normalise a URI scheme provided via CLI flags.
+/// Parse and normalize a URI scheme provided via CLI flags.
 ///
 /// Schemes must begin with an ASCII letter and may contain ASCII letters,
 /// digits, `+`, `-`, or `.` characters. The result is returned in lowercase.
@@ -84,6 +88,7 @@ pub(super) fn parse_scheme(localizer: &dyn Localizer, s: &str) -> Result<String,
     Ok(trimmed.to_ascii_lowercase())
 }
 
+/// Parse and normalize a locale tag, rejecting empty and malformed values.
 pub(super) fn parse_locale(localizer: &dyn Localizer, s: &str) -> Result<String, String> {
     let trimmed = s.trim();
     if trimmed.is_empty() {
@@ -108,6 +113,7 @@ pub(super) fn parse_locale(localizer: &dyn Localizer, s: &str) -> Result<String,
         })
 }
 
+/// Parse a colour policy, yielding a localized error for invalid values.
 pub(super) fn parse_color_policy(
     localizer: &dyn Localizer,
     s: &str,
@@ -122,6 +128,7 @@ pub(super) fn parse_color_policy(
     )
 }
 
+/// Parse an emoji policy, yielding a localized error for invalid values.
 pub(super) fn parse_emoji_policy(
     localizer: &dyn Localizer,
     s: &str,
@@ -136,6 +143,7 @@ pub(super) fn parse_emoji_policy(
     )
 }
 
+/// Parse a progress policy, yielding a localized error for invalid values.
 pub(super) fn parse_progress_policy(
     localizer: &dyn Localizer,
     s: &str,
@@ -150,6 +158,7 @@ pub(super) fn parse_progress_policy(
     )
 }
 
+/// Parse an accessibility policy, yielding a localized error for invalid values.
 pub(super) fn parse_accessibility_policy(
     localizer: &dyn Localizer,
     s: &str,
@@ -164,13 +173,16 @@ pub(super) fn parse_accessibility_policy(
     )
 }
 
-/// Bundles the static localisation metadata needed by [`parse_value_enum`].
+/// Bundles the static localization metadata needed by [`parse_value_enum`].
 #[derive(Copy, Clone)]
 struct ParseEnumSpec {
+    /// Localization key naming the invalid-value message.
     key: &'static str,
+    /// Interpolation argument that carries the rejected value.
     arg_name: &'static str,
 }
 
+/// Parse a value-enum member, yielding a localized error for invalid input.
 fn parse_value_enum<T>(localizer: &dyn Localizer, s: &str, spec: ParseEnumSpec) -> Result<T, String>
 where
     T: ValueEnum,
@@ -190,7 +202,7 @@ where
 /// Parse a host pattern supplied via CLI flags.
 ///
 /// The returned [`HostPattern`] retains both the wildcard flag and the
-/// normalised host body so downstream configuration can reuse the parsed
+/// normalized host body so downstream configuration can reuse the parsed
 /// structure without reparsing strings.
 pub(super) fn parse_host_pattern(
     _localizer: &dyn Localizer,

@@ -34,7 +34,9 @@ pub struct Sandbox {
     /// Retained so the temporary tree outlives the sandbox; the usable path is
     /// `root`, validated as UTF-8 once during construction.
     _temp: TempDir,
+    /// The temporary tree's root, parent of `bin`, `home`, and `prefix`.
     root: Utf8PathBuf,
+    /// The repository root, used as commands' working directory.
     repo: Utf8PathBuf,
 }
 
@@ -103,6 +105,11 @@ impl Sandbox {
         self.root.join("prefix")
     }
 
+    /// Symlink every allowlisted utility from the host into the sandbox `bin`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any utility cannot be located or linked.
     fn link_utilities(&self, env: &impl Env) -> Result<()> {
         for utility in SANDBOX_UTILITIES {
             let source = which(env, &self.repo, utility)
@@ -207,6 +214,8 @@ impl Sandbox {
         }
     }
 
+    /// A `Command` for `program` running in the repository with only the sandbox
+    /// `PATH` and `HOME`.
     fn base_command(&self, program: &Utf8Path) -> Command {
         let mut command = Command::new(program.as_std_path());
         command

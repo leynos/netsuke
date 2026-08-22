@@ -167,12 +167,15 @@ pub enum ManifestError {
     },
 }
 
+/// Diagnostic for a `serde_json` data-structure error.
 #[derive(Debug, Error, Diagnostic)]
 #[error("{message}")]
 #[diagnostic(code(netsuke::manifest::structure))]
 struct DataDiagnostic {
+    /// Underlying `serde_json` deserialization error.
     #[source]
     source: serde_json::Error,
+    /// Localized diagnostic message.
     message: LocalizedMessage,
 }
 

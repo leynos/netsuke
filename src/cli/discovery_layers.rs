@@ -186,6 +186,8 @@ fn collect_file_layers_with_normalizer_and_trace(
     (Some(trace), result)
 }
 
+/// Return the expected project-scope configuration file path, or `None` when
+/// no working directory is available.
 fn project_scope_file(directory: Option<&Path>) -> Option<PathBuf> {
     let root = directory
         .map(PathBuf::from)
@@ -193,6 +195,11 @@ fn project_scope_file(directory: Option<&Path>) -> Option<PathBuf> {
     Some(root.join(".netsuke.toml"))
 }
 
+/// Load the project-scope layers rooted at `project_file`, if one was found.
+///
+/// # Errors
+///
+/// Returns an error when the project file cannot be loaded.
 fn project_scope_layers(project_file: Option<&Path>) -> OrthoResult<Vec<MergeLayer<'static>>> {
     let Some(path) = project_file else {
         return Ok(Vec::new());

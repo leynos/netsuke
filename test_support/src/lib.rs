@@ -121,6 +121,11 @@ fn fake_ninja_in(exit_code: u8, parent: &std::path::Path) -> Result<(TempDir, Pa
     write_fake_ninja(exit_code, dir)
 }
 
+/// Write a fake Ninja executable into `dir` and return it with the directory.
+///
+/// # Errors
+///
+/// Returns an error if the executable cannot be written.
 fn write_fake_ninja(exit_code: u8, dir: TempDir) -> Result<(TempDir, PathBuf)> {
     #[cfg(unix)]
     let path = exec::write_exec_with_content(

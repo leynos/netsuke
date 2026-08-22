@@ -21,17 +21,22 @@ use tracing_subscriber::prelude::*;
 use tracing_subscriber::{Registry, fmt, reload};
 
 use monotony::{MonotonicClock, StdMonotonicClock};
+/// Selects whether diagnostics render as human text or JSON documents.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DiagMode {
+    /// Human-readable diagnostics written to stderr.
     Human,
+    /// Versioned JSON diagnostic documents written to stderr.
     Json,
 }
 
 impl DiagMode {
+    /// Build the diagnostic mode from a JSON-enabled flag.
     const fn from_json_enabled(enabled: bool) -> Self {
         if enabled { Self::Json } else { Self::Human }
     }
 
+    /// Return whether JSON diagnostics are selected.
     const fn is_json(self) -> bool {
         matches!(self, Self::Json)
     }
@@ -55,9 +60,13 @@ where
     C: MonotonicClock,
     E: cli::ConfigEnvProvider,
 {
+    /// Environment provider used for locale resolution.
     locale_env: &'a L,
+    /// System-locale provider used for default-language detection.
     system_locale: &'a S,
+    /// Monotonic clock used to time configuration loading.
     configuration_clock: &'a C,
+    /// Environment provider consulted during configuration discovery and merge.
     config_env: &'a E,
 }
 /// Send buffered startup diagnostics where `mode` says they belong.
@@ -173,6 +182,10 @@ fn finish_run(exit_code: ExitCode, verbose: bool) -> ExitCode {
     exit_code
 }
 
+/// Return whether the parsed CLI asks only for informational help.
+///
+/// Help for a specific topic is informational; the general help listing may
+/// instead require configuration, so it is not counted here.
 const fn is_informational_help(cli: &cli::Cli) -> bool {
     matches!(
         &cli.command,
@@ -181,6 +194,7 @@ const fn is_informational_help(cli: &cli::Cli) -> bool {
     )
 }
 
+/// Configure the runtime and dispatch the selected command through the runner.
 fn run_cli(
     cli: &cli::Cli,
     system_locale: &impl locale_resolution::SystemLocale,

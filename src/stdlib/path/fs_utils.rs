@@ -14,12 +14,17 @@ use crate::localization::{self, keys};
 use super::path_utils::normalise_parent;
 use crate::stdlib::io_helpers::io_to_error;
 
+/// An ambient handle to a path's parent directory and the entry name within it.
 pub(super) struct ParentDir {
+    /// Capability-scoped handle to the parent directory.
     pub handle: Dir,
+    /// The final path component, addressed within `handle`.
     pub entry: String,
+    /// The parent directory's own path.
     pub dir_path: Utf8PathBuf,
 }
 
+/// Open a path's parent directory with ambient authority.
 pub(super) fn parent_dir(path: &Utf8Path) -> Result<ParentDir, io::Error> {
     let dir_path = normalise_parent(path.parent());
     let handle = Dir::open_ambient_dir(&dir_path, ambient_authority())?;
@@ -31,6 +36,7 @@ pub(super) fn parent_dir(path: &Utf8Path) -> Result<ParentDir, io::Error> {
     })
 }
 
+/// Open a path's parent directory, mapping failures to template errors.
 pub(super) fn open_parent_dir(path: &Utf8Path) -> Result<ParentDir, Error> {
     parent_dir(path).map_err(|err| {
         io_to_error(
@@ -56,6 +62,7 @@ where
         .map_err(|err| io_to_error(path, &localization::message(action_key), err))
 }
 
+/// Determine whether the path's file type satisfies `predicate`, counting missing paths as non-matching.
 pub(crate) fn file_type_matches<F>(path: &Utf8Path, predicate: F) -> Result<bool, Error>
 where
     F: Fn(fs::FileType) -> bool,
@@ -79,6 +86,7 @@ where
     }
 }
 
+/// Return the byte length of the file at `path`.
 pub(super) fn file_size(path: &Utf8Path) -> Result<u64, Error> {
     with_parent_dir(path, keys::STDLIB_PATH_ACTION_STAT, |handle, entry| {
         handle
@@ -87,17 +95,20 @@ pub(super) fn file_size(path: &Utf8Path) -> Result<u64, Error> {
     })
 }
 
+/// Read the file at `path` as UTF-8 text.
 pub(super) fn read_utf8(path: &Utf8Path) -> Result<String, Error> {
     with_parent_dir(path, keys::STDLIB_PATH_ACTION_READ, |handle, entry| {
         handle.read_to_string(Utf8Path::new(entry))
     })
 }
 
+/// Count the lines in the file at `path`.
 pub(super) fn linecount(path: &Utf8Path) -> Result<usize, Error> {
     let content = read_utf8(path)?;
     Ok(content.lines().count())
 }
 
+/// Open the file at `path` for reading through a capability handle.
 pub(crate) fn open_file(path: &Utf8Path) -> Result<File, Error> {
     with_parent_dir(path, keys::STDLIB_PATH_ACTION_OPEN_FILE, |handle, entry| {
         let mut options = OpenOptions::new();

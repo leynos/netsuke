@@ -12,6 +12,7 @@
   },
   "ignores": [
     "**/.venv/**",
+    ".vtcode/**",
     ".node_modules/**",
     "**/node_modules/**",
     "**/target/**",

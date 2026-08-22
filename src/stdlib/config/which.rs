@@ -139,6 +139,7 @@ impl StdlibConfig {
         &self.workspace_skip_dirs
     }
 
+    /// Return the configured `which` cache capacity.
     pub(crate) const fn which_cache_capacity(&self) -> NonZeroUsize {
         self.which_cache_capacity
     }

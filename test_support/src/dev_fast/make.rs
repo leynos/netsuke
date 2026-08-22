@@ -22,8 +22,11 @@ use std::fmt::Display;
 /// ```
 #[derive(Clone, Debug)]
 pub struct MakeInvocation {
+    /// The Make target the invocation runs.
     target: String,
+    /// Command-line `NAME=value` overrides, outranking `?=` defaults.
     variables: Vec<(String, String)>,
+    /// Environment entries the Make process inherits.
     environment: Vec<(String, String)>,
 }
 
@@ -54,6 +57,7 @@ impl MakeInvocation {
         self
     }
 
+    /// The target this invocation runs.
     pub(super) fn target(&self) -> &str {
         &self.target
     }
@@ -65,6 +69,7 @@ impl MakeInvocation {
             .map(|(name, value)| format!("{name}={value}"))
     }
 
+    /// Environment entries as `(name, value)` pairs.
     pub(super) fn environment_entries(&self) -> impl Iterator<Item = (&str, &str)> + '_ {
         self.environment
             .iter()
