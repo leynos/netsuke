@@ -143,6 +143,15 @@ fn stdout_should_contain_in_order(
     assert_output_ordering(&world.command_stdout, OutputType::Stdout, &first, &second)
 }
 
+#[then("stderr should contain {first:string} before {second:string}")]
+fn stderr_should_contain_in_order(
+    world: &TestWorld,
+    first: OutputFragment,
+    second: OutputFragment,
+) -> Result<()> {
+    assert_output_ordering(&world.command_stderr, OutputType::Stderr, &first, &second)
+}
+
 #[then("the file {name:string} should exist")]
 fn file_should_exist(world: &TestWorld, name: FileName) -> Result<()> {
     assert_file_existence(world, &name, true)
