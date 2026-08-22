@@ -4,7 +4,6 @@
 //! through [`ConfigDiscovery`], handling explicit paths from CLI flags and
 //! environment variables, and loading TOML chains into [`MergeLayer`] values.
 
-use monotony::MonotonicClock;
 use ortho_config::{
     MapEnv, MergeComposer, MergeLayer, OrthoResult, SharedEnvSource, load_config_file_as_chain,
 };
@@ -123,18 +122,6 @@ impl DiscoveryOutcome {
 /// Discover configuration layers once through the injected environment.
 pub(crate) fn discover_file_layers(cli: &Cli, env: &impl EnvProvider) -> DiscoveryOutcome {
     collect_outcome(cli, env)
-}
-
-/// Discover layers once, recording telemetry at the composition boundary.
-///
-/// The query itself stays side-effect free; this wrapper is for composition
-/// roots that already hold a `MonotonicClock`.
-pub(crate) fn discover_file_layers_timed<C: MonotonicClock>(
-    cli: &Cli,
-    env: &impl EnvProvider,
-    clock: &C,
-) -> DiscoveryOutcome {
-    telemetry::timed_discovery(clock, || discover_file_layers(cli, env))
 }
 
 /// Run one discovery pass and retain its outcome, including deferred errors.

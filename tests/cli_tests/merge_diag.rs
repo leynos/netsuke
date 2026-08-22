@@ -2,6 +2,7 @@
 
 use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs::Dir};
+use metrics_util::debugging::DebuggingRecorder;
 use netsuke::cli_localization;
 use std::cell::Cell;
 use std::{collections::HashMap, ffi::OsString, sync::Arc};
@@ -29,6 +30,47 @@ fn resolve_merged_json_honours_injected_env() -> Result<()> {
         "injected NETSUKE_JSON should override file config",
     );
 
+    Ok(())
+}
+
+/// Standalone merging discovers configuration without recording telemetry.
+///
+/// The application composition root owns discovery timing and metrics. This
+/// public merge API must remain deterministic for library callers that inject
+/// their environment without also opting into an observability dependency.
+#[test]
+fn standalone_merge_does_not_record_discovery_telemetry() -> Result<()> {
+    let temp_dir = tempdir().context("create temporary config directory")?;
+    let config_path = temp_dir.path().join("netsuke.toml");
+    let config_dir = Dir::open_ambient_dir(temp_dir.path(), ambient_authority())
+        .context("open temporary config directory")?;
+    config_dir
+        .write("netsuke.toml", b"jobs = 13\n")
+        .context("write config")?;
+
+    let localizer = Arc::from(cli_localization::build_localizer(None));
+    let config_arg = config_path.to_string_lossy().into_owned();
+    let (cli, matches) = netsuke::cli::parse_with_localizer_from(
+        ["netsuke", "--config", config_arg.as_str()],
+        &localizer,
+    )
+    .context("parse CLI args for standalone merge")?;
+    let env = TestEnv::default();
+    let recorder = DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+
+    let merged = metrics::with_local_recorder(&recorder, || {
+        netsuke::cli::merge_with_config_and_env(&cli, &matches, &env)
+    })?;
+
+    ensure!(
+        merged.jobs == Some(13),
+        "standalone merge should retain the discovered config value"
+    );
+    ensure!(
+        snapshotter.snapshot().into_vec().is_empty(),
+        "standalone merge must not emit discovery telemetry"
+    );
     Ok(())
 }
 

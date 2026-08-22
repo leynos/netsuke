@@ -2521,6 +2521,24 @@ bounded deferred diagnostics. The diagnostic-mode resolver,
 resolves the JSON preference from those discovered layers and preserves the
 outcome for the startup boundary.
 
+Normal command-line use requires no change. The Rust API remains an unstable
+beta surface, but callers that compose configuration themselves can avoid
+discovering and loading the same configuration files more than once. At the
+composition boundary, call `DiscoveryOutcome::emit_diagnostics()` after
+tracing is configured, then consume the outcome with `into_layers()` and pass
+the cached layers to `merge_with_cached_file_layers` for the full merge. This
+preserves diagnostics from the same discovery pass while avoiding repeated
+file loading.
+
+If the composition boundary times discovery itself, call the public
+`record_discovery_outcome(&clock, started, &outcome)` after the pass completes.
+`started` is the `std::time::Instant` captured from the same injected
+`monotony::MonotonicClock` immediately before discovery; the function records
+the elapsed duration and retained outcome without rediscovering. It also
+recreates the bounded `collect_diag_file_layers` tracing span, recording
+`outcome=success` or `outcome=error`; a discovery failure records
+`error_category=file` for an `OrthoError::File` error.
+
 `DiscoveryOutcome::emit_diagnostics` replays the retained bounded diagnostics
 after the composition boundary configures tracing. Callers must explicitly
 replay diagnostics there; the method does not repeat environment or filesystem

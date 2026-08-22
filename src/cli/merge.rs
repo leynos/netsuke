@@ -31,13 +31,12 @@ use serde_json::{Map, Value, json};
 
 use super::config::{BuildConfig, CliConfig};
 use super::discovery::{
-    DiscoveredLayers, EnvProvider, StdEnvProvider, discover_file_layers_timed,
+    DiscoveredLayers, EnvProvider, StdEnvProvider, discover_file_layers,
     push_discovered_file_layers,
 };
 use super::environment::EnvironmentLayer;
 use super::parser::{BuildArgs, Cli, Commands};
 use super::validation_error;
-use monotony::StdMonotonicClock;
 
 /// Merge discovered configuration layers over parsed CLI input.
 ///
@@ -64,8 +63,7 @@ pub fn merge_with_config_and_env(
     matches: &ArgMatches,
     env: &impl EnvProvider,
 ) -> OrthoResult<Cli> {
-    let clock = StdMonotonicClock;
-    let outcome = discover_file_layers_timed(cli, env, &clock);
+    let outcome = discover_file_layers(cli, env);
     outcome.emit_diagnostics();
     merge_with_cached_file_layers(cli, matches, env, outcome.into_layers())
 }

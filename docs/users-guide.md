@@ -999,43 +999,6 @@ defaults. When it finds a candidate that cannot be loaded, such as malformed
 TOML or a file whose `extends` parent is missing, Netsuke reports the load
 error. A broken discovered configuration is therefore not treated as absent.
 
-### Reuse discovered configuration layers
-
-Normal command-line use requires no change. The Rust API remains an unstable
-beta surface, but callers that compose configuration themselves can avoid
-discovering and loading the same configuration files more than once. The
-`netsuke::cli::resolve_json_and_layers_outcome_with_env` returns
-`(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics. At the
-composition boundary, call `DiscoveryOutcome::emit_diagnostics()` after tracing
-is configured, then consume the outcome with `into_layers()` and pass the
-cached layers to `netsuke::cli::merge_with_cached_file_layers` for the full
-merge. This preserves diagnostics from the same discovery pass while avoiding
-repeated file loading.
-
-If the composition boundary times discovery itself, call the public
-`netsuke::cli::record_discovery_outcome(&clock, started, &outcome)` after the
-pass completes. `started` is the `std::time::Instant` captured from the same
-injected `monotony::MonotonicClock` immediately before discovery; the function
-records the elapsed duration and the retained outcome without rediscovering.
-It also recreates the bounded `collect_diag_file_layers` tracing span, recording
-`outcome=success` or `outcome=error`; a discovery failure records
-`error_category=file` for an `OrthoError::File` error.
-It records `DISCOVERY_TOTAL`
-(`netsuke_cli_config_discovery_total`) with the bounded `outcome=success` or
-`outcome=error` label, and `DISCOVERY_DURATION`
-(`netsuke_cli_config_discovery_duration_seconds`) with no labels. The
-`DISCOVERY_OUTCOME_VALUES` constant lists the admitted outcome labels.
-
-The discovery and merge entry points take an injected `&impl ConfigEnvProvider`.
-The public `ConfigEnvProvider` trait provides `get(&self, key: &str) ->
-Option<OsString>` for selector and environment lookups, plus
-`entries(&self) -> Vec<(OsString, OsString)>` for the complete configuration
-environment layer. Implementations must provide `entries()` explicitly; an
-empty vector is appropriate only for providers that support selector lookup
-without a complete environment layer.
-`ConfigStdEnvProvider` is the process-backed implementation; tests and other
-adapters can provide an implementation without mutating the process environment.
-
 ### Diagnose configuration selection
 
 Pass `--verbose` to see how Netsuke selected its configuration. Structured

@@ -51,40 +51,6 @@ const fn error_category(error: &OrthoError) -> &'static str {
     }
 }
 
-/// Run `discover` inside a bounded discovery span at the composition boundary.
-///
-/// Discovery is a query; instrumentation belongs at the composition boundary
-/// where a monotonic clock is available, never inside the query. The span and
-/// metrics carry only the pass outcome and, on failure, a coarse error
-/// category. Selectors, paths, and configuration values never become
-/// telemetry, matching the path-safe field policy of the deferred diagnostics.
-pub(super) fn timed_discovery<C: MonotonicClock>(
-    clock: &C,
-    discover: impl FnOnce() -> DiscoveryOutcome,
-) -> DiscoveryOutcome {
-    describe_metrics();
-    let span = tracing::trace_span!(
-        "collect_diag_file_layers",
-        outcome = field::Empty,
-        error_category = field::Empty,
-    );
-    let _guard = span.enter();
-    let started = clock.now();
-    let outcome = discover();
-    if let Some(error) = outcome.first_error() {
-        let category = error_category(error);
-        span.record("outcome", "error");
-        span.record("error_category", category);
-        tracing::debug!(error_category = category, "configuration discovery failed");
-        counter!(DISCOVERY_TOTAL, "outcome" => "error").increment(1);
-    } else {
-        span.record("outcome", "success");
-        counter!(DISCOVERY_TOTAL, "outcome" => "success").increment(1);
-    }
-    histogram!(DISCOVERY_DURATION).record(clock.now().duration_since(started));
-    outcome
-}
-
 /// Record the discovery outcome series at the composition boundary.
 ///
 /// This is for boundaries that already timed the phase (for example the
@@ -254,17 +220,6 @@ mod tests {
         }
     }
 
-    /// Run one timed discovery under an isolated recorder and return its snapshot.
-    fn snapshot_timed_discovery(discover: impl FnOnce() -> DiscoveryOutcome) -> Snapshot {
-        let recorder = DebuggingRecorder::new();
-        let snapshotter = recorder.snapshotter();
-        let clock = monotony::StdMonotonicClock;
-        metrics::with_local_recorder(&recorder, || {
-            drop(timed_discovery(&clock, discover));
-        });
-        snapshotter.snapshot().into_vec()
-    }
-
     /// Record one retained discovery outcome under isolated metrics and tracing capture.
     fn snapshot_recorded_outcome(outcome: &DiscoveryOutcome) -> (Snapshot, Vec<String>) {
         let recorder = DebuggingRecorder::new();
@@ -357,21 +312,6 @@ mod tests {
             ),
             "category must be from the closed set, got {category}"
         );
-    }
-
-    #[test]
-    fn instrument_discovery_records_success_counter_and_duration() {
-        let snapshot = snapshot_timed_discovery(outcome_without_error);
-
-        assert_discovery_counter(&snapshot, "success");
-        assert_discovery_duration(&snapshot);
-    }
-
-    #[test]
-    fn instrument_discovery_records_error_counter() {
-        let snapshot = snapshot_timed_discovery(outcome_with_error);
-
-        assert_discovery_counter(&snapshot, "error");
     }
 
     #[test]
