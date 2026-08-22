@@ -1,13 +1,18 @@
 //! Grep filter behaviour tests.
 
 use anyhow::{Context, Result, bail, ensure};
+#[cfg(not(windows))]
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{ErrorKind, context};
 use rstest::rstest;
+#[cfg(not(windows))]
 use test_support::fluent::normalize_fluent_isolates;
+#[cfg(not(windows))]
 use test_support::fs;
 
-use super::{StdlibConfig, fallible, streaming_match_payload};
+use super::fallible;
+#[cfg(not(windows))]
+use super::{StdlibConfig, streaming_match_payload};
 
 #[cfg(not(windows))]
 #[rstest]

@@ -3,6 +3,7 @@
 //! These cover which branch the shared file-layer boundary takes — explicit path
 //! versus automatic discovery — and the project-scope second pass. Selector
 //! precedence and event-schema snapshots live in the tracing test module.
+use super::paths::{FailingPathNormalizer, FsPathNormalizer, normalized_path_key};
 use super::*;
 use crate::cli::test_support::TestEnv;
 use anyhow::{Context, Result, ensure};
@@ -12,8 +13,8 @@ use rstest::rstest;
 use tempfile::{TempDir, tempdir};
 
 use super::event_assertions::{EventAssertion, capture_events, find_event};
+#[cfg(unix)]
 use super::layers::collect_file_layers_with_normalizer;
-use super::paths::FailingPathNormalizer;
 use std::cell::Cell;
 use std::ffi::OsString;
 
@@ -100,9 +101,9 @@ fn replay_logs_explicit_config_branch_without_environment_access() -> Result<()>
     Ok(())
 }
 
-/// Cached automatic discovery replays its appended project-scope decision.
+/// Cached automatic discovery emits no project-scope trace without a project layer.
 #[test]
-fn replay_logs_discovery_and_appended_project_scope_without_environment_access() -> Result<()> {
+fn replay_logs_discovery_without_project_scope_trace_without_environment_access() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
     let cli = scenario_cli(LayerScenario::Discovery, &temp)?;
     let env = CountingEnv::default();
@@ -121,7 +122,12 @@ fn replay_logs_discovery_and_appended_project_scope_without_environment_access()
     find_event(&events, "read config path variable")?;
     find_event(&events, "resolved config path")?;
     find_event(&events, "using config discovery")?;
-    find_event(&events, "appending project-scope layers")?;
+    ensure!(
+        !events
+            .iter()
+            .any(|event| event.contains("project-scope layers")),
+        "discovery without a project layer must not report a project-scope outcome: {events:?}"
+    );
 
     Ok(())
 }
@@ -175,7 +181,12 @@ fn injected_automatic_discovery_uses_xdg_config_home() -> Result<()> {
         .filter_map(|layer| layer.path().map(|path| path.as_str().to_owned()))
         .collect::<Vec<_>>();
 
-    assert_eq!(paths, vec![config_path.to_string_lossy().into_owned()]);
+    let expected_path = normalized_path_key(&FsPathNormalizer, &config_path.to_string_lossy())
+        .context("canonicalise injected XDG config path")?
+        .to_string_lossy()
+        .into_owned();
+
+    assert_eq!(paths, vec![expected_path]);
     Ok(())
 }
 
@@ -224,12 +235,9 @@ fn discovered_project_config_retains_load_outcome(
     Ok(())
 }
 
-/// A project-scope layer already found by discovery is not appended again.
+/// A non-canonical `--directory` must not append an already-discovered layer.
 ///
-/// `OrthoConfig` records canonicalised layer paths, so a non-canonical
-/// `--directory` (here one containing a `.` component, as a relative or
-/// symlinked path would be) must still match. Appending twice would duplicate
-/// the entries of every `merge_strategy = "append"` field in the file.
+/// Duplicating the layer repeats every `merge_strategy = "append"` value.
 #[test]
 fn existing_project_scope_layer_is_not_appended_twice() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
@@ -267,12 +275,43 @@ fn existing_project_scope_layer_is_not_appended_twice() -> Result<()> {
     Ok(())
 }
 
-/// Normalization failure must not fail configuration discovery.
-///
-/// A missing project `.netsuke.toml` or an unreadable directory makes
-/// canonicalization fail, which is ordinary rather than exceptional. The
-/// discovery-side policy compares such a path literally and carries on; only an
-/// unmatched project layer results, never an error.
+/// A symlink alias must not append a project-scope layer twice: Windows short
+/// and long names canonicalize to the one file recorded by discovery.
+#[cfg(unix)]
+#[test]
+fn project_scope_layer_is_not_appended_twice_via_symlink_alias() -> Result<()> {
+    let temp = tempdir().context("create temp dir")?;
+    let project_dir = temp.path().join("project");
+    test_support::fs::create_dir(&project_dir).context("create project dir")?;
+    test_support::fs::write(
+        project_dir.join(".netsuke.toml"),
+        "default_targets = [\"alpha\"]\n",
+    )
+    .context("write project config")?;
+
+    // An alternate spelling of `project_dir` that resolves to the same file.
+    let alias = temp.path().join("project-alias");
+    test_support::fs::symlink(&project_dir, &alias).context("create project alias")?;
+
+    let layers =
+        collect_file_layers_with_normalizer(Some(alias.as_path()), &paths::FsPathNormalizer)?;
+
+    let project_layers = layers
+        .iter()
+        .filter(|layer| {
+            layer
+                .path()
+                .is_some_and(|path| path.as_str().ends_with(".netsuke.toml"))
+        })
+        .count();
+    ensure!(
+        project_layers == 1,
+        "project-scope layer should appear exactly once, found {project_layers}: {layers:?}"
+    );
+    Ok(())
+}
+/// Canonicalization failure falls back to literal comparison without failing
+/// discovery.
 #[test]
 fn normalization_failure_does_not_fail_discovery() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
@@ -284,11 +323,47 @@ fn normalization_failure_does_not_fail_discovery() -> Result<()> {
     )
     .context("write project config")?;
 
-    let layers =
-        collect_file_layers_with_normalizer(Some(project_dir.as_path()), &FailingPathNormalizer)
-            .context("discovery must succeed despite normalization failure")?;
+    // The dot component differs from OrthoConfig's canonical layer path, so
+    // the failing normalizer must take the fallback de-duplication branch.
+    let alias = project_dir.join(".");
+    let cli = Cli {
+        directory: Some(alias),
+        ..Cli::default()
+    };
+    let env = CountingEnv::default();
+    let (discovered, collection_events) = capture_events(|| {
+        Ok::<_, anyhow::Error>(discover_file_layers_with_normalizer(
+            &cli,
+            &env,
+            &FailingPathNormalizer,
+        ))
+    })?;
 
-    ensure!(layers.len() == 1, "expected one project layer: {layers:?}");
+    ensure!(
+        !collection_events
+            .iter()
+            .any(|event| event.contains("resolved project-scope layer deduplication")),
+        "discovery must defer the project-layer count event until replay: {collection_events:?}"
+    );
+    let discovery_get_calls = env.get_calls();
+    let events = replay_events(&discovered)?;
+
+    ensure!(
+        env.get_calls() == discovery_get_calls,
+        "replay must not access the environment again"
+    );
+    ensure!(
+        discovered.layers().len() == 1,
+        "expected one project layer: {:?}",
+        discovered.layers()
+    );
+    let deduplication = find_event(&events, "resolved project-scope layer deduplication")?;
+    ensure!(
+        deduplication.contains("discovered_layer_count=1")
+            && deduplication.contains("project_layer_count=1")
+            && deduplication.contains("appended_layer_count=0"),
+        "fallback de-duplication outcome should record its counts: {deduplication}"
+    );
     Ok(())
 }
 

@@ -12,14 +12,17 @@ use ortho_config::{
 };
 use serde_json::Value;
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 #[cfg(test)]
 use std::sync::Arc;
 
 use super::super::parser::Cli;
 use super::CONFIG_ENV_VAR;
-use super::diagnostics::{BoundedConfigPath, debug_optional_config_path_from_fields};
-use super::paths::{FsPathNormalizer, PathNormalizer, normalized_path_key};
+use super::diagnostics::{
+    BoundedConfigPath, ProjectLayerDeduplication, debug_optional_config_path_from_fields,
+};
+use super::paths::{PathNormalizer, normalized_path_key};
 
 /// Preserve discovered layers while extracting their final JSON preference.
 ///
@@ -61,7 +64,15 @@ pub(super) enum ProjectScopeTrace {
     /// The primary discovery scan already yielded the project configuration.
     Included(BoundedConfigPath),
     /// The project configuration was loaded by the second pass.
-    Appended(BoundedConfigPath),
+    Appended {
+        path: BoundedConfigPath,
+        deduplication: Option<ProjectLayerDeduplication>,
+    },
+    /// The second pass found only layers already returned by discovery.
+    Deduplicated {
+        path: BoundedConfigPath,
+        deduplication: ProjectLayerDeduplication,
+    },
 }
 
 impl ProjectScopeTrace {
@@ -74,8 +85,24 @@ impl ProjectScopeTrace {
                     path,
                 );
             }
-            Self::Appended(path) => {
+            Self::Appended {
+                path,
+                deduplication,
+            } => {
+                if let Some(counts) = deduplication {
+                    counts.emit();
+                }
                 debug_optional_config_path_from_fields("appending project-scope layers", path);
+            }
+            Self::Deduplicated {
+                path,
+                deduplication,
+            } => {
+                deduplication.emit();
+                debug_optional_config_path_from_fields(
+                    "project-scope layers already discovered",
+                    path,
+                );
             }
         }
     }
@@ -95,18 +122,6 @@ fn config_discovery(directory: Option<&PathBuf>, env_source: SharedEnvSource) ->
     builder.build()
 }
 
-/// Run discovery with the composition root's environment source and retain its
-/// project-scope outcome for later replay.
-pub(super) fn collect_file_layers_with_trace_and_env_source(
-    directory: Option<&Path>,
-    env_source: SharedEnvSource,
-) -> (
-    Option<ProjectScopeTrace>,
-    OrthoResult<Vec<MergeLayer<'static>>>,
-) {
-    collect_file_layers_with_normalizer_and_trace(directory, &FsPathNormalizer, env_source)
-}
-
 /// Return the key used to compare `path` against the expected project file.
 ///
 /// This is the discovery-side fallback policy for [`normalized_path_key`]. A
@@ -114,8 +129,8 @@ pub(super) fn collect_file_layers_with_trace_and_env_source(
 /// frequently does not exist, or a directory the process cannot read — is
 /// compared literally with `OrthoConfig`'s already-canonicalized layer path
 /// rather than failing discovery. An exact textual match still identifies the layer;
-/// otherwise the project-scope pass appends it and retains its normal debug
-/// event for the composition boundary.
+/// otherwise the project-scope pass de-duplicates loaded layers and retains
+/// its bounded outcome for the composition boundary.
 fn comparison_key(normalizer: &impl PathNormalizer, path: &str) -> PathBuf {
     normalized_path_key(normalizer, path).unwrap_or_else(|_| PathBuf::from(path))
 }
@@ -138,7 +153,7 @@ pub(super) fn collect_file_layers_with_normalizer(
 }
 
 /// Build the discovery chain and project-scope trace using `normalizer`.
-fn collect_file_layers_with_normalizer_and_trace(
+pub(super) fn collect_file_layers_with_normalizer_and_trace(
     directory: Option<&Path>,
     normalizer: &impl PathNormalizer,
     env_source: SharedEnvSource,
@@ -175,15 +190,70 @@ fn collect_file_layers_with_normalizer_and_trace(
         );
     }
 
-    let trace = ProjectScopeTrace::Appended(project_trace_path);
-    let result = project_scope_layers(project_file.as_deref()).map(|project_layers| {
-        file_layers
-            .value
+    merge_project_scope_layers(
+        file_layers.value,
+        project_file.as_deref(),
+        project_trace_path,
+    )
+}
+
+/// Load project layers, filter aliases already yielded by discovery, and trace the outcome.
+fn merge_project_scope_layers(
+    discovered_layers: Vec<MergeLayer<'static>>,
+    project_file: Option<&Path>,
+    project_trace_path: BoundedConfigPath,
+) -> (
+    Option<ProjectScopeTrace>,
+    OrthoResult<Vec<MergeLayer<'static>>>,
+) {
+    let error_trace = ProjectScopeTrace::Appended {
+        path: project_trace_path.clone(),
+        deduplication: None,
+    };
+    let result = project_scope_layers(project_file).map(|project_layers| {
+        let discovered_paths = discovered_layers
+            .iter()
+            .filter_map(|layer| layer.path().map(camino::Utf8Path::as_str))
+            .collect::<HashSet<_>>();
+        let discovered_layer_count = discovered_paths.len();
+        let project_layer_count = project_layers.len();
+        let project_layers_to_append = project_layers
             .into_iter()
-            .chain(project_layers)
-            .collect()
+            .filter(|layer| {
+                layer
+                    .path()
+                    .is_none_or(|path| !discovered_paths.contains(path.as_str()))
+            })
+            .collect::<Vec<_>>();
+        let appended_layer_count = project_layers_to_append.len();
+        let deduplication = ProjectLayerDeduplication::new(
+            discovered_layer_count,
+            project_layer_count,
+            appended_layer_count,
+        );
+        let trace = if project_layer_count == 0 {
+            None
+        } else if appended_layer_count == 0 {
+            Some(ProjectScopeTrace::Deduplicated {
+                path: project_trace_path,
+                deduplication,
+            })
+        } else {
+            Some(ProjectScopeTrace::Appended {
+                path: project_trace_path,
+                deduplication: Some(deduplication),
+            })
+        };
+        let layers = discovered_layers
+            .into_iter()
+            .chain(project_layers_to_append)
+            .collect();
+        (trace, layers)
     });
-    (Some(trace), result)
+    match result {
+        Ok((trace, layers)) => (trace, Ok(layers)),
+        Err(err) => (Some(error_trace), Err(err)),
+    }
 }
 
 fn project_scope_file(directory: Option<&Path>) -> Option<PathBuf> {

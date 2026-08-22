@@ -44,6 +44,13 @@ const CI_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     rustflags: WARNINGS_POLONIUS_RUSTFLAGS,
     pins_toolchain_env: true,
 };
+const CI_WINDOWS_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
+    path: ".github/workflows/ci.yml",
+    job: "build-test-windows",
+    action: SETUP_RUST_ACTION,
+    rustflags: WARNINGS_POLONIUS_RUSTFLAGS,
+    pins_toolchain_env: true,
+};
 const NETSUKEFILE_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     path: ".github/workflows/netsukefile-test.yml",
     job: "netsukefile",
@@ -67,8 +74,9 @@ const PACKAGING_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
 };
 
 /// Every workflow under the shared-action toolchain contract.
-const WORKFLOW_EXPECTATIONS: [WorkflowExpectation; 4] = [
+const WORKFLOW_EXPECTATIONS: [WorkflowExpectation; 5] = [
     CI_WORKFLOW,
+    CI_WINDOWS_WORKFLOW,
     NETSUKEFILE_WORKFLOW,
     COVERAGE_WORKFLOW,
     PACKAGING_WORKFLOW,
@@ -167,6 +175,7 @@ fn makefile_declares_the_polonius_flags_variable() -> Result<()> {
 
 #[rstest]
 #[case::ci(CI_WORKFLOW)]
+#[case::ci_windows(CI_WINDOWS_WORKFLOW)]
 #[case::netsukefile(NETSUKEFILE_WORKFLOW)]
 #[case::coverage(COVERAGE_WORKFLOW)]
 #[case::packaging(PACKAGING_WORKFLOW)]

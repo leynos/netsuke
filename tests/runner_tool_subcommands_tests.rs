@@ -3,6 +3,11 @@
 //! Covers the `clean` subcommand which still invokes `ninja -t <tool>`. The
 //! `graph` subcommand renders in-process and is covered by
 //! `tests/runner_graph_tests.rs`.
+//!
+//! The whole crate is Unix-only: it drives a fake `ninja` shell script and the
+//! Unix-only `check_ninja` factories, neither of which exists on Windows.
+
+#![cfg(unix)]
 
 use anyhow::{Context, Result, bail, ensure};
 use netsuke::cli::{Cli, Commands};

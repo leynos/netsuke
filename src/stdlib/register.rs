@@ -254,7 +254,7 @@ fn is_fifo(ft: fs::FileType) -> bool {
 }
 
 #[cfg(not(unix))]
-fn is_fifo(_ft: fs::FileType) -> bool {
+const fn is_fifo(_ft: fs::FileType) -> bool {
     false
 }
 
@@ -264,7 +264,7 @@ fn is_block_device(ft: fs::FileType) -> bool {
 }
 
 #[cfg(not(unix))]
-fn is_block_device(_ft: fs::FileType) -> bool {
+const fn is_block_device(_ft: fs::FileType) -> bool {
     false
 }
 
@@ -274,7 +274,7 @@ fn is_char_device(ft: fs::FileType) -> bool {
 }
 
 #[cfg(not(unix))]
-fn is_char_device(_ft: fs::FileType) -> bool {
+const fn is_char_device(_ft: fs::FileType) -> bool {
     false
 }
 
@@ -284,6 +284,6 @@ fn is_device(ft: fs::FileType) -> bool {
 }
 
 #[cfg(not(unix))]
-fn is_device(_ft: fs::FileType) -> bool {
+const fn is_device(_ft: fs::FileType) -> bool {
     false
 }

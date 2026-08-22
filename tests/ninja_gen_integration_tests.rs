@@ -6,22 +6,30 @@
 
 use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8PathBuf;
+#[cfg(unix)]
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use netsuke::ast::Recipe;
 use netsuke::ir::{Action, BuildEdge, BuildGraph};
 use netsuke::ninja_gen::{NinjaGenError, generate, generate_into};
-use rstest::{fixture, rstest};
+#[cfg(unix)]
+use rstest::fixture;
+use rstest::rstest;
+#[cfg(unix)]
 use std::process::Command;
+#[cfg(unix)]
 use tempfile::TempDir;
+#[cfg(unix)]
 use test_support::ninja_gen::{self, AssertionType, NinjaIntegrationCase};
 
 /// Provide a temporary directory when Ninja is available, skipping otherwise.
+#[cfg(unix)]
 #[fixture]
 fn ninja_integration_setup() -> Option<TempDir> {
     ninja_gen::ninja_integration_setup()
 }
 
 /// Integration scenarios to confirm Ninja executes commands correctly.
+#[cfg(unix)]
 #[rstest]
 #[case::multiline_script_valid(NinjaIntegrationCase {
     action: Action {

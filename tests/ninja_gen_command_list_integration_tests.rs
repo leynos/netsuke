@@ -1,8 +1,10 @@
-//! Real-Ninja regressions for command-list shell boundaries.
+//! Real-Ninja regressions for POSIX command-list shell boundaries.
 //!
 //! These tests cover syntax which would escape a directly interpolated brace
 //! group and therefore require the generated command to evaluate each entry as
 //! a complete shell unit.
+
+#![cfg(unix)]
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;

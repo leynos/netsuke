@@ -15,6 +15,7 @@ use netsuke::runner::{
     BuildTargets, CommandEnv, NinjaBuildRequest, NinjaProcessOptions, NinjaToolRequest, StderrMode,
     run_ninja_tool_with, run_ninja_with,
 };
+use rstest::rstest;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::{TempDir, tempdir};
@@ -58,6 +59,8 @@ fn run_routing_worker(job: &str, tool: bool, ninja: &Path, ran_file: &Path) -> R
         .env(RAN_FILE_ENV, ran_file);
     if tool {
         command.env(TOOL_ENV, "1");
+    } else {
+        command.env_remove(TOOL_ENV);
     }
     Ok(command)
 }
@@ -163,30 +166,13 @@ fn routing_worker() -> Result<()> {
     result.context("run Ninja invocation in routing worker")
 }
 
-/// A build request carrying `stderr_mode=Forward`: the child markers must
-/// reach the user's stdout and stderr.
-#[test]
-fn forward_request_routes_child_streams() -> Result<()> {
-    assert_routing_case(StderrMode::Forward, false)
-}
-
-/// A tool request carrying `stderr_mode=Forward`: the child markers must
-/// reach the user's stdout and stderr.
-#[test]
-fn forward_tool_request_routes_child_streams() -> Result<()> {
-    assert_routing_case(StderrMode::Forward, true)
-}
-
-/// A build request carrying `stderr_mode=Suppress`: both child markers must be
-/// drained, and the run marker proves the child really executed.
-#[test]
-fn suppress_request_drains_child_streams() -> Result<()> {
-    assert_routing_case(StderrMode::Suppress, false)
-}
-
-/// A tool request carrying `stderr_mode=Suppress`: both child markers must be
-/// drained, with the run marker proving the child executed.
-#[test]
-fn suppress_tool_request_drains_child_streams() -> Result<()> {
-    assert_routing_case(StderrMode::Suppress, true)
+/// Each explicit stderr policy routes both build and tool request streams.
+/// Each case proves the process boundary honours `stderr_mode` alone.
+#[rstest]
+#[case::forward_build(StderrMode::Forward, false)]
+#[case::forward_tool(StderrMode::Forward, true)]
+#[case::suppress_build(StderrMode::Suppress, false)]
+#[case::suppress_tool(StderrMode::Suppress, true)]
+fn request_routes_child_streams(#[case] stderr_mode: StderrMode, #[case] tool: bool) -> Result<()> {
+    assert_routing_case(stderr_mode, tool)
 }

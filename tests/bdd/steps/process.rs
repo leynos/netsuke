@@ -4,18 +4,16 @@ use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use anyhow::{Context, Result, anyhow, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use mockable::{DefaultEnv, Env};
+#[cfg(unix)]
 use netsuke::output_prefs;
 use netsuke::runner::{self, BuildTargets, CommandEnv, NINJA_PROGRAM};
 use rstest_bdd_macros::{given, then, when};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
-use test_support::{
-    check_ninja::{self, ToolName},
-    ensure_manifest_exists,
-    env::prepend_path_value,
-    fake_ninja,
-};
+#[cfg(unix)]
+use test_support::check_ninja::ToolName;
+use test_support::{check_ninja, ensure_manifest_exists, env::prepend_path_value, fake_ninja};
 
 // ---------------------------------------------------------------------------
 // Helper functions
@@ -84,6 +82,7 @@ fn prepare_cli_with_directory(world: &TestWorld) -> Result<()> {
 }
 
 /// Prepares the CLI for execution with an absolute file path.
+#[cfg(unix)]
 fn prepare_cli_with_absolute_file(world: &TestWorld) -> Result<()> {
     prepare_cli_with_directory(world)?;
     world

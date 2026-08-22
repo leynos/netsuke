@@ -432,11 +432,12 @@ action's `with.rustflags` input, and none of them may set a job-level
 value and silently drop the flag, so the tree would fail to borrow-check with a
 confusing `E0499` rather than an obvious configuration error.
 
-Four workflows carry the contract:
+Five CI jobs across four workflows carry the contract:
 
 | Workflow | Job | Shared action | `with.rustflags` |
 | --- | --- | --- | --- |
 | [`ci.yml`](../.github/workflows/ci.yml) | `build-test` | `setup-rust` | `-D warnings -Zpolonius=next` |
+| [`ci.yml`](../.github/workflows/ci.yml) | `build-test-windows` | `setup-rust` | `-D warnings -Zpolonius=next` |
 | [`coverage-main.yml`](../.github/workflows/coverage-main.yml) | `coverage-upload` | `setup-rust` | `-D warnings -Zpolonius=next` |
 | [`netsukefile-test.yml`](../.github/workflows/netsukefile-test.yml) | `netsukefile` | `setup-rust` | `-Zpolonius=next` |
 | [`build-and-package.yml`](../.github/workflows/build-and-package.yml) | `build` | `rust-build-release` | `-Zpolonius=next` |
@@ -454,7 +455,7 @@ their toolchain through the action's own `toolchain` input and a second,
 independently edited pin would let the two disagree.
 
 [`tests/polonius_toolchain_contract.rs`](../tests/polonius_toolchain_contract.rs)
-enforces all four callers. For each one it asserts:
+enforces all five callers. For each one it asserts:
 
 - the job uses the expected shared-action reference — path *and* pinned
   revision, the latter derived from the checked workflows themselves rather
@@ -1970,6 +1971,19 @@ is not obvious from the name:
   regular file with any execute bit set, and `false` for an absent or
   unreadable path. It is the inverse of `set_mode`, and exists for probing a
   sandbox `PATH` the way an executable lookup would.
+- `canonicalize(path: &Utf8Path) -> io::Result<Utf8PathBuf>` is the deliberate
+  ambient boundary for fixture paths. It delegates to `std::fs::canonicalize`:
+  `cap_std::fs::Dir::canonicalize` is scoped to a directory handle and returns
+  a relative path, so it cannot provide the absolute canonical spelling needed
+  for fixtures in an ambient temporary directory. The helper propagates the
+  underlying I/O error and returns `io::ErrorKind::InvalidData` when the
+  canonical path cannot be represented as UTF-8; callers must not hide that
+  failure with lossy conversion. Because the operation is host-native, tests
+  that compare native path identity should use this helper, including when
+  Windows short-name and long-name spellings refer to the same file; identity
+  follows the filesystem's canonical form rather than handwritten separator
+  or string normalization. Keep this exception in `test_support::fs`; production
+  code remains capability-scoped or uses its dedicated normalizer.
 - `copy(from, to) -> io::Result<u64>` forwards to `std::fs::copy`, returning
   the number of bytes copied and propagating its failure. The `dev_fast`
   release fixtures use it to place a built archive under its versioned name.
@@ -2006,6 +2020,22 @@ the pre-persist action to cover controlled creation orderings; they do not claim
 to model arbitrary scheduler or filesystem interleavings. The fallible
 `test_support::fs::inspect_path` probe treats `NotFound` as absence and
 propagates every other metadata error.
+
+### Temporary Ninja build files
+
+`runner::process::create_temp_ninja_file` writes, flushes, and synchronizes a
+generated Ninja file, then converts the `NamedTempFile` into a
+`tempfile::TempPath`. Returning `TempPath` is deliberate: it retains automatic
+cleanup while releasing the writer before Ninja reopens the file by path. On
+Windows, leaving the original writer open can make Ninja's read fail. Keep the
+returned `TempPath` alive until the Ninja invocation completes; dropping it
+removes the temporary file.
+
+The regression test
+`create_temp_ninja_file_releases_writer_before_external_read` is the lifecycle
+contract. It opens the returned path through an independent handle, reads it
+back, and checks its contents, length, and `.ninja` suffix. Changes to the
+helper must preserve that writer-release and path-lifetime behaviour.
 
 ### Shared Makefile contract helpers
 
@@ -2582,8 +2612,12 @@ Configuration merge helpers:
   deferred diagnostics for the diagnostic and merge callers.
 - `push_discovered_file_layers(composer, errors, discovered) -> ()` transfers
   the retained layers and discovery errors into the full merge composition.
-- `collect_file_layers_with_trace_and_env_source(directory, env_source)` runs
-  the one discovery pass and retains bounded project-scope trace metadata.
+- `collect_file_layers_with_normalizer_and_trace(directory, normalizer,
+  env_source)` runs the one discovery pass with the injected path normalizer
+  and environment source, and retains bounded project-scope trace metadata for
+  deferred diagnostics. The normalizer canonicalizes comparison keys so
+  project layers are de-duplicated across equivalent path spellings;
+  `DiscoveryOutcome::emit_diagnostics()` is the production emission boundary.
 
 - `resolve_json_and_layers_outcome_with_env(cli, matches, env)` retains the
   `DiscoveryOutcome` so startup can emit diagnostics after tracing setup and
@@ -2772,11 +2806,30 @@ and `command_available` over a temporary directory with a chosen extension
 list; see `tests/stdlib_which_pathext_tests.rs`, which is gated to Windows
 because `PATHEXT` governs resolution only there.
 
-That gating has a cost worth stating: CI runs `make test` on `ubuntu-latest`
-only, so a `#[cfg(windows)]` test does not gate a merge. Keep host-independent
-rules — normalization, the fallback — in the `#[cfg(any(windows, test))]` unit
-tests that the Linux suite executes, and reserve the Windows-gated suite for
-behaviour that genuinely cannot run elsewhere.
+That gating has a cost worth stating: the Windows-gated suite runs only on
+`build-test-windows`, so keep host-independent rules — normalization, the
+fallback — in the `#[cfg(any(windows, test))]` unit tests that every host
+executes, and reserve the Windows-gated suite for behaviour that genuinely
+cannot run elsewhere.
+
+The `build-test-windows` job in `.github/workflows/ci.yml` is a merge gate: it
+compiles, lints (Clippy and Whitaker), and tests the `#[cfg(windows)]` suite on
+`windows-latest` under `-D warnings`, so a Windows-gated test or lint finding
+blocks a merge. The split still stands: host-independent rules stay in the
+`#[cfg(any(windows, test))]` unit tests so every host — including a developer
+on Unix — exercises them, while the Windows-gated suite covers the behaviour
+that only exists there.
+
+The Windows job installs GNU Make through Chocolatey and Ninja through the
+setup action, then runs every Make target through Git Bash with `SHELL=bash`.
+That override is required because GNU Make otherwise selects `cmd.exe` on
+Windows, while Netsuke's recipes use POSIX shell syntax. It installs the
+workflow-pinned `cargo-nextest`; the shared Rust setup action supplies
+`rustfmt` and Clippy. `whitaker-installer` produces a PowerShell wrapper on
+Windows, so the job adds a Bash shim that invokes it through PowerShell before
+running `make SHELL=bash lint-whitaker`. To reproduce the platform gate, use a
+Windows environment with those tools provisioned and run the four Windows Make
+commands from the workflow in that order.
 
 #### `PATHEXT` normalization
 
@@ -2800,6 +2853,17 @@ Composition rules:
 - A value yielding no usable extension falls back to the built-in list. An
   empty result would mean Windows treats nothing as executable, so `which`
   would report every command missing.
+
+The widening was reassessed when `build-test-windows` began compiling and
+testing the `#[cfg(windows)]` arm directly (#518): the original motivation for
+`#[cfg(any(windows, test))]` — reaching the pure string logic from a CI host
+that never compiled Windows — is gone, but reverting to `#[cfg(windows)]`
+would drop Unix-host coverage of `parse_pathext`'s normalization,
+de-duplication, and fallback rules, which `src/stdlib/which/pathext_tests.rs`
+pins on every host. There is no equivalent Unix-side test for a Windows-only
+function, so the widening stays: the pure string logic is exercised on both
+Linux and Windows, and a Windows-gated regression cannot hide from the Unix
+suite.
 
 The full normalization contract, which the property tests in
 `src/stdlib/which/pathext_tests.rs` pin:
@@ -2916,17 +2980,22 @@ split diagnostics, path comparison, and tests out of the main discovery flow:
 
 - `discovery_diagnostics.rs` — bounded tracing helpers (`path_hash`,
   `short_hash`, `debug_config_path`, `debug_optional_config_path`,
-  `warn_explicit_config_load_failed`) and the `ConfigLoadFailureKind` enum used
-  to classify a load failure without retaining error text.
+  `debug_project_layer_deduplication`, `warn_explicit_config_load_failed`) and
+  the `ConfigLoadFailureKind` enum used to classify a load failure without
+  retaining error text. The de-duplication event records discovered, project,
+  and appended layer counts after filtering without exposing paths.
 - `discovery_paths.rs` — `normalized_path_key` resolves a path to a
   comparable, canonicalized form and returns canonicalization errors to its
   caller. The discovery-side `comparison_key` fallback uses the original path
-  literally when resolution fails, continues discovery, and emits only the
-  normal append debug event. This lets relative or symlinked `--directory`
+  literally when resolution fails, continues discovery, and emits a bounded
+  post-filter layer-count event. This lets relative or symlinked `--directory`
   values match OrthoConfig's canonicalized layer paths without making an
-  unresolved path fatal. `FsPathNormalizer` is confined to this comparison
-  boundary: selectors remain pure path queries, OrthoConfig supplies the layer
-  path, and tracing remains at the orchestration boundary.
+  unresolved path fatal. `FsPathNormalizer` uses `dunce::canonicalize` to
+  mirror OrthoConfig's native Windows identity (without UNC-prefix or
+  short-name divergence); on other platforms it follows
+  `std::fs::canonicalize`. Keep it confined to this comparison boundary:
+  selectors remain pure path queries, OrthoConfig supplies the layer path, and
+  tracing remains at the orchestration boundary.
 - `discovery_event_assertions.rs` — shared test-only helpers:
   `capture_events` runs a closure under a TRACE capturing subscriber,
   `find_event` locates one emitted event by substring, and `EventAssertion`

@@ -24,7 +24,8 @@ mod paths;
 #[path = "discovery_trace.rs"]
 mod trace;
 use diagnostics::{BoundedConfigPath, ConfigLoadFailureKind, ConfigLoadWarning};
-use layers::collect_file_layers_with_trace_and_env_source;
+use layers::collect_file_layers_with_normalizer_and_trace;
+use paths::{FsPathNormalizer, PathNormalizer};
 use trace::{DiscoveryDiagnostics, DiscoveryTrace, FileLayerTrace};
 
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG";
@@ -148,7 +149,16 @@ impl DiscoveryOutcome {
 
 /// Discover configuration layers once through the injected environment.
 pub(crate) fn discover_file_layers(cli: &Cli, env: &impl EnvProvider) -> DiscoveryOutcome {
-    let (trace, load_warning, outcome) = collect_file_layers_with_env(cli, env);
+    discover_file_layers_with_normalizer(cli, env, &FsPathNormalizer)
+}
+
+/// Discover configuration layers through one path-normalization policy.
+fn discover_file_layers_with_normalizer(
+    cli: &Cli,
+    env: &impl EnvProvider,
+    normalizer: &impl PathNormalizer,
+) -> DiscoveryOutcome {
+    let (trace, load_warning, outcome) = collect_file_layers_with_env(cli, env, normalizer);
     let diagnostics = DiscoveryDiagnostics::new(trace, load_warning);
     let layers = match outcome {
         Ok(discovered_layers) => {
@@ -171,10 +181,7 @@ pub(crate) fn discover_file_layers(cli: &Cli, env: &impl EnvProvider) -> Discove
     DiscoveryOutcome { layers }
 }
 
-/// Add a discovered file layer result to a merge composition.
-///
-/// Discovery errors join the merge error collection, retaining the normal
-/// merge path's accumulated-error behaviour.
+/// Add discovered layers and errors to the normal merge accumulation.
 pub(crate) fn push_discovered_file_layers(
     composer: &mut MergeComposer,
     errors: &mut Vec<Arc<ortho_config::OrthoError>>,
@@ -188,12 +195,11 @@ pub(crate) fn push_discovered_file_layers(
 }
 
 /// Load layers through the shared explicit-config precedence boundary.
-///
-/// Normal merging and early JSON resolution both use this helper so they
-/// select the same file layers while retaining their own error handling.
+/// Normal merging and early JSON resolution use it to retain their error policy.
 fn collect_file_layers_with_env(
     cli: &Cli,
     env: &impl EnvProvider,
+    normalizer: &impl PathNormalizer,
 ) -> (
     DiscoveryTrace,
     Option<ConfigLoadWarning>,
@@ -202,8 +208,9 @@ fn collect_file_layers_with_env(
     let resolution = resolve_config_selector(cli.config.clone(), env);
     let (file_layers, load_warning, outcome) = resolution.path.as_deref().map_or_else(
         || {
-            let (project_scope, outcome) = collect_file_layers_with_trace_and_env_source(
+            let (project_scope, outcome) = collect_file_layers_with_normalizer_and_trace(
                 cli.directory.as_deref(),
+                normalizer,
                 discovery_env_source(env),
             );
             (FileLayerTrace::Automatic { project_scope }, None, outcome)

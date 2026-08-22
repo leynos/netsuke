@@ -1,7 +1,10 @@
 //! JSON diagnostic, result-envelope, and standard stderr integration tests.
 
-use super::support::{open_workspace, temp_with_minimal_manifest, write_fake_ninja_script};
+#[cfg(unix)]
+use super::support::write_fake_ninja_script;
+use super::support::{open_workspace, temp_with_minimal_manifest};
 use anyhow::{Context, Result, ensure};
+#[cfg(unix)]
 use camino::Utf8Path;
 #[cfg(unix)]
 use netsuke::runner::NINJA_ENV;

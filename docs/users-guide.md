@@ -989,6 +989,11 @@ defaults. When it finds a candidate that cannot be loaded, such as malformed
 TOML or a file whose `extends` parent is missing, Netsuke reports the load
 error. A broken discovered configuration is therefore not treated as absent.
 
+On Windows, Netsuke normalizes alternate spellings of a configuration path,
+including short and long path forms, before comparing discovered layers. A
+project `.netsuke.toml` therefore contributes one layer even when two spellings
+refer to the same physical file.
+
 ### Reuse discovered configuration layers
 
 Normal command-line use requires no change. The Rust API remains an unstable

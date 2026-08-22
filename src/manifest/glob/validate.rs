@@ -39,7 +39,11 @@ impl ValidationState {
     }
 
     #[cfg(not(unix))]
-    fn process_escape(&mut self, _ch: char) -> bool {
+    #[expect(
+        clippy::unused_self,
+        reason = "signature must mirror the Unix arm, which reads self.escaped"
+    )]
+    const fn process_escape(&mut self, _ch: char) -> bool {
         false
     }
 

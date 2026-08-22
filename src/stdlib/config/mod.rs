@@ -12,7 +12,7 @@ pub use super::config_types::{
 use super::{command, network::NetworkPolicy, which::WORKSPACE_SKIP_DIRS};
 use crate::localization::{self, keys};
 use anyhow::{anyhow, bail, ensure};
-use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::Dir;
 use std::{ffi::OsString, num::NonZeroUsize, sync::Arc};
 
@@ -284,17 +284,36 @@ impl StdlibConfig {
             );
         }
 
-        for component in relative.components() {
-            if matches!(
+        #[cfg(windows)]
+        let has_parent_directory = relative
+            .as_str()
+            .split(['/', '\\'])
+            .any(|component| component == "..");
+        #[cfg(not(windows))]
+        let has_parent_directory = relative
+            .as_std_path()
+            .components()
+            .any(|component| matches!(component, std::path::Component::ParentDir));
+
+        let has_rooted_component = relative.as_std_path().components().any(|component| {
+            matches!(
                 component,
-                Utf8Component::ParentDir | Utf8Component::Prefix(_)
-            ) {
-                bail!(
-                    "{}",
-                    localization::message(keys::STDLIB_FETCH_CACHE_ESCAPES)
-                        .with_arg("path", relative.as_str())
-                );
-            }
+                std::path::Component::Prefix(_) | std::path::Component::RootDir
+            )
+        });
+        if has_rooted_component {
+            bail!(
+                "{}",
+                localization::message(keys::STDLIB_FETCH_CACHE_NOT_RELATIVE)
+                    .with_arg("path", relative.as_str())
+            );
+        }
+        if has_parent_directory {
+            bail!(
+                "{}",
+                localization::message(keys::STDLIB_FETCH_CACHE_ESCAPES)
+                    .with_arg("path", relative.as_str())
+            );
         }
 
         Ok(())

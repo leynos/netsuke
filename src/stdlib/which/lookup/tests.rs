@@ -230,7 +230,7 @@ fn pathext_without_leading_dots_is_normalised_and_deduplicated(
         Some(std::ffi::OsStr::new("COM;EXE;EXE; .BAT ;bat")),
     )?;
     let mut pathexts = snapshot.pathext().to_vec();
-    pathexts.sort_unstable_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+    pathexts.sort_unstable_by_key(|ext| ext.to_lowercase());
 
     let contains_ci = |needle: &str| pathexts.iter().any(|ext| ext.eq_ignore_ascii_case(needle));
 
@@ -286,7 +286,6 @@ fn direct_path_not_executable_raises_direct_not_found(
 #[cfg(windows)]
 #[rstest]
 fn resolve_direct_appends_pathext(workspace: Result<TempWorkspace>) -> Result<()> {
-    use crate::stdlib::which::workspace_switch::WorkspaceSwitch;
     use test_support::exec::make_executable;
 
     let env = workspace?;
@@ -297,16 +296,14 @@ fn resolve_direct_appends_pathext(workspace: Result<TempWorkspace>) -> Result<()
     test_fs::create_dir_all(tools_dir.as_std_path()).context("mkdir tools")?;
     let exe = base.with_extension("bat");
     test_fs::write(exe.as_std_path(), b"@echo off\r\n").context("write stub")?;
-    make_executable(&exe)?;
+    make_executable(exe.as_std_path())?;
 
-    let snapshot = EnvSnapshot {
-        cwd: env.root.clone(),
-        raw_path: None,
-        raw_pathext: Some(".bat".into()),
-        entries: vec![],
-        pathext: vec![".bat".into()],
-        workspace_switch: WorkspaceSwitch::Absent,
-    };
+    let snapshot = EnvSnapshot::capture_with_pathext(
+        Some(env.root()),
+        None,
+        Some(std::ffi::OsStr::new(".bat")),
+    )
+    .context("capture env for direct PATHEXT resolution")?;
 
     let matches = resolve_direct(".\\tools\\gradlew", &snapshot, &WhichOptions::default())?;
 

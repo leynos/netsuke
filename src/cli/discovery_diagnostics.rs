@@ -22,6 +22,35 @@ pub(super) enum ConfigLoadFailureKind {
     LoadError,
 }
 
+/// Emit the bounded outcome of project-scope layer de-duplication.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct ProjectLayerDeduplication {
+    discovered: usize,
+    project: usize,
+    appended: usize,
+}
+
+impl ProjectLayerDeduplication {
+    /// Retain the bounded counts produced by one project-layer fallback pass.
+    pub(super) const fn new(discovered: usize, project: usize, appended: usize) -> Self {
+        Self {
+            discovered,
+            project,
+            appended,
+        }
+    }
+
+    /// Emit the retained project-layer de-duplication outcome.
+    pub(super) fn emit(&self) {
+        debug!(
+            discovered_layer_count = self.discovered,
+            project_layer_count = self.project,
+            appended_layer_count = self.appended,
+            "resolved project-scope layer deduplication"
+        );
+    }
+}
+
 /// Bounded warning metadata retained when an explicit config load fails.
 #[derive(Clone, Debug)]
 pub(super) struct ConfigLoadWarning {
