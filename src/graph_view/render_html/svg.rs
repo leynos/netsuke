@@ -26,6 +26,10 @@ pub(super) struct SvgHeader<'a> {
 }
 
 /// Write the SVG document, drawing edges before nodes so bodies overlay connectors.
+///
+/// # Errors
+///
+/// Returns a [`GraphRenderError`] when writing to `sink` fails.
 pub(super) fn write_svg(
     sink: &mut dyn Write,
     view: &GraphView,
@@ -75,6 +79,10 @@ fn canvas_extent(positions: &BTreeMap<&Utf8Path, Position>) -> (i32, i32) {
 }
 
 /// Write one node group with its body rect, label, and optional description.
+///
+/// # Errors
+///
+/// Returns a [`GraphRenderError`] when writing to `sink` fails.
 fn write_svg_node(
     sink: &mut dyn Write,
     node: &NodeView,
@@ -132,6 +140,10 @@ fn write_svg_node(
 }
 
 /// Write one edge group with a descriptive title and orthogonal connector.
+///
+/// # Errors
+///
+/// Returns a [`GraphRenderError`] when writing to `sink` fails.
 fn write_svg_edge(
     sink: &mut dyn Write,
     edge: &EdgeView,

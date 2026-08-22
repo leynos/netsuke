@@ -66,8 +66,8 @@ fn normalize_separators_handles_escaped_tokens() {
     }
 }
 
-/// The unmatched-brace diagnostic points at the `{` that never closes,
-/// not at a sibling brace that did.
+/// Assert that the diagnostic points at the `{` that never closes, not a
+/// matched sibling brace.
 #[test]
 fn validate_brace_matching_reports_the_outermost_unclosed_brace() -> Result<()> {
     let pattern = "{{}";

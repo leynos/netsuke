@@ -41,8 +41,8 @@ pub fn canonicalize_utf8_path(path: &Path) -> io::Result<Utf8PathBuf> {
 ///
 /// # Errors
 ///
-/// Returns an error when the directory cannot be opened or the result is not
-/// valid UTF-8.
+/// Returns an error when the directory cannot be opened, canonicalisation
+/// fails, or the result is not valid UTF-8.
 fn canonicalize_current_dir() -> io::Result<Utf8PathBuf> {
     let dir = cap_fs::Dir::open_ambient_dir(".", ambient_authority())?;
     let resolved = dir.canonicalize(Path::new("."))?;
@@ -58,8 +58,8 @@ fn canonicalize_root_path(utf8: &Utf8Path) -> Utf8PathBuf {
 ///
 /// # Errors
 ///
-/// Returns an error when the current directory cannot be opened or the result
-/// is not valid UTF-8.
+/// Returns an error when the current directory cannot be opened,
+/// canonicalisation fails, or the result is not valid UTF-8.
 fn canonicalize_relative_path(utf8: &Utf8Path) -> io::Result<Utf8PathBuf> {
     let dir = cap_fs::Dir::open_ambient_dir(".", ambient_authority())?;
     let resolved = dir.canonicalize(utf8.as_std_path())?;
@@ -70,8 +70,8 @@ fn canonicalize_relative_path(utf8: &Utf8Path) -> io::Result<Utf8PathBuf> {
 ///
 /// # Errors
 ///
-/// Returns an error when the parent directory cannot be opened or the result
-/// is not valid UTF-8.
+/// Returns an error when the parent directory cannot be opened,
+/// canonicalisation fails, or the result is not valid UTF-8.
 fn canonicalize_absolute_path(utf8: &Utf8Path) -> io::Result<Utf8PathBuf> {
     let parent = utf8.parent().unwrap_or_else(|| Utf8Path::new("/"));
     let handle = cap_fs::Dir::open_ambient_dir(parent.as_std_path(), ambient_authority())?;

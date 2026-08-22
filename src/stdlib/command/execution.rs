@@ -235,7 +235,7 @@ fn describe_metrics() {
 /// # Errors
 ///
 /// Returns a [`CommandFailure`] for spawn, I/O, broken-pipe, output-limit,
-/// or timeout conditions.
+/// timeout, or unsuccessful child exit status conditions.
 fn run_child_inner(
     mut command: Command,
     input: &[u8],

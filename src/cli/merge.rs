@@ -219,7 +219,7 @@ where
     Ok(())
 }
 
-/// Serialise `value` for the named configuration field.
+/// Serialize `value` for the named configuration field.
 ///
 /// # Errors
 ///

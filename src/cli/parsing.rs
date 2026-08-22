@@ -176,7 +176,7 @@ pub(super) fn parse_accessibility_policy(
 /// Bundles the static localization metadata needed by [`parse_value_enum`].
 #[derive(Copy, Clone)]
 struct ParseEnumSpec {
-    /// Localisation key naming the invalid-value message.
+    /// Localization key naming the invalid-value message.
     key: &'static str,
     /// Interpolation argument that carries the rejected value.
     arg_name: &'static str,

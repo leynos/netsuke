@@ -19,6 +19,11 @@ use super::{
 
 /// Run `command` in the platform shell with `value` on standard input and
 /// return its output.
+///
+/// # Errors
+///
+/// Returns an error for an empty command, an input value that cannot be
+/// converted to bytes, or a failing shell execution.
 pub(super) fn execute_shell(
     state: &State,
     value: &Value,
@@ -44,6 +49,12 @@ pub(super) fn execute_shell(
 
 /// Run `grep` with the pattern and flags in `call` over `value` and return
 /// its output.
+///
+/// # Errors
+///
+/// Returns an error for an empty pattern, invalid flag values or quoting, an
+/// input value that cannot be converted to bytes, or a failing grep
+/// execution.
 pub(super) fn execute_grep(
     state: &State,
     value: &Value,

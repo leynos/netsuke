@@ -40,7 +40,7 @@ fn parse_cwd_mode(value: &str) -> Option<CwdMode> {
 pub(crate) struct WhichOptions {
     /// Return every executable match instead of stopping at the first.
     pub(super) all: bool,
-    /// Canonicalise matched paths before returning them.
+    /// Canonicalize matched paths before returning them.
     pub(super) canonical: bool,
     /// Bypass the resolver cache for this resolution.
     pub(super) fresh: bool,
@@ -50,6 +50,11 @@ pub(crate) struct WhichOptions {
 
 impl WhichOptions {
     /// Read the option values from template keyword arguments.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ResolveError`] when a keyword cannot be extracted or the
+    /// `cwd_mode` value names an invalid mode.
     pub(crate) fn from_kwargs(kwargs: &Kwargs) -> Result<Self, ResolveError> {
         let all = kwargs.get::<Option<bool>>("all")?.unwrap_or(false);
         let canonical = kwargs.get::<Option<bool>>("canonical")?.unwrap_or(false);

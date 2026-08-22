@@ -295,6 +295,10 @@ fn read_request(stream: &mut TcpStream, deadline: Instant, poll_interval: Durati
 }
 
 /// Write a `200 OK` response carrying `body` to `stream`.
+///
+/// # Errors
+///
+/// Returns an error when the response cannot be written to the stream.
 fn write_response(stream: &mut TcpStream, body: &str) -> io::Result<()> {
     let response = format!(
         "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",

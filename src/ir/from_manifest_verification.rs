@@ -105,7 +105,7 @@ fn missing_rule_shape_is_rejected() {
 /// Generate one of two single-byte symbolic output names.
 ///
 /// The two small values keep the verifier's state space bounded while still
-/// exercizing both branches of equality in the duplicate-output scan.
+/// exercising both branches of equality in the duplicate-output scan.
 fn symbolic_path_name() -> String {
     if kani::any::<bool>() {
         "a".to_owned()

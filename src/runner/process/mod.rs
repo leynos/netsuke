@@ -88,8 +88,8 @@ pub mod doc {
 ///
 /// # Errors
 ///
-/// Returns an error when the command fails to spawn or reports a non-zero
-/// exit status.
+/// Returns an error when the command fails to spawn, a child standard stream
+/// cannot be taken or drained, or the command reports a non-zero exit status.
 fn run_command_and_stream_with_context<Clock: MonotonicClock>(
     mut cmd: Command,
     status_observer: Option<StatusObserver<'_>>,
@@ -225,8 +225,9 @@ struct NinjaInternalRequest<'request, 'observer> {
 ///
 /// # Errors
 ///
-/// Returns an error when command configuration or spawning fails, or when
-/// Ninja reports a non-zero exit status.
+/// Returns an error when command configuration fails, the Ninja process
+/// cannot be spawned, a child standard stream is unavailable, or Ninja
+/// reports a non-zero exit status.
 fn run_ninja_internal<F, Clock>(
     request: NinjaInternalRequest<'_, '_>,
     clock: &Clock,

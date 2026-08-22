@@ -163,8 +163,9 @@ pub enum HostPatternError {
 ///
 /// # Errors
 ///
-/// Returns an error for empty patterns, embedded scheme-like prefixes, or
-/// labels that fail the DNS-label checks.
+/// Returns an error for empty patterns, embedded scheme-like prefixes
+/// (`://`), path separators (`/`), a wildcard prefix with no suffix, hosts
+/// that exceed 255 characters, or labels that fail the DNS-label checks.
 fn normalise_host_pattern(input: HostPatternInput<'_>) -> Result<(String, bool), HostPatternError> {
     let trimmed = input.as_str().trim();
     if trimmed.is_empty() {

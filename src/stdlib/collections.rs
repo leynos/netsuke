@@ -80,6 +80,10 @@ impl Object for GroupedValues {
 }
 
 /// Deduplicate sequence items, preserving first-seen order.
+///
+/// # Errors
+///
+/// Returns an error when a non-sequence value cannot be iterated.
 fn uniq_filter(values: &Value) -> Result<Value, Error> {
     let iter = values.try_iter()?;
     let mut uniques: IndexSet<Value> = IndexSet::new();
@@ -121,6 +125,11 @@ fn flatten_filter(values: &Value) -> Result<Value, Error> {
 }
 
 /// Recursively append the leaves of `value` to `output`.
+///
+/// # Errors
+///
+/// Returns an error when a nested sequence or iterable value cannot be
+/// iterated.
 fn collect_flattened_values(value: Value, output: &mut Vec<Value>) -> Result<(), Error> {
     match value.kind() {
         ValueKind::Seq | ValueKind::Iterable => {
@@ -164,6 +173,11 @@ fn group_by_filter(values: &Value, attr: &str) -> Result<Value, Error> {
 
 /// Resolve the grouping key for an item, trying attribute access and
 /// falling back to item access.
+///
+/// # Errors
+///
+/// Returns an error when neither attribute nor item access resolves a value
+/// for the key, or when the resolved value is undefined.
 fn resolve_group_key(item: &Value, attr: &str) -> Result<Value, Error> {
     match item.get_attr(attr) {
         Ok(value) => ensure_resolved(value, attr, item),
@@ -175,7 +189,7 @@ fn resolve_group_key(item: &Value, attr: &str) -> Result<Value, Error> {
     }
 }
 
-/// Return `value` when defined, otherwize raize an unresolved-key error for
+/// Return `value` when defined, otherwise raise an unresolved-key error for
 /// `item`.
 fn ensure_resolved(value: Value, attr: &str, item: &Value) -> Result<Value, Error> {
     if value.is_undefined() {

@@ -7,7 +7,7 @@ use walkdir;
 
 use super::options::CwdMode;
 
-/// Typed errors raized while resolving a command with `which`.
+/// Typed errors raised while resolving a command with `which`.
 #[derive(Debug)]
 pub(crate) enum ResolveError {
     /// A PATH search exhausted every candidate directory without a hit.
@@ -31,7 +31,7 @@ pub(crate) enum ResolveError {
         /// Human-readable explanation of the invalid input.
         detail: String,
     },
-    /// Canonicalisation of a matched path failed.
+    /// Canonicalization of a matched path failed.
     Canonicalize {
         /// The path that failed to canonicalize.
         path: Utf8PathBuf,

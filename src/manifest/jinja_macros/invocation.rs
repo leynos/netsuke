@@ -44,6 +44,11 @@ pub(super) fn make_macro_fn(
 }
 
 /// Invoke a resolved macro reference against state, forwarding args and kwargs.
+///
+/// # Errors
+///
+/// Returns an error when the macro cannot be captured, keyword arguments
+/// cannot be collected, or the rendered macro output cannot be produced.
 fn invoke_macro(
     state: &State,
     args: &[Value],
@@ -73,6 +78,11 @@ pub(super) fn validate_macro(
 }
 
 /// Load a template and capture its rendered state for a named macro.
+///
+/// # Errors
+///
+/// Returns an error when the template cannot be loaded or rendered, or when
+/// the named macro is not exported by the template.
 fn capture_macro<'source>(
     env: &'source Environment<'source>,
     template_name: &str,
@@ -108,6 +118,10 @@ fn capture_macro<'source>(
 }
 
 /// Collect keyword arguments into a fresh `Kwargs`, or `None` when empty.
+///
+/// # Errors
+///
+/// Returns an error when a keyword value cannot be extracted.
 fn collect_kwargs(macro_kwargs: &Kwargs) -> Result<Option<Kwargs>, Error> {
     let mut entries = Vec::new();
     for key in macro_kwargs.args() {

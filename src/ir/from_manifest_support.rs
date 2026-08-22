@@ -124,7 +124,7 @@ fn duplicate_output_error_from_paths(dups: Vec<Utf8PathBuf>) -> IrGenError {
     }
 }
 
-/// Localise the duplicate-output message with the offending output paths.
+/// Localize the duplicate-output message with the offending output paths.
 fn duplicate_outputs_message(dups: &[Utf8PathBuf]) -> localization::LocalizedMessage {
     add_debug_arg(
         localization::message(keys::IR_DUPLICATE_OUTPUTS),
@@ -241,7 +241,7 @@ fn rule_not_found_error(target_name: &str, rule_name: &str) -> IrGenError {
     }
 }
 
-/// Localise the empty-rule message with the target name.
+/// Localize the empty-rule message with the target name.
 fn empty_rule_message(target_name: &str) -> localization::LocalizedMessage {
     add_arg(
         localization::message(keys::IR_EMPTY_RULE),
@@ -250,14 +250,14 @@ fn empty_rule_message(target_name: &str) -> localization::LocalizedMessage {
     )
 }
 
-/// Localise the multiple-rules message with the target and rule names.
+/// Localize the multiple-rules message with the target and rule names.
 fn multiple_rules_message(target_name: &str, rules: &[String]) -> localization::LocalizedMessage {
     let message = localization::message(keys::IR_MULTIPLE_RULES);
     let with_target = add_arg(message, "target", target_name);
     add_debug_arg(with_target, "rules", rules)
 }
 
-/// Localise the rule-not-found message with the target and rule names.
+/// Localize the rule-not-found message with the target and rule names.
 fn rule_not_found_message(target_name: &str, rule_name: &str) -> localization::LocalizedMessage {
     let message = localization::message(keys::IR_RULE_NOT_FOUND);
     let with_target = add_arg(message, "target", target_name);

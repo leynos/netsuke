@@ -100,7 +100,8 @@ pub(super) fn search_workspace(
     platform_search_workspace(env, command, collect_all, skip_dirs)
 }
 
-/// Whether a walkdir entry should be visited, skipping listed directories.
+/// Decide whether a walkdir entry should be visited, skipping listed
+/// directories.
 pub(super) fn should_visit_entry(entry: &walkdir::DirEntry, skip_dirs: &WorkspaceSkipList) -> bool {
     if !entry.file_type().is_dir() {
         return true;
@@ -136,13 +137,13 @@ pub(super) fn log_if_no_matches(matches: &[Utf8PathBuf], skip_dirs: &WorkspaceSk
     }
 }
 
-/// Normalise a directory basename for skip matching on Windows.
+/// Normalize a directory basename for skip matching on Windows.
 #[cfg(windows)]
 fn normalise_name(name: &str) -> String {
     name.to_ascii_lowercase()
 }
 
-/// Normalise a directory basename for skip matching on POSIX.
+/// Normalize a directory basename for skip matching on POSIX.
 #[cfg(not(windows))]
 fn normalise_name(name: &str) -> String {
     name.to_owned()
