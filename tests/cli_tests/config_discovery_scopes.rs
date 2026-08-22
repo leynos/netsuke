@@ -291,22 +291,10 @@ struct ScopeLayers {
     project_config: Option<&'static str>,
 }
 
-#[cfg(unix)]
-#[rstest]
-fn system_scope_config_discovered_when_no_user_or_project_config() -> Result<()> {
-    let temp_project = tempdir().context("create temporary project directory")?;
-    let temp_home = tempdir().context("create temporary home directory")?;
-    let temp_system = tempdir().context("create temporary system directory")?;
-    let merged = run_system_scope_scenario(
-        temp_project.path(),
-        temp_home.path(),
-        temp_system.path(),
-        &ScopeLayers::default(),
-    )?;
-    assert_system_config_applied(&merged)
-}
-
-#[cfg(windows)]
+/// System-scope discovery is platform-neutral here: `run_system_scope_scenario`
+/// points the child at an isolated `XDG_CONFIG_DIRS` via the injected
+/// environment seam, so the same body exercises system-scope discovery on
+/// every host without duplicating a platform-specific entry point.
 #[rstest]
 fn system_scope_config_discovered_when_no_user_or_project_config() -> Result<()> {
     let temp_project = tempdir().context("create temporary project directory")?;

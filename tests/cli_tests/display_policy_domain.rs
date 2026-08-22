@@ -22,6 +22,7 @@
 //! untouched).
 
 use anyhow::{Result, ensure};
+use itertools::iproduct;
 use netsuke::cli::Cli;
 use netsuke::cli::config::{AccessibilityPolicy, ColourPolicy, EmojiPolicy, ProgressPolicy};
 use netsuke::output_mode::{OutputMode, resolve_with};
@@ -81,6 +82,44 @@ fn accessibility_strategy() -> impl Strategy<Value = AccessibilityPolicy> {
         AccessibilityPolicy::On,
         AccessibilityPolicy::Off,
     ])
+}
+
+/// One `DomainCase` for every combination of the finite policy domain.
+///
+/// The 162 cases are enumerated as the Cartesian product of the finite
+/// `EmojiPolicy` x `ColourPolicy` x `ProgressPolicy` x `AccessibilityPolicy` x
+/// `NO_COLOR` domain via one flat ``iproduct!`` expression, so the sweep avoids
+/// deep control-flow nesting while remaining deterministic and exhaustive.
+fn all_domain_cases() -> Vec<DomainCase> {
+    let emojis = [EmojiPolicy::Auto, EmojiPolicy::Always, EmojiPolicy::Never];
+    let colours = [
+        ColourPolicy::Auto,
+        ColourPolicy::Always,
+        ColourPolicy::Never,
+    ];
+    let progresses = [
+        ProgressPolicy::Auto,
+        ProgressPolicy::Always,
+        ProgressPolicy::Never,
+    ];
+    let accessibilities = [
+        AccessibilityPolicy::Auto,
+        AccessibilityPolicy::On,
+        AccessibilityPolicy::Off,
+    ];
+    let no_colours = [false, true];
+    iproduct!(emojis, colours, progresses, accessibilities, no_colours)
+        .map(
+            |(emoji, color, progress, accessibility, no_color)| DomainCase {
+                emoji,
+                color,
+                progress,
+                accessibility,
+                no_color,
+                term_dumb: false,
+            },
+        )
+        .collect()
 }
 
 /// Expected theme preference derived from the emoji policy.
@@ -357,36 +396,8 @@ fn progress_policy_enables_progress(
 /// `NO_COLOR`, comparing the production pipeline against the truth model.
 #[rstest]
 fn exhaustive_domain_sweep_matches_truth_model() -> Result<()> {
-    for emoji in [EmojiPolicy::Auto, EmojiPolicy::Always, EmojiPolicy::Never] {
-        for color in [
-            ColourPolicy::Auto,
-            ColourPolicy::Always,
-            ColourPolicy::Never,
-        ] {
-            for progress in [
-                ProgressPolicy::Auto,
-                ProgressPolicy::Always,
-                ProgressPolicy::Never,
-            ] {
-                for accessibility in [
-                    AccessibilityPolicy::Auto,
-                    AccessibilityPolicy::On,
-                    AccessibilityPolicy::Off,
-                ] {
-                    for no_color in [false, true] {
-                        let case = DomainCase {
-                            emoji,
-                            color,
-                            progress,
-                            accessibility,
-                            no_color,
-                            term_dumb: false,
-                        };
-                        assert_consolidated(case)?;
-                    }
-                }
-            }
-        }
+    for case in all_domain_cases() {
+        assert_consolidated(case)?;
     }
     Ok(())
 }
