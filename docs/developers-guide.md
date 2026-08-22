@@ -434,9 +434,6 @@ confusing `E0499` rather than an obvious configuration error.
 
 Five CI jobs across four workflows carry the contract:
 
-**Triage:** [type:docstyle] Count CI jobs, rather than workflow files, because
-`ci.yml` contains distinct Linux and Windows jobs.
-
 | Workflow | Job | Shared action | `with.rustflags` |
 | --- | --- | --- | --- |
 | [`ci.yml`](../.github/workflows/ci.yml) | `build-test` | `setup-rust` | `-D warnings -Zpolonius=next` |
