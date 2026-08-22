@@ -141,8 +141,7 @@ pub fn en_localizer() -> EnLocalizer {
     // guards nothing but the ordering of localizer installation, and
     // `set_en_localizer` below re-establishes the global state unconditionally,
     // so recovering the guard is safe. Panicking here would instead fail every
-    // subsequent test that takes this fixture. `crate::env_lock` recovers from
-    // poisoning the same way.
+    // subsequent test that takes this fixture.
     let lock = localizer_test_lock().unwrap_or_else(PoisonError::into_inner);
     EnLocalizer {
         _guard: RestoreProbe::new(set_en_localizer()),

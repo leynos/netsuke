@@ -24,6 +24,7 @@
 //! [ADR-010](https://github.com/leynos/netsuke/blob/main/docs/adr-010-scope-glob-capability-to-literal-prefix.md)
 //! describe that boundary and why it remains.
 use minijinja::Error;
+use std::path::Path;
 
 mod diagnostics;
 mod errors;
@@ -176,7 +177,7 @@ impl GlobExpansion {
 ///
 /// ```
 /// use netsuke::manifest::glob_paths;
-/// let _: fn(&str) -> _ = glob_paths;
+/// let _: fn(&str, Option<&std::path::Path>) -> _ = glob_paths;
 /// ```
 ///
 /// The module's internals are not. `GlobEntryResult` is a private alias inside
@@ -189,12 +190,21 @@ impl GlobExpansion {
 /// The passing example above is the control for this rejection: it fails
 /// instead if the rustdoc harness wiring breaks, so the `compile_fail` block
 /// cannot pass vacuously.
-pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
-    expand_glob(pattern).map(GlobExpansion::into_paths)
+pub fn glob_paths(pattern: &str, base: Option<&Path>) -> std::result::Result<Vec<String>, Error> {
+    expand_glob(pattern, base).map(GlobExpansion::into_paths)
 }
 
 /// Expand a pattern and return its bounded diagnostic data without recording it.
-pub(super) fn expand_glob(pattern: &str) -> std::result::Result<GlobExpansion, Error> {
+///
+/// `base` anchors relative patterns: when supplied and the pattern is not
+/// absolute, the pattern is joined onto `base` before matching and the base is
+/// stripped from the returned paths, so results keep their pattern-relative
+/// spelling. `None` falls back to the process current directory, the
+/// composition-root behaviour retained for string parsing.
+pub(super) fn expand_glob(
+    pattern: &str,
+    base: Option<&Path>,
+) -> std::result::Result<GlobExpansion, Error> {
     use glob::{MatchOptions, glob_with};
 
     let opts = MatchOptions {
@@ -204,7 +214,19 @@ pub(super) fn expand_glob(pattern: &str) -> std::result::Result<GlobExpansion, E
     };
 
     let pattern_state = GlobPattern::new(pattern)?;
-    let entries = glob_with(pattern_state.normalized(), opts).map_err(|e| {
+    let normalized = pattern_state.normalized();
+    let (search, strip) = base
+        .filter(|_| !Path::new(normalized).is_absolute())
+        .map_or_else(
+            || (normalized.to_owned(), None),
+            |dir| {
+                (
+                    dir.join(normalized).to_string_lossy().into_owned(),
+                    Some(dir.to_path_buf()),
+                )
+            },
+        );
+    let entries = glob_with(&search, opts).map_err(|e| {
         create_glob_error(
             &GlobErrorContext {
                 pattern: pattern_state.raw().to_owned(),
@@ -216,7 +238,7 @@ pub(super) fn expand_glob(pattern: &str) -> std::result::Result<GlobExpansion, E
         )
     })?;
 
-    let Some(root) = open_root_dir(&pattern_state).map_err(|e| {
+    let Some(root) = open_root_dir(&search, base).map_err(|e| {
         create_glob_error(
             &GlobErrorContext {
                 pattern: pattern_state.raw().to_owned(),
@@ -241,7 +263,7 @@ pub(super) fn expand_glob(pattern: &str) -> std::result::Result<GlobExpansion, E
     let mut skipped = GlobSkippedEntries::default();
     for entry in entries {
         match process_glob_entry(entry, &pattern_state, &root)? {
-            GlobEntry::Path(path) => paths.push(path),
+            GlobEntry::Path(path) => paths.push(strip_base(strip.as_deref(), path)),
             GlobEntry::UnreachableSymlink(relative) => {
                 skipped.record_unreachable_symlink(relative);
             }
@@ -253,6 +275,23 @@ pub(super) fn expand_glob(pattern: &str) -> std::result::Result<GlobExpansion, E
         outcome: GlobOutcome::Matched,
         skipped,
     })
+}
+
+/// Remove an injected base directory from a matched path, restoring the
+/// pattern-relative spelling the caller supplied.
+///
+/// Only relative patterns with an injected base are affected: `strip` is
+/// `Some` exactly when the matcher ran against `base.join(pattern)`, so every
+/// match starts with `base` and the lexical strip cannot fail in a way that
+/// would drop real matches. The fallback returns the path unchanged.
+fn strip_base(base: Option<&Path>, path: String) -> String {
+    let Some(dir) = base else {
+        return path;
+    };
+    Path::new(&path)
+        .strip_prefix(dir)
+        .map(|relative| relative.to_string_lossy().replace('\\', "/"))
+        .unwrap_or(path)
 }
 
 /// Record the bounded observations from a completed expansion.

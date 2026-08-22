@@ -95,7 +95,10 @@ test-typos-config: spelling-helper-test ## Verify the shared spelling-policy int
 target/%/$(APP): ## Build binary in debug or release mode
 	RUSTFLAGS="$${RUSTFLAGS-} $(POLONIUS_FLAGS)" $(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP)
 
-lint: lint-clippy lint-whitaker ## Run Clippy and the Whitaker Dylint suite with warnings denied
+lint: lint-env-mutation lint-clippy lint-whitaker ## Reject in-process env mutation, then run Clippy and Whitaker
+
+lint-env-mutation: ## Reject in-process environment mutation in source
+	@scripts/check-env-mutation.sh
 
 lint-clippy: ## Run rustdoc and Clippy with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(CARGO) doc --workspace --no-deps

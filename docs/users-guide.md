@@ -536,8 +536,11 @@ expansion per matching source.
 
 Matching is case-sensitive. `*` and `?` do not cross directory separators; use
 `**` to descend into subdirectories. Directories are excluded, so only files
-are returned. The [quick-start guide](quickstart.md) shows a complete runnable
-example.
+are returned. Relative patterns resolve against the directory containing the
+manifest — the workspace root — independent of the directory Netsuke is
+invoked from, so `glob('src/*.c')` in a `Netsukefile` at the project root
+matches `<project>/src/*.c`. The [quick-start guide](quickstart.md) shows a
+complete runnable example.
 
 ### Define reusable macros
 

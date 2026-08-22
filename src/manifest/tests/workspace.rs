@@ -11,54 +11,21 @@ use rstest::rstest;
 use std::{path::Path, sync::Arc};
 use tempfile::tempdir;
 use test_support::fs as test_fs;
-use test_support::{env_lock::EnvLock, hash, http};
+use test_support::{hash, http};
 use url::Url;
-
-struct CurrentDirGuard {
-    original: std::path::PathBuf,
-    _lock: EnvLock,
-}
-
-impl CurrentDirGuard {
-    fn change_to(path: &std::path::Path) -> AnyResult<Self> {
-        let lock = EnvLock::acquire();
-        let original = std::env::current_dir().context("capture current working directory")?;
-        std::env::set_current_dir(path)
-            .with_context(|| format!("switch to working directory {}", path.display()))?;
-        Ok(Self {
-            original,
-            _lock: lock,
-        })
-    }
-}
-
-impl Drop for CurrentDirGuard {
-    fn drop(&mut self) {
-        if let Err(err) = std::env::set_current_dir(&self.original) {
-            tracing::warn!(
-                "failed to restore working directory to {}: {err}",
-                self.original.display()
-            );
-        }
-    }
-}
 
 #[rstest]
 #[case(true)]
 #[case(false)]
 fn open_manifest_workspace_resolves_workspace_root(#[case] use_relative: bool) -> AnyResult<()> {
     let temp = tempdir().context("create temp workspace")?;
-    let _guard = if use_relative {
-        Some(CurrentDirGuard::change_to(temp.path())?)
-    } else {
-        None
-    };
     let manifest_path = if use_relative {
         Path::new("Netsukefile").to_path_buf()
     } else {
         temp.path().join("Netsukefile")
     };
-    let workspace = open_manifest_workspace(&manifest_path)?;
+    let base = use_relative.then(|| temp.path());
+    let workspace = open_manifest_workspace(&manifest_path, base)?;
     let expected =
         Utf8Path::from_path(temp.path()).context("temp workspace path should be valid UTF-8")?;
     ensure!(
@@ -86,7 +53,7 @@ fn open_manifest_workspace_rejects_non_utf_workspace_root() -> AnyResult<()> {
     test_fs::create_dir_all(&manifest_dir)
         .context("create manifest directory with invalid UTF-8 component")?;
     let manifest_path = manifest_dir.join("manifest.yml");
-    let err = open_manifest_workspace(&manifest_path)
+    let err = open_manifest_workspace(&manifest_path, None)
         .expect_err("workspace should fail when its root contains non-UTF-8 components");
     ensure!(
         err.to_string().contains("path is not valid UTF-8"),
@@ -99,7 +66,7 @@ fn open_manifest_workspace_rejects_non_utf_workspace_root() -> AnyResult<()> {
 fn open_manifest_workspace_reports_missing_file_name() -> AnyResult<()> {
     // The filesystem root has no file-name component, so extraction fails with a
     // missing-name error, distinct from the non-UTF-8 case.
-    let err = open_manifest_workspace(Path::new("/"))
+    let err = open_manifest_workspace(Path::new("/"), None)
         .expect_err("workspace should fail when the path has no file name");
     ensure!(
         err.to_string().contains("has no file name"),
@@ -117,7 +84,7 @@ fn open_manifest_workspace_rejects_non_utf_file_name() -> AnyResult<()> {
     let temp = tempdir().context("create temp workspace")?;
     let invalid_name = OsString::from_vec(vec![b'm', 0xFF]); // invalid trailing byte
     let manifest_path = temp.path().join(&invalid_name);
-    let err = open_manifest_workspace(&manifest_path)
+    let err = open_manifest_workspace(&manifest_path, None)
         .expect_err("workspace should fail when the file name is not valid UTF-8");
     ensure!(
         err.to_string().contains("path is not valid UTF-8"),
@@ -132,7 +99,7 @@ fn open_manifest_workspace_reports_open_failure() -> AnyResult<()> {
     // the error is wrapped as a workspace open failure.
     let temp = tempdir().context("create temp workspace")?;
     let manifest_path = temp.path().join("missing-subdir").join("Netsukefile");
-    let err = open_manifest_workspace(&manifest_path)
+    let err = open_manifest_workspace(&manifest_path, None)
         .expect_err("workspace open should fail when the parent directory is absent");
     ensure!(
         err.to_string().contains("Failed to open workspace"),
@@ -170,7 +137,6 @@ fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
     );
     test_fs::write(&manifest_path, manifest_yaml)?;
 
-    let _cwd_guard = CurrentDirGuard::change_to(&outside)?;
     let manifest_url = url.clone();
     let env_reader: EnvReader = Arc::new(move |key| {
         if key == "NETSUKE_MANIFEST_URL" {
