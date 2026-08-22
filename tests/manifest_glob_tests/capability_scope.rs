@@ -6,10 +6,9 @@
 //! surfacing as a parse error.
 
 use super::{manifest_yaml, target_names, temp_dir};
-use anyhow::{Context, Result, ensure};
+use anyhow::{ensure, Context, Result};
 use rstest::rstest;
 use std::path::Path;
-use test_support::{cwd_guard::CwdGuard, env_lock::EnvLock};
 
 /// Build a manifest with one `foreach` target per glob match.
 fn glob_manifest(pattern: &str) -> String {
@@ -52,15 +51,17 @@ fn unopenable_prefix_yields_no_targets(
 /// A parent-relative pattern expands against the working directory.
 #[rstest]
 fn parent_relative_pattern_expands(temp_dir: tempfile::TempDir) -> Result<()> {
+    // Loading the manifest through its own path anchors relative glob
+    // patterns to the manifest's workspace root (`sub/`), so `../*.txt`
+    // ascends to the temporary directory. This preserves the parent-relative
+    // coverage without changing the process working directory.
     let sub = temp_dir.path().join("sub");
     test_support::fs::create_dir(&sub)?;
     test_support::fs::write(temp_dir.path().join("out.txt"), "out")?;
+    let manifest_path = sub.join("Netsukefile");
+    test_support::fs::write(&manifest_path, &glob_manifest("../*.txt"))?;
 
-    let _lock = EnvLock::acquire();
-    let _guard = CwdGuard::acquire()?;
-    std::env::set_current_dir(&sub).context("switch to the subdirectory")?;
-
-    let manifest = netsuke::manifest::from_str(&glob_manifest("../*.txt"))?;
+    let manifest = netsuke::manifest::from_path(&manifest_path)?;
     ensure!(
         target_names(&manifest)? == vec!["../out.txt".to_owned()],
         "expected the parent-relative match"
