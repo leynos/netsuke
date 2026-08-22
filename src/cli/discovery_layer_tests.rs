@@ -13,6 +13,7 @@ use rstest::rstest;
 use tempfile::{TempDir, tempdir};
 
 use super::event_assertions::{EventAssertion, capture_events, find_event};
+#[cfg(unix)]
 use super::layers::collect_file_layers_with_normalizer;
 use std::cell::Cell;
 use std::ffi::OsString;
