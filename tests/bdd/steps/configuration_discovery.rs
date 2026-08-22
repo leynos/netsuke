@@ -7,8 +7,11 @@ use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use netsuke::cli::Cli;
 use netsuke::cli::config::EmojiPolicy;
-use rstest_bdd_macros::{given, then};
+use rstest_bdd_macros::{given, then, when};
+use std::ffi::OsString;
 use tempfile::tempdir;
+
+use super::cli::apply_cli_tokens;
 
 #[given("a temporary workspace")]
 fn a_temporary_workspace(world: &TestWorld) -> Result<()> {
@@ -120,6 +123,26 @@ fn custom_config_with_emoji(
     emoji: EmojiPolicy,
 ) -> Result<()> {
     write_config_file(world, file_name.as_str(), &emoji_config_content(emoji))
+}
+
+#[when("the CLI is parsed with the workspace config file {file_name:string}")]
+fn parse_cli_with_workspace_config(world: &TestWorld, file_name: FileName) -> Result<()> {
+    let config_path = world
+        .temp_dir
+        .borrow()
+        .as_ref()
+        .context("temp_dir should be set")?
+        .path()
+        .join(file_name.as_str());
+    apply_cli_tokens(
+        world,
+        vec![
+            OsString::from("netsuke"),
+            OsString::from("--config"),
+            config_path.into_os_string(),
+        ],
+    );
+    Ok(())
 }
 
 #[given("the environment variable {var_name:string} is set to {value:string}")]
