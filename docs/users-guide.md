@@ -539,6 +539,14 @@ Matching is case-sensitive. `*` and `?` do not cross directory separators; use
 are returned. The [quick-start guide](quickstart.md) shows a complete runnable
 example.
 
+The Jinja helper rejects a matched path unless it can be inserted as one
+portable unquoted shell word. Letters, digits, `/`, `:`, comma, full stop,
+underscore, and hyphen are accepted; whitespace, control characters, and
+shell punctuation are rejected. This prevents an untrusted checkout filename
+from becoming shell syntax when `item` is interpolated into a `command` or
+`script`. The Rust `manifest::glob_paths` query is unaffected because its
+callers do not cross the manifest-template command boundary.
+
 ### Define reusable macros
 
 Macros return rendered text and can accept default arguments:
