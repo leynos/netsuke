@@ -64,6 +64,7 @@ fn from_path_with_registration(
                 .with_arg("path", path_ref.display().to_string())
         })?;
     let name = ManifestName::new(path_ref.display().to_string());
+    let manifest_root = Some(workspace.root.clone().into_std_path_buf());
     let stdlib_registration = match mode {
         ManifestLoadMode::Full(policy) => StdlibRegistration::Full(Box::new(
             StdlibConfig::new(workspace.dir)?
@@ -78,6 +79,7 @@ fn from_path_with_registration(
             name: &name,
             stdlib_registration: Some(stdlib_registration),
             env_reader,
+            manifest_root,
         },
         &mut on_stage,
     )

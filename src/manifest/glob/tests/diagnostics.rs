@@ -40,7 +40,7 @@ fn recorded<T>(expand: impl FnOnce() -> T) -> (T, Vec<String>, Snapshot) {
 
 /// Expand and record at the manifest adapter's telemetry boundary.
 fn expand_and_record(pattern: &str) -> Result<Vec<String>> {
-    let expansion = expand_glob(pattern)?;
+    let expansion = expand_glob(pattern, None)?;
     record_expansion(&expansion);
     Ok(expansion.into_paths())
 }
@@ -259,7 +259,7 @@ fn glob_paths_is_a_pure_query() -> Result<()> {
     test_fs::write(temp.path().join("a.txt"), "a")?;
     let pattern = format!("{}/*.txt", temp.path().display());
 
-    let (results, events, snapshot) = recorded(|| glob_paths(&pattern));
+    let (results, events, snapshot) = recorded(|| glob_paths(&pattern, None));
     ensure!(results?.len() == 1, "the file should match");
     ensure!(
         events.is_empty(),

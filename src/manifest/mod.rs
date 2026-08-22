@@ -30,7 +30,7 @@ use crate::{
 use anyhow::Result;
 use minijinja::{Environment, UndefinedBehavior, value::Value};
 use serde::de::Error as _;
-use std::{path::Path, sync::Arc};
+use std::{path::Path, path::PathBuf, sync::Arc};
 
 mod diagnostics;
 mod expand;
@@ -94,6 +94,12 @@ struct ManifestParse<'a> {
     stdlib_registration: Option<StdlibRegistration>,
     /// Environment reader backing the `env()` helper.
     env_reader: &'a EnvReader,
+    /// Manifest workspace root, anchoring relative `glob()` patterns.
+    ///
+    /// `None` when parsing a manifest string, where there is no owning
+    /// directory; relative `glob()` patterns then fall back to the process
+    /// current directory at the composition root.
+    manifest_root: Option<PathBuf>,
 }
 
 /// Selects the stdlib surface available while rendering a manifest.
@@ -113,6 +119,7 @@ fn from_str_named(
         name,
         stdlib_registration,
         env_reader,
+        manifest_root,
     } = parse;
     let is_manifest_query = matches!(stdlib_registration, Some(StdlibRegistration::ManifestQuery));
     notify_stage(on_stage, ManifestLoadStage::InitialYamlParsing);
@@ -129,8 +136,9 @@ fn from_str_named(
     jinja.add_function("env", move |var_name: String| {
         env_var_with(&var_name, |key| reader(key))
     });
-    jinja.add_function("glob", |pattern: String| {
-        let expansion = glob::expand_glob(&pattern)?;
+    let glob_base = manifest_root;
+    jinja.add_function("glob", move |pattern: String| {
+        let expansion = glob::expand_glob(&pattern, glob_base.as_deref())?;
         glob::record_expansion(&expansion);
         expansion.into_template_paths(&pattern)
     });
@@ -299,6 +307,7 @@ pub fn from_str_with_env(yaml: &str, env_reader: &EnvReader) -> Result<NetsukeMa
             name: &ManifestName::new("Netsukefile"),
             stdlib_registration: None,
             env_reader,
+            manifest_root: None,
         },
         &mut None,
     )

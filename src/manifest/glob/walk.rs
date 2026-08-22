@@ -24,7 +24,7 @@ use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use cap_primitives::fs::{FollowSymlinks, open_dir_nofollow, open_parent_dir, stat};
 use cap_std::{ambient_authority, fs::Dir};
 use minijinja::Error;
-use std::io;
+use std::{io, path::Path};
 
 /// Capability root for a glob expansion.
 ///
@@ -259,9 +259,14 @@ pub(super) fn unescape_literal_escapes(prefix: &str) -> String {
 /// Returns `Ok(None)` when the literal prefix does not exist (or is not a
 /// directory); the pattern can match nothing in that case, mirroring the
 /// empty result the matcher would produce.
-pub(super) fn open_root_dir(pattern: &GlobPattern) -> io::Result<Option<GlobRoot>> {
-    let prefix = literal_dir_path(pattern);
-    match open_literal_prefix(Utf8Path::new(&prefix)) {
+///
+/// `search` is the effective pattern the matcher ran on: the caller supplies
+/// the raw pattern when no base directory was injected, or the raw pattern
+/// joined onto the injected base. The literal prefix is computed from it, so
+/// an injected base both anchors relative patterns and scopes the capability.
+pub(super) fn open_root_dir(search: &str, base: Option<&Path>) -> io::Result<Option<GlobRoot>> {
+    let prefix = literal_dir_path(search);
+    match open_literal_prefix(Utf8Path::new(&prefix), base) {
         Ok(dir) => Ok(Some(GlobRoot {
             dir,
             prefix: Utf8PathBuf::from(prefix),
@@ -274,11 +279,12 @@ pub(super) fn open_root_dir(pattern: &GlobPattern) -> io::Result<Option<GlobRoot
 /// Open `prefix` without following a symbolic link in its literal components.
 ///
 /// The only ambient opening establishes the lexical filesystem root for an
-/// absolute prefix, or the current directory for a relative one. Subsequent
-/// normal components use `open_dir_nofollow`, while `..` deliberately moves
-/// through the parent-directory capability so parent-relative patterns retain
-/// their existing behaviour.
-fn open_literal_prefix(prefix: &Utf8Path) -> io::Result<Dir> {
+/// absolute prefix, or the injected `base` directory for a relative one (the
+/// current directory when no base is available). Subsequent normal components
+/// use `open_dir_nofollow`, while `..` deliberately moves through the
+/// parent-directory capability so parent-relative patterns retain their
+/// existing behaviour.
+fn open_literal_prefix(prefix: &Utf8Path, base: Option<&Path>) -> io::Result<Dir> {
     let (base, remainder) = if prefix.is_absolute() {
         let root = prefix.ancestors().last().ok_or_else(|| {
             io::Error::new(
@@ -294,7 +300,10 @@ fn open_literal_prefix(prefix: &Utf8Path) -> io::Result<Dir> {
         })?;
         (root, remainder)
     } else {
-        (Utf8Path::new("."), prefix)
+        let anchor = base
+            .and_then(|dir| Utf8Path::from_path(dir))
+            .unwrap_or_else(|| Utf8Path::new("."));
+        (anchor, prefix)
     };
     let mut dir = Dir::open_ambient_dir(base, ambient_authority())?.into_std_file();
 
@@ -325,9 +334,10 @@ fn open_literal_prefix(prefix: &Utf8Path) -> io::Result<Dir> {
 
     Ok(Dir::from_std_file(dir))
 }
-/// Return the filesystem path represented by a pattern's literal prefix.
-fn literal_dir_path(pattern: &GlobPattern) -> String {
-    unescape_literal_escapes(literal_dir_prefix(pattern.normalized()))
+/// Return the filesystem path represented by a normalised pattern's literal
+/// prefix.
+fn literal_dir_path(normalized: &str) -> String {
+    unescape_literal_escapes(literal_dir_prefix(normalized))
 }
 /// Report whether `err` means the literal prefix names no usable directory.
 ///

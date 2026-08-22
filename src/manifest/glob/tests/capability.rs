@@ -1,16 +1,13 @@
 //! Tests for the capability handle the glob metadata checks run through.
 #[cfg(unix)]
+use anyhow::{Context, Result, anyhow, ensure};
+use camino::{Utf8Path, Utf8PathBuf};
+use minijinja::ErrorKind;
+use rstest::{fixture, rstest};
 use super::super::walk::literal_dir_prefix;
 use super::super::walk::open_root_dir;
 use super::super::{GlobPattern, glob_paths};
-use anyhow::{Context, Result, anyhow, ensure};
-use camino::{Utf8Path, Utf8PathBuf};
-#[cfg(unix)]
-use minijinja::ErrorKind;
-use rstest::{fixture, rstest};
 use tempfile::{TempDir, tempdir};
-use test_support::cwd_guard::CwdGuard;
-use test_support::env_lock::EnvLock;
 use test_support::fs as test_fs;
 
 /// A tree with one file inside `scoped/` and one sibling outside it.
@@ -62,13 +59,14 @@ fn open_root_dir_declines_unopenable_prefix(
 ) -> Result<()> {
     let temp = scoped_tree?;
     let pattern = GlobPattern::new(&format!("{}/{prefix}/*.txt", temp.path().display()))?;
-    let root = open_root_dir(&pattern).with_context(|| format!("open root for {desc}"))?;
+    let root = open_root_dir(pattern.normalized(), None)
+        .with_context(|| format!("open root for {desc}"))?;
     ensure!(
         root.is_none(),
         "{desc} prefix should yield no capability at all"
     );
     ensure!(
-        glob_paths(pattern.raw())?.is_empty(),
+        glob_paths(pattern.raw(), None)?.is_empty(),
         "{desc} prefix should expand to no matches"
     );
     Ok(())
@@ -87,7 +85,7 @@ fn open_root_dir_scopes_past_an_escaped_metacharacter() -> Result<()> {
     test_fs::write(temp.path().join("out.txt"), "out")?;
 
     let pattern = GlobPattern::new(&format!(r"{}/\*x/*.txt", temp.path().display()))?;
-    let root = open_root_dir(&pattern)
+    let root = open_root_dir(pattern.normalized(), None)
         .context("open capability root")?
         .ok_or_else(|| anyhow!("the escaped directory exists, so a root was expected"))?;
 
@@ -102,7 +100,7 @@ fn open_root_dir_scopes_past_an_escaped_metacharacter() -> Result<()> {
         "the escaped directory's contents must be reachable"
     );
 
-    let results = glob_paths(pattern.raw())?;
+    let results = glob_paths(pattern.raw(), None)?;
     ensure!(
         results.iter().all(|p| p.ends_with("in.txt")) && results.len() == 1,
         "expected only the file inside the escaped directory: {results:?}"
@@ -123,11 +121,11 @@ fn open_root_dir_rejects_a_symlinked_literal_prefix() -> Result<()> {
 
     let pattern = GlobPattern::new(&format!("{}/link/*.c", temp.path().display()))?;
     ensure!(
-        open_root_dir(&pattern).is_err(),
+        open_root_dir(pattern.normalized(), None).is_err(),
         "a symbolic-link prefix must not receive a capability"
     );
     ensure!(
-        glob_paths(pattern.raw()).is_err(),
+        glob_paths(pattern.raw(), None).is_err(),
         "a symbolic-link prefix must fail rather than traverse its target"
     );
     Ok(())
@@ -161,7 +159,7 @@ fn open_root_dir_propagates_an_unreadable_prefix() -> Result<()> {
     let _restore = ModeGuard(Utf8PathBuf::try_from(locked.clone())?);
 
     let pattern = GlobPattern::new(&format!("{}/inner/*.txt", locked.display()))?;
-    let Err(err) = open_root_dir(&pattern) else {
+    let Err(err) = open_root_dir(pattern.normalized(), None) else {
         // A privileged user bypasses the mode, so there is nothing to observe.
         tracing::warn!("skipping: the mode-000 prefix stayed readable");
         return Ok(());
@@ -172,7 +170,7 @@ fn open_root_dir_propagates_an_unreadable_prefix() -> Result<()> {
         kind = err.kind()
     );
 
-    let expansion = glob_paths(pattern.raw())
+    let expansion = glob_paths(pattern.raw(), None)
         .expect_err("an unreadable prefix must fail the expansion, not silently match nothing");
     ensure!(
         expansion.kind() == ErrorKind::InvalidOperation,
@@ -189,7 +187,7 @@ fn open_root_dir_scopes_capability_to_literal_prefix(scoped_tree: Result<TempDir
     // the handle even though it exists on disk.
     let temp = scoped_tree?;
     let pattern = GlobPattern::new(&format!("{}/scoped/*.txt", temp.path().display()))?;
-    let root = open_root_dir(&pattern)
+    let root = open_root_dir(pattern.normalized(), None)
         .context("open capability root")?
         .ok_or_else(|| anyhow!("literal prefix exists, so a root was expected"))?;
 
@@ -218,7 +216,7 @@ fn glob_root_relativises_matches_against_the_prefix(scoped_tree: Result<TempDir>
     let root_path =
         Utf8PathBuf::try_from(temp.path().to_path_buf()).context("temp dir path is not UTF-8")?;
     let pattern = GlobPattern::new(&format!("{root_path}/scoped/*.txt"))?;
-    let root = open_root_dir(&pattern)
+    let root = open_root_dir(pattern.normalized(), None)
         .context("open capability root")?
         .ok_or_else(|| anyhow!("literal prefix exists, so a root was expected"))?;
 
@@ -245,7 +243,7 @@ fn glob_root_relativises_matches_against_the_prefix(scoped_tree: Result<TempDir>
 fn glob_paths_matches_only_within_literal_prefix(scoped_tree: Result<TempDir>) -> Result<()> {
     let temp = scoped_tree?;
     let pattern = format!("{}/scoped/*.txt", temp.path().display());
-    let results = glob_paths(&pattern)?;
+    let results = glob_paths(&pattern, None)?;
     ensure!(
         results.iter().all(|p| p.ends_with("in.txt")),
         "only files under the literal prefix should match: {results:?}"
@@ -256,19 +254,17 @@ fn glob_paths_matches_only_within_literal_prefix(scoped_tree: Result<TempDir>) -
 
 #[test]
 fn glob_paths_matches_parent_relative_patterns() -> Result<()> {
-    // Scoping the capability at the literal prefix also reaches patterns that
-    // ascend past the working directory: a `..` component in a match used to
-    // be rejected by the working-directory handle as a sandbox escape.
+    // Injecting a subdirectory as the glob base reaches patterns that ascend
+    // out of it: a `..` component in a match used to require changing the
+    // process working directory, which the sandbox-escape rejection cannot
+    // allow. The base's parent — here the temporary directory — is isolated,
+    // so the result is deterministic.
     let temp = tempdir()?;
     let sub = temp.path().join("sub");
     test_fs::create_dir(&sub)?;
     test_fs::write(temp.path().join("out.txt"), "out")?;
 
-    let _lock = EnvLock::acquire();
-    let _guard = CwdGuard::acquire()?;
-    std::env::set_current_dir(&sub).context("switch to the subdirectory")?;
-
-    let results = glob_paths("../*.txt")?;
+    let results = glob_paths("../*.txt", Some(&sub))?;
     ensure!(
         results == vec!["../out.txt".to_owned()],
         "expected the parent-relative match, got {results:?}"
@@ -306,7 +302,8 @@ fn glob_paths_skips_symlinks_escaping_the_prefix(
     test_fs::symlink(link_target, src.join(link_name))?;
 
     let pattern = format!("{}/{pattern_tail}", temp.path().display());
-    let results = glob_paths(&pattern).context("an escaping symlink must not abort the walk")?;
+    let results =
+        glob_paths(&pattern, None).context("an escaping symlink must not abort the walk")?;
     ensure!(
         results.iter().any(|p| p.ends_with(kept)),
         "valid matches should be preserved: {results:?}"
@@ -330,7 +327,8 @@ fn glob_paths_skips_dangling_symlinks() -> Result<()> {
     test_fs::symlink("nowhere.c", src.join("dangling.c"))?;
 
     let pattern = format!("{}/src/*.c", temp.path().display());
-    let results = glob_paths(&pattern).context("a dangling symlink must not abort the walk")?;
+    let results =
+        glob_paths(&pattern, None).context("a dangling symlink must not abort the walk")?;
     ensure!(
         results.iter().any(|p| p.ends_with("real.c")),
         "valid matches should be preserved: {results:?}"
@@ -353,7 +351,7 @@ fn glob_paths_reports_symlink_loops() -> Result<()> {
     test_fs::symlink("loop.c", src.join("loop.c"))?;
 
     let pattern = format!("{}/src/*.c", temp.path().display());
-    let err = glob_paths(&pattern).expect_err("a symlink loop should surface as an error");
+    let err = glob_paths(&pattern, None).expect_err("a symlink loop should surface as an error");
     ensure!(
         err.kind() == ErrorKind::InvalidOperation,
         "unexpected error kind {kind:?}",
@@ -368,7 +366,7 @@ fn open_root_dir_falls_back_to_cwd_without_a_literal_prefix() -> Result<()> {
     // component, so the capability stays scoped to the working directory —
     // the pre-existing behaviour for relative patterns.
     let pattern = GlobPattern::new("*.txt")?;
-    let root = open_root_dir(&pattern)
+    let root = open_root_dir(pattern.normalized(), None)
         .context("open capability root")?
         .ok_or_else(|| anyhow!("the working directory always exists"))?;
     ensure!(
