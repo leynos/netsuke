@@ -234,12 +234,9 @@ fn discovered_project_config_retains_load_outcome(
     Ok(())
 }
 
-/// A project-scope layer already found by discovery is not appended again.
+/// A non-canonical `--directory` must not append an already-discovered layer.
 ///
-/// `OrthoConfig` records canonicalised layer paths, so a non-canonical
-/// `--directory` (here one containing a `.` component, as a relative or
-/// symlinked path would be) must still match. Appending twice would duplicate
-/// the entries of every `merge_strategy = "append"` field in the file.
+/// Duplicating the layer repeats every `merge_strategy = "append"` value.
 #[test]
 fn existing_project_scope_layer_is_not_appended_twice() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
@@ -277,15 +274,8 @@ fn existing_project_scope_layer_is_not_appended_twice() -> Result<()> {
     Ok(())
 }
 
-/// A project-scope layer is not appended twice when the `--directory` alias
-/// resolves to the same physical file through a different spelling.
-///
-/// On Windows the same file can be reached through a short-name form
-/// (`C:\Users\RUNNER~1\...`) and a long-name form (`C:\Users\runneradmin\...`),
-/// and `ortho_config` records the long-name canonical form. A symlink alias on
-/// Unix exercises the same shape: the layer path recorded by discovery and the
-/// key derived from the alias both canonicalise to the same physical file, so
-/// the project-scope pass must not append the layer twice.
+/// A symlink alias must not append a project-scope layer twice: Windows short
+/// and long names canonicalize to the one file recorded by discovery.
 #[cfg(unix)]
 #[test]
 fn project_scope_layer_is_not_appended_twice_via_symlink_alias() -> Result<()> {
@@ -319,12 +309,8 @@ fn project_scope_layer_is_not_appended_twice_via_symlink_alias() -> Result<()> {
     );
     Ok(())
 }
-/// Normalization failure must not fail configuration discovery.
-///
-/// A missing project `.netsuke.toml` or an unreadable directory makes
-/// canonicalization fail, which is ordinary rather than exceptional. The
-/// discovery-side policy compares such a path literally and carries on; only an
-/// unmatched project layer results, never an error.
+/// Canonicalization failure falls back to literal comparison without failing
+/// discovery.
 #[test]
 fn normalization_failure_does_not_fail_discovery() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
@@ -339,12 +325,37 @@ fn normalization_failure_does_not_fail_discovery() -> Result<()> {
     // The dot component differs from OrthoConfig's canonical layer path, so
     // the failing normalizer must take the fallback de-duplication branch.
     let alias = project_dir.join(".");
-    let (layers, events) = capture_events(|| {
-        collect_file_layers_with_normalizer(Some(alias.as_path()), &FailingPathNormalizer)
-    })
-    .context("discovery must succeed despite normalization failure")?;
+    let cli = Cli {
+        directory: Some(alias),
+        ..Cli::default()
+    };
+    let env = CountingEnv::default();
+    let (discovered, collection_events) = capture_events(|| {
+        Ok::<_, anyhow::Error>(discover_file_layers_with_normalizer(
+            &cli,
+            &env,
+            &FailingPathNormalizer,
+        ))
+    })?;
 
-    ensure!(layers.len() == 1, "expected one project layer: {layers:?}");
+    ensure!(
+        !collection_events
+            .iter()
+            .any(|event| event.contains("resolved project-scope layer deduplication")),
+        "discovery must defer the project-layer count event until replay: {collection_events:?}"
+    );
+    let discovery_get_calls = env.get_calls();
+    let events = replay_events(&discovered)?;
+
+    ensure!(
+        env.get_calls() == discovery_get_calls,
+        "replay must not access the environment again"
+    );
+    ensure!(
+        discovered.layers().len() == 1,
+        "expected one project layer: {:?}",
+        discovered.layers()
+    );
     let deduplication = find_event(&events, "resolved project-scope layer deduplication")?;
     ensure!(
         deduplication.contains("discovered_layer_count=1")

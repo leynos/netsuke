@@ -87,6 +87,22 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn canonicalize_reports_a_missing_utf8_fixture_path() -> Result<()> {
+        use std::io::ErrorKind;
+
+        let temporary = tempdir().context("create temporary fixture directory")?;
+        let missing_fixture = temporary.path().join("missing-config.toml");
+
+        let error = canonicalize(utf8_path(&missing_fixture)?)
+            .expect_err("a missing fixture path must not canonicalize");
+        ensure!(
+            error.kind() == ErrorKind::NotFound,
+            "expected NotFound for a missing fixture path, got {error}"
+        );
+        Ok(())
+    }
+
     #[cfg(unix)]
     #[test]
     fn canonicalize_resolves_unix_symlink_alias_to_target() -> Result<()> {
