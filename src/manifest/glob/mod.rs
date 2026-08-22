@@ -190,10 +190,7 @@ impl GlobExpansion {
 /// The passing example above is the control for this rejection: it fails
 /// instead if the rustdoc harness wiring breaks, so the `compile_fail` block
 /// cannot pass vacuously.
-pub fn glob_paths(
-    pattern: &str,
-    base: Option<&Path>,
-) -> std::result::Result<Vec<String>, Error> {
+pub fn glob_paths(pattern: &str, base: Option<&Path>) -> std::result::Result<Vec<String>, Error> {
     expand_glob(pattern, base).map(GlobExpansion::into_paths)
 }
 
@@ -218,9 +215,7 @@ pub(super) fn expand_glob(
 
     let pattern_state = GlobPattern::new(pattern)?;
     let normalized = pattern_state.normalized();
-    let (search, strip) = match base
-        .filter(|_| !Path::new(normalized).is_absolute())
-    {
+    let (search, strip) = match base.filter(|_| !Path::new(normalized).is_absolute()) {
         Some(dir) => (
             dir.join(normalized).to_string_lossy().into_owned(),
             Some(dir.to_path_buf()),
