@@ -3,9 +3,10 @@
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use anyhow::{Context, Result, bail, ensure};
+use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use rstest_bdd_macros::then;
-use std::{fs, path::Path};
+use std::fs;
 use test_support::hash;
 use test_support::stdlib_assert::stdlib_output_or_error;
 use time::{Duration, OffsetDateTime, UtcOffset};
@@ -112,9 +113,9 @@ pub(crate) fn assert_fetch_cache_present(world: &TestWorld) -> Result<()> {
 #[then("the stdlib output equals the workspace root")]
 pub(crate) fn assert_stdlib_output_is_root(world: &TestWorld) -> Result<()> {
     let (root, output) = stdlib_root_and_output(world)?;
-    let actual = Path::new(&output);
+    let actual = Utf8Path::new(&output);
     ensure!(
-        actual == root.as_std_path(),
+        actual == root.as_path(),
         "expected output to equal workspace root"
     );
     Ok(())
@@ -124,9 +125,9 @@ pub(crate) fn assert_stdlib_output_is_root(world: &TestWorld) -> Result<()> {
 pub(crate) fn assert_stdlib_output_is_workspace_path(world: &TestWorld, path: &str) -> Result<()> {
     let (root, output) = stdlib_root_and_output(world)?;
     let expected = root.join(path);
-    let actual = Path::new(&output);
+    let actual = Utf8Path::new(&output);
     ensure!(
-        actual == expected.as_std_path(),
+        actual == expected.as_path(),
         "expected output '{}', got '{output}'",
         expected
     );
@@ -141,9 +142,9 @@ pub(crate) fn assert_stdlib_output_is_workspace_executable(
     let relative = camino::Utf8PathBuf::from(path);
     let (root, output) = stdlib_root_and_output(world)?;
     let expected = resolve_executable_path(&root, relative.as_path());
-    let actual = Path::new(&output);
+    let actual = Utf8Path::new(&output);
     ensure!(
-        actual == expected.as_std_path(),
+        actual == expected.as_path(),
         "expected stdlib output '{expected}' but was '{output}'"
     );
     Ok(())
