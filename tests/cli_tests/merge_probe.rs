@@ -72,6 +72,52 @@ pub(super) fn isolated_environment(
     Ok((xdg_config_dirs, environment))
 }
 
+/// Build the environment for a configuration probe whose system scope is
+/// redirected to `system_dirs`.
+///
+/// Unlike [`isolated_environment`], this variant does not return a sandbox
+/// `TempDir` for `XDG_CONFIG_DIRS`: it points the system-configuration
+/// directory at the caller-supplied `system_dirs` path so a config file
+/// written there is discovered as the system-scope layer. The caller retains
+/// ownership of `system_dirs` (typically a `TempDir`) and must keep it alive
+/// until the child process has finished, matching the lifetime contract of
+/// the sandbox directory returned by [`isolated_environment`].
+///
+/// The environment selector set stays closed at the documented variables;
+/// no selector other than `NETSUKE_CONFIG` participates in discovery.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let home = tempfile::tempdir()?;
+/// let system = tempfile::tempdir()?;
+/// std::fs::create_dir_all(system.path().join("netsuke"))?;
+/// std::fs::write(system.path().join("netsuke/config.toml"), "emoji = \"always\"\n")?;
+/// let environment = environment_with_system_scope(home.path(), system.path(), &[]);
+/// let merged = merge_in_child(&["netsuke"], home.path(), &environment)?;
+/// assert_eq!(merged.emoji, netsuke::cli::EmojiPolicy::Always);
+/// # Ok::<(), anyhow::Error>(())
+/// ```
+pub(super) fn environment_with_system_scope(
+    home: &Path,
+    system_dirs: &Path,
+    overrides: &[(OsString, OsString)],
+) -> Vec<(OsString, OsString)> {
+    let mut environment = vec![
+        (OsString::from("HOME"), home.as_os_str().to_owned()),
+        (
+            OsString::from("XDG_CONFIG_HOME"),
+            home.join(".config").into_os_string(),
+        ),
+        (
+            OsString::from("XDG_CONFIG_DIRS"),
+            system_dirs.as_os_str().to_owned(),
+        ),
+    ];
+    environment.extend_from_slice(overrides);
+    environment
+}
+
 /// Merge configuration in an isolated process with the supplied environment.
 pub(super) fn merge_in_child(
     args: &[&str],
