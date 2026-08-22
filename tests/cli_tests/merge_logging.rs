@@ -61,7 +61,7 @@ fn merge_logs_explicit_cli_override_keys() -> Result<()> {
 fn merge_logs_validation_rejection_with_key_and_reason() -> Result<()> {
     let temp_dir = tempfile::tempdir().context("create temporary config directory")?;
     let config_path = temp_dir.path().join("netsuke.toml");
-    std::fs::write(&config_path, "jobs = 0\n").context("write netsuke.toml")?;
+    test_support::fs::write(&config_path, "jobs = 0\n").context("write netsuke.toml")?;
 
     let localizer = Arc::from(netsuke::cli_localization::build_localizer(None));
     let config_arg = config_path.to_string_lossy().into_owned();

@@ -2705,8 +2705,9 @@ versioned diagnostic document on failure.
 Configuration loading remains a plain query. The application-owned recorder
 boundary in `src/observability.rs` composes instrumentation at the CLI root,
 around the diagnostic-mode resolution and full-merge queries; configuration
-loading itself does not emit telemetry. The process-wide recorder is installed
-by the application after tracing is ready, while tests use local recorders.
+loading itself does not install a recorder or emit metrics. The process-wide
+recorder is installed by the application after tracing is ready, while tests
+use local recorders.
 
 The metric vocabulary keeps labels bounded: `config_load_total` uses only
 `phase` (`diag_mode` or `merge`) and `outcome` (`success` or `failure`), while
@@ -2720,6 +2721,15 @@ including the snapshot, so its diagnostic document remains uncorrupted.
 Deferred configuration-discovery tracing retains only correlation hashes and
 presence bits for path metadata so events can be replayed after discovery.
 Those deferred trace events never retain or emit filenames or raw paths.
+
+The cached merge boundary emits one debug event as it pushes each defaults,
+file, environment, and CLI layer. Its private per-layer push helpers are owned
+by `merge_with_cached_file_layers`: they share its composer and accumulated
+error collection, and must not be reused to create a partial merge or access
+the process environment. CLI events contain override keys only; file-layer
+events use bounded path hashes; validation events use fixed `key` and `reason`
+fields. The application adjusts its tracing filter before this merge and turns
+it off for JSON diagnostics, preserving machine-readable stderr.
 
 CLI help and clap errors are localized via Fluent resources; locale resolution
 is handled in `src/locale_resolution.rs` in two phases. Before the

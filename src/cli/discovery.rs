@@ -4,9 +4,7 @@
 //! through [`ConfigDiscovery`], handling explicit paths from CLI flags and
 //! environment variables, and loading TOML chains into [`MergeLayer`] values.
 
-use ortho_config::{
-    MapEnv, MergeComposer, MergeLayer, OrthoResult, SharedEnvSource, load_config_file_as_chain,
-};
+use ortho_config::{MapEnv, MergeLayer, OrthoResult, SharedEnvSource, load_config_file_as_chain};
 use std::borrow::Cow;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -31,12 +29,16 @@ mod trace;
 
 #[path = "discovery_telemetry.rs"]
 mod telemetry;
-use diagnostics::{BoundedConfigPath, ConfigLoadFailureKind, ConfigLoadWarning, short_hash};
+use diagnostics::{BoundedConfigPath, ConfigLoadFailureKind, ConfigLoadWarning};
 use layers::collect_file_layers_with_normalizer_and_trace;
 use paths::{FsPathNormalizer, PathNormalizer};
 /// Record the discovery series for an already-timed phase at the boundary.
 pub use telemetry::record_discovery_outcome;
 use trace::{DiscoveryDiagnostics, DiscoveryTrace, FileLayerTrace};
+
+#[path = "discovery_merge_layers.rs"]
+mod merge_layers;
+pub(crate) use merge_layers::push_discovered_file_layers;
 /// Name of the environment variable that selects the configuration file.
 ///
 /// Read as the primary selector after the `--config` CLI flag when a path is
@@ -164,39 +166,6 @@ fn discover_file_layers_with_normalizer(
         },
     };
     DiscoveryOutcome { layers }
-}
-
-/// Add discovered layers and errors to the normal merge accumulation.
-pub(crate) fn push_discovered_file_layers(
-    composer: &mut MergeComposer,
-    errors: &mut Vec<Arc<ortho_config::OrthoError>>,
-    discovered: DiscoveredLayers,
-) {
-    let (layers, discovery_errors) = discovered.into_parts();
-    if discovery_errors.is_empty() {
-        tracing::debug!(
-            layer = "file",
-            layer_count = layers.len(),
-            "collected configuration file layers"
-        );
-    } else {
-        tracing::debug!(
-            layer = "file",
-            error_count = discovery_errors.len(),
-            "configuration file layer collection failed"
-        );
-    }
-    errors.extend(discovery_errors);
-    for layer in layers {
-        tracing::debug!(
-            layer = "file",
-            path_hash = layer
-                .path()
-                .map(|path| short_hash(path.as_str().as_bytes())),
-            "applied configuration file layer"
-        );
-        composer.push_layer(layer);
-    }
 }
 
 /// Load layers through the shared explicit-config precedence boundary.

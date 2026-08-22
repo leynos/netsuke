@@ -86,6 +86,24 @@ pub fn merge_with_cached_file_layers(
     let mut errors = Vec::new();
     let mut composer = MergeComposer::with_capacity(4);
 
+    push_defaults_layer(&mut composer, &mut errors);
+    push_discovered_file_layers(&mut composer, &mut errors, discovered);
+    push_environment_layer(env, &mut composer, &mut errors);
+    push_cli_layer(cli, matches, &mut composer, &mut errors);
+
+    let composition = LayerComposition::new(composer.layers(), errors);
+    let merged = composition.into_merge_result(CliConfig::merge_from_layers)?;
+    Ok(apply_config(cli, merged))
+}
+
+/// Push the default configuration layer and retain any serialization failure.
+///
+/// This helper belongs only to the cached merge boundary: it must append to the
+/// caller's shared composer and error collection rather than finish a merge.
+fn push_defaults_layer(
+    composer: &mut MergeComposer,
+    errors: &mut Vec<std::sync::Arc<ortho_config::OrthoError>>,
+) {
     match sanitize_value(&CliConfig::default()) {
         Ok(value) => {
             tracing::debug!(layer = "defaults", "applied default configuration layer");
@@ -96,9 +114,17 @@ pub fn merge_with_cached_file_layers(
             errors.push(err);
         }
     }
+}
 
-    push_discovered_file_layers(&mut composer, &mut errors, discovered);
-
+/// Push the injected environment layer and retain extraction failures.
+///
+/// This helper belongs only to the cached merge boundary and never reads the
+/// process environment: callers supply the environment adapter explicitly.
+fn push_environment_layer(
+    env: &impl EnvProvider,
+    composer: &mut MergeComposer,
+    errors: &mut Vec<std::sync::Arc<ortho_config::OrthoError>>,
+) {
     match Figment::from(EnvironmentLayer::new(env.entries()))
         .extract::<Value>()
         .into_ortho_merge()
@@ -119,7 +145,18 @@ pub fn merge_with_cached_file_layers(
             errors.push(err);
         }
     }
+}
 
+/// Push explicit CLI overrides and log their keys without recording values.
+///
+/// This helper is limited to the cached merge boundary because only that
+/// boundary owns the shared layer order and accumulated error collection.
+fn push_cli_layer(
+    cli: &Cli,
+    matches: &ArgMatches,
+    composer: &mut MergeComposer,
+    errors: &mut Vec<std::sync::Arc<ortho_config::OrthoError>>,
+) {
     match cli_overrides_from_matches(cli, matches) {
         Ok(value) if !is_empty_value(&value) => {
             // Values may echo user-supplied paths or host lists, so records
@@ -141,12 +178,7 @@ pub fn merge_with_cached_file_layers(
             errors.push(err);
         }
     }
-
-    let composition = LayerComposition::new(composer.layers(), errors);
-    let merged = composition.into_merge_result(CliConfig::merge_from_layers)?;
-    Ok(apply_config(cli, merged))
 }
-
 /// Return whether `value` is an empty JSON object and so contributes no CLI overrides.
 fn is_empty_value(value: &Value) -> bool {
     matches!(value, Value::Object(map) if map.is_empty())
@@ -324,6 +356,3 @@ fn resolve_command(parsed: Option<&Commands>, build_defaults: &BuildConfig) -> C
         }),
     }
 }
-
-/// Error type accumulated while composing configuration layers.
-type MergeError = std::sync::Arc<ortho_config::OrthoError>;

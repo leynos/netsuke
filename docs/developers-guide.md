@@ -2762,6 +2762,13 @@ tests only; integration tests under `tests/` compile as separate crates and
 cannot reach it. Coverage that needs the real binary's tracing output instead
 asserts on the process's stderr — see `tests/logging_stderr/config_tracing.rs`.
 
+`test_support::tracing_capture` supplies the equivalent public, reusable
+capture boundary for integration tests. It is limited to test code: callers
+choose the `LevelFilter`, capture events only inside the supplied closure, and
+must not install a global subscriber or use it from production modules. Reuse
+it for in-process observability assertions such as configuration merging;
+continue to assert subprocess tracing through stderr.
+
 `CapturedEvents` has no `Default` implementation — obtain it only from the
 handle passed into the `with_test_subscriber` closure. `snapshot()` recovers a
 poisoned lock rather than panicking, so a panic on another test thread cannot
