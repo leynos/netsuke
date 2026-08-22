@@ -19,12 +19,9 @@
 pub mod check_ninja;
 pub mod command_helper;
 pub mod config_metrics;
-pub mod cwd_guard;
-
 #[cfg(unix)]
 pub mod dev_fast;
 pub mod env;
-pub mod env_lock;
 pub mod exec;
 pub mod fixture;
 pub mod fluent;
@@ -40,9 +37,6 @@ pub mod ninja_gen;
 pub mod stdlib_assert;
 /// Re-export the SHA-256 helper for concise call sites.
 pub use hash::sha256_hex;
-
-/// Re-export of [`cwd_guard::CwdGuard`] for ergonomics in tests.
-pub use cwd_guard::CwdGuard;
 
 /// Re-export localizer helpers for integration tests.
 pub use localizer::{
