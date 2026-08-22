@@ -255,14 +255,7 @@ pub(super) fn unescape_literal_escapes(prefix: &str) -> String {
 
 /// Open the directory used as the capability root for the glob.
 ///
-/// Returns `Ok(None)` when the literal prefix does not exist (or is not a
-/// directory); the pattern can match nothing in that case, mirroring the
-/// empty result the matcher would produce.
-///
-/// `search` is the effective pattern the matcher ran on: the caller supplies
-/// the raw pattern when no base directory was injected, or the raw pattern
-/// joined onto the injected base. The literal prefix is computed from it, so
-/// an injected base both anchors relative patterns and scopes the capability.
+/// Returns `Ok(None)` when the literal prefix does not exist (or is not a directory).
 pub(super) fn open_root_dir(search: &str, base: Option<&Path>) -> io::Result<Option<GlobRoot>> {
     let prefix = literal_dir_path(search);
     match open_literal_prefix(Utf8Path::new(&prefix), base) {
@@ -277,12 +270,8 @@ pub(super) fn open_root_dir(search: &str, base: Option<&Path>) -> io::Result<Opt
 
 /// Open `prefix` without following a symbolic link in its literal components.
 ///
-/// The only ambient opening establishes the lexical filesystem root for an
-/// absolute prefix, or the injected `base` directory for a relative one (the
-/// current directory when no base is available). Subsequent normal components
-/// use `open_dir_nofollow`, while `..` deliberately moves through the
-/// parent-directory capability so parent-relative patterns retain their
-/// existing behaviour.
+/// The ambient opening establishes the filesystem root for an absolute prefix;
+/// a relative one is opened at the injected `base` (`.` when none).
 fn open_literal_prefix(prefix: &Utf8Path, injected_base: Option<&Path>) -> io::Result<Dir> {
     let (base, remainder) = if prefix.is_absolute() {
         let root = prefix.ancestors().last().ok_or_else(|| {
@@ -299,10 +288,12 @@ fn open_literal_prefix(prefix: &Utf8Path, injected_base: Option<&Path>) -> io::R
         })?;
         (root, remainder)
     } else {
-        let anchor = injected_base
-            .and_then(|dir| Utf8Path::from_path(dir))
-            .unwrap_or_else(|| Utf8Path::new("."));
-        (anchor, prefix)
+        (
+            injected_base
+                .and_then(Utf8Path::from_path)
+                .unwrap_or_else(|| Utf8Path::new(".")),
+            prefix,
+        )
     };
     let mut dir = Dir::open_ambient_dir(base, ambient_authority())?.into_std_file();
 
@@ -334,8 +325,7 @@ fn open_literal_prefix(prefix: &Utf8Path, injected_base: Option<&Path>) -> io::R
     Ok(Dir::from_std_file(dir))
 }
 
-/// Return the filesystem path represented by a normalised pattern's literal
-/// prefix.
+/// Return the filesystem path represented by a normalised pattern's literal prefix.
 fn literal_dir_path(normalized: &str) -> String {
     unescape_literal_escapes(literal_dir_prefix(normalized))
 }

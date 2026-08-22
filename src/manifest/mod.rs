@@ -107,11 +107,8 @@ struct ManifestParse<'a> {
     stdlib_registration: Option<StdlibRegistration>,
     /// Environment reader backing the `env()` helper.
     env_reader: &'a EnvReader,
-    /// Manifest workspace root, anchoring relative `glob()` patterns.
-    ///
-    /// `None` when parsing a manifest string, where there is no owning
-    /// directory; relative `glob()` patterns then fall back to the process
-    /// current directory at the composition root.
+    /// Manifest workspace root, anchoring relative `glob()` patterns; `None`
+    /// falls back to the process current directory at the composition root.
     manifest_root: Option<PathBuf>,
 }
 
@@ -147,9 +144,8 @@ fn from_str_named(
     jinja.add_function("env", move |var_name: String| {
         env_var_with(&var_name, |key| reader(key))
     });
-    let glob_base = manifest_root;
     jinja.add_function("glob", move |pattern: String| {
-        let expansion = glob::expand_glob(&pattern, glob_base.as_deref())?;
+        let expansion = glob::expand_glob(&pattern, manifest_root.as_deref())?;
         glob::record_expansion(&expansion);
         Ok(expansion.into_paths())
     });
