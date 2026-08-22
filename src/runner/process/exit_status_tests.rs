@@ -18,10 +18,10 @@ fn exit_status(code: i32) -> ExitStatus {
 }
 
 #[cfg(windows)]
-fn exit_status(code: i32) -> ExitStatus {
+fn exit_status(code: u32) -> ExitStatus {
     use std::os::windows::process::ExitStatusExt;
 
-    ExitStatus::from_raw(code as u32)
+    ExitStatus::from_raw(code)
 }
 
 fn command_log_context() -> CommandLogContext {
