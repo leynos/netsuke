@@ -12,10 +12,9 @@
 //! - Delegates value validation to [`super::parsing`] helpers.
 //! - Returns a `Cli`/`ArgMatches` pair consumed by [`super::merge`].
 //!
-//! [`LocalizedValueParser`]: self::LocalizedValueParser
+//! [`LocalizedValueParser`]: super::value_parser::LocalizedValueParser
 
-use clap::builder::{TypedValueParser, ValueParser};
-use clap::error::ErrorKind;
+use clap::builder::ValueParser;
 use clap::{ArgMatches, Args, CommandFactory, Parser, Subcommand};
 use ortho_config::{LocalizationArgs, Localizer, parse_localized_command};
 use serde::{Deserialize, Serialize};
@@ -29,45 +28,16 @@ use super::parsing::{
     parse_accessibility_policy, parse_color_policy, parse_emoji_policy, parse_host_pattern,
     parse_jobs, parse_locale, parse_progress_policy, parse_scheme,
 };
+use super::policy_values::{
+    accessibility_policy_possible_values, colour_policy_possible_values,
+    emoji_policy_possible_values, progress_policy_possible_values,
+};
+use super::value_parser::LocalizedValueParser;
 use super::{AccessibilityPolicy, ColourPolicy, EmojiPolicy, ProgressPolicy};
 use crate::cli_l10n::localize_command;
 pub use crate::cli_l10n::{json_hint_from_args, locale_hint_from_args};
 use crate::host_pattern::HostPattern;
 use crate::theme::ThemePreference;
-
-#[derive(Clone)]
-struct LocalizedValueParser<F> {
-    localizer: Arc<dyn Localizer>,
-    parser: F,
-}
-
-impl<F> LocalizedValueParser<F> {
-    fn new(localizer: Arc<dyn Localizer>, parser: F) -> Self {
-        Self { localizer, parser }
-    }
-}
-
-impl<F, T> TypedValueParser for LocalizedValueParser<F>
-where
-    F: Fn(&dyn Localizer, &str) -> Result<T, String> + Clone + Send + Sync + 'static,
-    T: Send + Sync + Clone + 'static,
-{
-    type Value = T;
-
-    fn parse_ref(
-        &self,
-        cmd: &clap::Command,
-        _arg: Option<&clap::Arg>,
-        value: &std::ffi::OsStr,
-    ) -> Result<Self::Value, clap::Error> {
-        let mut command = cmd.clone();
-        let Some(raw_value) = value.to_str() else {
-            return Err(command.error(ErrorKind::InvalidUtf8, "invalid UTF-8"));
-        };
-        (self.parser)(self.localizer.as_ref(), raw_value)
-            .map_err(|err| command.error(ErrorKind::ValueValidation, err))
-    }
-}
 
 pub(super) fn validation_message(
     localizer: &dyn Localizer,
@@ -344,12 +314,26 @@ fn configure_validation_parsers(
     let locale_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_locale);
     let scheme_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_scheme);
     let host_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_host_pattern);
-    let color_policy_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_color_policy);
-    let emoji_policy_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_emoji_policy);
-    let progress_policy_parser =
-        LocalizedValueParser::new(Arc::clone(localizer), parse_progress_policy);
-    let accessibility_policy_parser =
-        LocalizedValueParser::new(Arc::clone(localizer), parse_accessibility_policy);
+    let color_policy_parser = LocalizedValueParser::with_possible_values(
+        Arc::clone(localizer),
+        parse_color_policy,
+        colour_policy_possible_values(),
+    );
+    let emoji_policy_parser = LocalizedValueParser::with_possible_values(
+        Arc::clone(localizer),
+        parse_emoji_policy,
+        emoji_policy_possible_values(),
+    );
+    let progress_policy_parser = LocalizedValueParser::with_possible_values(
+        Arc::clone(localizer),
+        parse_progress_policy,
+        progress_policy_possible_values(),
+    );
+    let accessibility_policy_parser = LocalizedValueParser::with_possible_values(
+        Arc::clone(localizer),
+        parse_accessibility_policy,
+        accessibility_policy_possible_values(),
+    );
 
     command = command.mut_arg("jobs", |arg| {
         arg.value_parser(ValueParser::new(jobs_parser))
