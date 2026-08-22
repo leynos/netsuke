@@ -144,7 +144,7 @@ fn from_str_named(
     jinja.add_function("glob", |pattern: String| {
         let expansion = glob::expand_glob(&pattern)?;
         glob::record_expansion(&expansion);
-        Ok(expansion.into_paths())
+        expansion.into_template_paths(&pattern)
     });
     let _stdlib_state = match stdlib_registration {
         Some(StdlibRegistration::Full(config)) => {
