@@ -2,7 +2,9 @@
 //! project-file discovery, user-scope fallback, and project-over-user
 //! precedence on Unix and Windows.
 
-use super::super::merge_probe::{isolated_environment, merge_in_child};
+use super::super::merge_probe::{
+    environment_with_system_scope, isolated_environment, merge_in_child,
+};
 use anyhow::{Context, Result, ensure};
 use netsuke::cli::config::{ColourPolicy, EmojiPolicy};
 use rstest::rstest;
@@ -256,14 +258,8 @@ fn assert_system_config_applied(merged: &netsuke::cli::Cli) -> Result<()> {
 }
 
 /// Write discovery-scope config files and merge in an isolated child rooted at
-/// `project`.
-///
-/// The system-scope file is `XDG_CONFIG_DIRS/netsuke/config.toml`; the optional
-/// user-scope file is `XDG_CONFIG_HOME/netsuke/config.toml`, and the optional
-/// project-scope file is `project/.netsuke.toml`. The environment selector set
-/// stays closed at the documented variables, and no real system file is ever
-/// read because `system` is a caller-owned `TempDir` discarded after the child
-/// exits.
+/// `project`. The selector set stays closed at the documented variables; the
+/// `system` `TempDir` is discarded after the child exits.
 fn run_system_scope_scenario(
     project: &Path,
     home: &Path,
@@ -284,8 +280,8 @@ fn run_system_scope_scenario(
         fs::write(project.join(".netsuke.toml"), project_content)
             .context("write project config")?;
     }
-    let environment = super::super::merge_probe::environment_with_system_scope(home, system, &[]);
-    super::super::merge_probe::merge_in_child(&["netsuke"], project, &environment)
+    let environment = environment_with_system_scope(home, system, &[]);
+    merge_in_child(&["netsuke"], project, &environment)
 }
 
 /// Optional user- and project-scope layers for a system-scope discovery run.

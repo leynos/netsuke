@@ -15,7 +15,7 @@
 //! [`super::merge`] where a parsed command is available; a pure
 //! `MergeComposer` composition cannot observe it.
 //!
-//! No `#[derive(Arbitrary)]` is used anywhere; every strategy is hand-written
+//! No `#[derive(Arbitrary)]` is used anywhere; every strategy is handwritten
 //! and stays free of any second environment selector.
 
 use netsuke::cli::CliConfig;

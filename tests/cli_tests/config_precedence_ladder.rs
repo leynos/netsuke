@@ -26,9 +26,9 @@ use anyhow::{Context, Result, ensure};
 use netsuke::cli::{Cli, EmojiPolicy, config::ColourPolicy};
 use rstest::rstest;
 use std::ffi::OsString;
-use std::fs;
 use std::path::Path;
 use tempfile::tempdir;
+use test_support::fs as test_fs;
 
 /// Build the full ladder environment with a distinct value per layer.
 ///
@@ -47,49 +47,16 @@ fn ladder_environment(
 ) -> Result<Vec<(OsString, OsString)>> {
     // System scope (lowest discovered layer).
     if enabled_layers.contains(&Layer::System) {
-        let system_dir = system.join("netsuke");
-        fs::create_dir_all(&system_dir).context("create system config directory")?;
-        fs::write(
-            system_dir.join("config.toml"),
-            r#"
-file = "Systemfile"
-emoji = "always"
-jobs = 9
-locale = "de-DE"
-color = "always"
-"#,
-        )
-        .context("write system config")?;
+        write_scope_config(system.join("netsuke").join("config.toml"), SYSTEM_CONFIG)?;
     }
     // User scope.
     if enabled_layers.contains(&Layer::User) {
-        let user_dir = home.join(".config").join("netsuke");
-        fs::create_dir_all(&user_dir).context("create user config directory")?;
-        fs::write(
-            user_dir.join("config.toml"),
-            r#"
-file = "Userfile"
-emoji = "never"
-jobs = 4
-locale = "fr-FR"
-color = "never"
-"#,
-        )
-        .context("write user config")?;
+        let user_config = home.join(".config").join("netsuke").join("config.toml");
+        write_scope_config(user_config, USER_CONFIG)?;
     }
     // Project scope.
     if enabled_layers.contains(&Layer::Project) {
-        fs::write(
-            project.join(".netsuke.toml"),
-            r#"
-file = "Projectfile"
-emoji = "never"
-jobs = 8
-locale = "es-ES"
-color = "never"
-"#,
-        )
-        .context("write project config")?;
+        write_scope_config(project.join(".netsuke.toml"), PROJECT_CONFIG)?;
     }
 
     let mut environment = environment_with_system_scope(
@@ -109,6 +76,46 @@ color = "never"
     }
     Ok(environment)
 }
+
+/// Write a per-scope configuration file, creating parent directories first.
+fn write_scope_config(path: impl AsRef<Path>, contents: &'static str) -> Result<()> {
+    let target = path.as_ref();
+    test_fs::create_dir_all(
+        target
+            .parent()
+            .context("config file has no parent directory")?,
+    )
+    .context("create config directory")?;
+    test_fs::write(target, contents).with_context(|| format!("write {}", target.display()))?;
+    Ok(())
+}
+
+/// System-scope (lowest discovered) configuration values.
+const SYSTEM_CONFIG: &str = r#"
+file = "Systemfile"
+emoji = "always"
+jobs = 9
+locale = "de-DE"
+color = "always"
+"#;
+
+/// User-scope configuration values.
+const USER_CONFIG: &str = r#"
+file = "Userfile"
+emoji = "never"
+jobs = 4
+locale = "fr-FR"
+color = "never"
+"#;
+
+/// Project-scope configuration values.
+const PROJECT_CONFIG: &str = r#"
+file = "Projectfile"
+emoji = "never"
+jobs = 8
+locale = "es-ES"
+color = "never"
+"#;
 
 /// The discovered or injected layers the ladder test may seed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

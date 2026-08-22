@@ -11,7 +11,7 @@
 //! Coverage is threefold:
 //! - `exhaustive_domain_sweep_matches_truth_model`: a deterministic sweep of
 //!   every policy combination across the `NO_COLOR` toggle, checked against a
-//!   hand-written truth model.
+//!   handwritten truth model.
 //! - `output_mode_inference_matches_truth_model`: a deterministic sweep over
 //!   `OutputMode` and `TERM` across the `NO_COLOR` toggle.
 //! - `policy_domain_proptest`: probabilistic combinations covering the same
@@ -106,6 +106,18 @@ const fn expected_progress_enabled(progress: ProgressPolicy) -> bool {
     !matches!(progress, ProgressPolicy::Never)
 }
 
+/// Whether the `NO_COLOR` capability is active for the given colour policy.
+///
+/// `NO_COLOR` is active unless the colour policy is `Always`; `Auto` defers to
+/// the ambient `NO_COLOR` flag captured in the case.
+const fn expected_no_color_active(case: DomainCase) -> bool {
+    match case.color {
+        ColourPolicy::Always => false,
+        ColourPolicy::Never => true,
+        ColourPolicy::Auto => case.no_color,
+    }
+}
+
 /// Expected output mode decided by `output_mode::resolve`:
 ///
 /// 1. An explicit override forces Accessible(true) or Standard(false).
@@ -121,12 +133,7 @@ const fn expected_output_mode(case: DomainCase) -> OutputMode {
             OutputMode::Standard
         };
     }
-    let no_color_active = match case.color {
-        ColourPolicy::Always => false,
-        ColourPolicy::Never => true,
-        ColourPolicy::Auto => case.no_color,
-    };
-    if no_color_active || case.term_dumb {
+    if expected_no_color_active(case) || case.term_dumb {
         OutputMode::Accessible
     } else {
         OutputMode::Standard
@@ -142,18 +149,7 @@ const fn expected_emoji_allowed(case: DomainCase, mode: OutputMode) -> bool {
     match case.emoji {
         EmojiPolicy::Always => true,
         EmojiPolicy::Never => false,
-        EmojiPolicy::Auto => {
-            let no_color_active = match case.color {
-                ColourPolicy::Always => false,
-                ColourPolicy::Never => true,
-                ColourPolicy::Auto => case.no_color,
-            };
-            if no_color_active {
-                false
-            } else {
-                !mode.is_accessible()
-            }
-        }
+        EmojiPolicy::Auto => !expected_no_color_active(case) && !mode.is_accessible(),
     }
 }
 
@@ -269,7 +265,7 @@ fn assert_env_resolution(case: DomainCase, cli: &Cli, expected: ExpectedDisplay)
 }
 
 proptest! {
-    /// The production display-policy pipeline agrees with the hand-written
+    /// The production display-policy pipeline agrees with the handwritten
     /// truth model over the generated full domain and arbitrary environment
     /// signals.
     #[test]
