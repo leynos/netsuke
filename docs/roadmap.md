@@ -22,6 +22,8 @@ Each phase validates a product hypothesis:
 - Phase 5 validates that repeated human, Continuous Integration (CI), editor,
   and agent usage improves through introspection, profiles, run history,
   delivery, and feedback.
+- Phase 6 validates that manifests can select proportionate quality gates from
+  a deterministic Git changeset without embedding shell pipelines.
 
 The roadmap keeps user-facing product grammar separate from implementation
 detail. Public tasks name Netsuke capabilities first. Implementation adapters,
@@ -95,6 +97,8 @@ rewrite:
   delivered yet.
 - New CLI-redesign work starts at `3.15` and Phase 5 so historical numbers are
   not reused.
+- Git change-detection helper work starts at Phase 6 and follows
+  [the helper design](git-change-detection-helpers-design.md).
 
 ## 3. Friendly polish and agent-consistent CLI foundations
 
@@ -644,3 +648,88 @@ configuration, inspect run history, route artefacts, and report friction.
   - [ ] Keep human-first local examples beside automation examples.
   - [ ] Cross-link the archive so reviewers can trace where historical work
     moved.
+
+## 6. Change-aware manifest planning
+
+Idea: if Netsuke exposes deterministic commit-range paths as typed template
+data and composes them with a pure glob predicate, manifests can omit
+irrelevant expensive gates without inheriting shell quoting, path parsing, or
+platform differences.
+
+This capability phase delivers one manifest-time decision loop: resolve a
+strict Git range, return stable repository-relative paths, and ask whether any
+path matches any declared file class. It does not add working-tree inspection,
+untracked-file discovery, or per-linter file selection.
+
+### 6.1. Prove a Git range can become trustworthy template data
+
+This step asks whether Netsuke can convert two Git commit endpoints into a
+bounded, deterministic MiniJinja sequence without accepting arbitrary Git
+arguments. Its result establishes the repository and error boundaries used by
+the pure composition step.
+
+- [ ] 6.1.1. Implement the strict commit-range parser and feature-private Git
+  repository port.
+  - Accept exactly non-empty `A..B` and `A...B` forms, resolve both endpoints
+    to commits, and require a unique merge base for three-dot ranges.
+  - Keep the port private to `stdlib::change_detection`, inject scripted
+    responses in tests, and prohibit caller-selected Git flags or pathspecs.
+  - See
+    [git-change-detection-helpers-design.md §§4 and 7](git-change-detection-helpers-design.md#4-commit-range-semantics).
+  - Success: generated and example-backed cases reject malformed ranges and
+    option-like endpoints before Git starts, while valid two-dot and three-dot
+    ranges select the designed commits.
+- [ ] 6.1.2. Register `git_changed_files()` with bounded path decoding and
+  impurity tracking. Requires 6.1.1.
+  - Run fixed `rev-parse`, `merge-base`, and `diff` argument vectors in the
+    configured workspace, honouring the injected command `PATH`.
+  - Parse NUL-delimited output, reject non-UTF-8 names, normalize separators,
+    sort and de-duplicate paths, disable rename and external-diff processing,
+    and apply the configured capture limit.
+  - Install the named manifest-query rejection and mark ordinary rendering
+    impure immediately before Git execution.
+  - Reserve `git_changed_files` against manifest-variable shadowing.
+  - Add localized, bounded diagnostics and low-cardinality operation telemetry.
+  - See
+    [git-change-detection-helpers-design.md §§5, 8, and 9](git-change-detection-helpers-design.md#5-changed-path-result-contract).
+  - Follow
+    [ADR-014](adr-014-use-bounded-git-cli-for-change-detection.md).
+  - Success: temporary-repository cases preserve newline-bearing paths,
+    represent renames as old plus new paths, reject oversized and malformed
+    output, and demonstrate the specified purity transitions.
+
+### 6.2. Turn changed paths into a portable quality-gate decision
+
+This step asks whether the changed-path sequence composes into a concise,
+cross-platform Boolean decision with the same glob language authors already
+use. Its result determines whether the helpers replace shell-based CI selection
+in representative manifests.
+
+- [ ] 6.2.1. Implement the pure variadic `matches_glob()` collection filter.
+  Requires 6.1.2.
+  - Require a sequence of string paths and at least one string pattern; reject
+    invalid patterns and non-string members before returning a Boolean.
+  - Compile each pattern once, then return true when any path matches any
+    pattern using case-sensitive, literal-separator, leading-dot, and recursive
+    `**` semantics aligned with `glob()`.
+  - Register the filter in ordinary and manifest-query environments and add it
+    to the standard-library filter inventory.
+  - See
+    [git-change-detection-helpers-design.md §§3 and 6](git-change-detection-helpers-design.md#3-public-template-contract).
+  - Success: property-generated path and pattern collections agree with a
+    simple any-to-any reference predicate, and invalid input fails closed.
+- [ ] 6.2.2. Validate and document change-aware manifest gates. Requires
+  6.2.1.
+  - Add an end-to-end manifest matrix spanning two-dot and three-dot ranges,
+    additions, modifications, deletions, renames, submodule changes, matches,
+    and misses.
+  - Add a runnable Rust-quality-gate example to the standard-library guide and
+    align the core design, developer guide, localized diagnostics, and stdlib
+    metadata with the public contract.
+  - Verify Linux and Windows separator behaviour without mutating the process
+    environment or relying on developer-installed commands.
+  - See
+    [git-change-detection-helpers-design.md §§10 and 12](git-change-detection-helpers-design.md#10-correctness-and-verification).
+  - Success: the documented example omits its Rust target for a Python-only
+    changeset, includes it for every Rust path class, and passes the repository
+    documentation and behavioural gates.
