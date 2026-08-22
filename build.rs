@@ -18,6 +18,10 @@ use std::{
 };
 use time::{OffsetDateTime, format_description::well_known::Iso8601};
 
+/// Calendar date used when `SOURCE_DATE_EPOCH` is unset or invalid.
+///
+/// Keeping a fixed fallback makes builds reproducible when the build system
+/// does not supply the reproducible-builds epoch.
 const FALLBACK_DATE: &str = "1970-01-01";
 
 // The build script recompiles the parser subset needed to construct
@@ -91,6 +95,11 @@ mod build_l10n_audit;
     clippy::disallowed_methods,
     reason = "SOURCE_DATE_EPOCH is the reproducible-builds contract: the build system supplies it to the build script's process, so there is no seam to inject it through"
 )]
+/// Compute the manual page date from `SOURCE_DATE_EPOCH`.
+///
+/// Returns the epoch parsed as a Unix timestamp formatted as an ISO 8601 date;
+/// when the variable is unset or malformed the [`FALLBACK_DATE`] is returned so
+/// the generated page stays deterministic.
 fn manual_date() -> String {
     let Ok(raw) = env::var("SOURCE_DATE_EPOCH") else {
         return FALLBACK_DATE.into();
@@ -122,12 +131,20 @@ fn manual_date() -> String {
     clippy::disallowed_methods,
     reason = "TARGET and PROFILE are set by Cargo for the build script alone; nothing else knows the triple and profile being built, so they cannot be passed in"
 )]
+/// Return the generated-artefact directory for this build's target triple and profile.
+///
+/// Mirrors Cargo's own `target/<triple>/<profile>` layout so man pages and
+/// completions never mix between host and cross builds.
 fn out_dir_for_target_profile(artefact: &str) -> PathBuf {
     let target = env::var("TARGET").unwrap_or_else(|_| "unknown-target".into());
     let profile = env::var("PROFILE").unwrap_or_else(|_| "unknown-profile".into());
     PathBuf::from(format!("target/{artefact}/{target}/{profile}"))
 }
 
+/// Write one man page into `dir` atomically and return its path.
+///
+/// The bytes are written to a temporary name inside `dir` and then renamed over
+/// the final name, so a failed write never leaves a partial page behind.
 fn write_man_page(data: &[u8], dir: &Path, page_name: &str) -> std::io::Result<PathBuf> {
     let man_dir = if dir.is_relative() {
         let working_dir = Dir::open_ambient_dir(".", ambient_authority())?;
@@ -144,6 +161,10 @@ fn write_man_page(data: &[u8], dir: &Path, page_name: &str) -> std::io::Result<P
     Ok(dir.join(page_name))
 }
 
+/// Emit Cargo's `rerun-if-changed` directives for the generated sources.
+///
+/// Changing any listed file must rerun the build script so the man page and
+/// completions stay in sync with the CLI they describe.
 fn emit_rerun_directives() {
     println!("cargo:rerun-if-changed=src/cli/build_support.rs");
     println!("cargo:rerun-if-changed=src/cli/config.rs");
@@ -173,6 +194,10 @@ fn emit_rerun_directives() {
     clippy::disallowed_methods,
     reason = "CARGO_PKG_VERSION and OUT_DIR are Cargo's own build-script inputs; they describe the crate being compiled and Cargo provides them only through the environment"
 )]
+/// Generate and install the CLI manual page under `out_dir`.
+///
+/// The page is rendered from the same Clap command tree used at runtime, so the
+/// installed documentation cannot drift from the actual CLI.
 fn generate_man_page(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let cmd = cli::Cli::command();
     let name = cmd
@@ -209,6 +234,10 @@ fn generate_man_page(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Generate shell-completion files under `out_dir` for every supported shell.
+///
+/// Completions are derived from the same Clap command tree as the man page, so
+/// they cannot drift from the shipped CLI surface.
 fn generate_completions(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let working_dir = Dir::open_ambient_dir(".", ambient_authority())?;
     working_dir.create_dir_all(out_dir)?;

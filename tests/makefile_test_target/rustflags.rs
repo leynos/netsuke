@@ -141,7 +141,6 @@ const RUSTFLAGS_CASES: [RustflagsCase; 11] = [
     },
 ];
 
-
 /// Resolves `POLONIUS_FLAGS`, rejecting a missing or empty definition.
 ///
 /// Every assertion built on the resolved value uses `contains`, which an

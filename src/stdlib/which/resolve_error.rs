@@ -40,7 +40,9 @@ pub(crate) enum ResolveError {
     },
     /// `fs::metadata` failed whilst checking whether a path is executable.
     IsExecutable {
+        /// The path whose executable bit could not be probed.
         path: Utf8PathBuf,
+        /// The metadata error that prevented the probe.
         source: io::Error,
     },
     /// A canonical path could not be represented as UTF-8.
@@ -53,7 +55,10 @@ pub(crate) enum ResolveError {
         path: String,
     },
     /// A `walkdir` traversal error encountered during workspace fallback search.
-    WalkDir { source: walkdir::Error },
+    WalkDir {
+        /// The traversal error from the workspace fallback walk.
+        source: walkdir::Error,
+    },
     /// The working directory could not be read.
     CwdResolve {
         /// The underlying filesystem error.

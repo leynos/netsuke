@@ -18,6 +18,7 @@ pub use parser::Cli;
 /// Maximum number of jobs accepted by the CLI.
 pub(super) const MAX_JOBS: usize = 64;
 
+/// Build a validation `OrthoError` with the given key and message.
 pub(super) fn validation_error(key: &str, message: &str) -> Arc<OrthoError> {
     Arc::new(OrthoError::Validation {
         key: key.to_owned(),

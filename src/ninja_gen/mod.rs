@@ -31,6 +31,10 @@ mod ninja_gen_validation;
 use ninja_gen_command_list::{ActionId, CommandListEntry, command_list_entry};
 pub use ninja_gen_error::NinjaGenError;
 use ninja_gen_validation::validate_action_recipe;
+/// Write `key = value` to a Ninja file when `opt` holds a value.
+///
+/// The indented assignment is emitted only for present values, so optional
+/// fields vanish from the generated file instead of being left blank.
 macro_rules! write_kv {
     ($f:expr, $key:expr, $opt:expr) => {
         if let Some(val) = $opt {
@@ -39,6 +43,10 @@ macro_rules! write_kv {
     };
 }
 
+/// Write `key = 1` to a Ninja file when `cond` is set.
+///
+/// Boolean flags are rendered as a `1` only when enabled, matching Ninja's
+/// convention for switch-like variables.
 macro_rules! write_flag {
     ($f:expr, $key:expr, $cond:expr) => {
         if $cond {

@@ -270,6 +270,7 @@ fn generate_flag_help_key(arg_id: &str) -> Option<&'static str> {
     }
 }
 
+/// Return the localization key for a subcommand's short about text.
 const fn subcommand_about_key(subcommand: Subcommand) -> &'static str {
     match subcommand {
         Subcommand::Build => keys::CLI_SUBCOMMAND_BUILD_ABOUT,
@@ -280,6 +281,7 @@ const fn subcommand_about_key(subcommand: Subcommand) -> &'static str {
     }
 }
 
+/// Return the localization key for a subcommand's long about text.
 const fn subcommand_long_about_key(subcommand: Subcommand) -> &'static str {
     match subcommand {
         Subcommand::Build => keys::CLI_SUBCOMMAND_BUILD_LONG_ABOUT,
@@ -290,6 +292,7 @@ const fn subcommand_long_about_key(subcommand: Subcommand) -> &'static str {
     }
 }
 
+/// Return the localization key for a help topic's about text.
 const fn help_topic_about_key(topic: HelpTopicName) -> &'static str {
     match topic {
         HelpTopicName::Targets => keys::CLI_HELP_TARGETS_ABOUT,

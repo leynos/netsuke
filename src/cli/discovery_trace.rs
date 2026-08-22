@@ -81,9 +81,13 @@ impl ConfigPathTrace {
 #[derive(Clone, Debug)]
 pub(super) enum FileLayerTrace {
     /// An explicit CLI or environment selector chose a configuration path.
-    Explicit { path: BoundedConfigPath },
+    Explicit {
+        /// The explicitly selected configuration path.
+        path: BoundedConfigPath,
+    },
     /// Selector-free discovery, with any project-scope second-pass outcome.
     Automatic {
+        /// Trail of the project-scope second pass, when one ran.
         project_scope: Option<ProjectScopeTrace>,
     },
 }

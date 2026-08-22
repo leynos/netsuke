@@ -23,7 +23,9 @@ use metadata::parse_metadata_locales;
 use std::path::{Path, PathBuf};
 use std::{error::Error, io};
 
+/// Repository-relative path of the source file that defines the localization keys.
 const KEYS_PATH: &str = "src/localization/keys.rs";
+/// Repository-relative path of the manifest whose locale metadata is audited.
 const CARGO_MANIFEST: &str = "Cargo.toml";
 
 /// Path of the catalogue for `tag`, relative to the repository root.
@@ -89,6 +91,10 @@ fn parse_catalogue_at(path: &Path) -> Result<MessageVariables, Box<dyn Error>> {
         .map_err(|err| format!("{}: {err}", path.display()).into())
 }
 
+/// Parse the source-locale catalogue into message variables.
+///
+/// The source catalogue provides the variable declarations used when comparing
+/// every other locale against the key registry.
 fn source_catalogue_variables(root: &Path) -> Result<MessageVariables, Box<dyn Error>> {
     parse_catalogue_at(&catalogue_path_in(root, SOURCE_LOCALE))
 }

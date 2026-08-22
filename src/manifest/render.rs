@@ -216,6 +216,7 @@ fn record_recipe_context_preparation() {
 }
 
 #[cfg(not(test))]
+/// Count one recipe-context preparation for the recipe-context tests.
 const fn record_recipe_context_preparation() {}
 
 #[cfg(test)]

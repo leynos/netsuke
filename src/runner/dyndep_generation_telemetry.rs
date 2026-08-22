@@ -61,6 +61,7 @@ fn record_outcome<T>(span: &tracing::Span, result: &Result<T, NinjaGenError>) ->
     }
 }
 
+/// Return the broad failure category for a Ninja-generation error.
 const fn error_category(error: &NinjaGenError) -> &'static str {
     match error {
         NinjaGenError::MissingAction { .. } => "missing_action",

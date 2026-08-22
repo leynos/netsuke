@@ -20,7 +20,9 @@ use super::{
 
 /// Cached diagnostic resolution carried into the full configuration merge.
 struct ResolvedDiagnosticMode {
+    /// The diagnostic mode resolved during startup.
     mode: DiagMode,
+    /// File layers preserved from the shared discovery pass.
     discovered_layers: cli::DiscoveredLayers,
 }
 
