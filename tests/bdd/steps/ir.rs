@@ -213,23 +213,10 @@ fn graph_target_implicit_deps(world: &TestWorld, target: &str, paths: &str) -> R
 
 /// Compile a manifest file to IR, storing result or error in state.
 fn compile_manifest_impl(world: &TestWorld, path: &str) {
-    // Convert relative test data paths to absolute to avoid issues when CWD
-    // is changed by parallel tests.  Also lock CWD to the project root so
-    // that glob patterns inside the manifest resolve correctly.
+    // The manifest path is absolute, while the process CWD stays at the
+    // project root, so relative glob patterns continue to resolve correctly.
     let resolved = if std::path::Path::new(path).is_relative() && path.starts_with("tests/") {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        if let Err(error) = world.ensure_global_state_lock() {
-            let outcome = Err(format!("failed to capture current directory: {error}"));
-            store_parse_outcome(&world.build_graph, &world.generation_error, outcome);
-            return;
-        }
-        if let Err(e) = std::env::set_current_dir(manifest_dir) {
-            let outcome = Err(format!(
-                "failed to set current directory to {manifest_dir} for path {path}: {e}"
-            ));
-            store_parse_outcome(&world.build_graph, &world.generation_error, outcome);
-            return;
-        }
         std::path::Path::new(manifest_dir)
             .join(path)
             .to_string_lossy()
