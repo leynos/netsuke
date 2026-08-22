@@ -2954,9 +2954,11 @@ Diagnostic-mode resolution uses
 `(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics. The
 composition boundary calls `DiscoveryOutcome::emit_diagnostics()` after tracing
 is configured, replaying the retained diagnostics without repeating environment
-or filesystem access. `collect_file_layers_with_trace_and_env_source(...)`
-performs the underlying discovery scan and retains bounded project-scope trace
-metadata. `DiscoveryOutcome::into_layers()` transfers the same discovered
+or filesystem access. `collect_file_layers_with_normalizer_and_trace(directory,
+normalizer, env_source)` performs the underlying discovery scan with the path
+normalizer and environment source, retaining bounded project-scope trace
+metadata. The normalizer canonicalizes comparison keys so equivalent project
+path spellings de-duplicate to one layer. `DiscoveryOutcome::into_layers()` transfers the same discovered
 layers to `merge_with_cached_file_layers(...)`, which consumes them for the
 full merge and prevents a second discovery pass. The standalone
 `merge_with_config_and_env(...)` path performs discovery, emits diagnostics and
