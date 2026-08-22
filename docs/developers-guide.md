@@ -512,20 +512,116 @@ NEXTEST_VERSION="$(sed -n "s/.*NEXTEST_VERSION: '\(.*\)'.*/\1/p" \
 cargo install cargo-nextest --locked --version "$NEXTEST_VERSION"
 # or, for a prebuilt binary:
 cargo binstall --no-confirm --locked \
-  "cargo-nextest@$NEXTEST_VERSION"
+  "whitaker-installer@$WHITAKER_INSTALLER_VERSION"
 ```
 
-CI pins the Whitaker installer version in `WHITAKER_INSTALLER_VERSION` in
-`.github/workflows/ci.yml`. Install that same version locally so local linting
-matches CI; read the pin from the workflow rather than copying the number, so
-the two cannot drift:
+`whitaker-installer` and the lint libraries are separate artefacts with
+separate versions. `WHITAKER_INSTALLER_VERSION` pins the installer — the tool
+that stages libraries — and nothing else. The installer keeps its own checkout
+of the Whitaker repository under `~/.local/share/whitaker`, updates it with
+`git pull`, and stages the libraries from its default branch. Lint behaviour
+therefore tracks Whitaker HEAD.
+
+**Running the lint libraries at HEAD is deliberate.** Netsuke follows the suite
+as it develops, so new lints and fixes arrive without a version bump here. Do
+not add a `[workspace.metadata.dylint]` block pinning `whitaker_suite` to a
+`tag` or `rev`. The [Whitaker user's guide](whitaker-users-guide.md) documents
+that form, and it is the right answer for a project wanting reproducible lint
+results, but adopting it here would reverse a standing decision rather than fix
+a defect.
+
+The cost is worth stating plainly: a change upstream can alter lint results
+between two runs with no change in this repository, and a local checkout that
+has not been restaged will disagree with CI, which stages fresh on every job.
+Restaging is what reconciles them.
+
+What the module-scoped exemptions in `dylint.toml` actually depend on is
+[Whitaker PR #315][whitaker-pr-315], which added the `excluded_paths` option,
+so the staged libraries must be recent enough to include it. Libraries staged
+from an older checkout ignore `excluded_paths` silently — the exemptions stop
+applying with no error, and the lint reports the modules they covered. Re-run
+`whitaker-installer` to restage from HEAD. If that checkout has been left on a
+detached HEAD, the install fails at its `git pull`; put it back on the default
+branch and re-run.
+
+[whitaker-pr-315]: https://github.com/leynos/whitaker/pull/315
+
+Whitaker is configured by `dylint.toml` at the repository root, where each
+sanctioned ambient-filesystem scope for `no_std_fs_operations` carries a
+documented rationale. `docs/whitaker-users-guide.md` is a near-verbatim import
+of the [upstream Whitaker user's guide][whitaker-upstream-guide]; refresh it
+from that URL rather than editing it in place, preserving the "Netsuke
+deviation from upstream" callout, and record Netsuke-specific policy here and in
+`dylint.toml`.
+
+[whitaker-upstream-guide]: https://raw.githubusercontent.com/leynos/whitaker/refs/heads/main/docs/users-guide.md
+
+Prefer `excluded_paths` over `excluded_crates`: a path entry exempts one module
+and its descendants, whereas a crate entry exempts a whole compilation unit.
+The application crate's module-scoped exemptions include
+`netsuke::stdlib::which::lookup` (executable discovery through `PATH` and
+cross-directory symlink canonicalization, which `cap_std` cannot express) and
+`netsuke::runner::process::file_io::ambient_sync` (temporary-file
+synchronization, scoped to the submodule holding only that `sync_all` so the
+rest of `file_io` keeps writing through `cap_std` handles). Configuration
+discovery otherwise uses capability-scoped canonicalization. Its small,
+dedicated path-normalization module, `netsuke::cli::discovery::paths`, remains
+narrowly excluded because `std::fs::canonicalize` preserves the absolute
+comparison keys and cross-directory symlink behaviour that `cap_std` rejects.
+For man-page generation, the build script compiles the `cli::build_support`
+parser subset and deliberately omits runtime discovery. The broader
+`netsuke::cli::discovery` module remains under the capability policy; no
+`build_script_build` exception is required. The behavioural step definitions,
+CLI integration tests, and shared workflow-reading helper that stage fixtures
+ambiently are scoped the same way. A crate-level entry is justified only when
+the ambient access lives in the crate root itself, where a path entry would be
+no narrower — that covers the enumerated integration-test crates. The
+`test_support` crate uses capability-backed fixture helpers and remains linted
+by Whitaker under its own narrow policy.
+
+The root Whitaker invocation selects only the `netsuke-build` package (the
+Cargo package name behind the `netsuke` targets; see ADR-007) and disables
+Dylint dependency checks. It supplies the root `dylint.toml` contents
+explicitly through `DYLINT_TOML`, so every invocation receives the same
+capability-boundary policy regardless of how Dylint resolves the current crate.
+`test_support` is a workspace member with one sanctioned ambient boundary
+configured per crate. Its second, scoped invocation supplies
+`test_support/dylint.toml` through `DYLINT_TOML`, and uses
+`--package test_support` and `--no-deps` because running from a member
+directory alone would otherwise check the parent workspace. That configuration
+names only `test_support::fs` in `excluded_paths`. The root `excluded_crates`
+must not contain `test_support`: every other module in the crate remains
+subject to the filesystem policy.
+
+Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
+allows. Do not use Rust `#[allow]` or `#[expect]` for `no_std_fs_operations`:
+this Dylint lint is not known to `rustc`, so its exclusions must be configured
+there. Prefer migrating to `cap_std` over any of these; reach for an exclusion
+only when the operation is irreducibly ambient.
+
+To confirm the exclusions have not silently widened, add a temporary
+`std::fs::metadata` call to an unexcluded module — for example
+`src/stdlib/which/cache.rs`, a sibling of the excluded `lookup` module, or the
+body of `src/runner/process/file_io.rs` outside `ambient_sync` — then run
+`make lint-whitaker`. Both sites must still be reported; revert the probe
+afterwards. The same check applies to `test_support`: a `std::fs` call in, say,
+`test_support/src/exec.rs` must be reported even though `test_support::fs` is
+exempt.
+
+When command output is long, preserve exit codes and logs:
 
 ```bash
-WHITAKER_INSTALLER_VERSION="$(sed -n \
-  "s/.*WHITAKER_INSTALLER_VERSION: '\(.*\)'.*/\1/p" \
-  .github/workflows/ci.yml)"
-cargo install --locked whitaker-installer \
-  --version "$WHITAKER_INSTALLER_VERSION"
+set -o pipefail
+make test 2>&1 | tee /tmp/netsuke-make-test.log
+```
+
+These gates always use the repository toolchain and the default codegen
+backend. For a faster inner loop between gate runs, see
+[local build acceleration](#local-build-acceleration).
+
+For documentation changes, also run `make fmt`, `make markdownlint`, and
+`make nixie`.
+
 # or, for a prebuilt binary:
 cargo binstall --no-confirm --locked \
   "whitaker-installer@$WHITAKER_INSTALLER_VERSION"
@@ -1428,9 +1524,10 @@ governs the non-doctest pass only, and deliberately stays small:
 nextest runs each test in its own process, but the codebase does not rely on
 that isolation for environment safety. Tests pass environment values through
 explicit configuration seams or configure a child with `env_clear()` followed by
-`Command::env`. `EnvLock` and `CwdGuard` remain only for the few tests that
-exercise process working-directory behaviour, because the in-process coverage
-runner shares that state.
+`Command::env`. The BDD suite carries no environment or CWD lock: its steps run
+inside the generated test-harness process, not inside an `assert_cmd` child.
+`EnvLock` and `CwdGuard` remain only for direct tests that deliberately
+exercise process working-directory behaviour outside that suite.
 
 ### Runners not covered by this configuration
 
@@ -1841,15 +1938,19 @@ cargo-nextest alongside every other test (see
 point (`world: TestWorld`) to each generated scenario test.
 
 nextest runs each generated scenario in its own process. That reinforces the
-per-scenario isolation policy below rather than conflicting with it: scenario
-state cannot leak across process boundaries, so the policy's requirement to
-recreate state per test is enforced by the runner as well as by convention.
+per-scenario isolation policy below rather than conflicting with it. The
+scenario's steps still execute in that generated test-harness process, so an
+in-process BDD step does not qualify for subprocess isolation.
 
 ### State and isolation policy
 
 - Scenario isolation is the default: scenario state must be recreated per test.
 - Shared process-wide state is avoided unless infrastructure cost requires
   controlled reuse.
+- Route A drives an end-to-end `netsuke` child with `assert_cmd` and configures
+  only that child with `Command::env`.
+- Route B calls a library entry point with its injected environment and keeps
+  assertions on in-process values such as `Cli`, `Manifest`, or `BuildGraph`.
 - Use `Slot<T>` for optional or replaceable scenario values.
 - Use typed wrappers in `tests/bdd/types.rs` for step parameters to avoid
   ambiguous string-heavy signatures.
@@ -2057,9 +2158,12 @@ Environment variable mutations and working-directory changes are process-global
 side effects that can cause data races when tests run in parallel. Tests inject
 environment readers where the API supports them, and configure child processes
 with `env_clear()` followed by `Command::env` where ambient discovery is part
-of the contract. `CwdGuard` is the RAII utility for restoring a process working
-directory after the few tests that exercise it. For locale-sensitive snapshot
-tests, use the `EnLocalizer` scoped pattern documented in the
+of the contract. BDD steps must not change either process-global value: use an
+injected environment and absolute paths for in-process library assertions, or
+an isolated `assert_cmd` child for end-to-end behaviour. `CwdGuard` is the RAII
+utility for the few direct CWD tests that deliberately exercise it. For
+locale-sensitive snapshot tests, use the `EnLocalizer` scoped pattern documented
+in the
 [snapshot testing guide](snapshot-testing-in-netsuke-using-insta.md#locale-pinned-snapshot-tests).
 
 `src/snapshot_test_support.rs` owns output-oriented unit-test fixtures;
@@ -2531,7 +2635,9 @@ let _env_lock = EnvLock::acquire();
 ```
 
 Do not use this lock to justify process-environment mutation. Environment
-access must remain injected, or confined to a spawned child process.
+access must remain injected, or confined to a spawned child process. BDD
+scenarios must not acquire this lock: they are in-process tests, and a lock
+would serialize the suite rather than isolate an ambient dependency.
 
 ### `CwdGuard`
 
@@ -2550,6 +2656,11 @@ std::env::set_current_dir(temp.path())?;
 
 Acquire `EnvLock` and then `CwdGuard` so Rust drops them in reverse declaration
 order: `CwdGuard` restores the CWD first, and `EnvLock` releases second.
+
+These direct CWD tests are the narrow exception for exercising CWD-dependent
+code itself. BDD scenarios instead retain an absolute manifest path or pass
+`-C/--directory` into the CLI; neither approach changes the harness process
+CWD.
 
 ### Injected and child-process environments
 
@@ -2574,14 +2685,22 @@ appropriate injected seam, such as `run_with_ninja_program`,
 `StdlibConfig::with_path_override`, `StdlibConfig::with_home_override`, or
 `StdlibConfig::with_command_path_override`. End-to-end tests may call
 `env_clear()` and then apply values with `Command::env`, because the mutation
-is confined to the child.
+is confined to the child. This defines two BDD routes: Route A drives the
+compiled binary with `assert_cmd` and configures only its child environment;
+Route B calls library entry points with an injected environment and keeps the
+scenario's in-process assertions on `Cli`, `Manifest`, `BuildGraph`, or render
+state.
 
 ### Ordering rules
 
 1. Inject environment-dependent inputs whenever the API supports them.
 2. Use an isolated child process for APIs whose contract is ambient discovery.
-3. Acquire `EnvLock` and then `CwdGuard` only for CWD-specific tests.
-4. Never mutate the harness process environment.
+3. In BDD, choose Route A for an end-to-end binary assertion or Route B for an
+   injected in-process library assertion.
+4. Retain absolute paths or pass `-C/--directory` instead of changing the BDD
+   harness CWD.
+5. Acquire `EnvLock` and then `CwdGuard` only for direct CWD-specific tests.
+6. Never mutate the harness process environment.
 
 ### `tracing_capture`
 
@@ -2661,14 +2780,12 @@ Table: Scenario state groups and fields
 | Localization state | `localization_lock`, `localization_guard`, `locale_config`, `locale_env`, `locale_cli_override`, `locale_system`, `resolved_locale`, `locale_message`                                                                                    | Scenario-level localizer overrides and resolution state.   |
 | HTTP server state  | `http_server`, `stdlib_url`                                                                                                                                                                                                              | Test HTTP server fixture for fetch scenarios.              |
 | Output state       | `output_mode`, `simulated_no_color`, `simulated_term`, `output_prefs`, `simulated_no_emoji`, `rendered_prefix`                                                                                                                           | Accessibility and output preference resolution.            |
-| Environment state  | `env_vars_forward`, `global_state_lock`                                                                                                                                                                                                  | Child environment map and the CWD-only scenario lock.      |
+| Environment state  | `env_vars_forward`                                                                                                                                                                                                                       | Child environment map for Route A scenarios.               |
 
 ### Key `TestWorld` methods
 
 - `track_env_var(key, new_value)` — update `env_vars_forward` so
   `build_netsuke_command` can configure the scenario's child process.
-- `ensure_global_state_lock()` — acquire the scenario-scoped CWD lock on first
-  use; subsequent calls are no-ops.
 
 ## Configuration merge architecture
 
@@ -2850,8 +2967,9 @@ uses the bare `EnvProvider` name.
 Tests for injected configuration discovery should provide a map-backed
 `ConfigEnvProvider`. End-to-end tests of the ambient `ConfigStdEnvProvider`
 adapter must run in an isolated child configured with `env_clear()` followed by
-`Command::env`. `EnvLock` is reserved for tests that change the process working
-directory alongside `CwdGuard`; it does not justify environment mutation.
+`Command::env`. BDD configuration steps use the injected route; direct CWD
+tests alone may use `EnvLock` alongside `CwdGuard`. Neither guard justifies
+environment mutation.
 
 Unit tests that only need to verify explicit config path precedence should test
 `explicit_config_path_with_env` with an injected provider instead of mutating
