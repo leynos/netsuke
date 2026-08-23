@@ -8,6 +8,8 @@
 
 use camino::Utf8PathBuf;
 
+use super::super::super::cycle::support::{path_cmp, path_eq};
+
 /// Sort `values` in place with a stable insertion sort driven by `cmp`.
 ///
 /// Deliberately dependency-free and deterministic for the Kani harnesses.
@@ -65,7 +67,9 @@ fn string_cmp(left: &str, right: &str) -> std::cmp::Ordering {
 /// Sort duplicate output paths in place.
 #[cfg(not(kani))]
 pub(super) fn sort_paths(paths: &mut [Utf8PathBuf]) {
-    insertion_sort_by(paths, path_cmp);
+    insertion_sort_by(paths, |left, right| {
+        path_cmp(left.as_path(), right.as_path())
+    });
 }
 
 /// Sort duplicate output paths in place.
@@ -79,32 +83,11 @@ pub(super) fn has_seen_output(seen: &[&Utf8PathBuf], output: &Utf8PathBuf) -> bo
     let mut index = 0;
     while index < seen.len() {
         if let Some(candidate) = seen.get(index)
-            && path_eq(candidate, output)
+            && path_eq(candidate.as_path(), output.as_path())
         {
             return true;
         }
         index += 1;
     }
     false
-}
-
-/// Compare two output paths for equality.
-#[cfg(not(kani))]
-fn path_eq(left: &Utf8PathBuf, right: &Utf8PathBuf) -> bool {
-    left.as_str() == right.as_str()
-}
-
-/// Compare two output paths for equality; the Kani build compares only
-/// single-byte paths.
-#[cfg(kani)]
-fn path_eq(left: &Utf8PathBuf, right: &Utf8PathBuf) -> bool {
-    let left = left.as_str().as_bytes();
-    let right = right.as_str().as_bytes();
-    left.len() == 1 && right.len() == 1 && left[0] == right[0]
-}
-
-/// Order two output paths for deterministic duplicate sorting.
-#[cfg(not(kani))]
-fn path_cmp(left: &Utf8PathBuf, right: &Utf8PathBuf) -> std::cmp::Ordering {
-    left.as_str().cmp(right.as_str())
 }

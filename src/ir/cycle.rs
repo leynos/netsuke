@@ -23,7 +23,7 @@ use super::graph::{BuildEdge, IrHashMap};
 mod cycle_property_tests;
 
 #[path = "cycle_support.rs"]
-mod support;
+pub(super) mod support;
 // The test and Kani harnesses reach these through `super::*`/`super::Name`;
 // expose them only in those builds so the production build neither warns nor
 // carries their weight.

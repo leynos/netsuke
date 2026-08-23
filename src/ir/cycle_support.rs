@@ -149,12 +149,12 @@ pub(super) fn state_for_path(
 
 /// Compare two paths for equality.
 #[cfg(not(kani))]
-pub(super) fn path_eq(left: &Utf8Path, right: &Utf8Path) -> bool {
+pub(in crate::ir) fn path_eq(left: &Utf8Path, right: &Utf8Path) -> bool {
     left == right
 }
 
 #[cfg(kani)]
-pub(super) fn path_eq(left: &Utf8Path, right: &Utf8Path) -> bool {
+pub(in crate::ir) fn path_eq(left: &Utf8Path, right: &Utf8Path) -> bool {
     let left = left.as_str().as_bytes();
     let right = right.as_str().as_bytes();
     left.len() == 1 && right.len() == 1 && left[0] == right[0]
@@ -162,12 +162,12 @@ pub(super) fn path_eq(left: &Utf8Path, right: &Utf8Path) -> bool {
 
 /// Order two paths.
 #[cfg(not(kani))]
-pub(super) fn path_cmp(left: &Utf8Path, right: &Utf8Path) -> Ordering {
+pub(in crate::ir) fn path_cmp(left: &Utf8Path, right: &Utf8Path) -> Ordering {
     left.cmp(right)
 }
 
 #[cfg(kani)]
-pub(super) fn path_cmp(left: &Utf8Path, right: &Utf8Path) -> Ordering {
+pub(in crate::ir) fn path_cmp(left: &Utf8Path, right: &Utf8Path) -> Ordering {
     let left = left.as_str().as_bytes();
     let right = right.as_str().as_bytes();
     match (left.first(), right.first()) {
