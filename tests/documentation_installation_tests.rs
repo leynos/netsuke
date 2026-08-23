@@ -42,7 +42,7 @@ fn registry_install_examples_pin_the_toolchain() -> Result<()> {
                 continue;
             }
             ensure!(
-                line.contains("cargo +nightly-2026-08-13 install netsuke-build"),
+                line.contains("cargo +nightly-2026-08-23 install netsuke-build"),
                 "{id} must install with the pinned nightly toolchain: {line}",
                 id = example.id
             );
@@ -86,8 +86,8 @@ fn assert_release_installation_contract() -> Result<()> {
     // not see rust-toolchain.toml; the documented command must select the
     // pinned nightly itself, which is what enables Polonius.
     let expected_release = concat!(
-        "rustup toolchain install nightly-2026-08-13\n",
-        "cargo +nightly-2026-08-13 install netsuke-build\n"
+        "rustup toolchain install nightly-2026-08-23\n",
+        "cargo +nightly-2026-08-23 install netsuke-build\n"
     );
     ensure!(readme_release.body == expected_release, "README drifted");
     ensure!(guide_release.body == expected_release, "user guide drifted");

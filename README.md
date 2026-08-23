@@ -61,8 +61,8 @@ pinned toolchain is not picked up automatically; select it explicitly:
 <!-- tested-example: readme-crates-io-install -->
 
 ```sh
-rustup toolchain install nightly-2026-08-13
-cargo +nightly-2026-08-13 install netsuke-build
+rustup toolchain install nightly-2026-08-23
+cargo +nightly-2026-08-23 install netsuke-build
 ```
 
 Pre-built installers are available from the

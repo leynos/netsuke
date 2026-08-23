@@ -229,31 +229,43 @@ fn netsuke_rlib_in_message(line: &str) -> Option<PathBuf> {
     {
         return None;
     }
-    message
+    let filenames: Vec<&str> = message
         .get("filenames")?
         .as_array()?
         .iter()
         .filter_map(|filename| filename.as_str())
-        .filter(|filename| {
-            Path::new(filename)
-                .extension()
-                .is_some_and(|extension| extension.eq_ignore_ascii_case("rlib"))
-        })
-        .map(PathBuf::from)
-        .next()
+        .collect();
+    // Prefer the `.rmeta`, falling back to the `.rlib`. The fixtures are
+    // type-checked with `--emit=metadata`, so metadata is all `--extern`
+    // needs; and since Cargo builds with `-Zembed-metadata=no`, the rlib
+    // holds only a stub, which `rustc` refuses to load on its own.
+    let first_with_extension = |wanted: &str| {
+        filenames
+            .iter()
+            .find(|filename| {
+                Path::new(filename)
+                    .extension()
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case(wanted))
+            })
+            .map(PathBuf::from)
+    };
+    first_with_extension("rmeta").or_else(|| first_with_extension("rlib"))
 }
 
 /// Whether `filename` is an artefact `rustc` can load from a `-L dependency=`
 /// directory.
 ///
-/// Rlibs cover ordinary library dependencies; the platform's dynamic-library
-/// extension covers proc-macro crates, which `rustc` loads as host dynamic
-/// libraries. A shared `deps/` directory used to pick proc macros up for free;
-/// with a directory per crate, omitting them makes their dependents fail with
-/// `E0463`.
+/// `rmeta` carries full crate metadata, which an rlib no longer does: Cargo
+/// builds with `-Zembed-metadata=no`, leaving only a stub in the rlib.
+/// Rlibs still cover ordinary library dependencies, and the platform's
+/// dynamic-library extension covers proc-macro crates, which `rustc` loads as
+/// host dynamic libraries. A shared `deps/` directory used to pick proc macros
+/// up for free; with a directory per crate, omitting them makes their
+/// dependents fail with `E0463`.
 fn is_dependency_artefact(filename: &str) -> bool {
     Path::new(filename).extension().is_some_and(|extension| {
-        extension.eq_ignore_ascii_case("rlib")
+        extension.eq_ignore_ascii_case("rmeta")
+            || extension.eq_ignore_ascii_case("rlib")
             || extension.eq_ignore_ascii_case(std::env::consts::DLL_EXTENSION)
     })
 }

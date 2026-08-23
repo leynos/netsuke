@@ -156,6 +156,15 @@ keys only on insertion, and build error context lazily.
 - When adding a new borrow-centric API, record the classification in
   `docs/polonius.md`.
 
+### Trait solver: next-generation, enabled by the pin
+
+The same pinned nightly enables the next-generation trait solver, and Netsuke
+assumes it. Write to what the solver accepts: do not contort a design around an
+old-solver limitation, and do not add explicit turbofish, redundant bounds, or
+intermediate bindings to work around inference that already succeeds. As with
+Polonius, the pin is the whole mechanism — do not add a `-Znext-solver`
+directive anywhere.
+
 - Run `make check-fmt`, `make lint`, `make doc-coverage`, and `make test`
   before committing. These targets wrap the following commands, so contributors
   understand the exact behaviour and policy enforced:
@@ -199,7 +208,7 @@ keys only on insertion, and build error context lazily.
   - `make doc-coverage` executes:
 
     ```sh
-    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Zpolonius=next" \
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }" \
     RUSTDOCFLAGS="--cfg docsrs -D warnings" \
     python3 scripts/doc-coverage.py --threshold 80
     ```

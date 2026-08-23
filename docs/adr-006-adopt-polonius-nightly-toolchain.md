@@ -6,7 +6,7 @@ Accepted.
 
 ## Date
 
-2026-08-20 (last updated; originally accepted 2026-07-29).
+2026-08-23 (last updated; originally accepted 2026-07-29).
 
 ## Context and problem statement
 
@@ -39,8 +39,13 @@ so internal API quality was judged to outweigh a stable-toolchain guarantee
 Adopt Polonius now, as a nightly-only source tree:
 
 - Pin a dated nightly in `rust-toolchain.toml` so builds stay reproducible. The
-  pin is currently `nightly-2026-08-13`, which is at or after 2026-08-04 and so
+  pin is currently `nightly-2026-08-23`, which is at or after 2026-08-04 and so
   enables Polonius by default; a contract test enforces that lower bound.
+- Treat the pin as carrying the compiler's *front-end dialect*, not just
+  Polonius. It also supplies the next-generation trait solver, which Netsuke
+  assumes and which subsequent work may rely on. The same no-directive rule
+  applies: pass no `-Znext-solver` flag, because a build that restates a
+  default is a build that can silently drop it.
 - Pass no `-Zpolonius` directive anywhere. The pinned toolchain carries the
   requirement on its own, so plain Cargo invocations, rust-analyzer, Clippy,
   Whitaker, and Kani all borrow-check with the same analysis without any
@@ -90,7 +95,7 @@ no longer exists, because carrying the flag was its only purpose.
   anyway), so a bare `cargo install netsuke-build` of a Polonius-dependent
   release fails borrow checking on the user's default toolchain. Registry
   installs must select the pinned nightly explicitly
-  (`cargo +nightly-2026-08-13 install netsuke-build`); the README and users'
+  (`cargo +nightly-2026-08-23 install netsuke-build`); the README and users'
   guide document this command and a contract test pins it. Source installs from
   a checkout are unaffected because the pinned toolchain applies there.
 - Release packaging builds from the pinned nightly. Binary artefacts are
@@ -98,7 +103,10 @@ no longer exists, because carrying the flag was its only purpose.
 - Dependabot-style toolchain drift is impossible; moving the pin is a
   deliberate act. Move it forward periodically (and especially once Polonius
   stabilizes), re-running the full gate suite, and update this ADR's references
-  when doing so.
+  when doing so. Because the pin now carries the trait solver as well, expect a
+  pin move to surface toolchain events beyond borrow checking — new lints, and
+  build-layout or metadata changes in the accompanying Cargo. Record what a
+  move required rather than treating the fallout as unrelated breakage.
 - Sites that genuinely require Polonius are tagged `POLONIUS(...)` in source
   and must not be rewritten into NLL-era defensive forms; `AGENTS.md` and
   [polonius migration notes](polonius.md) carry the anti-regression guidance.

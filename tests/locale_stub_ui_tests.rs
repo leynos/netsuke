@@ -170,19 +170,26 @@ impl TestSupportRlib {
 /// Whether `filename` is an artefact `rustc` can load from a `-L dependency=`
 /// directory.
 ///
-/// Both extensions matter. Rlibs cover ordinary library dependencies, and the
-/// platform's dynamic-library extension covers proc-macro crates, which `rustc`
-/// loads as host dynamic libraries. Cargo once placed every dependency in one
-/// shared `deps/` directory, so collecting rlib directories happened to pick
-/// proc macros up as a side effect; the Cargo shipped with the 1.99 nightlies
-/// gives each crate its own directory, so a proc macro whose extension is
-/// filtered out is never on the search path and its dependents fail with
-/// `E0463`.
+/// Three extensions matter, each for its own reason:
+///
+/// - `rmeta` carries a crate's full metadata. Cargo now builds with
+///   `-Zembed-metadata=no`, so an rlib holds only a metadata *stub* and
+///   `rustc` rejects it with "only metadata stub found" unless the matching
+///   `.rmeta` is reachable.
+/// - `rlib` still covers ordinary library dependencies, and remains what a
+///   linking build needs.
+/// - The platform's dynamic-library extension covers proc-macro crates, which
+///   `rustc` loads as host dynamic libraries. A shared `deps/` directory used
+///   to pick those up as a side effect of collecting rlib directories; the
+///   Cargo shipped with the 1.99 nightlies gives each crate its own directory,
+///   so a filtered-out proc macro is simply absent and its dependents fail
+///   with `E0463`.
 fn is_dependency_artefact(filename: &str) -> bool {
     Utf8Path::new(filename)
         .extension()
         .is_some_and(|extension| {
-            extension.eq_ignore_ascii_case("rlib")
+            extension.eq_ignore_ascii_case("rmeta")
+                || extension.eq_ignore_ascii_case("rlib")
                 || extension.eq_ignore_ascii_case(std::env::consts::DLL_EXTENSION)
         })
 }
@@ -222,18 +229,23 @@ fn rlib_parents_in_message(line: &str) -> Vec<Utf8PathBuf> {
         .unwrap_or_default()
 }
 
-/// Extract the `test_support` rlib path from one Cargo JSON message, if any.
+/// Extract the `test_support` metadata path from one Cargo JSON message.
 ///
-/// Restricted to rlibs even though the collector accepts dynamic libraries
-/// too: this path is passed as `--extern test_support=…`, which must name the
-/// rlib.
+/// Prefers the `.rmeta`, falling back to the `.rlib`. The fixtures are
+/// type-checked with `--emit=metadata`, so metadata is all `--extern` needs;
+/// and since Cargo builds with `-Zembed-metadata=no`, the rlib holds only a
+/// stub, which `rustc` refuses to load on its own.
 fn test_support_rlib_in_message(line: &str) -> Option<Utf8PathBuf> {
     let (name, libs) = compiler_artifact_rlibs(line)?;
     if name != "test_support" {
         return None;
     }
-    libs.into_iter()
-        .rfind(|lib| lib.extension().is_some_and(|ext| ext == "rlib"))
+    let by_extension = |wanted: &str| {
+        libs.iter()
+            .rfind(|lib| lib.extension().is_some_and(|ext| ext == wanted))
+            .cloned()
+    };
+    by_extension("rmeta").or_else(|| by_extension("rlib"))
 }
 
 fn manifest_dir() -> Utf8PathBuf {
@@ -318,6 +330,26 @@ fn parser_selects_the_test_support_rlib_by_target_name() {
     assert!(
         test_support_rlib_in_message(SPLIT_LAYOUT_MESSAGE).is_none(),
         "other targets' artefacts should not be mistaken for test_support"
+    );
+}
+
+/// Cargo builds with `-Zembed-metadata=no`, so the rlib holds only a metadata
+/// stub and the full metadata lives in a sibling `.rmeta`. The `--extern` path
+/// must name the `.rmeta` whenever Cargo reports one, whatever the ordering.
+#[rstest]
+fn parser_prefers_the_rmeta_over_the_stub_rlib() {
+    let message = r#"{"reason":"compiler-artifact","target":{"name":"test_support"},"filenames":["/final/libtest_support.rlib","/build/out/libtest_support-1.rmeta"]}"#;
+    assert_eq!(
+        test_support_rlib_in_message(message),
+        Some(Utf8PathBuf::from("/build/out/libtest_support-1.rmeta")),
+        "the rmeta carries the full metadata the rlib no longer embeds"
+    );
+    // An older Cargo reports no rmeta at all; the rlib must still be selected.
+    let rlib_only = r#"{"reason":"compiler-artifact","target":{"name":"test_support"},"filenames":["/final/libtest_support.rlib"]}"#;
+    assert_eq!(
+        test_support_rlib_in_message(rlib_only),
+        Some(Utf8PathBuf::from("/final/libtest_support.rlib")),
+        "an rmeta-less message should fall back to the rlib"
     );
 }
 
