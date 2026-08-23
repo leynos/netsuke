@@ -10,7 +10,7 @@
 use super::super::workspace::resolve_absolute_workspace_root;
 use camino::Utf8PathBuf;
 use proptest::prelude::*;
-use std::path::{MAIN_SEPARATOR, Path};
+use std::path::{MAIN_SEPARATOR, MAIN_SEPARATOR_STR, Path};
 
 /// A path component: letters only, so no separators or `.`/`..` components.
 fn component() -> impl Strategy<Value = String> {
@@ -19,7 +19,7 @@ fn component() -> impl Strategy<Value = String> {
 
 /// Join generated components with the platform separator.
 fn joined(parts: &[String]) -> String {
-    parts.join(&MAIN_SEPARATOR.to_string())
+    parts.join(MAIN_SEPARATOR_STR)
 }
 
 /// Generate an absolute parent path of one or more components.
@@ -42,7 +42,7 @@ proptest! {
         base_kind in 0u8..3,
         base_parts in proptest::collection::vec(component(), 0..3),
     ) {
-        let base_text = base_parts.join(&MAIN_SEPARATOR.to_string());
+        let base_text = base_parts.join(MAIN_SEPARATOR_STR);
         let base = match base_kind {
             0 => None,
             1 => Some(Path::new(".")),
@@ -78,7 +78,7 @@ proptest! {
         base_kind in 0u8..3,
         base_parts in proptest::collection::vec(component(), 0..3),
     ) {
-        let base_text = base_parts.join(&MAIN_SEPARATOR.to_string());
+        let base_text = base_parts.join(MAIN_SEPARATOR_STR);
         let base = match base_kind {
             0 => None,
             1 => Some(Path::new(".")),
