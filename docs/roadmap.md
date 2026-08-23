@@ -675,7 +675,9 @@ configuration, inspect run history, route artefacts, and report friction.
   - [ ] Verify successful JSON mode writes exactly one stdout document and
     empty stderr.
   - [ ] Verify failing JSON mode writes empty stdout and exactly one stderr
-    diagnostic document.
+    diagnostic document. For `netsuke test` this means a command failure,
+    not a completed run reporting failed cases; see invariant I8 and
+    `6.6.2`.
   - [ ] Depend on OrthoConfig `7.2.1`, `7.2.5`, and `8.1.1`.
 
 - [ ] 5.5.3. Add error-remediation and exit-code tests.
@@ -689,7 +691,6 @@ configuration, inspect run history, route artefacts, and report friction.
   - [ ] Keep human-first local examples beside automation examples.
   - [ ] Cross-link the archive so reviewers can trace where historical work
     moved.
-
 
 ## 6. Netsukefile testing framework
 
@@ -730,15 +731,17 @@ in [RFC 0001](rfcs/0001-netsukefile-testing-framework.md), the
   Requires: 6.1.2. See
   [technical design §4.4](netsuke-test-framework-technical-design.md).
   - [ ] Pin `add_function` replacement semantics with a test.
+  - [ ] Rewrite the `MACRO_IMPORTS_GLOBAL` prelude for substituted names;
+    `add_function` alone is shadowed by the generated
+    `{% from ... import %}` statement at render time.
   - [ ] Pin runner-side handle capture for spy passthrough.
   - [ ] Fall back to filtered macro registration if shadowing fails.
 
 - [ ] 6.1.4. Dogfood the seams before dialect work begins. Requires:
-  6.1.1, 6.1.2.
+  6.1.1, 6.1.2, 6.1.3.
   - [ ] Run the differential fidelity suite over the repository's example
     manifests.
   - [ ] Record the evidence in the RFC before starting 6.2.
-
 
 ### 6.2. Test dialect parsing and discovery
 
@@ -782,6 +785,15 @@ in [RFC 0001](rfcs/0001-netsukefile-testing-framework.md), the
 
 ### 6.4. Fixture engine
 
+- [ ] 6.4.0. Add sandbox-rooted `glob()` and file-test adapters for the
+  test registration. Requires: 6.1.2. See
+  [technical design §4.5](netsuke-test-framework-technical-design.md).
+  - [ ] Resolve relative glob patterns against the case sandbox rather
+    than the process working directory.
+  - [ ] Resolve file-test paths through the sandbox handle instead of
+    `open_ambient_dir`, rejecting escapes.
+  - [ ] Leave the build path's ADR-010 behaviour unchanged.
+
 - [ ] 6.4.1. Implement the fixture lifecycle. See
   [UX design §9](netsuke-test-framework-ux-design.md) and
   [technical design §7](netsuke-test-framework-technical-design.md).
@@ -793,13 +805,14 @@ in [RFC 0001](rfcs/0001-netsukefile-testing-framework.md), the
 - [ ] 6.4.2. Implement sandbox retention. Requires: 6.4.1.
   - [ ] Support `--keep` for failing cases and print retained paths.
 
-
 ### 6.5. Actions, assertions, and result views
 
 - [ ] 6.5.1. Implement pipeline actions. Requires: 6.1.2. See
   [technical design §8](netsuke-test-framework-technical-design.md).
   - [ ] Compose `load_manifest`, `build_graph`, and `generate_ninja` from
     public library functions.
+  - [ ] Accumulate `results` across the case in execution order so
+    assertions can compare stages.
   - [ ] Deny network, commands, and ambient environment under test
     (invariant I5).
 
@@ -813,7 +826,6 @@ in [RFC 0001](rfcs/0001-netsukefile-testing-framework.md), the
   - [ ] Distinguish failures from errors end to end.
   - [ ] Implement `expect_failure` with named diagnostics.
   - [ ] Render failing expressions with substituted actual values.
-
 
 ### 6.6. Command, localization, and reporting
 

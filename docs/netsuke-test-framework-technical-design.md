@@ -108,8 +108,8 @@ _before_ expansion.
 `netsuke help targets` established the pattern this framework extends. The
 loader already selects its standard-library boundary through an enum
 (`StdlibRegistration`, `src/manifest/mod.rs:113`) with two variants:
-`Full(StdlibConfig)` for builds, and `ManifestQuery` for side-effect-free
-discovery. `src/manifest/query.rs` owns that boundary, and
+`Full(Box<StdlibConfig>)` for builds, and `ManifestQuery` for
+side-effect-free discovery. `src/manifest/query.rs` owns that boundary, and
 `register_manifest_query` (`src/stdlib/register.rs:114`) implements it by
 registering the pure helpers and replacing `env`, `glob`, `fetch`, `shell`,
 `grep`, and `contents` with stubs that raise a located diagnostic naming
@@ -120,9 +120,9 @@ the existing enum rather than introducing a parallel mechanism:
 
 ```rust
 enum StdlibRegistration {
-    Full(StdlibConfig),
+    Full(Box<StdlibConfig>),
     ManifestQuery,
-    Test(StdlibConfig),   // sandbox-rooted; impure helpers refuse
+    Test(Box<StdlibConfig>),   // sandbox-rooted; impure helpers refuse
 }
 ```
 
@@ -166,7 +166,10 @@ pub struct TemplateOverlays {
 `StdlibConfig` plus a separate `NetworkPolicy`, because §3.2 already binds
 those together per mode: the network policy for a test load is a property
 of `StdlibRegistration::Test`, not an independently settable knob. This
-keeps one place where a load mode's capabilities are decided.
+keeps one place where a load mode's capabilities are decided. `Test`
+boxes its payload like `Full`, matching the existing constructors in
+`parse_with_config.rs` and `query.rs` and keeping the variants near enough
+in size that the enum stays cheap to move.
 
 The structure is named `TemplateOverlays`, not `EnvOverlays`: in this
 codebase "env" means the process environment (ADR-008, `EnvReader`), and
@@ -182,9 +185,10 @@ order inside environment construction becomes:
 2. stdlib via `register_with_config` (with the test's `StdlibConfig`);
 3. manifest `vars` globals;
 4. manifest macros;
-5. **overlays** — test doubles and macro substitutions, registered last so
-   they shadow same-named stdlib functions and manifest macros (MiniJinja
-   `add_function` replaces an existing registration);
+5. **overlays** — test doubles registered last so they shadow same-named
+   stdlib functions (MiniJinja `add_function` replaces an existing
+   registration), plus macro substitutions, which additionally rewrite the
+   macro-import prelude (§4.4);
 6. `expand_foreach`, deserialization, rendering as today.
 
 The overlay hook is compiled unconditionally: it is an ordinary parameter,
@@ -254,12 +258,29 @@ built, and no live agent is ever constructed.
 ### 4.4. Macro substitution (new mechanism)
 
 `substitute("stand_in")` compiles the stand-in macro from the test file
-through the same `register_macro` path as manifest macros, then registers
-a journalling wrapper under the target name as an overlay (§3.3 step 5).
-The wrapper records the call in the journal and delegates to the compiled
+through the same `register_macro` path as manifest macros, then installs a
+journalling wrapper that records the call and delegates to the compiled
 stand-in. Signature arity is validated when the macro is called, as with
 ordinary manifest macros; earlier validation is a possible refinement, not
 a first-version requirement.
+
+Installing that wrapper takes more than `add_function`. `register_macro`
+does two things per macro: it adds a global function, _and_ it appends
+`{% from '<template>' import <name> %}` to a `MACRO_IMPORTS_GLOBAL` string
+that `render_template` (`src/manifest/jinja_macros/mod.rs`) prepends to
+every template it renders. An imported macro binds a template-local name,
+and template-local names resolve ahead of environment globals — so a
+same-named `add_function` overlay is shadowed at render time, and a
+substituted `compile_cmd` would still run the original macro while
+journalling nothing.
+
+Macro substitution therefore edits the prelude as well as the global: for
+each substituted name the overlay removes that name's entry from
+`MACRO_IMPORTS_GLOBAL` and re-adds an import bound to the stand-in's
+compiled template. Both halves are one operation and must stay together;
+the phase-1 spike (§13) covers the prelude rewrite, not merely
+`add_function` replacement, because the prelude is the half that actually
+decides which macro renders.
 
 ### 4.5. Stdlib configuration under test
 
@@ -285,11 +306,36 @@ diagnostic that names the operation and points at the double syntax. The
 test mode supplies its own message keys through the existing
 `manifest_query_operation_error` shape.
 
-Rooting `workspace_root` at the sandbox has a visibility consequence worth
-stating plainly: the project tree is _not_ visible to a manifest under
-test. A default-subject test sees only the files its fixtures and
-`given.fs` created, so unmocked `glob()` and file tests answer against the
-sandbox, not the project. Invariant I4 (§11) is scoped accordingly.
+`workspace_root` alone does not achieve that scoping, and the design must
+not pretend otherwise. Two filesystem helpers bypass it today:
+
+- `glob()` is registered in `src/manifest/mod.rs` over
+  `glob::expand_glob(&pattern)`, which takes no workspace root. Its
+  matcher traverses ambiently, and the capability it opens is rooted at
+  the pattern's literal prefix — `.` for a relative pattern, meaning the
+  process working directory. ADR-010 records the ambient traversal as an
+  accepted limitation of the build path.
+- File tests (`dir`, `file`, `symlink`, and the rest) reach
+  `path::file_type_matches`, whose `parent_dir` helper calls
+  `Dir::open_ambient_dir(.., ambient_authority())`. `register_file_tests`
+  never receives `StdlibConfig` at all.
+
+Left unaddressed, a fixture-built project would be globbed from the
+runner's working directory instead of its own sandbox, which is both
+host-dependent and the exact non-determinism this framework exists to
+remove. The test registration therefore supplies sandbox-rooted adapters
+for both helpers: `glob()` resolves relative patterns against the case
+sandbox `Dir`, and the file tests resolve their paths through the same
+handle, rejecting escapes rather than falling back to ambient authority.
+These adapters are test-mode components, not changes to the build path's
+behaviour, so ADR-010's accepted limitation stands for builds while tests
+get the stronger guarantee they require.
+
+With those adapters in place the visibility consequence is worth stating
+plainly: the project tree is _not_ visible to a manifest under test. A
+default-subject test sees only the files its fixtures and `given.fs`
+created. Invariant I4 (§11) is scoped accordingly, and invariant I5's
+no-ambient-filesystem claim depends on these adapters existing.
 
 ## 5. Test-suite AST and parser
 
@@ -358,23 +404,36 @@ pub struct CallEntry {
 }
 ```
 
-Dispatch: the overlay closure for a double locks the registry, appends the
-invocation to the journal, scans `entries` for the first matcher-accepting
-entry with remaining `times` budget (or, when `ordered`, the next
-unconsumed entry in declaration order), and returns the entry's response.
-A `Mock` with no accepting entry returns a MiniJinja error carrying a
-structured payload; the runner converts it into the unmatched-call report
-with the suggested YAML stanza. A `Stub` falls back to its `default` or
-`Undefined`. A `Spy` delegates to a handle the runner captured when it
-constructed the effective callable — the runner holds these handles itself
-rather than retrieving previously registered functions from the MiniJinja
-environment, which offers no such retrieval.
+Dispatch acquires the registry lock, appends the invocation to the
+journal, selects a response, and _releases the lock before producing it_.
+Selection scans `entries` for the first matcher-accepting entry with
+remaining `times` budget, or, when `ordered`, takes the next unconsumed
+entry in declaration order. A `Mock` with no accepting entry yields a
+MiniJinja error carrying a structured payload, which the runner converts
+into the unmatched-call report with its suggested YAML stanza. A `Stub`
+falls back to its `default` or `Undefined`. A `Spy` resolves to a handle
+the runner captured when it constructed the effective callable — the
+runner holds these handles itself rather than retrieving previously
+registered functions from the MiniJinja environment, which offers no such
+retrieval.
 
-Journal entries record arguments and a reference to the responding
-`CallEntry`, not a clone of the response value, so a large canned return
-is stored once however many calls it serves. The per-double journal
-ceiling from the UX design is enforced at append time; breaching it turns
-the case into an error naming the double.
+Releasing the lock before invoking a spy's delegate is load-bearing, not
+an optimization. A spied callable may call another double — a spied macro
+whose body calls a mocked `glob` is the ordinary case — and that nested
+dispatch re-enters the same registry. Holding the lock across the delegate
+would deadlock the case. Dispatch therefore returns a resolved action
+while unlocked, and the nested call takes the lock in its own turn. A test
+covering a spy that invokes a second double guards this.
+
+Journal entries record the arguments, and the identity of the responding
+entry as a `(double, entry_index)` pair rather than a Rust reference or a
+cloned response value. A borrowed `&CallEntry` would make the journal
+self-referential within `DoubleRegistry`; the index pair is stable across
+the case, keeps response-value deduplication a separate concern (the value
+still lives once in its `CallEntry`), and survives the registry being
+locked and unlocked around each dispatch. The per-double journal ceiling
+from the UX design is enforced at append time; breaching it turns the case
+into an error naming the double.
 
 Registry state is per case and lives behind an `Arc<Mutex<..>>` captured by
 the overlay closures; nothing is process-global, so parallel cases cannot
@@ -388,10 +447,12 @@ End-of-case verification walks the registry: unmet `Mock` expectations
 the case; doubles with zero journal entries raise the unnecessary-double
 warning unless `lenient`.
 
-Matcher evaluation is a closed enum (`Any`, `IsA(TypeName)`,
-`Regex(compiled)`, `Contains(Value)`, `StartsWith(String)`,
-`Not(Box<ArgMatcher>)`) compiled at parse time so an invalid regex is a
-suite error, not a mid-run surprise.
+Matcher evaluation is a closed enum (`Exact(Value)`, `Any`,
+`IsA(TypeName)`, `Regex(compiled)`, `Contains(Value)`,
+`StartsWith(String)`, `Not(Box<ArgMatcher>)`) compiled at parse time so an
+invalid regex is a suite error, not a mid-run surprise. `Exact` backs both
+the bare-argument form and the `eq:` escape hatch; the parser lowers both
+to it.
 
 ## 7. Fixture engine
 
@@ -445,25 +506,56 @@ evaluation and makes journal counts independent of the action list (the
 UX design §10 makes this the observable contract). A later step's action
 starts a fresh pass.
 
-Each action produces an `ActionResult { action, ok, views, error }`. An
-action failure with `expect_failure` in the following `then` is a normal
-comparison; without it, the failure fails the case at the point of the
-first assertion that needs a missing view (or immediately when the step has
-no `then`).
+Each action produces an `ActionResult { action, ok, views, error }`. The
+case runner keeps them in a `results: Vec<ActionResult>` that accumulates
+across the whole case in execution order, never resetting between steps.
+`result` is sugar for the last element. Assertions index the history
+positionally — `results[0]`, `results | length` — so a step that runs
+`load_manifest` then `generate_ninja` can compare the two stages, and a
+later step can still read an earlier step's outcome. Indices are stable
+because actions only ever append.
+
+An action failure with `expect_failure` in the following `then` is a
+normal comparison; without it, the failure fails the case at the point of
+the first assertion that needs a missing view (or immediately when the step
+has no `then`).
 
 The scheduler runs cases in parallel up to `--jobs` (defaulting to
 available parallelism), one case per worker, with no shared mutable state
-beyond the report sink. Case execution runs under `catch_unwind`; a worker
-panic records the case as errored and the worker is replaced, so every
-selected case reaches the report (invariant I9). Case execution order
-within a file is declaration order; files run in sorted path order for
-stable reports.
+at all. Workers own nothing in common: each sends a finished, immutable
+`CaseResult` down a channel to a single collector, and only the collector
+writes the report. That keeps report assembly free of locking and makes
+ordering a property of the collector rather than of scheduling luck — it
+buffers results and restores sorted file order, then declaration order
+within each file, before rendering. Cases therefore complete in whatever
+order they finish while human and JSON output stay byte-stable; a test
+that completes cases deliberately out of order and diffs both renderings
+guards this.
 
-Time governance lives at the seams, because MiniJinja evaluation cannot be
-preempted: the per-case deadline is checked in overlay dispatch and the
-loader's stage callback, macro call depth is capped, and `foreach`
-expansion under test has an item ceiling — each breach a named diagnostic
-that turns the case into an error carrying the partial journal.
+Case execution runs under `catch_unwind`; a worker panic records the case
+as errored and the worker is replaced, so every selected case reaches the
+report (invariant I9).
+
+Time governance is cooperative, and the design states its boundary rather
+than implying a guarantee it cannot deliver. The per-case deadline is
+checked wherever control returns to the runner: overlay dispatch, the
+loader's stage callbacks, each fixture setup and teardown action, between
+pipeline actions, and between assertions. Macro call depth is capped and
+`foreach` expansion under test has an item ceiling. Each breach raises a
+named diagnostic that turns the case into an error carrying the partial
+journal, and teardown still runs.
+
+What this does not cover: MiniJinja evaluation is not preemptible, so a
+single template expression — a very large loop inside one target field —
+can overrun `--timeout` without ever yielding to a checkpoint. The depth
+and expansion ceilings bound the common causes, but they are not a
+substitute for preemption, and no in-process mechanism closes the gap
+while C1 keeps evaluation in the runner's own address space. `--timeout`
+is therefore specified as best effort: it bounds every case that reaches a
+checkpoint, and CI should keep a job-level timeout as the outer backstop.
+Closing this properly needs a cancellation boundary — evaluating each case
+in a killable child process — which is deferred with the execution phase
+it would also serve.
 
 ## 9. CLI integration
 
@@ -472,8 +564,9 @@ the UX design §12. Like `GraphArgs`, the purely per-invocation flags are
 `#[serde(skip)]`ed out of OrthoConfig layering; candidates for config-file
 defaults (`jobs`, display policy) follow the existing precedence rules.
 `src/runner/dispatch.rs` routes the variant to `testing::run`, which owns
-discovery, scheduling, and process exit-code mapping (0/1/2/3 per the UX
-design).
+discovery, scheduling, and process exit-code mapping (0, 1, 2, 3, and 130
+per the UX design). Interruption keeps its own exit result and is not
+folded into the internal-runner-error class.
 
 New user-facing strings — report lines, diagnostics, warnings — get keys in
 `src/localization/keys.rs` and Fluent messages. The build-time
@@ -514,7 +607,7 @@ verification methods. These are design commitments, not a test-type list.
   point, asserting the teardown sequence property; case counts are bounded
   in the nextest profile so this suite cannot become the slowest gate.
 - **I3 — strict mock determinism.** An unmatched call on a `Mock` fails
-  the action at the call site; the journal preserves call order, arguments
+  the action at the call site; the journal preserves call order, arguments,
   and responses. _Method:_ unit tests per matcher and dispatch rule;
   `rstest` parameterized cases over the matcher vocabulary.
 - **I4 — semantic fidelity.** For any manifest with no doubles declared
@@ -538,10 +631,18 @@ verification methods. These are design commitments, not a test-type list.
 - **I7 — build-path neutrality.** A manifest containing a `tests` block
   behaves identically under `build`, `graph`, `generate`, and `clean` to
   the same manifest without it. _Method:_ differential snapshot tests.
-- **I8 — report stream purity.** `--json` success emits one stdout
-  document and empty stderr; failure emits diagnostics on stderr only.
-  _Method:_ the existing stream-purity behavioural test pattern extended
-  to `test`.
+- **I8 — report stream purity.** `--json` emits exactly one report
+  document on stdout with empty stderr whenever the run _completes_ —
+  whether every case passed, some failed or errored (exit 1), or the run
+  was interrupted (exit 130). Only a _command_ failure — invalid suite or
+  selector, zero selected cases without `--allow-empty` (exit 2), or an
+  internal runner error before a report can be assembled (exit 3) —
+  suppresses the stdout document and emits one diagnostic document on
+  stderr instead. The distinction matters because a completed run with
+  failing cases is the primary thing automation reads from stdout;
+  emptying stdout there would defeat `--json`. _Method:_ the existing
+  stream-purity behavioural test pattern extended to `test`, with cases
+  for each exit class.
 - **I9 — conservation of cases.** Every selected case appears in the
   report exactly once, as passed, failed, errored, or skipped — including
   under worker panic, timeout, and interruption. _Method:_ scheduler tests
@@ -551,10 +652,22 @@ verification methods. These are design commitments, not a test-type list.
 The combinatorial surface that carries the highest interaction risk is
 double kind × ordering × `times` × matcher type. I3's parameterized suite
 enumerates kind, ordering, and `times` exhaustively and pairs them with
-each matcher type individually; full four-way combination is not
-enumerated, which is acceptable because matcher evaluation is independent
-of consumption bookkeeping by construction (separate functions with no
-shared state).
+each matcher type individually. Full four-way enumeration is not run, but
+structural separation is not offered as the reason: matching and
+consumption meet in entry selection, so the interaction is real and the
+suite covers it directly with named cases —
+
+- a first entry whose `times` budget is exhausted, so a later entry with a
+  broader matcher must take the call;
+- an `ordered` double whose next entry rejects the arguments, pinning
+  whether selection falls through or fails;
+- a catch-all entry after a specific one, in both declaration orders,
+  confirming first-match-wins rather than best-match;
+- a `times`-bounded entry that is never exhausted, confirming a maximum
+  does not become a minimum (UX design §8.2).
+
+These are the cases where a bug would otherwise hide behind the
+independence claim.
 
 New `tests/*.rs` files land as real Cargo targets; the existing
 integration-test wiring contract test enforces this automatically.

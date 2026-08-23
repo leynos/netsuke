@@ -373,8 +373,14 @@ Semantics:
   entries into declaration-order matching. Every surveyed library that
   enforced global ordering by default is remembered for brittle tests;
   every modern one makes ordering opt-in.[^5][^7]
-- `times: N` bounds how often an entry may match; entries without `times`
-  match any number of calls.
+- `times: N` is a maximum, not a quota. An entry may match up to N calls;
+  the N+1th call that would have matched it instead falls through to later
+  entries, and fails dispatch if none accepts. Fewer than N matches — including
+  none — is not itself a failure, so `times` never doubles as a
+  minimum-call assertion. Entries without `times` match any number of
+  calls. To require that a call happened, assert on the journal
+  (`mocks.<name>.call_count`) or use a `mock`, whose declared entries must
+  all be satisfied by end of case.
 - `returns` supplies a YAML value returned as the MiniJinja value;
   `raises` supplies a structured template error instead.
 
@@ -709,9 +715,17 @@ Options:
 ```
 
 `--json` and `--jobs` are the existing global flags, not new per-command
-options; `test` consumes them with their established semantics. A case
-that exceeds its timeout is reported as errored, with the partial journal
-attached.
+options; `test` consumes them with their established semantics.
+
+A case that exceeds its timeout is reported as errored, with the partial
+journal attached, and its fixtures are still torn down. The deadline is
+enforced wherever control returns to the runner — fixture actions, each
+pipeline action, assertions, and every call into a double — which covers
+every case that makes progress through the framework. It is best effort
+rather than absolute: a single runaway template expression cannot be
+interrupted mid-evaluation, so a pathological manifest can overrun the
+budget. Treat `--timeout` as a guard against slow tests, not a hard
+sandbox, and keep a job-level timeout in CI.
 
 Exit codes:
 
@@ -726,11 +740,16 @@ Exit codes:
 _Table 5: `netsuke test` exit codes._
 
 The command follows the established display policy flags (`--color`,
-`--emoji`, `--progress`, `--accessibility`) and the stream-purity contract:
-in `--json` mode, success writes exactly one JSON document to stdout and
-nothing to stderr; failure writes the document to stdout and diagnostics to
-stderr. All human-facing strings are localized like the rest of the
-command-line interface (CLI) surface.
+`--emoji`, `--progress`, `--accessibility`) and the stream-purity contract,
+which turns on whether the _run_ completed rather than whether every case
+passed. A completed run — all passed, some failed or errored, or
+interrupted — writes exactly one JSON document to stdout and nothing to
+stderr; failing cases are reported inside that document, because they are
+what automation reads. A command failure that produces no report (invalid
+suite or selector, an empty selection without `--allow-empty`, or an
+internal runner error) instead leaves stdout empty and writes one
+diagnostic document to stderr. All human-facing strings are localized like
+the rest of the command-line interface (CLI) surface.
 
 Interruption (Ctrl-C) stops scheduling, tears down completed fixtures,
 removes the run's sandbox root unless `--keep`, and exits 130; in `--json`
@@ -875,7 +894,7 @@ Deferred, in likely delivery order:
 2. Filter and Jinja-test doubles.
 3. File- and session-scoped fixtures.
 4. Data-driven case tables (parameterized matrices), following OPA's named
-   sub-case reporting.[^3]
+   subcase reporting.[^3]
 5. Snapshot assertions against generated Ninja.
 6. JUnit XML output; an idempotence check asserting that regenerating from
    an unchanged manifest yields byte-identical Ninja.
