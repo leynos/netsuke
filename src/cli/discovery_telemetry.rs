@@ -88,16 +88,13 @@ mod tests {
 
     use super::*;
     use crate::cli::discovery::{DiscoveredLayers, DiscoveryDiagnostics, DiscoveryOutcome};
+    use crate::test_tracing_capture::with_test_subscriber;
     use metrics_util::{
         CompositeKey, MetricKind,
         debugging::{DebugValue, DebuggingRecorder},
     };
-    use std::sync::{Arc, Mutex, PoisonError};
-    use tracing::{Subscriber, field::Visit, span::Id};
-    use tracing_subscriber::{
-        Layer, filter::LevelFilter, layer::Context as LayerContext, prelude::*,
-        registry::LookupSpan,
-    };
+    use std::sync::Arc;
+    use tracing_subscriber::filter::LevelFilter;
 
     type Snapshot = Vec<(
         CompositeKey,
@@ -105,56 +102,6 @@ mod tests {
         Option<metrics::SharedString>,
         DebugValue,
     )>;
-
-    /// Captures fields recorded on the bounded discovery span.
-    #[derive(Clone, Default)]
-    struct DiscoverySpanCapture {
-        fields: Arc<Mutex<Vec<String>>>,
-    }
-
-    impl DiscoverySpanCapture {
-        /// Return every field recorded on the discovery span.
-        fn fields(&self) -> Vec<String> {
-            self.fields
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .clone()
-        }
-    }
-
-    impl<S> Layer<S> for DiscoverySpanCapture
-    where
-        S: Subscriber + for<'span> LookupSpan<'span>,
-    {
-        fn on_record(&self, id: &Id, values: &tracing::span::Record<'_>, ctx: LayerContext<'_, S>) {
-            let Some(span) = ctx.span(id) else {
-                return;
-            };
-            if span.metadata().name() != "collect_diag_file_layers" {
-                return;
-            }
-            let mut visitor = SpanFieldVisitor::default();
-            values.record(&mut visitor);
-            self.fields
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .extend(visitor.0);
-        }
-    }
-
-    /// Renders recorded span fields with stable string values for assertions.
-    #[derive(Default)]
-    struct SpanFieldVisitor(Vec<String>);
-
-    impl Visit for SpanFieldVisitor {
-        fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
-            self.0.push(format!("{}={value:?}", field.name()));
-        }
-
-        fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
-            self.0.push(format!("{}={value:?}", field.name()));
-        }
-    }
 
     /// Assert that one discovery counter has the expected bounded outcome.
     fn assert_discovery_counter(snapshot: &Snapshot, expected_outcome: &str) {
@@ -226,15 +173,13 @@ mod tests {
         let snapshotter = recorder.snapshotter();
         let clock = monotony::StdMonotonicClock;
         let started = clock.now();
-        let capture = DiscoverySpanCapture::default();
-        let subscriber =
-            tracing_subscriber::registry().with(capture.clone().with_filter(LevelFilter::TRACE));
-        metrics::with_local_recorder(&recorder, || {
-            tracing::subscriber::with_default(subscriber, || {
+        let fields = metrics::with_local_recorder(&recorder, || {
+            with_test_subscriber(LevelFilter::TRACE, |captured| {
                 record_discovery_outcome(&clock, started, outcome);
-            });
+                captured.discovery_span_fields()
+            })
         });
-        (snapshotter.snapshot().into_vec(), capture.fields())
+        (snapshotter.snapshot().into_vec(), fields)
     }
 
     /// A discovery outcome with no errors and no pending load warnings.

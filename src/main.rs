@@ -40,6 +40,10 @@ mod observability;
 #[path = "startup_tracing.rs"]
 mod startup_tracing;
 
+#[cfg(test)]
+#[path = "test_tracing_capture.rs"]
+mod test_tracing_capture;
+
 #[path = "config_load.rs"]
 mod config_load;
 use startup_tracing::StartupWriter;

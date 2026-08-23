@@ -16,6 +16,7 @@ use tracing_subscriber::{
 #[derive(Debug, Clone)]
 pub struct CapturedEvents {
     fields: Arc<Mutex<Vec<String>>>,
+    discovery_span_fields: Arc<Mutex<Vec<String>>>,
 }
 
 impl CapturedEvents {
@@ -30,6 +31,18 @@ impl CapturedEvents {
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
     }
+
+    /// Return fields recorded on the bounded configuration-discovery span.
+    ///
+    /// The capture layer filters by the fixed `collect_diag_file_layers` span
+    /// name, so this snapshot excludes fields from every other span.
+    #[must_use]
+    pub fn discovery_span_fields(&self) -> Vec<String> {
+        self.discovery_span_fields
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
 }
 
 /// [`Layer`] that appends each event's rendered fields to a shared buffer.
@@ -39,6 +52,7 @@ impl CapturedEvents {
 #[derive(Debug, Clone, Default)]
 struct CapturedEventsLayer {
     events: Arc<Mutex<Vec<String>>>,
+    discovery_span_fields: Arc<Mutex<Vec<String>>>,
 }
 
 impl<S> Layer<S> for CapturedEventsLayer
@@ -53,6 +67,27 @@ where
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .push(visitor.fields.join(" "));
+    }
+
+    /// Capture fields recorded on the bounded configuration-discovery span.
+    fn on_record(
+        &self,
+        id: &tracing::span::Id,
+        values: &tracing::span::Record<'_>,
+        ctx: LayerContext<'_, S>,
+    ) {
+        let Some(span) = ctx.span(id) else {
+            return;
+        };
+        if span.metadata().name() != "collect_diag_file_layers" {
+            return;
+        }
+        let mut visitor = FieldVisitor::default();
+        values.record(&mut visitor);
+        self.discovery_span_fields
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .extend(visitor.fields);
     }
 }
 
@@ -103,6 +138,7 @@ pub fn with_test_subscriber<T>(
     let layer = CapturedEventsLayer::default();
     let captured = CapturedEvents {
         fields: Arc::clone(&layer.events),
+        discovery_span_fields: Arc::clone(&layer.discovery_span_fields),
     };
     let subscriber = tracing_subscriber::registry().with(layer.with_filter(level_filter));
     tracing::subscriber::with_default(subscriber, || test(captured))
@@ -167,6 +203,7 @@ mod tests {
     fn snapshot_recovers_from_a_poisoned_lock() {
         let captured = CapturedEvents {
             fields: Arc::new(Mutex::new(vec!["seeded=1".to_owned()])),
+            discovery_span_fields: Arc::new(Mutex::new(Vec::new())),
         };
 
         let poisoner = Arc::clone(&captured.fields);
@@ -217,5 +254,20 @@ mod tests {
             outer.iter().all(|event| !event.contains("scope=\"inner\"")),
             "outer must not see the nested event: {outer:?}"
         );
+    }
+
+    /// The bounded discovery-span API excludes fields from unrelated spans.
+    #[test]
+    fn discovery_span_fields_capture_only_the_named_span() {
+        let fields = with_test_subscriber(LevelFilter::TRACE, |captured| {
+            let discovery =
+                tracing::trace_span!("collect_diag_file_layers", outcome = tracing::field::Empty,);
+            discovery.record("outcome", "success");
+            let other = tracing::trace_span!("other_span", field = tracing::field::Empty);
+            other.record("field", "excluded");
+            captured.discovery_span_fields()
+        });
+
+        assert_eq!(fields, vec!["outcome=\"success\"".to_owned()]);
     }
 }
