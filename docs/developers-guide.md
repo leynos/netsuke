@@ -3782,6 +3782,13 @@ verbose mode is active. `should_force_text_task_updates` decides whether the
 indicatif reporter emits textual task updates, forcing them for accessible mode
 or non-TTY standard output.
 
+`AccessibleReporter` and `VerboseTimingReporter` are each generic over a
+`Write + Send` output sink that defaults to `io::Stderr`; tests inject a
+`Vec<u8>` writer to capture status and timing lines without a global stderr
+sink. `VerboseTimingReporter` writes its timing summary to that injected
+sink while the wrapped reporter continues to own stage, task, and completion
+lines.
+
 `run_with_ninja_program` (in `src/runner/mod.rs`) constructs the run's
 `StatusReporter` through `reporter::make_reporter` after resolving output mode
 and reporter settings, then shares it via the `ExecutionContext` it passes to

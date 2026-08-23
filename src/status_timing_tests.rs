@@ -298,9 +298,9 @@ fn verbose_timing_reporter_writes_summary_to_injected_sink(en_localizer: EnLocal
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let rendered = normalize_fluent_isolates(&String::from_utf8_lossy(&output));
     assert!(rendered.contains("Stage timing summary:"));
-    assert!(rendered.contains("Stage 1/6: Reading manifest file"));
-    assert!(rendered.contains("Stage 2/6: Parsing YAML document"));
-    assert!(rendered.contains("Total pipeline time"));
+    assert!(rendered.contains("Stage 1/6: Reading manifest file: 12ms"));
+    assert!(rendered.contains("Stage 2/6: Parsing YAML document: 11ms"));
+    assert!(rendered.contains("Total pipeline time: 23ms"));
 }
 
 #[rstest]
