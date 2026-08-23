@@ -55,7 +55,10 @@ Total pipeline time: 50ms
 
 The summary lines are emitted on `stderr` with other status output. `stdout`
 continues to carry command artefacts (for example `manifest -` output) and is
-not used for timing diagnostics.
+not used for timing diagnostics. The summary sink is injectable:
+`VerboseTimingReporter` is generic over a `Write + Send` writer that defaults
+to `io::Stderr`, so tests can capture timing output without a global stderr
+sink.
 
 ## Constraints
 
@@ -182,7 +185,8 @@ What shipped:
 - Added `src/status_timing.rs` with:
   - a deterministic stage-timing recorder,
   - a duration formatter (`ns`/`us`/`ms`/`s`),
-  - `VerboseTimingReporter` wrapper with an injectable monotonic clock.
+  - `VerboseTimingReporter` wrapper with an injectable monotonic clock and an
+    injectable `Write + Send` output sink.
 - Wired reporter selection in `src/runner/reporter.rs` so verbose mode
   wraps the resolved base reporter (including silent progress mode).
 - Added localized timing summary runtime strings and updated verbose help copy

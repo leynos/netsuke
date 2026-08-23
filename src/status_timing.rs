@@ -93,6 +93,10 @@ impl TimingState {
 ///
 /// The writer defaults to [`io::Stderr`]; tests can supply a `Vec<u8>`
 /// via the test-only writer-and-clock constructor for output capture.
+/// The summary sink is guarded by a [`Mutex`] and written while the guard is
+/// held, serialising whole lines in call order; the reporting path never
+/// re-enters the same writer, so the bounded lock scope cannot deadlock,
+/// mirroring [`super::AccessibleReporter`].
 pub struct VerboseTimingReporter<W: Write + Send = io::Stderr> {
     /// Reporter receiving forwarded status events.
     inner: Box<dyn StatusReporter>,
