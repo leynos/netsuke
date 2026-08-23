@@ -106,7 +106,9 @@ mod tests {
             OsString::from("-j"),
             OsString::from("4"),
             OsString::from("-f"),
-            build_file.canonicalize()?.into_os_string(),
+            canonicalize_utf8_path(build_file)?
+                .into_std_path_buf()
+                .into_os_string(),
         ])
     }
 
