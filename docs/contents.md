@@ -61,8 +61,8 @@ operator, user, and contributor references are easier to find.
   Manifest telemetry decision record, separating observability from evaluation
   and bounding and redacting the emitted metrics and spans.
 - [adr-010-scope-glob-capability-to-literal-prefix.md](adr-010-scope-glob-capability-to-literal-prefix.md):
-  Glob capability-scoping decision record, opening the metadata capability at
-  a pattern's literal directory prefix instead of an ambient root.
+  Glob capability-scoping decision record, opening the metadata capability at a
+  pattern's literal directory prefix instead of an ambient root.
 - [adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md](adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md):
   Serial `deps` ordering decision record, covering staged Ninja dyndep bundles,
   their scoped execution guarantee, and generated-state ownership.
@@ -104,11 +104,12 @@ operator, user, and contributor references are easier to find.
 - [translators-guide.md](translators-guide.md): Localization workflow,
   translation guidance, the locale registry that owns the supported-tag list,
   and the fallback policy that keeps regional and script variants distinct.
-- [localization-glossary.md](localization-glossary.md): Local, Locize-ready
-  terminology source of truth for Netsuke product names, manifest concepts, and
-  identifiers.
-- [localization-styleguide.md](localization-styleguide.md): Locize-compatible
-  base guidance for consistent, human-first translations across Netsuke locales.
+- [localization-glossary.md](localization-glossary.md): Terminology source of
+  truth for Netsuke product names, manifest concepts, and identifiers, with
+  per-locale term mappings for every shipped locale.
+- [localization-styleguide.md](localization-styleguide.md): House style for
+  user-facing text and how voice, tone, register, and mechanics carry across
+  Netsuke locales.
 
 ## Contributor guidance
 
