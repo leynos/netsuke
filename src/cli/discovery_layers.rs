@@ -57,12 +57,16 @@ pub(super) enum ProjectScopeTrace {
     Included(BoundedConfigPath),
     /// The project configuration was loaded by the second pass.
     Appended {
+        /// Project config path loaded by the fallback pass.
         path: BoundedConfigPath,
+        /// Bounded de-duplication outcome, when one was recorded.
         deduplication: Option<ProjectLayerDeduplication>,
     },
     /// The second pass found only layers already returned by discovery.
     Deduplicated {
+        /// Project config path already returned by the primary scan.
         path: BoundedConfigPath,
+        /// Bounded de-duplication outcome for the repeated project layer.
         deduplication: ProjectLayerDeduplication,
     },
 }

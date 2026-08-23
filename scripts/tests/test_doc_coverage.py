@@ -307,6 +307,34 @@ def test_missing_cargo_maps_to_measurement_error(
     assert code == 2
 
 
+def test_measure_maps_missing_cargo_to_measurement_error(
+    script: types.ModuleType,
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An OSError from Cargo in ``measure()`` is a RuntimeError, not a traceback.
+
+    ``test_missing_cargo_maps_to_measurement_error`` covers the same boundary
+    through ``main()``, where the error also surfaces at ``load_metadata()``
+    time. This test isolates the ``measure()`` translation branch after
+    metadata loading has already succeeded, so the diagnostic is the rustdoc
+    one rather than the metadata one.
+    """
+
+    def fail(argv: list[str], **_kwargs: object) -> FakeResult:
+        message = "cargo: not found"
+        raise OSError(message)
+
+    monkeypatch.setattr(script.subprocess, "run", fail)
+
+    target = script.DocTarget("x", "lib", None)
+
+    with pytest.raises(
+        RuntimeError, match=r"cannot run cargo rustdoc for x lib \(lib\)"
+    ):
+        script.measure(target, "nightly-x", tmp_path)
+
+
 def test_toolchain_override_reaches_every_cargo_call(
     script: types.ModuleType,
     tmp_path: pathlib.Path,

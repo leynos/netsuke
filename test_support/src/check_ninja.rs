@@ -187,6 +187,10 @@ pub fn fake_ninja_check_build_file() -> Result<(TempDir, PathBuf)> {
 ///
 /// * `expected_tool` - The tool name that should follow `-t` (e.g., `"clean"`)
 ///
+/// # Errors
+///
+/// Returns an error if the temporary directory or fake executable cannot be created.
+///
 /// # Example
 ///
 /// ```rust,ignore
@@ -196,14 +200,8 @@ pub fn fake_ninja_check_build_file() -> Result<(TempDir, PathBuf)> {
 /// // ninja_path will succeed only when invoked with `-t clean`
 /// ```
 #[cfg(unix)]
-/// Stub for non-Unix platforms that returns an error.
-///
-/// # Errors
-///
-/// Always returns an error: this factory is only supported on Unix platforms.
-#[cfg(not(unix))]
-pub fn fake_ninja_expect_tool(_expected_tool: ToolName) -> Result<(TempDir, PathBuf)> {
-    anyhow::bail!("fake_ninja_expect_tool is only supported on Unix platforms")
+pub fn fake_ninja_expect_tool(expected_tool: ToolName) -> Result<(TempDir, PathBuf)> {
+    fake_ninja_expect_tool_with_jobs(expected_tool, None, None)
 }
 
 /// Convert a Rust string to a shell-safe single-quoted literal.
@@ -322,6 +320,11 @@ fn build_tool_validation_script(
 /// * `expected_jobs` - Optional job count that should follow `-j`
 /// * `expected_directory` - Optional working directory that should follow `-C`
 ///
+/// # Errors
+///
+/// Returns an error if the requested directory is not valid UTF-8, or if the
+/// temporary directory or fake executable cannot be created.
+///
 /// # Example
 ///
 /// ```rust,ignore
@@ -336,18 +339,14 @@ fn build_tool_validation_script(
 /// // ninja_path will succeed only when invoked with `-t clean -j 4 -C /path/to/build`
 /// ```
 #[cfg(unix)]
-/// Stub for non-Unix platforms that returns an error.
-///
-/// # Errors
-///
-/// Always returns an error: this factory is only supported on Unix platforms.
-#[cfg(not(unix))]
 pub fn fake_ninja_expect_tool_with_jobs(
-    _expected_tool: ToolName,
-    _expected_jobs: Option<u32>,
-    _expected_directory: Option<&Path>,
+    expected_tool: ToolName,
+    expected_jobs: Option<u32>,
+    expected_directory: Option<&Path>,
 ) -> Result<(TempDir, PathBuf)> {
-    anyhow::bail!("fake_ninja_expect_tool_with_jobs is only supported on Unix platforms")
+    let script_content =
+        build_tool_validation_script(expected_tool, expected_jobs, expected_directory)?;
+    write_fake_ninja_script(&script_content, "fake_ninja_expect_tool_with_jobs")
 }
 
 /// Stub for non-Unix platforms that returns an error.
@@ -375,43 +374,5 @@ pub fn fake_ninja_expect_tool_with_jobs(
 }
 
 #[cfg(all(test, unix))]
-mod tests {
-    //! Unit coverage for the fake-Ninja factories in this module: verifies the
-    //! generated shell scripts validate `-t`, `-f`, `-j`, and `-C` invocations
-    //! as expected by [`super::fake_ninja_expect_tool_with_jobs`].
-    use super::*;
-
-    /// Verify that the fake ninja script validates `-C <directory>` correctly.
-    #[cfg(unix)]
-    #[rstest::rstest]
-    #[case(&["-f", "build.ninja", "-C", "/path/to/build", "-t", "clean"], true, "correct -C value")]
-    #[case(&["-f", "build.ninja", "-C", "/wrong/path", "-t", "clean"], false, "wrong -C value")]
-    #[case(&["-f", "build.ninja", "-t", "clean"], false, "missing -C flag")]
-    fn fake_ninja_validates_directory_flag(
-        #[case] args: &[&str],
-        #[case] should_succeed: bool,
-        #[case] description: &str,
-    ) -> Result<()> {
-        use anyhow::Context;
-        use std::process::Command;
-
-        let (dir, ninja_path) = fake_ninja_expect_tool_with_jobs(
-            ToolName::new("clean"),
-            None,
-            Some(Path::new("/path/to/build")),
-        )?;
-
-        let status = Command::new(&ninja_path)
-            .args(args)
-            .current_dir(dir.path())
-            .status()
-            .context("execute fake ninja")?;
-
-        anyhow::ensure!(
-            status.success() == should_succeed,
-            "unexpected fake Ninja result for {description}"
-        );
-
-        Ok(())
-    }
-}
+#[path = "check_ninja_tests.rs"]
+mod tests;

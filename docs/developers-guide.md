@@ -1788,6 +1788,25 @@ datetimes and UTC offsets to ISO-8601 while stripping the zero fractional
 part, and exposes the `TimeDeltaValue` and `TimestampValue` MiniJinja object
 types the parent predicates downcast. Only the time module may import it.
 
+### `src/stdlib/which/env_path_support.rs`
+
+Path parsing and Windows executable-candidate construction, owned by
+`src/stdlib/which/env.rs`, which declares it through a `#[path]` attribute.
+It owns `PathEntry`, `PATH` and `PATHEXT` normalization, UTF-8
+current-directory conversion, and Windows candidate generation. Only
+`which::env` imports it; lookup modules retain their existing access through
+`which::env`'s narrow `pub(super)` re-exports. The split is purely to keep
+the environment snapshot adapter below the 400-line cap, not a new resolution
+boundary.
+
+### `test_support/src/check_ninja_tests.rs`
+
+Unix-only unit coverage for the fake-Ninja factories, owned by
+`test_support/src/check_ninja.rs` through a test-gated `#[path]` declaration.
+It exercises the `-C` directory argument contract through the public factory
+only. Keep fixture assertions here and production test-helper behaviour in
+`check_ninja.rs`; this split keeps the public helper below the 400-line cap.
+
 When adding a new `#[path]` support module, follow the same shape: keep it
 private to its parent, give it a `//!` header stating the split reason and
 ownership, cap its public surface at `pub(super)`, and document it here so the

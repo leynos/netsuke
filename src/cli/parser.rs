@@ -83,15 +83,6 @@ pub(super) fn validation_message(
     localizer.message(key, args, fallback)
 }
 
-#[derive(Debug, Parser, Serialize, Deserialize)]
-#[command(
-    name = "netsuke",
-    author,
-    version,
-    about,
-    long_about = None,
-    disable_help_subcommand = true
-)]
 /// A modern, friendly build system that uses YAML and Jinja, powered by Ninja.
 #[derive(Debug, Parser, Serialize, Deserialize)]
 #[command(
