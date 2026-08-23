@@ -130,10 +130,28 @@ and agents.
     `NETSUKE_CONFIG`) verified by exhaustive rstest cases and a proptest
     property test (PR `#327`, closes `#291`).
   - [ ] Depend on OrthoConfig `5.2.3` for consumer boundary guidance.
-  - [ ] Preserve Netsuke-specific precedence expectations for manifest path,
-    display policies, locale, and profile selection.
-  - [ ] Verify that CLI flags override environment, profile, project, user,
-    system, and default configuration layers.
+    OrthoConfig `5.2.3` is an upstream OrthoConfig roadmap identifier, not a
+    crate version; Netsuke stays pinned at `ortho_config = "0.9.0"` until
+    that guidance ships. Blocked on upstream; no `Cargo.toml` change.
+  - [x] Preserve Netsuke-specific precedence expectations for manifest path,
+    display policies, and locale across the two-selector ladder
+    (`--config` > `NETSUKE_CONFIG` > automatic discovery), where the
+    discovered rung is a single exclusive winner among system scope, user
+    scope, and defaults. When a user-scope configuration wins over the system
+    scope, system-only fields are not merged through and fall back to their
+    defaults (regression tests added in issue `#385`).
+  - [ ] Preserve Netsuke-specific precedence expectations for profile
+    selection (deferred to 5.3.1, when the `--profile` flag lands).
+  - [x] Verify that CLI flags override environment, project, user, system,
+    and default configuration layers for scalar fields (manifest path,
+    display policies, locale, jobs) in issue `#385`.
+  - [ ] Verify that CLI flags override the profile configuration layer
+    (deferred to 5.3.1, when the `--profile` flag lands).
+
+  - Note: OrthoConfig automatic discovery is exclusive: one discovered file
+    wins, so system-only fields are absent when a user-scope file is
+    selected (user-over-system and system-only merge-through cases are
+    covered by the regression tests added in issue #385).
 
 ### 3.12. Terminal rendering verification
 

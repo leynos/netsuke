@@ -2,6 +2,8 @@
 //! project-file discovery, user-scope fallback, and project-over-user
 //! precedence on Unix and Windows.
 
+#[cfg(unix)]
+use super::super::merge_probe::environment_with_system_scope;
 use super::super::merge_probe::{isolated_environment, merge_in_child};
 use anyhow::{Context, Result, ensure};
 use netsuke::cli::config::{ColourPolicy, EmojiPolicy};
@@ -220,4 +222,175 @@ fn project_config_takes_precedence_over_user_config() -> Result<()> {
         )],
     )?;
     assert_project_precedence_applied(&merged)
+}
+
+/// System-scope config content used by the Unix variants. Windows discovers
+/// user and system configuration through `APPDATA`/`LOCALAPPDATA` rather than
+/// the XDG variables these tests inject, so the scenarios below are Unix-only.
+#[cfg(unix)]
+const SYSTEM_CONFIG_CONTENT: &str = r#"
+file = "Systemfile"
+emoji = "always"
+color = "always"
+jobs = 9
+locale = "de-DE"
+"#;
+
+#[cfg(unix)]
+fn assert_system_config_applied(merged: &netsuke::cli::Cli) -> Result<()> {
+    ensure!(
+        merged.file.as_path() == Path::new("Systemfile"),
+        "system config manifest path should be discovered when no user or project config exists"
+    );
+    ensure!(
+        merged.emoji == EmojiPolicy::Always,
+        "system config emoji policy should be discovered when no user or project config exists"
+    );
+    ensure!(
+        merged.color == ColourPolicy::Always,
+        "system config color policy should be discovered"
+    );
+    ensure!(
+        merged.jobs == Some(9),
+        "system config jobs should be discovered"
+    );
+    ensure!(
+        merged.locale.as_deref() == Some("de-DE"),
+        "system config locale should be discovered"
+    );
+    Ok(())
+}
+
+/// Write discovery-scope config files and merge in an isolated child rooted at
+/// `project`. The selector set stays closed at the documented variables; the
+/// `system` `TempDir` is discarded after the child exits. Unix-only because the
+/// injected environment uses the XDG variables that Windows does not read.
+#[cfg(unix)]
+fn run_system_scope_scenario(
+    project: &Path,
+    home: &Path,
+    system: &Path,
+    scopes: &ScopeLayers,
+) -> Result<netsuke::cli::Cli> {
+    let system_dir = system.join("netsuke");
+    fs::create_dir_all(&system_dir)
+        .with_context(|| format!("create system config directory {}", system_dir.display()))?;
+    fs::write(system_dir.join("config.toml"), SYSTEM_CONFIG_CONTENT)
+        .context("write system config")?;
+    if let Some(user_content) = scopes.user_config {
+        let user_dir = home.join(".config").join("netsuke");
+        fs::create_dir_all(&user_dir).context("create user config directory")?;
+        fs::write(user_dir.join("config.toml"), user_content).context("write user config")?;
+    }
+    if let Some(project_content) = scopes.project_config {
+        fs::write(project.join(".netsuke.toml"), project_content)
+            .context("write project config")?;
+    }
+    let environment = environment_with_system_scope(home, system, &[]);
+    merge_in_child(&["netsuke"], project, &environment)
+}
+
+/// Optional user- and project-scope layers for a system-scope discovery run.
+#[cfg(unix)]
+#[derive(Default)]
+struct ScopeLayers {
+    user_config: Option<&'static str>,
+    project_config: Option<&'static str>,
+}
+
+/// System-scope discovery is platform-neutral here: `run_system_scope_scenario`
+/// points the child at an isolated `XDG_CONFIG_DIRS` via the injected
+/// environment seam. The XDG variables are not read on Windows (which uses
+/// `APPDATA`/`LOCALAPPDATA`), so the discovery scenario is Unix-only.
+#[cfg(unix)]
+#[rstest]
+fn system_scope_config_discovered_when_no_user_or_project_config() -> Result<()> {
+    let temp_project = tempdir().context("create temporary project directory")?;
+    let temp_home = tempdir().context("create temporary home directory")?;
+    let temp_system = tempdir().context("create temporary system directory")?;
+    let merged = run_system_scope_scenario(
+        temp_project.path(),
+        temp_home.path(),
+        temp_system.path(),
+        &ScopeLayers::default(),
+    )?;
+    assert_system_config_applied(&merged)
+}
+
+#[cfg(unix)]
+#[rstest]
+fn user_scope_config_takes_precedence_over_system_scope() -> Result<()> {
+    let temp_project = tempdir().context("create temporary project directory")?;
+    let temp_home = tempdir().context("create temporary home directory")?;
+    let temp_system = tempdir().context("create temporary system directory")?;
+    let merged = run_system_scope_scenario(
+        temp_project.path(),
+        temp_home.path(),
+        temp_system.path(),
+        &ScopeLayers {
+            user_config: Some("emoji = \"never\"\njobs = 4\n"),
+            ..ScopeLayers::default()
+        },
+    )?;
+    // OrthoConfig discovery is exclusive: the user layer wins over the system
+    // layer for every overlapping field, and the system file is not merged.
+    ensure!(
+        merged.file.as_path() == Path::new("Netsukefile"),
+        "manifest path should fall back to the default when the system layer loses, got {:?}",
+        merged.file
+    );
+    ensure!(
+        merged.emoji == EmojiPolicy::Never,
+        "user config emoji policy should override system config"
+    );
+    ensure!(
+        merged.jobs == Some(4),
+        "user config jobs should override system config"
+    );
+    ensure!(
+        merged.color == ColourPolicy::Auto,
+        "system color field should not appear when the user layer wins"
+    );
+    Ok(())
+}
+
+/// Project-scope config coexists with a system-scope file: the project layer
+/// outranks the system layer for overlapping fields, and a system-only field
+/// still merges through.
+#[cfg(unix)]
+#[rstest]
+fn project_config_overrides_system_and_system_only_field_merges() -> Result<()> {
+    let temp_project = tempdir().context("create temporary project directory")?;
+    let temp_home = tempdir().context("create temporary home directory")?;
+    let temp_system = tempdir().context("create temporary system directory")?;
+    let merged = run_system_scope_scenario(
+        temp_project.path(),
+        temp_home.path(),
+        temp_system.path(),
+        &ScopeLayers {
+            project_config: Some("emoji = \"never\"\njobs = 4\n"),
+            ..ScopeLayers::default()
+        },
+    )?;
+    ensure!(
+        merged.file.as_path() == Path::new("Systemfile"),
+        "system-only manifest path should merge through when project config does not set it"
+    );
+    ensure!(
+        merged.emoji == EmojiPolicy::Never,
+        "project config emoji policy should override system config"
+    );
+    ensure!(
+        merged.jobs == Some(4),
+        "project config jobs should override system config"
+    );
+    ensure!(
+        merged.color == ColourPolicy::Always,
+        "system-only color field should merge through when project config does not set it"
+    );
+    ensure!(
+        merged.locale.as_deref() == Some("de-DE"),
+        "system-only locale should merge through when project config does not set it"
+    );
+    Ok(())
 }

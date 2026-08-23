@@ -1503,6 +1503,37 @@ and staging states. Run it with `make test-workflow-contracts`; the target
 provisions `pytest`, `pyyaml`, and `hypothesis` through `uv run --with`, so
 `uv` is the only prerequisite and no virtual environment needs creating by hand.
 
+### Configuration-precedence regression tests
+
+The config-precedence ladder and display-policy domain are covered by three
+modules under `tests/cli_tests/`:
+
+- `config_precedence_ladder.rs` pins the closed selector model (`--config` >
+  `NETSUKE_CONFIG` > automatic discovery) end to end and checks that the
+  merged scalar fields follow CLI > environment > project > discovered
+  (user/system) > defaults. It includes an explicit guard that the removed
+  `NETSUKE_CONFIG_PATH` alias is not a selector, even when it names an
+  existing file with distinct values.
+- `display_policy_domain.rs` exhaustively verifies the consolidated
+  display-policy resolution (`EmojiPolicy`, `ColourPolicy`,
+  `ProgressPolicy`, `AccessibilityPolicy`, `json`, `NO_COLOR`, and
+  `TERM`/output mode) against a handwritten truth model, using one flat
+  Cartesian-product sweep plus a proptest. It adds coverage only; the
+  production resolution in `src/theme.rs` and `src/output_prefs.rs` is not
+  changed.
+- `merge_targets_proptests.rs` holds the handwritten proptest strategies (no
+  `#[derive(Arbitrary)]`) for the `default_targets` append-in-discovery-order
+  invariant and scalar merge ordering (defaults → file → environment → CLI).
+
+These tests drive a re-executed worker process through
+`tests/cli_tests/merge_probe.rs`. `merge_probe` builds an isolated
+environment (`HOME`, `XDG_CONFIG_HOME`, `XDG_CONFIG_DIRS`, and, for the
+system-scope variants, a redirectable `XDG_CONFIG_DIRS`) and `merge_in_child`
+runs the real ambient adapters in a child process, so the parent harness never
+mutates the process environment. The XDG system/user scope scenarios are
+Unix-only: Windows discovers configuration through `APPDATA`/`LOCALAPPDATA`
+rather than the XDG variables these tests inject.
+
 ### Temporary executable test helpers
 
 The low-level executable-stub primitive is owned by
