@@ -151,15 +151,16 @@ Don't:
   every message key and the names and number of its placeables.
 - Preserve valid Fluent syntax, attributes, terms, select expressions, and
   plural variants.
-- Preserve meaningful BCP 47 variants. Do not collapse `en-GB` into
-  `en-US`, `es-419` into `es-ES`, `pt-BR` into `pt-PT`, or `zh-Hans` into
-  `zh-Hant`. Regional and script variants exist because their vocabulary,
-  orthography, or register genuinely differ.
+- Preserve meaningful BCP 47 (Best Current Practice 47) locale variants. Do
+  not collapse `en-GB` into `en-US`, `es-419` into `es-ES`, `pt-BR` into
+  `pt-PT`, or `zh-Hans` into `zh-Hant`. Regional and script variants exist
+  because their vocabulary, orthography, or register genuinely differ.
 - For right-to-left languages, add the direction mark specified by the
   [translator guide](translators-guide.md) when the first strong character of
   the rendered message would otherwise have the wrong direction.
-- Do not translate locale tags, message keys, or literal values. Do not
-  localize paths, commands, or machine-readable JSON field names.
+- Do not translate locale tags, message keys, or literal values that form
+  part of a machine-readable contract. Do not localize paths, commands, or
+  machine-readable JSON field names.
 
 ## Machine-readable output
 
