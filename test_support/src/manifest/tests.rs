@@ -61,7 +61,7 @@ fn non_directory_parent_propagates_target_inspection_error(
     let (temp, temp_path) = temp_manifest_workspace?;
     let parent = temp.path().join("parent");
     fs::write(&parent, b"file").context("write placeholder parent file")?;
-    let manifest = parent.join("manifest.yml");
+    let manifest = temp_path.join("parent/manifest.yml");
 
     let Err(err) = ensure_manifest_exists(&temp_path, Utf8Path::new("parent/manifest.yml")) else {
         anyhow::bail!("non-directory parent should error");
@@ -71,10 +71,7 @@ fn non_directory_parent_propagates_target_inspection_error(
         "target inspection error should not be treated as absence: {err}"
     );
     let msg = err.to_string();
-    let manifest_str = manifest
-        .to_str()
-        .ok_or_else(|| anyhow::anyhow!("manifest path is not valid UTF-8"))?;
-    anyhow::ensure!(msg.contains(manifest_str), "message: {msg}");
+    anyhow::ensure!(msg.contains(manifest.as_str()), "message: {msg}");
     Ok(())
 }
 

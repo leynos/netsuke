@@ -23,7 +23,11 @@ fn make_script_executable(dir: &Dir, path: &Utf8Path) -> Result<()> {
 }
 
 #[cfg(not(unix))]
-fn make_script_executable(_dir: &Dir, _path: &Utf8Path) -> Result<()> {
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "the fallible signature must match the Unix variant so the shared call site needs no platform-specific handling"
+)]
+const fn make_script_executable(_dir: &Dir, _path: &Utf8Path) -> Result<()> {
     Ok(())
 }
 
@@ -108,21 +112,28 @@ pub(super) fn path_containing(dir: &Path) -> Result<std::ffi::OsString> {
 
 pub(super) fn run_verbose_build_with_ninja_env(
     current_dir: &Path,
-    path_env: std::ffi::OsString,
+    path_env: Option<std::ffi::OsString>,
     ninja_env: Option<&Path>,
 ) -> Result<String> {
     let mut command = assert_cmd::cargo::cargo_bin_cmd!("netsuke");
     command
         .current_dir(current_dir)
-        .env("PATH", path_env)
         .env_remove(NINJA_ENV)
         .arg("--verbose")
         .arg("build");
+    if let Some(path) = path_env {
+        command.env("PATH", path);
+    }
     if let Some(ninja) = ninja_env {
         command.env(NINJA_ENV, ninja);
     }
 
     let output = command.output().context("run verbose netsuke build")?;
-    ensure!(output.status.success(), "expected verbose build to succeed");
+    ensure!(
+        output.status.success(),
+        "expected verbose build to succeed with status {}: {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
     String::from_utf8(output.stderr).context("stderr should be valid UTF-8")
 }

@@ -150,8 +150,9 @@ The implementation must finish by marking roadmap item 3.11.2 done only after
   precedence over user scope as expected (2026-04-03).
 - Stage A analysis confirms that no code changes are needed in
   `src/cli/config_merge.rs` for discovery semantics—the implementation is
-  correct. The work required is test coverage and documentation alignment
-  (2026-04-03).
+  correct. Later hardening was made in the discovery-layer path comparison,
+  fallback de-duplication, and deferred diagnostic replay without changing that
+  merge seam (2026-04-03).
 
 ## Decision Log
 
@@ -175,19 +176,21 @@ The implementation must finish by marking roadmap item 3.11.2 done only after
   rules. Rationale: The design document should record architectural decisions
   permanently, while the user guide can link to or summarize that contract in
   user-friendly terms. Date/Author: 2026-04-03 / implementation agent.
-- Decision: Stage B (adjusting `config_discovery()`) is unnecessary because the
+- Decision: Stage B requires no change to `config_discovery()` because the
   current implementation correctly uses OrthoConfig's default discovery order,
-  which gives project scope precedence over user scope. Rationale: Analysis of
-  `config_discovery()` and OrthoConfig documentation confirms the
-  implementation matches the intended contract. Date/Author: 2026-04-03 /
-  implementation agent.
+  which gives project scope precedence over user scope. Separate hardening in
+  the discovery layers adds `dunce` comparison, fallback de-duplication, and
+  deferred bounded diagnostics without changing that seam. Date/Author:
+  2026-04-03 / implementation agent.
 
 ## Outcomes & Retrospective
 
-### Completion summary
+### Completion summary (historical milestone record)
 
 Roadmap item 3.11.2 is complete as of 2026-04-03. The discovery contract was
-documented, integration tests were added, and all validation gates pass.
+documented, integration tests were added, and the then-current validation gates
+passed. Later follow-up changes are described above and require current
+revision evidence from the focused and complete gates.
 
 ### Search order (documented in netsuke-design.md § 8.4.1)
 
@@ -209,15 +212,19 @@ leaving user-scope lookup unchanged.
 
 ### Code changes
 
-**None required.** The existing `config_discovery()` implementation in
-`src/cli/config_merge.rs` correctly uses OrthoConfig's default discovery order,
-which already provides the intended project-over-user precedence. The
-implementation was verified as correct and needed no adjustment.
+The implementation now canonicalizes project-path comparisons through `dunce`,
+matching OrthoConfig's Windows short-name and long-name handling. When
+canonical comparison is unavailable, the project-scope fallback pass still
+de-duplicates layers by the available path identity. `ProjectScopeTrace` retains
+only bounded project-path metadata and the discovered, project, and appended
+layer counts. The de-duplication event is deferred until the production
+`DiscoveryOutcome::emit_diagnostics` boundary, so collection does not emit a
+diagnostic before tracing is configured.
 
 ### Tests added
 
-1. **Integration tests** (`tests/cli_tests/config_discovery.rs`, 8 tests, all
-   passing):
+1. **Integration tests** (`tests/cli_tests/config_discovery_overrides.rs` and
+   `tests/cli_tests/config_discovery_scopes.rs`):
    - `project_scope_config_discovered_automatically`
    - `user_scope_config_discovered_when_no_project_config`
    - `project_config_takes_precedence_over_user_config`
@@ -227,7 +234,19 @@ implementation was verified as correct and needed no adjustment.
    - `config_path_env_var_bypasses_automatic_discovery`
    - `list_fields_append_across_discovered_config_env_and_cli`
 
-2. **BDD scenarios** (`tests/features/configuration_discovery.feature` and
+2. **Discovery diagnostics and layer tests** (`src/cli/discovery_layer_tests.rs`,
+   `src/cli/discovery_tracing_tests.rs`, and
+   `src/cli/discovery_replay_proptests.rs`):
+   - Deferred replay covers the project-layer de-duplication event and its
+     bounded layer counts without repeating discovery or environment access
+   - Unix alias and normalization-fallback cases preserve one project layer;
+     Windows coverage exercises native path identity
+
+3. **Canonicalization tests** (`test_support/src/canonicalize.rs`):
+   - Dot-component, missing-path (`NotFound`), Unix symlink, and Unix
+     non-UTF-8 (`InvalidData`) cases are covered
+
+4. **BDD scenarios** (`tests/features/configuration_discovery.feature` and
    `tests/bdd/steps/configuration_discovery.rs`, COMPLETED):
    - Feature file with 5 scenarios covering discovery and precedence
    - Step definitions for config file creation and environment setup
@@ -238,23 +257,39 @@ implementation was verified as correct and needed no adjustment.
 
 ### Platform-specific constraints
 
-None. OrthoConfig handles platform differences (Unix XDG paths vs. Windows
-AppData directories) transparently. The tests use platform-agnostic temp
-directories and $HOME overrides for reproducibility.
+OrthoConfig handles scope selection (Unix XDG paths versus Windows AppData
+directories) transparently, but path identity requires an explicit boundary
+policy. On Windows, a temporary directory may be spelled with a short path
+while OrthoConfig records a long canonical path. Discovery therefore
+canonicalizes both sides with `dunce` before comparing them, and the fallback
+pass de-duplicates the loaded project layers by their canonical path. This
+prevents one physical `.netsuke.toml` from entering the merge chain twice.
+The three bounded layer-count fields (discovered, project, and appended) are
+retained for deferred diagnostic replay and emitted only through
+`DiscoveryOutcome::emit_diagnostics`, not during collection.
+
+Unix tests exercise equivalent `.` and symlink aliases; Windows CI exercises
+the native short/long-path spelling. The property test generates additional
+project-directory spellings and requires one canonical layer.
 
 ### Validation results
 
+The following results are historical milestone evidence captured on 2026-04-03;
+the suite counts reflect that earlier repository state and are not current
+results for the follow-up:
+
 - `make check-fmt`: **PASS**
 - `make lint`: **PASS** (all Clippy warnings resolved)
-- `cargo test --test cli_tests`: **PASS** (all 54 tests pass, including 8 config
-  discovery tests)
-- `cargo test --test bdd_tests`: **PASS** (all 202 BDD scenarios pass, including
-  5 new configuration discovery scenarios)
-- `make test`: **PASS** (all 377 unit tests, 202 BDD scenarios, and 54
-  integration tests pass)
+- `cargo test --test cli_tests`: **PASS** (the then-current suite passed,
+  including the configuration-discovery tests)
+- `cargo test --test bdd_tests`: **PASS** (the then-current BDD suite passed,
+  including the configuration-discovery scenarios)
+- `make test`: **PASS** (the then-current unit, BDD, and integration suites
+  passed)
 
-All tests pass. Configuration discovery is fully implemented, tested, and
-documented.
+Validation for the follow-up must be reported from the focused and complete
+gates run against the current revision; this historical record does not
+substitute for that evidence.
 
 ### Documentation updates
 
@@ -271,9 +306,10 @@ documented.
 
 ### Lessons learned
 
-1. **Existing implementation was correct**: The discovery mechanism worked
-   correctly from the start. The milestone's value was in validation,
-   documentation, and test coverage rather than implementation changes.
+1. **The discovery seam was correct**: The core `ConfigDiscovery` mechanism
+   worked correctly from the start. Later hardening addressed canonical path
+   comparison, fallback layer de-duplication, and deferred bounded diagnostics
+   without replacing that seam.
 2. **BDD test complexity**: Integrating new BDD scenarios with existing test
    infrastructure requires careful coordination with existing step definitions.
    Future BDD work should either extend existing step files or provide complete
@@ -553,4 +589,6 @@ Expected evidence:
 ## Completion acknowledgement
 
 This plan has been completed as indicated by the "Status: COMPLETED" header.
-All stages have been implemented, tested, and integrated into the codebase.
+The original stages were implemented, tested, and integrated into the codebase;
+the historical validation record above must not be read as current follow-up
+gate evidence.

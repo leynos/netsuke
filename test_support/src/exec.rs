@@ -87,7 +87,7 @@ pub fn make_executable(path: &Path) -> Result<()> {
 /// Never returns an error; the fallible signature matches the Unix variant so
 /// callers need no platform-specific handling.
 #[cfg(not(unix))]
-pub fn make_executable(_path: &Path) -> Result<()> {
+pub const fn make_executable(_path: &Path) -> Result<()> {
     Ok(())
 }
 

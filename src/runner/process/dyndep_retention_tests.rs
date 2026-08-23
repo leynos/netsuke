@@ -11,6 +11,7 @@ use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use cap_std::fs_utf8::Dir;
 use rstest::{fixture, rstest};
+use std::path::Path;
 
 #[fixture]
 fn dyndep_workspace() -> Result<(tempfile::TempDir, Dir)> {
@@ -328,12 +329,54 @@ fn retention_cleanup_failure_has_localized_context(
     let Err(error) = result else {
         anyhow::bail!("retention must report an unremovable candidate");
     };
+    let native_failing_path = Path::new(DYNDEP_DIR).join("unremovable.dd");
+    let native_failing_path_display = native_failing_path.to_string_lossy().into_owned();
     let expected = localization::message(keys::RUNNER_IO_DYNDEP_RETENTION)
-        .with_arg("path", failing_path.as_str())
+        .with_arg("path", native_failing_path_display)
         .to_string();
     ensure!(
         format!("{error:#}").contains(&expected),
         "retention failures must retain localized context: {error:#}"
+    );
+    Ok(())
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_retention_removes_stale_sidecars_by_native_path_identity() -> Result<()> {
+    // Regression for the Windows path-identity bug fixed by comparing
+    // sidecar paths as `Path` values rather than `str` spellings: pruning
+    // must preserve the bundle that produced the lease and remove a stale
+    // sidecar even when the stale path is addressed through the native
+    // Windows separator spelling. The assertion resolves both paths through
+    // the capability directory, so NTFS treats them as the files on disk.
+    let temp = tempfile::tempdir()?;
+    let dir = temporary_dir(&temp)?;
+    let current = sidecar(".netsuke/dyndep/current.dd", "current");
+    let lease = materialize_dyndep_files(&dir, std::slice::from_ref(&current))?;
+
+    // A stale sidecar is materialised by the same writer, so spell its path
+    // the way the NTFS directory entry reports it: backslash separators.
+    let stale_native = ".netsuke\\dyndep\\stale-candidate.dd";
+    dir.write(stale_native, "stale")?;
+
+    prune_dyndep_sidecars(
+        &dir,
+        &lease,
+        std::slice::from_ref(&current),
+        RetentionPolicy::new(0, 0),
+    )?;
+
+    ensure!(
+        dir.open(current.relative_path()).is_ok(),
+        "retention must preserve the current bundle's sidecar under native path identity"
+    );
+    let stale_open_error = dir
+        .open(stale_native)
+        .expect_err("retention must remove a stale sidecar reported with native separators");
+    ensure!(
+        stale_open_error.kind() == std::io::ErrorKind::NotFound,
+        "stale sidecar must be absent rather than inaccessible: {stale_open_error}"
     );
     Ok(())
 }

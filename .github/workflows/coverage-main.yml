@@ -29,7 +29,6 @@ jobs:
           # Match rust-toolchain.toml: the tree needs -Zpolonius=next (see
           # docs/adr-006-adopt-polonius-nightly-toolchain.md).
           toolchain: nightly-2026-06-25
-          components: rustfmt, clippy
           # Preserve warnings-as-errors and Polonius through toolchain setup;
           # cargo-llvm-cov appends its instrumentation flags to this value.
           rustflags: -D warnings -Zpolonius=next
@@ -45,6 +44,7 @@ jobs:
         if: env.CS_ACCESS_TOKEN != ''
         uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@8add2d99854a5b77548eae98cca59202e68fefc8
         with:
+          path: lcov.info
           format: lcov
           access-token: ${{ env.CS_ACCESS_TOKEN }}
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}

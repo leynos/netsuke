@@ -5,6 +5,13 @@ on:
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 
+env:
+  # Single source of truth for the cargo-nextest pin. `make test` runs the
+  # non-doctest suite through nextest, so every job that installs it reads
+  # this value. Declared once at workflow scope so the documented
+  # AGENTS.md `sed` extraction yields exactly one version.
+  NEXTEST_VERSION: '0.9.133'
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
@@ -18,9 +25,6 @@ jobs:
       # the dated nightly pinned in rust-toolchain.toml.
       NETSUKE_RUST_TOOLCHAIN: nightly-2026-06-25
       WHITAKER_INSTALLER_VERSION: '0.2.7'
-      # Single source of truth for the cargo-nextest pin. `make test` runs the
-      # non-doctest suite through nextest, so the job installs it up front.
-      NEXTEST_VERSION: '0.9.133'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -48,7 +52,6 @@ jobs:
         uses: leynos/shared-actions/.github/actions/setup-rust@8add2d99854a5b77548eae98cca59202e68fefc8
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
-          components: rustfmt, clippy
           # Preserve warnings-as-errors and Polonius through toolchain setup.
           rustflags: -D warnings -Zpolonius=next
       - name: Install cargo-nextest
@@ -88,7 +91,10 @@ jobs:
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
         with:
           python-version: '3.13'
-          enable-cache: true
+          # This Rust workspace has no Python dependency manifest. Cache the
+          # shared spelling dictionary below rather than a uv cache with no
+          # durable dependency key.
+          enable-cache: 'false'
       - name: Cache shared spelling dictionary
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
@@ -118,11 +124,104 @@ jobs:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@8add2d99854a5b77548eae98cca59202e68fefc8
         with:
+          path: lcov.info
           format: lcov
           mode: check
           project-url: https://api.codescene.io/v2/projects/69281
           access-token: ${{ env.CS_ACCESS_TOKEN }}
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
+
+  build-test-windows:
+    # Gates merges: the `#[cfg(windows)]` tree is compiled, linted, and tested
+    # under `-D warnings` on this platform (see #518).
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+      BUILD_PROFILE: debug
+      # The tree requires -Zpolonius=next (see
+      # docs/adr-006-adopt-polonius-nightly-toolchain.md), so CI builds with
+      # the dated nightly pinned in rust-toolchain.toml.
+      NETSUKE_RUST_TOOLCHAIN: nightly-2026-06-25
+      WHITAKER_INSTALLER_VERSION: '0.2.7'
+    defaults:
+      run:
+        # The Makefile uses POSIX shell constructs throughout; Git Bash is
+        # preinstalled on windows-latest. GNU Make's default recipe shell on
+        # Windows is cmd.exe, so every make invocation overrides SHELL to bash.
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install GNU Make
+        run: choco install make --yes --no-progress
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@8add2d99854a5b77548eae98cca59202e68fefc8
+        with:
+          toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
+          # Preserve warnings-as-errors and Polonius through toolchain setup.
+          rustflags: -D warnings -Zpolonius=next
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@18b1216eba7f8039b0f8d131d5473787f0edce68  # v2.85.3
+        with:
+          tool: nextest@${{ env.NEXTEST_VERSION }}
+      - name: Show rustc version
+        run: |
+          rustup show
+          rustc --version
+          cargo --version
+      - name: Show Ninja version
+        run: ninja --version
+      - name: Format
+        run: make SHELL=bash check-fmt
+      - name: Lint (Clippy)
+        # Clippy and `cargo doc` over the whole workspace under `-D warnings`,
+        # including the `#[cfg(windows)]` arms.
+        run: make SHELL=bash lint-clippy
+      - name: Cache Whitaker installer
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.cargo/bin/whitaker-installer
+            ~/.cache/cargo-binstall
+          key: whitaker-installer-${{ runner.os }}-${{ runner.arch }}-${{ env.WHITAKER_INSTALLER_VERSION }}
+      - name: Install Whitaker
+        # Installs and runs on windows-latest (verified in #562); the same
+        # binstall-with-cargo-install-fallback path as the Linux job. On
+        # Windows the installer ships `whitaker` as a PowerShell wrapper
+        # (.ps1), which Git Bash cannot execute, so shim `whitaker` in the
+        # cargo bin directory (already on PATH) to run the wrapper through
+        # PowerShell. A failure here blocks the merge.
+        run: |
+          if ! command -v whitaker-installer >/dev/null 2>&1; then
+            if cargo binstall --version >/dev/null 2>&1; then
+              cargo binstall --no-confirm --locked "whitaker-installer@${WHITAKER_INSTALLER_VERSION}"
+            else
+              echo "cargo-binstall unavailable; building whitaker-installer from crates.io"
+              cargo install --locked whitaker-installer --version "${WHITAKER_INSTALLER_VERSION}"
+            fi
+          fi
+          whitaker-installer
+          if [ -f "${HOME}/.local/bin/whitaker.ps1" ]; then
+            printf '%s\n' \
+              '#!/bin/bash' \
+              'exec powershell -NoProfile -ExecutionPolicy Bypass -File "${HOME}/.local/bin/whitaker.ps1" "$@"' \
+              > "${CARGO_HOME:-$HOME/.cargo}/bin/whitaker"
+            chmod +x "${CARGO_HOME:-$HOME/.cargo}/bin/whitaker"
+          fi
+      - name: Lint (Whitaker)
+        # Whitaker/Dylint over the workspace under `-D warnings`, including
+        # the `#[cfg(windows)]` arms. A failure blocks the merge.
+        run: make SHELL=bash lint-whitaker
+      - name: Test
+        # cargo-nextest plus doctests under `-D warnings -Zpolonius=next`,
+        # compiling and running the `#[cfg(windows)]` test tree. A failure
+        # blocks the merge.
+        run: make SHELL=bash test
 
   kani-smoke:
     if: github.event_name == 'pull_request'
@@ -145,6 +244,10 @@ jobs:
           toolchain: stable
       - name: Install uv
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990  # v8.3.2
+        with:
+          # The Kani job has no Python dependency manifest; its explicit cache
+          # below owns the Rust toolchain artefacts.
+          enable-cache: false
       - name: Cache Kani tools
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:

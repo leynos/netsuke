@@ -67,6 +67,13 @@ pub(super) struct EnvSnapshot {
 }
 
 impl EnvSnapshot {
+    /// Capture a snapshot without a `PATHEXT` override.
+    ///
+    /// This is the production capture entry on platforms without `PATHEXT`
+    /// semantics, where `capture_with_pathext` delegates to it. On Windows the
+    /// production entry is `capture_with_pathext` itself, so here the function
+    /// survives only for tests, which is why the gate admits `test`.
+    #[cfg(any(not(windows), test))]
     pub(super) fn capture(
         cwd_override: Option<&Utf8Path>,
         path_override: Option<&OsStr>,
@@ -74,6 +81,12 @@ impl EnvSnapshot {
         Self::capture_with_env(cwd_override, path_override, &DefaultEnv)
     }
 
+    /// Capture with an injected environment provider.
+    ///
+    /// See [`Self::capture`] for why this is gated to non-Windows production
+    /// plus tests: on Windows the production path threads a `PATHEXT` override
+    /// and reaches `capture_impl` directly, so this chain is test-only there.
+    #[cfg(any(not(windows), test))]
     pub(super) fn capture_with_env(
         cwd_override: Option<&Utf8Path>,
         path_override: Option<&OsStr>,
@@ -88,7 +101,11 @@ impl EnvSnapshot {
     /// concept of, so the two `capture_impl` arities diverge. Isolating the
     /// divergence in a pair of wrappers keeps `capture_with_env` free of a
     /// `cfg`-gated bare `return`, which reads as dead code on either target.
-    #[cfg(windows)]
+    ///
+    /// Reachable only from `capture_with_env`, which is itself test-only on
+    /// Windows (production enters through `capture_with_pathext`), so this
+    /// arm is compiled only under `test`.
+    #[cfg(all(windows, test))]
     fn capture_for_platform(
         cwd_override: Option<&Utf8Path>,
         path_override: Option<&OsStr>,

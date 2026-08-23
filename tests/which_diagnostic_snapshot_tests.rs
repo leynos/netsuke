@@ -70,7 +70,11 @@ fn mark_executable(path: &Utf8Path) -> Result<()> {
 }
 
 #[cfg(not(unix))]
-fn mark_executable(_path: &Utf8Path) -> Result<()> {
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "the fallible signature must match the Unix variant so the shared write_tool call site needs no platform-specific handling"
+)]
+const fn mark_executable(_path: &Utf8Path) -> Result<()> {
     Ok(())
 }
 
@@ -83,6 +87,19 @@ fn render_error(env: &Environment<'_>, template: &str) -> Result<String> {
 
 fn normalize_error(message: &str, root: &Utf8Path) -> String {
     message.replace(root.as_str(), "[WORKSPACE]")
+}
+
+#[cfg(windows)]
+fn platform_snapshot_name(snapshot: &str) -> String {
+    match snapshot {
+        "which_not_found" | "which_direct_not_found" => format!("{snapshot}@windows"),
+        _ => snapshot.to_owned(),
+    }
+}
+
+#[cfg(not(windows))]
+const fn platform_snapshot_name(snapshot: &str) -> &str {
+    snapshot
 }
 
 #[rstest]
@@ -105,6 +122,6 @@ fn which_diagnostic_messages_match_baseline(
     let message = render_error(&env, template)?;
     let normalized = normalize_error(&message, &workspace_fixture.root);
 
-    insta::assert_snapshot!(snapshot, normalized);
+    insta::assert_snapshot!(platform_snapshot_name(snapshot), normalized);
     Ok(())
 }

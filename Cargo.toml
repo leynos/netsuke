@@ -101,6 +101,7 @@ cap-primitives = "3.4.4"
 cap-std = { version = "3.4.4", features = ["fs_utf8"] }
 fs4 = "1.1.0"
 camino = "1.2.0"
+dunce = "1.0.5"
 semver = { version = "1", features = ["serde"] }
 anyhow = "1"
 indicatif = "0.18.4"

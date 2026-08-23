@@ -381,7 +381,7 @@ mod tests {
         for expected in [
             root.join("build/debug").join(binary_name()),
             target_dir.join("debug").join(binary_name()),
-            target_dir.join("build/debug").join(binary_name()),
+            target_dir.join("build").join("debug").join(binary_name()),
         ] {
             ensure!(
                 message.contains(expected.as_str()),

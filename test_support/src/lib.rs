@@ -54,7 +54,7 @@ pub use manifest::ensure_manifest_exists;
 pub use exec::{make_executable, write_exec, write_exec_with_content};
 
 mod error;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tracing_capture;
 use anyhow::{Context, Result};
 /// Format an error and its sources (outermost → root) using `Display`, joined

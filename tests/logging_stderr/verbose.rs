@@ -58,14 +58,20 @@ fn run_verbose_build_with_fake_ninja_and_assert_log(
         NinjaOverride::FullPath => Some(ninja_path.as_path()),
         NinjaOverride::Name => Some(Path::new(&ninja_name)),
     };
-    let stderr = run_verbose_build_with_ninja_env(
-        workspace,
-        path_containing(ninja_temp.path())?,
-        ninja_env,
-    )?;
+    // Windows resolves the default `ninja` program as an executable, while
+    // the deterministic fixture is a batch script. Inherit the CI-provisioned
+    // Ninja only for that fallback branch; explicit overrides still use the
+    // fake through the injected PATH.
+    let path_env = if cfg!(windows) && matches!(override_mode, NinjaOverride::Unset) {
+        None
+    } else {
+        Some(path_containing(ninja_temp.path())?)
+    };
+    let stderr = run_verbose_build_with_ninja_env(workspace, path_env, ninja_env)?;
 
     let expected = match override_mode {
-        NinjaOverride::Unset | NinjaOverride::Name => format!("Executing command: {ninja_stem} "),
+        NinjaOverride::Unset => format!("Executing command: {ninja_stem} "),
+        NinjaOverride::Name => format!("Executing command: {ninja_name} "),
         NinjaOverride::FullPath => format!("Executing command: {} ", ninja_path.display()),
     };
     ensure!(stderr.contains(&expected), "{description}, got:\n{stderr}");

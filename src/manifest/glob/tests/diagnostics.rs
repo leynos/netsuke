@@ -4,7 +4,9 @@
 //! subscriber scoped to the call. The recorder and subscriber are both
 //! thread-local, so no test-wide lock is needed.
 
-use super::super::{MAX_UNREACHABLE_SYMLINK_SAMPLES, expand_glob, glob_paths, record_expansion};
+#[cfg(unix)]
+use super::super::MAX_UNREACHABLE_SYMLINK_SAMPLES;
+use super::super::{expand_glob, glob_paths, record_expansion};
 use anyhow::{Context, Result, ensure};
 use metrics::SharedString;
 use metrics_util::{

@@ -208,23 +208,25 @@ const fn executable_script() -> &'static [u8] {
     }
 }
 
+#[cfg(unix)]
 fn mark_executable(path: &Utf8Path) -> Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(path.as_std_path())
-            .with_context(|| format!("stat stdlib executable {path}"))?
-            .permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(path.as_std_path(), perms)
-            .with_context(|| format!("chmod stdlib executable {path}"))?;
-        Ok(())
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = path;
-        Ok(())
-    }
+    use std::os::unix::fs::PermissionsExt;
+    let mut perms = fs::metadata(path.as_std_path())
+        .with_context(|| format!("stat stdlib executable {path}"))?
+        .permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(path.as_std_path(), perms)
+        .with_context(|| format!("chmod stdlib executable {path}"))?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "the fallible signature must match the Unix variant so the shared call site needs no platform-specific handling"
+)]
+const fn mark_executable(_path: &Utf8Path) -> Result<()> {
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

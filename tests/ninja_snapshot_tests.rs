@@ -8,10 +8,16 @@ use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use insta::{Settings, assert_snapshot};
 use netsuke::{ir::BuildGraph, manifest, ninja_gen, stdlib::StdlibConfig};
-use std::{fs, process::Command};
+#[cfg(unix)]
+use std::process::Command;
+#[cfg(unix)]
 use tempfile::tempdir;
+#[cfg(unix)]
 use test_support::ensure_binaries_available;
+#[cfg(unix)]
+use test_support::fs;
 
+#[cfg(unix)]
 fn run_ok(cmd: &mut Command) -> Result<String> {
     let out = cmd.output().context("failed to spawn command")?;
     let status = out.status;
@@ -25,6 +31,7 @@ fn run_ok(cmd: &mut Command) -> Result<String> {
 }
 
 #[test]
+#[cfg(unix)]
 fn touch_manifest_ninja_validation() -> Result<()> {
     if let Err(err) =
         ensure_binaries_available(&[("ninja", &["--version"]), ("python3", &["--version"])])

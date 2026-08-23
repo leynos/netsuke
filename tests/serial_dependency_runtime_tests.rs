@@ -5,6 +5,8 @@
 //! failure short-circuiting, and shared-work reuse. They deliberately assert
 //! observable behaviour rather than generated text.
 
+#![cfg(unix)]
+
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
