@@ -15,7 +15,7 @@ use std::{env, path::Path};
 /// An injected `base` directory anchors relative parents for tests; `None`
 /// falls back to the process current directory so production behaviour is
 /// unchanged.
-fn resolve_absolute_workspace_root(
+pub(super) fn resolve_absolute_workspace_root(
     utf8_parent: &Utf8Path,
     base: Option<&Path>,
 ) -> Result<Utf8PathBuf> {
@@ -23,7 +23,13 @@ fn resolve_absolute_workspace_root(
         utf8_parent.to_path_buf().into_std_path_buf()
     } else {
         let anchor = match base {
-            Some(dir) => dir.to_path_buf(),
+            // A relative base (for example `Path::new(".")`) is anchored at the
+            // process working directory so the workspace root keeps its
+            // documented "absolute UTF-8 path" contract even for test bases.
+            Some(dir) if dir.is_absolute() => dir.to_path_buf(),
+            Some(dir) => env::current_dir()
+                .context(localization::message(keys::MANIFEST_RESOLVE_WORKSPACE_ROOT))?
+                .join(dir),
             None => env::current_dir()
                 .context(localization::message(keys::MANIFEST_RESOLVE_WORKSPACE_ROOT))?,
         };

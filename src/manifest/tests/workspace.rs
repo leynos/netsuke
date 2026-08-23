@@ -41,6 +41,22 @@ fn open_manifest_workspace_resolves_workspace_root(#[case] use_relative: bool) -
     Ok(())
 }
 
+/// A relative base is anchored at the process working directory, so the
+/// reported root stays absolute even though the manifest path is relative.
+#[rstest]
+fn open_manifest_workspace_anchors_relative_base_at_the_process_directory() -> AnyResult<()> {
+    // Both the manifest parent and the base are relative, which is the branch
+    // that must be anchored at the process working directory. The workspace is
+    // opened on the ambient directory; no file needs to exist for this check.
+    let workspace = open_manifest_workspace(Path::new("Netsukefile"), Some(Path::new(".")))?;
+    ensure!(
+        workspace.root.is_absolute(),
+        "a relative base must be anchored at the working directory, got {root}",
+        root = workspace.root
+    );
+    Ok(())
+}
+
 #[cfg(unix)]
 #[rstest]
 fn open_manifest_workspace_rejects_non_utf_workspace_root() -> AnyResult<()> {

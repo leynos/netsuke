@@ -7,6 +7,7 @@ mod stages;
 mod vars_reserved_diagnostic;
 mod vars_reserved_property;
 mod workspace;
+mod workspace_property;
 
 mod env_function;
 mod glob_telemetry;
