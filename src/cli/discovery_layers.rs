@@ -174,7 +174,7 @@ pub(super) fn collect_file_layers_with_normalizer_and_trace(
     let has_project_layer = project_key.as_deref().is_some_and(|key| {
         file_layers.value.iter().any(|layer| {
             layer.path().is_some_and(|path| {
-                key == path.as_std_path()
+                key.as_os_str() == path.as_std_path().as_os_str()
                     || lossy_project_key
                         .as_deref()
                         .is_some_and(|lossy_key| lossy_key == path.as_str())

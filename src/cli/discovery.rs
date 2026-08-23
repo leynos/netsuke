@@ -32,6 +32,7 @@ mod trace;
 #[path = "discovery_telemetry.rs"]
 mod telemetry;
 use diagnostics::{BoundedConfigPath, ConfigLoadFailureKind, ConfigLoadWarning};
+use layers::collect_file_layers_with_normalizer_and_trace;
 use paths::{FsPathNormalizer, PathNormalizer};
 /// Record the discovery series for an already-timed phase at the boundary.
 pub use telemetry::record_discovery_outcome;
@@ -348,6 +349,9 @@ mod event_assertions;
 #[path = "discovery_tracing_tests.rs"]
 mod tracing_tests;
 
+#[cfg(test)]
+#[path = "discovery_layer_replay_tests.rs"]
+mod layer_replay_tests;
 #[cfg(test)]
 #[path = "discovery_layer_tests.rs"]
 mod layer_tests;
