@@ -8,7 +8,11 @@
       "tables": false,
       "headings": false
     },
-    "MD029": { "style": "ordered" }
+    "MD029": { "style": "ordered" },
+    // Table alignment is owned by mdformat; MD060's display-width model
+    // disagrees with mdformat's padding for RTL and Indic scripts and for
+    // combining marks, so the two can never both be satisfied.
+    "MD060": false
   },
   "ignores": [
     "**/.venv/**",
