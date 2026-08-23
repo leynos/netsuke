@@ -59,6 +59,22 @@ def metadata_for(packages: list[dict]) -> dict:
     }
 
 
+def single_library_metadata() -> str:
+    """Return the ``cargo metadata`` JSON for one package with one library target.
+
+    Returns
+    -------
+    str
+        A metadata document describing the single ``x`` package with one ``lib``
+        target, in the shape ``doc_targets`` consumes.
+    """
+    return (
+        '{"packages": [{"id": "pkg:x:1.0.0", "name": "x", '
+        '"targets": [{"name": "x", "kind": ["lib"]}]}], '
+        '"workspace_members": ["pkg:x:1.0.0"]}'
+    )
+
+
 class FakeCargo:
     """Stand-in for ``cargo metadata`` and ``cargo rustdoc`` invocations.
 
@@ -194,44 +210,6 @@ def test_threshold_flips_exit_code(
     assert failing == 1
 
 
-def test_malformed_rustdoc_output_is_a_measurement_error(
-    script: types.ModuleType,
-    tmp_path: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Non-JSON rustdoc output surfaces as a controlled error, not a crash."""
-    metadata = (
-        '{"packages": [{"id": "pkg:x:1.0.0", "name": "x", '
-        '"targets": [{"name": "x", "kind": ["lib"]}]}], '
-        '"workspace_members": ["pkg:x:1.0.0"]}'
-    )
-    FakeCargo(script, metadata=metadata, rustdoc_output="not json at all").install(
-        monkeypatch
-    )
-    monkeypatch.chdir(tmp_path)
-
-    with pytest.raises(RuntimeError, match="did not emit coverage JSON"):
-        script.run_measurements("nightly-x", tmp_path)
-
-
-def test_rustdoc_failure_aborts_the_run(
-    script: types.ModuleType,
-    tmp_path: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A failing cargo rustdoc surfaces its stderr, not an empty aggregate."""
-    metadata = (
-        '{"packages": [{"id": "pkg:x:1.0.0", "name": "x", '
-        '"targets": [{"name": "x", "kind": ["lib"]}]}], '
-        '"workspace_members": ["pkg:x:1.0.0"]}'
-    )
-    FakeCargo(script, metadata=metadata, rustdoc_rc=1).install(monkeypatch)
-    monkeypatch.chdir(tmp_path)
-
-    with pytest.raises(RuntimeError, match="cargo rustdoc failed for x"):
-        script.run_measurements("nightly-x", tmp_path)
-
-
 def test_cargo_metadata_failure_aborts_the_run(
     script: types.ModuleType,
     tmp_path: pathlib.Path,
@@ -247,6 +225,44 @@ def test_cargo_metadata_failure_aborts_the_run(
 
     with pytest.raises(RuntimeError, match="cargo metadata failed"):
         script.load_metadata("nightly-x", tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("rustdoc_output", "rustdoc_rc", "diagnostic"),
+    [
+        pytest.param(
+            "not json at all",
+            0,
+            "did not emit coverage JSON",
+            id="malformed-output",
+        ),
+        pytest.param(
+            "{}",
+            1,
+            "cargo rustdoc failed for x",
+            id="rustdoc-exit-failure",
+        ),
+    ],
+)
+def test_run_measurements_propagates_rustdoc_failure(
+    script: types.ModuleType,
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    rustdoc_output: str,
+    rustdoc_rc: int,
+    diagnostic: str,
+) -> None:
+    """Propagate malformed output and non-zero rustdoc exits as measurement errors."""
+    FakeCargo(
+        script,
+        metadata=single_library_metadata(),
+        rustdoc_output=rustdoc_output,
+        rustdoc_rc=rustdoc_rc,
+    ).install(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(RuntimeError, match=diagnostic):
+        script.run_measurements("nightly-x", tmp_path)
 
 
 def test_malformed_metadata_shape_is_a_measurement_error(
@@ -342,14 +358,32 @@ def test_label_names_libraries_and_binaries(script: types.ModuleType) -> None:
     assert script.label(binary) == "netsuke bin (netsuke-bin)"
 
 
-def test_rustdoc_args_for_library_target(
-    script: types.ModuleType, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("target", "selector"),
+    [
+        pytest.param(
+            ("netsuke", "lib", None),
+            ["--lib"],
+            id="library",
+        ),
+        pytest.param(
+            ("netsuke", "bin", "netsuke-bin"),
+            ["--bin", "netsuke-bin"],
+            id="binary",
+        ),
+    ],
+)
+def test_rustdoc_args_for_target(
+    script: types.ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    target: tuple[str, str, str | None],
+    selector: list[str],
 ) -> None:
-    """A library target selects `--lib` and keeps the coverage flags in order."""
-    target = script.DocTarget("netsuke", "lib", None)
+    """Build the complete rustdoc command, selecting lib or bin by target kind."""
     monkeypatch.setenv("CARGO", "cargo")
+    doc_target = script.DocTarget(*target)
 
-    args = script.rustdoc_args(target, "nightly-x")
+    args = script.rustdoc_args(doc_target, "nightly-x")
 
     assert args == [
         "cargo",
@@ -357,34 +391,7 @@ def test_rustdoc_args_for_library_target(
         "rustdoc",
         "-p",
         "netsuke",
-        "--lib",
-        "--",
-        "-Z",
-        "unstable-options",
-        "--show-coverage",
-        "--output-format",
-        "json",
-        "--document-private-items",
-    ]
-
-
-def test_rustdoc_args_for_binary_target(
-    script: types.ModuleType, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A binary target selects `--bin <name>` after the package selector."""
-    target = script.DocTarget("netsuke", "bin", "netsuke-bin")
-    monkeypatch.setenv("CARGO", "cargo")
-
-    args = script.rustdoc_args(target, "nightly-x")
-
-    assert args == [
-        "cargo",
-        "+nightly-x",
-        "rustdoc",
-        "-p",
-        "netsuke",
-        "--bin",
-        "netsuke-bin",
+        *selector,
         "--",
         "-Z",
         "unstable-options",
