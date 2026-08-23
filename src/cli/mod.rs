@@ -35,6 +35,8 @@ pub use discovery::DiscoveryOutcome;
 pub use discovery::EnvProvider as ConfigEnvProvider;
 /// Process-backed configuration environment adapter for production callers.
 pub use discovery::StdEnvProvider as ConfigStdEnvProvider;
+/// Record the discovery metric series for an already-timed phase.
+pub use discovery::record_discovery_outcome;
 pub use help::{HelpArgs, HelpTopic};
 pub use merge::{merge_with_cached_file_layers, merge_with_config, merge_with_config_and_env};
 pub use parser::{
@@ -42,6 +44,13 @@ pub use parser::{
     parse_with_localizer_from,
 };
 pub use release_help::ReleaseHelpCli;
+
+/// Counter recording configuration discovery passes by bounded outcome.
+pub const DISCOVERY_TOTAL: &str = "netsuke_cli_config_discovery_total";
+/// Histogram recording configuration discovery duration in seconds.
+pub const DISCOVERY_DURATION: &str = "netsuke_cli_config_discovery_duration_seconds";
+/// Bounded outcome values admitted on the discovery counter series.
+pub const DISCOVERY_OUTCOME_VALUES: [&str; 2] = ["success", "error"];
 
 /// Maximum number of jobs accepted by the CLI.
 pub(super) const MAX_JOBS: usize = 64;

@@ -8,25 +8,34 @@ use ortho_config::{
     MapEnv, MergeComposer, MergeLayer, OrthoResult, SharedEnvSource, load_config_file_as_chain,
 };
 use std::borrow::Cow;
-use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use super::parser::Cli;
 
+#[path = "discovery_environment.rs"]
+mod environment;
+pub use environment::{EnvProvider, StdEnvProvider};
+
 #[path = "discovery_diagnostics.rs"]
 mod diagnostics;
+#[path = "discovery_json.rs"]
+mod json;
 #[path = "discovery_layers.rs"]
 mod layers;
 #[path = "discovery_paths.rs"]
 mod paths;
 #[path = "discovery_trace.rs"]
 mod trace;
+
+#[path = "discovery_telemetry.rs"]
+mod telemetry;
 use diagnostics::{BoundedConfigPath, ConfigLoadFailureKind, ConfigLoadWarning};
 use layers::collect_file_layers_with_trace_and_env_source;
+/// Record the discovery series for an already-timed phase at the boundary.
+pub use telemetry::record_discovery_outcome;
 use trace::{DiscoveryDiagnostics, DiscoveryTrace, FileLayerTrace};
-
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG";
 const DISCOVERY_ENV_KEYS: [&str; 7] = [
     CONFIG_ENV_VAR,
@@ -37,42 +46,6 @@ const DISCOVERY_ENV_KEYS: [&str; 7] = [
     "APPDATA",
     "LOCALAPPDATA",
 ];
-
-/// Provides access to environment variables used during config discovery.
-///
-/// Production code uses [`StdEnvProvider`]. Tests can provide an in-memory
-/// implementation so config-selection logic does not mutate process-global
-/// environment state.
-pub trait EnvProvider {
-    /// Return the value of `key`, or `None` when the key is unset.
-    fn get(&self, key: &str) -> Option<OsString>;
-
-    /// Return all values available to the configuration environment layer.
-    ///
-    /// Providers concerned only with selector lookup may retain the empty
-    /// default. Full merge providers override this method.
-    fn entries(&self) -> Vec<(OsString, OsString)> {
-        Vec::new()
-    }
-}
-
-/// Environment provider backed by [`std::env::var_os`].
-#[derive(Debug, Default, Clone, Copy)]
-pub struct StdEnvProvider;
-
-#[expect(
-    clippy::disallowed_methods,
-    reason = "composition root: StdEnvProvider is the process-backed adapter behind the EnvProvider seam"
-)]
-impl EnvProvider for StdEnvProvider {
-    fn get(&self, key: &str) -> Option<OsString> {
-        std::env::var_os(key)
-    }
-
-    fn entries(&self) -> Vec<(OsString, OsString)> {
-        std::env::vars_os().collect()
-    }
-}
 
 /// File layers and loading errors produced by one discovery pass.
 ///
@@ -148,6 +121,11 @@ impl DiscoveryOutcome {
 
 /// Discover configuration layers once through the injected environment.
 pub(crate) fn discover_file_layers(cli: &Cli, env: &impl EnvProvider) -> DiscoveryOutcome {
+    collect_outcome(cli, env)
+}
+
+/// Run one discovery pass and retain its outcome, including deferred errors.
+fn collect_outcome(cli: &Cli, env: &impl EnvProvider) -> DiscoveryOutcome {
     let (trace, load_warning, outcome) = collect_file_layers_with_env(cli, env);
     let diagnostics = DiscoveryDiagnostics::new(trace, load_warning);
     let layers = match outcome {

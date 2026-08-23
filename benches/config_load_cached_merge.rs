@@ -24,6 +24,10 @@ impl ConfigEnvProvider for BenchmarkEnv {
     fn get(&self, _key: &str) -> Option<OsString> {
         None
     }
+
+    fn entries(&self) -> Vec<(OsString, OsString)> {
+        Vec::new()
+    }
 }
 
 /// Create a large nested configuration payload with valid build targets.

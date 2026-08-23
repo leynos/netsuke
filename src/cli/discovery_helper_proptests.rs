@@ -9,11 +9,15 @@
 //! so nothing here asserts a specific hash value — only width, charset, and
 //! determinism within the run.
 
+use super::MergeLayer;
 use super::diagnostics::{path_hash, short_hash};
+use super::json::json_from_value;
 use super::paths::{FailingPathNormalizer, FsPathNormalizer, normalized_path_key};
 use anyhow::{Context, Result, ensure};
 use proptest::prelude::*;
 use rstest::rstest;
+use serde_json::{Map, Value};
+use std::borrow::Cow;
 use std::path::Path;
 use tempfile::tempdir;
 
@@ -95,6 +99,76 @@ proptest! {
         let twice = normalized_path_key(&FsPathNormalizer, &once.to_string_lossy())
             .expect("an already-resolved path must normalize again");
         prop_assert_eq!(once, twice);
+    }
+}
+
+/// One generated file-layer value with an optional `json` preference.
+///
+/// The value may hold a boolean `json` key, a non-boolean `json` value, any
+/// other key, or none of those, so folding must only respond to real bools.
+fn layer_value_with_optional_json(has_json: bool) -> impl Strategy<Value = Value> {
+    let keys = proptest::collection::vec(
+        (
+            "[a-z]{1,8}",
+            proptest::collection::vec("[A-Za-z0-9]{0,8}", 0..2),
+        ),
+        0..4,
+    );
+    let json_value = prop_oneof![
+        1 => Just(Value::Bool(true)),
+        1 => Just(Value::Bool(false)),
+        1 => Just(Value::String("yes".into())),
+    ];
+    (keys, json_value).prop_map(move |(entries, json_choice)| {
+        let mut map = Map::new();
+        for (key, values) in entries {
+            if has_json && key == "json" {
+                map.insert(key, json_choice.clone());
+            } else {
+                map.insert(
+                    key,
+                    Value::Array(values.into_iter().map(Value::String).collect()),
+                );
+            }
+        }
+        if has_json && !map.contains_key("json") {
+            map.insert("json".to_owned(), json_choice);
+        }
+        Value::Object(map)
+    })
+}
+
+fn json_script() -> impl Strategy<Value = Vec<Value>> {
+    proptest::collection::vec(layer_value_with_optional_json(true), 0..6)
+}
+
+proptest! {
+    /// Ordered-layer JSON folding keeps the last boolean `json` value.
+    ///
+    /// The discovery pass reads layers in file order and keeps the final
+    /// boolean `json` preference, falling back to the default when no layer
+    /// supplies one. Non-boolean and absent values never disturb the fold.
+    #[test]
+    fn folded_json_preference_is_the_last_boolean_in_layer_order(
+        layers in json_script(),
+        trailing in layer_value_with_optional_json(false),
+    ) {
+        let mut source = layers.clone();
+        source.push(trailing.clone());
+        let source_len = source.len();
+        let ordered = source
+            .into_iter()
+            .map(|value| MergeLayer::file(Cow::Owned(value), None))
+            .collect();
+        let (final_layers, json_preference) = super::layers::retain_layers_and_resolve_json(ordered);
+
+        let expected = layers
+            .iter()
+            .filter_map(json_from_value)
+            .next_back()
+            .unwrap_or_else(|| crate::cli::parser::Cli::default().json);
+        prop_assert_eq!(json_preference, expected);
+        prop_assert_eq!(final_layers.len(), source_len);
     }
 }
 

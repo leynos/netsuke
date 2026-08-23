@@ -65,13 +65,12 @@ licence. Ninja must be installed separately when using the macOS or Windows
 installer. The Windows MSI installs to `C:\Program Files\netsuke` and does not
 update `PATH`.
 
-The MSI installer supports pre-release SemVer versions such as
-`0.1.0-beta2`: the pre-release suffix cannot be represented in an MSI
-product version, so the installer carries the numeric release triple
-(`0.1.0`) while the full version remains in the package and release names.
-Because successive pre-releases share that numeric version, installing a
-later pre-release MSI replaces the existing installation for that version
-series rather than installing alongside it.
+The MSI installer supports pre-release SemVer versions such as `0.1.0-beta2`:
+the pre-release suffix cannot be represented in an MSI product version, so the
+installer carries the numeric release triple (`0.1.0`) while the full version
+remains in the package and release names. Because successive pre-releases share
+that numeric version, installing a later pre-release MSI replaces the existing
+installation for that version series rather than installing alongside it.
 
 SHA-256 checksum files accompany standalone binaries and staged help,
 completion, and licence files. Installer packages do not have checksum sidecars
@@ -83,8 +82,8 @@ sidecars under `completions/<shell>/` for Bash, Elvish, Fish, PowerShell, and
 Zsh. These files are portable and separate from the executable and installer
 payloads. To use one, extract the matching archive and copy the file for the
 chosen shell into that shell's normal completion directory, or load it through
-the shell's documented completion mechanism. The package installation
-commands above do not install completion files; completion directory names and
+the shell's documented completion mechanism. The package installation commands
+above do not install completion files; completion directory names and
 activation steps vary by shell and platform.
 
 Install the current source checkout with Cargo. The clone supplies both the
@@ -308,28 +307,27 @@ Rules may also provide `description`, text used for Ninja's progress display.
 Targets and actions may also provide `description`, but with a different
 purpose: a target or action description is discovery metadata surfaced by
 `netsuke help targets` (see
-[Generate and inspect artefacts](#generate-and-inspect-artefacts)). It does
-not affect Ninja progress output, which stays driven by the referenced rule's
+[Generate and inspect artefacts](#generate-and-inspect-artefacts)). It does not
+affect Ninja progress output, which stays driven by the referenced rule's
 `description`.
 
 A `command` list runs its entries in declaration order and stops at the first
-non-zero exit, so entries share the fail-fast behaviour of a handwritten
-`&&` chain. The command field is a `StringOrList`: a scalar remains one shell
+non-zero exit, so entries share the fail-fast behaviour of a handwritten `&&`
+chain. The command field is a `StringOrList`: a scalar remains one shell
 command, while a YAML sequence is rendered and lowered one entry at a time.
 This applies equally to rules, direct targets, and actions. Each entry sees the
 same Jinja context, including `{{ ins }}` and `{{ outs }}`; those two
-placeholders are resolved later to the concrete target's shell-quoted input
-and output paths. An empty command list is rejected when the manifest is
-parsed.
+placeholders are resolved later to the concrete target's shell-quoted input and
+output paths. An empty command list is rejected when the manifest is parsed.
 
 At execution time, each list entry is evaluated inside its own brace group and
 the groups are joined with `&&`. The entry is passed to `eval` as a
 shell-quoted payload, so an inline `#` comment or a trailing control operator
-such as `&` cannot consume the generated group's closing boundary. Brace
-groups run in the current shell rather than a subshell: a changed working
-directory, environment assignment, or shell variable can therefore be used by
-later entries. A failed entry stops the chain, and the diagnostic identifies
-the generated action and one-based list-entry positions, for example
+such as `&` cannot consume the generated group's closing boundary. Brace groups
+run in the current shell rather than a subshell: a changed working directory,
+environment assignment, or shell variable can therefore be used by later
+entries. A failed entry stops the chain, and the diagnostic identifies the
+generated action and one-based list-entry positions, for example
 `netsuke command-list failure: action HASH, entry 2`.
 
 <!-- tested-example: guide-command-list -->
@@ -368,8 +366,8 @@ targets:
 ```
 
 Prefer a `command` list for a short, ordered sequence of distinct commands.
-Prefer `script` when the logic needs multi-line structure or shell
-constructs such as loops, conditionals, or variable assignment.
+Prefer `script` when the logic needs multi-line structure or shell constructs
+such as loops, conditionals, or variable assignment.
 
 The v0.1.0-beta2 `script` implementation invokes `/bin/sh -e`; it is not
 currently a portable PowerShell abstraction. Prefer `command` or
@@ -396,9 +394,9 @@ A target supports these fields:
 - `phony`: marks a logical target that does not represent a file.
 - `always`: forces the recipe to run whenever the target is requested.
 - `description`: an optional human-readable summary of the public operation
-  the target performs. It is discovery metadata shown by `netsuke help
-  targets`; it never replaces a referenced rule's `description` in Ninja
-  progress output.
+  the target performs. It is discovery metadata shown by
+  `netsuke help targets`; it never replaces a referenced rule's `description`
+  in Ninja progress output.
 
 `name`, `sources`, `deps`, and `order_only_deps` accept either one string or a
 list of strings.
@@ -462,11 +460,10 @@ same ordered entry point.
 
 Netsuke uses Ninja's `dyndep` support for serial lists with two or more
 dependencies, and generated builds containing staged serial ordering require
-Ninja 1.10 or newer.
-`netsuke generate`, `build`, and `clean` materialize the generated sidecars
-under `.netsuke/dyndep` in the effective working directory before writing or
-invoking the generated Ninja file. The sidecars are immutable and
-content-addressed. Each sidecar-capable command retains the current bundle,
+Ninja 1.10 or newer. `netsuke generate`, `build`, and `clean` materialize the
+generated sidecars under `.netsuke/dyndep` in the effective working directory
+before writing or invoking the generated Ninja file. The sidecars are immutable
+and content-addressed. Each sidecar-capable command retains the current bundle,
 then at most 32 obsolete `.dd` files and 1 MiB of obsolete `.dd` bytes. Stale
 `.tmp` files are removed while the exclusive sidecar-directory lease is held.
 `build` and `generate` prune after materialization; `clean` prunes only after
@@ -474,10 +471,10 @@ successful `ninja -t clean`, and does not prune when clean fails.
 
 An older arbitrary manifest written with `generate --output` may lose its
 referenced sidecars after a later command. Regenerate that manifest before
-using it if retention has removed any of its sidecars.
-The paths `.netsuke/serial` and `.netsuke/dyndep` must not occur in any user
-graph path, including outputs, inputs, implicit dependencies, and order-only
-dependencies; they are reserved for Netsuke-generated gates and sidecars.
+using it if retention has removed any of its sidecars. The paths
+`.netsuke/serial` and `.netsuke/dyndep` must not occur in any user graph path,
+including outputs, inputs, implicit dependencies, and order-only dependencies;
+they are reserved for Netsuke-generated gates and sidecars.
 
 When migrating an existing manifest, see the
 [v0.1.0 migration guide](v0-1-0-migration-guide.md#opting-into-serial-dependency-ordering)
@@ -539,6 +536,20 @@ Matching is case-sensitive. `*` and `?` do not cross directory separators; use
 are returned. The [quick-start guide](quickstart.md) shows a complete runnable
 example.
 
+Patterns may be absolute or relative to the working directory, including
+parent-relative patterns such as `glob('../shared/*.h')`. Expansion is scoped
+to the pattern's longest literal directory prefix — the text up to the first
+`*`, `?`, `[` or `{`, trimmed back to the last separator, so `src/` for
+`src/**/*.c`. If that prefix does not exist, or names something that is not a
+directory, the call returns an empty list rather than failing. A symbolic-link
+literal prefix, such as `src/link/*.c`, cannot establish the capability and
+causes expansion to fail. A match is skipped rather than reported as an error
+when the metadata lookup cannot resolve a symbolic link — the match itself or a
+directory reached on the way to it — because it is unreadable within the
+prefix, dangling, or resolves outside that prefix. A cyclic symbolic link is
+reported as an error rather than skipped, since it describes a broken tree
+rather than a missing file.
+
 ### Define reusable macros
 
 Macros return rendered text and can accept default arguments:
@@ -570,22 +581,21 @@ defaults:
 is absent. The same helper is also available as a filter.
 
 On Windows, a name without an extension is matched against the effective
-`PATHEXT`, the same list the shell uses — so `which('cargo')` finds
-`cargo.exe` provided `.exe` is among those entries. A custom `PATHEXT` may
-legitimately omit it, in which case it is not a candidate.
+`PATHEXT`, the same list the shell uses — so `which('cargo')` finds `cargo.exe`
+provided `.exe` is among those entries. A custom `PATHEXT` may legitimately
+omit it, in which case it is not a candidate.
 
 `PATHEXT` falls back to the built-in list only when it is unset or when no
-entry survives normalization — that is, every entry is empty or whitespace.
-Any other value is used as given, however unusual. The built-in list, in
-order:
+entry survives normalization — that is, every entry is empty or whitespace. Any
+other value is used as given, however unusual. The built-in list, in order:
 
-`.com`, `.exe`, `.bat`, `.cmd`, `.vbs`, `.vbe`, `.js`, `.jse`, `.wsf`,
-`.wsh`, `.msc`
+`.com`, `.exe`, `.bat`, `.cmd`, `.vbs`, `.vbe`, `.js`, `.jse`, `.wsf`, `.wsh`,
+`.msc`
 
 The fallback exists because an empty effective list would match nothing and
-report every command missing. Entries are matched case-insensitively and
-tried in the order the list gives them. A name that already carries an
-extension is used as written.
+report every command missing. Entries are matched case-insensitively and tried
+in the order the list gives them. A name that already carries an extension is
+used as written.
 
 `command_available(name, **kwargs)` returns a boolean and is better for
 complementary branches:
@@ -762,9 +772,9 @@ environment. `path | expanduser` expands a leading `~` against the home
 directory, resolved from `HOME` then `USERPROFILE` on POSIX hosts, and from
 `HOME`, `USERPROFILE`, the `HOMEDRIVE`/`HOMEPATH` pair, then `HOMESHARE` on
 Windows. The Windows pair counts only when both halves are non-empty; an
-incomplete pair falls through to `HOMESHARE`. Named-user forms such as
-`~alice` are unsupported, and when no home directory resolves at all, the
-filter fails rather than passing the `~` through silently.
+incomplete pair falls through to `HOMESHARE`. Named-user forms such as `~alice`
+are unsupported, and when no home directory resolves at all, the filter fails
+rather than passing the `~` through silently.
 
 ## Use the command-line interface
 
@@ -918,18 +928,18 @@ textual outline and a `<noscript>` DOT representation.
 only the generated Ninja manifest. With `--output <FILE>`, Netsuke writes the
 manifest to that file and leaves stdout empty. For a serial dependency list,
 both forms also materialize the referenced sidecars under `.netsuke/dyndep` in
-the effective Ninja working directory, so the emitted manifest is executable
-at that point. Retention is bounded: a later Netsuke command may remove
-sidecars referenced by an older arbitrary output file. Regenerate the file
-when that happens.
+the effective Ninja working directory, so the emitted manifest is executable at
+that point. Retention is bounded: a later Netsuke command may remove sidecars
+referenced by an older arbitrary output file. Regenerate the file when that
+happens.
 
 `clean` removes file outputs tracked by Ninja. Phony targets and actions do not
 represent files and are not removed.
 
-`help targets` prints the target and action catalogue for the selected
-manifest — actions first, then targets — with a localized default marker such
-as `[★ default]` (or `[* default]` in accessible output) on manifest defaults
-and an empty description column for entries without a `description`:
+`help targets` prints the target and action catalogue for the selected manifest
+— actions first, then targets — with a localized default marker such as
+`[★ default]` (or `[* default]` in accessible output) on manifest defaults and
+an empty description column for entries without a `description`:
 
 <!-- tested-example: guide-help-targets -->
 
@@ -938,21 +948,21 @@ netsuke help targets
 ```
 
 The command loads, expands, renders, and validates the manifest through the
-same structural stages as a build, but performs no recipes and creates no
-build outputs. Rendering uses a restricted, side-effect-free Jinja surface.
-Queries allow only the lexical path filters `basename`, `dirname`,
-`with_suffix`, and `relative_to`, the collection filters `uniq`, `flatten`, and
-`group_by`, and the clock-independent `timedelta` function. Queries reject
-`env()` and `glob()`, file tests, filesystem metadata filters such as `size` and
+same structural stages as a build, but performs no recipes and creates no build
+outputs. Rendering uses a restricted, side-effect-free Jinja surface. Queries
+allow only the lexical path filters `basename`, `dirname`, `with_suffix`, and
+`relative_to`, the collection filters `uniq`, `flatten`, and `group_by`, and
+the clock-independent `timedelta` function. Queries reject `env()` and
+`glob()`, file tests, filesystem metadata filters such as `size` and
 `linecount`, `hash`, `digest`, `contents`, `realpath`, and `expanduser`,
 executable discovery through `which` and `command_available`, network and
 command helpers (`fetch`, `shell`, and `grep`), and the clock-dependent `now()`
 function. Normal build manifest rendering retains the full standard library;
 this restriction applies only to query rendering. It honours the usual
-manifest-selection options (`--file`,
-`-C/--directory`) and the normal colour, accessibility, locale, and JSON-output
-conventions; with `--json` the catalogue is emitted as a versioned JSON
-document whose `result.command` is `help-targets`.
+manifest-selection options (`--file`, `-C/--directory`) and the normal colour,
+accessibility, locale, and JSON-output conventions; with `--json` the catalogue
+is emitted as a versioned JSON document whose `result.command` is
+`help-targets`.
 
 The standard-library reference describes the full helper set available while
 rendering a normal build manifest. The query allowlist above is the deliberate
@@ -989,28 +999,6 @@ defaults. When it finds a candidate that cannot be loaded, such as malformed
 TOML or a file whose `extends` parent is missing, Netsuke reports the load
 error. A broken discovered configuration is therefore not treated as absent.
 
-### Reuse discovered configuration layers
-
-Normal command-line use requires no change. The Rust API remains an unstable
-beta surface, but callers that compose configuration themselves can avoid
-discovering and loading the same configuration files more than once.
-`netsuke::cli::resolve_json_and_layers_outcome_with_env` returns
-`(OrthoResult<bool>, DiscoveryOutcome)`. Callers may call
-`emit_diagnostics()` on the outcome, then call `into_layers()` before passing
-the layers to
-`netsuke::cli::merge_with_cached_file_layers` for the full merge. This
-preserves diagnostics from the same discovery pass while avoiding repeated
-file loading.
-
-All of these functions take an injected `&impl ConfigEnvProvider`. The public
-`ConfigEnvProvider` trait provides `get(&self, key: &str) -> Option<OsString>`
-for selector and environment lookups, plus
-`entries(&self) -> Vec<(OsString, OsString)>` for the complete configuration
-environment layer. `entries()` defaults to an empty vector.
-`ConfigStdEnvProvider` is the process-backed implementation; tests and other
-adapters can provide an implementation without mutating the process
-environment.
-
 ### Diagnose configuration selection
 
 Pass `--verbose` to see how Netsuke selected its configuration. Structured
@@ -1028,14 +1016,16 @@ Configuration tracing is disabled in JSON mode, including when `json = true`
 comes from a configuration file. This keeps stderr empty for successful JSON
 commands and reserves it for the single diagnostic document on failure.
 
-In human mode, every configuration failure includes bounded `operation` and
-`error_category` fields in its tracing event. Passing `--verbose` additionally
-emits one final `metrics snapshot` debug event before Netsuke exits. The
-snapshot is an in-process diagnostic record, not a metrics listener or a
-Prometheus endpoint.
-After a successful configuration merge, verbosity can also come from
-`NETSUKE_VERBOSE` or `verbose = true` in a configuration file. A configuration
-failure before that merge uses only CLI `--verbose`.
+For a terminal human-mode failure in either the early diagnostic-mode
+preference pass or the full `config_merge` phase, the
+`configuration load failed` event includes bounded `operation` and
+`error_category` fields. JSON mode instead emits the diagnostic document.
+Passing `--verbose` additionally emits one final `metrics snapshot` debug event
+before Netsuke exits. The snapshot is an in-process diagnostic record, not a
+metrics listener or a Prometheus endpoint. After a successful configuration
+merge, verbosity can also come from `NETSUKE_VERBOSE` or `verbose = true` in a
+configuration file. A configuration failure before that merge uses only CLI
+`--verbose`.
 
 It includes the bounded configuration-load series:
 
@@ -1045,6 +1035,9 @@ It includes the bounded configuration-load series:
 - The phase-level `config_load_total` and
   `config_load_duration_seconds` entries, labelled with `phase=diag_mode` or
   `phase=merge`; the counter also carries the bounded outcome value.
+- `netsuke_cli_config_discovery_total`, with `outcome=success` or
+  `outcome=error`, and `netsuke_cli_config_discovery_duration_seconds`, which
+  records the cached discovery pass duration.
 
 For example, a missing explicit file reports the actionable error first, then
 the bounded tracing fields and the snapshot (timestamps and metric values vary):
@@ -1065,15 +1058,19 @@ machine-readable diagnostic document.
 
 #### Bounded configuration metrics
 
-Configuration loading is recorded as two bounded metric series, both emitted
-in the drained `metrics snapshot`:
+Configuration loading is recorded as two bounded metric series, both emitted in
+the drained `metrics snapshot`:
 
 - `config_load_total` — a counter with the `phase` and `outcome` labels that
-  counts each configuration-loading phase. `phase` is `diag_mode` for the
-  early diagnostic JSON preference resolution or `merge` for the full
-  configuration merge; `outcome` is `success` or `failure`.
+  counts each configuration-loading phase. `phase` is `diag_mode` for the early
+  diagnostic-mode resolution or `merge` for the full configuration merge;
+  `outcome` is `success` or `failure`.
 - `config_load_duration_seconds` — a histogram with the `phase` label only,
   recording each phase's duration in seconds.
+- `netsuke_cli_config_discovery_total` — a counter with a bounded `outcome`
+  label of `success` or `error` for the discovery pass reused by startup.
+- `netsuke_cli_config_discovery_duration_seconds` — a histogram recording the
+  discovery pass duration without labels.
 
 The annotated [sample configuration](sample-netsuke.toml) lists every key. A
 small project configuration looks like this:
@@ -1117,11 +1114,10 @@ Leave it unset to use `ninja` from `PATH`, or set another executable name or an
 absolute path. Empty and non-UTF-8 values fall back to the default.
 
 `NETSUKE_WHICH_WORKSPACE` switches off the `which()` workspace-tree fallback
-search that runs when a command is not found on `PATH`. Set it to `0`,
-`false`, or `off` (case-insensitively) to disable the fallback; any other
-value, or leaving it unset, keeps the fallback enabled. A non-Unicode value
-also disables the fallback and is treated as an explicit opt-out, emitting a
-warning.
+search that runs when a command is not found on `PATH`. Set it to `0`, `false`,
+or `off` (case-insensitively) to disable the fallback; any other value, or
+leaving it unset, keeps the fallback enabled. A non-Unicode value also disables
+the fallback and is treated as an explicit opt-out, emitting a warning.
 
 The CLI and configuration use the same policy values. `auto` follows terminal
 and environment detection. `always` or `never` makes colour, emoji, or progress
@@ -1302,12 +1298,12 @@ Netsuke reports failures at the earliest stage that can identify them:
 Human diagnostics include remediation hints where one is available. JSON mode
 exposes the same information as fields.
 
-Human-mode configuration-load failures include structured `operation` and
-`error_category` fields. `operation` is `diag_mode_resolution` for the early
-diagnostic JSON preference pass or `config_merge` for the full merge;
-`error_category` is `io`, `validation`, or `parse`. Paths and display text are
-never recorded. JSON mode preserves the diagnostic document as the
-machine-readable failure output.
+Terminal human-mode configuration-load events emitted by `config_err_to_exit`
+include structured `operation` and `error_category` fields. `operation` is
+`diag_mode_resolution` for the early diagnostic preference phase or
+`config_merge` for the full configuration-merge phase; `error_category` is `io`,
+`validation`, or `parse`. Paths and display text are never recorded. JSON mode
+preserves the diagnostic document as the machine-readable failure output.
 
 The `--verbose` flag enables diagnostic tracing, successful timing summaries,
 and the final metrics snapshot described in
@@ -1324,8 +1320,32 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
 - `script` uses `/bin/sh -e` in v0.1.0-beta2.
 - `shell`, `grep`, `fetch`, filesystem helpers, and ordinary recipes interact
   with the host.
+- `glob` restricts its filesystem metadata access to a capability handle
+  scoped to the pattern's literal directory prefix, so it cannot inspect
+  anything outside the subtree the pattern can match; the pattern match walk
+  itself still uses ambient filesystem access.
+- Verbose glob tracing replaces every caller-controlled path field — patterns,
+  prefixes, and sampled relative matches — with the stable `<redacted>` marker.
+  Aggregate metrics retain only bounded status and reason data. Error messages
+  may retain the original input so invalid patterns can be explained.
 - `raw` template output and handwritten shell fragments remain the manifest
   author's responsibility.
+- Each `command` list entry is joined into a single shell chain; a later
+  entry inherits the working directory, environment, and shell variables left
+  by an earlier entry, and runs only when that earlier entry exits with status
+  zero. A failed entry may still leave side effects behind before it halts the
+  chain. The generated brace/eval boundary keeps comments and trailing control
+  operators inside an entry from changing the chain's structure. An entry may
+  start at most one background job; Netsuke waits for that job before moving to
+  a later entry, and rejects an entry that starts more than one background job
+  during Ninja generation. It also rejects an entry whose nested `eval` payload
+  makes the background-job count dynamic because the wrapper cannot safely
+  determine which jobs to wait for. A direct simple `exec`, optionally prefixed
+  by shell assignments, is supervised so its success or failure retains the
+  list's status semantics: a successful `exec` ends the remaining chain, while
+  structured or nested `exec` forms are rejected during Ninja generation.
+  Failure diagnostics include the action fingerprint and one-based entry
+  position when Netsuke can attribute the failed list entry.
 - Literal shell dollar expressions currently require Ninja-aware escaping,
   such as `$$PATH`.
 

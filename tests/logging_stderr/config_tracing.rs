@@ -112,6 +112,10 @@ fn explicit_selection_traces_bounded_fields() -> Result<()> {
         "verbose diagnostics must not expose the configuration file name: {joined}"
     );
     ensure!(
+        joined.contains("using explicit config path"),
+        "verbose stderr should replay the cached explicit branch: {joined}"
+    );
+    ensure!(
         !joined.contains(raw_path.as_str()),
         "diagnostics must not log the raw config path: {joined}"
     );
@@ -229,6 +233,10 @@ fn invalid_config_traces_without_parser_text() -> Result<()> {
     ensure!(
         joined.contains("explicit config load failed") && joined.contains("failure_kind=LoadError"),
         "stderr should classify the parse failure: {joined}"
+    );
+    ensure!(
+        joined.contains("resolved config path") && joined.contains("selector=\"cli_flag\""),
+        "verbose stderr should replay the cached selector decision: {joined}"
     );
     ensure!(
         !joined.contains("invalid parser secret"),

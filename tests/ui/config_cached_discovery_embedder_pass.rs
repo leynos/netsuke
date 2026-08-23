@@ -12,6 +12,8 @@ struct EmbeddedConfigEnv;
 
 impl ConfigEnvProvider for EmbeddedConfigEnv {
     fn get(&self, _: &str) -> Option<OsString> { None }
+
+    fn entries(&self) -> Vec<(OsString, OsString)> { Vec::new() }
 }
 
 fn main() {

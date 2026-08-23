@@ -6,11 +6,14 @@
 use super::super::super::{DiagMode, StartupWriter, cli};
 use super::super::{ConfigurationLoadContext, resolve_configuration};
 use super::{ConfigurationLoadScenario, configuration_clock};
+use crate::test_tracing_capture::with_test_subscriber;
 use anyhow::{Result, ensure};
 use clap::CommandFactory;
 use std::cell::Cell;
 use std::ffi::OsString;
 use std::time::Duration;
+use tempfile::tempdir;
+use tracing_subscriber::filter::LevelFilter;
 
 /// In-memory configuration environment for startup-metrics test scenarios.
 pub(super) struct EmptyConfigEnv;
@@ -18,6 +21,10 @@ pub(super) struct EmptyConfigEnv;
 impl cli::ConfigEnvProvider for EmptyConfigEnv {
     fn get(&self, _key: &str) -> Option<OsString> {
         None
+    }
+
+    fn entries(&self) -> Vec<(OsString, OsString)> {
+        Vec::new()
     }
 }
 
@@ -71,9 +78,11 @@ fn configuration_context_uses_its_injected_environment_for_both_phases() -> Resu
         ConfigurationLoadScenario::SuccessfulMerge,
         Duration::from_millis(1),
     )?;
-
-    let merged = resolve_configuration(&context, &clock)
-        .map_err(|code| anyhow::anyhow!("configuration should succeed, got {code:?}"))?;
+    let (merged, fields) = with_test_subscriber(LevelFilter::TRACE, |captured| {
+        resolve_configuration(&context, &clock)
+            .map(|merged| (merged, captured.discovery_span_fields()))
+            .map_err(|code| anyhow::anyhow!("configuration should succeed, got {code:?}"))
+    })?;
 
     ensure!(
         config_env.json_reads.get() == 1,
@@ -86,6 +95,56 @@ fn configuration_context_uses_its_injected_environment_for_both_phases() -> Resu
     ensure!(
         merged.jobs == Some(7),
         "cached merge should apply the injected NETSUKE_JOBS value"
+    );
+    ensure!(
+        fields.contains(&"outcome=\"success\"".to_owned()),
+        "startup must record a successful discovery outcome: {fields:?}"
+    );
+    ensure!(
+        !fields
+            .iter()
+            .any(|field| field.starts_with("error_category=")),
+        "successful discovery must not record an error category: {fields:?}"
+    );
+    Ok(())
+}
+
+/// Startup records the retained discovery outcome on the documented trace span.
+#[test]
+fn startup_resolution_records_the_retained_discovery_span() -> Result<()> {
+    let temp = tempdir()?;
+    let parsed_cli = cli::Cli {
+        config: Some(temp.path().join("missing.toml")),
+        ..cli::Cli::default()
+    };
+    let matches = cli::Cli::command().get_matches_from(["netsuke"]);
+    let startup_writer = StartupWriter::buffering();
+    let context = ConfigurationLoadContext {
+        parsed_cli: &parsed_cli,
+        matches: &matches,
+        startup_mode: DiagMode::Human,
+        startup_writer: &startup_writer,
+        config_env: &EmptyConfigEnv,
+    };
+    let clock = configuration_clock(
+        ConfigurationLoadScenario::JsonResolutionFailure,
+        Duration::from_millis(1),
+    )?;
+    let (result, fields) = with_test_subscriber(LevelFilter::TRACE, |captured| {
+        let result = resolve_configuration(&context, &clock);
+        (result, captured.discovery_span_fields())
+    });
+    ensure!(
+        result.is_err(),
+        "the missing explicit configuration must fail"
+    );
+    ensure!(
+        fields.contains(&"outcome=\"error\"".to_owned()),
+        "startup must record an error discovery outcome: {fields:?}"
+    );
+    ensure!(
+        fields.contains(&"error_category=\"file\"".to_owned()),
+        "startup must record the bounded file error category: {fields:?}"
     );
     Ok(())
 }
