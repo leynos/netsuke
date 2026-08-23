@@ -135,9 +135,11 @@ and agents.
     that guidance ships. Blocked on upstream; no `Cargo.toml` change.
   - [x] Preserve Netsuke-specific precedence expectations for manifest path,
     display policies, and locale across the two-selector ladder
-    (`--config` > `NETSUKE_CONFIG` > automatic discovery) with the full
-    merge ladder CLI > environment > project > user > system > default
-    (regression tests added in issue `#385`).
+    (`--config` > `NETSUKE_CONFIG` > automatic discovery), where the
+    discovered rung is a single exclusive winner among system scope, user
+    scope, and defaults. When a user-scope configuration wins over the system
+    scope, system-only fields are not merged through and fall back to their
+    defaults (regression tests added in issue `#385`).
   - [ ] Preserve Netsuke-specific precedence expectations for profile
     selection (deferred to 5.3.1, when the `--profile` flag lands).
   - [x] Verify that CLI flags override environment, project, user, system,
@@ -145,6 +147,15 @@ and agents.
     display policies, locale, jobs) in issue `#385`.
   - [ ] Verify that CLI flags override the profile configuration layer
     (deferred to 5.3.1, when the `--profile` flag lands).
+
+  - Note `[type:docstyle]: this item's earlier "full merge ladder CLI >
+    environment > project > user > system > default" phrasing described all
+    layers as merging on top of each other, but OrthoConfig automatic
+    discovery is exclusive: one discovered file wins, so system-only fields
+    are absent when a user-scope file is selected. The wording now reflects
+    that; the regression tests added in issue #385 already asserted the
+    exclusive semantics (user-over-system and system-only merge-through
+    cases). No behaviour changed.
 
 ### 3.12. Terminal rendering verification
 

@@ -311,13 +311,27 @@ fn netsuke_config_path_alias_is_not_a_selector_and_discovery_continues() -> Resu
     let home = tempdir().context("create home directory")?;
     let system = tempdir().context("create system directory")?;
 
-    // Seed a system-scope file and point the legacy alias at a distinct file
-    // that would override it if the alias were ever treated as a selector.
+    // Seed a system-scope file and point the legacy alias at a real, existing
+    // file carrying values distinct from the system scope. A legacy alias that
+    // were ever (incorrectly) treated as a selector would read this file and
+    // override the discovered system scope.
     let mut environment =
         ladder_environment(project.path(), home.path(), system.path(), &[Layer::System])?;
+    let legacy = tempdir().context("create legacy config directory")?;
+    test_fs::write(
+        legacy.path().join("legacy-config.toml"),
+        r#"
+file = "Legacyfile"
+emoji = "never"
+jobs = 1
+locale = "en-US"
+color = "never"
+"#,
+    )
+    .context("write legacy config")?;
     environment.push((
         OsString::from("NETSUKE_CONFIG_PATH"),
-        OsString::from("/legacy/path/never-used.toml"),
+        legacy.path().join("legacy-config.toml").into_os_string(),
     ));
     let merged = merge_in_child(&["netsuke"], project.path(), &environment)?;
 

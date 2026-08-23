@@ -98,6 +98,9 @@ pub(super) fn isolated_environment(
 /// assert_eq!(merged.emoji, netsuke::cli::EmojiPolicy::Always);
 /// # Ok::<(), anyhow::Error>(())
 /// ```
+/// The injected XDG environment is only meaningful on Unix; Windows discovers
+/// user and system configuration through `APPDATA`/`LOCALAPPDATA` instead.
+#[cfg(unix)]
 pub(super) fn environment_with_system_scope(
     home: &Path,
     system_dirs: &Path,

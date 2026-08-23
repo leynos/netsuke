@@ -1,23 +1,15 @@
 //! Exhaustive display-policy resolution coverage across the consolidated
 //! enum domain.
 //!
-//! Verifies that the consolidated display-policy resolution in `src/theme.rs`
-//! and `src/output_prefs.rs` honours the established precedence (explicit
-//! theme preference > emoji policy > `NO_COLOR` > output mode) over the full
-//! domain of `EmojiPolicy`, `ProgressPolicy`, `AccessibilityPolicy`,
-//! `ColourPolicy`, `OutputMode` and `json` combinations.
+//! Verifies the consolidated display-policy resolution in `src/theme.rs` and
+//! `src/output_prefs.rs`, honouring the established precedence (explicit theme
+//! preference, then emoji policy, then `NO_COLOR`, then output mode) over the
+//! full `EmojiPolicy`, `ColourPolicy`, `ProgressPolicy`, `AccessibilityPolicy`,
+//! `json` and `NO_COLOR` domain.
 //!
-//! Coverage is twofold:
-//! - `exhaustive_domain_sweep_matches_truth_model`: a deterministic sweep of
-//!   every policy combination across the `NO_COLOR` toggle, checked against a
-//!   handwritten truth model.
-//! - `policy_domain_proptest` (`consolidated_display_policies_resolve_correctly`):
-//!   probabilistic combinations, including the `TERM`/output-mode dimension.
+//! Coverage: a deterministic Cartesian-product sweep against a handwritten
+//! truth model, plus a proptest (with `TERM`/output-mode and JSON states).
 //!
-//! These tests add coverage only; they do not change any production
-//! resolution logic (`src/theme.rs` / `src/output_prefs.rs` are left
-//! untouched).
-
 use anyhow::{Result, ensure};
 use itertools::iproduct;
 use netsuke::cli::Cli;
@@ -47,6 +39,7 @@ struct DomainCase {
     accessibility: AccessibilityPolicy,
     no_color: bool,
     term_dumb: bool,
+    json: bool,
 }
 
 /// An emoji-policy strategy sampling directly from the enum domain.
@@ -81,9 +74,8 @@ fn accessibility_strategy() -> impl Strategy<Value = AccessibilityPolicy> {
     ])
 }
 
-/// One `DomainCase` for every combination of the finite policy domain: the
-/// Cartesian product via one flat ``iproduct!`` expression, avoiding deep
-/// control-flow nesting while remaining deterministic and exhaustive.
+/// One `DomainCase` per combination of the finite policy domain (324 cases):
+/// the flat Cartesian product via ``iproduct!``.
 fn all_domain_cases() -> Vec<DomainCase> {
     let emojis = [EmojiPolicy::Auto, EmojiPolicy::Always, EmojiPolicy::Never];
     let colours = [
@@ -101,15 +93,16 @@ fn all_domain_cases() -> Vec<DomainCase> {
         AccessibilityPolicy::On,
         AccessibilityPolicy::Off,
     ];
-    let no_colours = [false, true];
-    iproduct!(emojis, colours, progresses, accessibilities, no_colours)
+    let flags = [false, true];
+    iproduct!(emojis, colours, progresses, accessibilities, flags, flags)
         .map(
-            |(emoji, color, progress, accessibility, no_color)| DomainCase {
+            |(emoji, color, progress, accessibility, no_color, json)| DomainCase {
                 emoji,
                 color,
                 progress,
                 accessibility,
                 no_color,
+                json,
                 term_dumb: false,
             },
         )
@@ -220,8 +213,16 @@ fn assert_consolidated(case: DomainCase) -> Result<()> {
         color: case.color,
         progress: case.progress,
         accessibility: case.accessibility,
+        json: case.json,
         ..Cli::default()
     };
+    ensure!(
+        cli.json == case.json,
+        "json policy mismatch for json={}: got {}, expected {}",
+        case.json,
+        cli.json,
+        case.json
+    );
     ensure!(
         cli.theme_preference() == expected.theme_preference,
         "theme preference mismatch for emoji={:?}: got {:?}, expected {:?}",
@@ -309,6 +310,7 @@ proptest! {
         accessibility in accessibility_strategy(),
         no_color in any::<bool>(),
         term_dumb in any::<bool>(),
+        json in any::<bool>(),
     ) {
         let case = DomainCase {
             emoji,
@@ -317,6 +319,7 @@ proptest! {
             accessibility,
             no_color,
             term_dumb,
+            json,
         };
         // `assert_consolidated` uses `ensure!` and returns `Result`; divert the
         // failure to a prop-level assertion so shrinking reports the tuple.

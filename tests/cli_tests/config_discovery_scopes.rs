@@ -2,9 +2,9 @@
 //! project-file discovery, user-scope fallback, and project-over-user
 //! precedence on Unix and Windows.
 
-use super::super::merge_probe::{
-    environment_with_system_scope, isolated_environment, merge_in_child,
-};
+#[cfg(unix)]
+use super::super::merge_probe::environment_with_system_scope;
+use super::super::merge_probe::{isolated_environment, merge_in_child};
 use anyhow::{Context, Result, ensure};
 use netsuke::cli::config::{ColourPolicy, EmojiPolicy};
 use rstest::rstest;
@@ -224,7 +224,10 @@ fn project_config_takes_precedence_over_user_config() -> Result<()> {
     assert_project_precedence_applied(&merged)
 }
 
-/// System-scope config content used by the Unix and Windows test variants.
+/// System-scope config content used by the Unix variants. Windows discovers
+/// user and system configuration through `APPDATA`/`LOCALAPPDATA` rather than
+/// the XDG variables these tests inject, so the scenarios below are Unix-only.
+#[cfg(unix)]
 const SYSTEM_CONFIG_CONTENT: &str = r#"
 file = "Systemfile"
 emoji = "always"
@@ -233,6 +236,7 @@ jobs = 9
 locale = "de-DE"
 "#;
 
+#[cfg(unix)]
 fn assert_system_config_applied(merged: &netsuke::cli::Cli) -> Result<()> {
     ensure!(
         merged.file.as_path() == Path::new("Systemfile"),
@@ -259,7 +263,9 @@ fn assert_system_config_applied(merged: &netsuke::cli::Cli) -> Result<()> {
 
 /// Write discovery-scope config files and merge in an isolated child rooted at
 /// `project`. The selector set stays closed at the documented variables; the
-/// `system` `TempDir` is discarded after the child exits.
+/// `system` `TempDir` is discarded after the child exits. Unix-only because the
+/// injected environment uses the XDG variables that Windows does not read.
+#[cfg(unix)]
 fn run_system_scope_scenario(
     project: &Path,
     home: &Path,
@@ -285,6 +291,7 @@ fn run_system_scope_scenario(
 }
 
 /// Optional user- and project-scope layers for a system-scope discovery run.
+#[cfg(unix)]
 #[derive(Default)]
 struct ScopeLayers {
     user_config: Option<&'static str>,
@@ -293,8 +300,9 @@ struct ScopeLayers {
 
 /// System-scope discovery is platform-neutral here: `run_system_scope_scenario`
 /// points the child at an isolated `XDG_CONFIG_DIRS` via the injected
-/// environment seam, so the same body exercises system-scope discovery on
-/// every host without duplicating a platform-specific entry point.
+/// environment seam. The XDG variables are not read on Windows (which uses
+/// `APPDATA`/`LOCALAPPDATA`), so the discovery scenario is Unix-only.
+#[cfg(unix)]
 #[rstest]
 fn system_scope_config_discovered_when_no_user_or_project_config() -> Result<()> {
     let temp_project = tempdir().context("create temporary project directory")?;
@@ -309,6 +317,7 @@ fn system_scope_config_discovered_when_no_user_or_project_config() -> Result<()>
     assert_system_config_applied(&merged)
 }
 
+#[cfg(unix)]
 #[rstest]
 fn user_scope_config_takes_precedence_over_system_scope() -> Result<()> {
     let temp_project = tempdir().context("create temporary project directory")?;
@@ -348,6 +357,7 @@ fn user_scope_config_takes_precedence_over_system_scope() -> Result<()> {
 /// Project-scope config coexists with a system-scope file: the project layer
 /// outranks the system layer for overlapping fields, and a system-only field
 /// still merges through.
+#[cfg(unix)]
 #[rstest]
 fn project_config_overrides_system_and_system_only_field_merges() -> Result<()> {
     let temp_project = tempdir().context("create temporary project directory")?;

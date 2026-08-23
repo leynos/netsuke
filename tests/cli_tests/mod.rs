@@ -3,6 +3,7 @@
 //! This module exercises the command-line interface defined in `netsuke::cli`.
 
 mod config_discovery;
+#[cfg(unix)]
 mod config_precedence_ladder;
 mod config_selection;
 mod display_policy_domain;
