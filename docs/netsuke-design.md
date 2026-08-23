@@ -3154,6 +3154,12 @@ artefact destinations that the helper can adopt without breaking compatibility.
 
 Figure 8.1: Entity relationship for the staging configuration schema.
 
+For screen readers: `COMMON` defines shared release-staging settings and
+contains common `ArtefactConfig` entries. `TARGETS` defines platform-specific
+settings and contains target-specific `ArtefactConfig` entries. Each
+`ArtefactConfig` defines an artefact source, required status, and output or
+destination settings.
+
 ```mermaid
 %% Figure 8.1: Entity relationship for the staging configuration schema.
 erDiagram
