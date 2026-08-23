@@ -2518,6 +2518,39 @@ process.
 - The reader answers by name only. It must not enumerate, and it must not
   mutate.
 
+#### Manifest workspace base seam
+
+`resolve_absolute_workspace_root` and `open_manifest_workspace` in
+`src/manifest/workspace.rs` anchor the workspace directory containing a
+manifest. Both are `pub(super)` and are not exported from
+`src/manifest/mod.rs`: the seam is a working-directory injection point, not a
+general path-configuration API.
+
+Ownership and permitted call sites:
+
+- Production passes `None`; the sole caller is `from_path_with_registration` in
+  `src/manifest/query.rs`, so ambient current-directory resolution is
+  unchanged.
+- Tests inject a temporary directory or a relative base such as
+  `Some(Path::new("."))`; the seam must not become a general
+  path-configuration API.
+
+Composition rules:
+
+- An absolute parent wins outright; `base` is ignored.
+- A relative parent joins onto `base`; `None` falls back to the process
+  current directory.
+- A relative `base` (for example `Path::new(".")`) is itself anchored at the
+  current directory before joining, so `ManifestWorkspace::root` always stays
+  absolute.
+- Failure of the `None` fallback reports the `MANIFEST_RESOLVE_WORKSPACE_ROOT`
+  localization key.
+
+This is a working-directory seam, distinct from the three environment-variable
+shapes in [ADR-008](adr-008-environment-seam-taxonomy.md); it mirrors the
+`which` resolver's `cwd_override` precedent in
+[`EnvSnapshot::capture`](#which-environment-capture).
+
 ### `EnvLock`
 
 `test_support::env_lock::EnvLock` serializes the few tests that change the
