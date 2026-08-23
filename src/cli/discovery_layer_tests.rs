@@ -1,22 +1,21 @@
 //! Tests for configuration file-layer collection.
 //!
-//! These cover which branch the shared file-layer boundary takes — explicit path
-//! versus automatic discovery — and the project-scope second pass. Selector
-//! precedence and event-schema snapshots live in the tracing test module.
-use super::paths::{FailingPathNormalizer, FsPathNormalizer, PathNormalizer, normalized_path_key};
-use super::*;
-use crate::cli::test_support::TestEnv;
+//! These cover explicit-versus-discovery collection and the project-scope second pass.
+//! Selector precedence and event-schema snapshots live in the tracing test module.
 use anyhow::{Context, Result, ensure};
+use crate::cli::test_support::TestEnv;
 use googletest::prelude::*;
 use pretty_assertions::assert_eq;
 use rstest::rstest;
+use super::*;
+use super::paths::{FailingPathNormalizer, FsPathNormalizer, PathNormalizer, normalized_path_key};
 use tempfile::{TempDir, tempdir};
 
-use super::event_assertions::{capture_events, find_event};
-use super::layers::collect_file_layers_with_normalizer;
 use std::cell::Cell;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use super::event_assertions::{capture_events, find_event};
+use super::layers::collect_file_layers_with_normalizer;
 
 #[derive(Debug, Clone, Copy)]
 pub(super) enum LayerScenario {
