@@ -137,11 +137,6 @@ operator, user, and contributor references are easier to find.
 - [localization-styleguide.md](localization-styleguide.md): House style for
   user-facing text and how voice, tone, register, and mechanics carry across
   Netsuke locales.
-- [localization-glossary.md](localization-glossary.md): Local, Locize-ready
-  terminology source of truth for Netsuke product names, manifest concepts, and
-  identifiers.
-- [localization-styleguide.md](localization-styleguide.md): Locize-compatible
-  base guidance for consistent, human-first translations across Netsuke locales.
 
 ## Contributor guidance
 
