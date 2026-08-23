@@ -372,6 +372,9 @@ mod layer_replay_tests;
 mod layer_tests;
 
 #[cfg(test)]
+#[path = "discovery_path_selection_tests.rs"]
+mod path_selection_tests;
+#[cfg(test)]
 #[path = "discovery_helper_proptests.rs"]
 mod helper_proptests;
 

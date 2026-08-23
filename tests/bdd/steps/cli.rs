@@ -14,6 +14,7 @@ use netsuke::cli::{Cli, Commands, HelpTopic};
 use netsuke::cli_localization;
 use netsuke::locale_resolution;
 use rstest_bdd_macros::then;
+use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
 use std::sync::Arc;
 use test_support::locale_stubs::{StubEnv, StubSystemLocale};
@@ -53,20 +54,7 @@ pub(super) fn apply_cli_tokens(world: &TestWorld, mut tokens: Vec<std::ffi::OsSt
     // If there's a temp_dir set and the args don't already contain an
     // explicit -C or --directory flag, prepend -C <temp_dir> for config discovery.
     if let Some(temp_dir) = world.temp_dir.borrow().as_ref() {
-        let is_directory_flag = |t: &std::ffi::OsString| {
-            t.to_str().is_some_and(|s| {
-                s == "-C"
-                    || s.starts_with("-C")
-                    || s == "--directory"
-                    || s.starts_with("--directory=")
-            })
-        };
-        let has_directory_flag = tokens.iter().any(is_directory_flag);
-        if !has_directory_flag && !tokens.is_empty() {
-            let temp_path = temp_dir.path().as_os_str().to_owned();
-            tokens.insert(1, "-C".into());
-            tokens.insert(2, temp_path);
-        }
+        insert_discovery_directory_if_missing(&mut tokens, temp_dir.path().as_os_str());
     }
 
     let locale = locale_resolution::resolve_startup_locale(&tokens, &env, &system);
@@ -80,6 +68,30 @@ pub(super) fn apply_cli_tokens(world: &TestWorld, mut tokens: Vec<std::ffi::OsSt
                 .map_err(|e| e.to_string())
         });
     store_parse_outcome(&world.cli, &world.cli_error, outcome);
+}
+
+/// Add the BDD discovery anchor unless the scenario already supplies one.
+///
+/// This helper belongs only to the BDD CLI step boundary. Keeping detection on
+/// encoded bytes preserves attached directory values even when they are not
+/// valid UTF-8, so `apply_cli_tokens` never adds a competing directory option.
+fn insert_discovery_directory_if_missing(tokens: &mut Vec<OsString>, directory: &OsStr) {
+    let has_directory_flag = tokens
+        .iter()
+        .any(|token| is_directory_flag(token.as_os_str()));
+    if !has_directory_flag && !tokens.is_empty() {
+        tokens.insert(1, "-C".into());
+        tokens.insert(2, directory.to_owned());
+    }
+}
+
+/// Return whether a token is a standalone or attached directory option.
+fn is_directory_flag(token: &OsStr) -> bool {
+    let bytes = token.as_encoded_bytes();
+    bytes == b"-C"
+        || bytes.starts_with(b"-C")
+        || bytes == b"--directory"
+        || bytes.starts_with(b"--directory=")
 }
 
 /// Get the CLI's network policy.
@@ -250,4 +262,42 @@ fn an_error_should_be_returned(world: &TestWorld) -> Result<()> {
 #[then("the error message should contain {fragment:string}")]
 fn error_message_should_contain(world: &TestWorld, fragment: ErrorFragment) -> Result<()> {
     verify_error_contains(world, &fragment)
+}
+
+#[cfg(test)]
+mod tests {
+    //! Regression coverage for attached BDD directory options.
+
+    use super::insert_discovery_directory_if_missing;
+    use std::ffi::{OsStr, OsString};
+
+    #[test]
+    fn attached_directory_options_prevent_default_injection() {
+        for attached in ["-Cproject", "--directory=project"] {
+            let mut tokens = vec![OsString::from("netsuke"), OsString::from(attached)];
+            let expected = tokens.clone();
+
+            insert_discovery_directory_if_missing(&mut tokens, OsStr::new("temporary-project"));
+
+            assert_eq!(tokens, expected, "attached option {attached:?}");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_utf8_attached_directory_options_prevent_default_injection() {
+        use std::os::unix::ffi::OsStringExt;
+
+        for attached in [
+            OsString::from_vec(b"-C\xff".to_vec()),
+            OsString::from_vec(b"--directory=\xff".to_vec()),
+        ] {
+            let mut tokens = vec![OsString::from("netsuke"), attached];
+            let expected = tokens.clone();
+
+            insert_discovery_directory_if_missing(&mut tokens, OsStr::new("temporary-project"));
+
+            assert_eq!(tokens, expected, "non-UTF-8 attached directory option");
+        }
+    }
 }
