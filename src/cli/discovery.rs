@@ -37,7 +37,12 @@ use paths::{FsPathNormalizer, PathNormalizer};
 /// Record the discovery series for an already-timed phase at the boundary.
 pub use telemetry::record_discovery_outcome;
 use trace::{DiscoveryDiagnostics, DiscoveryTrace, FileLayerTrace};
+/// Name of the environment variable that selects the configuration file.
+///
+/// Read as the primary selector after the `--config` CLI flag when a path is
+/// not given explicitly.
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG";
+/// Environment variables consulted while discovering configuration layers.
 const DISCOVERY_ENV_KEYS: [&str; 7] = [
     CONFIG_ENV_VAR,
     "HOME",
@@ -54,9 +59,13 @@ const DISCOVERY_ENV_KEYS: [&str; 7] = [
 /// full merge consumes the same result. Keeping errors beside the layers lets
 /// those phases retain their distinct error policies without rediscovery.
 pub struct DiscoveredLayers {
+    /// File layers found in discovery order, before precedence resolution.
     layers: Vec<MergeLayer<'static>>,
+    /// Whether any discovered layer requested JSON output.
     json_preference: bool,
+    /// Loading errors deferred beside the layers that may still be usable.
     errors: Vec<Arc<ortho_config::OrthoError>>,
+    /// Bounded trace for composition boundaries to emit after the merge.
     diagnostics: DiscoveryDiagnostics,
 }
 
@@ -90,6 +99,7 @@ impl DiscoveredLayers {
 /// The diagnostic pre-pass reads the layers while retaining the bounded events
 /// for a composition boundary to emit after it installs the tracing filter.
 pub struct DiscoveryOutcome {
+    /// File layers and deferred loading errors from the discovery pass.
     layers: DiscoveredLayers,
 }
 
@@ -243,8 +253,11 @@ pub(crate) fn explicit_config_path_with_env(cli: &Cli, env: &impl EnvProvider) -
 /// afterwards without giving the query tracing side effects.
 #[derive(Debug, PartialEq, Eq)]
 struct ConfigPathResolution {
+    /// Configuration selector that resolved the path.
     selector: &'static str,
+    /// Bounded resolved configuration path, or `None` when unset.
     path: Option<PathBuf>,
+    /// Environment variables consulted during resolution, with their results.
     environment_lookups: Vec<(&'static str, Option<PathBuf>)>,
 }
 
