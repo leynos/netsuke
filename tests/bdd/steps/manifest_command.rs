@@ -8,6 +8,7 @@ use crate::bdd::types::{
 use anyhow::{Context, Result, ensure};
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{given, then, when};
+use std::ffi::OsString;
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -40,6 +41,14 @@ use manifest_command_helpers::{
 // Given steps
 // ---------------------------------------------------------------------------
 
+fn initialise_workspace(world: &TestWorld, temp: tempfile::TempDir) {
+    *world.temp_dir.borrow_mut() = Some(temp);
+    world.run_status.clear();
+    world.run_error.clear();
+    world.command_stdout.clear();
+    world.command_stderr.clear();
+}
+
 #[given("a minimal Netsuke workspace")]
 fn minimal_workspace(world: &TestWorld) -> Result<()> {
     let temp = tempfile::tempdir().context("create temp dir for manifest workspace")?;
@@ -49,11 +58,35 @@ fn minimal_workspace(world: &TestWorld) -> Result<()> {
     let minimal_yml_path = std::path::Path::new(manifest_dir).join("tests/data/minimal.yml");
     fs::copy(&minimal_yml_path, &netsukefile)
         .with_context(|| format!("copy manifest to {}", netsukefile.display()))?;
-    *world.temp_dir.borrow_mut() = Some(temp);
-    world.run_status.clear();
-    world.run_error.clear();
-    world.command_stdout.clear();
-    world.command_stderr.clear();
+    initialise_workspace(world, temp);
+    Ok(())
+}
+
+#[given("a Netsuke workspace with one hello target")]
+fn hello_target_workspace(world: &TestWorld) -> Result<()> {
+    let temp = tempfile::tempdir().context("create temp dir for hello workspace")?;
+    let netsukefile = temp.path().join("Netsukefile");
+    fs::write(
+        &netsukefile,
+        concat!(
+            "netsuke_version: \"1.0.0\"\n",
+            "targets:\n",
+            "  - name: hello\n",
+            "    command: \"echo hi\"\n",
+        ),
+    )
+    .with_context(|| format!("write manifest to {}", netsukefile.display()))?;
+    initialise_workspace(world, temp);
+    Ok(())
+}
+
+#[given("the child PATH is the workspace directory")]
+fn child_path_is_workspace_directory(world: &TestWorld) -> Result<()> {
+    let workspace_path = get_temp_path(world)?;
+    world.track_env_var(
+        "PATH".to_owned(),
+        Some(OsString::from(workspace_path.as_os_str())),
+    );
     Ok(())
 }
 
