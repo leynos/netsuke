@@ -35,7 +35,11 @@ Non-negotiable constraints the rest of the document assumes:
   injected readers per ADR-008.
 - **C3 — no execution.** No action in the first version spawns Ninja, build
   commands, or fixture shell commands. The stdlib command helpers are
-  disabled under test (§4.5).
+  disabled under test (§4.5). When the deferred `execute` action does
+  arrive it should drive `NinjaProcessOptions` — the narrow execution type
+  carrying working directory, job count, and stderr suppression — rather
+  than fabricating a `Cli`, since that decoupling exists precisely so
+  non-CLI callers can run Ninja.
 - **C4 — deterministic by default.** Clock, network, and environment are
   test-controlled. An unmocked impure call is an error, not a silent
   passthrough.
@@ -197,7 +201,7 @@ the shipped binary.
 
 ### 3.4. Result views
 
-`NetsukeManifest` already derives `Serialize` (`src/ast/mod.rs:97`), and
+`NetsukeManifest` already derives `Serialize` (`src/ast/mod.rs:101`), and
 `GraphView` (`src/graph_view/`) is an existing deterministic projection of
 `BuildGraph` with sorted nodes and edges. The assertion layer builds on
 both:
@@ -208,7 +212,7 @@ both:
   methods the UX design promises (`has_target`, `has_rule`, `target(name)`
   field access), exposed as a MiniJinja object.
 - `result.ninja` — the string from `ninja_gen::generate`
-  (`src/ninja_gen.rs:78`), which is already deterministic for snapshot
+  (`src/ninja_gen/mod.rs:87`), which is already deterministic for snapshot
   tests.
 
 The IR types themselves are not exposed: the views are a stable assertion

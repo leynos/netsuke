@@ -703,7 +703,6 @@ in [RFC 0001](rfcs/0001-netsukefile-testing-framework.md), the
 [UX and semantic design](netsuke-test-framework-ux-design.md), and the
 [technical design](netsuke-test-framework-technical-design.md).
 
-
 ### 6.1. Seams and loader options
 
 - [ ] 6.1.1. Add the clock provider seam to the stdlib time module. See
@@ -763,7 +762,6 @@ in [RFC 0001](rfcs/0001-netsukefile-testing-framework.md), the
   - [ ] Confine imports to the test tree.
   - [ ] Fail empty selections without `--allow-empty`.
 
-
 ### 6.3. Mock engine
 
 - [ ] 6.3.1. Implement doubles, matchers, and the journal. Requires: 6.1.2.
@@ -781,7 +779,6 @@ in [RFC 0001](rfcs/0001-netsukefile-testing-framework.md), the
 - [ ] 6.3.3. Implement macro substitution doubles. Requires: 6.1.3, 6.3.1.
   - [ ] Register journalling wrappers over compiled stand-in macros.
   - [ ] Journal calls under `substitutes.<name>`.
-
 
 ### 6.4. Fixture engine
 

@@ -639,11 +639,15 @@ result:
 `result.graph` is a stable, additive-only assertion surface, deliberately
 distinct from any internal graph type. Its fields: `targets` (a sorted
 list of target views, each with `name`, `sources`, `deps`,
-`order_only_deps`, `phony`, and `description`), `rules` (sorted rule
-names), `default_targets`, and `edge_count`. `description` is the target's
-discovery metadata — the text `netsuke help targets` renders — not the
+`order_only_deps`, `dependency_order`, `phony`, and `description`),
+`rules` (sorted rule names), `default_targets`, and `edge_count`.
+`description` is the target's discovery metadata — the text
+`netsuke help targets` renders — not the
 rule description Ninja reports during execution; a test asserting on
-progress output must read the rule instead. Its helper methods:
+progress output must read the rule instead. `dependency_order` is
+`parallel` or `serial`, so a manifest that serializes its dependencies
+can be asserted on directly rather than by pattern-matching the generated
+Ninja. Its helper methods:
 `has_target`, `has_rule`, `has_edge`, and `target(name)`. Fields and
 helpers are never removed or repurposed within a dialect major version. The
 helpers exist so authors never parse raw Ninja for structural questions:
