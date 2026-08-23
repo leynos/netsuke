@@ -148,14 +148,10 @@ and agents.
   - [ ] Verify that CLI flags override the profile configuration layer
     (deferred to 5.3.1, when the `--profile` flag lands).
 
-  - Note `[type:docstyle]: this item's earlier "full merge ladder CLI >
-    environment > project > user > system > default" phrasing described all
-    layers as merging on top of each other, but OrthoConfig automatic
-    discovery is exclusive: one discovered file wins, so system-only fields
-    are absent when a user-scope file is selected. The wording now reflects
-    that; the regression tests added in issue #385 already asserted the
-    exclusive semantics (user-over-system and system-only merge-through
-    cases). No behaviour changed.
+  - Note: OrthoConfig automatic discovery is exclusive: one discovered file
+    wins, so system-only fields are absent when a user-scope file is
+    selected (user-over-system and system-only merge-through cases are
+    covered by the regression tests added in issue #385).
 
 ### 3.12. Terminal rendering verification
 

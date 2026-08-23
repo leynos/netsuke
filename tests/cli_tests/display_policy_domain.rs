@@ -6,10 +6,8 @@
 //! preference, then emoji policy, then `NO_COLOR`, then output mode) over the
 //! full `EmojiPolicy`, `ColourPolicy`, `ProgressPolicy`, `AccessibilityPolicy`,
 //! `json` and `NO_COLOR` domain.
-//!
 //! Coverage: a deterministic Cartesian-product sweep against a handwritten
 //! truth model, plus a proptest (with `TERM`/output-mode and JSON states).
-//!
 use anyhow::{Result, ensure};
 use itertools::iproduct;
 use netsuke::cli::Cli;
@@ -74,7 +72,7 @@ fn accessibility_strategy() -> impl Strategy<Value = AccessibilityPolicy> {
     ])
 }
 
-/// One `DomainCase` per combination of the finite policy domain (324 cases):
+/// One `DomainCase` per combination of the finite policy domain (648 cases):
 /// the flat Cartesian product via ``iproduct!``.
 fn all_domain_cases() -> Vec<DomainCase> {
     let emojis = [EmojiPolicy::Auto, EmojiPolicy::Always, EmojiPolicy::Never];
@@ -94,19 +92,27 @@ fn all_domain_cases() -> Vec<DomainCase> {
         AccessibilityPolicy::Off,
     ];
     let flags = [false, true];
-    iproduct!(emojis, colours, progresses, accessibilities, flags, flags)
-        .map(
-            |(emoji, color, progress, accessibility, no_color, json)| DomainCase {
-                emoji,
-                color,
-                progress,
-                accessibility,
-                no_color,
-                json,
-                term_dumb: false,
-            },
-        )
-        .collect()
+    iproduct!(
+        emojis,
+        colours,
+        progresses,
+        accessibilities,
+        flags,
+        flags,
+        flags
+    )
+    .map(
+        |(emoji, color, progress, accessibility, no_color, term_dumb, json)| DomainCase {
+            emoji,
+            color,
+            progress,
+            accessibility,
+            no_color,
+            term_dumb,
+            json,
+        },
+    )
+    .collect()
 }
 
 /// Expected theme preference derived from the emoji policy.
@@ -132,10 +138,8 @@ const fn expected_progress_enabled(progress: ProgressPolicy) -> bool {
     !matches!(progress, ProgressPolicy::Never)
 }
 
-/// Whether the `NO_COLOR` capability is active for the given colour policy.
-///
-/// `NO_COLOR` is active unless the colour policy is `Always`; `Auto` defers to
-/// the ambient `NO_COLOR` flag captured in the case.
+/// Whether `NO_COLOR` is active: never for `Always`, always for `Never`,
+/// otherwise deferred to the ambient flag captured in the case.
 const fn expected_no_color_active(case: DomainCase) -> bool {
     match case.color {
         ColourPolicy::Always => false,
@@ -144,13 +148,8 @@ const fn expected_no_color_active(case: DomainCase) -> bool {
     }
 }
 
-/// Expected output mode decided by `output_mode::resolve`:
-///
-/// 1. An explicit override forces Accessible(true) or Standard(false).
-/// 2. `NO_COLOR` is active unless the colour policy is `Always`; when active
-///    the mode is Accessible.
-/// 3. `TERM=dumb` forces Accessible.
-/// 4. Otherwise Standard.
+/// Expected output mode: an explicit accessibility override wins; otherwise
+/// `NO_COLOR` (when active) or `TERM=dumb` forces Accessible, else Standard.
 const fn expected_output_mode(case: DomainCase) -> OutputMode {
     if let Some(forced) = expected_accessibility_override(case.accessibility) {
         return if forced {
@@ -166,11 +165,9 @@ const fn expected_output_mode(case: DomainCase) -> OutputMode {
     }
 }
 
-/// Expected emoji allowance decided by `theme::should_use_unicode`:
-///
-/// 1. An explicit Unicode/Ascii theme preference wins outright.
-/// 2. Otherwise `NO_COLOR` active (colour-aware) forces ASCII.
-/// 3. Otherwise Accessible mode uses ASCII, Standard uses Unicode.
+/// Expected emoji allowance decided by `theme::should_use_unicode`: an explicit
+/// theme preference wins; otherwise `NO_COLOR`-active forces ASCII, and
+/// otherwise Accessible mode uses ASCII while Standard uses Unicode.
 const fn expected_emoji_allowed(case: DomainCase, mode: OutputMode) -> bool {
     match case.emoji {
         EmojiPolicy::Always => true,
@@ -389,8 +386,8 @@ fn progress_policy_enables_progress(
     Ok(())
 }
 
-/// Exhaustive sweep of the full 3 x 3 x 3 x 3 policy domain with and without
-/// `NO_COLOR`, comparing the production pipeline against the truth model.
+/// Exhaustive sweep of the 3 x 3 x 3 x 3 policy domain across the `NO_COLOR`,
+/// `json`, and `TERM=dumb` toggles, comparing the pipeline to the truth model.
 #[rstest]
 fn exhaustive_domain_sweep_matches_truth_model() -> Result<()> {
     for case in all_domain_cases() {
