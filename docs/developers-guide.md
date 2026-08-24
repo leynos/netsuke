@@ -2543,8 +2543,9 @@ Composition rules:
 - A relative `base` (for example `Path::new(".")`) is itself anchored at the
   current directory before joining, so `ManifestWorkspace::root` always stays
   absolute.
-- Failure of the `None` fallback reports the `MANIFEST_RESOLVE_WORKSPACE_ROOT`
-  localization key.
+- Both the `None` fallback and relative `base` anchoring call
+  `env::current_dir()`; either failure reports the
+  `MANIFEST_RESOLVE_WORKSPACE_ROOT` localization key.
 
 This is a working-directory seam, distinct from the three environment-variable
 shapes in [ADR-008](adr-008-environment-seam-taxonomy.md); it mirrors the

@@ -29,6 +29,13 @@ fn joined(parts: &[String]) -> String {
     parts.join(MAIN_SEPARATOR_STR)
 }
 
+/// An optional, relative base, including an explicit empty base.
+fn optional_relative_base() -> impl Strategy<Value = Option<String>> {
+    proptest::option::of(
+        proptest::collection::vec(component(), 0..3).prop_map(|parts| joined(&parts)),
+    )
+}
+
 /// The process working directory as an absolute UTF-8 anchor.
 ///
 /// Genuinely absolute parents and bases hang off this anchor so the generated
@@ -47,19 +54,13 @@ proptest! {
     #[test]
     fn absolute_parent_ignores_the_base(
         parent_parts in proptest::collection::vec(component(), 1..4),
-        base_kind in 0u8..3,
-        base_parts in proptest::collection::vec(component(), 0..3),
+        base in optional_relative_base(),
     ) {
         let anchor = absolute_anchor()?;
         let parent = anchor.join(joined(&parent_parts));
-        let base_text = base_parts.join(MAIN_SEPARATOR_STR);
-        let base = match base_kind {
-            0 => None,
-            1 => Some(Path::new(".")),
-            _ => Some(Path::new(&base_text)),
-        };
+        let base_path = base.as_deref().map(Path::new);
         let resolved =
-            resolve_absolute_workspace_root(&parent, base).expect("absolute parent resolves");
+            resolve_absolute_workspace_root(&parent, base_path).expect("absolute parent resolves");
         prop_assert_eq!(resolved, parent, "an absolute parent must not be re-anchored");
     }
 
@@ -86,18 +87,22 @@ proptest! {
     #[test]
     fn relative_parent_always_resolves_absolutely(
         parent_parts in proptest::collection::vec(component(), 1..4),
-        base_kind in 0u8..3,
-        base_parts in proptest::collection::vec(component(), 0..3),
+        base in optional_relative_base(),
     ) {
+        let anchor = absolute_anchor()?;
         let parent = Utf8PathBuf::from(joined(&parent_parts));
-        let base_text = base_parts.join(MAIN_SEPARATOR_STR);
-        let base = match base_kind {
-            0 => None,
-            1 => Some(Path::new(".")),
-            _ => Some(Path::new(&base_text)),
-        };
+        let expected = base.as_ref().map_or_else(
+            || anchor.join(&parent),
+            |relative_base| anchor.join(relative_base).join(&parent),
+        );
+        let base_path = base.as_deref().map(Path::new);
         let resolved =
-            resolve_absolute_workspace_root(&parent, base).expect("relative parent resolves");
+            resolve_absolute_workspace_root(&parent, base_path).expect("relative parent resolves");
         prop_assert!(resolved.is_absolute(), "root {resolved:?} should be absolute");
+        prop_assert_eq!(
+            resolved,
+            expected,
+            "a relative parent must join onto the current directory and relative base"
+        );
     }
 }
