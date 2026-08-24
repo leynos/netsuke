@@ -286,11 +286,8 @@ pub(super) fn expand_glob(
     // globs; walking the linked spelling component-by-component would reject
     // the link itself. Relative bases become absolute here, which the rest of
     // the seam already accepts.
-    let base = base.map(|dir| {
-        dir.canonicalize()
-            .unwrap_or_else(|_| dir.to_path_buf())
-    });
-    let (search, strip) = base
+    let resolved_base = base.map(|dir| dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf()));
+    let (search, strip) = resolved_base
         .as_deref()
         .filter(|_| !Path::new(normalized).is_absolute())
         .map_or_else(

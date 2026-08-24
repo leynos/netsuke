@@ -3489,10 +3489,12 @@ manual flag repetition.
   automatic discovery. If an explicit selector is set, the selected file is
   loaded directly and bypasses discovery, but still participates in the normal
   precedence ladder: defaults < file < environment < CLI.
-- Relative paths passed to `--config` are resolved against the process current
-  working directory, not the `-C/--directory` anchor. This keeps config-file
-  selection aligned with normal shell path semantics while `-C` continues to
-  scope project discovery and manifest lookup.
+- Relative paths passed to `--config` are resolved against the `-C/--directory`
+  anchor when one is supplied, because `-C` behaves as a working-directory
+  change for CLI paths including an explicit configuration selector; without
+  `-C`, they resolve against the process working directory. This keeps
+  config-file selection aligned with the directory Netsuke is anchored to
+  while `-C` continues to scope project discovery and manifest lookup.
 
 ### 8.5 Manual Pages
 
