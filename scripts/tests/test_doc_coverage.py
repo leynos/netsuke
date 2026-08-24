@@ -14,6 +14,7 @@ hyphen-free module name.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import importlib.util
 import pathlib
 import sys
@@ -73,6 +74,25 @@ def single_library_metadata() -> str:
         '"targets": [{"name": "x", "kind": ["lib"]}]}], '
         '"workspace_members": ["pkg:x:1.0.0"]}'
     )
+
+
+@dataclasses.dataclass(frozen=True)
+class RustdocFailureCase:
+    """Define one Rustdoc failure scenario for measurement integration tests.
+
+    Parameters
+    ----------
+    output
+        The mocked standard output from `cargo rustdoc`.
+    returncode
+        The mocked `cargo rustdoc` process exit code.
+    diagnostic
+        Text that must occur in the translated `RuntimeError`.
+    """
+
+    output: str
+    returncode: int
+    diagnostic: str
 
 
 class FakeCargo:
@@ -228,18 +248,22 @@ def test_cargo_metadata_failure_aborts_the_run(
 
 
 @pytest.mark.parametrize(
-    ("rustdoc_output", "rustdoc_rc", "diagnostic"),
+    "case",
     [
         pytest.param(
-            "not json at all",
-            0,
-            "did not emit coverage JSON",
+            RustdocFailureCase(
+                "not json at all",
+                0,
+                "did not emit coverage JSON",
+            ),
             id="malformed-output",
         ),
         pytest.param(
-            "{}",
-            1,
-            "cargo rustdoc failed for x",
+            RustdocFailureCase(
+                "{}",
+                1,
+                "cargo rustdoc failed for x",
+            ),
             id="rustdoc-exit-failure",
         ),
     ],
@@ -248,20 +272,18 @@ def test_run_measurements_propagates_rustdoc_failure(
     script: types.ModuleType,
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
-    rustdoc_output: str,
-    rustdoc_rc: int,
-    diagnostic: str,
+    case: RustdocFailureCase,
 ) -> None:
     """Propagate malformed output and non-zero rustdoc exits as measurement errors."""
     FakeCargo(
         script,
         metadata=single_library_metadata(),
-        rustdoc_output=rustdoc_output,
-        rustdoc_rc=rustdoc_rc,
+        rustdoc_output=case.output,
+        rustdoc_rc=case.returncode,
     ).install(monkeypatch)
     monkeypatch.chdir(tmp_path)
 
-    with pytest.raises(RuntimeError, match=diagnostic):
+    with pytest.raises(RuntimeError, match=case.diagnostic):
         script.run_measurements("nightly-x", tmp_path)
 
 
