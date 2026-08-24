@@ -302,7 +302,10 @@ targets: []
     )?;
 
     let manifest = from_path_for_manifest_query(&manifest_path, None)?;
-    let Recipe::Command { command } = &manifest.actions[0].recipe else {
+    let Some(action) = manifest.actions.first() else {
+        anyhow::bail!("query fixture should retain its action");
+    };
+    let Recipe::Command { command } = &action.recipe else {
         anyhow::bail!("query fixture action should retain its command recipe");
     };
     ensure!(
