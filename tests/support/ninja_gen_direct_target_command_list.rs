@@ -5,7 +5,7 @@ use anyhow::{Context, Result, ensure};
 use minijinja::Environment;
 use netsuke::ast::{NetsukeManifest, Recipe};
 use netsuke::ir::BuildGraph;
-use netsuke::manifest::{self, render_manifest};
+use netsuke::manifest::{self, RenderMode, render_manifest};
 use netsuke::ninja_gen::generate;
 use std::process::Command;
 use tempfile::TempDir;
@@ -26,7 +26,7 @@ targets:
       - "echo '{{ second }}' >> {{ outs }}"
 "#,
     )?;
-    render_manifest(manifest, &Environment::new())
+    render_manifest(manifest, &Environment::new(), RenderMode::Full)
 }
 
 fn assert_rendered_direct_target(manifest: &NetsukeManifest) -> Result<()> {

@@ -15,6 +15,15 @@ use minijinja::Environment;
 #[cfg(test)]
 use std::cell::Cell;
 
+/// Selects which manifest fields are safe to render for the caller.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RenderMode {
+    /// Render every manifest field for build, generate, and manifest output.
+    Full,
+    /// Render discovery metadata without evaluating recipes.
+    ManifestQuery,
+}
+
 /// Render manifest targets and rules by evaluating template expressions.
 ///
 /// # Errors
@@ -24,16 +33,17 @@ use std::cell::Cell;
 pub fn render_manifest(
     mut manifest: NetsukeManifest,
     env: &Environment,
+    mode: RenderMode,
 ) -> Result<NetsukeManifest> {
     for action in &mut manifest.actions {
-        render_target(action, env)?;
+        render_target(action, env, mode)?;
     }
     for target in &mut manifest.targets {
-        render_target(target, env)?;
+        render_target(target, env, mode)?;
     }
     let rule_vars = manifest.vars.clone();
     for rule in &mut manifest.rules {
-        render_rule(rule, env, &rule_vars)?;
+        render_rule(rule, env, &rule_vars, mode)?;
     }
     Ok(manifest)
 }
@@ -44,9 +54,16 @@ pub fn render_manifest(
 ///
 /// Returns an error when a description or recipe template fails to render;
 /// the propagated error names the offending rule stage.
-fn render_rule(rule: &mut crate::ast::Rule, env: &Environment, vars: &Vars) -> Result<()> {
+fn render_rule(
+    rule: &mut crate::ast::Rule,
+    env: &Environment,
+    vars: &Vars,
+    mode: RenderMode,
+) -> Result<()> {
     render_description(&mut rule.description, env, vars, "rule")?;
-    render_recipe(&mut rule.recipe, env, vars, "rule")?;
+    if mode == RenderMode::Full {
+        render_recipe(&mut rule.recipe, env, vars, "rule")?;
+    }
     Ok(())
 }
 
@@ -56,14 +73,16 @@ fn render_rule(rule: &mut crate::ast::Rule, env: &Environment, vars: &Vars) -> R
 ///
 /// Returns an error when any of the target's vars, name, sources, deps,
 /// order-only deps, description, or recipe templates fail to render.
-fn render_target(target: &mut Target, env: &Environment) -> Result<()> {
+fn render_target(target: &mut Target, env: &Environment, mode: RenderMode) -> Result<()> {
     render_vars(&mut target.vars, env)?;
     render_description(&mut target.description, env, &target.vars, "target")?;
     render_string_or_list(&mut target.name, env, &target.vars)?;
     render_string_or_list(&mut target.sources, env, &target.vars)?;
     render_string_or_list(&mut target.deps, env, &target.vars)?;
     render_string_or_list(&mut target.order_only_deps, env, &target.vars)?;
-    render_recipe(&mut target.recipe, env, &target.vars, "target")?;
+    if mode == RenderMode::Full {
+        render_recipe(&mut target.recipe, env, &target.vars, "target")?;
+    }
     Ok(())
 }
 
@@ -210,10 +229,8 @@ thread_local! {
     static RECIPE_CONTEXT_PREPARATIONS: Cell<usize> = const { Cell::new(0) };
 }
 
-#[cfg(test)]
-fn record_recipe_context_preparation() {
-    RECIPE_CONTEXT_PREPARATIONS.with(|count| count.set(count.get() + 1));
-}
+/// Count one recipe-context preparation for the recipe-context tests.
+const fn record_recipe_context_preparation() {}
 
 #[cfg(not(test))]
 /// Count one recipe-context preparation for the recipe-context tests.
@@ -246,3 +263,12 @@ mod tests;
 #[cfg(test)]
 #[path = "render_command_list_tests.rs"]
 mod command_list_tests;
+
+/// Selects which manifest fields are safe to render for the caller.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RenderMode {
+    /// Render every manifest field for build, generate, and manifest output.
+    Full,
+    /// Render discovery metadata without evaluating recipes.
+    ManifestQuery,
+}

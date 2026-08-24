@@ -1,6 +1,6 @@
 //! Unit tests for manifest template rendering.
 
-use super::{ManifestValue, render_manifest};
+use super::{ManifestValue, RenderMode, render_manifest};
 use crate::ast::{DependencyOrder, NetsukeManifest, Recipe, Rule, StringOrList, Target, Vars};
 use anyhow::{Context, Result};
 use minijinja::Environment;
@@ -137,7 +137,7 @@ fn assert_rendered_rule(rule: &Rule) {
 fn render_manifest_renders_targets_and_rules() -> Result<()> {
     let env = Environment::new();
     let manifest = sample_manifest()?;
-    let rendered = render_manifest(manifest, &env)?;
+    let rendered = render_manifest(manifest, &env, RenderMode::Full)?;
     let rendered_target = rendered
         .targets
         .first()
@@ -173,7 +173,7 @@ fn command_list_renders_each_entry_with_ins_outs_placeholders() -> Result<()> {
         targets: Vec::new(),
         defaults: Vec::new(),
     };
-    let rendered = render_manifest(manifest, &env)?;
+    let rendered = render_manifest(manifest, &env, RenderMode::Full)?;
     let rule = rendered.rules.first().context("rendered rule missing")?;
     let Recipe::Command { command } = &rule.recipe else {
         anyhow::bail!("expected command recipe, got {:?}", rule.recipe);
@@ -203,7 +203,7 @@ fn command_list_render_failure_names_the_failing_entry() -> Result<()> {
         targets: Vec::new(),
         defaults: Vec::new(),
     };
-    let error = render_manifest(manifest, &env)
+    let error = render_manifest(manifest, &env, RenderMode::Full)
         .err()
         .context("expected the malformed entry to fail rendering")?;
     let report = format!("{error:#}");
@@ -275,7 +275,74 @@ fn render_manifest_renders_script_and_rule_ref_recipes() -> Result<()> {
         defaults: Vec::new(),
     };
 
-    let rendered = render_manifest(manifest, &minijinja::Environment::new())?;
+    let rendered = render_manifest(manifest, &minijinja::Environment::new(), RenderMode::Full)?;
     assert_rendered_script_and_rule_recipes(&rendered)?;
+    Ok(())
+}
+
+fn manifest_with_build_only_recipe_helper() -> Result<NetsukeManifest> {
+    Ok(NetsukeManifest {
+        netsuke_version: Version::parse("1.0.0")?,
+        vars: Vars::new(),
+        macros: Vec::new(),
+        rules: Vec::new(),
+        actions: vec![Target {
+            name: "test".into(),
+            recipe: Recipe::Command {
+                command: concat!(
+                    "cargo {% if command_available(\"cargo-nextest\") %}",
+                    "nextest run{% else %}test{% endif %} --all-targets"
+                )
+                .into(),
+            },
+            sources: StringOrList::Empty,
+            deps: StringOrList::Empty,
+            dependency_order: DependencyOrder::Parallel,
+            order_only_deps: StringOrList::Empty,
+            vars: Vars::new(),
+            phony: true,
+            always: false,
+            description: Some("Run tests".into()),
+        }],
+        targets: Vec::new(),
+        defaults: Vec::new(),
+    })
+}
+
+#[test]
+fn manifest_query_keeps_build_only_recipe_helpers_unrendered() -> Result<()> {
+    let manifest = manifest_with_build_only_recipe_helper()?;
+    let rendered = render_manifest(manifest, &Environment::new(), RenderMode::ManifestQuery)?;
+    let action = rendered
+        .actions
+        .first()
+        .context("rendered action missing")?;
+
+    anyhow::ensure!(
+        expect_command(&action.recipe, "query action").contains("command_available"),
+        "manifest query should leave build-only recipe helpers unrendered"
+    );
+    anyhow::ensure!(
+        action.description.as_deref() == Some("Run tests"),
+        "manifest query should still render discovery descriptions"
+    );
+    Ok(())
+}
+
+#[test]
+fn full_render_evaluates_build_only_recipe_helpers() -> Result<()> {
+    let mut env = Environment::new();
+    env.add_function("command_available", |_command: String| true);
+    let manifest = manifest_with_build_only_recipe_helper()?;
+    let rendered = render_manifest(manifest, &env, RenderMode::Full)?;
+    let action = rendered
+        .actions
+        .first()
+        .context("rendered action missing")?;
+
+    anyhow::ensure!(
+        expect_command(&action.recipe, "full action") == "cargo nextest run --all-targets",
+        "full rendering should evaluate build-only recipe helpers"
+    );
     Ok(())
 }
