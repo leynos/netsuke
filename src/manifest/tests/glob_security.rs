@@ -1,10 +1,12 @@
 //! Security regression coverage for filesystem paths exposed by Jinja `glob()`.
 
 use super::super::from_str;
+use crate::snapshot_test_support::snapshot_settings;
 use anyhow::{Result, ensure};
+use insta::assert_snapshot;
 use rstest::rstest;
 use tempfile::tempdir;
-use test_support::{fs as test_fs, manifest::manifest_yaml};
+use test_support::{display_error_chain, fs as test_fs, manifest::manifest_yaml};
 
 fn glob_manifest(pattern: &str) -> String {
     manifest_yaml(&format!(
@@ -35,6 +37,11 @@ fn jinja_glob_rejects_a_command_injecting_filename() -> Result<()> {
         diagnostic.contains("characters that require shell quoting"),
         "unexpected diagnostic: {diagnostic}"
     );
+    let rendered =
+        display_error_chain(error.as_ref()).replace(&temp.path().display().to_string(), "[TEMP]");
+    snapshot_settings("manifest").bind(|| {
+        assert_snapshot!("jinja_glob_unsafe_path", rendered);
+    });
     Ok(())
 }
 

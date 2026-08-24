@@ -184,6 +184,7 @@ impl GlobExpansion {
         if self.paths.iter().all(|path| is_shell_inert_path(path)) {
             return Ok(self.paths);
         }
+        diagnostics::record_template_path_rejection();
         Err(create_glob_error(
             &GlobErrorContext {
                 pattern: pattern.to_owned(),

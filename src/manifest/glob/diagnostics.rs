@@ -5,6 +5,7 @@
 //! that names no directory, and a match that the capability cannot resolve
 //! because a symbolic link escapes the prefix. Both are recorded here so a
 //! degraded expansion is visible without having to reproduce it.
+//! The Jinja adapter also records paths rejected at its shell-safety boundary.
 //!
 //! What is recorded is deliberately bounded and redacted.
 //!
@@ -28,6 +29,7 @@ use std::sync::Once;
 const EXPANSIONS_TOTAL: &str = "netsuke_manifest_glob_expansions_total";
 /// Metric name counting entries dropped from a glob expansion.
 const ENTRIES_SKIPPED_TOTAL: &str = "netsuke_manifest_glob_entries_skipped_total";
+const REJECTIONS_TOTAL: &str = "netsuke_manifest_glob_rejections_total";
 /// Stable marker replacing caller-controlled paths in tracing events.
 const REDACTED_PATH: &str = "<redacted>";
 
@@ -47,9 +49,30 @@ fn describe_metrics() {
              by reason: unreachable_symlink for a link the capability cannot \
              resolve, not_a_file for a directory or other non-file."
         );
+        describe_counter!(
+            REJECTIONS_TOTAL,
+            "Counts paths rejected by the Jinja glob adapter, labelled by a \
+             bounded outcome and error category."
+        );
     });
 }
 
+/// Record a path rejected by the manifest-template shell-safety adapter.
+pub(super) fn record_template_path_rejection() {
+    describe_metrics();
+    counter!(
+        REJECTIONS_TOTAL,
+        "outcome" => "unsafe_path",
+        "error_category" => "shell_quoting_required"
+    )
+    .increment(1);
+    tracing::debug!(
+        path = REDACTED_PATH,
+        outcome = "unsafe_path",
+        error_category = "shell_quoting_required",
+        "glob template path rejected"
+    );
+}
 /// Record the observations returned by the pure glob expansion query.
 pub(super) fn record(expansion: &GlobExpansion) {
     match &expansion.outcome {

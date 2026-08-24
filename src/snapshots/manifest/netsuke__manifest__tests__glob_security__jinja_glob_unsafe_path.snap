@@ -1,0 +1,6 @@
+---
+source: src/manifest/tests/glob_security.rs
+assertion_line: 43
+expression: rendered
+---
+Failed to evaluate ⁨foreach⁩ expression.: invalid operation: Glob failed for '⁨[TEMP]/*.txt⁩': ⁨glob matched a path containing characters that require shell quoting⁩. (in <expression>:1)
