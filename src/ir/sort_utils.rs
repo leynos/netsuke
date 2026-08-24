@@ -8,7 +8,10 @@
 
 use camino::Utf8PathBuf;
 
-use super::super::super::cycle::support::{path_cmp, path_eq};
+use super::super::super::cycle::support::path_eq;
+
+#[cfg(not(kani))]
+use super::super::super::cycle::support::path_cmp;
 
 /// Sort `values` in place with a stable insertion sort driven by `cmp`.
 ///
