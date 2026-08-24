@@ -1323,14 +1323,15 @@ This section is populated during implementation. It must contain, by EP-M6:
   `grep -c 'kani::proof'` over the two verification modules totals 13.
   Impact: the repository's non-vacuity discipline is convention-only. `OBL-
   PATCHES` closes this. The missing patch belongs to roadmap 4.2.2's adapter
-  harness; raise it rather than fixing it here.
+  harness; raise it rather than fixing it here. Tracked as issue #585.
 
 - Observation: `docs/execplans/4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks.md`
   carries `Status: READY FOR REVIEW` although its own Progress and Outcomes
   sections, the roadmap checkmarks, and the committed harnesses all show the
   work complete.
   Impact: none here, but do not treat execplan status fields as a source of
-  truth.
+  truth. The field is stale in that file and uses at least five different
+  vocabularies across the directory. Tracked as issue #586.
 
 ## Decision log
 
@@ -1460,8 +1461,8 @@ To be completed at EP-M6. Before setting this plan to `COMPLETE`, reconcile:
   classification, documented in the developers' guide;
 - every obligation handed from Kani to Proptest, stated as a gap rather than
   implied;
-- the missing mutation patch for roadmap 4.2.2's adapter harness, raised as a
-  follow-up rather than absorbed here.
+- the missing mutation patch for roadmap 4.2.2's adapter harness, raised as
+  issue #585 rather than absorbed here.
 
 ## Revision note
 
