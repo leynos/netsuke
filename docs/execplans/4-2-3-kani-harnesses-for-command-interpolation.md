@@ -7,7 +7,7 @@ This ExecPlan (execution plan) is a living document. The sections
 
 Status: DRAFT
 
-Revision 2.1. See `Revision note` at the foot of this document.
+Revision 2.2. See `Revision note` at the foot of this document.
 
 ## Purpose / big picture
 
@@ -886,10 +886,13 @@ the next stage on a failing gate.
   `peak RSS`, `verdict`, plus a stated `M` for the string-level and guard
   harnesses.
 - **Conformance check and mechanical stop:** if the `find_substitution` shape
-  does not verify at `N = 8` within 6 minutes, commit nothing and report. If it
-  verifies at `N = 8` but the string-level shape does not reach `M = 6`, that is
-  a deviation from `FV-CMD`: record it in `Decision log`, draft the `ADR-004`
-  extension, set status to `BLOCKED`, and obtain acceptance before EP-M1.
+  does not verify at `N = 8` within 6 minutes, commit nothing and report; that
+  shortfall would undermine the plan's premise rather than merely narrow its
+  reach, and it is not covered by the maintainer's pre-acceptance. A shortfall
+  in the *string-level* bound is different: the maintainer accepted it in
+  advance on 2026-08-24, so record the achieved bound and the residual gap in
+  `Decision log`, draft the `ADR-004` extension, and continue to EP-M1 without
+  setting the plan to `BLOCKED`.
 - **Recovery:** delete the scratch branch.
 - **Compatibility decision:** none; no interface exists yet.
 
@@ -1273,21 +1276,24 @@ This section is populated during implementation. It must contain, by EP-M6:
 
 ## Progress
 
-- [x] (2026-08-17) Reconnaissance: `src/ir/cmd_interpolate.rs`,
+- [x] (2026-08-24) Reconnaissance: `src/ir/cmd_interpolate.rs`,
   `src/ir/cycle_verification.rs`, `src/ir/cycle_support.rs`, `ADR-004`, the
   developers' guide formal-verification sections, the roadmap, the CI workflow,
   and the 4.2.2 execplan's operational lessons.
-- [x] (2026-08-17) Confirmed Kani 0.67.0 pin; `bounded_any` and stubbing are
+- [x] (2026-08-24) Confirmed Kani 0.67.0 pin; `bounded_any` and stubbing are
   experimental `-Z` features and therefore out of tolerance.
-- [x] (2026-08-17) Measured the CI baseline: `kani-smoke` 4:18-4:43 total, of
+- [x] (2026-08-24) Measured the CI baseline: `kani-smoke` 4:18-4:43 total, of
   which `make kani-ir` is 191-227s and roughly 45-75s is solving.
-- [x] (2026-08-17) Drafted revision 1.
-- [x] (2026-08-17) Six-lens design review; revision 2 rewritten in response.
-- [x] (2026-08-17) Rebased onto `origin/main` at `7e5c2679` ("Add target
+- [x] (2026-08-24) Drafted revision 1.
+- [x] (2026-08-24) Six-lens design review; revision 2 rewritten in response.
+- [x] (2026-08-24) Rebased onto `origin/main` at `7e5c2679` ("Add target
   descriptions and netsuke help targets"). No conflicts; line references
   refreshed. See `Decision log` for the relevance assessment.
-- [ ] Plan approved by the maintainer, including the three decisions flagged
-  below as requiring acceptance.
+- [x] (2026-08-24) Maintainer ratified all three decisions flagged as requiring
+  acceptance: the `RM-4.2.3.d` reformulation, harness-local oracles, and a
+  string-level bound below the roadmap's stated 256/8.
+- [ ] Plan approved by the maintainer as a whole, authorizing implementation to
+  begin at EP-M0.
 - [ ] EP-M0 feasibility spike and bound decision.
 - [ ] EP-M1 production seam; behaviour unchanged.
 - [ ] EP-M2 sigil and marker harnesses; mutation-patch contract test.
@@ -1335,10 +1341,10 @@ This section is populated during implementation. It must contain, by EP-M6:
 
 ## Decision log
 
-Three entries below are marked **requires maintainer acceptance**. They deviate
-from the roadmap's literal wording or from a constraint this plan otherwise
-imposes, and implementation must not start on the affected milestone until they
-are accepted.
+Three entries below were marked **requires maintainer acceptance**, because they
+deviate from the roadmap's literal wording or from a constraint this plan
+otherwise imposes. **All three were ratified by the maintainer on 2026-08-24**
+and are now marked **accepted**. No decision in this log is outstanding.
 
 - **Decision:** Withdraw revision 1's `PlanBuffer` / `ScanOutcome` /
   `Substitution` kernel and replace it with a three-line `substitute_chars`
@@ -1355,22 +1361,22 @@ are accepted.
   at N=4. The real cost driver is symbolic UTF-8 across the `&str` boundary,
   which the seam addresses directly. Constraint 4 now forbids the original
   approach.
-  **Date/Author:** 2026-08-17, planning agent.
+  **Date/Author:** 2026-08-24, planning agent.
 
 - **Decision:** Reformulate `RM-4.2.3.d` as the guard-placement biconditional
   `OBL-GUARD` rather than asserting `shlex::split(result).is_some()` on the
-  `Ok` branch. **Requires maintainer acceptance.**
+  `Ok` branch. **Accepted by the maintainer, 2026-08-24.**
   **Rationale:** the literal reading restates the branch condition at
   `src/ir/cmd_interpolate.rs:107` and cannot fail for any implementation. The
   ExecPlan discipline treats assuming the conclusion as a verification failure.
   The biconditional adds the "only if" direction, the result identity, and
   guard placement, each with a real failure mode demonstrated by the mutation
   patch. Its limits are stated honestly in `OBL-GUARD`.
-  **Date/Author:** 2026-08-17, planning agent.
+  **Date/Author:** 2026-08-24, planning agent.
 
 - **Decision:** Permit harness-local oracles for side conditions, and a
-  harness-local declarative specification for `OBL-SPEC`. **Requires maintainer
-  acceptance.**
+  harness-local declarative specification for `OBL-SPEC`. **Accepted by the
+  maintainer, 2026-08-24.**
   **Rationale:** `ADR-004` Option C forbids a harness-side model *replacing* a
   production path, and Option D rejects public verification ports. Neither
   forbids an independently written oracle used as the right-hand side of an
@@ -1380,19 +1386,24 @@ are accepted.
   both sides. `OBL-SPEC`'s oracle carries transcription risk, which is why the
   plan mandates a structurally different formulation and an explicit
   independence check against a second mutation.
-  **Date/Author:** 2026-08-17, planning agent.
+  **Date/Author:** 2026-08-24, planning agent.
 
 - **Decision:** Treat the roadmap's "256-character commands with at most 8
   placeholders" as a target measured against in EP-M0, and expect to meet it
   for `RM-4.2.3.a` by a window-completeness argument rather than by a large
-  bound. **Requires maintainer acceptance** if EP-M0 shows the string-level
-  bound falling short.
+  bound. **Accepted by the maintainer, 2026-08-24**, including in advance the
+  case where EP-M0 shows the string-level bound falling short. EP-M0 therefore
+  does not set the plan to `BLOCKED` on a shortfall; it records the achieved
+  bound, the residual gap, and the Proptest hand-off, and continues. The
+  mechanical stop in `Tolerances` still applies if the sigil shape cannot reach
+  a window of 8 characters, because that would undermine the plan's premise
+  rather than merely narrow its reach.
   **Rationale:** `ADR-004` records the identical collision for roadmap 4.2.1,
   where a stated 10-node bound proved unreachable and was resolved by small
   bounds plus a Proptest hand-off. For the sigil contract the bound largely
   dissolves under AXIOM-WINDOW; for the string-level and guard harnesses it does
   not, and EP-M5 covers the remainder.
-  **Date/Author:** 2026-08-17, planning agent.
+  **Date/Author:** 2026-08-24, planning agent.
 
 - **Decision:** Mandate symbolic `u8` constrained to concrete ASCII values and
   widened with `char::from`, never `kani::any::<char>()`.
@@ -1401,7 +1412,7 @@ are accepted.
   `String` construction for the same reason. A `u8` index into a constant table
   was also considered and rejected: it uses fewer input bits but reintroduces a
   ten-way multiplexer per symbol.
-  **Date/Author:** 2026-08-17, planning agent.
+  **Date/Author:** 2026-08-24, planning agent.
 
 - **Decision:** Add a `cfg(kani)` `CommandBindings::from_parts` constructor.
   **Rationale:** the fields are private and `new` runs `shell_quote`, which
@@ -1409,7 +1420,7 @@ are accepted.
   unstatable. Bypassing quoting proves the guard over a *wider* domain than
   quoted paths, which is strictly stronger, and leaves quoting where
   AXIOM-QUOTE puts it. It is `cfg(kani)`-gated and `pub(super)`.
-  **Date/Author:** 2026-08-17, planning agent.
+  **Date/Author:** 2026-08-24, planning agent.
 
 - **Decision:** Add `tests/mutation_evidence_tests.rs`, a contract test that
   `git apply --check`s every mutation patch and asserts harness parity.
@@ -1417,7 +1428,7 @@ are accepted.
   gate over `docs/verification/mutations/` as the highest-value cheap addition.
   The discipline is what makes every Kani result in this repository
   non-vacuous, and it currently rests on convention alone.
-  **Date/Author:** 2026-08-17, planning agent.
+  **Date/Author:** 2026-08-24, planning agent.
 
 - **Decision:** Do not use `ortho_config`, and make no change to
   `docs/users-guide.md`.
@@ -1425,7 +1436,7 @@ are accepted.
   behaviour. The user-facing placeholder contract is roadmap 4.4.1, which
   `Requires 4.2.3`; `docs/developers-guide.md` is the correct destination under
   AGENTS.md and gives 4.4.1 its source material.
-  **Date/Author:** 2026-08-17, planning agent.
+  **Date/Author:** 2026-08-24, planning agent.
 
 - **Decision:** Carry this plan forward unchanged in substance across the
   rebase onto `origin/main` at `7e5c2679`.
@@ -1440,14 +1451,14 @@ are accepted.
   `docs/developers-guide.md` sit outside the formal-verification sections. The
   only consequence is line-number drift in citations, refreshed in this
   revision.
-  **Date/Author:** 2026-08-17, planning agent.
+  **Date/Author:** 2026-08-24, planning agent.
 
 - **Decision:** Extend `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md`
   rather than minting a new ADR number.
   **Rationale:** the same decision — how far to bound Kani harnesses and where
   to hand off — applied to a third subject. Roadmap 4.2.2 set the precedent, and
   three files already share the `adr-004` prefix.
-  **Date/Author:** 2026-08-17, planning agent.
+  **Date/Author:** 2026-08-24, planning agent.
 
 ## Outcomes & retrospective
 
@@ -1466,7 +1477,7 @@ To be completed at EP-M6. Before setting this plan to `COMPLETE`, reconcile:
 
 ## Revision note
 
-**Revision 2 (2026-08-17).** Rewritten after a six-lens design review.
+**Revision 2 (2026-08-24).** Rewritten after a six-lens design review.
 
 What changed and why:
 
@@ -1516,7 +1527,7 @@ to three lines, the harness count drops from six to five, one contract test is
 added, and three decisions now require explicit maintainer acceptance before
 their milestones start.
 
-**Revision 2.1 (2026-08-17).** Rebased onto `origin/main` at `7e5c2679`. No
+**Revision 2.1 (2026-08-24).** Rebased onto `origin/main` at `7e5c2679`. No
 conflicts and no substantive change: that commit adds target descriptions and
 `netsuke help targets`, touches nothing this plan modifies, and its single
 `src/ir/` edit is a comment reinforcing that target descriptions stay out of
@@ -1524,3 +1535,17 @@ recipe resolution. Line references into `docs/roadmap.md`,
 `docs/developers-guide.md`, `Cargo.toml`, and `src/ir/from_manifest.rs` were
 refreshed, and a note now warns that such numbers drift — verify an anchor by
 heading or symbol name before trusting it. Remaining work is unaffected.
+
+**Revision 2.2 (2026-08-24).** The maintainer ratified all three decisions
+flagged as requiring acceptance: the `RM-4.2.3.d` reformulation as a
+guard-placement biconditional, harness-local oracles including the declarative
+specification for `OBL-SPEC`, and a string-level bound below the roadmap's
+stated 256 characters and 8 placeholders. The third was accepted in advance, so
+EP-M0 no longer sets the plan to `BLOCKED` when the string-level bound falls
+short — it records the achieved bound, the residual gap, and the Proptest
+hand-off and continues. The mechanical stop for a sigil-shape shortfall below an
+8-character window is unchanged, because that would undermine the plan's premise
+rather than narrow its reach. Planning dates were also corrected from 2026-08-17
+to 2026-08-24; the earlier value was wrong and two commit author dates still
+carry it. No obligation, milestone, or artefact changed. The plan remains
+`DRAFT` pending approval to begin implementation.
