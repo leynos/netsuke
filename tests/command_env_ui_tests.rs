@@ -92,6 +92,27 @@ fn config_cached_discovery_embedder_fixture_compiles() -> io::Result<()> {
     )
 }
 
+/// The verbose timing constructors compile for an external embedder.
+#[test]
+fn verbose_timing_reporter_embedder_fixture_compiles() -> io::Result<()> {
+    let source = "tests/ui/verbose_timing_reporter_embedder_pass.rs";
+    let rlib = NetsukeRlib::build()?;
+    let output = rlib.compile(source)?;
+    if !output.status.success() {
+        return Err(io::Error::other(format!(
+            "the verbose timing reporter fixture should compile against the public API:\n{}",
+            stderr(&output)
+        )));
+    }
+
+    let control = rlib.compile_without_netsuke_extern(source)?;
+    if control.status.success() {
+        return Err(io::Error::other(
+            "the verbose timing fixture compiled without --extern netsuke",
+        ));
+    }
+    Ok(())
+}
 /// Compile one external public-API fixture through the direct-rustc harness.
 fn compile_public_api_fixture(source: &str, failure_message: &str) -> io::Result<()> {
     let rlib = NetsukeRlib::build()?;
@@ -172,6 +193,24 @@ impl NetsukeRlib {
             .arg(format!("dependency={}", self.deps_dir.display()))
             .arg("-o")
             .arg(output_dir.path().join("command-env-ui.rmeta"))
+            .output()
+    }
+
+    /// Compile `source` without the `netsuke` extern as a harness control.
+    ///
+    /// The fixture must fail here because it imports `netsuke`; otherwise a
+    /// compile-pass result could conceal an ineffective `--extern` assertion.
+    fn compile_without_netsuke_extern(&self, source: &str) -> io::Result<Output> {
+        let output_dir = tempfile::tempdir()?;
+        Command::new(rustc())
+            .arg("--edition=2024")
+            .arg("--crate-type=bin")
+            .arg("--emit=metadata")
+            .arg(manifest_dir().join(source))
+            .arg("-L")
+            .arg(format!("dependency={}", self.deps_dir.display()))
+            .arg("-o")
+            .arg(output_dir.path().join("command-env-ui-control.rmeta"))
             .output()
     }
 }

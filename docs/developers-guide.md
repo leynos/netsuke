@@ -3789,6 +3789,18 @@ sink. `VerboseTimingReporter` writes its timing summary to that injected
 sink while the wrapped reporter continues to own stage, task, and completion
 lines.
 
+External embedders construct the generic form with
+`VerboseTimingReporter::with_writer`; `VerboseTimingReporter::new` retains the
+default stderr sink. The wrapper marks completion before it forwards the inner
+completion, then takes the owned writer from its mutex and writes the timing
+lines synchronously without holding a reporter mutex. Therefore, a blocking
+writer blocks that caller's `report_complete` operation but cannot re-enable
+stage, task, or duplicate completion forwarding. Re-entrant writer calls see
+the completed state and return without taking the writer again. Summary lines
+retain their rendered order, write errors remain ignored as they are for
+`AccessibleReporter`, and no background worker requires shutdown or delivery
+draining. The deterministic clock constructor is private and test-only.
+
 `run_with_ninja_program` (in `src/runner/mod.rs`) constructs the run's
 `StatusReporter` through `reporter::make_reporter` after resolving output mode
 and reporter settings, then shares it via the `ExecutionContext` it passes to

@@ -140,6 +140,9 @@ sink.
 - [x] (2026-02-26 00:00Z) Stage E: updated docs/design/roadmap and passed all
       required quality gates (`make check-fmt`, `make lint`, `make test`) plus
       Markdown validation (`make markdownlint`, `make nixie`).
+- [x] (2026-08-24) Review follow-up: exposed the public generic writer
+      constructor, added direct-rustc external API coverage, and transferred
+      writer ownership before synchronous timing output.
 
 ## Surprises & Discoveries
 
@@ -152,9 +155,10 @@ sink.
   toggles and are the right extension point for verbose timing behaviour.
 - `--progress false` still traverses all stage callbacks internally, so timing
   capture can remain active while progress output remains suppressed.
-- `VerboseTimingReporter` tests that call `report_complete` emit summary lines
-  on stderr during test execution; this is expected and harmless for gate
-  output.
+- Timing sinks can block or re-enter status reporting. The reporter must mark
+  completion before forwarding it, then call the sink only after releasing all
+  reporter mutexes. This makes the blocked call explicit, preserves summary
+  line order, and makes recursive status calls harmless.
 
 ## Decision Log
 
@@ -175,6 +179,13 @@ sink.
 - Decision: prefer deterministic duration formatting with existing std library
   types and no new dependency. Rationale: reduces churn and keeps tests stable
   and straightforward. Date/Author: 2026-02-25 / Codex.
+
+- Decision: transfer the writer out of its mutex before synchronously emitting
+  a completed summary. Rationale: `Write` is arbitrary user code and may block
+  or call back into the reporter; an owned, synchronous sink preserves
+  completion-before-summary ordering without holding a reporter mutex or
+  introducing worker shutdown and delivery obligations. Date/Author:
+  2026-08-24 / Codex.
 
 ## Outcomes & Retrospective
 
@@ -203,6 +214,10 @@ Validation evidence:
 - `make test` passed (log: `/tmp/3-9-3-test.log`).
 - `make markdownlint` passed (log: `/tmp/3-9-3-markdownlint.log`).
 - `make nixie` passed (log: `/tmp/3-9-3-nixie.log`).
+
+The review follow-up adds public API, property-state-machine, blocking-sink,
+and re-entrant-sink coverage; rerun the current repository gates before
+relying on the historical results above.
 
 Lessons learned:
 

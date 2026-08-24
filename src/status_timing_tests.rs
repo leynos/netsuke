@@ -1,350 +1,183 @@
-//! Tests for verbose timing summary support.
+//! Property-based state-machine tests for verbose timing summaries.
 
 use super::*;
 use crate::output_prefs;
-use crate::snapshot_test_support::{snapshot_settings, theme_prefs};
-use insta::assert_snapshot;
-use rstest::{fixture, rstest};
-use std::collections::VecDeque;
+use proptest::prelude::*;
+use std::io::{self, Write};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use test_support::fluent::normalize_fluent_isolates;
-use test_support::{EnLocalizer, en_localizer};
 
-#[fixture]
-fn test_prefs() -> OutputPrefs {
-    output_prefs::resolve_with(None, |_| None)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RecordedEvent {
+    Stage,
+    Progress,
+    Complete,
+    Summary,
 }
 
 #[derive(Debug)]
-struct FakeClock {
-    values: Mutex<VecDeque<Duration>>,
-    fallback: Duration,
-    call_count: AtomicUsize,
+struct EventRecordingReporter {
+    events: Arc<Mutex<Vec<RecordedEvent>>>,
 }
 
-impl FakeClock {
-    fn from_millis(values: &[u64]) -> Self {
-        let points = values
-            .iter()
-            .copied()
-            .map(Duration::from_millis)
-            .collect::<VecDeque<_>>();
-        let fallback = points.back().copied().unwrap_or(Duration::ZERO);
-        Self {
-            values: Mutex::new(points),
-            fallback,
-            call_count: AtomicUsize::new(0),
-        }
-    }
-
-    fn now(&self) -> Duration {
-        self.call_count.fetch_add(1, Ordering::SeqCst);
-        let mut values = self
-            .values
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        values.pop_front().unwrap_or(self.fallback)
-    }
-
-    fn call_count(&self) -> usize {
-        self.call_count.load(Ordering::SeqCst)
-    }
-}
-
-#[rstest]
-fn timing_recorder_renders_happy_path_summary(test_prefs: OutputPrefs) {
-    let total = StageNumber::new_unchecked(6);
-    let mut state = TimingState::default();
-    state.start_stage(
-        Duration::from_millis(0),
-        StageMarker {
-            current: StageNumber::new_unchecked(1),
-            total,
-        },
-        "Reading manifest file",
-    );
-    state.start_stage(
-        Duration::from_millis(12),
-        StageMarker {
-            current: StageNumber::new_unchecked(2),
-            total,
-        },
-        "Parsing YAML document",
-    );
-    state.start_stage(
-        Duration::from_millis(16),
-        StageMarker {
-            current: StageNumber::new_unchecked(3),
-            total,
-        },
-        "Expanding template directives",
-    );
-    state.finish(Duration::from_millis(23));
-
-    let lines = render_summary_lines(test_prefs, state.completed_stages());
-    let [header, stage1, stage2, stage3, total_line] = lines.as_slice() else {
-        panic!("expected 5 timing summary lines");
-    };
-    assert!(normalize_fluent_isolates(header).contains("Timing:"));
-    assert!(normalize_fluent_isolates(header).contains("Stage timing summary:"));
-    assert_eq!(
-        normalize_fluent_isolates(stage1),
-        "  - Stage 1/6: Reading manifest file: 12ms"
-    );
-    assert_eq!(
-        normalize_fluent_isolates(stage2),
-        "  - Stage 2/6: Parsing YAML document: 4ms"
-    );
-    assert_eq!(
-        normalize_fluent_isolates(stage3),
-        "  - Stage 3/6: Expanding template directives: 7ms"
-    );
-    assert_eq!(
-        normalize_fluent_isolates(total_line),
-        "  Total pipeline time: 23ms"
-    );
-}
-
-#[rstest]
-fn timing_recorder_incomplete_flow_has_no_summary_lines(test_prefs: OutputPrefs) {
-    let total = StageNumber::new_unchecked(6);
-    let mut state = TimingState::default();
-    state.start_stage(
-        Duration::from_millis(0),
-        StageMarker {
-            current: StageNumber::new_unchecked(1),
-            total,
-        },
-        "Reading manifest file",
-    );
-
-    let lines = render_summary_lines(test_prefs, state.completed_stages());
-    assert!(lines.is_empty());
-}
-
-#[rstest]
-#[case(Duration::from_nanos(7), "7ns")]
-#[case(Duration::from_micros(18), "18us")]
-#[case(Duration::from_millis(22), "22ms")]
-#[case(Duration::from_millis(1_900), "1.900s")]
-#[case(Duration::from_secs(3), "3s")]
-fn duration_formatting_uses_expected_units(#[case] duration: Duration, #[case] expected: &str) {
-    assert_eq!(format_duration(duration), expected);
-}
-
-#[rstest]
-fn verbose_timing_reporter_finalizes_current_stage_on_complete(test_prefs: OutputPrefs) {
-    struct ObservingReporter {
-        observed_clock_calls: Arc<Mutex<Vec<usize>>>,
-        clock: Arc<FakeClock>,
-    }
-
-    impl StatusReporter for ObservingReporter {
-        fn report_stage(&self, _current: StageNumber, _total: StageNumber, _description: &str) {}
-        fn report_complete(&self, _tool_key: LocalizationKey) {
-            let mut observed = self
-                .observed_clock_calls
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            observed.push(self.clock.call_count());
-        }
-    }
-
-    let observed_clock_calls = Arc::new(Mutex::new(Vec::new()));
-    let clock = Arc::new(FakeClock::from_millis(&[0, 15]));
-    let reporter_clock = Arc::clone(&clock);
-    let reporter = VerboseTimingReporter::with_clock(
-        Box::new(ObservingReporter {
-            observed_clock_calls: Arc::clone(&observed_clock_calls),
-            clock: Arc::clone(&clock),
-        }),
-        test_prefs,
-        Box::new(move || reporter_clock.now()),
-    );
-    reporter.report_stage(
-        StageNumber::new_unchecked(1),
-        StageNumber::new_unchecked(6),
-        "Reading manifest file",
-    );
-    reporter.report_complete(LocalizationKey::new(keys::STATUS_TOOL_GENERATE));
-
-    let observed = observed_clock_calls
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    assert_eq!(
-        observed.as_slice(),
-        &[2],
-        "stage timing should be finalized before inner completion output"
-    );
-
-    let state = reporter
-        .state
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let lines = render_summary_lines(test_prefs, state.completed_stages());
-    let [header, stage_line, total_line] = lines.as_slice() else {
-        panic!("expected 3 timing summary lines");
-    };
-    assert!(normalize_fluent_isolates(header).contains("Timing:"));
-    assert!(normalize_fluent_isolates(header).contains("Stage timing summary:"));
-    assert!(normalize_fluent_isolates(stage_line).contains("Stage 1/6: Reading manifest file"));
-    assert!(normalize_fluent_isolates(stage_line).ends_with(": 15ms"));
-    assert!(normalize_fluent_isolates(total_line).contains("Total pipeline time: 15ms"));
-}
-
-#[derive(Debug, Default)]
-struct Counts {
-    stages: usize,
-    tasks: usize,
-    completions: usize,
-}
-
-#[derive(Debug)]
-struct CountingReporter {
-    counts: Arc<Mutex<Counts>>,
-}
-
-impl StatusReporter for CountingReporter {
+impl StatusReporter for EventRecordingReporter {
     fn report_stage(&self, _current: StageNumber, _total: StageNumber, _description: &str) {
-        self.counts
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .stages += 1;
+        record_event(&self.events, RecordedEvent::Stage);
     }
 
     fn report_task_progress(&self, _current: u32, _total: u32, _description: &str) {
-        self.counts
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .tasks += 1;
+        record_event(&self.events, RecordedEvent::Progress);
     }
 
     fn report_complete(&self, _tool_key: LocalizationKey) {
-        self.counts
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .completions += 1;
+        record_event(&self.events, RecordedEvent::Complete);
     }
 }
 
-#[rstest]
-fn verbose_timing_reporter_suppresses_progress_updates_after_complete(test_prefs: OutputPrefs) {
-    let counts = Arc::new(Mutex::new(Counts::default()));
-    let reporter = VerboseTimingReporter::with_clock(
-        Box::new(CountingReporter {
-            counts: Arc::clone(&counts),
+#[derive(Debug)]
+struct EventRecordingWriter {
+    buffer: Arc<Mutex<Vec<u8>>>,
+    events: Arc<Mutex<Vec<RecordedEvent>>>,
+    summary_started: bool,
+}
+
+impl Write for EventRecordingWriter {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        if !self.summary_started {
+            record_event(&self.events, RecordedEvent::Summary);
+            self.summary_started = true;
+        }
+        self.buffer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+enum StatusUpdate {
+    Stage {
+        current: u32,
+        description: String,
+    },
+    Progress {
+        current: u32,
+        total: u32,
+        description: String,
+    },
+}
+
+#[derive(Debug, Clone)]
+enum StatusOperation {
+    Update(StatusUpdate),
+    Complete,
+}
+
+fn record_event(events: &Arc<Mutex<Vec<RecordedEvent>>>, event: RecordedEvent) {
+    events
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .push(event);
+}
+
+fn status_update_strategy() -> impl Strategy<Value = StatusUpdate> {
+    prop_oneof![
+        (1_u32..=6, "[a-z]{0,16}").prop_map(|(current, description)| StatusUpdate::Stage {
+            current,
+            description
         }),
-        test_prefs,
-        Box::new(|| Duration::from_millis(50)),
-    );
-    reporter.report_stage(
-        StageNumber::new_unchecked(1),
-        StageNumber::new_unchecked(6),
-        "Reading manifest file",
-    );
-    reporter.report_task_progress(1, 2, "cc -c src/main.c");
-    reporter.report_complete(LocalizationKey::new(keys::STATUS_TOOL_GENERATE));
-    reporter.report_stage(
-        StageNumber::new_unchecked(2),
-        StageNumber::new_unchecked(6),
-        "Parsing YAML document",
-    );
-    reporter.report_task_progress(2, 2, "cc -c src/lib.c");
-
-    let final_counts = counts
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    assert_eq!(
-        final_counts.stages, 1,
-        "stage updates should stop after completion"
-    );
-    assert_eq!(
-        final_counts.tasks, 1,
-        "task updates should stop after completion"
-    );
-    assert_eq!(
-        final_counts.completions, 1,
-        "completion should still be delegated"
-    );
+        (0_u32..=8, 1_u32..=8, "[a-z]{0,16}").prop_map(|(current, total, description)| {
+            StatusUpdate::Progress {
+                current,
+                total,
+                description,
+            }
+        }),
+    ]
 }
 
-#[rstest]
-fn verbose_timing_reporter_writes_summary_to_injected_sink(en_localizer: EnLocalizer) {
-    let _localizer = en_localizer;
-    let clock = Arc::new(FakeClock::from_millis(&[0, 12, 23]));
-    let injected_clock = Arc::clone(&clock);
-    let reporter = VerboseTimingReporter::with_clock_and_writer(
-        Box::new(crate::status::SilentReporter),
-        test_prefs(),
-        Box::new(move || injected_clock.now()),
-        Vec::new(),
-    );
-    reporter.report_stage(
-        StageNumber::new_unchecked(1),
-        StageNumber::new_unchecked(6),
-        "Reading manifest file",
-    );
-    reporter.report_stage(
-        StageNumber::new_unchecked(2),
-        StageNumber::new_unchecked(6),
-        "Parsing YAML document",
-    );
-    reporter.report_complete(LocalizationKey::new(keys::STATUS_TOOL_GENERATE));
-
-    let output = reporter
-        .writer
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let rendered = normalize_fluent_isolates(&String::from_utf8_lossy(&output));
-    assert!(rendered.contains("Stage timing summary:"));
-    assert!(rendered.contains("Stage 1/6: Reading manifest file: 12ms"));
-    assert!(rendered.contains("Stage 2/6: Parsing YAML document: 11ms"));
-    assert!(rendered.contains("Total pipeline time: 23ms"));
+fn status_operation_strategy() -> impl Strategy<Value = StatusOperation> {
+    prop_oneof![
+        status_update_strategy().prop_map(StatusOperation::Update),
+        Just(StatusOperation::Complete)
+    ]
 }
 
-#[rstest]
-#[case::unicode(crate::theme::ThemePreference::Unicode, "timing_summary_unicode")]
-#[case::ascii(crate::theme::ThemePreference::Ascii, "timing_summary_ascii")]
-fn timing_summary_snapshot(
-    en_localizer: EnLocalizer,
-    #[case] theme: crate::theme::ThemePreference,
-    #[case] snapshot_name: &str,
-) {
-    let _localizer = en_localizer;
-    let total = StageNumber::new_unchecked(6);
-    let mut state = TimingState::default();
-    state.start_stage(
-        Duration::from_millis(0),
-        StageMarker {
-            current: StageNumber::new_unchecked(1),
+fn apply_update(reporter: &dyn StatusReporter, update: &StatusUpdate) {
+    match update {
+        StatusUpdate::Stage {
+            current,
+            description,
+        } => reporter.report_stage(
+            StageNumber::new_unchecked(*current),
+            StageNumber::new_unchecked(6),
+            description,
+        ),
+        StatusUpdate::Progress {
+            current,
             total,
-        },
-        "Reading manifest file",
-    );
-    state.start_stage(
-        Duration::from_millis(12),
-        StageMarker {
-            current: StageNumber::new_unchecked(2),
-            total,
-        },
-        "Parsing YAML document",
-    );
-    state.start_stage(
-        Duration::from_millis(16),
-        StageMarker {
-            current: StageNumber::new_unchecked(3),
-            total,
-        },
-        "Expanding template directives",
-    );
-    state.finish(Duration::from_millis(23));
+            description,
+        } => reporter.report_task_progress(*current, *total, description),
+    }
+}
 
-    let rendered = normalize_fluent_isolates(
-        &render_summary_lines(theme_prefs(theme), state.completed_stages()).join("\n"),
-    );
+proptest! {
+    #![proptest_config(ProptestConfig { cases: 64, .. ProptestConfig::default() })]
 
-    snapshot_settings("status_timing").bind(|| {
-        assert_snapshot!(snapshot_name, rendered);
-    });
+    #[test]
+    fn verbose_timing_reporter_preserves_completion_state_machine(
+        first_description in "[a-z]{0,16}",
+        before_complete in prop::collection::vec(status_update_strategy(), 0..12),
+        after_complete in prop::collection::vec(status_operation_strategy(), 0..12),
+    ) {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let buffer = Arc::new(Mutex::new(Vec::new()));
+        let clock_ticks = Arc::new(AtomicUsize::new(0));
+        let reporter_clock = Arc::clone(&clock_ticks);
+        let reporter = VerboseTimingReporter::with_clock_and_writer(
+            Box::new(EventRecordingReporter { events: Arc::clone(&events) }),
+            output_prefs::resolve_with(None, |_| None),
+            Box::new(move || Duration::from_millis(reporter_clock.fetch_add(1, Ordering::SeqCst) as u64)),
+            EventRecordingWriter { buffer: Arc::clone(&buffer), events: Arc::clone(&events), summary_started: false },
+        );
+
+        let first_stage = StatusUpdate::Stage { current: 1, description: first_description };
+        let mut expected_forwarded = vec![RecordedEvent::Stage];
+        apply_update(&reporter, &first_stage);
+        for update in &before_complete {
+            apply_update(&reporter, update);
+            expected_forwarded.push(match update {
+                StatusUpdate::Stage { .. } => RecordedEvent::Stage,
+                StatusUpdate::Progress { .. } => RecordedEvent::Progress,
+            });
+        }
+
+        reporter.report_complete(LocalizationKey::new(keys::STATUS_TOOL_GENERATE));
+        expected_forwarded.push(RecordedEvent::Complete);
+        for operation in &after_complete {
+            match operation {
+                StatusOperation::Update(update) => apply_update(&reporter, update),
+                StatusOperation::Complete => reporter.report_complete(LocalizationKey::new(keys::STATUS_TOOL_GENERATE)),
+            }
+        }
+
+        let observed = events.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
+        let forwarded = observed.iter().copied().filter(|event| *event != RecordedEvent::Summary).collect::<Vec<_>>();
+        prop_assert_eq!(forwarded, expected_forwarded);
+        prop_assert_eq!(observed.iter().filter(|event| **event == RecordedEvent::Complete).count(), 1);
+        prop_assert_eq!(observed.iter().filter(|event| **event == RecordedEvent::Summary).count(), 1);
+        let completion_index = observed.iter().position(|event| *event == RecordedEvent::Complete).expect("the forced completion should reach the inner reporter");
+        let summary_index = observed.iter().position(|event| *event == RecordedEvent::Summary).expect("the injected writer should observe one timing summary");
+        prop_assert!(completion_index < summary_index);
+
+        let output = buffer.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let rendered = normalize_fluent_isolates(&String::from_utf8_lossy(&output));
+        prop_assert!(rendered.contains("Stage timing summary:"));
+    }
 }

@@ -59,7 +59,7 @@ pub use self::indicatif::IndicatifReporter;
 use self::indicatif::{format_completion_line, stage_label, task_progress_update};
 
 /// Reports pipeline stage transitions and completion.
-pub trait StatusReporter {
+pub trait StatusReporter: Send + Sync {
     /// Emit a stage update.
     fn report_stage(&self, current: StageNumber, total: StageNumber, description: &str);
     /// Emit validated, monotonic task progress for Stage 6 execution.

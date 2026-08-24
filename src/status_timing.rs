@@ -91,12 +91,13 @@ impl TimingState {
 /// Status reporter wrapper that emits per-stage timings on successful
 /// completion.
 ///
-/// The writer defaults to [`io::Stderr`]; tests can supply a `Vec<u8>`
-/// via the test-only writer-and-clock constructor for output capture.
-/// The summary sink is guarded by a [`Mutex`] and written while the guard is
-/// held, serialising whole lines in call order; the reporting path never
-/// re-enters the same writer, so the bounded lock scope cannot deadlock,
-/// mirroring [`super::AccessibleReporter`].
+/// The writer defaults to [`io::Stderr`]. [`Self::with_writer`] accepts an
+/// owned alternative sink. On the first completion, the wrapper atomically
+/// stops forwarding later updates, forwards completion to its inner reporter,
+/// and then writes the summary synchronously. It takes the writer out of its
+/// mutex before calling [`Write::write`], so a blocking or re-entrant writer
+/// never runs while a reporter-owned mutex is held. Write errors are ignored,
+/// consistently with [`super::AccessibleReporter`].
 pub struct VerboseTimingReporter<W: Write + Send = io::Stderr> {
     /// Reporter receiving forwarded status events.
     inner: Box<dyn StatusReporter>,
@@ -106,32 +107,41 @@ pub struct VerboseTimingReporter<W: Write + Send = io::Stderr> {
     clock: Box<MonotonicClock>,
     /// Timing state shared across reporting threads.
     state: Mutex<TimingState>,
-    /// Sink receiving the rendered timing summary.
-    writer: Mutex<W>,
+    /// Sink receiving the rendered timing summary when it is available.
+    writer: Mutex<Option<W>>,
 }
 
 impl VerboseTimingReporter {
     /// Wrap an existing reporter with verbose timing summary support.
     #[must_use]
     pub fn new(inner: Box<dyn StatusReporter>, prefs: OutputPrefs) -> Self {
-        let start = Instant::now();
-        Self::with_clock(inner, prefs, Box::new(move || start.elapsed()))
-    }
-
-    /// Wrap an existing reporter with verbose timing summary support and an
-    /// injected monotonic clock.
-    fn with_clock(
-        inner: Box<dyn StatusReporter>,
-        prefs: OutputPrefs,
-        clock: Box<MonotonicClock>,
-    ) -> Self {
-        Self::with_clock_and_writer(inner, prefs, clock, io::stderr())
+        Self::with_writer(inner, prefs, io::stderr())
     }
 }
 
 impl<W: Write + Send> VerboseTimingReporter<W> {
-    /// Wrap an existing reporter with verbose timing summary support, an
-    /// injected monotonic clock, and an injected timing summary sink.
+    /// Wrap an existing reporter with verbose timing support and `writer` as
+    /// its timing-summary sink.
+    ///
+    /// The sink is owned by this wrapper. Completion is forwarded to `inner`
+    /// before the first timing line is written. A blocking sink blocks only
+    /// that `report_complete` call; the wrapper has already recorded
+    /// completion, so concurrent stage, progress, and completion calls return
+    /// without forwarding or producing another summary.
+    #[must_use]
+    pub fn with_writer(inner: Box<dyn StatusReporter>, prefs: OutputPrefs, writer: W) -> Self {
+        let start = Instant::now();
+        Self {
+            inner,
+            prefs,
+            clock: Box::new(move || start.elapsed()),
+            state: Mutex::new(TimingState::default()),
+            writer: Mutex::new(Some(writer)),
+        }
+    }
+
+    /// Construct a reporter with deterministic time and an injected sink.
+    #[cfg(test)]
     fn with_clock_and_writer(
         inner: Box<dyn StatusReporter>,
         prefs: OutputPrefs,
@@ -143,8 +153,30 @@ impl<W: Write + Send> VerboseTimingReporter<W> {
             prefs,
             clock,
             state: Mutex::new(TimingState::default()),
-            writer: Mutex::new(writer),
+            writer: Mutex::new(Some(writer)),
         }
+    }
+
+    /// Write one completed timing summary without holding a reporter mutex.
+    fn write_summary(&self, lines: Vec<String>) {
+        let Some(mut writer) = self
+            .writer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take()
+        else {
+            return;
+        };
+
+        for line in lines {
+            drop(writeln!(writer, "{line}"));
+        }
+
+        let mut writer_slot = self
+            .writer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *writer_slot = Some(writer);
     }
 }
 
@@ -181,29 +213,24 @@ impl<W: Write + Send> StatusReporter for VerboseTimingReporter<W> {
     }
 
     fn report_complete(&self, tool_key: LocalizationKey) {
-        let lines = {
+        let Some(lines) = ({
             let mut state = self
                 .state
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             if state.completed {
-                Vec::new()
+                None
             } else {
                 state.completed = true;
                 state.finish((self.clock)());
-                render_summary_lines(self.prefs, state.completed_stages())
+                Some(render_summary_lines(self.prefs, state.completed_stages()))
             }
+        }) else {
+            return;
         };
 
         self.inner.report_complete(tool_key);
-
-        let mut writer = self
-            .writer
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        for line in lines {
-            drop(writeln!(writer, "{line}"));
-        }
+        self.write_summary(lines);
     }
 }
 /// Render the timing summary header, per-stage lines, and total duration.
@@ -260,6 +287,15 @@ fn format_duration(duration: Duration) -> String {
     format!("{}ns", duration.as_nanos())
 }
 
+#[path = "status_timing_concurrency_tests.rs"]
+#[cfg(test)]
+mod concurrency_tests;
+#[path = "status_timing_format_tests.rs"]
+#[cfg(test)]
+mod format_tests;
+#[path = "status_timing_lifecycle_tests.rs"]
+#[cfg(test)]
+mod lifecycle_tests;
 #[path = "status_timing_tests.rs"]
 #[cfg(test)]
 mod tests;
