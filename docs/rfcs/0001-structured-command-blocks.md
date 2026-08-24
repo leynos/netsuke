@@ -641,6 +641,16 @@ to Netsuke's effective working directory after command-line `-C` processing.
 Netsuke opens the path when the action executes, not while the manifest is
 compiled.
 
+Before opening any stream file, Netsuke validates every configured destination
+in the block as one set: `stdin`, `stdout`, `stderr`, and `tee`. The runner
+resolves each destination to a file identity, not merely a rendered path
+string. The resolution must account for relative aliases, symlinks, and hard
+links where the platform provides the required filesystem identity information.
+If two configured destinations identify the same file, validation fails before
+any destination is created, truncated, or opened. The validation also applies
+when a destination is used alongside a pipeline; the pipeline restrictions
+below remain in force.
+
 Stream paths do not implicitly become target sources, dependencies, or outputs.
 Manifest authors must continue to declare graph relationships explicitly.
 Netsuke does not create missing parent directories.
@@ -681,9 +691,9 @@ error to it.
 Standard error is independent of the stdout selection. This RFC does not define
 stderr piping, stderr teeing, or `2>&1`-style stream merging.
 
-A rendered `stderr` path may not equal the rendered `stdout` or `tee` path for
-the same block. Opening the same path through independent truncating handles
-would give ambiguous ordering and file-offset semantics.
+No two configured stream destinations may identify the same file. Opening the
+same file through independent truncating handles would give ambiguous ordering
+and file-offset semantics.
 
 ### 12.5 File modes and byte handling
 
@@ -722,12 +732,17 @@ stage or out of its last stage in this RFC.
 ### 13.2 Execution
 
 Netsuke creates operating-system pipes and starts the stages as one execution
-unit. Standard output from each non-final stage feeds standard input of the next
-stage. The final stage applies its own inherited, `stdout`, or `tee` behaviour.
+unit. It starts every stage and every required drain or tee relay before waiting
+for any stage. Standard output from each non-final stage feeds standard input of
+the next stage. The final stage applies its own inherited, `stdout`, or `tee`
+behaviour.
 
 If a stage cannot be spawned, Netsuke terminates and reaps any stages already
-started for that pipeline, then reports the spawn failure. After successful
-startup, Netsuke waits for every stage and drains every managed stream.
+started for that pipeline, then reports the spawn failure. If a relay or tee
+write fails, Netsuke closes the affected pipe ends, terminates every still-
+running stage, and reaps every stage that was started. Otherwise, after all
+stages and relays have started successfully, Netsuke waits for every stage and
+drains every managed stream.
 
 The pipeline succeeds only when:
 
@@ -815,7 +830,10 @@ the required information is available at compile time.
 - The item after `pipe: true` must be a structured command block.
 - A pipeline recipient may not specify `stdin`.
 - Pipelines may not cross rule, script, or legacy-string boundaries.
-- `stderr` may not resolve to the same path as `stdout` or `tee` in one block.
+- All configured destinations among `stdin`, `stdout`, `stderr`, and `tee` must
+  have distinct resolved file identities. Validation must detect relative path
+  aliases, symlinks, and hard links before any stream destination is opened,
+  created, or truncated.
 
 ### 15.4 Reference validation
 
@@ -956,14 +974,33 @@ The following requirements are normative:
 - action plans are versioned and validated before execution;
 - the generated command contains no rendered user arguments or environment
   values;
-- the action identifier is opaque and cannot select data outside the plan;
-- action-plan files live outside the project tree in a private temporary
-  directory;
-- owner-only permissions or the closest platform equivalent protect the plan;
-- the plan remains alive until Ninja and all action-runner children finish;
-- normal cleanup removes the plan, with bounded stale-file cleanup after
-  abnormal termination; and
+- the action identifier is opaque and cannot select data outside the plan; and
 - diagnostics and telemetry do not dump the complete plan by default.
+
+Action-plan lifetime depends on how the Ninja manifest was produced:
+
+- During a build that Netsuke launches, action plans live outside the project
+  tree in a private temporary directory. Netsuke leases each plan exclusively
+  to the generated Ninja edge, and the lease remains held through Ninja and all
+  action-runner children. Owner-only permissions, or the closest platform
+  equivalent, protect the plan. Normal cleanup removes the plan after the lease
+  ends, with bounded stale-file cleanup after abnormal termination.
+- For `netsuke generate --output <manifest>`, generation does not launch Ninja,
+  so a temporary plan cannot be removed when generation exits. Netsuke instead
+  publishes each plan as a private sidecar associated with the generated output
+  and records the association in a versioned manifest-local index. Publication
+  is atomic: acquire an exclusive lease for the output, write and validate the
+  new sidecar, then atomically replace the index that names the complete
+  sidecar set. The sidecar remains available for later Ninja invocations and is
+  protected by the same owner-only permissions. Replacing or deleting the
+  generated output releases its lease and removes its associated sidecars;
+  bounded stale-sidecar cleanup handles interrupted publication and abandoned
+  leases without scanning unbounded paths.
+
+The generated-output association must not allow a manifest or action identifier
+to select a plan outside its private sidecar set. A later `netsuke generate`
+must either publish a complete replacement or leave the previous usable
+association intact.
 
 A recipe containing only legacy command text may continue to lower directly to
 Ninja command text. Once a recipe contains a structured block, rule item, or
@@ -1076,14 +1113,16 @@ After acceptance and implementation:
 - Add the hidden, versioned action-runner entry point.
 - Implement direct spawn, environment overlay, stream files, teeing, and strict
   pipeline status collection.
-- Add bounded cleanup and private action-plan materialization.
+- Add private action-plan materialization with exclusive leases, bounded stale
+  cleanup, and persistent generated-output sidecars.
 - Add Windows batch-target rejection.
 
 ### 20.4 Phase 4: Ninja lowering
 
 - Generate action-plan sidecars and runner commands for structured units.
 - Keep legacy command lowering unchanged.
-- Ensure temporary-plan lifetime covers every Ninja child.
+- Ensure build-time leases cover every Ninja child and generated-output plans
+  remain available after `generate` exits.
 - Extend graph and debug views to distinguish direct, shell, and pipeline units
   without exposing secrets.
 
@@ -1109,8 +1148,18 @@ The implementation should include:
   stderr bytes, and exit status for cross-platform integration tests;
 - pipeline tests where the first, middle, and final stages fail independently;
 - spawn-failure tests that verify already-started stages are reaped;
+- high-volume pipeline tests that verify all stages and drain or tee relays
+  start before waiting, plus tee-write-failure tests that verify affected pipes
+  close, remaining stages terminate, and every started stage is reaped;
 - byte-oriented tee tests including non-UTF-8 output;
-- truncate and path-resolution tests for every stream field;
+- truncate and path-resolution tests for every stream field and every pair of
+  configured stream destinations, including relative aliases, symlinks, and
+  hard links, verifying that collisions are rejected before any open or
+  truncate;
+- action-plan lifecycle tests covering build-time cleanup after all Ninja and
+  runner children finish, persistent `generate --output` sidecars, exclusive
+  leases, atomic publication, replacement and deletion cleanup, and bounded
+  stale-sidecar cleanup;
 - duplicate environment-key tests, including Windows case folding;
 - compatibility snapshots for existing scalar and all-string-list lowering;
 - rule-cycle and pipeline-boundary tests;
