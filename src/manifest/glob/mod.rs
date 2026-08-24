@@ -280,7 +280,18 @@ pub(super) fn expand_glob(
 
     let pattern_state = GlobPattern::new(pattern)?;
     let normalized = pattern_state.normalized();
+    // Resolve the injected base to a symlink-free absolute path before it is
+    // embedded in the search text and opened as the capability root. A
+    // workspace reached through a symbolic link must still expand relative
+    // globs; walking the linked spelling component-by-component would reject
+    // the link itself. Relative bases become absolute here, which the rest of
+    // the seam already accepts.
+    let base = base.map(|dir| {
+        dir.canonicalize()
+            .unwrap_or_else(|_| dir.to_path_buf())
+    });
     let (search, strip) = base
+        .as_deref()
         .filter(|_| !Path::new(normalized).is_absolute())
         .map_or_else(
             || (normalized.to_owned(), None),
@@ -303,7 +314,11 @@ pub(super) fn expand_glob(
         )
     })?;
 
-    let Some(root) = open_root_dir(&search, base).map_err(|e| {
+    // `search` already embeds the injected base (`base.join(normalized)`), so
+    // the capability root must be opened from the literal prefix as written
+    // rather than passing `base` again: doing the latter would reopen the base
+    // directory and then traverse its own name, doubling the path component.
+    let Some(root) = open_root_dir(&search, None).map_err(|e| {
         create_glob_error(
             &GlobErrorContext {
                 pattern: pattern_state.raw().to_owned(),
