@@ -61,6 +61,14 @@ pub(crate) fn register_functions(
 }
 
 /// Fetch a URL for the `fetch` template function, applying policy and optional caching.
+///
+/// # Errors
+///
+/// Returns an error when the template arguments are invalid or unused, the URL
+/// cannot be parsed, or the network policy rejects it. When caching is
+/// enabled, cache directory, entry, read, write, and sync failures are also
+/// reported. Remote request failures, response-body read failures, and
+/// responses that exceed the configured size limit are reported as errors.
 fn fetch(
     url: &str,
     kwargs: &Kwargs,

@@ -86,6 +86,11 @@ pub(super) fn relative_to(path: &Utf8Path, root: &Utf8Path) -> Result<String, Er
 /// Roots return without filesystem access; an empty path or `.` resolves the
 /// current directory with filesystem access; any other path is canonicalized
 /// through its parent directory handle.
+///
+/// # Errors
+///
+/// Returns a template error when the current directory, the path's parent
+/// directory, or the path's canonical target cannot be resolved.
 pub(super) fn canonicalize_any(path: &Utf8Path) -> Result<Utf8PathBuf, Error> {
     if path.as_str().is_empty() || path == Utf8Path::new(".") {
         return current_dir_utf8().map_err(|err| {
@@ -226,6 +231,11 @@ fn is_root(path: &Utf8Path) -> bool {
 }
 
 /// Resolve the current directory to an absolute, canonical UTF-8 path.
+///
+/// # Errors
+///
+/// Returns the underlying I/O error when the current directory cannot be
+/// opened or canonicalized.
 fn current_dir_utf8() -> Result<Utf8PathBuf, io::Error> {
     let dir = Dir::open_ambient_dir(".", ambient_authority())?;
     dir.canonicalize(Utf8Path::new("."))

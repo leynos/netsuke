@@ -70,6 +70,12 @@ pub(super) fn compute_hash(path: &Utf8Path, alg: &str) -> Result<String, Error> 
     }
 }
 /// Hash the file and truncate the hex digest to `len` characters.
+///
+/// # Errors
+///
+/// Returns an error when `alg` is unsupported, when a legacy algorithm is
+/// unavailable without the `legacy-digests` feature, or when the file cannot
+/// be opened or read.
 pub(super) fn compute_digest(path: &Utf8Path, len: usize, alg: &str) -> Result<String, Error> {
     let mut hash = compute_hash(path, alg)?;
     if len < hash.len() {
@@ -79,6 +85,11 @@ pub(super) fn compute_digest(path: &Utf8Path, len: usize, alg: &str) -> Result<S
 }
 
 /// Stream the file through a hasher in fixed-size chunks, returning lowercase hex.
+///
+/// # Errors
+///
+/// Returns a template error when the file cannot be opened or a chunk cannot
+/// be read.
 fn hash_stream<H>(path: &Utf8Path) -> Result<String, Error>
 where
     H: Digest,

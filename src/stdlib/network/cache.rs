@@ -43,6 +43,11 @@ impl<'a> CacheEntry<'a> {
     }
 
     /// Open the entry for writing, truncating any existing content.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the cache entry cannot be created, opened, or
+    /// truncated for writing.
     pub(super) fn open_writer(&self) -> Result<File, Error> {
         open_cache_writer(self.dir, self.path())
     }
@@ -75,6 +80,11 @@ pub(super) fn discard_partial_cache(cache: &CacheEntry<'_>) {
 ///
 /// The relative path is validated against the cache-boundary rules before any
 /// directory is created.
+///
+/// # Errors
+///
+/// Returns an error when `relative` violates the cache-boundary rules, or when
+/// the directory cannot be created or opened under `root`.
 pub(super) fn open_cache_dir(root: &Dir, relative: &Utf8Path) -> Result<Dir, Error> {
     tracing::debug!(cache_dir = %relative, "opening fetch cache directory");
     if let Err(err) = StdlibConfig::validate_cache_relative(relative) {
@@ -94,6 +104,11 @@ pub(super) fn open_cache_dir(root: &Dir, relative: &Utf8Path) -> Result<Dir, Err
 /// Read a cached entry, returning `None` when it does not exist.
 ///
 /// Enforces the response size limit on the exact bytes read from the entry.
+///
+/// # Errors
+///
+/// Returns an error when the entry cannot be opened, its metadata cannot be
+/// read, its contents cannot be read, or its contents exceed `limit` bytes.
 pub(super) fn read_cached(dir: &Dir, name: &str, limit: u64) -> Result<Option<Vec<u8>>, Error> {
     let path = Utf8Path::new(name);
     let mut options = OpenOptions::new();
@@ -161,6 +176,11 @@ fn read_cached_file(name: &str, mut file: File, limit: u64) -> Result<Vec<u8>, E
 }
 
 /// Open a cache entry for writing, creating and truncating it.
+///
+/// # Errors
+///
+/// Returns an error when the entry cannot be created, opened, or truncated for
+/// writing in `dir`.
 fn open_cache_writer(dir: &Dir, path: &Utf8Path) -> Result<File, Error> {
     let mut options = OpenOptions::new();
     options.create(true).truncate(true).write(true);
@@ -194,6 +214,12 @@ impl FetchCache {
     }
 
     /// Open the configured cache directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the configured relative path violates the
+    /// cache-boundary rules, or when the cache directory cannot be created or
+    /// opened.
     #[rustfmt::skip]
     pub(super) fn open_dir(&self) -> Result<Dir, Error> { open_cache_dir(&self.root, &self.relative) }
 }

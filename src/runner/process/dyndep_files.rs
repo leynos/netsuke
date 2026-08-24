@@ -319,7 +319,7 @@ struct TempNameSource {
 }
 
 impl TempNameSource {
-    /// Build an operation-scoped source with a process-unique nonce.
+    /// Build an operation-scoped source with a best-effort nonce.
     fn for_operation() -> Self {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)

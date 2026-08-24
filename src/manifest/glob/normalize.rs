@@ -29,7 +29,8 @@ pub(crate) fn normalize_separators(pattern: &str) -> String {
 }
 
 #[cfg(unix)]
-/// Push the normalized form of a backslash and its following character.
+/// Push the normalized separator for a backslash escape without consuming its
+/// following character.
 fn push_normalized_backslash(
     it: &mut std::iter::Peekable<std::str::Chars<'_>>,
     out: &mut String,
@@ -102,7 +103,11 @@ pub(super) fn force_literal_escapes(pattern: &str) -> String {
 }
 
 #[cfg(unix)]
-/// Push the bracket-class form of an escaped metacharacter.
+/// Rewrite recognised escaped metacharacters as bracket classes.
+///
+/// Recognised metacharacters are consumed and emitted as bracket classes;
+/// otherwise the backslash is preserved and the following character remains
+/// for the caller to process.
 fn handle_escaped_char(it: &mut std::iter::Peekable<std::str::Chars<'_>>, out: &mut String) {
     let Some(next) = it.peek().copied() else {
         out.push('\\');
