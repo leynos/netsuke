@@ -158,8 +158,10 @@ Don't:
 - For right-to-left languages, add the direction mark specified by the
   [translator guide](translators-guide.md) when the first strong character of
   the rendered message would otherwise have the wrong direction.
-- Do not translate locale tags, message keys, or literal values that form
-  part of a machine-readable contract. Do not localize paths, commands, or
+- Do not translate locale tags, message keys, or the literal option values
+  the [translator guide](translators-guide.md) lists as identifiers, such as
+  `auto`, `always`, `never`, `on`, and `off`, even when they appear inside
+  otherwise-translatable prose. Do not localize paths, commands, or
   machine-readable JSON field names.
 
 ## Machine-readable output
