@@ -324,11 +324,6 @@ impl FetchContext {
     ///
     /// # Errors
     ///
-    /// Returns an error when the configured cache directory violates policy or
-    /// cannot be created or opened.
-    ///
-    /// # Errors
-    ///
     /// Returns an error when the configured relative path violates the cache
     /// boundary rules, or when the directory cannot be created or opened.
     #[rustfmt::skip]

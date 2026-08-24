@@ -213,13 +213,9 @@ def parse_coverage_output(target: DocTarget, output: str) -> Coverage:
             f" ({target.name or 'lib'}) did not emit coverage JSON: {error}"
         )
         raise RuntimeError(detail) from error
-    if not isinstance(per_file, dict):
-        detail = (
-            f"cargo rustdoc for {target.package} {target.kind}"
-            f" ({target.name or 'lib'}) did not emit coverage JSON: expected an object"
-        )
-        raise RuntimeError(detail)
     try:
+        if not isinstance(per_file, dict):
+            raise TypeError("expected an object")
         return sum(
             (
                 Coverage(int(entry["total"]), int(entry["with_docs"]))
@@ -228,11 +224,17 @@ def parse_coverage_output(target: DocTarget, output: str) -> Coverage:
             Coverage(0, 0),
         )
     except (KeyError, TypeError, ValueError) as error:
-        detail = (
-            f"cargo rustdoc for {target.package} {target.kind}"
-            f" ({target.name or 'lib'}) did not emit coverage JSON: "
-            f"each entry requires total and with_docs: {error}"
-        )
+        if not isinstance(per_file, dict):
+            detail = (
+                f"cargo rustdoc for {target.package} {target.kind}"
+                f" ({target.name or 'lib'}) did not emit coverage JSON: {error}"
+            )
+        else:
+            detail = (
+                f"cargo rustdoc for {target.package} {target.kind}"
+                f" ({target.name or 'lib'}) did not emit coverage JSON: "
+                f"each entry requires total and with_docs: {error}"
+            )
         raise RuntimeError(detail) from error
 
 

@@ -301,8 +301,9 @@ as `--toolchain`.
 - Rustdoc's own counting excludes trait-implementation overrides, so a
   concrete `Display::fmt`, `FromStr::from_str`, `Serialize`, `Deserialize`,
   `Drop::drop`, or similar does not need `///` docs to satisfy the metric.
-  Inherent `impl`-block methods and modules count like any other item and must
-  carry `///` documentation.
+  Inherent `impl`-block methods count like any other item and must carry `///`
+  documentation. Modules count like any other item and must begin with a
+  module-level `//!` comment explaining their purpose and utility.
 - Test functions (`#[test]` / `#[rstest]`) live in `cfg(test)` modules that
   Rustdoc does not compile, so they are not counted; do not add `///` docs to
   them.

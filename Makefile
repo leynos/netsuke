@@ -84,6 +84,7 @@ MD_FILES_FIND = find . -type f -name '*.md' \
 PROVER_TOOLS_SOURCE ?= git+https://github.com/leynos/rust-prover-tools@b07ef696f8373d54ae68e517d39d47a5d27a5bd5
 PROVER_TOOLS ?= uv tool run --from $(PROVER_TOOLS_SOURCE) prover-tools
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
+export PYTHON POLONIUS_FLAGS RUSTDOC_FLAGS
 VERUS_FLAGS ?=
 VERUS_INSTALL_FLAGS ?=
 WHITAKER ?= whitaker
@@ -127,8 +128,8 @@ lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 	cd test_support && DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(WHITAKER) --all --no-deps --package test_support -- --all-targets --all-features
 
 doc-coverage: doc-coverage-test ## Verify aggregate Rustdoc doc-comment coverage meets the threshold
-	@RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }$(POLONIUS_FLAGS)" RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" \
-		"$(PYTHON)" scripts/doc-coverage.py --toolchain "$$DOC_COVERAGE_TOOLCHAIN" --threshold "$$DOC_COVERAGE_THRESHOLD"
+	@RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }$${POLONIUS_FLAGS}" RUSTDOCFLAGS="$${RUSTDOC_FLAGS}" \
+		"$${PYTHON}" scripts/doc-coverage.py --toolchain "$$DOC_COVERAGE_TOOLCHAIN" --threshold "$$DOC_COVERAGE_THRESHOLD"
 
 doc-coverage-test: ## Run the pytest suite for scripts/doc-coverage.py
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python 3.13 \
