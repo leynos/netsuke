@@ -259,13 +259,13 @@ and agents.
     `Action.deps_format` are defined in `src/ir/graph.rs` and emitted by
     `src/ninja_gen.rs`; only manifest parsing and population from `deps_from`
     remain.
-- [ ] 3.14.7. Escape backend dollar syntax after Netsuke placeholder lowering.
+- [x] 3.14.7. Escape backend dollar syntax after Netsuke placeholder lowering.
   Depends on archived task `1.3.2`. See
   [netsuke-design.md §§2.6 and 5.4](netsuke-design.md).
-  - [ ] Preserve shell variables such as `$PATH`, `${CARGO:-cargo}`, and
+  - [x] Preserve shell variables such as `$PATH`, `${CARGO:-cargo}`, and
     `$RUSTFLAGS` in generated Ninja by emitting literal dollars as `$$`.
-  - [ ] Keep the IR free of Ninja-specific dollar escaping.
-  - [ ] Add command and script regression tests covering shell variables,
+  - [x] Keep the IR free of Ninja-specific dollar escaping.
+  - [x] Add command and script regression tests covering shell variables,
     `$in` / `$out`, and unrelated identifiers such as `$input`.
 - [ ] 3.14.8. Make Jinja command helpers match the documented ergonomics.
   Depends on archived task `2.2.4` and 3.14.4. See

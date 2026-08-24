@@ -82,7 +82,7 @@ pub(super) fn command_list_entry_error(
 ///
 /// Brace groups deliberately run in the current shell, so the EXIT trap must
 /// be cleared on both the success and failure paths before leaving the group.
-/// `$$!` records only the latest background PID: validation rejects entries
+/// `$!` records only the latest background PID: validation rejects entries
 /// with multiple or dynamically generated background jobs before rendering.
 /// The `_netsuke_*` variables are reserved because user assignments to them
 /// can corrupt status propagation or failure attribution. Finally, a direct
@@ -99,21 +99,21 @@ pub(super) fn command_list_entry(
     let evaluator = command_evaluator(command);
     format!(
         concat!(
-            "{{ _netsuke_background_before=$${{!:-}}; _netsuke_exec_succeeded=0; ",
-            "trap '_netsuke_command_status=$$?; printf \"%s\\n\" \"{}\" >&2; ",
-            "trap - EXIT; exit \"$$_netsuke_command_status\"' EXIT; ",
-            "if {}; then _netsuke_command_status=0;{} else _netsuke_command_status=$$?; fi; ",
-            "_netsuke_background_after=$${{!:-}}; ",
-            "if [ -n \"$$_netsuke_background_after\" ] && ",
-            "[ \"$$_netsuke_background_after\" != \"$$_netsuke_background_before\" ]; then ",
-            "if wait \"$$_netsuke_background_after\"; then :; ",
-            "else _netsuke_background_status=$$?; ",
-            "if [ \"$$_netsuke_command_status\" -eq 0 ]; then ",
-            "_netsuke_command_status=$$_netsuke_background_status; fi; fi; fi; ",
-            "if [ \"$$_netsuke_command_status\" -eq 0 ]; then trap - EXIT; ",
-            "if [ \"$$_netsuke_exec_succeeded\" -eq 1 ]; then exit 0; else :; fi; ",
+            "{{ _netsuke_background_before=${{!:-}}; _netsuke_exec_succeeded=0; ",
+            "trap '_netsuke_command_status=$?; printf \"%s\\n\" \"{}\" >&2; ",
+            "trap - EXIT; exit \"$_netsuke_command_status\"' EXIT; ",
+            "if {}; then _netsuke_command_status=0;{} else _netsuke_command_status=$?; fi; ",
+            "_netsuke_background_after=${{!:-}}; ",
+            "if [ -n \"$_netsuke_background_after\" ] && ",
+            "[ \"$_netsuke_background_after\" != \"$_netsuke_background_before\" ]; then ",
+            "if wait \"$_netsuke_background_after\"; then :; ",
+            "else _netsuke_background_status=$?; ",
+            "if [ \"$_netsuke_command_status\" -eq 0 ]; then ",
+            "_netsuke_command_status=$_netsuke_background_status; fi; fi; fi; ",
+            "if [ \"$_netsuke_command_status\" -eq 0 ]; then trap - EXIT; ",
+            "if [ \"$_netsuke_exec_succeeded\" -eq 1 ]; then exit 0; else :; fi; ",
             "else trap - EXIT; printf '%s\\n' '{}' >&2; ",
-            "exit \"$$_netsuke_command_status\"; fi; }}"
+            "exit \"$_netsuke_command_status\"; fi; }}"
         ),
         context, evaluator.shell_expression, evaluator.exec_success_fragment, context,
     )

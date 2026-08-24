@@ -211,7 +211,8 @@ fn render_script_recipe(script: &mut String, context: &RecipeRenderContext<'_>) 
     if context.mode == RenderMode::ManifestQuery {
         return Ok(());
     }
-    *script = render_str_with(context.env, script, context.vars, || {
+    let recipe_context = recipe_render_context(context.vars);
+    *script = render_str_with(context.env, script, &recipe_context, || {
         format!("render {} script", context.subject)
     })?;
     Ok(())

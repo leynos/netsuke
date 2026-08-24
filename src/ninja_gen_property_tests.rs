@@ -172,7 +172,23 @@ fn command_list_entry_strategy() -> impl Strategy<Value = String> {
 }
 
 fn canonical_shell_single_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', r"'\''"))
+    format!("'{}'", value.replace('\'', r"'\''").replace('$', "$$"))
+}
+
+fn scalar_command_strategy() -> impl Strategy<Value = String> {
+    prop::collection::vec(
+        prop_oneof![
+            Just("plain"),
+            Just("$value"),
+            Just("${value:-fallback}"),
+            Just("$(command)"),
+            Just("'quoted'"),
+            Just("\"double\""),
+            Just("@!?*-"),
+        ],
+        1..8,
+    )
+    .prop_map(|parts| format!("echo {}", parts.join(" ")))
 }
 
 proptest! {
@@ -241,12 +257,12 @@ proptest! {
     }
 
     #[test]
-    fn scalar_command_output_retains_the_preexisting_form(command in "echo [a-z]{1,12}") {
+    fn scalar_command_output_escapes_residual_dollars(command in scalar_command_strategy()) {
         let ninja = generate(&scalar_graph(command.clone())).expect("scalar command should generate");
-        let expected_command_line = format!("  command = {command}\n");
-        let retains_scalar_form = ninja.contains(&expected_command_line);
+        let expected_command_line = format!("  command = {}\n", command.replace('$', "$$"));
+        let escapes_scalar_form = ninja.contains(&expected_command_line);
         let uses_list_boundary = ninja.contains("_netsuke_background_before=$${!:-}");
-        prop_assert!(retains_scalar_form);
+        prop_assert!(escapes_scalar_form);
         prop_assert!(!uses_list_boundary);
     }
 

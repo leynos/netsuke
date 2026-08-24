@@ -13,7 +13,9 @@ use crate::hasher::ActionHasher;
 use crate::localization::{self, keys};
 
 use super::super::{
-    cmd_interpolate::{CommandBindings, interpolate_command_with_bindings},
+    cmd_interpolate::{
+        CommandBindings, interpolate_command_with_bindings, interpolate_script_with_bindings,
+    },
     graph::{Action, BuildEdge, IrGenError, IrHashMap},
 };
 
@@ -44,32 +46,8 @@ pub(super) fn register_action(
     description: Option<&str>,
     bindings: ActionBindings<'_>,
 ) -> Result<String, IrGenError> {
-    let resolved_recipe = match recipe {
-        Recipe::Command { command } => {
-            let command_bindings = CommandBindings::new(bindings.inputs, bindings.outputs);
-            let interpolated = match command {
-                StringOrList::String(cmd) => StringOrList::String(
-                    interpolate_command_with_bindings(&cmd, &command_bindings)?,
-                ),
-                StringOrList::List(items) => {
-                    let mut rendered = Vec::with_capacity(items.len());
-                    for item in items {
-                        rendered.push(interpolate_command_with_bindings(&item, &command_bindings)?);
-                    }
-                    StringOrList::List(rendered)
-                }
-                // An empty command list cannot deserialize (the manifest
-                // parser rejects it), so nothing needs interpolating here.
-                StringOrList::Empty => StringOrList::Empty,
-            };
-            Recipe::Command {
-                command: interpolated,
-            }
-        }
-        other => other,
-    };
     let action = Action {
-        recipe: resolved_recipe,
+        recipe: resolve_recipe(recipe, bindings)?,
         description: description.map(ToOwned::to_owned),
         depfile: None,
         deps_format: None,
@@ -92,6 +70,45 @@ pub(super) fn register_action(
         actions.insert(hash.clone(), action);
     }
     Ok(hash)
+}
+
+fn resolve_recipe(recipe: Recipe, bindings: ActionBindings<'_>) -> Result<Recipe, IrGenError> {
+    match recipe {
+        Recipe::Command { command } => Ok(Recipe::Command {
+            command: resolve_command(command, bindings)?,
+        }),
+        Recipe::Script { script } => Ok(Recipe::Script {
+            script: resolve_script(&script, bindings)?,
+        }),
+        rule @ Recipe::Rule { .. } => Ok(rule),
+    }
+}
+
+fn resolve_command(
+    command: StringOrList,
+    bindings: ActionBindings<'_>,
+) -> Result<StringOrList, IrGenError> {
+    let command_bindings = CommandBindings::new(bindings.inputs, bindings.outputs);
+    match command {
+        StringOrList::String(scalar_command) => Ok(StringOrList::String(
+            interpolate_command_with_bindings(&scalar_command, &command_bindings)?,
+        )),
+        StringOrList::List(items) => items
+            .into_iter()
+            .map(|item| interpolate_command_with_bindings(&item, &command_bindings))
+            .collect::<Result<Vec<_>, _>>()
+            .map(StringOrList::List),
+        // An empty command list cannot deserialize (the manifest parser
+        // rejects it), so nothing needs interpolating here.
+        StringOrList::Empty => Ok(StringOrList::Empty),
+    }
+}
+
+fn resolve_script(script: &str, bindings: ActionBindings<'_>) -> Result<String, IrGenError> {
+    interpolate_script_with_bindings(
+        script,
+        &CommandBindings::new(bindings.inputs, bindings.outputs),
+    )
 }
 
 /// Report duplicate outputs already known or repeated within one target.

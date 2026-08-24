@@ -109,15 +109,35 @@ pub(crate) fn interpolate_command_with_bindings(
 ) -> Result<String, IrGenError> {
     let interpolated = substitute(template, &bindings.ins, &bindings.outs);
     if has_unmatched_backticks(&interpolated) || shlex::split(&interpolated).is_none() {
-        let snippet = interpolated.chars().take(160).collect();
-        let message = localization::message(keys::IR_INVALID_COMMAND).with_arg("snippet", &snippet);
-        return Err(IrGenError::InvalidCommand {
-            command: interpolated,
-            snippet,
-            message,
-        });
+        return Err(invalid_command_error(interpolated));
     }
     Ok(interpolated)
+}
+
+/// Interpolate a script without requiring command-shaped shell syntax.
+///
+/// Script recipes may contain heredocs, comments, and other valid shell text
+/// that `shlex` cannot parse as a command. Backticks remain an explicit
+/// exclusion: placeholders within them would otherwise evade lowering and
+/// become silently empty shell variables after the Ninja backend escapes `$`.
+pub(crate) fn interpolate_script_with_bindings(
+    template: &str,
+    bindings: &CommandBindings,
+) -> Result<String, IrGenError> {
+    if has_placeholder_in_backticks(template) {
+        return Err(invalid_command_error(template.to_owned()));
+    }
+    Ok(substitute(template, &bindings.ins, &bindings.outs))
+}
+
+fn invalid_command_error(command: String) -> IrGenError {
+    let snippet = command.chars().take(160).collect();
+    let message = localization::message(keys::IR_INVALID_COMMAND).with_arg("snippet", &snippet);
+    IrGenError::InvalidCommand {
+        command,
+        snippet,
+        message,
+    }
 }
 
 /// Returns whether `ch` is a valid identifier character (ASCII letter, digit, or underscore).
@@ -266,6 +286,21 @@ fn substitute(template: &str, ins: &str, outs: &str) -> String {
         }
     }
     out
+}
+
+fn has_placeholder_in_backticks(template: &str) -> bool {
+    let chars: Vec<char> = template.chars().collect();
+    let mut in_backticks = false;
+    for (index, character) in chars.iter().enumerate() {
+        if *character == '`' {
+            in_backticks ^= true;
+            continue;
+        }
+        if in_backticks && find_substitution(&chars, index, "", "").is_some() {
+            return true;
+        }
+    }
+    false
 }
 
 /// Internal marker emitted for `{{ ins }}` during manifest rendering and

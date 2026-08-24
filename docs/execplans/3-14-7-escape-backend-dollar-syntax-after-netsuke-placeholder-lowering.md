@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
 `Verification plan` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 There is no `PLANS.md` in this repository; `docs/execplans/` is the plan
 directory and `docs/roadmap.md` is the work index.
@@ -192,14 +192,40 @@ Stop and escalate rather than improvising when any of these is reached.
 - [x] (2026-08-17) Plan drafted.
 - [x] (2026-08-17) Rebased onto `origin/main` at `7e5c2679`; no conflicts. All
   line citations re-resolved and the affected plan steps rewritten.
-- [ ] Approval gate: awaiting explicit user approval.
-- [ ] EP-M0 — real-`ninja` differential oracle and red tests.
-- [ ] EP-M1 — lower `$in`/`$out` for `script:` recipes.
-- [ ] EP-M2 — the `ShellText` to `NinjaValue` escaping seam.
-- [ ] EP-M3 — fallible path emission.
-- [ ] EP-M4 — documentation, ADR, users' guide migration, roadmap tick.
+- [x] (2026-08-24) Approval gate: the user explicitly requested implementation
+  of this ExecPlan as written, including its recommended resolutions for the
+  two marked decisions.
+- [x] (2026-08-24) Stage A: settled `D-BACKTICK` and `D-METADATA`.
+- [x] (2026-08-24) EP-M0 — real-`ninja` differential oracle and red tests.
+- [x] (2026-08-24) EP-M1 — lower `$in`/`$out` for `script:` recipes.
+- [x] (2026-08-24) EP-M2 — the `ShellText` to `NinjaValue` escaping seam.
+- [x] (2026-08-24) EP-M3 — fallible path emission.
+- [x] (2026-08-24) EP-M4 — documentation, ADR, users' guide migration, roadmap
+  tick, deterministic gates, and CodeRabbit review.
 
 ## Surprises & discoveries
+
+- Observation: the existing debug-only `shlex` guard rejected a valid script
+  containing a heredoc and an apostrophe in a comment after script placeholder
+  lowering. The generated wrapper is intentionally broader than one shell
+  command, so `shlex` is not an admissible validator for it.
+  Evidence: the EP-M1 red/green run failed B5 at `assert_shell_command` with
+  the correctly escaped wrapper text.
+  Impact: remove the guard from `write_script_command` in EP-M1. EP-M2 still
+  validates the fully assembled wrapper through its fallible Ninja-value
+  constructor; this is a mechanical sequencing adjustment, not an architecture
+  change.
+
+- Observation: documentation examples and test fixtures that followed the old
+  `$$` workaround are executable migration inputs, not merely prose. The
+  command-list attribution fixture needed ordinary `$i` and `$((...))` syntax;
+  its doubled form made the shell fail before the intended second list entry.
+  Block-style macro bodies also supplied a trailing newline to a scalar command
+  and now correctly fail the backend control-character boundary.
+  Evidence: the full test gate failed the command-list attribution and three
+  documented-manifest cases until their examples used plain shell syntax and
+  newline-safe YAML representation.
+  Impact: update the examples and retain the full gate as the migration check.
 
 - Observation: `${CARGO:-cargo}` is a hard Ninja parse error, not silent
   corruption. The roadmap names it alongside `$PATH` as though both fail the
@@ -315,6 +341,14 @@ Stop and escalate rather than improvising when any of these is reached.
   zero is the worst available outcome.
   Date/Author: 2026-08-17, planning agent.
 
+- Decision `D-BACKTICK`: approved on 2026-08-24. Reject a Netsuke placeholder
+  that survives inside a backtick region with a typed `IrGenError` diagnostic.
+  The user requested that this ExecPlan be implemented as written, which
+  explicitly includes the recommended resolution. This preserves the existing
+  backtick contract while preventing a silent empty shell expansion after the
+  backend escapes dollar signs.
+  Date/Author: 2026-08-24, implementation agent.
+
 - Decision `D-METADATA`: **NEEDS APPROVAL before EP-M2.** Whether to escape
   `description`, `depfile`, `deps`, and `pool` in addition to command and
   script text.
@@ -344,6 +378,15 @@ Stop and escalate rather than improvising when any of these is reached.
   injection hole closes everywhere even though dollar escaping does not.
   Date/Author: 2026-08-17, planning agent.
 
+- Decision `D-METADATA`: approved on 2026-08-24. Restrict dollar escaping to
+  command and script text after placeholder lowering. Do not dollar-escape
+  descriptions, `depfile`, `deps`, or `pool`; retain the planned validation of
+  unsafe control characters at their output boundary. The user requested
+  implementation of the ExecPlan as written, including this recommendation.
+  This maintains the approved backend/IR boundary and leaves the documented
+  Ninja metadata idioms intact.
+  Date/Author: 2026-08-24, implementation agent.
+
 - Decision: no Kani harness and no Verus proof for this change.
   Rationale: the introduced function is a pure, total string map with no
   arithmetic, no `unsafe`, no bounded state machine, and no loop of interest.
@@ -371,9 +414,25 @@ Stop and escalate rather than improvising when any of these is reached.
 
 ## Outcomes & retrospective
 
-Not started. Complete at EP-M4, comparing the delivered behaviour against
-`Purpose / big picture`, and reconciling every discovery against the
-`Conformance basis` artefacts before setting the status to `COMPLETE`.
+Delivered as designed. Commands and scripts retain ordinary shell dollars in
+the backend-neutral IR; the typed Ninja writer doubles only residual dollars
+after Netsuke lowering, rejects unsafe command control characters, and refuses
+paths that cannot be emitted consistently. Script placeholder lowering now
+precedes backend escaping, while backtick-protected placeholders receive a
+typed diagnostic rather than silent divergent behaviour.
+
+The user migration is documented: historical `$$` recipe spellings change to
+ordinary `$`, and existing script action IDs change once. The real-Ninja matrix
+covers generated output, actual shell execution with set and unset variables,
+scripts, command lists, control characters, unsafe paths, and dollar-free
+invariance. CI makes the Ninja dependency mandatory for that coverage.
+
+Final verification on 2026-08-24 passed `make check-fmt`, `make typecheck`,
+`make lint`, `make test` (2,189 nextest tests, 2 skipped, plus doctests),
+`make markdownlint`, `make nixie`, and `make test-workflow-contracts` (45
+tests). `coderabbit review --agent` completed after those gates with zero
+findings. The final working tree touches 25 files, within the stated scope
+tolerance.
 
 ## Context and orientation
 
@@ -794,7 +853,7 @@ each type means, that `ShellText` must not implement `Display`, that
 emission sites must go through it. Per `AGENTS.md`, record the new
 abstraction's scope and re-use policy there.
 
-Add `docs/adr-011-backend-text-escaping-seam.md` following
+Add `docs/adr-014-backend-text-escaping-seam.md` following
 `docs/documentation-style-guide.md:421-498`, covering the layering decision,
 the fallible constructor, the rejection of Kani and Verus, and the scope
 boundary excluding descriptions and `depfile`. Reference it from
@@ -1067,6 +1126,38 @@ as approval. On approval, start at stage A and settle `D-BACKTICK` and
 `D-METADATA` before any code changes.
 
 ## Revision note
+
+2026-08-24 — during EP-M1, moved the removal of the debug-only shell parser
+guard for scripts forward from EP-M2. B5 showed that valid script language is
+broader than `shlex` accepts, so retaining the guard would violate EP-M1's
+explicit regression requirement. The later typed Ninja escaping seam remains
+unchanged; it will validate Ninja syntax rather than impose command-shaped
+shell validation on scripts.
+
+2026-08-24 — implementation started after the user explicitly approved this
+ExecPlan by requesting its implementation as written. The status is now `IN
+PROGRESS`; the approval gate and Stage A are complete. The user-approved
+resolutions for `D-BACKTICK` and `D-METADATA` are recorded in `Decision log`.
+The remaining milestones and verification obligations are unchanged.
+
+2026-08-24 — completed EP-M0 through EP-M4. The initially red differential
+matrix became green after the script-lowering, typed escaping, and path
+validation milestones. Full gates exposed and corrected stale `$$` examples,
+scalar-command newlines in documentation macros, and command-list fixtures.
+The final full deterministic run and gate-first CodeRabbit review passed with
+zero findings; this plan is now `COMPLETE`.
+
+2026-08-26 — rebasing the completed implementation onto `origin/main` at
+`1d0cb167` required a deliberate integration with main's Ninja-generation
+split and serial-dependency work. Main now owns ADR-011 through ADR-013, so
+the escaping decision record is renumbered to ADR-014. The resolution keeps
+main's `src/ninja_gen/mod.rs` layout, dyndep/path validation, and relocated
+command-list process tests while retaining the completed shell-text escaping
+seam, script placeholder lowering, required-Ninja CI contract, and migration
+guidance. The status is temporarily `IN PROGRESS` until the named post-rebase
+gates complete.
+
+2026-08-17 —
 
 2026-08-17 — rebased onto `origin/main` at `7e5c2679` ("Add target
 descriptions and netsuke help targets"). The rebase itself was clean: this

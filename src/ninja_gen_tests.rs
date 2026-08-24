@@ -128,7 +128,7 @@ fn generate_script_ninja_round_trips() -> Result<()> {
     ensure!(ninja.contains("rule a"));
     ensure!(ninja.contains("command = /bin/sh -e -c"));
     ensure!(ninja.contains("echo '\"'\"'a b'\"'\"'"));
-    ensure!(ninja.contains("\\\"\\$HOME\\\""));
+    ensure!(ninja.contains("\\\"\\$$HOME\\\""));
     ensure!(ninja.contains("\\`whoami\\`"));
     ensure!(ninja.contains("printf %b"));
     ensure!(ninja.contains("\\n# line' | /bin/sh -e"));

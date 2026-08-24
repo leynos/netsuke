@@ -343,9 +343,15 @@ The lowering stages have deliberately separate responsibilities:
 - `src/ir/from_manifest_support.rs` prepares one shell-quoted input/output
   binding set for the recipe, then interpolates every scalar or list entry with
   that set. `{{ ins }}` and `{{ outs }}` markers and standalone `$in` and
-  `$out` tokens are resolved per entry; tokens inside backticks are preserved.
-  The resulting action contains ordinary command text and no Ninja placeholders.
-- `src/ninja_gen.rs` emits a scalar command unchanged. For a list, it puts
+  `$out` tokens are resolved per entry. A placeholder within backticks is
+  rejected because Netsuke cannot lower it safely; scripts use substitution
+  without command-shaped parsing, so heredocs and comments remain valid. The
+  resulting action contains ordinary command text and no Ninja placeholders.
+- `src/ninja_gen/mod.rs` turns completed shell text into a Ninja value exactly
+  once. That boundary doubles residual dollar signs and rejects control
+  characters after IR lowering and before file emission. Paths remain distinct
+  from shell text and are rejected when they contain `$`, spaces, colons, or
+  control characters. For a list, it puts
   each entry in a brace group and joins the groups with `&&`. Each group uses
   `eval` with a shell-quoted entry payload. This keeps an inline comment or a
   trailing control operator such as `&` inside the entry from consuming the
@@ -399,6 +405,50 @@ Changes to this pipeline must preserve the scalar/list distinction, per-entry
 rendering, current-shell state sharing, and failure attribution. The focused
 rendering, lowering, Ninja-generation, and real-Ninja integration tests are the
 behavioural contract for these boundaries.
+
+### Ninja text-escaping seam
+
+`ShellText` is completed, backend-agnostic command or script text from the IR.
+It deliberately does not implement `Display`: writers must not serialize it by
+accident. `NinjaValue` is the escaped value accepted by a Ninja `command`
+binding. `escape_ninja_value` is its only constructor and is fallible so control
+characters fail before emission.
+
+The seam is owned by `src/ninja_gen_escape.rs`. Only the Ninja action writer
+may compose a completed command and convert its `ShellText` into a
+`NinjaValue`; no lowering code, metadata writer, or future backend may call it.
+Descriptions, `depfile`, `deps`, and `pool` retain their existing raw emission
+semantics because they are not shell text, although metadata is still checked
+for control characters. Add a separate, explicitly documented conversion for
+any new Ninja grammar position rather than reusing command escaping.
+
+The lowest-layer POSIX shell-word quoting used for input/output paths during IR
+lowering is `shell_quote::QuoteRefExt::quoted(Sh)`. It performs minimal,
+fragmented shell quoting, which is appropriate for a literal shell word but not
+for the command-list `eval` payload. That renderer requires a canonical
+single-quoted payload so existing generated Ninja list text remains
+byte-for-byte stable, and the delimiter/boundary tests continue to hold. Keep
+that quoting in the deliberately local `shell_single_quote` function; it is
+not a general-purpose helper. Neither quoting path is the platform-specific
+`src/stdlib/command/quote.rs` implementation behind the `command.quote`
+template wrapper, which must retain its `cmd.exe` quoting behaviour on Windows.
+
+Attributed list failures emit the bounded tracing fields
+`command_list_action` (a fixed-width action fingerprint) and
+`command_list_entry` (the one-based entry index), plus the matching
+`command_list_failure` marker. The process boundary records
+`netsuke_ninja_command_list_failures_total` and
+`netsuke_ninja_command_list_failure_duration_seconds`, with an `outcome`
+label of `failure`. Elapsed failure duration is measured through the injected
+`monotony::MonotonicClock`; production uses `StdMonotonicClock`, while tests use
+deterministic test clocks. These diagnostics and metrics contain no command
+text.
+
+Changes to this pipeline must preserve the scalar/list distinction, per-entry
+rendering, current-shell state sharing, and failure attribution. The focused
+rendering, lowering, Ninja-generation, and real-Ninja integration tests are
+the behavioural contract for these boundaries.
+
 
 ## Package and target naming
 

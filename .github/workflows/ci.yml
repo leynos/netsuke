@@ -25,6 +25,9 @@ jobs:
       # builds with the dated nightly pinned in rust-toolchain.toml.
       NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
       WHITAKER_INSTALLER_VERSION: '0.2.7'
+      # Real-Ninja integration coverage must not silently skip when a runner
+      # image lacks the backend executable.
+      NETSUKE_REQUIRE_NINJA: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
