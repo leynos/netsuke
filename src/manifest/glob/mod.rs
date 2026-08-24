@@ -173,6 +173,19 @@ impl GlobExpansion {
 
     /// Consume paths for use as unquoted manifest-template values.
     ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let expansion = GlobExpansion {
+    ///     paths: vec!["src/main.c".to_owned()],
+    ///     outcome: GlobOutcome::Matched,
+    ///     skipped: GlobSkippedEntries::default(),
+    /// };
+    /// let paths = expansion.into_template_paths("src/*.c")?;
+    /// assert_eq!(paths, vec!["src/main.c"]);
+    /// # Ok::<(), minijinja::Error>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// Returns an error if a path contains characters that a command shell

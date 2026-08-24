@@ -31,6 +31,42 @@ fn create_netsuke_command(current_dir: &Path) -> Command {
     command
 }
 
+#[cfg(unix)]
+#[rstest]
+fn build_rejects_command_injecting_glob_filename() -> Result<()> {
+    let temp = tempdir().context("create command-injection test workspace")?;
+    let files = temp.path().join("files");
+    fs::create_dir(&files).context("create glob input directory")?;
+    fs::write(
+        files.join("a.txt; touch PWNED; #.txt"),
+        "attacker-controlled filename",
+    )
+    .context("write malicious glob input")?;
+    let pattern = files.join("*.txt");
+    let manifest = format!(
+        concat!(
+            "netsuke_version: '1.0.0'\n",
+            "targets:\n",
+            "  - foreach: glob({pattern:?})\n",
+            "    name: output-{{{{ index }}}}.txt\n",
+            "    command: echo {{{{ item }}}}\n"
+        ),
+        pattern = pattern.display()
+    );
+    fs::write(temp.path().join("Netsukefile"), manifest)
+        .context("write command-injection test manifest")?;
+
+    create_netsuke_command(temp.path())
+        .arg("build")
+        .assert()
+        .failure();
+    ensure!(
+        !temp.path().join("PWNED").exists(),
+        "the attacker-controlled filename must not create PWNED"
+    );
+    Ok(())
+}
+
 fn assert_generate_streams_to_stdout(
     current_dir: &Path,
     args: &[&str],

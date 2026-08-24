@@ -558,8 +558,9 @@ portable unquoted shell word. Letters, digits, `/`, `:`, comma, full stop,
 underscore, and hyphen are accepted; whitespace, control characters, and
 shell punctuation are rejected. This prevents an untrusted checkout filename
 from becoming shell syntax when `item` is interpolated into a `command` or
-`script`. The Rust `manifest::glob_paths` query is unaffected because its
-callers do not cross the manifest-template command boundary.
+`script`. The Rust `manifest::glob_paths` query performs no shell-safety
+validation; each caller must validate or escape matched paths before passing
+them to a command sink.
 
 ### Define reusable macros
 
