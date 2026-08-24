@@ -39,18 +39,19 @@ although surrounding text follows the target language's grammar.
 
 Table 1: product and ecosystem names
 
-| title       | preferred     | allowed                                            | forbidden                     |
-| ----------- | ------------- | -------------------------------------------------- | ----------------------------- |
-| Netsuke     | `Netsuke`     | `netsuke` (executable, crate, command, code path)  | —                             |
-| Netsukefile | `Netsukefile` | `Netsuke manifest`; `manifest file`                | `NetsukeFile`; `Netsuke file` |
-| Ninja       | `Ninja`       | `ninja` (executable or literal command)            | —                             |
-| Fluent      | `Fluent`      | `Project Fluent`; `Fluent Translation List`; `FTL` | —                             |
-| Jinja       | `Jinja`       | `MiniJinja` (the Rust implementation)              | `Jinja2` (for the dialect)    |
-| YAML        | `YAML`        | —                                                  | `Yaml`; `yaml` (in prose)     |
-| Graphviz    | `Graphviz`    | —                                                  | —                             |
-| DOT         | `DOT`         | `Graphviz DOT`                                     | `dot` (for the language)      |
-| Rust        | `Rust`        | —                                                  | —                             |
-| CLDR        | `CLDR`        | `Unicode CLDR`                                     | —                             |
+| title         | preferred       | allowed                                                                | forbidden                                          |
+| ------------- | --------------- | ---------------------------------------------------------------------- | -------------------------------------------------- |
+| Netsuke       | `Netsuke`       | `netsuke` (executable, library target, command, OS package, code path) | —                                                  |
+| netsuke-build | `netsuke-build` | `cargo install netsuke-build`; `cargo binstall netsuke-build`          | `netsuke` (for the Cargo package); `netsuke_build` |
+| Netsukefile   | `Netsukefile`   | `Netsuke manifest`; `manifest file`                                    | `NetsukeFile`; `Netsuke file`                      |
+| Ninja         | `Ninja`         | `ninja` (executable or literal command)                                | —                                                  |
+| Fluent        | `Fluent`        | `Project Fluent`; `Fluent Translation List`; `FTL`                     | —                                                  |
+| Jinja         | `Jinja`         | `MiniJinja` (the Rust implementation)                                  | `Jinja2` (for the dialect)                         |
+| YAML          | `YAML`          | —                                                                      | `Yaml`; `yaml` (in prose)                          |
+| Graphviz      | `Graphviz`      | —                                                                      | —                                                  |
+| DOT           | `DOT`           | `Graphviz DOT`                                                         | `dot` (for the language)                           |
+| Rust          | `Rust`          | —                                                                      | —                                                  |
+| CLDR          | `CLDR`          | `Unicode CLDR`                                                         | —                                                  |
 
 ### Manifest and build-model concepts
 
