@@ -41,6 +41,7 @@ cli.help.actions_heading = Acties:
 cli.help.targets_heading = Doelen:
 cli.help.targets.about = Doelen en acties in het geselecteerde manifest weergeven.
 cli.help.default_marker = standaard
+cli.help.conditional_marker = voorwaardelijk
 
 # Helptekst voor opties van de subopdracht build.
 cli.subcommand.build.flag.targets.help = Te bouwen doelen (gebruikt de standaarddoelen uit het manifest als dit ontbreekt).

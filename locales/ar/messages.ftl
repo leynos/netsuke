@@ -41,6 +41,7 @@ cli.help.actions_heading = الإجراءات:
 cli.help.targets_heading = الأهداف:
 cli.help.targets.about = سرد الأهداف والإجراءات في الملف المحدد.
 cli.help.default_marker = الافتراضي
+cli.help.conditional_marker = مشروط
 
 # نص المساعدة لخيارات الأمر الفرعي build.
 cli.subcommand.build.flag.targets.help = الأهداف المطلوب بناؤها (تُستخدم افتراضيات ملف البيانات عند الإغفال).

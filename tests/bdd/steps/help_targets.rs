@@ -38,6 +38,34 @@ defaults:
     Ok(())
 }
 
+#[given("a Netsuke workspace with a conditional action")]
+fn conditional_action_workspace(world: &TestWorld) -> Result<()> {
+    let temp = tempfile::tempdir().context("create temp dir for conditional workspace")?;
+    let manifest = temp.path().join("Netsukefile");
+    fs::write(
+        &manifest,
+        r#"netsuke_version: "1.0.0"
+actions:
+  - name: preferred
+    description: Run tests with cargo-nextest
+    command: touch preferred-ran
+    when: command_available("cargo-nextest")
+  - name: fallback
+    description: Run tests with Cargo
+    command: touch fallback-ran
+    when: not command_available("cargo-nextest")
+targets: []
+"#,
+    )
+    .with_context(|| format!("write manifest to {}", manifest.display()))?;
+    *world.temp_dir.borrow_mut() = Some(temp);
+    world.run_status.clear();
+    world.run_error.clear();
+    world.command_stdout.clear();
+    world.command_stderr.clear();
+    Ok(())
+}
+
 #[when("the netsuke help targets subcommand is run")]
 fn run_help_targets_subcommand(world: &TestWorld) -> Result<()> {
     run_netsuke_and_store(world, &["help", "targets"])

@@ -41,6 +41,7 @@ cli.help.actions_heading = Ações:
 cli.help.targets_heading = Alvos:
 cli.help.targets.about = Listar alvos e ações no manifesto selecionado.
 cli.help.default_marker = padrão
+cli.help.conditional_marker = condicional
 
 # Texto de ajuda das opções do subcomando build.
 cli.subcommand.build.flag.targets.help = Alvos a compilar (se omitido, usa os padrões do manifesto).

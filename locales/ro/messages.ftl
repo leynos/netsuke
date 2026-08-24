@@ -41,6 +41,7 @@ cli.help.actions_heading = Acțiuni:
 cli.help.targets_heading = Ținte:
 cli.help.targets.about = Listează țintele și acțiunile din fișierul selectat.
 cli.help.default_marker = implicit
+cli.help.conditional_marker = condițional
 
 # Textul de ajutor pentru opțiunile subcomenzii build.
 cli.subcommand.build.flag.targets.help = Țintele de construit (dacă lipsesc, se folosesc cele implicite din manifest).

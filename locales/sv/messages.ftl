@@ -41,6 +41,7 @@ cli.help.actions_heading = Åtgärder:
 cli.help.targets_heading = Mål:
 cli.help.targets.about = Lista mål och åtgärder i det valda manifestet.
 cli.help.default_marker = standard
+cli.help.conditional_marker = villkorlig
 
 # Hjälptext för flaggor till underkommandot build.
 cli.subcommand.build.flag.targets.help = Mål som ska byggas (använder manifestets standardmål om det utelämnas).

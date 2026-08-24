@@ -41,6 +41,7 @@ cli.help.actions_heading = 动作：
 cli.help.targets_heading = 目标：
 cli.help.targets.about = 列出所选清单中的目标和动作。
 cli.help.default_marker = 默认
+cli.help.conditional_marker = 条件
 
 # build 子命令选项的帮助文本。
 cli.subcommand.build.flag.targets.help = 要构建的目标（省略时使用清单中的默认目标）。

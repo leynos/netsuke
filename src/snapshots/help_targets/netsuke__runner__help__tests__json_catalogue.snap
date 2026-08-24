@@ -14,29 +14,34 @@ expression: rendered
       {
         "name": "lint",
         "description": "Run rustdoc, Clippy, and Whitaker",
-        "default": true
+        "default": true,
+        "conditional": false
       },
       {
         "name": "test",
         "description": "Run unit, behavioural, UI, and documentation tests",
-        "default": true
+        "default": true,
+        "conditional": true
       },
       {
         "name": "undocumented",
         "description": null,
-        "default": false
+        "default": false,
+        "conditional": false
       }
     ],
     "targets": [
       {
         "name": "target/release/catnap",
         "description": "Build the optimized release binary",
-        "default": false
+        "default": false,
+        "conditional": false
       },
       {
         "name": "plain",
         "description": null,
-        "default": false
+        "default": false,
+        "conditional": false
       }
     ]
   }

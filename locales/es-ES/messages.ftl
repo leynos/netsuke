@@ -41,6 +41,7 @@ cli.help.actions_heading = Acciones:
 cli.help.targets_heading = Objetivos:
 cli.help.targets.about = Enumerar objetivos y acciones en el manifiesto seleccionado.
 cli.help.default_marker = predeterminado
+cli.help.conditional_marker = condicional
 
 # Texto de ayuda para opciones del subcomando build.
 cli.subcommand.build.flag.targets.help = Objetivos a compilar (usa los predeterminados del manifiesto si se omite).

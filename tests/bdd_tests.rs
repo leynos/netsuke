@@ -1,8 +1,8 @@
 //! BDD test entry point using rstest-bdd.
 //!
-//! This file serves as the main test binary that discovers and runs all BDD
-//! scenarios from the feature files. The scenarios! macro generates test
-//! functions for each scenario found in the feature directories.
+//! This file is the main test binary that discovers and runs all BDD scenarios
+//! from the feature files. The `scenarios!` macro generates a test function
+//! for each scenario found in the feature directories.
 
 mod bdd;
 pub mod documentation_examples;

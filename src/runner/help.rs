@@ -121,8 +121,8 @@ fn resolved_prefs(cli: &Cli) -> OutputPrefs {
 
 /// Render the text catalogue: an "Actions:" section followed by a "Targets:"
 /// section, with aligned name and description columns and a localized default
-/// marker. A missing description leaves the entry visible without a description
-/// column. Empty sections are omitted.
+/// marker and a localized conditional marker. A missing description leaves the
+/// entry visible without a description column. Empty sections are omitted.
 fn render_text(entries: &[HelpEntry], prefs: OutputPrefs) -> String {
     let actions: Vec<&HelpEntry> = entries.iter().filter(|entry| entry.is_action).collect();
     let targets: Vec<&HelpEntry> = entries.iter().filter(|entry| !entry.is_action).collect();
@@ -156,7 +156,8 @@ fn render_section(
         .map(|name| UnicodeWidthStr::width(name.as_ref()))
         .max()
         .unwrap_or(0);
-    let marker = default_marker(prefs);
+    let default_marker = default_marker(prefs);
+    let conditional_marker = conditional_marker(prefs);
     for (entry, name) in entries.iter().zip(display_names) {
         let name_width = UnicodeWidthStr::width(name.as_ref());
         out.push_str("  ");
@@ -168,7 +169,11 @@ fn render_section(
         }
         if entry.is_default {
             out.push(' ');
-            out.push_str(&marker);
+            out.push_str(&default_marker);
+        }
+        if entry.conditional {
+            out.push(' ');
+            out.push_str(&conditional_marker);
         }
         out.push('\n');
     }
@@ -219,6 +224,14 @@ fn default_marker(prefs: OutputPrefs) -> String {
     format!("[{glyph} {label}]")
 }
 
+/// The localized conditional marker, pairing a theme glyph with a translated
+/// label so entries retained without evaluating their `when` condition are
+/// never mistaken for unconditionally available targets.
+fn conditional_marker(prefs: OutputPrefs) -> String {
+    let glyph = if prefs.emoji_allowed() { "◇" } else { "?" };
+    let label = localization::message(keys::CLI_HELP_CONDITIONAL_MARKER).to_string();
+    format!("[{glyph} {label}]")
+}
 /// Versioned JSON catalogue document, mirroring `crate::result_json`'s
 /// envelope shape while carrying the listing payload instead of free text.
 #[derive(Debug, Serialize)]
@@ -251,6 +264,7 @@ struct HelpEntryJson<'a> {
     description: Option<&'a str>,
     /// Whether the entry is one of the manifest's default targets.
     default: bool,
+    conditional: bool,
 }
 
 /// Serialize the catalogue into a pretty-printed versioned JSON document.
@@ -281,6 +295,7 @@ fn json_entries<'entry>(
             name: entry.name.as_str(),
             description: entry.description.as_deref(),
             default: entry.is_default,
+            conditional: entry.conditional,
         })
         .collect()
 }

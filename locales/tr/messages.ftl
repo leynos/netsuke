@@ -41,6 +41,7 @@ cli.help.actions_heading = Eylemler:
 cli.help.targets_heading = Hedefler:
 cli.help.targets.about = Seçilen bildirimdeki hedef ve eylemleri listele.
 cli.help.default_marker = varsayılan
+cli.help.conditional_marker = koşullu
 
 # build alt komutunun seçenekleri için yardım metni.
 cli.subcommand.build.flag.targets.help = Derlenecek hedefler (belirtilmezse bildirimdeki varsayılanlar kullanılır).

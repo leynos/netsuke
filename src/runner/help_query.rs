@@ -24,6 +24,7 @@ pub(super) struct HelpEntry {
     pub(super) is_action: bool,
     /// Whether the entry is one of the manifest's default targets.
     pub(super) is_default: bool,
+    pub(super) conditional: bool,
 }
 
 /// The pure result of loading, validating, and cataloguing a help manifest.
@@ -167,6 +168,7 @@ fn append_target_entries(
     for name in target.name.to_string_vec() {
         entries.push(HelpEntry {
             is_default: defaults.contains(name.as_str()),
+            conditional: target.conditional,
             name,
             description: description.clone(),
             is_action,

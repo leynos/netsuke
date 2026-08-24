@@ -41,6 +41,7 @@ cli.help.actions_heading = Actions:
 cli.help.targets_heading = Targets:
 cli.help.targets.about = List targets and actions in the selected manifest.
 cli.help.default_marker = default
+cli.help.conditional_marker = conditional
 
 # Build subcommand flag help text.
 cli.subcommand.build.flag.targets.help = Targets to build (uses manifest defaults if omitted).

@@ -41,6 +41,7 @@ cli.help.actions_heading = اقدامات:
 cli.help.targets_heading = اهداف:
 cli.help.targets.about = فهرست کردن اهداف و اقدامات در پروندهٔ انتخاب‌شده.
 cli.help.default_marker = پیش‌فرض
+cli.help.conditional_marker = مشروط
 
 # متن راهنمای گزینه‌های زیرفرمان build.
 cli.subcommand.build.flag.targets.help = هدف‌هایی که باید ساخته شوند (در صورت نیامدن، پیش‌فرض‌های مانیفست به کار می‌روند).

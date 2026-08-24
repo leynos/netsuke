@@ -283,4 +283,38 @@ fn manifest_query_rejects_clock_dependent_template_helpers() -> AnyResult<()> {
     Ok(())
 }
 
+#[test]
+fn manifest_query_keeps_inline_build_helpers_in_recipes() -> AnyResult<()> {
+    let temp = tempdir().context("create recipe-only helper query workspace")?;
+    let manifest_path = temp.path().join("Netsukefile");
+    test_fs::write(
+        &manifest_path,
+        r#"netsuke_version: "1.0.0"
+actions:
+  - name: test
+    description: Run tests with cargo-nextest or Cargo
+    command: >-
+      RUSTFLAGS='-D warnings'
+      cargo {% if command_available("cargo-nextest") %}nextest run{% else %}test{% endif %}
+      --all-targets --all-features
+targets: []
+"#,
+    )?;
+
+    let manifest = from_path_for_manifest_query(&manifest_path, None)?;
+    let Recipe::Command { command } = &manifest.actions[0].recipe else {
+        anyhow::bail!("query fixture action should retain its command recipe");
+    };
+    ensure!(
+        command
+            .as_single()
+            .is_some_and(|recipe| recipe.contains("command_available")),
+        "query should leave the recipe helper unrendered: {command:?}"
+    );
+    ensure!(
+        !temp.path().join(".netsuke").exists(),
+        "query should not create a build-output directory"
+    );
+    Ok(())
+}
 const QUERY_SECRET: &str = "help-query-secret";

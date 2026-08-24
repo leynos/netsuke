@@ -41,6 +41,7 @@ cli.help.actions_heading = פעולות:
 cli.help.targets_heading = יעדים:
 cli.help.targets.about = הצגת רשימת היעדים והפעולות במניפסט שנבחר.
 cli.help.default_marker = ברירת מחדל
+cli.help.conditional_marker = מותנה
 
 # טקסט העזרה של אפשרויות פקודת המשנה build.
 cli.subcommand.build.flag.targets.help = היעדים שיש לבנות (בהשמטה נעשה שימוש בברירות המחדל של המניפסט).

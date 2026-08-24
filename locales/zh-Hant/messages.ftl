@@ -41,6 +41,7 @@ cli.help.actions_heading = 動作：
 cli.help.targets_heading = 目標：
 cli.help.targets.about = 列出所選資訊清單中的目標和動作。
 cli.help.default_marker = 預設
+cli.help.conditional_marker = 條件式
 
 # build 子命令選項的說明文字。
 cli.subcommand.build.flag.targets.help = 要建置的目標（省略時採用資訊清單的預設值）。

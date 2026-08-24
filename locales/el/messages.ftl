@@ -41,6 +41,7 @@ cli.help.actions_heading = Ενέργειες:
 cli.help.targets_heading = Στόχοι:
 cli.help.targets.about = Παράθεση στόχων και ενεργειών στο επιλεγμένο δηλωτικό.
 cli.help.default_marker = προεπιλογή
+cli.help.conditional_marker = υπό όρους
 
 # Κείμενο βοήθειας για τις επιλογές της υποεντολής build.
 cli.subcommand.build.flag.targets.help = Στόχοι προς δόμηση (αν παραλειφθούν, χρησιμοποιούνται οι προεπιλογές του δηλωτικού).

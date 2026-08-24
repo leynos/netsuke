@@ -41,6 +41,7 @@ cli.help.actions_heading = 작업:
 cli.help.targets_heading = 대상:
 cli.help.targets.about = 선택한 매니페스트의 대상 및 작업을 나열합니다.
 cli.help.default_marker = 기본값
+cli.help.conditional_marker = 조건부
 
 # build 하위 명령 옵션의 도움말.
 cli.subcommand.build.flag.targets.help = 빌드할 대상입니다(생략하면 매니페스트의 기본값을 사용).

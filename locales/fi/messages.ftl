@@ -41,6 +41,7 @@ cli.help.actions_heading = Toiminnot:
 cli.help.targets_heading = Kohteet:
 cli.help.targets.about = Luettele valitun tiedoston kohteet ja toiminnot.
 cli.help.default_marker = oletus
+cli.help.conditional_marker = ehdollinen
 
 # build-alikomennon valitsimien ohjeteksti.
 cli.subcommand.build.flag.targets.help = Koostettavat kohteet (jos puuttuu, käytetään manifestin oletuskohteita).

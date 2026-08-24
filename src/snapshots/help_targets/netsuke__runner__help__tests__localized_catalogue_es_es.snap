@@ -1,11 +1,10 @@
 ---
 source: src/runner/help_tests.rs
-assertion_line: 92
 expression: rendered
 ---
 Acciones:
   lint          Run rustdoc, Clippy, and Whitaker [★ predeterminado]
-  test          Run unit, behavioural, UI, and documentation tests [★ predeterminado]
+  test          Run unit, behavioural, UI, and documentation tests [★ predeterminado] [◇ condicional]
   undocumented
 
 Objetivos:

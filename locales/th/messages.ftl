@@ -41,6 +41,7 @@ cli.help.actions_heading = การดำเนินการ:
 cli.help.targets_heading = เป้าหมาย:
 cli.help.targets.about = แสดงรายการเป้าหมายและการดำเนินการในไฟล์รายการที่เลือก
 cli.help.default_marker = ค่าเริ่มต้น
+cli.help.conditional_marker = มีเงื่อนไข
 
 # ข้อความช่วยเหลือของตัวเลือกในคำสั่งย่อย build
 cli.subcommand.build.flag.targets.help = เป้าหมายที่จะสร้าง (หากละไว้ จะใช้ค่าโดยปริยายของไฟล์รายการ)

@@ -41,6 +41,7 @@ cli.help.actions_heading = Gweithredoedd:
 cli.help.targets_heading = Targedau:
 cli.help.targets.about = Rhestru targedau a gweithredoedd yn y maniffest a ddewiswyd.
 cli.help.default_marker = diofyn
+cli.help.conditional_marker = amodol
 
 # Testun cymorth dewisiadau'r is-orchymyn build.
 cli.subcommand.build.flag.targets.help = Y targedau i'w hadeiladu (defnyddir rhagosodiadau'r maniffest os hepgorir hwy).
