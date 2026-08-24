@@ -7,7 +7,7 @@ This ExecPlan (execution plan) is a living document. The sections
 
 Status: DRAFT
 
-Revision 2.2. See `Revision note` at the foot of this document.
+Revision 2.3. See `Revision note` at the foot of this document.
 
 ## Purpose / big picture
 
@@ -174,10 +174,12 @@ you must follow:
   ```
 
   with bodies in the sibling `*_verification.rs`. See `src/ir/cycle.rs` lines
-  380-382 and `src/ir/from_manifest.rs` lines 163-165. The split exists because
-  AGENTS.md line 31 caps any code file at 400 lines. Note that line numbers in
-  documents this plan cites drift as those documents change; verify an anchor
-  by its heading or symbol name before trusting the number.
+  380-382 and `src/ir/from_manifest.rs` lines 164-166. The split exists because
+  AGENTS.md line 31 caps any code file at 400 lines. This plan cites Markdown
+  documents by section heading rather than line number, because `main` moves
+  those files faster than the numbers can be kept true; line numbers are used
+  only for code, and `src/ir/cmd_interpolate.rs` in particular has been stable.
+  Verify any anchor by heading or symbol name before trusting a number.
   The repository's sibling-module convention for shared production
   helpers is `<module>_support.rs`; see `src/ir/cycle_support.rs`, which holds
   the `canonicalize_cycle_by` kernel that `src/ir/cycle.rs` re-exports.
@@ -206,13 +208,14 @@ you must follow:
 
 The existing inventory is thirteen harnesses across
 `src/ir/from_manifest_verification.rs` (four) and `src/ir/cycle_verification.rs`
-(nine), documented in `docs/developers-guide.md` lines 1323-1337. There are
+(nine), documented in the "Kani harness inventory" table of
+`docs/developers-guide.md`. There are
 twelve mutation patches: the adapter harness
 `canonicalize_path_wrapper_matches_u8_kernel_for_two_nodes` has none.
 
 ### Continuous integration and its budget
 
-`.github/workflows/ci.yml` lines 127-160 define a `kani-smoke` job, pull
+`.github/workflows/ci.yml` defines a `kani-smoke` job, pull
 requests only, capped at `timeout-minutes: 20`. Measured on five recent runs
 the job takes 4:18 to 4:43 total: roughly 55 seconds of setup and version
 check, 191 to 227 seconds for `make kani-ir`, and 25 seconds of post-steps. Of
@@ -229,6 +232,16 @@ The job's cache key is `hashFiles('tools/kani/VERSION', 'Makefile')` with no
 `restore-keys`. Editing the Makefile therefore forces a cold Kani install on
 exactly the pull request that is already near budget. Do not edit the Makefile
 in this work unless a tolerance forces it.
+
+This is no longer hypothetical: `main` has since edited the Makefile for
+unrelated reasons (a `bench-config-load` target and Markdown-discovery
+exclusions), so the Kani cache is already cold and the next run of this job will
+pay the full install cost. Treat the first measured timing as pessimistic and
+re-measure on a second run before concluding anything about the budget. `main`
+has also added a `build-test-windows` job that gates merges; it is separate from
+`kani-smoke` and does not share its budget, but it lengthens overall pull-request
+turnaround. Adding `restore-keys` to the Kani cache remains the cheapest fix and
+is listed as a contingency lever, not part of this work.
 
 ### Terms used in this plan
 
@@ -255,8 +268,8 @@ Repository documents:
 - `AGENTS.md` — mandatory gates, file-size cap, commit style, spelling policy.
 - `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md` — the governing decision
   on Kani bounds and production-owned kernels.
-- `docs/developers-guide.md` lines 266-343 ("Command and recipe lowering")
-  and lines 1256-1388 ("Formal-verification tooling").
+- `docs/developers-guide.md`, sections "Command and recipe lowering" and
+  "Formal-verification tooling".
 - `docs/formal-verification-methods-in-netsuke.md` — the design rationale.
 - `docs/execplans/4-2-2-kani-harnesses-for-cycle-canonicalization.md` — the
   closest comparable job. Its Decision log records the resource-cap wrapper and
@@ -283,10 +296,10 @@ Skills to load:
 
 There is no Terms of Reference document in this repository. Upstream artefacts:
 
-- `docs/roadmap.md` lines 428-434 — item 4.2.3 and its four sub-items, referred
-  to as `RM-4.2.3.a` through `RM-4.2.3.d`.
-- `docs/formal-verification-methods-in-netsuke.md` lines 62-79 — the design
-  basis, `FV-CMD`.
+- `docs/roadmap.md`, item 4.2.3 and its four sub-items, referred to as
+  `RM-4.2.3.a` through `RM-4.2.3.d`.
+- `docs/formal-verification-methods-in-netsuke.md`, section "Kani for command
+  interpolation" — the design basis, `FV-CMD`.
 - `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md` — `ADR-004`.
 
 Trace links:
@@ -971,26 +984,29 @@ the next stage on a failing gate.
 
 - **Deliverables:**
   - `docs/developers-guide.md`: one inventory row per new harness in the table
-    at lines 1323-1337, matching the existing columns; extend the prose above
-    it to describe the `substitute_chars` seam and the `cfg(kani)` bindings
-    constructor as lines 1312-1321 describe the cycle kernel; add a subsection
-    under "Command and recipe lowering" (line 266) stating the placeholder
+    in the "Kani harness inventory" section, matching the existing columns;
+    extend the prose above it to describe the `substitute_chars` seam and the
+    `cfg(kani)` bindings constructor, as the paragraph introducing that table
+    already describes the cycle kernel; add a subsection under "Command and
+    recipe lowering" stating the placeholder
     contract now proved — supported placeholders, the boundary rule with the
     `x$in` and `$$in` behaviours, the marker-form asymmetry, backtick-region
     exclusion, and guard placement, including the explicit note that `OBL-ODD`
     and `OBL-GUARD` are complementary. This is the source material for roadmap
     4.4.1.
-  - `docs/formal-verification-methods-in-netsuke.md`: update lines 62-79 to
+  - `docs/formal-verification-methods-in-netsuke.md`: update the "Kani for
+    command interpolation" section to
     state the bounds actually achieved and the AXIOM-WINDOW argument rather than
     the aspirational 256/8, and name the Proptest hand-off; update the harness
-    count in the CI paragraph at line 247.
+    count in the continuous-integration paragraph that currently says
+    "13 harnesses".
   - `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md`: extend Status, Date,
     Decision outcome, and Known risks with the 4.2.3 bound decision, the
     window-completeness argument, the harness-local oracle policy, and the
     residual gaps. Add this execplan to Related documents.
-  - `docs/roadmap.md` lines 428-434: change `- [ ] 4.2.3.` and all four
+  - `docs/roadmap.md`, item 4.2.3: change `- [ ] 4.2.3.` and all four
     sub-bullets to `- [x]`, then append evidence bullets in the style of the
-    completed 4.2.1 and 4.2.2 entries (lines 376-427).
+    completed 4.2.1 and 4.2.2 entries.
   - `docs/users-guide.md`: **no change**, and say so here rather than leaving
     it unstated. This work adds no user-visible behaviour and no configuration.
 - **Acceptance evidence:** `make check-fmt`, `make lint`, `make test`,
@@ -1289,6 +1305,10 @@ This section is populated during implementation. It must contain, by EP-M6:
 - [x] (2026-08-24) Rebased onto `origin/main` at `7e5c2679` ("Add target
   descriptions and netsuke help targets"). No conflicts; line references
   refreshed. See `Decision log` for the relevance assessment.
+- [x] (2026-08-24) Rebased again onto `origin/main` at `aa93ef8b`, across nine
+  commits. No conflicts. `src/ir/cmd_interpolate.rs` is untouched, the harness
+  count is still thirteen, and the patch count is still twelve, so issue #585's
+  facts and every obligation in this plan stand. See `Decision log`.
 - [x] (2026-08-24) Maintainer ratified all three decisions flagged as requiring
   acceptance: the `RM-4.2.3.d` reformulation, harness-local oracles, and a
   string-level bound below the roadmap's stated 256/8.
@@ -1453,6 +1473,23 @@ and are now marked **accepted**. No decision in this log is outstanding.
   revision.
   **Date/Author:** 2026-08-24, planning agent.
 
+- **Decision:** Carry this plan forward unchanged in substance across the
+  second rebase, onto `origin/main` at `aa93ef8b`.
+  **Rationale:** nine commits landed, including serial dependency ordering
+  (roadmap 3.14.3), configuration-load caching and observability, a Windows CI
+  job, and a large restructuring of `docs/developers-guide.md`. A semantic diff
+  over `src/ir` reports a new `DependencyOrder` enum, one added `BuildEdge`
+  field, and mechanical updates to four test helpers; `cmd_interpolate` does not
+  appear at all. `src/ir/cmd_interpolate.rs`,
+  `src/ir/cmd_interpolate_property_tests.rs`, `src/ir/from_manifest_support.rs`,
+  and `docs/verification/` are byte-identical, the harness count is still
+  thirteen, the patch count is still twelve, and the `kani-smoke` job keeps its
+  shape, its cache key, and its 20-minute cap. Two operational notes are folded
+  into `Risks` below. Citations were converted from line numbers to section
+  headings for Markdown documents, because two consecutive rebases have now
+  moved them and the numbers cannot be kept true.
+  **Date/Author:** 2026-08-24, planning agent.
+
 - **Decision:** Extend `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md`
   rather than minting a new ADR number.
   **Rationale:** the same decision — how far to bound Kani harnesses and where
@@ -1549,3 +1586,18 @@ rather than narrow its reach. Planning dates were also corrected from 2026-08-17
 to 2026-08-24; the earlier value was wrong and two commit author dates still
 carry it. No obligation, milestone, or artefact changed. The plan remains
 `DRAFT` pending approval to begin implementation.
+
+**Revision 2.3 (2026-08-24).** Rebased onto `origin/main` at `aa93ef8b`, across
+nine commits, with no conflicts and no change of substance. A semantic diff over
+`src/ir` shows a new `DependencyOrder` enum and one added `BuildEdge` field from
+roadmap 3.14.3; `cmd_interpolate` is untouched, the harness count is still
+thirteen, and the patch count is still twelve, so every obligation and both
+follow-up issues stand as written. Two operational notes were added to `Risks`:
+`main` has edited the Makefile, which invalidates the Kani cache because the CI
+cache key hashes it and has no `restore-keys`, so the next timing will be
+pessimistic; and a merge-gating `build-test-windows` job now exists alongside
+`kani-smoke`. Citations to Markdown documents were converted from line numbers
+to section headings, since two consecutive rebases have moved them and the
+numbers cannot be kept true; line numbers are retained only for code, where
+`src/ir/cmd_interpolate.rs` has been stable throughout. The plan remains `DRAFT`
+pending approval to begin implementation.
