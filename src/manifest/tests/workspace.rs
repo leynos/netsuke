@@ -277,8 +277,8 @@ fn manifest_query_rejects_clock_dependent_template_helpers() -> AnyResult<()> {
     ensure!(
         error
             .chain()
-            .any(|cause| cause.to_string().contains("unknown function: now")),
-        "query should reject the unavailable now helper: {error:?}"
+            .any(|cause| cause.to_string().contains("now is disabled")),
+        "query should name the disabled now helper: {error:?}"
     );
     Ok(())
 }

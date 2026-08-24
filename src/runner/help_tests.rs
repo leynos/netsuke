@@ -293,6 +293,7 @@ fn catalogue_target(names: Vec<String>, description: Option<String>, phony: bool
         vars: crate::ast::Vars::default(),
         phony,
         always: false,
+        conditional: false,
         description,
     }
 }

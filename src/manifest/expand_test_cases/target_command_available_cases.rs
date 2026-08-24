@@ -6,6 +6,12 @@ use anyhow::{Context, Result};
 use minijinja::Environment;
 use rstest::rstest;
 
+fn manifest_query_environment() -> Environment<'static> {
+    let mut env = Environment::new();
+    let _state = crate::stdlib::register_manifest_query(&mut env);
+    env
+}
+
 #[rstest]
 #[case::present("preferred-tool", "preferred")]
 #[case::absent("missing-tool", "fallback")]
@@ -44,6 +50,31 @@ fn expand_static_target_when_supports_complementary_command_available_branches(
     anyhow::ensure!(
         !map.contains_key("when"),
         "when should be removed after target expansion"
+    );
+    Ok(())
+}
+
+#[test]
+fn manifest_query_marks_template_command_available_target_conditional() -> Result<()> {
+    let env = manifest_query_environment();
+    let yaml = "targets:
+  - name: test
+    description: Run the test suite
+    command: cargo test
+    when: \"{{ command_available('cargo-nextest') }}\"";
+    let mut doc: ManifestValue = serde_saphyr::from_str(yaml)?;
+
+    expand_foreach(&mut doc, &env)?;
+
+    let targets = targets(&doc)?;
+    anyhow::ensure!(targets.len() == 1, "query should retain the target");
+    let target = targets
+        .first()
+        .and_then(ManifestValue::as_object)
+        .context("conditional target map")?;
+    anyhow::ensure!(
+        target.get("conditional") == Some(&ManifestValue::Bool(true)),
+        "query-disabled template condition should be marked conditional: {target:?}"
     );
     Ok(())
 }

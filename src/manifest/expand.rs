@@ -35,6 +35,16 @@ struct ExpansionContext<'a> {
     section: &'a str,
 }
 
+/// Decides how discovery should handle a manifest `when` expression.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum WhenResolution {
+    /// The expression evaluated to true.
+    Include,
+    /// The expression evaluated to false.
+    Exclude,
+    /// A query-disabled helper prevents evaluation without making the entry invalid.
+    Conditional,
+}
 /// Expand manifest targets and actions defined with the `foreach` key.
 ///
 /// # Errors
@@ -91,9 +101,15 @@ fn expand_target(
         for (index, item) in values.into_iter().enumerate() {
             let mut clone = map.clone();
             clone.remove("foreach");
-            if !when_allows(&mut clone, context, Some((&item, index)))? {
-                *filtered += 1;
-                continue;
+            match when_allows(&mut clone, context, Some((&item, index)))? {
+                WhenResolution::Include => {}
+                WhenResolution::Exclude => {
+                    *filtered += 1;
+                    continue;
+                }
+                WhenResolution::Conditional => {
+                    clone.insert("conditional".into(), ManifestValue::Bool(true));
+                }
             }
             inject_iteration_vars(&mut clone, &item, index)?;
             items.push(ManifestValue::Object(clone));
@@ -102,9 +118,15 @@ fn expand_target(
     } else {
         // For targets without foreach, still evaluate and remove the `when` clause.
         // Use empty context since there's no iteration variable.
-        if !when_allows(&mut map, context, None)? {
-            *filtered += 1;
-            return Ok(vec![]);
+        match when_allows(&mut map, context, None)? {
+            WhenResolution::Include => {}
+            WhenResolution::Exclude => {
+                *filtered += 1;
+                return Ok(vec![]);
+            }
+            WhenResolution::Conditional => {
+                map.insert("conditional".into(), ManifestValue::Bool(true));
+            }
         }
         Ok(vec![ManifestValue::Object(map)])
     }
@@ -142,7 +164,7 @@ fn parse_foreach_values(expr_val: &ManifestValue, env: &Environment) -> Result<V
     Ok(iter.collect())
 }
 
-/// Evaluate a `when` clause and return whether the target should be included.
+/// Evaluate a `when` clause and return its discovery resolution.
 ///
 /// The `when` clause can be either:
 /// - A Jinja expression (e.g., `item > 1`) - evaluated via `compile_expression`
@@ -153,7 +175,7 @@ fn parse_foreach_values(expr_val: &ManifestValue, env: &Environment) -> Result<V
 /// checking for `{{` which could appear in string literals.
 ///
 /// Empty expressions are rejected as invalid.
-fn eval_when(env: &Environment, expr: &str, ctx: Value) -> Result<bool> {
+fn eval_when(env: &Environment, expr: &str, ctx: Value) -> Result<WhenResolution> {
     anyhow::ensure!(
         !expr.trim().is_empty(),
         "{}",
@@ -163,24 +185,50 @@ fn eval_when(env: &Environment, expr: &str, ctx: Value) -> Result<bool> {
     // Try expression compilation first - this handles plain expressions
     // like "item > 1" or "true" without needing template delimiters.
     if let Ok(compiled) = env.compile_expression(expr) {
-        let result = compiled.eval(ctx).with_context(|| {
+        let evaluation = compiled.eval(ctx).with_context(|| {
             localization::message(keys::MANIFEST_WHEN_EVAL_ERROR).with_arg("expr", expr)
-        })?;
-        return Ok(result.is_true());
+        });
+        return match evaluation {
+            Ok(value) => Ok(when_resolution(value.is_true())),
+            Err(error) if is_query_disabled_when_error(&error) => Ok(WhenResolution::Conditional),
+            Err(error) => Err(error),
+        };
     }
 
     // Expression parsing failed - treat as template syntax (e.g., "{{ path is dir }}")
-    let rendered = render_template(env, expr, &ctx).with_context(|| {
+    let template_rendering = render_template(env, expr, &ctx).with_context(|| {
         localization::message(keys::MANIFEST_WHEN_TEMPLATE_ERROR).with_arg("expr", expr)
-    })?;
+    });
+    let rendered_template = match template_rendering {
+        Ok(output) => output,
+        Err(error) if is_query_disabled_when_error(&error) => {
+            return Ok(WhenResolution::Conditional);
+        }
+        Err(error) => return Err(error),
+    };
     // Treat "true" or "1" as truthy, anything else (including "false", "") as falsy
-    Ok(matches!(
-        rendered.trim().to_lowercase().as_str(),
+    Ok(when_resolution(matches!(
+        rendered_template.trim().to_lowercase().as_str(),
         "true" | "1"
-    ))
+    )))
 }
 
-/// Evaluate a `when` clause if present, returning whether the target should be included.
+const fn when_resolution(is_true: bool) -> WhenResolution {
+    if is_true {
+        WhenResolution::Include
+    } else {
+        WhenResolution::Exclude
+    }
+}
+
+fn is_query_disabled_when_error(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
+        cause
+            .downcast_ref::<minijinja::Error>()
+            .is_some_and(crate::stdlib::is_manifest_query_disabled_error)
+    })
+}
+/// Evaluate a `when` clause if present, returning its discovery resolution.
 ///
 /// Accepts an optional iteration context (`item`, `index`) for foreach targets;
 /// static targets pass `None`.
@@ -188,14 +236,14 @@ fn when_allows(
     map: &mut ManifestMap,
     context: &ExpansionContext<'_>,
     iteration: Option<(&Value, usize)>,
-) -> Result<bool> {
+) -> Result<WhenResolution> {
     let Some(when_val) = map.remove("when") else {
-        return Ok(true);
+        return Ok(WhenResolution::Include);
     };
     let expr = as_str(&when_val, "when")?;
     let ctx = when_context(map, iteration)?;
     let allowed = eval_when(context.env, expr, ctx)?;
-    if !allowed && has_subscriber() {
+    if allowed == WhenResolution::Exclude && has_subscriber() {
         let entry_name = entry_name(map);
         let iteration_index = iteration.map(|(_, index)| index);
         let entry_name_hash = entry_name_hash(entry_name);

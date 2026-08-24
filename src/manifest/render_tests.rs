@@ -27,6 +27,7 @@ fn sample_manifest() -> Result<NetsukeManifest> {
         vars: target_vars,
         phony: false,
         always: false,
+        conditional: false,
         description: Some("{{ message }}".into()),
     };
 
@@ -253,6 +254,7 @@ fn render_manifest_renders_script_and_rule_ref_recipes() -> Result<()> {
         vars: target_vars,
         phony: false,
         always: false,
+        conditional: false,
         description: None,
     };
     let rule = Rule {
@@ -302,6 +304,7 @@ fn manifest_with_build_only_recipe_helper() -> Result<NetsukeManifest> {
             vars: Vars::new(),
             phony: true,
             always: false,
+            conditional: false,
             description: Some("Run tests".into()),
         }],
         targets: Vec::new(),
