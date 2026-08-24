@@ -95,6 +95,10 @@ fn parse_catalogue_at(path: &Path) -> Result<MessageVariables, Box<dyn Error>> {
 ///
 /// The source catalogue provides the variable declarations used when comparing
 /// every other locale against the key registry.
+///
+/// # Errors
+///
+/// Returns an error when the source catalogue cannot be read or parsed.
 fn source_catalogue_variables(root: &Path) -> Result<MessageVariables, Box<dyn Error>> {
     parse_catalogue_at(&catalogue_path_in(root, SOURCE_LOCALE))
 }

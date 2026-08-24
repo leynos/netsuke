@@ -50,6 +50,11 @@ where
 ///
 /// The measured interval starts immediately before diagnostic-mode resolution
 /// and ends after either that resolution or the full configuration merge.
+///
+/// # Errors
+///
+/// Returns a failure [`ExitCode`] when diagnostic-mode resolution or the
+/// subsequent configuration merge fails.
 pub(super) fn resolve_configuration<E>(
     context: &ConfigurationLoadContext<'_, E>,
     clock: &impl MonotonicClock,
@@ -108,6 +113,11 @@ pub(super) fn config_err_to_exit(
 /// The diagnostic-mode phase is timed with the injected [`MonotonicClock`].
 /// Resolution failures select the fallback mode's filter and return a failure
 /// [`ExitCode`] through [`config_err_to_exit`].
+///
+/// # Errors
+///
+/// Returns a failure [`ExitCode`] when config discovery or JSON preference
+/// resolution fails.
 fn resolve_json_mode_or_exit<E>(
     context: &ConfigurationLoadContext<'_, E>,
     clock: &impl MonotonicClock,
@@ -156,6 +166,11 @@ where
 ///
 /// The merge is timed with the injected [`MonotonicClock`], applies the default
 /// command, and maps configuration failures to a failure [`ExitCode`].
+///
+/// # Errors
+///
+/// Returns a failure [`ExitCode`] when merging the discovered layers with the
+/// CLI values fails.
 fn merge_cli_or_exit<E>(
     context: &ConfigurationLoadContext<'_, E>,
     resolution: ResolvedDiagnosticMode,

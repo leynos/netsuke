@@ -34,8 +34,8 @@ def script_fixture() -> types.ModuleType:
     spec = importlib.util.spec_from_file_location(
         "doc_coverage_module", SCRIPT_DIRECTORY / "doc-coverage.py"
     )
-    assert spec is not None
-    assert spec.loader is not None
+    assert spec is not None, "expected import setup to produce a module spec"
+    assert spec.loader is not None, "expected module spec to provide a loader"
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
@@ -92,6 +92,22 @@ class RustdocFailureCase:
 
     output: str
     returncode: int
+    diagnostic: str
+
+
+@dataclasses.dataclass(frozen=True)
+class CoveragePayloadFailureCase:
+    """Define one invalid Rustdoc coverage-payload scenario.
+
+    Parameters
+    ----------
+    payload
+        The mocked output from `cargo rustdoc`.
+    diagnostic
+        Text that must occur in the translated `RuntimeError`.
+    """
+
+    payload: str
     diagnostic: str
 
 
@@ -237,7 +253,7 @@ def test_cargo_metadata_failure_aborts_the_run(
 ) -> None:
     """A failing cargo metadata run is a measurement error, not an empty gate."""
 
-    def fail(argv: list[str], **_kwargs: object) -> FakeResult:
+    def fail(_argv: list[str], **_kwargs: object) -> FakeResult:
         return FakeResult(1, "", "filtered diagnostics")
 
     monkeypatch.setattr(script.subprocess, "run", fail)
@@ -317,7 +333,7 @@ def test_missing_cargo_maps_to_measurement_error(
 ) -> None:
     """An OSError from Cargo exits 2 with a message, not a traceback."""
 
-    def fail(argv: list[str], **_kwargs: object) -> FakeResult:
+    def fail(_argv: list[str], **_kwargs: object) -> FakeResult:
         message = "cargo: not found"
         raise OSError(message)
 
@@ -343,7 +359,7 @@ def test_measure_maps_missing_cargo_to_measurement_error(
     one rather than the metadata one.
     """
 
-    def fail(argv: list[str], **_kwargs: object) -> FakeResult:
+    def fail(_argv: list[str], **_kwargs: object) -> FakeResult:
         message = "cargo: not found"
         raise OSError(message)
 
@@ -474,3 +490,46 @@ def test_parse_coverage_output_rejects_malformed_json(script: types.ModuleType) 
 
     with pytest.raises(RuntimeError, match="did not emit coverage JSON"):
         script.parse_coverage_output(target, "not json at all")
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(
+            CoveragePayloadFailureCase("[]", "expected an object"),
+            id="non-object",
+        ),
+        pytest.param(
+            CoveragePayloadFailureCase(
+                '{"src/lib.rs": {"total": 1}}',
+                "each entry requires total and with_docs",
+            ),
+            id="missing-with-docs",
+        ),
+        pytest.param(
+            CoveragePayloadFailureCase(
+                '{"src/lib.rs": {"with_docs": 1}}',
+                "each entry requires total and with_docs",
+            ),
+            id="missing-total",
+        ),
+    ],
+)
+def test_main_maps_invalid_coverage_shape_to_measurement_error(
+    script: types.ModuleType,
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    case: CoveragePayloadFailureCase,
+) -> None:
+    """Return the controlled measurement exit for invalid coverage JSON shapes."""
+    FakeCargo(
+        script,
+        metadata=single_library_metadata(),
+        rustdoc_output=case.payload,
+    ).install(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(RuntimeError, match=case.diagnostic):
+        script.run_measurements("nightly-x", tmp_path)
+
+    assert script.main(["--toolchain", "nightly-x"]) == 2

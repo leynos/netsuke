@@ -72,7 +72,8 @@ pub(super) fn lookup(
     }
 }
 
-/// Resolve a command that already looks like a path (absolute or relative).
+/// Resolve a command that already looks like a path (absolute or relative),
+/// returning all matching executable paths.
 ///
 /// On Windows this honours `PATHEXT` when the path is missing an extension so
 /// callers can pass `.\gradlew` and still resolve `gradlew.bat`. On POSIX the
@@ -103,10 +104,11 @@ pub(super) fn resolve_direct(
     }
 }
 
-/// Resolve a path-like command to one executable path.
+/// Resolve a path-like command to executable matches.
 ///
 /// On POSIX the candidate must already be executable; canonicalization is
-/// applied when requested in `options`.
+/// applied when requested in `options`. The result contains one direct-path
+/// match on POSIX.
 #[cfg(not(windows))]
 pub(super) fn resolve_direct(
     command: &str,
@@ -253,8 +255,8 @@ struct HandleMissContext<'a> {
     workspace_skips: &'a WorkspaceSkipList,
 }
 
-/// Handle a PATH-search miss, falling back to a workspace search only when
-/// `PATH` is empty and `ctx.options.cwd_mode` is not [`CwdMode::Never`].
+/// Handle a PATH-search miss, falling back to a workspace search when `PATH`
+/// is unset or empty and `ctx.options.cwd_mode` is not [`CwdMode::Never`].
 fn handle_miss(ctx: HandleMissContext<'_>) -> Result<Vec<Utf8PathBuf>, ResolveError> {
     let path_empty = ctx.env.raw_path.as_ref().is_none_or(|path| path.is_empty());
 

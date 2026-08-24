@@ -156,8 +156,8 @@ references, clone keys only on insertion, and build error context lazily.
   `-Zpolonius=next` and record the classification in `docs/polonius.md`.
 
 - Run `make check-fmt`, `make lint`, `make doc-coverage`, and `make test`
-  before committing. These targets wrap the following commands, so
-  contributors understand the exact behaviour and policy enforced:
+  before committing. These targets wrap the following commands, so contributors
+  understand the exact behaviour and policy enforced:
   - `make check-fmt` executes:
 
     ```sh
@@ -237,11 +237,11 @@ references, clone keys only on insertion, and build error context lazily.
   module's purpose and utility.
 - Every public and private function and method **must** carry a `///` doc
   comment: an imperative one-line summary starting with a verb, a rationale
-  paragraph only where a design choice is non-obvious, and a `# Errors`
-  section on functions returning `Result` whose failure semantics are not
-  obvious from the summary. Do not add `# Arguments` or `# Returns`
-  boilerplate; it is not used in this codebase. See *Doc-comment coverage*
-  below for the metric and its exemptions.
+  paragraph only where a design choice is non-obvious, and a `# Errors` section
+  on functions returning `Result` whose failure semantics are not obvious from
+  the summary. Do not add `# Arguments` or `# Returns` boilerplate; it is not
+  used in this codebase. See *Doc-comment coverage* below for the metric and
+  its exemptions.
 
 - Prefer immutable data and avoid unnecessary `mut` bindings.
 - Use explicit version ranges in `Cargo.toml` and keep dependencies up-to-date.
@@ -292,17 +292,17 @@ The aggregate doc-comment coverage of the workspace stays at or above 80% of
 the items Rustdoc counts; `make doc-coverage` measures and enforces the bar.
 The metric runs `cargo rustdoc --show-coverage` over every library and binary
 target, counts private items too, and sums the documented share across the
-workspace. The threshold is overridable with `DOC_COVERAGE_THRESHOLD`, and
-the toolchain with `DOC_COVERAGE_TOOLCHAIN`, which the target passes to the
-script as `--toolchain`.
+workspace. The threshold is overridable with `DOC_COVERAGE_THRESHOLD`, and the
+toolchain with `DOC_COVERAGE_TOOLCHAIN`, which the target passes to the script
+as `--toolchain`.
 
 - Public **and** private functions and methods carry `///` docs per the
   style above; there is no private-helper carve-out.
 - Rustdoc's own counting excludes trait-implementation overrides, so a
   concrete `Display::fmt`, `FromStr::from_str`, `Serialize`, `Deserialize`,
   `Drop::drop`, or similar does not need `///` docs to satisfy the metric.
-  Inherent `impl`-block methods and modules count like any other item; add
-  `///` docs only when they add real clarity.
+  Inherent `impl`-block methods and modules count like any other item and must
+  carry `///` documentation.
 - Test functions (`#[test]` / `#[rstest]`) live in `cfg(test)` modules that
   Rustdoc does not compile, so they are not counted; do not add `///` docs to
   them.

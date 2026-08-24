@@ -201,8 +201,9 @@ def parse_coverage_output(target: DocTarget, output: str) -> Coverage:
     Raises
     ------
     RuntimeError
-        When ``output`` is not valid JSON, with the existing
-        ``did not emit coverage JSON`` diagnostic naming the target.
+        When ``output`` is invalid JSON or does not have Rustdoc's per-file
+        object shape, with the ``did not emit coverage JSON`` diagnostic
+        naming the target.
     """
     try:
         per_file = json.loads(output)
@@ -212,13 +213,27 @@ def parse_coverage_output(target: DocTarget, output: str) -> Coverage:
             f" ({target.name or 'lib'}) did not emit coverage JSON: {error}"
         )
         raise RuntimeError(detail) from error
-    return sum(
-        (
-            Coverage(int(entry["total"]), int(entry["with_docs"]))
-            for entry in per_file.values()
-        ),
-        Coverage(0, 0),
-    )
+    if not isinstance(per_file, dict):
+        detail = (
+            f"cargo rustdoc for {target.package} {target.kind}"
+            f" ({target.name or 'lib'}) did not emit coverage JSON: expected an object"
+        )
+        raise RuntimeError(detail)
+    try:
+        return sum(
+            (
+                Coverage(int(entry["total"]), int(entry["with_docs"]))
+                for entry in per_file.values()
+            ),
+            Coverage(0, 0),
+        )
+    except (KeyError, TypeError, ValueError) as error:
+        detail = (
+            f"cargo rustdoc for {target.package} {target.kind}"
+            f" ({target.name or 'lib'}) did not emit coverage JSON: "
+            f"each entry requires total and with_docs: {error}"
+        )
+        raise RuntimeError(detail) from error
 
 
 def measure(target: DocTarget, toolchain: str, manifest_root: pathlib.Path) -> Coverage:

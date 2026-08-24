@@ -15,10 +15,12 @@ use super::{
 #[path = "env_path_support.rs"]
 mod path_support;
 
+#[cfg(test)]
+pub(super) use path_support::DEFAULT_PATHEXT;
 #[cfg(windows)]
 pub(super) use path_support::candidate_paths;
 #[cfg(any(windows, test))]
-pub(super) use path_support::{DEFAULT_PATHEXT, parse_pathext};
+pub(super) use path_support::parse_pathext;
 use path_support::{PathEntry, current_dir_utf8, parse_path_entries};
 
 /// Translate a platform reading of the switch into its domain state.

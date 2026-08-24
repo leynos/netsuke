@@ -77,6 +77,11 @@ impl Default for WorkspaceSkipList {
 }
 
 /// Search the working directory tree for `command`, honouring the fallback switch.
+///
+/// # Errors
+///
+/// Returns a [`ResolveError`] when traversal fails, a workspace path is not
+/// valid UTF-8, or an executable probe fails.
 pub(super) fn search_workspace(
     env: &EnvSnapshot,
     command: &str,

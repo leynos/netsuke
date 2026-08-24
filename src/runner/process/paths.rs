@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 
 /// Canonicalize `path`, requiring and returning UTF-8 throughout.
 ///
-/// Empty and `.` paths resolve to the current directory, and existing
-/// ancestors anchor absolute paths during canonicalization.
+/// Empty and `.` paths resolve to the current directory. Absolute-path
+/// resolution is anchored by opening the direct parent directory.
 ///
 /// # Errors
 ///

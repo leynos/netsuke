@@ -48,12 +48,12 @@ impl ValidationState {
         false
     }
 
+    /// Report that no escape handling applies on non-Unix targets.
     #[cfg(not(unix))]
     #[expect(
         clippy::unused_self,
         reason = "signature must mirror the Unix arm, which reads self.escaped"
     )]
-    /// Report that no escape handling applies on non-Unix targets.
     const fn process_escape(&mut self, _ch: char) -> bool {
         false
     }

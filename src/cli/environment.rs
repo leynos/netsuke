@@ -147,7 +147,8 @@ fn strip_prefix_uncased<'a>(value: &'a str, prefix: &str) -> Option<&'a str> {
 ///
 /// # Errors
 ///
-/// Returns an error when `components` conflicts with an existing scalar key.
+/// Returns an error when the leaf component conflicts with an existing key,
+/// whether that key currently holds a scalar value or a dictionary.
 fn insert_nested(target: &mut Dict, components: &[String], value: Value) -> Result<(), String> {
     let Some((head, tail)) = components.split_first() else {
         return Ok(());

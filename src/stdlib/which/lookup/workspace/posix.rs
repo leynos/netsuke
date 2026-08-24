@@ -16,8 +16,8 @@ use crate::stdlib::which::{env::EnvSnapshot, resolve_error::ResolveError};
 ///
 /// # Errors
 ///
-/// Returns a [`ResolveError`] when directory traversal or an executable-probe
-/// fails.
+/// Returns a [`ResolveError`] when directory traversal fails, a workspace path
+/// is not valid UTF-8, or an executable probe fails.
 pub(super) fn search_workspace(
     env: &EnvSnapshot,
     command: &str,
@@ -40,8 +40,8 @@ pub(super) fn search_workspace(
 ///
 /// # Errors
 ///
-/// Returns a [`ResolveError`] when a walkdir iteration fails or an entry
-/// cannot be probed for executability.
+/// Returns a [`ResolveError`] when a walkdir iteration fails, an entry path is
+/// not valid UTF-8, or an entry cannot be probed for executability.
 fn collect_matching_executables(
     walker: impl Iterator<Item = Result<walkdir::DirEntry, walkdir::Error>>,
     command: &str,

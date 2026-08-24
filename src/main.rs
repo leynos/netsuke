@@ -188,8 +188,9 @@ fn finish_run(exit_code: ExitCode, verbose: bool) -> ExitCode {
 
 /// Return whether the parsed CLI asks only for informational help.
 ///
-/// Help for a specific topic is informational; the general help listing may
-/// instead require configuration, so it is not counted here.
+/// Most topic-specific help is informational, but [`cli::HelpTopic::Targets`] is
+/// excluded because it may require configuration. General help may also
+/// require configuration, so it is not counted here.
 const fn is_informational_help(cli: &cli::Cli) -> bool {
     matches!(
         &cli.command,

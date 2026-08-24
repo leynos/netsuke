@@ -122,12 +122,25 @@ fn fetch(
 }
 
 /// Fetch a URL's response body, enforcing the response size limit.
+///
+/// # Errors
+///
+/// Returns an error when the request cannot be dispatched, the response body
+/// cannot be read, its buffer cannot be sliced, or the body exceeds `limit`
+/// bytes.
 fn fetch_remote(url: &Url, impure: &Arc<AtomicBool>, limit: u64) -> Result<Vec<u8>, Error> {
     let response = dispatch_request(url, impure)?;
     read_response(url, response.into_reader(), limit, None)
 }
 
 /// Fetch a URL, streaming the response into the cache entry.
+///
+/// # Errors
+///
+/// Returns an error when the request cannot be dispatched, the cache entry
+/// cannot be opened or synchronized, the response cannot be read or copied to
+/// the cache, or the response exceeds `limit` bytes. A partial cache entry is
+/// removed when response processing fails.
 fn fetch_remote_with_cache(
     url: &Url,
     impure: &Arc<AtomicBool>,
@@ -151,6 +164,12 @@ fn fetch_remote_with_cache(
 }
 
 /// Dispatch a GET request with bounded timeouts, marking the template impure.
+///
+/// # Errors
+///
+/// Returns an error when `ureq` cannot connect to the server, send the request,
+/// receive the response, or complete within one of the configured timeouts,
+/// including unsuccessful HTTP responses.
 fn dispatch_request(url: &Url, impure: &Arc<AtomicBool>) -> Result<ureq::Response, Error> {
     impure.store(true, Ordering::Relaxed);
     let agent = ureq::AgentBuilder::new()
@@ -173,6 +192,12 @@ fn dispatch_request(url: &Url, impure: &Arc<AtomicBool>) -> Result<ureq::Respons
 }
 
 /// Read a response body up to the size limit, mirroring bytes to an optional cache sink.
+///
+/// # Errors
+///
+/// Returns an error when reading a response chunk fails, the body exceeds
+/// `limit`, the response buffer cannot be sliced as requested, or an optional
+/// cache sink rejects a write.
 fn read_response(
     url: &Url,
     mut reader: impl Read,
@@ -206,6 +231,10 @@ fn read_response(
 }
 
 /// Read one chunk from the response body, localizing read failures.
+///
+/// # Errors
+///
+/// Returns an error when `reader` fails while reading the next response chunk.
 fn read_response_chunk(
     url: &Url,
     reader: &mut impl Read,
@@ -292,6 +321,16 @@ impl FetchContext {
     }
 
     /// Open the configured cache directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the configured cache directory violates policy or
+    /// cannot be created or opened.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the configured relative path violates the cache
+    /// boundary rules, or when the directory cannot be created or opened.
     #[rustfmt::skip]
     fn open_cache_dir(&self) -> Result<Dir, Error> { self.cache.open_dir() }
 

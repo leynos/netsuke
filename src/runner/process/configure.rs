@@ -18,6 +18,13 @@ use super::{
 ///
 /// Sets up stdout/stderr pipes for streaming. Callers append targets or tool
 /// flags after this function returns.
+///
+/// # Errors
+///
+/// Returns an I/O error only when working-directory canonicalization fails or
+/// the build-file path remains non-UTF-8 after the fallback. Build and tool
+/// helpers tolerate build-file canonicalization failure when the original path
+/// is valid UTF-8.
 fn configure_ninja_base(
     cmd: &mut Command,
     options: &NinjaProcessOptions,

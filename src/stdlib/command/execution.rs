@@ -116,8 +116,9 @@ fn run_configured_command(
 ///
 /// # Errors
 ///
-/// Returns a `CommandFailure` when the process cannot be spawned, exceeds a
-/// configured output limit, times out, or exits unsuccessfully.
+/// Returns a `CommandFailure` when spawning fails, input or output I/O
+/// encounters an error (including a broken pipe), output exceeds its limit,
+/// execution times out, or the process exits unsuccessfully.
 pub(super) fn run_command(
     command: &str,
     input: &[u8],
@@ -158,8 +159,9 @@ fn configure_shell_command(cmd: &mut Command, command: &str) {
 ///
 /// # Errors
 ///
-/// Returns a `CommandFailure` when the process cannot be spawned, exceeds a
-/// configured output limit, times out, or exits unsuccessfully.
+/// Returns a `CommandFailure` when spawning fails, input or output I/O
+/// encounters an error (including a broken pipe), output exceeds its limit,
+/// execution times out, or the process exits unsuccessfully.
 #[cfg(windows)]
 pub(super) fn run_program(
     program: &str,

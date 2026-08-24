@@ -215,6 +215,7 @@ mod tests {
     use rstest::rstest;
     use test_support::fs as test_fs;
 
+    /// Verify the temporary Ninja file can be reopened after its writer drops.
     #[test]
     fn create_temp_ninja_file_releases_writer_before_external_read() -> Result<()> {
         let content = NinjaContent::new(String::from("rule cc"));

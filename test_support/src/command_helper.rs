@@ -168,8 +168,9 @@ pub fn compile_rust_helper(
 ///
 /// # Errors
 ///
-/// Returns an error if the source cannot be written or the compiler exits
-/// unsuccessfully.
+/// Returns an error if the source cannot be written, starting or launching the
+/// configured `RUSTC` compiler fails before an exit status is available, or
+/// the compiler exits unsuccessfully.
 fn compile_rust_helper_with_env(
     env: &impl Env,
     dir: &Dir,

@@ -238,6 +238,11 @@ impl ShellWords {
     }
 
     /// Count background jobs reachable at `depth`, recursing into static `eval` payloads.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`UnanalyzableEval`] when nested evaluation cannot be analysed
+    /// or when the accumulated job count overflows.
     fn background_job_count_at_depth(&self, depth: usize) -> Result<usize, UnanalyzableEval> {
         self.0
             .iter()
@@ -252,6 +257,12 @@ impl ShellWords {
     }
 
     /// Count background jobs in the static payload of the `eval` at `index`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`UnanalyzableEval`] when the nesting depth limit is reached,
+    /// the payload contains dynamic expansion, shell parsing fails, or the
+    /// resulting job count overflows.
     fn background_jobs_from_eval(
         &self,
         index: usize,

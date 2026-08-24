@@ -99,8 +99,8 @@ fn execute_generate(
 ///
 /// # Errors
 ///
-/// Returns an error when the clean tool fails or the JSON result cannot be
-/// written.
+/// Returns an error when the clean tool fails or, when `cli.json` is enabled,
+/// the JSON result cannot be written.
 fn execute_clean(cli: &Cli, context: &ExecutionContext<'_>) -> Result<()> {
     handle_ninja_tool(
         cli,

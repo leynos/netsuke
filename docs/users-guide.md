@@ -550,6 +550,10 @@ prefix, dangling, or resolves outside that prefix. A cyclic symbolic link is
 reported as an error rather than skipped, since it describes a broken tree
 rather than a missing file.
 
+Patterns with unmatched braces are rejected during validation. When an opening
+brace remains unclosed, the diagnostic points to the outermost unmatched
+opening brace; an unmatched closing brace is reported at that closing brace.
+
 ### Define reusable macros
 
 Macros return rendered text and can accept default arguments:
@@ -674,33 +678,32 @@ documentation, rather than the YAML-only examples elsewhere in this guide.
 
 Netsuke is a build tool, not a library: the Netsukefile format and the graph
 export are the only surfaces it commits to, and every Rust API named in this
-section is private in intent and unstable, liable to change or disappear in
-any beta release. It is documented here for the benefit of anyone who calls
-it anyway, with that caveat understood.
+section is private in intent and unstable, liable to change or disappear in any
+beta release. It is documented here for the benefit of anyone who calls it
+anyway, with that caveat understood.
 
-A program calling Netsuke's Rust API can invoke Ninja without touching
-its own process environment. `netsuke::runner::CommandEnv` carries child
-environment overrides as data — `inherit()` changes nothing, `with_var` and
-`with_path` set variables for the spawned command only — and the explicit
-request forms `run_ninja_with` and `run_ninja_tool_with` accept a request
-naming the program, build file, targets or tool, that environment, and a
-`stderr_mode: StderrMode` policy routing the child's standard streams:
-`Suppress` drains both streams (keeping JSON diagnostics machine-readable),
-while `Forward` relays them to the caller. The convenience wrappers
-`run_ninja` and `run_ninja_tool` behave identically with an inherited
-environment, deriving the policy from the CLI's JSON setting. Overrides are
-additive: variables not named are inherited from the calling process, and
-the injected `PATH` governs what commands Ninja launches will see. Relative
-program names remain valid and resolve through that child `PATH`; supply an
-absolute or otherwise resolved `program` only when executable selection must
-stay isolated from the injected `PATH`.
+A program calling Netsuke's Rust API can invoke Ninja without touching its own
+process environment. `netsuke::runner::CommandEnv` carries child environment
+overrides as data — `inherit()` changes nothing, `with_var` and `with_path` set
+variables for the spawned command only — and the explicit request forms
+`run_ninja_with` and `run_ninja_tool_with` accept a request naming the program,
+build file, targets or tool, that environment, and a `stderr_mode: StderrMode`
+policy routing the child's standard streams: `Suppress` drains both streams
+(keeping JSON diagnostics machine-readable), while `Forward` relays them to the
+caller. The convenience wrappers `run_ninja` and `run_ninja_tool` behave
+identically with an inherited environment, deriving the policy from the CLI's
+JSON setting. Overrides are additive: variables not named are inherited from
+the calling process, and the injected `PATH` governs what commands Ninja
+launches will see. Relative program names remain valid and resolve through that
+child `PATH`; supply an absolute or otherwise resolved `program` only when
+executable selection must stay isolated from the injected `PATH`.
 
 The request itself is a named type: `netsuke::runner::NinjaBuildRequest` for a
 build and `netsuke::runner::NinjaToolRequest` for `ninja -t <tool>`. Both
 borrow their fields, so one `CommandEnv` and one `NinjaProcessOptions` can
-serve several
-invocations. The [v0.1.0 migration guide](v0-1-0-migration-guide.md)
-summarizes these additions and confirms the wrappers are unchanged.
+serve several invocations. The
+[v0.1.0 migration guide](v0-1-0-migration-guide.md) summarizes these additions
+and confirms the wrappers are unchanged.
 
 <!-- tested-example: guide-ninja-request-snippet -->
 
@@ -749,11 +752,11 @@ if std::env::var_os("NETSUKE_GUIDE_RUN").is_some() {
 The convenience wrappers `run_ninja` and `run_ninja_tool` keep their existing
 signatures and behaviour, so a caller that uses them needs no change; the
 request bundles use `options: &options` instead of `cli: &cli` and gained the
-required `stderr_mode` field, so a caller that constructs
-`NinjaBuildRequest`/`NinjaToolRequest` directly must supply both.
-Each release records such additions in [`CHANGELOG.md`](../CHANGELOG.md),
-which is where Netsuke signposts Rust API changes — with no stability promise
-attached to them ahead of 1.0.
+required `stderr_mode` field, so a caller that constructs `NinjaBuildRequest`/
+`NinjaToolRequest` directly must supply both. Each release records such
+additions in [`CHANGELOG.md`](../CHANGELOG.md), which is where Netsuke
+signposts Rust API changes — with no stability promise attached to them ahead
+of 1.0.
 
 ## Use the template standard library
 

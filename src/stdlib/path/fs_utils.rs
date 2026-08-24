@@ -137,6 +137,11 @@ pub(super) fn linecount(path: &Utf8Path) -> Result<usize, Error> {
 }
 
 /// Open the file at `path` for reading through a capability handle.
+///
+/// # Errors
+///
+/// Returns a template error when the parent directory cannot be opened or the
+/// target file cannot be opened for reading.
 pub(crate) fn open_file(path: &Utf8Path) -> Result<File, Error> {
     with_parent_dir(path, keys::STDLIB_PATH_ACTION_OPEN_FILE, |handle, entry| {
         let mut options = OpenOptions::new();

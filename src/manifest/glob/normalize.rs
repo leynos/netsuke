@@ -28,9 +28,9 @@ pub(crate) fn normalize_separators(pattern: &str) -> String {
     }
 }
 
-#[cfg(unix)]
 /// Push the normalized separator for a backslash escape without consuming its
-/// following character.
+/// following character; it only peeks at that character to choose the output.
+#[cfg(unix)]
 fn push_normalized_backslash(
     it: &mut std::iter::Peekable<std::str::Chars<'_>>,
     out: &mut String,
@@ -62,12 +62,12 @@ fn push_normalized_backslash(
     out.push(native);
 }
 
+/// Stub that pushes a literal backslash, keeping cfg alignment on other platforms.
 #[cfg(not(unix))]
 #[expect(
     dead_code,
     reason = "stub keeps cfg alignment; unused on non-Unix targets"
 )]
-/// Stub that pushes a literal backslash, keeping cfg alignment on other platforms.
 fn push_normalized_backslash(
     _it: &mut std::iter::Peekable<std::str::Chars<'_>>,
     out: &mut String,
@@ -79,8 +79,8 @@ fn push_normalized_backslash(
     out.push('\\');
 }
 
-#[cfg(unix)]
 /// Rewrite backslash-escaped metacharacters as the matching bracket class.
+#[cfg(unix)]
 pub(super) fn force_literal_escapes(pattern: &str) -> String {
     let mut out = String::with_capacity(pattern.len());
     let mut it = pattern.chars().peekable();
@@ -102,12 +102,12 @@ pub(super) fn force_literal_escapes(pattern: &str) -> String {
     out
 }
 
-#[cfg(unix)]
 /// Rewrite recognised escaped metacharacters as bracket classes.
 ///
-/// Recognised metacharacters are consumed and emitted as bracket classes;
-/// otherwise the backslash is preserved and the following character remains
+/// Recognised metacharacters are consumed and emitted as bracket classes.
+/// Other characters preserve the backslash, leaving the following character
 /// for the caller to process.
+#[cfg(unix)]
 fn handle_escaped_char(it: &mut std::iter::Peekable<std::str::Chars<'_>>, out: &mut String) {
     let Some(next) = it.peek().copied() else {
         out.push('\\');

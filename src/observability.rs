@@ -10,7 +10,10 @@ use monotony::MonotonicClock;
 use ortho_config::OrthoError;
 use std::{
     error::Error,
-    sync::{Once, OnceLock},
+    sync::{
+        Once, OnceLock,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 #[path = "observability_recorder.rs"]
@@ -80,21 +83,28 @@ impl ConfigLoadOutcome {
 
 /// Process-global metrics snapshotter, installed when metrics initialize.
 static SNAPSHOTTER: OnceLock<Snapshotter> = OnceLock::new();
-/// Guards one-time installation of the process metrics recorder.
-static METRICS_INITIALIZED: Once = Once::new();
+/// Serialize recorder installation without blocking a later retry after failure.
+static METRICS_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 /// Install the process metrics recorder once the tracing subscriber is ready.
 ///
 /// The binary owns global recorder installation. Tests use local recorders so
 /// their samples stay isolated from each other and the process-wide recorder.
 pub(crate) fn init_metrics() {
-    METRICS_INITIALIZED.call_once(|| {
-        let recorder = ConfigMetricsRecorder::new();
-        let snapshotter = recorder.snapshotter();
-        if metrics::set_global_recorder(recorder).is_ok() {
-            drop(SNAPSHOTTER.set(snapshotter));
-        }
-    });
+    if METRICS_INITIALIZED
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return;
+    }
+
+    let recorder = ConfigMetricsRecorder::new();
+    let snapshotter = recorder.snapshotter();
+    if metrics::set_global_recorder(recorder).is_ok() {
+        drop(SNAPSHOTTER.set(snapshotter));
+    } else {
+        METRICS_INITIALIZED.store(false, Ordering::Release);
+    }
 }
 
 /// Emit the recorder's drained aggregate at process shutdown.

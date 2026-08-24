@@ -33,6 +33,11 @@ impl fmt::Display for QuoteError {
 impl std::error::Error for QuoteError {}
 
 /// Quote an argument for the platform shell, rejecting line breaks.
+///
+/// # Errors
+///
+/// Returns [`QuoteError::ContainsLineBreak`] when `arg` contains a newline or
+/// carriage return.
 #[cfg(windows)]
 pub(super) fn quote(arg: &str) -> Result<String, QuoteError> {
     if arg.chars().any(|ch| matches!(ch, '\n' | '\r')) {
@@ -81,6 +86,11 @@ pub(super) fn quote(arg: &str) -> Result<String, QuoteError> {
 }
 
 /// Quote an argument for the platform shell, rejecting line breaks.
+///
+/// # Errors
+///
+/// Returns [`QuoteError::ContainsLineBreak`] when `arg` contains a newline or
+/// carriage return.
 #[cfg(not(windows))]
 pub(super) fn quote(arg: &str) -> Result<String, QuoteError> {
     if arg.chars().any(|ch| matches!(ch, '\n' | '\r')) {

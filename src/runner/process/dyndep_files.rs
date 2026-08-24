@@ -307,12 +307,12 @@ fn handle_rename_failure(
 
 /// Operation-scoped source of same-directory temporary path candidates.
 ///
-/// This private source is used only by dyndep publication. Its nonce separates
-/// concurrent operations, while its local sequence supports bounded collision
-/// retries without process-global mutable state. `create_new` remains the
-/// authority that decides whether each candidate is available.
+/// This private source is used only by dyndep publication. Its nonce is a
+/// best-effort collision-reduction suffix, while its local sequence supports
+/// bounded retries without process-global mutable state. `create_new` remains
+/// the authority that decides whether each candidate is available.
 struct TempNameSource {
-    /// Per-operating-process nonce separating concurrent writers.
+    /// Best-effort suffix that reduces candidate-name collisions.
     nonce: String,
     /// Local candidate counter for bounded collision retries.
     sequence: u64,

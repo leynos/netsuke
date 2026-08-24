@@ -25,7 +25,7 @@ pub(super) enum ConfigLoadFailureKind {
 /// Emit the bounded outcome of project-scope layer de-duplication.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct ProjectLayerDeduplication {
-    /// Number of layers found by the primary discovery scan.
+    /// Number of distinct path-bearing layers from the primary discovery scan.
     discovered: usize,
     /// Number of project-scope layers seen by the fallback pass.
     project: usize,
