@@ -60,8 +60,10 @@ fn configure_ninja_base(
 ///
 /// # Errors
 ///
-/// Returns an error when the working directory or build file cannot be
-/// canonicalized.
+/// Build-file canonicalization failure is tolerated when the original path is
+/// valid UTF-8. Returns an error when working-directory canonicalization fails
+/// or when the build-file path cannot be represented as UTF-8 after that
+/// fallback.
 pub(super) fn configure_ninja_build_command(
     cmd: &mut Command,
     request: &NinjaBuildRequest<'_>,
@@ -76,8 +78,10 @@ pub(super) fn configure_ninja_build_command(
 ///
 /// # Errors
 ///
-/// Returns an error when the working directory or build file cannot be
-/// canonicalized.
+/// Build-file canonicalization failure is tolerated when the original path is
+/// valid UTF-8. Returns an error when working-directory canonicalization fails
+/// or when the build-file path cannot be represented as UTF-8 after that
+/// fallback.
 pub(super) fn configure_ninja_tool_command(
     cmd: &mut Command,
     request: &NinjaToolRequest<'_>,
