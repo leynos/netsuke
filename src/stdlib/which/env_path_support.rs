@@ -126,7 +126,7 @@ pub(super) fn current_dir_utf8() -> Result<Utf8PathBuf, ResolveError> {
 
 /// Build the Windows candidate paths for `command` within one directory.
 #[cfg(windows)]
-pub(super) fn candidate_paths(
+pub(in crate::stdlib::which) fn candidate_paths(
     dir: &Utf8Path,
     command: &str,
     pathext: &[String],
