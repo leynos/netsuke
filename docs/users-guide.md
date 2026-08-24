@@ -758,6 +758,34 @@ additions in [`CHANGELOG.md`](../CHANGELOG.md), which is where Netsuke
 signposts Rust API changes — with no stability promise attached to them ahead
 of 1.0.
 
+
+### Capture verbose timing output
+
+Rust callers that wrap a `StatusReporter` can send verbose timing summaries to
+an owned sink with `VerboseTimingReporter::with_writer`:
+
+<!-- tested-example: guide-verbose-timing-reporter -->
+
+```rust
+use netsuke::output_prefs::resolve;
+use netsuke::status::{SilentReporter, VerboseTimingReporter};
+
+let reporter = VerboseTimingReporter::with_writer(
+    Box::new(SilentReporter),
+    resolve(None),
+    Vec::<u8>::new(),
+);
+```
+
+The generic writer must implement `Write + Send` and is owned by the timing
+reporter. `VerboseTimingReporter::new` remains the default API and writes to
+`io::Stderr`. On the first completion, the wrapped reporter receives its
+completion event before the timing summary is written synchronously to the
+sink. A blocking sink therefore blocks only that completion call; later stage,
+progress, and completion events remain suppressed. Re-entrant calls observe
+the completed state, and summary lines retain their rendered order. Write
+errors are ignored, matching the existing accessible reporter contract.
+
 ## Use the template standard library
 
 Netsuke registers focused path, collection, command, network, and time helpers

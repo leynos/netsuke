@@ -13,8 +13,8 @@ fn test_prefs() -> OutputPrefs {
     output_prefs::resolve_with(None, |_| None)
 }
 
-#[rstest]
-fn timing_recorder_renders_happy_path_summary(test_prefs: OutputPrefs) {
+#[fixture]
+fn three_stage_state() -> TimingState {
     let total = StageNumber::new_unchecked(6);
     let mut state = TimingState::default();
     state.start_stage(
@@ -42,8 +42,15 @@ fn timing_recorder_renders_happy_path_summary(test_prefs: OutputPrefs) {
         "Expanding template directives",
     );
     state.finish(Duration::from_millis(23));
+    state
+}
 
-    let lines = render_summary_lines(test_prefs, state.completed_stages());
+#[rstest]
+fn timing_recorder_renders_happy_path_summary(
+    test_prefs: OutputPrefs,
+    three_stage_state: TimingState,
+) {
+    let lines = render_summary_lines(test_prefs, three_stage_state.completed_stages());
     let [header, stage1, stage2, stage3, total_line] = lines.as_slice() else {
         panic!("expected 5 timing summary lines");
     };
@@ -101,38 +108,11 @@ fn timing_summary_snapshot(
     en_localizer: EnLocalizer,
     #[case] theme: crate::theme::ThemePreference,
     #[case] snapshot_name: &str,
+    three_stage_state: TimingState,
 ) {
     let _localizer = en_localizer;
-    let total = StageNumber::new_unchecked(6);
-    let mut state = TimingState::default();
-    state.start_stage(
-        Duration::from_millis(0),
-        StageMarker {
-            current: StageNumber::new_unchecked(1),
-            total,
-        },
-        "Reading manifest file",
-    );
-    state.start_stage(
-        Duration::from_millis(12),
-        StageMarker {
-            current: StageNumber::new_unchecked(2),
-            total,
-        },
-        "Parsing YAML document",
-    );
-    state.start_stage(
-        Duration::from_millis(16),
-        StageMarker {
-            current: StageNumber::new_unchecked(3),
-            total,
-        },
-        "Expanding template directives",
-    );
-    state.finish(Duration::from_millis(23));
-
     let rendered = normalize_fluent_isolates(
-        &render_summary_lines(theme_prefs(theme), state.completed_stages()).join("\n"),
+        &render_summary_lines(theme_prefs(theme), three_stage_state.completed_stages()).join("\n"),
     );
 
     snapshot_settings("status_timing").bind(|| {

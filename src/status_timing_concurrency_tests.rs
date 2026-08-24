@@ -113,13 +113,12 @@ fn blocking_sink_prevents_later_status_forwarding_without_blocking_state_checks(
             "later",
         );
         reporter.report_task_progress(1, 1, "later task");
-        let observed = counts
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        assert_eq!(observed.stages, 1);
-        assert_eq!(observed.progress, 0);
-        assert_eq!(observed.completions, 1);
-        drop(observed);
+        let observed = {
+            let observed = counts
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            (observed.stages, observed.progress, observed.completions)
+        };
 
         release_sender
             .send(())
@@ -127,6 +126,9 @@ fn blocking_sink_prevents_later_status_forwarding_without_blocking_state_checks(
         completion
             .join()
             .expect("the completion caller should finish after release");
+        assert_eq!(observed.0, 1);
+        assert_eq!(observed.1, 0);
+        assert_eq!(observed.2, 1);
     });
 }
 
@@ -136,6 +138,7 @@ struct ReentrantWriter {
     reporter: Arc<Mutex<Option<Weak<ReentrantReporter>>>>,
     output: Arc<Mutex<Vec<u8>>>,
     reentered: mpsc::Sender<()>,
+    writer_mutex_available: mpsc::Sender<bool>,
     has_reentered: bool,
 }
 
@@ -149,6 +152,9 @@ impl Write for ReentrantWriter {
                 .as_ref()
                 .and_then(Weak::upgrade)
                 .ok_or_else(|| io::Error::other("the re-entrant reporter should still exist"))?;
+            self.writer_mutex_available
+                .send(reporter.writer.try_lock().is_ok())
+                .map_err(|error| io::Error::other(error.to_string()))?;
             reporter.report_stage(
                 StageNumber::new_unchecked(2),
                 StageNumber::new_unchecked(6),
@@ -178,6 +184,7 @@ fn reentrant_sink_cannot_deadlock_or_duplicate_completion_output() {
     let counts = Arc::new(Mutex::new(Counts::default()));
     let output = Arc::new(Mutex::new(Vec::new()));
     let (reentered_sender, reentered_receiver) = mpsc::channel();
+    let (writer_mutex_sender, writer_mutex_receiver) = mpsc::channel();
     let target = Arc::new(Mutex::new(None));
     let reporter = Arc::new(VerboseTimingReporter::with_clock_and_writer(
         Box::new(RecordingReporter {
@@ -189,6 +196,7 @@ fn reentrant_sink_cannot_deadlock_or_duplicate_completion_output() {
             reporter: Arc::clone(&target),
             output: Arc::clone(&output),
             reentered: reentered_sender,
+            writer_mutex_available: writer_mutex_sender,
             has_reentered: false,
         },
     ));
@@ -213,6 +221,11 @@ fn reentrant_sink_cannot_deadlock_or_duplicate_completion_output() {
         reentered_receiver
             .recv_timeout(TEST_TIMEOUT)
             .expect("re-entry should complete without a deadlock");
+        assert!(
+            writer_mutex_receiver
+                .recv_timeout(TEST_TIMEOUT)
+                .expect("the re-entrant writer should observe the released writer mutex")
+        );
         completion
             .join()
             .expect("the re-entrant completion call should return");

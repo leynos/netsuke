@@ -140,7 +140,7 @@ sink.
 - [x] (2026-02-26 00:00Z) Stage E: updated docs/design/roadmap and passed all
       required quality gates (`make check-fmt`, `make lint`, `make test`) plus
       Markdown validation (`make markdownlint`, `make nixie`).
-- [x] (2026-08-24) Review follow-up: exposed the public generic writer
+- [x] (2026-08-24 00:00Z) Review follow-up: exposed the public generic writer
       constructor, added direct-rustc external API coverage, and transferred
       writer ownership before synchronous timing output.
 

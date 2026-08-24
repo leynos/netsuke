@@ -76,6 +76,18 @@ impl Write for SharedBufferWriter {
     }
 }
 
+struct ErroringWriter;
+
+impl Write for ErroringWriter {
+    fn write(&mut self, _bytes: &[u8]) -> io::Result<usize> {
+        Err(io::Error::other("the timing sink is unavailable"))
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
 #[rstest]
 fn verbose_timing_reporter_finalizes_current_stage_on_complete(test_prefs: OutputPrefs) {
     struct ObservingReporter {
@@ -244,4 +256,62 @@ fn verbose_timing_reporter_writes_summary_to_injected_sink(en_localizer: EnLocal
     assert!(rendered.contains("Stage 1/6: Reading manifest file: 12ms"));
     assert!(rendered.contains("Stage 2/6: Parsing YAML document: 11ms"));
     assert!(rendered.contains("Total pipeline time: 23ms"));
+}
+
+#[rstest]
+fn public_writer_constructor_writes_summary_to_its_sink(en_localizer: EnLocalizer) {
+    let _localizer = en_localizer;
+    let output = Arc::new(Mutex::new(Vec::new()));
+    let reporter = VerboseTimingReporter::with_writer(
+        Box::new(crate::status::SilentReporter),
+        test_prefs(),
+        SharedBufferWriter::new(Arc::clone(&output)),
+    );
+    reporter.report_stage(
+        StageNumber::new_unchecked(1),
+        StageNumber::new_unchecked(6),
+        "Reading manifest file",
+    );
+    reporter.report_complete(LocalizationKey::new(keys::STATUS_TOOL_GENERATE));
+
+    let captured_output = output
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let rendered = normalize_fluent_isolates(&String::from_utf8_lossy(&captured_output));
+    assert!(rendered.contains("Stage timing summary:"));
+    assert!(rendered.contains("Stage 1/6: Reading manifest file:"));
+}
+
+#[rstest]
+fn erroring_timing_sink_preserves_completion_state(test_prefs: OutputPrefs) {
+    let counts = Arc::new(Mutex::new(Counts::default()));
+    let reporter = VerboseTimingReporter::with_clock_and_writer(
+        Box::new(CountingReporter {
+            counts: Arc::clone(&counts),
+        }),
+        test_prefs,
+        Box::new(|| Duration::from_millis(50)),
+        ErroringWriter,
+    );
+    reporter.report_stage(
+        StageNumber::new_unchecked(1),
+        StageNumber::new_unchecked(6),
+        "Reading manifest file",
+    );
+    reporter.report_task_progress(1, 2, "cc -c src/main.c");
+    reporter.report_complete(LocalizationKey::new(keys::STATUS_TOOL_GENERATE));
+    reporter.report_stage(
+        StageNumber::new_unchecked(2),
+        StageNumber::new_unchecked(6),
+        "Parsing YAML document",
+    );
+    reporter.report_task_progress(2, 2, "cc -c src/lib.c");
+    reporter.report_complete(LocalizationKey::new(keys::STATUS_TOOL_GENERATE));
+
+    let observed = counts
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    assert_eq!(observed.stages, 1);
+    assert_eq!(observed.tasks, 1);
+    assert_eq!(observed.completions, 1);
 }
