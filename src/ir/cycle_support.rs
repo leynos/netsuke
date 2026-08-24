@@ -166,14 +166,18 @@ pub(in crate::ir) fn path_cmp(left: &Utf8Path, right: &Utf8Path) -> Ordering {
     left.cmp(right)
 }
 
+/// Compare strings by their first byte for bounded Kani path and rule names.
 #[cfg(kani)]
-pub(in crate::ir) fn path_cmp(left: &Utf8Path, right: &Utf8Path) -> Ordering {
-    let left = left.as_str().as_bytes();
-    let right = right.as_str().as_bytes();
-    match (left.first(), right.first()) {
+pub(in crate::ir) fn first_byte_cmp(left: &str, right: &str) -> Ordering {
+    match (left.as_bytes().first(), right.as_bytes().first()) {
         (Some(left), Some(right)) => left.cmp(right),
         (None, Some(_)) => Ordering::Less,
         (Some(_), None) => Ordering::Greater,
         (None, None) => Ordering::Equal,
     }
+}
+
+#[cfg(kani)]
+pub(in crate::ir) fn path_cmp(left: &Utf8Path, right: &Utf8Path) -> Ordering {
+    first_byte_cmp(left.as_str(), right.as_str())
 }

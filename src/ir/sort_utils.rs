@@ -10,6 +10,8 @@ use camino::Utf8PathBuf;
 
 use super::super::super::cycle::support::path_eq;
 
+#[cfg(kani)]
+use super::super::super::cycle::support::first_byte_cmp;
 #[cfg(not(kani))]
 use super::super::super::cycle::support::path_cmp;
 
@@ -57,14 +59,7 @@ fn string_cmp(left: &str, right: &str) -> std::cmp::Ordering {
 /// single-byte symbolic names.
 #[cfg(kani)]
 fn string_cmp(left: &str, right: &str) -> std::cmp::Ordering {
-    let left = left.as_bytes();
-    let right = right.as_bytes();
-    match (left.first(), right.first()) {
-        (Some(left), Some(right)) => left.cmp(right),
-        (None, Some(_)) => std::cmp::Ordering::Less,
-        (Some(_), None) => std::cmp::Ordering::Greater,
-        (None, None) => std::cmp::Ordering::Equal,
-    }
+    first_byte_cmp(left, right)
 }
 
 /// Sort duplicate output paths in place.
