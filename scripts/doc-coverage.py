@@ -208,34 +208,56 @@ def parse_coverage_output(target: DocTarget, output: str) -> Coverage:
     try:
         per_file = json.loads(output)
     except json.JSONDecodeError as error:
-        detail = (
-            f"cargo rustdoc for {target.package} {target.kind}"
-            f" ({target.name or 'lib'}) did not emit coverage JSON: {error}"
-        )
-        raise RuntimeError(detail) from error
+        raise coverage_json_error(target, str(error)) from error
+    per_file = coverage_payload(target, per_file)
     try:
-        if not isinstance(per_file, dict):
-            raise TypeError("expected an object")
-        return sum(
-            (
-                Coverage(int(entry["total"]), int(entry["with_docs"]))
-                for entry in per_file.values()
-            ),
-            Coverage(0, 0),
-        )
-    except (KeyError, TypeError, ValueError) as error:
-        if not isinstance(per_file, dict):
-            detail = (
-                f"cargo rustdoc for {target.package} {target.kind}"
-                f" ({target.name or 'lib'}) did not emit coverage JSON: {error}"
-            )
-        else:
-            detail = (
-                f"cargo rustdoc for {target.package} {target.kind}"
-                f" ({target.name or 'lib'}) did not emit coverage JSON: "
-                f"each entry requires total and with_docs: {error}"
-            )
-        raise RuntimeError(detail) from error
+        return aggregate_coverage_payload(per_file)
+    except (KeyError, TypeError, ValueError, OverflowError) as error:
+        detail = f"each entry requires total and with_docs: {error}"
+        raise coverage_json_error(target, detail) from error
+
+
+def coverage_json_error(target: DocTarget, detail: str) -> RuntimeError:
+    """Build a measurement error naming `target` and its invalid JSON detail."""
+    message = (
+        f"cargo rustdoc for {target.package} {target.kind}"
+        f" ({target.name or 'lib'}) did not emit coverage JSON: {detail}"
+    )
+    return RuntimeError(message)
+
+
+def coverage_payload(target: DocTarget, payload: object) -> dict:
+    """Validate that `payload` is Rustdoc's per-file coverage object."""
+    match payload:
+        case dict() as per_file:
+            return per_file
+        case _:
+            raise coverage_json_error(target, "expected an object")
+
+
+def aggregate_coverage_payload(per_file: dict) -> Coverage:
+    """Validate and sum Rustdoc's documented and total counts."""
+    return sum(
+        (coverage_from_entry(entry) for entry in per_file.values()),
+        Coverage(0, 0),
+    )
+
+
+def coverage_from_entry(entry: object) -> Coverage:
+    """Validate one Rustdoc coverage entry and convert it to `Coverage`."""
+    total = entry["total"]
+    with_docs = entry["with_docs"]
+    if (
+        isinstance(total, bool)
+        or not isinstance(total, int)
+        or isinstance(with_docs, bool)
+        or not isinstance(with_docs, int)
+        or total < 0
+        or with_docs < 0
+        or with_docs > total
+    ):
+        raise ValueError("counts must be non-negative integers with with_docs <= total")
+    return Coverage(total, with_docs)
 
 
 def measure(target: DocTarget, toolchain: str, manifest_root: pathlib.Path) -> Coverage:

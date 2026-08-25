@@ -493,6 +493,36 @@ def test_parse_coverage_output_rejects_malformed_json(script: types.ModuleType) 
 
 
 @pytest.mark.parametrize(
+    "entry",
+    [
+        pytest.param('{"total": 1e999, "with_docs": 0}', id="non-finite"),
+        pytest.param('{"total": -1, "with_docs": 0}', id="negative"),
+        pytest.param('{"total": 1.5, "with_docs": 0}', id="non-integer"),
+        pytest.param('{"total": 1, "with_docs": 2}', id="inconsistent"),
+    ],
+)
+def test_main_rejects_invalid_coverage_counts(
+    script: types.ModuleType,
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    entry: str,
+) -> None:
+    """Return the controlled exit for invalid Rustdoc count invariants."""
+    payload = '{"src/lib.rs": ' + entry + "}"
+    FakeCargo(
+        script,
+        metadata=single_library_metadata(),
+        rustdoc_output=payload,
+    ).install(monkeypatch)
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(RuntimeError, match="each entry requires total and with_docs"):
+        script.run_measurements("nightly-x", tmp_path)
+
+    assert script.main(["--toolchain", "nightly-x"]) == 2
+
+
+@pytest.mark.parametrize(
     "case",
     [
         pytest.param(
