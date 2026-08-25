@@ -27,7 +27,6 @@
 //! [ADR-010](https://github.com/leynos/netsuke/blob/main/docs/adr-010-scope-glob-capability-to-literal-prefix.md)
 //! describe that boundary and why it remains.
 use minijinja::Error;
-use std::path::Path;
 
 mod diagnostics;
 mod errors;
@@ -35,6 +34,7 @@ mod normalize;
 mod validate;
 mod walk;
 
+use camino::{Utf8Path, Utf8PathBuf};
 use errors::{GlobErrorContext, GlobErrorType, create_glob_error};
 use normalize::normalize_separators;
 use validate::validate_brace_matching;
@@ -242,7 +242,7 @@ fn is_shell_inert_path(path: &str) -> bool {
 ///
 /// ```
 /// use netsuke::manifest::glob_paths;
-/// let _: fn(&str, Option<&std::path::Path>) -> _ = glob_paths;
+/// let _: fn(&str, Option<&camino::Utf8Path>) -> _ = glob_paths;
 /// ```
 ///
 /// The module's internals are not. `GlobEntryResult` is a private alias inside
@@ -255,7 +255,10 @@ fn is_shell_inert_path(path: &str) -> bool {
 /// The passing example above is the control for this rejection: it fails
 /// instead if the rustdoc harness wiring breaks, so the `compile_fail` block
 /// cannot pass vacuously.
-pub fn glob_paths(pattern: &str, base: Option<&Path>) -> std::result::Result<Vec<String>, Error> {
+pub fn glob_paths(
+    pattern: &str,
+    base: Option<&Utf8Path>,
+) -> std::result::Result<Vec<String>, Error> {
     expand_glob(pattern, base).map(GlobExpansion::into_paths)
 }
 
@@ -268,7 +271,7 @@ pub fn glob_paths(pattern: &str, base: Option<&Path>) -> std::result::Result<Vec
 /// composition-root behaviour retained for string parsing.
 pub(super) fn expand_glob(
     pattern: &str,
-    base: Option<&Path>,
+    base: Option<&Utf8Path>,
 ) -> std::result::Result<GlobExpansion, Error> {
     use glob::{MatchOptions, glob_with};
 
@@ -278,31 +281,11 @@ pub(super) fn expand_glob(
         require_literal_leading_dot: false,
     };
 
-    let pattern_state = GlobPattern::new(pattern)?;
-    let normalized = pattern_state.normalized();
-    // Resolve the injected base to a symlink-free absolute path before it is
-    // embedded in the search text and opened as the capability root. A
-    // workspace reached through a symbolic link must still expand relative
-    // globs; walking the linked spelling component-by-component would reject
-    // the link itself. Relative bases become absolute here, which the rest of
-    // the seam already accepts.
-    let resolved_base = base.map(|dir| dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf()));
-    let (search, strip) = resolved_base
-        .as_deref()
-        .filter(|_| !Path::new(normalized).is_absolute())
-        .map_or_else(
-            || (normalized.to_owned(), None),
-            |dir| {
-                (
-                    dir.join(normalized).to_string_lossy().into_owned(),
-                    Some(dir.to_path_buf()),
-                )
-            },
-        );
-    let entries = glob_with(&search, opts).map_err(|e| {
+    let prepared = PreparedGlob::new(pattern, base)?;
+    let entries = glob_with(&prepared.search, opts).map_err(|e| {
         create_glob_error(
             &GlobErrorContext {
-                pattern: pattern_state.raw().to_owned(),
+                pattern: prepared.pattern.raw().to_owned(),
                 error_char: char::from(0),
                 position: 0,
                 error_type: GlobErrorType::InvalidPattern,
@@ -315,10 +298,10 @@ pub(super) fn expand_glob(
     // the capability root must be opened from the literal prefix as written
     // rather than passing `base` again: doing the latter would reopen the base
     // directory and then traverse its own name, doubling the path component.
-    let Some(root) = open_root_dir(&search, None).map_err(|e| {
+    let Some(root) = open_root_dir(&prepared.search, None).map_err(|e| {
         create_glob_error(
             &GlobErrorContext {
-                pattern: pattern_state.raw().to_owned(),
+                pattern: prepared.pattern.raw().to_owned(),
                 error_char: char::from(0),
                 position: 0,
                 error_type: GlobErrorType::IoError,
@@ -339,8 +322,8 @@ pub(super) fn expand_glob(
     let mut paths = Vec::new();
     let mut skipped = GlobSkippedEntries::default();
     for entry in entries {
-        match process_glob_entry(entry, &pattern_state, &root)? {
-            GlobEntry::Path(path) => paths.push(strip_base(strip.as_deref(), path)),
+        match process_glob_entry(entry, &prepared.pattern, &root)? {
+            GlobEntry::Path(path) => paths.push(strip_base(prepared.strip.as_deref(), path)),
             GlobEntry::UnreachableSymlink(relative) => {
                 skipped.record_unreachable_symlink(relative);
             }
@@ -354,6 +337,56 @@ pub(super) fn expand_glob(
     })
 }
 
+/// A validated glob pattern, its search text, and the base to strip.
+///
+/// Preparation is pure text work: the pattern is validated and normalised
+/// once, the injected base is resolved to a symlink-free absolute path, and
+/// the resolved base is embedded in the search text only when the pattern is
+/// relative. Keeping it separate from the filesystem walk means [`expand_glob`]
+/// only orchestrates matching, prefix opening, and result collection.
+struct PreparedGlob {
+    /// Validated pattern and its normalised spelling.
+    pattern: GlobPattern,
+    /// Search text handed to `glob_with`: the normalised pattern, prefixed
+    /// with the resolved base when the pattern is relative.
+    search: String,
+    /// Canonicalized base stripped from matches, present exactly when relative.
+    strip: Option<Utf8PathBuf>,
+}
+
+impl PreparedGlob {
+    /// Prepare `pattern` for matching against the optional injected `base`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the pattern fails brace validation.
+    fn new(pattern: &str, base: Option<&Utf8Path>) -> std::result::Result<Self, Error> {
+        let pattern = GlobPattern::new(pattern)?;
+        let normalized = pattern.normalized();
+        // Resolve the injected base to a symlink-free absolute path before it
+        // is embedded in the search text and opened as the capability root. A
+        // workspace reached through a symbolic link must still expand
+        // relative globs; walking the linked spelling component-by-component
+        // would reject the link itself. Relative bases become absolute here,
+        // which the rest of the seam already accepts.
+        let resolved_base = base.map(|dir| {
+            dir.canonicalize_utf8()
+                .unwrap_or_else(|_| dir.to_path_buf())
+        });
+        let (search, strip) = resolved_base
+            .as_deref()
+            .filter(|_| !Utf8Path::new(normalized).is_absolute())
+            .map_or_else(
+                || (normalized.to_owned(), None),
+                |dir| (String::from(dir.join(normalized)), Some(dir.to_path_buf())),
+            );
+        Ok(Self {
+            pattern,
+            search,
+            strip,
+        })
+    }
+}
 /// Remove an injected base directory from a matched path, restoring the
 /// pattern-relative spelling the caller supplied.
 ///
@@ -361,14 +394,18 @@ pub(super) fn expand_glob(
 /// `Some` exactly when the matcher ran against `base.join(pattern)`, so every
 /// match starts with `base` and the lexical strip cannot fail in a way that
 /// would drop real matches. The fallback returns the path unchanged.
-fn strip_base(base: Option<&Path>, path: String) -> String {
+fn strip_base(base: Option<&Utf8Path>, path: String) -> String {
     let Some(dir) = base else {
         return path;
     };
-    Path::new(&path)
-        .strip_prefix(dir)
-        .map(|relative| relative.to_string_lossy().replace('\\', "/"))
-        .unwrap_or(path)
+    let mut relative = path;
+    if let Ok(stripped) = Utf8Path::new(&relative).strip_prefix(dir) {
+        // One allocation: the matched path is already owned, so replace
+        // separators in place instead of materialising a second String via
+        // `to_string_lossy().replace(..)`.
+        relative = stripped.as_str().replace('\\', "/");
+    }
+    relative
 }
 /// Record the bounded observations from a completed expansion.
 ///

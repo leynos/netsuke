@@ -24,7 +24,7 @@ use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use cap_primitives::fs::{FollowSymlinks, open_dir_nofollow, open_parent_dir, stat};
 use cap_std::{ambient_authority, fs::Dir};
 use minijinja::Error;
-use std::{io, path::Path};
+use std::io;
 
 /// Capability root for a glob expansion.
 ///
@@ -257,7 +257,7 @@ pub(super) fn unescape_literal_escapes(prefix: &str) -> String {
 /// Open the directory used as the capability root for the glob.
 ///
 /// Returns `Ok(None)` when the literal prefix does not exist (or is not a directory).
-pub(super) fn open_root_dir(search: &str, base: Option<&Path>) -> io::Result<Option<GlobRoot>> {
+pub(super) fn open_root_dir(search: &str, base: Option<&Utf8Path>) -> io::Result<Option<GlobRoot>> {
     let prefix = literal_dir_path(search);
     match open_literal_prefix(Utf8Path::new(&prefix), base) {
         Ok(dir) => Ok(Some(GlobRoot {
@@ -273,7 +273,7 @@ pub(super) fn open_root_dir(search: &str, base: Option<&Path>) -> io::Result<Opt
 ///
 /// The ambient opening establishes the filesystem root for an absolute prefix;
 /// a relative one is opened at the injected `base` (`.` when none).
-fn open_literal_prefix(prefix: &Utf8Path, injected_base: Option<&Path>) -> io::Result<Dir> {
+fn open_literal_prefix(prefix: &Utf8Path, injected_base: Option<&Utf8Path>) -> io::Result<Dir> {
     let (base, remainder) = if prefix.is_absolute() {
         let root = prefix.ancestors().last().ok_or_else(|| {
             io::Error::new(
@@ -289,12 +289,7 @@ fn open_literal_prefix(prefix: &Utf8Path, injected_base: Option<&Path>) -> io::R
         })?;
         (root, remainder)
     } else {
-        (
-            injected_base
-                .and_then(Utf8Path::from_path)
-                .unwrap_or_else(|| Utf8Path::new(".")),
-            prefix,
-        )
+        (injected_base.unwrap_or_else(|| Utf8Path::new(".")), prefix)
     };
     let mut dir = Dir::open_ambient_dir(base, ambient_authority())?.into_std_file();
 

@@ -30,7 +30,7 @@ use crate::{
 use anyhow::Result;
 use minijinja::{Environment, UndefinedBehavior, value::Value};
 use serde::de::Error as _;
-use std::{path::Path, path::PathBuf, sync::Arc};
+use std::{path::Path, sync::Arc};
 
 mod diagnostics;
 mod expand;
@@ -96,7 +96,7 @@ struct ManifestParse<'a> {
     env_reader: &'a EnvReader,
     /// Manifest workspace root, anchoring relative `glob()` patterns; `None`
     /// falls back to the process current directory at the composition root.
-    manifest_root: Option<PathBuf>,
+    manifest_root: Option<camino::Utf8PathBuf>,
 }
 
 /// Selects the stdlib surface available while rendering a manifest.

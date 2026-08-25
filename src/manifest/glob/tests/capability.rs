@@ -264,7 +264,10 @@ fn glob_paths_matches_parent_relative_patterns() -> Result<()> {
     test_fs::create_dir(&sub)?;
     test_fs::write(temp.path().join("out.txt"), "out")?;
 
-    let results = glob_paths("../*.txt", Some(&sub))?;
+    let results = glob_paths(
+        "../*.txt",
+        Some(Utf8Path::from_path(&sub).expect("temp paths are UTF-8")),
+    )?;
     ensure!(
         results == vec!["../out.txt".to_owned()],
         "expected the parent-relative match, got {results:?}"

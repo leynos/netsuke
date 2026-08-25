@@ -7,6 +7,7 @@
 use super::super::glob_paths;
 #[cfg(unix)]
 use anyhow::{Context, Result, ensure};
+use camino::Utf8Path;
 use tempfile::{Builder, tempdir};
 use test_support::fs as test_fs;
 
@@ -31,7 +32,10 @@ fn glob_paths_relative_base_is_not_doubled() -> Result<()> {
         .context("the temporary directory must live under the working directory")?;
     test_fs::write(temp.path().join("a.txt"), "a")?;
 
-    let results = glob_paths("*.txt", Some(base))?;
+    let results = glob_paths(
+        "*.txt",
+        Some(Utf8Path::from_path(base).expect("temp paths are UTF-8")),
+    )?;
     ensure!(
         results == vec!["a.txt".to_owned()],
         "a relative base must not be doubled, got {results:?}"
@@ -57,7 +61,10 @@ fn glob_paths_follows_a_symlinked_base() -> Result<()> {
     let link = temp.path().join("link");
     test_fs::symlink("target", &link)?;
 
-    let results = glob_paths("*.txt", Some(&link))?;
+    let results = glob_paths(
+        "*.txt",
+        Some(Utf8Path::from_path(&link).expect("temp paths are UTF-8")),
+    )?;
     ensure!(
         results == vec!["a.txt".to_owned()],
         "expected the match relative to the symlinked base, got {results:?}"
