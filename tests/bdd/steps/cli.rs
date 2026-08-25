@@ -269,35 +269,36 @@ mod tests {
     //! Regression coverage for attached BDD directory options.
 
     use super::insert_discovery_directory_if_missing;
+    use rstest::rstest;
     use std::ffi::{OsStr, OsString};
 
-    #[test]
-    fn attached_directory_options_prevent_default_injection() {
-        for attached in ["-Cproject", "--directory=project"] {
-            let mut tokens = vec![OsString::from("netsuke"), OsString::from(attached)];
-            let expected = tokens.clone();
+    #[rstest]
+    #[case::short("-Cproject")]
+    #[case::long("--directory=project")]
+    fn attached_directory_options_prevent_default_injection(#[case] attached: &str) {
+        let mut tokens = vec![OsString::from("netsuke"), OsString::from(attached)];
+        let expected = tokens.clone();
 
-            insert_discovery_directory_if_missing(&mut tokens, OsStr::new("temporary-project"));
+        insert_discovery_directory_if_missing(&mut tokens, OsStr::new("temporary-project"));
 
-            assert_eq!(tokens, expected, "attached option {attached:?}");
-        }
+        assert_eq!(tokens, expected, "attached option {attached:?}");
     }
 
     #[cfg(unix)]
-    #[test]
-    fn non_utf8_attached_directory_options_prevent_default_injection() {
+    #[rstest]
+    #[case::short(b"-C\xff")]
+    #[case::long(b"--directory=\xff")]
+    fn non_utf8_attached_directory_options_prevent_default_injection(#[case] attached: &[u8]) {
         use std::os::unix::ffi::OsStringExt;
 
-        for attached in [
-            OsString::from_vec(b"-C\xff".to_vec()),
-            OsString::from_vec(b"--directory=\xff".to_vec()),
-        ] {
-            let mut tokens = vec![OsString::from("netsuke"), attached];
-            let expected = tokens.clone();
+        let mut tokens = vec![
+            OsString::from("netsuke"),
+            OsString::from_vec(attached.to_vec()),
+        ];
+        let expected = tokens.clone();
 
-            insert_discovery_directory_if_missing(&mut tokens, OsStr::new("temporary-project"));
+        insert_discovery_directory_if_missing(&mut tokens, OsStr::new("temporary-project"));
 
-            assert_eq!(tokens, expected, "non-UTF-8 attached directory option");
-        }
+        assert_eq!(tokens, expected, "non-UTF-8 attached directory option");
     }
 }

@@ -118,24 +118,6 @@ that need a deterministic Ninja executable use `runner::run_with_ninja_program`
 to supply the already-resolved program path directly, bypassing `NETSUKE_NINJA`
 resolution entirely rather than setting the variable for a child to read.
 
-### BDD route selection
-
-`rstest-bdd` steps execute in the generated test-harness process. A behavioural
-label therefore does not make a step a subprocess test. Issue #492 removes the
-BDD suite's process-global environment/CWD guard and records two allowed routes:
-
-- **Route A — isolated child.** An end-to-end scenario invokes `netsuke` with
-  `assert_cmd`, clears the child environment, and supplies only the required
-  values through `Command::env`.
-- **Route B — injected environment.** A scenario calls an in-process library
-  entry point with its injected environment and retains assertions over values
-  such as `Cli`, `Manifest`, `BuildGraph`, or rendered output.
-
-Route B avoids CWD changes by passing absolute manifest or configuration paths,
-or by preserving `-C/--directory` as a CLI value for automatic project
-discovery. An explicit relative `--config` or `NETSUKE_CONFIG` selector remains
-relative to the child or harness process CWD; it is not rebased under `-C`.
-
 ## Rationale
 
 - **Proportionate abstraction.** A trait object for a single-variable,
@@ -188,12 +170,9 @@ relative to the child or harness process CWD; it is not rebased under `-C`.
   Rejected: mutating the test process to influence a spawned `netsuke` binary
   reintroduces the shared-mutable-state races that injected readers and
   child-process configuration exist to avoid, and it is exactly the pattern
-  #493 removed from the BDD and integration test helpers. Issue #492 also
-  removed BDD's process-global CWD coordination.
+  #493 removed from the BDD and integration test helpers.
   `.config/nextest.toml` runs no serialized environment group precisely because
-  no sanctioned test still mutates the harness environment. `EnvLock` and
-  `CwdGuard` remain only for direct tests that exercise process
-  working-directory behaviour; they are not a BDD isolation mechanism.
+  no sanctioned test still mutates the harness environment.
 
 ## Implementation references
 
@@ -216,3 +195,24 @@ relative to the child or harness process CWD; it is not rebased under `-C`.
 - Policy narrative: "Environment and template ports" and "Injected and
   child-process environments" in
   [`docs/developers-guide.md`](developers-guide.md)
+
+## Addendum
+
+### 2026-08-25: BDD isolation routes
+
+Issue #492 applied this taxonomy to `rstest-bdd`, whose steps execute in the
+test-harness process. The suite now uses two routes:
+
+- **Route A — isolated child.** An end-to-end scenario invokes `netsuke` with
+  `assert_cmd`, clears the child environment, and supplies required values
+  through `Command::env`.
+- **Route B — injected environment.** A scenario calls an in-process library
+  entry point with its injected environment and asserts values such as `Cli`,
+  `Manifest`, `BuildGraph`, or rendered output.
+
+The BDD suite no longer uses `EnvLock` or `CwdGuard` to coordinate
+process-global environment or working-directory changes. Route B avoids CWD
+changes by passing absolute paths or preserving `-C/--directory` for automatic
+project discovery.
+Explicit relative `--config` and `NETSUKE_CONFIG` selectors remain anchored to
+the child process CWD; they are not rebased beneath `-C`.

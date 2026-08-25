@@ -9,7 +9,6 @@ use assert_cmd::cargo::cargo_bin_cmd;
 use camino::{Utf8Path, Utf8PathBuf};
 use proptest::prelude::*;
 use serde_json::Value;
-use std::path::PathBuf;
 use tempfile::{TempDir, tempdir};
 use test_support::fs as test_fs;
 
@@ -94,21 +93,21 @@ fn assert_explicit_relative_config_ignores_directory_anchor(
     test_fs::write(project.join(config_name), "json = false\n")
         .context("write directory-anchored config")?;
 
+    let outer_path = utf8_workspace_path(&outer)?;
     let selector_path = match selector_path_kind {
         // Relative explicit selectors stay anchored to the child CWD.
-        SelectorPathKind::Relative => PathBuf::from(config_name),
+        SelectorPathKind::Relative => Utf8PathBuf::from(config_name),
         // Absolute explicit selectors remain unchanged.
-        SelectorPathKind::Absolute => outer.path().join(config_name),
+        SelectorPathKind::Absolute => outer_path.join(config_name),
     };
-    let outer_path = utf8_workspace_path(&outer)?;
     let mut command = isolated_netsuke_command(&outer_path);
     command.args(["-C", project_name]);
     match selector {
         ExplicitSelector::Cli => {
-            command.arg("--config").arg(&selector_path);
+            command.arg("--config").arg(selector_path.as_str());
         }
         ExplicitSelector::Environment => {
-            command.env("NETSUKE_CONFIG", &selector_path);
+            command.env("NETSUKE_CONFIG", selector_path.as_str());
         }
     }
     let output = command
