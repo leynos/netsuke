@@ -8,7 +8,9 @@ use camino::Utf8Path;
 use netsuke::locale_catalogues::SUPPORTED_LOCALES;
 use std::collections::BTreeSet;
 use std::env;
+use std::ffi::OsStr;
 use std::process::Command;
+use tempfile::TempDir;
 
 const REQUIRED_PACKAGED_FILES: [&str; 9] = [
     "build_l10n_audit/mod.rs",
@@ -30,6 +32,14 @@ fn required_catalogue_paths() -> Vec<String> {
         .map(|entry| format!("locales/{}/messages.ftl", entry.tag()))
         .collect()
 }
+
+/// Create a Cargo subprocess that writes build artefacts beneath `target_dir`.
+fn cargo_subprocess(cargo_binary: &OsStr, target_dir: &TempDir) -> Command {
+    let mut command = Command::new(cargo_binary);
+    command.env("CARGO_TARGET_DIR", target_dir.path());
+    command
+}
+
 #[test]
 #[expect(
     clippy::disallowed_methods,
@@ -37,7 +47,9 @@ fn required_catalogue_paths() -> Vec<String> {
 )]
 fn packaged_manifest_retains_build_script_sources() {
     let cargo_binary = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-    let publish_output = Command::new(&cargo_binary)
+    let cargo_target_dir = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create isolated Cargo target directory: {error}"));
+    let publish_output = cargo_subprocess(&cargo_binary, &cargo_target_dir)
         .args([
             "publish",
             "--dry-run",
@@ -55,7 +67,7 @@ fn packaged_manifest_retains_build_script_sources() {
         String::from_utf8_lossy(&publish_output.stderr)
     );
 
-    let list_output = Command::new(cargo_binary)
+    let list_output = cargo_subprocess(&cargo_binary, &cargo_target_dir)
         .args(["package", "--list", "--allow-dirty", "-p", "netsuke-build"])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
@@ -75,6 +87,18 @@ fn packaged_manifest_retains_build_script_sources() {
 
     assert_required_paths_present(&packaged_paths);
     assert_forbidden_roots_absent(&packaged_paths);
+}
+
+#[test]
+fn cargo_subprocess_uses_the_given_target_directory() {
+    let target_dir = tempfile::tempdir().expect("create isolated Cargo target directory");
+    let command = cargo_subprocess(OsStr::new("cargo"), &target_dir);
+    let configured_target_dir = command
+        .get_envs()
+        .find_map(|(key, value)| (key == OsStr::new("CARGO_TARGET_DIR")).then_some(value))
+        .flatten();
+
+    assert_eq!(configured_target_dir, Some(target_dir.path().as_os_str()));
 }
 
 /// Normalize Cargo's platform-native package-list separators for comparison.
