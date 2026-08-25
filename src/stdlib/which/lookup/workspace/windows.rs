@@ -18,11 +18,14 @@ use crate::stdlib::which::{
 /// Encapsulates the state and logic for collecting matching executables during
 /// workspace traversal.
 struct CollectionState {
+    /// Paths that matched the requested command during traversal.
     matches: Vec<Utf8PathBuf>,
+    /// Whether traversal should retain every match instead of stopping early.
     collect_all: bool,
 }
 
 impl CollectionState {
+    /// Create an empty collector with the requested collection mode.
     const fn new(collect_all: bool) -> Self {
         Self {
             matches: Vec::new(),
@@ -50,6 +53,12 @@ impl CollectionState {
     }
 }
 
+/// Search the working directory tree for executable command matches.
+///
+/// # Errors
+///
+/// Returns a [`ResolveError`] when directory traversal fails, a workspace path
+/// is not valid UTF-8, or an executable probe fails.
 pub(super) fn search_workspace(
     env: &EnvSnapshot,
     command: &str,
@@ -78,13 +87,23 @@ pub(super) fn search_workspace(
     Ok(collector.matches)
 }
 
+/// Store the Windows-specific command matching state for workspace traversal.
 #[derive(Clone)]
 struct WorkspaceMatchContext {
+    /// Lowercase command name used for case-insensitive matching.
     command_lower: String,
+    /// Whether the requested command already contains an extension.
     command_has_ext: bool,
+    /// Lowercase executable basenames accepted through PATHEXT expansion.
     basenames: HashSet<String>,
 }
 
+/// Match one workspace entry and return it when it is an executable command.
+///
+/// # Errors
+///
+/// Returns a [`ResolveError`] when the entry path is not valid UTF-8 or the
+/// executability probe fails.
 fn match_workspace_entry(
     entry: walkdir::DirEntry,
     command: &str,
@@ -112,6 +131,7 @@ fn match_workspace_entry(
 }
 
 impl WorkspaceMatchContext {
+    /// Build matching state from a command and the captured environment.
     fn new(command: &str, env: &EnvSnapshot) -> Self {
         let command_lower = command.to_ascii_lowercase();
         let command_has_ext = command_lower.contains('.');
@@ -134,6 +154,7 @@ impl WorkspaceMatchContext {
     }
 }
 
+/// Check whether a filename matches the command and PATHEXT candidates.
 fn name_matches(file_name: &str, ctx: &WorkspaceMatchContext) -> bool {
     if file_name == ctx.command_lower {
         return true;

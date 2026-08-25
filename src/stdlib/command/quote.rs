@@ -7,8 +7,10 @@ use shell_quote::{QuoteRefExt, Sh};
 
 use crate::localization::{self, keys};
 
+/// Failure modes for shell argument quoting.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum QuoteError {
+    /// The argument contains a line break, which cannot be quoted safely.
     ContainsLineBreak,
 }
 
@@ -30,6 +32,12 @@ impl fmt::Display for QuoteError {
 /// which requires the `std::error::Error` trait.
 impl std::error::Error for QuoteError {}
 
+/// Quote an argument for the platform shell, rejecting line breaks.
+///
+/// # Errors
+///
+/// Returns [`QuoteError::ContainsLineBreak`] when `arg` contains a newline or
+/// carriage return.
 #[cfg(windows)]
 pub(super) fn quote(arg: &str) -> Result<String, QuoteError> {
     if arg.chars().any(|ch| matches!(ch, '\n' | '\r')) {
@@ -77,6 +85,12 @@ pub(super) fn quote(arg: &str) -> Result<String, QuoteError> {
     Ok(buf)
 }
 
+/// Quote an argument for the platform shell, rejecting line breaks.
+///
+/// # Errors
+///
+/// Returns [`QuoteError::ContainsLineBreak`] when `arg` contains a newline or
+/// carriage return.
 #[cfg(not(windows))]
 pub(super) fn quote(arg: &str) -> Result<String, QuoteError> {
     if arg.chars().any(|ch| matches!(ch, '\n' | '\r')) {

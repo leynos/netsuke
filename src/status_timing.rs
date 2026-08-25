@@ -7,36 +7,54 @@ use std::io::{self, Write};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+/// Monotonic clock abstraction returning an elapsed duration on demand.
 type MonotonicClock = dyn Fn() -> Duration + Send + Sync;
 
+/// Identify a stage by its position within the overall stage count.
 #[derive(Debug, Copy, Clone)]
 struct StageMarker {
+    /// One-based index of the stage being reported.
     current: StageNumber,
+    /// Total number of stages in the run.
     total: StageNumber,
 }
 
+/// Describe a stage that is currently in progress.
 #[derive(Debug, Clone)]
 struct RunningStage {
+    /// Marker identifying the running stage.
     marker: StageMarker,
+    /// Human-readable description of the running stage.
     description: String,
+    /// Clock value recorded when the stage began.
     started_at: Duration,
 }
 
+/// Record a stage that has finished and the time it took.
 #[derive(Debug, Clone)]
 struct CompletedStage {
+    /// Marker identifying the finished stage.
     marker: StageMarker,
+    /// Human-readable description of the finished stage.
     description: String,
+    /// Duration the stage ran before completion.
     elapsed: Duration,
 }
 
+/// Track the timing summary being accumulated for one run.
 #[derive(Debug, Default)]
 struct TimingState {
+    /// Whether completion has already been recorded for this run.
     completed: bool,
+    /// Stages finished so far, in completion order.
     completed_stages: Vec<CompletedStage>,
+    /// Stage currently in progress, if any.
     running: Option<RunningStage>,
 }
 
 impl TimingState {
+    /// Finish the stage currently running, if any, then record a new running
+    /// stage.
     fn start_stage(&mut self, now: Duration, marker: StageMarker, description: &str) {
         self.finish_running(now);
         self.running = Some(RunningStage {
@@ -46,14 +64,17 @@ impl TimingState {
         });
     }
 
+    /// Finish the stage currently running, if any.
     fn finish(&mut self, now: Duration) {
         self.finish_running(now);
     }
 
+    /// Return the stages finished so far, in completion order.
     fn completed_stages(&self) -> &[CompletedStage] {
         &self.completed_stages
     }
 
+    /// Move the running stage, if any, into the completed list.
     fn finish_running(&mut self, now: Duration) {
         let Some(running) = self.running.take() else {
             return;
@@ -70,9 +91,13 @@ impl TimingState {
 /// Status reporter wrapper that emits per-stage timings on successful
 /// completion.
 pub struct VerboseTimingReporter {
+    /// Reporter receiving forwarded status events.
     inner: Box<dyn StatusReporter>,
+    /// Output preferences controlling summary formatting.
     prefs: OutputPrefs,
+    /// Clock used to timestamp stage transitions.
     clock: Box<MonotonicClock>,
+    /// Timing state shared across reporting threads.
     state: Mutex<TimingState>,
 }
 
@@ -84,6 +109,7 @@ impl VerboseTimingReporter {
         Self::with_clock(inner, prefs, Box::new(move || start.elapsed()))
     }
 
+    /// Build a timing reporter that uses the given clock.
     fn with_clock(
         inner: Box<dyn StatusReporter>,
         prefs: OutputPrefs,
@@ -153,6 +179,7 @@ impl StatusReporter for VerboseTimingReporter {
     }
 }
 
+/// Render the timing summary header, per-stage lines, and total duration.
 fn render_summary_lines(prefs: OutputPrefs, entries: &[CompletedStage]) -> Vec<String> {
     if entries.is_empty() {
         return Vec::new();
@@ -187,6 +214,7 @@ fn render_summary_lines(prefs: OutputPrefs, entries: &[CompletedStage]) -> Vec<S
     lines
 }
 
+/// Format a duration with the unit (ns, us, ms, or s) chosen for readability.
 fn format_duration(duration: Duration) -> String {
     let seconds = duration.as_secs();
     if seconds > 0 {

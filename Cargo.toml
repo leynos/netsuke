@@ -240,6 +240,7 @@ lossy_float_literal                 = "deny"
 missing_const_for_fn                = "deny"
 must_use_candidate                  = "deny"
 unused_async                        = "deny"
+missing_docs_in_private_items       = "deny"
 
 # 8. Error handling
 missing_panics_doc                  = "deny"

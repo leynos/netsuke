@@ -33,6 +33,7 @@ use std::io::{self, Write};
 /// Computes stable digests for [`Action`] definitions.
 pub struct ActionHasher;
 
+/// `Write` adapter that feeds bytes into the wrapping digest.
 struct DigestWriter<'a, D: Digest>(&'a mut D);
 
 impl<D: Digest> Write for DigestWriter<'_, D> {

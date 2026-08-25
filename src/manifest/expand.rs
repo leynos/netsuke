@@ -17,7 +17,9 @@ use tracing::{debug, dispatcher, subscriber::NoSubscriber};
 /// manifest filtering occurred.
 #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
 pub(crate) struct FilteringStats {
+    /// Target entries skipped because a `when` condition evaluated to false.
     pub filtered_targets: usize,
+    /// Action entries skipped because a `when` condition evaluated to false.
     pub filtered_actions: usize,
 }
 
@@ -27,7 +29,9 @@ pub(crate) struct FilteringStats {
 /// name of the manifest section currently being expanded, such as `targets` or
 /// `actions`.
 struct ExpansionContext<'a> {
+    /// Jinja environment used to render `foreach` and `when` expressions.
     env: &'a Environment<'a>,
+    /// Name of the manifest section being expanded, such as `targets`.
     section: &'a str,
 }
 
@@ -53,6 +57,7 @@ pub(crate) fn expand_foreach(doc: &mut ManifestValue, env: &Environment) -> Resu
     Ok(stats)
 }
 
+/// Expand one manifest section, returning the number of filtered entries.
 fn expand_section(doc: &mut ManifestValue, key: &str, env: &Environment) -> Result<usize> {
     let Some(entries) = doc.get_mut(key).and_then(|v| v.as_array_mut()) else {
         return Ok(0);
@@ -74,6 +79,7 @@ fn expand_section(doc: &mut ManifestValue, key: &str, env: &Environment) -> Resu
     Ok(filtered)
 }
 
+/// Expand a single target into its concrete entries, honouring `foreach`.
 fn expand_target(
     mut map: ManifestMap,
     context: &ExpansionContext<'_>,
@@ -104,12 +110,14 @@ fn expand_target(
     }
 }
 
+/// Read a target's `name`, defaulting to `<unnamed>`.
 fn entry_name(map: &ManifestMap) -> &str {
     map.get("name")
         .and_then(ManifestValue::as_str)
         .unwrap_or("<unnamed>")
 }
 
+/// Derive a short stable hash of an entry name for filtered-entry logs.
 fn entry_name_hash(entry_name: &str) -> String {
     let digest = Sha256::digest(entry_name.as_bytes());
     digest
@@ -121,6 +129,7 @@ fn entry_name_hash(entry_name: &str) -> String {
         })
 }
 
+/// Resolve `foreach` values from an inline array or a Jinja expression.
 fn parse_foreach_values(expr_val: &ManifestValue, env: &Environment) -> Result<Vec<Value>> {
     if let Some(seq) = expr_val.as_array() {
         return Ok(seq.iter().cloned().map(Value::from_serialize).collect());
@@ -206,10 +215,12 @@ fn when_allows(
     Ok(allowed)
 }
 
+/// Report whether a tracing subscriber is active for the default dispatcher.
 fn has_subscriber() -> bool {
     dispatcher::get_default(|current| !current.is::<NoSubscriber>())
 }
 
+/// Build the Jinja context for a `when` condition, adding `item` and `index`.
 fn when_context(map: &ManifestMap, iteration: Option<(&Value, usize)>) -> Result<Value> {
     let mut vars = map
         .get("vars")
@@ -230,6 +241,7 @@ fn when_context(map: &ManifestMap, iteration: Option<(&Value, usize)>) -> Result
     Ok(Value::from_serialize(vars))
 }
 
+/// Inject `item` and `index` into a target's `vars`, creating the map when absent.
 fn inject_iteration_vars(map: &mut ManifestMap, item: &Value, index: usize) -> Result<()> {
     let vars_value = match map.entry("vars") {
         Entry::Vacant(slot) => slot.insert(ManifestValue::Object(ManifestMap::new())),
@@ -264,6 +276,7 @@ fn inject_iteration_vars(map: &mut ManifestMap, item: &Value, index: usize) -> R
     Ok(())
 }
 
+/// Extract a manifest value as a string, erroring when it is not one.
 fn as_str<'a>(value: &'a ManifestValue, field: &str) -> Result<&'a str> {
     value.as_str().ok_or_else(|| {
         anyhow::anyhow!(
@@ -273,6 +286,7 @@ fn as_str<'a>(value: &'a ManifestValue, field: &str) -> Result<&'a str> {
     })
 }
 
+/// Evaluate a Jinja expression, mapping parse and evaluation errors.
 fn eval_expression(env: &Environment, name: &str, expr: &str, ctx: Value) -> Result<Value> {
     env.compile_expression(expr)
         .with_context(|| {

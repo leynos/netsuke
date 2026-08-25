@@ -1,7 +1,7 @@
 //! Filesystem search utilities for resolving commands for the `which` feature.
 //!
 //! PATH lookup is deliberately ambient, so executable probes and
-//! canonicalisation cannot use the capability-based handles mandated elsewhere
+//! canonicalization cannot use the capability-based handles mandated elsewhere
 //! in Netsuke.
 
 use std::{fs, io};
@@ -23,7 +23,7 @@ use workspace::search_workspace;
 pub(crate) use workspace::{WORKSPACE_SKIP_DIRS, WorkspaceSkipList};
 
 /// Resolve `command` either as a direct path or by searching the environment's
-/// PATH, optionally canonicalising or collecting all matches.
+/// PATH, optionally canonicalizing or collecting all matches.
 ///
 /// When `options.all` is `true`, every executable candidate is returned;
 /// otherwise resolution stops at the first match. The current working directory
@@ -72,7 +72,8 @@ pub(super) fn lookup(
     }
 }
 
-/// Resolve a command that already looks like a path (absolute or relative).
+/// Resolve a command that already looks like a path (absolute or relative),
+/// returning all matching executable paths.
 ///
 /// On Windows this honours `PATHEXT` when the path is missing an extension so
 /// callers can pass `.\gradlew` and still resolve `gradlew.bat`. On POSIX the
@@ -103,6 +104,11 @@ pub(super) fn resolve_direct(
     }
 }
 
+/// Resolve a path-like command to executable matches.
+///
+/// On POSIX the candidate must already be executable; canonicalization is
+/// applied when requested in `options`. The result contains one direct-path
+/// match on POSIX.
 #[cfg(not(windows))]
 pub(super) fn resolve_direct(
     command: &str,
@@ -120,6 +126,7 @@ pub(super) fn resolve_direct(
     }
 }
 
+/// Resolve a path-like command against the working directory when relative.
 fn normalize_direct_path(command: &str, env: &EnvSnapshot) -> Utf8PathBuf {
     let raw = Utf8Path::new(command);
     if raw.is_absolute() {
@@ -129,6 +136,7 @@ fn normalize_direct_path(command: &str, env: &EnvSnapshot) -> Utf8PathBuf {
     }
 }
 
+/// Build the candidate paths for a resolved direct path, on Windows.
 #[cfg(windows)]
 fn direct_candidates(resolved: &Utf8PathBuf, env: &EnvSnapshot) -> Vec<Utf8PathBuf> {
     if resolved.extension().is_some() {
@@ -186,6 +194,7 @@ pub(super) fn is_direct_path(command: &str) -> bool {
     }
 }
 
+/// Build the candidate paths for a command within one directory.
 fn candidates_for_dir(env: &EnvSnapshot, dir: &Utf8Path, command: &str) -> Vec<Utf8PathBuf> {
     #[cfg(windows)]
     {
@@ -218,26 +227,36 @@ pub(super) fn is_executable(path: &Utf8Path) -> Result<bool, ResolveError> {
     }
 }
 
+/// Whether metadata describes an executable file on Unix.
 #[cfg(unix)]
 fn is_executable_metadata(metadata: &fs::Metadata) -> bool {
     use std::os::unix::fs::PermissionsExt;
     metadata.is_file() && metadata.permissions().mode() & 0o111 != 0
 }
 
+/// Whether metadata describes an executable file on non-Unix platforms.
 #[cfg(not(unix))]
 fn is_executable_metadata(metadata: &fs::Metadata) -> bool {
     metadata.is_file()
 }
 
+/// Context for handling a PATH-search miss.
 #[derive(Clone, Copy)]
 struct HandleMissContext<'a> {
+    /// The environment snapshot the failed search ran against.
     env: &'a EnvSnapshot,
+    /// The command that was not found.
     command: &'a str,
+    /// The options the failed search ran with.
     options: &'a WhichOptions,
+    /// The directories already searched, for the miss diagnostic.
     dirs: &'a [&'a Utf8Path],
+    /// The skip list for the workspace fallback search.
     workspace_skips: &'a WorkspaceSkipList,
 }
 
+/// Handle a PATH-search miss, falling back to a workspace search when `PATH`
+/// is unset or empty and `ctx.options.cwd_mode` is not [`CwdMode::Never`].
 fn handle_miss(ctx: HandleMissContext<'_>) -> Result<Vec<Utf8PathBuf>, ResolveError> {
     let path_empty = ctx.env.raw_path.as_ref().is_none_or(|path| path.is_empty());
 

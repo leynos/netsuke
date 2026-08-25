@@ -9,10 +9,12 @@ use std::ffi::OsString;
 
 use crate::localization::keys;
 
+/// Strip the leading `Usage: ` prefix from a rendered usage string.
 fn usage_body(usage: &str) -> &str {
     usage.strip_prefix("Usage: ").unwrap_or(usage)
 }
 
+/// Localize a command's usage, about text, argument help, and subcommands.
 pub(crate) fn localize_command(mut command: Command, localizer: &dyn Localizer) -> Command {
     let rendered_usage = command.clone().render_usage().to_string();
     let fallback_usage = usage_body(&rendered_usage).to_owned();
@@ -48,7 +50,7 @@ pub(crate) fn localize_command(mut command: Command, localizer: &dyn Localizer) 
     command
 }
 
-/// Localise help text for all arguments in a command.
+/// Localize help text for all arguments in a command.
 ///
 /// When `subcommand` is `None`, keys are looked up as `cli.flag.{arg_id}.help`.
 /// When a subcommand is provided, keys are
@@ -77,6 +79,7 @@ fn localize_arguments(
     })
 }
 
+/// Localize a single help field, returning translated text when a key exists.
 fn localize_field(
     localizer: &dyn Localizer,
     key: Option<&'static str>,
@@ -89,6 +92,7 @@ fn localize_field(
     localizer.lookup(key_id, None)
 }
 
+/// Localize the about text, argument help, and help topics of every subcommand.
 fn localize_subcommands(command: &mut Command, localizer: &dyn Localizer) {
     for subcommand in command.get_subcommands_mut() {
         let known = Subcommand::from_name(subcommand.get_name());
@@ -121,7 +125,7 @@ fn localize_subcommands(command: &mut Command, localizer: &dyn Localizer) {
     }
 }
 
-/// Localise the topics nested beneath the `help` subcommand.
+/// Localize the topics nested beneath the `help` subcommand.
 fn localize_help_topics(
     mut command: Command,
     localizer: &dyn Localizer,
@@ -151,18 +155,24 @@ fn localize_help_topics(
 
 /// The set of known CLI subcommands.
 ///
-/// Replaces raw `&str` subcommand-name parameters in localisation helpers to
+/// Replaces raw `&str` subcommand-name parameters in localization helpers to
 /// eliminate primitive obsession.
 #[derive(Clone, Copy)]
 enum Subcommand {
+    /// The `build` subcommand.
     Build,
+    /// The `clean` subcommand.
     Clean,
+    /// The `graph` subcommand.
     Graph,
+    /// The `generate` subcommand.
     Generate,
+    /// The `help` subcommand.
     Help,
 }
 
 impl Subcommand {
+    /// Resolve a subcommand from its CLI name.
     fn from_name(name: &str) -> Option<Self> {
         match name {
             "build" => Some(Self::Build),
@@ -178,11 +188,14 @@ impl Subcommand {
 /// The topics nested under the `help` subcommand.
 #[derive(Clone, Copy)]
 enum HelpTopicName {
+    /// The `targets` help topic.
     Targets,
+    /// A help topic describing a known subcommand.
     Subcommand(Subcommand),
 }
 
 impl HelpTopicName {
+    /// Resolve a help topic from its CLI name.
     fn from_name(name: &str) -> Option<Self> {
         if name == "targets" {
             return Some(Self::Targets);
@@ -197,6 +210,7 @@ impl HelpTopicName {
     }
 }
 
+/// Return the help key for a flag within a subcommand, when one is known.
 fn flag_help_key(arg_id: &str, subcommand: Option<Subcommand>) -> Option<&'static str> {
     match subcommand {
         None => top_level_flag_help_key(arg_id),
@@ -207,6 +221,7 @@ fn flag_help_key(arg_id: &str, subcommand: Option<Subcommand>) -> Option<&'stati
     }
 }
 
+/// Return the help key for a top-level flag, when one is known.
 fn top_level_flag_help_key(arg_id: &str) -> Option<&'static str> {
     match arg_id {
         "file" => Some(keys::CLI_FLAG_FILE_HELP),
@@ -230,6 +245,7 @@ fn top_level_flag_help_key(arg_id: &str) -> Option<&'static str> {
     }
 }
 
+/// Return the help key for a `build` subcommand flag, when one is known.
 fn build_flag_help_key(arg_id: &str) -> Option<&'static str> {
     match arg_id {
         "targets" => Some(keys::CLI_SUBCOMMAND_BUILD_FLAG_TARGETS_HELP),
@@ -237,6 +253,7 @@ fn build_flag_help_key(arg_id: &str) -> Option<&'static str> {
     }
 }
 
+/// Return the help key for a `graph` subcommand flag, when one is known.
 fn graph_flag_help_key(arg_id: &str) -> Option<&'static str> {
     match arg_id {
         "html" => Some(keys::CLI_SUBCOMMAND_GRAPH_FLAG_HTML_HELP),
@@ -245,6 +262,7 @@ fn graph_flag_help_key(arg_id: &str) -> Option<&'static str> {
     }
 }
 
+/// Return the help key for a `generate` subcommand flag, when one is known.
 fn generate_flag_help_key(arg_id: &str) -> Option<&'static str> {
     match arg_id {
         "output" => Some(keys::CLI_SUBCOMMAND_GENERATE_FLAG_OUTPUT_HELP),
@@ -252,6 +270,7 @@ fn generate_flag_help_key(arg_id: &str) -> Option<&'static str> {
     }
 }
 
+/// Return the localization key for a subcommand's short about text.
 const fn subcommand_about_key(subcommand: Subcommand) -> &'static str {
     match subcommand {
         Subcommand::Build => keys::CLI_SUBCOMMAND_BUILD_ABOUT,
@@ -262,6 +281,7 @@ const fn subcommand_about_key(subcommand: Subcommand) -> &'static str {
     }
 }
 
+/// Return the localization key for a subcommand's long about text.
 const fn subcommand_long_about_key(subcommand: Subcommand) -> &'static str {
     match subcommand {
         Subcommand::Build => keys::CLI_SUBCOMMAND_BUILD_LONG_ABOUT,
@@ -272,6 +292,7 @@ const fn subcommand_long_about_key(subcommand: Subcommand) -> &'static str {
     }
 }
 
+/// Return the localization key for a help topic's about text.
 const fn help_topic_about_key(topic: HelpTopicName) -> &'static str {
     match topic {
         HelpTopicName::Targets => keys::CLI_HELP_TARGETS_ABOUT,
@@ -310,6 +331,7 @@ pub fn locale_hint_from_args(args: &[OsString]) -> Option<String> {
     hint
 }
 
+/// Parse a user-supplied boolean value, returning `None` for unrecognized input.
 pub(crate) fn parse_bool_hint(value: &str) -> Option<bool> {
     match value.to_ascii_lowercase().as_str() {
         "1" | "true" | "yes" | "on" => Some(true),

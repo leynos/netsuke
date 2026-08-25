@@ -59,6 +59,12 @@ mod ambient_sync {
 
 use ambient_sync::sync_temp_ninja_file;
 
+/// Write `content` to `path` under `dir`, creating parent directories.
+///
+/// # Errors
+///
+/// Returns an error when the parent directories or file cannot be created, or
+/// when writing, flushing, or synchronizing fails.
 pub fn write_text_file_utf8(dir: &cap_fs::Dir, path: &Utf8Path, content: &str) -> AnyResult<()> {
     if let Some(parent) = path.parent().filter(|p| !p.as_str().is_empty()) {
         dir.create_dir_all(parent.as_str()).with_context(|| {
@@ -81,6 +87,16 @@ pub fn write_text_file_utf8(dir: &cap_fs::Dir, path: &Utf8Path, content: &str) -
     Ok(())
 }
 
+/// Split `path` into a capability-scoped directory and a relative remainder.
+///
+/// Relative paths open the current directory; absolute paths are anchored on
+/// the deepest pre-existing ancestor directory.
+///
+/// # Errors
+///
+/// Returns an error when the current directory (for a relative path) or no
+/// pre-existing ancestor directory (for an absolute path) can be opened, or
+/// when the relative remainder cannot be derived from the selected base.
 fn derive_dir_and_relative(path: &Utf8Path) -> AnyResult<(cap_fs::Dir, Utf8PathBuf)> {
     if path.is_relative() {
         let dir = cap_fs::Dir::open_ambient_dir(".", ambient_authority())
@@ -110,11 +126,21 @@ fn derive_dir_and_relative(path: &Utf8Path) -> AnyResult<(cap_fs::Dir, Utf8PathB
     Ok((dir, relative))
 }
 
+/// Write Ninja `content` to `path`, creating missing parent directories.
+///
+/// # Errors
+///
+/// Returns an error when the path is not valid UTF-8 or the write fails.
 pub fn write_ninja_file(path: &Path, content: &NinjaContent) -> AnyResult<()> {
     write_text_file(path, content.as_str())?;
     Ok(())
 }
 
+/// Write `content` to `path`, creating missing parent directories.
+///
+/// # Errors
+///
+/// Returns an error when the path is not valid UTF-8 or the write fails.
 pub fn write_text_file(path: &Path, content: &str) -> AnyResult<()> {
     let utf8_path = Utf8Path::from_path(path).ok_or_else(|| {
         anyhow!(
@@ -129,10 +155,12 @@ pub fn write_text_file(path: &Path, content: &str) -> AnyResult<()> {
     Ok(())
 }
 
+/// Return whether `err` signals a closed reader on the other end.
 fn is_broken_pipe(err: &io::Error) -> bool {
     err.kind() == io::ErrorKind::BrokenPipe
 }
 
+/// Write `buf` in full, swallowing only broken-pipe failures.
 fn write_all_ignoring_broken_pipe(writer: &mut impl Write, buf: &[u8]) -> io::Result<()> {
     match writer.write_all(buf) {
         Ok(()) => Ok(()),
@@ -141,6 +169,7 @@ fn write_all_ignoring_broken_pipe(writer: &mut impl Write, buf: &[u8]) -> io::Re
     }
 }
 
+/// Flush `writer`, swallowing only broken-pipe failures.
 fn flush_ignoring_broken_pipe(writer: &mut impl Write) -> io::Result<()> {
     match writer.flush() {
         Ok(()) => Ok(()),
@@ -149,10 +178,22 @@ fn flush_ignoring_broken_pipe(writer: &mut impl Write) -> io::Result<()> {
     }
 }
 
+/// Write Ninja `content` to stdout, tolerating a closed pipe.
+///
+/// # Errors
+///
+/// Returns an error when the stdout write fails other than through a broken
+/// pipe.
 pub fn write_ninja_stdout(content: &NinjaContent) -> AnyResult<()> {
     write_text_stdout(content.as_str())
 }
 
+/// Write `content` to stdout, tolerating a closed pipe.
+///
+/// # Errors
+///
+/// Returns an error when the stdout write fails other than through a broken
+/// pipe.
 pub fn write_text_stdout(content: &str) -> AnyResult<()> {
     let mut stdout = io::stdout().lock();
     write_all_ignoring_broken_pipe(&mut stdout, content.as_bytes())
@@ -174,6 +215,7 @@ mod tests {
     use rstest::rstest;
     use test_support::fs as test_fs;
 
+    /// Verify the temporary Ninja file can be reopened after its writer drops.
     #[test]
     fn create_temp_ninja_file_releases_writer_before_external_read() -> Result<()> {
         let content = NinjaContent::new(String::from("rule cc"));

@@ -5,29 +5,37 @@
 //! round-trip through `MiniJinja` as lightweight objects so other predicates can
 //! downcast them later without reparsing strings.
 
-use std::{fmt, sync::Arc};
-
 use minijinja::{
     Environment, Error, ErrorKind,
-    value::{Kwargs, Object, ObjectRepr, Value},
+    value::{Kwargs, Value},
 };
 use time::{
-    Duration, OffsetDateTime, UtcOffset,
-    format_description::{FormatItem, well_known::Iso8601},
-    macros::format_description,
+    Duration, OffsetDateTime, UtcOffset, format_description::FormatItem, macros::format_description,
 };
 
 use crate::localization::{self, keys};
 
+mod format;
+use self::format::{TimeDeltaValue, TimestampValue};
+
+/// Seconds in one minute.
 const SECONDS_PER_MINUTE: i64 = 60;
+/// Seconds in one hour.
 const SECONDS_PER_HOUR: i64 = 60 * SECONDS_PER_MINUTE;
+/// Seconds in one day.
 const SECONDS_PER_DAY: i64 = 24 * SECONDS_PER_HOUR;
+/// Seconds in one week.
 const SECONDS_PER_WEEK: i64 = 7 * SECONDS_PER_DAY;
+/// Nanoseconds in one microsecond.
 const NANOS_PER_MICROSECOND: i64 = 1_000;
+/// Nanoseconds in one millisecond.
 const NANOS_PER_MILLISECOND: i64 = 1_000 * NANOS_PER_MICROSECOND;
+/// Seconds in one minute, in `i32` for offset arithmetic.
 const SECONDS_PER_MINUTE_I32: i32 = 60;
+/// Seconds in one hour, in `i32` for offset arithmetic.
 const SECONDS_PER_HOUR_I32: i32 = 3_600;
 
+/// Format description for an offset's hour, minute, and optional second.
 const OFFSET_FMT: &[FormatItem<'static>] =
     format_description!("[offset_hour]:[offset_minute][optional [:[offset_second]]]");
 
@@ -42,6 +50,11 @@ pub(crate) fn register_query_functions(env: &mut Environment<'_>) {
     env.add_function("timedelta", |kwargs: Kwargs| timedelta(&kwargs));
 }
 
+/// Resolve the `now` helper: the current UTC time shifted by a given offset.
+///
+/// # Errors
+///
+/// Returns an invalid-operation error when the offset string does not parse.
 fn now(kwargs: &Kwargs) -> Result<Value, Error> {
     let offset_spec: Option<String> = kwargs.get("offset")?;
     kwargs.assert_all_used()?;
@@ -55,6 +68,7 @@ fn now(kwargs: &Kwargs) -> Result<Value, Error> {
     Ok(Value::from_object(TimestampValue::new(timestamp)))
 }
 
+/// Parse an offset string into a UTC offset, accepting `Z`/`z` for UTC, then a signed numeric offset.
 fn parse_offset(raw: &str) -> Result<UtcOffset, Error> {
     let trimmed = raw.trim();
     if trimmed.eq_ignore_ascii_case("z") {
@@ -68,6 +82,7 @@ fn parse_offset(raw: &str) -> Result<UtcOffset, Error> {
     UtcOffset::parse(trimmed, OFFSET_FMT).map_err(|_| invalid_offset(raw))
 }
 
+/// Build the invalid-offset error for the given string.
 fn invalid_offset(raw: &str) -> Error {
     Error::new(
         ErrorKind::InvalidOperation,
@@ -77,6 +92,7 @@ fn invalid_offset(raw: &str) -> Error {
     )
 }
 
+/// The `timedelta` keyword components, in canonical resolution order.
 const COMPONENT_SPECS: &[(&str, ComponentSpec)] = &[
     (
         "weeks",
@@ -144,13 +160,22 @@ const COMPONENT_SPECS: &[(&str, ComponentSpec)] = &[
     ),
 ];
 
+/// One duration component the `timedelta` helper accepts, with its scaling.
 #[derive(Clone, Copy)]
 struct ComponentSpec {
+    /// Multiplier converting the requested unit to the component's basis.
     multiplier: i64,
+    /// Constructor turning the scaled value into a [`Duration`].
     constructor: fn(i64) -> Duration,
+    /// Fluent key naming the component in overflow diagnostics.
     label_key: &'static str,
 }
 
+/// Add one scaled component to `total`, rejecting overflow and `None` amount.
+///
+/// # Errors
+///
+/// Returns an invalid-operation error when the scaled component overflows.
 fn add_component(
     mut total: Duration,
     amount: Option<i64>,
@@ -168,6 +193,7 @@ fn add_component(
     Ok(total)
 }
 
+/// Build the overflow error for the labelled component.
 fn overflow_error(label_key: &'static str) -> Error {
     let component = localization::message(label_key).to_string();
     Error::new(
@@ -178,6 +204,11 @@ fn overflow_error(label_key: &'static str) -> Error {
     )
 }
 
+/// Resolve the `timedelta` helper from its keyword components.
+///
+/// # Errors
+///
+/// Returns an invalid-operation error for unknown component keys or overflow.
 fn timedelta(kwargs: &Kwargs) -> Result<Value, Error> {
     let mut total = Duration::ZERO;
 
@@ -188,197 +219,6 @@ fn timedelta(kwargs: &Kwargs) -> Result<Value, Error> {
 
     kwargs.assert_all_used()?;
     Ok(Value::from_object(TimeDeltaValue::new(total)))
-}
-
-fn has_timezone_after(formatted: &str, pos: usize) -> bool {
-    formatted
-        .get(pos + 10..)
-        .and_then(|rest| rest.chars().next())
-        .is_some_and(|next| matches!(next, 'Z' | '+' | '-'))
-}
-
-fn format_offset_datetime(datetime: OffsetDateTime) -> String {
-    datetime.format(&Iso8601::DEFAULT).map_or_else(
-        |_| datetime.to_string(),
-        |mut formatted| {
-            if let Some(pos) = formatted.find(".000000000")
-                && has_timezone_after(&formatted, pos)
-            {
-                formatted.replace_range(pos..pos + 10, "");
-            }
-            formatted
-        },
-    )
-}
-
-fn format_utc_offset(offset: UtcOffset) -> String {
-    let total_seconds = offset.whole_seconds();
-    let sign = if total_seconds >= 0 { '+' } else { '-' };
-    let abs_seconds = total_seconds.abs();
-    let hours = abs_seconds.div_euclid(SECONDS_PER_HOUR_I32);
-    let remainder = abs_seconds.rem_euclid(SECONDS_PER_HOUR_I32);
-    let minutes = remainder.div_euclid(SECONDS_PER_MINUTE_I32);
-    let seconds = remainder.rem_euclid(SECONDS_PER_MINUTE_I32);
-
-    if seconds == 0 {
-        format!("{sign}{hours:02}:{minutes:02}")
-    } else {
-        format!("{sign}{hours:02}:{minutes:02}:{seconds:02}")
-    }
-}
-
-fn format_duration_iso8601(duration: Duration) -> String {
-    if duration.is_zero() {
-        return "PT0S".to_owned();
-    }
-
-    let mut buffer = String::new();
-    if duration.is_negative() {
-        buffer.push('-');
-    }
-    buffer.push('P');
-
-    let absolute = duration.abs();
-    let days = absolute.whole_days();
-    let remainder = absolute - Duration::days(days);
-
-    if days != 0 {
-        buffer.push_str(&days.to_string());
-        buffer.push('D');
-    }
-
-    let time_section = format_time_components(remainder);
-    finalize_duration_buffer(buffer, &time_section)
-}
-
-fn format_time_components(mut remainder: Duration) -> String {
-    let mut time_section = String::new();
-
-    let hours = remainder.whole_hours();
-    if hours != 0 {
-        time_section.push_str(&hours.to_string());
-        time_section.push('H');
-        remainder -= Duration::hours(hours);
-    }
-
-    let minutes = remainder.whole_minutes();
-    if minutes != 0 {
-        time_section.push_str(&minutes.to_string());
-        time_section.push('M');
-        remainder -= Duration::minutes(minutes);
-    }
-
-    let seconds = remainder.whole_seconds();
-    let nanos = remainder.subsec_nanoseconds();
-    if seconds != 0 || nanos != 0 {
-        time_section.push_str(&format_seconds_with_fraction(seconds, nanos));
-    }
-
-    time_section
-}
-
-fn finalize_duration_buffer(mut buffer: String, time_section: &str) -> String {
-    if time_section.is_empty() {
-        if buffer.ends_with('P') {
-            buffer.push_str("T0S");
-        }
-    } else {
-        buffer.push('T');
-        buffer.push_str(time_section);
-    }
-
-    buffer
-}
-
-fn format_seconds_with_fraction(seconds: i64, nanos: i32) -> String {
-    // Callers pass the remainder of an absolute duration, so `seconds` is
-    // non-negative; `unsigned_abs` is the total conversion for that domain.
-    debug_assert!(seconds >= 0, "seconds must be non-negative (got {seconds})");
-    let seconds_u64 = seconds.unsigned_abs();
-    if nanos == 0 {
-        return format!("{seconds_u64}S");
-    }
-
-    let mut fraction = format!("{nanos:09}");
-    while fraction.ends_with('0') {
-        fraction.pop();
-    }
-
-    format!("{seconds_u64}.{fraction}S")
-}
-
-#[derive(Clone, Copy)]
-struct TimestampValue {
-    datetime: OffsetDateTime,
-}
-
-impl TimestampValue {
-    const fn new(datetime: OffsetDateTime) -> Self {
-        Self { datetime }
-    }
-
-    fn iso8601(&self) -> String {
-        format_offset_datetime(self.datetime)
-    }
-}
-
-impl fmt::Debug for TimestampValue {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.iso8601())
-    }
-}
-
-impl Object for TimestampValue {
-    fn repr(self: &Arc<Self>) -> ObjectRepr {
-        ObjectRepr::Plain
-    }
-
-    fn get_value(self: &Arc<Self>, key: &Value) -> Option<Value> {
-        let attr = key.as_str()?;
-        match attr {
-            "iso8601" => Some(Value::from(self.iso8601())),
-            "unix_timestamp" => Some(Value::from(self.datetime.unix_timestamp())),
-            "offset" => Some(Value::from(format_utc_offset(self.datetime.offset()))),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-struct TimeDeltaValue {
-    duration: Duration,
-}
-
-impl TimeDeltaValue {
-    const fn new(duration: Duration) -> Self {
-        Self { duration }
-    }
-
-    fn iso8601(&self) -> String {
-        format_duration_iso8601(self.duration)
-    }
-}
-
-impl fmt::Debug for TimeDeltaValue {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.iso8601())
-    }
-}
-
-impl Object for TimeDeltaValue {
-    fn repr(self: &Arc<Self>) -> ObjectRepr {
-        ObjectRepr::Plain
-    }
-
-    fn get_value(self: &Arc<Self>, key: &Value) -> Option<Value> {
-        let attr = key.as_str()?;
-        match attr {
-            "iso8601" => Some(Value::from(self.iso8601())),
-            "seconds" => Some(Value::from(self.duration.whole_seconds())),
-            "nanoseconds" => Some(Value::from(i64::from(self.duration.subsec_nanoseconds()))),
-            _ => None,
-        }
-    }
 }
 
 #[cfg(test)]

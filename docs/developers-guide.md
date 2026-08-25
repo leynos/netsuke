@@ -30,13 +30,13 @@ as the durable architecture record.
 
 The public Ninja process helpers are re-exported from `netsuke::runner`.
 `CommandEnv` is an explicit, composable set of child-process overrides:
-`CommandEnv::inherit()` leaves the parent environment in place,
-`with_var` overrides one variable, and `with_path` replaces the child's
-`PATH`. The parent process is never mutated. `NinjaBuildRequest` and
-`NinjaToolRequest` borrow the program, `NinjaProcessOptions` (`working_dir` and
-`jobs`), generated build file, target list or tool name, and `CommandEnv`
-needed for one invocation. The process boundary is parser-independent; callers
-without CLI state construct `NinjaProcessOptions` directly.
+`CommandEnv::inherit()` leaves the parent environment in place, `with_var`
+overrides one variable, and `with_path` replaces the child's `PATH`. The parent
+process is never mutated. `NinjaBuildRequest` and `NinjaToolRequest` borrow the
+program, `NinjaProcessOptions` (`working_dir` and `jobs`), generated build
+file, target list or tool name, and `CommandEnv` needed for one invocation. The
+process boundary is parser-independent; callers without CLI state construct
+`NinjaProcessOptions` directly.
 
 The legacy `run_ninja` and `run_ninja_tool` helpers retain their existing
 signatures and inherit the parent environment. Callers that need an isolated
@@ -55,8 +55,8 @@ side-effect-free query surface. It allowlists only the lexical path filters
 `basename`, `dirname`, `with_suffix`, and `relative_to`, the collection filters
 `uniq`, `flatten`, and `group_by`, and the clock-independent `timedelta`
 function. It rejects `env()` and `glob()`, file tests, filesystem metadata
-filters such as `size` and `linecount`, `hash`, `digest`, `contents`, `realpath`,
-and `expanduser`, executable discovery through `which` and
+filters such as `size` and `linecount`, `hash`, `digest`, `contents`,
+`realpath`, and `expanduser`, executable discovery through `which` and
 `command_available`, network and command helpers (`fetch`, `shell`, and
 `grep`), and the clock-dependent `now()` function. Normal build manifest
 rendering still registers the full standard library; this restriction applies
@@ -431,13 +431,13 @@ confusing `E0499` rather than an obvious configuration error.
 
 Five CI jobs across four workflows carry the contract:
 
-| Workflow | Job | Shared action | `with.rustflags` |
-| --- | --- | --- | --- |
-| [`ci.yml`](../.github/workflows/ci.yml) | `build-test` | `setup-rust` | `-D warnings -Zpolonius=next` |
-| [`ci.yml`](../.github/workflows/ci.yml) | `build-test-windows` | `setup-rust` | `-D warnings -Zpolonius=next` |
-| [`coverage-main.yml`](../.github/workflows/coverage-main.yml) | `coverage-upload` | `setup-rust` | `-D warnings -Zpolonius=next` |
-| [`netsukefile-test.yml`](../.github/workflows/netsukefile-test.yml) | `netsukefile` | `setup-rust` | `-Zpolonius=next` |
-| [`build-and-package.yml`](../.github/workflows/build-and-package.yml) | `build` | `rust-build-release` | `-Zpolonius=next` |
+| Workflow                                                              | Job                  | Shared action        | `with.rustflags`              |
+| --------------------------------------------------------------------- | -------------------- | -------------------- | ----------------------------- |
+| [`ci.yml`](../.github/workflows/ci.yml)                               | `build-test`         | `setup-rust`         | `-D warnings -Zpolonius=next` |
+| [`ci.yml`](../.github/workflows/ci.yml)                               | `build-test-windows` | `setup-rust`         | `-D warnings -Zpolonius=next` |
+| [`coverage-main.yml`](../.github/workflows/coverage-main.yml)         | `coverage-upload`    | `setup-rust`         | `-D warnings -Zpolonius=next` |
+| [`netsukefile-test.yml`](../.github/workflows/netsukefile-test.yml)   | `netsukefile`        | `setup-rust`         | `-Zpolonius=next`             |
+| [`build-and-package.yml`](../.github/workflows/build-and-package.yml) | `build`              | `rust-build-release` | `-Zpolonius=next`             |
 
 CI and coverage add `-D warnings` because those jobs gate on a warning-free
 build; the Netsukefile and packaging jobs carry the Polonius flag alone, so a
@@ -481,6 +481,7 @@ Run these commands before finalizing any change:
 
 - `make check-fmt`
 - `make lint`
+- `make doc-coverage`
 - `make test`
 
 When the change touches any Markdown file — documentation, ADRs, execplans, or
@@ -489,6 +490,15 @@ the README — also run:
 - `make fmt`
 - `make markdownlint`
 - `make nixie`
+
+`make doc-coverage` verifies the aggregate Rustdoc doc-comment coverage of
+every workspace library and binary target, counting private items, and fails
+when the documented share drops below `DOC_COVERAGE_THRESHOLD` (default 80%).
+The toolchain the metric measures with is `DOC_COVERAGE_TOOLCHAIN`, defaulting
+to the channel pinned in `rust-toolchain.toml`. See *Doc-comment coverage* in
+`AGENTS.md` for the counting rules and the exemptions (Rustdoc excludes
+trait-implementation overrides, and `cfg(test)` items are not compiled into the
+doc build).
 
 `make test` runs the non-doctest suite through
 [cargo-nextest](https://nexte.st/) and then runs the doctests separately. CI
@@ -589,15 +599,15 @@ The root Whitaker invocation selects only the `netsuke-build` package (the
 Cargo package name behind the `netsuke` targets; see ADR-007) and disables
 Dylint dependency checks. It supplies the root `dylint.toml` contents
 explicitly through `DYLINT_TOML`, so every invocation receives the same
-capability-boundary policy regardless of how Dylint resolves the current
-crate. `test_support` is a workspace member with one sanctioned ambient
-boundary configured per crate. Its second, scoped invocation supplies
-`test_support/dylint.toml` through `DYLINT_TOML`, and uses `--package
-test_support` and `--no-deps`, because running from a member directory alone
-would otherwise check the parent workspace. That configuration names only
-`test_support::fs` in `excluded_paths`. The root `excluded_crates` must not
-contain `test_support`: every other module in the crate remains subject to the
-filesystem policy.
+capability-boundary policy regardless of how Dylint resolves the current crate.
+`test_support` is a workspace member with one sanctioned ambient boundary
+configured per crate. Its second, scoped invocation supplies
+`test_support/dylint.toml` through `DYLINT_TOML`, and uses
+`--package test_support` and `--no-deps` because running from a member
+directory alone would otherwise check the parent workspace. That configuration
+names only `test_support::fs` in `excluded_paths`. The root `excluded_crates`
+must not contain `test_support`: every other module in the crate remains
+subject to the filesystem policy.
 
 Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
 allows. Do not use Rust `#[allow]` or `#[expect]` for `no_std_fs_operations`:
@@ -1728,6 +1738,100 @@ used in those strategy signatures, including `proptest`, must be regular
 `test_support` dependencies. Property tests local to the main crate continue to
 use the root crate's development dependency.
 
+## Internal support module boundaries
+
+The repository caps every source file at 400 lines (Whitaker's
+`module_max_lines`, see `docs/whitaker-users-guide.md`). When a production
+module approaches that cap, the established pattern is to split its private
+helpers into a sibling `#[path]` module rather than restructure the public
+surface. Each such module is a pure implementation seam: it keeps the parent
+below the cap while preserving `pub(super)` visibility for the helpers the
+parent needs, and nothing outside the parent module may reach it. These split
+modules record their ownership and caller contract in their `//!` header; the
+following list is the authoritative indexing of the current ones.
+
+### `src/ir/sort_utils.rs`
+
+Kani-friendly deterministic sorting and comparison helpers, owned by
+`src/ir/from_manifest_support.rs` (which declares
+`#[path = "sort_utils.rs"] mod sort_utils;`). It provides `insertion_sort_by`,
+`sort_strings`, `sort_paths`, and `has_seen_output`, which the manifest-to-IR
+rule-resolution and duplicate-output detection paths consume. The
+implementations avoid `std::slice::sort` and full-width comparisons so the Kani
+harnesses in `src/ir/from_manifest_verification.rs` can verify orderings with
+bounded symbolic input; keep these helpers dependency-free and deterministic,
+and do not move them out to a shared utility crate.
+
+### `src/ir/cycle_detector.rs`
+
+The depth-first traversal state machine, owned by `src/ir/cycle.rs` through its
+private `#[path = "cycle_detector.rs"] mod detector;` declaration. It provides
+`CycleDetector`, `VisitState`, and traversal result types used by the production
+`analyse` entry point and its Kani presence-only variant. The module is
+private to `ir::cycle`; its test and verification children reach the types
+through the parent module's private re-exports. Keep graph traversal state
+here, while path comparison and cycle canonicalization remain owned by
+`cycle_support.rs`.
+
+### `src/diagnostic_json_support.rs`
+
+Private helpers for the machine-readable diagnostic document in
+`src/diagnostic_json.rs`. It owns the span extraction, cause collection, help
+and URL rendering, and fallback-payload machinery, exposing them as
+`pub(super)` items re-imported by the parent. Only `src/diagnostic_json.rs` may
+call into it. The schema remains defined by the parent module; this file is a
+size split, not a second schema owner.
+
+### `src/stdlib/command/error_support.rs`
+
+Detail types and message-append helpers for command-failure rendering in
+`src/stdlib/command/error.rs`, which declares
+`#[path = "error_support.rs"] mod support;`. It owns `ExitDetails`,
+`LimitExceeded`, `append_exit_status`, and `append_stderr`, and is reachable
+only from that error module. Keep the localized-message keys it uses alongside
+the other stdlib command keys rather than introducing a separate key namespace.
+
+### `src/stdlib/time/format.rs`
+
+ISO-8601 rendering for the standard-library time values, owned by
+`src/stdlib/time/mod.rs` (which declares `mod format;`). It renders offset
+datetimes and UTC offsets to ISO-8601 while stripping the zero fractional part,
+and exposes the `TimeDeltaValue` and `TimestampValue` MiniJinja object types
+the parent predicates downcast. Only the time module may import it.
+
+### `src/status_indicatif.rs`
+
+The `indicatif`-backed progress reporter and rendering helpers, owned by
+`src/status.rs` through its private
+`#[path = "status_indicatif.rs"] mod indicatif;` declaration. It provides the
+crate's `IndicatifReporter` export and the shared stage/completion rendering
+helpers used by the accessible reporter. Only `status.rs` and its test module
+may reach this private support module; callers use the reporter re-export from
+`status`.
+
+### `src/stdlib/which/env_path_support.rs`
+
+Path parsing and Windows executable-candidate construction, owned by
+`src/stdlib/which/env.rs`, which declares it through a `#[path]` attribute. It
+owns `PathEntry`, `PATH` and `PATHEXT` normalization, UTF-8 current-directory
+conversion, and Windows candidate generation. Only `which::env` imports it;
+lookup modules retain their existing access through `which::env`'s narrow
+`pub(super)` re-exports. The split is purely to keep the environment snapshot
+adapter below the 400-line cap, not a new resolution boundary.
+
+### `test_support/src/check_ninja_tests.rs`
+
+Unix-only unit coverage for the fake-Ninja factories, owned by
+`test_support/src/check_ninja.rs` through a test-gated `#[path]` declaration.
+It exercises the `-C` directory argument contract through the public factory
+only. Keep fixture assertions here and production test-helper behaviour in
+`check_ninja.rs`; this split keeps the public helper below the 400-line cap.
+
+When adding a new `#[path]` support module, follow the same shape: keep it
+private to its parent, give it a `//!` header stating the split reason and
+ownership, cap its public surface at `pub(super)`, and document it here so the
+boundary inventory stays complete.
+
 ## Behavioural testing strategy
 
 Behavioural tests use `rstest-bdd`, not a bespoke runner, and are executed by
@@ -2006,8 +2110,8 @@ is not obvious from the name:
   failure with lossy conversion. Because the operation is host-native, tests
   that compare native path identity should use this helper, including when
   Windows short-name and long-name spellings refer to the same file; identity
-  follows the filesystem's canonical form rather than handwritten separator
-  or string normalization. Keep this exception in `test_support::fs`; production
+  follows the filesystem's canonical form rather than handwritten separator or
+  string normalization. Keep this exception in `test_support::fs`; production
   code remains capability-scoped or uses its dedicated normalizer.
 - `copy(from, to) -> io::Result<u64>` forwards to `std::fs::copy`, returning
   the number of bytes copied and propagating its failure. The `dev_fast`
@@ -2585,11 +2689,11 @@ outcome for the startup boundary.
 Normal command-line use requires no change. The Rust API remains an unstable
 beta surface, but callers that compose configuration themselves can avoid
 discovering and loading the same configuration files more than once. At the
-composition boundary, call `DiscoveryOutcome::emit_diagnostics()` after
-tracing is configured, then consume the outcome with `into_layers()` and pass
-the cached layers to `merge_with_cached_file_layers` for the full merge. This
-preserves diagnostics from the same discovery pass while avoiding repeated
-file loading.
+composition boundary, call `DiscoveryOutcome::emit_diagnostics()` after tracing
+is configured, then consume the outcome with `into_layers()` and pass the
+cached layers to `merge_with_cached_file_layers` for the full merge. This
+preserves diagnostics from the same discovery pass while avoiding repeated file
+loading.
 
 If the composition boundary times discovery itself, call the public
 `record_discovery_outcome(&clock, started, &outcome)` after the pass completes.
@@ -2655,11 +2759,11 @@ Configuration merge helpers:
   diagnostics for the diagnostic and merge callers.
 - `push_discovered_file_layers(composer, errors, discovered) -> ()` transfers
   the retained layers and discovery errors into the full merge composition.
-- `collect_file_layers_with_normalizer_and_trace(directory, normalizer,
-  env_source)` runs the one discovery pass with the injected path normalizer
-  and environment source, and retains bounded project-scope trace metadata for
-  deferred diagnostics. The normalizer canonicalizes comparison keys so
-  project layers are de-duplicated across equivalent path spellings;
+- `collect_file_layers_with_normalizer_and_trace(directory, normalizer, env_source)`
+  runs the one discovery pass with the injected path normalizer and environment
+  source, and retains bounded project-scope trace metadata for deferred
+  diagnostics. The normalizer canonicalizes comparison keys so project layers
+  are de-duplicated across equivalent path spellings;
   `DiscoveryOutcome::emit_diagnostics()` is the production emission boundary.
 
 - `resolve_json_and_layers_outcome_with_env(cli, matches, env)` retains the
@@ -2916,13 +3020,12 @@ Composition rules:
 The widening was reassessed when `build-test-windows` began compiling and
 testing the `#[cfg(windows)]` arm directly (#518): the original motivation for
 `#[cfg(any(windows, test))]` — reaching the pure string logic from a CI host
-that never compiled Windows — is gone, but reverting to `#[cfg(windows)]`
-would drop Unix-host coverage of `parse_pathext`'s normalization,
-de-duplication, and fallback rules, which `src/stdlib/which/pathext_tests.rs`
-pins on every host. There is no equivalent Unix-side test for a Windows-only
-function, so the widening stays: the pure string logic is exercised on both
-Linux and Windows, and a Windows-gated regression cannot hide from the Unix
-suite.
+that never compiled Windows — is gone, but reverting to `#[cfg(windows)]` would
+drop Unix-host coverage of `parse_pathext`'s normalization, de-duplication, and
+fallback rules, which `src/stdlib/which/pathext_tests.rs` pins on every host.
+There is no equivalent Unix-side test for a Windows-only function, so the
+widening stays: the pure string logic is exercised on both Linux and Windows,
+and a Windows-gated regression cannot hide from the Unix suite.
 
 The full normalization contract, which the property tests in
 `src/stdlib/which/pathext_tests.rs` pin:
@@ -3613,8 +3716,8 @@ selected source at debug level. Process construction uses the resolved path
 exported by this module and must not interpret the environment override
 independently.
 
-`src/runner/ninja_process_adapter.rs` owns the one-way translation from `Cli`
-to `NinjaProcessOptions` and the public CLI-facing wrappers. It converts
+`src/runner/ninja_process_adapter.rs` owns the one-way translation from `Cli` to
+`NinjaProcessOptions` and the public CLI-facing wrappers. It converts
 `Cli::directory` to the options' UTF-8 `working_dir`, returning
 `io::ErrorKind::InvalidData` for a non-UTF-8 path. The process module remains
 parser-independent; callers without CLI state construct `NinjaProcessOptions`
@@ -3745,36 +3848,35 @@ spawned Ninja command as data, rather than by mutating the parent process.
   diverge from production in ways unrelated to what the test is pinning.
 
 The `ninja_subprocess` span and its spawn/exit events carry
-`env_override_count` and `path_overridden`, derived from the prepared
-`Command` rather than from `CommandEnv`, so an environment-caused failure is
-diagnosable from the logs alone. Both fields are bounded and carry no variable
-name or value: override names and values may hold secrets, and a count plus a
-`PATH` flag is the most that can be logged safely. The flag uses the same
-target-aware name comparison, so a Unix variable merely named `Path` does not
-raise it. Production runs use `CommandEnv::inherit()`, so they report `0` and
-`false`.
+`env_override_count` and `path_overridden`, derived from the prepared `Command`
+rather than from `CommandEnv`, so an environment-caused failure is diagnosable
+from the logs alone. Both fields are bounded and carry no variable name or
+value: override names and values may hold secrets, and a count plus a `PATH`
+flag is the most that can be logged safely. The flag uses the same target-aware
+name comparison, so a Unix variable merely named `Path` does not raise it.
+Production runs use `CommandEnv::inherit()`, so they report `0` and `false`.
 
-`PATH` values are composed with `test_support::env::prepend_path_value`, a
-pure function that places a directory ahead of an explicitly supplied prior
-value. It takes the starting value rather than reading the process, so the
-result depends only on its inputs. An absent prior value yields just the new
-directory, and — by the helper's contract, which its tests pin — a wholly
-empty prior value is treated the same way; empty entries inside a non-empty
-value survive composition. It returns an error when an entry cannot be
-represented in a `PATH`, which `std::env::join_paths` itself reports: Unix
-rejects an entry containing `:` because entries cannot be quoted, whereas
-Windows can quote `;` and instead rejects the quoting character `"`.
+`PATH` values are composed with `test_support::env::prepend_path_value`, a pure
+function that places a directory ahead of an explicitly supplied prior value.
+It takes the starting value rather than reading the process, so the result
+depends only on its inputs. An absent prior value yields just the new
+directory, and — by the helper's contract, which its tests pin — a wholly empty
+prior value is treated the same way; empty entries inside a non-empty value
+survive composition. It returns an error when an entry cannot be represented in
+a `PATH`, which `std::env::join_paths` itself reports: Unix rejects an entry
+containing `:` because entries cannot be quoted, whereas Windows can quote `;`
+and instead rejects the quoting character `"`.
 
-Nothing in this seam reads or writes the process `PATH`. The guarantee that
-an injected `PATH` cannot select Ninja itself holds only when
+Nothing in this seam reads or writes the process `PATH`. The guarantee that an
+injected `PATH` cannot select Ninja itself holds only when
 `NinjaBuildRequest.program`/`NinjaToolRequest.program` is an absolute or
 otherwise resolved path: `program` is handed to `Command::new` as given, so a
-bare relative name such as `ninja` is looked up in the child's `PATH` on
-Unix, injected directories included. Callers that must not let the injected
-`PATH` select the executable therefore pass an absolute or otherwise resolved
-program path; when that isolation does not matter, a relative name resolving
-through the child `PATH` is acceptable. What the injected `PATH` always
-governs is the environment Ninja's own child commands see when it shells out.
+bare relative name such as `ninja` is looked up in the child's `PATH` on Unix,
+injected directories included. Callers that must not let the injected `PATH`
+select the executable therefore pass an absolute or otherwise resolved program
+path; when that isolation does not matter, a relative name resolving through
+the child `PATH` is acceptable. What the injected `PATH` always governs is the
+environment Ninja's own child commands see when it shells out.
 
 The explicit request APIs compose on top of `CommandEnv`: `NinjaBuildRequest`/
 `NinjaToolRequest` carry `env: &CommandEnv` and `stderr_mode: StderrMode`
@@ -3782,12 +3884,11 @@ fields alongside the program, `NinjaProcessOptions`, and build file, and are
 consumed by `run_ninja_with`/`run_ninja_tool_with`. The convenience wrappers
 `run_ninja`/`run_ninja_tool` live in `src/runner/ninja_process_adapter.rs`,
 call these with `CommandEnv::inherit()`, and derive the `stderr_mode` policy
-from the CLI via
-`StderrMode::from_json_enabled(cli.json)`, reproducing production behaviour;
-tests reach for `run_ninja_with`/`run_ninja_tool_with` directly to supply a
-`CommandEnv` built with `with_path` instead. Section 6.1 of the
-[design document](netsuke-design.md) records the same architecture from the
-process-management side.
+from the CLI via `StderrMode::from_json_enabled(cli.json)`, reproducing
+production behaviour; tests reach for `run_ninja_with`/`run_ninja_tool_with`
+directly to supply a `CommandEnv` built with `with_path` instead. Section 6.1
+of the [design document](netsuke-design.md) records the same architecture from
+the process-management side.
 
 Property coverage for this seam lives in `tests/env_path_property_tests.rs`,
 which Cargo builds as its own integration-test target; Proptest therefore
@@ -3798,7 +3899,10 @@ beside it. The named cases sit in `tests/env_path_tests.rs`.
 
 ### Module: `ir::cycle`
 
-`src/ir/cycle.rs` provides cycle detection for the IR target graph.
+`src/ir/cycle.rs` provides the cycle-detection entry point for the IR target
+graph. It delegates depth-first traversal to the private sibling
+`src/ir/cycle_detector.rs` and path lookup/canonicalization helpers to
+`src/ir/cycle_support.rs`.
 
 **Entry point:**
 `analyse(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> CycleDetectionReport`

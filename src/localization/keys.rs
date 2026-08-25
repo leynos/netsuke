@@ -1,5 +1,6 @@
 //! Fluent message identifiers used by Netsuke.
 
+/// Declare Fluent message keys and their stable string identifiers.
 macro_rules! define_keys {
     ($($name:ident => $value:literal,)+) => {
         $(#[doc = "Fluent message key."] pub const $name: &str = $value;)+

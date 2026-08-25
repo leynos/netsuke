@@ -92,6 +92,22 @@ pub fn generate_bundle(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenErr
     generate_bundle_inner(graph)
 }
 
+/// Construct the [`GeneratedNinja`] bundle for `graph`.
+///
+/// # Errors
+///
+/// Returns [`NinjaGenError::UnsupportedPathCharacter`] when a graph path
+/// contains a character Ninja cannot represent, and
+/// [`NinjaGenError::ReservedOutputPath`] when a graph path collides with the
+/// reserved serial-ordering namespaces. Returns
+/// [`NinjaGenError::EmptyCommandRecipe`],
+/// [`NinjaGenError::MultipleBackgroundJobs`],
+/// [`NinjaGenError::UnsupportedCommandListExec`],
+/// [`NinjaGenError::UnanalyzableCommandListEval`], or
+/// [`NinjaGenError::NinjaControlCharacter`] when an action recipe cannot be
+/// rendered safely. Returns [`NinjaGenError::MissingAction`] when an edge
+/// references an action absent from the graph, or [`NinjaGenError::Format`]
+/// when rendering the bundle fails.
 fn generate_bundle_inner(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenError> {
     reject_unsupported_path_characters(graph)?;
     reject_reserved_paths(graph)?;
@@ -201,7 +217,9 @@ fn render_display_edge(
 /// Mutable staging state shared while lowering one serial edge.
 #[derive(Default)]
 struct SerialStages {
+    /// Dyndep sidecars collected while lowering serial edges.
     dyndep_files: Vec<GeneratedDyndep>,
+    /// Sidecar paths already staged, deduplicating shared dependencies.
     staged_sidecars: HashSet<Utf8PathBuf>,
 }
 

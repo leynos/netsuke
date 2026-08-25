@@ -1,7 +1,27 @@
-.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-typos-config build release lint lint-clippy lint-whitaker fmt check-fmt typecheck markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load
+.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-typos-config build release lint lint-clippy lint-whitaker doc-coverage doc-coverage-test fmt check-fmt typecheck markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load
+
+PYTHON ?= python3
+RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
+# Export this path before shell probes expand it, so Make does not interpolate
+# an override into the shell command line.
+export RUST_TOOLCHAIN_FILE
+# Threshold and toolchain for the Rustdoc doc-comment coverage gate. The
+# threshold mirrors the 80% bar stated in AGENTS.md; the toolchain recollects
+# the channel from rust-toolchain.toml the same way the dev-fast variables do,
+# so overriding either stays independent.
+DOC_COVERAGE_THRESHOLD ?= 80
+DOC_COVERAGE_TOOLCHAIN ?= $(shell awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/ { print $$2; exit }' "$$RUST_TOOLCHAIN_FILE")
+# Exported rather than interpolated into the recipe line. Passing the values
+# through the environment means a toolchain or threshold containing a quote
+# cannot inject commands into the shell command line; the child script reads
+# them from its environment instead.
+export DOC_COVERAGE_THRESHOLD DOC_COVERAGE_TOOLCHAIN
 
 APP ?= netsuke
 CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$$HOME/.cargo/bin/cargo")
+# CARGO is resolved above before it is exported: `export` alone would define
+# the variable empty and shadow the `?=` fallback for every recipe.
+export CARGO
 # The Polonius borrow-checker flag normally flows from .cargo/config.toml, but
 # any recipe that sets RUSTFLAGS overrides that table and must re-state it.
 POLONIUS_FLAGS ?= -Zpolonius=next
@@ -26,15 +46,14 @@ KANI_VERSION_FILE ?= tools/kani/VERSION
 # separately — dev-fast uses the repository's own nightly.
 MOLD_VERSION_FILE ?= tools/mold/VERSION
 MOLD_SHA256SUMS_FILE ?= tools/mold/SHA256SUMS
-RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 DEV_FAST_CONFIG ?= tools/dev-fast/config.toml
 DEV_FAST_PREFIX ?= $(HOME)/.local
 # Exported rather than interpolated into the recipes. Make hands an exported
 # variable to the child process directly, so a path containing a quote cannot
 # break the command line the shell parses; a `VAR='$(VAR)'` prefix could.
-export MOLD_VERSION_FILE MOLD_SHA256SUMS_FILE RUST_TOOLCHAIN_FILE
+export MOLD_VERSION_FILE MOLD_SHA256SUMS_FILE
 export DEV_FAST_CONFIG DEV_FAST_PREFIX
-DEV_FAST_TOOLCHAIN = $$(awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/ { print $$2; exit }' '$(RUST_TOOLCHAIN_FILE)')
+DEV_FAST_TOOLCHAIN = $$(awk -F'"' '/^[[:space:]]*channel[[:space:]]*=/ { print $$2; exit }' "$$RUST_TOOLCHAIN_FILE")
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 NIXIE ?= nixie
 # Single source of truth for the typos version; the markdownlint target and CI
@@ -65,6 +84,7 @@ MD_FILES_FIND = find . -type f -name '*.md' \
 PROVER_TOOLS_SOURCE ?= git+https://github.com/leynos/rust-prover-tools@b07ef696f8373d54ae68e517d39d47a5d27a5bd5
 PROVER_TOOLS ?= uv tool run --from $(PROVER_TOOLS_SOURCE) prover-tools
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
+export PYTHON POLONIUS_FLAGS RUSTDOC_FLAGS
 VERUS_FLAGS ?=
 VERUS_INSTALL_FLAGS ?=
 WHITAKER ?= whitaker
@@ -106,6 +126,16 @@ lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 	# Run from the crate directory as well so Whitaker loads the narrow
 	# `test_support::fs` exemption from test_support/dylint.toml.
 	cd test_support && DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(POLONIUS_FLAGS)" $(WHITAKER) --all --no-deps --package test_support -- --all-targets --all-features
+
+doc-coverage: doc-coverage-test ## Verify aggregate Rustdoc doc-comment coverage meets the threshold
+	@RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }$${POLONIUS_FLAGS}" RUSTDOCFLAGS="$${RUSTDOC_FLAGS}" \
+		"$${PYTHON}" scripts/doc-coverage.py --toolchain "$$DOC_COVERAGE_TOOLCHAIN" --threshold "$$DOC_COVERAGE_THRESHOLD"
+
+doc-coverage-test: ## Run the pytest suite for scripts/doc-coverage.py
+	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python 3.13 \
+		--with pytest==9.0.2 --with pytest-cov==7.0.0 \
+		python -m pytest scripts/tests/test_doc_coverage.py -c /dev/null \
+		--rootdir=. -p no:cacheprovider --cov=doc_coverage_module
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all

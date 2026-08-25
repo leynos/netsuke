@@ -34,6 +34,9 @@ fn io_message_variant(detail: &str, label: &str) -> IoMessageVariant {
     }
 }
 
+/// Convert an I/O error into a localized `InvalidOperation` diagnostic for
+/// `path` and `action`, varying the message by whether `err` repeats the
+/// label.
 pub(crate) fn io_to_error(path: &Utf8Path, action: &LocalizedMessage, err: io::Error) -> Error {
     let io_kind = err.kind();
     let label = localization::message(io_error_kind_label(io_kind)).to_string();
@@ -69,6 +72,9 @@ pub(crate) fn io_to_error(path: &Utf8Path, action: &LocalizedMessage, err: io::E
     Error::new(ErrorKind::InvalidOperation, message).with_source(err)
 }
 
+/// Convert an I/O error into a localized `InvalidOperation` diagnostic using
+/// the message template `template_key` with `action`, `path`, and error
+/// details.
 pub(crate) fn io_action_error(
     template_key: &'static str,
     action: &LocalizedMessage,
@@ -83,6 +89,7 @@ pub(crate) fn io_action_error(
     Error::new(ErrorKind::InvalidOperation, message).with_source(err)
 }
 
+/// Return the localization key for a human-readable `io::ErrorKind` label.
 const fn io_error_kind_label(kind: IoErrorKind) -> &'static str {
     match kind {
         IoErrorKind::NotFound => keys::STDLIB_PATH_IO_NOT_FOUND,

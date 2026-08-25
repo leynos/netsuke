@@ -1,6 +1,6 @@
 //! Shared host pattern validation helpers.
 //!
-//! The module centralises normalisation and matching logic so CLI parsing and
+//! The module centralizes normalization and matching logic so CLI parsing and
 //! runtime policy evaluation agree on allowable host syntax.
 
 use crate::localization::{self, LocalizedMessage, keys};
@@ -8,33 +8,47 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use thiserror::Error;
 
+/// Wrapper around a raw host pattern string awaiting normalization.
 #[derive(Copy, Clone)]
 struct HostPatternInput<'a>(&'a str);
 
 impl<'a> HostPatternInput<'a> {
+    /// Return the wrapped pattern string.
     const fn as_str(self) -> &'a str {
         self.0
     }
 }
 
+/// Host name presented for matching against a `HostPattern`.
 #[derive(Copy, Clone)]
 pub(crate) struct HostCandidate<'a>(pub(crate) &'a str);
 
 impl<'a> HostCandidate<'a> {
+    /// Return the wrapped host name.
     const fn as_str(self) -> &'a str {
         self.0
     }
 }
 
+/// Shared validation state for one host pattern.
 struct ValidationContext<'a> {
+    /// Original pattern, used in error messages.
     original: HostPatternInput<'a>,
 }
 
 impl<'a> ValidationContext<'a> {
+    /// Build a validation context around the original pattern.
     const fn new(original: HostPatternInput<'a>) -> Self {
         Self { original }
     }
 
+    /// Validate a single DNS label, returning the error for each kind of
+    /// violation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for empty labels, invalid characters, invalid label
+    /// edges, or labels longer than 63 characters.
     fn validate_label(&self, label: &str) -> Result<(), HostPatternError> {
         let original = self.original.as_str();
         if label.is_empty() {
@@ -144,6 +158,14 @@ pub enum HostPatternError {
     },
 }
 
+/// Normalize and validate a host pattern, returning the lowercased body and
+/// wildcard flag.
+///
+/// # Errors
+///
+/// Returns an error for empty patterns, embedded scheme-like prefixes
+/// (`://`), path separators (`/`), a wildcard prefix with no suffix, hosts
+/// that exceed 255 characters, or labels that fail the DNS-label checks.
 fn normalise_host_pattern(input: HostPatternInput<'_>) -> Result<(String, bool), HostPatternError> {
     let trimmed = input.as_str().trim();
     if trimmed.is_empty() {
@@ -179,10 +201,10 @@ fn normalise_host_pattern(input: HostPatternInput<'_>) -> Result<(String, bool),
         (false, trimmed)
     };
 
-    let normalised = host_body.to_ascii_lowercase();
+    let normalized = host_body.to_ascii_lowercase();
     let mut total_len = 0usize;
     let ctx = ValidationContext::new(HostPatternInput(trimmed));
-    for (index, label) in normalised.split('.').enumerate() {
+    for (index, label) in normalized.split('.').enumerate() {
         ctx.validate_label(label)?;
         total_len += label.len() + usize::from(index > 0);
     }
@@ -194,13 +216,15 @@ fn normalise_host_pattern(input: HostPatternInput<'_>) -> Result<(String, bool),
         });
     }
 
-    Ok((normalised, wildcard))
+    Ok((normalized, wildcard))
 }
 
-/// Canonical host pattern storing the normalised body and wildcard flag.
+/// Canonical host pattern storing the normalized body and wildcard flag.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HostPattern {
+    /// Normalized lowercase host body, without the wildcard prefix.
     pub(crate) pattern: String,
+    /// Whether the pattern matches any subdomain of the body.
     pub(crate) wildcard: bool,
 }
 
@@ -212,13 +236,15 @@ impl HostPattern {
     /// Returns an error when the pattern is empty, includes invalid
     /// characters, or uses a wildcard without a suffix.
     pub fn parse(pattern: &str) -> Result<Self, HostPatternError> {
-        let (normalised, wildcard) = normalise_host_pattern(HostPatternInput(pattern))?;
+        let (normalized, wildcard) = normalise_host_pattern(HostPatternInput(pattern))?;
         Ok(Self {
-            pattern: normalised,
+            pattern: normalized,
             wildcard,
         })
     }
 
+    /// Return whether a candidate host matches this pattern. Wildcard patterns
+    /// match subdomains only, never the apex domain itself.
     pub(crate) fn matches(&self, candidate: HostCandidate<'_>) -> bool {
         let host = candidate.as_str().to_ascii_lowercase();
         if self.wildcard {

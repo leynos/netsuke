@@ -17,12 +17,27 @@ use super::super::{
     graph::{Action, BuildEdge, IrGenError, IrHashMap},
 };
 
+#[path = "sort_utils.rs"]
+mod sort_utils;
+
+/// The `$in`/`$out` substitution views for one action under construction.
 #[derive(Clone, Copy)]
 pub(super) struct ActionBindings<'a> {
+    /// Paths the target's recipe consumes via `$in`.
     pub(super) inputs: &'a [Utf8PathBuf],
+    /// Paths the target's recipe produces via `$out`.
     pub(super) outputs: &'a [Utf8PathBuf],
 }
 
+/// Register one action under its content hash, deduplicating identical ones.
+///
+/// Command recipes interpolate their `$in`/`$out` bindings; equivalent
+/// expanded commands share one action hash.
+///
+/// # Errors
+///
+/// Returns [`IrGenError::ActionSerialisation`] when the action cannot be
+/// hashed or serialized.
 pub(super) fn register_action(
     actions: &mut IrHashMap<String, Action>,
     recipe: Recipe,
@@ -100,6 +115,7 @@ pub(super) fn insert_edge_for_outputs(
     }
 }
 
+/// Build the duplicate-output error for the reported colliding paths.
 fn duplicate_output_error_from_paths(dups: Vec<Utf8PathBuf>) -> IrGenError {
     let message = duplicate_outputs_message(&dups);
     IrGenError::DuplicateOutput {
@@ -108,6 +124,7 @@ fn duplicate_output_error_from_paths(dups: Vec<Utf8PathBuf>) -> IrGenError {
     }
 }
 
+/// Localize the duplicate-output message with the offending output paths.
 fn duplicate_outputs_message(dups: &[Utf8PathBuf]) -> localization::LocalizedMessage {
     add_debug_arg(
         localization::message(keys::IR_DUPLICATE_OUTPUTS),
@@ -116,6 +133,7 @@ fn duplicate_outputs_message(dups: &[Utf8PathBuf]) -> localization::LocalizedMes
     )
 }
 
+/// Attach one named argument to a localized message.
 #[cfg(not(kani))]
 fn add_arg<T: ToString + ?Sized>(
     message: localization::LocalizedMessage,
@@ -125,6 +143,8 @@ fn add_arg<T: ToString + ?Sized>(
     message.with_arg(key, value.to_string())
 }
 
+/// Attach one named argument to a localized message; a no-op in the Kani
+/// build.
 #[cfg(kani)]
 fn add_arg<T: ?Sized>(
     message: localization::LocalizedMessage,
@@ -134,6 +154,7 @@ fn add_arg<T: ?Sized>(
     message
 }
 
+/// Attach one debug-formatted argument to a localized message.
 #[cfg(not(kani))]
 fn add_debug_arg(
     message: localization::LocalizedMessage,
@@ -144,6 +165,8 @@ fn add_debug_arg(
     add_arg(message, key, &rendered)
 }
 
+/// Attach one debug-formatted argument to a localized message; a no-op in
+/// the Kani build.
 #[cfg(kani)]
 fn add_debug_arg<T: ?Sized>(
     message: localization::LocalizedMessage,
@@ -179,7 +202,7 @@ pub(super) fn resolve_rule(
             if rules.is_empty() {
                 Err(empty_rule_error(target_name))
             } else {
-                sort_strings(&mut rules);
+                sort_utils::sort_strings(&mut rules);
                 Err(multiple_rules_error(target_name, rules))
             }
         },
@@ -192,6 +215,7 @@ pub(super) fn resolve_rule(
     )
 }
 
+/// Build the empty-rule error for a target that selected no rule.
 fn empty_rule_error(target_name: &str) -> IrGenError {
     IrGenError::EmptyRule {
         target_name: target_name.to_owned(),
@@ -199,6 +223,7 @@ fn empty_rule_error(target_name: &str) -> IrGenError {
     }
 }
 
+/// Build the multiple-rules error for a target selecting several rules.
 fn multiple_rules_error(target_name: &str, rules: Vec<String>) -> IrGenError {
     IrGenError::MultipleRules {
         target_name: target_name.to_owned(),
@@ -207,6 +232,7 @@ fn multiple_rules_error(target_name: &str, rules: Vec<String>) -> IrGenError {
     }
 }
 
+/// Build the rule-not-found error for an unknown single-rule selector.
 fn rule_not_found_error(target_name: &str, rule_name: &str) -> IrGenError {
     IrGenError::RuleNotFound {
         target_name: target_name.to_owned(),
@@ -215,6 +241,7 @@ fn rule_not_found_error(target_name: &str, rule_name: &str) -> IrGenError {
     }
 }
 
+/// Localize the empty-rule message with the target name.
 fn empty_rule_message(target_name: &str) -> localization::LocalizedMessage {
     add_arg(
         localization::message(keys::IR_EMPTY_RULE),
@@ -223,59 +250,18 @@ fn empty_rule_message(target_name: &str) -> localization::LocalizedMessage {
     )
 }
 
+/// Localize the multiple-rules message with the target and rule names.
 fn multiple_rules_message(target_name: &str, rules: &[String]) -> localization::LocalizedMessage {
     let message = localization::message(keys::IR_MULTIPLE_RULES);
     let with_target = add_arg(message, "target", target_name);
     add_debug_arg(with_target, "rules", rules)
 }
 
+/// Localize the rule-not-found message with the target and rule names.
 fn rule_not_found_message(target_name: &str, rule_name: &str) -> localization::LocalizedMessage {
     let message = localization::message(keys::IR_RULE_NOT_FOUND);
     let with_target = add_arg(message, "target", target_name);
     add_arg(with_target, "rule", rule_name)
-}
-
-fn insertion_sort_by<T, F>(values: &mut [T], cmp: F)
-where
-    F: Fn(&T, &T) -> std::cmp::Ordering,
-{
-    let mut index = 1;
-    while index < values.len() {
-        let mut sorted_index = index;
-        while sorted_index > 0 {
-            let swap = values
-                .get(sorted_index)
-                .zip(values.get(sorted_index - 1))
-                .is_some_and(|(cur, prev)| cmp(cur, prev) == std::cmp::Ordering::Less);
-            if !swap {
-                break;
-            }
-            values.swap(sorted_index, sorted_index - 1);
-            sorted_index -= 1;
-        }
-        index += 1;
-    }
-}
-
-fn sort_strings(values: &mut [String]) {
-    insertion_sort_by(values, |a, b| string_cmp(a, b));
-}
-
-#[cfg(not(kani))]
-fn string_cmp(left: &str, right: &str) -> std::cmp::Ordering {
-    left.cmp(right)
-}
-
-#[cfg(kani)]
-fn string_cmp(left: &str, right: &str) -> std::cmp::Ordering {
-    let left = left.as_bytes();
-    let right = right.as_bytes();
-    match (left.first(), right.first()) {
-        (Some(left), Some(right)) => left.cmp(right),
-        (None, Some(_)) => std::cmp::Ordering::Less,
-        (Some(_), None) => std::cmp::Ordering::Greater,
-        (None, None) => std::cmp::Ordering::Equal,
-    }
 }
 
 /// Find output paths that would collide with existing or sibling outputs.
@@ -288,7 +274,8 @@ pub(super) fn find_duplicates(
     let mut index = 0;
     while index < outputs.len() {
         if let Some(output) = outputs.get(index) {
-            if targets.contains_key(output) || has_seen_output(seen.as_slice(), output) {
+            if targets.contains_key(output) || sort_utils::has_seen_output(seen.as_slice(), output)
+            {
                 dups.push(output.clone());
             } else {
                 seen.push(output);
@@ -300,50 +287,14 @@ pub(super) fn find_duplicates(
         None
     } else {
         if dups.len() > 1 {
-            sort_paths(&mut dups);
+            sort_utils::sort_paths(&mut dups);
         }
         Some(dups)
     }
 }
 
-#[cfg(not(kani))]
-fn sort_paths(paths: &mut [Utf8PathBuf]) {
-    insertion_sort_by(paths, path_cmp);
-}
-
-#[cfg(kani)]
-fn sort_paths(_paths: &mut [Utf8PathBuf]) {}
-
-fn has_seen_output(seen: &[&Utf8PathBuf], output: &Utf8PathBuf) -> bool {
-    let mut index = 0;
-    while index < seen.len() {
-        if let Some(candidate) = seen.get(index)
-            && path_eq(candidate, output)
-        {
-            return true;
-        }
-        index += 1;
-    }
-    false
-}
-
-#[cfg(not(kani))]
-fn path_eq(left: &Utf8PathBuf, right: &Utf8PathBuf) -> bool {
-    left.as_str() == right.as_str()
-}
-
-#[cfg(kani)]
-fn path_eq(left: &Utf8PathBuf, right: &Utf8PathBuf) -> bool {
-    let left = left.as_str().as_bytes();
-    let right = right.as_str().as_bytes();
-    left.len() == 1 && right.len() == 1 && left[0] == right[0]
-}
-
-#[cfg(not(kani))]
-fn path_cmp(left: &Utf8PathBuf, right: &Utf8PathBuf) -> std::cmp::Ordering {
-    left.as_str().cmp(right.as_str())
-}
-
+/// Return the first output path as the target's display name, or an empty
+/// string when the target declares no explicit outputs.
 pub(super) fn get_target_display_name(paths: &[Utf8PathBuf]) -> String {
     paths
         .first()

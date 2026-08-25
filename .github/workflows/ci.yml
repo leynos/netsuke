@@ -95,6 +95,11 @@ jobs:
           # shared spelling dictionary below rather than a uv cache with no
           # durable dependency key.
           enable-cache: 'false'
+      - name: Doc coverage
+        # Rustdoc doc-comment coverage across every workspace lib and bin
+        # target, gated on the 80% threshold stated in AGENTS.md. Runs after
+        # `make lint` so it reuses the freshly built doc database.
+        run: make doc-coverage
       - name: Cache shared spelling dictionary
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:

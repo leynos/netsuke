@@ -10,6 +10,11 @@ use crate::localization::keys;
 use crate::result_json;
 use anyhow::{Context, Result};
 
+/// Dispatch a parsed `command` to its subcommand handler.
+///
+/// # Errors
+///
+/// Returns an error when the selected subcommand handler fails.
 pub(super) fn execute(cli: &Cli, command: Commands, context: &ExecutionContext<'_>) -> Result<()> {
     match command {
         Commands::Build(args) => execute_build(cli, &args, context),
@@ -20,6 +25,11 @@ pub(super) fn execute(cli: &Cli, command: Commands, context: &ExecutionContext<'
     }
 }
 
+/// Render help for the requested topic, or the root help when no topic is given.
+///
+/// # Errors
+///
+/// Returns an error when the requested help text cannot be rendered or written.
 pub(super) fn execute_help(
     cli: &Cli,
     args: &HelpArgs,
@@ -35,11 +45,26 @@ pub(super) fn execute_help(
     }
 }
 
+/// Run the build through Ninja and emit its successful JSON result when
+/// `cli.json` is enabled.
+///
+/// # Errors
+///
+/// Returns an error when the build fails or the JSON result cannot be written.
 fn execute_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> Result<()> {
     handle_build(cli, args, context)?;
     write_json_result(cli, "build", None)
 }
 
+/// Generate the Ninja bundle and write it to a file, stdout, or JSON.
+///
+/// The selected output follows the CLI preference: an `--output` path to a
+/// file, the rendered Ninja text to stdout, or the JSON envelope.
+///
+/// # Errors
+///
+/// Returns an error when generation, sidecar publication, pruning, or output
+/// writing fails.
 fn execute_generate(
     cli: &Cli,
     output: Option<&std::path::PathBuf>,
@@ -70,6 +95,12 @@ fn execute_generate(
     json_result
 }
 
+/// Run Ninja's `clean` tool and emit its successful JSON result.
+///
+/// # Errors
+///
+/// Returns an error when the clean tool fails or, when `cli.json` is enabled,
+/// the JSON result cannot be written.
 fn execute_clean(cli: &Cli, context: &ExecutionContext<'_>) -> Result<()> {
     handle_ninja_tool(
         cli,
@@ -83,6 +114,11 @@ fn execute_clean(cli: &Cli, context: &ExecutionContext<'_>) -> Result<()> {
     write_json_result(cli, "clean", None)
 }
 
+/// Render and write the successful JSON result document when `cli.json` is set.
+///
+/// # Errors
+///
+/// Returns an error when JSON serialization or the stdout write fails.
 fn write_json_result(cli: &Cli, command: &str, content: Option<&str>) -> Result<()> {
     if !cli.json {
         return Ok(());

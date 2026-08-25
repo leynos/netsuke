@@ -22,10 +22,15 @@ use tracing::{field, info, info_span, warn};
 /// so individual logging paths do not reconstruct command metadata
 /// inconsistently.
 pub(super) struct CommandLogContext {
+    /// Displayable program name, lossy for non-UTF-8 paths.
     pub(super) program_display: String,
+    /// Redacted command line, safe to log verbatim.
     redacted_command: String,
+    /// Number of redacted arguments shown on the command line.
     arg_count: usize,
+    /// Number of environment overrides applied to the child.
     env_override_count: usize,
+    /// Whether `PATH` itself is among the overrides.
     is_path_overridden: bool,
 }
 
@@ -179,10 +184,12 @@ mod tests {
     use rstest::rstest;
     use tracing_subscriber::filter::LevelFilter;
 
+    /// Build the command-log context used by logging tests.
     fn logging_context() -> CommandLogContext {
         CommandLogContext::from_command(&Command::new("ninja"))
     }
 
+    /// Capture the execution event emitted for `operation`.
     fn captured_execution_event(operation: &str) -> String {
         crate::test_tracing_capture::with_test_subscriber(LevelFilter::INFO, |captured| {
             log_command_execution(&logging_context(), operation, StderrMode::Forward);
@@ -224,6 +231,7 @@ mod tests {
     #[rstest]
     #[case::build("build")]
     #[case::named_tool("clean")]
+    /// Verify execution logging preserves its operation label.
     fn execution_logging_preserves_operation_label(#[case] operation: &str) {
         let event = captured_execution_event(operation);
 
@@ -237,6 +245,7 @@ mod tests {
         );
     }
 
+    /// Build a failing Unix exit status for logging tests.
     #[cfg(unix)]
     fn failed_exit_status() -> ExitStatus {
         use std::os::unix::process::ExitStatusExt;
@@ -244,6 +253,7 @@ mod tests {
         ExitStatus::from_raw(1 << 8)
     }
 
+    /// Build a failing Windows exit status for logging tests.
     #[cfg(windows)]
     fn failed_exit_status() -> ExitStatus {
         use std::os::windows::process::ExitStatusExt;
@@ -251,6 +261,7 @@ mod tests {
         ExitStatus::from_raw(1)
     }
 
+    /// Verify exit failures record status diagnostics.
     #[test]
     fn exit_failure_logging_records_status_diagnostics() {
         let event =

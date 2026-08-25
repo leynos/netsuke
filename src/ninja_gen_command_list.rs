@@ -131,6 +131,8 @@ struct CommandEvaluator {
     exec_success_fragment: &'static str,
 }
 
+/// Build the evaluator for one entry, retaining subprocess replacement on a
+/// direct `exec`.
 fn command_evaluator(command: CommandListEntry<'_>) -> CommandEvaluator {
     let quoted = shell_single_quote(command);
     if exec_boundary(command) == ExecBoundary::Direct {
@@ -146,6 +148,7 @@ fn command_evaluator(command: CommandListEntry<'_>) -> CommandEvaluator {
     }
 }
 
+/// How an `exec` keyword sits within a command-list entry.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ExecBoundary {
     /// The entry does not contain `exec` in a shell command position.
@@ -178,6 +181,8 @@ impl ShellWords {
             .unwrap_or(ExecBoundary::None)
     }
 
+    /// Classify `exec` at `index`: `Direct` when it is the first simple command,
+    /// `Unsupported` when a wrapper position hides it, else `None`.
     fn exec_boundary_at(
         &self,
         index: usize,
@@ -232,6 +237,12 @@ impl ShellWords {
         self.background_job_count_at_depth(0)
     }
 
+    /// Count background jobs reachable at `depth`, recursing into static `eval` payloads.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`UnanalyzableEval`] when nested evaluation cannot be analysed
+    /// or when the accumulated job count overflows.
     fn background_job_count_at_depth(&self, depth: usize) -> Result<usize, UnanalyzableEval> {
         self.0
             .iter()
@@ -245,6 +256,13 @@ impl ShellWords {
             })
     }
 
+    /// Count background jobs in the static payload of the `eval` at `index`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`UnanalyzableEval`] when the nesting depth limit is reached,
+    /// the payload contains dynamic expansion, shell parsing fails, or the
+    /// resulting job count overflows.
     fn background_jobs_from_eval(
         &self,
         index: usize,

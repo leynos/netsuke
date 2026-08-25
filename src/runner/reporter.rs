@@ -10,13 +10,19 @@ use crate::status::{
 /// progress preference, verbose preference, and output preferences.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct ReporterOptions {
+    /// Resolved output mode driving the concrete reporter choice.
     pub(super) mode: OutputMode,
+    /// Whether the command may show progress updates.
     pub(super) progress_enabled: bool,
+    /// Whether the reporter should time and report each stage.
     pub(super) verbose: bool,
+    /// Theme and accessibility output preferences for the reporter.
     pub(super) prefs: OutputPrefs,
+    /// Whether stdout is a terminal, steering progress formatting.
     pub(super) stdout_is_tty: bool,
 }
 
+/// Build the `StatusReporter` matching the resolved output settings.
 pub(super) fn make_reporter(options: ReporterOptions) -> Box<dyn StatusReporter> {
     let base: Box<dyn StatusReporter> = if options.progress_enabled {
         let force_text_task_updates =
@@ -39,6 +45,7 @@ pub(super) fn make_reporter(options: ReporterOptions) -> Box<dyn StatusReporter>
     }
 }
 
+/// Whether task updates must render as plain text rather than live UI.
 const fn should_force_text_task_updates(mode: OutputMode, stdout_is_tty: bool) -> bool {
     mode.is_accessible() || !stdout_is_tty
 }

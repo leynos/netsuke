@@ -20,7 +20,9 @@ use super::{
 
 /// Cached diagnostic resolution carried into the full configuration merge.
 struct ResolvedDiagnosticMode {
+    /// The diagnostic mode resolved during startup.
     mode: DiagMode,
+    /// File layers preserved from the shared discovery pass.
     discovered_layers: cli::DiscoveredLayers,
 }
 
@@ -32,10 +34,15 @@ pub(super) struct ConfigurationLoadContext<'a, E>
 where
     E: cli::ConfigEnvProvider,
 {
+    /// CLI values parsed before configuration was discovered.
     pub(super) parsed_cli: &'a cli::Cli,
+    /// Clap argument matches backing the parsed CLI values.
     pub(super) matches: &'a ArgMatches,
+    /// Diagnostic mode used when startup configuration resolution fails.
     pub(super) startup_mode: DiagMode,
+    /// Writes startup diagnostics before tracing is configured.
     pub(super) startup_writer: &'a StartupWriter,
+    /// Environment provider consulted during configuration discovery and merge.
     pub(super) config_env: &'a E,
 }
 
@@ -43,6 +50,11 @@ where
 ///
 /// The measured interval starts immediately before diagnostic-mode resolution
 /// and ends after either that resolution or the full configuration merge.
+///
+/// # Errors
+///
+/// Returns a failure [`ExitCode`] when diagnostic-mode resolution or the
+/// subsequent configuration merge fails.
 pub(super) fn resolve_configuration<E>(
     context: &ConfigurationLoadContext<'_, E>,
     clock: &impl MonotonicClock,
@@ -101,6 +113,11 @@ pub(super) fn config_err_to_exit(
 /// The diagnostic-mode phase is timed with the injected [`MonotonicClock`].
 /// Resolution failures select the fallback mode's filter and return a failure
 /// [`ExitCode`] through [`config_err_to_exit`].
+///
+/// # Errors
+///
+/// Returns a failure [`ExitCode`] when config discovery or JSON preference
+/// resolution fails.
 fn resolve_json_mode_or_exit<E>(
     context: &ConfigurationLoadContext<'_, E>,
     clock: &impl MonotonicClock,
@@ -149,6 +166,11 @@ where
 ///
 /// The merge is timed with the injected [`MonotonicClock`], applies the default
 /// command, and maps configuration failures to a failure [`ExitCode`].
+///
+/// # Errors
+///
+/// Returns a failure [`ExitCode`] when merging the discovered layers with the
+/// CLI values fails.
 fn merge_cli_or_exit<E>(
     context: &ConfigurationLoadContext<'_, E>,
     resolution: ResolvedDiagnosticMode,

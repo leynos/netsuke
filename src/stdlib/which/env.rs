@@ -3,17 +3,25 @@
 use std::ffi::{OsStr, OsString};
 
 use camino::{Utf8Path, Utf8PathBuf};
-#[cfg(any(windows, test))]
-use indexmap::IndexSet;
 use mockable::{DefaultEnv, Env};
-
-use crate::localization::{self, keys};
 
 use super::{
     options::CwdMode,
     resolve_error::ResolveError,
     workspace_switch::{WORKSPACE_FALLBACK_ENV, WorkspaceSwitch},
 };
+
+/// Keep path parsing and Windows candidate construction below the module cap.
+#[path = "env_path_support.rs"]
+mod path_support;
+
+#[cfg(test)]
+pub(super) use path_support::DEFAULT_PATHEXT;
+#[cfg(windows)]
+pub(super) use path_support::candidate_paths;
+#[cfg(any(windows, test))]
+pub(super) use path_support::parse_pathext;
+use path_support::{PathEntry, current_dir_utf8, parse_path_entries};
 
 /// Translate a platform reading of the switch into its domain state.
 ///
@@ -49,12 +57,18 @@ fn capture_workspace_switch(env: &impl Env) -> WorkspaceSwitch {
     switch
 }
 
+/// Snapshot of the environment inputs one `which` resolution consults.
 #[derive(Clone, Debug)]
 pub(super) struct EnvSnapshot {
+    /// The working directory resolutions run from.
     pub(super) cwd: Utf8PathBuf,
+    /// The raw `PATH` value, when one was present.
     pub(super) raw_path: Option<OsString>,
+    /// The raw `PATHEXT` value, when one was present.
     pub(super) raw_pathext: Option<OsString>,
+    /// The parsed `PATH` directory entries in search order.
     entries: Vec<PathEntry>,
+    /// The parsed executable extensions, on Windows.
     #[cfg(windows)]
     pathext: Vec<String>,
     /// The `NETSUKE_WHICH_WORKSPACE` state captured for this snapshot.
@@ -153,6 +167,8 @@ impl EnvSnapshot {
         Self::capture(cwd_override, path_override)
     }
 
+    /// Capture a snapshot on platforms without `PATHEXT` semantics.
+    /// # Errors: returns a [`ResolveError`] when the working directory, `PATH`, or directory entries cannot be read.
     #[cfg(not(windows))]
     fn capture_impl(
         cwd_override: Option<&Utf8Path>,
@@ -170,6 +186,8 @@ impl EnvSnapshot {
         })
     }
 
+    /// Capture a snapshot on Windows, including the parsed extension list.
+    /// # Errors: returns a [`ResolveError`] when the working directory, `PATH`, directory entries, or Windows candidate paths cannot be read or derived.
     #[cfg(windows)]
     fn capture_impl(
         cwd_override: Option<&Utf8Path>,
@@ -222,6 +240,7 @@ impl EnvSnapshot {
         dirs
     }
 
+    /// Return the parsed executable extensions.
     #[cfg(windows)]
     pub(super) fn pathext(&self) -> &[String] {
         &self.pathext
@@ -249,6 +268,8 @@ impl EnvSnapshot {
     }
 }
 
+/// Read the working directory, `PATH`, and directory entries shared by all snapshots.
+/// # Errors: returns a [`ResolveError`] when the working directory cannot be resolved, the `PATH` values cannot be read or parsed, or a directory cannot be read.
 fn capture_common(
     cwd_override: Option<&Utf8Path>,
     path_override: Option<&OsStr>,
@@ -264,123 +285,6 @@ fn capture_common(
         .or_else(|| env.os_string("PATH"));
     let entries = parse_path_entries(raw_path.as_deref(), &cwd)?;
     Ok((cwd, raw_path, entries))
-}
-
-#[derive(Clone, Debug)]
-enum PathEntry {
-    Dir(Utf8PathBuf),
-    CurrentDir,
-}
-
-fn parse_path_entries(raw: Option<&OsStr>, cwd: &Utf8Path) -> Result<Vec<PathEntry>, ResolveError> {
-    let mut entries = Vec::new();
-    let Some(raw_value) = raw else {
-        return Ok(entries);
-    };
-    for (index, component) in std::env::split_paths(raw_value).enumerate() {
-        if component.as_os_str().is_empty() {
-            entries.push(PathEntry::CurrentDir);
-            continue;
-        }
-        let utf8 = Utf8PathBuf::from_path_buf(component).map_err(|_| {
-            ResolveError::args(
-                localization::message(keys::STDLIB_WHICH_PATH_ENTRY_NON_UTF8)
-                    .with_arg("index", index),
-            )
-        })?;
-        let resolved = if utf8.is_absolute() {
-            utf8
-        } else {
-            cwd.join(utf8)
-        };
-        entries.push(PathEntry::Dir(resolved));
-    }
-    Ok(entries)
-}
-
-/// Extensions Windows treats as executable when `PATHEXT` is unset or empty.
-///
-/// Compiled on Windows and under `test`, alongside [`parse_pathext`], which
-/// falls back to it.
-#[cfg(any(windows, test))]
-pub(super) const DEFAULT_PATHEXT: &[&str] = &[
-    ".com", ".exe", ".bat", ".cmd", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh", ".msc",
-];
-
-/// Own the built-in list so the fallback has a single construction site.
-///
-/// The entries are already lowercase and dot-prefixed, so they need no further
-/// normalization.
-#[cfg(any(windows, test))]
-fn default_pathext() -> Vec<String> {
-    DEFAULT_PATHEXT.iter().copied().map(String::from).collect()
-}
-
-/// Normalize a raw `PATHEXT` value into lowercase, dot-prefixed extensions.
-///
-/// Pure string handling, consulted only by the Windows snapshot but compiled
-/// on Windows *and* under `test`. Gated to `#[cfg(windows)]` alone, its
-/// normalization — lowercasing, inserting missing leading dots, trimming,
-/// de-duplicating, and falling back to the built-in list when the value yields
-/// nothing — could not be exercised from the Unix CI host at all, so every rule
-/// it implements went unverified on the platform where the suite actually runs.
-/// Compiled unconditionally it would instead be dead code in a Unix release
-/// build, which `-D warnings` rejects.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// // Values are lowercased, given a leading dot, and de-duplicated.
-/// assert_eq!(parse_pathext(Some(OsStr::new("COM;.com"))), vec![".com"]);
-/// ```
-#[cfg(any(windows, test))]
-pub(super) fn parse_pathext(raw: Option<&OsStr>) -> Vec<String> {
-    let mut dedup = IndexSet::new();
-    let source = raw.map_or_else(
-        || DEFAULT_PATHEXT.join(";"),
-        |value| value.to_string_lossy().into_owned(),
-    );
-    for segment in source.split(';') {
-        let trimmed = segment.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        let mut normalised = trimmed.to_ascii_lowercase();
-        if !normalised.starts_with('.') {
-            normalised.insert(0, '.');
-        }
-        dedup.insert(normalised);
-    }
-    if dedup.is_empty() {
-        default_pathext()
-    } else {
-        dedup.into_iter().collect()
-    }
-}
-
-pub(super) fn current_dir_utf8() -> Result<Utf8PathBuf, ResolveError> {
-    let cwd = std::env::current_dir().map_err(|source| ResolveError::CwdResolve { source })?;
-    Utf8PathBuf::from_path_buf(cwd).map_err(|_| ResolveError::CwdNonUtf8)
-}
-
-#[cfg(windows)]
-pub(super) fn candidate_paths(
-    dir: &Utf8Path,
-    command: &str,
-    pathext: &[String],
-) -> Vec<Utf8PathBuf> {
-    let mut paths = Vec::new();
-    let base = dir.join(command);
-    if Utf8Path::new(command).extension().is_some() {
-        paths.push(base);
-        return paths;
-    }
-    for ext in pathext {
-        let mut candidate = base.as_str().to_owned();
-        candidate.push_str(ext);
-        paths.push(Utf8PathBuf::from(candidate));
-    }
-    paths
 }
 
 #[cfg(all(test, not(windows)))]

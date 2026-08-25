@@ -8,6 +8,7 @@ use crate::localization::{self, keys};
 use anyhow::{Context, Result, anyhow, ensure};
 use minijinja::ErrorKind;
 use rstest::rstest;
+use test_support::fluent::normalize_fluent_isolates;
 
 /// Helper to assert that a pattern produces a syntax error.
 fn assert_syntax_error(pattern: &str, context_msg: &str) -> Result<()> {
@@ -63,6 +64,22 @@ fn normalize_separators_handles_escaped_tokens() {
         let normalized = normalize_separators(input);
         assert_eq!(normalized, expected, "input {input}");
     }
+}
+
+/// Assert that the diagnostic points at the `{` that never closes, not a
+/// matched sibling brace.
+#[test]
+fn validate_brace_matching_reports_the_outermost_unclosed_brace() -> Result<()> {
+    let pattern = "{{}";
+    let err = validate_brace_matching(pattern)
+        .err()
+        .context("pattern {{} should fail brace validation")?;
+    let message = normalize_fluent_isolates(&err.to_string());
+    ensure!(
+        message.contains("position 0"),
+        "expected the outermost opening brace at position 0, got: {message}"
+    );
+    Ok(())
 }
 
 #[test]

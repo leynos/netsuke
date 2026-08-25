@@ -18,6 +18,13 @@ use super::{
 ///
 /// Sets up stdout/stderr pipes for streaming. Callers append targets or tool
 /// flags after this function returns.
+///
+/// # Errors
+///
+/// Returns an I/O error only when working-directory canonicalization fails or
+/// the build-file path remains non-UTF-8 after the fallback. Build and tool
+/// helpers tolerate build-file canonicalization failure when the original path
+/// is valid UTF-8.
 fn configure_ninja_base(
     cmd: &mut Command,
     options: &NinjaProcessOptions,
@@ -49,6 +56,14 @@ fn configure_ninja_base(
     Ok(())
 }
 
+/// Configure a Ninja build command from `request`, appending its targets.
+///
+/// # Errors
+///
+/// Build-file canonicalization failure is tolerated when the original path is
+/// valid UTF-8. Returns an error when working-directory canonicalization fails
+/// or when the build-file path cannot be represented as UTF-8 after that
+/// fallback.
 pub(super) fn configure_ninja_build_command(
     cmd: &mut Command,
     request: &NinjaBuildRequest<'_>,
@@ -59,6 +74,14 @@ pub(super) fn configure_ninja_build_command(
     Ok(())
 }
 
+/// Configure a Ninja tool command from `request`, appending the tool name.
+///
+/// # Errors
+///
+/// Build-file canonicalization failure is tolerated when the original path is
+/// valid UTF-8. Returns an error when working-directory canonicalization fails
+/// or when the build-file path cannot be represented as UTF-8 after that
+/// fallback.
 pub(super) fn configure_ninja_tool_command(
     cmd: &mut Command,
     request: &NinjaToolRequest<'_>,

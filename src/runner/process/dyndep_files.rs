@@ -89,10 +89,14 @@ fn materialize_one_inner(dir: &Dir, sidecar: &GeneratedDyndep) -> Result<()> {
     }
 }
 
+/// Result of comparing an existing sidecar with its expected content.
 #[derive(PartialEq)]
 enum ReadOutcome {
+    /// Existing sidecar bytes match the expected content.
     Matching,
+    /// Existing sidecar bytes differ or changed while being read.
     Mismatch,
+    /// No sidecar exists yet.
     Missing,
 }
 
@@ -106,6 +110,12 @@ fn read_verified(dir: &Dir, rel: &Utf8Path, expected: &str) -> Result<ReadOutcom
     Ok(content_outcome(&content, expected, grew_while_reading))
 }
 
+/// Open an existing sidecar for reading, mapping a missing file to `None`.
+///
+/// # Errors
+///
+/// Returns an error when the sidecar cannot be read for any reason other than
+/// its absence.
 fn open_existing_sidecar(dir: &Dir, rel: &Utf8Path) -> Result<Option<cap_std::fs_utf8::File>> {
     let mut options = OpenOptions::new();
     options.read(true);
@@ -118,6 +128,12 @@ fn open_existing_sidecar(dir: &Dir, rel: &Utf8Path) -> Result<Option<cap_std::fs
     }
 }
 
+/// Return the existing sidecar's byte length, rejecting oversize files.
+///
+/// # Errors
+///
+/// Returns an error when the file metadata cannot be read or the size exceeds
+/// the accepted verification ceiling.
 fn verified_sidecar_size(file: &cap_std::fs_utf8::File, rel: &Utf8Path) -> Result<u64> {
     let size = file
         .metadata()
@@ -135,6 +151,14 @@ fn verified_sidecar_size(file: &cap_std::fs_utf8::File, rel: &Utf8Path) -> Resul
     Ok(size)
 }
 
+/// Read exactly the verified byte count, flagging growth beyond it.
+///
+/// The returned flag tells the caller whether the file grew past the verified
+/// size while being read, which would make a byte match untrustworthy.
+///
+/// # Errors
+///
+/// Returns an error when the sidecar cannot be read.
 fn read_sidecar_content(
     file: &mut cap_std::fs_utf8::File,
     size: u64,
@@ -157,6 +181,7 @@ fn read_sidecar_content(
     Ok((buf, grew_while_reading))
 }
 
+/// Classify read content as matching only when it is exact and stable.
 fn content_outcome(content: &[u8], expected: &str, grew_while_reading: bool) -> ReadOutcome {
     if !grew_while_reading && content == expected.as_bytes() {
         ReadOutcome::Matching
@@ -254,8 +279,11 @@ fn rename_temp_file(dir: &Dir, temp: &Utf8Path, rel: &Utf8Path, content: &str) -
 
 /// Paths and expected content for one failed same-directory rename.
 struct RenameAttempt<'a> {
+    /// Same-directory temporary path of the finished sidecar.
     temp: &'a Utf8Path,
+    /// Final sidecar-relative destination path.
     rel: &'a Utf8Path,
+    /// Expected content, used to verify a concurrent writer's result.
     content: &'a str,
 }
 
@@ -279,16 +307,19 @@ fn handle_rename_failure(
 
 /// Operation-scoped source of same-directory temporary path candidates.
 ///
-/// This private source is used only by dyndep publication. Its nonce separates
-/// concurrent operations, while its local sequence supports bounded collision
-/// retries without process-global mutable state. `create_new` remains the
-/// authority that decides whether each candidate is available.
+/// This private source is used only by dyndep publication. Its nonce is a
+/// best-effort collision-reduction suffix, while its local sequence supports
+/// bounded retries without process-global mutable state. `create_new` remains
+/// the authority that decides whether each candidate is available.
 struct TempNameSource {
+    /// Best-effort suffix that reduces candidate-name collisions.
     nonce: String,
+    /// Local candidate counter for bounded collision retries.
     sequence: u64,
 }
 
 impl TempNameSource {
+    /// Build an operation-scoped source with a best-effort nonce.
     fn for_operation() -> Self {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -305,10 +336,12 @@ impl TempNameSource {
         Self::new(nonce)
     }
 
+    /// Construct a source from a caller-supplied nonce.
     const fn new(nonce: String) -> Self {
         Self { nonce, sequence: 0 }
     }
 
+    /// Return the next candidate temporary path beside `rel`.
     fn next_name(&mut self, rel: &Utf8Path) -> Utf8PathBuf {
         let name = rel.file_name().unwrap_or("sidecar.dd");
         let sequence = self.sequence;

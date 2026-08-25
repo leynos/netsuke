@@ -57,12 +57,16 @@ pub(super) enum ProjectScopeTrace {
     Included(BoundedConfigPath),
     /// The project configuration was loaded by the second pass.
     Appended {
+        /// Project config path loaded by the fallback pass.
         path: BoundedConfigPath,
+        /// Bounded de-duplication outcome, when one was recorded.
         deduplication: Option<ProjectLayerDeduplication>,
     },
     /// The second pass found only layers already returned by discovery.
     Deduplicated {
+        /// Project config path already returned by the primary scan.
         path: BoundedConfigPath,
+        /// Bounded de-duplication outcome for the repeated project layer.
         deduplication: ProjectLayerDeduplication,
     },
 }
@@ -254,6 +258,8 @@ fn merge_project_scope_layers(
         Err(err) => (Some(error_trace), Err(err)),
     }
 }
+/// Return the expected project-scope configuration file path, or `None` when
+/// no working directory is available.
 fn project_scope_file(directory: Option<&Path>) -> Option<PathBuf> {
     let root = directory
         .map(PathBuf::from)
@@ -261,6 +267,11 @@ fn project_scope_file(directory: Option<&Path>) -> Option<PathBuf> {
     Some(root.join(".netsuke.toml"))
 }
 
+/// Load the project-scope layers rooted at `project_file`, if one was found.
+///
+/// # Errors
+///
+/// Returns an error when the project file cannot be loaded.
 fn project_scope_layers(project_file: Option<&Path>) -> OrthoResult<Vec<MergeLayer<'static>>> {
     let Some(path) = project_file else {
         return Ok(Vec::new());

@@ -6,13 +6,19 @@ use std::io::{self, Read, Write};
 /// Forwarding statistics for a child output stream.
 #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
 pub(super) struct ForwardStats {
+    /// Bytes consumed from the child stream.
     pub(super) bytes_read: usize,
+    /// Bytes accepted by the forwarding writer.
     pub(super) bytes_written: usize,
+    /// Whether the forwarding writer failed, truncating output.
     pub(super) write_failed: bool,
 }
 
+/// Read wrapper that counts bytes surfaced to the caller.
 struct CountingReader<'a, R> {
+    /// Wrapped reader.
     inner: &'a mut R,
+    /// Saturating count of bytes read so far.
     read: u64,
 }
 
@@ -24,8 +30,11 @@ impl<R: Read> Read for CountingReader<'_, R> {
     }
 }
 
+/// Write wrapper that counts bytes accepted by the wrapped writer.
 struct CountingWriter<'a, W> {
+    /// Wrapped writer.
     inner: &'a mut W,
+    /// Saturating count of bytes written so far.
     written: u64,
 }
 
@@ -41,14 +50,20 @@ impl<W: Write> Write for CountingWriter<'_, W> {
     }
 }
 
+/// Read wrapper that parses Ninja status lines and reports monotonic progress.
 struct NinjaStatusParsingReader<'a, R, F> {
+    /// Wrapped reader.
     inner: &'a mut R,
+    /// Tracker rejecting regressive or inconsistent status updates.
     tracker: NinjaTaskProgressTracker,
+    /// Bytes of the status line currently being assembled.
     pending_line: Vec<u8>,
+    /// Callback receiving accepted `(current, total, description)` updates.
     observer: &'a mut F,
 }
 
 impl<R, F> NinjaStatusParsingReader<'_, R, F> {
+    /// Split `bytes` into complete lines, finishing each one when it ends.
     fn consume_bytes(&mut self, bytes: &[u8])
     where
         F: FnMut(u32, u32, &str),
@@ -62,6 +77,7 @@ impl<R, F> NinjaStatusParsingReader<'_, R, F> {
         }
     }
 
+    /// Report the pending line as progress when it parses and passes the tracker.
     fn finish_line(&mut self)
     where
         F: FnMut(u32, u32, &str),
@@ -96,10 +112,12 @@ where
     }
 }
 
+/// Convert a byte count to `usize` with saturation.
 fn clamp_u64_to_usize(value: u64) -> usize {
     usize::try_from(value).unwrap_or(usize::MAX)
 }
 
+/// Copy `reader` to `writer`, tracking statistics and draining on failure.
 fn copy_with_stats<R, W>(reader: &mut R, writer: &mut W, stream_name: &'static str) -> ForwardStats
 where
     R: Read,

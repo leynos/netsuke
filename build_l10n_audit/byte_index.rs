@@ -21,6 +21,7 @@ impl ByteIndex {
         Self(offset)
     }
 
+    /// The wrapped offset as a `usize`.
     pub(crate) const fn get(self) -> usize {
         self.0
     }

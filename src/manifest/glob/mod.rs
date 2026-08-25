@@ -11,7 +11,7 @@
 //! - `validate` rejects unbalanced braces before any filesystem access.
 //! - `normalize` maps separators onto the platform's and, on Unix, rewrites
 //!   backslash escapes into the bracket classes the `glob` crate understands.
-//!   [`GlobPattern`] pairs the caller's text with that normalised form.
+//!   [`GlobPattern`] pairs the caller's text with that normalized form.
 //! - `walk` owns the filesystem side: it computes the pattern's literal
 //!   directory prefix, opens a capability-scoped `cap_std` handle there, and
 //!   runs the metadata check that filters each match.
@@ -40,14 +40,16 @@ use walk::{open_root_dir, process_glob_entry};
 use normalize::force_literal_escapes;
 
 #[derive(Debug, Clone)]
-/// A glob pattern and its normalised representation.
+/// A glob pattern and its normalized representation.
 struct GlobPattern {
+    /// Pattern text as provided by the caller.
     raw: String,
+    /// Platform-normalized pattern used for globbing.
     normalized: String,
 }
 
 impl GlobPattern {
-    /// Access the pattern as provided by the caller.
+    /// Access the pattern text as provided by the caller.
     #[must_use]
     #[expect(
         clippy::missing_const_for_fn,
@@ -57,7 +59,7 @@ impl GlobPattern {
         self.raw.as_str()
     }
 
-    /// Access the platform-normalised pattern suitable for globbing.
+    /// Access the platform-normalized pattern suitable for globbing.
     #[must_use]
     #[expect(
         clippy::missing_const_for_fn,
@@ -67,7 +69,7 @@ impl GlobPattern {
         self.normalized.as_str()
     }
 
-    /// Validate and normalise a glob pattern, preventing inconsistent state.
+    /// Validate and normalize a glob pattern, preventing inconsistent state.
     ///
     /// # Errors
     ///
@@ -104,14 +106,19 @@ type GlobEntryResult = std::result::Result<std::path::PathBuf, glob::GlobError>;
 
 /// A completed glob expansion and the bounded outcomes it observed.
 pub(super) struct GlobExpansion {
+    /// Matched file paths in walker order.
     paths: Vec<String>,
+    /// How the expansion terminated.
     outcome: GlobOutcome,
+    /// Bounded observations of entries omitted from the paths.
     skipped: GlobSkippedEntries,
 }
 
 /// Terminal outcome of a glob expansion.
 enum GlobOutcome {
+    /// The pattern was expanded to completion.
     Matched,
+    /// The pattern's literal directory prefix could not be opened.
     UnopenablePrefix,
 }
 
@@ -121,8 +128,11 @@ const MAX_UNREACHABLE_SYMLINK_SAMPLES: usize = 4;
 /// Bounded diagnostic data about entries omitted from an expansion.
 #[derive(Default)]
 struct GlobSkippedEntries {
+    /// Number of matches the capability could not resolve through symlinks.
     unreachable_symlinks: usize,
+    /// Short bounded sample of skipped symlink paths, retained for tracing.
     unreachable_symlink_samples: Vec<camino::Utf8PathBuf>,
+    /// Number of matches that do not name a regular file.
     not_a_file: usize,
 }
 
@@ -144,8 +154,11 @@ impl GlobSkippedEntries {
 /// Entry selected by the capability-scoped metadata query.
 #[derive(Debug)]
 pub(super) enum GlobEntry {
+    /// A matched regular file path with separators normalized to `/`.
     Path(String),
+    /// A symlink the capability cannot resolve, given relative to the prefix.
     UnreachableSymlink(camino::Utf8PathBuf),
+    /// The match does not name a regular file.
     NotAFile,
 }
 

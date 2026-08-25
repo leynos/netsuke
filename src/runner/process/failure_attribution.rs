@@ -26,13 +26,17 @@ where
 /// tail lets the process boundary recover the generated failure marker after a
 /// non-zero exit without examining or line-buffering ordinary command output.
 pub(super) struct NinjaFailureOutputTail<W> {
+    /// Wrapped writer receiving the full forwarded output.
     inner: W,
+    /// Retained fixed-size byte tail of the forwarded output.
     tail: Vec<u8>,
 }
 
 impl<W> NinjaFailureOutputTail<W> {
+    /// Maximum number of trailing output bytes retained for a failure report.
     const MAX_TAIL_BYTES: usize = 512;
 
+    /// Wrap `inner`, retaining an initially empty output tail.
     pub(super) fn new(inner: W) -> Self {
         Self {
             inner,
@@ -53,6 +57,7 @@ impl<W> NinjaFailureOutputTail<W> {
         self.tail.len()
     }
 
+    /// Merge `bytes` into the tail, keeping at most `MAX_TAIL_BYTES`.
     fn retain_tail(&mut self, bytes: &[u8]) {
         if bytes.len() >= Self::MAX_TAIL_BYTES {
             self.tail.clear();
@@ -86,16 +91,22 @@ impl<W: Write> Write for NinjaFailureOutputTail<W> {
     }
 }
 
+/// Writer forwarding bytes while observing bounded command-list failure markers.
 pub(super) struct FailureAttributionWriter<W> {
+    /// Wrapped writer receiving the full forwarded output.
     inner: W,
+    /// Bytes of the current line, capped at `MAX_LINE_BYTES`.
     pending: Vec<u8>,
+    /// Last attributed failure marker observed, if any.
     failure: Option<CommandListFailure>,
 }
 
 /// Safe, fixed-shape failure details emitted by command-list lowering.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct CommandListFailure {
+    /// Stable hashed action identity, never the manifest command content.
     action_identity: String,
+    /// One-based command-list entry position.
     entry_index: usize,
 }
 
@@ -122,8 +133,10 @@ impl std::fmt::Display for CommandListFailure {
 }
 
 impl<W> FailureAttributionWriter<W> {
+    /// Maximum length of one retained snippet line, in bytes.
     const MAX_LINE_BYTES: usize = 128;
 
+    /// Wrap `inner` with no attribution observed yet.
     pub(super) const fn new(inner: W) -> Self {
         Self {
             inner,
@@ -132,10 +145,12 @@ impl<W> FailureAttributionWriter<W> {
         }
     }
 
+    /// Consume the writer and return the last attributed failure marker.
     pub(super) fn into_failure(self) -> Option<CommandListFailure> {
         self.failure
     }
 
+    /// Split `bytes` into lines, recording each completed line.
     fn observe(&mut self, bytes: &[u8]) {
         for byte in bytes {
             if *byte == b'\n' {
@@ -147,6 +162,7 @@ impl<W> FailureAttributionWriter<W> {
         }
     }
 
+    /// Record the pending line as an attribution when it carries a marker.
     fn record_line(&mut self) {
         if let Some(failure) = parse_marker(&self.pending) {
             self.failure = Some(failure);
@@ -154,6 +170,7 @@ impl<W> FailureAttributionWriter<W> {
     }
 }
 
+/// Parse a bounded command-list failure marker from one line of bytes.
 fn parse_marker(bytes: &[u8]) -> Option<CommandListFailure> {
     let line = std::str::from_utf8(bytes).ok()?;
     let (action, entry_text) = line
@@ -170,6 +187,7 @@ fn parse_marker(bytes: &[u8]) -> Option<CommandListFailure> {
     }
 }
 
+/// Return whether `value` has the fixed 64-hex-digit action identity shape.
 fn is_action_identity(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }

@@ -3,21 +3,31 @@ use minijinja::{Error, ErrorKind};
 
 use crate::localization::{self, keys};
 
+/// Context describing a glob pattern failure.
 #[derive(Debug)]
 pub(super) struct GlobErrorContext {
+    /// Raw pattern that failed to expand.
     pub(super) pattern: String,
+    /// Offending character, when the failure names one.
     pub(super) error_char: char,
+    /// Byte position of the offending character within the pattern.
     pub(super) position: usize,
+    /// Classification of the failure.
     pub(super) error_type: GlobErrorType,
 }
 
+/// Classification of a glob pattern failure.
 #[derive(Debug)]
 pub(super) enum GlobErrorType {
+    /// A brace without its matching counterpart.
     UnmatchedBrace,
+    /// Pattern syntax that the glob matcher rejects.
     InvalidPattern,
+    /// A filesystem operation failed while expanding the pattern.
     IoError,
 }
 
+/// Build a `minijinja` error for a glob context with an optional detail string.
 pub(super) fn create_glob_error(context: &GlobErrorContext, details: Option<String>) -> Error {
     match context.error_type {
         GlobErrorType::UnmatchedBrace => Error::new(
@@ -55,6 +65,7 @@ pub(super) fn create_glob_error(context: &GlobErrorContext, details: Option<Stri
     }
 }
 
+/// Build the localized unmatched-brace error for a glob context.
 pub(super) fn create_unmatched_brace_error(context: &GlobErrorContext) -> Error {
     create_glob_error(context, None)
 }

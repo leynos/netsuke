@@ -24,9 +24,12 @@ impl ToolName {
     }
 }
 
+/// Compile-time sample tool name exercised by the assertion below.
 const COMPILE_TIME_TOOL_NAME: ToolName = ToolName::new("compdb");
+/// String form of the sample tool name, computed at compile time.
 const COMPILE_TIME_TOOL_NAME_TEXT: &str = COMPILE_TIME_TOOL_NAME.as_str();
 
+/// Compile-time assertion that `ToolName` stays const-evaluable.
 const _: () = assert!(
     COMPILE_TIME_TOOL_NAME_TEXT.len() == "compdb".len(),
     "ToolName::new and ToolName::as_str must remain const-evaluable"
@@ -42,26 +45,32 @@ impl From<&'static str> for ToolName {
 #[cfg(unix)]
 #[derive(Debug, Clone, Copy)]
 struct ShellFlag {
+    /// The command-line flag text, e.g. `-j`.
     flag: &'static str,
+    /// The shell variable name the flag is validated as, e.g. `jobs`.
     var_name: &'static str,
 }
 
 #[cfg(unix)]
 impl ShellFlag {
+    /// The `-j` job-count flag.
     const JOBS: Self = Self {
         flag: "-j",
         var_name: "jobs",
     };
 
+    /// The `-C` working-directory flag.
     const DIRECTORY: Self = Self {
         flag: "-C",
         var_name: "dir",
     };
 
+    /// The flag text.
     const fn flag(&self) -> &str {
         self.flag
     }
 
+    /// The associated shell variable name.
     const fn var_name(&self) -> &str {
         self.var_name
     }
@@ -77,6 +86,12 @@ fn write_fake_ninja_script(script: &str, context: &str) -> Result<(TempDir, Path
     let dir = TempDir::new().with_context(|| format!("{context}: create temp dir"))?;
     write_fake_ninja_script_in_dir(script, context, dir)
 }
+/// Write `script` as an executable `ninja` inside `dir`, returning the
+/// directory and the path of the written script.
+///
+/// # Errors
+///
+/// Returns an error if the script cannot be written or made executable.
 #[cfg(unix)]
 fn write_fake_ninja_script_in_dir(
     script: &str,
@@ -172,6 +187,10 @@ pub fn fake_ninja_check_build_file() -> Result<(TempDir, PathBuf)> {
 ///
 /// * `expected_tool` - The tool name that should follow `-t` (e.g., `"clean"`)
 ///
+/// # Errors
+///
+/// Returns an error if the temporary directory or fake executable cannot be created.
+///
 /// # Example
 ///
 /// ```rust,ignore
@@ -181,10 +200,6 @@ pub fn fake_ninja_check_build_file() -> Result<(TempDir, PathBuf)> {
 /// // ninja_path will succeed only when invoked with `-t clean`
 /// ```
 #[cfg(unix)]
-///
-/// # Errors
-///
-/// Returns an error if the temporary directory or fake executable cannot be created.
 pub fn fake_ninja_expect_tool(expected_tool: ToolName) -> Result<(TempDir, PathBuf)> {
     fake_ninja_expect_tool_with_jobs(expected_tool, None, None)
 }
@@ -305,6 +320,11 @@ fn build_tool_validation_script(
 /// * `expected_jobs` - Optional job count that should follow `-j`
 /// * `expected_directory` - Optional working directory that should follow `-C`
 ///
+/// # Errors
+///
+/// Returns an error if the requested directory is not valid UTF-8, or if the
+/// temporary directory or fake executable cannot be created.
+///
 /// # Example
 ///
 /// ```rust,ignore
@@ -319,10 +339,6 @@ fn build_tool_validation_script(
 /// // ninja_path will succeed only when invoked with `-t clean -j 4 -C /path/to/build`
 /// ```
 #[cfg(unix)]
-///
-/// # Errors
-///
-/// Returns an error if the temporary directory or fake executable cannot be created.
 pub fn fake_ninja_expect_tool_with_jobs(
     expected_tool: ToolName,
     expected_jobs: Option<u32>,
@@ -358,43 +374,5 @@ pub fn fake_ninja_expect_tool_with_jobs(
 }
 
 #[cfg(all(test, unix))]
-mod tests {
-    //! Unit coverage for the fake-Ninja factories in this module: verifies the
-    //! generated shell scripts validate `-t`, `-f`, `-j`, and `-C` invocations
-    //! as expected by [`super::fake_ninja_expect_tool_with_jobs`].
-    use super::*;
-
-    /// Verify that the fake ninja script validates `-C <directory>` correctly.
-    #[cfg(unix)]
-    #[rstest::rstest]
-    #[case(&["-f", "build.ninja", "-C", "/path/to/build", "-t", "clean"], true, "correct -C value")]
-    #[case(&["-f", "build.ninja", "-C", "/wrong/path", "-t", "clean"], false, "wrong -C value")]
-    #[case(&["-f", "build.ninja", "-t", "clean"], false, "missing -C flag")]
-    fn fake_ninja_validates_directory_flag(
-        #[case] args: &[&str],
-        #[case] should_succeed: bool,
-        #[case] description: &str,
-    ) -> Result<()> {
-        use anyhow::Context;
-        use std::process::Command;
-
-        let (dir, ninja_path) = fake_ninja_expect_tool_with_jobs(
-            ToolName::new("clean"),
-            None,
-            Some(Path::new("/path/to/build")),
-        )?;
-
-        let status = Command::new(&ninja_path)
-            .args(args)
-            .current_dir(dir.path())
-            .status()
-            .context("execute fake ninja")?;
-
-        anyhow::ensure!(
-            status.success() == should_succeed,
-            "unexpected fake Ninja result for {description}"
-        );
-
-        Ok(())
-    }
-}
+#[path = "check_ninja_tests.rs"]
+mod tests;

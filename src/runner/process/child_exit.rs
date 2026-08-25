@@ -18,10 +18,15 @@ use super::{
 /// Context retained until the child process has completed.
 #[derive(Clone, Copy)]
 pub(super) struct ExitFailureContext<'failure, 'clock, Clock> {
+    /// Invocation description used in exit-failure logs.
     pub(super) operation: &'failure str,
+    /// Child stderr policy, reflected in failure diagnostics.
     pub(super) stderr_mode: StderrMode,
+    /// Bounded command-list attribution recovered from child output.
     pub(super) command_list_failure: Option<&'failure CommandListFailure>,
+    /// Monotonic clock used to measure the child run.
     pub(super) clock: &'clock Clock,
+    /// Instant the child was spawned, for failure-duration telemetry.
     pub(super) started_at: Instant,
 }
 
@@ -96,6 +101,7 @@ pub(super) fn finalize_streaming(
     wait_result.map(|status| (status, command_list_failure))
 }
 
+/// Log a truncation debug event when a forwarding stream hit a closed pipe.
 fn handle_forwarding_stats(stats: ForwardStats, stream_name: &str) {
     if stats.write_failed {
         tracing::debug!("{stream_name} forwarding encountered closed pipe; output truncated");

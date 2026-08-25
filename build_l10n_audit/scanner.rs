@@ -20,11 +20,13 @@ pub(crate) use byte_index::ByteIndex;
 /// both on one value keeps them paired, so no caller can pass a byte slice
 /// belonging to a different string from the one it slices.
 pub(super) struct DefineKeysParser<'source> {
+    /// The body as `str`, for slicing literal contents without re-decoding.
     source: &'source str,
+    /// The body as raw bytes, for character-at-a-time scanning.
     bytes: &'source [u8],
 }
-
 impl<'source> DefineKeysParser<'source> {
+    /// Construct a scanner over `source`.
     pub(super) const fn new(source: &'source str) -> Self {
         Self {
             source,
@@ -32,19 +34,18 @@ impl<'source> DefineKeysParser<'source> {
         }
     }
 
-    /// Whether `index` has run past the end of the body.
+    /// Return whether `index` has reached or passed the end of the body.
     pub(super) const fn is_exhausted(&self, index: ByteIndex) -> bool {
         index.get() >= self.bytes.len()
     }
-
+    /// Return the byte at `index`, if any.
     fn byte_at(&self, index: ByteIndex) -> Option<&u8> {
         self.bytes.get(index.get())
     }
-
+    /// Check whether the byte at `index` equals `expected`.
     fn byte_is(&self, index: ByteIndex, expected: u8) -> bool {
         self.byte_at(index) == Some(&expected)
     }
-
     /// Parse the string literal starting at `start`, returning its value and
     /// the position just past it.
     fn parse_string_literal(
@@ -56,7 +57,12 @@ impl<'source> DefineKeysParser<'source> {
         }
         self.parse_raw_string_literal(start)
     }
-
+    /// Parse an escaped `"..."` literal starting at `start`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when `start` does not identify a valid source slice or
+    /// when the escaped string literal has no closing quote.
     fn parse_regular_string_literal(
         &self,
         start: ByteIndex,
@@ -82,7 +88,14 @@ impl<'source> DefineKeysParser<'source> {
         }
         Err("unterminated string literal in localization keys".into())
     }
-
+    /// Parse a raw `r#"..."#` literal starting at `start`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the literal prefix is invalid, the input is a
+    /// byte string literal, the opening quote is missing, the raw literal has
+    /// no matching closing delimiter, or its content cannot form a valid
+    /// source slice.
     fn parse_raw_string_literal(
         &self,
         start: ByteIndex,
@@ -105,7 +118,6 @@ impl<'source> DefineKeysParser<'source> {
             .ok_or_else(|| "raw string slice invalid".to_owned())?;
         Ok((content.to_owned(), end))
     }
-
     /// Consume an optional `b` prefix and the mandatory `r`, reporting whether
     /// the literal was a byte string.
     fn parse_raw_prefix(&self, start: ByteIndex) -> Result<(ByteIndex, bool), Box<dyn Error>> {
@@ -120,7 +132,6 @@ impl<'source> DefineKeysParser<'source> {
         }
         Ok((raw_marker.advance(1), has_byte_prefix))
     }
-
     /// Count the run of `#` characters at `start`, returning the count and the
     /// position just past the run.
     fn count_hashes(&self, start: ByteIndex) -> (usize, ByteIndex) {
@@ -132,7 +143,7 @@ impl<'source> DefineKeysParser<'source> {
         }
         (count, index)
     }
-
+    /// Find the offset just past the `"` and `#`es closing the raw literal from `start`.
     fn find_raw_string_end(&self, start: ByteIndex, hash_count: usize) -> Option<ByteIndex> {
         let mut index = start;
         while let Some(byte) = self.byte_at(index) {
@@ -143,19 +154,19 @@ impl<'source> DefineKeysParser<'source> {
         }
         None
     }
-
+    /// Check whether `count` `#` characters follow `start`.
     fn raw_hashes_match(&self, start: ByteIndex, count: usize) -> bool {
         (0..count).all(|offset| self.byte_is(start.advance(offset), b'#'))
     }
-
+    /// Check whether `//` opens at `index`.
     fn is_line_comment(&self, index: ByteIndex) -> bool {
         self.byte_is(index, b'/') && self.byte_is(index.advance(1), b'/')
     }
-
+    /// Check whether `/*` opens at `index`.
     fn is_block_comment(&self, index: ByteIndex) -> bool {
         self.byte_is(index, b'/') && self.byte_is(index.advance(1), b'*')
     }
-
+    /// Skip to just past the newline ending the line comment at `start`.
     fn skip_line_comment(&self, start: ByteIndex) -> ByteIndex {
         let mut index = start;
         while let Some(byte) = self.byte_at(index) {
@@ -167,7 +178,6 @@ impl<'source> DefineKeysParser<'source> {
         }
         index
     }
-
     /// Skip to just past the `*/` closing the block comment opened before
     /// `start`.
     ///
@@ -195,12 +205,11 @@ impl<'source> DefineKeysParser<'source> {
         }
         ByteIndex::from_offset(self.bytes.len())
     }
-
-    /// Whether a `*/` sits at `index`.
+    /// Check whether a `*/` sits at `index`.
     fn closes_block_comment(&self, index: ByteIndex) -> bool {
         self.byte_is(index, b'*') && self.byte_is(index.advance(1), b'/')
     }
-
+    /// Skip to the first non-whitespace byte at or after `start`.
     fn skip_whitespace(&self, start: ByteIndex) -> ByteIndex {
         let mut index = start;
         while self.byte_at(index).is_some_and(u8::is_ascii_whitespace) {
@@ -208,9 +217,14 @@ impl<'source> DefineKeysParser<'source> {
         }
         index
     }
-
-    /// Attempts to parse a key-value pair starting at the given index.
-    /// Returns the extracted key and the next index to continue parsing.
+    /// Parse a key-value pair starting at the given index, returning the key
+    /// and the next parse index.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the value after `=>` has a malformed or missing
+    /// prefix or quote, is a byte literal, or is unterminated. Literal parsing
+    /// errors, including invalid source slices, are propagated unchanged.
     fn try_parse_key_at_arrow(
         &self,
         index: ByteIndex,
@@ -218,19 +232,16 @@ impl<'source> DefineKeysParser<'source> {
         if !self.byte_is(index, b'=') || !self.byte_is(index.advance(1), b'>') {
             return Ok(None);
         }
-
         let literal_start = self.skip_whitespace(index.advance(2));
         if self.is_exhausted(literal_start) {
             return Ok(None);
         }
-
         let (value, next) = self.parse_string_literal(literal_start)?;
         Ok(Some((value, next)))
     }
-
     /// Whether a string literal opens at `index`.
     ///
-    /// Recognizes `"…"`, `r"…"`, and `r#*"…"#*`, plus the byte-string forms so
+    /// Recognizes `"…"`, `r"…"`, and `r#"…"#`, plus the byte-string forms so
     /// that a `b"…"` is skipped as a literal rather than scanned as source.
     fn starts_string_literal(&self, index: ByteIndex) -> bool {
         if self.byte_is(index, b'"') {
@@ -247,7 +258,6 @@ impl<'source> DefineKeysParser<'source> {
         let (_, after_hashes) = self.count_hashes(raw_marker.advance(1));
         self.byte_is(after_hashes, b'"')
     }
-
     /// Skip the comment or string literal at `index`.
     ///
     /// Returns `None` when `index` opens neither, leaving the caller to decide
@@ -270,7 +280,6 @@ impl<'source> DefineKeysParser<'source> {
         }
         Ok(None)
     }
-
     /// Whether `needle` starts at `index` and is not the tail of a longer
     /// identifier.
     ///
@@ -289,7 +298,6 @@ impl<'source> DefineKeysParser<'source> {
                 .is_none_or(|byte| !byte.is_ascii_alphanumeric() && *byte != b'_')
         })
     }
-
     /// Offset of `needle` where it appears as source, not inside a comment or
     /// a string literal.
     ///
@@ -310,7 +318,6 @@ impl<'source> DefineKeysParser<'source> {
         }
         None
     }
-
     /// Offset just past the `{` that opens the body, starting the search at
     /// `start`.
     ///
@@ -332,7 +339,6 @@ impl<'source> DefineKeysParser<'source> {
         }
         None
     }
-
     /// Offset of the `}` that closes the body opening at the start of `self`.
     ///
     /// A literal that fails to parse is stepped over one byte at a time rather
@@ -359,7 +365,6 @@ impl<'source> DefineKeysParser<'source> {
         }
         Err("define_keys! macro body is missing '}'".into())
     }
-
     /// The brace depth after consuming the byte at `index`.
     ///
     /// The closing brace of the body itself never reaches here; the caller
@@ -373,7 +378,6 @@ impl<'source> DefineKeysParser<'source> {
             depth
         }
     }
-
     /// Consume one token at `index`, yielding any key it declares.
     ///
     /// Tokens that declare no key yield an empty string alongside the position

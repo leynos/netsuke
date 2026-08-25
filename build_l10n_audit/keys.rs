@@ -11,6 +11,7 @@ use scanner::{ByteIndex, DefineKeysParser};
 use std::collections::BTreeSet;
 use std::error::Error;
 
+/// The macro invocation the audit scans for.
 const DEFINE_KEYS_MACRO: &str = "define_keys!";
 
 /// Extracts localization key values from `keys.rs`.
@@ -34,6 +35,11 @@ pub(super) fn extract_key_constants(source: &str) -> Result<BTreeSet<String>, Bo
     Ok(keys)
 }
 
+/// Slice out the text between the macro's `{` and its matching `}`.
+///
+/// # Errors
+///
+/// Returns an error if the macro or its closing brace cannot be found.
 fn extract_define_keys_body(source: &str) -> Result<&str, Box<dyn Error>> {
     // Scanned rather than searched: `define_keys!` named in a doc comment or
     // quoted in a string is not the invocation, and reading from there would
@@ -70,6 +76,11 @@ fn find_matching_brace(source: &str) -> Result<usize, Box<dyn Error>> {
     DefineKeysParser::new(source).find_body_end()
 }
 
+/// Collect the `"..."` values from `=>` entries in `body`.
+///
+/// # Errors
+///
+/// Returns an error if an entry's string literal is malformed.
 fn parse_define_keys_body(body: &str) -> Result<BTreeSet<String>, Box<dyn Error>> {
     let parser = DefineKeysParser::new(body);
     let mut keys = BTreeSet::new();

@@ -1,5 +1,6 @@
-//! Separator and escape normalisation for glob patterns.
+//! Separator and escape normalization for glob patterns.
 
+/// Normalise separators and backslash escapes onto the platform native form.
 pub(crate) fn normalize_separators(pattern: &str) -> String {
     let native = std::path::MAIN_SEPARATOR;
     #[cfg(unix)]
@@ -27,6 +28,8 @@ pub(crate) fn normalize_separators(pattern: &str) -> String {
     }
 }
 
+/// Push the normalized separator for a backslash escape without consuming its
+/// following character; it only peeks at that character to choose the output.
 #[cfg(unix)]
 fn push_normalized_backslash(
     it: &mut std::iter::Peekable<std::str::Chars<'_>>,
@@ -59,6 +62,7 @@ fn push_normalized_backslash(
     out.push(native);
 }
 
+/// Stub that pushes a literal backslash, keeping cfg alignment on other platforms.
 #[cfg(not(unix))]
 #[expect(
     dead_code,
@@ -70,11 +74,12 @@ fn push_normalized_backslash(
     _native: char,
 ) {
     // On non-Unix targets the function is never invoked because the
-    // normalisation path uses the `replace` branch. Provide a stub to keep
+    // normalization path uses the `replace` branch. Provide a stub to keep
     // cfg alignment in sync for future callers.
     out.push('\\');
 }
 
+/// Rewrite backslash-escaped metacharacters as the matching bracket class.
 #[cfg(unix)]
 pub(super) fn force_literal_escapes(pattern: &str) -> String {
     let mut out = String::with_capacity(pattern.len());
@@ -97,6 +102,11 @@ pub(super) fn force_literal_escapes(pattern: &str) -> String {
     out
 }
 
+/// Rewrite recognised escaped metacharacters as bracket classes.
+///
+/// Recognised metacharacters are consumed and emitted as bracket classes.
+/// Other characters preserve the backslash, leaving the following character
+/// for the caller to process.
 #[cfg(unix)]
 fn handle_escaped_char(it: &mut std::iter::Peekable<std::str::Chars<'_>>, out: &mut String) {
     let Some(next) = it.peek().copied() else {
@@ -134,6 +144,7 @@ fn handle_escaped_char(it: &mut std::iter::Peekable<std::str::Chars<'_>>, out: &
 }
 
 #[cfg(unix)]
+/// Report whether a character continues a wildcard token.
 fn is_wildcard_continuation_char(ch: char) -> bool {
     ch.is_alphanumeric() || ch == '-' || ch == '_'
 }

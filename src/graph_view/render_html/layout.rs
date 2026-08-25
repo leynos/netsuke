@@ -12,19 +12,29 @@ use camino::Utf8Path;
 
 use crate::graph_view::{EdgeView, GraphView};
 
+/// Horizontal spacing between depth columns, in pixels.
 pub(super) const COL_WIDTH: i32 = 240;
+/// Vertical spacing between rows within a column, in pixels.
 pub(super) const ROW_HEIGHT: i32 = 70;
+/// Width of a node body, in pixels.
 pub(super) const NODE_WIDTH: i32 = 200;
+/// Height of a node body, in pixels.
 pub(super) const NODE_HEIGHT: i32 = 44;
+/// Half the node height, used to centre the vertical axis.
 pub(super) const NODE_HEIGHT_HALF: i32 = NODE_HEIGHT >> 1;
+/// Padding between the canvas edge and the outermost nodes, in pixels.
 pub(super) const MARGIN: i32 = 24;
 
+/// A cursor position on the drawing canvas.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Position {
+    /// Horizontal position, in pixels.
     pub x: i32,
+    /// Vertical position, in pixels.
     pub y: i32,
 }
 
+/// Compute positions for every node, laid out left-to-right by depth.
 pub(super) fn layout_positions(view: &GraphView) -> BTreeMap<&Utf8Path, Position> {
     let predecessors: BTreeMap<&Utf8Path, Vec<&Utf8Path>> = collect_predecessors(&view.edges);
     let mut depths: BTreeMap<&Utf8Path, i32> = BTreeMap::new();
@@ -52,6 +62,7 @@ pub(super) fn layout_positions(view: &GraphView) -> BTreeMap<&Utf8Path, Position
     positions
 }
 
+/// Group every edge destination with its direct source nodes.
 pub(super) fn collect_predecessors(edges: &[EdgeView]) -> BTreeMap<&Utf8Path, Vec<&Utf8Path>> {
     let mut preds: BTreeMap<&Utf8Path, Vec<&Utf8Path>> = BTreeMap::new();
     for edge in edges {
@@ -63,6 +74,7 @@ pub(super) fn collect_predecessors(edges: &[EdgeView]) -> BTreeMap<&Utf8Path, Ve
     preds
 }
 
+/// Return the depth of `path`: one greater than its deepest predecessor.
 fn compute_depth<'a>(
     path: &'a Utf8Path,
     predecessors: &BTreeMap<&'a Utf8Path, Vec<&'a Utf8Path>>,

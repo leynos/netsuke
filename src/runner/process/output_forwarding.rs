@@ -22,6 +22,10 @@ use std::{
 /// callback for the call duration, so callers can retain state across updates.
 pub(super) type StatusObserver<'a> = &'a mut dyn FnMut(u32, u32, &str);
 
+/// Forward child stdout, parsing status updates and optionally the failure tail.
+///
+/// Returns forwarding statistics and any command-list failure marker recovered
+/// from the bounded output tail.
 fn forward_stdout<W>(
     stdout: impl io::Read,
     output: &mut W,

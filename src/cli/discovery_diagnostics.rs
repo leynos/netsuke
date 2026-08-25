@@ -25,8 +25,11 @@ pub(super) enum ConfigLoadFailureKind {
 /// Emit the bounded outcome of project-scope layer de-duplication.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct ProjectLayerDeduplication {
+    /// Number of distinct path-bearing layers from the primary discovery scan.
     discovered: usize,
+    /// Number of project-scope layers seen by the fallback pass.
     project: usize,
+    /// Number of layers appended by the second project pass.
     appended: usize,
 }
 
@@ -54,7 +57,9 @@ impl ProjectLayerDeduplication {
 /// Bounded warning metadata retained when an explicit config load fails.
 #[derive(Clone, Debug)]
 pub(super) struct ConfigLoadWarning {
+    /// Bounded path of the configuration file that failed to load.
     path: BoundedConfigPath,
+    /// Classification of the load failure.
     failure_kind: ConfigLoadFailureKind,
 }
 
@@ -79,7 +84,9 @@ impl ConfigLoadWarning {
 /// diagnostic event. It deliberately excludes the full path and file name.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct BoundedConfigPath {
+    /// Correlation hash of the original path, meaningful only within one run.
     pub(super) hash: Option<String>,
+    /// Whether a concrete path was captured.
     pub(super) is_present: bool,
 }
 

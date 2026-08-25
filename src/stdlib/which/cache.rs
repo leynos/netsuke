@@ -20,15 +20,23 @@ use super::{
     resolve_error::ResolveError,
 };
 
+/// Name of the counter tallying cache outcomes labelled hit, miss, or bypass.
 const WHICH_CACHE_TOTAL: &str = "netsuke_stdlib_which_cache_total";
+/// Name of the counter tallying resolution outcomes labelled found, `not_found`, or error.
 const WHICH_RESOLUTION_TOTAL: &str = "netsuke_stdlib_which_resolution_total";
 
+/// Shared resolver that caches `which` lookups under an LRU bound.
 #[derive(Clone, Debug)]
 pub(crate) struct WhichResolver {
+    /// LRU mapping cache keys to their stored matches.
     cache: Arc<Mutex<LruCache<CacheKey, CacheEntry>>>,
+    /// Override for the working directory lookups run from.
     cwd_override: Option<Arc<Utf8PathBuf>>,
+    /// Override for the `PATH` value used during lookups.
     path_override: Option<OsString>,
+    /// Override for the `PATHEXT` value used on Windows lookups.
     pathext_override: Option<OsString>,
+    /// Directory basenames excluded from the workspace fallback search.
     workspace_skips: WorkspaceSkipList,
 }
 
@@ -57,6 +65,8 @@ impl WhichResolver {
         }
     }
 
+    /// Resolve `command` to executable paths, consulting the cache unless `fresh`.
+    /// Capture and lookup failures are recorded as metrics before being returned.
     pub(crate) fn resolve(
         &self,
         command: &str,
@@ -108,16 +118,19 @@ impl WhichResolver {
     // because a reference cannot outlive the `MutexGuard`, and the resolver
     // is shared across template evaluation sites. Owned returns at this
     // boundary are an aliasing/synchronization constraint, not NLL residue.
+    /// Return cached matches for a key, if any is present.
     fn try_cache(&self, key: &CacheKey) -> Option<Vec<Utf8PathBuf>> {
         let mut guard = self.lock_cache();
         guard.get(key).map(|entry| entry.matches.clone())
     }
 
+    /// Insert matches under a key for later reuse.
     fn store(&self, key: CacheKey, matches: Vec<Utf8PathBuf>) {
         let mut guard = self.lock_cache();
         guard.put(key, CacheEntry { matches });
     }
 
+    /// Lock the cache, recovering the guard from a poisoned mutex.
     fn lock_cache(&self) -> MutexGuard<'_, LruCache<CacheKey, CacheEntry>> {
         match self.cache.lock() {
             Ok(guard) => guard,
@@ -126,6 +139,7 @@ impl WhichResolver {
     }
 }
 
+/// Describe the resolver's counters once per process.
 fn describe_metrics() {
     static DESCRIBE: Once = Once::new();
     DESCRIBE.call_once(|| {
@@ -140,11 +154,13 @@ fn describe_metrics() {
     });
 }
 
+/// Record a cache outcome on the span and its counter.
 fn record_cache_outcome(span: &tracing::Span, outcome: &'static str) {
     span.record("cache_outcome", outcome);
     counter!(WHICH_CACHE_TOTAL, "outcome" => outcome).increment(1);
 }
 
+/// Record a resolution failure's outcome and error category as metrics.
 fn record_resolution_error(span: &tracing::Span, error: &ResolveError) {
     let category = error.category();
     let outcome = if matches!(
@@ -170,21 +186,30 @@ fn record_resolution_error(span: &tracing::Span, error: &ResolveError) {
     .increment(1);
 }
 
+/// Matches stored in the cache for one key.
 #[derive(Clone, Debug)]
 struct CacheEntry {
+    /// The executable paths that resolved for the key.
     matches: Vec<Utf8PathBuf>,
 }
 
+/// Identity of one cached resolution.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct CacheKey {
+    /// The command that was looked up.
     command: String,
+    /// Hash of the environment inputs that affect resolution.
     env_fingerprint: u64,
+    /// The working directory the lookup ran from.
     cwd: Utf8PathBuf,
+    /// The options the lookup ran with, minus cache-irrelevant flags.
     options: WhichOptions,
+    /// The skip list the lookup applied.
     workspace_skips: WorkspaceSkipList,
 }
 
 impl CacheKey {
+    /// Build a cache key from the lookup inputs.
     fn new(
         command: &str,
         env: &EnvSnapshot,
@@ -201,6 +226,7 @@ impl CacheKey {
     }
 }
 
+/// Hash the environment inputs that affect a resolution's outcome.
 fn env_fingerprint(env: &EnvSnapshot) -> u64 {
     let mut hasher = DefaultHasher::new();
     env.raw_path.hash(&mut hasher);

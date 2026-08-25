@@ -90,6 +90,11 @@ impl Sandbox {
         fs::create_dir_all(path).with_context(|| format!("create {path}"))
     }
 
+    /// Create `path`'s parent directory, leaving a parentless path untouched.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the parent directory cannot be created.
     fn create_parent(&self, path: &Utf8Path) -> Result<()> {
         path.parent()
             .map_or_else(|| Ok(()), |parent| self.create_dir(parent))

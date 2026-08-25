@@ -1,7 +1,7 @@
 //! Serialise environment mutations across tests.
 //!
 //! The `EnvLock` guard ensures that changes to global state like `PATH` are
-//! synchronised, preventing interference between concurrently running tests.
+//! synchronized, preventing interference between concurrently running tests.
 
 use std::cell::RefCell;
 use std::marker::PhantomData;
@@ -9,6 +9,7 @@ use std::rc::Rc;
 use std::sync::{Mutex, MutexGuard};
 use std::{fmt, fmt::Formatter};
 
+/// Global mutex serializing all environment mutations.
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 thread_local! {
@@ -18,8 +19,11 @@ thread_local! {
     }) };
 }
 
+/// Per-thread bookkeeping for the global environment lock.
 struct LockState {
+    /// Number of live `EnvLock` guards on this thread.
     depth: usize,
+    /// The held mutex guard, present only while `depth` is non-zero.
     guard: Option<MutexGuard<'static, ()>>,
 }
 
@@ -36,6 +40,7 @@ struct LockState {
 /// std::thread::spawn(move || drop(guard));
 /// ```
 pub struct EnvLock {
+    /// Marker making the guard `!Send`, keeping the lock thread-bound.
     _not_send: PhantomData<Rc<()>>,
 }
 
@@ -46,7 +51,7 @@ impl fmt::Debug for EnvLock {
 }
 
 impl EnvLock {
-    /// Acquire the global lock serialising environment mutations.
+    /// Acquire the global lock serializing environment mutations.
     #[must_use]
     pub fn acquire() -> Self {
         ENV_LOCK_STATE.with(|lock_state| {

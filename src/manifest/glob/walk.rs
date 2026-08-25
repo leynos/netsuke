@@ -31,7 +31,9 @@ use std::io;
 /// Couples the [`Dir`] handle opened at the pattern's literal prefix with
 /// that prefix, so matched paths can be relativised before metadata lookups.
 pub(super) struct GlobRoot {
+    /// Capability-scoped directory handle opened at the literal prefix.
     dir: Dir,
+    /// Literal directory prefix the capability is scoped to.
     prefix: Utf8PathBuf,
 }
 
@@ -40,19 +42,16 @@ impl GlobRoot {
     pub(super) const fn new(dir: Dir, prefix: Utf8PathBuf) -> Self {
         Self { dir, prefix }
     }
-
     /// Directory the capability is scoped to.
     #[cfg(test)]
     pub(super) const fn dir(&self) -> &Dir {
         &self.dir
     }
-
     /// Literal pattern prefix the capability was opened at.
     #[cfg(test)]
     pub(super) fn prefix(&self) -> &Utf8Path {
         self.prefix.as_path()
     }
-
     /// Fetch metadata for a matched path via the capability-scoped handle.
     ///
     /// Returns `Ok(None)` only when the match is unresolvable in one of the two
@@ -73,7 +72,12 @@ impl GlobRoot {
     pub(super) fn metadata(&self, path: &Utf8Path) -> io::Result<Option<cap_std::fs::Metadata>> {
         self.metadata_relative(self.relativise(path)?)
     }
-
+    /// Fetch metadata for a prefix-relative match, skipping unresolvable links.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`io::Error`] for metadata failures other than unresolvable
+    /// links, which return `Ok(None)`.
     fn metadata_relative(&self, relative: &Utf8Path) -> io::Result<Option<cap_std::fs::Metadata>> {
         match self.dir.metadata(relative) {
             Ok(metadata) => Ok(Some(metadata)),
@@ -81,7 +85,6 @@ impl GlobRoot {
             Err(err) => Err(err),
         }
     }
-
     /// Report whether any component of `relative` is a symbolic link.
     ///
     /// `symlink_metadata` does not follow its final component, so the match
@@ -158,7 +161,6 @@ fn is_unresolvable_link(err: &io::Error) -> bool {
         io::ErrorKind::PermissionDenied | io::ErrorKind::NotFound
     )
 }
-
 /// Characters [`super::normalize::force_literal_escapes`] wraps in a bracket
 /// class to force a literal match.
 const LITERAL_ESCAPES: [char; 6] = ['[', ']', '*', '?', '{', '}'];
@@ -185,7 +187,6 @@ fn literal_escape(rest: &str) -> Option<(char, usize)> {
         '['.len_utf8() + escaped.len_utf8() + ']'.len_utf8(),
     ))
 }
-
 /// Byte offset of the first character that makes `normalized` a wildcard.
 ///
 /// A bracketed literal escape is a literal character rather than a
@@ -324,12 +325,10 @@ fn open_literal_prefix(prefix: &Utf8Path) -> io::Result<Dir> {
 
     Ok(Dir::from_std_file(dir))
 }
-
 /// Return the filesystem path represented by a pattern's literal prefix.
 fn literal_dir_path(pattern: &GlobPattern) -> String {
     unescape_literal_escapes(literal_dir_prefix(pattern.normalized()))
 }
-
 /// Report whether `err` means the literal prefix names no usable directory.
 ///
 /// A missing path and a non-directory path both mean the pattern can match
@@ -355,6 +354,7 @@ fn prefix_is_unopenable(err: &io::Error) -> bool {
     false
 }
 
+/// Build a glob `minijinja` error from an I/O failure at a pattern position.
 fn create_io_error(pattern: &GlobPattern, position: usize, detail: String) -> Error {
     create_glob_error(
         &GlobErrorContext {

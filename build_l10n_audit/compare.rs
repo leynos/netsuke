@@ -9,9 +9,13 @@ use std::collections::BTreeSet;
 
 /// Findings for a single catalogue.
 pub(super) struct LocaleFindings {
+    /// The locale tag the findings refer to.
     tag: String,
+    /// Declared keys the catalogue does not provide.
     missing: Vec<String>,
+    /// Keys the catalogue provides that are not declared.
     orphaned: Vec<String>,
+    /// Descriptions of keys whose interpolation variables differ from the source.
     variable_mismatches: Vec<String>,
 }
 

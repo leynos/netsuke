@@ -38,12 +38,24 @@ pub fn render_manifest(
     Ok(manifest)
 }
 
+/// Render a rule's description and recipe, substituting template expressions.
+///
+/// # Errors
+///
+/// Returns an error when a description or recipe template fails to render;
+/// the propagated error names the offending rule stage.
 fn render_rule(rule: &mut crate::ast::Rule, env: &Environment, vars: &Vars) -> Result<()> {
     render_description(&mut rule.description, env, vars, "rule")?;
     render_recipe(&mut rule.recipe, env, vars, "rule")?;
     Ok(())
 }
 
+/// Render a target's vars, paths, and recipe against `env`.
+///
+/// # Errors
+///
+/// Returns an error when any of the target's vars, name, sources, deps,
+/// order-only deps, description, or recipe templates fail to render.
 fn render_target(target: &mut Target, env: &Environment) -> Result<()> {
     render_vars(&mut target.vars, env)?;
     render_description(&mut target.description, env, &target.vars, "target")?;
@@ -59,6 +71,11 @@ fn render_target(target: &mut Target, env: &Environment) -> Result<()> {
 ///
 /// The `subject` selects the error-context wording ("rule" or "target") so
 /// that diagnostics keep naming the manifest entry being rendered.
+///
+/// # Errors
+///
+/// Returns an error when the description template fails to render; the
+/// propagated error names the subject (`"rule"` or `"target"`) description.
 fn render_description(
     description: &mut Option<String>,
     env: &Environment,
@@ -78,6 +95,12 @@ fn render_description(
 /// recipe is rendered through [`render_recipe_string_or_list`] so the `ins`/`outs`
 /// placeholders stay available; a rule-reference recipe reuses
 /// [`render_string_or_list`].
+///
+/// # Errors
+///
+/// Returns an error when the recipe's script or command text fails to render;
+/// the propagated error names the subject (`"rule"` or `"target"`) and the
+/// failing stage.
 fn render_recipe(recipe: &mut Recipe, env: &Environment, vars: &Vars, subject: &str) -> Result<()> {
     match recipe {
         Recipe::Command { command } => {
@@ -92,6 +115,13 @@ fn render_recipe(recipe: &mut Recipe, env: &Environment, vars: &Vars, subject: &
     }
     Ok(())
 }
+
+/// Render each string variable against a snapshot of the original `vars`.
+///
+/// # Errors
+///
+/// Returns an error when any string variable fails to render; the propagated
+/// error names the offending variable key.
 fn render_vars(vars: &mut Vars, env: &Environment) -> Result<()> {
     let snapshot = vars.clone();
     for (key, value) in vars.iter_mut() {
@@ -102,6 +132,11 @@ fn render_vars(vars: &mut Vars, env: &Environment) -> Result<()> {
     Ok(())
 }
 
+/// Render every string inside a `StringOrList` against `ctx`.
+///
+/// # Errors
+///
+/// Returns an error when a scalar or list-entry template fails to render.
 fn render_string_or_list(value: &mut StringOrList, env: &Environment, ctx: &Vars) -> Result<()> {
     match value {
         StringOrList::String(s) => {
@@ -125,6 +160,12 @@ fn render_string_or_list(value: &mut StringOrList, env: &Environment, ctx: &Vars
 /// IR interpolation. The `what` label is computed once and shared by every
 /// entry. A scalar failure names the recipe stage alone; a list failure also
 /// names the one-based position of the entry that failed to render.
+///
+/// # Errors
+///
+/// Returns an error when any command entry fails to render; the propagated
+/// template error is given the named stage (`what`) context, adding the
+/// entry position for list commands.
 fn render_recipe_string_or_list(
     value: &mut StringOrList,
     env: &Environment,
@@ -175,6 +216,7 @@ fn record_recipe_context_preparation() {
 }
 
 #[cfg(not(test))]
+/// Count one recipe-context preparation for the recipe-context tests.
 const fn record_recipe_context_preparation() {}
 
 #[cfg(test)]
@@ -187,6 +229,7 @@ pub(super) fn recipe_context_preparations() -> usize {
     RECIPE_CONTEXT_PREPARATIONS.with(Cell::get)
 }
 
+/// Render one template string, attaching `what` to any error context.
 fn render_str_with(
     env: &Environment,
     tpl: &str,

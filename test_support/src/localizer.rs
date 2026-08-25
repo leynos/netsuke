@@ -51,6 +51,7 @@ pub struct RestoreProbe {
 }
 
 impl RestoreProbe {
+    /// Wrap `guard` so the moment of its drop can be observed.
     const fn new(guard: LocalizerGuard) -> Self {
         Self { _guard: guard }
     }
@@ -90,11 +91,10 @@ impl Drop for RestoreProbe {
 /// thread install its own override and capture this test's override as its
 /// "previous", so that thread would later restore the wrong value.
 pub struct EnLocalizer {
-    // Field order is the invariant: Rust drops fields in declaration order, so
-    // the localizer guard must come first. It restores the process-global
-    // localizer, and doing that after the mutex was released would let another
-    // test install its own localizer into the window and have it overwritten.
+    /// Wraps the localizer guard; its drop restores the previous localizer
+    /// and must run before the lock is released (fields drop in order).
     _guard: RestoreProbe,
+    /// Holds the global localizer test lock for the bundle's lifetime.
     _lock: MutexGuard<'static, ()>,
 }
 
@@ -163,7 +163,9 @@ pub fn en_localizer() -> EnLocalizer {
 /// The ordering is the field declaration order, since Rust drops fields in the
 /// order they are declared; see [`EnLocalizer`] for the same arrangement.
 pub struct LocaleLocalizer {
+    /// Wraps the localizer guard; its drop restores the previous localizer.
     _guard: RestoreProbe,
+    /// Holds the global localizer test lock for the bundle's lifetime.
     _lock: MutexGuard<'static, ()>,
 }
 

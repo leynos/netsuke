@@ -15,6 +15,7 @@ use super::discovery::{
 };
 use super::parser::Cli;
 
+/// Environment variable carrying an explicit JSON-output preference.
 const JSON_ENV_VAR: &str = "NETSUKE_JSON";
 
 /// Resolve the effective JSON preference from the raw config layers.
@@ -25,7 +26,7 @@ const JSON_ENV_VAR: &str = "NETSUKE_JSON";
 /// # Errors
 ///
 /// Returns an [`ortho_config::OrthoError`] when a selected config file cannot
-/// be loaded, or when `NETSUKE_JSON` contains an invalid boolean.
+/// be loaded or parsed, or when `NETSUKE_JSON` contains an invalid boolean.
 pub fn resolve_merged_json(cli: &Cli, matches: &ArgMatches) -> OrthoResult<bool> {
     resolve_merged_json_with_env(cli, matches, &StdEnvProvider)
 }
@@ -54,6 +55,13 @@ pub fn resolve_merged_json_with_env(
 /// Startup uses this form to replay cached diagnostics after it enables its
 /// output filter, including when discovery or JSON validation fails. The
 /// outcome owns the discovered layers and deferred diagnostics.
+///
+/// # Errors
+///
+/// The first tuple element contains an [`ortho_config::OrthoError`] when a
+/// discovered config file cannot be loaded or parsed, or when
+/// `NETSUKE_JSON` contains an invalid boolean. The second element always
+/// retains the discovery outcome, including any deferred diagnostics.
 pub fn resolve_json_and_layers_outcome_with_env(
     cli: &Cli,
     matches: &ArgMatches,
@@ -66,6 +74,11 @@ pub fn resolve_json_and_layers_outcome_with_env(
 }
 
 /// Resolve JSON preference after file-layer discovery has completed.
+///
+/// # Errors
+///
+/// Returns an [`ortho_config::OrthoError`] when discovery recorded a config
+/// file error or when `NETSUKE_JSON` contains an invalid boolean.
 fn resolve_json_preference(
     cli: &Cli,
     env: &impl EnvProvider,

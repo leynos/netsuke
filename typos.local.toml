@@ -35,6 +35,15 @@ accepted = [
 # appears in the associated environment-variable names; neither is prose.
 mold = "mold"
 MOLD = "MOLD"
+exercize = "exercise"
+exercized = "exercised"
+exercizes = "exercises"
+exercizing = "exercising"
+otherwize = "otherwise"
+raize = "raise"
+raized = "raised"
+raizes = "raises"
+raizing = "raising"
 
 [patterns]
 # The tokenizer splits the valid hyphenated prefix in `mis-grouping`.
@@ -69,4 +78,7 @@ ignore = ["mis-grouping",
 ]
 
 [files]
-exclude = ["scripts/tests/test_typos_rollout_hardening.py"]
+exclude = [
+  ".vtcode/**",
+  "scripts/tests/test_typos_rollout_hardening.py",
+]

@@ -54,9 +54,13 @@ pub use stderr_mode::StderrMode;
 
 /// Per-invocation process settings passed only from Ninja setup to execution.
 struct CommandExecutionContext<'a, Clock> {
+    /// Invocation description attached to logs and spans.
     operation: &'a str,
+    /// Child stderr policy controlling forwarding and attribution.
     stderr_mode: StderrMode,
+    /// Whether stdout forwarding should retain the bounded failure tail.
     captures_ninja_failure_output: bool,
+    /// Monotonic clock measuring the child run.
     clock: &'a Clock,
 }
 
@@ -80,6 +84,12 @@ pub mod doc {
     };
 }
 
+/// Spawn and stream a prepared command, converting a failed exit into an error.
+///
+/// # Errors
+///
+/// Returns an error when the command fails to spawn, a child standard stream
+/// cannot be taken or drained, or the command reports a non-zero exit status.
 fn run_command_and_stream_with_context<Clock: MonotonicClock>(
     mut cmd: Command,
     status_observer: Option<StatusObserver<'_>>,
@@ -154,6 +164,12 @@ pub fn run_ninja_with(request: &NinjaBuildRequest<'_>) -> io::Result<()> {
     run_ninja_with_clock(request, &StdMonotonicClock)
 }
 
+/// Run a Ninja build with an injected clock, without status observation.
+///
+/// # Errors
+///
+/// Returns an error when the Ninja process fails to spawn, the standard
+/// streams are unavailable, or Ninja reports a non-zero exit status.
 fn run_ninja_with_clock(
     request: &NinjaBuildRequest<'_>,
     clock: &impl MonotonicClock,
@@ -191,14 +207,27 @@ pub fn run_ninja_tool_with(request: &NinjaToolRequest<'_>) -> io::Result<()> {
     run_ninja_tool_internal(*request, None, &StdMonotonicClock)
 }
 
+/// Caller-supplied parameters shared across Ninja invocation variants.
 struct NinjaInternalRequest<'request, 'observer> {
+    /// Ninja executable to invoke.
     program: &'request Path,
+    /// Child stderr policy controlling forwarding and attribution.
     stderr_mode: StderrMode,
+    /// Optional callback receiving parsed task-progress updates.
     status_observer: Option<StatusObserver<'observer>>,
+    /// Invocation description attached to logs and spans.
     operation: &'request str,
+    /// Whether stdout forwarding should retain the bounded failure tail.
     captures_ninja_failure_output: bool,
 }
 
+/// Build, spawn, and stream a Ninja invocation through a shared core.
+///
+/// # Errors
+///
+/// Returns an error when command configuration fails, the Ninja process
+/// cannot be spawned, a child standard stream is unavailable, or Ninja
+/// reports a non-zero exit status.
 fn run_ninja_internal<F, Clock>(
     request: NinjaInternalRequest<'_, '_>,
     clock: &Clock,
@@ -218,6 +247,12 @@ where
     };
     run_command_and_stream_with_context(cmd, request.status_observer, &execution)
 }
+/// Run a Ninja build with an injected clock and optional status observation.
+///
+/// # Errors
+///
+/// Returns an error when the Ninja process fails to spawn or reports a non-zero
+/// exit status.
 fn run_ninja_build_internal(
     request: NinjaBuildRequest<'_>,
     status_observer: Option<StatusObserver<'_>>,
@@ -236,6 +271,12 @@ fn run_ninja_build_internal(
     )
 }
 
+/// Run a Ninja tool with an injected clock and optional status observation.
+///
+/// # Errors
+///
+/// Returns an error when the Ninja process fails to spawn or reports a non-zero
+/// exit status.
 fn run_ninja_tool_internal(
     request: NinjaToolRequest<'_>,
     status_observer: Option<StatusObserver<'_>>,

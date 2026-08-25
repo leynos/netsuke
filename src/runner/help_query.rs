@@ -15,22 +15,30 @@ use super::terminal_safe;
 
 /// One catalogue row: a single resolved target name with its metadata.
 pub(super) struct HelpEntry {
+    /// Resolved target name, one row per declared name.
     pub(super) name: String,
+    /// Manifest-controlled description, when present.
     pub(super) description: Option<Arc<str>>,
+    /// Whether the entry comes from the manifest's `actions` section.
     pub(super) is_action: bool,
+    /// Whether the entry is one of the manifest's default targets.
     pub(super) is_default: bool,
 }
 
 /// The pure result of loading, validating, and cataloguing a help manifest.
 pub(super) struct HelpTargetsQuery {
+    /// Catalogue rows in declaration order, actions first.
     pub(super) entries: Vec<HelpEntry>,
+    /// Pipeline stages traversed while loading the manifest.
     pub(super) stages: Vec<PipelineStage>,
 }
 
 /// A query failure with stages for the command boundary to report.
 #[derive(Debug)]
 pub(super) struct HelpTargetsQueryFailure {
+    /// The underlying failure, displayable as its own message.
     pub(super) error: anyhow::Error,
+    /// Stages traversed before the failure, for the command boundary to report.
     pub(super) stages: Vec<PipelineStage>,
 }
 
@@ -58,6 +66,15 @@ pub(super) fn query_help_targets(
     }
 }
 
+/// Load, validate, and flatten the manifest into the catalogue row list.
+///
+/// The manifest is rendered and validated through a no-side-effect load that
+/// builds the IR only to catch duplicate outputs, missing rules, and cycles.
+///
+/// # Errors
+///
+/// Returns an error when the manifest cannot be resolved, loaded, rendered, or
+/// validated, or when a declared default names no catalogue entry.
 fn query_entries(cli: &Cli, stages: &mut Vec<PipelineStage>) -> Result<Vec<HelpEntry>> {
     let manifest_path = resolve_manifest_path(cli)?;
     if let Err(error) = ensure_manifest_exists(cli, &manifest_path) {
@@ -95,6 +112,7 @@ fn reject_terminal_controls_in_target_names(manifest: &NetsukeManifest) -> Resul
     Ok(())
 }
 
+/// Record the ingestion stage when the failure reports a missing manifest.
 fn record_missing_manifest_stage(error: &anyhow::Error, stages: &mut Vec<PipelineStage>) {
     if error
         .downcast_ref::<RunnerError>()
@@ -119,6 +137,11 @@ pub(super) fn build_catalogue(manifest: &NetsukeManifest) -> Vec<HelpEntry> {
     entries
 }
 
+/// Ensure every declared default names a catalogue entry.
+///
+/// # Errors
+///
+/// Returns an error when a declared default does not appear among the entries.
 fn validate_defaults(defaults: &[String], entries: &[HelpEntry]) -> Result<()> {
     let names: HashSet<&str> = entries.iter().map(|entry| entry.name.as_str()).collect();
     for default in defaults {
@@ -132,6 +155,7 @@ fn validate_defaults(defaults: &[String], entries: &[HelpEntry]) -> Result<()> {
     Ok(())
 }
 
+/// Append one catalogue row per declared target name, sharing its metadata.
 fn append_target_entries(
     entries: &mut Vec<HelpEntry>,
     target: &Target,

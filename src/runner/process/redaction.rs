@@ -34,6 +34,7 @@ impl CommandArg {
     }
 }
 
+/// Return whether `key` matches a known sensitive keyword, case-insensitively.
 fn is_sensitive_key(key: &str) -> bool {
     const SENSITIVE_KEYS: [&str; 7] = [
         "password",
