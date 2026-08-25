@@ -219,12 +219,12 @@ fn shell_expression(makefile: &str, case: RustflagsCase) -> Result<String> {
     Ok(resolved)
 }
 
-/// Expands `expression` in a shell, exporting `inherited` as `RUSTFLAGS`.
+/// Expands `expression` in a shell with Make's exported flag variables.
 ///
 /// Only the assignment is expanded; the command the recipe would run is never
 /// executed, so no test here invokes Cargo, Kani, nextest, or Dylint.
 #[cfg(unix)]
-fn expand(expression: &str, inherited: Option<&str>) -> Result<String> {
+fn expand(expression: &str, inherited: Option<&str>, polonius: &str) -> Result<String> {
     ensure!(
         !expression.contains('"') && !expression.contains('`'),
         "the expansion helper cannot safely embed {expression:?}"
@@ -233,7 +233,8 @@ fn expand(expression: &str, inherited: Option<&str>) -> Result<String> {
     command
         .arg("-c")
         .arg(format!("printf '%s' \"{expression}\""))
-        .env_remove("RUSTFLAGS");
+        .env_remove("RUSTFLAGS")
+        .env("POLONIUS_FLAGS", polonius);
     if let Some(value) = inherited {
         command.env("RUSTFLAGS", value);
     }
@@ -289,7 +290,11 @@ fn behavioural_rustflags_recipes_preserve_inherited_flags() -> Result<()> {
     let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
     let polonius = polonius_flags(&makefile)?;
     for case in RUSTFLAGS_CASES {
-        let expanded = expand(&shell_expression(&makefile, case)?, Some(CALLER_RUSTFLAGS))?;
+        let expanded = expand(
+            &shell_expression(&makefile, case)?,
+            Some(CALLER_RUSTFLAGS),
+            &polonius,
+        )?;
 
         ensure!(
             expanded.contains(CALLER_RUSTFLAGS),
@@ -322,7 +327,7 @@ fn behavioural_rustflags_recipes_are_well_formed_without_inherited_flags() -> Re
     let polonius = polonius_flags(&makefile)?;
     for case in RUSTFLAGS_CASES {
         let expression = shell_expression(&makefile, case)?;
-        let expanded = expand(&expression, None)?;
+        let expanded = expand(&expression, None, &polonius)?;
 
         ensure!(
             expanded.contains(&polonius),
