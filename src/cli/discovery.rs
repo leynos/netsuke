@@ -190,17 +190,14 @@ fn collect_file_layers_with_env(
             (FileLayerTrace::Automatic { project_scope }, None, outcome)
         },
         |path| {
-            // `-C` behaves as a working-directory change for CLI paths,
-            // including an explicit configuration selector.
-            let effective_path = cli
-                .directory
-                .as_deref()
-                .filter(|_| path.is_relative())
-                .map_or_else(|| path.to_path_buf(), |directory| directory.join(path));
-            let (load_warning, outcome) = load_layers_from_path_with_warning(&effective_path);
+            // An explicit configuration selector is used exactly as written:
+            // a relative selector resolves against the shell's original
+            // working directory, independent of `-C/--directory`, which
+            // anchors only automatic discovery (see ADR-004).
+            let (load_warning, outcome) = load_layers_from_path_with_warning(path);
             (
                 FileLayerTrace::Explicit {
-                    path: BoundedConfigPath::from_path(Some(&effective_path)),
+                    path: BoundedConfigPath::from_path(Some(path)),
                 },
                 load_warning,
                 outcome,
