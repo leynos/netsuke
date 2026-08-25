@@ -208,7 +208,6 @@ directive anywhere.
   - `make doc-coverage` executes:
 
     ```sh
-    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }" \
     RUSTDOCFLAGS="--cfg docsrs -D warnings" \
     python3 scripts/doc-coverage.py --threshold 80
     ```

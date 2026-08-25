@@ -440,13 +440,13 @@ whatever the action set.
 
 Five CI jobs across four workflows carry the contract:
 
-| Workflow | Job | Shared action | `with.rustflags` |
-| --- | --- | --- | --- |
-| [`ci.yml`](../.github/workflows/ci.yml) | `build-test` | `setup-rust` | `-D warnings` |
-| [`ci.yml`](../.github/workflows/ci.yml) | `build-test-windows` | `setup-rust` | `-D warnings` |
-| [`coverage-main.yml`](../.github/workflows/coverage-main.yml) | `coverage-upload` | `setup-rust` | `-D warnings` |
-| [`netsukefile-test.yml`](../.github/workflows/netsukefile-test.yml) | `netsukefile` | `setup-rust` | *(none)* |
-| [`build-and-package.yml`](../.github/workflows/build-and-package.yml) | `build` | `rust-build-release` | *(none)* |
+| Workflow                                                              | Job                  | Shared action        | `with.rustflags` |
+| --------------------------------------------------------------------- | -------------------- | -------------------- | ---------------- |
+| [`ci.yml`](../.github/workflows/ci.yml)                               | `build-test`         | `setup-rust`         | `-D warnings`    |
+| [`ci.yml`](../.github/workflows/ci.yml)                               | `build-test-windows` | `setup-rust`         | `-D warnings`    |
+| [`coverage-main.yml`](../.github/workflows/coverage-main.yml)         | `coverage-upload`    | `setup-rust`         | `-D warnings`    |
+| [`netsukefile-test.yml`](../.github/workflows/netsukefile-test.yml)   | `netsukefile`        | `setup-rust`         | *(none)*         |
+| [`build-and-package.yml`](../.github/workflows/build-and-package.yml) | `build`              | `rust-build-release` | *(none)*         |
 
 The CI jobs and coverage add `-D warnings` because those jobs gate on a
 warning-free build — on Windows that is what surfaces findings in the
@@ -519,7 +519,11 @@ The toolchain the metric measures with is `DOC_COVERAGE_TOOLCHAIN`, defaulting
 to the channel pinned in `rust-toolchain.toml`. See *Doc-comment coverage* in
 `AGENTS.md` for the counting rules and the exemptions (Rustdoc excludes
 trait-implementation overrides, and `cfg(test)` items are not compiled into the
-doc build).
+doc build). Rustdoc writes the coverage JSON to its reported generated file,
+which the script reads immediately after each successful invocation. That
+path-extraction helper belongs only to the
+`--show-coverage --output-format json` collector; do not reuse it for general
+Rustdoc output.
 
 `make test` runs the non-doctest suite through
 [cargo-nextest](https://nexte.st/) and then runs the doctests separately. CI
@@ -1050,10 +1054,10 @@ The fragment sets the `codegen-backend` unstable flag,
   `make dev-test` is a faster inner-loop proxy, not a substitute.
 - **`RUSTFLAGS`.** `make test-nextest`, `make doctest`, `make typecheck`, and
   the rustdoc stage of `make lint` append `-D warnings` to any flags inherited
-  from the caller. An externally set `RUSTFLAGS`
-  overrides the `[target.*]` `rustflags` in a Cargo configuration file, so the
-  `dev-*` targets deliberately do not set it. Exporting `RUSTFLAGS` in the
-  shell silently disables `mold` for these targets.
+  from the caller. An externally set `RUSTFLAGS` overrides the `[target.*]`
+  `rustflags` in a Cargo configuration file, so the `dev-*` targets
+  deliberately do not set it. Exporting `RUSTFLAGS` in the shell silently
+  disables `mold` for these targets.
 - **Release and packaging.** `make release` and everything under
   `.github/workflows/build-and-package.yml` use the release profile, the LLVM
   backend, and the platform linker. Cranelift is applied to the `dev` profile
@@ -1247,11 +1251,10 @@ directory behind, remove it.
 
 Results below were recorded on a 24-core x86_64 Linux host, with both variants
 on the repository's then-pinned `nightly-2026-06-25` supplying Cranelift
-0.132.0, and
-`mold` 2.41.0. Regenerate the table verbatim with `make bench-build`. Absolute
-figures move with machine load, so the ratio between the two rows is the
-durable signal, not the seconds; the run below is representative of three
-consecutive runs that agreed to within 0.4 s.
+0.132.0, and `mold` 2.41.0. Regenerate the table verbatim with
+`make bench-build`. Absolute figures move with machine load, so the ratio
+between the two rows is the durable signal, not the seconds; the run below is
+representative of three consecutive runs that agreed to within 0.4 s.
 
 | Variant                         | Clean build (s) | Incremental build (s) |
 | ------------------------------- | --------------- | --------------------- |
@@ -1543,30 +1546,29 @@ The config-precedence ladder and display-policy domain are covered by three
 modules under `tests/cli_tests/`:
 
 - `config_precedence_ladder.rs` pins the closed selector model (`--config` >
-  `NETSUKE_CONFIG` > automatic discovery) end to end and checks that the
-  merged scalar fields follow CLI > environment > project > discovered
-  (user/system) > defaults. It includes an explicit guard that the removed
-  `NETSUKE_CONFIG_PATH` alias is not a selector, even when it names an
-  existing file with distinct values.
+  `NETSUKE_CONFIG` > automatic discovery) end to end and checks that the merged
+  scalar fields follow CLI > environment > project > discovered (user/system) >
+  defaults. It includes an explicit guard that the removed
+  `NETSUKE_CONFIG_PATH` alias is not a selector, even when it names an existing
+  file with distinct values.
 - `display_policy_domain.rs` exhaustively verifies the consolidated
-  display-policy resolution (`EmojiPolicy`, `ColourPolicy`,
-  `ProgressPolicy`, `AccessibilityPolicy`, `json`, `NO_COLOR`, and
-  `TERM`/output mode) against a handwritten truth model, using one flat
-  Cartesian-product sweep plus a proptest. It adds coverage only; the
-  production resolution in `src/theme.rs` and `src/output_prefs.rs` is not
-  changed.
+  display-policy resolution (`EmojiPolicy`, `ColourPolicy`, `ProgressPolicy`,
+  `AccessibilityPolicy`, `json`, `NO_COLOR`, and `TERM`/output mode) against a
+  handwritten truth model, using one flat Cartesian-product sweep plus a
+  proptest. It adds coverage only; the production resolution in `src/theme.rs`
+  and `src/output_prefs.rs` is not changed.
 - `merge_targets_proptests.rs` holds the handwritten proptest strategies (no
   `#[derive(Arbitrary)]`) for the `default_targets` append-in-discovery-order
   invariant and scalar merge ordering (defaults → file → environment → CLI).
 
 These tests drive a re-executed worker process through
-`tests/cli_tests/merge_probe.rs`. `merge_probe` builds an isolated
-environment (`HOME`, `XDG_CONFIG_HOME`, `XDG_CONFIG_DIRS`, and, for the
-system-scope variants, a redirectable `XDG_CONFIG_DIRS`) and `merge_in_child`
-runs the real ambient adapters in a child process, so the parent harness never
-mutates the process environment. The XDG system/user scope scenarios are
-Unix-only: Windows discovers configuration through `APPDATA`/`LOCALAPPDATA`
-rather than the XDG variables these tests inject.
+`tests/cli_tests/merge_probe.rs`. `merge_probe` builds an isolated environment
+(`HOME`, `XDG_CONFIG_HOME`, `XDG_CONFIG_DIRS`, and, for the system-scope
+variants, a redirectable `XDG_CONFIG_DIRS`) and `merge_in_child` runs the real
+ambient adapters in a child process, so the parent harness never mutates the
+process environment. The XDG system/user scope scenarios are Unix-only: Windows
+discovers configuration through `APPDATA`/`LOCALAPPDATA` rather than the XDG
+variables these tests inject.
 
 ### Temporary executable test helpers
 
@@ -2469,18 +2471,18 @@ property tests.
 
 #### Locale-stub UI harness and split build directories
 
-`tests/locale_stub_ui_tests.rs` builds `test_support` with `cargo build
---message-format=json` and parses the resulting Cargo JSON messages rather
-than assuming its dependencies sit beside the uplifted `test_support` rlib.
-For every `compiler-artifact` message it records the parent directory of each
-loadable artefact the message names, and passes the whole set to `rustc` as
-`-L dependency=` directories when compiling the UI fixtures. This keeps the
-harness correct when Cargo's `build.build-dir` setting splits intermediate
-artefacts — where dependency rlibs live — from the final, uplifted ones, and
-when Cargo gives each crate its own build directory instead of one shared
-`deps/`, as the Cargo shipped with the 1.99 nightlies does. Deriving the
-directories from what Cargo actually reports, rather than from a single
-assumed location, means the harness does not need to special-case either
+`tests/locale_stub_ui_tests.rs` builds `test_support` with
+`cargo build --message-format=json` and parses the resulting Cargo JSON
+messages rather than assuming its dependencies sit beside the uplifted
+`test_support` rlib. For every `compiler-artifact` message it records the
+parent directory of each loadable artefact the message names, and passes the
+whole set to `rustc` as `-L dependency=` directories when compiling the UI
+fixtures. This keeps the harness correct when Cargo's `build.build-dir` setting
+splits intermediate artefacts — where dependency rlibs live — from the final,
+uplifted ones, and when Cargo gives each crate its own build directory instead
+of one shared `deps/`, as the Cargo shipped with the 1.99 nightlies does.
+Deriving the directories from what Cargo actually reports, rather than from a
+single assumed location, means the harness does not need to special-case either
 layout.
 
 "Loadable artefact" means an rlib *or* a file with the platform's
@@ -2515,16 +2517,16 @@ dependency-search, and output argument retained — because the failure it
 prevents is Windows-specific and cannot be reproduced on the hosts that run
 most of this suite.
 
-`harness_compiles_under_a_split_build_dir` is the regression test for this:
-it forces a split layout with its own private `CARGO_TARGET_DIR` and
+`harness_compiles_under_a_split_build_dir` is the regression test for this: it
+forces a split layout with its own private `CARGO_TARGET_DIR` and
 `CARGO_BUILD_BUILD_DIR` roots, confirms the collected dependency directories
-span the split, and then compiles a fixture against them. The roots are
-private to the test rather than the ambient target directory because the
-`#[once]` `test_support_rlib` fixture builds concurrently for
+span the split, and then compiles a fixture against them. The roots are private
+to the test rather than the ambient target directory because the `#[once]`
+`test_support_rlib` fixture builds concurrently for
 `stub_env_default_does_not_compile` and
-`stub_env_builders_compile_under_the_same_harness`. Sharing a target
-directory would make `harness_compiles_under_a_split_build_dir` race that
-build on the uplifted rlibs and fail with version-skew errors (`E0460`).
+`stub_env_builders_compile_under_the_same_harness`. Sharing a target directory
+would make `harness_compiles_under_a_split_build_dir` race that build on the
+uplifted rlibs and fail with version-skew errors (`E0460`).
 
 ### Manifest `env()` reader
 
@@ -3470,8 +3472,8 @@ both. It strips a trailing `deps` component, the long-standing layout; or a
 trailing `build/<package>/<hash>/out`, the layout used by the Cargo shipped
 with the 1.99 nightlies, which has no `deps` directory at all. Any other shape
 is left alone, so an unrecognized layout degrades to looking beside the
-executable rather than failing outright. The same derived directory supplies
-the `<profile>` component of the two fallbacks, so both layouts spell them
+executable rather than failing outright. The same derived directory supplies the
+`<profile>` component of the two fallbacks, so both layouts spell them
 identically.
 
 Filesystem errors other than "not found" are surfaced rather than treated as a

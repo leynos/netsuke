@@ -53,9 +53,9 @@ Publish as `netsuke-build`, and keep every user-facing name as `netsuke`.
   covers every released target because `stage-release-artefacts` names each
   target's archive to the same shape. Without the template `cargo binstall`
   would probe its default asset-name patterns, which place the target before
-  the version, fail to find any matching asset, and fall back to a source
-  build that needs the pinned nightly — the very fallback the documented
-  command exists to avoid.
+  the version, fail to find any matching asset, and fall back to a source build
+  that needs the pinned nightly — the very fallback the documented command
+  exists to avoid.
 - Update the crates.io installation guidance in the README, the users' guide,
   and the quickstart to install `netsuke-build`.
 
@@ -87,8 +87,8 @@ Publish as `netsuke-build`, and keep every user-facing name as `netsuke`.
   script that stages those archives to the release root.
 - The `pkg-url` template encodes the staged archive name's shape. Changing
   `staging_dir_template`, `bin_name`, or the workflow artefact names without
-  keeping the staged archive name in step with the template breaks `cargo
-  binstall`; the contract tests fail first for the parts they can derive.
+  keeping the staged archive name in step with the template breaks
+  `cargo binstall`; the contract tests fail first for the parts they can derive.
 - Documentation and contract tests refer to `netsuke-build` only for registry
   installation. Everywhere else — prose, examples, help output, packaging — the
   project remains Netsuke.

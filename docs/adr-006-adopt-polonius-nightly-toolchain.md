@@ -15,8 +15,8 @@ borrow checker imposed on the whole Rust ecosystem: lookups that clone keys
 unconditionally, registries that hand back owned values, and error paths that
 compute context eagerly. The Polonius alpha analysis accepts a strict superset
 of NLL and removes the lifetime limitation behind several of these shapes, so
-the natural borrow-returning form of an accessor can compile where NLL
-rejected it. When this ADR was first accepted the analysis was opt-in behind
+the natural borrow-returning form of an accessor can compile where NLL rejected
+it. When this ADR was first accepted the analysis was opt-in behind
 `-Zpolonius=next`; nightly toolchains dated 2026-08-04 and later enable it by
 default, and the directive is on its way out.
 
@@ -111,7 +111,7 @@ no longer exists, because carrying the flag was its only purpose.
   and must not be rewritten into NLL-era defensive forms; `AGENTS.md` and
   [polonius migration notes](polonius.md) carry the anti-regression guidance.
 - `cargo +stable` invocations fail to borrow-check the `POLONIUS(...)` sites.
-  Under the retired flag the failure was loud and immediate — stable rejects
-  the `-Z` directive outright — whereas the requirement now surfaces as a
+  Under the retired flag the failure was loud and immediate — stable rejects the
+  `-Z` directive outright — whereas the requirement now surfaces as a
   borrow-check error. The pinned toolchain applies automatically inside a
   checkout, so reaching that error takes a deliberate `+stable` override.

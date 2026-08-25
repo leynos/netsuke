@@ -121,10 +121,10 @@ has to use the pinned toolchain; nothing needs to propagate a build setting:
   Polonius-specific handling.
 - **Kani** manages a supporting nightly during `cargo kani setup`, and that
   nightly can be older than the repository's. Kani 0.67.0 uses
-  `nightly-2025-11-21`, which predates the Polonius default, so `make
-  kani-full` borrow-checks under NLL. With no tagged sites in the tree this
-  costs nothing today; should a `POLONIUS(...)` site fail to verify, move Kani
-  to a build whose nightly is 2026-08-04 or later rather than reinstating a
+  `nightly-2025-11-21`, which predates the Polonius default, so
+  `make kani-full` borrow-checks under NLL. With no tagged sites in the tree
+  this costs nothing today; should a `POLONIUS(...)` site fail to verify, move
+  Kani to a build whose nightly is 2026-08-04 or later rather than reinstating a
   `-Zpolonius` directive.
 - **CI setup actions**: the shared `setup-rust` and `rust-build-release`
   actions export their own `RUSTFLAGS`, so anything a job needs travels through
@@ -134,11 +134,11 @@ has to use the pinned toolchain; nothing needs to propagate a build setting:
   invocation inherits the flags exported by `setup-rust` and appends its
   instrumentation flags. The per-workflow values, the `NETSUKE_RUST_TOOLCHAIN`
   policy and the reason the contract test pins each action's exact revision are
-  set out in the developer guide under [Polonius CI shared-action
-  contract](developers-guide.md#polonius-ci-shared-action-contract).
+  set out in the developer guide under
+  [Polonius CI shared-action contract](developers-guide.md#polonius-ci-shared-action-contract).
 - **Registry installs**: the crates.io package excludes `rust-toolchain.toml`,
-  and registry builds run outside the checkout, so `cargo install
-  netsuke-build` must select the pinned nightly explicitly
+  and registry builds run outside the checkout, so
+  `cargo install netsuke-build` must select the pinned nightly explicitly
   (`cargo +nightly-2026-08-23 install netsuke-build`). The README and users'
   guide document the command and `tests/documentation_installation_tests.rs`
   pins it.

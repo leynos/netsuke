@@ -124,7 +124,7 @@ lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 	cd test_support && DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(WHITAKER) --all --no-deps --package test_support -- --all-targets --all-features
 
 doc-coverage: doc-coverage-test ## Verify aggregate Rustdoc doc-comment coverage meets the threshold
-	@RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }" RUSTDOCFLAGS="$${RUSTDOC_FLAGS}" \
+	@RUSTDOCFLAGS="$${RUSTDOC_FLAGS}" \
 		"$${PYTHON}" scripts/doc-coverage.py --toolchain "$$DOC_COVERAGE_TOOLCHAIN" --threshold "$$DOC_COVERAGE_THRESHOLD"
 
 doc-coverage-test: ## Run the pytest suite for scripts/doc-coverage.py

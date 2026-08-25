@@ -189,8 +189,8 @@ def parse_coverage_output(target: DocTarget, output: str) -> Coverage:
         The target whose JSON payload is parsed; named only in the error
         diagnostic so failures identify the measured crate.
     output
-        The ``--show-coverage --output-format json`` document rustdoc wrote
-        to stdout.
+        The ``--show-coverage --output-format json`` document read from the
+        artefact Rustdoc generated.
 
     Returns
     -------
@@ -225,6 +225,19 @@ def coverage_json_error(target: DocTarget, detail: str) -> RuntimeError:
         f" ({target.name or 'lib'}) did not emit coverage JSON: {detail}"
     )
     return RuntimeError(message)
+
+
+def coverage_output_path(
+    target: DocTarget, output: str, manifest_root: pathlib.Path
+) -> pathlib.Path:
+    """Return the JSON artefact Rustdoc reported after measuring ``target``."""
+    prefix = 'Generated output into "'
+    for line in output.splitlines():
+        if line.startswith(prefix) and line.endswith('"'):
+            path = pathlib.Path(line.removeprefix(prefix).removesuffix('"'))
+            return path if path.is_absolute() else manifest_root / path
+    detail = "Rustdoc did not report the generated coverage JSON path"
+    raise coverage_json_error(target, detail)
 
 
 def aggregate_coverage_payload(per_file: object) -> Coverage:
@@ -262,8 +275,7 @@ def measure(target: DocTarget, toolchain: str, manifest_root: pathlib.Path) -> C
     """Run Rustdoc's coverage meter for one target and sum its per-file counts.
 
     ``RUSTFLAGS`` and ``RUSTDOCFLAGS`` flow through from the environment so
-    the Makefile can thread the Polonius flag and the docsrs/deny-warnings
-    policy that the rest of the tree builds with.
+    the Makefile can thread its docsrs and warnings-as-errors policy.
     """
     # With no shell involved and argv built from workspace metadata plus
     # constant flags, there is no untrusted input to inject.
@@ -287,7 +299,13 @@ def measure(target: DocTarget, toolchain: str, manifest_root: pathlib.Path) -> C
             f" ({target.name or 'lib'}):\n{result.stderr}"
         )
         raise RuntimeError(detail)
-    return parse_coverage_output(target, result.stdout)
+    output_path = coverage_output_path(target, result.stdout, manifest_root)
+    try:
+        output = output_path.read_text(encoding="utf-8")
+    except OSError as error:
+        detail = f"cannot read generated coverage JSON at {output_path}: {error}"
+        raise coverage_json_error(target, detail) from error
+    return parse_coverage_output(target, output)
 
 
 def label(target: DocTarget) -> str:

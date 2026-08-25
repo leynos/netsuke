@@ -114,8 +114,8 @@ class CoveragePayloadFailureCase:
 class FakeCargo:
     """Stand-in for ``cargo metadata`` and ``cargo rustdoc`` invocations.
 
-    Each call records its argv for later assertion and answers the metadata
-    call with ``metadata`` and every rustdoc call with ``rustdoc_output``.
+    Each call records its argv, answers metadata with ``metadata``, and writes
+    each Rustdoc payload to the generated file path that Rustdoc reports.
     """
 
     def __init__(
@@ -137,12 +137,20 @@ class FakeCargo:
         monkeypatch.setattr(self._script.subprocess, "run", self.run)
         return self
 
-    def run(self, argv: list[str], **_kwargs: object) -> FakeResult:
+    def run(self, argv: list[str], **kwargs: object) -> FakeResult:
         """Answer one Cargo invocation from the canned payloads."""
         self.calls.append(argv)
         if "metadata" in argv:
             return FakeResult(0, self.metadata_payload)
-        return FakeResult(self.rustdoc_rc, self.rustdoc_payload)
+        manifest_root = pathlib.Path(typ.cast(pathlib.Path, kwargs["cwd"]))
+        package = argv[argv.index("-p") + 1].replace("-", "_")
+        output_path = manifest_root / "target" / "doc" / f"{package}.json"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(self.rustdoc_payload, encoding="utf-8")
+        return FakeResult(
+            self.rustdoc_rc,
+            f'Generated output into "{output_path}"\n',
+        )
 
 
 class FakeResult:
@@ -371,6 +379,22 @@ def test_measure_maps_missing_cargo_to_measurement_error(
         RuntimeError, match=r"cannot run cargo rustdoc for x lib \(lib\)"
     ):
         script.measure(target, "nightly-x", tmp_path)
+
+
+def test_measure_reads_coverage_from_the_reported_generated_file(
+    script: types.ModuleType,
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Rustdoc's output notice points the collector at the JSON payload."""
+    FakeCargo(
+        script,
+        rustdoc_output='{"src/lib.rs": {"total": 10, "with_docs": 9}}',
+    ).install(monkeypatch)
+
+    coverage = script.measure(script.DocTarget("x", "lib", None), "nightly-x", tmp_path)
+
+    assert coverage == script.Coverage(total=10, with_docs=9)
 
 
 def test_toolchain_override_reaches_every_cargo_call(
