@@ -1,37 +1,3 @@
-//! Compile-time tests for public environment-injection APIs.
-//!
-//! The fixture in `tests/ui/command_env_embedder_pass.rs` imports and
-//! constructs `CommandEnv`, `NinjaBuildRequest`, and `NinjaToolRequest`, and
-//! references `run_ninja_with`/`run_ninja_tool_with`, exactly as an external
-//! embedder would, so a visibility or signature regression fails this suite
-//! rather than only the crate's own tests.
-//! The cached CLI configuration fixture exercises the equivalent public
-//! boundary for `ConfigEnvProvider` and `DiscoveredLayers` through Cargo,
-//! which resolves the identical implementation expected by Netsuke.
-//!
-//! There is deliberately no compile-fail case for the removed APIs
-//! (`EnvMut`, `PathGuard`, `prepend_dir_to_path`, `override_ninja_env`): the
-//! workspace build already rejects any revived call site, and pinning rustc's
-//! diagnostic wording for a missing item would make the suite fail on
-//! compiler upgrades without guarding anything extra.
-//!
-//! Trybuild drove this during the Polonius migration and could not: it removes
-//! ambient `RUSTFLAGS` and overrides workspace `build.rustflags` outright, so
-//! while Polonius was flag-gated it rebuilt the `netsuke` dependency without
-//! the analysis and rejected the crate's `POLONIUS(...)` sites (see
-//! docs/polonius.md). The pinned nightly now enables Polonius by default, so
-//! that hazard is gone, but the direct-compile harness is kept: it needs no
-//! scratch project and no toolchain-sensitive `.stderr` snapshot. The `netsuke`
-//! rlib is built by Cargo, and the fixture is compiled directly with the
-//! workspace `rustc` against it.
-
-use std::{
-    io,
-    path::{Path, PathBuf},
-    process::{Command, Output},
-};
-use test_support::fs as test_fs;
-
 /// The embedder fixture type-checks against the public API.
 #[test]
 fn command_env_embedder_fixture_compiles() -> io::Result<()> {
@@ -191,30 +157,45 @@ impl NetsukeRlib {
     /// dependency tree. When `include_netsuke_extern` is `false`, the fixture
     /// must fail because it imports `netsuke`; this control proves the normal
     /// compile path receives an effective `--extern` argument.
+    ///
+    /// The arguments travel in a `rustc` response file rather than on the
+    /// command line. Cargo 1.99 gives every crate its own artefact directory,
+    /// so `deps_dirs` holds one entry per dependency; passed directly, a list
+    /// that long can exceed the Windows `CreateProcess` command-line limit and
+    /// fail the spawn with `Os { code: 206 }` before `rustc` runs. Every
+    /// directory is required to avoid `E0463`, so the list moves off the
+    /// command line rather than being shortened.
     fn compile(&self, source: &str, include_netsuke_extern: bool) -> io::Result<Output> {
         let output_dir = tempfile::tempdir()?;
-        let mut command = Command::new(rustc());
-        command
-            .arg("--edition=2024")
-            .arg("--crate-type=bin")
-            .arg("--emit=metadata")
-            .arg(manifest_dir().join(source));
+        let mut args = vec![
+            String::from("--edition=2024"),
+            String::from("--crate-type=bin"),
+            String::from("--emit=metadata"),
+            manifest_dir().join(source).to_string_lossy().into_owned(),
+        ];
 
         if include_netsuke_extern {
-            command
-                .arg("--extern")
-                .arg(format!("netsuke={}", self.rlib.display()));
+            args.extend([String::from("--extern"), format!("netsuke={}", self.rlib.display())]);
         }
 
-        command
-            .args(
-                self.deps_dirs
-                    .iter()
-                    .flat_map(|dir| [String::from("-L"), format!("dependency={}", dir.display())]),
-            )
-            .arg("-o")
-            .arg(output_dir.path().join("command-env-ui.rmeta"))
-            .output()
+        args.extend(
+            self.deps_dirs
+                .iter()
+                .flat_map(|dir| [String::from("-L"), format!("dependency={}", dir.display())]),
+        );
+        args.push(String::from("-o"));
+        args.push(
+            output_dir
+                .path()
+                .join("command-env-ui.rmeta")
+                .to_string_lossy()
+                .into_owned(),
+        );
+
+        let response = rustc_response_file::write(output_dir.path(), "command-env-ui.args", &args)?;
+        // `output_dir` owns the response file and stays in scope across the
+        // call below, so the file still exists when `rustc` opens it at spawn.
+        Command::new(rustc()).arg(response).output()
     }
 }
 
@@ -312,3 +293,33 @@ fn rustc() -> PathBuf {
 fn stderr(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
 }
+
+//! Compile-time tests for public environment-injection APIs.
+//!
+//! The fixture in `tests/ui/command_env_embedder_pass.rs` imports and
+//! constructs `CommandEnv`, `NinjaBuildRequest`, and `NinjaToolRequest`, and
+//! references `run_ninja_with`/`run_ninja_tool_with`, exactly as an external
+//! embedder would, so a visibility or signature regression fails this suite
+//! rather than only the crate's own tests.
+//! The cached CLI configuration fixture exercises the equivalent public
+//! boundary for `ConfigEnvProvider` and `DiscoveredLayers` through Cargo,
+//! which resolves the identical implementation expected by Netsuke.
+//!
+//! There is deliberately no compile-fail case for the removed APIs
+//! (`EnvMut`, `PathGuard`, `prepend_dir_to_path`, `override_ninja_env`): the
+//! workspace build already rejects any revived call site, and pinning rustc's
+//! diagnostic wording for a missing item would make the suite fail on
+//! compiler upgrades without guarding anything extra.
+//!
+//! Trybuild drove this during the Polonius migration and could not: it removes
+//! ambient `RUSTFLAGS` and overrides workspace `build.rustflags` outright, so
+//! while Polonius was flag-gated it rebuilt the `netsuke` dependency without
+//! the analysis and rejected the crate's `POLONIUS(...)` sites (see
+//! docs/polonius.md). The pinned nightly now enables Polonius by default, so
+//! that hazard is gone, but the direct-compile harness is kept: it needs no
+//! scratch project and no toolchain-sensitive `.stderr` snapshot. The `netsuke`
+//! rlib is built by Cargo, and the fixture is compiled directly with the
+//! workspace `rustc` against it.
+
+#[path = "support/rustc_response_file.rs"]
+mod rustc_response_file;

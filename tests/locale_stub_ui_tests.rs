@@ -16,6 +16,9 @@
 //! `.stderr` snapshot. The `test_support` rlib is built by Cargo, and the
 //! fixtures are compiled directly with the workspace `rustc` against it.
 
+#[path = "support/rustc_response_file.rs"]
+mod rustc_response_file;
+
 use camino::{Utf8Path, Utf8PathBuf};
 use rstest::{fixture, rstest};
 use std::{
@@ -147,23 +150,43 @@ impl TestSupportRlib {
     ///
     /// `--emit=metadata` is enough to surface the missing-item error while
     /// sparing the harness a full link of `test_support`'s dependency tree.
+    ///
+    /// The arguments travel in a `rustc` response file rather than on the
+    /// command line. Cargo 1.99 gives every crate its own artefact directory,
+    /// so `deps_dirs` holds one entry per dependency, and the split-build test
+    /// adds long temporary roots on top; passed directly, the result exceeds
+    /// the Windows `CreateProcess` command-line limit and the spawn fails with
+    /// `Os { code: 206 }` before `rustc` runs. Every directory is required to
+    /// avoid `E0463`, so the list moves off the command line rather than being
+    /// shortened.
     fn compile(&self, source: &str) -> io::Result<Output> {
         let output_dir = tempfile::tempdir()?;
-        Command::new(rustc())
-            .arg("--edition=2024")
-            .arg("--crate-type=bin")
-            .arg("--emit=metadata")
-            .arg(manifest_dir().join(source))
-            .arg("--extern")
-            .arg(format!("test_support={}", self.rlib))
-            .args(
-                self.deps_dirs
-                    .iter()
-                    .flat_map(|dir| [String::from("-L"), format!("dependency={dir}")]),
-            )
-            .arg("-o")
-            .arg(output_dir.path().join("stub-env-ui.rmeta"))
-            .output()
+        let mut args = vec![
+            String::from("--edition=2024"),
+            String::from("--crate-type=bin"),
+            String::from("--emit=metadata"),
+            manifest_dir().join(source).into_string(),
+            String::from("--extern"),
+            format!("test_support={}", self.rlib),
+        ];
+        args.extend(
+            self.deps_dirs
+                .iter()
+                .flat_map(|dir| [String::from("-L"), format!("dependency={dir}")]),
+        );
+        args.push(String::from("-o"));
+        args.push(
+            output_dir
+                .path()
+                .join("stub-env-ui.rmeta")
+                .to_string_lossy()
+                .into_owned(),
+        );
+
+        let response = rustc_response_file::write(output_dir.path(), "stub-env-ui.args", &args)?;
+        // `output_dir` owns the response file and stays in scope across the
+        // call below, so the file still exists when `rustc` opens it at spawn.
+        Command::new(rustc()).arg(response).output()
     }
 }
 

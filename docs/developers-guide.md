@@ -2492,6 +2492,29 @@ search path and its dependents fail with `E0463`. The same rule and the same
 reasoning apply to `tests/command_env_ui_tests.rs`, which builds the `netsuke`
 rlib and derives its search path the same way.
 
+Those arguments reach `rustc` through a **response file**, not the command
+line. One `-L dependency=` pair per crate, over the long unique roots the
+split-build test creates, pushed the Windows `CreateProcessW` command line past
+its 32,767-character limit; the spawn then failed with
+`Os { code: 206, kind: InvalidFilename }` before `rustc` ran at all. Every
+directory is required to avoid `E0463`, so the list had to move off the command
+line rather than be shortened or deduplicated further. `rustc` reads arguments
+from `@<path>` — UTF-8, one argument per line, no quoting — which leaves each
+harness passing exactly one argument, so command-line length no longer scales
+with the dependency count.
+
+`tests/support/rustc_response_file.rs` owns that rendering and is included by
+both harnesses through the usual `#[path = …] mod …;` pattern. Its scope is
+deliberately narrow: it renders an argument vector and writes it, and knows
+nothing about what a compilation needs. Reach for it from a `tests/*.rs` binary
+that invokes `rustc` directly with an argument list whose length is not bounded
+by the source; a harness passing a fixed handful of arguments does not need it.
+Its unit tests assert the file's shape — one argument per line, spaces
+preserved without quoting, newlines rejected, and every source, `--extern`,
+dependency-search, and output argument retained — because the failure it
+prevents is Windows-specific and cannot be reproduced on the hosts that run
+most of this suite.
+
 `harness_compiles_under_a_split_build_dir` is the regression test for this:
 it forces a split layout with its own private `CARGO_TARGET_DIR` and
 `CARGO_BUILD_BUILD_DIR` roots, confirms the collected dependency directories
