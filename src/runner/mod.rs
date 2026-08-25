@@ -332,21 +332,6 @@ fn stage_reporting_callback(
         report_pipeline_stage(reporter, pipeline_stage, None);
     }
 }
-/// Map manifest-loading stages onto the status reporter's pipeline stages.
-fn stage_reporting_callback(
-    reporter: &dyn StatusReporter,
-) -> impl FnMut(manifest::ManifestLoadStage) + '_ {
-    move |stage: manifest::ManifestLoadStage| {
-        let pipeline_stage = match stage {
-            manifest::ManifestLoadStage::ManifestIngestion => PipelineStage::ManifestIngestion,
-            manifest::ManifestLoadStage::InitialYamlParsing => PipelineStage::InitialYamlParsing,
-            manifest::ManifestLoadStage::TemplateExpansion => PipelineStage::TemplateExpansion,
-            manifest::ManifestLoadStage::FinalRendering => PipelineStage::FinalRendering,
-        };
-        report_pipeline_stage(reporter, pipeline_stage, None);
-    }
-}
-
 /// Load the manifest, translating loading stages into reporter updates.
 ///
 /// Thin reporting wrapper over [`generation::load_manifest`].
