@@ -143,6 +143,9 @@ sink.
 - [x] (2026-08-24 00:00Z) Review follow-up: exposed the public generic writer
       constructor, added direct-rustc external API coverage, and transferred
       writer ownership before synchronous timing output.
+- [x] (2026-08-26 21:28Z) Review follow-up: documented the `StatusReporter:
+      Send + Sync` ownership contract and bounded timing-summary sink
+      telemetry.
 
 ## Surprises & Discoveries
 
@@ -186,6 +189,17 @@ sink.
   completion-before-summary ordering without holding a reporter mutex or
   introducing worker shutdown and delivery obligations. Date/Author:
   2026-08-24 / Codex.
+
+- Decision: instrument each completed, non-empty timing summary as one
+  synchronous sink-delivery attempt. Rationale: the
+  `netsuke_status_timing_summary_writes_total` counter records one bounded
+  `success` or `write_error` outcome per attempt, while the unlabelled
+  `netsuke_status_timing_summary_write_duration_seconds` histogram measures
+  only the summary-write loop. Failed writes also emit the bounded debug event
+  `timing summary sink write failed` with fixed operation, outcome, and
+  `error_category=io` fields; write errors remain non-fatal and their text is
+  not recorded. JSON tracing remains disabled. Date/Author: 2026-08-26 /
+  Codex.
 
 ## Outcomes & Retrospective
 

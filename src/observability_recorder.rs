@@ -10,6 +10,15 @@ use metrics_util::debugging::{DebuggingRecorder, Snapshotter};
 
 use netsuke::cli::{DISCOVERY_DURATION, DISCOVERY_OUTCOME_VALUES, DISCOVERY_TOTAL};
 
+/// Counter emitted by the library for bounded timing-summary sink outcomes.
+pub(super) const TIMING_SUMMARY_SINK_WRITES_TOTAL: &str =
+    "netsuke_status_timing_summary_writes_total";
+/// Histogram emitted by the library for synchronous timing-summary sink writes.
+pub(super) const TIMING_SUMMARY_SINK_WRITE_DURATION: &str =
+    "netsuke_status_timing_summary_write_duration_seconds";
+/// Bounded outcomes admitted for timing-summary sink counters.
+const TIMING_SUMMARY_SINK_WRITE_OUTCOMES: [&str; 2] = ["success", "write_error"];
+
 /// Label key naming the configuration-load phase on every series.
 const PHASE_LABEL: &str = "phase";
 /// Label key naming the outcome on configuration-load counter series.
@@ -19,7 +28,7 @@ const PHASE_VALUES: [&str; 2] = [DIAG_MODE_PHASE, MERGE_PHASE];
 /// The bounded outcome values accepted on configuration-load counter series.
 const OUTCOME_VALUES: [&str; 2] = ["success", "failure"];
 
-/// Application recorder that retains only bounded configuration observability.
+/// Application recorder that retains only bounded observability series.
 ///
 /// The process-wide debugging recorder is a shutdown-only diagnostic aid. It
 /// must not retain workload-proportional observations from unrelated metrics.
@@ -52,6 +61,8 @@ impl ConfigMetricsRecorder {
                 | STARTUP_CONFIG_LOAD_DURATION
                 | DISCOVERY_TOTAL
                 | DISCOVERY_DURATION
+                | TIMING_SUMMARY_SINK_WRITES_TOTAL
+                | TIMING_SUMMARY_SINK_WRITE_DURATION
         )
     }
 
@@ -67,6 +78,9 @@ impl ConfigMetricsRecorder {
             ),
             STARTUP_CONFIG_LOAD_COUNTER => exact_labels(key, &[(OUTCOME_LABEL, &OUTCOME_VALUES)]),
             DISCOVERY_TOTAL => exact_labels(key, &[(OUTCOME_LABEL, &DISCOVERY_OUTCOME_VALUES)]),
+            TIMING_SUMMARY_SINK_WRITES_TOTAL => {
+                exact_labels(key, &[(OUTCOME_LABEL, &TIMING_SUMMARY_SINK_WRITE_OUTCOMES)])
+            }
             _ => false,
         }
     }
@@ -75,7 +89,9 @@ impl ConfigMetricsRecorder {
     fn accepts_histogram_registration(key: &Key) -> bool {
         match key.name() {
             CONFIG_LOAD_DURATION => exact_labels(key, &[(PHASE_LABEL, &PHASE_VALUES)]),
-            STARTUP_CONFIG_LOAD_DURATION | DISCOVERY_DURATION => exact_labels(key, &[]),
+            STARTUP_CONFIG_LOAD_DURATION
+            | DISCOVERY_DURATION
+            | TIMING_SUMMARY_SINK_WRITE_DURATION => exact_labels(key, &[]),
             _ => false,
         }
     }

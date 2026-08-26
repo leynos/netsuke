@@ -3806,6 +3806,27 @@ draining. The deterministic clock constructor is private and test-only.
 and reporter settings, then shares it via the `ExecutionContext` it passes to
 `dispatch::execute`.
 
+`StatusReporter` is a `Send + Sync` contract. The runner constructs one
+reporter per run and shares a `&dyn StatusReporter` across execution threads
+through `ExecutionContext` to the dispatch handlers, so implementations must
+protect mutable state for calls that the execution path may overlap. This
+requirement applies to built-in and external implementations, including custom
+writers and reporter wrappers. It does not imply that every reporter call is
+made concurrently; it requires each implementation to remain safe when it is.
+
+The timing-summary sink has bounded observability at its synchronous write
+boundary. A completed, non-empty summary is one delivery attempt, counted once
+by `netsuke_status_timing_summary_writes_total` with the closed `outcome` values
+`success` or `write_error`. The same attempt records one sample in the
+unlabelled `netsuke_status_timing_summary_write_duration_seconds` histogram;
+the sample covers only the loop that writes the summary to its owned sink.
+Write failures additionally emit the bounded debug event
+`timing summary sink write failed` with `operation=timing_summary_sink_write`,
+`outcome=write_error`, and `error_category=io`. No error text, sink contents,
+writer type, or stage description is included in telemetry. These write errors
+remain non-fatal and are ignored by the reporter API. JSON mode keeps tracing
+disabled, so this event cannot corrupt its diagnostic output.
+
 #### Reuse boundary
 
 - **Ownership:** `runner::reporter` is an internal, non-public submodule of

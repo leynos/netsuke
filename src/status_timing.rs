@@ -3,9 +3,24 @@
 use super::{LocalizationKey, StageNumber, StatusReporter};
 use crate::localization::{self, keys};
 use crate::output_prefs::OutputPrefs;
+use metrics::{counter, describe_counter, describe_histogram, histogram};
 use std::io::{self, Write};
-use std::sync::Mutex;
+use std::sync::{Mutex, Once};
 use std::time::{Duration, Instant};
+
+/// Metric counting complete rendered timing-summary delivery attempts.
+const TIMING_SUMMARY_SINK_WRITES_TOTAL: &str = "netsuke_status_timing_summary_writes_total";
+/// Metric measuring each complete rendered timing-summary delivery attempt.
+const TIMING_SUMMARY_SINK_WRITE_DURATION: &str =
+    "netsuke_status_timing_summary_write_duration_seconds";
+/// Stable tracing operation identifying timing-summary sink delivery.
+const TIMING_SUMMARY_SINK_WRITE_OPERATION: &str = "timing_summary_sink_write";
+/// Bounded successful timing-summary sink-write outcome.
+const TIMING_SUMMARY_SINK_WRITE_SUCCESS: &str = "success";
+/// Bounded failed timing-summary sink-write outcome.
+const TIMING_SUMMARY_SINK_WRITE_ERROR: &str = "write_error";
+/// Bounded category for a timing-summary sink-write failure.
+const TIMING_SUMMARY_SINK_WRITE_ERROR_CATEGORY: &str = "io";
 
 /// Monotonic clock abstraction returning an elapsed duration on demand.
 type MonotonicClock = dyn Fn() -> Duration + Send + Sync;
@@ -158,6 +173,12 @@ impl<W: Write + Send> VerboseTimingReporter<W> {
     }
 
     /// Write one completed timing summary without holding a reporter mutex.
+    ///
+    /// A non-empty rendered summary is one delivery attempt, even though its
+    /// rendered lines are written separately to preserve their order. Writer
+    /// failures remain best-effort: every line is attempted, then one bounded
+    /// outcome, duration, and failure event are recorded without propagating
+    /// an error through [`StatusReporter`].
     fn write_summary(&self, lines: Vec<String>) {
         let Some(mut writer) = self
             .writer
@@ -168,8 +189,14 @@ impl<W: Write + Send> VerboseTimingReporter<W> {
             return;
         };
 
+        let has_lines = !lines.is_empty();
+        let started = Instant::now();
+        let mut succeeded = true;
         for line in lines {
-            drop(writeln!(writer, "{line}"));
+            succeeded &= writeln!(writer, "{line}").is_ok();
+        }
+        if has_lines {
+            record_timing_summary_sink_write(started.elapsed(), succeeded);
         }
 
         let mut writer_slot = self
@@ -178,6 +205,46 @@ impl<W: Write + Send> VerboseTimingReporter<W> {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         *writer_slot = Some(writer);
     }
+}
+
+/// Record one completed timing-summary sink delivery attempt.
+///
+/// The duration covers only the synchronous loop that calls [`Write::write`]
+/// through `writeln!`; rendering and reporter-owned mutex acquisition happen
+/// before the timer starts. The event contains only fixed fields so arbitrary
+/// writer failures and rendered summary data never enter telemetry.
+fn record_timing_summary_sink_write(elapsed: Duration, succeeded: bool) {
+    describe_timing_summary_sink_metrics();
+    let outcome = if succeeded {
+        TIMING_SUMMARY_SINK_WRITE_SUCCESS
+    } else {
+        TIMING_SUMMARY_SINK_WRITE_ERROR
+    };
+    counter!(TIMING_SUMMARY_SINK_WRITES_TOTAL, "outcome" => outcome).increment(1);
+    histogram!(TIMING_SUMMARY_SINK_WRITE_DURATION).record(elapsed);
+    if !succeeded {
+        tracing::debug!(
+            operation = TIMING_SUMMARY_SINK_WRITE_OPERATION,
+            outcome = TIMING_SUMMARY_SINK_WRITE_ERROR,
+            error_category = TIMING_SUMMARY_SINK_WRITE_ERROR_CATEGORY,
+            "timing summary sink write failed"
+        );
+    }
+}
+
+/// Register the bounded timing-summary sink metric descriptions once.
+fn describe_timing_summary_sink_metrics() {
+    static DESCRIBE: Once = Once::new();
+    DESCRIBE.call_once(|| {
+        describe_counter!(
+            TIMING_SUMMARY_SINK_WRITES_TOTAL,
+            "Counts complete rendered timing-summary sink delivery attempts by bounded outcome."
+        );
+        describe_histogram!(
+            TIMING_SUMMARY_SINK_WRITE_DURATION,
+            "Measures synchronous timing-summary sink delivery duration in seconds."
+        );
+    });
 }
 
 impl<W: Write + Send> StatusReporter for VerboseTimingReporter<W> {
@@ -296,6 +363,9 @@ mod format_tests;
 #[path = "status_timing_lifecycle_tests.rs"]
 #[cfg(test)]
 mod lifecycle_tests;
+#[path = "status_timing_telemetry_tests.rs"]
+#[cfg(test)]
+mod telemetry_tests;
 #[path = "status_timing_tests.rs"]
 #[cfg(test)]
 mod tests;

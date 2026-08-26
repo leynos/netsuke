@@ -20,6 +20,8 @@ use std::{
 mod recorder;
 
 use self::recorder::ConfigMetricsRecorder;
+#[cfg(test)]
+use self::recorder::{TIMING_SUMMARY_SINK_WRITE_DURATION, TIMING_SUMMARY_SINK_WRITES_TOTAL};
 
 /// Counter recording configuration-load outcomes by bounded phase and outcome.
 pub(crate) const CONFIG_LOAD_COUNTER: &str = "config_load_total";

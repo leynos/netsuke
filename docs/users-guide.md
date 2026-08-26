@@ -783,7 +783,9 @@ completion event before the timing summary is written synchronously to the
 sink. A blocking sink therefore blocks only that completion call; later stage,
 progress, and completion events remain suppressed. Re-entrant calls observe
 the completed state, and summary lines retain their rendered order. Write
-errors are ignored, matching the existing accessible reporter contract.
+errors are ignored, matching the existing accessible reporter contract;
+applications can observe them through the bounded timing sink telemetry emitted
+by their configured metrics and tracing backends.
 
 ## Use the template standard library
 
