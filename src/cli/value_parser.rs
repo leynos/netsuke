@@ -16,8 +16,11 @@ use std::sync::Arc;
 /// closure and optionally advertises possible values for help rendering.
 #[derive(Clone)]
 pub(super) struct LocalizedValueParser<F> {
+    /// Shared localiser used to format validation messages.
     localizer: Arc<dyn Localizer>,
+    /// Localiser-aware function validating each raw value.
     parser: F,
+    /// Values advertised in `--help` for the argument being validated.
     possible_values: Option<Vec<PossibleValue>>,
 }
 
