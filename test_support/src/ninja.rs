@@ -71,15 +71,18 @@ fn probe_ninja() -> Result<(), NinjaWorkspaceError> {
     }
 }
 
+/// Return whether the current test run requires Ninja to be installed.
 fn ninja_is_required(env: &impl Env) -> bool {
     env.os_string("NETSUKE_REQUIRE_NINJA")
         .is_some_and(|value| value == "1")
 }
 
+/// Abort when a required Ninja installation is unavailable.
 fn report_required_ninja_unavailable(error: &NinjaWorkspaceError) -> ! {
     panic!("Ninja is required for this test run: {error}");
 }
 
+/// Probe Ninja and escalate an unavailable required installation.
 fn probe_ninja_with_requirement(env: &impl Env) -> Result<(), NinjaWorkspaceError> {
     match probe_ninja() {
         Ok(()) => Ok(()),

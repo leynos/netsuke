@@ -449,7 +449,6 @@ rendering, current-shell state sharing, and failure attribution. The focused
 rendering, lowering, Ninja-generation, and real-Ninja integration tests are
 the behavioural contract for these boundaries.
 
-
 ## Package and target naming
 
 The crates.io package is `netsuke-build`; the library target, the binary

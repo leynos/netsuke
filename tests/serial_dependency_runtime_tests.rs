@@ -97,7 +97,7 @@ fn shared_work_graph() -> BuildGraph {
     for (name, command) in [
         (
             "shared",
-            "i=0; while test ! -f unrelated-start; do i=$$((i + 1)); test \"$$i\" -lt 100 || exit 1; sleep 0.01; done; test ! -f unrelated-end || exit 1; echo shared >> execution.log; touch shared",
+            "i=0; while test ! -f unrelated-start; do i=$((i + 1)); test \"$i\" -lt 100 || exit 1; sleep 0.01; done; test ! -f unrelated-end || exit 1; echo shared >> execution.log; touch shared",
         ),
         ("left", "test -f shared && touch left"),
         ("right", "test -f shared && touch right"),

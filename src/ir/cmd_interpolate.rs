@@ -130,6 +130,7 @@ pub(crate) fn interpolate_script_with_bindings(
     Ok(substitute(template, &bindings.ins, &bindings.outs))
 }
 
+/// Builds the diagnostic for a command rejected during placeholder expansion.
 fn invalid_command_error(command: String) -> IrGenError {
     let snippet = command.chars().take(160).collect();
     let message = localization::message(keys::IR_INVALID_COMMAND).with_arg("snippet", &snippet);
@@ -288,6 +289,7 @@ fn substitute(template: &str, ins: &str, outs: &str) -> String {
     out
 }
 
+/// Reports whether a placeholder occurs within shell backticks.
 fn has_placeholder_in_backticks(template: &str) -> bool {
     let chars: Vec<char> = template.chars().collect();
     let mut in_backticks = false;

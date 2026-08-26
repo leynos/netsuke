@@ -1157,6 +1157,19 @@ seam, script placeholder lowering, required-Ninja CI contract, and migration
 guidance. The status is temporarily `IN PROGRESS` until the named post-rebase
 gates complete.
 
+2026-08-27 — post-rebase gates found three integration repairs. Main added
+`BuildEdge::dependency_order` and made private-item documentation mandatory,
+so the dollar-escaping fixture now supplies `DependencyOrder::Parallel` and
+the moved private helpers are documented. The rebase initially retained the
+old branch's `validate_paths` guard, which rejected `$`, spaces, and colons
+despite main's `path_syntax` explicitly escaping them; the stale guard was
+removed and its test now covers only Ninja-unsupported `|`, tab, and newline.
+Finally, the real-Ninja serial-runtime fixture supplied its arithmetic shell
+expansion as the old Ninja-ready `$$((...))`. The new backend correctly doubles
+raw shell dollars, so the fixture now supplies raw `$((...))` and `$i`. A
+focused nextest run passes. The full named gates and final review remain
+pending; status stays `IN PROGRESS`.
+
 2026-08-17 —
 
 2026-08-17 — rebased onto `origin/main` at `7e5c2679` ("Add target

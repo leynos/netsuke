@@ -34,7 +34,7 @@ mod ninja_gen_validation;
 use ninja_gen_command_list::{ActionId, CommandListEntry, command_list_entry};
 pub use ninja_gen_error::NinjaGenError;
 use ninja_gen_escape::{ShellText, escape_ninja_value};
-use ninja_gen_validation::{validate_action_metadata, validate_action_recipe, validate_paths};
+use ninja_gen_validation::{validate_action_metadata, validate_action_recipe};
 /// Write `key = value` to a Ninja file when `opt` holds a value.
 ///
 /// The indented assignment is emitted only for present values, so optional
@@ -161,11 +161,6 @@ pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), Ni
     edges.sort_by_key(|a| path_key(&a.explicit_outputs));
     let mut seen = HashSet::new();
     for edge in edges {
-        validate_paths(&edge.explicit_outputs)?;
-        validate_paths(&edge.implicit_outputs)?;
-        validate_paths(&edge.inputs)?;
-        validate_paths(&edge.implicit_deps)?;
-        validate_paths(&edge.order_only_deps)?;
         let key = path_key(&edge.explicit_outputs);
         if !seen.insert(key.clone()) {
             continue;
@@ -193,7 +188,6 @@ pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), Ni
     if !graph.default_targets.is_empty() {
         let mut defs = graph.default_targets.clone();
         defs.sort();
-        validate_paths(&defs)?;
         writeln!(out, "default {}", join(&defs))?;
     }
 
@@ -299,6 +293,7 @@ impl NamedAction<'_> {
         Err(NinjaGenError::UnsafeNinjaValue)
     }
 
+    /// Converts the action recipe into shell text before Ninja escaping.
     fn shell_text(&self) -> Result<ShellText, NinjaGenError> {
         let command = match &self.action.recipe {
             Recipe::Command {
@@ -319,6 +314,7 @@ impl NamedAction<'_> {
         Ok(ShellText::new(command))
     }
 
+    /// Wraps a multi-line script in a one-line shell command for Ninja.
     fn script_shell_text(script: &str) -> String {
         // Ninja commands must be single-line. Encode newlines and reconstruct the
         // original script with `printf %b` piped into a fresh shell to preserve
@@ -350,6 +346,7 @@ impl NamedAction<'_> {
         command_line
     }
 
+    /// Writes this action's Ninja rule, escaping only the shell-text boundary.
     fn write_into<W: Write>(&self, output: &mut W) -> Result<(), NinjaGenError> {
         let command = escape_ninja_value(&self.shell_text()?)?;
         writeln!(output, "rule {}", self.id)?;

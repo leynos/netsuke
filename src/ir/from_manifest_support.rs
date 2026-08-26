@@ -72,6 +72,7 @@ pub(super) fn register_action(
     Ok(hash)
 }
 
+/// Resolves action bindings in the recipe variant supplied by a manifest.
 fn resolve_recipe(recipe: Recipe, bindings: ActionBindings<'_>) -> Result<Recipe, IrGenError> {
     match recipe {
         Recipe::Command { command } => Ok(Recipe::Command {
@@ -84,6 +85,7 @@ fn resolve_recipe(recipe: Recipe, bindings: ActionBindings<'_>) -> Result<Recipe
     }
 }
 
+/// Resolves input and output bindings in every command representation.
 fn resolve_command(
     command: StringOrList,
     bindings: ActionBindings<'_>,
@@ -104,6 +106,7 @@ fn resolve_command(
     }
 }
 
+/// Resolves input and output bindings in a script without interpreting shell syntax.
 fn resolve_script(script: &str, bindings: ActionBindings<'_>) -> Result<String, IrGenError> {
     interpolate_script_with_bindings(
         script,

@@ -1,7 +1,5 @@
 //! Validation for command-list boundaries before Ninja rendering.
 
-use camino::Utf8PathBuf;
-
 use super::ninja_gen_command_list::{
     CommandListEntry, CommandListEntryError, command_list_entry_error,
 };
@@ -71,18 +69,6 @@ pub(super) fn validate_action_metadata(action: &crate::ir::Action) -> Result<(),
     .flatten()
     {
         escape_ninja_value(&ShellText::new(value.clone())).map(|_| ())?;
-    }
-    Ok(())
-}
-
-/// Reject paths that require Ninja lexical escapes until path escaping exists.
-pub(super) fn validate_paths(paths: &[Utf8PathBuf]) -> Result<(), NinjaGenError> {
-    for path in paths {
-        if path.as_str().contains(['$', ' ', ':', '\n', '\r', '\0']) {
-            return Err(NinjaGenError::UnsafeNinjaPath {
-                path: path.as_str().to_owned(),
-            });
-        }
     }
     Ok(())
 }
