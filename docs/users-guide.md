@@ -758,7 +758,6 @@ additions in [`CHANGELOG.md`](../CHANGELOG.md), which is where Netsuke
 signposts Rust API changes — with no stability promise attached to them ahead
 of 1.0.
 
-
 ### Capture verbose timing output
 
 Rust callers that wrap a `StatusReporter` can send verbose timing summaries to
