@@ -1,7 +1,9 @@
-//! Serialise environment mutations across tests.
+//! Retain the retiring `EnvLock` legacy seam during caller migration.
 //!
-//! The `EnvLock` guard ensures that changes to global state like `PATH` are
-//! synchronized, preventing interference between concurrently running tests.
+//! `EnvLock` remains only until its callers migrate to injected
+//! `mockable::Env` seams and issue #494 removes it. Add no callers or tests;
+//! [ADR-008](../../docs/adr-008-environment-seam-taxonomy.md) records the
+//! retirement decision.
 
 use std::cell::RefCell;
 use std::marker::PhantomData;
