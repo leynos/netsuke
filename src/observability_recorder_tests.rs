@@ -42,16 +42,20 @@ fn assert_retained_startup_counter(snapshot: &[SnapshotEntry]) {
     );
 }
 
-/// Assert the retained startup duration is unlabelled with one expected sample.
-fn assert_retained_startup_duration(snapshot: &[SnapshotEntry]) {
+/// Assert an unlabelled duration has the exact expected histogram sample.
+fn assert_unlabelled_duration(
+    snapshot: &[SnapshotEntry],
+    metric_name: &str,
+    expected_seconds: f64,
+) {
     assert!(
         snapshot.iter().any(|entry| {
             entry.0.kind() == MetricKind::Histogram
-                && entry.0.key().name() == STARTUP_CONFIG_LOAD_DURATION
+                && entry.0.key().name() == metric_name
                 && entry.0.key().labels().next().is_none()
-                && matches!(entry.3, DebugValue::Histogram(ref values) if values.as_slice() == [0.02])
+                && matches!(entry.3, DebugValue::Histogram(ref values) if values.as_slice() == [expected_seconds])
         }),
-        "snapshot should retain the unlabelled startup duration: {snapshot:?}"
+        "expected unlabelled duration {metric_name} with sample [{expected_seconds}]: {snapshot:?}"
     );
 }
 
@@ -85,7 +89,7 @@ fn configuration_metrics_recorder_retains_bounded_startup_and_phase_series() {
         "only bounded configuration metric series should be retained"
     );
     assert_retained_startup_counter(&snapshot);
-    assert_retained_startup_duration(&snapshot);
+    assert_unlabelled_duration(&snapshot, STARTUP_CONFIG_LOAD_DURATION, 0.02);
     assert_only_configuration_metric_names(&snapshot);
 }
 
@@ -111,7 +115,7 @@ fn recorder_retains_bounded_timing_summary_sink_series() {
     );
     assert_timing_summary_counter(&snapshot, "success");
     assert_timing_summary_counter(&snapshot, "write_error");
-    assert_timing_summary_duration(&snapshot);
+    assert_unlabelled_duration(&snapshot, TIMING_SUMMARY_SINK_WRITE_DURATION, 0.01);
 }
 
 /// Assert that `outcome` retains one bounded timing-summary counter increment.
@@ -129,18 +133,5 @@ fn assert_timing_summary_counter(snapshot: &[SnapshotEntry], outcome: &str) {
                 && matches!(entry.3, DebugValue::Counter(1))
         }),
         "expected retained timing-summary counter with outcome {outcome}: {snapshot:?}"
-    );
-}
-
-/// Assert that the unlabelled timing-summary duration has one sample.
-fn assert_timing_summary_duration(snapshot: &[SnapshotEntry]) {
-    assert!(
-        snapshot.iter().any(|entry| {
-            entry.0.kind() == MetricKind::Histogram
-                && entry.0.key().name() == TIMING_SUMMARY_SINK_WRITE_DURATION
-                && entry.0.key().labels().next().is_none()
-                && matches!(entry.3, DebugValue::Histogram(ref values) if values.as_slice() == [0.01])
-        }),
-        "expected retained timing-summary duration: {snapshot:?}"
     );
 }
