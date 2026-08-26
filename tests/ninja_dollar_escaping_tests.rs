@@ -54,19 +54,40 @@ fn required_ninja_workspace() -> Result<TempDir> {
     ninja_integration_workspace().context("Ninja is required for dollar-escaping tests")
 }
 
+/// An isolated workspace containing a generated Ninja file and its output.
+struct NinjaWorkspace {
+    /// Keeps the temporary directory alive while Ninja uses its contents.
+    _workspace: TempDir,
+    /// UTF-8 path used as the child Ninja process's current directory.
+    path: Utf8PathBuf,
+    /// Capability-scoped directory used to read and write test artefacts.
+    directory: Dir,
+}
+
+impl NinjaWorkspace {
+    /// Creates an isolated workspace and writes the generated Ninja file into it.
+    fn create(ninja_file: &str) -> anyhow::Result<Self> {
+        let workspace = required_ninja_workspace()?;
+        let path = Utf8PathBuf::from_path_buf(workspace.path().to_path_buf())
+            .map_err(|non_utf8| anyhow::anyhow!("non-UTF-8 temporary path: {non_utf8:?}"))?;
+        let directory = Dir::open_ambient_dir(&path, ambient_authority())
+            .with_context(|| format!("open Ninja workspace {path}"))?;
+        directory
+            .write("build.ninja", ninja_file)
+            .context("write generated Ninja file")?;
+        Ok(Self {
+            _workspace: workspace,
+            path,
+            directory,
+        })
+    }
+}
 fn ninja_commands(ninja_file: &str, target: &str) -> Result<String> {
-    let workspace = required_ninja_workspace()?;
-    let path = Utf8PathBuf::from_path_buf(workspace.path().to_path_buf())
-        .map_err(|non_utf8| anyhow::anyhow!("non-UTF-8 temporary path: {non_utf8:?}"))?;
-    let directory = Dir::open_ambient_dir(&path, ambient_authority())
-        .with_context(|| format!("open Ninja workspace {path}"))?;
-    directory
-        .write("build.ninja", ninja_file)
-        .context("write generated Ninja file")?;
+    let workspace = NinjaWorkspace::create(ninja_file)?;
 
     let output = Command::new("ninja")
         .args(["-f", "build.ninja", "-t", "commands", target])
-        .current_dir(path.as_std_path())
+        .current_dir(workspace.path.as_std_path())
         .env_clear()
         .env(SENTINEL, SENTINEL_VALUE)
         .output()
@@ -81,19 +102,12 @@ fn ninja_commands(ninja_file: &str, target: &str) -> Result<String> {
 }
 
 fn ninja_output(ninja_file: &str, environment_value: Option<&str>) -> Result<String> {
-    let workspace = required_ninja_workspace()?;
-    let path = Utf8PathBuf::from_path_buf(workspace.path().to_path_buf())
-        .map_err(|non_utf8| anyhow::anyhow!("non-UTF-8 temporary path: {non_utf8:?}"))?;
-    let directory = Dir::open_ambient_dir(&path, ambient_authority())
-        .with_context(|| format!("open Ninja workspace {path}"))?;
-    directory
-        .write("build.ninja", ninja_file)
-        .context("write generated Ninja file")?;
+    let workspace = NinjaWorkspace::create(ninja_file)?;
 
     let mut command = Command::new("ninja");
     command
         .args(["-f", "build.ninja", "out"])
-        .current_dir(path.as_std_path())
+        .current_dir(workspace.path.as_std_path())
         .env_clear();
     if let Some(value) = environment_value {
         command.env(SENTINEL, value);
@@ -105,7 +119,8 @@ fn ninja_output(ninja_file: &str, environment_value: Option<&str>) -> Result<Str
             String::from_utf8_lossy(&output.stderr)
         );
     }
-    directory
+    workspace
+        .directory
         .read_to_string("out")
         .context("read shell output from generated target")
 }
