@@ -1,8 +1,7 @@
 //! Tests for configuration file-layer collection.
 //!
-//! These cover which branch the shared file-layer boundary takes — explicit path
-//! versus automatic discovery — and the project-scope second pass. Selector
-//! precedence and event-schema snapshots live in the tracing test module.
+//! These cover explicit-versus-discovery collection and the project-scope second pass.
+//! Selector precedence and event-schema snapshots live in the tracing test module.
 use super::paths::{FailingPathNormalizer, FsPathNormalizer, PathNormalizer, normalized_path_key};
 use super::*;
 use crate::cli::test_support::TestEnv;
@@ -128,7 +127,6 @@ fn injected_automatic_discovery_uses_xdg_config_home() -> Result<()> {
     assert_eq!(paths, vec![expected_path]);
     Ok(())
 }
-
 /// Discovered configuration candidates retain the outcome that their content
 /// warrants; an unreadable candidate is never mistaken for an absent one.
 #[rstest]

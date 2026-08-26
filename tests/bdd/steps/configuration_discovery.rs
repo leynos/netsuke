@@ -7,8 +7,11 @@ use anyhow::{Context, Result, ensure};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use netsuke::cli::Cli;
 use netsuke::cli::config::EmojiPolicy;
-use rstest_bdd_macros::{given, then};
+use rstest_bdd_macros::{given, then, when};
+use std::ffi::OsString;
 use tempfile::tempdir;
+
+use super::cli::apply_cli_tokens;
 
 #[given("a temporary workspace")]
 fn a_temporary_workspace(world: &TestWorld) -> Result<()> {
@@ -18,9 +21,7 @@ fn a_temporary_workspace(world: &TestWorld) -> Result<()> {
 }
 
 /// Write `content` to `file_name` inside `world`'s temp directory.
-/// Set `chdir` to `true` for project-scope configs so discovery works
-/// without an explicit path override.
-fn write_config_file(world: &TestWorld, file_name: &str, content: &str, chdir: bool) -> Result<()> {
+fn write_config_file(world: &TestWorld, file_name: &str, content: &str) -> Result<()> {
     let temp_dir = world
         .temp_dir
         .borrow()
@@ -36,12 +37,6 @@ fn write_config_file(world: &TestWorld, file_name: &str, content: &str, chdir: b
         .with_context(|| format!("open workspace {temp_dir_utf8} to write {file_name}"))?;
     dir.write(file_name, content.as_bytes())
         .with_context(|| format!("failed to write {file_name} in {temp_dir_utf8}"))?;
-
-    if chdir {
-        // Acquire scenario-scoped lock before process-global CWD mutation
-        world.ensure_global_state_lock()?;
-        std::env::set_current_dir(&temp_dir).context("failed to change to temp directory")?;
-    }
 
     Ok(())
 }
@@ -59,12 +54,12 @@ emoji = "{emoji}"
 jobs = {jobs}
 "#
     );
-    write_config_file(world, file_name.as_str(), &content, true)
+    write_config_file(world, file_name.as_str(), &content)
 }
 
 #[given("a malformed project config file {file_name:string}")]
 fn malformed_project_config(world: &TestWorld, file_name: FileName) -> Result<()> {
-    write_config_file(world, file_name.as_str(), "emoji = \"always\n", true)
+    write_config_file(world, file_name.as_str(), "emoji = \"always\n")
 }
 
 /// Returns the TOML snippet for a config file that sets only `emoji`.
@@ -78,12 +73,7 @@ fn project_config_with_emoji(
     file_name: FileName,
     emoji: EmojiPolicy,
 ) -> Result<()> {
-    write_config_file(
-        world,
-        file_name.as_str(),
-        &emoji_config_content(emoji),
-        true,
-    )
+    write_config_file(world, file_name.as_str(), &emoji_config_content(emoji))
 }
 
 #[given("a project config file {file_name:string} with emoji {emoji:string} and JSON {json}")]
@@ -99,7 +89,7 @@ emoji = "{emoji}"
 json = {json}
 "#
     );
-    write_config_file(world, file_name.as_str(), &content, true)
+    write_config_file(world, file_name.as_str(), &content)
 }
 
 #[given("a project config file {file_name:string} with default targets {targets:string}")]
@@ -123,7 +113,7 @@ fn project_config_with_default_targets(
 default_targets = {targets_toml}
 "
     );
-    write_config_file(world, file_name.as_str(), &content, true)
+    write_config_file(world, file_name.as_str(), &content)
 }
 
 #[given("a custom config file {file_name:string} with emoji {emoji:string}")]
@@ -132,12 +122,27 @@ fn custom_config_with_emoji(
     file_name: FileName,
     emoji: EmojiPolicy,
 ) -> Result<()> {
-    write_config_file(
+    write_config_file(world, file_name.as_str(), &emoji_config_content(emoji))
+}
+
+#[when("the CLI is parsed with the workspace config file {file_name:string}")]
+fn parse_cli_with_workspace_config(world: &TestWorld, file_name: FileName) -> Result<()> {
+    let config_path = world
+        .temp_dir
+        .borrow()
+        .as_ref()
+        .context("temp_dir should be set")?
+        .path()
+        .join(file_name.as_str());
+    apply_cli_tokens(
         world,
-        file_name.as_str(),
-        &emoji_config_content(emoji),
-        false,
-    )
+        vec![
+            OsString::from("netsuke"),
+            OsString::from("--config"),
+            config_path.into_os_string(),
+        ],
+    );
+    Ok(())
 }
 
 #[given("the environment variable {var_name:string} is set to {value:string}")]

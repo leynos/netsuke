@@ -39,7 +39,7 @@ Feature: Configuration file discovery and precedence
     Given a temporary workspace
     And a project config file ".netsuke.toml" with emoji "never"
     And a custom config file "custom.toml" with emoji "always"
-    When the CLI is parsed with "--config custom.toml"
+    When the CLI is parsed with the workspace config file "custom.toml"
     Then parsing succeeds
     And the emoji policy is "always"
 
@@ -58,7 +58,7 @@ Feature: Configuration file discovery and precedence
     And a custom config file "cli.toml" with emoji "always"
     And a custom config file "env.toml" with emoji "never"
     And the environment variable "NETSUKE_CONFIG" points to "env.toml"
-    When the CLI is parsed with "--config cli.toml"
+    When the CLI is parsed with the workspace config file "cli.toml"
     Then parsing succeeds
     And the emoji policy is "always"
 

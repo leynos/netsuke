@@ -172,9 +172,7 @@ resolution entirely rather than setting the variable for a child to read.
   child-process configuration exist to avoid, and it is exactly the pattern
   #493 removed from the BDD and integration test helpers.
   `.config/nextest.toml` runs no serialized environment group precisely because
-  no sanctioned test still mutates the harness environment; `EnvLock` and
-  `CwdGuard` remain only for the few tests that exercise process
-  working-directory behaviour.
+  no sanctioned test still mutates the harness environment.
 
 ## Implementation references
 
@@ -197,3 +195,24 @@ resolution entirely rather than setting the variable for a child to read.
 - Policy narrative: "Environment and template ports" and "Injected and
   child-process environments" in
   [`docs/developers-guide.md`](developers-guide.md)
+
+## Addendum
+
+### 2026-08-25: BDD isolation routes
+
+Issue #492 applied this taxonomy to `rstest-bdd`, whose steps execute in the
+test-harness process. The suite now uses two routes:
+
+- **Route A — isolated child.** An end-to-end scenario invokes `netsuke` with
+  `assert_cmd`, clears the child environment, and supplies required values
+  through `Command::env`.
+- **Route B — injected environment.** A scenario calls an in-process library
+  entry point with its injected environment and asserts values such as `Cli`,
+  `Manifest`, `BuildGraph`, or rendered output.
+
+The BDD suite no longer uses `EnvLock` or `CwdGuard` to coordinate
+process-global environment or working-directory changes. Route B avoids CWD
+changes by passing absolute paths or preserving `-C/--directory` for automatic
+project discovery.
+Explicit relative `--config` and `NETSUKE_CONFIG` selectors remain anchored to
+the child process CWD; they are not rebased beneath `-C`.

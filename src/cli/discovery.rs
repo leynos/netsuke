@@ -365,15 +365,18 @@ mod event_assertions;
 mod tracing_tests;
 
 #[cfg(test)]
+#[path = "discovery_helper_proptests.rs"]
+mod helper_proptests;
+
+#[cfg(test)]
 #[path = "discovery_layer_replay_tests.rs"]
 mod layer_replay_tests;
 #[cfg(test)]
 #[path = "discovery_layer_tests.rs"]
 mod layer_tests;
-
 #[cfg(test)]
-#[path = "discovery_helper_proptests.rs"]
-mod helper_proptests;
+#[path = "discovery_path_selection_tests.rs"]
+mod path_selection_tests;
 
 #[cfg(test)]
 #[path = "discovery_replay_proptests.rs"]
