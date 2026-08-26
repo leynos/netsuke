@@ -40,6 +40,10 @@ operator, user, and contributor references are easier to find.
 - [rfcs/0001-amendment-command-working-directories.md](rfcs/0001-amendment-command-working-directories.md):
   Normative amendment adding capability-scoped per-command working directories
   to RFC 0001.
+- [rfcs/0001-amendment-runtime-bindings-and-secure-tempdirs.md](rfcs/0001-amendment-runtime-bindings-and-secure-tempdirs.md):
+  Normative amendment adding bounded stdout environment capture, standard-error
+  pipelines, environment-selected working directories, and secure temporary
+  execution directories to RFC 0001.
 - [rfcs/0002-repository-relative-includes.md](rfcs/0002-repository-relative-includes.md):
   Deterministic repository-relative manifest includes with cycle detection,
   provenance, namespaces, and duplicate rejection.
