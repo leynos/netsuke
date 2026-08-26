@@ -3108,7 +3108,7 @@ Table: Scenario state groups and fields
 | Localization state | `localization_lock`, `localization_guard`, `locale_config`, `locale_env`, `locale_cli_override`, `locale_system`, `resolved_locale`, `locale_message`                                                                                    | Scenario-level localizer overrides and resolution state.   |
 | HTTP server state  | `http_server`, `stdlib_url`                                                                                                                                                                                                              | Test HTTP server fixture for fetch scenarios.              |
 | Output state       | `output_mode`, `simulated_no_color`, `simulated_term`, `output_prefs`, `simulated_no_emoji`, `rendered_prefix`                                                                                                                           | Accessibility and output preference resolution.            |
-| Environment state  | `env_vars_forward`                                                                                                                                                                                                  | Child process environment map forwarded to spawned commands.      |
+|Environment state   |`env_vars_forward`                                                                                                                                                                                                                        |Child process environment map forwarded to spawned commands.|
 
 ### Key `TestWorld` methods
 
