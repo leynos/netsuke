@@ -953,11 +953,11 @@ relative output paths:
 netsuke --directory /path/to/project build
 ```
 
-An explicit `--config` path is resolved against the directory anchored by
-`--directory` when one is supplied, and against the shell's original working
-directory otherwise. Earlier beta releases always resolved `--config` against
-the shell's original working directory; pass an absolute path (or run from the
-project directory) if you relied on that behaviour.
+An explicit `--config` path is always resolved relative to the shell's
+original working directory — `--directory` anchors automatic configuration
+discovery and manifest lookup, not explicit selectors. Pass an absolute path
+(or run from the project directory) when the selector is not relative to where
+the shell started.
 
 ### Generate and inspect artefacts
 

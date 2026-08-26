@@ -3108,14 +3108,12 @@ Table: Scenario state groups and fields
 | Localization state | `localization_lock`, `localization_guard`, `locale_config`, `locale_env`, `locale_cli_override`, `locale_system`, `resolved_locale`, `locale_message`                                                                                    | Scenario-level localizer overrides and resolution state.   |
 | HTTP server state  | `http_server`, `stdlib_url`                                                                                                                                                                                                              | Test HTTP server fixture for fetch scenarios.              |
 | Output state       | `output_mode`, `simulated_no_color`, `simulated_term`, `output_prefs`, `simulated_no_emoji`, `rendered_prefix`                                                                                                                           | Accessibility and output preference resolution.            |
-| Environment state  | `env_vars_forward`, `global_state_lock`                                                                                                                                                                                                  | Child environment map and the CWD-only scenario lock.      |
+| Environment state  | `env_vars_forward`                                                                                                                                                                                                  | Child process environment map forwarded to spawned commands.      |
 
 ### Key `TestWorld` methods
 
 - `track_env_var(key, new_value)` — update `env_vars_forward` so
   `build_netsuke_command` can configure the scenario's child process.
-- `ensure_global_state_lock()` — acquire the scenario-scoped CWD lock on first
-  use; subsequent calls are no-ops.
 
 ## Configuration merge architecture
 
