@@ -50,9 +50,15 @@ Adopt Polonius now, as a nightly-only source tree:
   default is a build that can silently drop it.
 - Pass no `-Zpolonius` directive anywhere. The pinned toolchain carries the
   requirement on its own, so plain Cargo invocations, rust-analyzer, Clippy,
-  Whitaker, and Kani all borrow-check with the same analysis without any
+  and Whitaker borrow-check with the same analysis without any
   build-configuration cooperation. A contract test fails if the directive
   reappears in the Makefile, a Cargo configuration fragment, or a workflow.
+- Treat Kani as a separate toolchain boundary. Kani 0.67.0 installs and uses
+  its bundled `nightly-2025-11-21` through `cargo kani setup`. That nightly
+  predates the nightly default for Polonius, so Kani currently uses NLL. Moving
+  the repository Rust pin does not upgrade Kani. Do not claim that Kani verifies
+  `POLONIUS(...)` APIs with Polonius until a Kani release bundles a
+  sufficiently recent nightly, or Kani is rebuilt from source against one.
 - Collapse the CI matrices in `ci.yml` and `netsukefile-test.yml` to the
   pinned nightly, and align `coverage-main.yml`. Stable and MSRV legs are
   removed because the tree no longer compiles without Polonius.
@@ -82,9 +88,11 @@ no longer exists, because carrying the flag was its only purpose.
   compiler bits build the tree everywhere. `rustup` provisions it automatically
   from `rust-toolchain.toml`.
 - **Coherent tooling.** Carrying the requirement in the toolchain pin alone
-  keeps rust-analyzer, Clippy, Whitaker (whose Dylint driver is nightly-based),
-  and Kani borrow-checking the same dialect, avoiding phantom editor errors on
-  correct code. There is no flag for a wrapper to drop.
+  keeps rust-analyzer, Clippy, and Whitaker (whose Dylint driver is
+  nightly-based) borrow-checking the same dialect, avoiding phantom editor
+  errors on correct code. There is no flag for a wrapper to drop. Kani remains
+  on its bundled NLL toolchain until it is upgraded or rebuilt as described
+  above.
 - **Stabilization path.** Polonius is a Rust project goal for stabilization,
   and is already the nightly default. When it reaches stable, the pin can be
   dropped without touching the migrated code, and an MSRV can be re-declared at
