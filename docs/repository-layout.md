@@ -18,7 +18,8 @@ output and some leaf files so the long-lived structure remains visible.
 ├── cyclopts/
 ├── docs/
 │   ├── archive/
-│   └── execplans/
+│   ├── execplans/
+│   └── rfcs/
 ├── examples/
 │   └── hello-world/
 ├── installer/
@@ -68,6 +69,9 @@ output and some leaf files so the long-lived structure remains visible.
   after active roadmap work moves on.
 - `docs/execplans/`: Execution plans used as implementation handoff documents
   for scoped tasks.
+- `docs/rfcs/`: Requests for Comments proposing changes that need technical
+  review before they become binding, named `NNNN-short-topic.md` and numbered
+  in allocation order.
 - `examples/`: Example Netsuke manifests and minimal runnable sample projects.
 - `installer/`: Installer packaging assets and platform-specific packaging
   definitions.
