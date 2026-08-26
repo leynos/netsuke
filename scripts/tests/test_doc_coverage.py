@@ -617,6 +617,7 @@ def test_parse_coverage_output_rejects_malformed_json(script: types.ModuleType) 
 @pytest.mark.parametrize(
     "entry",
     [
+        pytest.param('{"total": true, "with_docs": 0}', id="boolean"),
         pytest.param('{"total": 1e999, "with_docs": 0}', id="non-finite"),
         pytest.param('{"total": -1, "with_docs": 0}', id="negative"),
         pytest.param('{"total": 1.5, "with_docs": 0}', id="non-integer"),

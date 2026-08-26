@@ -61,6 +61,10 @@ def coverage_from_entry(entry: object) -> Coverage:
 def coverage_count(entry: object, name: str) -> int:
     """Convert and validate one Rustdoc coverage count."""
     count = entry[name]
-    if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+    if isinstance(count, bool):
+        raise ValueError("counts must be non-negative integers with with_docs <= total")
+    if not isinstance(count, int):
+        raise ValueError("counts must be non-negative integers with with_docs <= total")
+    if count < 0:
         raise ValueError("counts must be non-negative integers with with_docs <= total")
     return count
