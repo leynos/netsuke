@@ -2,11 +2,11 @@
 
 ## Status
 
-Accepted.
+Accepted. Updated on 2026-08-26 to record the retirement of `EnvLock`.
 
 ## Date
 
-2026-08-06
+2026-08-26
 
 ## Context and problem statement
 
@@ -67,6 +67,19 @@ variable or one precedence ladder; see "Environment and template ports" in
 `docs/developers-guide.md` for the composition rules that apply to all three,
 and "Ownership and permitted call sites" under that guide's "Manifest `env()`
 reader" section for the `EnvReader` shape specifically.
+
+### `EnvLock` retirement
+
+`EnvLock` is retired rather than hardened. Its replacement is an injected
+`mockable::Env` seam in production signatures, with `mockable::DefaultEnv`
+supplied at the production boundary and `mockable::MockEnv` supplied by tests.
+This is the target pattern described in [`AGENTS.md`](../AGENTS.md) and
+[`docs/reliable-testing-in-rust-via-dependency-injection.md`](reliable-testing-in-rust-via-dependency-injection.md).
+
+Removal is tracked in issue #494. Before that removal, the remaining callers
+migrate under issues #491, #492, and #493. No synchronization unit tests for
+`EnvLock` will be added: idempotent acquisition and Drop-based CWD restoration
+are properties of the lock, not Netsuke, and are vacuous once it has no callers.
 
 ### `EnvSnapshot` ownership
 
@@ -158,6 +171,12 @@ resolution entirely rather than setting the variable for a child to read.
   environment variable, for example) must be folded into `EnvSnapshot` and into
   `env_fingerprint`, not read independently downstream, to preserve the
   no-cycle and cache-correctness properties this ADR records.
+- `EnvLock` is a retiring legacy seam, not a mechanism to harden or extend.
+  Its removal is tracked in issue #494 after the callers migrate under issues
+  #491, #492, and #493 to injected `mockable::Env` production signatures.
+- Do not add synchronization unit tests for `EnvLock`: its idempotency and
+  Drop-based CWD restoration are lock properties, not Netsuke behaviour, and
+  become vacuous when the retiring seam has no callers.
 
 ## Alternatives considered
 
