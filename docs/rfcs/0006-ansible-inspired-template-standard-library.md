@@ -132,10 +132,17 @@ Three existing mechanisms matter to this proposal.
    [ADR-008](../adr-008-environment-seam-taxonomy.md) records the seam
    taxonomy: narrow closure seams for one or two call sites, snapshot values
    for wider ones.
-2. **Manifest-query restriction.** `netsuke help targets` loads manifests
-   through `register_manifest_query`, which registers only lexical path
-   filters, the collection filters, and `timedelta`, then re-registers `env`,
-   `glob`, `fetch`, `shell`, `grep`, and `contents` as always-failing stubs.
+2. **Manifest-query restriction.** The runner's read-only generation pipeline,
+   `runner::generation::load_manifest`, loads manifests through
+   `register_manifest_query`, which registers only lexical path filters, the
+   collection filters, and `timedelta`, then re-registers `env`, `glob`,
+   `fetch`, `shell`, `grep`, and `contents` as always-failing stubs.
+   `netsuke help targets` is its only command consumer today, but
+   [the developers' guide](../developers-guide.md) already admits future
+   dry-run and background-generation callers into the same pipeline. This RFC
+   therefore treats the restriction as a property of the read-only
+   registration rather than of one command, and "available in manifest
+   queries" below should be read that way throughout.
 3. **Documented examples are executed.** Every fenced example in
    `docs/stdlib-yaml-and-jinja-guide.md` carries a `tested-example` marker and
    is loaded, generated, and in most cases executed by
@@ -235,8 +242,10 @@ clock-observing, network-observing, or subprocess-observing.
 
 ### 6.2. Manifest-query availability
 
-Only pure, non-disclosing helpers are registered while rendering
-`netsuke help targets`.
+Only pure, non-disclosing helpers are registered in the read-only
+manifest-query environment. That environment serves `netsuke help targets`
+today and any later read-only generation caller, so a helper admitted here is
+admitted to every such caller at once.
 
 1. Every pure helper added by this RFC is registered in
    `register_query_helpers`.
@@ -1153,8 +1162,9 @@ The one **environment-observing** helper in this RFC.
   function.
 - It reads the environment through the injected reader described in section
   6.4, not through an ambient `std::env::var` call in the leaf helper.
-- It is **disabled during `netsuke help targets`**, exactly as `env` is, and
-  fails with the explicit restriction diagnostic from section 6.2.
+- It is **excluded from the read-only manifest-query registration**, exactly
+  as `env` is, and fails with the explicit restriction diagnostic from section
+  6.2.
 - It does not expand `~`; `expanduser` already does that.
 
 ### 8.7. Filesystem predicates

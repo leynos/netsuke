@@ -966,8 +966,8 @@ cross-platform surface. See RFC 0006 §8.6.
 - [ ] 6.6.4. Add the `abs` test as a pure lexical predicate. Requires 6.6.1.
   - See RFC 0006 §§8.7 and 11.4.
   - Resolve RFC 0006 §16 question 2 on the name before registering.
-  - Success: `abs` is available during `netsuke help targets`, unlike the
-    filesystem predicates in step 6.7.
+  - Success: `abs` is registered in the read-only manifest-query environment,
+    unlike the filesystem predicates in step 6.7.
 - [ ] 6.6.5. Add the combinatorial path-dialect suite. Requires 6.6.3 and
   6.6.4.
   - Cross every lexical path helper with all three dialects and both host
@@ -1009,7 +1009,9 @@ capability contract in RFC 0006 §6.4. See RFC 0006 §§8.6 and 8.7.
     [adr-008-environment-seam-taxonomy.md](adr-008-environment-seam-taxonomy.md).
   - Support `missing` values `error`, `empty`, and `preserve`, defaulting to
     `error`, and reject malformed references rather than passing them through.
-  - Disable it during `netsuke help targets` exactly as `env` is disabled.
+  - Exclude it from the read-only manifest-query registration exactly as `env`
+    is excluded, so every read-only generation caller is covered, not just
+    `netsuke help targets`.
   - Success: no leaf helper reads the environment ambiently, and the
     manifest-query stub explains the restriction.
 
