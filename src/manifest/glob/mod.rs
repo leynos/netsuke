@@ -361,8 +361,8 @@ impl PreparedGlob {
     ///
     /// Returns an error when the pattern fails brace validation.
     fn new(pattern: &str, base: Option<&Utf8Path>) -> std::result::Result<Self, Error> {
-        let pattern = GlobPattern::new(pattern)?;
-        let normalized = pattern.normalized();
+        let pattern_state = GlobPattern::new(pattern)?;
+        let normalized = pattern_state.normalized();
         // Resolve the injected base to a symlink-free absolute path before it
         // is embedded in the search text and opened as the capability root. A
         // workspace reached through a symbolic link must still expand
@@ -381,7 +381,7 @@ impl PreparedGlob {
                 |dir| (String::from(dir.join(normalized)), Some(dir.to_path_buf())),
             );
         Ok(Self {
-            pattern,
+            pattern: pattern_state,
             search,
             strip,
         })
