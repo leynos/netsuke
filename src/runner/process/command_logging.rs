@@ -1,8 +1,8 @@
 //! Structured tracing helpers for prepared Ninja subprocess commands.
 //!
-//! The parent process still emits the established human-readable command line
-//! for operators, while also attaching stable tracing fields for tools that
-//! consume structured diagnostics.
+//! Informational events retain only stable fields for tools that consume
+//! structured diagnostics, while debug events retain the human-readable,
+//! redacted command line for operators.
 
 use super::StderrMode;
 use super::command_env::env_names_eq;
@@ -14,7 +14,7 @@ use std::{
     path::PathBuf,
     process::{Command, ExitStatus},
 };
-use tracing::{field, info, info_span, warn};
+use tracing::{debug, field, info, info_span, warn};
 
 /// Prepared, redacted logging representation of a Ninja [`Command`].
 ///
@@ -91,7 +91,9 @@ impl CommandLogContext {
 /// Records the structured event emitted immediately before spawning Ninja.
 ///
 /// Includes the operation, executable, argument count, environment-override
-/// summary, and stderr suppression metadata.
+/// summary, and stderr suppression metadata. A debug companion event retains
+/// the redacted command line for verbose diagnostics without increasing the
+/// informational event's cardinality.
 pub(super) fn log_command_execution(
     context: &CommandLogContext,
     operation: &str,
@@ -104,6 +106,11 @@ pub(super) fn log_command_execution(
         env_override_count = context.env_override_count,
         path_overridden = context.is_path_overridden,
         suppress_stderr = stderr_mode.is_suppress(),
+        "Executing Ninja subprocess",
+    );
+    debug!(
+        operation,
+        ninja_program = %context.program_display,
         "Executing command: {}",
         context.redacted_command,
     );
@@ -189,7 +196,7 @@ mod tests {
         CommandLogContext::from_command(&Command::new("ninja"))
     }
 
-    /// Capture the execution event emitted for `operation`.
+    /// Capture the informational execution event emitted for `operation`.
     fn captured_execution_event(operation: &str) -> String {
         crate::test_tracing_capture::with_test_subscriber(LevelFilter::INFO, |captured| {
             log_command_execution(&logging_context(), operation, StderrMode::Forward);
@@ -231,8 +238,8 @@ mod tests {
     #[rstest]
     #[case::build("build")]
     #[case::named_tool("clean")]
-    /// Verify execution logging preserves its operation label.
-    fn execution_logging_preserves_operation_label(#[case] operation: &str) {
+    /// Verify informational execution logging retains only stable fields.
+    fn execution_logging_preserves_stable_fields(#[case] operation: &str) {
         let event = captured_execution_event(operation);
 
         assert!(
@@ -240,8 +247,51 @@ mod tests {
             "execution event should retain its operation label: {event}"
         );
         assert!(
-            event.contains("message=Executing command"),
-            "execution event should identify command execution: {event}"
+            event.contains("ninja_program=ninja"),
+            "execution event should retain its Ninja program: {event}"
+        );
+        assert!(
+            event.contains("arg_count=0")
+                && event.contains("env_override_count=0")
+                && event.contains("path_overridden=false")
+                && event.contains("suppress_stderr=false"),
+            "execution event should retain stable command metadata: {event}"
+        );
+        assert!(
+            event.contains("message=Executing Ninja subprocess"),
+            "execution event should use its static informational message: {event}"
+        );
+        assert!(
+            !event.contains("Executing command"),
+            "execution event must not contain the redacted command: {event}"
+        );
+    }
+
+    /// Verify debug logging carries the redacted command-line companion event.
+    #[test]
+    fn execution_logging_emits_redacted_command_at_debug_level() {
+        let mut command = Command::new("ninja");
+        command.arg("build.ninja");
+        let context = CommandLogContext::from_command(&command);
+        let events =
+            crate::test_tracing_capture::with_test_subscriber(LevelFilter::DEBUG, |captured| {
+                log_command_execution(&context, "build", StderrMode::Forward);
+                captured.snapshot()
+            });
+
+        let Some(event) = events
+            .iter()
+            .find(|event| event.contains("message=Executing command:"))
+        else {
+            panic!("expected a debug command event, got {events:?}");
+        };
+        assert!(
+            event.contains("Executing command: ninja build.ninja"),
+            "debug event should contain the redacted command: {event}"
+        );
+        assert!(
+            event.contains("operation=\"build\"") && event.contains("ninja_program=ninja"),
+            "debug event should retain correlation fields: {event}"
         );
     }
 
