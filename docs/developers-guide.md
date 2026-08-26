@@ -3728,6 +3728,48 @@ context rather than resolving output or process configuration again; tests
 should inject the program through `run_with_ninja_program` when they need a
 deterministic child executable.
 
+### Module: `runner::generation`
+
+`src/runner/generation.rs` owns the runner's reusable, in-memory generation
+pipeline. It separates manifest loading, IR construction, and Ninja bundle
+synthesis from command reporting and process execution. The read-only pipeline
+is `load_manifest` (optionally observing manifest stages), then `build_graph`,
+then `ninja_text`. Its final value is `GeneratedNinja`, including any dyndep
+sidecars, rather than a materialized file or a running Ninja process.
+
+`load_manifest` uses the manifest-query registration: it permits only its
+read-only helpers and rejects template access to the environment, filesystem,
+network, clock, and shell. `load_manifest_for_build` is a separate, explicitly
+effectful loader for build, clean, generate, and graph commands. It receives a
+network policy and enables the full build stdlib; it is not a dry-run or
+background-query primitive.
+
+#### Generation reuse boundary
+
+- **Ownership:** `runner::generation` is a private runner submodule. It owns
+  the three read-only generation steps, the explicitly effectful build loader,
+  their input/output hand-offs, and the manifest and IR error contexts. It
+  does not own `StatusReporter` updates, command dispatch, dyndep publication,
+  or Ninja execution.
+- **Permitted call-sites:** `runner::generate_ninja` composes the complete
+  build pipeline through `load_manifest_for_build` for build, clean, and
+  generate commands. `runner::graph::handle_graph` may stop after `build_graph`
+  to render the graph, and `runner::help_query` uses `load_manifest` for its
+  read-only target catalogue. Runner unit tests may compose the read-only
+  steps directly. New dry-run or background-generation work may use
+  `load_manifest`, `build_graph`, and `ninja_text` only within the runner
+  boundary; a public or cross-subsystem consumer requires an explicit
+  application boundary rather than widening these internal helpers.
+- **Composition rules:** command adapters report stages before or after the
+  relevant step and wrap `ninja_text` with runner-owned generation telemetry.
+  Only `load_manifest_with_stage_reporting` translates `StageObserver` events
+  into status updates and selects the effectful build loader. Consumers must
+  not call manifest parsing, IR generation, or `ninja_gen::generate_bundle`
+  directly in parallel with this pipeline. Before an adapter writes or
+  executes a returned bundle, it must use the existing capability-injected
+  dyndep-publication path to materialize its sidecars; the read-only steps
+  never write files, start processes, or invoke effectful template helpers.
+
 ### Module: `runner::reporter`
 
 `src/runner/reporter.rs` owns construction of the run's `StatusReporter` from

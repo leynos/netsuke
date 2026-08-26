@@ -28,9 +28,27 @@ Feature: Progress output
     When netsuke is run with arguments "--accessibility off --progress always generate"
     Then the command should succeed
     And stderr should contain "Stage 1/6"
+    And stderr should contain "Stage 1/6" before "Stage 2/6"
+    And stderr should contain "Stage 2/6" before "Stage 3/6"
+    And stderr should contain "Stage 3/6" before "Stage 4/6"
+    And stderr should contain "Stage 4/6" before "Stage 5/6"
+    And stderr should contain "Stage 5/6" before "Stage 6/6"
     And stderr should contain "Stage 6/6"
     And stderr should contain "Success:"
     And stderr should contain "Generate complete."
+
+  Scenario: Generate reports every stage for an isolated hello target
+    Given a Netsuke workspace with one hello target
+    And a fake ninja executable that succeeds without output
+    And the child PATH is the workspace directory
+    When netsuke is run with arguments "--accessibility off --progress always generate"
+    Then the command should succeed
+    And stderr should contain "Stage 1/6: Reading manifest file" before "Stage 2/6: Parsing YAML document"
+    And stderr should contain "Stage 2/6: Parsing YAML document" before "Stage 3/6: Expanding template directives"
+    And stderr should contain "Stage 3/6: Expanding template directives" before "Stage 4/6: Deserializing and rendering manifest values"
+    And stderr should contain "Stage 4/6: Deserializing and rendering manifest values" before "Stage 5/6: Building and validating dependency graph"
+    And stderr should contain "Stage 5/6: Building and validating dependency graph" before "Stage 6/6: Synthesizing Ninja build plan"
+    And stdout should contain "build hello:"
 
   Scenario: Verbose mode includes a prefixed completion timing summary
     Given a minimal Netsuke workspace

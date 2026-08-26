@@ -10,6 +10,7 @@ use crate::localization::{self, keys};
 use crate::status::PipelineStage;
 
 use super::super::RunnerError;
+use super::super::generation;
 use super::super::path_helpers::{ensure_manifest_exists, resolve_manifest_path};
 use super::terminal_safe;
 
@@ -179,11 +180,7 @@ fn load_manifest_for_query(
     stages: &mut Vec<PipelineStage>,
 ) -> Result<NetsukeManifest> {
     let mut on_stage = |stage| stages.push(pipeline_stage(stage));
-    crate::manifest::from_path_for_manifest_query(manifest_path.as_std_path(), Some(&mut on_stage))
-        .with_context(|| {
-            localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
-                .with_arg("path", manifest_path.as_str())
-        })
+    generation::load_manifest(manifest_path, Some(&mut on_stage))
 }
 
 /// Map manifest-loading events to data that the command boundary can report.
