@@ -92,6 +92,9 @@ operator, user, and contributor references are easier to find.
 - [v0-1-0-migration-guide.md](v0-1-0-migration-guide.md): Migration notes for
   the v0.1.0 child-environment API, glob behaviour, and serial-dependency
   additions, plus the stability caveat that covers them.
+- [release-admission-canaries.md](release-admission-canaries.md): Pinned
+  downstream v0.1.0 release-admission canaries, their shared bootstrap, and
+  intentional Makefile and helper-script boundaries.
 - [v0-1-1-migration-guide.md](v0-1-1-migration-guide.md): Migration note for
   replacing no-op aggregate recipes with dependency-only actions or targets.
 - [users-guide.md](users-guide.md): End-user reference for authoring and
@@ -112,10 +115,6 @@ operator, user, and contributor references are easier to find.
 - [localization-styleguide.md](localization-styleguide.md): House style for
   user-facing text and how voice, tone, register, and mechanics carry across
   Netsuke locales.
-- [locize-glossary.md](locize-glossary.md): Local, Locize-ready terminology
-  source of truth for Netsuke product names, manifest concepts, and identifiers.
-- [locize-styleguide.md](locize-styleguide.md): Locize-compatible base guidance
-  for consistent, human-first translations across Netsuke locales.
 
 ## Contributor guidance
 
