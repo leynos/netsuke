@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
 `Verification plan` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 There is no `PLANS.md` in this repository; `docs/execplans/` is the plan
 directory and `docs/roadmap.md` is the work index.
@@ -1169,6 +1169,12 @@ expansion as the old Ninja-ready `$$((...))`. The new backend correctly doubles
 raw shell dollars, so the fixture now supplies raw `$((...))` and `$i`. A
 focused nextest run passes. The full named gates and final review remain
 pending; status stays `IN PROGRESS`.
+
+2026-08-27 — final post-rebase verification passed: `make check-fmt`,
+`make test` (2,417 tests and doctests), `make typecheck`, `make lint`,
+`make markdownlint`, `make nixie`, and `make test-workflow-contracts` (55
+tests). `coderabbit review --agent` then completed with zero findings. The
+rebase and its compatibility repairs are complete; status is `COMPLETE`.
 
 2026-08-17 —
 
