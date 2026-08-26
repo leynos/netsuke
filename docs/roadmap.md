@@ -803,10 +803,11 @@ See RFC 0006 §8.1 and
 
 ### 6.3. Make configuration layering expressible
 
-This step answers whether the mapping transforms remove the hand-written merge
-and re-index loops that `vars`, `foreach`, and per-entry overrides currently
-force on manifest authors. Its outcome informs how much of the platform and
-toolchain configuration problem the template layer can own. See RFC 0006 §8.2.
+This step answers whether the mapping transforms remove the merge and
+re-index loops that `vars`, `foreach`, and per-entry overrides currently force
+manifest authors to write by hand. Its outcome informs how much of the
+platform and toolchain configuration problem the template layer can own. See
+RFC 0006 §8.2.
 
 - [ ] 6.3.1. Add `combine` with explicit recursion and list policies. Requires
   6.1.2 and 6.1.4.
