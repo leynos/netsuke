@@ -1,0 +1,64 @@
+//! Input and accumulation state for one cached configuration merge.
+//!
+//! The application creates a [`CachedMergeInput`] after diagnostic discovery,
+//! while the merge implementation owns [`MergeComposition`] until schema
+//! validation produces the resolved configuration.
+
+use clap::ArgMatches;
+use ortho_config::declarative::LayerComposition;
+use ortho_config::{MergeComposer, OrthoError, OrthoResult};
+use std::sync::Arc;
+
+use super::config::CliConfig;
+use super::discovery::{DiscoveredLayers, EnvProvider};
+use super::parser::Cli;
+
+/// Inputs for one cached configuration merge, owned by its application caller.
+pub struct CachedMergeInput<'a, E: ?Sized> {
+    pub(super) cli: &'a Cli,
+    pub(super) matches: &'a ArgMatches,
+    pub(super) env: &'a E,
+    pub(super) discovered: DiscoveredLayers,
+}
+
+impl<'a, E> CachedMergeInput<'a, E>
+where
+    E: EnvProvider + ?Sized,
+{
+    /// Create one merge request from parsed input and previously discovered layers.
+    pub const fn new(
+        cli: &'a Cli,
+        matches: &'a ArgMatches,
+        env: &'a E,
+        discovered: DiscoveredLayers,
+    ) -> Self {
+        Self {
+            cli,
+            matches,
+            env,
+            discovered,
+        }
+    }
+}
+
+/// Accumulates merge layers and errors before applying the configuration schema.
+pub(super) struct MergeComposition {
+    pub(super) composer: MergeComposer,
+    pub(super) errors: Vec<Arc<OrthoError>>,
+}
+
+impl MergeComposition {
+    /// Start a four-layer configuration composition.
+    pub(super) fn new() -> Self {
+        Self {
+            composer: MergeComposer::with_capacity(4),
+            errors: Vec::new(),
+        }
+    }
+
+    /// Apply the schema after all layers and layer errors have been collected.
+    pub(super) fn into_merge_result(self) -> OrthoResult<CliConfig> {
+        LayerComposition::new(self.composer.layers(), self.errors)
+            .into_merge_result(CliConfig::merge_from_layers)
+    }
+}

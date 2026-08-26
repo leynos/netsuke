@@ -22,21 +22,23 @@
 
 use clap::ArgMatches;
 use clap::parser::ValueSource;
-use ortho_config::declarative::LayerComposition;
 use ortho_config::figment::Figment;
-use ortho_config::{MergeComposer, OrthoMergeExt, OrthoResult, sanitize_value};
+use ortho_config::{OrthoError, OrthoMergeExt, OrthoResult, sanitize_value};
 use serde::Serialize;
 
 use serde_json::{Map, Value, json};
 
-use super::config::{BuildConfig, CliConfig};
+use super::config::{BuildConfig, CliConfig, validation_rejection_reason};
 use super::discovery::{
     DiscoveredLayers, EnvProvider, StdEnvProvider, discover_file_layers,
     push_discovered_file_layers,
 };
 use super::environment::EnvironmentLayer;
+use super::merge_input::{CachedMergeInput, MergeComposition};
+use super::merge_observability::{NoopMergeObserver, collect_override_leaf_paths};
 use super::parser::{BuildArgs, Cli, Commands};
 use super::validation_error;
+use super::{MergeEvent, MergeObserver};
 
 /// Merge discovered configuration layers over parsed CLI input.
 ///
@@ -64,7 +66,6 @@ pub fn merge_with_config_and_env(
     env: &impl EnvProvider,
 ) -> OrthoResult<Cli> {
     let outcome = discover_file_layers(cli, env);
-    outcome.emit_diagnostics();
     merge_with_cached_file_layers(cli, matches, env, outcome.into_layers())
 }
 
@@ -83,16 +84,50 @@ pub fn merge_with_cached_file_layers(
     env: &impl EnvProvider,
     discovered: DiscoveredLayers,
 ) -> OrthoResult<Cli> {
-    let mut errors = Vec::new();
-    let mut composer = MergeComposer::with_capacity(4);
+    let mut observer = NoopMergeObserver;
+    let input = CachedMergeInput::new(cli, matches, env, discovered);
+    merge_with_cached_file_layers_with_observer(input, &mut observer)
+}
 
-    push_defaults_layer(&mut composer, &mut errors);
-    push_discovered_file_layers(&mut composer, &mut errors, discovered);
-    push_environment_layer(env, &mut composer, &mut errors);
-    push_cli_layer(cli, matches, &mut composer, &mut errors);
+/// Merge cached configuration layers and report bounded events to `observer`.
+///
+/// Application adapters opt into observability by supplying an observer. The
+/// ordinary merge functions use a no-op observer so they remain side-effect
+/// free and reusable in non-CLI contexts.
+///
+/// # Errors
+///
+/// Returns an [`ortho_config::OrthoError`] if layer composition or merging
+/// fails.
+pub fn merge_with_cached_file_layers_with_observer<E, O>(
+    input: CachedMergeInput<'_, E>,
+    observer: &mut O,
+) -> OrthoResult<Cli>
+where
+    E: EnvProvider + ?Sized,
+    O: MergeObserver + ?Sized,
+{
+    let CachedMergeInput {
+        cli,
+        matches,
+        env,
+        discovered,
+    } = input;
+    let mut composition = MergeComposition::new();
 
-    let composition = LayerComposition::new(composer.layers(), errors);
-    let merged = composition.into_merge_result(CliConfig::merge_from_layers)?;
+    push_defaults_layer(&mut composition, observer);
+    push_discovered_file_layers(
+        &mut composition.composer,
+        &mut composition.errors,
+        discovered,
+        observer,
+    );
+    push_environment_layer(env, &mut composition, observer);
+    push_cli_layer(cli, matches, &mut composition, observer);
+
+    let merged = composition
+        .into_merge_result()
+        .inspect_err(|error| observe_validation_rejection(observer, error.as_ref()))?;
     Ok(apply_config(cli, merged))
 }
 
@@ -100,18 +135,18 @@ pub fn merge_with_cached_file_layers(
 ///
 /// This helper belongs only to the cached merge boundary: it must append to the
 /// caller's shared composer and error collection rather than finish a merge.
-fn push_defaults_layer(
-    composer: &mut MergeComposer,
-    errors: &mut Vec<std::sync::Arc<ortho_config::OrthoError>>,
-) {
+fn push_defaults_layer<O>(composition: &mut MergeComposition, observer: &mut O)
+where
+    O: MergeObserver + ?Sized,
+{
     match sanitize_value(&CliConfig::default()) {
         Ok(value) => {
-            tracing::debug!(layer = "defaults", "applied default configuration layer");
-            composer.push_defaults(value);
+            observer.observe(MergeEvent::DefaultsApplied);
+            composition.composer.push_defaults(value);
         }
         Err(err) => {
-            tracing::debug!(layer = "defaults", "default configuration layer failed");
-            errors.push(err);
+            observer.observe(MergeEvent::DefaultsFailed);
+            composition.errors.push(err);
         }
     }
 }
@@ -120,29 +155,26 @@ fn push_defaults_layer(
 ///
 /// This helper belongs only to the cached merge boundary and never reads the
 /// process environment: callers supply the environment adapter explicitly.
-fn push_environment_layer(
-    env: &impl EnvProvider,
-    composer: &mut MergeComposer,
-    errors: &mut Vec<std::sync::Arc<ortho_config::OrthoError>>,
-) {
+fn push_environment_layer<O>(
+    env: &(impl EnvProvider + ?Sized),
+    composition: &mut MergeComposition,
+    observer: &mut O,
+) where
+    O: MergeObserver + ?Sized,
+{
     match Figment::from(EnvironmentLayer::new(env.entries()))
         .extract::<Value>()
         .into_ortho_merge()
     {
         Ok(value) => {
-            tracing::debug!(
-                layer = "environment",
-                is_empty = is_empty_value(&value),
-                "merged environment configuration layer"
-            );
-            composer.push_environment(value);
+            observer.observe(MergeEvent::EnvironmentApplied {
+                is_empty: is_empty_value(&value),
+            });
+            composition.composer.push_environment(value);
         }
         Err(err) => {
-            tracing::debug!(
-                layer = "environment",
-                "environment configuration layer failed"
-            );
-            errors.push(err);
+            observer.observe(MergeEvent::EnvironmentFailed);
+            composition.errors.push(err);
         }
     }
 }
@@ -151,35 +183,46 @@ fn push_environment_layer(
 ///
 /// This helper is limited to the cached merge boundary because only that
 /// boundary owns the shared layer order and accumulated error collection.
-fn push_cli_layer(
+fn push_cli_layer<O>(
     cli: &Cli,
     matches: &ArgMatches,
-    composer: &mut MergeComposer,
-    errors: &mut Vec<std::sync::Arc<ortho_config::OrthoError>>,
-) {
+    composition: &mut MergeComposition,
+    observer: &mut O,
+) where
+    O: MergeObserver + ?Sized,
+{
     match cli_overrides_from_matches(cli, matches) {
         Ok(value) if !is_empty_value(&value) => {
             // Values may echo user-supplied paths or host lists, so records
             // identify only the keys that were explicitly overridden.
-            let override_keys = value
-                .as_object()
-                .map(|map| map.keys().cloned().collect::<Vec<_>>())
-                .unwrap_or_default();
-            tracing::debug!(
-                layer = "cli",
-                override_keys = ?override_keys,
-                "applied CLI override layer"
-            );
-            composer.push_cli(value);
+            observer.observe(MergeEvent::CliOverridesApplied {
+                override_keys: collect_override_leaf_paths(&value),
+            });
+            composition.composer.push_cli(value);
         }
-        Ok(_) => tracing::debug!(layer = "cli", "no explicit CLI overrides supplied"),
+        Ok(_) => observer.observe(MergeEvent::CliOverridesAbsent),
         Err(err) => {
-            tracing::debug!(layer = "cli", "CLI override layer failed");
-            errors.push(err);
+            observer.observe(MergeEvent::CliOverridesFailed);
+            composition.errors.push(err);
         }
     }
 }
-/// Return whether `value` is an empty JSON object and so contributes no CLI overrides.
+/// Forward known validation rejections to the explicit observer with fixed data.
+fn observe_validation_rejection<O>(observer: &mut O, error: &OrthoError)
+where
+    O: MergeObserver + ?Sized,
+{
+    if let OrthoError::Validation { key, .. } = error
+        && let Some(reason) = validation_rejection_reason(key)
+    {
+        observer.observe(MergeEvent::ValidationRejected {
+            key: key.clone(),
+            reason,
+        });
+    }
+}
+
+/// Return whether an override object contains no explicitly supplied settings.
 fn is_empty_value(value: &Value) -> bool {
     matches!(value, Value::Object(map) if map.is_empty())
 }

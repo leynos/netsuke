@@ -2733,12 +2733,12 @@ where resolution itself fails. No library module installs a global subscriber.
 
 Tests use a separate capture boundary:
 
-`src/test_tracing_capture.rs` (`crate::test_tracing_capture`) is the
-workspace's single implementation for capturing structured tracing events in
-tests. `with_test_subscriber` installs a capturing `Layer` as the default
-subscriber for the duration of a closure, then returns the closure's result.
-Each event's fields are rendered as a space-separated list of `name=value`
-pairs — strings and `Debug` values are quoted — and appended to a shared buffer:
+`src/test_tracing_capture.rs` (`crate::test_tracing_capture`) is the root
+crate's `#[cfg(test)]` capture boundary for unit tests. `with_test_subscriber`
+installs a capturing `Layer` as the default subscriber for the duration of a
+closure, then returns the closure's result. Each event's fields are rendered as
+a space-separated list of `name=value` pairs — strings and `Debug` values are
+quoted — and appended to a shared buffer:
 
 ```rust
 use crate::test_tracing_capture::with_test_subscriber;
@@ -2757,17 +2757,15 @@ with_test_subscriber(LevelFilter::TRACE, |captured| {
 default. Only events emitted on the calling thread are captured; events emitted
 from threads spawned inside the closure are silently dropped.
 
-The module is `#[cfg(test)]` in the root crate, so it is available to unit
-tests only; integration tests under `tests/` compile as separate crates and
-cannot reach it. Coverage that needs the real binary's tracing output instead
-asserts on the process's stderr — see `tests/logging_stderr/config_tracing.rs`.
-
-`test_support::tracing_capture` supplies the equivalent public, reusable
-capture boundary for integration tests. It is limited to test code: callers
-choose the `LevelFilter`, capture events only inside the supplied closure, and
-must not install a global subscriber or use it from production modules. Reuse
-it for in-process observability assertions such as configuration merging;
-continue to assert subprocess tracing through stderr.
+The root-crate module is `#[cfg(test)]`, so it is available to unit tests only;
+integration tests under `tests/` compile as separate crates and cannot reach
+it. `test_support::tracing_capture` is the public, reusable capture boundary
+for integration tests. It is limited to test code: callers choose the
+`LevelFilter`, capture events only inside the supplied closure, and must not
+install a global subscriber or use it from production modules. Reuse it for
+in-process observability assertions such as configuration merging. Coverage
+that needs the real binary's tracing output continues to assert on the
+process's stderr — see `tests/logging_stderr/config_tracing.rs`.
 
 `CapturedEvents` has no `Default` implementation — obtain it only from the
 handle passed into the `with_test_subscriber` closure. `snapshot()` recovers a
@@ -4215,6 +4213,14 @@ configuration-loading boundaries in `src/main.rs`. Keep configuration loading
 itself as a plain query: compose this instrumentation only at the CLI
 composition root. Other subsystem boundaries retain their local telemetry
 modules and must not add unbounded configuration detail to these series.
+
+The public `cli::MergeObserver` seam carries bounded `cli::MergeEvent` values
+from `merge_with_cached_file_layers_with_observer`. The application supplies
+`cli::TracingMergeObserver` from `config_load::resolve_configuration`; direct
+callers of the ordinary merge queries use no-op observation and emit no
+tracing. Custom observers may consume the bounded events, which exclude raw
+configuration values and paths. Keep observer ownership at the application
+boundary rather than installing a subscriber in a query.
 
 The phase-level metric contract is:
 

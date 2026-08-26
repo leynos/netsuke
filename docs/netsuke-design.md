@@ -2722,14 +2722,16 @@ Deferred configuration-discovery tracing retains only correlation hashes and
 presence bits for path metadata so events can be replayed after discovery.
 Those deferred trace events never retain or emit filenames or raw paths.
 
-The cached merge boundary emits one debug event as it pushes each defaults,
-file, environment, and CLI layer. Its private per-layer push helpers are owned
-by `merge_with_cached_file_layers`: they share its composer and accumulated
-error collection, and must not be reused to create a partial merge or access
-the process environment. CLI events contain override keys only; file-layer
-events use bounded path hashes; validation events use fixed `key` and `reason`
-fields. The application adjusts its tracing filter before this merge and turns
-it off for JSON diagnostics, preserving machine-readable stderr.
+The application-owned `MergeObserver` seam receives bounded `MergeEvent` values
+from `merge_with_cached_file_layers_with_observer`. Production supplies
+`TracingMergeObserver` from `config_load::resolve_configuration`; callers that
+use the ordinary `merge_with_config*` or `merge_with_cached_file_layers` query
+APIs receive no observation effects. Callers that need merge events may provide
+their own observer, but the event surface excludes raw configuration values and
+paths. CLI events contain override keys only; file-layer events use bounded
+path hashes; validation events use fixed `key` and `reason` fields. The
+application adjusts its tracing filter before this merge and turns it off for
+JSON diagnostics, preserving machine-readable stderr.
 
 CLI help and clap errors are localized via Fluent resources; locale resolution
 is handled in `src/locale_resolution.rs` in two phases. Before the

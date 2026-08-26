@@ -15,6 +15,8 @@ mod discovery;
 mod environment;
 mod help;
 mod merge;
+mod merge_input;
+mod merge_observability;
 mod parser;
 mod parsing;
 mod release_help;
@@ -38,7 +40,14 @@ pub use discovery::StdEnvProvider as ConfigStdEnvProvider;
 /// Record the discovery metric series for an already-timed phase.
 pub use discovery::record_discovery_outcome;
 pub use help::{HelpArgs, HelpTopic};
-pub use merge::{merge_with_cached_file_layers, merge_with_config, merge_with_config_and_env};
+pub use merge::{
+    merge_with_cached_file_layers, merge_with_cached_file_layers_with_observer, merge_with_config,
+    merge_with_config_and_env,
+};
+/// Input for an observer-enabled merge using previously discovered layers.
+pub use merge_input::CachedMergeInput;
+/// Bounded events and the production tracing adapter for observer-enabled merges.
+pub use merge_observability::{MergeEvent, MergeObserver, TracingMergeObserver};
 pub use parser::{
     BuildArgs, Cli, Commands, GraphArgs, json_hint_from_args, locale_hint_from_args,
     parse_with_localizer_from,
@@ -62,3 +71,7 @@ pub(super) fn validation_error(key: &str, message: &str) -> Arc<OrthoError> {
         message: message.to_owned(),
     })
 }
+
+#[cfg(test)]
+#[path = "merge_logging_proptests.rs"]
+mod merge_logging_proptests;

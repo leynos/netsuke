@@ -1042,6 +1042,16 @@ events report whether `--config`, `NETSUKE_CONFIG`, or automatic discovery won,
 whether a path was present, and which environment lookups were attempted.
 Events then identify whether Netsuke uses an explicit file or discovered layers.
 
+During the merge, verbose tracing also reports the defaults, file,
+environment, and CLI layers as they are applied. File-layer events include a
+bounded `path_hash` so operators can correlate a layer with discovery events
+without recording the raw path. CLI events record only the leaf keys in
+`override_keys`; they do not record override values such as paths or host
+lists. If validation rejects the merged configuration, the event includes the
+rejected setting in `key` and a bounded explanation in `reason`. These events
+make configuration precedence and rejection decisions auditable without
+exposing user-supplied values.
+
 If an explicit file cannot be loaded, the warning records `failure_kind` as
 `Missing` or `LoadError`. Verbose tracing uses only `path_hash` and
 `path_present`; it never exposes a file name or full path. The unkeyed
