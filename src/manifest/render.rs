@@ -182,6 +182,7 @@ fn render_recipe(recipe: &mut Recipe, context: &RecipeRenderContext<'_>) -> Resu
         Recipe::Command { command } => render_command_recipe(command, context),
         Recipe::Script { script } => render_script_recipe(script, context),
         Recipe::Rule { rule } => render_string_or_list(rule, context.env, context.vars),
+        Recipe::DependencyOnly => Ok(()),
     }
 }
 
@@ -313,6 +314,7 @@ thread_local! {
 }
 
 #[cfg(test)]
+/// Count one recipe-context preparation for the recipe-context tests.
 fn record_recipe_context_preparation() {
     RECIPE_CONTEXT_PREPARATIONS.with(|count| count.set(count.get() + 1));
 }

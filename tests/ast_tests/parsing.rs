@@ -328,7 +328,7 @@ fn rule_level_deps_are_rejected() -> Result<()> {
         command: "echo hi"
 "#
 )]
-#[case::actions_missing_recipe(
+#[case::actions_missing_recipe_and_deps(
     r#"
     netsuke_version: "1.0.0"
     actions:

@@ -147,9 +147,10 @@ pub struct Rule {
 
 /// Execution style for rules and targets.
 ///
-/// Exactly one variant must be provided for a rule or target. The fields are
-/// flattened in the manifest, so the presence of `command`, `script`, or `rule`
-/// determines the variant.
+/// Rules require an executable variant. Targets and actions may instead use
+/// [`Self::DependencyOnly`] when their non-empty `deps` list is the complete
+/// operation. The fields are flattened in the manifest, so the presence of
+/// `command`, `script`, or `rule` determines an executable variant.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum Recipe {
     /// A shell command, given as a scalar or an ordered list executed by a
@@ -169,6 +170,22 @@ pub enum Recipe {
         /// Name or names of rules to execute.
         rule: StringOrList,
     },
+    /// Model an action or target whose dependencies are its complete work.
+    ///
+    /// This is valid only for targets and actions with at least one `deps`
+    /// entry. Rules cannot use it because reusable rules must supply a recipe.
+    DependencyOnly,
+}
+
+/// Preserve the established diagnostic for entries without a recipe or deps.
+pub(crate) const MISSING_RECIPE_ERROR: &str = "missing one of command, script, or rule";
+
+impl Recipe {
+    /// Report whether this recipe lowers to a dependency-only Ninja node.
+    #[must_use]
+    pub(crate) const fn is_dependency_only(&self) -> bool {
+        matches!(self, Self::DependencyOnly)
+    }
 }
 
 /// Flattened recipe fields before deserialization selects a variant.
@@ -205,9 +222,7 @@ impl<'de> Deserialize<'de> for Recipe {
             },
             (None, Some(script), None) => Ok(Self::Script { script }),
             (None, None, Some(rule)) => Ok(Self::Rule { rule }),
-            (None, None, None) => Err(serde::de::Error::custom(
-                "missing one of command, script, or rule",
-            )),
+            (None, None, None) => Ok(Self::DependencyOnly),
             (command_opt, script_opt, rule_opt) => {
                 let present: Vec<&str> = [
                     ("command", command_opt.is_some()),
@@ -224,5 +239,27 @@ impl<'de> Deserialize<'de> for Recipe {
                 )))
             }
         }
+    }
+}
+
+impl NetsukeManifest {
+    /// Validate that every dependency-only entry has declared dependencies.
+    ///
+    /// A rule cannot be dependency-only because targets need a reusable
+    /// executable recipe when they reference a rule by name.
+    pub(crate) fn validate_recipes(&self) -> Result<(), &'static str> {
+        if self
+            .rules
+            .iter()
+            .any(|rule| rule.recipe.is_dependency_only())
+            || self
+                .actions
+                .iter()
+                .chain(&self.targets)
+                .any(|target| target.recipe.is_dependency_only() && target.deps.is_empty_content())
+        {
+            return Err(MISSING_RECIPE_ERROR);
+        }
+        Ok(())
     }
 }

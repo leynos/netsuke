@@ -92,6 +92,8 @@ operator, user, and contributor references are easier to find.
 - [v0-1-0-migration-guide.md](v0-1-0-migration-guide.md): Migration notes for
   the v0.1.0 child-environment API, glob behaviour, and serial-dependency
   additions, plus the stability caveat that covers them.
+- [v0-1-1-migration-guide.md](v0-1-1-migration-guide.md): Migration note for
+  replacing no-op aggregate recipes with dependency-only actions or targets.
 - [users-guide.md](users-guide.md): End-user reference for authoring and
   running Netsuke manifests, including executable discovery and
   `command_available` branch selection.

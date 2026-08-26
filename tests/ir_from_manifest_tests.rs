@@ -269,6 +269,41 @@ fn manifest_deps_do_not_contribute_to_recipe_inputs() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn dependency_only_entries_lower_to_deduplicated_phony_actions() -> Result<()> {
+    let yaml = concat!(
+        "netsuke_version: '1.0.0'\n",
+        "actions:\n",
+        "  - name: all\n",
+        "    deps: [check-fmt, lint]\n",
+        "targets:\n",
+        "  - name: release\n",
+        "    deps: [all]\n",
+    );
+    let manifest = manifest::from_str(yaml)?;
+    let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
+    ensure!(
+        graph.actions.len() == 1
+            && graph
+                .actions
+                .values()
+                .all(|action| matches!(action.recipe, Recipe::DependencyOnly)),
+        "dependency-only entries should deduplicate into one non-executable action: {:?}",
+        graph.actions
+    );
+    let ninja = ninja_gen::generate(&graph).context("generate dependency-only Ninja")?;
+    ensure!(
+        ninja.contains("build all: phony | check-fmt lint")
+            && ninja.contains("build release: phony | all"),
+        "dependency-only entries should lower to phony Ninja nodes: {ninja}"
+    );
+    ensure!(
+        !ninja.contains("rule ") && !ninja.contains("command ="),
+        "dependency-only nodes must not emit a synthetic recipe: {ninja}"
+    );
+    Ok(())
+}
+
 #[rstest]
 fn target_descriptions_do_not_replace_rule_progress_text() -> Result<()> {
     let yaml = concat!(

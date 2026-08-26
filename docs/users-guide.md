@@ -376,7 +376,10 @@ platform-selected actions when a manifest must work on Windows.
 A target supports these fields:
 
 - `name`: one output path or a list of output paths.
-- `rule`, `command`, or `script`: exactly one recipe.
+- `rule`, `command`, or `script`: exactly one recipe for work that has its own
+  execution step. An action or target with a non-empty `deps` list may omit a
+  recipe to form a dependency-only aggregate; this is preferred over a no-op
+  `command: ":"`.
 - `sources`: explicit inputs. They affect freshness and become `{{ ins }}`.
 - `deps`: implicit dependencies. They affect freshness but do not become
   recipe arguments. Declare them on each target; reusable rules reject `deps`.
@@ -426,7 +429,6 @@ actions:
   - name: test
     command: "echo testing"
   - name: all
-    command: ":"
     dependency_order: serial
     deps:
       - check-fmt
@@ -444,6 +446,10 @@ targets:
       - test
       - release-notes
 ```
+
+The `all` action has no recipe because its dependencies are the complete
+workflow. Netsuke lowers it to a native Ninja `phony` node, so it has no shell
+no-op of its own.
 
 For a serial list, Netsuke starts each direct dependency only after the
 preceding one succeeds. If an earlier dependency fails, later dependencies in

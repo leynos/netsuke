@@ -1,0 +1,16 @@
+---
+source: tests/ninja_snapshot_tests.rs
+assertion_line: 292
+expression: ninja_content
+---
+rule 00ea0ab8887980936b52022196b4723924fd4d0f1f120f7bac53f2a60aab1148
+  command = echo checking format
+
+rule 6530944c178f4c8cf6d38d1d9298bd291a71091fe6ea01b3ab16a60fdae95e71
+  command = echo linting
+
+build all: phony | check-fmt lint
+
+build check-fmt: 00ea0ab8887980936b52022196b4723924fd4d0f1f120f7bac53f2a60aab1148
+
+build lint: 6530944c178f4c8cf6d38d1d9298bd291a71091fe6ea01b3ab16a60fdae95e71

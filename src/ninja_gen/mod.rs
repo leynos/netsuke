@@ -151,6 +151,9 @@ pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), Ni
     let mut actions: Vec<_> = graph.actions.iter().collect();
     actions.sort_by_key(|(id, _)| *id);
     for (zero_based_action_index, (id, action)) in actions.into_iter().enumerate() {
+        if action.recipe.is_dependency_only() {
+            continue;
+        }
         let action_index = zero_based_action_index + 1;
         validate_action_recipe(action, action_index)?;
         validate_action_metadata(action)?;
@@ -179,6 +182,11 @@ pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), Ni
             "{}",
             DisplayEdge {
                 edge,
+                action_name: if action.recipe.is_dependency_only() {
+                    "phony"
+                } else {
+                    &edge.action_id
+                },
                 action_restat: action.restat,
                 implicit_deps: &edge.implicit_deps,
             }
@@ -310,6 +318,7 @@ impl NamedAction<'_> {
             Recipe::Command {
                 command: StringOrList::Empty,
             } => return Self::reject_empty_command_recipe(),
+            Recipe::DependencyOnly => return Self::reject_empty_command_recipe(),
             Recipe::Script { script } => Self::script_shell_text(script),
             Recipe::Rule { .. } => return Self::reject_rule_recipe(),
         };
@@ -360,6 +369,8 @@ impl NamedAction<'_> {
 pub(crate) struct DisplayEdge<'a> {
     /// The build edge whose inputs and outputs are rendered.
     edge: &'a BuildEdge,
+    /// The Ninja rule selected for the edge, including the built-in `phony` rule.
+    action_name: &'a str,
     /// Whether the action sets `restat`, suppressing the edge-level override.
     action_restat: bool,
     /// Dependencies rendered after `|`, either the edge's implicit deps or lowered serial gates.
@@ -372,7 +383,7 @@ impl Display for DisplayEdge<'_> {
         if !self.edge.implicit_outputs.is_empty() {
             write!(f, " | {}", join(&self.edge.implicit_outputs))?;
         }
-        write!(f, ": {}", self.edge.action_id)?;
+        write!(f, ": {}", self.action_name)?;
         if !self.edge.inputs.is_empty() {
             write!(f, " {}", join(&self.edge.inputs))?;
         }

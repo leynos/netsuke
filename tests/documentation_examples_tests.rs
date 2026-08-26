@@ -175,6 +175,24 @@ fn documented_manifest_generates_ninja(#[case] example_id: &str) -> Result<()> {
 }
 
 #[test]
+fn serial_aggregate_example_generates_a_dependency_only_node() -> Result<()> {
+    let workspace = manifest_workspace("guide-serial-dependency-order-manifest")?;
+    let run = run_netsuke_in(workspace.path(), &["--progress", "never", "generate"])?;
+
+    assert_success(&run, "guide dependency-only serial aggregate")?;
+    ensure!(
+        run.stdout.contains("build all: phony | .netsuke/serial/"),
+        "the documented aggregate should lower to a dependency-only phony node: {}",
+        run.stdout
+    );
+    ensure!(
+        !run.stdout.contains("command = :"),
+        "the documented aggregate must not emit a shell no-op: {}",
+        run.stdout
+    );
+    Ok(())
+}
+#[test]
 fn documented_fetch_expression_is_registered_but_not_executed() -> Result<()> {
     let example = documented_example("stdlib-fetch-expression")?;
     ensure!(

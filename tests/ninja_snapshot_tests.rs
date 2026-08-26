@@ -256,3 +256,41 @@ fn implicit_deps_manifest_ninja_snapshot() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn dependency_only_manifest_ninja_snapshot() -> Result<()> {
+    let manifest_yaml = r#"
+        netsuke_version: "1.0.0"
+        actions:
+          - name: check-fmt
+            command: "echo checking format"
+          - name: lint
+            command: "echo linting"
+          - name: all
+            deps: [check-fmt, lint]
+        targets: []
+    "#;
+    let manifest = manifest::from_str(manifest_yaml)?;
+    let ir = BuildGraph::from_manifest(&manifest)?;
+    let ninja_content = ninja_gen::generate(&ir)?;
+
+    ensure!(
+        ninja_content.contains("build all: phony | check-fmt lint"),
+        "dependency-only aggregate should lower to a native phony node: {ninja_content}"
+    );
+    ensure!(
+        !ninja_content.contains("command = :"),
+        "dependency-only aggregate must not retain a shell no-op: {ninja_content}"
+    );
+
+    let mut settings = Settings::new();
+    settings.set_snapshot_path(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/snapshots/ninja"
+    ));
+    settings.bind(|| {
+        assert_snapshot!("dependency_only_manifest_ninja", ninja_content);
+    });
+
+    Ok(())
+}

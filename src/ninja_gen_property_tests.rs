@@ -63,6 +63,7 @@ fn edge_strategy_with_ranges(
 fn format_edge(edge: &BuildEdge) -> String {
     DisplayEdge {
         edge,
+        action_name: &edge.action_id,
         action_restat: false,
         implicit_deps: &edge.implicit_deps,
     }

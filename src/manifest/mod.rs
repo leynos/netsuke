@@ -52,14 +52,12 @@ mod render;
 pub type ManifestValue = serde_json::Value;
 /// JSON object mapping string keys to manifest values.
 pub type ManifestMap = serde_json::Map<String, ManifestValue>;
-
 pub use diagnostics::{
     ManifestError, ManifestName, ManifestSource, map_data_error, map_yaml_error,
 };
 pub use env_reader::{EnvReadError, EnvReader, process_env_reader};
-pub use glob::glob_paths;
-
 pub(crate) use expand::expand_foreach;
+pub use glob::glob_paths;
 pub use parse_with_config::from_str_with_env_and_config;
 pub(crate) use query::from_path_for_manifest_query;
 pub use render::render_manifest;
@@ -168,6 +166,13 @@ fn from_str_named(
     let manifest: NetsukeManifest =
         serde_json::from_value(doc).map_err(|error| ManifestError::Parse {
             source: map_data_error(localize_recipe_error(error), name),
+            message: localization::message(keys::MANIFEST_PARSE),
+        })?;
+
+    manifest
+        .validate_recipes()
+        .map_err(|detail| ManifestError::Parse {
+            source: map_data_error(serde_json::Error::custom(detail), name),
             message: localization::message(keys::MANIFEST_PARSE),
         })?;
 

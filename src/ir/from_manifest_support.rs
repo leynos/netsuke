@@ -82,6 +82,7 @@ fn resolve_recipe(recipe: Recipe, bindings: ActionBindings<'_>) -> Result<Recipe
             script: resolve_script(&script, bindings)?,
         }),
         rule @ Recipe::Rule { .. } => Ok(rule),
+        dependency_only @ Recipe::DependencyOnly => Ok(dependency_only),
     }
 }
 

@@ -32,6 +32,17 @@ fn action(command: &str) -> Action {
     }
 }
 
+/// Construct an action whose dependencies are its complete operation.
+const fn dependency_only_action() -> Action {
+    Action {
+        recipe: Recipe::DependencyOnly,
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    }
+}
 fn edge(
     action_id: &str,
     output: &str,
@@ -66,13 +77,10 @@ fn serial_order_graph() -> BuildGraph {
             "test",
             "test -e lint && test ! -e test && echo three >> order.log && touch test",
         ),
-        (
-            "all",
-            "test -e test && test ! -e all && echo all >> order.log && touch all",
-        ),
     ] {
         graph.actions.insert(name.into(), action(command));
     }
+    graph.actions.insert("all".into(), dependency_only_action());
     for (action_id, output, deps, dependency_order) in [
         ("fmt", "check-fmt", &[][..], DependencyOrder::Parallel),
         ("lint", "lint", &[][..], DependencyOrder::Parallel),
@@ -227,8 +235,12 @@ fn serial_deps_run_in_declaration_order() -> Result<()> {
         .read_to_string("order.log")
         .context("read order log")?;
     ensure!(
-        log.lines().collect::<Vec<_>>() == vec!["one", "two", "three", "all"],
+        log.lines().collect::<Vec<_>>() == vec!["one", "two", "three"],
         "deps ran out of order: {log:?}"
+    );
+    ensure!(
+        run.root.open("all").is_err(),
+        "dependency-only aggregate must not run a synthetic recipe"
     );
     Ok(())
 }
@@ -241,9 +253,7 @@ fn failure_of_early_dep_stops_later_stages() -> Result<()> {
     graph
         .actions
         .insert("later".into(), action("touch later-marker"));
-    graph
-        .actions
-        .insert("all".into(), action("touch all-marker"));
+    graph.actions.insert("all".into(), dependency_only_action());
 
     graph.targets.insert(
         Utf8PathBuf::from("first"),
@@ -298,10 +308,6 @@ fn failure_of_early_dep_stops_later_stages() -> Result<()> {
     ensure!(
         !dir.path().join("later-marker").exists(),
         "later dependency must not run after the first dep fails"
-    );
-    ensure!(
-        !dir.path().join("all-marker").exists(),
-        "aggregate must not run after the first dep fails"
     );
     Ok(())
 }
