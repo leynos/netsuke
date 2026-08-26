@@ -117,6 +117,7 @@ mod tests {
     //! which holds everywhere — rather than a host-specific spawn.
 
     use super::{render, write};
+    use proptest::prelude::*;
 
     fn owned(args: &[&str]) -> Vec<String> {
         args.iter().map(|arg| (*arg).to_owned()).collect()
@@ -162,6 +163,23 @@ mod tests {
     #[test]
     fn an_empty_argument_list_renders_empty() {
         assert_eq!(render(&[]).expect("no arguments render"), "");
+    }
+
+    proptest! {
+        /// Preserve every newline-free compiler argument in ordered UTF-8 form.
+        #[test]
+        fn render_preserves_newline_free_argument_vectors(
+            args in proptest::collection::vec("[\\p{L}\\p{N}\\p{P}\\p{Zs}]{0,32}", 0..32),
+        ) {
+            let expected = args.iter().fold(String::new(), |mut text, argument| {
+                text.push_str(argument);
+                text.push('\n');
+                text
+            });
+            let actual = render(&args).map_err(|error| error.to_string());
+
+            prop_assert_eq!(actual, Ok(expected));
+        }
     }
 
     #[test]

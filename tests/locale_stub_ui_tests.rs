@@ -16,10 +16,11 @@
 //! `.stderr` snapshot. The `test_support` rlib is built by Cargo, and the
 //! fixtures are compiled directly with the workspace `rustc` against it.
 
+#[path = "support/cargo_artifacts.rs"]
+mod cargo_artifacts;
 #[path = "support/rustc_response_file.rs"]
 mod rustc_response_file;
 
-use camino::{Utf8Path, Utf8PathBuf};
 use rstest::{fixture, rstest};
 use std::{
     io,
@@ -84,8 +85,8 @@ fn stub_env_builders_compile_under_the_same_harness(
 
 /// The `test_support` rlib and the directories holding its dependencies.
 struct TestSupportRlib {
-    rlib: Utf8PathBuf,
-    deps_dirs: Vec<Utf8PathBuf>,
+    rlib: PathBuf,
+    deps_dirs: Vec<PathBuf>,
 }
 
 impl TestSupportRlib {
@@ -122,7 +123,7 @@ impl TestSupportRlib {
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
         let rlib = stdout
             .lines()
-            .filter_map(test_support_rlib_in_message)
+            .filter_map(|line| cargo_artifacts::library_path_in_message(line, "test_support"))
             .next_back()
             .ok_or_else(|| io::Error::other("cargo reported no test_support rlib artefact"))?;
         // Dependencies do not necessarily sit beside the uplifted
@@ -132,8 +133,11 @@ impl TestSupportRlib {
         // own directory rather than one shared `deps/`. Every
         // compiler-artifact message names where its own artefacts really
         // landed, so collect each parent directory for `-L dependency=`.
-        let mut deps_dirs: Vec<Utf8PathBuf> = Vec::new();
-        for parent in stdout.lines().flat_map(rlib_parents_in_message) {
+        let mut deps_dirs = Vec::new();
+        for parent in stdout
+            .lines()
+            .flat_map(cargo_artifacts::dependency_dirs_in_message)
+        {
             if !deps_dirs.contains(&parent) {
                 deps_dirs.push(parent);
             }
@@ -165,14 +169,14 @@ impl TestSupportRlib {
             String::from("--edition=2024"),
             String::from("--crate-type=bin"),
             String::from("--emit=metadata"),
-            manifest_dir().join(source).into_string(),
+            manifest_dir().join(source).to_string_lossy().into_owned(),
             String::from("--extern"),
-            format!("test_support={}", self.rlib),
+            format!("test_support={}", self.rlib.display()),
         ];
         args.extend(
             self.deps_dirs
                 .iter()
-                .flat_map(|dir| [String::from("-L"), format!("dependency={dir}")]),
+                .flat_map(|dir| [String::from("-L"), format!("dependency={}", dir.display())]),
         );
         args.push(String::from("-o"));
         args.push(
@@ -190,89 +194,8 @@ impl TestSupportRlib {
     }
 }
 
-/// Whether `filename` is an artefact `rustc` can load from a `-L dependency=`
-/// directory.
-///
-/// Three extensions matter, each for its own reason:
-///
-/// - `rmeta` carries a crate's full metadata. Cargo now builds with
-///   `-Zembed-metadata=no`, so an rlib holds only a metadata *stub* and
-///   `rustc` rejects it with "only metadata stub found" unless the matching
-///   `.rmeta` is reachable.
-/// - `rlib` still covers ordinary library dependencies, and remains what a
-///   linking build needs.
-/// - The platform's dynamic-library extension covers proc-macro crates, which
-///   `rustc` loads as host dynamic libraries. A shared `deps/` directory used
-///   to pick those up as a side effect of collecting rlib directories; the
-///   Cargo shipped with the 1.99 nightlies gives each crate its own directory,
-///   so a filtered-out proc macro is simply absent and its dependents fail
-///   with `E0463`.
-fn is_dependency_artefact(filename: &str) -> bool {
-    Utf8Path::new(filename)
-        .extension()
-        .is_some_and(|extension| {
-            extension.eq_ignore_ascii_case("rmeta")
-                || extension.eq_ignore_ascii_case("rlib")
-                || extension.eq_ignore_ascii_case(std::env::consts::DLL_EXTENSION)
-        })
-}
-
-/// Extract a compiler-artifact message's target name and library paths.
-///
-/// Returns `None` for lines that are not valid JSON, not compiler-artifact
-/// messages, or that lack a target name; the library list may be empty for
-/// artefacts that emit nothing loadable.
-fn compiler_artifact_rlibs(line: &str) -> Option<(String, Vec<Utf8PathBuf>)> {
-    let message: serde_json::Value = serde_json::from_str(line).ok()?;
-    if message.get("reason")? != "compiler-artifact" {
-        return None;
-    }
-    let name = message.get("target")?.get("name")?.as_str()?.to_owned();
-    let rlibs = message
-        .get("filenames")
-        .and_then(serde_json::Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(serde_json::Value::as_str)
-        .filter(|filename| is_dependency_artefact(filename))
-        .map(Utf8PathBuf::from)
-        .collect();
-    Some((name, rlibs))
-}
-
-/// Extract the parent directories of every rlib in one Cargo JSON message.
-fn rlib_parents_in_message(line: &str) -> Vec<Utf8PathBuf> {
-    compiler_artifact_rlibs(line)
-        .map(|(_name, rlibs)| {
-            rlibs
-                .iter()
-                .filter_map(|rlib| rlib.parent().map(Utf8Path::to_path_buf))
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-/// Extract the `test_support` metadata path from one Cargo JSON message.
-///
-/// Prefers the `.rmeta`, falling back to the `.rlib`. The fixtures are
-/// type-checked with `--emit=metadata`, so metadata is all `--extern` needs;
-/// and since Cargo builds with `-Zembed-metadata=no`, the rlib holds only a
-/// stub, which `rustc` refuses to load on its own.
-fn test_support_rlib_in_message(line: &str) -> Option<Utf8PathBuf> {
-    let (name, libs) = compiler_artifact_rlibs(line)?;
-    if name != "test_support" {
-        return None;
-    }
-    let by_extension = |wanted: &str| {
-        libs.iter()
-            .rfind(|lib| lib.extension().is_some_and(|ext| ext == wanted))
-            .cloned()
-    };
-    by_extension("rmeta").or_else(|| by_extension("rlib"))
-}
-
-fn manifest_dir() -> Utf8PathBuf {
-    Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+fn manifest_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
 #[expect(
@@ -293,87 +216,6 @@ fn rustc() -> PathBuf {
 
 fn stderr(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
-}
-
-/// A synthetic Cargo message with two rlibs in different directories,
-/// mirroring a split `build.build-dir` layout.
-const SPLIT_LAYOUT_MESSAGE: &str = r#"{"reason":"compiler-artifact","target":{"name":"anyhow"},"filenames":["/build/debug/deps/libanyhow-1.rlib","/target/debug/libanyhow-1.rlib"]}"#;
-
-#[rstest]
-fn parser_collects_every_rlib_directory_from_a_message() {
-    let parents = rlib_parents_in_message(SPLIT_LAYOUT_MESSAGE);
-    assert_eq!(
-        parents,
-        vec![
-            Utf8PathBuf::from("/build/debug/deps"),
-            Utf8PathBuf::from("/target/debug"),
-        ],
-        "both rlib directories should be collected in message order"
-    );
-}
-
-/// Proc-macro crates emit a host dynamic library rather than an rlib, and
-/// each one now has its own directory, so its parent must be collected too.
-#[rstest]
-fn parser_collects_proc_macro_dynamic_library_directories() {
-    let message = format!(
-        r#"{{"reason":"compiler-artifact","target":{{"name":"tracing_attributes"}},"filenames":["/build/tracing-attributes/1/out/libtracing_attributes-1.{}"]}}"#,
-        std::env::consts::DLL_EXTENSION
-    );
-    assert_eq!(
-        rlib_parents_in_message(&message),
-        vec![Utf8PathBuf::from("/build/tracing-attributes/1/out")],
-        "a proc-macro dylib directory should join the dependency search path"
-    );
-}
-
-#[rstest]
-#[case::malformed_json("not json at all")]
-#[case::other_reason(r#"{"reason":"build-script-executed","target":{"name":"anyhow"}}"#)]
-#[case::missing_target(r#"{"reason":"compiler-artifact","filenames":["/a/lib.rlib"]}"#)]
-fn parser_ignores_non_artifact_messages(#[case] line: &str) {
-    assert!(
-        rlib_parents_in_message(line).is_empty(),
-        "non-artifact input should yield no directories: {line:?}"
-    );
-    assert!(
-        test_support_rlib_in_message(line).is_none(),
-        "non-artifact input should yield no test_support rlib: {line:?}"
-    );
-}
-
-#[rstest]
-fn parser_selects_the_test_support_rlib_by_target_name() {
-    let message = r#"{"reason":"compiler-artifact","target":{"name":"test_support"},"filenames":["/deps/libtest_support-1.rlib","/final/libtest_support.rlib"]}"#;
-    assert_eq!(
-        test_support_rlib_in_message(message),
-        Some(Utf8PathBuf::from("/final/libtest_support.rlib")),
-        "the last-listed rlib should win, matching Cargo's uplift ordering"
-    );
-    assert!(
-        test_support_rlib_in_message(SPLIT_LAYOUT_MESSAGE).is_none(),
-        "other targets' artefacts should not be mistaken for test_support"
-    );
-}
-
-/// Cargo builds with `-Zembed-metadata=no`, so the rlib holds only a metadata
-/// stub and the full metadata lives in a sibling `.rmeta`. The `--extern` path
-/// must name the `.rmeta` whenever Cargo reports one, whatever the ordering.
-#[rstest]
-fn parser_prefers_the_rmeta_over_the_stub_rlib() {
-    let message = r#"{"reason":"compiler-artifact","target":{"name":"test_support"},"filenames":["/final/libtest_support.rlib","/build/out/libtest_support-1.rmeta"]}"#;
-    assert_eq!(
-        test_support_rlib_in_message(message),
-        Some(Utf8PathBuf::from("/build/out/libtest_support-1.rmeta")),
-        "the rmeta carries the full metadata the rlib no longer embeds"
-    );
-    // An older Cargo reports no rmeta at all; the rlib must still be selected.
-    let rlib_only = r#"{"reason":"compiler-artifact","target":{"name":"test_support"},"filenames":["/final/libtest_support.rlib"]}"#;
-    assert_eq!(
-        test_support_rlib_in_message(rlib_only),
-        Some(Utf8PathBuf::from("/final/libtest_support.rlib")),
-        "an rmeta-less message should fall back to the rlib"
-    );
 }
 
 /// Forcing a split `build.build-dir` must still yield a working harness:

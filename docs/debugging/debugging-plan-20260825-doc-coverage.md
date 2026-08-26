@@ -1,11 +1,11 @@
-# Debugging Plan: Restore Rustdoc coverage parsing
+# Debugging plan: restore Rustdoc coverage parsing
 
 **Generated**: 2026-08-25 **Issue ID**: rebase follow-up for PR #577
 **Severity**: high **Falsification sub-agent**: `alchemist` **Planning agent
 boundary**: This document was prepared by the planning agent. Falsification
 must be executed by the named sub-agent, not by the planning agent.
 
-## Problem Statement
+## Problem statement
 
 `make doc-coverage` passes its Python unit tests but fails while measuring the
 `test_support` library on the pinned nightly. Cargo exits successfully, yet the
@@ -13,7 +13,9 @@ coverage script receives empty standard output where it expects Rustdoc JSON.
 The gate must parse the compiler's actual output channel without weakening the
 coverage threshold or skipping the workspace member.
 
-## Context Summary
+## Context summary
+
+Table: Context and initial observations for the coverage failure.
 
 | Aspect              | Details                                                      |
 | ------------------- | ------------------------------------------------------------ |
@@ -22,14 +24,14 @@ coverage threshold or skipping the workspace member.
 | Affected components | `scripts/doc-coverage.py`, `test_support` Rustdoc invocation |
 | Recent changes      | Pin moved to `nightly-2026-08-23`; `main` added doc coverage |
 
-### Error Artefacts
+### Error artefacts
 
 ```text
 error: cargo rustdoc for test_support lib (lib) did not emit coverage JSON:
 Expecting value: line 1 column 1 (char 0)
 ```
 
-### Information Gaps
+### Information gaps
 
 - Whether the nightly now writes the coverage JSON to standard error.
 - Whether the output differs only for workspace member libraries.
@@ -51,7 +53,9 @@ to standard output and progress to standard error; neither stream held JSON.
 streams finds a non-empty, parseable JSON document on standard error and an
 empty standard output stream.
 
-#### H1 Falsification Plan
+#### H1 falsification plan
+
+Table: Falsification steps for the standard-error output hypothesis.
 
 | Step | Action                                                                                                                                                                                           | Expected Negative Result                                                           |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
@@ -75,7 +79,9 @@ to either captured stream.
 **Prediction**: The named file exists after the invocation and its contents
 parse as the per-file coverage object that `aggregate_coverage_payload` accepts.
 
-#### H2 Falsification Plan
+#### H2 falsification plan
+
+Table: Falsification steps for the generated-file output hypothesis.
 
 | Step | Action                                                                                                                    | Expected Negative Result                                                         |
 | ---- | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
@@ -88,18 +94,18 @@ for whether the existing aggregator can consume it unchanged.
 
 ______________________________________________________________________
 
-## Recommended Execution Order
+## Recommended execution order
 
 1. **H1** — falsified: neither output stream contains JSON.
 2. **H2** — verify the file Rustdoc announced before changing the collector.
 
-## Termination Criteria
+## Termination criteria
 
 - **Root cause identified**: H2 survives its falsification test.
 - **Escalation trigger**: H2 is falsified; revise this plan before inspecting
   a third cause.
 
-## Notes for Executing Agent
+## Notes for executing agent
 
 Do not edit tracked files or run the full repository gates. Return the exact
 stream observed and a verdict of `falsified`, `not-falsified`, or

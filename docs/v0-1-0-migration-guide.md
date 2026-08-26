@@ -14,6 +14,19 @@ remain compatible. Callers constructing `NinjaBuildRequest` or
 `NinjaToolRequest` must replace `cli: &cli` with `options: &options`; every
 other addition is opt-in.
 
+
+## Select the pinned Rust toolchain
+
+Source builds from a checkout require the dated nightly pinned in
+`rust-toolchain.toml`. Inside the checkout, `rustup` selects that toolchain
+automatically, so no command-line argument is required. Registry installs run
+outside the checkout and must select the same nightly explicitly:
+
+```sh
+rustup toolchain install nightly-2026-08-23
+cargo +nightly-2026-08-23 install netsuke-build
+```
+
 ## Netsuke is a build tool, not a library
 
 Netsuke is intended to be used as a command-line build tool. The only surfaces

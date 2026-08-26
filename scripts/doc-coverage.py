@@ -22,7 +22,6 @@ remediation sweep can target the lowest-coverage files first.
 from __future__ import annotations
 
 import argparse
-import dataclasses as dc
 import json
 import os
 import pathlib
@@ -30,6 +29,8 @@ import subprocess
 import sys
 import tomllib
 import typing as typ
+
+from doc_coverage_model import Coverage, DocTarget, aggregate_coverage_payload
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -47,46 +48,6 @@ def cargo_executable() -> str:
     custom executable.
     """
     return os.environ.get("CARGO") or "cargo"
-
-
-@dc.dataclass(frozen=True)
-class Coverage:
-    """Counts of Rustdoc-measured items for one documentation run."""
-
-    total: int
-    with_docs: int
-
-    @property
-    def percentage(self) -> float:
-        """Return the share of documented items as a percentage.
-
-        An empty run is treated as complete rather than dividing by zero; a
-        crate with no doc-able targets contributes nothing either way.
-        """
-        return 100.0 * self.with_docs / self.total if self.total else 100.0
-
-    def __add__(self, other: Coverage) -> Coverage:
-        """Return the sum of two coverage counts."""
-        return Coverage(self.total + other.total, self.with_docs + other.with_docs)
-
-
-@dc.dataclass(frozen=True)
-class DocTarget:
-    """One target among a package's doc-able (library or binary) targets.
-
-    Parameters
-    ----------
-    package
-        Cargo package name the target belongs to.
-    kind
-        ``"lib"`` for a library target, ``"bin"`` for a binary target.
-    name
-        Binary target name, or ``None`` for a library.
-    """
-
-    package: str
-    kind: str
-    name: str | None
 
 
 def pinned_toolchain(manifest_root: pathlib.Path) -> str:
@@ -230,45 +191,38 @@ def coverage_json_error(target: DocTarget, detail: str) -> RuntimeError:
 def coverage_output_path(
     target: DocTarget, output: str, manifest_root: pathlib.Path
 ) -> pathlib.Path:
-    """Return the JSON artefact Rustdoc reported after measuring ``target``."""
+    """Return the JSON artefact Rustdoc reported after measuring ``target``.
+
+    Parameters
+    ----------
+    target
+        The measured target, named in the controlled error when Rustdoc omits
+        its generated-file notice.
+    output
+        Standard output from the successful Rustdoc invocation.
+    manifest_root
+        Workspace root used to resolve a relative generated-file path.
+
+    Returns
+    -------
+    pathlib.Path
+        The absolute reported path, or the relative path resolved from
+        ``manifest_root``.
+
+    Raises
+    ------
+    RuntimeError
+        When Rustdoc reports no generated coverage JSON path.
+    """
     prefix = 'Generated output into "'
     for line in output.splitlines():
         if line.startswith(prefix) and line.endswith('"'):
-            path = pathlib.Path(line.removeprefix(prefix).removesuffix('"'))
-            return path if path.is_absolute() else manifest_root / path
+            reported_path = line.removeprefix(prefix).removesuffix('"')
+            if reported_path:
+                path = pathlib.Path(reported_path)
+                return path if path.is_absolute() else manifest_root / path
     detail = "Rustdoc did not report the generated coverage JSON path"
     raise coverage_json_error(target, detail)
-
-
-def aggregate_coverage_payload(per_file: object) -> Coverage:
-    """Validate and sum Rustdoc's documented and total counts."""
-    match per_file:
-        case dict() as entries:
-            return sum(
-                (coverage_from_entry(entry) for entry in entries.values()),
-                Coverage(0, 0),
-            )
-        case _:
-            raise TypeError("expected an object")
-
-
-def coverage_from_entry(entry: object) -> Coverage:
-    """Validate one Rustdoc coverage entry and convert it to `Coverage`."""
-    total = coverage_count(entry, "total")
-    with_docs = coverage_count(entry, "with_docs")
-    if with_docs > total:
-        raise ValueError("counts must be non-negative integers with with_docs <= total")
-    return Coverage(total, with_docs)
-
-
-def coverage_count(entry: object, name: str) -> int:
-    """Convert and validate one Rustdoc coverage count."""
-    count = entry[name]
-    if isinstance(count, bool) or not isinstance(count, int):
-        raise ValueError("counts must be non-negative integers with with_docs <= total")
-    if count < 0:
-        raise ValueError("counts must be non-negative integers with with_docs <= total")
-    return int(count)
 
 
 def measure(target: DocTarget, toolchain: str, manifest_root: pathlib.Path) -> Coverage:

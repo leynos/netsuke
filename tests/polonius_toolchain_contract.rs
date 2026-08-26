@@ -19,6 +19,7 @@ use camino::Utf8Path;
 use makefile::{read_repo_file, repo_root};
 use rstest::rstest;
 use serde_yaml::Value as YamlValue;
+use std::io::ErrorKind;
 use toml::Value as TomlValue;
 
 /// The retired directive that must not reappear in build configuration.
@@ -171,10 +172,14 @@ fn rust_toolchain_pins_a_nightly_that_enables_polonius_by_default() -> Result<()
 fn build_configuration_does_not_restate_the_retired_polonius_flag() -> Result<()> {
     let root = repo_root()?;
     for path in BUILD_CONFIGURATION_FILES {
-        let Ok(contents) = root.read_to_string(path) else {
-            // An absent file cannot carry the flag; `.cargo/config.toml` is
-            // listed precisely because it is expected to be missing.
-            continue;
+        let contents = match root.read_to_string(path) {
+            Ok(contents) => contents,
+            // `.cargo/config.toml` is intentionally absent but remains under
+            // contract because recreating it is the likeliest flag regression.
+            Err(error) if path == ".cargo/config.toml" && error.kind() == ErrorKind::NotFound => {
+                continue;
+            }
+            Err(error) => return Err(error).with_context(|| format!("read {path}")),
         };
         ensure!(
             !contents.contains(POLONIUS_FLAG),

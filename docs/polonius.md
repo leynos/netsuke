@@ -11,7 +11,7 @@ The migration originally ran against an opt-in `-Zpolonius=next` directive.
 Nightly toolchains dated 2026-08-04 and later enable Polonius by default, and
 the directive is being retired, so the tree passes it nowhere. Historical
 references to the flag below describe how a classification was made at the
-time, not a build setting anything still applies.
+time, not a build setting that still applies.
 
 ## Method
 

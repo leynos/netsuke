@@ -440,20 +440,23 @@ whatever the action set.
 
 Five CI jobs across four workflows carry the contract:
 
-| Workflow                                                              | Job                  | Shared action        | `with.rustflags` |
-| --------------------------------------------------------------------- | -------------------- | -------------------- | ---------------- |
-| [`ci.yml`](../.github/workflows/ci.yml)                               | `build-test`         | `setup-rust`         | `-D warnings`    |
-| [`ci.yml`](../.github/workflows/ci.yml)                               | `build-test-windows` | `setup-rust`         | `-D warnings`    |
-| [`coverage-main.yml`](../.github/workflows/coverage-main.yml)         | `coverage-upload`    | `setup-rust`         | `-D warnings`    |
-| [`netsukefile-test.yml`](../.github/workflows/netsukefile-test.yml)   | `netsukefile`        | `setup-rust`         | *(none)*         |
-| [`build-and-package.yml`](../.github/workflows/build-and-package.yml) | `build`              | `rust-build-release` | *(none)*         |
+| Workflow                                                              | Job                  | Shared action        | `with.rustflags`            |
+| --------------------------------------------------------------------- | -------------------- | -------------------- | --------------------------- |
+| [`ci.yml`](../.github/workflows/ci.yml)                               | `build-test`         | `setup-rust`         | `-D warnings`               |
+| [`ci.yml`](../.github/workflows/ci.yml)                               | `build-test-windows` | `setup-rust`         | `-D warnings`               |
+| [`coverage-main.yml`](../.github/workflows/coverage-main.yml)         | `coverage-upload`    | `setup-rust`         | `-D warnings`               |
+| [`netsukefile-test.yml`](../.github/workflows/netsukefile-test.yml)   | `netsukefile`        | `setup-rust`         | *(omitted; action default)* |
+| [`build-and-package.yml`](../.github/workflows/build-and-package.yml) | `build`              | `rust-build-release` | *(omitted; action default)* |
 
-The CI jobs and coverage add `-D warnings` because those jobs gate on a
-warning-free build — on Windows that is what surfaces findings in the
-`#[cfg(windows)]` tree at all. The Netsukefile and packaging jobs pass no
-`rustflags`, so a new upstream warning cannot break a release build. The
-coverage action's `cargo-llvm-cov` invocation inherits the flags `setup-rust`
-exports and appends its own instrumentation flags.
+The CI jobs and coverage pass `-D warnings` explicitly because those jobs gate
+on a warning-free build — on Windows that is what surfaces findings in the
+`#[cfg(windows)]` tree at all. The pinned shared actions also apply
+`-D warnings` by default when `with.rustflags` is omitted, so an upstream
+compiler warning can fail both the Netsukefile and packaging jobs. Their
+omitted inputs are intentional and remain distinct from jobs that explicitly
+pass `with.rustflags: -D warnings`; neither job supplies an explicit empty
+value. The coverage action's `cargo-llvm-cov` invocation inherits the flags
+`setup-rust` exports and appends its own instrumentation flags.
 
 No `setup-rust` call passes a `components` input. The shared action is not
 declared to accept one and installs rustfmt and clippy itself, so passing it
@@ -493,8 +496,8 @@ cargo nextest run --test polonius_toolchain_contract
 ```
 
 Keep this section and the [Polonius migration notes](polonius.md) in step: both
-describe the same contract, and the notes list every remaining harness that
-must propagate the flag.
+describe the same no-directive, pinned-toolchain contract, and the notes record
+the remaining harness consequences of that policy.
 
 ## Quality gates
 
@@ -523,7 +526,9 @@ doc build). Rustdoc writes the coverage JSON to its reported generated file,
 which the script reads immediately after each successful invocation. That
 path-extraction helper belongs only to the
 `--show-coverage --output-format json` collector; do not reuse it for general
-Rustdoc output.
+Rustdoc output. The pure `Coverage`/`DocTarget` model and payload validation
+belong to `scripts/doc_coverage_model.py`; only the coverage gate may import
+it. The executable retains Cargo invocation and user-facing error translation.
 
 `make test` runs the non-doctest suite through
 [cargo-nextest](https://nexte.st/) and then runs the doctests separately. CI
@@ -2485,14 +2490,22 @@ Deriving the directories from what Cargo actually reports, rather than from a
 single assumed location, means the harness does not need to special-case either
 layout.
 
-"Loadable artefact" means an rlib *or* a file with the platform's
-dynamic-library extension. The second half matters: proc-macro crates emit a
-host dynamic library rather than an rlib. A shared `deps/` directory used to
+"Loadable artefact" means an rlib, an `.rmeta` metadata file, or a file with
+the platform's dynamic-library extension. The `.rmeta` file is needed for the
+metadata-only direct-`rustc` checks because Cargo builds with
+`-Zembed-metadata=no`; the parser prefers it while retaining an rlib fallback
+for older layouts. The dynamic-library case matters too: proc-macro crates emit
+a host dynamic library rather than an rlib. A shared `deps/` directory used to
 pick them up for free, so an rlib-only filter went unnoticed; once each crate
 has its own directory, a filtered-out proc macro is simply absent from the
 search path and its dependents fail with `E0463`. The same rule and the same
 reasoning apply to `tests/command_env_ui_tests.rs`, which builds the `netsuke`
 rlib and derives its search path the same way.
+
+The shared `tests/support/cargo_artifacts.rs` module owns parsing Cargo
+`compiler-artifact` messages and extracting loadable artefact directories. It
+may be included only by these direct-`rustc` UI harnesses; the callers retain
+build and process-spawn orchestration.
 
 Those arguments reach `rustc` through a **response file**, not the command
 line. One `-L dependency=` pair per crate, over the long unique roots the

@@ -127,7 +127,7 @@ impl NetsukeRlib {
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
         let rlib = stdout
             .lines()
-            .filter_map(netsuke_rlib_in_message)
+            .filter_map(|line| cargo_artifacts::library_path_in_message(line, "netsuke"))
             .next_back()
             .ok_or_else(|| io::Error::other("cargo reported no netsuke rlib artefact"))?;
         // Dependencies do not sit in one predictable directory. Cargo uplifts
@@ -137,7 +137,10 @@ impl NetsukeRlib {
         // compiler-artifact message names where its own artefacts really
         // landed, so derive the search path from what Cargo reports.
         let mut deps_dirs: Vec<PathBuf> = Vec::new();
-        for parent in stdout.lines().flat_map(dependency_dirs_in_message) {
+        for parent in stdout
+            .lines()
+            .flat_map(cargo_artifacts::dependency_dirs_in_message)
+        {
             if !deps_dirs.contains(&parent) {
                 deps_dirs.push(parent);
             }
@@ -198,78 +201,6 @@ impl NetsukeRlib {
         Command::new(rustc()).arg(response).output()
     }
 }
-
-/// Extract the `netsuke` lib rlib path from one Cargo JSON message, if any.
-///
-/// The package also ships a `netsuke` bin target; requiring an `.rlib`
-/// filename keeps the filter on the library artefact.
-fn netsuke_rlib_in_message(line: &str) -> Option<PathBuf> {
-    let message: serde_json::Value = serde_json::from_str(line).ok()?;
-    if message.get("reason")? != "compiler-artifact"
-        || message.get("target")?.get("name")? != "netsuke"
-    {
-        return None;
-    }
-    let filenames: Vec<&str> = message
-        .get("filenames")?
-        .as_array()?
-        .iter()
-        .filter_map(|filename| filename.as_str())
-        .collect();
-    // Prefer the `.rmeta`, falling back to the `.rlib`. The fixtures are
-    // type-checked with `--emit=metadata`, so metadata is all `--extern`
-    // needs; and since Cargo builds with `-Zembed-metadata=no`, the rlib
-    // holds only a stub, which `rustc` refuses to load on its own.
-    let first_with_extension = |wanted: &str| {
-        filenames
-            .iter()
-            .find(|filename| {
-                Path::new(filename)
-                    .extension()
-                    .is_some_and(|extension| extension.eq_ignore_ascii_case(wanted))
-            })
-            .map(PathBuf::from)
-    };
-    first_with_extension("rmeta").or_else(|| first_with_extension("rlib"))
-}
-
-/// Whether `filename` is an artefact `rustc` can load from a `-L dependency=`
-/// directory.
-///
-/// `rmeta` carries full crate metadata, which an rlib no longer does: Cargo
-/// builds with `-Zembed-metadata=no`, leaving only a stub in the rlib.
-/// Rlibs still cover ordinary library dependencies, and the platform's
-/// dynamic-library extension covers proc-macro crates, which `rustc` loads as
-/// host dynamic libraries. A shared `deps/` directory used to pick proc macros
-/// up for free; with a directory per crate, omitting them makes their
-/// dependents fail with `E0463`.
-fn is_dependency_artefact(filename: &str) -> bool {
-    Path::new(filename).extension().is_some_and(|extension| {
-        extension.eq_ignore_ascii_case("rmeta")
-            || extension.eq_ignore_ascii_case("rlib")
-            || extension.eq_ignore_ascii_case(std::env::consts::DLL_EXTENSION)
-    })
-}
-
-/// Extract the parent directory of every loadable artefact in one Cargo JSON
-/// message.
-fn dependency_dirs_in_message(line: &str) -> Vec<PathBuf> {
-    let Ok(message) = serde_json::from_str::<serde_json::Value>(line) else {
-        return Vec::new();
-    };
-    if message.get("reason").map(serde_json::Value::as_str) != Some(Some("compiler-artifact")) {
-        return Vec::new();
-    }
-    message
-        .get("filenames")
-        .and_then(serde_json::Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(serde_json::Value::as_str)
-        .filter(|filename| is_dependency_artefact(filename))
-        .filter_map(|filename| Path::new(filename).parent().map(Path::to_path_buf))
-        .collect()
-}
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
@@ -293,6 +224,9 @@ fn rustc() -> PathBuf {
 fn stderr(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
 }
+
+#[path = "support/rustc_response_file.rs"]
+mod rustc_response_file;
 
 //! Compile-time tests for public environment-injection APIs.
 //!
@@ -321,5 +255,5 @@ fn stderr(output: &Output) -> String {
 //! rlib is built by Cargo, and the fixture is compiled directly with the
 //! workspace `rustc` against it.
 
-#[path = "support/rustc_response_file.rs"]
-mod rustc_response_file;
+#[path = "support/cargo_artifacts.rs"]
+mod cargo_artifacts;

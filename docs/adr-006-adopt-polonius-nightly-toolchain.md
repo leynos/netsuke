@@ -6,7 +6,9 @@ Accepted.
 
 ## Date
 
-2026-08-23 (last updated; originally accepted 2026-07-29).
+2026-08-23
+
+**Historical note:** This ADR was originally accepted on 2026-07-29.
 
 ## Context and problem statement
 

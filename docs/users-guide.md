@@ -15,8 +15,8 @@ also requires the dated Rust nightly toolchain pinned in `rust-toolchain.toml`,
 because Netsuke builds with the Polonius borrow checker, which nightly enables
 by default.
 
-Inside a checkout that is inherited automatically: `rustup` installs the pinned
-toolchain, and nothing has to be passed on the command line.
+Inside a checkout, `rustup` automatically selects the pinned toolchain from
+`rust-toolchain.toml`; no command-line argument is required.
 
 Netsuke v0.1.0-beta2 is available from crates.io. Where
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) is available,
