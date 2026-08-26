@@ -20,11 +20,11 @@ in the CI log, so the structured record remains appropriate for release review.
 
 ## Pinned v0.1.0 candidate set
 
-| Downstream repository      | Base revision                              | Migration branch                | Selected targets                                                                                                               |
-| -------------------------- | ------------------------------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `leynos/repovec-appliance` | `4881161b10592530ea878a41a4f043ee061442ca` | `issue-598-v010-netsuke-canary` | `all`, `check-fmt`, `lint`, `test`                                                                                             |
-| `leynos/mxd`               | `7eefacd9f915f80fe93de9f68afa0d7b8e83dec3` | `issue-598-v010-netsuke-canary` | `check-fmt`, `lint-postgres`, `lint-sqlite`, `lint-wireframe-only`, `test-postgres`, `test-sqlite`, `test-wireframe-only`      |
-| `leynos/ortho-config`      | `dbeed53c4c2e8e0f94568bb0e24ed9e1864aa5b6` | `issue-598-v010-netsuke-canary` | Linux: `check-fmt`, `lint`, `test`, `markdownlint`; Windows: `check-fmt`, `lint-clippy`, `test`, `powershell-wrapper-validate` |
+| Downstream repository      | Pinned migration revision                  | Migration branch                | Selected targets                                                                                                                                   |
+| -------------------------- | ------------------------------------------ | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `leynos/repovec-appliance` | `6be365b4b30ef48537add5719a9b387ccc41777f` | `issue-598-v010-netsuke-canary` | `all`, `check-fmt`, `lint`, `test`                                                                                                                 |
+| `leynos/mxd`               | `8146278cc82506c222bb78d4f3fc05c12ed95b41` | `issue-598-v010-netsuke-canary` | `check-fmt`, `lint-postgres`, `lint-sqlite`, `lint-wireframe-only`, `test-postgres`, `test-sqlite`, `test-wireframe-only`                          |
+| `leynos/ortho-config`      | `bf5f8f843ff5ebb05dcd74e4f1e254e03832919b` | `issue-598-v010-netsuke-canary` | Linux: `check-fmt`, `lint`, `test`, `markdownlint`, `generated-config`; Windows: `check-fmt`, `lint-clippy`, `test`, `powershell-wrapper-validate` |
 
 The candidate revision is intentionally recorded in each downstream commit and
 workflow, rather than inferred from an action tag. The v0.1.0 candidate carries
@@ -47,10 +47,10 @@ the beta2 package version until final release packaging changes it.
 
 ## Release decision
 
-The release workflow's admission job runs the pinned Linux canaries and checks
-their structured results. The OrthoConfig migration workflow additionally runs
-its Windows target set on `windows-latest`; its successful run is a required
-review input. A failure blocks v0.1.0 only when it violates a supported v0.1.0
+The release workflow checks the successful run for each pinned revision before
+it publishes v0.1.0. The OrthoConfig migration workflow additionally runs its
+Windows target set on `windows-latest`; its successful run is a required review
+input. A failure blocks v0.1.0 only when it violates a supported v0.1.0
 manifest or runtime contract. Ergonomic gaps remain follow-up work, not release
 scope expansion.
 
