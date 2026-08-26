@@ -37,6 +37,18 @@ operator, user, and contributor references are easier to find.
 - [rfcs/0001-structured-command-blocks.md](rfcs/0001-structured-command-blocks.md):
   Proposed structured command blocks, shell-free argv templates, typed Jinja
   interpolation, stream routing, and pipeline semantics.
+- [rfcs/0001-amendment-command-working-directories.md](rfcs/0001-amendment-command-working-directories.md):
+  Normative amendment adding capability-scoped per-command working directories
+  to RFC 0001.
+- [rfcs/0002-repository-relative-includes.md](rfcs/0002-repository-relative-includes.md):
+  Deterministic repository-relative manifest includes with cycle detection,
+  provenance, namespaces, and duplicate rejection.
+- [rfcs/0003-versioned-local-bundles.md](rfcs/0003-versioned-local-bundles.md):
+  Versioned local bundles with typed parameters, explicit exports, SemVer
+  selection, canonical digests, and lock records.
+- [rfcs/0004-digest-pinned-external-bundles.md](rfcs/0004-digest-pinned-external-bundles.md):
+  Later digest-pinned external Git bundles with exact tag resolution, immutable
+  object provenance, bounded acquisition, caching, and offline verification.
 - [RFC 0005: Harden release integrity and
   admission](rfcs/0005-release-hardening.md): Proposed release-profile
   invariants, secret and dependency policy, and exact-commit release admission.
