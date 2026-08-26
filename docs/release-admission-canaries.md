@@ -20,11 +20,11 @@ in the CI log, so the structured record remains appropriate for release review.
 
 ## Pinned v0.1.0 candidate set
 
-| Downstream repository      | Pinned migration revision                  | Migration branch                | Selected targets                                                                                                                                   |
-| -------------------------- | ------------------------------------------ | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `leynos/repovec-appliance` | `6be365b4b30ef48537add5719a9b387ccc41777f` | `issue-598-v010-netsuke-canary` | `all`, `check-fmt`, `lint`, `test`                                                                                                                 |
-| `leynos/mxd`               | `8146278cc82506c222bb78d4f3fc05c12ed95b41` | `issue-598-v010-netsuke-canary` | `check-fmt`, `lint-postgres`, `lint-sqlite`, `lint-wireframe-only`, `test-postgres`, `test-sqlite`, `test-wireframe-only`                          |
-| `leynos/ortho-config`      | `bf5f8f843ff5ebb05dcd74e4f1e254e03832919b` | `issue-598-v010-netsuke-canary` | Linux: `check-fmt`, `lint`, `test`, `markdownlint`, `generated-config`; Windows: `check-fmt`, `lint-clippy`, `test`, `powershell-wrapper-validate` |
+| Downstream repository      | Pinned migration revision                  | Migration branch                | Selected targets                                                                                                          |
+| -------------------------- | ------------------------------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `leynos/repovec-appliance` | `6be365b4b30ef48537add5719a9b387ccc41777f` | `issue-598-v010-netsuke-canary` | `all`, `check-fmt`, `lint`, `test`                                                                                        |
+| `leynos/mxd`               | `8146278cc82506c222bb78d4f3fc05c12ed95b41` | `issue-598-v010-netsuke-canary` | `check-fmt`, `lint-postgres`, `lint-sqlite`, `lint-wireframe-only`, `test-postgres`, `test-sqlite`, `test-wireframe-only` |
+| `leynos/ortho-config`      | `b42b5d0adfacd79456d2a2f9edbf9f561aac943b` | `issue-598-v010-netsuke-canary` | Linux: `check-fmt`, `lint`, `test`, `markdownlint`, `generated-config`; Windows: `powershell-wrapper-validate`            |
 
 The candidate revision is intentionally recorded in each downstream commit and
 workflow, rather than inferred from an action tag. The v0.1.0 candidate carries

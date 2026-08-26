@@ -75,7 +75,7 @@ fn behavioural_release_workflow_requires_pinned_canaries() {
     assert!(
         contents.contains("leynos/repovec-appliance 6be365b4b30ef48537add5719a9b387ccc41777f")
             && contents.contains("leynos/mxd 8146278cc82506c222bb78d4f3fc05c12ed95b41")
-            && contents.contains("leynos/ortho-config bf5f8f843ff5ebb05dcd74e4f1e254e03832919b"),
+            && contents.contains("leynos/ortho-config b42b5d0adfacd79456d2a2f9edbf9f561aac943b"),
         "release workflow should keep every v0.1.0 canary revision pinned"
     );
     assert!(
