@@ -6,6 +6,10 @@ use super::ninja_gen_command_list::{
 use super::{NinjaGenError, ninja_gen_escape::validate_ninja_value};
 use crate::ast::{Recipe, StringOrList};
 
+
+//! Validation for command-list boundaries before Ninja rendering.
+};
+
 /// Reject recipes the generated shell cannot execute with stable semantics.
 pub(super) fn validate_action_recipe(
     action: &crate::ir::Action,
