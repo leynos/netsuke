@@ -11,13 +11,29 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use std::{env, path::Path};
 
 /// Resolve a potentially relative manifest parent path to an absolute UTF-8 workspace root.
-fn resolve_absolute_workspace_root(utf8_parent: &Utf8Path) -> Result<Utf8PathBuf> {
+///
+/// An injected `base` directory anchors relative parents for tests; `None`
+/// falls back to the process current directory so production behaviour is
+/// unchanged.
+pub(super) fn resolve_absolute_workspace_root(
+    utf8_parent: &Utf8Path,
+    base: Option<&Path>,
+) -> Result<Utf8PathBuf> {
     let workspace_base = if utf8_parent.is_absolute() {
         utf8_parent.to_path_buf().into_std_path_buf()
     } else {
-        env::current_dir()
-            .context(localization::message(keys::MANIFEST_RESOLVE_WORKSPACE_ROOT))?
-            .join(utf8_parent.as_std_path())
+        let anchor = match base {
+            // A relative base (for example `Path::new(".")`) is anchored at the
+            // process working directory so the workspace root keeps its
+            // documented "absolute UTF-8 path" contract even for test bases.
+            Some(dir) if dir.is_absolute() => dir.to_path_buf(),
+            Some(dir) => env::current_dir()
+                .context(localization::message(keys::MANIFEST_RESOLVE_WORKSPACE_ROOT))?
+                .join(dir),
+            None => env::current_dir()
+                .context(localization::message(keys::MANIFEST_RESOLVE_WORKSPACE_ROOT))?,
+        };
+        anchor.join(utf8_parent.as_std_path())
     };
     Utf8PathBuf::from_path_buf(workspace_base).map_err(|invalid| {
         anyhow!(
@@ -40,7 +56,13 @@ pub(super) struct ManifestWorkspace {
 }
 
 /// Open the directory containing `path` as a capability-scoped workspace.
-pub(super) fn open_manifest_workspace(path: &Path) -> Result<ManifestWorkspace> {
+///
+/// `base` anchors relative manifest paths for tests; `None` keeps the ambient
+/// current-directory resolution used by production callers.
+pub(super) fn open_manifest_workspace(
+    path: &Path,
+    base: Option<&Path>,
+) -> Result<ManifestWorkspace> {
     let parent = match path.parent() {
         Some(parent) if !parent.as_os_str().is_empty() => parent,
         _ => Path::new("."),
@@ -70,7 +92,7 @@ pub(super) fn open_manifest_workspace(path: &Path) -> Result<ManifestWorkspace> 
                 .with_arg("path", path.display().to_string())
         )
     })?;
-    let root = resolve_absolute_workspace_root(utf8_parent)?;
+    let root = resolve_absolute_workspace_root(utf8_parent, base)?;
     tracing::debug!(workspace = %root, manifest = %manifest_file, "opening manifest workspace directory");
     let dir = Dir::open_ambient_dir(root.as_path(), ambient_authority())
         .inspect_err(|err| {
