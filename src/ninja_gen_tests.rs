@@ -8,6 +8,11 @@ use rstest::rstest;
 use super::test_support::command_action;
 use super::{
     NamedAction, NinjaGenError, RecipeShell, generate, generate_bundle, generate_into,
+    NamedAction, NinjaGenError, RecipeShell, generate, generate_into, generate_into_with_shell,
+};
+
+
+//! Unit tests for Ninja file generation and rule synthesis.
 };
 
 /// Build one action graph with the requested metadata field populated.
@@ -94,7 +99,7 @@ fn generate_simple_ninja() -> Result<()> {
     graph.targets.insert(Utf8PathBuf::from("out"), edge);
     graph.default_targets.push(Utf8PathBuf::from("out"));
 
-    let ninja = generate(&graph)?;
+    let ninja = generate_posix(&graph)?;
     let expected = concat!(
         "rule a\n",
         "  command = echo hi\n\n",
@@ -226,7 +231,7 @@ fn generate_script_ninja_round_trips() -> Result<()> {
     graph.actions.insert("a".into(), action);
     graph.targets.insert(Utf8PathBuf::from("out"), edge);
 
-    let ninja = generate(&graph)?;
+    let ninja = generate_posix(&graph)?;
     ensure!(ninja.contains("rule a"));
     ensure!(ninja.contains("command = /bin/sh -e -c"));
     ensure!(ninja.contains(r"echo '\''a b'\''"));
@@ -259,7 +264,7 @@ fn generate_command_list_ninja_joins_a_fail_fast_chain() -> Result<()> {
     graph.actions.insert("a".into(), action);
     graph.targets.insert(Utf8PathBuf::from("out"), edge);
 
-    let ninja = generate(&graph)?;
+    let ninja = generate_posix(&graph)?;
     ensure!(
         ninja.contains("command = { _netsuke_background_before=$${!:-};"),
         "first list boundary should start the generated command:\n{ninja}"
@@ -456,4 +461,11 @@ fn decode_power_shell_script(encoded: &str) -> Result<String> {
         })
         .collect::<Result<Vec<_>>>()?;
     String::from_utf16(&units).context("decode PowerShell UTF-16 payload")
+}
+
+/// Generate Ninja text using the explicit POSIX compatibility renderer.
+fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
+    let mut ninja = String::new();
+    generate_into_with_shell(graph, &mut ninja, RecipeShell::Posix)?;
+    Ok(ninja)
 }

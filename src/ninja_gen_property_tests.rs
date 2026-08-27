@@ -7,8 +7,8 @@ use proptest::prelude::*;
 use test_support::ninja_gen::paths_strategy;
 
 use super::{
-    DisplayEdge, GeneratedDyndep, GeneratedNinja, NinjaGenError, generate, generate_bundle,
-    test_support::command_action,
+    DisplayEdge, GeneratedDyndep, GeneratedNinja, NinjaGenError, RecipeShell, generate,
+    generate_bundle, generate_into_with_shell, test_support::command_action,
 };
 use crate::{
     ast::{Recipe, StringOrList},
@@ -70,6 +70,13 @@ fn format_edge(edge: &BuildEdge) -> String {
         implicit_deps: &edge.implicit_deps,
     }
     .to_string()
+}
+
+/// Render a graph through the explicit POSIX compatibility renderer.
+fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
+    let mut ninja = String::new();
+    generate_into_with_shell(graph, &mut ninja, RecipeShell::Posix)?;
+    Ok(ninja)
 }
 
 fn build_line(formatted: &str) -> Option<&str> {
@@ -249,7 +256,8 @@ proptest! {
 
     #[test]
     fn command_lists_preserve_order_boundaries_and_fail_fast_joins(entries in prop::collection::vec(command_list_entry_strategy(), 1..9)) {
-        let ninja = generate(&command_list_graph(&entries)).expect("non-empty command list should generate");
+        let ninja = generate_posix(&command_list_graph(&entries))
+            .expect("non-empty command list should generate");
         let command_line = ninja.lines().find(|line| line.starts_with("  command = "))
             .expect("generated action should include a command line");
         let mut previous = 0;
@@ -280,8 +288,12 @@ proptest! {
     }
 
     #[test]
-    fn programmatic_empty_command_lists_are_rejected(() in Just(())) {
-        let graph = command_graph(StringOrList::List(Vec::new()));
+    fn programmatic_empty_command_recipes_are_rejected(use_empty_list in any::<bool>()) {
+        let graph = command_graph(if use_empty_list {
+            StringOrList::List(Vec::new())
+        } else {
+            StringOrList::Empty
+        });
         let error = generate(&graph).expect_err("empty command recipe should be rejected");
         let is_stable_empty_recipe_error = matches!(error, NinjaGenError::EmptyCommandRecipe { action_index: 1 });
         prop_assert!(is_stable_empty_recipe_error);
@@ -289,7 +301,8 @@ proptest! {
 
     #[test]
     fn scalar_command_output_retains_the_preexisting_form(command in "echo [a-z]{1,12}") {
-        let ninja = generate(&scalar_graph(command.clone())).expect("scalar command should generate");
+        let ninja = generate_posix(&scalar_graph(command.clone()))
+            .expect("scalar command should generate");
         let expected_command_line = format!("  command = {command}\n");
         let retains_scalar_form = ninja.contains(&expected_command_line);
         let uses_list_boundary = ninja.contains("_netsuke_background_before=$${!:-}");
