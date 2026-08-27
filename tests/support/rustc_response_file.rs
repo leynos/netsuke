@@ -119,10 +119,12 @@ mod tests {
     use super::{render, write};
     use proptest::prelude::*;
 
+    /// Convert borrowed test arguments to owned compiler arguments.
     fn owned(args: &[&str]) -> Vec<String> {
         args.iter().map(|arg| (*arg).to_owned()).collect()
     }
 
+    /// Render each compiler argument on its own response-file line.
     #[test]
     fn each_argument_occupies_its_own_line() {
         let args = owned(&["--edition=2024", "--crate-type=bin", "--emit=metadata"]);
@@ -138,6 +140,7 @@ mod tests {
         );
     }
 
+    /// Preserve arguments containing spaces on one response-file line.
     #[test]
     fn arguments_containing_spaces_stay_on_one_line() {
         // A path with a space must not be split; the line boundary is the only
@@ -150,6 +153,7 @@ mod tests {
         );
     }
 
+    /// Reject an argument whose newline would become a second argument.
     #[test]
     fn a_newline_in_an_argument_is_rejected() {
         let error = render(&owned(&["-L", "dependency=/tmp/a\nb"]))
@@ -160,6 +164,7 @@ mod tests {
         );
     }
 
+    /// Render an empty compiler-argument list as empty text.
     #[test]
     fn an_empty_argument_list_renders_empty() {
         assert_eq!(render(&[]).expect("no arguments render"), "");
@@ -182,6 +187,7 @@ mod tests {
         }
     }
 
+    /// Retain every compiler argument when writing the response file.
     #[test]
     fn the_written_file_retains_every_compiler_argument() {
         let dir = tempfile::tempdir().expect("create temp dir");

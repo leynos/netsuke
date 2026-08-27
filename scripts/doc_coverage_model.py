@@ -13,7 +13,15 @@ import dataclasses as dc
 
 @dc.dataclass(frozen=True)
 class Coverage:
-    """Counts of Rustdoc-measured items for one documentation run."""
+    """Represent Rustdoc-measured items for one documentation run.
+
+    Parameters
+    ----------
+    total
+        Total number of Rustdoc-counted items.
+    with_docs
+        Number of those items carrying documentation.
+    """
 
     total: int
     with_docs: int
@@ -30,7 +38,17 @@ class Coverage:
 
 @dc.dataclass(frozen=True)
 class DocTarget:
-    """Describe one library or binary target measured by Rustdoc."""
+    """Describe one library or binary target measured by Rustdoc.
+
+    Parameters
+    ----------
+    package
+        Cargo package containing the target.
+    kind
+        Target category: ``"lib"`` or ``"bin"``.
+    name
+        Binary target name, or ``None`` for a library target.
+    """
 
     package: str
     kind: str
@@ -38,7 +56,25 @@ class DocTarget:
 
 
 def aggregate_coverage_payload(per_file: object) -> Coverage:
-    """Validate and sum Rustdoc's documented and total counts."""
+    """Validate and sum Rustdoc's documented and total counts.
+
+    Parameters
+    ----------
+    per_file
+        Rustdoc's mapping from source-file names to coverage entries.
+
+    Returns
+    -------
+    Coverage
+        Aggregate documented and total item counts.
+
+    Raises
+    ------
+    TypeError
+        If Rustdoc's payload is not an object.
+    KeyError, ValueError
+        If an entry omits or violates a coverage-count invariant.
+    """
     match per_file:
         case dict() as entries:
             return sum(
@@ -50,7 +86,26 @@ def aggregate_coverage_payload(per_file: object) -> Coverage:
 
 
 def coverage_from_entry(entry: object) -> Coverage:
-    """Validate one Rustdoc coverage entry and convert it to `Coverage`."""
+    """Validate one Rustdoc coverage entry and convert it to ``Coverage``.
+
+    Parameters
+    ----------
+    entry
+        Rustdoc entry containing ``total`` and ``with_docs`` counts.
+
+    Returns
+    -------
+    Coverage
+        Validated counts for one source file.
+
+    Raises
+    ------
+    KeyError
+        If either required count is absent.
+    TypeError, ValueError
+        If a count is not a non-negative integer or documented items exceed
+        total items.
+    """
     total = coverage_count(entry, "total")
     with_docs = coverage_count(entry, "with_docs")
     if with_docs > total:
@@ -59,7 +114,28 @@ def coverage_from_entry(entry: object) -> Coverage:
 
 
 def coverage_count(entry: object, name: str) -> int:
-    """Convert and validate one Rustdoc coverage count."""
+    """Validate one named Rustdoc coverage count.
+
+    Parameters
+    ----------
+    entry
+        Rustdoc coverage entry containing the requested count.
+    name
+        Name of the count to retrieve.
+
+    Returns
+    -------
+    int
+        The validated non-negative count.
+
+    Raises
+    ------
+    KeyError
+        If ``name`` is absent from ``entry``.
+    TypeError, ValueError
+        If the count cannot be an integer count, including JSON booleans, or
+        is negative.
+    """
     count = entry[name]
     if isinstance(count, bool):
         raise ValueError("counts must be non-negative integers with with_docs <= total")

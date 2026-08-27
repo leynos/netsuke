@@ -134,6 +134,7 @@ mod tests {
         }
     }
 
+    /// Prefer metadata and fall back to the library artefact.
     #[test]
     fn parser_prefers_metadata_then_falls_back_to_library() {
         let message = r#"{"reason":"compiler-artifact","target":{"name":"fixture"},"filenames":["/final/libfixture.rlib","/build/libfixture.rmeta"]}"#;

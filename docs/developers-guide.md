@@ -404,8 +404,10 @@ that restates it is a build that can silently drop it. A contract test
 (described below) fails if one reappears.
 
 `rustup` provisions the toolchain automatically inside a checkout, which covers
-every consumer — plain Cargo invocations, rust-analyzer, Clippy, Whitaker, and
-Kani alike — without any Cargo configuration. The repository has no
+every checkout consumer — plain Cargo invocations, rust-analyzer, Clippy, and
+Whitaker — without any Cargo configuration. `cargo kani setup` is a separate
+boundary: Kani 0.67.0 installs and uses its bundled `nightly-2025-11-21`
+toolchain rather than the checkout toolchain. The repository has no
 `.cargo/config.toml`; carrying the flag was that file's only purpose, and it
 was deleted when the pin moved past 2026-08-04.
 
@@ -629,15 +631,15 @@ The root Whitaker invocation selects only the `netsuke-build` package (the
 Cargo package name behind the `netsuke` targets; see ADR-007) and disables
 Dylint dependency checks. It supplies the root `dylint.toml` contents
 explicitly through `DYLINT_TOML`, so every invocation receives the same
-capability-boundary policy regardless of how Dylint resolves the current
-crate. `test_support` is a workspace member with one sanctioned ambient
-boundary configured per crate. Its second, scoped invocation supplies
-`test_support/dylint.toml` through `DYLINT_TOML`, and uses `--package
-test_support` and `--no-deps`, because running from a member directory alone
-would otherwise check the parent workspace. That configuration names only
-`test_support::fs` in `excluded_paths`. The root `excluded_crates` must not
-contain `test_support`: every other module in the crate remains subject to the
-filesystem policy.
+capability-boundary policy regardless of how Dylint resolves the current crate.
+`test_support` is a workspace member with one sanctioned ambient boundary
+configured per crate. Its second, scoped invocation supplies
+`test_support/dylint.toml` through `DYLINT_TOML`, and uses
+`--package test_support` and `--no-deps`, because running from a member
+directory alone would otherwise check the parent workspace. That configuration
+names only `test_support::fs` in `excluded_paths`. The root `excluded_crates`
+must not contain `test_support`: every other module in the crate remains
+subject to the filesystem policy.
 
 Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
 allows. Do not use Rust `#[allow]` or `#[expect]` for `no_std_fs_operations`:
@@ -962,11 +964,10 @@ missing or empty file is reported as `dev-fast: missing version pin: <path>`
 rather than silently becoming an empty version.
 
 - `rust-toolchain.toml` supplies the toolchain. dev-fast deliberately shares
-  the repository's own dated nightly rather than pinning a second one: the tree
-  borrow-checks only under Polonius, which that nightly enables (ADR-006), so a
-  separate pin could let the accelerated loop and the gates disagree about
-  which borrows are legal. `make install-dev-fast` adds
-  `rustc-codegen-cranelift-preview` to that toolchain.
+  the repository's own dated nightly rather than pinning a second one, keeping
+  the accelerated loop and the gates on the same toolchain. The
+  `make install-dev-fast` target adds `rustc-codegen-cranelift-preview` to that
+  toolchain.
 - `tools/mold/VERSION` holds the `mold` release tag.
 - `tools/mold/SHA256SUMS` holds the SHA-256 checksum of each supported `mold`
   release artefact. `make install-dev-fast` refuses to install an artefact that
@@ -1459,8 +1460,8 @@ governs the non-doctest pass only, and deliberately stays small:
 nextest runs each test in its own process, but the codebase does not rely on
 that isolation for environment safety. Tests pass environment values through
 explicit configuration seams or configure a child with `env_clear()` followed by
-`Command::env`. The BDD suite carries no environment or CWD lock: its steps run
-inside the generated test-harness process, not inside an `assert_cmd` child.
+`Command::env`. The BDD suite carries no environment or CWD lock: its steps
+run inside the generated test-harness process, not inside an `assert_cmd` child.
 `EnvLock` and `CwdGuard` remain only for direct tests that deliberately
 exercise process working-directory behaviour outside that suite.
 
@@ -2096,8 +2097,8 @@ of the contract. BDD steps must not change either process-global value: use an
 injected environment and absolute paths for in-process library assertions, or
 an isolated `assert_cmd` child for end-to-end behaviour. `CwdGuard` is the RAII
 utility for the few direct CWD tests that deliberately exercise it. For
-locale-sensitive snapshot tests, use the `EnLocalizer` scoped pattern documented
-in the
+locale-sensitive snapshot tests, use the `EnLocalizer` scoped pattern
+documented in the
 [snapshot testing guide](snapshot-testing-in-netsuke-using-insta.md#locale-pinned-snapshot-tests).
 
 `src/snapshot_test_support.rs` owns output-oriented unit-test fixtures;
@@ -2593,11 +2594,10 @@ general path-configuration API.
 Ownership and permitted call sites:
 
 - Production passes `None`; the sole caller is `from_path_with_registration` in
-  `src/manifest/query.rs`, so ambient current-directory resolution is
-  unchanged.
+  `src/manifest/query.rs`, so ambient current-directory resolution is unchanged.
 - Tests inject a temporary directory or a relative base such as
-  `Some(Path::new("."))`; the seam must not become a general
-  path-configuration API.
+  `Some(Path::new("."))`; the seam must not become a general path-configuration
+  API.
 
 Composition rules:
 
@@ -2653,8 +2653,7 @@ order: `CwdGuard` restores the CWD first, and `EnvLock` releases second.
 
 These direct CWD tests are the narrow exception for exercising CWD-dependent
 code itself. BDD scenarios instead retain an absolute manifest path or pass
-`-C/--directory` into the CLI; neither approach changes the harness process
-CWD.
+`-C/--directory` into the CLI; neither approach changes the harness process CWD.
 
 ### Injected and child-process environments
 
@@ -3818,25 +3817,25 @@ background-query primitive.
 
 - **Ownership:** `runner::generation` is a private runner submodule. It owns
   the three read-only generation steps, the explicitly effectful build loader,
-  their input/output hand-offs, and the manifest and IR error contexts. It
-  does not own `StatusReporter` updates, command dispatch, dyndep publication,
-  or Ninja execution.
+  their input/output hand-offs, and the manifest and IR error contexts. It does
+  not own `StatusReporter` updates, command dispatch, dyndep publication, or
+  Ninja execution.
 - **Permitted call-sites:** `runner::generate_ninja` composes the complete
   build pipeline through `load_manifest_for_build` for build, clean, and
   generate commands. `runner::graph::handle_graph` may stop after `build_graph`
   to render the graph, and `runner::help_query` uses `load_manifest` for its
-  read-only target catalogue. Runner unit tests may compose the read-only
-  steps directly. New dry-run or background-generation work may use
-  `load_manifest`, `build_graph`, and `ninja_text` only within the runner
-  boundary; a public or cross-subsystem consumer requires an explicit
-  application boundary rather than widening these internal helpers.
+  read-only target catalogue. Runner unit tests may compose the read-only steps
+  directly. New dry-run or background-generation work may use `load_manifest`,
+  `build_graph`, and `ninja_text` only within the runner boundary; a public or
+  cross-subsystem consumer requires an explicit application boundary rather
+  than widening these internal helpers.
 - **Composition rules:** command adapters report stages before or after the
   relevant step and wrap `ninja_text` with runner-owned generation telemetry.
   Only `load_manifest_with_stage_reporting` translates `StageObserver` events
   into status updates and selects the effectful build loader. Consumers must
   not call manifest parsing, IR generation, or `ninja_gen::generate_bundle`
-  directly in parallel with this pipeline. Before an adapter writes or
-  executes a returned bundle, it must use the existing capability-injected
+  directly in parallel with this pipeline. Before an adapter writes or executes
+  a returned bundle, it must use the existing capability-injected
   dyndep-publication path to materialize its sidecars; the read-only steps
   never write files, start processes, or invoke effectful template helpers.
 
