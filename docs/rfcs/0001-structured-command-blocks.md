@@ -284,7 +284,7 @@ The motivating coverage command becomes:
 actions:
   - name: coverage
     command:
-      - invoke: echo "coverage linker flags: -fuse-ld=lld"
+      - invoke: 'echo "coverage linker flags: -fuse-ld=lld"'
       - invoke: >-
           cargo llvm-cov --lcov --output-path lcov.info
           --all-targets --all-features
@@ -321,15 +321,43 @@ lexer interprets surrounding quotes or whitespace.
 invocation       := whitespace* word (whitespace+ word)* whitespace*
 word             := word-part+ | empty-single-quote | empty-double-quote
 word-part        := unquoted-run | single-quoted | double-quoted | expression
+empty-single-quote := "''"
+empty-double-quote := '""'
+unquoted-run     := unquoted-char+
+unquoted-char    := any Unicode scalar except whitespace, U+0022, U+0027,
+                    U+007C, U+0026, U+003B, U+003C, U+003E, or the start of
+                    U+007B U+007B
 single-quoted    := "'" (single-literal | expression)* "'"
+single-literal   := single-char+
+single-char      := any Unicode scalar except U+0027 or the start of
+                    U+007B U+007B
 double-quoted    := '"' (double-literal | escaped-quote
                     | escaped-backslash | expression)* '"'
-expression       := MiniJinja expression token delimited by "{{" and "}}"
+double-literal   := double-char+
+double-char      := any Unicode scalar except U+0022 or the start of
+                    U+007B U+007B
+escaped-quote    := U+005C U+0022
+escaped-backslash := U+005C U+005C
+expression       := MiniJinja expression token delimited by U+007B U+007B
+                    and U+007D U+007D
 whitespace       := U+0020 | U+0009 | U+000A | U+000D
 ```
 
-`unquoted-run` excludes argv whitespace, quote characters, the start of a Jinja
-expression, and the reserved direct-mode metacharacters listed below.
+The lexer checks for `expression` (the two-code-point start sequence `{{`)
+before consuming any surrounding lexical production, including inside quotes.
+Otherwise, `unquoted-char` excludes the four `whitespace` code points, U+0022
+(`"`), U+0027 (`'`), and the direct-mode metacharacters U+007C (`|`), U+0026
+(`&`), U+003B (`;`), U+003C (`<`), and U+003E (`>`). `single-char` excludes
+only U+0027, and `double-char` excludes only U+0022; the `expression` check
+therefore also applies within both literal productions.
+The escape alternatives are checked before `double-char`, so only the two-code-
+point sequence `\"` yields one literal `"` and only `\\` yields one literal
+`\`. Every other backslash is literal, including a terminal backslash in an
+unquoted or single-literal run; there is no general backslash escape and no
+dangling-escape error. In double-quoted text, a backslash immediately before a
+quote is therefore `escaped-quote`; a literal backslash before the closing
+quote must use `\\`. A quote closes its corresponding quoted production unless
+it was consumed by `escaped-quote`.
 
 ### 7.3 Quoting and escaping
 
@@ -641,15 +669,30 @@ to Netsuke's effective working directory after command-line `-C` processing.
 Netsuke opens the path when the action executes, not while the manifest is
 compiled.
 
-Before opening any stream file, Netsuke validates every configured destination
-in the block as one set: `stdin`, `stdout`, `stderr`, and `tee`. The runner
-resolves each destination to a file identity, not merely a rendered path
-string. The resolution must account for relative aliases, symlinks, and hard
-links where the platform provides the required filesystem identity information.
-If two configured destinations identify the same file, validation fails before
-any destination is created, truncated, or opened. The validation also applies
-when a destination is used alongside a pipeline; the pipeline restrictions
-below remain in force.
+At action start, the runner records the current identity (including an explicit
+absent state) of every configured destination as one set: `stdin`, `stdout`,
+`stderr`, and `tee`. It then opens a provisional handle for each destination
+without truncation. Input handles are read-only; output handles may create a
+missing file but must not truncate it.
+The handles use non-following flags, or the closest platform-equivalent safe
+handle semantics, where available.
+
+For each provisional handle, the runner freshly resolves the current path and
+compares that identity with the identity obtained from the handle. A path that
+disappears, is replaced, changes symlink target, or cannot be resolved safely
+is rejected. A replacement, disappearance, or unexpected creation by another
+actor between the initial resolution and provisional open is also rejected. It
+next compares every pair of opened-handle identities. Relative aliases,
+symlinks, and hard links must therefore be detected, including `stdin` versus
+every output destination, wherever the platform provides filesystem identity
+information. All provisional handles are closed on rejection.
+
+Only after every opened-handle identity and pairwise-distinctness check
+succeeds may the runner truncate output handles and bind them to child
+streams. The validation also applies when a destination is used alongside a
+pipeline; the pipeline restrictions below remain in force. The runner never
+reopens a destination by path after provisional open; truncation and stream
+binding use only the validated handles.
 
 Stream paths do not implicitly become target sources, dependencies, or outputs.
 Manifest authors must continue to declare graph relationships explicitly.
@@ -669,13 +712,15 @@ also specify `stdin`.
 When none of `stdout`, `tee`, or `pipe` is selected, the child inherits the
 action runner's standard output.
 
-`stdout` creates or truncates the named file and directs the child's standard
-output only to that file.
+`stdout` uses its validated output handle, truncates the named file after all
+destination checks succeed, and directs the child's standard output only to
+that file.
 
-`tee` creates or truncates the named file and copies the child's standard output
-byte-for-byte to both that file and the action runner's inherited standard
-output. Netsuke treats a read or write failure in the tee path as an execution
-failure even when the child exits successfully.
+`tee` uses its validated output handle, truncates the named file after all
+destination checks succeed, and copies the child's standard output byte-for-
+byte to both that file and the action runner's inherited standard output.
+Netsuke treats a read or write failure in the tee path as an execution failure
+even when the child exits successfully.
 
 `pipe: true` directs the child's standard output to the next structured command
 block's standard input.
@@ -685,21 +730,23 @@ block's standard input.
 ### 12.4 Standard error
 
 When `stderr` is absent, the child inherits the action runner's standard error.
-When present, Netsuke creates or truncates the named file and directs standard
-error to it.
+When present, Netsuke uses its validated output handle, truncates the named
+file after all destination checks succeed, and directs standard error to it.
 
 Standard error is independent of the stdout selection. This RFC does not define
 stderr piping, stderr teeing, or `2>&1`-style stream merging.
 
 No two configured stream destinations may identify the same file. Opening the
-same file through independent truncating handles would give ambiguous ordering
-and file-offset semantics.
+same file through independent handles would give ambiguous ordering and
+file-offset semantics. This pairwise check occurs before any output handle is
+truncated.
 
 ### 12.5 File modes and byte handling
 
-All output files use create-or-truncate semantics. Append mode is reserved for a
-future object-valued stream syntax. Pipes and tee operations carry arbitrary
-bytes and do not require UTF-8 output.
+All output files use create-or-truncate semantics, implemented by truncating
+the already-validated output handles only after every destination check
+succeeds. Append mode is reserved for a future object-valued stream syntax.
+Pipes and tee operations carry arbitrary bytes and do not require UTF-8 output.
 
 Failure to open a stream path, write a tee output, or relay inherited output
 fails the execution unit and stops the enclosing command sequence.
@@ -738,11 +785,12 @@ the next stage. The final stage applies its own inherited, `stdout`, or `tee`
 behaviour.
 
 If a stage cannot be spawned, Netsuke terminates and reaps any stages already
-started for that pipeline, then reports the spawn failure. If a relay or tee
-write fails, Netsuke closes the affected pipe ends, terminates every still-
-running stage, and reaps every stage that was started. Otherwise, after all
-stages and relays have started successfully, Netsuke waits for every stage and
-drains every managed stream.
+started for that pipeline, then reports the spawn failure. If any managed pipe,
+relay, or tee I/O fails, including a relay read failure or a tee write failure,
+Netsuke closes the affected pipe ends, terminates every still-running stage,
+and reaps every stage that was started. Otherwise, after all stages and relays
+have started successfully, Netsuke waits for every stage and drains every
+managed stream.
 
 The pipeline succeeds only when:
 
@@ -831,9 +879,12 @@ the required information is available at compile time.
 - A pipeline recipient may not specify `stdin`.
 - Pipelines may not cross rule, script, or legacy-string boundaries.
 - All configured destinations among `stdin`, `stdout`, `stderr`, and `tee` must
-  have distinct resolved file identities. Validation must detect relative path
-  aliases, symlinks, and hard links before any stream destination is opened,
-  created, or truncated.
+  be provisionally opened without truncation using safe non-following handles,
+  or the closest platform equivalent. Each handle must match a fresh path
+  identity, and every pair of handles must have a distinct file identity.
+  Validation must detect relative path aliases, symlinks, hard links, path
+  replacement, disappearance, and unexpected creation before any output handle
+  is truncated. Provisional handles are closed on rejection.
 
 ### 15.4 Reference validation
 
@@ -1149,13 +1200,15 @@ The implementation should include:
 - pipeline tests where the first, middle, and final stages fail independently;
 - spawn-failure tests that verify already-started stages are reaped;
 - high-volume pipeline tests that verify all stages and drain or tee relays
-  start before waiting, plus tee-write-failure tests that verify affected pipes
-  close, remaining stages terminate, and every started stage is reaped;
+  start before waiting, plus tee-write-failure and relay-read-failure tests
+  that verify affected pipes close, remaining stages terminate, and every
+  started stage is reaped;
 - byte-oriented tee tests including non-UTF-8 output;
 - truncate and path-resolution tests for every stream field and every pair of
   configured stream destinations, including relative aliases, symlinks, and
-  hard links, verifying that collisions are rejected before any open or
-  truncate;
+  hard links, verifying that collisions are rejected before any output
+  truncation; race-focused tests replace a path during validation or opening
+  and verify that the replacement is rejected without truncating its target;
 - action-plan lifecycle tests covering build-time cleanup after all Ninja and
   runner children finish, persistent `generate --output` sidecars, exclusive
   leases, atomic publication, replacement and deletion cleanup, and bounded
