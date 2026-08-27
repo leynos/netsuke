@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
 `Verification plan` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 There is no `PLANS.md` in this repository; `docs/execplans/` is the plan
 directory and `docs/roadmap.md` is the work index.
@@ -205,7 +205,7 @@ Stop and escalate rather than improvising when any of these is reached.
 - [x] (2026-08-27) Correct post-implementation verification gaps: restore the
   consuming `ShellText` boundary, exercise scalar dollar syntax through the
   real-Ninja oracle, execute B2, and make the sentinel BDD scenario observable.
-- [ ] (2026-08-27) Run complete deterministic gates and gate-first CodeRabbit
+- [x] (2026-08-27) Run complete deterministic gates and gate-first CodeRabbit
   review for the correction set.
 
 ## Surprises & discoveries
@@ -1215,6 +1215,15 @@ submodule. Its scope is solely creating ephemeral `build.ninja` files and
 querying `ninja -t commands out` for scalar-property cases; callers keep the
 property and expected IR text in the parent module. It is not a production
 abstraction or a general integration-test helper.
+
+2026-08-27 — the correction set is complete. Focused real-Ninja checks passed:
+the 128-case scalar differential property, all 21 dollar-escaping integration
+tests, and the executable BDD sentinel scenario. The final deterministic suite
+passed `make check-fmt`, `make test` (2,418 passed, 3 skipped), `make
+typecheck`, `make lint`, `make markdownlint`, and `make nixie`. Gate-first
+`coderabbit review --agent` completed with zero findings. I3 now consumes
+`ShellText`, B2 runs through real Ninja with its declared input seeded, and
+the BDD scenario observes the target's output. Status is `COMPLETE`.
 
 2026-08-17 —
 
