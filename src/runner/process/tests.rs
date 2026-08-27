@@ -235,44 +235,94 @@ fn capture_public_ninja_execution(level_filter: LevelFilter) -> anyhow::Result<V
     Ok(events)
 }
 
+/// Verify that `event` contains every stable field required by its contract.
+///
+/// # Errors
+///
+/// Returns an error identifying the missing field when the event violates its
+/// tracing contract.
+#[cfg(unix)]
+fn assert_event_fields(
+    event: &str,
+    required_fields: &[&str],
+    event_kind: &str,
+) -> anyhow::Result<()> {
+    for field in required_fields {
+        anyhow::ensure!(
+            event.contains(field),
+            "{event_kind} event should contain {field:?}: {event}"
+        );
+    }
+    Ok(())
+}
+
+/// Verify the stable informational event emitted by public Ninja execution.
+///
+/// # Errors
+///
+/// Returns an error when public execution emits any number other than one
+/// informational event, includes a required field, or exposes the command.
+#[cfg(unix)]
+fn assert_public_ninja_info_event(events: &[String]) -> anyhow::Result<()> {
+    let [event] = events else {
+        anyhow::bail!("expected one informational event, got {events:?}");
+    };
+    assert_event_fields(
+        event,
+        &[
+            "message=Executing Ninja subprocess",
+            "operation=\"build\"",
+            "ninja_program=",
+            "arg_count=",
+            "env_override_count=0",
+            "path_overridden=false",
+            "suppress_stderr=false",
+        ],
+        "informational",
+    )?;
+    anyhow::ensure!(
+        !event.contains("Executing command"),
+        "informational event must not contain the redacted command: {event}"
+    );
+    Ok(())
+}
+
+/// Verify the verbose command event emitted by public Ninja execution.
+///
+/// # Errors
+///
+/// Returns an error when public execution omits the debug command event or it
+/// does not retain the required correlation and command fields.
+#[cfg(unix)]
+fn assert_public_ninja_debug_event(events: &[String]) -> anyhow::Result<()> {
+    let Some(event) = events
+        .iter()
+        .find(|event| event.contains("message=Executing command:"))
+    else {
+        anyhow::bail!("expected a debug command event, got {events:?}");
+    };
+    assert_event_fields(
+        event,
+        &[
+            "operation=\"build\"",
+            "ninja_program=",
+            "suppress_stderr=false",
+            "Executing command:",
+            "fake-ninja",
+        ],
+        "debug command",
+    )
+}
+
 /// Verify public Ninja execution separates stable and verbose event payloads.
 #[cfg(unix)]
 #[test]
 fn public_ninja_execution_splits_info_and_debug_events() -> anyhow::Result<()> {
     let info_events = capture_public_ninja_execution(LevelFilter::INFO)?;
-    let [info_event] = info_events.as_slice() else {
-        anyhow::bail!("expected one informational event, got {info_events:?}");
-    };
-    anyhow::ensure!(
-        info_event.contains("message=Executing Ninja subprocess")
-            && info_event.contains("operation=\"build\"")
-            && info_event.contains("ninja_program=")
-            && info_event.contains("arg_count=")
-            && info_event.contains("env_override_count=0")
-            && info_event.contains("path_overridden=false")
-            && info_event.contains("suppress_stderr=false")
-            && !info_event.contains("Executing command"),
-        "informational event must contain only stable fields: {info_event}"
-    );
+    assert_public_ninja_info_event(&info_events)?;
 
     let debug_events = capture_public_ninja_execution(LevelFilter::DEBUG)?;
-    let Some(debug_event) = debug_events
-        .iter()
-        .find(|event| event.contains("message=Executing command:"))
-    else {
-        anyhow::bail!("expected a debug command event, got {debug_events:?}");
-    };
-    anyhow::ensure!(
-        debug_event.contains("operation=\"build\"")
-            && debug_event.contains("ninja_program=")
-            && debug_event.contains("suppress_stderr=false"),
-        "debug event must retain correlation fields: {debug_event}"
-    );
-    anyhow::ensure!(
-        debug_event.contains("Executing command:") && debug_event.contains("fake-ninja"),
-        "debug event must contain the public request's redacted command: {debug_event}"
-    );
-    Ok(())
+    assert_public_ninja_debug_event(&debug_events)
 }
 
 /// Spawning a missing Ninja emits a spawn-failure warning whose
