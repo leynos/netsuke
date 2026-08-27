@@ -264,6 +264,7 @@ struct HelpEntryJson<'a> {
     description: Option<&'a str>,
     /// Whether the entry is one of the manifest's default targets.
     default: bool,
+    /// Whether the entry has an unevaluated query-disabled condition.
     conditional: bool,
 }
 

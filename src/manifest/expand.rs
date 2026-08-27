@@ -213,6 +213,7 @@ fn eval_when(env: &Environment, expr: &str, ctx: Value) -> Result<WhenResolution
     )))
 }
 
+/// Map a successfully evaluated boolean condition to its discovery resolution.
 const fn when_resolution(is_true: bool) -> WhenResolution {
     if is_true {
         WhenResolution::Include
@@ -221,6 +222,7 @@ const fn when_resolution(is_true: bool) -> WhenResolution {
     }
 }
 
+/// Return whether a `when` evaluation failed only because query mode disabled a helper.
 fn is_query_disabled_when_error(error: &anyhow::Error) -> bool {
     error.chain().any(|cause| {
         cause

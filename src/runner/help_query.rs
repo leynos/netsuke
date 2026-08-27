@@ -24,6 +24,7 @@ pub(super) struct HelpEntry {
     pub(super) is_action: bool,
     /// Whether the entry is one of the manifest's default targets.
     pub(super) is_default: bool,
+    /// Whether query-disabled `when` evaluation left the entry conditional.
     pub(super) conditional: bool,
 }
 

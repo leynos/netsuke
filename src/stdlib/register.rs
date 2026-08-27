@@ -27,6 +27,7 @@ use crate::localization::{self, keys};
 /// type predicate.
 type FileTest = (&'static str, fn(fs::FileType) -> bool);
 
+/// Stable text identifying helpers deliberately unavailable to manifest queries.
 const MANIFEST_QUERY_DISABLED_HELPER_MARKER: &str = "is disabled while rendering `netsuke help targets`; manifest queries permit \
      only non-disclosing, side-effect-free template helpers";
 
@@ -153,6 +154,7 @@ fn register_disabled_query_helpers(env: &mut Environment<'_>) {
     register_host_dependent_query_helpers(env);
 }
 
+/// Register helpers that are never safe while rendering discovery metadata.
 fn register_always_disabled_query_helpers(env: &mut Environment<'_>) {
     env.add_function("env", |_variable: String| -> Result<String, Error> {
         Err(manifest_query_operation_error("env"))
@@ -191,6 +193,7 @@ fn register_always_disabled_query_helpers(env: &mut Environment<'_>) {
     );
 }
 
+/// Register helpers whose result would disclose host state during a query.
 fn register_host_dependent_query_helpers(env: &mut Environment<'_>) {
     env.add_filter(
         "which",
