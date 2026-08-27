@@ -6,6 +6,7 @@ use crate::bdd::types::{ContentName, NinjaFragment, TokenList};
 use anyhow::{Context, Result, anyhow, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
+use mockable::{DefaultEnv, Env};
 use netsuke::ninja_gen;
 use rstest_bdd_macros::{then, when};
 use std::process::Command;
@@ -109,6 +110,10 @@ fn generate_ninja(world: &TestWorld) -> Result<()> {
 #[when("the generated Ninja target {target:string} is run with sentinel {value:string}")]
 fn run_generated_ninja_target(world: &TestWorld, target: &str, value: &str) -> Result<()> {
     let ninja = get_ninja_content(world)?;
+    let process_env = DefaultEnv;
+    let host_path = process_env
+        .os_string("PATH")
+        .context("host PATH is required to run Ninja")?;
     let workspace = ninja_integration_workspace().context("Ninja is required for BDD execution")?;
     let path = Utf8PathBuf::from_path_buf(workspace.path().to_path_buf())
         .map_err(|non_utf8| anyhow!("non-UTF-8 temporary path: {non_utf8:?}"))?;
@@ -122,6 +127,7 @@ fn run_generated_ninja_target(world: &TestWorld, target: &str, value: &str) -> R
         .args(["-f", "build.ninja", target])
         .current_dir(path.as_std_path())
         .env_clear()
+        .env("PATH", host_path)
         .env(SENTINEL, value)
         .output()
         .context("run generated Ninja target")?;

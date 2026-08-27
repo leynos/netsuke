@@ -13,13 +13,31 @@ use netsuke::{
     ninja_gen::generate,
 };
 use rstest::rstest;
-use std::process::Command;
 use tempfile::TempDir;
 use test_support::ninja::ninja_integration_workspace;
+
+use mockable::{DefaultEnv, Env};
+
+//! Differential tests for shell dollars preserved through the Ninja backend.
+//!
+//! These tests use Ninja itself as the lexer oracle. The generated command
+//! must be the shell text held by the IR after Netsuke lowers `$in` and `$out`.
+};
 
 const SENTINEL: &str = "NETSUKE_TEST_SENTINEL";
 const SENTINEL_VALUE: &str = "sentinel-value";
 
+/// Read the host `PATH` for isolated real-Ninja child processes.
+///
+/// # Errors
+///
+/// Returns an error if the host environment does not provide `PATH`.
+fn host_path() -> Result<OsString> {
+    let process_env = DefaultEnv;
+    process_env
+        .os_string("PATH")
+        .context("host PATH is required to run Ninja")
+}
 const fn action(recipe: Recipe) -> Action {
     Action {
         recipe,
@@ -89,6 +107,7 @@ fn ninja_commands(ninja_file: &str, target: &str) -> Result<String> {
         .args(["-f", "build.ninja", "-t", "commands", target])
         .current_dir(workspace.path.as_std_path())
         .env_clear()
+        .env("PATH", host_path()?)
         .env(SENTINEL, SENTINEL_VALUE)
         .output()
         .context("run Ninja command oracle")?;
@@ -118,7 +137,8 @@ fn ninja_output(
     command
         .args(["-f", "build.ninja", "out"])
         .current_dir(workspace.path.as_std_path())
-        .env_clear();
+        .env_clear()
+        .env("PATH", host_path()?);
     if let Some(value) = environment_value {
         command.env(SENTINEL, value);
     }
