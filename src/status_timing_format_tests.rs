@@ -88,7 +88,7 @@ fn timing_recorder_incomplete_flow_has_no_summary_lines(test_prefs: OutputPrefs)
     );
 
     let lines = render_summary_lines(test_prefs, state.completed_stages());
-    assert!(lines.is_empty());
+    assert_eq!(lines, Vec::<String>::new());
 }
 
 #[rstest]
