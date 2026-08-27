@@ -29,6 +29,7 @@ use std::sync::Once;
 const EXPANSIONS_TOTAL: &str = "netsuke_manifest_glob_expansions_total";
 /// Metric name counting entries dropped from a glob expansion.
 const ENTRIES_SKIPPED_TOTAL: &str = "netsuke_manifest_glob_entries_skipped_total";
+/// Metric name counting paths rejected by the Jinja glob adapter.
 const REJECTIONS_TOTAL: &str = "netsuke_manifest_glob_rejections_total";
 /// Stable marker replacing caller-controlled paths in tracing events.
 const REDACTED_PATH: &str = "<redacted>";
