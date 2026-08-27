@@ -59,7 +59,7 @@ use crate::hex;
 use crate::ir::{BuildEdge, BuildGraph};
 use crate::localization::{self, keys};
 use crate::ninja_gen::{
-    NinjaGenError, edge_requires_gates, graph_requires_dyndep, join, path_key,
+    NinjaGenError, RecipeShell, edge_requires_gates, graph_requires_dyndep, join, path_key,
     reject_unsupported_path_characters, write_action_rules,
 };
 use camino::Utf8PathBuf;
@@ -89,7 +89,20 @@ const DYNDEP_NAMESPACE: &str = ".netsuke/dyndep";
 /// `.netsuke/dyndep` namespace, and [`NinjaGenError::MissingAction`] when an
 /// edge references an unknown action.
 pub fn generate_bundle(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenError> {
-    generate_bundle_inner(graph)
+    generate_bundle_for_shell(graph, RecipeShell::host_default())
+}
+
+/// Generate a complete Ninja bundle for one explicit legacy recipe interpreter.
+///
+/// # Errors
+///
+/// Returns [`NinjaGenError`] when the graph cannot be represented safely or
+/// the generated bundle cannot be written.
+pub(crate) fn generate_bundle_for_shell(
+    graph: &BuildGraph,
+    shell: RecipeShell,
+) -> Result<GeneratedNinja, NinjaGenError> {
+    generate_bundle_inner(graph, shell)
 }
 
 /// Construct the [`GeneratedNinja`] bundle for `graph`.
@@ -108,7 +121,10 @@ pub fn generate_bundle(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenErr
 /// rendered safely. Returns [`NinjaGenError::MissingAction`] when an edge
 /// references an action absent from the graph, or [`NinjaGenError::Format`]
 /// when rendering the bundle fails.
-fn generate_bundle_inner(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenError> {
+fn generate_bundle_inner(
+    graph: &BuildGraph,
+    shell: RecipeShell,
+) -> Result<GeneratedNinja, NinjaGenError> {
     reject_unsupported_path_characters(graph)?;
     reject_reserved_paths(graph)?;
     let serial_present = graph_requires_dyndep(graph);
@@ -118,7 +134,7 @@ fn generate_bundle_inner(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenE
         writeln!(out, "ninja_required_version = 1.10\n")?;
     }
 
-    write_action_rules(graph, &mut out)?;
+    write_action_rules(graph, &mut out, shell)?;
 
     let mut stages = SerialStages::default();
     render_edges(graph, &mut out, &mut stages)?;

@@ -300,7 +300,7 @@ non-empty `deps` list is their complete operation. This dependency-only
 aggregate form is preferred over a no-op command such as `command: ":"`:
 
 - `command`: one shell command, or an ordered list of commands.
-- `script`: a multi-line POSIX shell script.
+- `script`: a multi-line script interpreted by the selected recipe shell.
 - `rule`: the name of another rule to use.
 
 Rules may also provide `description`, text used for Ninja's progress display.
@@ -321,8 +321,59 @@ same Jinja context, including `{{ ins }}` and `{{ outs }}`; those two
 placeholders are resolved later to the concrete target's shell-quoted input and
 output paths. An empty command list is rejected when the manifest is parsed.
 
-At execution time, each list entry is evaluated inside its own brace group and
-the groups are joined with `&&`. The entry is passed to `eval` as a
+
+### Windows legacy recipe contract
+
+On Windows, v0.1.x interprets every legacy `command` string, `command` list,
+and `script` with **Windows PowerShell** (`powershell.exe`), not with the shell
+that launched `netsuke`. Netsuke invokes it explicitly with an encoded,
+non-interactive, no-profile command before Ninja executes a recipe. A build
+started from PowerShell, `cmd.exe`, an IDE, or Git Bash therefore uses the same
+recipe interpreter. This is a Windows PowerShell contract, not a PowerShell
+Core (`pwsh`) contract.
+
+Scalar commands and scripts each receive a fresh PowerShell process. A command
+list receives one shared process: entries run in declaration order, later
+entries see PowerShell variables, `$env:` assignments, and locations left by an
+earlier entry, and Netsuke exits at the first native-program non-zero status.
+PowerShell terminating errors also fail the recipe. State does not cross action
+or target boundaries.
+
+Use PowerShell syntax in the default route. `$name` is a PowerShell variable
+and `$env:NAME` reads an environment variable; `${VAR:-default}` is POSIX
+syntax and is not valid PowerShell. Recipe text is protected from Ninja dollar
+expansion, so write ordinary PowerShell dollars rather than `$$`. The rendered
+`{{ ins }}` and `{{ outs }}` paths use single-quoted PowerShell arguments,
+including paths with spaces. Quote every other path and argument with
+PowerShell syntax; arbitrary rendered Jinja text is not shell-quoted.
+
+Ninja turns a failed recipe into its own non-zero result, and `netsuke` returns
+failure after forwarding Ninja's output. The CLI contract distinguishes success
+from failure; it does not promise to return the recipe's exact child value.
+
+To retain POSIX interpretation on Windows, explicitly select a Git
+Bash-compatible runtime:
+
+<!-- tested-example: guide-windows-bash-compatibility -->
+
+```powershell
+choco install git --yes --no-progress
+$env:PATH = "C:\Program Files\Git\bin;$env:PATH"
+$env:NETSUKE_WINDOWS_SHELL = "bash"
+netsuke build
+```
+
+MSYS2 Bash is also supported when `bash.exe` is on `PATH`. Before `build` or
+Ninja-tool execution, Netsuke checks this selection. If `bash.exe --version`
+cannot run, it stops with instructions to install Git for Windows or MSYS2, add
+Bash to `PATH`, or unset `NETSUKE_WINDOWS_SHELL`. `generate` and `help targets`
+do not execute recipes, so they do not require Bash. In CI, install Git
+explicitly, prepend its `bin` directory to `PATH`, set
+`NETSUKE_WINDOWS_SHELL=bash`, and launch Netsuke normally from a `pwsh` step;
+do not rely on a workflow-wide `shell: bash` setting.
+
+On Unix and on the explicit Bash route, each list entry is evaluated inside its
+own brace group and the groups are joined with `&&`. The entry is passed to `eval` as a
 shell-quoted payload, so an inline `#` comment or a trailing control operator
 such as `&` cannot consume the generated group's closing boundary. Brace groups
 run in the current shell rather than a subshell: a changed working directory,

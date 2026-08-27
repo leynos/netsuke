@@ -70,11 +70,12 @@ const fn error_category(error: &NinjaGenError) -> &'static str {
         | NinjaGenError::UnsupportedCommandListExec { .. }
         | NinjaGenError::UnanalyzableCommandListEval { .. }
         | NinjaGenError::NinjaControlCharacter { .. } => "command_list",
+        NinjaGenError::UnsafeNinjaValue => "unsafe_ninja_value",
         NinjaGenError::Format { .. } => "format",
         NinjaGenError::DyndepFilesRequired { .. } => "dyndep_files_required",
         NinjaGenError::ReservedOutputPath { .. } => "reserved_output_path",
         NinjaGenError::UnsupportedPathCharacter { .. } => "unsupported_path_character",
-        NinjaGenError::UnsafeNinjaValue => "unsafe_ninja_value",
+        NinjaGenError::UnsafeNinjaPath { .. } => "unsafe_ninja_path",
     }
 }
 

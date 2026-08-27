@@ -254,7 +254,10 @@ proptest! {
             .expect("generated action should include a command line");
         let mut previous = 0;
         for entry in &entries {
-            let expected_entry = format!("eval {}", canonical_shell_single_quote(&format!("echo {entry}")));
+            let expected_entry = format!(
+                "eval {}",
+                canonical_shell_single_quote(&format!("echo {entry}")).replace('$', "$$")
+            );
             let expected_count = entries.iter().filter(|candidate| *candidate == entry).count();
             prop_assert_eq!(
                 command_line.matches(&expected_entry).count(),

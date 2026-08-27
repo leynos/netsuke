@@ -4,7 +4,7 @@ use super::*;
 use crate::cli::{HelpArgs, HelpTopic};
 use crate::ir::{BuildEdge, BuildGraph, DependencyOrder};
 use crate::manifest::ManifestLoadStage;
-use crate::ninja_gen::NinjaGenError;
+use crate::ninja_gen::{NinjaGenError, RecipeShell};
 use crate::status::{LocalizationKey, StageNumber, StatusReporter};
 use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;
@@ -84,7 +84,8 @@ fn generation_steps_run_without_reporter() -> anyhow::Result<()> {
     let manifest =
         generation::load_manifest(&manifest_path, Some(&mut |stage| stages.push(stage)))?;
     let graph = generation::build_graph(&manifest)?;
-    let (ninja_text, _) = generation::ninja_text(&graph)?.into_parts();
+    let (ninja_text, _) =
+        generation::ninja_text_for_shell(&graph, RecipeShell::host_default())?.into_parts();
     ensure!(
         stages
             == vec![
@@ -186,7 +187,8 @@ fn ninja_text_propagates_typed_generation_errors() {
         },
     );
 
-    let error = generation::ninja_text(&graph).expect_err("missing action should fail generation");
+    let error = generation::ninja_text_for_shell(&graph, RecipeShell::host_default())
+        .expect_err("missing action should fail generation");
     assert!(matches!(
         error,
         NinjaGenError::MissingAction { ref id, .. } if id == "missing"
@@ -204,7 +206,7 @@ fn runner_reports_the_complete_generation_stage_sequence() -> Result<()> {
     };
     let reporter = StageRecordingReporter::default();
 
-    let generated = generate_ninja(&cli, &reporter, None)?;
+    let generated = generate_ninja_with_shell(&cli, &reporter, None, RecipeShell::host_default())?;
     let (ninja_text, _) = generated.into_parts();
 
     let stages = reporter.stages();

@@ -50,7 +50,7 @@ impact
 | Cached CLI configuration API | Breaking for callers of the unstable Rust API: use the opt-in cached discovery flow with `ConfigEnvProvider`; `ConfigStdEnvProvider` supplies process-backed access.                                                                                                                                                                                  | [Users' guide](users-guide.md)                                                                   |
 | Timing output                | Existing `VerboseTimingReporter::new` keeps its stderr sink; Rust callers can opt into an owned `Write + Send` sink with `with_writer`.                                                                                                                                                                                                               | [Users' guide](users-guide.md#capture-verbose-timing-output)                                     |
 | Glob expansion               | Parent-relative patterns such as `glob('../shared/*.h')` now expand. The Jinja helper rejects matched paths that are not portable unquoted shell words. Metadata checks use a capability rooted at the pattern's longest literal directory prefix; missing or non-directory prefixes return no matches, and unresolvable symlink matches are skipped. | [Users' guide](users-guide.md) and [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) |
-| Command recipes              | Existing scalar `command` recipes are unchanged. New YAML command lists are opt-in and run in declaration order with fail-fast semantics.                                                                                                                                                                                                             | [Rules and recipes](users-guide.md#rules-and-recipes)                                            |
+| Command recipes              | On Windows, legacy scalar commands, lists, and scripts use Windows PowerShell by default; YAML command lists remain opt-in, ordered, and fail-fast.                                                                                                                                                                                                    | [Windows legacy recipe contract](users-guide.md#windows-legacy-recipe-contract)                 |
 | Ninja text escaping          | Write shell dollars normally; paths containing `$`, spaces, colons, `\|`, or control characters are rejected, as are newline, carriage-return, and NUL metadata values.                                                                                                                                                                               | [Users' guide](users-guide.md#review-the-safety-boundary)                                        |
 | Manifest discovery           | Optional target/action `description` values are shown by the new `netsuke help targets` command. Manifests without them and existing build output are unchanged.                                                                                                                                                                                      | [Users' guide](users-guide.md)                                                                   |
 | Serial dependencies          | New opt-in `dependency_order: serial` runs an action or target's direct `deps` list in declaration order.                                                                                                                                                                                                                                             | [Serial dependency ordering](users-guide.md#run-direct-dependencies-serially)                    |
@@ -109,6 +109,52 @@ run a short sequence of commands in declaration order, change a recipe to a
 non-empty YAML list. The entries run in one shell process and stop at the first
 non-zero exit. See [Rules and recipes](users-guide.md#rules-and-recipes) for
 the syntax, shell semantics, and examples.
+
+
+## Windows legacy recipe interpreter
+
+v0.1.x makes Windows legacy-recipe execution explicit. Netsuke starts
+`powershell.exe` for every scalar command, ordered list, and script, regardless
+of whether the CLI was launched by `pwsh`, `cmd.exe`, an IDE, or Git Bash. The
+default is Windows PowerShell, not PowerShell Core. Existing Windows manifests
+that contain POSIX-only syntax must either move to PowerShell syntax or opt into
+the Bash compatibility route:
+
+```powershell
+choco install git --yes --no-progress
+$env:PATH = "C:\Program Files\Git\bin;$env:PATH"
+$env:NETSUKE_WINDOWS_SHELL = "bash"
+netsuke build
+```
+
+MSYS2 is equally suitable when its `bash.exe` is on `PATH`. The executable is
+checked before `build` and Ninja-tool commands, so an absent selected Bash
+runtime produces an actionable Netsuke error instead of a Ninja command-not-
+found failure. `generate` and `help targets` do not run recipes and therefore
+do not require the optional runtime.
+
+In the default route, write `$name` for a PowerShell variable and `$env:NAME`
+for an environment variable. `${VAR:-default}` is only valid in the explicit
+Bash route. The v0.1.0 dollar-escaping fix means these are ordinary, single
+dollars, not Ninja-escaped `$$` forms. Ordered lists share one PowerShell
+process, so variables, environment assignments, and current-directory changes
+persist between entries; a later entry does not run after a terminating error
+or non-zero native exit. Each scalar, script, action, and target has a fresh
+shell process. `{{ ins }}` and `{{ outs }}` remain path-quoted, including for
+spaces; quote any other path or argument with the selected shell's syntax.
+
+For reproducible Windows CI, use a `pwsh` step and let Netsuke select
+PowerShell; do not use a workflow-level `shell: bash` setting as evidence of
+recipe behaviour. If selecting Bash, install Git with Chocolatey as above,
+prepend `C:\Program Files\Git\bin` to that step's `PATH`, and set
+`NETSUKE_WINDOWS_SHELL=bash` explicitly.
+
+This is deliberately a v0.1.x shell-string compatibility boundary. The
+structured command blocks and argv templates in [RFC: structured command
+blocks and argv templates #573](https://github.com/leynos/netsuke/pull/573)
+are planned for v0.2.0 to remove shell-dependent quoting, paths, variable
+expansion, and exit-status ambiguity. They are not backported through an
+implicit change to legacy recipes.
 
 ## Opting into an explicit child environment
 

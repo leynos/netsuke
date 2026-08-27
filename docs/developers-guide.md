@@ -371,27 +371,22 @@ The lowering stages have deliberately separate responsibilities:
   rejected because Netsuke cannot lower it safely; scripts use substitution
   without command-shaped parsing, so heredocs and comments remain valid. The
   resulting action contains ordinary command text and no Ninja placeholders.
-- `src/ninja_gen/mod.rs` turns completed shell text into a Ninja value exactly
-  once. That boundary doubles residual dollar signs and rejects control
-  characters after IR lowering and before file emission. Paths remain distinct
-  from shell text and are rejected when they contain `$`, spaces, colons, or
-  control characters. For a list, it puts each entry in a brace group and joins
-  the groups with `&&`. Each group uses `eval` with a shell-quoted entry
-  payload. This keeps an inline comment or a trailing control operator such as
-  `&` inside the entry from consuming the generated group terminator. Braces
-  run in the current shell, not a subshell, so directory changes, environment
-  assignments, and shell variables can carry from one entry to the next. The
-  `&&` chain remains fail-fast. Each entry may start at most one background
-  job; the generated wrapper waits for that job before it evaluates a later
-  entry. Ninja generation rejects entries that start more than one background
-  job. It also rejects entries whose nested `eval` payload makes the
-  background-job count dynamic because the wrapper cannot safely determine
-  which jobs to wait for. A direct simple `exec`, optionally prefixed by shell
-  assignments, is evaluated in a retaining subshell so its success or failure
-  remains visible to the wrapper; a successful `exec` ends the remaining chain.
-  Structured or nested `exec` forms are rejected during Ninja generation
-  because the wrapper cannot supervise them without changing their shell
-  semantics.
+- `src/ninja_gen/mod.rs` delegates completed recipe text to
+  `src/ninja_gen_recipe_shell.rs`. On Unix, and for the explicit Windows Bash
+  compatibility route, a scalar remains POSIX shell text. A list puts each
+  entry in a brace group and joins the groups with `&&`; `eval` receives a
+  shell-quoted payload, which keeps inline comments and trailing control
+  operators inside the entry boundary. Braces preserve current-shell state and
+  the chain remains fail-fast. The existing background-job and `exec`
+  validation rules apply to this POSIX route.
+- On Windows, `RecipeShell::PowerShell` renders scalar commands and scripts as
+  encoded `powershell.exe` invocations. An ordered list becomes one PowerShell
+  script that resets and checks `$LASTEXITCODE` after each entry, preserving
+  PowerShell state while stopping after a failed native program. The POSIX
+  command-list analyser is deliberately not applied to this route. The runner
+  resolves `NETSUKE_WINDOWS_SHELL` and preflights `bash.exe` only when the
+  optional compatibility route is selected; `help targets` stays outside this
+  execution boundary.
 - `src/runner/process` forwards the command's output and recognizes the
   bounded `netsuke command-list failure: action HASH, entry M` marker. A failed
   list therefore retains the original exit status while adding the fixed-width
@@ -432,18 +427,14 @@ behavioural contract for these boundaries.
 
 ### Ninja text-escaping seam
 
-`ShellText` is completed, backend-agnostic command or script text from the IR.
-It deliberately does not implement `Display`: writers must not serialize it by
-accident. `NinjaValue` is the escaped value accepted by a Ninja `command`
-binding. `escape_ninja_value` is its only constructor and is fallible so
-control characters fail before emission.
-
-The seam is owned by `src/ninja_gen_escape.rs`. Only the Ninja action writer
-may compose a completed command and convert its `ShellText` into a
-`NinjaValue`; no lowering code or future backend may call it. Metadata fields
-use the same escaping boundary when emitted to Ninja, so literal dollars are
-not interpreted as Ninja variables and newline, carriage-return, and NUL
-characters are rejected. Add a separate, explicitly documented conversion for
+The seam is owned by `src/ninja_gen_escape.rs`. The Ninja action writer may
+compose a completed command and hand it to the selected renderer. POSIX and
+Bash routes convert `ShellText` through `escape_ninja_value`; the encoded
+PowerShell transport returns a private `NinjaValue` without exposing its
+payload to Ninja parsing. No IR or manifest lowering may call either route.
+Descriptions, `depfile`, `deps`, and `pool` retain their existing raw emission
+semantics because they are not shell text, although metadata is still checked
+for control characters. Add a separate, explicitly documented conversion for
 any new Ninja grammar position rather than reusing command escaping.
 
 ## Package and target naming

@@ -143,8 +143,8 @@ fn command_list_entry_control_flow_cannot_mask_an_earlier_failure(
 fn command_list_entries_share_one_shell_process(
     ninja_integration_setup: Option<TempDir>,
 ) -> Result<()> {
-    // The backend escapes the shell variable for Ninja, so the shell sees the
-    // value written by the first entry.
+    // Final Ninja serialisation escapes this ordinary dollar, so the shell sees
+    // the value written by the first entry.
     let Some(run) = run_command_list(
         ninja_integration_setup,
         &[

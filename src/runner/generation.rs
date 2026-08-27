@@ -101,17 +101,20 @@ pub(super) fn build_graph(manifest: &NetsukeManifest) -> Result<BuildGraph> {
 /// # Examples
 ///
 /// ```rust,ignore
-/// let generated = ninja_text(&graph)?;
+/// let generated = ninja_text_for_shell(&graph, RecipeShell::host_default())?;
 /// let (text, sidecars) = generated.into_parts();
 /// assert!(text.contains("build hello:"));
 /// assert!(sidecars.is_empty());
 /// ```
 ///
+/// Generate Ninja text using the selected legacy-recipe interpreter.
+///
 /// # Errors
 ///
 /// Returns an error when Ninja synthesis fails.
-pub(super) fn ninja_text(
+pub(super) fn ninja_text_for_shell(
     graph: &BuildGraph,
+    shell: crate::ninja_gen::RecipeShell,
 ) -> Result<ninja_gen::GeneratedNinja, ninja_gen::NinjaGenError> {
-    ninja_gen::generate_bundle(graph)
+    ninja_gen::dyndep::generate_bundle_for_shell(graph, shell)
 }

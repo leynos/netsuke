@@ -317,6 +317,40 @@ jobs:
         # blocks the merge.
         run: make SHELL=bash test
 
+  windows-native-recipe-smoke:
+    # This deliberately has no Git-Bash shell override. It proves that a
+    # PowerShell-launched Netsuke directs Ninja legacy recipes to the
+    # PowerShell interpreter selected by the Windows contract (#599).
+    needs: build-test-windows
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+      NETSUKE_RUST_TOOLCHAIN: nightly-2026-06-25
+      RUSTFLAGS: -D warnings -Zpolonius=next
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@8add2d99854a5b77548eae98cca59202e68fefc8
+        with:
+          toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
+          rustflags: -D warnings -Zpolonius=next
+      - name: Install Ninja
+        uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
+      - name: Build Netsuke
+        run: cargo build --locked --bin netsuke
+      - name: Exercise native Windows recipes
+        run: >-
+          ./scripts/windows-recipe-smoke.ps1
+          -Netsuke ./target/debug/netsuke.exe
+          -Manifest ./tests/data/windows-recipe-smoke.yml
+
   kani-smoke:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest

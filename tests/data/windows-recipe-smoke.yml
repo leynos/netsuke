@@ -1,0 +1,40 @@
+netsuke_version: "1.0.0"
+
+actions:
+  - name: scalar
+    description: Prove the scalar recipe uses Windows PowerShell
+    command: "$edition = $PSVersionTable.PSEdition; if ($env:NETSUKE_SMOKE_VALUE -ne 'value with spaces') { exit 71 }; Set-Content -NoNewline -LiteralPath 'scalar interpreter with spaces.txt' -Value $edition"
+  - name: ordered-list
+    description: Preserve PowerShell state through a two-entry command list
+    command:
+      - "$env:NETSUKE_ORDER = 'first'; Set-Content -NoNewline -LiteralPath 'ordered state.txt' -Value $env:NETSUKE_ORDER"
+      - "if ($env:NETSUKE_ORDER -ne 'first') { exit 72 }; Add-Content -NoNewline -LiteralPath 'ordered state.txt' -Value ';second'"
+  - name: first-list-entry-fails
+    description: Stop an ordered command list after its first failing entry
+    command:
+      - "cmd.exe /d /c exit 27"
+      - "Set-Content -NoNewline -LiteralPath 'must not exist.txt' -Value second-entry-ran"
+  - name: script
+    description: Prove script recipes use Windows PowerShell
+    script: |
+      $edition = $PSVersionTable.PSEdition
+      Set-Content -NoNewline -LiteralPath 'script interpreter.txt' -Value $edition
+  - name: dependency-first
+    command: "Set-Content -NoNewline -LiteralPath 'dependency order.txt' -Value first"
+  - name: dependency-second
+    command: "if ((Get-Content -Raw -LiteralPath 'dependency order.txt') -ne 'first') { exit 73 }; Add-Content -NoNewline -LiteralPath 'dependency order.txt' -Value ';second'"
+  - name: aggregate
+    description: Run direct dependencies in declaration order
+    command: "if ((Get-Content -Raw -LiteralPath 'dependency order.txt') -ne 'first;second') { exit 74 }; Add-Content -NoNewline -LiteralPath 'dependency order.txt' -Value ';aggregate'"
+    dependency_order: serial
+    deps:
+      - dependency-first
+      - dependency-second
+
+targets:
+  - name: "automatic path with spaces.txt"
+    description: Discover this target without executing its recipe
+    command: "Set-Content -NoNewline -LiteralPath {{ outs }} -Value automatic-path-quoting"
+  - name: "discovery must not execute.txt"
+    description: Confirm target discovery has no recipe side effects
+    command: "Set-Content -NoNewline -LiteralPath {{ outs }} -Value recipe-should-not-run"

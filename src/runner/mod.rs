@@ -44,6 +44,7 @@ mod ninja_content;
 mod ninja_process_adapter;
 mod path_helpers;
 mod process;
+mod recipe_shell;
 pub use ninja_content::NinjaContent;
 pub use ninja_process_adapter::{run_ninja, run_ninja_tool};
 #[cfg(doctest)]
@@ -67,6 +68,8 @@ struct ExecutionContext<'a> {
     /// Keep a native [`Path`]: only `NETSUKE_NINJA` resolution performs UTF-8
     /// conversion, preserving valid non-UTF-8 executable paths.
     ninja_program: &'a Path,
+    /// Explicit interpreter for generated legacy recipe text.
+    recipe_shell: ninja_gen::RecipeShell,
 }
 
 /// Target list passed through to Ninja; an empty slice uses IR defaults.
@@ -139,10 +142,12 @@ fn run_with_ninja_program_resolver(
     }
     let ninja_program =
         configured_program.map_or_else(|| Cow::Owned(resolve_program()), Cow::Borrowed);
+    let recipe_shell = recipe_shell::resolve_recipe_shell()?;
     let context = ExecutionContext {
         reporter: reporter.as_ref(),
         progress_enabled,
         ninja_program: ninja_program.as_ref(),
+        recipe_shell,
     };
     dispatch::execute(cli, command, &context)
 }
@@ -160,7 +165,13 @@ fn on_task_progress_callback(reporter: &dyn StatusReporter) -> impl FnMut(u32, u
 ///
 /// Returns an error if manifest generation or Ninja execution fails.
 fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> Result<()> {
-    let bundle = generate_ninja(cli, context.reporter, Some(keys::STATUS_TOOL_BUILD.into()))?;
+    recipe_shell::validate_recipe_shell(context.recipe_shell)?;
+    let bundle = generate_ninja_with_shell(
+        cli,
+        context.reporter,
+        Some(keys::STATUS_TOOL_BUILD.into()),
+        context.recipe_shell,
+    )?;
     let publication = materialize_dyndep_bundle(cli, &bundle)?;
     prune_dyndep_bundle(cli, bundle.dyndep_files(), &publication)?;
     let ninja = NinjaContent::new(bundle.into_parts().0);
@@ -231,7 +242,9 @@ fn handle_ninja_tool(
         subcommand = tool.name,
         "Preparing Ninja tool invocation"
     );
-    let bundle = generate_ninja(cli, context.reporter, Some(tool.key))?;
+    recipe_shell::validate_recipe_shell(context.recipe_shell)?;
+    let bundle =
+        generate_ninja_with_shell(cli, context.reporter, Some(tool.key), context.recipe_shell)?;
     let publication = materialize_dyndep_bundle(cli, &bundle)?;
     let (ninja_file, dyndep_files) = bundle.into_parts();
     let ninja = NinjaContent::new(ninja_file);
@@ -285,10 +298,12 @@ fn handle_ninja_tool(
 /// use netsuke::ninja_gen::GeneratedNinja;
 /// # let _: Option<GeneratedNinja> = None;
 /// ```
-fn generate_ninja(
+/// Generate Ninja output using one selected legacy-recipe interpreter.
+pub(super) fn generate_ninja_with_shell(
     cli: &Cli,
     reporter: &dyn StatusReporter,
     tool_key: Option<LocalizationKey>,
+    recipe_shell: ninja_gen::RecipeShell,
 ) -> Result<ninja_gen::GeneratedNinja> {
     let manifest_path = resolve_manifest_path(cli)?;
     ensure_manifest_exists_or_error(cli, reporter, &manifest_path)?;
@@ -313,7 +328,7 @@ fn generate_ninja(
         tool_key,
     );
     dyndep_generation_telemetry::instrument_bundle_generation(&graph, || {
-        generation::ninja_text(&graph)
+        generation::ninja_text_for_shell(&graph, recipe_shell)
     })
     .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))
 }

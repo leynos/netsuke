@@ -1,9 +1,9 @@
-//! Validation for command-list boundaries before Ninja rendering.
+//! Validate recipes and metadata before Ninja rendering.
 
 use super::ninja_gen_command_list::{
     CommandListEntry, CommandListEntryError, command_list_entry_error,
 };
-use super::{NinjaGenError, ninja_gen_escape::validate_ninja_value};
+use super::{NinjaGenError, RecipeShell, ninja_gen_escape::validate_ninja_value};
 use crate::ast::{Recipe, StringOrList};
 
 
@@ -14,15 +14,24 @@ use crate::ast::{Recipe, StringOrList};
 pub(super) fn validate_action_recipe(
     action: &crate::ir::Action,
     action_index: usize,
+    shell: RecipeShell,
 ) -> Result<(), NinjaGenError> {
     if let Recipe::Command { command } = &action.recipe
         && command.is_empty_content()
     {
         return Err(NinjaGenError::EmptyCommandRecipe { action_index });
     }
-    if let Recipe::Command {
-        command: StringOrList::List(entries),
-    } = &action.recipe
+    if shell != RecipeShell::PowerShell
+        && let Recipe::Command {
+            command: StringOrList::String(command),
+        } = &action.recipe
+    {
+        validate_ninja_value(command)?;
+    }
+    if shell != RecipeShell::PowerShell
+        && let Recipe::Command {
+            command: StringOrList::List(entries),
+        } = &action.recipe
     {
         for (zero_based_entry_index, entry) in entries.iter().enumerate() {
             let entry_index = zero_based_entry_index + 1;

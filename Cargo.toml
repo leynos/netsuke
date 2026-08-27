@@ -104,6 +104,7 @@ camino = "1.2.0"
 dunce = "1.0.5"
 semver = { version = "1", features = ["serde"] }
 anyhow = "1"
+base64 = "0.22.1"
 indicatif = "0.18.4"
 thiserror = "1"
 miette = { version = "7.6.0", features = ["fancy"] }
