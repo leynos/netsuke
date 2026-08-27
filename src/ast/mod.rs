@@ -252,11 +252,14 @@ impl NetsukeManifest {
             .rules
             .iter()
             .any(|rule| rule.recipe.is_dependency_only())
-            || self
-                .actions
-                .iter()
-                .chain(&self.targets)
-                .any(|target| target.recipe.is_dependency_only() && target.deps.is_empty_content())
+        {
+            return Err(MISSING_RECIPE_ERROR);
+        }
+        if self
+            .actions
+            .iter()
+            .chain(&self.targets)
+            .any(|target| target.recipe.is_dependency_only() && target.deps.is_empty_content())
         {
             return Err(MISSING_RECIPE_ERROR);
         }
