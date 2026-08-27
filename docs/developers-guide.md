@@ -896,6 +896,20 @@ Use `googletest` matchers for structural or diagnostic assertions and
 `pretty_assertions` for ordered collection equality where its diff is useful.
 Do not rewrite established tests only to introduce either library.
 
+## Lading configuration
+
+`lading.toml` at the repository root configures
+[Lading](https://github.com/leynos/lading), the configuration-driven release
+tool for Rust workspaces. Its `[preflight]` configuration sets
+`unit_tests_only = true`, so release validation runs unit tests.
+
+The `[bump.documentation].globs` configuration targets `README.md` and
+`docs/users-guide.md`. It directs Lading to update workspace-crate version
+references inside TOML code fences in those files during a version bump.
+
+When release-validation requirements or documentation paths change, update
+`lading.toml` and this section in the same change-set.
+
 ## Local build acceleration
 
 Debug builds and tests can optionally use the [`mold`] linker and the Cranelift
