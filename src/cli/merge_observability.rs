@@ -6,6 +6,11 @@
 
 use serde_json::Value;
 
+/// Return whether a configuration-layer object contains no supplied settings.
+pub(crate) fn is_empty_configuration_value(value: &Value) -> bool {
+    matches!(value, Value::Object(map) if map.is_empty())
+}
+
 /// A bounded event emitted by an explicitly supplied configuration observer.
 ///
 /// The event surface intentionally excludes configuration values and raw

@@ -15,6 +15,7 @@ use tracing_subscriber::{
 /// Events recorded by [`with_test_subscriber`].
 #[derive(Debug, Clone)]
 pub struct CapturedEvents {
+    /// Shared rendered event fields captured by the thread-local subscriber.
     fields: Arc<Mutex<Vec<String>>>,
 }
 
@@ -35,6 +36,7 @@ impl CapturedEvents {
 /// Layer that renders each event's fields into the shared capture buffer.
 #[derive(Debug, Clone, Default)]
 struct CapturedEventsLayer {
+    /// Shared destination for fields rendered from each observed event.
     events: Arc<Mutex<Vec<String>>>,
 }
 
@@ -55,6 +57,7 @@ where
 /// Visitor that renders tracing fields as stable `name=value` strings.
 #[derive(Debug, Default)]
 struct FieldVisitor {
+    /// Stable `name=value` renderings collected from one tracing event.
     fields: Vec<String>,
 }
 

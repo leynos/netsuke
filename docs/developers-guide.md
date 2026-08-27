@@ -2827,11 +2827,13 @@ outcome for the startup boundary.
 Normal command-line use requires no change. The Rust API remains an unstable
 beta surface, but callers that compose configuration themselves can avoid
 discovering and loading the same configuration files more than once. At the
-composition boundary, call `DiscoveryOutcome::emit_diagnostics()` after tracing
-is configured, then consume the outcome with `into_layers()` and pass the
-cached layers to `merge_with_cached_file_layers` for the full merge. This
-preserves diagnostics from the same discovery pass while avoiding repeated file
-loading.
+application composition boundary, call `DiscoveryOutcome::emit_diagnostics()`
+after tracing is configured, then consume the outcome with `into_layers()` and
+construct a `CachedMergeInput`. Pass that input to
+`merge_with_cached_file_layers_with_observer` with a `MergeObserver`, such as
+`TracingMergeObserver`, for the full merge. This preserves diagnostics from the
+same discovery pass while avoiding repeated file loading and keeps observation
+outside the merge query.
 
 If the composition boundary times discovery itself, call the public
 `record_discovery_outcome(&clock, started, &outcome)` after the pass completes.
@@ -2853,9 +2855,11 @@ merge and prevents a second discovery pass.
 with a large nested configuration payload. It protects the ownership transfer
 that avoids copying complete `MergeLayer` values before the cached merge.
 
-The standalone `merge_with_config_and_env` path performs discovery, emits the
-retained diagnostics and delegates to `merge_with_cached_file_layers`.
-`merge_with_config` is the process-environment wrapper around that path.
+The standalone `merge_with_config_and_env` path performs discovery and
+delegates to the ordinary, no-op-observer merge query. It does not replay
+retained discovery diagnostics or emit merge tracing. `merge_with_config` is
+the process-environment wrapper around that path. The application startup path
+replays discovery diagnostics and injects `TracingMergeObserver` explicitly.
 
 Deferred bounded discovery diagnostics are replay metadata only. Discovery
 errors remain owned by `DiscoveredLayers` and are handled by the diagnostic
@@ -2895,8 +2899,9 @@ Configuration merge helpers:
 - `discover_file_layers(cli, env) -> DiscoveryOutcome` performs one discovery
   pass and retains the discovered layers, discovery errors and bounded deferred
   diagnostics for the diagnostic and merge callers.
-- `push_discovered_file_layers(composer, errors, discovered) -> ()` transfers
-  the retained layers and discovery errors into the full merge composition.
+- `push_discovered_file_layers(composer, errors, discovered, observer) -> ()`
+  transfers the retained layers and discovery errors into the full merge
+  composition while reporting bounded file-layer events to the observer.
 - `collect_file_layers_with_normalizer_and_trace(directory, normalizer, env_source)`
   runs the one discovery pass with the injected path normalizer and environment
   source, and retains bounded project-scope trace metadata for deferred
@@ -2908,7 +2913,12 @@ Configuration merge helpers:
   `DiscoveryOutcome` so startup can emit diagnostics after tracing setup and
   then call `into_layers()`.
 - `merge_with_cached_file_layers(cli, matches, env, discovered)` consumes the
-  discovered layers without rediscovery.
+  discovered layers without rediscovery and uses no-op observation.
+- `CachedMergeInput::new(cli, matches, env, discovered)` packages parsed input
+  and cached layers for an observer-enabled merge.
+- `merge_with_cached_file_layers_with_observer(input, observer)` consumes the
+  cached input and reports bounded `MergeEvent` values to the supplied
+  `MergeObserver`.
 - `is_empty_value(value: &serde_json::Value) -> bool` detects an empty CLI
   override object.
 - `retain_layers_and_resolve_json(layers)` transfers each owned file-layer
@@ -2979,6 +2989,13 @@ pub fn resolve_merged_json_with_env(
     env: &impl ConfigEnvProvider,
 ) -> OrthoResult<bool>;
 ```
+
+These ordinary merge and JSON-resolution queries have no tracing side effects.
+The startup boundary obtains the cached layers, replays their deferred
+discovery diagnostics, and uses `CachedMergeInput::new` with
+`merge_with_cached_file_layers_with_observer` when it needs the bounded merge
+events. A caller supplying its own `MergeObserver` can consume those events
+without installing a global subscriber.
 
 The `cli` module re-exports this trait publicly as `ConfigEnvProvider` (and
 `StdEnvProvider` as `ConfigStdEnvProvider`) to keep the CLI seam distinct from
@@ -3324,7 +3341,10 @@ metrics are recorded by `config_load::resolve_configuration`, which receives a
 `resolve_json_mode_or_exit` and `merge_cli_or_exit`. The diagnostic-mode helper
 resolves and caches discovered layers with
 `cli::resolve_json_and_layers_outcome_with_env`; the merge helper passes those
-cached layers to `cli::merge_with_cached_file_layers` for the full merge.
+cached layers to `cli::merge_with_cached_file_layers_with_observer` with a
+`cli::TracingMergeObserver` for the full merge. The boundary replays deferred
+discovery diagnostics before that merge; the ordinary query helpers do not emit
+tracing themselves.
 Phase-level metrics are composed in `src/observability.rs` around those two
 operations.
 

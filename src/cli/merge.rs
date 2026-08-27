@@ -35,7 +35,9 @@ use super::discovery::{
 };
 use super::environment::EnvironmentLayer;
 use super::merge_input::{CachedMergeInput, MergeComposition};
-use super::merge_observability::{NoopMergeObserver, collect_override_leaf_paths};
+use super::merge_observability::{
+    NoopMergeObserver, collect_override_leaf_paths, is_empty_configuration_value,
+};
 use super::parser::{BuildArgs, Cli, Commands};
 use super::validation_error;
 use super::{MergeEvent, MergeObserver};
@@ -168,7 +170,7 @@ fn push_environment_layer<O>(
     {
         Ok(value) => {
             observer.observe(MergeEvent::EnvironmentApplied {
-                is_empty: is_empty_value(&value),
+                is_empty: is_empty_configuration_value(&value),
             });
             composition.composer.push_environment(value);
         }
@@ -192,7 +194,7 @@ fn push_cli_layer<O>(
     O: MergeObserver + ?Sized,
 {
     match cli_overrides_from_matches(cli, matches) {
-        Ok(value) if !is_empty_value(&value) => {
+        Ok(value) if !is_empty_configuration_value(&value) => {
             // Values may echo user-supplied paths or host lists, so records
             // identify only the keys that were explicitly overridden.
             observer.observe(MergeEvent::CliOverridesApplied {
@@ -220,11 +222,6 @@ where
             reason,
         });
     }
-}
-
-/// Return whether an override object contains no explicitly supplied settings.
-fn is_empty_value(value: &Value) -> bool {
-    matches!(value, Value::Object(map) if map.is_empty())
 }
 
 /// Collect CLI-layer overrides from arguments explicitly supplied on the command line.

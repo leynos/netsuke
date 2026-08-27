@@ -279,8 +279,10 @@ impl CliConfig {
 /// Maximum number of parallel build jobs accepted by the CLI.
 const MAX_JOBS: usize = super::MAX_JOBS;
 
+/// Fixed reason reported when merged configuration enables interactive input.
 pub(crate) const NO_INPUT_VALIDATION_REASON: &str =
     "no_input = false is unsupported because Netsuke has no interactive mode";
+/// Fixed reason reported when a merged parallel job count is out of range.
 pub(crate) const JOBS_VALIDATION_REASON: &str = "job count is outside the supported range";
 
 /// Return the bounded observability reason for a known validation key.

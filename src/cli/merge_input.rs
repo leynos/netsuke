@@ -15,9 +15,13 @@ use super::parser::Cli;
 
 /// Inputs for one cached configuration merge, owned by its application caller.
 pub struct CachedMergeInput<'a, E: ?Sized> {
+    /// Parsed command-line configuration before layered resolution.
     pub(super) cli: &'a Cli,
+    /// Clap matches used to identify explicitly supplied overrides.
     pub(super) matches: &'a ArgMatches,
+    /// Injected environment for discovery and configuration-layer extraction.
     pub(super) env: &'a E,
+    /// Cached file layers transferred from one discovery pass.
     pub(super) discovered: DiscoveredLayers,
 }
 
@@ -43,7 +47,9 @@ where
 
 /// Accumulates merge layers and errors before applying the configuration schema.
 pub(super) struct MergeComposition {
+    /// Ordered layer collector for the four-layer configuration merge.
     pub(super) composer: MergeComposer,
+    /// Deferred layer-construction failures collected before schema validation.
     pub(super) errors: Vec<Arc<OrthoError>>,
 }
 

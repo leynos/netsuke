@@ -2764,11 +2764,12 @@ this decision is recorded in
 [ADR-013](adr-013-application-owned-configuration-observability.md).
 `config_load::resolve_configuration` owns the startup-attempt measurement: it
 resolves diagnostic mode with `cli::resolve_json_and_layers_outcome_with_env`,
-then passes the cached layers to `cli::merge_with_cached_file_layers` for the
-full merge. Those query functions do not install a recorder or own
-configuration-load metrics. `src/observability.rs` owns the phase recorder and
-bounded phase/outcome vocabulary, while `src/config_load.rs` owns the
-startup-attempt series. The application installs an in-process
+then replays the outcome's deferred diagnostics and passes the cached layers to
+`cli::merge_with_cached_file_layers_with_observer` with
+`cli::TracingMergeObserver` for the full merge. The ordinary query functions do
+not install a recorder or emit tracing. `src/observability.rs` owns the phase
+recorder and bounded phase/outcome vocabulary, while `src/config_load.rs` owns
+the startup-attempt series. The application installs an in-process
 `DebuggingRecorder`; it does not open a metrics listener as a side effect of a
 command invocation.
 
@@ -2926,7 +2927,8 @@ option, then either loads an explicit selection or runs OrthoConfig discovery
 rooted by that directory, with an optional project-scope fallback. The
 `DiscoveryOutcome` retains layers and diagnostics for replay before
 `into_layers()` hands the cached layers to the full merge via
-`merge_with_cached_file_layers()`. Accessible text description follows below.
+`merge_with_cached_file_layers_with_observer()`. Accessible text description
+follows below.
 
 ```mermaid
 flowchart LR
@@ -2947,7 +2949,7 @@ flowchart LR
   J --> K[Configure tracing]
   K --> L["emit_diagnostics()"]
   L --> M["into_layers()"]
-  M --> N["merge_with_cached_file_layers()"]
+  M --> N["merge_with_cached_file_layers_with_observer()"]
   N --> O[Run Netsuke with final behaviour]
 ```
 
@@ -2966,17 +2968,18 @@ Diagnostic-mode resolution uses
 `(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics. The
 composition boundary calls `DiscoveryOutcome::emit_diagnostics()` after tracing
 is configured, replaying the retained diagnostics without repeating environment
-or filesystem access.
-`collect_file_layers_with_normalizer_and_trace(directory,
-normalizer, env_source)`
-performs the underlying discovery scan with the path normalizer and
-environment source, retaining bounded project-scope trace metadata. The
-normalizer canonicalizes comparison keys so equivalent project path spellings
-de-duplicate to one layer. `DiscoveryOutcome::into_layers()` transfers the same
-discovered layers to `merge_with_cached_file_layers(...)`, which consumes them
-for the full merge and prevents a second discovery pass. The standalone
-`merge_with_config_and_env(...)` path performs discovery, emits diagnostics and
-delegates to `merge_with_cached_file_layers(...)`.
+or filesystem access. `collect_file_layers_with_normalizer_and_trace(directory,
+normalizer, env_source)` performs the underlying discovery scan with the path
+normalizer and environment source, retaining bounded project-scope trace
+metadata. The normalizer canonicalizes comparison keys so equivalent project
+path spellings de-duplicate to one layer. `DiscoveryOutcome::into_layers()`
+transfers the same discovered layers to
+`merge_with_cached_file_layers_with_observer(...)`, which consumes them for the
+full merge and prevents a second discovery pass. The standalone
+`merge_with_config_and_env(...)` path performs discovery and delegates to the
+ordinary no-op-observer merge query; it does not replay retained diagnostics or
+emit merge tracing. The application startup boundary replays the diagnostics
+and injects `TracingMergeObserver` explicitly.
 
 Deferred bounded discovery diagnostics are retained only for replay after the
 startup tracing boundary is configured. They do not contain raw paths or file
@@ -3081,12 +3084,12 @@ manual flag repetition.
 - The `explicit_config_path_with_env(...)` helper resolves explicit config
   selectors before automatic discovery so missing or invalid explicit files
   remain hard errors.
-- The `merge_with_config_and_env()` function in `src/cli/merge.rs` orchestrates
-  the full layer composition: it calls `discover_file_layers(...)`, emits the
-  retained bounded diagnostics, and delegates to
-  `merge_with_cached_file_layers(...)` to merge defaults, discovered layers,
-  environment variables via Figment and CLI overrides extracted from
-  `ArgMatches`.
+- The `merge_with_config_and_env()` function in `src/cli/merge.rs` performs
+  discovery and delegates to the ordinary no-op-observer merge query. The
+  application startup boundary replays retained bounded diagnostics and calls
+  `merge_with_cached_file_layers_with_observer(...)` with
+  `TracingMergeObserver` to merge defaults, discovered layers, environment
+  variables via Figment and CLI overrides extracted from `ArgMatches`.
 - The `config_discovery()` function uses OrthoConfig's builder API with the
   application name, injected discovery environment, and optional project-root
   anchor, relying on OrthoConfig's platform-specific defaults for standard
@@ -3097,9 +3100,12 @@ manual flag repetition.
   tests supply an in-memory `ConfigEnvProvider` without mutating the process
   environment. Startup obtains a `DiscoveryOutcome` from
   `resolve_json_and_layers_outcome_with_env`, emits its deferred diagnostics,
-  then passes `into_layers()` to `merge_with_cached_file_layers`, so file
-  discovery and loading happen once. OrthoConfig discovery remains an external
-  boundary and may still read platform environment variables directly.
+  then passes `into_layers()` to
+  `merge_with_cached_file_layers_with_observer` with
+  `TracingMergeObserver`, so file discovery and loading happen once while
+  merge observation stays at the application boundary. OrthoConfig discovery
+  remains an external boundary and may still read platform environment
+  variables directly.
 - Configuration files use TOML format by default. JSON5 (`.json`, `.json5`) and
   YAML (`.yaml`, `.yml`) formats are supported when the corresponding Cargo
   features are enabled.

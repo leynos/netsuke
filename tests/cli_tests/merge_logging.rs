@@ -4,6 +4,7 @@
 //! fields while keeping caller-controlled paths and values out of events.
 
 use anyhow::{Context, Result, ensure};
+use netsuke::cli::{MergeEvent, MergeObserver};
 use rstest::rstest;
 use std::{ffi::OsString, sync::Arc};
 use test_support::tracing_capture::with_test_subscriber;
@@ -22,6 +23,33 @@ impl netsuke::cli::ConfigEnvProvider for TestEnv {
     fn entries(&self) -> Vec<(OsString, OsString)> {
         self.entries.clone()
     }
+}
+
+/// Collect bounded merge events without installing a tracing subscriber.
+#[derive(Default)]
+struct EventCollector {
+    events: Vec<MergeEvent>,
+}
+
+impl MergeObserver for EventCollector {
+    fn observe(&mut self, event: MergeEvent) {
+        self.events.push(event);
+    }
+}
+
+/// Run the cached merge with a caller-owned observer.
+fn merge_and_observe(cli_args: &[&str], env: &TestEnv) -> Result<(Vec<MergeEvent>, bool)> {
+    let localizer = Arc::from(netsuke::cli_localization::build_localizer(None));
+    let (cli, matches) = netsuke::cli::parse_with_localizer_from(cli_args, &localizer)
+        .context("parse CLI args for merge observer test")?;
+    let (json_mode, outcome) =
+        netsuke::cli::resolve_json_and_layers_outcome_with_env(&cli, &matches, env);
+    json_mode.context("resolve diagnostic mode before merge")?;
+    let input = netsuke::cli::CachedMergeInput::new(&cli, &matches, env, outcome.into_layers());
+    let mut observer = EventCollector::default();
+    let merge_ok =
+        netsuke::cli::merge_with_cached_file_layers_with_observer(input, &mut observer).is_ok();
+    Ok((observer.events, merge_ok))
 }
 
 /// Run the cached merge with the application's explicit tracing adapter.
@@ -67,6 +95,34 @@ fn merge_query_without_observer_emits_no_merge_events() -> Result<()> {
     ensure!(
         events.iter().all(|event| !event.contains("layer=\"")),
         "merge queries without an observer must not emit merge events: {events:#?}"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn observer_reports_exact_empty_input_events() -> Result<()> {
+    let directory = tempfile::tempdir().context("create empty configuration directory")?;
+    let directory_arg = directory.path().to_string_lossy().into_owned();
+    let (events, merge_ok) = merge_and_observe(
+        &["netsuke", "--directory", &directory_arg],
+        &TestEnv::default(),
+    )?;
+
+    ensure!(
+        merge_ok,
+        "merge should succeed with empty configuration inputs"
+    );
+    ensure!(
+        matches!(
+            events.as_slice(),
+            [
+                MergeEvent::DefaultsApplied,
+                MergeEvent::FileLayersCollected { layer_count: 0 },
+                MergeEvent::EnvironmentApplied { is_empty: true },
+                MergeEvent::CliOverridesAbsent,
+            ]
+        ),
+        "empty inputs should produce the bounded event sequence: {events:#?}"
     );
     Ok(())
 }
