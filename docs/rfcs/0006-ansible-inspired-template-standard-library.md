@@ -155,11 +155,16 @@ Three existing gaps constrain this design and are called out so the follow-up
 work does not silently inherit them.
 
 - **Excluded helpers do not all fail explicitly.** `register_manifest_query`
-  stubs six helpers, but `size`, `contents`' siblings `linecount`, `hash`,
-  `digest`, `realpath`, and `expanduser` are simply absent, so a manifest
-  query reports "unknown filter" rather than explaining the restriction.
-  Section 6.2 makes explicit failure normative and section 14.1 schedules the
-  repair.
+  stubs six helpers: `env`, `glob`, `fetch`, `shell`, `grep`, and `contents`.
+  A further sixteen names registered in the full environment are absent from
+  the manifest-query environment altogether, so a manifest query reports
+  "unknown filter" or "unknown test" rather than explaining the restriction.
+  They are the filters `realpath`, `expanduser`, `size`, `linecount`, `hash`,
+  and `digest`; `which`, which is registered as both a filter and a function;
+  the functions `command_available` and `now`; and the file tests `dir`,
+  `file`, `symlink`, `pipe`, `block_device`, `char_device`, and `device`.
+  Section 6.2 makes explicit failure normative, and section 14.1 schedules the
+  repair across that whole set rather than the path filters alone.
 - **`manifest_query_operation_error` is not localized.** It builds its message
   with `format!` rather than a Fluent key, unlike the rest of the stdlib.
 - **`now` has no injected clock seam.** It calls `OffsetDateTime::now_utc()`
@@ -255,9 +260,18 @@ admitted to every such caller at once.
    restriction; they must never simply be absent.
 3. The stub diagnostic is localized through a Fluent key, replacing the
    current `format!`-built message.
-4. A test enumerates the registered names in both modes and asserts that the
-   difference is exactly the set of non-pure helpers. This makes it impossible
-   to add a non-pure helper without deciding its query disposition.
+4. A test asserts each helper's disposition by exercising its registration,
+   rather than by differencing the two name sets. Clause 2 keeps every
+   non-pure helper registered in the manifest-query environment as a stub, so
+   a compliant implementation has the same names in both modes and the
+   difference is always empty. For every helper in the inventory from section
+   14.1 the test instead checks that the name resolves in both environments,
+   that a pure helper evaluates normally under the manifest-query
+   registration, and that a non-pure helper raises the restriction diagnostic
+   there. A helper missing from the inventory, or one whose manifest-query
+   registration neither evaluates nor raises the restriction diagnostic, fails
+   the test. This makes it impossible to add a non-pure helper without
+   deciding its query disposition.
 
 ### 6.3. Determinism
 
@@ -753,9 +767,16 @@ Merges mappings left to right, with later mappings taking precedence.
   set-flavoured operation hiding inside a merge, and `union` composes more
   legibly.
 - An unknown `list_merge` value is an error enumerating the four valid values.
-- Merge laws verified by property test: the operation is associative; merging
-  with an empty mapping is the identity; and merging a mapping with itself
-  returns an equal mapping.
+- Merge laws verified by property test, scoped to the policies that satisfy
+  them. Merging with an empty mapping is the identity under every policy.
+  Associativity and self-merge idempotence hold under `list_merge='replace'`
+  and `list_merge='keep'`, with or without `recursive`, and are asserted only
+  for those two. `append` and `prepend` accumulate deliberately and satisfy
+  neither law: `{'x': [1]}` merged with itself under `append` yields
+  `{'x': [1, 1]}`, and under `recursive=true` a scalar between two sequence
+  values makes the two groupings differ, because one grouping replaces where
+  the other appends. The guide states this at the argument so authors do not
+  assume an accumulating merge is repeatable.
 
 #### `mapping | dict2items(key_name='key', value_name='value')`
 
@@ -1486,7 +1507,6 @@ Netsuke should adopt.
 | `%f` | Fractional second, six digits |
 | `%j` | Day of year, 001 to 366 |
 | `%z` | UTC offset as `+HHMM` |
-| `%Z` | Time-zone abbreviation |
 | `%s` | Unix epoch seconds |
 | `%a`, `%A` | Abbreviated and full weekday name, invariant C locale |
 | `%b`, `%B` | Abbreviated and full month name, invariant C locale |
@@ -1499,9 +1519,15 @@ _Table 12: Accepted conversion specifiers for `to_datetime` and `strftime`._
   always render the invariant C locale's English forms. Identical manifests
   therefore cannot acquire machine-dependent graph text, which satisfies the
   determinism requirement in section 6.3.
-- Any specifier outside table 12, including `%c`, `%x`, `%X`, `%U`, `%W`, and
-  `%G`, is an error enumerating the supported set. Locale-varying and
-  week-numbering specifiers are excluded deliberately.
+- **`%Z` is not offered.** Netsuke's timestamp value wraps a
+  `time::OffsetDateTime`, which retains a numeric UTC offset and no zone
+  identity, and Netsuke depends on no IANA time-zone database. A zone
+  abbreviation therefore cannot be recovered from a timestamp, whether it came
+  from `now()` or from `to_datetime`. Abbreviations are ambiguous in any case,
+  with `CST` denoting several distinct zones. Use `%z` for the numeric offset.
+- Any specifier outside table 12, including `%Z`, `%c`, `%x`, `%X`, `%U`,
+  `%W`, and `%G`, is an error enumerating the supported set. Locale-varying,
+  zone-naming, and week-numbering specifiers are excluded deliberately.
 - An unterminated trailing `%` is an error.
 
 #### `text | to_datetime(format='%Y-%m-%d %H:%M:%S', timezone='UTC')`

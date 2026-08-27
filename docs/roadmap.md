@@ -26,10 +26,12 @@ Each phase validates a product hypothesis:
   template standard library makes declarative build manifests markedly easier
   to write without weakening determinism or the capability boundary.
 
-Phases carry one kind of work each. Phases 3 to 5 mix capability delivery with
-verification and consistency work under their own hypotheses. Phase 6 is a
-capability track: new template standard-library work belongs there rather than
-being appended to whichever phase happens to be open.
+Each phase carries one hypothesis, and Phase 6 is the capability track for
+template standard-library work. Phases 3 to 5 predate that separation: each
+mixes capability delivery with verification and consistency work under a
+single hypothesis, and they are not being re-partitioned. New template
+standard-library work belongs in Phase 6 rather than being appended to
+whichever phase happens to be open.
 
 The roadmap keeps user-facing product grammar separate from implementation
 detail. Public tasks name Netsuke capabilities first. Implementation adapters,
@@ -738,18 +740,30 @@ ordinary additions or need individual design passes. See RFC 0006 §§6 and
   - See RFC 0006 §§3.3 and 6.2.
   - Localize `manifest_query_operation_error` through a Fluent key instead of
     building it with `format!`.
-  - Add explicit failing stubs for `size`, `linecount`, `hash`, `digest`,
-    `realpath`, and `expanduser`, which currently vanish rather than
-    explaining the restriction.
+  - Add explicit failing stubs for every full-environment helper currently
+    absent from the manifest-query environment, all of which vanish rather
+    than explaining the restriction: the filters `realpath`, `expanduser`,
+    `size`, `linecount`, `hash`, and `digest`; `which`, as both a filter and a
+    function; the functions `command_available` and `now`; and the file tests
+    `dir`, `file`, `symlink`, `pipe`, `block_device`, `char_device`, and
+    `device`.
   - Success: no helper registered in the full environment is silently absent
     from the manifest-query environment.
 - [ ] 6.1.6. Add the manifest-query registration contract test. Requires
   6.1.5.
   - See RFC 0006 §6.2.
-  - Enumerate the registered names in both environments and assert the
-    difference is exactly the set of non-pure helpers.
-  - Success: adding a non-pure helper without deciding its query disposition
-    fails the suite.
+  - Assert dispositions by exercising each registration rather than by
+    differencing name sets. Task 6.1.5 keeps every non-pure helper registered
+    as a stub, so both environments hold the same names and the difference is
+    always empty.
+  - For every helper in the inventory, check that the name resolves in both
+    environments, that a pure helper evaluates normally under the
+    manifest-query registration, and that a non-pure helper raises the
+    restriction diagnostic there.
+  - Success: a helper absent from the inventory, or one whose manifest-query
+    registration neither evaluates nor raises the restriction diagnostic,
+    fails the suite, so a non-pure helper cannot be added without deciding its
+    query disposition.
 - [ ] 6.1.7. Publish the maintained standard-library inventory.
   - See RFC 0006 §§11 and 14.1.
   - Distinguish MiniJinja built-ins, existing Netsuke extensions, adopted
@@ -815,9 +829,11 @@ RFC 0006 §8.2.
   - Support `recursive` and the `replace`, `keep`, `append`, and `prepend`
     list policies, enumerating the valid values on an unknown one.
   - Preserve first-appearance key order, updating an overridden key in place.
-  - Success: property tests show the merge is associative, that an empty
-    mapping is the identity, and that the result is independent of hash
-    iteration order.
+  - Success: property tests show that an empty mapping is the identity under
+    every policy, that associativity and self-merge idempotence hold under
+    `replace` and `keep`, and that the result is independent of hash iteration
+    order. `append` and `prepend` accumulate and are exempt from the latter
+    two laws.
 - [ ] 6.3.2. Add `dict2items` and `items2dict` with an explicit duplicate
   policy. Requires 6.3.1.
   - See RFC 0006 §8.2.
@@ -884,8 +900,13 @@ the determinism claim in RFC 0006 §6.3. See RFC 0006 §§8.3 and 8.8.
   6.4.4.
   - Compile a representative target matrix built from `product`, the set
     algebra, and `selectattr` with `contains`, twice from the same inputs.
-  - Add a property test that permutes the insertion order of equivalent inputs
-    and asserts the generated Ninja is unchanged.
+  - Add a property test that holds the logical input order fixed while varying
+    the internal hash state of the mappings the helpers consume, for example
+    by building equal mappings through different insertion and reservation
+    histories.
+  - Do not permute logical input order. RFC 0006 §8.3 makes first-appearance
+    order observable, so a different input order may legitimately produce
+    different output, and requiring otherwise would contradict the contract.
   - Success: both runs emit byte-identical Ninja, and the property test fails
     if any helper is reimplemented over a hash set.
 
