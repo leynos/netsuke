@@ -229,8 +229,10 @@ thread_local! {
     static RECIPE_CONTEXT_PREPARATIONS: Cell<usize> = const { Cell::new(0) };
 }
 
-/// Count one recipe-context preparation for the recipe-context tests.
-const fn record_recipe_context_preparation() {}
+#[cfg(test)]
+fn record_recipe_context_preparation() {
+    RECIPE_CONTEXT_PREPARATIONS.with(|count| count.set(count.get() + 1));
+}
 
 #[cfg(not(test))]
 /// Count one recipe-context preparation for the recipe-context tests.
@@ -263,12 +265,3 @@ mod tests;
 #[cfg(test)]
 #[path = "render_command_list_tests.rs"]
 mod command_list_tests;
-
-/// Selects which manifest fields are safe to render for the caller.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RenderMode {
-    /// Render every manifest field for build, generate, and manifest output.
-    Full,
-    /// Render discovery metadata without evaluating recipes.
-    ManifestQuery,
-}
