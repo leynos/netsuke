@@ -68,7 +68,7 @@ pub(super) fn validate_action_metadata(action: &crate::ir::Action) -> Result<(),
     .into_iter()
     .flatten()
     {
-        escape_ninja_value(&ShellText::new(value.clone())).map(|_| ())?;
+        escape_ninja_value(ShellText::new(value.clone())).map(|_| ())?;
     }
     Ok(())
 }

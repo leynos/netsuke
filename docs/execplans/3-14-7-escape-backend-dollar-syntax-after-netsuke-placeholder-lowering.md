@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
 `Verification plan` must be kept up to date as work proceeds.
 
-Status: COMPLETE
+Status: IN PROGRESS
 
 There is no `PLANS.md` in this repository; `docs/execplans/` is the plan
 directory and `docs/roadmap.md` is the work index.
@@ -202,8 +202,29 @@ Stop and escalate rather than improvising when any of these is reached.
 - [x] (2026-08-24) EP-M3 — fallible path emission.
 - [x] (2026-08-24) EP-M4 — documentation, ADR, users' guide migration, roadmap
   tick, deterministic gates, and CodeRabbit review.
+- [x] (2026-08-27) Correct post-implementation verification gaps: restore the
+  consuming `ShellText` boundary, exercise scalar dollar syntax through the
+  real-Ninja oracle, execute B2, and make the sentinel BDD scenario observable.
+- [ ] (2026-08-27) Run complete deterministic gates and gate-first CodeRabbit
+  review for the correction set.
 
 ## Surprises & discoveries
+
+- Observation: real Ninja checks an input's declared dependency before running
+  the B2 script, even where the script only prints the lowered input path.
+  Evidence: the first B2 run failed with `in`, needed by `out`, missing and no
+  known rule to make it.
+  Impact: the existing Ninja-output helper now optionally seeds an input file
+  through its capability-scoped directory before spawning Ninja. The B2 test
+  supplies `in` and confirms that the executed script writes `in` to `out`.
+
+- Observation: Clippy does not infer that reading `text.0` makes the I3
+  conversion's by-value parameter semantically consumed.
+  Evidence: `make lint` reported `needless_pass_by_value` against the required
+  consuming signature.
+  Impact: destructure `ShellText` immediately at the conversion boundary. This
+  makes the string move explicit to both the compiler and readers while
+  preserving the non-reference API required by I3.
 
 - Observation: the existing debug-only `shlex` guard rejected a valid script
   containing a heredoc and an apostrophe in a comment after script placeholder
@@ -1175,6 +1196,25 @@ pending; status stays `IN PROGRESS`.
 `make markdownlint`, `make nixie`, and `make test-workflow-contracts` (55
 tests). `coderabbit review --agent` then completed with zero findings. The
 rebase and its compatibility repairs are complete; status is `COMPLETE`.
+
+2026-08-27 — post-implementation review reopened the plan. The escape
+constructor borrowed `ShellText`, contradicting I3's ownership proof because a
+caller could escape the same source text twice. The scalar property inspected
+generated text without invoking Ninja and did not guarantee a `${…}` case.
+Likewise, B2 and the BDD sentinel scenario asserted generated text without
+observing a child shell. The corrective work restores a consuming conversion,
+uses `ninja -t commands` for scalar properties with a deliberate `${…}`
+control, executes B2 through real Ninja, and makes the BDD scenario assert the
+produced file. Status is `IN PROGRESS` until the deterministic gates and a
+gate-first CodeRabbit review pass.
+
+2026-08-27 — the real-Ninja property support exceeded the repository's
+400-line module limit when kept alongside the existing formatting properties.
+It now lives in the private `ninja_gen_property_tests::ninja_oracle` test
+submodule. Its scope is solely creating ephemeral `build.ninja` files and
+querying `ninja -t commands out` for scalar-property cases; callers keep the
+property and expected IR text in the parent module. It is not a production
+abstraction or a general integration-test helper.
 
 2026-08-17 —
 

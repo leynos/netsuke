@@ -30,9 +30,10 @@ impl Display for NinjaValue {
 ///
 /// Literal dollars become `$$`. Control characters are rejected because they
 /// could add a new Ninja statement instead of remaining part of the binding.
-pub(super) fn escape_ninja_value(text: &ShellText) -> Result<NinjaValue, NinjaGenError> {
-    if text.0.contains(['\n', '\r', '\0']) {
+pub(super) fn escape_ninja_value(text: ShellText) -> Result<NinjaValue, NinjaGenError> {
+    let ShellText(contents) = text;
+    if contents.contains(['\n', '\r', '\0']) {
         return Err(NinjaGenError::UnsafeNinjaValue);
     }
-    Ok(NinjaValue(text.0.replace('$', "$$")))
+    Ok(NinjaValue(contents.replace('$', "$$")))
 }

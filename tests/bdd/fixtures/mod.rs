@@ -53,6 +53,8 @@ pub struct TestWorld {
     pub ninja_content: Slot<String>,
     /// Error message from Ninja generation.
     pub ninja_error: Slot<String>,
+    /// Contents of the output produced by the generated Ninja target.
+    pub ninja_target_output: Slot<String>,
 
     // Process state (mixed)
     /// Status of the last process execution (true for success, false for failure).

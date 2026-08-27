@@ -15,7 +15,8 @@ Feature: Ninja file generation
   Scenario: Shell variables stay visible to the child shell
     When the manifest file "tests/data/dollar_escaping.yml" is compiled to IR
     And the ninja file is generated
-    Then the ninja file contains "$$NETSUKE_TEST_SENTINEL"
+    And the generated Ninja target "dollar-output" is run with sentinel "sentinel-value"
+    Then the generated Ninja output file contains "sentinel-value"
 
   Scenario: Missing action is reported
     When the manifest file "tests/data/rules.yml" is compiled to IR

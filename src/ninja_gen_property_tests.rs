@@ -18,6 +18,10 @@ use crate::{
 use camino::Utf8PathBuf;
 use std::collections::{HashMap, HashSet};
 
+#[path = "ninja_gen_property_tests/ninja_oracle.rs"]
+mod ninja_oracle;
+use ninja_oracle::{ninja_commands, ninja_is_available, scalar_command_strategy};
+
 fn edge_strategy_with_ranges(
     input_range: std::ops::Range<usize>,
     implicit_range: std::ops::Range<usize>,
@@ -154,7 +158,22 @@ fn command_list_graph(entries: &[String]) -> BuildGraph {
 }
 
 fn scalar_graph(command: String) -> BuildGraph {
-    command_graph(StringOrList::String(command))
+    let mut graph = command_graph(StringOrList::String(command));
+    graph.targets.insert(
+        Utf8PathBuf::from("out"),
+        BuildEdge {
+            action_id: "action".into(),
+            inputs: Vec::new(),
+            implicit_deps: Vec::new(),
+            dependency_order: DependencyOrder::Parallel,
+            explicit_outputs: vec![Utf8PathBuf::from("out")],
+            implicit_outputs: Vec::new(),
+            order_only_deps: Vec::new(),
+            phony: false,
+            always: false,
+        },
+    );
+    graph
 }
 
 fn command_list_entry_strategy() -> impl Strategy<Value = String> {
@@ -173,22 +192,6 @@ fn command_list_entry_strategy() -> impl Strategy<Value = String> {
 
 fn canonical_shell_single_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', r"'\''").replace('$', "$$"))
-}
-
-fn scalar_command_strategy() -> impl Strategy<Value = String> {
-    prop::collection::vec(
-        prop_oneof![
-            Just("plain"),
-            Just("$value"),
-            Just("${value:-fallback}"),
-            Just("$(command)"),
-            Just("'quoted'"),
-            Just("\"double\""),
-            Just("@!?*-"),
-        ],
-        1..8,
-    )
-    .prop_map(|parts| format!("echo {}", parts.join(" ")))
 }
 
 proptest! {
@@ -257,13 +260,21 @@ proptest! {
     }
 
     #[test]
-    fn scalar_command_output_escapes_residual_dollars(command in scalar_command_strategy()) {
-        let ninja = generate(&scalar_graph(command.clone())).expect("scalar command should generate");
-        let expected_command_line = format!("  command = {}\n", command.replace('$', "$$"));
-        let escapes_scalar_form = ninja.contains(&expected_command_line);
-        let uses_list_boundary = ninja.contains("_netsuke_background_before=$${!:-}");
-        prop_assert!(escapes_scalar_form);
-        prop_assert!(!uses_list_boundary);
+    fn scalar_command_output_matches_ninja_oracle((command, braced_command) in scalar_command_strategy()) {
+        if !ninja_is_available() {
+            return Ok(());
+        }
+        let contains_braced_expansion = braced_command.contains("${");
+        prop_assert!(
+            contains_braced_expansion,
+            "braced property input must contain a shell braced expansion"
+        );
+        for candidate in [&command, &braced_command] {
+            let ninja = generate(&scalar_graph(candidate.clone()))
+                .expect("scalar command should generate");
+            let observed = ninja_commands(&ninja)?;
+            prop_assert_eq!(observed.strip_suffix('\n'), Some(candidate.as_str()));
+        }
     }
 
     #[test]

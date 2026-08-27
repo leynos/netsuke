@@ -101,8 +101,18 @@ fn ninja_commands(ninja_file: &str, target: &str) -> Result<String> {
     String::from_utf8(output.stdout).context("Ninja command output was not UTF-8")
 }
 
-fn ninja_output(ninja_file: &str, environment_value: Option<&str>) -> Result<String> {
+fn ninja_output(
+    ninja_file: &str,
+    environment_value: Option<&str>,
+    input: Option<(&str, &str)>,
+) -> Result<String> {
     let workspace = NinjaWorkspace::create(ninja_file)?;
+    if let Some((path, contents)) = input {
+        workspace
+            .directory
+            .write(path, contents)
+            .context("write script input")?;
+    }
 
     let mut command = Command::new("ninja");
     command
@@ -178,7 +188,7 @@ fn shell_default_reaches_the_child_shell(
     )?;
     let ninja = generate(&BuildGraph::from_manifest(&manifest)?)?;
 
-    let actual = ninja_output(&ninja, environment_value)?;
+    let actual = ninja_output(&ninja, environment_value, None)?;
     ensure!(
         actual == expected,
         "expected child shell output {expected:?}, got {actual:?}"
@@ -216,6 +226,20 @@ fn scripts_lower_placeholders_without_command_parser_validation() -> Result<()> 
     Ok(())
 }
 
+#[rstest]
+fn script_placeholders_execute_against_real_paths() -> Result<()> {
+    let manifest = manifest::from_str(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: in\n    script: \"printf '%s' $in > $out\"\n",
+    )?;
+    let ninja = generate(&BuildGraph::from_manifest(&manifest)?)?;
+
+    let actual = ninja_output(&ninja, None, Some(("in", "script input")))?;
+    ensure!(
+        actual == "in",
+        "expected script to write the lowered input path \"in\", got {actual:?}"
+    );
+    Ok(())
+}
 #[rstest]
 fn placeholders_inside_backticks_are_rejected_before_backend_escaping() -> Result<()> {
     let manifest = manifest::from_str(

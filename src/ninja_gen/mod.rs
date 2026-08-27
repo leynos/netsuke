@@ -348,7 +348,7 @@ impl NamedAction<'_> {
 
     /// Writes this action's Ninja rule, escaping only the shell-text boundary.
     fn write_into<W: Write>(&self, output: &mut W) -> Result<(), NinjaGenError> {
-        let command = escape_ninja_value(&self.shell_text()?)?;
+        let command = escape_ninja_value(self.shell_text()?)?;
         writeln!(output, "rule {}", self.id)?;
         writeln!(output, "  command = {command}")?;
         self.write_metadata(output)
