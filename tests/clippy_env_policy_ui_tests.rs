@@ -23,7 +23,7 @@ use tempfile::tempdir;
 /// The banned path is assembled from pieces so the repository source never
 /// contains the literal contiguously (the grep gate would otherwise reject
 /// its own fixture); `concat!` still yields the exact path at compile time.
-fn banned_set_current_dir() -> &'static str {
+const fn banned_set_current_dir() -> &'static str {
     concat!("std::env", "::set_current_dir")
 }
 

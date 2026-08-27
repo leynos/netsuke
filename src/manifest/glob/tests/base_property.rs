@@ -63,10 +63,11 @@ proptest! {
     fn relative_pattern_under_base_returns_pattern_relative_paths(
         segments in segments(),
     ) {
-        let temp = tempdir().context("create a temporary directory").unwrap();
-        let expected = install_leaf(temp.path(), &segments).unwrap();
+        let temp =
+            tempdir().context("create a temporary directory").expect("temp dir must be creatable");
+        let expected = install_leaf(temp.path(), &segments).expect("fixture must install");
         let base = Utf8Path::from_path(temp.path()).expect("temp paths are UTF-8");
-        let mut results = glob_paths("**/*.txt", Some(base)).unwrap();
+        let mut results = glob_paths("**/*.txt", Some(base)).expect("relative glob must succeed");
         results.sort();
         let mut want = vec![expected];
         want.sort();
@@ -80,19 +81,22 @@ proptest! {
         first in segments(),
         second in segments(),
     ) {
-        let temp = tempdir().context("create a temporary directory").unwrap();
+        let temp =
+            tempdir().context("create a temporary directory").expect("temp dir must be creatable");
         let base_a = temp.path().join("a");
-        test_fs::create_dir(&base_a).unwrap();
+        test_fs::create_dir(&base_a).expect("base A dir must be creatable");
         let base_b = temp.path().join("b");
-        test_fs::create_dir(&base_b).unwrap();
-        let expected_a = install_leaf(&base_a, &first).unwrap();
-        let expected_b = install_leaf(&base_b, &second).unwrap();
+        test_fs::create_dir(&base_b).expect("base B dir must be creatable");
+        let expected_a = install_leaf(&base_a, &first).expect("fixture A must install");
+        let expected_b = install_leaf(&base_b, &second).expect("fixture B must install");
         let pattern = "**/*.txt";
 
         let results_a =
-            glob_paths(pattern, Some(Utf8Path::from_path(&base_a).expect("UTF-8"))).unwrap();
+            glob_paths(pattern, Some(Utf8Path::from_path(&base_a).expect("UTF-8")))
+                .expect("glob under base A must succeed");
         let results_b =
-            glob_paths(pattern, Some(Utf8Path::from_path(&base_b).expect("UTF-8"))).unwrap();
+            glob_paths(pattern, Some(Utf8Path::from_path(&base_b).expect("UTF-8")))
+                .expect("glob under base B must succeed");
         prop_assert_eq!(
             results_a.into_iter().collect::<BTreeSet<_>>(),
             BTreeSet::from([expected_a.clone()]),
@@ -110,26 +114,27 @@ proptest! {
     /// retained.
     #[test]
     fn absolute_pattern_ignores_the_base(nested in segments()) {
-        let temp = tempdir().context("create a temporary directory").unwrap();
+        let temp =
+            tempdir().context("create a temporary directory").expect("temp dir must be creatable");
         let concrete = temp.path().join("concrete");
-        test_fs::create_dir(&concrete).unwrap();
-        let expected = install_leaf(&concrete, &nested).unwrap();
+        test_fs::create_dir(&concrete).expect("concrete dir must be creatable");
+        let expected = install_leaf(&concrete, &nested).expect("fixture must install");
         let absolute_pattern = format!("{}/**/*.txt", concrete.display());
         // A decoy base that must neither be joined nor stripped.
         let decoy = temp.path().join("decoy");
-        test_fs::create_dir(&decoy).unwrap();
-        test_fs::write(decoy.join("stray.txt"), "s").unwrap();
-        let results = glob_paths(
+        test_fs::create_dir(&decoy).expect("decoy dir must be creatable");
+        test_fs::write(decoy.join("stray.txt"), "s").expect("decoy file must be writable");
+        let found = glob_paths(
             &absolute_pattern,
             Some(Utf8Path::from_path(&decoy).expect("UTF-8")),
         )
-        .unwrap();
-        let results = results.into_iter().collect::<BTreeSet<_>>();
+        .expect("absolute glob must succeed");
+        let results = found.into_iter().collect::<BTreeSet<_>>();
         prop_assert!(
             results.len() == 1,
             "absolute pattern must match only concrete's files: {results:?}"
         );
-        let got = results.iter().next().unwrap();
+        let got = results.iter().next().expect("one result was asserted above");
         // Compare the suffix after the concrete base directory.
         let suffix = format!("/{expected}");
         prop_assert!(
