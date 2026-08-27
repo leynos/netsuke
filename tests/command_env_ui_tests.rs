@@ -92,10 +92,31 @@ fn config_cached_discovery_embedder_fixture_compiles() -> io::Result<()> {
     )
 }
 
+/// The verbose timing constructors compile for an external embedder.
+#[test]
+fn verbose_timing_reporter_embedder_fixture_compiles() -> io::Result<()> {
+    let source = "tests/ui/verbose_timing_reporter_embedder_pass.rs";
+    let rlib = NetsukeRlib::build()?;
+    let output = rlib.compile(source, true)?;
+    if !output.status.success() {
+        return Err(io::Error::other(format!(
+            "the verbose timing reporter fixture should compile against the public API:\n{}",
+            stderr(&output)
+        )));
+    }
+
+    let control = rlib.compile(source, false)?;
+    if control.status.success() {
+        return Err(io::Error::other(
+            "the verbose timing fixture compiled without --extern netsuke",
+        ));
+    }
+    Ok(())
+}
 /// Compile one external public-API fixture through the direct-rustc harness.
 fn compile_public_api_fixture(source: &str, failure_message: &str) -> io::Result<()> {
     let rlib = NetsukeRlib::build()?;
-    let output = rlib.compile(source)?;
+    let output = rlib.compile(source, true)?;
 
     if !output.status.success() {
         return Err(io::Error::other(format!(
@@ -154,20 +175,29 @@ impl NetsukeRlib {
         Ok(Self { rlib, deps_dir })
     }
 
-    /// Type-check `source` against the rlib without linking a binary.
+    /// Type-check `source` with or without the `netsuke` rlib.
     ///
     /// `--emit=metadata` is enough to surface any visibility or signature
     /// regression while sparing the harness a full link of `netsuke`'s
-    /// dependency tree.
-    fn compile(&self, source: &str) -> io::Result<Output> {
+    /// dependency tree. When `include_netsuke_extern` is `false`, the fixture
+    /// must fail because it imports `netsuke`; this control proves the normal
+    /// compile path receives an effective `--extern` argument.
+    fn compile(&self, source: &str, include_netsuke_extern: bool) -> io::Result<Output> {
         let output_dir = tempfile::tempdir()?;
-        Command::new(rustc())
+        let mut command = Command::new(rustc());
+        command
             .arg("--edition=2024")
             .arg("--crate-type=bin")
             .arg("--emit=metadata")
-            .arg(manifest_dir().join(source))
-            .arg("--extern")
-            .arg(format!("netsuke={}", self.rlib.display()))
+            .arg(manifest_dir().join(source));
+
+        if include_netsuke_extern {
+            command
+                .arg("--extern")
+                .arg(format!("netsuke={}", self.rlib.display()));
+        }
+
+        command
             .arg("-L")
             .arg(format!("dependency={}", self.deps_dir.display()))
             .arg("-o")

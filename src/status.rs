@@ -59,7 +59,14 @@ pub use self::indicatif::IndicatifReporter;
 use self::indicatif::{format_completion_line, stage_label, task_progress_update};
 
 /// Reports pipeline stage transitions and completion.
-pub trait StatusReporter {
+///
+/// Implementations must be safe to share between threads. The runner constructs
+/// one reporter and shares it across execution threads through
+/// `ExecutionContext`, so the [`Send`] and [`Sync`] bounds apply to built-in and
+/// external implementations alike. Implementations with mutable state, custom
+/// writers, or reporter wrappers must synchronize that state for concurrent
+/// calls; the runner does not promise that every callback runs concurrently.
+pub trait StatusReporter: Send + Sync {
     /// Emit a stage update.
     fn report_stage(&self, current: StageNumber, total: StageNumber, description: &str);
     /// Emit validated, monotonic task progress for Stage 6 execution.

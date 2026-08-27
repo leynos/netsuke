@@ -1,5 +1,6 @@
 ---
-source: src/status_timing_tests.rs
+source: src/status_timing_format_tests.rs
+assertion_line: 139
 expression: rendered
 ---
 T Timing: Stage timing summary:

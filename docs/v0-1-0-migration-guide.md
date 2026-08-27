@@ -34,6 +34,7 @@ Table: documented v0.1.0 additions, including `netsuke help targets`, and their 
 | Child environment | New opt-in `netsuke::runner::CommandEnv` carries additive variable overrides and an injected `PATH` for Ninja child processes. | [Users' guide](users-guide.md) |
 | Request types | New `netsuke::runner::NinjaBuildRequest` and `netsuke::runner::NinjaToolRequest` name the program, `NinjaProcessOptions`, build file, targets or tool, a child environment, and a required `stderr_mode: StderrMode` policy for the `*_with` run functions. | [Users' guide](users-guide.md) |
 | Cached CLI configuration API | Breaking for callers of the unstable Rust API: use the opt-in cached discovery flow with `ConfigEnvProvider`; `ConfigStdEnvProvider` supplies process-backed access. | [Users' guide](users-guide.md) |
+| Timing output | Existing `VerboseTimingReporter::new` keeps its stderr sink; Rust callers can opt into an owned `Write + Send` sink with `with_writer`. | [Users' guide](users-guide.md#capture-verbose-timing-output) |
 | Glob expansion | Parent-relative patterns such as `glob('../shared/*.h')` now expand. Metadata checks use a capability rooted at the pattern's longest literal directory prefix; missing or non-directory prefixes return no matches, and unresolvable symlink matches are skipped. | [Users' guide](users-guide.md) and [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) |
 | Command recipes | Existing scalar `command` recipes are unchanged. New YAML command lists are opt-in and run in declaration order with fail-fast semantics. | [Rules and recipes](users-guide.md#rules-and-recipes) |
 | Manifest discovery | Optional target/action `description` values are shown by the new `netsuke help targets` command. Manifests without them and existing build output are unchanged. | [Users' guide](users-guide.md) |
@@ -47,6 +48,12 @@ exactly as before. No caller using these wrappers needs to change to adopt this
 release. A caller that constructs `NinjaBuildRequest`/`NinjaToolRequest`
 directly must pass `options: &options` and supply the required
 `stderr_mode: StderrMode` field.
+
+Existing callers that construct `VerboseTimingReporter::new` continue to
+receive timing summaries on stderr. Callers that need to capture or redirect
+those summaries can opt into `VerboseTimingReporter::with_writer`; the
+[users' guide](users-guide.md#capture-verbose-timing-output) documents the
+owned sink and completion-ordering contract.
 
 ## Opting into ordered command lists
 

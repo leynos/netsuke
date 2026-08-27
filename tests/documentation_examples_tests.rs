@@ -40,6 +40,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-serial-dependency-order-manifest",
     "guide-source-install",
     "guide-utility-commands",
+    "guide-verbose-timing-reporter",
     "guide-windows-help",
     "guide-windows-help-install",
     "guide-windows-path",

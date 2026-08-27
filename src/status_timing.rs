@@ -3,9 +3,24 @@
 use super::{LocalizationKey, StageNumber, StatusReporter};
 use crate::localization::{self, keys};
 use crate::output_prefs::OutputPrefs;
+use metrics::{counter, describe_counter, describe_histogram, histogram};
 use std::io::{self, Write};
-use std::sync::Mutex;
+use std::sync::{Mutex, Once};
 use std::time::{Duration, Instant};
+
+/// Metric counting complete rendered timing-summary delivery attempts.
+const TIMING_SUMMARY_SINK_WRITES_TOTAL: &str = "netsuke_status_timing_summary_writes_total";
+/// Metric measuring each complete rendered timing-summary delivery attempt.
+const TIMING_SUMMARY_SINK_WRITE_DURATION: &str =
+    "netsuke_status_timing_summary_write_duration_seconds";
+/// Stable tracing operation identifying timing-summary sink delivery.
+const TIMING_SUMMARY_SINK_WRITE_OPERATION: &str = "timing_summary_sink_write";
+/// Bounded successful timing-summary sink-write outcome.
+const TIMING_SUMMARY_SINK_WRITE_SUCCESS: &str = "success";
+/// Bounded failed timing-summary sink-write outcome.
+const TIMING_SUMMARY_SINK_WRITE_ERROR: &str = "write_error";
+/// Bounded category for a timing-summary sink-write failure.
+const TIMING_SUMMARY_SINK_WRITE_ERROR_CATEGORY: &str = "io";
 
 /// Monotonic clock abstraction returning an elapsed duration on demand.
 type MonotonicClock = dyn Fn() -> Duration + Send + Sync;
@@ -90,7 +105,15 @@ impl TimingState {
 
 /// Status reporter wrapper that emits per-stage timings on successful
 /// completion.
-pub struct VerboseTimingReporter {
+///
+/// The writer defaults to [`io::Stderr`]. [`Self::with_writer`] accepts an
+/// owned alternative sink. On the first completion, the wrapper atomically
+/// stops forwarding later updates, forwards completion to its inner reporter,
+/// and then writes the summary synchronously. It takes the writer out of its
+/// mutex before calling [`Write::write`], so a blocking or re-entrant writer
+/// never runs while a reporter-owned mutex is held. Write errors are ignored,
+/// consistently with [`super::AccessibleReporter`].
+pub struct VerboseTimingReporter<W: Write + Send = io::Stderr> {
     /// Reporter receiving forwarded status events.
     inner: Box<dyn StatusReporter>,
     /// Output preferences controlling summary formatting.
@@ -99,32 +122,132 @@ pub struct VerboseTimingReporter {
     clock: Box<MonotonicClock>,
     /// Timing state shared across reporting threads.
     state: Mutex<TimingState>,
+    /// Sink receiving the rendered timing summary when it is available.
+    writer: Mutex<Option<W>>,
 }
 
 impl VerboseTimingReporter {
     /// Wrap an existing reporter with verbose timing summary support.
     #[must_use]
     pub fn new(inner: Box<dyn StatusReporter>, prefs: OutputPrefs) -> Self {
+        Self::with_writer(inner, prefs, io::stderr())
+    }
+}
+
+impl<W: Write + Send> VerboseTimingReporter<W> {
+    /// Wrap an existing reporter with verbose timing support and `writer` as
+    /// its timing-summary sink.
+    ///
+    /// The sink is owned by this wrapper. Completion is forwarded to `inner`
+    /// before the first timing line is written. A blocking sink blocks only
+    /// that `report_complete` call; the wrapper has already recorded
+    /// completion, so concurrent stage, progress, and completion calls return
+    /// without forwarding or producing another summary.
+    #[must_use]
+    pub fn with_writer(inner: Box<dyn StatusReporter>, prefs: OutputPrefs, writer: W) -> Self {
         let start = Instant::now();
-        Self::with_clock(inner, prefs, Box::new(move || start.elapsed()))
+        Self {
+            inner,
+            prefs,
+            clock: Box::new(move || start.elapsed()),
+            state: Mutex::new(TimingState::default()),
+            writer: Mutex::new(Some(writer)),
+        }
     }
 
-    /// Build a timing reporter that uses the given clock.
-    fn with_clock(
+    /// Construct a reporter with deterministic time and an injected sink.
+    #[cfg(test)]
+    fn with_clock_and_writer(
         inner: Box<dyn StatusReporter>,
         prefs: OutputPrefs,
         clock: Box<MonotonicClock>,
+        writer: W,
     ) -> Self {
         Self {
             inner,
             prefs,
             clock,
             state: Mutex::new(TimingState::default()),
+            writer: Mutex::new(Some(writer)),
         }
+    }
+
+    /// Write one completed timing summary without holding a reporter mutex.
+    ///
+    /// A non-empty rendered summary is one delivery attempt, even though its
+    /// rendered lines are written separately to preserve their order. Writer
+    /// failures remain best-effort: every line is attempted, then one bounded
+    /// outcome, duration, and failure event are recorded without propagating
+    /// an error through [`StatusReporter`].
+    fn write_summary(&self, lines: Vec<String>) {
+        let Some(mut writer) = self
+            .writer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take()
+        else {
+            return;
+        };
+
+        let has_lines = !lines.is_empty();
+        let started = Instant::now();
+        let mut succeeded = true;
+        for line in lines {
+            succeeded &= writeln!(writer, "{line}").is_ok();
+        }
+        if has_lines {
+            record_timing_summary_sink_write(started.elapsed(), succeeded);
+        }
+
+        let mut writer_slot = self
+            .writer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *writer_slot = Some(writer);
     }
 }
 
-impl StatusReporter for VerboseTimingReporter {
+/// Record one completed timing-summary sink delivery attempt.
+///
+/// The duration covers only the synchronous loop that calls [`Write::write`]
+/// through `writeln!`; rendering and reporter-owned mutex acquisition happen
+/// before the timer starts. The event contains only fixed fields so arbitrary
+/// writer failures and rendered summary data never enter telemetry.
+fn record_timing_summary_sink_write(elapsed: Duration, succeeded: bool) {
+    describe_timing_summary_sink_metrics();
+    let outcome = if succeeded {
+        TIMING_SUMMARY_SINK_WRITE_SUCCESS
+    } else {
+        TIMING_SUMMARY_SINK_WRITE_ERROR
+    };
+    counter!(TIMING_SUMMARY_SINK_WRITES_TOTAL, "outcome" => outcome).increment(1);
+    histogram!(TIMING_SUMMARY_SINK_WRITE_DURATION).record(elapsed);
+    if !succeeded {
+        tracing::debug!(
+            operation = TIMING_SUMMARY_SINK_WRITE_OPERATION,
+            outcome = TIMING_SUMMARY_SINK_WRITE_ERROR,
+            error_category = TIMING_SUMMARY_SINK_WRITE_ERROR_CATEGORY,
+            "timing summary sink write failed"
+        );
+    }
+}
+
+/// Register the bounded timing-summary sink metric descriptions once.
+fn describe_timing_summary_sink_metrics() {
+    static DESCRIBE: Once = Once::new();
+    DESCRIBE.call_once(|| {
+        describe_counter!(
+            TIMING_SUMMARY_SINK_WRITES_TOTAL,
+            "Counts complete rendered timing-summary sink delivery attempts by bounded outcome."
+        );
+        describe_histogram!(
+            TIMING_SUMMARY_SINK_WRITE_DURATION,
+            "Measures synchronous timing-summary sink delivery duration in seconds."
+        );
+    });
+}
+
+impl<W: Write + Send> StatusReporter for VerboseTimingReporter<W> {
     fn report_stage(&self, current: StageNumber, total: StageNumber, description: &str) {
         let should_forward = {
             let mut state = self
@@ -157,28 +280,26 @@ impl StatusReporter for VerboseTimingReporter {
     }
 
     fn report_complete(&self, tool_key: LocalizationKey) {
-        let lines = {
+        let Some(lines) = ({
             let mut state = self
                 .state
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             if state.completed {
-                Vec::new()
+                None
             } else {
                 state.completed = true;
                 state.finish((self.clock)());
-                render_summary_lines(self.prefs, state.completed_stages())
+                Some(render_summary_lines(self.prefs, state.completed_stages()))
             }
+        }) else {
+            return;
         };
 
         self.inner.report_complete(tool_key);
-
-        for line in lines {
-            drop(writeln!(io::stderr(), "{line}"));
-        }
+        self.write_summary(lines);
     }
 }
-
 /// Render the timing summary header, per-stage lines, and total duration.
 fn render_summary_lines(prefs: OutputPrefs, entries: &[CompletedStage]) -> Vec<String> {
     if entries.is_empty() {
@@ -233,6 +354,18 @@ fn format_duration(duration: Duration) -> String {
     format!("{}ns", duration.as_nanos())
 }
 
+#[path = "status_timing_concurrency_tests.rs"]
+#[cfg(test)]
+mod concurrency_tests;
+#[path = "status_timing_format_tests.rs"]
+#[cfg(test)]
+mod format_tests;
+#[path = "status_timing_lifecycle_tests.rs"]
+#[cfg(test)]
+mod lifecycle_tests;
+#[path = "status_timing_telemetry_tests.rs"]
+#[cfg(test)]
+mod telemetry_tests;
 #[path = "status_timing_tests.rs"]
 #[cfg(test)]
 mod tests;
