@@ -6,7 +6,7 @@ expression: rendered
   "schema_version": 1,
   "generator": {
     "name": "netsuke",
-    "version": "0.1.0-beta2"
+    "version": "[version]"
   },
   "result": {
     "command": "help-targets",

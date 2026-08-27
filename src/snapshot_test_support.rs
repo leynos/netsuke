@@ -35,6 +35,17 @@ pub(crate) fn snapshot_settings(subdir: &str) -> Settings {
     settings
 }
 
+/// Add a redaction filter for the Netsuke generator version.
+///
+/// Anchor the filter on the enclosing generator object so unrelated versioned
+/// content remains visible in snapshot diffs.
+fn add_generator_version_filter(settings: &mut Settings) {
+    settings.add_filter(
+        r#"("generator": \{\s*\n\s*"name": "netsuke",\s*\n\s*"version": ")[^"]+(")"#,
+        r"${1}[version]${2}",
+    );
+}
+
 /// Build snapshot settings for diagnostic-JSON documents.
 ///
 /// Extends [`snapshot_settings`] with a redaction filter for the generator's
@@ -45,10 +56,17 @@ pub(crate) fn snapshot_settings(subdir: &str) -> Settings {
 /// so the redaction is applied consistently.
 pub(crate) fn diagnostic_json_snapshot_settings() -> Settings {
     let mut settings = snapshot_settings("diagnostic_json");
-    settings.add_filter(
-        r#"("generator": \{\s*\n\s*"name": "netsuke",\s*\n\s*"version": ")[^"]+(")"#,
-        r"${1}[version]${2}",
-    );
+    add_generator_version_filter(&mut settings);
+    settings
+}
+
+/// Build snapshot settings for JSON help-target catalogues.
+///
+/// Extend the help-target settings with the generator-version redaction while
+/// retaining unfiltered settings for text catalogues.
+pub(crate) fn help_targets_json_snapshot_settings() -> Settings {
+    let mut settings = snapshot_settings("help_targets");
+    add_generator_version_filter(&mut settings);
     settings
 }
 
