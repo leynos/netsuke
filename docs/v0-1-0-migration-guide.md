@@ -14,7 +14,6 @@ remain compatible. Callers constructing `NinjaBuildRequest` or
 `NinjaToolRequest` must replace `cli: &cli` with `options: &options`; every
 other addition is opt-in.
 
-
 ## Select the pinned Rust toolchain
 
 Source builds from a checkout require the dated nightly pinned in
