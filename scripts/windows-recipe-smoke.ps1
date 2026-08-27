@@ -76,13 +76,17 @@ try {
     Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'scalar interpreter with spaces.txt') `
         -Expected 'Desktop' -Message 'A scalar recipe did not run in Windows PowerShell'
 
+    Invoke-Netsuke -Arguments @('build', 'dollar-syntax')
+    Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'dollar value.txt') -Expected 'default value' `
+        -Message 'Ninja did not preserve ordinary PowerShell dollar syntax'
+
     Invoke-Netsuke -Arguments @('build', 'ordered-list')
     Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'ordered state.txt') -Expected 'first;second' `
         -Message 'The ordered command list did not preserve state and order'
 
     $failure = & $Netsuke build first-list-entry-fails 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        throw 'A failed first command-list entry unexpectedly succeeded through Netsuke and Ninja.'
+    if ($LASTEXITCODE -ne 1) {
+        throw "A recipe exit code of 27 should become Netsuke's documented failure exit code 1, got $LASTEXITCODE: $failure"
     }
     if (Test-Path -LiteralPath 'must not exist.txt') {
         throw "The second command-list entry ran after the first failed: $failure"

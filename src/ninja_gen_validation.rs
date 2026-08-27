@@ -21,52 +21,66 @@ pub(super) fn validate_action_recipe(
     {
         return Err(NinjaGenError::EmptyCommandRecipe { action_index });
     }
-    if shell != RecipeShell::PowerShell
-        && let Recipe::Command {
-            command: StringOrList::String(command),
-        } = &action.recipe
-    {
-        validate_ninja_value(command)?;
+    if shell == RecipeShell::PowerShell {
+        return Ok(());
     }
-    if shell != RecipeShell::PowerShell
-        && let Recipe::Command {
+    match &action.recipe {
+        Recipe::Command {
+            command: StringOrList::String(command),
+        } => validate_scalar_command(command),
+        Recipe::Command {
             command: StringOrList::List(entries),
-        } = &action.recipe
-    {
-        for (zero_based_entry_index, entry) in entries.iter().enumerate() {
-            let entry_index = zero_based_entry_index + 1;
-            match command_list_entry_error(CommandListEntry(entry)) {
-                Some(CommandListEntryError::MultipleBackgroundJobs) => {
-                    return Err(NinjaGenError::MultipleBackgroundJobs {
-                        action_index,
-                        entry_index,
-                    });
-                }
-                Some(CommandListEntryError::UnsupportedExec) => {
-                    return Err(NinjaGenError::UnsupportedCommandListExec {
-                        action_index,
-                        entry_index,
-                    });
-                }
-                Some(CommandListEntryError::UnanalyzableEval) => {
-                    return Err(NinjaGenError::UnanalyzableCommandListEval {
-                        action_index,
-                        entry_index,
-                    });
-                }
-                Some(CommandListEntryError::NinjaControlCharacter) => {
-                    return Err(NinjaGenError::NinjaControlCharacter {
-                        action_index,
-                        entry_index,
-                    });
-                }
-                None => {}
+        } => validate_posix_command_list(entries, action_index),
+        Recipe::Command {
+            command: StringOrList::Empty,
+        }
+        | Recipe::Script { .. }
+        | Recipe::Rule { .. } => Ok(()),
+    }
+}
+
+/// Reject scalar command text that cannot occupy one Ninja command binding.
+fn validate_scalar_command(command: &str) -> Result<(), NinjaGenError> {
+    validate_ninja_value(command)
+}
+
+/// Reject POSIX command-list entries that violate the generated wrapper contract.
+fn validate_posix_command_list(
+    entries: &[String],
+    action_index: usize,
+) -> Result<(), NinjaGenError> {
+    for (zero_based_entry_index, entry) in entries.iter().enumerate() {
+        let entry_index = zero_based_entry_index + 1;
+        match command_list_entry_error(CommandListEntry(entry)) {
+            Some(CommandListEntryError::MultipleBackgroundJobs) => {
+                return Err(NinjaGenError::MultipleBackgroundJobs {
+                    action_index,
+                    entry_index,
+                });
             }
+            Some(CommandListEntryError::UnsupportedExec) => {
+                return Err(NinjaGenError::UnsupportedCommandListExec {
+                    action_index,
+                    entry_index,
+                });
+            }
+            Some(CommandListEntryError::UnanalyzableEval) => {
+                return Err(NinjaGenError::UnanalyzableCommandListEval {
+                    action_index,
+                    entry_index,
+                });
+            }
+            Some(CommandListEntryError::NinjaControlCharacter) => {
+                return Err(NinjaGenError::NinjaControlCharacter {
+                    action_index,
+                    entry_index,
+                });
+            }
+            None => {}
         }
     }
     Ok(())
 }
-
 /// Reject metadata values that cannot remain within one Ninja binding.
 pub(super) fn validate_action_metadata(action: &crate::ir::Action) -> Result<(), NinjaGenError> {
     for value in [

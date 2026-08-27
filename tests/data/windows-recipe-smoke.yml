@@ -4,6 +4,9 @@ actions:
   - name: scalar
     description: Prove the scalar recipe uses Windows PowerShell
     command: "$edition = $PSVersionTable.PSEdition; if ($env:NETSUKE_SMOKE_VALUE -ne 'value with spaces') { exit 71 }; Set-Content -NoNewline -LiteralPath 'scalar interpreter with spaces.txt' -Value $edition"
+  - name: dollar-syntax
+    description: Preserve ordinary PowerShell dollar variables through Ninja
+    command: "$recipeValue = if ($null -eq $env:NETSUKE_SMOKE_OPTION) { 'default value' } else { $env:NETSUKE_SMOKE_OPTION }; Set-Content -NoNewline -LiteralPath 'dollar value.txt' -Value $recipeValue"
   - name: ordered-list
     description: Preserve PowerShell state through a two-entry command list
     command:
