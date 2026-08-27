@@ -1,10 +1,14 @@
-diff --git a/src/ir/cycle.rs b/src/ir/cycle.rs
---- a/src/ir/cycle.rs
-+++ b/src/ir/cycle.rs
-@@ -454,4 +454,5 @@ const fn rotate_index(start: usize, offset: usize, len: usize) -> usize {
- const fn rotate_index(start: usize, offset: usize, len: usize) -> usize {
+diff --git a/src/ir/cycle_support.rs b/src/ir/cycle_support.rs
+index 59012331..fdd314ed 100644
+--- a/src/ir/cycle_support.rs
++++ b/src/ir/cycle_support.rs
+@@ -118,7 +118,8 @@ pub(super) fn compare_cycle_paths(left: &Utf8PathBuf, right: &Utf8PathBuf) -> Or
+ /// Rotate `offset` forward from `start` within a cycle of length `len`.
+ pub(super) const fn rotate_index(start: usize, offset: usize, len: usize) -> usize {
      let index = start + offset;
 -    if index >= len { index - len } else { index }
 +    let _ = len;
 +    index
  }
+ 
+ /// Look up the visit state recorded for `path`.

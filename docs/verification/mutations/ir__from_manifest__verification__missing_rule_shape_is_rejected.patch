@@ -1,7 +1,8 @@
 diff --git a/src/ir/from_manifest_support.rs b/src/ir/from_manifest_support.rs
+index 04cc1ec0..5c4137a7 100644
 --- a/src/ir/from_manifest_support.rs
 +++ b/src/ir/from_manifest_support.rs
-@@ -187,7 +187,7 @@ pub(super) fn resolve_rule(
+@@ -210,7 +210,7 @@ pub(super) fn resolve_rule(
              rule_map
                  .get(name)
                  .cloned()

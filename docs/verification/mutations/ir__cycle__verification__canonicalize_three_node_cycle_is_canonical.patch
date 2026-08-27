@@ -1,7 +1,8 @@
-diff --git a/src/ir/cycle.rs b/src/ir/cycle.rs
---- a/src/ir/cycle.rs
-+++ b/src/ir/cycle.rs
-@@ -416,7 +416,7 @@ fn rotate_cycle_by<T: Clone>(cycle: &[T], start: usize, len: usize) -> Vec<T> {
+diff --git a/src/ir/cycle_support.rs b/src/ir/cycle_support.rs
+index 59012331..f9227dfd 100644
+--- a/src/ir/cycle_support.rs
++++ b/src/ir/cycle_support.rs
+@@ -70,7 +70,7 @@ pub(super) fn rotate_cycle_by<T: Clone>(cycle: &[T], start: usize, len: usize) -
          offset += 1;
      }
      if let Some(first) = canonical.first().cloned() {

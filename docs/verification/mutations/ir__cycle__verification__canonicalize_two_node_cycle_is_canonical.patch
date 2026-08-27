@@ -1,7 +1,8 @@
-diff --git a/src/ir/cycle.rs b/src/ir/cycle.rs
---- a/src/ir/cycle.rs
-+++ b/src/ir/cycle.rs
-@@ -397,7 +397,7 @@ fn find_rotation_start_by<T>(cycle: &[T], len: usize, compare: fn(&T, &T) -> Ord
+diff --git a/src/ir/cycle_support.rs b/src/ir/cycle_support.rs
+index 59012331..abdcf08f 100644
+--- a/src/ir/cycle_support.rs
++++ b/src/ir/cycle_support.rs
+@@ -51,7 +51,7 @@ pub(super) fn find_rotation_start_by<T>(
          if let (Some(candidate), Some(current)) = (cycle.get(index), cycle.get(start))
              && compare(candidate, current) == Ordering::Less
          {
