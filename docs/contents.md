@@ -75,12 +75,15 @@ operator, user, and contributor references are easier to find.
 - [ADR-013](adr-013-application-owned-configuration-observability.md):
   Application-owned configuration-load metrics, verbose snapshots, and bounded
   label vocabulary.
-- [ADR-014](adr-014-backend-text-escaping-seam.md):
+- [ADR-014: backend text escaping](adr-014-backend-text-escaping-seam.md):
   Ninja backend escaping boundary decision record, preserving ordinary shell
   dollar syntax in manifests without coupling the IR to Ninja.
 - [ADR-015](adr-015-use-bounded-git-cli-for-change-detection.md):
   Feature-private, bounded Git CLI queries for standard-library change
   detection.
+- [ADR-014: base-directory seam](adr-014-base-directory-seam-and-dir-anchoring.md): Base-directory
+  seam for manifest and glob resolution, explicit-selector independence from
+  `-C`, and the in-process environment-mutation gate.
 
 ## Proposals
 

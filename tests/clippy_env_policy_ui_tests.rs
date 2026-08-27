@@ -11,14 +11,17 @@
 //! The compile-fail source is generated inside a temporary crate with the
 //! banned path spliced from string fragments, so no forbidden literal ever
 //! appears in a committed `.rs` file and `scripts/check-env-mutation.sh`
-//! remains green while the policy is exercised end to end.
+//! remains green while the policy is exercised end to end. All filesystem
+//! access goes through the capability-based `test_support::fs` wrapper, never
+//! `std::fs`.
 
 use std::{
-    fs, io,
+    io,
     path::{Path, PathBuf},
     process::{Command, Output},
 };
 use tempfile::tempdir;
+use test_support::fs as test_fs;
 
 /// The banned path is assembled from pieces so the repository source never
 /// contains the literal contiguously (the grep gate would otherwise reject
@@ -65,15 +68,15 @@ fn clippy_on(manifest: &Path) -> io::Result<Output> {
 fn set_current_dir_compile_fails_under_the_policy() -> io::Result<()> {
     let temporary_root = tempdir()?;
     let fixture_dir = temporary_root.path().join("clippy_env_policy_compile_fail");
-    fs::create_dir_all(fixture_dir.join("src"))?;
-    fs::write(
+    test_fs::create_dir_all(fixture_dir.join("src"))?;
+    test_fs::write(
         fixture_dir.join("Cargo.toml"),
         "[package]\nname = \"clippy-env-policy-compile-fail\"\nversion = \"0.0.0\"\nedition = \"2024\"\npublish = false\n\n[workspace]\n",
     )?;
     // Clippy discovers `disallowed-methods` from a `clippy.toml` in the crate
     // directory. Copy the repository's real policy so this fixture exercises
     // exactly the configuration that gates the workspace build.
-    fs::copy(
+    test_fs::copy(
         manifest_dir().join("clippy.toml"),
         fixture_dir.join("clippy.toml"),
     )?;
@@ -83,7 +86,7 @@ fn set_current_dir_compile_fails_under_the_policy() -> io::Result<()> {
         "use std::path::Path;\nfn main() {{\n    let _ = {}(\"/tmp\");\n    let _ = Path::new(\"/tmp\");\n}}\n",
         banned_set_current_dir()
     );
-    fs::write(fixture_dir.join("src/main.rs"), source)?;
+    test_fs::write(fixture_dir.join("src/main.rs"), source)?;
 
     let output = clippy_on(&fixture_dir.join("Cargo.toml"))?;
     if output.status.success() {
