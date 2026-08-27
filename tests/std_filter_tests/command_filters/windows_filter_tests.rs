@@ -90,7 +90,7 @@ fn windows_command_setup(
 ) -> Result<(tempfile::TempDir, OsString, Utf8PathBuf)> {
     let temp = tempdir().context(ctx.tempdir)?;
     let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-        .map_err(|path| anyhow!("{}: {path:?}", ctx.root))?;
+        .map_err(|path| anyhow!("{}: {}", ctx.root, path.display()))?;
     let dir = Dir::open_ambient_dir(&root, ambient_authority()).context(ctx.dir)?;
     let helper =
         compile_rust_helper(&dir, &root, helper_name, helper_source).context(ctx.compile)?;
