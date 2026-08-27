@@ -131,8 +131,9 @@ mod tests {
         };
         assert!(
             event.contains("ninja_program=/opt/ninja")
-                && event.contains("source=\"NETSUKE_NINJA\""),
-            "override resolution should identify its program and source: {event}"
+                && event.contains("source=\"NETSUKE_NINJA\"")
+                && event.contains("message=Resolved Ninja executable from environment override"),
+            "override resolution should identify its program, source, and message: {event}"
         );
     }
 
@@ -150,8 +151,9 @@ mod tests {
         };
         assert!(
             event.contains(&format!("ninja_program={NINJA_PROGRAM:?}"))
-                && event.contains("source=\"fallback\""),
-            "fallback resolution should identify its program and source: {event}"
+                && event.contains("source=\"fallback\"")
+                && event.contains("message=Resolved Ninja executable from default program"),
+            "fallback resolution should identify its program, source, and message: {event}"
         );
     }
 
@@ -167,8 +169,16 @@ mod tests {
     /// Verify UTF-8 resolution defaults when the override is absent.
     #[rstest]
     fn resolve_ninja_program_utf8_defaults_without_override(ninja_env: MockEnv) {
-        let resolved = resolve_ninja_program_utf8_with(&ninja_env);
+        let (resolved, events) = with_test_subscriber(LevelFilter::INFO, |captured| {
+            let resolved = resolve_ninja_program_utf8_with(&ninja_env);
+            (resolved, captured.snapshot())
+        });
+
         assert_eq!(resolved, Utf8PathBuf::from(NINJA_PROGRAM));
+        assert!(
+            events.is_empty(),
+            "resolver debug events must be hidden by an INFO filter: {events:?}"
+        );
     }
 
     /// Verify UTF-8 resolution defaults when the override is empty.
@@ -176,8 +186,21 @@ mod tests {
     fn resolve_ninja_program_utf8_defaults_for_empty_override(
         #[with(Some(OsString::new()))] ninja_env: MockEnv,
     ) {
-        let resolved = resolve_ninja_program_utf8_with(&ninja_env);
+        let (resolved, events) = with_test_subscriber(LevelFilter::DEBUG, |captured| {
+            let resolved = resolve_ninja_program_utf8_with(&ninja_env);
+            (resolved, captured.snapshot())
+        });
+
         assert_eq!(resolved, Utf8PathBuf::from(NINJA_PROGRAM));
+        let [event] = events.as_slice() else {
+            panic!("expected one Ninja-resolution event, got {events:?}");
+        };
+        assert!(
+            event.contains(&format!("ninja_program={NINJA_PROGRAM:?}"))
+                && event.contains("source=\"fallback\"")
+                && event.contains("message=Ignoring empty Ninja executable override"),
+            "empty override should identify its fallback resolution: {event}"
+        );
     }
 
     /// Verify UTF-8 resolution defaults when the override is not UTF-8.
@@ -186,8 +209,21 @@ mod tests {
     fn resolve_ninja_program_utf8_ignores_invalid_utf8_override(
         #[with(Some(invalid_utf8_override()))] ninja_env: MockEnv,
     ) {
-        let resolved = resolve_ninja_program_utf8_with(&ninja_env);
+        let (resolved, events) = with_test_subscriber(LevelFilter::DEBUG, |captured| {
+            let resolved = resolve_ninja_program_utf8_with(&ninja_env);
+            (resolved, captured.snapshot())
+        });
+
         assert_eq!(resolved, Utf8PathBuf::from(NINJA_PROGRAM));
+        let [event] = events.as_slice() else {
+            panic!("expected one Ninja-resolution event, got {events:?}");
+        };
+        assert!(
+            event.contains(&format!("ninja_program={NINJA_PROGRAM:?}"))
+                && event.contains("source=\"fallback\"")
+                && event.contains("message=Ignoring non-UTF-8 Ninja executable override"),
+            "invalid override should identify its fallback resolution: {event}"
+        );
     }
 
     /// Build a non-UTF-8 override value for Unix-only resolution tests.

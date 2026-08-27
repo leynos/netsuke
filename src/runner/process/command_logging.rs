@@ -111,6 +111,7 @@ pub(super) fn log_command_execution(
     debug!(
         operation,
         ninja_program = %context.program_display,
+        suppress_stderr = stderr_mode.is_suppress(),
         "Executing command: {}",
         context.redacted_command,
     );
@@ -290,7 +291,9 @@ mod tests {
             "debug event should contain the redacted command: {event}"
         );
         assert!(
-            event.contains("operation=\"build\"") && event.contains("ninja_program=ninja"),
+            event.contains("operation=\"build\"")
+                && event.contains("ninja_program=ninja")
+                && event.contains("suppress_stderr=false"),
             "debug event should retain correlation fields: {event}"
         );
     }

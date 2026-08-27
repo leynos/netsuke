@@ -1150,6 +1150,21 @@ it combines with the flag and the system default.
 Leave it unset to use `ninja` from `PATH`, or set another executable name or an
 absolute path. Empty and non-UTF-8 values fall back to the default.
 
+
+### Diagnose Ninja execution
+
+Pass `--verbose` to see Ninja subprocess diagnostics on stderr. The
+`Executing Ninja subprocess` informational event contains stable fields:
+`operation`, `ninja_program`, `arg_count`, `env_override_count`,
+`path_overridden`, and `suppress_stderr`. A debug-level companion event contains
+the redacted command as `Executing command: ...`, including the arguments used
+for the invocation.
+
+Ninja executable resolution also emits a debug event with `ninja_program` and
+`source`. The source is `NETSUKE_NINJA` for a valid override and `fallback` when
+the variable is unset, empty, or non-UTF-8. JSON mode suppresses these tracing
+events so stderr remains parseable.
+
 `NETSUKE_WHICH_WORKSPACE` switches off the `which()` workspace-tree fallback
 search that runs when a command is not found on `PATH`. Set it to `0`, `false`,
 or `off` (case-insensitively) to disable the fallback; any other value, or
