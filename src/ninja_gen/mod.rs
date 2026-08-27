@@ -46,7 +46,6 @@ macro_rules! write_kv {
         }
     };
 }
-
 /// Write `key = 1` to a Ninja file when `cond` is set.
 ///
 /// Boolean flags are rendered as a `1` only when enabled, matching Ninja's
@@ -58,7 +57,6 @@ macro_rules! write_flag {
         }
     };
 }
-
 /// Generate a Ninja build file as a string.
 ///
 /// # Examples
@@ -148,18 +146,7 @@ pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), Ni
             message: localization::message(keys::NINJA_GEN_DYNDEP_FILES_REQUIRED),
         });
     }
-    let mut actions: Vec<_> = graph.actions.iter().collect();
-    actions.sort_by_key(|(id, _)| *id);
-    for (zero_based_action_index, (id, action)) in actions.into_iter().enumerate() {
-        if action.recipe.is_dependency_only() {
-            continue;
-        }
-        let action_index = zero_based_action_index + 1;
-        validate_action_recipe(action, action_index)?;
-        validate_action_metadata(action)?;
-        NamedAction { id, action }.write_into(out)?;
-    }
-
+    write_action_rules(graph, out)?;
     let mut edges: Vec<_> = graph.targets.values().collect();
     edges.sort_by_key(|a| path_key(&a.explicit_outputs));
     let mut seen = HashSet::new();
@@ -202,6 +189,23 @@ pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), Ni
     Ok(())
 }
 
+/// Write executable rules in stable action-ID order, omitting dependency-only `phony` nodes.
+pub(crate) fn write_action_rules<W: Write>(
+    graph: &BuildGraph,
+    out: &mut W,
+) -> Result<(), NinjaGenError> {
+    let mut actions: Vec<_> = graph.actions.iter().collect();
+    actions.sort_by_key(|(id, _)| *id);
+    for (zero_based_action_index, (id, action)) in actions.into_iter().enumerate() {
+        if action.recipe.is_dependency_only() {
+            continue;
+        }
+        validate_action_recipe(action, zero_based_action_index + 1)?;
+        validate_action_metadata(action)?;
+        NamedAction { id, action }.write_into(out)?;
+    }
+    Ok(())
+}
 /// Convert a slice of paths into a space-separated string.
 pub(crate) fn join(paths: &[Utf8PathBuf]) -> String {
     paths
@@ -214,8 +218,7 @@ pub(crate) fn join(paths: &[Utf8PathBuf]) -> String {
 pub(crate) fn path_key(paths: &[Utf8PathBuf]) -> String {
     let mut parts: Vec<String> = paths.iter().map(|p| p.as_str().to_owned()).collect();
     parts.sort_unstable();
-    let separator = char::from(0).to_string();
-    parts.join(&separator)
+    parts.join(&char::from(0).to_string())
 }
 
 /// Escape a script for the wrapper's single-quoted `printf %b` argument.
