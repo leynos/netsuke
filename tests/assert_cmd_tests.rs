@@ -56,10 +56,19 @@ fn build_rejects_command_injecting_glob_filename() -> Result<()> {
     fs::write(temp.path().join("Netsukefile"), manifest)
         .context("write command-injection test manifest")?;
 
-    create_netsuke_command(temp.path())
-        .arg("build")
-        .assert()
-        .failure();
+    let output = create_netsuke_command(temp.path())
+        .args(["--json", "build"])
+        .output()
+        .context("run Netsuke build with JSON diagnostics")?;
+    ensure!(
+        !output.status.success(),
+        "the unsafe filename must stop the Netsuke build"
+    );
+    let stderr = String::from_utf8(output.stderr).context("build stderr should be valid UTF-8")?;
+    ensure!(
+        stderr.contains("characters that require shell quoting"),
+        "the failed build must report the shell-quoting rejection: {stderr}"
+    );
     ensure!(
         !temp.path().join("PWNED").exists(),
         "the attacker-controlled filename must not create PWNED"

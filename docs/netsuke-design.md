@@ -1125,7 +1125,7 @@ providing a secure bridge to the underlying system.
 
   The Rust query returns those UTF-8 paths unchanged. The Jinja `glob()`
   adapter adds the narrower command-safety boundary: it exposes a result only
-  when every path is a portable unquoted shell word made from letters, digits,
+  when every path is a portable unquoted shell word made from ASCII letters, digits,
   `/`, `:`, comma, full stop, underscore, or hyphen. Other matches fail
   manifest loading rather than entering `foreach` variables and potentially
   reaching command or script recipes as executable shell syntax. This private

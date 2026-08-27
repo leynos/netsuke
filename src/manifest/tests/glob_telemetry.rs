@@ -17,6 +17,7 @@ use test_support::manifest::manifest_yaml;
 use tracing::level_filters::LevelFilter;
 
 const EXPANSIONS_TOTAL: &str = "netsuke_manifest_glob_expansions_total";
+#[cfg(unix)]
 const REJECTIONS_TOTAL: &str = "netsuke_manifest_glob_rejections_total";
 
 type Snapshot = Vec<(
@@ -57,6 +58,7 @@ fn expansion_count(snapshot: &Snapshot, outcome: &str) -> Option<u64> {
 }
 
 /// Value of the glob-rejection counter carrying its bounded labels.
+#[cfg(unix)]
 fn unsafe_path_rejection_count(snapshot: &Snapshot) -> Option<u64> {
     snapshot.iter().find_map(|(key, _, _, value)| {
         if key.kind() != MetricKind::Counter || key.key().name() != REJECTIONS_TOTAL {

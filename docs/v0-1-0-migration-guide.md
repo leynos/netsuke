@@ -73,7 +73,7 @@ owned sink and completion-ordering contract.
 
 This beta release tightens the Jinja `glob()` helper. A manifest that expands a
 matched filename containing whitespace, control characters, or shell
-punctuation now fails during manifest loading. Letters, digits, `/`, `:`,
+punctuation now fails during manifest loading. ASCII letters, digits, `/`, `:`,
 comma, full stop, underscore, and hyphen remain accepted. This prevents a
 checkout filename from becoming executable shell syntax when a `foreach` item
 is interpolated into a `command` or `script`.

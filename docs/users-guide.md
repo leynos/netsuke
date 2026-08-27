@@ -554,7 +554,7 @@ brace remains unclosed, the diagnostic points to the outermost unmatched
 opening brace; an unmatched closing brace is reported at that closing brace.
 
 The Jinja helper rejects a matched path unless it can be inserted as one
-portable unquoted shell word. Letters, digits, `/`, `:`, comma, full stop,
+portable unquoted shell word. ASCII letters, digits, `/`, `:`, comma, full stop,
 underscore, and hyphen are accepted; whitespace, control characters, and
 shell punctuation are rejected. This prevents an untrusted checkout filename
 from becoming shell syntax when `item` is interpolated into a `command` or
