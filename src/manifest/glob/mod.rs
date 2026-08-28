@@ -359,33 +359,69 @@ impl PreparedGlob {
     ///
     /// # Errors
     ///
-    /// Returns an error when the pattern fails brace validation.
+    /// Returns an error when the pattern fails brace validation or when the
+    /// injected base cannot be canonicalized.
     fn new(pattern: &str, base: Option<&Utf8Path>) -> std::result::Result<Self, Error> {
         let pattern_state = GlobPattern::new(pattern)?;
         let normalized = pattern_state.normalized();
-        // Resolve the injected base to a symlink-free absolute path before it
-        // is embedded in the search text and opened as the capability root. A
-        // workspace reached through a symbolic link must still expand
-        // relative globs; walking the linked spelling component-by-component
-        // would reject the link itself. Relative bases become absolute here,
-        // which the rest of the seam already accepts.
-        let resolved_base = base.map(|dir| {
-            dir.canonicalize_utf8()
-                .unwrap_or_else(|_| dir.to_path_buf())
-        });
-        let (search, strip) = resolved_base
-            .as_deref()
-            .filter(|_| !Utf8Path::new(normalized).is_absolute())
-            .map_or_else(
-                || (normalized.to_owned(), None),
-                |dir| (String::from(dir.join(normalized)), Some(dir.to_path_buf())),
-            );
+        let resolved_base = match base {
+            // Only a relative pattern is anchored to the injected base; an
+            // absolute pattern names its own location and must ignore `base`.
+            Some(dir) if !Utf8Path::new(normalized).is_absolute() => {
+                Some(resolve_relative_glob_base(dir)?)
+            }
+            _ => None,
+        };
+        let (search, strip) = resolved_base.as_deref().map_or_else(
+            || (normalized.to_owned(), None),
+            |dir| {
+                // Escape the base as a literal: workspace directories may
+                // legitimately contain glob metacharacters (`*`, `?`, `[`,
+                // `{`), which would otherwise be compiled as wildcards and
+                // match decoy directories instead of the manifest's base.
+                // The user's pattern keeps its syntax.
+                let escaped = glob::Pattern::escape(dir.as_str());
+                (
+                    // `Pattern::escape` escapes on the current platform's
+                    // separators, which is what the matcher compiles.
+                    format!("{escaped}/{normalized}"),
+                    Some(dir.to_path_buf()),
+                )
+            },
+        );
         Ok(Self {
             pattern: pattern_state,
             search,
             strip,
         })
     }
+}
+
+/// Resolve an injected base for a relative pattern to a canonical path.
+///
+/// A workspace reached through a symbolic link must still expand relative
+/// globs; walking the linked spelling component-by-component would reject the
+/// link itself. Canonicalization is therefore mandatory, and a failure is
+/// propagated as an I/O error with the raw pattern for context rather than
+/// silently falling back to the linked spelling.
+///
+/// # Errors
+///
+/// Propagates canonicalization failures (for example a base removed between
+/// manifest parse and expansion, or an unreadable ancestor) as
+/// [`GlobErrorType::IoError`].
+fn resolve_relative_glob_base(base: &Utf8Path) -> std::result::Result<Utf8PathBuf, Error> {
+    base.canonicalize_utf8().map_err(|e| {
+        create_glob_error(
+            &GlobErrorContext {
+                pattern: base.to_string(),
+                error_char: char::from(0),
+                position: 0,
+                error_type: GlobErrorType::IoError,
+            },
+            Some(e.to_string()),
+        )
+    })
 }
 /// Remove an injected base directory from a matched path, restoring the
 /// pattern-relative spelling the caller supplied.
