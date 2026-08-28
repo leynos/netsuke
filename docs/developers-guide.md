@@ -1374,7 +1374,28 @@ ordinary builds it is a type alias to `std::collections::HashMap`, so the public
 Mutation evidence for these harnesses lives under
 `docs/verification/mutations/`. File names use the harness path with `::`
 replaced by `__`, for example
-`ir__cycle__verification__self_dependency_reports_cycle.patch`.
+`ir__cycle__verification__self_dependency_reports_cycle.patch`. Each patch
+seeds one realistic fault into the production code its harness drives, and
+each was validated by applying the patch and watching the harness fail under
+`cargo kani --harness <name>`.
+
+`tests/kani_mutation_evidence_tests.rs` keeps that evidence in lockstep with
+the harnesses as part of `make test`:
+
+- every patch must still apply cleanly to the current tree
+  (`git apply --check`), catching silent rot when production code near a
+  patched hunk moves — skipped when the source tree is not a git checkout,
+  because `cargo-mutants` tests each mutant in a copy without `.git` and a
+  mutant overlapping a patch hunk would otherwise be reported as killed
+  without any behavioural assertion detecting it;
+- every `#[kani::proof]` harness under `src/` must own a correspondingly
+  named patch, or appear in the test's exemption list with a stated reason;
+  and
+- every patch must correspond to a live harness, catching renames.
+
+When the gate reports a rotted patch, regenerate it against the moved
+production code and re-validate it by applying the patch and running its
+harness under the mutation before committing the regenerated file.
 
 ### Kani cfg compile-time checks
 

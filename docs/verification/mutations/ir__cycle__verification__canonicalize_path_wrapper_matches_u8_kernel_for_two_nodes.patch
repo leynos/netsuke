@@ -1,0 +1,13 @@
+diff --git a/src/ir/cycle_support.rs b/src/ir/cycle_support.rs
+index 59012331..cb8bbc46 100644
+--- a/src/ir/cycle_support.rs
++++ b/src/ir/cycle_support.rs
+@@ -107,7 +107,7 @@ pub(super) fn canonicalize_cycle_by<T: Clone>(
+ /// The input must contain at least two nodes; the first and last node are
+ /// expected to be identical (the standard DFS cycle representation).
+ pub(super) fn canonicalize_cycle(cycle: Vec<Utf8PathBuf>) -> Vec<Utf8PathBuf> {
+-    canonicalize_cycle_by(cycle, compare_cycle_paths)
++    canonicalize_cycle_by(cycle, |left, right| compare_cycle_paths(right, left))
+ }
+ 
+ /// Compare two path-backed cycle nodes using the production path ordering.

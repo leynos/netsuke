@@ -1,12 +1,13 @@
 diff --git a/src/ir/from_manifest_support.rs b/src/ir/from_manifest_support.rs
+index 04cc1ec0..c7844a80 100644
 --- a/src/ir/from_manifest_support.rs
 +++ b/src/ir/from_manifest_support.rs
-@@ -177,7 +177,7 @@ pub(super) fn resolve_rule(
+@@ -200,7 +200,7 @@ pub(super) fn resolve_rule(
          || {
-             let mut rules = to_string_vec(rule);
+             let mut rules = rule.to_string_vec();
              if rules.is_empty() {
 -                Err(empty_rule_error(target_name))
 +                Err(rule_not_found_error(target_name, ""))
              } else {
-                 sort_strings(&mut rules);
+                 sort_utils::sort_strings(&mut rules);
                  Err(multiple_rules_error(target_name, rules))
