@@ -4,11 +4,9 @@
 
 Accepted.
 
-Updated on 2026-08-26 to record the retirement of `EnvLock`.
-
 ## Date
 
-2026-08-26
+2026-08-06
 
 ## Context and problem statement
 
@@ -70,24 +68,6 @@ variable or one precedence ladder; see "Environment and template ports" in
 and "Ownership and permitted call sites" under that guide's "Manifest `env()`
 reader" section for the `EnvReader` shape specifically.
 
-### `EnvLock` retirement
-
-`EnvLock` is retired rather than hardened. Environment-variable callers replace
-it with an injected `mockable::Env` seam in production signatures, with
-`mockable::DefaultEnv` supplied at the production boundary and
-`mockable::MockEnv` supplied by tests. This is the target pattern described in
-[`AGENTS.md`](../AGENTS.md) and
-[`docs/reliable-testing-in-rust-via-dependency-injection.md`](reliable-testing-in-rust-via-dependency-injection.md).
-
-Current-working-directory callers use the existing working-directory seam, such
-as an injected base or current-directory path, or avoid mutation by passing
-absolute paths or preserving the `-C/--directory` route.
-
-Removal is tracked in issue #494. Before that removal, the remaining callers
-migrate under issues #491, #492, and #493. No synchronization unit tests for
-`EnvLock` will be added: idempotent acquisition and Drop-based CWD restoration
-are properties of the lock, not Netsuke, and are vacuous once it has no callers.
-
 ### `EnvSnapshot` ownership
 
 `stdlib::which::env::EnvSnapshot::capture` is the resolver's single ambient
@@ -107,8 +87,8 @@ calls back into neither, so there is no environment-to-lookup cycle.
 The which-resolver `CacheKey` incorporates every input the snapshot captured,
 though not uniformly: `cwd` is stored directly as its own field, while
 `stdlib::which::cache::env_fingerprint` hashes `raw_path`, `raw_pathext`, and
-the `WorkspaceSwitch` state, which derives `Hash` precisely so it can be hashed
-directly. Either way, two resolutions that differ only in one captured
+the `WorkspaceSwitch` state, which derives `Hash` precisely so it can be
+hashed directly. Either way, two resolutions that differ only in one captured
 environment input cannot share a cache entry.
 
 ### Explicit child-environment composition
@@ -178,14 +158,6 @@ resolution entirely rather than setting the variable for a child to read.
   environment variable, for example) must be folded into `EnvSnapshot` and into
   `env_fingerprint`, not read independently downstream, to preserve the
   no-cycle and cache-correctness properties this ADR records.
-- `EnvLock` is a retiring legacy seam, not a mechanism to harden or extend.
-  Its removal is tracked in issue #494 after environment-variable callers
-  migrate under issues #491, #492, and #493 to injected `mockable::Env`
-  production signatures and current-working-directory callers migrate to the
-  existing working-directory seam or to absolute paths or `-C/--directory`.
-- Do not add synchronization unit tests for `EnvLock`: its idempotency and
-  Drop-based CWD restoration are lock properties, not Netsuke behaviour, and
-  become vacuous when the retiring seam has no callers.
 
 ## Alternatives considered
 
@@ -226,6 +198,16 @@ resolution entirely rather than setting the variable for a child to read.
 
 ## Addendum
 
+### 2026-08-26: EnvLock retirement
+
+`EnvLock` is retired rather than hardened. Production signatures must inject
+`mockable::Env`, with `mockable::DefaultEnv` at production boundaries and
+`mockable::MockEnv` in tests. CWD callers must use the existing
+working-directory seam, absolute paths, or the `-C/--directory` route.
+
+Migrations are tracked in issues #491, #492, and #493; removal is tracked in
+issue #494. No new `EnvLock` callers or synchronization tests are permitted.
+
 ### 2026-08-25: BDD isolation routes
 
 Issue #492 applied this taxonomy to `rstest-bdd`, whose steps execute in the
@@ -241,5 +223,6 @@ test-harness process. The suite now uses two routes:
 The BDD suite no longer uses `EnvLock` or `CwdGuard` to coordinate
 process-global environment or working-directory changes. Route B avoids CWD
 changes by passing absolute paths or preserving `-C/--directory` for automatic
-project discovery. Explicit relative `--config` and `NETSUKE_CONFIG` selectors
-remain anchored to the child process CWD; they are not rebased beneath `-C`.
+project discovery.
+Explicit relative `--config` and `NETSUKE_CONFIG` selectors remain anchored to
+the child process CWD; they are not rebased beneath `-C`.
