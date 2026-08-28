@@ -4,11 +4,15 @@
 //! onto it before matching and the base is stripped from the results. These
 //! tests cover the two invariants of that anchoring — the base is not applied
 //! twice, and a symlinked base is followed rather than rejected.
+#[cfg(unix)]
 use super::super::glob_paths;
 #[cfg(unix)]
 use anyhow::{Context, Result, ensure};
+#[cfg(unix)]
 use camino::Utf8Path;
+#[cfg(unix)]
 use tempfile::{Builder, tempdir};
+#[cfg(unix)]
 use test_support::fs as test_fs;
 
 /// A relative injected base is not reopened under itself.
