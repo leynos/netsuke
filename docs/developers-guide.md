@@ -492,6 +492,24 @@ with no per-target edit. `tests/binstall_metadata_tests.rs` and
 and fail if per-target overrides reappear or the staged and expected archive
 names diverge.
 
+## Release-admission tooling
+
+The [install-release-candidate action][release-candidate-action] is the shared
+bootstrap for downstream release-admission canaries. Callers must provide
+`revision`, the full Git revision of the proposed candidate, and
+`expected-version`, the version that `netsuke --version` must report. The
+action fetches and checks out that exact revision, verifies the resolved commit,
+and runs `cargo build --locked --release --bin netsuke` before exposing the
+candidate binary.
+
+The action outputs the absolute `binary` path, the resolved `revision`, and the
+resolved `version`. It selects `netsuke.exe` on Windows and `netsuke` on other
+platforms, so callers can invoke the same outputs in platform-specific jobs.
+Each downstream canary must pin its migration revision, run the selected
+Netsukefile targets with this action, and publish a bounded provenance record;
+the release workflow admits a candidate only when the required downstream
+revisions have successful canary runs.
+
 ## Toolchain and borrow checker
 
 Netsuke builds on the dated nightly toolchain pinned in `rust-toolchain.toml`
@@ -4638,3 +4656,5 @@ paths, configuration values, or error text as metric labels.
 
 When test strategy or behavioural test usage changes, update this file in the
 same change-set, so the documented approach remains aligned with the codebase.
+
+[release-candidate-action]: ../.github/actions/install-release-candidate/action.yml

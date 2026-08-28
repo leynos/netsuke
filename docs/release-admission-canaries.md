@@ -20,6 +20,9 @@ in the CI log, so the structured record remains appropriate for release review.
 
 ## Pinned v0.1.0 candidate set
 
+This table records the pinned downstream migration revisions and their selected
+release-admission targets.
+
 | Downstream repository      | Pinned migration revision                  | Migration branch                | Selected targets                                                                                                          |
 | -------------------------- | ------------------------------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `leynos/repovec-appliance` | `6be365b4b30ef48537add5719a9b387ccc41777f` | `issue-598-v010-netsuke-canary` | `all`, `check-fmt`, `lint`, `test`                                                                                        |
@@ -34,7 +37,10 @@ the beta2 package version until final release packaging changes it.
 
 - Repovec Appliance uses `command: ":"` for its serial `all` action. v0.1.0
   requires a recipe even for dependency-only actions; [#572][issue-572] tracks
-  its removal for v0.1.1.
+  its removal for v0.1.1. [#597][issue-597] tracks the v0.1.1 gate that will
+  remove the synthetic no-op and exercise the replacement, while
+  [#599][issue-599] tracks the native Windows legacy-recipe shell contract and
+  smoke coverage as a separate Windows boundary.
 - MXD keeps separate target names for PostgreSQL, SQLite, and wireframe-only.
   The manifest does not collapse mutually exclusive feature lanes into an
   all-features command.
@@ -56,3 +62,5 @@ scope expansion.
 
 [installer]: ../.github/actions/install-release-candidate/action.yml
 [issue-572]: https://github.com/leynos/netsuke/issues/572
+[issue-597]: https://github.com/leynos/netsuke/issues/597
+[issue-599]: https://github.com/leynos/netsuke/issues/599
