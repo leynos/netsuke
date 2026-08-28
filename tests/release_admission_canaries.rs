@@ -1,6 +1,6 @@
-#![cfg(unix)]
-
 //! Exercise release admission against isolated downstream GitHub API adapters.
+
+#![cfg(unix)]
 
 use std::{
     path::PathBuf,
@@ -14,10 +14,26 @@ use test_support::{fs as test_fs, write_exec_with_content};
 const CANDIDATE_REVISION: &str = "a1b2c3d4";
 const TEST_PATH: &str = "/usr/bin:/bin";
 const MATCHING_WORKFLOW_SOURCE: &str = concat!(
-    "dXNlczogbGV5bm9zL25ldHN1a2UvLmdpdGh1Yi9hY3Rpb25zL2luc3RhbGwtcmVsZWFzZS1j",
-    "YW5kaWRhdGVAYTFiMmMzZDQKcmV2aXNpb246IGExYjJjM2Q0Cg=="
+    "am9iczoKICBjYW5hcnk6CiAgICBzdGVwczoKICAgICAgLSB1c2VzOiBsZXlub3MvbmV0c3Vr",
+    "ZS8uZ2l0aHViL2FjdGlvbnMvaW5zdGFsbC1yZWxlYXNlLWNhbmRpZGF0ZUBhMWIyYzNkNAog",
+    "ICAgICAgIHdpdGg6CiAgICAgICAgICByZXZpc2lvbjogYTFiMmMzZDQK"
 );
-const MISMATCHING_WORKFLOW_SOURCE: &str = "cmV2aXNpb246IG90aGVyCg==";
+const MISMATCHING_WORKFLOW_SOURCE: &str = concat!(
+    "am9iczoKICBjYW5hcnk6CiAgICBzdGVwczoKICAgICAgLSB1c2VzOiBsZXlub3MvbmV0c3Vr",
+    "ZS8uZ2l0aHViL2FjdGlvbnMvaW5zdGFsbC1yZWxlYXNlLWNhbmRpZGF0ZUBhMWIyYzNkNAog",
+    "ICAgICAgIHdpdGg6CiAgICAgICAgICByZXZpc2lvbjogb3RoZXIK"
+);
+const COMMENT_ONLY_WORKFLOW_SOURCE: &str = concat!(
+    "am9iczoKICBjYW5hcnk6CiAgICBzdGVwczoKICAgICAgIyB1c2VzOiBsZXlub3MvbmV0c3Vr",
+    "ZS8uZ2l0aHViL2FjdGlvbnMvaW5zdGFsbC1yZWxlYXNlLWNhbmRpZGF0ZUBhMWIyYzNkNAog",
+    "ICAgICAgIyByZXZpc2lvbjogYTFiMmMzZDQKICAgICAgLSBydW46IHRydWUK"
+);
+const SPLIT_STEP_WORKFLOW_SOURCE: &str = concat!(
+    "am9iczoKICBjYW5hcnk6CiAgICBzdGVwczoKICAgICAgLSB1c2VzOiBsZXlub3MvbmV0c3Vr",
+    "ZS8uZ2l0aHViL2FjdGlvbnMvaW5zdGFsbC1yZWxlYXNlLWNhbmRpZGF0ZUBhMWIyYzNkNAog",
+    "ICAgICAgLSB3aXRoOgogICAgICAgICAgcmV2aXNpb246IGExYjJjM2Q0CiAgICAgICAgcnVu",
+    "OiB0cnVlCg=="
+);
 
 struct AdmissionHarness {
     root: TempDir,
@@ -134,6 +150,33 @@ fn admission_rejects_a_pinned_workflow_that_did_not_test_the_candidate() -> Resu
     ensure!(
         !harness.gh_args_path.exists(),
         "admission should reject mismatched workflow source before checking runs"
+    );
+
+    Ok(())
+}
+
+#[rstest::rstest]
+#[case(COMMENT_ONLY_WORKFLOW_SOURCE, "comment-only")]
+#[case(SPLIT_STEP_WORKFLOW_SOURCE, "split-step")]
+fn admission_rejects_non_executable_or_split_candidate_references(
+    #[case] workflow_source: &str,
+    #[case] fixture_name: &str,
+) -> Result<()> {
+    let harness = AdmissionHarness::new()?;
+
+    let output = harness.run("success", workflow_source)?;
+
+    ensure!(
+        !output.status.success(),
+        "admission should reject the {fixture_name} fixture"
+    );
+    ensure!(
+        String::from_utf8_lossy(&output.stderr).contains("does not test a1b2c3d4"),
+        "admission should identify the {fixture_name} candidate mismatch"
+    );
+    ensure!(
+        !harness.gh_args_path.exists(),
+        "admission should reject the {fixture_name} fixture before checking runs"
     );
 
     Ok(())

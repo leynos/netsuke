@@ -1,6 +1,6 @@
-#![cfg(unix)]
-
 //! Exercise the release-candidate installer against isolated command adapters.
+
+#![cfg(unix)]
 
 use std::{
     collections::BTreeMap,

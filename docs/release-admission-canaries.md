@@ -63,12 +63,12 @@ cannot admit a later release candidate.
 
 ## Release decision
 
-The release workflow checks the successful, identity-bound run for each pinned
-revision before it publishes v0.1.0. The OrthoConfig migration workflow
-additionally runs its Windows target set on `windows-latest`; its successful run
-is a required review input. A failure blocks v0.1.0 only when it violates a
-supported v0.1.0 manifest or runtime contract. Ergonomic gaps remain follow-up
-work, not release scope expansion.
+The release workflow is fail-closed: any missing, failed, or
+identity-mismatched required canary blocks publication of v0.1.0. The
+OrthoConfig migration workflow additionally runs its Windows target set on
+`windows-latest`; its successful, identity-bound run is a required review
+input. Ergonomic gaps remain follow-up work, but they cannot weaken this
+admission rule or provide an exception to it.
 
 [installer]: ../.github/actions/install-release-candidate/action.yml
 [issue-572]: https://github.com/leynos/netsuke/issues/572
