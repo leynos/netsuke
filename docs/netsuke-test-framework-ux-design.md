@@ -721,15 +721,25 @@ Options:
 `--json` and `--jobs` are the existing global flags, not new per-command
 options; `test` consumes them with their established semantics.
 
-A case that exceeds its timeout is reported as errored, with the partial
-journal attached, and its fixtures are still torn down. The deadline is
-enforced wherever control returns to the runner — fixture actions, each
-pipeline action, assertions, and every call into a double — which covers
-every case that makes progress through the framework. It is best effort
-rather than absolute: a single runaway template expression cannot be
-interrupted mid-evaluation, so a pathological manifest can overrun the
-budget. Treat `--timeout` as a guard against slow tests, not a hard
-sandbox, and keep a job-level timeout in CI.
+Under `--jobs > 1`, `--fail-fast` stops scheduling rather than cancelling
+work in flight: cases already running continue to completion, so their
+fixture teardown and journal handling are unaffected by the stop. No new
+case is started once a failure is observed. Cases that never start are
+reported as `skipped`. A suite with more selected cases than `--jobs`
+therefore exercises both halves of this rule in one run: the cases already
+dispatched finish normally, and the remainder are skipped rather than run.
+Both the human summary and the JSON `summary` counts (§13) therefore add up
+to the full selected-case count, not the number executed: every selected
+case appears exactly once, whether run or skipped.
+
+A case that exceeds its timeout is reported as errored, with whatever
+journal it produced attached, its fixtures torn down, and its sandbox
+retained for inspection. The deadline is absolute: each case runs in its
+own child process, so a case that stops cooperating — a runaway template
+expression that never yields — is terminated rather than waited on. A
+pathological manifest cannot hang the run. This requires a platform that
+supports spawning and terminating child processes; Linux and Windows are
+covered by continuous integration.
 
 Exit codes:
 
@@ -819,6 +829,65 @@ it lands.[^2]
 
 ## 14. Worked example
 
+### 14.1. Quick start
+
+A test tree needs nothing beyond a Netsukefile and one test file in the
+default `netsuke-tests` directory:
+
+```plaintext
+project/
+├── Netsukefile
+└── netsuke-tests/
+    └── hello.yml
+```
+
+The subject manifest declares one target with a literal command and no
+sources:
+
+```yaml
+netsuke_version: "1.2.0"
+
+targets:
+  - name: build/hello.txt
+    command: echo hello > build/hello.txt
+```
+
+The test file declares one case with one step that generates Ninja and
+asserts the target exists:
+
+```yaml
+netsuke_test_version: "1.0"
+
+test_hello_target_is_generated:
+  steps:
+    - when: generate_ninja
+      then:
+        - result.ok
+        - result.graph.has_target("build/hello.txt")
+```
+
+Run it from the project root:
+
+```plaintext
+netsuke test
+```
+
+A passing run reports one case:
+
+```plaintext
+netsuke test
+
+PASS hello.yml::test_hello_target_is_generated
+
+1 case: 1 passed
+```
+
+This case needs no external tools, no compiler, no network access, and no
+real filesystem fixtures: `generate_ninja` runs entirely against the
+in-memory pipeline described in §10.
+
+### 14.2. Worked example
+
 Subject `Netsukefile`:
 
 ```yaml
@@ -902,6 +971,44 @@ Deferred, in likely delivery order:
 5. Snapshot assertions against generated Ninja.
 6. JUnit XML output; an idempotence check asserting that regenerating from
    an unchanged manifest yields byte-identical Ninja.
+
+## 16. Risks and trade-offs
+
+- The dialect is declarative and closed: predicate functions and dynamic
+  response handlers are deliberately absent (§8.3). A case that needs
+  computed behaviour has no escape hatch until fixture scripts land (§15).
+- Strictness defaults trade ceremony for early failure: an unmatched call
+  on a `mock` fails the action immediately, and an unused double warns by
+  default (§8.4). Authors pay for this with `lenient: true` opt-outs on
+  legitimately unused doubles.
+- Plan-mode-only means `netsuke test` validates everything up to and
+  including the generated Ninja text, and nothing about the behaviour of
+  the commands within it, until `execute` ships (§10).
+- Tests are sandbox-rooted: fixtures cannot touch the project root or the
+  host filesystem (§9). A manifest that legitimately reads the project
+  tree therefore behaves differently under test than under a real build.
+- Every dialect addition — a new matcher, a new assertion form — is a
+  minor-version event, and older runners reject newer files by design
+  (§4). This is deliberate rigidity, traded for the guarantee that a
+  runner never silently misreads a newer test file.
+
+## 17. Rejected alternatives
+
+RFC 0001 evaluates these alternatives in full; this section names them and
+the conclusion only.
+
+- **An instrumented general-purpose-language harness.** Rejected in favour
+  of a closed declarative dialect: a general-purpose language reopens the
+  drift risk that same-compiler, declared-substitution design exists to
+  close (§1.1).
+- **Assertions embedded in the Netsukefile.** Rejected because it mixes
+  build data with test data and couples the manifest's shape to its own
+  verification, contrary to the separation this framework establishes
+  between subject manifest and test file (§4).
+- **Snapshot-only testing.** Rejected as the sole assertion style, though
+  snapshot assertions against generated Ninja remain a deferred addition
+  (§15): structured assertions against `result.graph` give better failure
+  output (§11) than diffing raw Ninja text.
 
 [^1]: Act documents its unsupported-functionality list and positions itself
     as fast pre-flight rather than a substitute oracle:

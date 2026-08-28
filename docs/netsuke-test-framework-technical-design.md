@@ -50,38 +50,51 @@ Non-negotiable constraints the rest of the document assumes:
 ## 2. Architecture summary
 
 The feature adds one new subsystem, `src/testing/`, plus narrow seams in
-existing modules. The runner parses test files into a test-suite AST,
-builds a per-case `TestContext` (sandbox, doubles, environment, clock),
-executes pipeline actions through the existing manifest/IR/Ninja code with
-an overlay-carrying options structure, and evaluates assertions against
-structured result views.
+existing modules. The runner parses test files into a test-suite AST, then
+executes each case in a child process that builds a per-case
+`TestContext` (sandbox, doubles, environment, clock), drives pipeline
+actions through the existing manifest/IR/Ninja code with an
+overlay-carrying options structure, and evaluates assertions against
+structured result views. The parent supervises those children and renders
+the report.
 
-The diagram below shows the flow for one test case: suite discovery and
-parsing feed case execution; case execution drives the existing compiler
-pipeline with overlays injected at construction time; results and the mock
-journal feed assertion evaluation and reporting.
+The process boundary exists to make `--timeout` enforceable (§8.1); it is
+not a second evaluator. The diagram below shows the flow for one case,
+with the parent/child split marked: discovery and parsing happen once in
+the parent, case execution happens in a killable child, and the
+`CaseResult` returns over a versioned frame protocol for reporting.
 
 ```mermaid
 graph TD
-    A["netsuke test (CLI)"] --> B[discovery]
-    B --> C[test-suite parser]
-    C --> D[case scheduler]
-    D --> E[TestContext<br/>sandbox, doubles, env, clock]
-    E --> F[fixture engine]
-    E --> G[pipeline actions]
-    G --> H["manifest loader<br/>(with overlays)"]
-    H --> I[BuildGraph lowering]
-    I --> J[ninja_gen]
-    H --> K[mock journal]
-    G --> L[result views]
-    L --> M[assertion evaluator]
-    K --> M
-    M --> N[report renderer<br/>human / JSON]
+    subgraph parent["parent process"]
+        A["netsuke test (CLI)"] --> B[discovery]
+        B --> C[test-suite parser]
+        C --> D[case scheduler]
+        D --> S["case supervisor<br/>deadline, kill, reap"]
+        R[collector] --> N["report renderer<br/>human / JSON"]
+    end
+    S -->|spawn| E
+    subgraph child["child process (one case)"]
+        E[TestContext<br/>sandbox, doubles, env, clock]
+        E --> F[fixture engine]
+        E --> G[pipeline actions]
+        G --> H["manifest loader<br/>(with overlays)"]
+        H --> I[BuildGraph lowering]
+        I --> J[ninja_gen]
+        H --> K[mock journal]
+        G --> L[result views]
+        L --> M[assertion evaluator]
+        K --> M
+    end
+    M -->|CaseResult frames| R
+    S -->|timeout: synthesized error| R
 ```
 
-_Figure 1: Test case execution flow. Existing compiler components (manifest
-loader, BuildGraph, ninja_gen) are reused unchanged apart from overlay
-injection at environment-construction time._
+_Figure 1: Test case execution flow across the process boundary. Existing
+compiler components (manifest loader, BuildGraph, ninja_gen) are reused
+unchanged apart from overlay injection at environment-construction time.
+The supervisor enforces the deadline and, on expiry, supplies a
+synthesized errored result in place of the child's._
 
 ## 3. Pipeline integration
 
@@ -411,8 +424,26 @@ pub struct CallEntry {
 Dispatch acquires the registry lock, appends the invocation to the
 journal, selects a response, and _releases the lock before producing it_.
 Selection scans `entries` for the first matcher-accepting entry with
-remaining `times` budget, or, when `ordered`, takes the next unconsumed
-entry in declaration order. A `Mock` with no accepting entry yields a
+remaining `times` budget. Ordering changes which entries are eligible, not
+what happens on a mismatch:
+
+- Unordered (the default) considers every entry in declaration order and
+  takes the first that accepts the arguments and has budget left.
+- `ordered: true` considers only the next unconsumed entry. An entry
+  without `times` is never consumed, so it stays the candidate for every
+  subsequent call and later entries remain unreachable behind it — an
+  unbounded entry in an ordered double is therefore a terminal entry, and
+  the parser warns when one precedes another. An entry with `times: N`
+  is consumed after its Nth match, and the next entry becomes the
+  candidate.
+
+A mismatch never silently skips ahead in an ordered double: if the
+candidate entry rejects the arguments, dispatch fails rather than
+searching later entries, because declaration order is precisely what the
+author asked to pin. Unordered doubles fall through to later entries and
+fail only when none accepts. Tests cover repeated calls against an
+unbounded entry, an unbounded entry followed by another, and a mismatch
+under both ordering modes. A `Mock` with no accepting entry yields a
 MiniJinja error carrying a structured payload, which the runner converts
 into the unmatched-call report with its suggested YAML stanza. A `Stub`
 falls back to its `default` or `Undefined`. A `Spy` resolves to a handle
@@ -446,10 +477,13 @@ observe each other (invariant I1, §11). Overlay dispatch runs under
 becomes a case error, and the registry lock recovers from poisoning so
 end-of-case verification can still report the journalled calls.
 
-End-of-case verification walks the registry: unmet `Mock` expectations
-(entries with `times` not reached, or ordered entries never consumed) fail
-the case; doubles with zero journal entries raise the unnecessary-double
-warning unless `lenient`.
+End-of-case verification walks the registry. A `Mock` entry that never
+matched a call is an unmet expectation and fails the case. `times` plays
+no part in that judgement: it is a maximum-call budget, so an entry
+declared `times: 3` that matched once or twice is satisfied, and only an
+entry that matched zero times is unmet. Nothing fails merely because a
+budget went unspent. Doubles with zero journal entries raise the
+unnecessary-double warning unless `lenient`.
 
 Matcher evaluation is a closed enum (`Exact(Value)`, `Any`,
 `IsA(TypeName)`, `Regex(compiled)`, `Contains(Value)`,
@@ -462,7 +496,15 @@ to it.
 
 `src/testing/fixtures.rs` resolves the case's requested fixtures into a
 dependency graph (`uses` edges), topologically sorts it — a cycle is a
-suite error naming the cycle — and executes setup actions in order. Each
+suite error naming the cycle — and executes setup actions in order. A
+topological sort leaves independent fixtures mutually unordered, so the
+sort breaks ties deterministically rather than by hash iteration order:
+fixtures requested by the step come first in request order, and fixtures
+pulled in only as `uses` dependencies follow in declaration order within
+their file. Two fixtures that depend on nothing therefore always set up in
+the same sequence, and reverse-order teardown is correspondingly stable. A
+test with several independent fixtures asserts both the setup and the
+teardown sequence. Each
 case owns one sandbox: a temporary directory opened as a `cap-std` `Dir`,
 within which `tmpdir`, `mkdir`, `write`, `copy`, and `remove` operate by
 relative path. Absolute paths and `..` traversal are rejected at
@@ -526,9 +568,11 @@ has no `then`).
 
 The scheduler runs cases in parallel up to `--jobs` (defaulting to
 available parallelism), one case per worker, with no shared mutable state
-at all. Workers own nothing in common: each sends a finished, immutable
-`CaseResult` down a channel to a single collector, and only the collector
-writes the report. That keeps report assembly free of locking and makes
+at all. A worker supervises one child at a time (§8.1) and forwards the
+finished, immutable `CaseResult` — whether the child produced it or the
+supervisor synthesized it after a timeout — down a channel to a single
+collector, and only the collector writes the report. That keeps report
+assembly free of locking and makes
 ordering a property of the collector rather than of scheduling luck — it
 buffers results and restores sorted file order, then declaration order
 within each file, before rendering. Cases therefore complete in whatever
@@ -536,30 +580,83 @@ order they finish while human and JSON output stay byte-stable; a test
 that completes cases deliberately out of order and diffs both renderings
 guards this.
 
-Case execution runs under `catch_unwind`; a worker panic records the case
-as errored and the worker is replaced, so every selected case reaches the
-report (invariant I9).
+Case execution runs under `catch_unwind` inside the child; a panic that
+escapes it becomes an abnormal child exit, which the supervisor records as
+an errored case. Either way the worker survives and every selected case
+reaches the report (invariant I9). Process isolation strengthens this:
+a child that aborts outright can no longer take the run down with it.
 
-Time governance is cooperative, and the design states its boundary rather
-than implying a guarantee it cannot deliver. The per-case deadline is
-checked wherever control returns to the runner: overlay dispatch, the
-loader's stage callbacks, each fixture setup and teardown action, between
-pipeline actions, and between assertions. Macro call depth is capped and
-`foreach` expansion under test has an item ceiling. Each breach raises a
-named diagnostic that turns the case into an error carrying the partial
-journal, and teardown still runs.
+### 8.1. Enforcing the per-case timeout
 
-What this does not cover: MiniJinja evaluation is not preemptible, so a
-single template expression — a very large loop inside one target field —
-can overrun `--timeout` without ever yielding to a checkpoint. The depth
-and expansion ceilings bound the common causes, but they are not a
-substitute for preemption, and no in-process mechanism closes the gap
-while C1 keeps evaluation in the runner's own address space. `--timeout`
-is therefore specified as best effort: it bounds every case that reaches a
-checkpoint, and CI should keep a job-level timeout as the outer backstop.
-Closing this properly needs a cancellation boundary — evaluating each case
-in a killable child process — which is deferred with the execution phase
-it would also serve.
+`--timeout` is a hard per-case wall-clock bound, not a best-effort one.
+Making it hard requires a cancellation boundary, because MiniJinja
+evaluation is not preemptible: a single large loop inside one target field
+can run indefinitely inside one `render_template` call, yielding to no
+checkpoint the runner controls. Cooperative deadline checks alone cannot
+bound that, so each case executes in an independently killable child
+process.
+
+The split is deliberately narrow. The parent keeps discovery, parsing,
+scheduling, timeout enforcement, child reaping, and all report rendering.
+The child executes exactly one case — fixtures, overlays, pipeline
+actions, assertions — and returns a `CaseResult`. Nothing about the
+compiler pipeline changes: the child runs the same loader, IR builder, and
+generator as before (C1), so this is an execution boundary, not a second
+evaluator.
+
+Timeout behaviour in the parent:
+
+1. Start the deadline before spawning, so spawn cost counts against the
+   case rather than being free.
+2. Wait with `wait_timeout`, exactly as `src/stdlib/command/execution.rs`
+   already bounds stdlib command helpers.
+3. On expiry, kill the child and reap it. `std::process::Child::kill` maps
+   to `SIGKILL` on Unix and `TerminateProcess` on Windows, so termination
+   needs no platform-specific code; CI covers both (`ubuntu-latest` and
+   `windows-latest`).
+4. Collect a partial result if the protocol delivered one complete frame
+   before termination; otherwise synthesize an errored `CaseResult`
+   carrying a timeout diagnostic.
+5. Attach whatever mock journal arrived, so a timed-out case still shows
+   which doubles it reached.
+
+The child streams to the parent over its stdout pipe using
+length-prefixed `serde_json` frames, versioned like the existing
+`json_envelope` (`SCHEMA_VERSION`) so parent and child cannot silently
+disagree. `serde_json` is already a dependency; no IPC crate, socket, or
+named pipe is introduced. Frames are bounded — a journal ceiling breach
+truncates rather than streaming without limit — and the parent treats a
+truncated final frame as "no complete result", falling to step 4. The
+child's stderr is captured and folded into the case's diagnostics rather
+than leaking into the parent's stream, preserving stream purity (I8).
+
+Cooperative checkpoints remain, and are now the graceful path rather than
+the only one. The deadline is still checked at overlay dispatch, loader
+stage callbacks, each fixture setup and teardown action, between pipeline
+actions, and between assertions; macro depth and `foreach` expansion
+ceilings still apply. A case that reaches a checkpoint reports itself
+cleanly with a full journal and completes its own teardown. Termination is
+the backstop for the case that never reaches one. The design does not
+claim that a blocked in-process action is interrupted where it stands: it
+claims the process running it is killed.
+
+Cleanup ownership follows the same split:
+
+| Situation | Teardown performed by |
+| --- | --- |
+| Normal completion | child, before sending its result |
+| Cooperative timeout | child, after marking the case errored |
+| Forced termination | parent, over the case sandbox |
+| Child panic | parent, after observing abnormal exit |
+| Interruption (Ctrl-C) | parent, for every live child and the run root |
+
+_Table 2: Fixture teardown ownership._
+
+Case sandboxes stay under the existing per-run root, so the parent can
+always finish cleanup a dead child left undone. A timed-out case retains
+its sandbox for inspection, on the same terms as `--keep`, and the path is
+printed. The parent reaps every child it spawns, including on the
+interrupt path, so no zombies survive the run.
 
 ## 9. CLI integration
 
@@ -623,9 +720,12 @@ verification methods. These are design commitments, not a test-type list.
   test. _Method:_ differential tests that run both paths over the example
   manifests inside one tree and compare serialized outputs; `insta`
   snapshots of the generated Ninja.
-- **I5 — no execution, no network, no ambient environment.** Under test,
-  no process is spawned, no socket is opened, and no host environment
-  variable is read outside an explicit opt-in. _Method:_ the seams make
+- **I5 — no build execution, no network, no ambient environment.** Under
+  test, no build command, Ninja invocation, or fixture shell command runs;
+  no socket is opened; and no host environment variable is read outside an
+  explicit opt-in. The per-case child process (§8.1) is the runner
+  supervising itself, not the manifest executing anything, and it inherits
+  every restriction in this list. _Method:_ the seams make
   these unrepresentable (impure helpers registered as refusing stubs,
   deny-all policy, closed `EnvReader`); negative tests assert every
   refusal diagnostic.
@@ -649,9 +749,24 @@ verification methods. These are design commitments, not a test-type list.
   for each exit class.
 - **I9 — conservation of cases.** Every selected case appears in the
   report exactly once, as passed, failed, errored, or skipped — including
-  under worker panic, timeout, and interruption. _Method:_ scheduler tests
-  with injected panics and deadline breaches, asserting report totals
-  against the selection count.
+  under child panic, forced termination, and interruption. _Method:_
+  scheduler tests with injected panics and deadline breaches, asserting
+  report totals against the selection count.
+- **I10 — the timeout is enforced.** No case exceeds its deadline by more
+  than the termination and reaping window, whatever the manifest does.
+  _Method:_ a case whose manifest contains a deliberately non-cooperative
+  template expression — one large enough to run indefinitely inside a
+  single render with no checkpoint — asserting that the run terminates,
+  the case is errored with a timeout diagnostic, its partial journal
+  survives, its sandbox is retained, its fixtures are torn down, no child
+  process outlives the run, and `--json` still emits exactly one document.
+  Cooperative expiry is covered separately and deterministically through
+  an injected clock: a fixture setup action that passes a checkpoint after
+  the deadline must error the case, keep the partial journal, and tear
+  down every fixture whose setup completed; a teardown action that does
+  the same must continue unwinding the remaining stack, aggregate its
+  errors, retain the sandbox, and report the case as errored. Neither test
+  depends on wall-clock delays.
 
 The combinatorial surface that carries the highest interaction risk is
 double kind × ordering × `times` × matcher type. I3's parameterized suite
@@ -688,6 +803,8 @@ src/testing/
   context.rs      — TestContext, sandbox, result views
   fixtures.rs     — fixture graph, setup/teardown
   actions.rs      — pipeline actions
+  supervisor.rs   — child spawn, deadline, kill, reap
+  protocol.rs     — versioned length-prefixed CaseResult frames
   mocks.rs        — DoubleRegistry, matchers, journal
   assertions.rs   — assertion normalization and evaluation
   report.rs       — SuiteReport, human and JSON rendering
@@ -701,7 +818,11 @@ Existing modules touched: `src/manifest/mod.rs` (options entry point,
 `src/stdlib/config/` (clock in `StdlibConfig`), `src/ast/mod.rs` (optional
 `tests` field), `src/cli/parser.rs` and `src/runner/dispatch.rs` (command
 wiring), `src/localization/keys.rs` (strings). Errors are semantic
-`thiserror` enums per module, composed into the runner's reporting; the
+`thiserror` enums per module, composed into the runner's reporting. The
+supervisor reuses the `wait_timeout`-then-kill-then-reap pattern already
+proven in `src/stdlib/command/execution.rs`, and `protocol.rs` follows the
+`src/json_envelope.rs` versioning convention rather than inventing its
+own. The
 subsystem follows whichever diagnostic direction (miette versus anyhow)
 the in-flight migration settles on, and must not add new dependencies on
 the deprecated path.
@@ -721,7 +842,8 @@ The minimum viable implementation, in dependency order:
    dialect's diagnostics are defined from this phase onwards (§9).
 3. Mock engine and overlays for functions and macro substitution (I1, I3).
 4. Fixture engine and sandbox (I2).
-5. Actions and result views (I9).
+5. Actions, result views, and the case supervisor with its frame protocol
+   (I9, I10).
 6. Assertion evaluation and the failure taxonomy.
 7. CLI wiring, remaining localization, and reporting (I5, I8).
 8. Author-facing documentation: a users' guide chapter on writing and
@@ -730,3 +852,24 @@ The minimum viable implementation, in dependency order:
 Deferred work is enumerated in the UX design §15; nothing in this
 architecture forecloses it. Roadmap phase 6 tracks these deliverables as
 numbered tasks.
+
+## 14. Synchronization
+
+This document must be kept in step with the decisions and documents that
+govern it. When any of the following change, this document is updated in
+the same change set or the divergence is called out explicitly here until
+it is reconciled:
+
+- The [UX design](netsuke-test-framework-ux-design.md), which is normative
+  for dialect semantics; implementation detail here must not contradict it.
+- [RFC 0001](rfcs/0001-netsukefile-testing-framework.md), which positions
+  and scopes the feature.
+- [ADR-008](adr-008-environment-seam-taxonomy.md), which governs the
+  environment injection seams §4 relies on.
+- [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md), which
+  governs the glob capability scoping the mock engine and sandbox rely on.
+- [Roadmap phase 6](roadmap.md), which tracks the phasing above (§13) as
+  numbered deliverables.
+
+If an accepted ADR changes, the ADR wins: this document is either updated
+to match or the divergence is recorded here until it is.

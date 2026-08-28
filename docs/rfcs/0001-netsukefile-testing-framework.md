@@ -95,7 +95,14 @@ for a stand-in declared in the test file.
 
 Implementation reuses the existing pipeline behind a new options-carrying
 loader entry point that registers test overlays after stdlib and manifest
-macros and before `foreach` expansion. Two seams are added (clock provider;
+macros and before `foreach` expansion. Each case runs in a killable child
+process so `--timeout` is a hard bound rather than a cooperative
+courtesy — MiniJinja evaluation cannot be preempted in-process — while
+discovery, scheduling, and report rendering stay in the parent. That
+boundary reuses the `wait_timeout`-then-kill-then-reap pattern already
+serving the stdlib command helpers, and carries results over
+length-prefixed `serde_json` frames versioned like the existing JSON
+envelope, so it adds no new dependency. Two seams are added (clock provider;
 macro substitution overlay); network mocking needs no transport seam
 because the deny-all policy plus function-level doubles make the real
 network code unreachable under test.

@@ -710,6 +710,9 @@ in [RFC 0001](rfcs/0001-netsukefile-testing-framework.md), the
   - [ ] Register `now()` through an injected `ClockProvider` closure held in
     `StdlibConfig`.
   - [ ] Preserve current behaviour when no provider is supplied.
+  - [ ] Test an injected provider value, repeated `now()` calls returning
+    it, and the ambient fallback when no provider is configured, all
+    registered through `StdlibConfig`.
   - [ ] Record the seam classification per
     [ADR-008](adr-008-environment-seam-taxonomy.md).
 
@@ -755,6 +758,10 @@ in [RFC 0001](rfcs/0001-netsukefile-testing-framework.md), the
   - [ ] Partition known keys from dynamic `test_*` keys.
   - [ ] Enforce the closed-schema and nearest-known-key diagnostics.
   - [ ] Enforce the expression/template field split at parse time.
+  - [ ] Enforce the `netsuke_test_version` contract from RFC 0001: accept
+    the supported major and a minor at most the supported minor, with
+    tests for missing, malformed, unsupported-major, and newer-minor
+    values.
 
 - [ ] 6.2.3. Implement discovery and imports. Requires: 6.2.1, 6.2.2.
   - [ ] Resolve `tests.root`, include and exclude patterns, and support
@@ -782,7 +789,7 @@ in [RFC 0001](rfcs/0001-netsukefile-testing-framework.md), the
 
 ### 6.4. Fixture engine
 
-- [ ] 6.4.0. Add sandbox-rooted `glob()` and file-test adapters for the
+- [ ] 6.4.1. Add sandbox-rooted `glob()` and file-test adapters for the
   test registration. Requires: 6.1.2. See
   [technical design §4.5](netsuke-test-framework-technical-design.md).
   - [ ] Resolve relative glob patterns against the case sandbox rather
@@ -791,7 +798,7 @@ in [RFC 0001](rfcs/0001-netsukefile-testing-framework.md), the
     `open_ambient_dir`, rejecting escapes.
   - [ ] Leave the build path's ADR-010 behaviour unchanged.
 
-- [ ] 6.4.1. Implement the fixture lifecycle. See
+- [ ] 6.4.2. Implement the fixture lifecycle. See
   [UX design §9](netsuke-test-framework-ux-design.md) and
   [technical design §7](netsuke-test-framework-technical-design.md).
   - [ ] Resolve `uses` dependencies with a topological sort.
@@ -799,7 +806,7 @@ in [RFC 0001](rfcs/0001-netsukefile-testing-framework.md), the
   - [ ] Guarantee reverse-order teardown on every exit path
     (invariant I2, property-tested).
 
-- [ ] 6.4.2. Implement sandbox retention. Requires: 6.4.1.
+- [ ] 6.4.3. Implement sandbox retention. Requires: 6.4.2.
   - [ ] Support `--keep` for failing cases and print retained paths.
 
 ### 6.5. Actions, assertions, and result views
@@ -813,12 +820,29 @@ in [RFC 0001](rfcs/0001-netsukefile-testing-framework.md), the
   - [ ] Deny network, commands, and ambient environment under test
     (invariant I5).
 
-- [ ] 6.5.2. Implement result views. Requires: 6.5.1.
+- [ ] 6.5.2. Implement the case supervisor and frame protocol. Requires:
+  6.5.1. See
+  [technical design §8.1](netsuke-test-framework-technical-design.md).
+  - [ ] Run each case in a killable child process, keeping discovery,
+    scheduling, and reporting in the parent.
+  - [ ] Enforce the deadline with `wait_timeout`, then kill and reap,
+    reusing the pattern in `src/stdlib/command/execution.rs`.
+  - [ ] Carry `CaseResult` over length-prefixed `serde_json` frames
+    versioned like `src/json_envelope.rs`; add no new dependency.
+  - [ ] Synthesize an errored result with a timeout diagnostic when no
+    complete frame arrived, preserving any partial journal.
+  - [ ] Assign teardown ownership per the design's table, retain
+    timed-out sandboxes, and reap every child including on interrupt.
+  - [ ] Test a deliberately non-cooperative template expression,
+    termination, timeout reporting, fixture cleanup, child reaping, and
+    single-document `--json` output (invariant I10).
+
+- [ ] 6.5.3. Implement result views. Requires: 6.5.1.
   - [ ] Expose manifest, graph, and Ninja views with the documented helper
     surface.
   - [ ] Keep views stable across internal IR changes.
 
-- [ ] 6.5.3. Implement assertion evaluation. Requires: 6.5.2.
+- [ ] 6.5.4. Implement assertion evaluation. Requires: 6.5.3.
   - [ ] Normalize scalar and structured assertions.
   - [ ] Distinguish failures from errors end to end.
   - [ ] Implement `expect_failure` with named diagnostics.
@@ -826,7 +850,7 @@ in [RFC 0001](rfcs/0001-netsukefile-testing-framework.md), the
 
 ### 6.6. Command, localization, and reporting
 
-- [ ] 6.6.1. Wire the `test` subcommand. Requires: 6.2.3, 6.5.3. See
+- [ ] 6.6.1. Wire the `test` subcommand. Requires: 6.2.3, 6.4.3, 6.5.4. See
   [UX design §12](netsuke-test-framework-ux-design.md).
   - [ ] Add filters, tags, `--list`, `--fail-fast`, `--timeout`, `--keep`,
     and `--allow-empty`; consume the global `--json` and `--jobs`.
@@ -845,7 +869,7 @@ in [RFC 0001](rfcs/0001-netsukefile-testing-framework.md), the
     notes.
 
 **Success criterion:** a Netsukefile author can write the worked example from
-[UX design §14](netsuke-test-framework-ux-design.md) and run it to a green
+[UX design §14.2](netsuke-test-framework-ux-design.md) and run it to a green
 result on a machine with no compiler, no network, and a fixed clock.
 ## 6. Template standard-library expansion
 
