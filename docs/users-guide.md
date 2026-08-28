@@ -1150,7 +1150,6 @@ it combines with the flag and the system default.
 Leave it unset to use `ninja` from `PATH`, or set another executable name or an
 absolute path. Empty and non-UTF-8 values fall back to the default.
 
-
 ### Diagnose Ninja execution
 
 Pass `--verbose` to see Ninja subprocess diagnostics on stderr. The
