@@ -164,10 +164,16 @@ impl BuildSliceDependencies {
 /// Verify the fixture root still mirrors the module declarations in `build.rs`.
 fn assert_fixture_matches_build_rs() -> io::Result<()> {
     let build_script = test_support::fs::read_to_string(manifest_dir().join("build.rs"))?;
-    let slice_start = build_script
+    assert_fixture_matches_build_source(&build_script)
+}
+
+/// Verify one build-script source text declares exactly the fixture module slice.
+fn assert_fixture_matches_build_source(build_script: &str) -> io::Result<()> {
+    let normalised_build_script = build_script.replace("\r\n", "\n");
+    let slice_start = normalised_build_script
         .find("#[path = \"src/cli\"]\nmod cli {")
         .ok_or_else(|| io::Error::other("build.rs no longer declares its inline cli module"))?;
-    let declared_slice = build_script
+    let declared_slice = normalised_build_script
         .get(slice_start..)
         .and_then(|slice| {
             slice
@@ -192,6 +198,21 @@ fn assert_fixture_matches_build_rs() -> io::Result<()> {
         ));
     }
     Ok(())
+}
+
+#[test]
+fn fixture_contract_accepts_crlf_build_script_source() -> io::Result<()> {
+    let mut build_script = String::from("#[path = \"src/cli\"]\r\nmod cli {\r\n");
+    for (path, declaration) in BUILD_SLICE_MODULES {
+        build_script.push_str("    #[path = \"");
+        build_script.push_str(path);
+        build_script.push_str("\"]\r\n    ");
+        build_script.push_str(declaration);
+        build_script.push_str("\r\n");
+    }
+    build_script.push_str("}\r\n#[path = \"src/cli_localization.rs\"]\r\n");
+
+    assert_fixture_matches_build_source(&build_script)
 }
 
 /// Supply the Cargo package variables consumed by Clap's command derives.
