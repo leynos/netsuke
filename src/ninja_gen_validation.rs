@@ -3,10 +3,7 @@
 use super::ninja_gen_command_list::{
     CommandListEntry, CommandListEntryError, command_list_entry_error,
 };
-use super::{
-    NinjaGenError,
-    ninja_gen_escape::{ShellText, escape_ninja_value},
-};
+use super::{NinjaGenError, ninja_gen_escape::validate_ninja_value};
 use crate::ast::{Recipe, StringOrList};
 
 /// Reject recipes the generated shell cannot execute with stable semantics.
@@ -57,7 +54,7 @@ pub(super) fn validate_action_recipe(
     Ok(())
 }
 
-/// Reject values that would introduce a new Ninja statement when emitted raw.
+/// Reject metadata values that cannot remain within one Ninja binding.
 pub(super) fn validate_action_metadata(action: &crate::ir::Action) -> Result<(), NinjaGenError> {
     for value in [
         action.description.as_ref(),
@@ -68,7 +65,7 @@ pub(super) fn validate_action_metadata(action: &crate::ir::Action) -> Result<(),
     .into_iter()
     .flatten()
     {
-        escape_ninja_value(ShellText::new(value.clone())).map(|_| ())?;
+        validate_ninja_value(value)?;
     }
     Ok(())
 }

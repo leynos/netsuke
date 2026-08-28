@@ -1,4 +1,4 @@
-# Debugging Plan: Serial Runtime Test Failure After Rebase
+# Debugging plan: serial runtime test failure after rebase
 
 **Generated**: 2026-08-27
 **Issue ID**: post-rebase gate failure
@@ -14,10 +14,13 @@ agent.
 `shared_serial_work_runs_once_while_unrelated_work_progresses`, although all
 other serial-dependency tests and the format, typecheck, and lint gates passed.
 The test requires real Ninja scheduling with three jobs and returned a
-non-success status without diagnostic stderr. We must distinguish an
-environmental timing failure from a rebase regression before changing code.
+non-success status without diagnostic stderr. The investigation must
+distinguish an environmental timing failure from a rebase regression before
+changing code.
 
-## Context Summary
+## Context summary
+
+Failure context after the rebase:
 
 | Aspect | Details |
 | --- | --- |
@@ -26,14 +29,14 @@ environmental timing failure from a rebase regression before changing code.
 | Affected components | `tests/serial_dependency_runtime_tests.rs`, real Ninja |
 | Recent changes | Rebase integrated main's split Ninja generation and path escaping |
 
-### Error Artefacts
+### Error artefacts
 
 ```plaintext
 Error: ninja failed:
 shared_serial_work_runs_once_while_unrelated_work_progresses
 ```
 
-### Information Gaps
+### Information gaps
 
 - The failing Ninja invocation emitted no stderr.
 - The test has not yet been rerun in isolation.
@@ -43,7 +46,7 @@ ______________________________________________________________________
 
 ## Hypotheses
 
-### H1: The full-suite failure was an environmental scheduling transient
+### H1: the full-suite failure was an environmental scheduling transient
 
 **Claim**: Contention during the full nextest run delayed the unrelated task
 enough for the shared task's bounded polling loop to fail, while the generated
@@ -55,7 +58,7 @@ and its full-suite failure produced no Ninja diagnostic.
 **Prediction**: A focused rerun with the same test binary and no concurrent
 nextest work succeeds.
 
-#### H1 Falsification Plan
+#### H1 Falsification plan
 
 | Step | Action | Expected Negative Result |
 | --- | --- | --- |
@@ -69,7 +72,7 @@ out contention elsewhere in the suite.
 
 ______________________________________________________________________
 
-### H2: The rebased generator changed the serial dyndep graph
+### H2: the rebased generator changed the serial dyndep graph
 
 **Claim**: The shell-text lowering integration altered the generated serial
 graph such that the shared task starts before its unrelated prerequisite or
@@ -81,7 +84,7 @@ but nearby serial tests passed in the same run.
 **Prediction**: A focused rerun continues to fail, despite an otherwise idle
 test process.
 
-#### H2 Falsification Plan
+#### H2 Falsification plan
 
 | Step | Action | Expected Negative Result |
 | --- | --- | --- |
@@ -95,7 +98,7 @@ prove the absence of all timing sensitivity.
 
 ______________________________________________________________________
 
-### H3: The runtime fixture pre-escapes a shell arithmetic dollar
+### H3: the runtime fixture pre-escapes a shell arithmetic dollar
 
 **Claim**: `shared_work_graph` supplies `$$((...))`, which was correct when
 the old renderer wrote recipe text directly, but the new backend doubles every
@@ -108,7 +111,7 @@ shared action contains the only dollar-heavy shell expression in the graph.
 **Prediction**: The fixture contains `$$((`, while the new backend's escaping
 contract is independently covered by the dollar-escaping tests.
 
-#### H3 Falsification Plan
+#### H3 Falsification plan
 
 | Step | Action | Expected Negative Result |
 | --- | --- | --- |
@@ -123,14 +126,14 @@ whether the test input is one escaping layer ahead of the current contract.
 
 ______________________________________________________________________
 
-## Recommended Execution Order
+## Recommended execution order
 
 1. **H1** — one focused test is the cheapest decisive check.
 2. **H2** — the same result falsifies or supports the integration hypothesis.
 3. **H3** — source-level inspection directly tests the remaining boundary
    mismatch.
 
-## Termination Criteria
+## Termination criteria
 
 - **Environmental transient**: The focused test passes; rerun the full gate
   suite to establish the final result.
@@ -139,7 +142,7 @@ ______________________________________________________________________
 - **Potential regression**: H3 is falsified; inspect the generated Ninja bundle
   and compare it with `origin/main` before changing source.
 
-## Notes for Executing Agent
+## Notes for executing agent
 
 Run only the supplied focused experiment. Do not edit files, run the full gate
 suite, or infer a fix. Report whether each hypothesis is falsified,

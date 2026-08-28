@@ -2,8 +2,7 @@
 
 ## Status
 
-Accepted: 2026-08-24. Netsuke lowers its placeholders before the Ninja backend
-escapes residual shell dollar signs.
+Accepted.
 
 ## Date
 
@@ -37,8 +36,8 @@ Netsuke uses a private typed conversion at the Ninja writer boundary:
   `NinjaValue`. The conversion doubles each remaining dollar sign and rejects
   newline, carriage-return, and NUL control characters.
 - Only the completed `NinjaValue` is written as a Ninja `command` binding;
-  descriptions, `depfile`, `deps`, and `pool` keep their existing raw emission
-  semantics but receive the same control-character validation.
+  descriptions, `depfile`, `deps`, and `pool` are escaped at their Ninja
+  emission boundary and reject newline, carriage-return, and NUL characters.
 - Build-edge paths remain separate values and are rejected when they contain a
   dollar, space, colon, newline, carriage return, or NUL.
 - A script uses substitution-only lowering, preserving script syntax such as

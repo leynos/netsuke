@@ -1,9 +1,8 @@
 //! Property tests for command interpolation token boundaries.
 //!
 //! These properties ensure `interpolate_command` replaces placeholders outside
-//! backticks with quoted paths, preserves `$in`, `$out`, and long placeholder
-//! tokens verbatim inside backtick-delimited regions, and rejects unbalanced
-//! backtick input as an invalid command.
+//! backticks with quoted paths, rejects placeholders within backticks, and
+//! rejects unbalanced backtick input as an invalid command.
 
 use proptest::prelude::*;
 use test_support::ninja_gen::paths_strategy;
@@ -18,11 +17,15 @@ fn safe_text_strategy() -> impl Strategy<Value = String> {
 
 proptest! {
     #[test]
-    fn dollar_tokens_inside_backticks_are_preserved(prefix in safe_text_strategy(), suffix in safe_text_strategy(), inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
+    fn dollar_tokens_inside_backticks_are_rejected(prefix in safe_text_strategy(), suffix in safe_text_strategy(), inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
         let template = format!("echo {prefix} `printf '$in $out'` {suffix}");
-        let command = interpolate_command(&template, &inputs, &outputs).expect("balanced command should interpolate");
+        let error = interpolate_command(&template, &inputs, &outputs)
+            .expect_err("placeholders inside backticks should be rejected");
 
-        prop_assert!(command.contains("`printf '$in $out'`"));
+        prop_assert!(
+            matches!(error, IrGenError::InvalidCommand { .. }),
+            "backtick placeholder must be an invalid command: {error:?}"
+        );
     }
 
     #[test]
@@ -59,11 +62,15 @@ proptest! {
     }
 
     #[test]
-    fn tokens_inside_backticks_are_preserved_verbatim(token in prop::sample::select(vec!["$in", "$out", INS_TOKEN, OUTS_TOKEN]), inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
+    fn tokens_inside_backticks_are_rejected(token in prop::sample::select(vec!["$in", "$out", INS_TOKEN, OUTS_TOKEN]), inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
         let template = format!("echo `{token}`");
-        let command = interpolate_command(&template, &inputs, &outputs).expect("balanced command should interpolate");
+        let error = interpolate_command(&template, &inputs, &outputs)
+            .expect_err("placeholders inside backticks should be rejected");
 
-        prop_assert_eq!(command, template);
+        prop_assert!(
+            matches!(error, IrGenError::InvalidCommand { .. }),
+            "backtick placeholder must be an invalid command: {error:?}"
+        );
     }
 
     #[test]

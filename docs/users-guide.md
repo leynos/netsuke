@@ -1467,7 +1467,12 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   `${CARGO:-cargo}` reach the child shell unchanged. Netsuke performs the
   required Ninja escaping after it lowers `$in`, `$out`, `{{ ins }}`, and
   `{{ outs }}`. A `$in` or `$out` token inside backticks is rejected because
-  Netsuke cannot safely lower it there.
+  Netsuke cannot safely lower it there. This applies to command and script
+  recipes.
+- Build and default-target paths reject `$`, spaces, colons, `|`, and control
+  characters because Ninja cannot represent them without ambiguity. Generation
+  also rejects newline, carriage-return, and NUL characters in emitted metadata
+  such as descriptions, `depfile`, `deps`, and `pool`.
 - **Migration:** replace the historical manifest spelling `$$PATH` with
   `$PATH`. Keeping the extra dollar now asks the shell to interpret `$$` as
   its process identifier and can change the command's result. Existing script

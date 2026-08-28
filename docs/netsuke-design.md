@@ -544,7 +544,7 @@ makes applying the conversion before placeholder lowering or applying it twice
 an invalid internal call rather than a convention left to review. Paths use a
 separate boundary: values containing Ninja-special syntax (`$`, spaces,
 colons, or control characters) are rejected rather than emitted ambiguously.
-ADR 011 records the boundary and its migration consequences.
+ADR 014 records the boundary and its migration consequences.
 
 #### Structured environment mapping
 
@@ -2106,9 +2106,11 @@ structures to the Ninja file syntax.
    Command and script text must be converted from IR text to backend text at
    this stage. After Netsuke placeholders have been resolved, remaining literal
    dollar signs are escaped as `$$` for Ninja so shell variables survive to the
-   shell. The conversion rejects command control characters and only accepts a
-   completed shell-text value once. Structured `exec` recipes are rendered by
-   quoting each argv element as one argument for the selected backend.
+   shell. The conversion rejects newline, carriage-return, and NUL characters
+   and will accept a completed shell-text value once. Structured `exec` recipes
+   are rendered by quoting each argv element as one argument for the selected
+   backend. Metadata fields are escaped at their Ninja emission boundary, while
+   the IR remains backend-neutral.
 
    Resolved environment bindings are emitted as backend-specific command
    prefixes or generated wrapper script assignments. The implementation must

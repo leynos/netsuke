@@ -33,7 +33,7 @@ mod ninja_gen_validation;
 
 use ninja_gen_command_list::{ActionId, CommandListEntry, command_list_entry};
 pub use ninja_gen_error::NinjaGenError;
-use ninja_gen_escape::{ShellText, escape_ninja_value};
+use ninja_gen_escape::{ShellText, escape_metadata_value, escape_ninja_value};
 use ninja_gen_validation::{validate_action_metadata, validate_action_recipe};
 /// Write `key = value` to a Ninja file when `opt` holds a value.
 ///
@@ -223,7 +223,7 @@ fn escape_script(script: &str) -> String {
         .replace('$', "\\$")
         .replace('"', "\\\"")
         .replace('`', "\\`")
-        .replace('\'', "'\"'\"'")
+        .replace('\'', r"'\''")
         .replace('\n', "\\n")
 }
 /// Whether the graph contains an edge whose serial list needs dyndep gates.
@@ -246,10 +246,14 @@ pub(crate) struct NamedAction<'a> {
 impl NamedAction<'_> {
     /// Write the action's optional metadata bindings followed by a blank line.
     fn write_metadata<W: Write>(&self, f: &mut W) -> Result<(), NinjaGenError> {
-        write_kv!(f, "description", &self.action.description);
-        write_kv!(f, "depfile", &self.action.depfile);
-        write_kv!(f, "deps", &self.action.deps_format);
-        write_kv!(f, "pool", &self.action.pool);
+        let description = escape_metadata_value(self.action.description.as_deref())?;
+        let depfile = escape_metadata_value(self.action.depfile.as_deref())?;
+        let deps_format = escape_metadata_value(self.action.deps_format.as_deref())?;
+        let pool = escape_metadata_value(self.action.pool.as_deref())?;
+        write_kv!(f, "description", &description);
+        write_kv!(f, "depfile", &depfile);
+        write_kv!(f, "deps", &deps_format);
+        write_kv!(f, "pool", &pool);
         write_flag!(f, "restat", self.action.restat);
         writeln!(f)?;
         Ok(())

@@ -1,12 +1,65 @@
 //! Unit tests for Ninja file generation and rule synthesis.
 
 use super::test_support::command_action;
-use super::{NamedAction, NinjaGenError, generate, generate_into};
+use super::{NamedAction, NinjaGenError, generate, generate_bundle, generate_into};
 use crate::ast::{Recipe, StringOrList};
 use crate::ir::{Action, BuildEdge, BuildGraph, DependencyOrder};
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8PathBuf;
 use rstest::rstest;
+
+fn metadata_graph(field: &str, value: &str) -> Result<BuildGraph> {
+    let mut action = command_action("true".into());
+    match field {
+        "description" => action.description = Some(value.into()),
+        "depfile" => action.depfile = Some(value.into()),
+        "deps_format" => action.deps_format = Some(value.into()),
+        "pool" => action.pool = Some(value.into()),
+        _ => bail!("test must use a known action metadata field: {field}"),
+    }
+    let mut graph = BuildGraph::default();
+    graph.actions.insert("metadata".into(), action);
+    Ok(graph)
+}
+
+fn metadata_ninja_key(field: &str) -> Result<&str> {
+    Ok(match field {
+        "description" => "description",
+        "depfile" => "depfile",
+        "deps_format" => "deps",
+        "pool" => "pool",
+        _ => bail!("test must use a known action metadata field: {field}"),
+    })
+}
+
+fn assert_metadata_control_character_is_rejected(field: &str, value: &str) -> Result<()> {
+    let graph = metadata_graph(field, value)?;
+    let generate_error = generate(&graph).expect_err("unsafe metadata should not generate Ninja");
+    ensure!(
+        matches!(generate_error, NinjaGenError::UnsafeNinjaValue),
+        "{field} should produce UnsafeNinjaValue, got {generate_error:?}"
+    );
+
+    let mut output = String::new();
+    let generate_into_error = generate_into(&graph, &mut output)
+        .expect_err("unsafe metadata should not write Ninja output");
+    ensure!(
+        matches!(generate_into_error, NinjaGenError::UnsafeNinjaValue),
+        "{field} should produce UnsafeNinjaValue, got {generate_into_error:?}"
+    );
+    ensure!(
+        output.is_empty(),
+        "single-action metadata validation must not emit partial Ninja output: {output}"
+    );
+
+    let bundle_error =
+        generate_bundle(&graph).expect_err("unsafe metadata should not bundle Ninja");
+    ensure!(
+        matches!(bundle_error, NinjaGenError::UnsafeNinjaValue),
+        "{field} should produce UnsafeNinjaValue, got {bundle_error:?}"
+    );
+    Ok(())
+}
 
 #[rstest]
 fn generate_simple_ninja() -> Result<()> {
@@ -97,6 +150,48 @@ fn string_generation_apis_reject_reserved_paths() -> Result<()> {
 }
 
 #[rstest]
+#[case::description("description")]
+#[case::depfile("depfile")]
+#[case::deps_format("deps_format")]
+#[case::pool("pool")]
+fn metadata_values_escape_ninja_dollars(#[case] field: &str) -> Result<()> {
+    let graph = metadata_graph(field, "literal$metadata")?;
+    let key = metadata_ninja_key(field)?;
+    let expected = format!("  {key} = literal$$metadata");
+
+    let ninja = generate(&graph)?;
+    ensure!(
+        ninja.contains(&expected),
+        "{field} must escape a literal dollar before Ninja parses it:\n{ninja}"
+    );
+
+    let bundle = generate_bundle(&graph)?;
+    ensure!(
+        bundle.build_file().contains(&expected),
+        "{field} must be escaped in bundled Ninja output:\n{}",
+        bundle.build_file()
+    );
+    Ok(())
+}
+
+#[rstest]
+#[case::description("description")]
+#[case::depfile("depfile")]
+#[case::deps_format("deps_format")]
+#[case::pool("pool")]
+fn metadata_control_characters_are_rejected(#[case] field: &str) -> Result<()> {
+    for (name, value) in [
+        ("newline", "unsafe\nmetadata"),
+        ("carriage return", "unsafe\rmetadata"),
+        ("NUL", "unsafe\0metadata"),
+    ] {
+        assert_metadata_control_character_is_rejected(field, value)
+            .with_context(|| format!("{field} must reject {name}"))?;
+    }
+    Ok(())
+}
+
+#[rstest]
 fn generate_script_ninja_round_trips() -> Result<()> {
     let script = "echo 'a b' && echo \"$HOME\" && printf %s \"`whoami`\"\n# line";
     let action = Action {
@@ -127,7 +222,7 @@ fn generate_script_ninja_round_trips() -> Result<()> {
     let ninja = generate(&graph)?;
     ensure!(ninja.contains("rule a"));
     ensure!(ninja.contains("command = /bin/sh -e -c"));
-    ensure!(ninja.contains("echo '\"'\"'a b'\"'\"'"));
+    ensure!(ninja.contains(r"echo '\''a b'\''"));
     ensure!(ninja.contains("\\\"\\$$HOME\\\""));
     ensure!(ninja.contains("\\`whoami\\`"));
     ensure!(ninja.contains("printf %b"));

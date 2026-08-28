@@ -231,6 +231,7 @@ fn placeholder_lowering_precedes_backend_escaping(#[case] recipe: &str) -> Resul
     Ok(())
 }
 
+#[cfg(unix)]
 #[rstest]
 fn scripts_lower_placeholders_without_command_parser_validation() -> Result<()> {
     let manifest = manifest::from_str(
@@ -241,6 +242,11 @@ fn scripts_lower_placeholders_without_command_parser_validation() -> Result<()> 
     ensure!(
         !ninja.contains("\\$out") && !ninja.contains("$in"),
         "script placeholders must be lowered before backend escaping:\n{ninja}"
+    );
+    let actual = ninja_output(&ninja, None, Some(("in", "script input")))?;
+    ensure!(
+        actual == "script inputdone\n",
+        "expected script and heredoc output, got {actual:?}"
     );
     Ok(())
 }

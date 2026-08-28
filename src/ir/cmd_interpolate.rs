@@ -107,6 +107,9 @@ pub(crate) fn interpolate_command_with_bindings(
     template: &str,
     bindings: &CommandBindings,
 ) -> Result<String, IrGenError> {
+    if has_placeholder_in_backticks(template) {
+        return Err(invalid_command_error(template.to_owned()));
+    }
     let interpolated = substitute(template, &bindings.ins, &bindings.outs);
     if has_unmatched_backticks(&interpolated) || shlex::split(&interpolated).is_none() {
         return Err(invalid_command_error(interpolated));
@@ -349,20 +352,23 @@ mod tests {
     }
 
     #[test]
-    fn interpolate_command_preserves_backtick_tokens() {
+    fn interpolate_command_rejects_short_placeholders_in_backticks() {
         let ins = vec![Utf8PathBuf::from("src")];
         let outs = vec![Utf8PathBuf::from("out")];
-        let command =
-            interpolate_command("echo `cat $in` && echo $out", &ins, &outs).expect("command");
-        assert_eq!(command, "echo `cat $in` && echo out");
+        let error = interpolate_command("echo `cat $in` && echo $out", &ins, &outs)
+            .expect_err("placeholders inside backticks should be rejected");
+        assert!(matches!(error, IrGenError::InvalidCommand { .. }));
     }
 
     #[test]
-    fn interpolate_command_preserves_braced_placeholders_in_backticks() {
-        let command =
-            interpolate_command("echo `{{ ins }}` $out", &[], &[Utf8PathBuf::from("out")])
-                .expect("command");
-        assert_eq!(command, "echo `{{ ins }}` out");
+    fn interpolate_command_rejects_template_placeholders_in_backticks() {
+        let error = interpolate_command(
+            &format!("echo `{INS_TOKEN}` $out"),
+            &[],
+            &[Utf8PathBuf::from("out")],
+        )
+        .expect_err("template placeholders inside backticks should be rejected");
+        assert!(matches!(error, IrGenError::InvalidCommand { .. }));
     }
 
     #[test]

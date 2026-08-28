@@ -416,38 +416,11 @@ characters fail before emission.
 
 The seam is owned by `src/ninja_gen_escape.rs`. Only the Ninja action writer
 may compose a completed command and convert its `ShellText` into a
-`NinjaValue`; no lowering code, metadata writer, or future backend may call it.
-Descriptions, `depfile`, `deps`, and `pool` retain their existing raw emission
-semantics because they are not shell text, although metadata is still checked
-for control characters. Add a separate, explicitly documented conversion for
+`NinjaValue`; no lowering code or future backend may call it. Metadata fields
+use the same escaping boundary when emitted to Ninja, so literal dollars are
+not interpreted as Ninja variables and newline, carriage-return, and NUL
+characters are rejected. Add a separate, explicitly documented conversion for
 any new Ninja grammar position rather than reusing command escaping.
-
-The lowest-layer POSIX shell-word quoting used for input/output paths during IR
-lowering is `shell_quote::QuoteRefExt::quoted(Sh)`. It performs minimal,
-fragmented shell quoting, which is appropriate for a literal shell word but not
-for the command-list `eval` payload. That renderer requires a canonical
-single-quoted payload so existing generated Ninja list text remains
-byte-for-byte stable, and the delimiter/boundary tests continue to hold. Keep
-that quoting in the deliberately local `shell_single_quote` function; it is
-not a general-purpose helper. Neither quoting path is the platform-specific
-`src/stdlib/command/quote.rs` implementation behind the `command.quote`
-template wrapper, which must retain its `cmd.exe` quoting behaviour on Windows.
-
-Attributed list failures emit the bounded tracing fields
-`command_list_action` (a fixed-width action fingerprint) and
-`command_list_entry` (the one-based entry index), plus the matching
-`command_list_failure` marker. The process boundary records
-`netsuke_ninja_command_list_failures_total` and
-`netsuke_ninja_command_list_failure_duration_seconds`, with an `outcome`
-label of `failure`. Elapsed failure duration is measured through the injected
-`monotony::MonotonicClock`; production uses `StdMonotonicClock`, while tests use
-deterministic test clocks. These diagnostics and metrics contain no command
-text.
-
-Changes to this pipeline must preserve the scalar/list distinction, per-entry
-rendering, current-shell state sharing, and failure attribution. The focused
-rendering, lowering, Ninja-generation, and real-Ninja integration tests are
-the behavioural contract for these boundaries.
 
 ## Package and target naming
 
@@ -1623,6 +1596,16 @@ Cargo home plus Kani support-file home.
 
 If either pass fails, `make test` fails. Run the individual targets when
 iterating, but treat `make test` as the gate.
+
+### Required real-Ninja coverage
+
+Real-Ninja integration tests skip when `ninja` is unavailable locally. Set
+`NETSUKE_REQUIRE_NINJA=1` to turn that skip into a failure; CI sets this
+variable for the jobs that exercise Ninja. Run the required local subset with:
+
+```sh
+NETSUKE_REQUIRE_NINJA=1 cargo nextest run -E 'test(ninja)'
+```
 
 Cargo spells build parallelism `-j`; nextest reserves `-j` for test concurrency
 and spells build parallelism `--build-jobs`. The Makefile therefore keeps

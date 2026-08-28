@@ -26,14 +26,29 @@ impl Display for NinjaValue {
     }
 }
 
+/// Reject text that cannot remain within one Ninja binding.
+pub(super) fn validate_ninja_value(text: &str) -> Result<(), NinjaGenError> {
+    if text.contains(['\n', '\r', '\0']) {
+        return Err(NinjaGenError::UnsafeNinjaValue);
+    }
+    Ok(())
+}
+
 /// Escape fully assembled shell text for one Ninja binding.
 ///
 /// Literal dollars become `$$`. Control characters are rejected because they
 /// could add a new Ninja statement instead of remaining part of the binding.
 pub(super) fn escape_ninja_value(text: ShellText) -> Result<NinjaValue, NinjaGenError> {
     let ShellText(contents) = text;
-    if contents.contains(['\n', '\r', '\0']) {
-        return Err(NinjaGenError::UnsafeNinjaValue);
-    }
+    validate_ninja_value(&contents)?;
     Ok(NinjaValue(contents.replace('$', "$$")))
+}
+
+/// Escape an optional metadata value for one Ninja binding.
+pub(super) fn escape_metadata_value(
+    value: Option<&str>,
+) -> Result<Option<NinjaValue>, NinjaGenError> {
+    value
+        .map(|metadata| escape_ninja_value(ShellText::new(metadata.to_owned())))
+        .transpose()
 }

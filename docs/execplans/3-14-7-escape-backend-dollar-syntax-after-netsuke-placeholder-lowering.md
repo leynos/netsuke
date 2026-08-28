@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
 `Verification plan` must be kept up to date as work proceeds.
 
-Status: COMPLETE
+Status: IN PROGRESS
 
 There is no `PLANS.md` in this repository; `docs/execplans/` is the plan
 directory and `docs/roadmap.md` is the work index.
@@ -393,21 +393,18 @@ Stop and escalate rather than improvising when any of these is reached.
   descriptions as the sole source of Ninja progress text. Applying a
   Ninja-specific transform to a field that also feeds a non-Ninja consumer is
   exactly the layering mistake this task exists to fix.
-  Recommendation: scope this task to command and script text exactly as the
-  approved design states. Record the description gap as a follow-up
-  (lower `$in`/`$out` into descriptions first, then escape — the coherent
-  ordering), and leave `depfile`/`deps`/`pool` alone. The `NinjaValue`
-  constructor still rejects control characters in these fields, so the
-  injection hole closes everywhere even though dollar escaping does not.
+  Recommendation: lower `$in`/`$out` into descriptions before any future
+  description-specific processing. Metadata fields are escaped at their Ninja
+  emission boundary after IR lowering, and the `NinjaValue` constructor still
+  rejects control characters in these fields.
   Date/Author: 2026-08-17, planning agent.
 
-- Decision `D-METADATA`: approved on 2026-08-24. Restrict dollar escaping to
-  command and script text after placeholder lowering. Do not dollar-escape
-  descriptions, `depfile`, `deps`, or `pool`; retain the planned validation of
-  unsafe control characters at their output boundary. The user requested
-  implementation of the ExecPlan as written, including this recommendation.
-  This maintains the approved backend/IR boundary and leaves the documented
-  Ninja metadata idioms intact.
+- Decision `D-METADATA`: revised during the 2026-08-28 review repair. Escape
+  descriptions, `depfile`, `deps`, and `pool` at their Ninja emission boundary,
+  while retaining rejection of newline, carriage-return, and NUL. These fields
+  are backend values at emission time, so literal dollars must not become Ninja
+  variable references. The completed action and metadata paths now share this
+  explicit contract.
   Date/Author: 2026-08-24, implementation agent.
 
 - Decision: no Kani harness and no Verus proof for this change.
@@ -418,7 +415,7 @@ Stop and escalate rather than improvising when any of these is reached.
   real Ninja lexer, because Kani cannot model Ninja. The repository's Kani
   usage is for structural graph invariants
   (`src/ir/from_manifest_support.rs`, `#[cfg(kani)]` shims), which is a
-  different obligation class. A Verus proof would require axiomatising
+  different obligation class. A Verus proof would require axiomizing
   `str::replace` and then proving the axiom implies the specification, which is
   assuming the conclusion. Proportionate rigour here is a property test whose
   oracle is the real binary.
@@ -496,11 +493,12 @@ The files that matter, with what each does today:
 `NamedAction` `Display` implementation, then walks the sorted build edges
 through `DisplayEdge`, then writes the `default` line.
 `NamedAction::write_recipe` (lines 202-219) has three live arms: a scalar
-command written verbatim at line 208; a command list built by
+command escaped at emission; a command list built by
 `write_command_list` (lines 232-248); and a script wrapped by
 `write_script_command` (lines 221-229). `escape_script` (lines 185-193)
 escapes for the outer shell, not for Ninja. `write_metadata` (lines 250-257)
-writes `description`, `depfile`, `deps`, and `pool` unescaped. `join`
+writes `description`, `depfile`, `deps`, and `pool` through the Ninja escaping
+boundary. `join`
 (lines 166-168) space-joins paths unescaped.
 
 `src/ninja_gen_command_list.rs` renders one entry of a command list into a
@@ -943,14 +941,14 @@ surface is crate-internal and pre-1.0, so callers are updated together with the
 interfaces.
 
 Follow-up work deliberately left out of scope, to be proposed as separate
-tasks: escaping `description` after first lowering `$in`/`$out` into
-descriptions; full Ninja path escaping using dollar-space and `$:` rather than
-rejection; and revisiting `depfile` escaping when roadmap 3.14.6 populates it.
+tasks: lowering `$in`/`$out` into descriptions before any description-specific
+processing, and full Ninja path escaping using dollar-space and `$:` rather
+than rejection.
 
 ## Concrete steps
 
-Run everything from the repository root,
-`/home/leynos/.lody/repos/github---leynos---netsuke/worktrees/e6fb5970-3785-4215-b5b0-8d20c0ec4f14`.
+Run everything from the repository root. Refer to files using repository-
+relative paths.
 
 Reproduce the current failure before starting, so the red state is on record:
 
@@ -1252,14 +1250,14 @@ citations moved: users' guide 1152-1153 to 1208-1209, design §2.6 499-508 to
 snippet 2054-2058 to 2072-2076, the backtick contract 257 to 265, and the
 developers' guide anchor 199 to 266.
 
-Why it matters. Decision `D-METADATA` is strengthened, not weakened:
-`description` now feeds a non-backend consumer, so applying a Ninja-specific
-transform to it would repeat the layering mistake this task exists to correct.
-The recommendation to scope escaping to command and script text stands.
+Why it matters. Decision `D-METADATA` now matches the writer: metadata remains
+backend-neutral in the IR, then receives Ninja escaping only at emission. The
+help catalogue continues to consume the unescaped IR description, so the
+backend boundary does not leak Ninja syntax into non-Ninja consumers.
 
-Effect on remaining work. None of the milestones, obligations, or open
-decisions change. EP-M1 gets slightly smaller. The plan remains DRAFT and
-still requires approval before stage A begins.
+Effect on remaining work. The metadata emission contract is now explicit and
+must be covered by the pending deterministic gates. EP-M1 remains complete;
+the plan is `IN PROGRESS` while this review repair is validated.
 
 2026-08-28 — Windows CI exposed raw CRLF output from `ninja -t commands`.
 The property now removes only one final CRLF or LF terminator, rather than
@@ -1332,3 +1330,18 @@ Clippy, Whitaker, and full test steps all passed. This confirms that the
 real-Ninja property accepts both CRLF and LF records without trimming command
 whitespace; the prior Windows failure was eliminated, and no property failure
 is hidden by record-terminator normalization. Status is `COMPLETE`.
+
+2026-08-28 — review repair: documentation was reconciled with the current
+implementation. Metadata fields are escaped at Ninja emission, while the IR
+and help catalogue retain backend-neutral text; the ADR and design documents
+now state that boundary. The developers' guide documents the required-Ninja
+gate, and the users' and migration guides document rejected path and metadata
+characters. Status returns to `IN PROGRESS` until deterministic validation and
+the requested follow-up review complete.
+
+2026-08-28 — focused B5 real-Ninja execution exposed an unexpected-EOF defect
+in the script wrapper: `escape_script` used the wrong apostrophe sequence for
+its double-quoted `/bin/sh -c` payload. The wrapper now emits `r"'\\''"`,
+and the focused heredoc test passes with the observed output
+`script inputdone\n`. Status remains `IN PROGRESS` pending the full gates and
+follow-up review.
