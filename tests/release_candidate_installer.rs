@@ -182,39 +182,35 @@ fn installer_builds_the_expected_platform_binary(#[case] runner_os: &str) -> Res
     Ok(())
 }
 
-#[test]
-fn installer_rejects_a_resolved_revision_that_differs_from_the_candidate() -> Result<()> {
+#[rstest]
+#[case::revision_mismatch(
+    "different-revision",
+    CANDIDATE_VERSION,
+    "candidate revision mismatch",
+    false
+)]
+#[case::version_mismatch(CANDIDATE_REVISION, "0.1.0-wrong", "candidate version mismatch", true)]
+fn installer_rejects_an_invalid_candidate_identity(
+    #[case] resolved_revision: &str,
+    #[case] version: &str,
+    #[case] expected_stderr: &str,
+    #[case] should_build_cargo: bool,
+) -> Result<()> {
     let harness = InstallerHarness::new()?;
 
-    let output = harness.run("Linux", "different-revision", CANDIDATE_VERSION)?;
+    let output = harness.run("Linux", resolved_revision, version)?;
 
     ensure!(
         !output.status.success(),
-        "installer should reject the wrong revision"
+        "installer should reject an invalid candidate identity"
     );
-    ensure!(String::from_utf8_lossy(&output.stderr).contains("candidate revision mismatch"));
     ensure!(
-        !harness.cargo_args_path.exists(),
-        "installer should not build an unverified candidate"
+        String::from_utf8_lossy(&output.stderr).contains(expected_stderr),
+        "installer should report the expected identity validation error"
     );
-
-    Ok(())
-}
-
-#[test]
-fn installer_rejects_a_candidate_binary_with_the_wrong_version() -> Result<()> {
-    let harness = InstallerHarness::new()?;
-
-    let output = harness.run("Linux", CANDIDATE_REVISION, "0.1.0-wrong")?;
-
     ensure!(
-        !output.status.success(),
-        "installer should reject the wrong version"
-    );
-    ensure!(String::from_utf8_lossy(&output.stderr).contains("candidate version mismatch"));
-    ensure!(
-        harness.cargo_args_path.exists(),
-        "installer should build only after it verifies the revision"
+        harness.cargo_args_path.exists() == should_build_cargo,
+        "installer Cargo build should match the candidate identity failure"
     );
 
     Ok(())
