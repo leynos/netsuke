@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result, ensure};
 use netsuke::{
-    ast::{NetsukeManifest, Recipe},
+    ast::{NetsukeManifest, Recipe, StringOrList},
     ir::BuildGraph,
 };
 use rstest::rstest;
@@ -31,8 +31,17 @@ fn dependency_only_entries_require_non_empty_deps() -> Result<()> {
         .first()
         .context("manifest should contain the dependency-only target")?;
     ensure!(
-        matches!(action.recipe, Recipe::DependencyOnly)
-            && matches!(target.recipe, Recipe::DependencyOnly),
+        matches!(
+            &action.recipe,
+            Recipe::Command {
+                command: StringOrList::Empty
+            }
+        ) && matches!(
+            &target.recipe,
+            Recipe::Command {
+                command: StringOrList::Empty
+            }
+        ),
         "entries with deps should deserialize as dependency-only recipes"
     );
     let serialised =
@@ -55,6 +64,7 @@ fn dependency_only_entries_require_non_empty_deps() -> Result<()> {
     Ok(())
 }
 
+/// Reject dependency-only entries without usable dependencies.
 #[rstest]
 #[case::action_without_dependencies(
     "an action without dependencies",
@@ -136,6 +146,7 @@ fn dependency_only_entries_without_usable_dependencies_are_rejected(
     Ok(())
 }
 
+/// Reject dependency-only entries whose rendered dependency is blank.
 #[test]
 fn rendered_blank_dependency_is_rejected() -> Result<()> {
     let yaml = r#"
@@ -156,6 +167,7 @@ fn rendered_blank_dependency_is_rejected() -> Result<()> {
     Ok(())
 }
 
+/// Reject invalid direct AST deserialisation before IR lowering.
 #[test]
 fn direct_ast_deserialisation_is_validated_before_ir_lowering() -> Result<()> {
     let yaml = r#"

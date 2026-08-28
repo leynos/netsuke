@@ -10,7 +10,7 @@
 use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8PathBuf;
 use netsuke::{
-    ast::Recipe,
+    ast::{Recipe, StringOrList},
     ir::{BuildGraph, IrGenError},
     manifest, ninja_gen,
 };
@@ -273,10 +273,14 @@ fn dependency_only_entries_lower_to_deduplicated_phony_actions() -> Result<()> {
     let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
     ensure!(
         graph.actions.len() == 1
-            && graph
-                .actions
-                .values()
-                .all(|action| matches!(action.recipe, Recipe::DependencyOnly)),
+            && graph.actions.values().all(|action| {
+                matches!(
+                    action.recipe,
+                    Recipe::Command {
+                        command: StringOrList::Empty
+                    }
+                )
+            }),
         "dependency-only entries should deduplicate into one non-executable action: {:?}",
         graph.actions
     );

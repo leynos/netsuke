@@ -129,6 +129,15 @@ impl StringOrList {
         }
     }
 
+    /// Report whether the value is the internal dependency-only marker.
+    ///
+    /// Only `Empty` is a marker; `List(Vec::new())` preserves the explicit
+    /// empty-command-list validation error.
+    #[must_use]
+    pub(crate) const fn is_empty_marker(&self) -> bool {
+        matches!(self, Self::Empty)
+    }
+
     /// Report whether the value has no non-whitespace string content.
     ///
     /// This keeps dependency-only validation narrow: executable recipes retain

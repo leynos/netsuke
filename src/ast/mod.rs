@@ -147,17 +147,19 @@ pub struct Rule {
 
 /// Execution style for rules and targets.
 ///
-/// Rules require an executable variant. Targets and actions may instead use
-/// [`Self::DependencyOnly`] when their non-empty `deps` list is the complete
-/// operation. The fields are flattened in the manifest, so the presence of
-/// `command`, `script`, or `rule` determines an executable variant.
+/// Rules require an executable variant. Targets and actions whose non-empty
+/// `deps` list is the complete operation use an empty internal command marker.
+/// The fields are flattened in the manifest, so the presence of `command`,
+/// `script`, or `rule` determines an executable variant.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum Recipe {
     /// A shell command, given as a scalar or an ordered list executed by a
     /// fail-fast shell chain.
     Command {
         /// A scalar command passes through unchanged; list entries are
-        /// evaluated in brace groups joined by a fail-fast `&&` chain.
+        /// evaluated in brace groups joined by a fail-fast `&&` chain. An
+        /// empty value is reserved for dependency-only manifest entries.
+        #[serde(skip_serializing_if = "StringOrList::is_empty_marker")]
         command: StringOrList,
     },
     /// An embedded multi-line script.
@@ -170,11 +172,6 @@ pub enum Recipe {
         /// Name or names of rules to execute.
         rule: StringOrList,
     },
-    /// Model an action or target whose dependencies are its complete work.
-    ///
-    /// This is valid only for targets and actions with at least one `deps`
-    /// entry. Rules cannot use it because reusable rules must supply a recipe.
-    DependencyOnly,
 }
 
 /// Preserve the established diagnostic for entries without a recipe or deps.
@@ -184,7 +181,7 @@ impl Recipe {
     /// Report whether this recipe lowers to a dependency-only Ninja node.
     #[must_use]
     pub(crate) const fn is_dependency_only(&self) -> bool {
-        matches!(self, Self::DependencyOnly)
+        matches!(self, Self::Command { command } if command.is_empty_marker())
     }
 }
 
@@ -222,7 +219,9 @@ impl<'de> Deserialize<'de> for Recipe {
             },
             (None, Some(script), None) => Ok(Self::Script { script }),
             (None, None, Some(rule)) => Ok(Self::Rule { rule }),
-            (None, None, None) => Ok(Self::DependencyOnly),
+            (None, None, None) => Ok(Self::Command {
+                command: StringOrList::Empty,
+            }),
             (command_opt, script_opt, rule_opt) => {
                 let present: Vec<&str> = [
                     ("command", command_opt.is_some()),

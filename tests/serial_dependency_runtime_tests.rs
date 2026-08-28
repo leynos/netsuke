@@ -10,7 +10,7 @@
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use netsuke::ast::Recipe;
+use netsuke::ast::{Recipe, StringOrList};
 use netsuke::ir::{Action, BuildEdge, BuildGraph, DependencyOrder};
 use netsuke::ninja_gen::generate_bundle;
 use std::io::ErrorKind;
@@ -35,7 +35,9 @@ fn action(command: &str) -> Action {
 /// Construct an action whose dependencies are its complete operation.
 const fn dependency_only_action() -> Action {
     Action {
-        recipe: Recipe::DependencyOnly,
+        recipe: Recipe::Command {
+            command: StringOrList::Empty,
+        },
         description: None,
         depfile: None,
         deps_format: None,

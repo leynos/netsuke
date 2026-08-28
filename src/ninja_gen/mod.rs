@@ -321,7 +321,6 @@ impl NamedAction<'_> {
             Recipe::Command {
                 command: StringOrList::Empty,
             } => return Self::reject_empty_command_recipe(),
-            Recipe::DependencyOnly => return Self::reject_empty_command_recipe(),
             Recipe::Script { script } => Self::script_shell_text(script),
             Recipe::Rule { .. } => return Self::reject_rule_recipe(),
         };

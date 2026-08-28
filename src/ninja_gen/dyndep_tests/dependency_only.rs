@@ -1,6 +1,6 @@
 //! Regression coverage for dependency-only actions with serial dependencies.
 
-use crate::ast::Recipe;
+use crate::ast::{Recipe, StringOrList};
 use crate::ir::{Action, BuildEdge, BuildGraph, DependencyOrder};
 use crate::ninja_gen::dyndep::generate_bundle;
 use anyhow::{Result, ensure};
@@ -12,7 +12,9 @@ fn dependency_only_serial_bundle_uses_phony_without_a_recipe() -> Result<()> {
     graph.actions.insert(
         "aggregate".into(),
         Action {
-            recipe: Recipe::DependencyOnly,
+            recipe: Recipe::Command {
+                command: StringOrList::Empty,
+            },
             description: None,
             depfile: None,
             deps_format: None,

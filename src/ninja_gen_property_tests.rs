@@ -7,7 +7,7 @@ use proptest::prelude::*;
 use test_support::ninja_gen::paths_strategy;
 
 use super::{
-    DisplayEdge, GeneratedDyndep, GeneratedNinja, NinjaGenError, generate, generate_bundle,
+    DisplayEdge, GeneratedDyndep, GeneratedNinja, generate, generate_bundle,
     test_support::command_action,
 };
 use crate::{
@@ -286,6 +286,16 @@ proptest! {
         let error = generate(&graph).expect_err("empty command recipe should be rejected");
         let is_stable_empty_recipe_error = matches!(error, NinjaGenError::EmptyCommandRecipe { action_index: 1 });
         prop_assert!(is_stable_empty_recipe_error);
+    }
+
+    #[test]
+    fn scalar_command_output_retains_the_preexisting_form(command in "echo [a-z]{1,12}") {
+        let ninja = generate(&scalar_graph(command.clone())).expect("scalar command should generate");
+        let expected_command_line = format!("  command = {command}\n");
+        let retains_scalar_form = ninja.contains(&expected_command_line);
+        let uses_list_boundary = ninja.contains("_netsuke_background_before=$${!:-}");
+        prop_assert!(retains_scalar_form);
+        prop_assert!(!uses_list_boundary);
     }
 
     #[test]

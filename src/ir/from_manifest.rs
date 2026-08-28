@@ -116,17 +116,15 @@ impl BuildGraph {
                         },
                     )?
                 }
-                Recipe::Command { .. } | Recipe::Script { .. } | Recipe::DependencyOnly => {
-                    register_action(
-                        actions,
-                        target.recipe.clone(),
-                        None,
-                        ActionBindings {
-                            inputs: &inputs,
-                            outputs: &outputs,
-                        },
-                    )?
-                }
+                Recipe::Command { .. } | Recipe::Script { .. } => register_action(
+                    actions,
+                    target.recipe.clone(),
+                    None,
+                    ActionBindings {
+                        inputs: &inputs,
+                        outputs: &outputs,
+                    },
+                )?,
             };
 
             let edge = BuildEdge {

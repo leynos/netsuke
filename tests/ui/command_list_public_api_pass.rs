@@ -9,6 +9,14 @@ fn command(recipe: Recipe) -> StringOrList {
     command
 }
 
+fn recipe_kind(recipe: Recipe) -> &'static str {
+    match recipe {
+        Recipe::Command { .. } => "command",
+        Recipe::Script { .. } => "script",
+        Recipe::Rule { .. } => "rule",
+    }
+}
+
 fn main() {
     let borrowed = StringOrList::from("borrowed");
     let owned = StringOrList::from(String::from("owned"));
@@ -22,4 +30,10 @@ fn main() {
         command: StringOrList::from("recipe"),
     });
     assert!(matches!(constructed, StringOrList::String(value) if value == "recipe"));
+    assert_eq!(
+        recipe_kind(Command {
+            command: StringOrList::from("recipe"),
+        }),
+        "command"
+    );
 }
