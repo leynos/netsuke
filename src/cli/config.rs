@@ -13,11 +13,11 @@ use super::validation::validation_error;
 use crate::host_pattern::HostPattern;
 
 #[path = "policy_definitions.rs"]
-mod policy_definitions;
+pub(super) mod policy_definitions;
 
 pub(super) use policy_definitions::{
     ACCESSIBILITY_POLICY_DEFINITIONS, COLOUR_POLICY_DEFINITIONS, EMOJI_POLICY_DEFINITIONS,
-    PROGRESS_POLICY_DEFINITIONS, PolicyDefinition,
+    PROGRESS_POLICY_DEFINITIONS,
 };
 use policy_definitions::{definition_for, parse_policy};
 
