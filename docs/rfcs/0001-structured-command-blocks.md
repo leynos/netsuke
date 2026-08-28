@@ -122,7 +122,10 @@ This RFC has the following goals:
 - ensure scalar interpolation cannot introduce syntax or split arguments;
 - support typed list interpolation for flags, inputs, and outputs;
 - support exact per-process environment overlays;
+- support per-block working directories and per-stage private temporary
+  directories;
 - model standard-input files, output files, teeing, and pipelines explicitly;
+- support bounded stdout capture and selection of stdout or stderr as a pipe;
 - preserve the existing behaviour of legacy command strings and all-string
   command lists;
 - provide deterministic validation before Ninja starts work;
@@ -140,7 +143,6 @@ This RFC does not attempt to:
   expression, query, or program fragment;
 - sanitize shell source supplied under `shell: true`;
 - add runtime Jinja evaluation;
-- add per-command working directories;
 - add append-mode redirection or merged stdout and stderr;
 - add rich environment operations such as `prepend`, `append`, `default`, or
   `unset`;
@@ -234,6 +236,9 @@ stdout: path
 stderr: path
 tee: path
 pipe: false
+cwd: path
+capture_stdout: 65536
+temp_dir: true
 ```
 
 | Field | Type | Default | Meaning |
@@ -245,7 +250,10 @@ pipe: false
 | `stdout` | string path | inherited | Write standard output to a truncated file. |
 | `stderr` | string path | inherited | Write standard error to a truncated file. |
 | `tee` | string path | absent | Copy standard output to inherited stdout and a truncated file. |
-| `pipe` | Boolean | `false` | Connect standard output to the next structured block's stdin. |
+| `pipe` | Boolean or `stdout`/`stderr` | `false` | Connect the selected stream to the next structured block's stdin. `true` is an alias for `stdout`. |
+| `cwd` | string path | effective directory | Run this block relative to the effective `-C` directory. |
+| `capture_stdout` | non-negative integer | absent | Retain at most this many stdout bytes for the action result. |
+| `temp_dir` | Boolean | `false` | Bind a private, per-stage runtime temporary directory. |
 
 Table 1: Structured command block fields.
 
@@ -567,6 +575,15 @@ effective `PATH` according to Netsuke's platform resolver. A value containing a
 path separator is treated as a path relative to the effective working directory
 unless it is absolute.
 
+The effective working directory starts with the directory selected by the
+command-line `-C` option. A block without `cwd` runs there. When `cwd` is
+present, Netsuke renders it as a path and resolves it relative to that
+effective directory; an absolute path remains absolute. Each block resolves
+its own `cwd`, so a pipeline stage does not inherit the preceding stage's
+working directory. The resolved directory must exist and be a directory before
+the stage starts. This block or stage directory is the base for all relative
+stream paths and is the child's working directory.
+
 On Windows, direct mode must reject a resolved `cmd.exe`, `.bat`, or `.cmd`
 target. Rust preserves Windows batch-file launching through `cmd.exe`, whose
 non-standard argument parser can reinterpret otherwise distinct arguments as
@@ -608,10 +625,10 @@ interpolation safe.
 
 ### 10.3 Structured facilities still apply
 
-The `env`, `stdin`, `stdout`, `stderr`, `tee`, and `pipe` fields retain their
-Netsuke-managed meanings in shell mode. For example, a shell block may
-participate as one stage in a structured pipeline without placing the outer
-pipe operator in shell source.
+The `env`, `cwd`, `stdin`, `stdout`, `stderr`, `tee`, `capture_stdout`,
+`temp_dir`, and `pipe` fields retain their Netsuke-managed meanings in shell
+mode. For example, a shell block may participate as one stage in a structured
+pipeline without placing the outer pipe operator in shell source.
 
 ## 11. Environment semantics
 
@@ -653,7 +670,23 @@ The `env()` Jinja helper reads the manifest compiler's environment. It does not
 observe the block overlay being defined because that overlay applies only when
 the child process starts.
 
-### 11.3 Deferred operations
+### 11.3 Runtime temporary directories
+
+When `temp_dir: true`, the runner creates a private directory for that stage
+before spawning it, binds the stage's `TMPDIR`, `TMP`, and `TEMP` variables to
+that directory, and removes the directory after the stage and its associated
+relays have finished. The directory is created outside the project tree with
+owner-only permissions, or the closest platform equivalent. A stage receives
+its own directory; sequential stages do not share one, and the directory is
+not an action-plan sidecar.
+
+The temporary-directory bindings are applied after the `env` overlay and take
+precedence over entries with the same names. With `temp_dir: false`, `env` may
+set those variables normally, but Netsuke does not create or remove a
+directory. The runner never exposes the generated path to a later execution
+unit or persists it in the action plan.
+
+### 11.4 Deferred operations
 
 This RFC deliberately defers object-valued operations such as `default`,
 `prepend`, `append`, and `unset`. They require ordered merge semantics across
@@ -665,15 +698,24 @@ small, deterministic first surface and covers the motivating use case.
 ### 12.1 Path resolution
 
 Every stream path is rendered at manifest compilation time and resolved relative
-to Netsuke's effective working directory after command-line `-C` processing.
-Netsuke opens the path when the action executes, not while the manifest is
-compiled.
+to the block's resolved `cwd`. An absent `cwd` resolves to the effective
+working directory after command-line `-C` processing. Netsuke opens the path
+when the action executes, not while the manifest is compiled.
 
-At action start, the runner records the current identity (including an explicit
-absent state) of every configured destination as one set: `stdin`, `stdout`,
-`stderr`, and `tee`. It then opens a provisional handle for each destination
-without truncation. Input handles are read-only; output handles may create a
-missing file but must not truncate it.
+Validation occurs independently when each execution unit starts. For a
+maximal structured pipeline, the unit's destination set is the union of
+`stdin`, `stdout`, `stderr`, and `tee` from all its stages, resolved using each
+stage's own `cwd`; all those destinations are checked together. A different
+sequential execution unit starts a new validation set and does not compare its
+destinations with a previous unit. Sequential output reuse is therefore
+permitted: after one unit succeeds, a later unit may resolve and open that
+unit's output as its `stdin`.
+
+At unit start, the runner records the current identity (including an explicit
+absent state) of every configured destination in that unit's set. It then opens
+a provisional handle for each destination without truncation. Input handles
+are read-only; output handles may create a missing file but must not truncate
+it.
 The handles use non-following flags, or the closest platform-equivalent safe
 handle semantics, where available.
 
@@ -687,12 +729,12 @@ symlinks, and hard links must therefore be detected, including `stdin` versus
 every output destination, wherever the platform provides filesystem identity
 information. All provisional handles are closed on rejection.
 
-Only after every opened-handle identity and pairwise-distinctness check
-succeeds may the runner truncate output handles and bind them to child
-streams. The validation also applies when a destination is used alongside a
-pipeline; the pipeline restrictions below remain in force. The runner never
-reopens a destination by path after provisional open; truncation and stream
-binding use only the validated handles.
+Only after every opened-handle identity and pairwise-distinctness check within
+the execution unit succeeds may the runner truncate output handles and bind
+them to child streams. The validation also applies when a destination is used
+alongside a pipeline; the pipeline restrictions below remain in force. The
+runner never reopens a destination by path after provisional open; truncation
+and stream binding use only the validated handles.
 
 Stream paths do not implicitly become target sources, dependencies, or outputs.
 Manifest authors must continue to declare graph relationships explicitly.
@@ -722,10 +764,18 @@ byte to both that file and the action runner's inherited standard output.
 Netsuke treats a read or write failure in the tee path as an execution failure
 even when the child exits successfully.
 
-`pipe: true` directs the child's standard output to the next structured command
-block's standard input.
+`capture_stdout` directs standard output to a bounded in-memory capture. Its
+non-negative integer value is the maximum number of bytes retained. If the
+child writes more than that limit, the runner fails the execution unit rather
+than silently truncating the capture. Captured bytes remain available only in
+the runner's bounded result and diagnostics until the unit completes; they are
+then discarded and cannot be consumed by a later unit.
 
-`stdout`, `tee`, and `pipe: true` are mutually exclusive.
+`pipe: true` or `pipe: "stdout"` directs the child's standard output to the
+next structured command block's standard input. `true` is exactly an alias for
+`"stdout"`.
+
+`stdout`, `tee`, `capture_stdout`, and a stdout pipe are mutually exclusive.
 
 ### 12.4 Standard error
 
@@ -734,12 +784,16 @@ When present, Netsuke uses its validated output handle, truncates the named
 file after all destination checks succeed, and directs standard error to it.
 
 Standard error is independent of the stdout selection. This RFC does not define
-stderr piping, stderr teeing, or `2>&1`-style stream merging.
+stderr teeing or `2>&1`-style stream merging. `pipe: "stderr"` directs the
+child's standard error to the next structured command block's standard input.
+It is mutually exclusive with `stderr`. A block may pipe stderr while selecting
+an independent stdout behaviour, including `tee` or `capture_stdout`.
 
-No two configured stream destinations may identify the same file. Opening the
-same file through independent handles would give ambiguous ordering and
-file-offset semantics. This pairwise check occurs before any output handle is
-truncated.
+No two configured stream destinations in one execution unit may identify the
+same file. Opening the same file through independent handles would give
+ambiguous ordering and file-offset semantics. This pairwise check occurs
+before any output handle is truncated; destinations in separate sequential
+units are not part of this check.
 
 ### 12.5 File modes and byte handling
 
@@ -755,10 +809,10 @@ fails the execution unit and stops the enclosing command sequence.
 
 ### 13.1 Formation
 
-A block with `pipe: true` must be followed immediately by another structured
-command block in the same source command list. The next item may not be a legacy
-string, rule item, or script item. The final item in a command list may not set
-`pipe: true`.
+A block with `pipe: true`, `pipe: "stdout"`, or `pipe: "stderr"` must be
+followed immediately by another structured command block in the same source
+command list. The next item may not be a legacy string, rule item, or script
+item. The final item in a command list may not select a pipe.
 
 A maximal chain of such adjacent blocks forms one structured pipeline:
 
@@ -780,17 +834,29 @@ stage or out of its last stage in this RFC.
 
 Netsuke creates operating-system pipes and starts the stages as one execution
 unit. It starts every stage and every required drain or tee relay before waiting
-for any stage. Standard output from each non-final stage feeds standard input of
-the next stage. The final stage applies its own inherited, `stdout`, or `tee`
-behaviour.
+for any stage. Each child inherits only its assigned standard handles: the
+selected input pipe, the selected output or relay pipe, and its configured
+standard handles. It never inherits an unrelated pipe end. After spawning each
+stage, the runner closes its duplicate and otherwise unused pipe ends
+immediately, retaining only ends needed by a later spawn or by a relay. Once
+the final writer has been spawned, the runner closes its own duplicate writer
+end so downstream readers can observe EOF.
 
-If a stage cannot be spawned, Netsuke terminates and reaps any stages already
-started for that pipeline, then reports the spawn failure. If any managed pipe,
+Standard output or standard error selected by a non-final stage feeds standard
+input of the next stage. The final stage applies its own inherited, `stdout`,
+`tee`, or `capture_stdout` behaviour.
+
+If a stage cannot be spawned, Netsuke closes every managed pipe end, terminates
+and reaps any stages already started for that pipeline. If any managed pipe,
 relay, or tee I/O fails, including a relay read failure or a tee write failure,
 Netsuke closes the affected pipe ends, terminates every still-running stage,
 and reaps every stage that was started. Otherwise, after all stages and relays
 have started successfully, Netsuke waits for every stage and drains every
 managed stream.
+
+Before reporting either success or failure, the runner joins every started
+drain or tee relay. No relay remains detached after stage statuses have been
+collected.
 
 The pipeline succeeds only when:
 
@@ -809,6 +875,12 @@ pipeline's failure stops the enclosing sequence.
 
 Execution units run in declaration order. Netsuke starts the next unit only
 when the previous unit succeeds. A failure stops the sequence.
+
+Stream validation is repeated at the start of each unit, rather than across
+the whole command list. Consequently, sequential output reuse is permitted:
+the next unit may open a successful earlier unit's output as `stdin`. Stages
+within one maximal pipeline remain one validation set and may not alias one
+another's stream destinations.
 
 ### 14.2 Legacy string groups
 
@@ -873,18 +945,28 @@ the required information is available at compile time.
 
 ### 15.3 Stream and pipeline validation
 
-- At most one of `stdout`, `tee`, or `pipe: true` may be selected.
-- `pipe: true` is invalid on a singular command block or the final list item.
-- The item after `pipe: true` must be a structured command block.
+- At most one of `stdout`, `tee`, `capture_stdout`, or a stdout pipe may be
+  selected. `pipe: true` is an alias for `pipe: "stdout"`.
+- `pipe: "stderr"` is mutually exclusive with `stderr`; stderr piping does not
+  prevent an independent stdout selection.
+- A pipe selection is invalid on a singular command block or the final list
+  item. The item after a pipe must be a structured command block.
 - A pipeline recipient may not specify `stdin`.
 - Pipelines may not cross rule, script, or legacy-string boundaries.
-- All configured destinations among `stdin`, `stdout`, `stderr`, and `tee` must
-  be provisionally opened without truncation using safe non-following handles,
-  or the closest platform equivalent. Each handle must match a fresh path
-  identity, and every pair of handles must have a distinct file identity.
-  Validation must detect relative path aliases, symlinks, hard links, path
-  replacement, disappearance, and unexpected creation before any output handle
-  is truncated. Provisional handles are closed on rejection.
+- All configured destinations among `stdin`, `stdout`, `stderr`, and `tee` in
+  one execution unit must be provisionally opened without truncation using
+  safe non-following handles, or the closest platform equivalent. Each handle
+  must match a fresh path identity, and every pair of handles must have a
+  distinct file identity. Validation must detect relative path aliases,
+  symlinks, hard links, path replacement, disappearance, and unexpected
+  creation before any output handle is truncated. Provisional handles are
+  closed on rejection. Destinations in separate sequential units are checked
+  independently.
+- `capture_stdout` must be a non-negative byte limit. It is mutually exclusive
+  with `stdout`, `tee`, and a stdout pipe; a limit violation fails the unit.
+- `cwd` must resolve to an existing directory before its execution unit starts.
+- `temp_dir: true` creates one private runtime directory for each stage and
+  binds the conventional temporary-directory environment variables to it.
 
 ### 15.4 Reference validation
 
@@ -946,11 +1028,20 @@ pub struct CommandBlock {
     pub invoke: String,
     pub shell: bool,
     pub env: BTreeMap<String, String>,
+    pub cwd: Option<Utf8PathBuf>,
     pub stdin: Option<Utf8PathBuf>,
     pub stdout: Option<Utf8PathBuf>,
     pub stderr: Option<Utf8PathBuf>,
     pub tee: Option<Utf8PathBuf>,
-    pub pipe_stdout: bool,
+    pub pipe: PipeStream,
+    pub capture_stdout: Option<usize>,
+    pub temp_dir: bool,
+}
+
+pub enum PipeStream {
+    None,
+    Stdout,
+    Stderr,
 }
 ```
 
@@ -1000,7 +1091,21 @@ pub enum ProcessKind {
     Direct { program: String, args: Vec<String> },
     Shell { source: String, shell: PlatformShell },
 }
+
+pub struct ProcessSpec {
+    pub kind: ProcessKind,
+    pub cwd: Utf8PathBuf,
+    pub env: BTreeMap<String, String>,
+    pub streams: StreamBindings,
+    pub capture_stdout: Option<usize>,
+    pub temp_dir: bool,
+}
 ```
+
+`StreamBindings` is responsible for the validated file handles and selected
+pipe ends. `cwd` is resolved per block before stream paths are resolved, and
+`temp_dir` is materialized per stage at execution time; neither value is
+inherited from a preceding sequential unit.
 
 The IR must contain no Ninja-specific quoting. Backend escaping remains the
 responsibility of Ninja synthesis.
@@ -1197,7 +1302,15 @@ The implementation should include:
   nothing else;
 - a helper executable that records argv, environment, stdin bytes, stdout bytes,
   stderr bytes, and exit status for cross-platform integration tests;
+- per-block and per-stage `cwd` tests, including relative stream-path
+  resolution and independent pipeline-stage directories;
+- bounded stdout-capture tests for the limit, overflow failure, stream
+  exclusivity, discarded completion lifetime, and captured-byte diagnostics;
+- per-stage temporary-directory tests for `TMPDIR`, `TMP`, and `TEMP`
+  precedence, isolation, cleanup, and distinction from action-plan sidecars;
 - pipeline tests where the first, middle, and final stages fail independently;
+- finite pipelines that verify unused pipe ends close, downstream stages
+  receive EOF, all relays join, and successful stages terminate;
 - spawn-failure tests that verify already-started stages are reaped;
 - high-volume pipeline tests that verify all stages and drain or tee relays
   start before waiting, plus tee-write-failure and relay-read-failure tests
@@ -1310,8 +1423,6 @@ visible during review:
   for generated manifests?
 - What object syntax should add append mode, stderr teeing, or stdout/stderr
   merging without creating conflicting file handles?
-- Should per-block `cwd` be added, and how should it interact with graph paths
-  and the effective `-C` directory?
 - Which follow-up RFC should define ordered environment operations and merging
   across rule, target, action, and block levels?
 - Should rule references eventually declare explicit stream contracts that
