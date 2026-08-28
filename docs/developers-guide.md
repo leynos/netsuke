@@ -72,6 +72,29 @@ named-command help paths render clap help directly and do not load a manifest.
 Keep future help topics within this boundary rather than coupling read-only
 inspection to `runner::process`.
 
+Manifest rendering has two caller-selected modes. Full rendering evaluates
+all manifest fields, including recipe bodies, for build, generate, and manifest
+output. Manifest-query rendering evaluates discovery metadata and the
+structural selectors needed to validate the graph, but leaves command and
+script recipe bodies untouched. This boundary is what permits a recipe to
+contain a build-only helper without causing `help targets` to execute or
+otherwise evaluate that helper; it does not alter full-render behaviour.
+
+Helpers excluded from the query allowlist are registered as deliberate
+query-disabled stubs by the standard-library adapter. The stubs return a
+stable, classified MiniJinja operation error. Manifest expansion recognises
+that classification only while evaluating a query `when` expression: the
+result is a conditional entry when the helper prevents evaluation, whereas a
+successfully evaluated false expression still excludes the entry. Unrelated
+template errors continue to propagate normally.
+
+Expansion records the conditional outcome as internal `Target::conditional`
+metadata, which defaults to `false` for ordinary manifest data. Help-query
+cataloguing copies that flag to every resolved name, and the text and JSON
+renderers expose it as the localized conditional marker and the JSON
+`conditional` boolean. The flag is discovery metadata only and must not change
+which recipe a normal build executes.
+
 ### Help-target query telemetry
 
 `src/runner/help_telemetry.rs` is the observability boundary around the pure
