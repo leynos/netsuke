@@ -88,7 +88,7 @@ pub(crate) fn theme_prefs(theme: ThemePreference) -> OutputPrefs {
 
 #[cfg(test)]
 mod tests {
-    //! Verify that generator-version redaction remains scoped across SemVer values.
+    //! Verify that generator-version redaction remains scoped across `SemVer` values.
 
     use super::*;
     use proptest::prelude::*;
