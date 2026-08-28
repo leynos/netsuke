@@ -774,9 +774,9 @@ Merges mappings left to right, with later mappings taking precedence.
   for those two. `append` and `prepend` accumulate deliberately and satisfy
   neither law: `{'x': [1]}` merged with itself under `append` yields
   `{'x': [1, 1]}`, and under `recursive=true` a scalar between two sequence
-  values makes the two groupings differ, because one grouping replaces where
-  the other appends. The guide states this at the argument so authors do not
-  assume an accumulating merge is repeatable.
+  values makes the two groupings differ because one grouping replaces where
+  the other appends. The guide states this at the argument so that authors do
+  not assume an accumulating merge is repeatable.
 
 #### `mapping | dict2items(key_name='key', value_name='value')`
 
@@ -1898,12 +1898,13 @@ each invent their own version of the same four things.
   table 3, so combinatorial and parser bounds are enforced in one place.
 - The domain-error and `netsuke::jinja::<module>::<reason>` diagnostic
   scaffolding from section 6.9, following the existing `ResolveError` pattern.
-- The manifest-query registration test from section 6.2, which enumerates both
-  environments and asserts the difference. This slice also repairs the two
-  existing gaps recorded in section 3.3: it localizes
-  `manifest_query_operation_error` and adds explicit stubs for `size`,
-  `linecount`, `hash`, `digest`, `realpath`, and `expanduser`, so no helper
-  silently disappears from a manifest query.
+- The manifest-query registration test from section 6.2, which asserts each
+  helper's disposition by exercising its registration rather than by
+  differencing name sets. This slice also repairs the two existing gaps
+  recorded in section 3.3: it localizes `manifest_query_operation_error`, and
+  it adds explicit stubs for all sixteen helpers that section 3.3 records as
+  absent from the manifest-query environment, so no helper silently
+  disappears from a manifest query.
 - The **maintained inventory** in
   [the standard-library guide](../stdlib-yaml-and-jinja-guide.md): one table
   distinguishing MiniJinja built-ins, existing Netsuke extensions, adopted
