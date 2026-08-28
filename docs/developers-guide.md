@@ -1747,9 +1747,31 @@ module approaches that cap, the established pattern is to split its private
 helpers into a sibling `#[path]` module rather than restructure the public
 surface. Each such module is a pure implementation seam: it keeps the parent
 below the cap while preserving `pub(super)` visibility for the helpers the
-parent needs, and nothing outside the parent module may reach it. These split
-modules record their ownership and caller contract in their `//!` header; the
-following list is the authoritative indexing of the current ones.
+parent needs, and nothing outside the parent module may reach it. A helper may
+use `pub(in crate::ir)` only when a sibling IR support module needs it; that is
+still an internal boundary, not a public API. These split modules record their
+ownership and caller contract in their `//!` header; the following list is the
+authoritative indexing of the current ones.
+
+### `src/ir/cycle_support.rs`
+
+`src/ir/cycle.rs` owns this support module and declares it `pub(super)`, so it
+is nameable only within `ir`. Its `pub(in crate::ir)` comparisons are likewise
+limited to the IR implementation; they must not be re-exported from the crate
+or used by non-IR modules.
+
+`first_byte_cmp` owns the bounded string-comparison semantics for Kani builds.
+Under `cfg(kani)`, it orders non-empty strings by their first UTF-8 byte, orders
+an empty string before a non-empty string, and treats two empty strings as
+equal. Its only direct consumers are `path_cmp`, which adapts cycle paths with
+`Utf8Path::as_str`, and `sort_utils::string_cmp`, which adapts manifest rule
+names. Future IR code may reuse it only when its symbolic inputs have that same
+single-byte contract; ordinary builds must keep their full lexical comparison,
+and a caller with different semantics must own a separate local comparator.
+
+This composition keeps the Kani approximation in one owner while leaving the
+cycle and manifest modules responsible for adapting their domain values. It is
+not a general-purpose string-sorting utility.
 
 ### `src/ir/sort_utils.rs`
 
@@ -1757,11 +1779,12 @@ Kani-friendly deterministic sorting and comparison helpers, owned by
 `src/ir/from_manifest_support.rs` (which declares
 `#[path = "sort_utils.rs"] mod sort_utils;`). It provides `insertion_sort_by`,
 `sort_strings`, `sort_paths`, and `has_seen_output`, which the manifest-to-IR
-rule-resolution and duplicate-output detection paths consume. The
-implementations avoid `std::slice::sort` and full-width comparisons so the Kani
-harnesses in `src/ir/from_manifest_verification.rs` can verify orderings with
-bounded symbolic input; keep these helpers dependency-free and deterministic,
-and do not move them out to a shared utility crate.
+rule-resolution and duplicate-output detection paths consume. Its Kani
+`string_cmp` adapts rule names to the `cycle::support::first_byte_cmp` contract;
+it must not duplicate or redefine that byte-ordering semantics. Keep the local
+sorting algorithms dependency-free and deterministic so the Kani harnesses in
+`src/ir/from_manifest_verification.rs` can verify bounded symbolic input, and
+do not move them out to a shared utility crate.
 
 ### `src/ir/cycle_detector.rs`
 
