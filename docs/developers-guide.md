@@ -2740,8 +2740,11 @@ shapes in [ADR-008](adr-008-environment-seam-taxonomy.md); it mirrors the
 `test_support::env_lock::EnvLock` serializes the few tests that change the
 process working directory. It is retired and retained only until those callers
 migrate; do not add callers or tests.
-[ADR-008](adr-008-environment-seam-taxonomy.md) records the replacement:
-injected `mockable::Env` seams in production signatures. Until the current
+[ADR-008](adr-008-environment-seam-taxonomy.md) records its retirement.
+Environment-variable callers migrate to injected `mockable::Env` seams in
+production signatures. Current-working-directory callers migrate to the
+existing working-directory seam, such as an injected base or current-directory
+path, or use absolute paths or `-C/--directory` instead. Until the current
 CWD-only callers migrate, acquire it before `CwdGuard` so restoration occurs
 before the lock is released:
 

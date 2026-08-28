@@ -154,11 +154,11 @@ and agents.
     covered by the regression tests added in issue #385).
 
 - [ ] 3.11.5. Retire `EnvLock` rather than harden its synchronization tests.
-  - Adopt injected `mockable::Env` seams in production signatures as the
+  - [ ] Adopt injected `mockable::Env` seams in production signatures as the
     replacement for process-global test coordination.
-  - Migrate the remaining callers under issues #491, #492, and #493, in that
+  - [ ] Migrate the remaining callers under issues #491, #492, and #493, in that
     order.
-  - Remove `EnvLock` under issue #494 once those migrations complete.
+  - [ ] Remove `EnvLock` under issue #494 once those migrations complete.
   - See [ADR-008](adr-008-environment-seam-taxonomy.md).
 
 ### 3.12. Terminal rendering verification
