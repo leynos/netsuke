@@ -67,6 +67,15 @@ operator, user, and contributor references are easier to find.
   Application-owned configuration-load metrics, verbose snapshots, and bounded
   label vocabulary.
 
+## Proposals
+
+- [rfcs/](rfcs/): Requests for Comments proposing changes that need technical
+  review before they become binding.
+  - [rfcs/0006-ansible-inspired-template-standard-library.md](rfcs/0006-ansible-inspired-template-standard-library.md):
+    Survey of the ansible-core Jinja standard library, with an explicit
+    disposition for every candidate helper and Netsuke-native contracts for
+    the accepted set.
+
 ## User and operator guides
 
 - [quickstart.md](quickstart.md): First-run walkthrough for building with

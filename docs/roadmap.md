@@ -22,6 +22,16 @@ Each phase validates a product hypothesis:
 - Phase 5 validates that repeated human, Continuous Integration (CI), editor,
   and agent usage improves through introspection, profiles, run history,
   delivery, and feedback.
+- Phase 6 validates that absorbing common manifest operations into the
+  template standard library makes declarative build manifests markedly easier
+  to write without weakening determinism or the capability boundary.
+
+Each phase carries one hypothesis, and Phase 6 is the capability track for
+template standard-library work. Phases 3 to 5 predate that separation: each
+mixes capability delivery with verification and consistency work under a
+single hypothesis, and they are not being re-partitioned. New template
+standard-library work belongs in Phase 6 rather than being appended to
+whichever phase happens to be open.
 
 The roadmap keeps user-facing product grammar separate from implementation
 detail. Public tasks name Netsuke capabilities first. Implementation adapters,
@@ -95,6 +105,10 @@ rewrite:
   delivered yet.
 - New CLI-redesign work starts at `3.15` and Phase 5 so historical numbers are
   not reused.
+- Phase 6 is new and introduces the template standard-library expansion
+  specified in
+  [RFC 0006](rfcs/0006-ansible-inspired-template-standard-library.md). It
+  reuses no historical numbers.
 
 ## 3. Friendly polish and agent-consistent CLI foundations
 
@@ -675,3 +689,473 @@ configuration, inspect run history, route artefacts, and report friction.
   - [ ] Keep human-first local examples beside automation examples.
   - [ ] Cross-link the archive so reviewers can trace where historical work
     moved.
+
+## 6. Template standard-library expansion
+
+Hypothesis: Netsuke manifests currently fall back to `shell()` whenever they
+need structured data, mapping composition, pattern matching, or version
+comparison; if the template standard library absorbs those operations as pure,
+bounded, capability-classified helpers, manifests become markedly easier to
+write, the generated graph stays byte-for-byte reproducible, and
+`netsuke help targets` can answer more questions without executing anything.
+
+Kind: capability. Value is measured by the manifest operations that no longer
+require a subprocess, not by name parity with Ansible.
+
+Scope: the accepted set in
+[RFC 0006](rfcs/0006-ansible-inspired-template-standard-library.md). Every
+task in this phase targets a release after v0.1.0 final and must not widen the
+hardening release defined by issue `#594`. Candidates that RFC 0006 §10
+rejects must not be reintroduced by a later task, and candidates it defers are
+gated behind step 6.10.
+
+### 6.1. Settle the standard-library contract before the volume arrives
+
+This step answers whether one shared contract, covering canonical equality,
+checked bounds, typed localized diagnostics, and an enumerated manifest-query
+boundary, can carry every later helper, or whether each capability group needs
+its own. Its outcome decides whether steps 6.2 to 6.9 can be reviewed as
+ordinary additions or need individual design passes. See RFC 0006 §§6 and
+14.1.
+
+- [ ] 6.1.1. Split the RFC 0006 accepted set into focused child issues.
+  - See RFC 0006 §14.
+  - Give each issue the full cross-cutting contract from RFC 0006 §6 rather
+    than a reference to Ansible.
+  - Record a release target of v0.1.x or later for each issue.
+  - Success: every accepted capability in RFC 0006 §7 is covered by exactly
+    one open child issue, and every deferred or rejected candidate is covered
+    by none.
+- [ ] 6.1.2. Implement the canonical value key and equality relation.
+  - See RFC 0006 §6.7.
+  - Derive the key with the existing `serde_json_canonicalizer` dependency and
+    reject value kinds that have no canonical form.
+  - Provide an order-preserving deduplication helper keyed on it.
+  - Success: property tests show the relation is reflexive, symmetric, and
+    transitive; that deduplication preserves first appearance; and that no
+    public helper exposes a hash-map iteration order.
+- [ ] 6.1.3. Implement the shared bounded-materialization helper. Requires
+  6.1.2.
+  - See RFC 0006 §6.8 and table 3.
+  - Cover input length, nesting depth, checked combinatorial cardinality, and
+    match counts.
+  - Success: cardinality is rejected before allocation, and the diagnostic
+    names both the computed cardinality and the ceiling.
+- [ ] 6.1.4. Establish the stdlib domain-error and diagnostic-code scaffolding.
+  - See RFC 0006 §6.9 and the stdlib resolver-boundary conventions in
+    [developers-guide.md](developers-guide.md).
+  - Follow the existing `ResolveError` boundary: one domain error enum per
+    capability group with a single `From` conversion, not ad hoc `Error::new`
+    calls in leaf helpers.
+  - Register `netsuke::jinja::<module>::<reason>` codes with Fluent keys under
+    `stdlib.<module>.<condition>`.
+- [ ] 6.1.5. Close the manifest-query disclosure gaps.
+  - See RFC 0006 §§3.3 and 6.2.
+  - Localize `manifest_query_operation_error` through a Fluent key instead of
+    building it with `format!`.
+  - Add explicit failing stubs for every full-environment helper currently
+    absent from the manifest-query environment, all of which vanish rather
+    than explaining the restriction: the filters `realpath`, `expanduser`,
+    `size`, `linecount`, `hash`, and `digest`; `which`, as both a filter and a
+    function; the functions `command_available` and `now`; and the file tests
+    `dir`, `file`, `symlink`, `pipe`, `block_device`, `char_device`, and
+    `device`.
+  - Success: no helper registered in the full environment is silently absent
+    from the manifest-query environment.
+- [ ] 6.1.6. Add the manifest-query registration contract test. Requires
+  6.1.5.
+  - See RFC 0006 §6.2.
+  - Assert dispositions by exercising each registration rather than by
+    differencing name sets. Task 6.1.5 keeps every non-pure helper registered
+    as a stub, so both environments hold the same names and the difference is
+    always empty.
+  - For every helper in the inventory, check that the name resolves in both
+    environments, that a pure helper evaluates normally under the
+    manifest-query registration, and that a non-pure helper raises the
+    restriction diagnostic there.
+  - Success: a helper absent from the inventory, or one whose manifest-query
+    registration neither evaluates nor raises the restriction diagnostic,
+    fails the suite, so a non-pure helper cannot be added without deciding its
+    query disposition.
+- [ ] 6.1.7. Publish the maintained standard-library inventory.
+  - See RFC 0006 §§11 and 14.1.
+  - Distinguish MiniJinja built-ins, existing Netsuke extensions, adopted
+    Ansible-inspired helpers, and deliberately unsupported Ansible helpers
+    with the Netsuke spelling to use instead.
+  - Record each collision resolution at both colliding entries, covering
+    `hash` against `text_hash`, `groupby` against `group_by`, `unique` against
+    `uniq`, `items` against `dict2items`, `in` against `contains`, and the
+    `abs` filter against the `abs` test.
+  - Success: a test asserts that every registered name appears in the
+    inventory, so the table cannot drift.
+
+### 6.2. Read structured data without a subprocess
+
+This step answers whether a manifest can consume compiler metadata, package
+manifests, and generated configuration fragments directly, or whether `jq`,
+`yq`, and a scripting runtime remain unavoidable host assumptions. Its outcome
+determines how much surrounding toolchain a `Netsukefile` still has to assume.
+See RFC 0006 §8.1 and
+[adr-001-replace-serde-yml-with-serde-saphyr.md](adr-001-replace-serde-yml-with-serde-saphyr.md).
+
+- [ ] 6.2.1. Add `from_json` with duplicate-key rejection and source offsets.
+  Requires 6.1.3 and 6.1.4.
+  - See RFC 0006 §8.1.
+  - Preserve object order and report line, column, and byte offset on failure.
+  - Success: a document with a repeated object key fails naming the key and
+    the offset of its second occurrence, rather than silently keeping the last
+    value.
+- [ ] 6.2.2. Add `from_yaml` and `from_yaml_all` over the existing safe YAML
+  stack. Requires 6.2.1.
+  - See RFC 0006 §8.1.
+  - Reject non-standard tags, duplicate keys, and merge keys, and materialize
+    the multi-document result rather than exposing a lazy iterator.
+  - Establish whether `serde-saphyr` can bound alias expansion; if it cannot,
+    reject aliases outright and record that in the standard-library guide.
+  - Success: an alias-expansion bomb fails with a bounded-resource diagnostic
+    instead of exhausting memory.
+- [ ] 6.2.3. Add the deterministic `to_yaml` and `to_nice_json` serializers.
+  Requires 6.2.2.
+  - See RFC 0006 §§6.3 and 8.1.
+  - Pin key ordering, indentation, scalar quoting, line endings, and
+    trailing-newline behaviour, quoting every scalar that could be read back
+    as a boolean, null, number, or timestamp.
+  - Resolve RFC 0006 §16 question 1 before registering: either reject
+    `to_nice_yaml` outright or register it solely to raise a diagnostic naming
+    `to_yaml(indent=4)`.
+  - Success: property tests show that `to_yaml` with `from_yaml` and
+    `to_nice_json` with `from_json` round-trip under canonical equality, and
+    that the YAML 1.1 `yes`, `no`, `on`, and `off` spellings cannot reach a
+    generated file unquoted.
+
+### 6.3. Make configuration layering expressible
+
+This step answers whether the mapping transforms remove the merge and
+re-index loops that `vars`, `foreach`, and per-entry overrides currently force
+manifest authors to write by hand. Its outcome informs how much of the
+platform and toolchain configuration problem the template layer can own. See
+RFC 0006 §8.2.
+
+- [ ] 6.3.1. Add `combine` with explicit recursion and list policies. Requires
+  6.1.2 and 6.1.4.
+  - See RFC 0006 §8.2.
+  - Support `recursive` and the `replace`, `keep`, `append`, and `prepend`
+    list policies, enumerating the valid values on an unknown one.
+  - Preserve first-appearance key order, updating an overridden key in place.
+  - Add a regression test for the recursive non-associativity counterexample
+    in RFC 0006 §8.2: with `a = {'x': {'a': 1}}`, `b = {'x': 0}`, and
+    `c = {'x': {'b': 2}}`, grouping to the left yields `{'x': {'b': 2}}` and
+    grouping to the right yields `{'x': {'a': 1, 'b': 2}}`.
+  - Success: property tests show that an empty mapping is the identity under
+    every policy, that self-merge idempotence holds under `replace` and
+    `keep` with or without `recursive`, that associativity holds when
+    `recursive=false` under `replace` and `keep`, and that the result is
+    independent of hash iteration order. Associativity is not asserted for
+    `recursive=true`, and neither law is asserted for the accumulating
+    `append` and `prepend` policies.
+- [ ] 6.3.2. Add `dict2items` and `items2dict` with an explicit duplicate
+  policy. Requires 6.3.1.
+  - See RFC 0006 §8.2.
+  - Reject equal `key_name` and `value_name`, and reject missing fields naming
+    the element index.
+  - Success: `dict2items` followed by `items2dict` is the identity, and a
+    duplicate derived key fails by default rather than silently collapsing.
+- [ ] 6.3.3. Add `extract` with explicit missing-value behaviour. Requires
+  6.3.2.
+  - See RFC 0006 §8.2.
+  - Keep the key as the filter subject so the filter composes with `map`.
+  - Reject negative sequence indices, and treat traversal into a
+    non-container as an error even when `default` is supplied.
+  - Success: a missing key errors naming the failing step of the path unless
+    `default` is given; the filter never yields undefined.
+- [ ] 6.3.4. Add `subelements` and `rekey_on_member`. Requires 6.3.3.
+  - See RFC 0006 §8.2.
+  - Keep `skip_missing` scoped to absence only; a value present at the path
+    but not a sequence is always an error.
+  - Accept sequences only for `rekey_on_member`, rejecting the
+    mapping-of-mappings form that silently discards keys.
+- [ ] 6.3.5. Add an end-to-end layered-configuration manifest example.
+  Requires 6.3.4.
+  - Cover defaults, a platform overlay, and a per-target overlay composed with
+    `combine`, `dict2items`, and `extract`.
+  - Add the example to
+    [stdlib-yaml-and-jinja-guide.md](stdlib-yaml-and-jinja-guide.md) with a
+    `tested-example` marker so the documentation harness executes it.
+  - Success: the example builds in an isolated workspace and its generated
+    Ninja is byte-identical across two runs.
+
+### 6.4. Make build matrices expressible with stable ordering
+
+This step answers whether ordered collection algebra can replace both
+hand-expanded target matrices and Ansible's set-backed filters without
+introducing a single unstable ordering. Its outcome is the strongest test of
+the determinism claim in RFC 0006 §6.3. See RFC 0006 §§8.3 and 8.8.
+
+- [ ] 6.4.1. Add the ordered set algebra. Requires 6.1.2.
+  - See RFC 0006 §8.3.
+  - Implement `union`, `intersect`, `difference`, and `symmetric_difference`
+    with first-appearance ordering and canonical-key deduplication.
+  - Success: property tests show idempotence, the documented ordering, and
+    that reordering an input's duplicate positions does not change the result.
+- [ ] 6.4.2. Add the bounded combinatorial filters. Requires 6.1.3.
+  - See RFC 0006 §§6.8 and 8.3.
+  - Implement `product`, `combinations`, and `permutations` with checked
+    cardinality and the lower ceiling for `permutations`.
+  - Success: an over-large request fails naming the computed cardinality and
+    the ceiling, without allocating the result.
+- [ ] 6.4.3. Add `zip_longest` with a required fill value. Requires 6.4.1.
+  - See RFC 0006 §8.3.
+  - Omitting `fill_value` is an error, so a silent `none` cannot enter a build
+    graph.
+- [ ] 6.4.4. Add the collection and truth predicates. Requires 6.1.2.
+  - See RFC 0006 §8.8.
+  - Implement `any`, `all`, `subset`, `superset`, `contains`, `truthy`, and
+    `falsy`.
+  - Restrict `convert_bool` to the closed eight-spelling vocabulary, erroring
+    on anything else rather than reproducing Ansible's permissive fallback.
+  - Success: `truthy` and `falsy` are exact complements wherever both succeed,
+    and `contains` is documented against MiniJinja's `in` at both entries.
+- [ ] 6.4.5. Add the matrix-determinism end-to-end suite. Requires 6.4.2 and
+  6.4.4.
+  - Compile a representative target matrix built from `product`, the set
+    algebra, and `selectattr` with `contains`, twice from the same inputs.
+  - Add a property test that holds the logical input order fixed while varying
+    the internal hash state of the mappings the helpers consume, for example
+    by building equal mappings through different insertion and reservation
+    histories.
+  - Do not permute logical input order. RFC 0006 §8.3 makes first-appearance
+    order observable, so a different input order may legitimately produce
+    different output, and requiring otherwise would contradict the contract.
+  - Success: both runs emit byte-identical Ninja, and the property test fails
+    if any helper is reimplemented over a hash set.
+
+### 6.5. Make text and version conditions expressible
+
+This step answers whether a coherent, bounded Netsuke regular-expression
+dialect and a strict version predicate can replace the `shell()` calls that
+manifests currently use to inspect `--version` output and filter path lists.
+Its outcome determines whether conditional flag selection can be expressed at
+manifest time. See RFC 0006 §§8.4 and 8.5.
+
+- [ ] 6.5.1. Establish the `netsuke-regex-v1` dialect and the bounded pattern
+  cache. Requires 6.1.3 and 6.1.4.
+  - See RFC 0006 §8.4.
+  - Add the `regex` dependency, name the supported and unsupported constructs
+    in the standard-library guide, and enforce the compiled-pattern size limit
+    and least-recently-used cache from RFC 0006 table 3.
+  - Success: an unsupported construct such as a look-ahead produces a typed
+    localized diagnostic naming the construct and offset, not a generic parse
+    failure.
+- [ ] 6.5.2. Add `regex_replace` with dollar-form replacements. Requires
+  6.5.1.
+  - See RFC 0006 §8.4.
+  - Support `count` and `mandatory_count`, and reject a Python-style `\1` or
+    `\g<name>` replacement with a diagnostic pointing at the `$1` form.
+  - Success: a replacement pasted from an Ansible playbook fails loudly rather
+    than emitting the literal text `\1`.
+- [ ] 6.5.3. Add `regex_search`, `regex_findall`, and `regex_escape`. Requires
+  6.5.2.
+  - See RFC 0006 §8.4.
+  - Return `none` for a non-match, keep the `regex_findall` return shape
+    dependent only on the arguments, and accept only the `netsuke` escape
+    dialect.
+  - Success: `regex_findall` returns a sequence of strings whether the pattern
+    has zero, one, or several capture groups.
+- [ ] 6.5.4. Add the `match`, `search`, and `regex` tests. Requires 6.5.1.
+  - See RFC 0006 §8.4.
+  - Support `match_type` values `search`, `match`, and `fullmatch`,
+    enumerating them on an unknown value.
+- [ ] 6.5.5. Add the `version` test over the existing `semver` dependency.
+  Requires 6.1.4.
+  - See RFC 0006 §8.5.
+  - Make `operator` required, accept the six symbolic and six mnemonic forms,
+    and accept only `semver` for `scheme`.
+  - Resolve RFC 0006 §16 question 3 on whether a `v` prefix is tolerated
+    before registering the test.
+  - Success: parse failure names which operand failed and the offending text,
+    and the guide states that build metadata is ignored for comparison.
+
+### 6.6. Compose path text for a platform other than the host
+
+This step answers whether one uniform `dialect` mechanism can serve
+cross-compilation better than a family of Windows-specific filter names, and
+whether lexical normalization can be offered without weakening the capability
+boundary. Its outcome informs how Netsuke describes any future
+cross-platform surface. See RFC 0006 §8.6.
+
+- [ ] 6.6.1. Add the `dialect` argument and its `host`, `posix`, and `windows`
+  path parsers. Requires 6.1.4.
+  - See RFC 0006 §8.6.
+  - Extend the existing `basename` and `dirname` filters additively, so
+    omitting `dialect` preserves current behaviour.
+  - Success: a Unix host parses a Windows path identically to a Windows host,
+    with no host-native fallback.
+- [ ] 6.6.2. Add `path_join`, `normpath`, and `splitext`. Requires 6.6.1.
+  - See RFC 0006 §8.6.
+  - Reject an absolute component after the first position in `path_join`, and
+    reject empty components.
+  - Document the single-suffix `splitext` rule against the existing
+    `with_suffix` filter.
+  - Success: `['/safe/root', '/etc/passwd'] | path_join` fails naming the
+    index rather than yielding `/etc/passwd`.
+- [ ] 6.6.3. Add `commonpath`, `relpath`, and `splitdrive`. Requires 6.6.2.
+  - See RFC 0006 §8.6.
+  - Compare component-wise, reject mixed absolute and relative inputs, and
+    reject differing drives or UNC roots under the `windows` dialect.
+  - Contrast `relpath` with the stricter existing `relative_to` in the guide.
+- [ ] 6.6.4. Add the `abs` test as a pure lexical predicate. Requires 6.6.1.
+  - See RFC 0006 §§8.7 and 11.4.
+  - Resolve RFC 0006 §16 question 2 on the name before registering.
+  - Success: `abs` is registered in the read-only manifest-query environment,
+    unlike the filesystem predicates in step 6.7.
+- [ ] 6.6.5. Add the combinatorial path-dialect suite. Requires 6.6.3 and
+  6.6.4.
+  - Cross every lexical path helper with all three dialects and both host
+    platforms, including drive-relative paths, UNC roots, trailing
+    separators, and leading `..` components.
+  - Success: the suite fails if any helper reaches for host-native parsing
+    when an explicit dialect was supplied.
+
+### 6.7. Probe host state through injected, query-gated seams
+
+This step answers whether existence probing and environment expansion can be
+added without a second ambient-authority path and without any helper silently
+disappearing from a manifest query. Its outcome is the practical test of the
+capability contract in RFC 0006 §6.4. See RFC 0006 §§8.6 and 8.7.
+
+- [ ] 6.7.1. Add the `exists` and `link_exists` tests. Requires 6.1.6.
+  - See RFC 0006 §8.7.
+  - Route both through the injected `cap_std` workspace handle, and treat a
+    path outside the capability boundary as an error rather than `false`.
+  - Success: a dangling symbolic link is `false` for `exists` and `true` for
+    `link_exists`.
+- [ ] 6.7.2. Add the `same_file` and `mount` tests. Requires 6.7.1.
+  - See RFC 0006 §§6.5 and 8.7.
+  - Compare file identity rather than path spelling, and error on a missing
+    operand rather than reporting `false`.
+  - Qualify `mount` explicitly per platform; an unsupported platform errors
+    rather than returning a plausible `false`.
+  - Success: the platform contract for both tests is stated in the guide and
+    exercised on Unix and Windows continuous integration.
+- [ ] 6.7.3. Add the `files_only` option to the existing `glob` function.
+  Requires 6.7.1.
+  - See RFC 0006 §8.7 and
+    [adr-010-scope-glob-capability-to-literal-prefix.md](adr-010-scope-glob-capability-to-literal-prefix.md).
+  - Leave the existing capability scoping, ordering, and observability
+    contracts unchanged, and do not introduce a second glob implementation.
+- [ ] 6.7.4. Add `expandvars` through an injected environment reader. Requires
+  6.1.5 and 6.6.1.
+  - See RFC 0006 §8.6 and
+    [adr-008-environment-seam-taxonomy.md](adr-008-environment-seam-taxonomy.md).
+  - Support `missing` values `error`, `empty`, and `preserve`, defaulting to
+    `error`, and reject malformed references rather than passing them through.
+  - Exclude it from the read-only manifest-query registration exactly as `env`
+    is excluded, so every read-only generation caller is covered, not just
+    `netsuke help targets`.
+  - Success: no leaf helper reads the environment ambiently, and the
+    manifest-query stub explains the restriction.
+
+### 6.8. Generate file text and stable identities
+
+This step answers whether Netsuke can produce comment banners, encoded
+payloads, quoted shell words, human-readable sizes, and content-derived
+identifiers without either a subprocess or a second quoting implementation.
+See RFC 0006 §8.9.
+
+- [ ] 6.8.1. Add `b64encode`, `b64decode`, and `urldecode`. Requires 6.1.3 and
+  6.1.4.
+  - See RFC 0006 §8.9.
+  - Add the Base64 dependency, support both alphabets and configurable
+    padding, and default `urldecode` to `plus=false` so it round-trips with
+    MiniJinja's `urlencode`.
+  - Success: property tests show both Base64 alphabets and the URL codec
+    round-trip, and invalid input errors naming the offset.
+- [ ] 6.8.2. Add `to_uuid` over a documented Netsuke namespace. Requires
+  6.1.4.
+  - See RFC 0006 §8.9.
+  - Use the frozen namespace recorded in the RFC, accept an explicit
+    `namespace`, and record why UUID version 5 does not fall under the
+    `legacy-digests` policy.
+  - Success: the default namespace is Netsuke's, not Ansible's, and the guide
+    records both its derivation and its literal value.
+- [ ] 6.8.3. Add `shell_quote` over the existing quoting machinery. Requires
+  3.14.8 and 6.1.4.
+  - See RFC 0006 §§8.9 and 13.3.
+  - Adopt `shell_quote` as the canonical name that resolves the documented but
+    unimplemented `shell_escape` helper, and add the `dialect` argument with
+    an enumerated value set.
+  - Success: the user guide and the registered surface agree, and no second
+    quoting implementation is introduced.
+- [ ] 6.8.4. Add `comment` with a closing-marker guard. Requires 6.1.4.
+  - See RFC 0006 §8.9.
+  - Support the three line styles, the two block styles, and an explicit
+    `prefix`, emitting no trailing whitespace.
+  - Success: a block style whose input already contains the closing marker
+    fails, so comment text cannot escape into a generated file as live syntax.
+- [ ] 6.8.5. Add `human_readable` and `human_to_bytes`. Requires 6.1.3.
+  - See RFC 0006 §8.9.
+  - Pin locale-independent output, parse case-insensitively, select bits by
+    keyword rather than by letter case, and use checked integer arithmetic.
+  - Success: overflow and non-integral results error rather than truncating,
+    and unknown units are rejected with the valid set enumerated.
+- [ ] 6.8.6. Add `text_hash` without disturbing the existing `hash` contract.
+  Requires 6.1.4.
+  - See RFC 0006 §§8.9 and 11.1.
+  - Reuse the existing `legacy-digests` gating for `sha1` and `md5`, and
+    register neither `hash_text` nor `checksum`.
+  - Success: `hash` continues to hash the file at the supplied path, and the
+    inventory states the distinction at both entries.
+
+### 6.9. Convert explicit timestamps without reading the clock
+
+This step answers whether timestamp parsing and formatting can be added as
+pure helpers over the existing `now()` value, leaving clock access as the only
+host-observing time operation. See RFC 0006 §8.10.
+
+- [ ] 6.9.1. Add the shared conversion-specifier set and `strftime`. Requires
+  6.1.4.
+  - See RFC 0006 §8.10 and table 12.
+  - Pin the invariant C locale for the name-producing specifiers, and reject
+    every specifier outside the accepted set with the supported set
+    enumerated.
+  - Accept the `now()` timestamp value and integer epoch seconds; reject
+    floats.
+  - Success: identical manifests produce identical text on machines with
+    different locales.
+- [ ] 6.9.2. Add `to_datetime`. Requires 6.9.1.
+  - See RFC 0006 §8.10.
+  - Accept `UTC` and fixed offsets for `timezone`, rejecting IANA zone names
+    so no time-zone database is required.
+  - Success: a property test shows that `to_datetime` followed by `strftime`
+    round-trips for every lossless format.
+
+### 6.10. Decide the deferred candidates on evidence rather than parity
+
+This step answers whether the capabilities RFC 0006 deliberately withheld are
+actually wanted once the accepted set is in use. Its outcome either closes
+them permanently or produces a specification with a named consumer, so neither
+is adopted for name parity alone. See RFC 0006 §9.
+
+- [ ] 6.10.1. Evaluate seeded `shuffle` and `random`. Requires steps 6.1 to
+  6.9.
+  - See RFC 0006 §9.1.
+  - Adopt only with a named consumer, a required seed, and a pinned
+    seed-to-stream mapping recorded as a compatibility contract.
+  - Unseeded forms remain permanently rejected.
+- [ ] 6.10.2. Evaluate `log`, `pow`, `root`, and checked integer
+  exponentiation. Requires 6.10.1.
+  - See RFC 0006 §9.2.
+  - Adopt only against a real `Netsukefile` requirement, and specify the
+    floating-point domain, signed-zero, and rounding behaviour before
+    registering anything.
+- [ ] 6.10.3. Evaluate `type_debug`. Requires 6.10.1.
+  - See RFC 0006 §9.3.
+  - Adopt only if a recorded diagnostic session shows MiniJinja's `debug`,
+    `pprint`, and type tests do not expose the relevant value kind.
+
+**Success criterion:** Netsuke's template standard library covers the accepted
+RFC 0006 set behind one shared contract; every helper carries a purity label,
+an enumerated manifest-query disposition, checked resource bounds, and a typed
+localized diagnostic; the maintained inventory names every registered helper
+and every deliberately unsupported Ansible spelling; and a representative
+matrix manifest compiles twice to byte-identical Ninja.
