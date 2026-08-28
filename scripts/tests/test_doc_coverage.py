@@ -972,13 +972,12 @@ def test_main_rejects_invalid_coverage_counts(
 )
 def test_main_maps_invalid_coverage_shape_to_measurement_error(
     script: types.ModuleType,
-    runner: types.ModuleType,
-    cargo: types.ModuleType,
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
     case: CoveragePayloadFailureCase,
 ) -> None:
     """Return the controlled measurement exit for invalid coverage JSON shapes."""
+    cargo = script.runner.doc_coverage_cargo
     FakeCargo(
         cargo,
         metadata=single_library_metadata(),
@@ -987,6 +986,6 @@ def test_main_maps_invalid_coverage_shape_to_measurement_error(
     monkeypatch.chdir(tmp_path)
 
     with pytest.raises(RuntimeError, match=case.diagnostic):
-        runner.run_measurements("nightly-x", tmp_path)
+        script.runner.run_measurements("nightly-x", tmp_path)
 
     assert script.main(["--toolchain", "nightly-x"]) == 2
