@@ -1,6 +1,5 @@
 //! Unit and property tests for Ninja process helpers.
 
-use super::super::{NINJA_ENV, NINJA_PROGRAM};
 use super::child_exit::finalize_streaming;
 #[cfg(unix)]
 use super::command_list_telemetry::COMMAND_LIST_FAILURE_DURATION;
@@ -13,17 +12,11 @@ use metrics_util::{
     MetricKind,
     debugging::{DebugValue, DebuggingRecorder},
 };
-use mockable::MockEnv;
 #[cfg(unix)]
 use monotony::StdMonotonicClock;
 #[cfg(unix)]
 use monotony::test_util::FixedMonotonicClock;
-use proptest::prelude::*;
-use rstest::{fixture, rstest};
-use std::ffi::OsString;
 use std::path::Path;
-#[cfg(unix)]
-use std::path::PathBuf;
 #[cfg(unix)]
 use std::process::Stdio;
 use std::thread;
@@ -31,96 +24,15 @@ use std::thread;
 use std::time::Duration;
 use tracing_subscriber::filter::LevelFilter;
 
+#[cfg(unix)]
+#[path = "public_ninja_execution_tests.rs"]
+mod public_ninja_execution_tests;
+
 /// Open a capability directory rooted at an owned UTF-8 temporary directory.
 pub(super) fn temporary_dir(temp: &tempfile::TempDir) -> anyhow::Result<cap_std::fs_utf8::Dir> {
     let path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
         .map_err(|path| anyhow::anyhow!("temporary directory is not UTF-8: {}", path.display()))?;
     cap_std::fs_utf8::Dir::open_ambient_dir(path, cap_std::ambient_authority()).map_err(Into::into)
-}
-
-/// A `MockEnv` answering exactly one `os_string` read of `NETSUKE_NINJA`.
-///
-/// The key expectation is part of the contract (#488): a resolver that reads
-/// any other variable, or reads more than once, fails these tests rather than
-/// silently consulting something else. Consumers override the answer with
-/// `#[with(...)]`; the `#[default(None)]` parameter models "variable unset".
-#[fixture]
-fn ninja_env(#[default(None)] value: Option<OsString>) -> MockEnv {
-    let mut env = MockEnv::new();
-    env.expect_os_string()
-        .times(1)
-        .withf(|key| key == NINJA_ENV)
-        .return_const(value);
-    env
-}
-
-#[rstest]
-fn resolve_ninja_program_utf8_prefers_env_override(
-    #[with(Some(OsString::from("/opt/ninja")))] ninja_env: MockEnv,
-) {
-    let resolved = resolve_ninja_program_utf8_with(&ninja_env);
-    assert_eq!(resolved, Utf8PathBuf::from("/opt/ninja"));
-}
-
-#[rstest]
-fn resolve_ninja_program_utf8_defaults_without_override(ninja_env: MockEnv) {
-    let resolved = resolve_ninja_program_utf8_with(&ninja_env);
-    assert_eq!(resolved, Utf8PathBuf::from(NINJA_PROGRAM));
-}
-
-#[rstest]
-fn resolve_ninja_program_utf8_defaults_for_empty_override(
-    #[with(Some(OsString::new()))] ninja_env: MockEnv,
-) {
-    let resolved = resolve_ninja_program_utf8_with(&ninja_env);
-    assert_eq!(resolved, Utf8PathBuf::from(NINJA_PROGRAM));
-}
-
-#[cfg(unix)]
-#[rstest]
-fn resolve_ninja_program_utf8_ignores_invalid_utf8_override(
-    #[with(Some(invalid_utf8_override()))] ninja_env: MockEnv,
-) {
-    let resolved = resolve_ninja_program_utf8_with(&ninja_env);
-    assert_eq!(resolved, Utf8PathBuf::from(NINJA_PROGRAM));
-}
-
-/// A non-UTF-8 override value; the leading `0xff` byte is never valid UTF-8.
-#[cfg(unix)]
-fn invalid_utf8_override() -> OsString {
-    use std::os::unix::ffi::OsStringExt;
-
-    OsString::from_vec(vec![0xff, b'n', b'i', b'n', b'j', b'a'])
-}
-
-/// The platform-path variant shares the UTF-8 resolution and conversion.
-#[rstest]
-fn resolve_ninja_program_with_converts_the_resolved_path(
-    #[with(Some(OsString::from("/opt/ninja")))] ninja_env: MockEnv,
-) {
-    let resolved = resolve_ninja_program_with(&ninja_env);
-    assert_eq!(resolved, std::path::PathBuf::from("/opt/ninja"));
-}
-
-// `proptest!` owns the generated function signature, so rstest cannot inject
-// the fixture here. Calling the fixture function directly keeps the one-read,
-// exact-key contract identical to the injected cases without weakening the
-// property's input coverage.
-proptest! {
-    #[test]
-    fn resolve_ninja_program_utf8_matches_utf8_env_invariant(
-        override_value in prop::option::of(".*")
-    ) {
-        let env_value = override_value.clone().map(OsString::from);
-        let expected = match override_value {
-            Some(value) if !value.is_empty() => Utf8PathBuf::from(value),
-            _ => Utf8PathBuf::from(NINJA_PROGRAM),
-        };
-
-        let resolved = resolve_ninja_program_utf8_with(&ninja_env(env_value));
-
-        prop_assert_eq!(resolved, expected);
-    }
 }
 
 #[test]
@@ -241,30 +153,6 @@ fn large_stdout_cannot_supply_command_list_attribution() -> anyhow::Result<()> {
         anyhow::bail!("stdout must not supply command-list attribution: {error}");
     }
     Ok(())
-}
-
-// As above, the fixture is called directly because `proptest!` generates the
-// function signature and leaves no parameter for rstest to inject.
-#[cfg(unix)]
-proptest! {
-    #[test]
-    fn resolve_ninja_program_utf8_falls_back_for_non_utf8_env_values(
-        bytes in prop::collection::vec(any::<u8>(), 0..32)
-    ) {
-        use std::os::unix::ffi::OsStringExt;
-
-        let env_value = OsString::from_vec(bytes);
-        let expected = if env_value.as_os_str().is_empty() {
-            Utf8PathBuf::from(NINJA_PROGRAM)
-        } else {
-            Utf8PathBuf::from_path_buf(PathBuf::from(env_value.clone()))
-                .unwrap_or_else(|_| Utf8PathBuf::from(NINJA_PROGRAM))
-        };
-
-        let resolved = resolve_ninja_program_utf8_with(&ninja_env(Some(env_value)));
-
-        prop_assert_eq!(resolved, expected);
-    }
 }
 
 /// The child process runs in the requested working directory.

@@ -35,7 +35,7 @@ pub(super) fn resolve_ninja_program_utf8_with(env: &impl Env) -> Utf8PathBuf {
             let path = PathBuf::from(value);
             if path.as_os_str().is_empty() {
                 debug!(
-                    fallback_program = NINJA_PROGRAM,
+                    ninja_program = NINJA_PROGRAM,
                     source = "fallback",
                     "Ignoring empty Ninja executable override",
                 );
@@ -53,7 +53,7 @@ pub(super) fn resolve_ninja_program_utf8_with(env: &impl Env) -> Utf8PathBuf {
                     Err(non_utf8_path) => {
                         debug!(
                             configured_ninja = %non_utf8_path.to_string_lossy(),
-                            fallback_program = NINJA_PROGRAM,
+                            ninja_program = NINJA_PROGRAM,
                             source = "fallback",
                             "Ignoring non-UTF-8 Ninja executable override",
                         );
@@ -84,4 +84,206 @@ pub fn resolve_ninja_program_utf8() -> Utf8PathBuf {
 #[must_use]
 pub fn resolve_ninja_program() -> PathBuf {
     resolve_ninja_program_utf8().into()
+}
+#[cfg(test)]
+mod tests {
+    //! Tests for Ninja executable-resolution tracing.
+
+    use super::*;
+    use crate::test_tracing_capture::with_test_subscriber;
+    use mockable::MockEnv;
+    use proptest::prelude::*;
+    use rstest::{fixture, rstest};
+    use std::ffi::OsString;
+    #[cfg(unix)]
+    use std::path::PathBuf;
+    use tracing_subscriber::filter::LevelFilter;
+
+    /// Build an environment that returns `value` for exactly one Ninja lookup.
+    ///
+    /// The key expectation is part of the contract (#488): a resolver that
+    /// reads any other variable, or reads more than once, fails these tests
+    /// rather than silently consulting something else. Consumers override the
+    /// answer with `#[with(...)]`; `None` models an unset variable.
+    #[fixture]
+    fn ninja_env(#[default(None)] value: Option<OsString>) -> MockEnv {
+        let mut env = MockEnv::new();
+        env.expect_os_string()
+            .times(1)
+            .withf(|key| key == NINJA_ENV)
+            .return_const(value);
+        env
+    }
+
+    /// Verify override resolution records its selected program and source.
+    #[rstest]
+    fn resolve_ninja_program_utf8_logs_override_resolution(
+        #[with(Some(OsString::from("/opt/ninja")))] ninja_env: MockEnv,
+    ) {
+        let (resolved, events) = with_test_subscriber(LevelFilter::DEBUG, |captured| {
+            let resolved = resolve_ninja_program_utf8_with(&ninja_env);
+            (resolved, captured.snapshot())
+        });
+
+        assert_eq!(resolved, Utf8PathBuf::from("/opt/ninja"));
+        let [event] = events.as_slice() else {
+            panic!("expected one Ninja-resolution event, got {events:?}");
+        };
+        assert!(
+            event.contains("ninja_program=/opt/ninja")
+                && event.contains("source=\"NETSUKE_NINJA\"")
+                && event.contains("message=Resolved Ninja executable from environment override"),
+            "override resolution should identify its program, source, and message: {event}"
+        );
+    }
+
+    /// Verify fallback resolution records its selected program and source.
+    #[rstest]
+    fn resolve_ninja_program_utf8_logs_fallback_resolution(ninja_env: MockEnv) {
+        let (resolved, events) = with_test_subscriber(LevelFilter::DEBUG, |captured| {
+            let resolved = resolve_ninja_program_utf8_with(&ninja_env);
+            (resolved, captured.snapshot())
+        });
+
+        assert_eq!(resolved, Utf8PathBuf::from(NINJA_PROGRAM));
+        let [event] = events.as_slice() else {
+            panic!("expected one Ninja-resolution event, got {events:?}");
+        };
+        assert!(
+            event.contains(&format!("ninja_program={NINJA_PROGRAM:?}"))
+                && event.contains("source=\"fallback\"")
+                && event.contains("message=Resolved Ninja executable from default program"),
+            "fallback resolution should identify its program, source, and message: {event}"
+        );
+    }
+
+    /// Verify UTF-8 resolution favours the non-empty environment override.
+    #[rstest]
+    fn resolve_ninja_program_utf8_prefers_env_override(
+        #[with(Some(OsString::from("/opt/ninja")))] ninja_env: MockEnv,
+    ) {
+        let resolved = resolve_ninja_program_utf8_with(&ninja_env);
+        assert_eq!(resolved, Utf8PathBuf::from("/opt/ninja"));
+    }
+
+    /// Verify UTF-8 resolution defaults when the override is absent.
+    #[rstest]
+    fn resolve_ninja_program_utf8_defaults_without_override(ninja_env: MockEnv) {
+        let (resolved, events) = with_test_subscriber(LevelFilter::INFO, |captured| {
+            let resolved = resolve_ninja_program_utf8_with(&ninja_env);
+            (resolved, captured.snapshot())
+        });
+
+        assert_eq!(resolved, Utf8PathBuf::from(NINJA_PROGRAM));
+        assert!(
+            events.is_empty(),
+            "resolver debug events must be hidden by an INFO filter: {events:?}"
+        );
+    }
+
+    /// Verify UTF-8 resolution defaults when the override is empty.
+    #[rstest]
+    fn resolve_ninja_program_utf8_defaults_for_empty_override(
+        #[with(Some(OsString::new()))] ninja_env: MockEnv,
+    ) {
+        let (resolved, events) = with_test_subscriber(LevelFilter::DEBUG, |captured| {
+            let resolved = resolve_ninja_program_utf8_with(&ninja_env);
+            (resolved, captured.snapshot())
+        });
+
+        assert_eq!(resolved, Utf8PathBuf::from(NINJA_PROGRAM));
+        let [event] = events.as_slice() else {
+            panic!("expected one Ninja-resolution event, got {events:?}");
+        };
+        assert!(
+            event.contains(&format!("ninja_program={NINJA_PROGRAM:?}"))
+                && event.contains("source=\"fallback\"")
+                && event.contains("message=Ignoring empty Ninja executable override"),
+            "empty override should identify its fallback resolution: {event}"
+        );
+    }
+
+    /// Verify UTF-8 resolution defaults when the override is not UTF-8.
+    #[cfg(unix)]
+    #[rstest]
+    fn resolve_ninja_program_utf8_ignores_invalid_utf8_override(
+        #[with(Some(invalid_utf8_override()))] ninja_env: MockEnv,
+    ) {
+        let (resolved, events) = with_test_subscriber(LevelFilter::DEBUG, |captured| {
+            let resolved = resolve_ninja_program_utf8_with(&ninja_env);
+            (resolved, captured.snapshot())
+        });
+
+        assert_eq!(resolved, Utf8PathBuf::from(NINJA_PROGRAM));
+        let [event] = events.as_slice() else {
+            panic!("expected one Ninja-resolution event, got {events:?}");
+        };
+        assert!(
+            event.contains(&format!("ninja_program={NINJA_PROGRAM:?}"))
+                && event.contains("source=\"fallback\"")
+                && event.contains("message=Ignoring non-UTF-8 Ninja executable override"),
+            "invalid override should identify its fallback resolution: {event}"
+        );
+    }
+
+    /// Build a non-UTF-8 override value for Unix-only resolution tests.
+    #[cfg(unix)]
+    fn invalid_utf8_override() -> OsString {
+        use std::os::unix::ffi::OsStringExt;
+
+        OsString::from_vec(vec![0xff, b'n', b'i', b'n', b'j', b'a'])
+    }
+
+    /// Verify platform-path resolution shares the UTF-8 resolver's result.
+    #[rstest]
+    fn resolve_ninja_program_with_converts_the_resolved_path(
+        #[with(Some(OsString::from("/opt/ninja")))] ninja_env: MockEnv,
+    ) {
+        let resolved = resolve_ninja_program_with(&ninja_env);
+        assert_eq!(resolved, PathBuf::from("/opt/ninja"));
+    }
+
+    // `proptest!` owns the generated function signature, so rstest cannot
+    // inject the fixture. Calling it directly keeps the one-read, exact-key
+    // contract without weakening property coverage.
+    proptest! {
+        #[test]
+        fn resolve_ninja_program_utf8_matches_utf8_env_invariant(
+            override_value in prop::option::of(".*")
+        ) {
+            let env_value = override_value.clone().map(OsString::from);
+            let expected = match override_value {
+                Some(value) if !value.is_empty() => Utf8PathBuf::from(value),
+                _ => Utf8PathBuf::from(NINJA_PROGRAM),
+            };
+
+            let resolved = resolve_ninja_program_utf8_with(&ninja_env(env_value));
+
+            prop_assert_eq!(resolved, expected);
+        }
+    }
+
+    // As above, the fixture is called directly because `proptest!` generates
+    // the function signature and leaves no parameter for rstest to inject.
+    #[cfg(unix)]
+    proptest! {
+        #[test]
+        fn resolve_ninja_program_utf8_falls_back_for_non_utf8_env_values(
+            bytes in prop::collection::vec(any::<u8>(), 0..32)
+        ) {
+            use std::os::unix::ffi::OsStringExt;
+
+            let env_value = OsString::from_vec(bytes);
+            let expected = if env_value.as_os_str().is_empty() {
+                Utf8PathBuf::from(NINJA_PROGRAM)
+            } else {
+                Utf8PathBuf::from_path_buf(PathBuf::from(env_value.clone()))
+                    .unwrap_or_else(|_| Utf8PathBuf::from(NINJA_PROGRAM))
+            };
+
+            let resolved = resolve_ninja_program_utf8_with(&ninja_env(Some(env_value)));
+
+            prop_assert_eq!(resolved, expected);
+        }
+    }
 }

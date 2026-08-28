@@ -36,8 +36,6 @@ pub use file_io::*;
 pub use ninja_program::resolve_ninja_program;
 #[cfg(doctest)]
 pub use ninja_program::resolve_ninja_program_utf8;
-#[cfg(test)]
-use ninja_program::{resolve_ninja_program_utf8_with, resolve_ninja_program_with};
 use output_forwarding::{StatusObserver, spawn_and_stream_output};
 
 mod command_env;
