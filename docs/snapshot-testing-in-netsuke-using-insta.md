@@ -276,28 +276,30 @@ function, serializing locale state across the test suite.
 - `test_support::set_en_localizer()` — installs `en-US` as the active locale
   and returns a `LocalizerGuard`.
 
-## Redacting the generator version in diagnostic JSON snapshots
+## Redacting generator versions in JSON snapshots
 
-The diagnostics JSON document embeds the generator's crate version. Left
-unredacted, that field changes on every version bump and would churn every
-diagnostic-JSON snapshot — this is exactly what happened on the v0.1.0-beta1
-bump.
+JSON diagnostics and help-target catalogues embed Netsuke's crate version.
+Left unredacted, that field changes on every version bump and would churn their
+snapshots without a behavioural change.
 
-The shared `diagnostic_json_snapshot_settings()` helper in
-`src/snapshot_test_support.rs` adds an insta filter that rewrites the
-generator's version to `[version]`. The filter anchors on the enclosing
-`"generator"` object and its `"name": "netsuke"` line, so it redacts only
-the generator block's version; any other field named `version` elsewhere in
-a diagnostic document remains visible in snapshot diffs.
-`src/diagnostic_json_tests.rs` imports the helper.
+The shared, private `add_generator_version_filter` helper in
+`src/snapshot_test_support.rs` is composed by the specialized
+`diagnostic_json_snapshot_settings()` and
+`help_targets_json_snapshot_settings()` builders. These builders add an insta
+filter that rewrites the Netsuke generator's version to `[version]`.
 
-New diagnostic-JSON snapshot tests, in any module, must bind through
-`snapshot_test_support::diagnostic_json_snapshot_settings()` rather than
-asserting raw output, so the redaction is applied consistently.
+JSON diagnostic snapshot tests must bind through
+`snapshot_test_support::diagnostic_json_snapshot_settings()`, and JSON
+help-target catalogue snapshot tests must bind through
+`snapshot_test_support::help_targets_json_snapshot_settings()`. Text catalogue
+tests must continue to use the unfiltered `snapshot_settings("help_targets")`
+builder.
 
-`schema_version` and the generator name are deliberately excluded from this
-redaction: they are asserted structurally in dedicated tests, separate from
-the redacted version string.
+The filter anchors on the enclosing `"generator"` object and its
+`"name": "netsuke"` line. It redacts only that generator version; any other
+field named `version` remains visible in snapshot diffs. The generator name and
+`schema_version` are deliberately excluded from this redaction and remain
+asserted structurally.
 
 ## Running and Updating Snapshot Tests
 

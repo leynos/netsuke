@@ -9,10 +9,12 @@ use crate::ast::{NetsukeManifest, Target};
 use crate::cli_localization::build_localizer;
 use crate::localization::set_localizer_for_tests;
 use crate::manifest;
-use crate::snapshot_test_support::{snapshot_settings, theme_prefs};
+use crate::snapshot_test_support::{
+    help_targets_json_snapshot_settings, snapshot_settings, theme_prefs,
+};
 use crate::theme::ThemePreference;
 use anyhow::{Context, Result};
-use insta::assert_snapshot;
+use insta::{Settings, assert_snapshot};
 use proptest::prelude::*;
 use semver::Version;
 use std::sync::{Arc, Mutex, TryLockError, mpsc};
@@ -98,14 +100,34 @@ fn send_localizer_lock_result(sender: &mpsc::SyncSender<bool>) -> Result<()> {
 fn catalogue_snapshot(
     locale: &str,
     snapshot_name: &str,
+    settings: &Settings,
     render: impl FnOnce(&NetsukeManifest) -> Result<String>,
 ) -> Result<()> {
     let manifest = fixture_manifest()?;
     let rendered = render_catalogue_with_locale(locale, &manifest, render)?;
-    snapshot_settings("help_targets").bind(|| {
+    settings.bind(|| {
         assert_snapshot!(snapshot_name, rendered);
     });
     Ok(())
+}
+
+/// Render and assert a text catalogue snapshot with a selected theme.
+fn text_catalogue_snapshot_with_theme(
+    locale: &str,
+    snapshot_name: &str,
+    theme: ThemePreference,
+) -> Result<()> {
+    catalogue_snapshot(
+        locale,
+        snapshot_name,
+        &snapshot_settings("help_targets"),
+        |manifest| {
+            Ok(normalize_fluent_isolates(&render_text(
+                &build_catalogue(manifest),
+                theme_prefs(theme),
+            )))
+        },
+    )
 }
 
 /// Render a catalogue while holding the localizer lock only for its global
@@ -150,39 +172,31 @@ fn catalogue_rendering_releases_localizer_lock_before_snapshot_work() -> Result<
 
 #[test]
 fn text_catalogue_snapshot() -> Result<()> {
-    catalogue_snapshot("en-US", "text_catalogue", |manifest| {
-        Ok(normalize_fluent_isolates(&render_text(
-            &build_catalogue(manifest),
-            theme_prefs(ThemePreference::Unicode),
-        )))
-    })
+    text_catalogue_snapshot_with_theme("en-US", "text_catalogue", ThemePreference::Unicode)
 }
 
 #[test]
 fn accessible_catalogue_snapshot() -> Result<()> {
-    catalogue_snapshot("en-US", "accessible_catalogue", |manifest| {
-        Ok(normalize_fluent_isolates(&render_text(
-            &build_catalogue(manifest),
-            theme_prefs(ThemePreference::Ascii),
-        )))
-    })
+    text_catalogue_snapshot_with_theme("en-US", "accessible_catalogue", ThemePreference::Ascii)
 }
 
 #[test]
 fn localized_catalogue_snapshot() -> Result<()> {
-    catalogue_snapshot("es-ES", "localized_catalogue_es_es", |manifest| {
-        Ok(normalize_fluent_isolates(&render_text(
-            &build_catalogue(manifest),
-            theme_prefs(ThemePreference::Unicode),
-        )))
-    })
+    text_catalogue_snapshot_with_theme(
+        "es-ES",
+        "localized_catalogue_es_es",
+        ThemePreference::Unicode,
+    )
 }
 
 #[test]
 fn json_catalogue_snapshot() -> Result<()> {
-    catalogue_snapshot("en-US", "json_catalogue", |manifest| {
-        render_json(&build_catalogue(manifest))
-    })
+    catalogue_snapshot(
+        "en-US",
+        "json_catalogue",
+        &help_targets_json_snapshot_settings(),
+        |manifest| render_json(&build_catalogue(manifest)),
+    )
 }
 
 #[test]

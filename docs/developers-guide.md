@@ -2163,6 +2163,21 @@ documented in the
 `no_color_env` is shared across output-preference and theme tests that exercise
 optional `NO_COLOR` lookup behaviour.
 
+### JSON snapshot version redaction
+
+`src/snapshot_test_support.rs` owns the snapshot settings for versioned JSON
+output. Its private `add_generator_version_filter` helper is composed only by
+`diagnostic_json_snapshot_settings()` and
+`help_targets_json_snapshot_settings()`; individual tests must use those
+specialized builders rather than adding the filter themselves. JSON diagnostic
+snapshots must bind through the diagnostic builder, and JSON help-target
+catalogue snapshots must bind through the help-target builder.
+
+Text catalogue snapshots must continue to use the unfiltered
+`snapshot_settings("help_targets")` builder. The filter is anchored on the
+Netsuke generator object, so unrelated `version` fields remain asserted in
+every snapshot.
+
 ### `test_support::fs`
 
 `test_support::fs` (`test_support/src/fs.rs`) is the crate's single

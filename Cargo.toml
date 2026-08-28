@@ -168,6 +168,7 @@ serde_yaml = "0.9"
 proptest = "1.11.0"
 googletest = "0.14.3"
 pretty_assertions = "1.4.1"
+regex = "1.12.2"
 # Plural-selection tests must pass numeric arguments to Fluent. `ortho_config`
 # exposes `LocalizationArgs` as a map of `FluentValue`, but does not re-export
 # the value type, so the tests need `fluent-bundle` directly. Constrained to
