@@ -8,8 +8,6 @@
 //! - computing SHA-256 hashes for cache keys (hash module)
 //! - spawning lightweight HTTP servers for network tests (http module)
 //! - sandboxing PATH and HOME for the dev-fast target tests (`dev_fast` module)
-//! - retaining the legacy `env_lock`/`EnvLock` seam until its callers migrate
-//!   ([ADR-008](../../docs/adr-008-environment-seam-taxonomy.md))
 //!
 //! All items are intended for use in tests within this workspace; avoid using
 //! them in production code.
