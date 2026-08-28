@@ -24,6 +24,19 @@ fn release_workflow_jobs(workflow: &YamlValue) -> Result<&Mapping> {
         .context("release workflow should define jobs")
 }
 
+/// Return the reusable release workflow's declared inputs.
+fn release_workflow_call_inputs(workflow: &YamlValue) -> Result<&Mapping> {
+    workflow
+        .as_mapping()
+        .and_then(|root| mapping_value(root, "on"))
+        .and_then(YamlValue::as_mapping)
+        .and_then(|triggers| mapping_value(triggers, "workflow_call"))
+        .and_then(YamlValue::as_mapping)
+        .and_then(|workflow_call| mapping_value(workflow_call, "inputs"))
+        .and_then(YamlValue::as_mapping)
+        .context("release workflow should declare reusable workflow inputs")
+}
+
 /// Return a named job mapping from the release workflow.
 fn release_workflow_job<'a>(jobs: &'a Mapping, name: &str) -> Result<&'a Mapping> {
     mapping_value(jobs, name)
@@ -72,6 +85,12 @@ fn require_release_admission_workflow_wiring(
     let release_needs = mapping_value(release, "needs")
         .and_then(YamlValue::as_sequence)
         .context("release job should declare dependencies")?;
+    let admission_input = mapping_value(
+        release_workflow_call_inputs(workflow)?,
+        "run-release-admission",
+    )
+    .and_then(YamlValue::as_mapping)
+    .context("release workflow should declare a release-admission input")?;
     let release_condition = mapping_value(release, "if").and_then(YamlValue::as_str);
     let admission_condition = mapping_value(admission, "if").and_then(YamlValue::as_str);
     let admission_permissions = mapping_value(admission, "permissions")
@@ -104,6 +123,13 @@ fn require_release_admission_workflow_wiring(
         admission_condition
             == Some("github.event_name != 'workflow_call' || inputs.run-release-admission"),
         "trusted release events should run downstream canary admission"
+    );
+    ensure!(
+        mapping_value(admission_input, "type").and_then(YamlValue::as_str) == Some("boolean")
+            && mapping_value(admission_input, "required").and_then(YamlValue::as_bool)
+                == Some(false)
+            && mapping_value(admission_input, "default").and_then(YamlValue::as_bool) == Some(true),
+        "release workflow should expose a default-enabled boolean admission input"
     );
     ensure!(
         admission_permissions.len() == 2
@@ -182,6 +208,7 @@ fn require_successful_trusted_run_evidence(admission_script: &str) -> Result<()>
     Ok(())
 }
 
+/// Verify that the release workflow uses the approved shared actions.
 #[test]
 fn behavioural_release_workflow_uses_shared_actions() {
     let contents = workflow_contents("release.yml").expect("release workflow should be readable");
@@ -204,6 +231,7 @@ fn behavioural_release_workflow_uses_shared_actions() {
     );
 }
 
+/// Verify that the release workflow exports the package binary name.
 #[test]
 fn behavioural_release_workflow_exports_bin_name() {
     let contents = workflow_contents("release.yml").expect("release workflow should be readable");
@@ -218,6 +246,7 @@ fn behavioural_release_workflow_exports_bin_name() {
     );
 }
 
+/// Verify that release modes wire their outputs into publication decisions.
 #[test]
 fn behavioural_release_workflow_wires_release_modes_outputs() {
     let contents = workflow_contents("release.yml").expect("release workflow should be readable");
@@ -241,6 +270,7 @@ fn behavioural_release_workflow_wires_release_modes_outputs() {
     );
 }
 
+/// Verify that release publication requires successful pinned canaries.
 #[test]
 fn behavioural_release_workflow_requires_pinned_canaries() -> Result<()> {
     let contents = workflow_contents("release.yml")?;
@@ -293,6 +323,7 @@ fn behavioural_release_dry_run_disables_untrusted_admission() -> Result<()> {
     Ok(())
 }
 
+/// Verify that Linux release staging receives each supported target.
 #[rstest]
 #[case("linux-x86_64")]
 #[case("linux-aarch64")]
