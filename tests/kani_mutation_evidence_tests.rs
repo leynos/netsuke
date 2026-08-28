@@ -14,7 +14,7 @@
 //! Patch names use the harness path with `::` replaced by `__`, for example
 //! `ir__cycle__verification__self_dependency_reports_cycle.patch`.
 
-use std::{collections::BTreeSet, process::Command};
+use std::{collections::BTreeSet, io::Write as _, process::Command};
 
 use anyhow::{Context, Result, bail, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -177,6 +177,37 @@ fn patch_stem_for_harness(harness: &str) -> String {
     harness.replace("::", "__")
 }
 
+/// Return whether the source tree is a Git work tree.
+///
+/// `cargo-mutants` tests each mutant in a copied source tree without
+/// `.git`, for which Git returns 128. Patch applicability must not run
+/// there: a mutant overlapping a patch hunk would fail `git apply --check`
+/// and be reported as killed without any behavioural or Kani assertion
+/// detecting the fault, inflating mutation coverage.
+fn is_git_work_tree(root: &Utf8Path) -> Result<bool> {
+    let probe = Command::new("git")
+        .args(["-C", root.as_str(), "rev-parse", "--is-inside-work-tree"])
+        .output()
+        .context("probe whether the source tree is a Git work tree")?;
+    if !probe.status.success() {
+        if probe.status.code() == Some(128) {
+            return Ok(false);
+        }
+        bail!(
+            "git rev-parse --is-inside-work-tree failed ({})",
+            probe.status
+        );
+    }
+    match String::from_utf8(probe.stdout)
+        .context("decode git work-tree probe output")?
+        .trim()
+    {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        output => bail!("unexpected git work-tree probe output: {output:?}"),
+    }
+}
+
 /// Every harness carries a mutation patch or an explicit, live exemption.
 #[test]
 fn every_harness_has_mutation_evidence_or_exemption() -> Result<()> {
@@ -235,6 +266,19 @@ fn every_patch_matches_a_harness() -> Result<()> {
 /// Every mutation patch still applies cleanly to the current tree.
 #[test]
 fn every_patch_applies_cleanly() -> Result<()> {
+    if !is_git_work_tree(manifest_dir())? {
+        // cargo-mutants copies omit `.git`; applicability there would
+        // mis-report mutants overlapping a patch hunk as killed.
+        writeln!(
+            std::io::stderr().lock(),
+            concat!(
+                "skipping: source tree is not a git checkout; ",
+                "operation=check mutation patch applicability; repository={}"
+            ),
+            manifest_dir()
+        )?;
+        return Ok(());
+    }
     let mutations = Dir::open_ambient_dir(manifest_dir().join(MUTATIONS_DIR), ambient_authority())
         .with_context(|| format!("open {MUTATIONS_DIR}"))?;
     let mut rotted = Vec::new();

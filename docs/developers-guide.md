@@ -1351,7 +1351,10 @@ the harnesses as part of `make test`:
 
 - every patch must still apply cleanly to the current tree
   (`git apply --check`), catching silent rot when production code near a
-  patched hunk moves;
+  patched hunk moves — skipped when the source tree is not a git checkout,
+  because `cargo-mutants` tests each mutant in a copy without `.git` and a
+  mutant overlapping a patch hunk would otherwise be reported as killed
+  without any behavioural assertion detecting it;
 - every `#[kani::proof]` harness under `src/` must own a correspondingly
   named patch, or appear in the test's exemption list with a stated reason;
   and
