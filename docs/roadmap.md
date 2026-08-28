@@ -829,11 +829,17 @@ RFC 0006 §8.2.
   - Support `recursive` and the `replace`, `keep`, `append`, and `prepend`
     list policies, enumerating the valid values on an unknown one.
   - Preserve first-appearance key order, updating an overridden key in place.
+  - Add a regression test for the recursive non-associativity counterexample
+    in RFC 0006 §8.2: with `a = {'x': {'a': 1}}`, `b = {'x': 0}`, and
+    `c = {'x': {'b': 2}}`, grouping to the left yields `{'x': {'b': 2}}` and
+    grouping to the right yields `{'x': {'a': 1, 'b': 2}}`.
   - Success: property tests show that an empty mapping is the identity under
-    every policy, that associativity and self-merge idempotence hold under
-    `replace` and `keep`, and that the result is independent of hash iteration
-    order. `append` and `prepend` accumulate and are exempt from the latter
-    two laws.
+    every policy, that self-merge idempotence holds under `replace` and
+    `keep` with or without `recursive`, that associativity holds when
+    `recursive=false` under `replace` and `keep`, and that the result is
+    independent of hash iteration order. Associativity is not asserted for
+    `recursive=true`, and neither law is asserted for the accumulating
+    `append` and `prepend` policies.
 - [ ] 6.3.2. Add `dict2items` and `items2dict` with an explicit duplicate
   policy. Requires 6.3.1.
   - See RFC 0006 §8.2.

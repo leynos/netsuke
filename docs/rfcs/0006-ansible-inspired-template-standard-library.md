@@ -767,16 +767,34 @@ Merges mappings left to right, with later mappings taking precedence.
   set-flavoured operation hiding inside a merge, and `union` composes more
   legibly.
 - An unknown `list_merge` value is an error enumerating the four valid values.
-- Merge laws verified by property test, scoped to the policies that satisfy
-  them. Merging with an empty mapping is the identity under every policy.
-  Associativity and self-merge idempotence hold under `list_merge='replace'`
-  and `list_merge='keep'`, with or without `recursive`, and are asserted only
-  for those two. `append` and `prepend` accumulate deliberately and satisfy
-  neither law: `{'x': [1]}` merged with itself under `append` yields
-  `{'x': [1, 1]}`, and under `recursive=true` a scalar between two sequence
-  values makes the two groupings differ because one grouping replaces where
-  the other appends. The guide states this at the argument so that authors do
-  not assume an accumulating merge is repeatable.
+- Merge laws verified by property test, scoped to the policies and modes that
+  satisfy them.
+  - **Identity.** Merging with an empty mapping returns an equal mapping under
+    every `list_merge` policy, with or without `recursive`.
+  - **Self-merge idempotence.** Merging a mapping with itself returns an equal
+    mapping under `list_merge='replace'` and `list_merge='keep'`, with or
+    without `recursive`.
+  - **Associativity.** Asserted only when `recursive=false` and `list_merge`
+    is `replace` or `keep`. It is deliberately **not** claimed for
+    `recursive=true`, even under those two policies: recursive merging is
+    non-associative whenever an intermediate operand replaces a nested mapping
+    with a scalar and a later operand supplies a mapping at the same key. Take
+    `a = {'x': {'a': 1}}`, `b = {'x': 0}`, and `c = {'x': {'b': 2}}`. Grouping
+    to the left, `a | combine(b)` yields `{'x': 0}` because the right-hand
+    scalar replaces the nested mapping, and combining that with `c` yields
+    `{'x': {'b': 2}}` because the left-hand side at `x` is no longer a
+    mapping. Grouping to the right, `b | combine(c)` yields `{'x': {'b': 2}}`,
+    and combining `a` with that yields `{'x': {'a': 1, 'b': 2}}` because both
+    sides at `x` are now mappings and merge recursively. The two groupings
+    differ.
+  - **`append` and `prepend`.** These accumulate deliberately and are
+    non-idempotent: `{'x': [1]}` merged with itself under `append` yields
+    `{'x': [1, 1]}`. Associativity is not asserted for them either.
+  - **Regression coverage.** The implementation slice adds a regression test
+    for the recursive counterexample above, alongside the property tests for
+    the three laws.
+- The guide states these limits at the argument so that authors do not assume
+  an accumulating or recursive merge is repeatable or re-groupable.
 
 #### `mapping | dict2items(key_name='key', value_name='value')`
 
@@ -1890,7 +1908,7 @@ _Figure 1: Prerequisite relationships between the delivery slices._
 ### 14.1. Slice 0: shared contract and inventory foundation
 
 This slice exists because seven of the eight remaining slices would otherwise
-each invent their own version of the same four things.
+each invent their own version of the same shared machinery.
 
 - The canonical value key and equality relation from section 6.7, with its
   property tests.
@@ -1898,13 +1916,26 @@ each invent their own version of the same four things.
   table 3, so combinatorial and parser bounds are enforced in one place.
 - The domain-error and `netsuke::jinja::<module>::<reason>` diagnostic
   scaffolding from section 6.9, following the existing `ResolveError` pattern.
-- The manifest-query registration test from section 6.2, which asserts each
-  helper's disposition by exercising its registration rather than by
-  differencing name sets. This slice also repairs the two existing gaps
-  recorded in section 3.3: it localizes `manifest_query_operation_error`, and
-  it adds explicit stubs for all sixteen helpers that section 3.3 records as
-  absent from the manifest-query environment, so no helper silently
-  disappears from a manifest query.
+- The manifest-query disposition test from section 6.2. It exercises every
+  inventory entry against both the full registration and the manifest-query
+  registration, verifying that each pure helper evaluates normally under the
+  manifest-query registration, and that each non-pure helper resolves there
+  but raises the localized manifest-query restriction diagnostic. It does not
+  compare the two environments' name sets, which are identical by construction
+  once clause 2 of section 6.2 is satisfied.
+- The repair of the two existing gaps recorded in section 3.3. This slice
+  localizes `manifest_query_operation_error` through a Fluent key, and it adds
+  an explicit stub for every one of the sixteen names that section 3.3 records
+  as absent from the manifest-query environment, so no helper silently
+  disappears from a manifest query. Every stub raises the same localized
+  manifest-query restriction diagnostic. The names are:
+  - the filters `realpath`, `expanduser`, `size`, `linecount`, `hash`, and
+    `digest`;
+  - `which`, which needs a stub in both its filter form and its function form,
+    because filters and functions occupy separate namespaces;
+  - the functions `command_available` and `now`; and
+  - the tests `dir`, `file`, `symlink`, `pipe`, `block_device`, `char_device`,
+    and `device`.
 - The **maintained inventory** in
   [the standard-library guide](../stdlib-yaml-and-jinja-guide.md): one table
   distinguishing MiniJinja built-ins, existing Netsuke extensions, adopted
