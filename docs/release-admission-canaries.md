@@ -33,6 +33,16 @@ The candidate revision is intentionally recorded in each downstream commit and
 workflow, rather than inferred from an action tag. The v0.1.0 candidate carries
 the beta2 package version until final release packaging changes it.
 
+Admission is fail-closed. For each table row, the release workflow reads the
+downstream `netsuke-canary.yml` at the pinned migration revision and requires
+both the installer action reference and its `revision` input to identify the
+exact published `GITHUB_SHA`. It then queries the pinned workflow ID with
+`head_sha` set to the migration revision and accepts only a run whose repository
+and workflow ID and path, `push` event, migration branch, head SHA, candidate
+name, completed status, and successful conclusion all match. A new candidate SHA
+therefore requires fresh downstream workflow evidence; earlier canary runs
+cannot admit a later release candidate.
+
 ## Deliberate migration boundaries
 
 - Repovec Appliance uses `command: ":"` for its serial `all` action. v0.1.0
@@ -53,12 +63,12 @@ the beta2 package version until final release packaging changes it.
 
 ## Release decision
 
-The release workflow checks the successful run for each pinned revision before
-it publishes v0.1.0. The OrthoConfig migration workflow additionally runs its
-Windows target set on `windows-latest`; its successful run is a required review
-input. A failure blocks v0.1.0 only when it violates a supported v0.1.0
-manifest or runtime contract. Ergonomic gaps remain follow-up work, not release
-scope expansion.
+The release workflow checks the successful, identity-bound run for each pinned
+revision before it publishes v0.1.0. The OrthoConfig migration workflow
+additionally runs its Windows target set on `windows-latest`; its successful run
+is a required review input. A failure blocks v0.1.0 only when it violates a
+supported v0.1.0 manifest or runtime contract. Ergonomic gaps remain follow-up
+work, not release scope expansion.
 
 [installer]: ../.github/actions/install-release-candidate/action.yml
 [issue-572]: https://github.com/leynos/netsuke/issues/572

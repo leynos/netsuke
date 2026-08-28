@@ -508,7 +508,12 @@ platforms, so callers can invoke the same outputs in platform-specific jobs.
 Each downstream canary must pin its migration revision, run the selected
 Netsukefile targets with this action, and publish a bounded provenance record;
 the release workflow admits a candidate only when the required downstream
-revisions have successful canary runs.
+revisions have successful, identity-bound canary runs. It reads each pinned
+workflow source and requires the installer reference and `revision` input to
+match the published `GITHUB_SHA`, then checks the configured workflow ID and
+path, `push` event, branch, migration head SHA, candidate name, completed
+status, and successful conclusion. A changed candidate SHA therefore requires
+fresh downstream evidence.
 
 ## Toolchain and borrow checker
 
