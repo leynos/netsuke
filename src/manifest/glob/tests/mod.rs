@@ -10,6 +10,7 @@
 //! invariants through the production [`super::glob_paths`] boundary across
 //! arbitrary safe nesting.
 
+#[cfg(unix)]
 mod base;
 mod base_property;
 mod capability;
