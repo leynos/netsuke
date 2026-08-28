@@ -10,12 +10,13 @@ import pathlib
 import subprocess
 import sys
 import textwrap
-import types
 import typing as typ
 
 import pytest
-
 from conftest import SCRIPT_DIRECTORY
+
+if typ.TYPE_CHECKING:
+    import types
 
 
 @dataclasses.dataclass(frozen=True)
@@ -99,9 +100,18 @@ def test_threshold_flips_exit_code(
 @pytest.mark.parametrize(
     "case",
     [
-        pytest.param(CliProcessCase("80", False, 0), id="passing-threshold"),
-        pytest.param(CliProcessCase("95", False, 1), id="failing-threshold"),
-        pytest.param(CliProcessCase("80", True, 2), id="adapter-failure"),
+        pytest.param(
+            CliProcessCase(threshold="80", fails_adapter=False, expected_code=0),
+            id="passing-threshold",
+        ),
+        pytest.param(
+            CliProcessCase(threshold="95", fails_adapter=False, expected_code=1),
+            id="failing-threshold",
+        ),
+        pytest.param(
+            CliProcessCase(threshold="80", fails_adapter=True, expected_code=2),
+            id="adapter-failure",
+        ),
     ],
 )
 def test_cli_process_uses_configured_cargo_adapter(
@@ -117,7 +127,7 @@ def test_cli_process_uses_configured_cargo_adapter(
     }
     if case.fails_adapter:
         environment["DOC_COVERAGE_CARGO_FAILURE"] = "1"
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603 - executes the controlled fixture with shell disabled.
         [
             sys.executable,
             str(SCRIPT_DIRECTORY / "doc-coverage.py"),
@@ -175,10 +185,11 @@ def test_missing_cargo_maps_to_measurement_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Map a missing Cargo executable to the established CLI failure exit."""
+    message = "cargo: not found"
 
     def fail(_argv: list[str], **_kwargs: object) -> typ.NoReturn:
         """Raise the configured Cargo executable error."""
-        raise OSError("cargo: not found")
+        raise OSError(message)
 
     monkeypatch.setattr(script.runner.doc_coverage_cargo.subprocess, "run", fail)
     monkeypatch.chdir(tmp_path)

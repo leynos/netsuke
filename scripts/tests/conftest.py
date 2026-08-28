@@ -6,9 +6,12 @@ import importlib
 import importlib.util
 import pathlib
 import sys
-import types
+import typing as typ
 
 import pytest
+
+if typ.TYPE_CHECKING:
+    import types
 
 SCRIPT_DIRECTORY = pathlib.Path(__file__).resolve().parents[1]
 
@@ -30,8 +33,12 @@ def load_script_module(module_name: str, file_name: str) -> types.ModuleType:
     spec = importlib.util.spec_from_file_location(
         module_name, SCRIPT_DIRECTORY / file_name
     )
-    assert spec is not None, "expected import setup to produce a module spec"
-    assert spec.loader is not None, "expected module spec to provide a loader"
+    if spec is None:
+        message = "expected import setup to produce a module spec"
+        raise AssertionError(message)
+    if spec.loader is None:
+        message = "expected module spec to provide a loader"
+        raise AssertionError(message)
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)

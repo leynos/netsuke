@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import dataclasses
 import pathlib
-import types
 import typing as typ
 
 import pytest
+
+if typ.TYPE_CHECKING:
+    import types
 
 
 def single_library_metadata() -> str:
@@ -49,6 +51,9 @@ class FakeRustdocResult:
     write_output: bool = True
 
 
+_DEFAULT_RUSTDOC_RESULT = FakeRustdocResult()
+
+
 class FakeResult:
     """Provide a minimal ``subprocess.CompletedProcess`` stand-in."""
 
@@ -70,7 +75,7 @@ class FakeCargo:
         cargo: types.ModuleType,
         *,
         metadata: str = '{"packages": [], "workspace_members": []}',
-        rustdoc: FakeRustdocResult = FakeRustdocResult(),
+        rustdoc: FakeRustdocResult = _DEFAULT_RUSTDOC_RESULT,
     ) -> None:
         self._cargo = cargo
         self.metadata_payload = metadata
@@ -167,10 +172,11 @@ def test_measure_maps_missing_cargo_to_measurement_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Translate an OSError from Rustdoc execution into a RuntimeError."""
+    message = "cargo: not found"
 
     def fail(_argv: list[str], **_kwargs: object) -> FakeResult:
         """Raise the configured Cargo executable error."""
-        raise OSError("cargo: not found")
+        raise OSError(message)
 
     monkeypatch.setattr(cargo.subprocess, "run", fail)
 
@@ -234,8 +240,8 @@ def test_measure_reads_the_reported_generated_coverage_file(
     ("output", "expected"),
     [
         pytest.param(
-            'Generated output into "/tmp/coverage.json"',
-            pathlib.Path("/tmp/coverage.json"),
+            f'Generated output into "{pathlib.Path.cwd() / "coverage.json"}"',
+            pathlib.Path.cwd() / "coverage.json",
             id="absolute-path",
         ),
         pytest.param(

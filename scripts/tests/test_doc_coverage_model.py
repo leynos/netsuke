@@ -1,9 +1,6 @@
 """Test documentation-coverage value objects."""
 
-from __future__ import annotations
-
 import pytest
-
 from doc_coverage_model import Coverage
 
 

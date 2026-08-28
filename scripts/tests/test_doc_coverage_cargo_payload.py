@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import dataclasses
-import types
+import typing as typ
 
 import pytest
+
+if typ.TYPE_CHECKING:
+    import types
 
 
 @dataclasses.dataclass(frozen=True)

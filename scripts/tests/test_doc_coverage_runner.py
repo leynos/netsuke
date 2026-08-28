@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-import pathlib
-import types
+import typing as typ
 
 import pytest
+
+if typ.TYPE_CHECKING:
+    import pathlib
+    import types
 
 
 def lib_target(name: str) -> dict[str, object]:
