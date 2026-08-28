@@ -62,8 +62,20 @@ fn require_release_admission_workflow_wiring(
         "release publication should require successful downstream canaries"
     );
     ensure!(
+        contents.contains("needs.release-admission-canaries.result == 'success'"),
+        "release publication should require successful downstream admission"
+    );
+    ensure!(
         admission_command == "bash .github/scripts/require-release-admission-canaries.sh",
         "release workflow should execute the tested canary-admission script"
+    );
+    ensure!(
+        contents.contains("github.event_name != 'workflow_call' || inputs.run-release-admission"),
+        "trusted release events should run downstream canary admission"
+    );
+    ensure!(
+        contents.contains("actions: read\n      contents: read"),
+        "canary admission should use only read permissions"
     );
 
     Ok(())
@@ -185,6 +197,22 @@ fn behavioural_release_workflow_requires_pinned_canaries() -> Result<()> {
     require_pinned_canary_revisions(&admission_script)?;
     require_exact_revision_run_lookup(&admission_script)?;
     require_successful_trusted_run_evidence(&admission_script)?;
+
+    Ok(())
+}
+
+#[test]
+fn behavioural_release_dry_run_disables_untrusted_admission() -> Result<()> {
+    let contents = workflow_contents("release-dry-run.yml")?;
+
+    ensure!(
+        !contents.contains("secrets: inherit"),
+        "pull-request dry runs should not inherit release secrets"
+    );
+    ensure!(
+        contents.contains("run-release-admission: false"),
+        "pull-request dry runs should disable release admission"
+    );
 
     Ok(())
 }
