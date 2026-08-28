@@ -1,4 +1,9 @@
 //! Tests for Netsuke's JSON diagnostics schema.
+//!
+//! The diagnostic snapshot filter is one anchored regular expression with no
+//! data-dependent branching. A fixed example that places unrelated `version`
+//! fields on both sides of the matching generator block therefore covers every
+//! filter path; property generation would not exercise a distinct behaviour.
 
 use super::{render_diagnostic_json, render_error_json};
 use crate::ir::IrGenError;
@@ -28,6 +33,9 @@ fn parse_json_value(document: &str) -> Result<Value> {
 fn snapshot_filter_preserves_versions_outside_the_generator_block() {
     let rendered = concat!(
         "{\n",
+        "  \"schema\": {\n",
+        "    \"version\": \"3.4.5\"\n",
+        "  },\n",
         "  \"generator\": {\n",
         "    \"name\": \"netsuke\",\n",
         "    \"version\": \"9.9.9\"\n",
@@ -42,6 +50,9 @@ fn snapshot_filter_preserves_versions_outside_the_generator_block() {
     snapshot_settings().bind(|| {
         assert_snapshot!(rendered, @r#"
         {
+          "schema": {
+            "version": "3.4.5"
+          },
           "generator": {
             "name": "netsuke",
             "version": "[version]"

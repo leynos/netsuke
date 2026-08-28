@@ -301,6 +301,11 @@ field named `version` remains visible in snapshot diffs. The generator name and
 `schema_version` are deliberately excluded from this redaction and remain
 asserted structurally.
 
+The fixed diagnostic example exercises every structural filter path because the
+regular expression has no data-dependent branches. The
+`snapshot_test_support` property test separately varies valid `SemVer`
+generator versions.
+
 ## Running and Updating Snapshot Tests
 
 > In this repository the canonical runner is cargo-nextest: `make test`, or

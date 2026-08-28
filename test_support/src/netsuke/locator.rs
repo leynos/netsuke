@@ -119,6 +119,9 @@ mod tests {
     use mockable::MockEnv;
     use rstest::{fixture, rstest};
 
+    #[path = "locator_property_tests.rs"]
+    mod locator_property_tests;
+
     fn utf8_root(temp: &tempfile::TempDir) -> Result<Utf8PathBuf> {
         Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
             .map_err(|path| anyhow::anyhow!("temp dir {} is not UTF-8", path.display()))

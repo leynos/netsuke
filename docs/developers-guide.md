@@ -3610,6 +3610,14 @@ The locator's unit tests live beside it in
 executable layouts, an `out` directory that is *not* the Cargo build layout,
 both fallback paths, and the missing-binary case.
 
+The private, test-only child module
+`test_support/src/netsuke/locator/tests/locator_property_tests.rs` owns the
+generated property coverage. `locator.rs` retains the fixed Cargo-layout and
+named presence-mask regression tests, while the child verifies candidate-list
+content and order, first-present lookup selection across optional
+`CARGO_TARGET_DIR`/profile/target-triple layouts, and missing-candidate
+diagnostics.
+
 ## Digest rendering
 
 `src/hex.rs` (`netsuke::hex`) is the single owner of lowercase hexadecimal

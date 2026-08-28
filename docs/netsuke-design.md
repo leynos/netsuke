@@ -2308,6 +2308,42 @@ rule, so its view of the environment always matches the child's.
 The developers' guide documents the module layout and the `PATH` composition
 helper under "Module: `runner::process::command_env`".
 
+Integration-test support finds the already-built `netsuke` executable before
+spawning it. Its locator derives an ordered candidate list from the test
+executable's layout and injected `CARGO_TARGET_DIR`, then selects the first
+existing candidate. The property tests construct the filesystem layout and the
+expected result independently, so they validate both successful selection and
+the diagnostic that records every attempted candidate.
+
+For screen readers: The following sequence shows a property test creating
+candidate paths, asking the locator to inspect them in order, and comparing the
+result with its independently reconstructed expectation. When a candidate
+exists, the locator returns the first matching path. When none exists, it
+returns a diagnostic listing every candidate it checked.
+
+```mermaid
+sequenceDiagram
+    participant PropertyTest
+    participant Locator
+    participant Filesystem
+    participant Diagnostic
+
+    PropertyTest->>Filesystem: create candidate paths from generated layout
+    PropertyTest->>Locator: netsuke_executable_from()
+    Locator->>Filesystem: check candidates in lookup order
+    Filesystem-->>Locator: candidate presence
+    alt executable candidate exists
+        Locator-->>PropertyTest: first matching path
+    else no candidate exists
+        Locator->>Diagnostic: build missing-candidate diagnostic
+        Diagnostic-->>PropertyTest: missing diagnostic
+    end
+    PropertyTest->>PropertyTest: verify independently reconstructed result
+```
+
+Figure: Property-based test support resolves the first executable candidate or
+reports every missing candidate.
+
 ### 6.2 The Criticality of Shell Escaping
 
 A primary security responsibility for Netsuke is the prevention of command
