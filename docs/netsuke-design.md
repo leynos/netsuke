@@ -287,8 +287,10 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   [`shell-quote`](https://docs.rs/shell-quote/latest/shell_quote/) crate (Sh
   mode); the default Windows PowerShell route uses single-quoted literals and
   doubles embedded apostrophes. Standalone `$in` and `$out` tokens are resolved
-  at the same boundary, while tokens inside backticks are preserved. A scalar
-  command is emitted unchanged. On Unix and the explicit Windows Bash
+  at the same boundary. On POSIX and Bash routes, tokens inside backticks are
+  preserved and a placeholder there is rejected; PowerShell backticks use
+  native escape semantics and do not suppress interpolation. A scalar command
+  is emitted unchanged. On Unix and the explicit Windows Bash
   compatibility route, a list is lowered to brace groups that evaluate each
   entry through a shell-quoted `eval` payload and are joined by `&&`. The groups
   run in declaration order in one shell process and stop at the first non-zero

@@ -1,6 +1,7 @@
 //! Hold the state required for one-pass recipe placeholder substitution.
 
 use super::{IrGenError, find_substitution, invalid_command_error};
+use crate::ninja_gen::RecipeShell;
 
 /// Track one-pass substitution while retaining the original error template.
 ///
@@ -16,6 +17,8 @@ pub(super) struct SubstitutionTraversal<'a> {
     ins: &'a str,
     /// Supply the replacement for output placeholders.
     outs: &'a str,
+    /// Select whether backticks delimit protected POSIX syntax.
+    shell: RecipeShell,
     /// Accumulate substituted output without a second traversal.
     output: String,
     /// Record whether the current position is protected by backticks.
@@ -24,12 +27,19 @@ pub(super) struct SubstitutionTraversal<'a> {
 
 impl<'a> SubstitutionTraversal<'a> {
     /// Initialise a traversal for one template and its placeholder bindings.
-    pub(super) fn new(template: &'a str, chars: &'a [char], ins: &'a str, outs: &'a str) -> Self {
+    pub(super) fn new(
+        template: &'a str,
+        chars: &'a [char],
+        ins: &'a str,
+        outs: &'a str,
+        shell: RecipeShell,
+    ) -> Self {
         Self {
             template,
             chars,
             ins,
             outs,
+            shell,
             output: String::with_capacity(template.len()),
             in_backticks: false,
         }
@@ -44,7 +54,7 @@ impl<'a> SubstitutionTraversal<'a> {
             .chars
             .get(pos)
             .ok_or_else(|| invalid_command_error(self.template.to_owned()))?;
-        if ch == '`' {
+        if self.shell != RecipeShell::PowerShell && ch == '`' {
             self.in_backticks ^= true;
             self.output.push(ch);
             return Ok(pos + 1);

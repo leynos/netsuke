@@ -11,6 +11,7 @@ use netsuke::ir::{Action, BuildEdge, BuildGraph};
 use netsuke::ninja_gen::{NinjaGenError, RecipeShell, generate_with_shell};
 use rstest::rstest;
 
+/// Render Ninja content with explicit POSIX shell semantics.
 fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
     generate_with_shell(graph, RecipeShell::Posix)
 }

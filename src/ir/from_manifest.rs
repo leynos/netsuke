@@ -60,7 +60,8 @@ impl BuildGraph {
     /// Returns [`IrGenError`] when a referenced rule is missing, multiple rules
     /// are specified for a single target, no rule is provided, or a directly
     /// deserialized manifest violates the recipe contract.
-    pub(crate) fn from_manifest_for_shell(
+    #[doc(hidden)]
+    pub fn from_manifest_for_shell(
         manifest: &NetsukeManifest,
         shell: RecipeShell,
     ) -> Result<Self, IrGenError> {

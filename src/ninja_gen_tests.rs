@@ -1,19 +1,14 @@
 //! Unit tests for Ninja file generation and rule synthesis.
-use anyhow::{Context, Result, bail, ensure};
-use base64::{Engine as _, engine::general_purpose::STANDARD};
-use camino::Utf8PathBuf;
-use crate::ast::{Recipe, StringOrList};
-use crate::ir::{Action, BuildEdge, BuildGraph, DependencyOrder};
-use rstest::rstest;
 use super::test_support::command_action;
 use super::{
     NamedAction, NinjaGenError, RecipeShell, generate, generate_bundle, generate_into,
-    NamedAction, NinjaGenError, RecipeShell, generate, generate_into, generate_into_with_shell,
+    generate_into_with_shell,
 };
-
-
-//! Unit tests for Ninja file generation and rule synthesis.
-};
+use crate::ast::{Recipe, StringOrList};
+use crate::ir::{Action, BuildEdge, BuildGraph, DependencyOrder};
+use anyhow::{Context, Result, bail, ensure};
+use camino::Utf8PathBuf;
+use rstest::rstest;
 
 /// Build one action graph with the requested metadata field populated.
 fn metadata_graph(field: &str, value: &str) -> Result<BuildGraph> {
@@ -292,89 +287,6 @@ fn generate_command_list_ninja_joins_a_fail_fast_chain() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn power_shell_command_lists_preserve_state_and_stop_on_native_failure() -> Result<()> {
-    let action = command_action(StringOrList::List(vec![
-        "$env:NETSUKE_ORDER = 'first'".into(),
-        "if ($env:NETSUKE_ORDER -ne 'first') { exit 9 }; cmd.exe /c exit 0".into(),
-    ]));
-    let mut rendered = String::new();
-    NamedAction {
-        id: "power_shell_list",
-        action: &action,
-        shell: RecipeShell::PowerShell,
-    }
-    .write_into(&mut rendered)?;
-    let encoded = rendered
-        .lines()
-        .find_map(|line| line.split("-EncodedCommand ").nth(1))
-        .context("PowerShell command should include an encoded script")?
-        .trim();
-    let script = decode_power_shell_script(encoded)?;
-    ensure!(script.contains("$env:NETSUKE_ORDER = 'first'"));
-    ensure!(script.contains("$LASTEXITCODE = 0"));
-    ensure!(script.contains("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"));
-    ensure!(
-        !rendered.contains("NETSUKE_ORDER"),
-        "Ninja must not parse the PowerShell variable expression: {rendered}"
-    );
-    Ok(())
-}
-
-#[test]
-fn power_shell_recipes_quote_apostrophe_paths_with_power_shell_literals() -> Result<()> {
-    let manifest = crate::manifest::from_str(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: output's file\n    sources: source's file\n    command: Copy-Item $in $out\n",
-    )?;
-    let graph = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::PowerShell)?;
-    let mut rendered = String::new();
-    generate_into_with_shell(&graph, &mut rendered, RecipeShell::PowerShell)?;
-    let encoded = rendered
-        .lines()
-        .find_map(|line| line.split("-EncodedCommand ").nth(1))
-        .context("PowerShell command should include an encoded script")?
-        .trim();
-    let script = decode_power_shell_script(encoded)?;
-    ensure!(
-        script.contains("Copy-Item 'source''s file' 'output''s file'"),
-        "PowerShell must receive apostrophe-safe path literals:\n{script}"
-    );
-    Ok(())
-}
-#[test]
-fn power_shell_scripts_do_not_use_the_posix_script_wrapper() -> Result<()> {
-    let action = Action {
-        recipe: Recipe::Script {
-            script: "$edition = $PSVersionTable.PSEdition\nWrite-Output $edition".into(),
-        },
-        description: None,
-        depfile: None,
-        deps_format: None,
-        pool: None,
-        restat: false,
-    };
-    let mut rendered = String::new();
-    NamedAction {
-        id: "power_shell_script",
-        action: &action,
-        shell: RecipeShell::PowerShell,
-    }
-    .write_into(&mut rendered)?;
-    let encoded = rendered
-        .split("-EncodedCommand ")
-        .nth(1)
-        .context("PowerShell command should include an encoded script")?
-        .trim();
-    let script = decode_power_shell_script(encoded)?;
-    ensure!(script.contains("$edition = $PSVersionTable.PSEdition"));
-    ensure!(script.contains("Write-Output $edition"));
-    ensure!(
-        !script.contains("/bin/sh"),
-        "PowerShell script must not traverse the POSIX script wrapper: {script}"
-    );
-    Ok(())
-}
-
 #[rstest]
 #[case::empty_list(StringOrList::List(Vec::new()))]
 fn programmatic_empty_command_list_returns_a_typed_generation_error(#[case] command: StringOrList) {
@@ -465,27 +377,12 @@ fn assert_shell_command_tolerates_complex_syntax() {
     let command = r#"/bin/sh -c "echo 'nested quotes' && echo \"double\" && (echo subshell)""#;
     NamedAction::assert_shell_command(command);
 }
-
-/// Decode the UTF-16LE PowerShell payload emitted in a Ninja command binding.
-fn decode_power_shell_script(encoded: &str) -> Result<String> {
-    let bytes = STANDARD
-        .decode(encoded)
-        .context("decode PowerShell command payload")?;
-    let units = bytes
-        .chunks_exact(2)
-        .map(|pair| {
-            let [low, high]: [u8; 2] = pair
-                .try_into()
-                .context("PowerShell UTF-16 unit must contain two bytes")?;
-            Ok(u16::from(low) | (u16::from(high) << 8))
-        })
-        .collect::<Result<Vec<_>>>()?;
-    String::from_utf16(&units).context("decode PowerShell UTF-16 payload")
-}
-
 /// Generate Ninja text using the explicit POSIX compatibility renderer.
 fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
     let mut ninja = String::new();
     generate_into_with_shell(graph, &mut ninja, RecipeShell::Posix)?;
     Ok(ninja)
 }
+
+#[path = "ninja_gen_tests/power_shell.rs"]
+mod power_shell;

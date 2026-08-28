@@ -65,7 +65,7 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "Target discovery failed with exit code ${LASTEXITCODE}: $discovery"
     }
-    if ($discovery -notmatch 'Confirm target discovery has no recipe side effects') {
+    if (-not ($discovery -match 'Confirm target discovery has no recipe side effects')) {
         throw "Target discovery omitted the fixture target: $discovery"
     }
     if (Test-Path -LiteralPath 'discovery must not execute.txt') {
@@ -115,7 +115,7 @@ try {
         if ($LASTEXITCODE -eq 0) {
             throw 'Selecting Bash without bash.exe unexpectedly succeeded.'
         }
-        if ($bashFailure -notmatch 'bash.exe.*not found on PATH') {
+        if (-not ($bashFailure -match 'bash.exe.*not found on PATH')) {
             throw "Missing-Bash diagnostics were not actionable: $bashFailure"
         }
     }

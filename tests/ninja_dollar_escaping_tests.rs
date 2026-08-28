@@ -23,39 +23,10 @@ use std::{
 use tempfile::TempDir;
 use test_support::ninja::ninja_integration_workspace;
 
-
-//! Differential tests for shell dollars preserved through the Ninja backend.
-//!
-//! These tests use Ninja itself as the lexer oracle. The generated command
-//! must be the shell text held by the IR after Netsuke lowers `$in` and `$out`.
-};
-
-
-//! Differential tests for shell dollars preserved through the Ninja backend.
-//!
-//! These tests use Ninja itself as the lexer oracle. The generated command
-//! must be the shell text held by the IR after Netsuke lowers `$in` and `$out`.
-};
-};
-//! Differential tests for shell dollars preserved through the Ninja backend.
-//!
-//! These tests use Ninja itself as the lexer oracle. The generated command
-//! must be the shell text held by the IR after Netsuke lowers `$in` and `$out`.
-};
-//! Differential tests for shell dollars preserved through the Ninja backend.
-//!
-//! These tests use Ninja itself as the lexer oracle. The generated command
-//! must be the shell text held by the IR after Netsuke lowers `$in` and `$out`.
-};
-//! Differential tests for shell dollars preserved through the Ninja backend.
-//!
-//! These tests use Ninja itself as the lexer oracle. The generated command
-//! must be the shell text held by the IR after Netsuke lowers `$in` and `$out`.
-};
-
 const SENTINEL: &str = "NETSUKE_TEST_SENTINEL";
 const SENTINEL_VALUE: &str = "sentinel-value";
 
+/// Render Ninja content with explicit POSIX shell semantics.
 fn generate_posix(graph: &BuildGraph) -> Result<String> {
     generate_with_shell(graph, RecipeShell::Posix).map_err(Into::into)
 }
@@ -261,7 +232,10 @@ fn shell_default_reaches_the_child_shell(
     let manifest = manifest::from_str(
         "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    command: 'printf %s \"${NETSUKE_TEST_SENTINEL:-fallback}\" > $out'\n",
     )?;
-    let ninja = generate_posix(&BuildGraph::from_manifest(&manifest)?)?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        &manifest,
+        RecipeShell::Posix,
+    )?)?;
 
     let actual = ninja_output(&ninja, environment_value, None)?;
     ensure!(
@@ -301,7 +275,10 @@ fn placeholder_lowering_precedes_backend_escaping(#[case] recipe: &str) -> Resul
     let manifest = manifest::from_str(&format!(
         "netsuke_version: '1.0.0'\ntargets:\n  - name: output.txt\n    sources: input.txt\n    {recipe}\n"
     ))?;
-    let ninja = generate_posix(&BuildGraph::from_manifest(&manifest)?)?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        &manifest,
+        RecipeShell::Posix,
+    )?)?;
     let commands = ninja_commands(&ninja, "output.txt")?;
     ensure!(
         commands.contains("cat input.txt > output.txt"),
@@ -317,7 +294,7 @@ fn scripts_lower_placeholders_without_command_parser_validation() -> Result<()> 
     let manifest = manifest::from_str(
         "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: in\n    script: |\n      cat $in > $out\n      # apostrophe's comment and a heredoc must remain valid\n      cat <<'EOF' >> $out\n      done\n      EOF\n",
     )?;
-    let graph = BuildGraph::from_manifest(&manifest)?;
+    let graph = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::Posix)?;
     let ninja = generate_posix(&graph)?;
     ensure!(
         !ninja.contains("\\$out") && !ninja.contains("$in"),
@@ -360,7 +337,10 @@ fn script_placeholders_execute_against_real_paths() -> Result<()> {
     let manifest = manifest::from_str(
         "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: in\n    script: \"printf '%s' $in > $out\"\n",
     )?;
-    let ninja = generate_posix(&BuildGraph::from_manifest(&manifest)?)?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        &manifest,
+        RecipeShell::Posix,
+    )?)?;
 
     let actual = ninja_output(&ninja, None, Some(("in", "script input")))?;
     ensure!(

@@ -1593,8 +1593,10 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
 - Write shell dollar expressions normally. `$PATH`, `$RUSTFLAGS`, and
   `${CARGO:-cargo}` reach POSIX routes unchanged; PowerShell routes use `$name`
   or `$env:NAME`. Netsuke performs the required Ninja escaping after it lowers
-  `$in`, `$out`, `{{ ins }}`, and `{{ outs }}`. A `$in` or `$out` token inside
-  backticks is rejected because Netsuke cannot safely lower it there.
+  `$in`, `$out`, `{{ ins }}`, and `{{ outs }}`. On POSIX and Bash routes, a
+  `$in` or `$out` token inside backticks is rejected because Netsuke cannot
+  safely lower it there. PowerShell uses backticks as its native escape syntax,
+  so they do not suppress placeholder interpolation.
 - Build and default-target paths reject `$`, spaces, colons, `|`, and control
   characters because Ninja cannot represent them without ambiguity. Generation
   also rejects newline, carriage-return, and NUL characters in emitted metadata

@@ -57,7 +57,7 @@ fn touch_manifest_ninja_validation() -> Result<()> {
     "#;
 
     let manifest = manifest::from_str(manifest_yaml)?;
-    let ir = BuildGraph::from_manifest(&manifest)?;
+    let ir = BuildGraph::from_manifest_for_shell(&manifest, ninja_gen::RecipeShell::Posix)?;
     let ninja_content = generate_posix(&ir)?;
 
     let mut settings = Settings::new();
@@ -120,7 +120,7 @@ fn conditional_manifest_ninja_snapshot() -> Result<()> {
     "#;
 
     let manifest = manifest::from_str(manifest_yaml)?;
-    let ir = BuildGraph::from_manifest(&manifest)?;
+    let ir = BuildGraph::from_manifest_for_shell(&manifest, ninja_gen::RecipeShell::Posix)?;
     let ninja_content = generate_posix(&ir)?;
 
     ensure!(
@@ -176,7 +176,7 @@ fn command_available_manifest_ninja_snapshot() -> Result<()> {
         &manifest::process_env_reader(),
         config,
     )?;
-    let ir = BuildGraph::from_manifest(&manifest)?;
+    let ir = BuildGraph::from_manifest_for_shell(&manifest, ninja_gen::RecipeShell::Posix)?;
     let ninja_content = generate_posix(&ir)?;
 
     ensure!(
@@ -210,7 +210,7 @@ fn multi_command_manifest_ninja_snapshot() -> Result<()> {
         .context("read tests/data/multi_command.yml")?;
 
     let manifest = manifest::from_str(&manifest_yaml)?;
-    let ir = BuildGraph::from_manifest(&manifest)?;
+    let ir = BuildGraph::from_manifest_for_shell(&manifest, ninja_gen::RecipeShell::Posix)?;
     let ninja_content = generate_posix(&ir)?;
 
     ensure!(
@@ -247,7 +247,7 @@ fn implicit_deps_manifest_ninja_snapshot() -> Result<()> {
         .context("read tests/data/implicit_deps.yml")?;
 
     let manifest = manifest::from_str(&manifest_yaml)?;
-    let ir = BuildGraph::from_manifest(&manifest)?;
+    let ir = BuildGraph::from_manifest_for_shell(&manifest, ninja_gen::RecipeShell::Posix)?;
     let ninja_content = generate_posix(&ir)?;
 
     ensure!(
@@ -306,6 +306,7 @@ fn dependency_only_manifest_ninja_snapshot() -> Result<()> {
     Ok(())
 }
 
+/// Render Ninja content with explicit POSIX shell semantics.
 fn generate_posix(graph: &BuildGraph) -> Result<String> {
     ninja_gen::generate_with_shell(graph, ninja_gen::RecipeShell::Posix).map_err(Into::into)
 }

@@ -128,6 +128,7 @@ mod tests {
     use crate::ninja_gen::ninja_gen_escape::ShellText;
     use proptest::prelude::*;
 
+    /// Verify that encoded PowerShell commands hide recipe dollars from Ninja.
     #[test]
     fn power_shell_command_hides_recipe_dollars_from_ninja() {
         let rendered = RecipeShell::PowerShell
@@ -138,6 +139,7 @@ mod tests {
         assert!(!rendered.contains("NETSUKE_SMOKE"));
     }
 
+    /// Verify that Windows argument quoting preserves quotes and trailing slashes.
     #[test]
     fn windows_argument_preserves_quotes_and_trailing_backslashes() {
         assert_eq!(
@@ -146,6 +148,7 @@ mod tests {
         );
     }
 
+    /// Verify that the Bash compatibility renderer invokes `bash.exe -e -c`.
     #[test]
     fn bash_command_value_uses_the_explicit_windows_compatibility_runtime() {
         let rendered = RecipeShell::Bash
@@ -155,6 +158,7 @@ mod tests {
         assert_eq!(rendered, "bash.exe -e -c \"echo \\\"hello world\\\"\\\\\"");
     }
 
+    /// Verify that a PowerShell list checks native failure before its next entry.
     #[test]
     fn power_shell_lists_check_the_captured_status_before_the_next_entry() {
         let script = RecipeShell::PowerShell
@@ -169,6 +173,7 @@ mod tests {
         assert!(failure_check < next_entry);
     }
 
+    /// Verify that PowerShell list bookkeeping does not reserve a user variable.
     #[test]
     fn power_shell_lists_do_not_reserve_user_variable_names() {
         let script = RecipeShell::PowerShell
@@ -180,6 +185,7 @@ mod tests {
         assert!(!script.contains("$netsuke_exit_code = $LASTEXITCODE"));
     }
 
+    /// Verify that oversized encoded commands fail before Windows rejects the process.
     #[test]
     fn power_shell_commands_fail_before_exceeding_the_windows_command_line_limit() {
         let result = RecipeShell::PowerShell.command_value(&ShellText::new("x".repeat(12_500)));
@@ -190,6 +196,7 @@ mod tests {
     }
 
     proptest! {
+        /// Verify that every generated PowerShell list entry has an immediate failure check.
         #[test]
         fn power_shell_lists_check_each_entry_before_the_next(
             labels in proptest::collection::vec("[a-z]{1,12}", 1..8),

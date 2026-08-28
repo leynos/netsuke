@@ -140,12 +140,14 @@ mod tests {
         assert!(error.to_string().contains("powershell` or `bash"));
     }
 
+    /// Verify that a successful injected Bash probe permits the compatibility route.
     #[test]
     fn bash_runtime_probe_accepts_a_successful_runtime() {
         let result = validate_bash_runtime_with(|| Ok(BashProbeStatus::Available));
         assert!(result.is_ok());
     }
 
+    /// Verify that a missing injected Bash runtime produces actionable guidance.
     #[test]
     fn bash_runtime_probe_reports_a_missing_runtime() {
         let error = validate_bash_runtime_with(|| {
@@ -162,6 +164,7 @@ mod tests {
         );
     }
 
+    /// Verify that a failing injected Bash probe preserves its exit diagnostic.
     #[test]
     fn bash_runtime_probe_reports_an_unsuccessful_runtime() {
         let error =
