@@ -1325,3 +1325,10 @@ shadowed the completed `NinjaWorkspace`. It has been renamed to make the
 ownership transition explicit. The Linux functional gates passed before that
 lint-only correction; the full gate-first review sequence will rerun before
 the next Windows confirmation.
+
+2026-08-28 — final platform confirmation succeeded: GitHub Actions run
+`33142627259` completed successfully, including `build-test-windows`. Its
+Clippy, Whitaker, and full test steps all passed. This confirms that the
+real-Ninja property accepts both CRLF and LF records without trimming command
+whitespace; the prior Windows failure was eliminated, and no property failure
+is hidden by record-terminator normalization. Status is `COMPLETE`.
