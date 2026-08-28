@@ -55,6 +55,10 @@ class DocTarget:
     name: str | None
 
 
+class CoveragePayloadShapeError(TypeError):
+    """Report that Rustdoc emitted a coverage payload other than an object."""
+
+
 def aggregate_coverage_payload(per_file: object) -> Coverage:
     """Validate and sum Rustdoc's documented and total counts.
 
@@ -70,7 +74,7 @@ def aggregate_coverage_payload(per_file: object) -> Coverage:
 
     Raises
     ------
-    TypeError
+    CoveragePayloadShapeError
         If Rustdoc's payload is not an object.
     KeyError, ValueError
         If an entry omits or violates a coverage-count invariant.
@@ -82,7 +86,7 @@ def aggregate_coverage_payload(per_file: object) -> Coverage:
                 Coverage(0, 0),
             )
         case _:
-            raise TypeError("expected an object")
+            raise CoveragePayloadShapeError("expected an object")
 
 
 def coverage_from_entry(entry: object) -> Coverage:
@@ -137,10 +141,18 @@ def coverage_count(entry: object, name: str) -> int:
         is negative.
     """
     count = entry[name]
-    if isinstance(count, bool):
-        raise ValueError("counts must be non-negative integers with with_docs <= total")
-    if not isinstance(count, int):
-        raise ValueError("counts must be non-negative integers with with_docs <= total")
-    if count < 0:
-        raise ValueError("counts must be non-negative integers with with_docs <= total")
-    return count
+    match count:
+        case bool():
+            raise ValueError(
+                "counts must be non-negative integers with with_docs <= total"
+            )
+        case int() if count >= 0:
+            return count
+        case int():
+            raise ValueError(
+                "counts must be non-negative integers with with_docs <= total"
+            )
+        case _:
+            raise ValueError(
+                "counts must be non-negative integers with with_docs <= total"
+            )

@@ -88,8 +88,9 @@ fn last_with_extension(paths: &[PathBuf], extension: &str) -> Option<PathBuf> {
 mod tests {
     //! Property and example tests for the Cargo artefact parser.
 
-    use super::{dependency_dirs_in_message, library_path_in_message};
+    use super::{compiler_artifact_paths, dependency_dirs_in_message, library_path_in_message};
     use proptest::prelude::*;
+    use rstest::rstest;
     use std::path::{Path, PathBuf};
 
     /// Generate a newline-free Cargo artefact path and whether rustc can load it.
@@ -135,19 +136,45 @@ mod tests {
     }
 
     /// Prefer metadata and fall back to the library artefact.
-    #[test]
-    fn parser_prefers_metadata_then_falls_back_to_library() {
-        let message = r#"{"reason":"compiler-artifact","target":{"name":"fixture"},"filenames":["/final/libfixture.rlib","/build/libfixture.rmeta"]}"#;
+    #[rstest]
+    #[case(
+        r#"{"reason":"compiler-artifact","target":{"name":"fixture"},"filenames":["/final/libfixture.rlib","/build/libfixture.rmeta"]}"#,
+        "/build/libfixture.rmeta",
+        "metadata"
+    )]
+    #[case(
+        r#"{"reason":"compiler-artifact","target":{"name":"fixture"},"filenames":["/final/libfixture.rlib"]}"#,
+        "/final/libfixture.rlib",
+        "library fallback"
+    )]
+    fn parser_prefers_metadata_then_falls_back_to_library(
+        #[case] message: &str,
+        #[case] expected: &str,
+        #[case] selection: &str,
+    ) {
         assert_eq!(
             library_path_in_message(message, "fixture"),
-            Some(PathBuf::from("/build/libfixture.rmeta")),
-            "metadata should be selected when Cargo reports it"
+            Some(PathBuf::from(expected)),
+            "{selection} should be selected when Cargo reports it"
         );
-        let rlib_only = r#"{"reason":"compiler-artifact","target":{"name":"fixture"},"filenames":["/final/libfixture.rlib"]}"#;
-        assert_eq!(
-            library_path_in_message(rlib_only, "fixture"),
-            Some(PathBuf::from("/final/libfixture.rlib")),
-            "older Cargo layouts need the rlib fallback"
-        );
+    }
+
+    /// Reject malformed and irrelevant messages before selecting an artefact.
+    #[rstest]
+    #[case("not JSON")]
+    #[case(r#"{"reason":"build-script-executed"}"#)]
+    fn compiler_artifact_parser_rejects_invalid_messages(#[case] message: &str) {
+        assert_eq!(compiler_artifact_paths(message), None);
+    }
+
+    /// Reject malformed, irrelevant, and mismatched messages for a named library.
+    #[rstest]
+    #[case("not JSON")]
+    #[case(r#"{"reason":"build-script-executed"}"#)]
+    #[case(
+        r#"{"reason":"compiler-artifact","target":{"name":"other"},"filenames":["/build/libother.rmeta"]}"#
+    )]
+    fn library_path_parser_rejects_unmatched_messages(#[case] message: &str) {
+        assert_eq!(library_path_in_message(message, "fixture"), None);
     }
 }
