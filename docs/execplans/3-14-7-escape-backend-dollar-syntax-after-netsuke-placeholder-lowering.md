@@ -1284,12 +1284,13 @@ real-Ninja property. Its only failure was the BDD sentinel recipe: Ninja uses
 `cmd.exe` on Windows, whereas the fixture used POSIX-only `printf` and `$VAR`
 syntax, so it never wrote the output file. A first cross-platform `echo`
 replacement also failed because Ninja's Windows launcher does not reliably
-resolve the shell built-in. The revised fixture calls the hosted `python`
-executable to write the output, while passing both native shell expansions as
-arguments: POSIX expands `$NETSUKE_TEST_SENTINEL`; Windows expands
-`%NETSUKE_TEST_SENTINEL%`. The assertion remains deliberately narrow: it
-observes the sentinel value written by the child shell on each platform.
-`make check-fmt`, `make test` (2,440 passed, 3 skipped), `make typecheck`,
-`make lint`, `make doc-coverage` (98.99%), `make markdownlint`, and `make
-nixie` passed. CodeRabbit reported zero findings. Status is `COMPLETE` pending
-the final pushed Windows rerun.
+resolve the shell built-in. A second attempt proved that Windows Ninja invokes
+the command directly, so neither POSIX `$VAR` nor `cmd.exe` `%VAR%` expansion
+occurs. The BDD scenario therefore verifies the cross-platform contract it can
+observe: a generated command receives the explicit sentinel environment and
+writes it to its target through the hosted `python` executable. The independent
+real-Ninja property remains the shell-dollar parser oracle. `make check-fmt`,
+`make test` (2,440 passed, 3 skipped), `make typecheck`, `make lint`, `make
+doc-coverage` (98.99%), `make markdownlint`, and `make nixie` passed.
+CodeRabbit reported zero findings. Status is `COMPLETE` pending the final
+pushed Windows rerun.
