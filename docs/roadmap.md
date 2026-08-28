@@ -260,7 +260,7 @@ and agents.
     `src/ninja_gen.rs`; only manifest parsing and population from `deps_from`
     remain.
 - [x] 3.14.7. Escape backend dollar syntax after Netsuke placeholder lowering.
-  Depends on archived task `1.3.2`. See
+  This task depends on archived task `1.3.2`. See
   [netsuke-design.md §§2.6 and 5.4](netsuke-design.md).
   - [x] Preserve shell variables such as `$PATH`, `${CARGO:-cargo}`, and
     `$RUSTFLAGS` in generated Ninja by emitting literal dollars as `$$`.
