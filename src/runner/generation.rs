@@ -96,6 +96,20 @@ pub(super) fn build_graph(manifest: &NetsukeManifest) -> Result<BuildGraph> {
         .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH))
 }
 
+/// Translate a manifest into a graph for one legacy recipe interpreter.
+///
+/// # Errors
+///
+/// Returns an error when graph construction or validation fails (for example
+/// on circular dependencies or duplicate outputs).
+pub(super) fn build_graph_for_shell(
+    manifest: &NetsukeManifest,
+    shell: crate::ninja_gen::RecipeShell,
+) -> Result<BuildGraph> {
+    BuildGraph::from_manifest_for_shell(manifest, shell)
+        .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH))
+}
+
 /// Generate the Ninja bundle for a build graph.
 ///
 /// # Examples

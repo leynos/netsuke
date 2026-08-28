@@ -13,6 +13,7 @@ use shell_quote::{QuoteRefExt, Sh};
 use std::cell::Cell;
 
 use super::IrGenError;
+use crate::ninja_gen::RecipeShell;
 
 mod substitution;
 
@@ -34,11 +35,11 @@ pub(crate) struct CommandBindings {
 impl CommandBindings {
     /// Quote the paths once for every command in one recipe.
     #[must_use]
-    pub(crate) fn new(inputs: &[Utf8PathBuf], outputs: &[Utf8PathBuf]) -> Self {
+    pub(crate) fn new(inputs: &[Utf8PathBuf], outputs: &[Utf8PathBuf], shell: RecipeShell) -> Self {
         record_binding_preparation();
         Self {
-            ins: quote_paths(inputs).join(" "),
-            outs: quote_paths(outputs).join(" "),
+            ins: quote_paths(inputs, shell).join(" "),
+            outs: quote_paths(outputs, shell).join(" "),
         }
     }
 }
@@ -67,22 +68,25 @@ pub(crate) fn binding_preparations() -> usize {
     BINDING_PREPARATIONS.with(Cell::get)
 }
 
-/// Shell-quote each path, producing one quoted string per path.
-fn quote_paths(paths: &[Utf8PathBuf]) -> Vec<String> {
-    paths
-        .iter()
-        .map(|path| {
-            // Utf8PathBuf guarantees UTF-8, and shell quoting should preserve it.
-            let bytes: Vec<u8> = path.as_str().quoted(Sh);
-            match String::from_utf8(bytes) {
-                Ok(text) => text,
-                Err(err) => {
-                    debug_assert!(false, "shell quoting produced non UTF-8 bytes: {err}");
-                    String::from_utf8_lossy(err.as_bytes()).into_owned()
-                }
-            }
-        })
-        .collect()
+/// Quote each path for the selected legacy recipe interpreter.
+fn quote_paths(paths: &[Utf8PathBuf], shell: RecipeShell) -> Vec<String> {
+    paths.iter().map(|path| quote_path(path, shell)).collect()
+}
+
+/// Quote one path for the selected legacy recipe interpreter.
+fn quote_path(path: &Utf8PathBuf, shell: RecipeShell) -> String {
+    if shell == RecipeShell::PowerShell {
+        return format!("'{}'", path.as_str().replace('\'', "''"));
+    }
+    // Utf8PathBuf guarantees UTF-8, and shell quoting should preserve it.
+    let bytes: Vec<u8> = path.as_str().quoted(Sh);
+    match String::from_utf8(bytes) {
+        Ok(text) => text,
+        Err(err) => {
+            debug_assert!(false, "shell quoting produced non UTF-8 bytes: {err}");
+            String::from_utf8_lossy(err.as_bytes()).into_owned()
+        }
+    }
 }
 
 /// Returns `true` when the command contains an odd number of backticks.
@@ -102,7 +106,7 @@ pub(crate) fn interpolate_command(
     inputs: &[Utf8PathBuf],
     outputs: &[Utf8PathBuf],
 ) -> Result<String, IrGenError> {
-    let bindings = CommandBindings::new(inputs, outputs);
+    let bindings = CommandBindings::new(inputs, outputs, RecipeShell::host_default());
     interpolate_command_with_bindings(template, &bindings)
 }
 
@@ -348,5 +352,17 @@ mod tests {
         )
         .expect("command");
         assert_eq!(command, "in out out");
+    }
+
+    #[test]
+    fn power_shell_bindings_quote_apostrophes_as_single_literals() {
+        let bindings = CommandBindings::new(
+            &[Utf8PathBuf::from("source's file")],
+            &[Utf8PathBuf::from("output's file")],
+            RecipeShell::PowerShell,
+        );
+        let command = interpolate_command_with_bindings("Copy-Item $in $out", &bindings)
+            .expect("PowerShell-safe placeholders should interpolate");
+        assert_eq!(command, "Copy-Item 'source''s file' 'output''s file'");
     }
 }

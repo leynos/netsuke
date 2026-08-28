@@ -71,6 +71,7 @@ const fn error_category(error: &NinjaGenError) -> &'static str {
         | NinjaGenError::UnanalyzableCommandListEval { .. }
         | NinjaGenError::NinjaControlCharacter { .. } => "command_list",
         NinjaGenError::UnsafeNinjaValue => "unsafe_ninja_value",
+        NinjaGenError::PowerShellCommandLineTooLong { .. } => "powershell_command_line_too_long",
         NinjaGenError::Format { .. } => "format",
         NinjaGenError::DyndepFilesRequired { .. } => "dyndep_files_required",
         NinjaGenError::ReservedOutputPath { .. } => "reserved_output_path",

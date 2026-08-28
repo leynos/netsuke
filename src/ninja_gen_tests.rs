@@ -306,15 +306,14 @@ fn power_shell_command_lists_preserve_state_and_stop_on_native_failure() -> Resu
     }
     .write_into(&mut rendered)?;
     let encoded = rendered
-        .split("-EncodedCommand ")
-        .nth(1)
+        .lines()
+        .find_map(|line| line.split("-EncodedCommand ").nth(1))
         .context("PowerShell command should include an encoded script")?
         .trim();
     let script = decode_power_shell_script(encoded)?;
     ensure!(script.contains("$env:NETSUKE_ORDER = 'first'"));
     ensure!(script.contains("$LASTEXITCODE = 0"));
-    ensure!(script.contains("$netsuke_exit_code = $LASTEXITCODE"));
-    ensure!(script.contains("if ($netsuke_exit_code -ne 0) { exit $netsuke_exit_code }"));
+    ensure!(script.contains("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"));
     ensure!(
         !rendered.contains("NETSUKE_ORDER"),
         "Ninja must not parse the PowerShell variable expression: {rendered}"
@@ -322,6 +321,26 @@ fn power_shell_command_lists_preserve_state_and_stop_on_native_failure() -> Resu
     Ok(())
 }
 
+#[test]
+fn power_shell_recipes_quote_apostrophe_paths_with_power_shell_literals() -> Result<()> {
+    let manifest = crate::manifest::from_str(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: output's file\n    sources: source's file\n    command: Copy-Item $in $out\n",
+    )?;
+    let graph = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::PowerShell)?;
+    let mut rendered = String::new();
+    generate_into_with_shell(&graph, &mut rendered, RecipeShell::PowerShell)?;
+    let encoded = rendered
+        .lines()
+        .find_map(|line| line.split("-EncodedCommand ").nth(1))
+        .context("PowerShell command should include an encoded script")?
+        .trim();
+    let script = decode_power_shell_script(encoded)?;
+    ensure!(
+        script.contains("Copy-Item 'source''s file' 'output''s file'"),
+        "PowerShell must receive apostrophe-safe path literals:\n{script}"
+    );
+    Ok(())
+}
 #[test]
 fn power_shell_scripts_do_not_use_the_posix_script_wrapper() -> Result<()> {
     let action = Action {

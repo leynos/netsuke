@@ -4,6 +4,15 @@ use anyhow::{Context, Result, bail};
 use mockable::Env;
 use std::ffi::OsString;
 
+/// Record one outcome from the Bash availability probe.
+#[derive(Debug, Eq, PartialEq)]
+enum BashProbeStatus {
+    /// Confirm that the runtime accepted `--version`.
+    Available,
+    /// Preserve the runtime's failed status for the actionable diagnostic.
+    Failed(String),
+}
+
 use crate::ninja_gen::RecipeShell;
 
 /// Names the optional Windows legacy-recipe interpreter override.
@@ -48,17 +57,32 @@ pub(super) fn validate_recipe_shell(shell: RecipeShell) -> Result<()> {
     if !cfg!(windows) || shell != RecipeShell::Bash {
         return Ok(());
     }
-    let status = std::process::Command::new("bash.exe")
-        .arg("--version")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .context(
-            "Windows legacy recipes selected `bash`, but `bash.exe` was not found on PATH; \
+    validate_bash_runtime_with(|| {
+        std::process::Command::new("bash.exe")
+            .arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|status| {
+                if status.success() {
+                    BashProbeStatus::Available
+                } else {
+                    BashProbeStatus::Failed(status.to_string())
+                }
+            })
+    })
+}
+
+/// Validate one injected Bash availability probe.
+fn validate_bash_runtime_with(
+    probe: impl FnOnce() -> std::io::Result<BashProbeStatus>,
+) -> Result<()> {
+    let probe_status = probe().context(
+        "Windows legacy recipes selected `bash`, but `bash.exe` was not found on PATH; \
              install Git for Windows or MSYS2, add its Bash directory to PATH, or unset \
              NETSUKE_WINDOWS_SHELL to use PowerShell",
-        )?;
-    if !status.success() {
+    )?;
+    if let BashProbeStatus::Failed(status) = probe_status {
         bail!(
             "Windows legacy recipes selected `bash`, but `bash.exe --version` exited with {status}; \
              repair the Bash runtime or unset NETSUKE_WINDOWS_SHELL to use PowerShell"
@@ -71,7 +95,10 @@ pub(super) fn validate_recipe_shell(shell: RecipeShell) -> Result<()> {
 mod tests {
     //! Verifies Windows legacy-recipe interpreter selection.
 
-    use super::{WINDOWS_SHELL_ENV, resolve_recipe_shell_with, resolve_windows_recipe_shell};
+    use super::{
+        BashProbeStatus, WINDOWS_SHELL_ENV, resolve_recipe_shell_with,
+        resolve_windows_recipe_shell, validate_bash_runtime_with,
+    };
     use crate::ninja_gen::RecipeShell;
     use mockable::MockEnv;
     use std::ffi::OsString;
@@ -111,5 +138,39 @@ mod tests {
         let error = resolve_windows_recipe_shell(Some(OsString::from("cmd")))
             .expect_err("unknown shell selection should fail");
         assert!(error.to_string().contains("powershell` or `bash"));
+    }
+
+    #[test]
+    fn bash_runtime_probe_accepts_a_successful_runtime() {
+        let result = validate_bash_runtime_with(|| Ok(BashProbeStatus::Available));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn bash_runtime_probe_reports_a_missing_runtime() {
+        let error = validate_bash_runtime_with(|| {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "missing bash",
+            ))
+        })
+        .expect_err("missing Bash should be actionable");
+        assert!(
+            error
+                .to_string()
+                .contains("bash.exe` was not found on PATH")
+        );
+    }
+
+    #[test]
+    fn bash_runtime_probe_reports_an_unsuccessful_runtime() {
+        let error =
+            validate_bash_runtime_with(|| Ok(BashProbeStatus::Failed("exit status: 7".into())))
+                .expect_err("failed Bash probe should be actionable");
+        assert!(
+            error
+                .to_string()
+                .contains("bash.exe --version` exited with exit status: 7")
+        );
     }
 }

@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::ir::cmd_interpolate::{binding_preparations, reset_binding_preparations};
+use crate::ninja_gen::RecipeShell;
 use proptest::prelude::*;
 
 #[test]
@@ -20,6 +21,7 @@ fn large_command_list_prepares_path_bindings_once() {
         ActionBindings {
             inputs: &[Utf8PathBuf::from("input")],
             outputs: &[Utf8PathBuf::from("output")],
+            shell: RecipeShell::Posix,
         },
     )
     .expect("shell-safe command list should lower");
@@ -47,6 +49,7 @@ proptest! {
             ActionBindings {
                 inputs: &[Utf8PathBuf::from("input")],
                 outputs: &[Utf8PathBuf::from("output")],
+                shell: RecipeShell::Posix,
             },
         ).expect("shell-safe generated entries should interpolate");
         let action = actions.get(&action_id).expect("registered action should be available");

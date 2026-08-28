@@ -320,7 +320,7 @@ pub(super) fn generate_ninja_with_shell(
     }
 
     report_pipeline_stage(reporter, PipelineStage::IrGenerationValidation, None);
-    let graph = generation::build_graph(&manifest)?;
+    let graph = generation::build_graph_for_shell(&manifest, recipe_shell)?;
 
     report_pipeline_stage(
         reporter,

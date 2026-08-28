@@ -21,6 +21,7 @@ use itertools::Itertools;
 use std::collections::HashSet;
 use std::fmt::Write;
 
+mod explicit_shell;
 #[path = "../ninja_gen_command_list.rs"]
 pub(crate) mod ninja_gen_command_list;
 #[path = "../ninja_gen_error.rs"]
@@ -33,10 +34,11 @@ mod ninja_gen_recipe_shell;
 #[path = "../ninja_gen_validation.rs"]
 mod ninja_gen_validation;
 
+pub use explicit_shell::generate_with_shell;
 use ninja_gen_command_list::{ActionId, CommandListEntry, command_list_entry};
 pub use ninja_gen_error::NinjaGenError;
 use ninja_gen_escape::{ShellText, escape_metadata_value};
-pub(crate) use ninja_gen_recipe_shell::RecipeShell;
+pub use ninja_gen_recipe_shell::RecipeShell;
 use ninja_gen_validation::{validate_action_metadata, validate_action_recipe};
 /// Write `key = value` to a Ninja file when `opt` holds a value.
 ///

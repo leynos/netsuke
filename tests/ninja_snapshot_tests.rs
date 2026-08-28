@@ -58,7 +58,7 @@ fn touch_manifest_ninja_validation() -> Result<()> {
 
     let manifest = manifest::from_str(manifest_yaml)?;
     let ir = BuildGraph::from_manifest(&manifest)?;
-    let ninja_content = ninja_gen::generate(&ir)?;
+    let ninja_content = generate_posix(&ir)?;
 
     let mut settings = Settings::new();
     settings.set_snapshot_path(concat!(
@@ -121,7 +121,7 @@ fn conditional_manifest_ninja_snapshot() -> Result<()> {
 
     let manifest = manifest::from_str(manifest_yaml)?;
     let ir = BuildGraph::from_manifest(&manifest)?;
-    let ninja_content = ninja_gen::generate(&ir)?;
+    let ninja_content = generate_posix(&ir)?;
 
     ensure!(
         ninja_content.contains("build out/kept:") && ninja_content.contains(" in/kept"),
@@ -177,7 +177,7 @@ fn command_available_manifest_ninja_snapshot() -> Result<()> {
         config,
     )?;
     let ir = BuildGraph::from_manifest(&manifest)?;
-    let ninja_content = ninja_gen::generate(&ir)?;
+    let ninja_content = generate_posix(&ir)?;
 
     ensure!(
         ninja_content.contains("fallback"),
@@ -211,7 +211,7 @@ fn multi_command_manifest_ninja_snapshot() -> Result<()> {
 
     let manifest = manifest::from_str(&manifest_yaml)?;
     let ir = BuildGraph::from_manifest(&manifest)?;
-    let ninja_content = ninja_gen::generate(&ir)?;
+    let ninja_content = generate_posix(&ir)?;
 
     ensure!(
         ninja_content.contains("if eval 'echo check-fmt'")
@@ -248,7 +248,7 @@ fn implicit_deps_manifest_ninja_snapshot() -> Result<()> {
 
     let manifest = manifest::from_str(&manifest_yaml)?;
     let ir = BuildGraph::from_manifest(&manifest)?;
-    let ninja_content = ninja_gen::generate(&ir)?;
+    let ninja_content = generate_posix(&ir)?;
 
     ensure!(
         ninja_content.contains(" | "),
@@ -304,4 +304,8 @@ fn dependency_only_manifest_ninja_snapshot() -> Result<()> {
     });
 
     Ok(())
+}
+
+fn generate_posix(graph: &BuildGraph) -> Result<String> {
+    ninja_gen::generate_with_shell(graph, ninja_gen::RecipeShell::Posix).map_err(Into::into)
 }

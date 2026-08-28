@@ -334,9 +334,11 @@ Core (`pwsh`) contract.
 
 Scalar commands and scripts each receive a fresh PowerShell process. A command
 list receives one shared process: entries run in declaration order, and each
-native command is followed immediately by a `$LASTEXITCODE` check. A non-zero
-status stops the list before a later command or entry can overwrite it.
-PowerShell terminating errors also fail the recipe. Later entries see
+generated entry is followed immediately by a `$LASTEXITCODE` check. A non-zero
+status stops the list before a later entry can overwrite it. An entry remains
+opaque recipe text, so multiple native commands separated by semicolons inside
+one entry are not checked individually; only the status left by that entry is
+observed. PowerShell terminating errors also fail the recipe. Later entries see
 PowerShell variables, `$env:` assignments, and locations left by earlier
 entries, but state does not cross action or target boundaries.
 
@@ -348,6 +350,11 @@ expansion, so write ordinary PowerShell dollars rather than `$$`. The rendered
 including paths with spaces. Quote every other path and argument with
 PowerShell syntax; arbitrary rendered Jinja text is not shell-quoted.
 
+Netsuke rejects a PowerShell recipe when its encoded invocation would exceed
+the 32,766-character Windows command-line safety limit. The diagnostic tells
+you to split the legacy recipe into smaller actions; v0.1.x does not spill an
+oversized script to a temporary file or standard input.
+
 Ninja turns a failed recipe into its own non-zero result, and `netsuke` returns
 failure after forwarding Ninja's output. The CLI contract distinguishes success
 from failure; it does not promise to return the recipe's exact child value.
@@ -356,7 +363,6 @@ To retain POSIX interpretation on Windows, explicitly select a Git
 Bash-compatible runtime:
 
 <!-- tested-example: guide-windows-bash-compatibility -->
-
 ```powershell
 choco install git --yes --no-progress
 $env:PATH = "C:\Program Files\Git\bin;$env:PATH"
@@ -1579,8 +1585,9 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   entry position when Netsuke can attribute the failed list entry.
 - On Windows in the default PowerShell route, each command list shares one
   PowerShell process. Netsuke checks `$LASTEXITCODE` immediately after every
-  native command and stops before a later command or entry can overwrite a
-  failure; terminating PowerShell errors also stop the list. The POSIX
+  generated list entry and stops before a later entry can overwrite a failure.
+  Multiple native commands inside one entry are not individually instrumented;
+  terminating PowerShell errors also stop the list. The POSIX
   brace-group, `eval`, background-job, and `exec` restrictions do not apply to
   this route.
 - Write shell dollar expressions normally. `$PATH`, `$RUSTFLAGS`, and

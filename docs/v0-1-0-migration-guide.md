@@ -137,9 +137,10 @@ In the default route, write `$name` for a PowerShell variable and `$env:NAME`
 for an environment variable. `${VAR:-default}` is only valid in the explicit
 Bash route. The v0.1.0 dollar-escaping fix means these are ordinary, single
 dollars, not Ninja-escaped `$$` forms. Ordered lists share one PowerShell
-process: Netsuke checks `$LASTEXITCODE` immediately after each native command,
-so a non-zero status or terminating error stops the list before a later command
-or entry can overwrite it. Variables, environment assignments, and
+process: Netsuke checks `$LASTEXITCODE` immediately after each generated list
+entry, so a non-zero status or terminating error stops the list before a later
+entry can overwrite it. Multiple native commands inside one entry are not
+individually instrumented. Variables, environment assignments, and
 current-directory changes persist between entries. Each scalar, script, action,
 and target has a fresh shell process. `{{ ins }}` and `{{ outs }}` remain
 path-quoted, including for spaces; quote any other path or argument with the

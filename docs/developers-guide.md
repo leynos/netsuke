@@ -381,17 +381,18 @@ The lowering stages have deliberately separate responsibilities:
   validation rules apply to this POSIX route.
 - On Windows, `RecipeShell::PowerShell` renders scalar commands and scripts as
   encoded `powershell.exe` invocations. An ordered list becomes one PowerShell
-  script that checks `$LASTEXITCODE` immediately after each native command,
-  preserving PowerShell state while stopping before a later command or entry
-  can overwrite a non-zero status. Terminating PowerShell errors also stop the
+  script that checks `$LASTEXITCODE` immediately after each generated list
+  entry, preserving PowerShell state while stopping before a later entry can
+  overwrite a non-zero status. Multiple native commands inside one entry are
+  not individually instrumented. Terminating PowerShell errors also stop the
   list. The POSIX command-list analyser is deliberately not applied to this
   route. The runner resolves `NETSUKE_WINDOWS_SHELL` and preflights `bash.exe`
   only when the optional compatibility route is selected; `help targets` stays
   outside this execution boundary.
 - The brace-group, `eval`, background-job, and `exec` validation rules described
   above apply only to Unix and the explicit Windows Bash compatibility route.
-  PowerShell uses its per-native-command `$LASTEXITCODE` and terminating-error
-  checks instead. In shell-dollar documentation, `$$` therefore means a
+  PowerShell uses its per-entry `$LASTEXITCODE` and terminating-error checks
+  instead. In shell-dollar documentation, `$$` therefore means a
   process identifier only for POSIX/Bash; PowerShell's `$$` automatic variable
   contains the last token received by the session.
 - `src/runner/process` forwards the command's output and recognizes the

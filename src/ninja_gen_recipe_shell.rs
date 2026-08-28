@@ -5,9 +5,16 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use super::NinjaGenError;
 use super::ninja_gen_escape::{NinjaValue, ShellText, escape_ninja_value};
 
+/// Leave space for Windows' terminating command-line NUL character.
+const MAX_POWER_SHELL_COMMAND_LINE: usize = 32_766;
+
+/// Prefix shared by every encoded Windows PowerShell recipe invocation.
+const POWER_SHELL_COMMAND_PREFIX: &str =
+    "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ";
+
 /// Selects the interpreter that receives completed legacy recipe text.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum RecipeShell {
+pub enum RecipeShell {
     /// Uses the host POSIX shell through Ninja's ordinary Unix execution path.
     Posix,
     /// Uses Windows PowerShell with an encoded script argument.
@@ -47,8 +54,7 @@ impl RecipeShell {
         for entry in entries {
             script.push_str("$LASTEXITCODE = 0\n");
             script.push_str(entry);
-            script.push_str("\n$netsuke_exit_code = $LASTEXITCODE\n");
-            script.push_str("if ($netsuke_exit_code -ne 0) { exit $netsuke_exit_code }\n");
+            script.push_str("\nif ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n");
         }
         Some(script)
     }
@@ -72,8 +78,15 @@ impl RecipeShell {
             .flat_map(u16::to_le_bytes)
             .collect::<Vec<_>>();
         let command = STANDARD.encode(utf16le);
+        let length = POWER_SHELL_COMMAND_PREFIX.len() + command.len();
+        if length > MAX_POWER_SHELL_COMMAND_LINE {
+            return Err(NinjaGenError::PowerShellCommandLineTooLong {
+                length,
+                maximum: MAX_POWER_SHELL_COMMAND_LINE,
+            });
+        }
         Ok(NinjaValue::from_encoded(format!(
-            "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {command}"
+            "{POWER_SHELL_COMMAND_PREFIX}{command}"
         )))
     }
 
@@ -113,6 +126,7 @@ mod tests {
 
     use super::{RecipeShell, windows_argument};
     use crate::ninja_gen::ninja_gen_escape::ShellText;
+    use proptest::prelude::*;
 
     #[test]
     fn power_shell_command_hides_recipe_dollars_from_ninja() {
@@ -133,16 +147,70 @@ mod tests {
     }
 
     #[test]
+    fn bash_command_value_uses_the_explicit_windows_compatibility_runtime() {
+        let rendered = RecipeShell::Bash
+            .command_value(&ShellText::new("echo \"hello world\"\\".into()))
+            .expect("Bash command rendering should succeed")
+            .to_string();
+        assert_eq!(rendered, "bash.exe -e -c \"echo \\\"hello world\\\"\\\\\"");
+    }
+
+    #[test]
     fn power_shell_lists_check_the_captured_status_before_the_next_entry() {
         let script = RecipeShell::PowerShell
             .command_list_script(&["cmd.exe /c exit 7".into(), "Write-Output later".into()])
             .expect("PowerShell should render command-list scripts");
         let failure_check = script
-            .find("if ($netsuke_exit_code -ne 0) { exit $netsuke_exit_code }")
-            .expect("first command should have a captured-status check");
+            .find("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }")
+            .expect("first command should have an immediate status check");
         let next_entry = script
             .find("Write-Output later")
             .expect("second command should be rendered");
         assert!(failure_check < next_entry);
+    }
+
+    #[test]
+    fn power_shell_lists_do_not_reserve_user_variable_names() {
+        let script = RecipeShell::PowerShell
+            .command_list_script(&[
+                "$netsuke_exit_code = 'keep'".into(),
+                "if ($netsuke_exit_code -ne 'keep') { throw 'lost' }".into(),
+            ])
+            .expect("PowerShell should render command-list scripts");
+        assert!(!script.contains("$netsuke_exit_code = $LASTEXITCODE"));
+    }
+
+    #[test]
+    fn power_shell_commands_fail_before_exceeding_the_windows_command_line_limit() {
+        let result = RecipeShell::PowerShell.command_value(&ShellText::new("x".repeat(12_500)));
+        assert!(matches!(
+            result,
+            Err(super::NinjaGenError::PowerShellCommandLineTooLong { .. })
+        ));
+    }
+
+    proptest! {
+        #[test]
+        fn power_shell_lists_check_each_entry_before_the_next(
+            labels in proptest::collection::vec("[a-z]{1,12}", 1..8),
+        ) {
+            let entries = labels
+                .iter()
+                .map(|label| format!("Write-Output {label}"))
+                .collect::<Vec<_>>();
+            let script = RecipeShell::PowerShell
+                .command_list_script(&entries)
+                .expect("PowerShell should render command-list scripts");
+            let check = "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }";
+            let expected = entries.iter().fold(String::new(), |mut expected_script, entry| {
+                expected_script.push_str("$LASTEXITCODE = 0\n");
+                expected_script.push_str(entry);
+                expected_script.push('\n');
+                expected_script.push_str(check);
+                expected_script.push('\n');
+                expected_script
+            });
+            prop_assert_eq!(script, expected);
+        }
     }
 }
