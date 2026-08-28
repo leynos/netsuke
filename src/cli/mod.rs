@@ -1,9 +1,10 @@
 //! Command-line parsing plus layered CLI configuration support.
 //!
-//! The parser-facing [`Cli`] type remains responsible for user-facing command
-//! syntax, while [`CliConfig`] is the authoritative OrthoConfig-derived schema
-//! used to merge defaults, configuration files, environment variables, and CLI
-//! overrides into the runtime shape consumed by the runner.
+//! `command` owns the user-facing [`Cli`] schema and default-command behaviour,
+//! while `parser` localises that schema before parsing. [`CliConfig`]
+//! is the authoritative OrthoConfig-derived schema used to merge defaults,
+//! configuration files, environment variables, and CLI overrides into the
+//! runtime shape consumed by the runner.
 //!
 //! The module is split so that `build.rs` can compile the Clap schema alone.
 //! `command`, [`config`], `help`, and `validation` form that self-contained

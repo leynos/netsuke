@@ -675,8 +675,12 @@ discovery otherwise uses capability-scoped canonicalization. Its small,
 dedicated path-normalization module, `netsuke::cli::discovery::paths`, remains
 narrowly excluded because `std::fs::canonicalize` preserves the absolute
 comparison keys and cross-directory symlink behaviour that `cap_std` rejects.
-For man-page generation, the build script compiles the `cli::build_support`
-parser subset and deliberately omits runtime discovery. The broader
+For ordinary man-page and completion generation, the build script compiles its
+inline `cli` facade: the four-file slice containing `src/cli/command.rs`,
+`src/cli/config.rs`, `src/cli/help.rs`, and `src/cli/validation.rs`. The
+`command.rs` module owns the Clap command schema and default-command behaviour,
+including `Cli::with_default_command()`, while runtime discovery remains
+deliberately outside the slice. The broader
 `netsuke::cli::discovery` module remains under the capability policy; no
 `build_script_build` exception is required. The behavioural step definitions,
 CLI integration tests, and shared workflow-reading helper that stage fixtures
@@ -1012,9 +1016,10 @@ module naming exactly four files — `src/cli/command.rs`, `src/cli/config.rs`,
 
 That slice is a maintained boundary, not an accident:
 
-- `src/cli/command.rs` holds Clap definitions only. Runtime behaviour on `Cli`
-  belongs in `src/cli/preferences.rs`, and the localization-aware parsing entry
-  point belongs in `src/cli/parser.rs`.
+- `src/cli/command.rs` holds the Clap command schema and default-command
+  behaviour, including `Cli::with_default_command()`. Runtime behaviour on
+  `Cli` belongs in `src/cli/preferences.rs`, and the localization-aware parsing
+  entry point belongs in `src/cli/parser.rs`.
 - `src/cli/validation.rs` holds the shared limits and error constructor that
   `src/cli/config.rs` needs, so neither file has to reach up into
   `src/cli/mod.rs`.

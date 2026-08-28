@@ -13,6 +13,20 @@ use std::sync::Arc;
 pub(super) const MAX_JOBS: usize = 64;
 
 /// Build a validation error for `key` with `message`.
+///
+/// Produces [`OrthoError::Validation`] so callers can preserve the rejected
+/// field and its diagnostic while propagating a shared error value.
+///
+/// # Examples
+///
+/// ```ignore
+/// let error = validation_error("jobs", "must be positive");
+/// assert!(matches!(
+///     error.as_ref(),
+///     OrthoError::Validation { key, message }
+///         if key == "jobs" && message == "must be positive"
+/// ));
+/// ```
 pub(super) fn validation_error(key: &str, message: &str) -> Arc<OrthoError> {
     Arc::new(OrthoError::Validation {
         key: key.to_owned(),

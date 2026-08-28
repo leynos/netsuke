@@ -21,8 +21,26 @@ impl<'a> HostCandidate<'a> {
 
 impl HostPattern {
     /// Return whether `candidate` is covered by this pattern.
+    ///
+    /// A terminal DNS dot is ignored before matching. Wildcards still require
+    /// a non-empty subdomain prefix, so they do not match the apex.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let exact = HostPattern::parse("example.test")?;
+    /// assert!(exact.matches(HostCandidate("example.test.")));
+    ///
+    /// let wildcard = HostPattern::parse("*.example.test")?;
+    /// assert!(wildcard.matches(HostCandidate("sub.example.test.")));
+    /// assert!(!wildcard.matches(HostCandidate("example.test.")));
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
     pub(crate) fn matches(&self, candidate: HostCandidate<'_>) -> bool {
-        let host = candidate.as_str().to_ascii_lowercase();
+        let lowercased_host = candidate.as_str().to_ascii_lowercase();
+        let host = lowercased_host
+            .strip_suffix('.')
+            .unwrap_or(&lowercased_host);
         if self.wildcard {
             // Wildcard patterns match only subdomains, not the apex domain.
             // Example: "*.example.com" matches "sub.example.com" but not
@@ -63,6 +81,8 @@ mod tests {
     #[case("*.example.com", "example.com", false)]
     #[case("*.example.com", "deep.sub.example.com", true)]
     #[case("*.example.com", "other.com", false)]
+    #[case("example.com", "example.com.", true)]
+    #[case("*.example.com", "sub.example.com.", true)]
     #[case("example.com", "", false)]
     #[case("example.com", "ÉXAMPLE.COM", false)]
     fn host_pattern_matches_expected(

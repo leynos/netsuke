@@ -125,6 +125,16 @@ pub struct Cli {
 
 impl Cli {
     /// Apply the default command if none was specified.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::cli::{BuildArgs, Cli, Commands};
+    ///
+    /// let command = Cli::default().with_default_command().command;
+    ///
+    /// assert_eq!(command, Some(Commands::Build(BuildArgs::default())));
+    /// ```
     #[must_use]
     pub fn with_default_command(mut self) -> Self {
         if self.command.is_none() {

@@ -12,6 +12,20 @@ use crate::theme::ThemePreference;
 
 impl Cli {
     /// Return the effective theme preference for emoji policy resolution.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::cli::{Cli, EmojiPolicy};
+    /// use netsuke::theme::ThemePreference;
+    ///
+    /// let cli = Cli {
+    ///     emoji: EmojiPolicy::Always,
+    ///     ..Cli::default()
+    /// };
+    ///
+    /// assert_eq!(cli.theme_preference(), Some(ThemePreference::Unicode));
+    /// ```
     #[must_use]
     pub const fn theme_preference(&self) -> Option<ThemePreference> {
         match self.emoji {
@@ -22,6 +36,19 @@ impl Cli {
     }
 
     /// Return an explicit accessible-output override, if configured.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::cli::{AccessibilityPolicy, Cli};
+    ///
+    /// let cli = Cli {
+    ///     accessibility: AccessibilityPolicy::On,
+    ///     ..Cli::default()
+    /// };
+    ///
+    /// assert_eq!(cli.accessibility_override(), Some(true));
+    /// ```
     #[must_use]
     pub const fn accessibility_override(&self) -> Option<bool> {
         match self.accessibility {
@@ -32,12 +59,33 @@ impl Cli {
     }
 
     /// Return whether interactive input is disabled.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::cli::Cli;
+    ///
+    /// assert!(Cli::default().no_input());
+    /// ```
     #[must_use]
     pub const fn no_input(&self) -> bool {
         self.interaction.no_input
     }
 
     /// Return whether progress summaries should be enabled.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::cli::{Cli, ProgressPolicy};
+    ///
+    /// let cli = Cli {
+    ///     progress: ProgressPolicy::Never,
+    ///     ..Cli::default()
+    /// };
+    ///
+    /// assert!(!cli.progress_enabled());
+    /// ```
     #[must_use]
     pub const fn progress_enabled(&self) -> bool {
         !matches!(self.progress, ProgressPolicy::Never)
