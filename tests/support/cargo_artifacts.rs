@@ -113,6 +113,29 @@ mod tests {
             })
     }
 
+    /// Generate an ordered path whose extension can select a library artefact.
+    fn library_artefact_path() -> impl Strategy<Value = String> {
+        (
+            "[a-z]{1,12}",
+            prop_oneof![Just("rmeta"), Just("rlib"), Just("txt"), Just("dylib")],
+        )
+            .prop_map(|(name, extension)| format!("/tmp/build/lib{name}.{extension}"))
+    }
+
+    /// Derive the metadata-first library selection from an ordered path list.
+    fn expected_library_path(paths: &[String]) -> Option<PathBuf> {
+        ["rmeta", "rlib"].into_iter().find_map(|extension| {
+            paths
+                .iter()
+                .rfind(|path| {
+                    Path::new(path)
+                        .extension()
+                        .is_some_and(|value| value == extension)
+                })
+                .map(PathBuf::from)
+        })
+    }
+
     proptest! {
         /// Preserve every ordered parent directory rustc needs across varied paths.
         #[test]
@@ -133,6 +156,22 @@ mod tests {
 
             prop_assert_eq!(dependency_dirs_in_message(&message.to_string()), expected);
         }
+
+        /// Select the last metadata artefact, or the last library artefact when needed.
+        #[test]
+        fn library_parser_prefers_last_metadata_then_library_and_rejects_mismatches(
+            artefacts in proptest::collection::vec(library_artefact_path(), 0..16),
+        ) {
+            let message = serde_json::json!({
+                "reason": "compiler-artifact",
+                "target": {"name": "fixture"},
+                "filenames": &artefacts,
+            });
+            let expected = expected_library_path(&artefacts);
+
+            prop_assert_eq!(library_path_in_message(&message.to_string(), "fixture"), expected);
+            prop_assert_eq!(library_path_in_message(&message.to_string(), "other"), None);
+        }
     }
 
     /// Prefer metadata and fall back to the library artefact.
@@ -147,6 +186,16 @@ mod tests {
         "/final/libfixture.rlib",
         "library fallback"
     )]
+    #[case(
+        r#"{"reason":"compiler-artifact","target":{"name":"fixture"},"filenames":["/first/libfixture.rmeta","/first/libfixture.rlib","/last/libfixture.rmeta","/last/libfixture.rlib"]}"#,
+        "/last/libfixture.rmeta",
+        "last metadata"
+    )]
+    #[case(
+        r#"{"reason":"compiler-artifact","target":{"name":"fixture"},"filenames":["/first/libfixture.rlib","/last/libfixture.rlib"]}"#,
+        "/last/libfixture.rlib",
+        "last library fallback"
+    )]
     fn parser_prefers_metadata_then_falls_back_to_library(
         #[case] message: &str,
         #[case] expected: &str,
@@ -159,10 +208,14 @@ mod tests {
         );
     }
 
-    /// Reject malformed and irrelevant messages before selecting an artefact.
+    /// Reject malformed and irrelevant messages before reading artefact paths.
     #[rstest]
     #[case("not JSON")]
     #[case(r#"{"reason":"build-script-executed"}"#)]
+    #[case(r#"{"reason":"compiler-artifact","filenames":[]}"#)]
+    #[case(r#"{"reason":"compiler-artifact","target":{},"filenames":[]}"#)]
+    #[case(r#"{"reason":"compiler-artifact","target":{"name":"fixture"}}"#)]
+    #[case(r#"{"reason":"compiler-artifact","target":{"name":"fixture"},"filenames":{}}"#)]
     fn compiler_artifact_parser_rejects_invalid_messages(#[case] message: &str) {
         assert_eq!(compiler_artifact_paths(message), None);
     }
@@ -171,6 +224,13 @@ mod tests {
     #[rstest]
     #[case("not JSON")]
     #[case(r#"{"reason":"build-script-executed"}"#)]
+    #[case(r#"{"reason":"compiler-artifact","filenames":[]}"#)]
+    #[case(r#"{"reason":"compiler-artifact","target":{},"filenames":[]}"#)]
+    #[case(r#"{"reason":"compiler-artifact","target":{"name":"fixture"}}"#)]
+    #[case(r#"{"reason":"compiler-artifact","target":{"name":"fixture"},"filenames":{}}"#)]
+    #[case(
+        r#"{"reason":"compiler-artifact","target":{"name":"fixture"},"filenames":["/build/libfixture.a","/build/libfixture.txt"]}"#
+    )]
     #[case(
         r#"{"reason":"compiler-artifact","target":{"name":"other"},"filenames":["/build/libother.rmeta"]}"#
     )]

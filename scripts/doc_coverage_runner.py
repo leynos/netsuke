@@ -9,9 +9,24 @@ from __future__ import annotations
 
 import pathlib
 import tomllib
+import typing as typ
 
-from doc_coverage_cargo import load_metadata, measure
+import doc_coverage_cargo
 from doc_coverage_model import Coverage, DocTarget
+
+
+class CoverageAdapter(typ.Protocol):
+    """Define the Cargo boundary consumed by measurement orchestration."""
+
+    def load_metadata(
+        self, toolchain: str, manifest_root: pathlib.Path
+    ) -> dict[str, object]:
+        """Load Cargo metadata for the selected workspace."""
+
+    def measure(
+        self, target: DocTarget, toolchain: str, manifest_root: pathlib.Path
+    ) -> Coverage:
+        """Measure documentation coverage for one selected target."""
 
 
 def pinned_toolchain(manifest_root: pathlib.Path) -> str:
@@ -100,7 +115,9 @@ def doc_able_targets(
 
 
 def run_measurements(
-    toolchain: str, manifest_root: pathlib.Path
+    toolchain: str,
+    manifest_root: pathlib.Path,
+    adapter: CoverageAdapter | None = None,
 ) -> tuple[Coverage, list[tuple[DocTarget, Coverage]]]:
     """Measure every target and return aggregate plus target-specific coverage.
 
@@ -110,6 +127,9 @@ def run_measurements(
         Dated nightly channel to select for every Cargo invocation.
     manifest_root
         Workspace root passed to metadata discovery and Rustdoc.
+    adapter
+        Cargo and Rustdoc boundary to use. When omitted, the configured
+        production Cargo adapter is constructed.
 
     Returns
     -------
@@ -121,10 +141,11 @@ def run_measurements(
     RuntimeError
         If Cargo metadata discovery or any target measurement fails.
     """
+    coverage_adapter = adapter or doc_coverage_cargo.production_adapter()
     totals = Coverage(0, 0)
     rows: list[tuple[DocTarget, Coverage]] = []
-    for target in doc_targets(load_metadata(toolchain, manifest_root)):
-        coverage = measure(target, toolchain, manifest_root)
+    for target in doc_targets(coverage_adapter.load_metadata(toolchain, manifest_root)):
+        coverage = coverage_adapter.measure(target, toolchain, manifest_root)
         rows.append((target, coverage))
         totals += coverage
     return totals, rows

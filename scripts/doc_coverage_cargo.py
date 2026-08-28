@@ -11,27 +11,44 @@ import json
 import os
 import pathlib
 import subprocess
+import dataclasses as dc
 
-from doc_coverage_model import (
-    Coverage,
-    CoveragePayloadShapeError,
-    DocTarget,
-    aggregate_coverage_payload,
-)
+from doc_coverage_model import Coverage, DocTarget
 
 
-def cargo_executable() -> str:
-    """Return the configured Cargo executable.
+@dc.dataclass(frozen=True)
+class CargoAdapter:
+    """Adapt one explicit Cargo executable to coverage measurements.
 
-    Returns
-    -------
-    str
-        The value of ``CARGO``, or ``"cargo"`` when it is unset.
+    The runner depends on this narrow interface instead of process globals, so
+    its target selection and aggregation can be tested without subprocesses.
     """
-    return os.environ.get("CARGO") or "cargo"
+
+    executable: str
+
+    def load_metadata(
+        self, toolchain: str, manifest_root: pathlib.Path
+    ) -> dict[str, object]:
+        """Load workspace metadata through this adapter's Cargo executable."""
+        return load_metadata(toolchain, manifest_root, self.executable)
+
+    def measure(
+        self, target: DocTarget, toolchain: str, manifest_root: pathlib.Path
+    ) -> Coverage:
+        """Measure one target through this adapter's Cargo executable."""
+        return measure(target, toolchain, manifest_root, self.executable)
 
 
-def rustdoc_args(target: DocTarget, toolchain: str) -> list[str]:
+class CoveragePayloadShapeError(TypeError):
+    """Report that Rustdoc emitted a coverage payload other than an object."""
+
+
+def production_adapter() -> CargoAdapter:
+    """Create the production adapter with the configured Cargo executable."""
+    return CargoAdapter(os.environ.get("CARGO") or "cargo")
+
+
+def rustdoc_args(target: DocTarget, toolchain: str, cargo_executable: str) -> list[str]:
     """Build Cargo's Rustdoc coverage command for one target.
 
     Parameters
@@ -40,13 +57,15 @@ def rustdoc_args(target: DocTarget, toolchain: str) -> list[str]:
         Workspace target Cargo will document.
     toolchain
         Dated nightly channel to select with Cargo's ``+`` syntax.
+    cargo_executable
+        Cargo executable selected by the adapter at the production boundary.
 
     Returns
     -------
     list[str]
         Argument vector for ``cargo rustdoc`` with its coverage options.
     """
-    args = [cargo_executable(), f"+{toolchain}", "rustdoc", "-p", target.package]
+    args = [cargo_executable, f"+{toolchain}", "rustdoc", "-p", target.package]
     if target.kind == "bin":
         args += ["--bin", target.name]
     else:
@@ -94,6 +113,105 @@ def parse_coverage_output(target: DocTarget, output: str) -> Coverage:
     except (KeyError, TypeError, ValueError, OverflowError) as error:
         detail = f"each entry requires total and with_docs: {error}"
         raise coverage_json_error(target, detail) from error
+
+
+def aggregate_coverage_payload(per_file: object) -> Coverage:
+    """Validate and sum Rustdoc's documented and total counts.
+
+    Parameters
+    ----------
+    per_file
+        Rustdoc's mapping from source-file names to coverage entries.
+
+    Returns
+    -------
+    Coverage
+        Aggregate documented and total item counts.
+
+    Raises
+    ------
+    CoveragePayloadShapeError
+        If Rustdoc's payload is not an object.
+    KeyError, ValueError
+        If an entry omits or violates a coverage-count invariant.
+    """
+    match per_file:
+        case dict() as entries:
+            return sum(
+                (coverage_from_entry(entry) for entry in entries.values()),
+                Coverage(0, 0),
+            )
+        case _:
+            raise CoveragePayloadShapeError("expected an object")
+
+
+def coverage_from_entry(entry: object) -> Coverage:
+    """Validate one Rustdoc coverage entry and convert it to ``Coverage``.
+
+    Parameters
+    ----------
+    entry
+        Rustdoc entry containing ``total`` and ``with_docs`` counts.
+
+    Returns
+    -------
+    Coverage
+        Validated counts for one source file.
+
+    Raises
+    ------
+    KeyError
+        If either required count is absent.
+    TypeError, ValueError
+        If a count is not a non-negative integer or documented items exceed
+        total items.
+    """
+    total = coverage_count(entry, "total")
+    with_docs = coverage_count(entry, "with_docs")
+    if with_docs > total:
+        raise ValueError("counts must be non-negative integers with with_docs <= total")
+    return Coverage(total, with_docs)
+
+
+def coverage_count(entry: object, name: str) -> int:
+    """Validate one named Rustdoc coverage count.
+
+    Parameters
+    ----------
+    entry
+        Rustdoc coverage entry containing the requested count.
+    name
+        Name of the count to retrieve.
+
+    Returns
+    -------
+    int
+        The validated non-negative count.
+
+    Raises
+    ------
+    KeyError
+        If ``name`` is absent from ``entry``.
+    TypeError, ValueError
+        If the count cannot be an integer count, including JSON booleans, or
+        is negative.
+    """
+    count = entry[name]
+    match count:
+        case bool():
+            raise ValueError(
+                "counts must be non-negative integers with with_docs <= total"
+            )
+        case int() if count >= 0:
+            return count
+        case int():
+            raise ValueError(
+                "counts must be non-negative integers with with_docs <= total"
+            )
+        case _:
+            raise ValueError(
+                "counts must be non-negative integers with with_docs <= total"
+            )
 
 
 def coverage_json_error(target: DocTarget, detail: str) -> RuntimeError:
@@ -153,7 +271,12 @@ def coverage_output_path(
     raise coverage_json_error(target, detail)
 
 
-def measure(target: DocTarget, toolchain: str, manifest_root: pathlib.Path) -> Coverage:
+def measure(
+    target: DocTarget,
+    toolchain: str,
+    manifest_root: pathlib.Path,
+    cargo_executable: str,
+) -> Coverage:
     """Run Rustdoc coverage for one target and sum its per-file counts.
 
     Parameters
@@ -164,6 +287,8 @@ def measure(target: DocTarget, toolchain: str, manifest_root: pathlib.Path) -> C
         Dated nightly channel to select for Cargo.
     manifest_root
         Workspace root passed to Cargo and used to resolve generated output.
+    cargo_executable
+        Explicit Cargo executable for the Rustdoc process.
 
     Returns
     -------
@@ -178,7 +303,7 @@ def measure(target: DocTarget, toolchain: str, manifest_root: pathlib.Path) -> C
     """
     try:
         result = subprocess.run(  # noqa: S603 - Cargo metadata targets and pinned toolchain form argv; shell remains False.
-            rustdoc_args(target, toolchain),
+            rustdoc_args(target, toolchain, cargo_executable),
             cwd=manifest_root,
             capture_output=True,
             text=True,
@@ -205,7 +330,9 @@ def measure(target: DocTarget, toolchain: str, manifest_root: pathlib.Path) -> C
     return parse_coverage_output(target, output)
 
 
-def load_metadata(toolchain: str, manifest_root: pathlib.Path) -> dict[str, object]:
+def load_metadata(
+    toolchain: str, manifest_root: pathlib.Path, cargo_executable: str
+) -> dict[str, object]:
     """Return Cargo metadata for the workspace rooted at ``manifest_root``.
 
     Parameters
@@ -214,6 +341,8 @@ def load_metadata(toolchain: str, manifest_root: pathlib.Path) -> dict[str, obje
         Dated nightly channel to select for Cargo.
     manifest_root
         Workspace root from which Cargo reads its manifest.
+    cargo_executable
+        Explicit Cargo executable for the metadata process.
 
     Returns
     -------
@@ -226,7 +355,7 @@ def load_metadata(toolchain: str, manifest_root: pathlib.Path) -> dict[str, obje
         If Cargo cannot run, returns failure, or emits invalid JSON.
     """
     args = [
-        cargo_executable(),
+        cargo_executable,
         f"+{toolchain}",
         "metadata",
         "--no-deps",

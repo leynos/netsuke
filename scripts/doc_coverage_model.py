@@ -1,9 +1,7 @@
-"""Represent and validate the data used by the Rustdoc coverage gate.
+"""Represent the values shared by the Rustdoc documentation-coverage gate.
 
-The command-line script owns process execution and user-facing diagnostics;
-this module owns the pure coverage value objects and payload validation. The
-split keeps both modules below the repository's source-file size limit while
-leaving the executable's public import surface unchanged.
+The Cargo adapter owns Rustdoc payload decoding and validation. This module
+keeps only the values shared by adapter, orchestration, and command-line code.
 """
 
 from __future__ import annotations
@@ -53,106 +51,3 @@ class DocTarget:
     package: str
     kind: str
     name: str | None
-
-
-class CoveragePayloadShapeError(TypeError):
-    """Report that Rustdoc emitted a coverage payload other than an object."""
-
-
-def aggregate_coverage_payload(per_file: object) -> Coverage:
-    """Validate and sum Rustdoc's documented and total counts.
-
-    Parameters
-    ----------
-    per_file
-        Rustdoc's mapping from source-file names to coverage entries.
-
-    Returns
-    -------
-    Coverage
-        Aggregate documented and total item counts.
-
-    Raises
-    ------
-    CoveragePayloadShapeError
-        If Rustdoc's payload is not an object.
-    KeyError, ValueError
-        If an entry omits or violates a coverage-count invariant.
-    """
-    match per_file:
-        case dict() as entries:
-            return sum(
-                (coverage_from_entry(entry) for entry in entries.values()),
-                Coverage(0, 0),
-            )
-        case _:
-            raise CoveragePayloadShapeError("expected an object")
-
-
-def coverage_from_entry(entry: object) -> Coverage:
-    """Validate one Rustdoc coverage entry and convert it to ``Coverage``.
-
-    Parameters
-    ----------
-    entry
-        Rustdoc entry containing ``total`` and ``with_docs`` counts.
-
-    Returns
-    -------
-    Coverage
-        Validated counts for one source file.
-
-    Raises
-    ------
-    KeyError
-        If either required count is absent.
-    TypeError, ValueError
-        If a count is not a non-negative integer or documented items exceed
-        total items.
-    """
-    total = coverage_count(entry, "total")
-    with_docs = coverage_count(entry, "with_docs")
-    if with_docs > total:
-        raise ValueError("counts must be non-negative integers with with_docs <= total")
-    return Coverage(total, with_docs)
-
-
-def coverage_count(entry: object, name: str) -> int:
-    """Validate one named Rustdoc coverage count.
-
-    Parameters
-    ----------
-    entry
-        Rustdoc coverage entry containing the requested count.
-    name
-        Name of the count to retrieve.
-
-    Returns
-    -------
-    int
-        The validated non-negative count.
-
-    Raises
-    ------
-    KeyError
-        If ``name`` is absent from ``entry``.
-    TypeError, ValueError
-        If the count cannot be an integer count, including JSON booleans, or
-        is negative.
-    """
-    count = entry[name]
-    match count:
-        case bool():
-            raise ValueError(
-                "counts must be non-negative integers with with_docs <= total"
-            )
-        case int() if count >= 0:
-            return count
-        case int():
-            raise ValueError(
-                "counts must be non-negative integers with with_docs <= total"
-            )
-        case _:
-            raise ValueError(
-                "counts must be non-negative integers with with_docs <= total"
-            )

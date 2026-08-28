@@ -104,3 +104,10 @@ Publish as `netsuke-build`, and keep every user-facing name as `netsuke`.
   rule.
 - [Developer guide](developers-guide.md): the day-to-day naming guidance and
   the contract tests that enforce it.
+
+## Addendum (2026-08-28)
+
+A source-build fallback from `cargo binstall` requires the repository's pinned
+nightly toolchain. This requirement follows the repository toolchain policy;
+the fallback must not restore the retired `RUSTFLAGS=-Zpolonius=next`
+instruction.
