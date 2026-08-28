@@ -68,7 +68,7 @@ use netsuke::NetsukeManifest;      // assumed struct for parsed manifest
 use netsuke::ir::BuildGraph;       // assumed IR data structure
 
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // (Re-use the same manifest YAML as before)
+    // Example Netsuke manifest in YAML (string literal for test)
     let manifest_yaml = r#"
         netsuke_version: "0.1"
         rules:
@@ -79,58 +79,65 @@ use netsuke::ir::BuildGraph;       // assumed IR data structure
             deps: ["hello.c"]
             rule: "compile"
     "#;
+
+    // 1. Parse manifest YAML into AST/manifest struct
     let manifest = NetsukeManifest::from_yaml_str(manifest_yaml)?;
+
+    // 2. Generate the IR (BuildGraph) from the manifest
     let build_graph = BuildGraph::from_manifest(&manifest)?;
 
-    // Generate Ninja file content from the IR
-    // `generate` returns `Result<String, NinjaGenError>`; handle errors
-    let ninja_file = ninja_gen::generate(&build_graph)?;
+    // 3. Convert IR to a deterministic string representation
+    // For example, use Debug trait or implement a custom Display/serialization
+    let ir_pretty = format!("{:#?}", build_graph);
 
-    // The output is a multi-line Ninja build script (as a String)
-    // Ensure the output is deterministic
-    // (e.g., consistent ordering of rules/targets)
+    // 4. Assert snapshot, storing output in tests/snapshots/ir/
     Settings::new()
-        .set_snapshot_path("tests/snapshots/ninja")
+        .set_snapshot_path("tests/snapshots/ir")
         .bind(|| {
-            assert_snapshot!("simple_manifest_ninja", ninja_file);
+            assert_snapshot!("simple_manifest_ir", ir_pretty);
         });
     Ok(())
 # }
 ```
 
-The match explicitly handles the `Result` from `generate` so any formatting or
-missing action errors surface during tests. Production code should propagate
-the error and report it with `miette` rather than panicking.
+This test involves:
 
-Key points for Ninja snapshot tests:
+- Construct a **deterministic** input (a small manifest with a known rule and
+  target).
 
-- Use a known manifest input and first derive the IR. An IR can also be
-  constructed directly for tests, but using the manifest→IR pipeline ensures
-  realistic coverage.
+- Run the IR generation (`BuildGraph::from_manifest`). This function should
+  produce the intermediate build graph.
 
-- Call the Ninja generation function (`ninja_gen::generate`), which
-  yields a `Result<String, NinjaGenError>`. This function traverses the IR and
-  outputs rules and build statements in Ninja syntax, returning an error if any
-  build edge references an undefined action.
+- Format the IR consistently for comparison. Pretty-printed debug output
+  (`{:#?}`) can be used, but for more complex structures implement `Display` or
+  use `assert_yaml_snapshot!` to serialize the IR to YAML/JSON for clarity.
 
-- As with IR, **determinism is crucial**. The Ninja output should list rules,
-  targets, and dependencies in a consistent order. For example, if the IR does
-  not preserve order, targets may need to be sorted by name or hashing and
-  deduplication must avoid randomness. The design’s approach of consolidating
-  rules by a hash of their properties should still produce the same ordering
-  given the same input, as long as iteration over hashmaps is avoided or
-  stabilized.
+- Use `Settings::new().set_snapshot_path("tests/snapshots/ir")` to direct the
+  snapshot file to the IR snapshot directory. Call `assert_snapshot!` with a
+  snapshot name (`"simple_manifest_ir"`) and the IR output string. On first run,
+  `insta` will record this output as the reference snapshot. **Determinism in
+  IR Output:** To ensure consistent snapshots, the IR output must be
+  **deterministic**. This means that given the same manifest input, the IR’s
+  printed form should not vary between test runs or across machines. Pay
+  attention to ordering and ephemeral data:
 
-- Use `Settings::set_snapshot_path` to store these snapshots in a separate
-  `tests/snapshots/ninja` directory. The snapshot name
-  `"simple_manifest_ninja"` identifies this particular scenario.
+- **Ordering:** If `BuildGraph` contains collections (e.g. sets of targets
+  or rules), iterate or sort them in a fixed order before printing. Using
+  `BTreeMap` or sorting vectors of targets by name can help. This avoids
+  nondeterministic ordering from hash maps.
 
-With this setup, IR tests and Ninja tests have distinct snapshot files. For
-example, after the first test run (see next section), expected snapshot files
-include `tests/snapshots/ir/simple_manifest_ir.snap` and
-`tests/snapshots/ninja/simple_manifest_ninja.snap` (or combined snapshot files
-per test module). These snapshot files contain the expected IR debug output and
-Ninja file text respectively.
+- **Stable Identifiers:** If IR includes IDs or memory addresses, prefer stable
+  identifiers. For example, when generating rule IDs, assign them in insertion
+  order so they are consistent, or omit details that can change.
+
+- **No timestamps or environment-specific data:** The IR should not include
+  timestamps, random values, or absolute file system paths. If such data is
+  unavoidable, use `insta` redactions or post-process the output to replace
+  them with placeholders (e.g., `<CURRENT_DIR>`).
+
+By making the IR snapshot output stable, the snapshot tests will reliably catch
+regressions. If the IR generation logic changes intentionally (e.g., new fields
+added), the snapshot will change predictably, prompting a review.
 
 ## Writing Snapshot Tests for Ninja File Output
 
