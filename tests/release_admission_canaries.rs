@@ -314,6 +314,7 @@ fn require_missing_successful_evidence(output: &Output) -> Result<()> {
     Ok(())
 }
 
+/// Accept trusted evidence for all pinned canaries.
 #[test]
 fn admission_accepts_every_trusted_pinned_canary() -> Result<()> {
     let harness = AdmissionHarness::new()?;
@@ -333,6 +334,7 @@ fn admission_accepts_every_trusted_pinned_canary() -> Result<()> {
     require_recorded_api_arguments(&harness)
 }
 
+/// Reject evidence from a pinned workflow that did not test the candidate.
 #[test]
 fn admission_rejects_a_pinned_workflow_that_did_not_test_the_candidate() -> Result<()> {
     let harness = AdmissionHarness::new()?;
@@ -355,6 +357,7 @@ fn admission_rejects_a_pinned_workflow_that_did_not_test_the_candidate() -> Resu
     Ok(())
 }
 
+/// Reject candidate references that appear only in comments or split steps.
 #[rstest::rstest]
 #[case(COMMENT_ONLY_WORKFLOW_SOURCE, "comment-only")]
 #[case(SPLIT_STEP_WORKFLOW_SOURCE, "split-step")]
@@ -382,6 +385,7 @@ fn admission_rejects_non_executable_or_split_candidate_references(
     Ok(())
 }
 
+/// Reject evidence when any trusted workflow-run field differs.
 #[rstest::rstest]
 #[case::repository(TrustField::Repository)]
 #[case::workflow_id(TrustField::WorkflowId)]
@@ -401,6 +405,7 @@ fn admission_rejects_each_altered_trust_field(#[case] field: TrustField) -> Resu
     require_missing_successful_evidence(&output)
 }
 
+/// Reject admission when no successful trusted evidence is available.
 #[test]
 fn admission_rejects_missing_successful_evidence() -> Result<()> {
     let harness = AdmissionHarness::new()?;
