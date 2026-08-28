@@ -51,7 +51,10 @@ raizing = "raising"
 # attribute argument), so they are not en-GB prose and must stay exempt.
 # The scanner tokenizes the `COLOR` suffix in this environment variable
 # separately, so ignore the complete identifier rather than accepting `COLOR`.
+# The shared dictionary corrects this en-GB term to American spelling; this
+# repository's prose deliberately retains the required local form.
 ignore = ["mis-grouping",
+  "\\blocalisation\\b",
   "`[^`\\n]+`",
   "NETSUKE_COLOR",
   "(?m)^            dist/\\$\\{\\{ inputs\\['bin-name'\\] \\}\\}-\\$\\{\\{ inputs\\.version \\}\\}-\\$\\{\\{ inputs\\['artifact-suffix'\\] \\}\\}\\.pkg$",

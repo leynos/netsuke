@@ -1119,6 +1119,72 @@ be loaded cannot enable diagnostics because configuration merging has not
 completed. JSON mode suppresses the tracing and snapshot so stderr remains one
 machine-readable diagnostic document.
 
+
+#### Cached merge API (unstable)
+
+Programs using Netsuke's unstable Rust API can retain the layers from one
+discovery pass and observe the subsequent merge. Construct
+`CachedMergeInput::new(cli, matches, env, discovered)` with the parsed CLI
+values, an injected `ConfigEnvProvider`, and `DiscoveryOutcome::into_layers()`;
+then pass it to `cli::merge_with_cached_file_layers_with_observer(input)`. The
+function returns the merge result alongside bounded events; replay those events
+through `MergeObserver`, such as `TracingMergeObserver`. Another caller can
+provide its own `MergeObserver` implementation. Observers receive bounded
+`MergeEvent` values: layer application and failure states, file `path_hash`
+and layer counts, CLI override leaf keys, and validation `key`/`reason` fields.
+Configuration values and raw paths are never included. Ordinary
+`merge_with_config*` and `merge_with_cached_file_layers` calls discard their
+collected events and do not emit merge tracing.
+
+If an explicit file cannot be loaded, the warning records `failure_kind` as
+`Missing` or `LoadError`. Verbose tracing uses only `path_hash` and
+`path_present`; it never exposes a file name or full path. The unkeyed
+`path_hash` is only a correlation identifier: it does not protect a guessable
+path from disclosure.
+
+Configuration tracing is disabled in JSON mode, including when `json = true`
+comes from a configuration file. This keeps stderr empty for successful JSON
+commands and reserves it for the single diagnostic document on failure.
+
+For a terminal human-mode failure in either the early diagnostic-mode
+preference pass or the full `config_merge` phase, the
+`configuration load failed` event includes bounded `operation` and
+`error_category` fields. JSON mode instead emits the diagnostic document.
+Passing `--verbose` additionally emits one final `metrics snapshot` debug event
+before Netsuke exits. The snapshot is an in-process diagnostic record, not a
+metrics listener or a Prometheus endpoint. After a successful configuration
+merge, verbosity can also come from `NETSUKE_VERBOSE` or `verbose = true` in a
+configuration file. A configuration failure before that merge uses only CLI
+`--verbose`.
+
+It includes the bounded configuration-load series:
+
+- `netsuke_config_load_total`, with `outcome=success` or `outcome=failure`.
+- `netsuke_config_load_duration_seconds`, with one sample for the startup
+  configuration-load attempt.
+- The phase-level `config_load_total` and
+  `config_load_duration_seconds` entries, labelled with `phase=diag_mode` or
+  `phase=merge`; the counter also carries the bounded outcome value.
+- `netsuke_cli_config_discovery_total`, with `outcome=success` or
+  `outcome=error`, and `netsuke_cli_config_discovery_duration_seconds`, which
+  records the cached discovery pass duration.
+
+For example, a missing explicit file reports the actionable error first, then
+the bounded tracing fields and the snapshot (timestamps and metric values vary):
+
+<!-- tested-example: guide-configuration-observability -->
+
+```plaintext
+Configuration file error in 'missing.toml': explicit configuration file not found
+ERROR ... configuration load failed operation="diag_mode_resolution" error_category="io"
+DEBUG ... metrics snapshot metrics=[...]
+```
+
+The snapshot is available for a configuration failure when `--verbose` was
+supplied on the command line. A `verbose = true` setting in a file that cannot
+be loaded cannot enable diagnostics because configuration merging has not
+completed. JSON mode suppresses the tracing and snapshot so stderr remains one
+machine-readable diagnostic document.
 #### Bounded configuration metrics
 
 Configuration loading is recorded as two bounded metric series, both emitted in

@@ -145,6 +145,7 @@ impl Cli {
 }
 
 impl Default for Cli {
+    /// Construct default CLI values with the `build` command selected.
     fn default() -> Self {
         Self {
             file: CliConfig::default_manifest_path(),
@@ -179,6 +180,7 @@ pub struct InteractionArgs {
 }
 
 impl Default for InteractionArgs {
+    /// Construct interaction defaults that reject prompts unless explicitly enabled.
     fn default() -> Self {
         Self { no_input: true }
     }

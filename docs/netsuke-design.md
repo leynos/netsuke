@@ -2735,7 +2735,7 @@ the targets listed in the `defaults` section of the manifest are built.
 ### 8.4 Design Decisions
 
 The parser-facing `Cli` type is now defined in `src/cli/command.rs`, with the
-localization-aware parsing entry point in `src/cli/parser.rs` and the runtime
+localisation-aware parsing entry point in `src/cli/parser.rs` and the runtime
 preference accessors in `src/cli/preferences.rs`, while
 layered configuration lives in a dedicated `CliConfig` struct derived with
 OrthoConfig in `src/cli/config.rs`. The top-level `src/cli/mod.rs` module
@@ -2782,15 +2782,17 @@ presence bits for path metadata so events can be replayed after discovery.
 Those deferred trace events never retain or emit filenames or raw paths.
 
 The application-owned `MergeObserver` seam receives bounded `MergeEvent` values
-from `merge_with_cached_file_layers_with_observer`. Production supplies
-`TracingMergeObserver` from `config_load::resolve_configuration`; callers that
-use the ordinary `merge_with_config*` or `merge_with_cached_file_layers` query
-APIs receive no observation effects. Callers that need merge events may provide
-their own observer, but the event surface excludes raw configuration values and
-paths. CLI events contain override keys only; file-layer events use bounded
-path hashes; validation events use fixed `key` and `reason` fields. The
-application adjusts its tracing filter before this merge and turns it off for
-JSON diagnostics, preserving machine-readable stderr.
+returned alongside the merge result by
+`merge_with_cached_file_layers_with_observer`. Production replays those events
+through `TracingMergeObserver` from `config_load::resolve_configuration`;
+callers that use the ordinary `merge_with_config*` or
+`merge_with_cached_file_layers` query APIs receive no observation effects.
+Callers that need merge events may replay them through their own observer, but
+the event surface excludes raw configuration values and paths. CLI events
+contain override keys only; file-layer events use bounded path hashes;
+validation events use fixed `key` and `reason` fields. The application adjusts
+its tracing filter before this merge and turns it off for JSON diagnostics,
+preserving machine-readable stderr.
 
 CLI help and clap errors are localized via Fluent resources; locale resolution
 is handled in `src/locale_resolution.rs` in two phases. Before the
@@ -2824,9 +2826,10 @@ this decision is recorded in
 `config_load::resolve_configuration` owns the startup-attempt measurement: it
 resolves diagnostic mode with `cli::resolve_json_and_layers_outcome_with_env`,
 then replays the outcome's deferred diagnostics and passes the cached layers to
-`cli::merge_with_cached_file_layers_with_observer` with
-`cli::TracingMergeObserver` for the full merge. The ordinary query functions do
-not install a recorder or emit tracing. `src/observability.rs` owns the phase
+`cli::merge_with_cached_file_layers_with_observer`. That query returns bounded
+merge events alongside the result, which `config_load::resolve_configuration`
+replays through `cli::TracingMergeObserver`. The ordinary query functions do not
+install a recorder or emit tracing. `src/observability.rs` owns the phase
 recorder and bounded phase/outcome vocabulary, while `src/config_load.rs` owns
 the startup-attempt series. The application installs an in-process
 `DebuggingRecorder`; it does not open a metrics listener as a side effect of a
@@ -3033,12 +3036,14 @@ normalizer and environment source, retaining bounded project-scope trace
 metadata. The normalizer canonicalizes comparison keys so equivalent project
 path spellings de-duplicate to one layer. `DiscoveryOutcome::into_layers()`
 transfers the same discovered layers to
-`merge_with_cached_file_layers_with_observer(...)`, which consumes them for the
-full merge and prevents a second discovery pass. The standalone
+`merge_with_cached_file_layers_with_observer(...)`, which returns bounded merge
+events alongside the full merge result and prevents a second discovery pass.
+The standalone
 `merge_with_config_and_env(...)` path performs discovery and delegates to the
-ordinary no-op-observer merge query; it does not replay retained diagnostics or
-emit merge tracing. The application startup boundary replays the diagnostics
-and injects `TracingMergeObserver` explicitly.
+ordinary merge query, which discards its collected events; it does not replay
+retained diagnostics or emit merge tracing. The application startup boundary
+replays the diagnostics
+and the returned merge events through `TracingMergeObserver` explicitly.
 
 Deferred bounded discovery diagnostics are retained only for replay after the
 startup tracing boundary is configured. They do not contain raw paths or file
@@ -3144,11 +3149,13 @@ manual flag repetition.
   selectors before automatic discovery so missing or invalid explicit files
   remain hard errors.
 - The `merge_with_config_and_env()` function in `src/cli/merge.rs` performs
-  discovery and delegates to the ordinary no-op-observer merge query. The
+  discovery and delegates to the ordinary merge query, which discards its
+  collected events. The
   application startup boundary replays retained bounded diagnostics and calls
-  `merge_with_cached_file_layers_with_observer(...)` with
-  `TracingMergeObserver` to merge defaults, discovered layers, environment
-  variables via Figment and CLI overrides extracted from `ArgMatches`.
+  `merge_with_cached_file_layers_with_observer(...)` to merge defaults,
+  discovered layers, environment variables via Figment and CLI overrides
+  extracted from `ArgMatches`, then replays its returned events through
+  `TracingMergeObserver`.
 - The `config_discovery()` function uses OrthoConfig's builder API with the
   application name, injected discovery environment, and optional project-root
   anchor, relying on OrthoConfig's platform-specific defaults for standard
@@ -3160,9 +3167,9 @@ manual flag repetition.
   environment. Startup obtains a `DiscoveryOutcome` from
   `resolve_json_and_layers_outcome_with_env`, emits its deferred diagnostics,
   then passes `into_layers()` to
-  `merge_with_cached_file_layers_with_observer` with
-  `TracingMergeObserver`, so file discovery and loading happen once while
-  merge observation stays at the application boundary. OrthoConfig discovery
+  `merge_with_cached_file_layers_with_observer`, replaying its returned events
+  through `TracingMergeObserver`, so file discovery and loading happen once
+  while merge observation stays at the application boundary. OrthoConfig discovery
   remains an external boundary and may still read platform environment
   variables directly.
 - Configuration files use TOML format by default. JSON5 (`.json`, `.json5`) and

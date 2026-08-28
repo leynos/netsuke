@@ -40,11 +40,13 @@ mod tests {
 
     use super::*;
 
+    /// Verify that the maximum job limit remains 64.
     #[test]
     fn max_jobs_matches_the_cli_contract() {
         assert_eq!(MAX_JOBS, 64);
     }
 
+    /// Verify that validation errors preserve their supplied key and message.
     #[test]
     fn validation_error_preserves_its_key_and_message() {
         let error = validation_error("jobs", "message");

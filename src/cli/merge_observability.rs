@@ -1,8 +1,8 @@
 //! Explicit observability adapter for configuration merging.
 //!
-//! Merge queries accept a [`MergeObserver`] from their application boundary.
-//! Production supplies [`TracingMergeObserver`], while direct callers use the
-//! no-op implementation and remain free of logging side effects.
+//! Merge queries return [`MergeEvent`] values to their application boundary.
+//! Production replays them through [`TracingMergeObserver`], while direct
+//! callers remain free of logging side effects.
 
 use serde_json::Value;
 
@@ -87,6 +87,7 @@ pub trait MergeObserver {
 pub struct TracingMergeObserver;
 
 impl MergeObserver for TracingMergeObserver {
+    /// Record one bounded merge event through its matching tracing field set.
     fn observe(&mut self, event: MergeEvent) {
         record_default_event(&event);
         record_file_event(&event);
@@ -197,11 +198,4 @@ fn collect_leaf_paths(value: &Value, prefix: &str, paths: &mut Vec<String>) {
     } else if !prefix.is_empty() {
         paths.push(prefix.to_owned());
     }
-}
-
-/// Observer used by direct merge queries that must not perform I/O.
-pub(crate) struct NoopMergeObserver;
-
-impl MergeObserver for NoopMergeObserver {
-    fn observe(&mut self, _event: MergeEvent) {}
 }

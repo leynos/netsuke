@@ -37,7 +37,7 @@ impl MergeObserver for EventCollector {
     }
 }
 
-/// Run the cached merge with a caller-owned observer.
+/// Run the cached merge and replay its events through a caller-owned observer.
 pub(super) fn merge_and_observe(
     cli_args: &[&str],
     env: &TestEnv,
@@ -60,8 +60,11 @@ pub(super) fn merge_and_observe_after_json_resolution(
         netsuke::cli::resolve_json_and_layers_outcome_with_env(&cli, &matches, env);
     let input = netsuke::cli::CachedMergeInput::new(&cli, &matches, env, outcome.into_layers());
     let mut observer = EventCollector::default();
-    let merge_ok =
-        netsuke::cli::merge_with_cached_file_layers_with_observer(input, &mut observer).is_ok();
+    let (merged, events) = netsuke::cli::merge_with_cached_file_layers_with_observer(input);
+    for event in events {
+        observer.observe(event);
+    }
+    let merge_ok = merged.is_ok();
     Ok((json_mode.is_ok(), observer.events, merge_ok))
 }
 
@@ -76,8 +79,11 @@ fn merge_and_capture(cli_args: &[&str], env: &TestEnv) -> Result<(Vec<String>, b
     Ok(with_test_subscriber(LevelFilter::DEBUG, |captured| {
         let mut observer = netsuke::cli::TracingMergeObserver;
         let input = netsuke::cli::CachedMergeInput::new(&cli, &matches, env, outcome.into_layers());
-        let merge_ok =
-            netsuke::cli::merge_with_cached_file_layers_with_observer(input, &mut observer).is_ok();
+        let (merged, events) = netsuke::cli::merge_with_cached_file_layers_with_observer(input);
+        for event in events {
+            observer.observe(event);
+        }
+        let merge_ok = merged.is_ok();
         (captured.snapshot(), merge_ok)
     }))
 }
@@ -203,8 +209,11 @@ fn merge_logs_validation_rejection_with_key_and_reason() -> Result<()> {
         let mut observer = netsuke::cli::TracingMergeObserver;
         let input =
             netsuke::cli::CachedMergeInput::new(&cli, &matches, &env, outcome.into_layers());
-        let merge_ok =
-            netsuke::cli::merge_with_cached_file_layers_with_observer(input, &mut observer).is_ok();
+        let (merged, events) = netsuke::cli::merge_with_cached_file_layers_with_observer(input);
+        for event in events {
+            observer.observe(event);
+        }
+        let merge_ok = merged.is_ok();
         (captured.snapshot(), merge_ok)
     });
     ensure!(!merge_ok, "file-sourced out-of-range jobs must be rejected");

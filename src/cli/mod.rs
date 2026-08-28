@@ -52,9 +52,9 @@ pub use merge::{
     merge_with_cached_file_layers, merge_with_cached_file_layers_with_observer, merge_with_config,
     merge_with_config_and_env,
 };
-/// Input for an observer-enabled merge using previously discovered layers.
+/// Input for an event-collecting merge using previously discovered layers.
 pub use merge_input::CachedMergeInput;
-/// Bounded events and the production tracing adapter for observer-enabled merges.
+/// Bounded events and the production tracing adapter for application-side replay.
 pub use merge_observability::{MergeEvent, MergeObserver, TracingMergeObserver};
 pub(crate) use parser::configured_command;
 pub use parser::{json_hint_from_args, locale_hint_from_args, parse_with_localizer_from};

@@ -26,15 +26,15 @@ const FALLBACK_DATE: &str = "1970-01-01";
 
 // The build script recompiles a slice of the library as its own crate so that
 // `cli::Cli::command()` (used for man-page and completion generation) can be
-// constructed, and so that the localization audit can read the declared key
+// constructed, and so that the localisation audit can read the declared key
 // registry.
 //
 // The slice is named file by file rather than by pulling in `src/cli/mod.rs`,
 // because that would drag the whole `cli` subtree: configuration discovery,
-// merging, diagnostics, and localized value parsing, none of which is
+// merging, diagnostics, and localised value parsing, none of which is
 // reachable here. Runtime discovery is excluded deliberately: the build script
 // does not perform discovery, and compiling it here would pull its ambient
-// canonicalization boundary into this separate compilation unit. Recompiling
+// canonicalisation boundary into this separate compilation unit. Recompiling
 // only what is reachable keeps rustc's unused-item analysis meaningful here
 // instead of requiring module-wide `#[expect(dead_code)]` suppressions that
 // would also mask genuinely dead library code.
@@ -42,7 +42,7 @@ const FALLBACK_DATE: &str = "1970-01-01";
 // The library modules below are laid out to keep this slice small:
 // `src/cli/command.rs` holds command-schema and default-command behavior,
 // including `Cli::with_default_command`, with runtime preferences in
-// `src/cli/preferences.rs` and the localization-aware parsing entry point in
+// `src/cli/preferences.rs` and the localisation-aware parsing entry point in
 // `src/cli/parser.rs`; matching logic is split out of `src/host_pattern.rs`
 // into `src/host_matching.rs`. Adding a dependency on anything outside this
 // slice will surface here as a compile error, which is the intended signal.
