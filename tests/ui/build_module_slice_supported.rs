@@ -26,6 +26,7 @@ mod cli {
     pub use config::{AccessibilityPolicy, ColourPolicy, EmojiPolicy, ProgressPolicy};
 }
 
+/// Compile the supported production module slice.
 fn main() {
     let _ = <cli::Cli as clap::CommandFactory>::command;
 }

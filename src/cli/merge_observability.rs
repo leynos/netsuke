@@ -6,9 +6,23 @@
 
 use serde_json::Value;
 
+use super::config::NO_INPUT_VALIDATION_REASON;
+
+/// Fixed reason reported when a merged parallel job count is out of range.
+const JOBS_VALIDATION_REASON: &str = "job count is outside the supported range";
+
 /// Return whether a configuration-layer object contains no supplied settings.
 pub(crate) fn is_empty_configuration_value(value: &Value) -> bool {
     matches!(value, Value::Object(map) if map.is_empty())
+}
+
+/// Return the bounded observability reason for a known validation key.
+pub(crate) fn validation_rejection_reason(key: &str) -> Option<&'static str> {
+    match key {
+        "no_input" => Some(NO_INPUT_VALIDATION_REASON),
+        "jobs" => Some(JOBS_VALIDATION_REASON),
+        _ => None,
+    }
 }
 
 /// A bounded event emitted by an explicitly supplied configuration observer.

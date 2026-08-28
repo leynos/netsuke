@@ -285,17 +285,6 @@ const MAX_JOBS: usize = super::validation::MAX_JOBS;
 /// Fixed reason reported when merged configuration enables interactive input.
 pub(crate) const NO_INPUT_VALIDATION_REASON: &str =
     "no_input = false is unsupported because Netsuke has no interactive mode";
-/// Fixed reason reported when a merged parallel job count is out of range.
-pub(crate) const JOBS_VALIDATION_REASON: &str = "job count is outside the supported range";
-
-/// Return the bounded observability reason for a known validation key.
-pub(crate) fn validation_rejection_reason(key: &str) -> Option<&'static str> {
-    match key {
-        "no_input" => Some(NO_INPUT_VALIDATION_REASON),
-        "jobs" => Some(JOBS_VALIDATION_REASON),
-        _ => None,
-    }
-}
 /// Return whether `jobs` falls outside the accepted range.
 const fn jobs_out_of_bounds(jobs: usize) -> bool {
     jobs == 0 || jobs > MAX_JOBS

@@ -30,7 +30,7 @@ use serde::Serialize;
 use serde_json::{Map, Value, json};
 
 use super::command::{BuildArgs, Cli, Commands};
-use super::config::{BuildConfig, CliConfig, validation_rejection_reason};
+use super::config::{BuildConfig, CliConfig};
 use super::discovery::{
     DiscoveredLayers, EnvProvider, StdEnvProvider, discover_file_layers,
     push_discovered_file_layers,
@@ -39,6 +39,7 @@ use super::environment::EnvironmentLayer;
 use super::merge_input::{CachedMergeInput, MergeComposition};
 use super::merge_observability::{
     NoopMergeObserver, collect_override_leaf_paths, is_empty_configuration_value,
+    validation_rejection_reason,
 };
 use super::validation::validation_error;
 use super::{MergeEvent, MergeObserver};

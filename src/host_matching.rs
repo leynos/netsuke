@@ -55,6 +55,7 @@ mod tests {
         HostPattern::parse(pattern).map_err(|error| TestCaseError::fail(error.to_string()))
     }
 
+    /// Verify representative exact and wildcard host matches.
     #[rstest]
     #[case("example.com", "example.com", true)]
     #[case("example.com", "sub.example.com", false)]
@@ -77,6 +78,7 @@ mod tests {
         Ok(())
     }
 
+    /// Verify candidate normalization changes ASCII letters only.
     #[test]
     fn host_matching_normalizes_ascii_candidates_only() -> Result<()> {
         let pattern = HostPattern::parse("example.test")?;
@@ -93,6 +95,7 @@ mod tests {
     }
 
     proptest! {
+        /// Verify exact patterns match ASCII case variants.
         #[test]
         fn exact_patterns_match_ascii_case_insensitively(
             label in ascii_dns_label_strategy(),
@@ -104,6 +107,7 @@ mod tests {
             prop_assert!(parsed.matches(HostCandidate(&candidate)));
         }
 
+        /// Verify wildcard patterns match every non-empty subdomain prefix.
         #[test]
         fn wildcard_patterns_match_every_nonempty_ascii_subdomain_prefix(
             labels in prop::collection::vec(ascii_dns_label_strategy(), 1..5),
@@ -116,6 +120,7 @@ mod tests {
             prop_assert!(!parsed.matches(HostCandidate("example.test")));
         }
 
+        /// Verify exact patterns reject strict suffixes and superdomains.
         #[test]
         fn exact_patterns_reject_strict_suffixes_and_superdomains(
             label in ascii_dns_label_strategy(),
