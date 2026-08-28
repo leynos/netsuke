@@ -68,20 +68,32 @@ description for Ninja progress output. The topic honours the selected
 manifest and the normal output preferences, including localization,
 accessibility, and `--json`.
 
-`netsuke help targets` loads, expands, renders, and validates the manifest,
-then prints actions followed by targets. It does not invoke Ninja, run recipes,
-or create build outputs. Rendering uses a restricted, side-effect-free Jinja
-surface. Queries allow only the lexical path filters `basename`, `dirname`,
-`with_suffix`, and `relative_to`, the collection filters `uniq`, `flatten`, and
-`group_by`, and the clock-independent `timedelta` function. Queries reject
-`env()` and `glob()`, file tests, filesystem metadata filters such as `size` and
-`linecount`, `hash`, `digest`, `contents`, `realpath`, and `expanduser`,
-executable discovery through `which` and `command_available`, network and
-command helpers (`fetch`, `shell`, and `grep`), and the clock-dependent `now()`
-function. This keeps discovery useful in an unfamiliar project without making
-help a build operation. Normal build manifest rendering retains the full
-standard library; the restriction applies only to query rendering. Existing
-manifests remain compatible when they omit the optional descriptions.
+`netsuke help targets` uses manifest-query rendering to load, expand, and
+validate the selected manifest, then prints actions followed by targets. It
+validates the resolved entries needed for the graph, but does not invoke Ninja,
+execute recipes, or create build outputs. Query rendering evaluates discovery
+metadata and structural rule selectors, while skipping `command` and `script`
+recipe bodies. Build-only helpers in those skipped bodies are not evaluated.
+
+Rendering uses a restricted, side-effect-free Jinja surface. Queries allow only
+the lexical path filters `basename`, `dirname`, `with_suffix`, and
+`relative_to`, the collection filters `uniq`, `flatten`, and `group_by`, and
+the clock-independent `timedelta` function. Direct evaluation of query-disabled
+helpers remains rejected: this includes `env()` and `glob()`, file tests,
+filesystem metadata filters such as `size` and `linecount`, `hash`, `digest`,
+`contents`, `realpath`, and `expanduser`, executable discovery through `which`
+and `command_available`, network and command helpers (`fetch`, `shell`, and
+`grep`), and the clock-dependent `now()` function. A `when` expression using a
+query-disabled helper instead retains its action or target as a conditional
+entry. An ordinary false `when` expression excludes its entry, and other
+template errors continue to fail discovery.
+
+Human-readable output shows a localized `[◇ conditional]` marker when emoji is
+enabled, or `[? conditional]` in the ASCII theme. JSON output always includes
+the boolean `conditional` JSON field. Full rendering for normal builds retains
+its full standard library and behaviour; these restrictions apply only to
+manifest-query rendering. Existing manifests remain compatible when they omit
+the optional descriptions.
 
 Intuitive **defaults** further contribute to a smooth UX. As noted, if no
 subcommand is given, `netsuke build` is assumed by default. Similarly, common

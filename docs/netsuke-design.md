@@ -68,6 +68,27 @@ before execution, a critical requirement for compatibility with Ninja.
    templating using `{% %}` blocks is forbidden; all control flow must appear
    in YAML values.
 
+   #### Manifest rendering modes and discovery
+
+   Netsuke has two rendering policies. Full rendering evaluates every manifest
+   field for `build`, `generate`, and normal manifest rendering, retaining the
+   full standard library and existing build semantics. Manifest-query rendering
+   is used by `netsuke help targets`: it evaluates discovery metadata and the
+   structural rule selectors required for graph validation, but leaves
+   `command` and `script` recipe bodies unchanged. Build-only helpers in those
+   skipped recipe bodies are therefore not evaluated during discovery.
+
+   During manifest-query rendering, a query-disabled helper error while
+   evaluating a `when` expression produces a conditional entry. An explicit
+   false `when` expression excludes the entry, while any other template error
+   still fails discovery. The expansion state propagates through
+   `Target::conditional` into the help catalogue, where localized text output
+   shows the conditional marker and JSON output includes the boolean
+   `conditional` JSON field. The catalogue retains conditional unresolved
+   alternatives, but graph validation excludes them so those alternatives are
+   not treated as simultaneously active. Full rendering and normal build
+   selection remain unchanged.
+
 5. Stage 5: IR Generation & Validation
 
    The AST is traversed to construct a canonical, fully resolved Intermediate
