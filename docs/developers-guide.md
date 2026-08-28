@@ -334,6 +334,21 @@ constructs the IR directly must also reject both `StringOrList::Empty` and an
 empty `StringOrList::List(Vec::new())` during Ninja generation rather than
 emitting an unusable rule.
 
+### Dependency-only actions and targets
+
+`ast::Recipe::DependencyOnly` represents an action or target whose non-empty
+`deps` list is its complete operation. Manifest loading renders `deps` before
+validating recipes, then rejects dependency-only rules and actions or targets
+whose rendered dependencies are absent. Entries with executable work continue
+to require exactly one of `command`, `script`, or `rule`.
+
+Manifest-to-IR lowering keeps the dependency list as `BuildEdge::implicit_deps`
+and registers the dependency-only action without a command. The shared action
+rule emission in `src/ninja_gen/mod.rs` omits that action from the generated
+Ninja `rule` blocks; its edge selects Ninja's built-in `phony` rule instead.
+The direct generator and the serial-dependency bundle use this same path, so a
+dependency-only aggregate does not need a synthetic `command: ":"` recipe.
+
 The lowering stages have deliberately separate responsibilities:
 
 - `src/manifest/render.rs` renders a scalar or each list entry independently.

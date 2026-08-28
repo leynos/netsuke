@@ -169,18 +169,19 @@ fn from_str_named(
             message: localization::message(keys::MANIFEST_PARSE),
         })?;
 
-    manifest
+    let rendered_manifest = if is_manifest_query {
+        render::render_manifest_for_manifest_query(manifest, &jinja)?
+    } else {
+        render_manifest(manifest, &jinja)?
+    };
+    rendered_manifest
         .validate_recipes()
         .map_err(|detail| ManifestError::Parse {
             source: map_data_error(serde_json::Error::custom(detail), name),
             message: localization::message(keys::MANIFEST_PARSE),
         })?;
 
-    if is_manifest_query {
-        render::render_manifest_for_manifest_query(manifest, &jinja)
-    } else {
-        render_manifest(manifest, &jinja)
-    }
+    Ok(rendered_manifest)
 }
 
 /// Translate schema-only recipe errors at the manifest adapter boundary.

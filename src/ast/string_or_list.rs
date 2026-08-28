@@ -128,6 +128,23 @@ impl StringOrList {
             Self::List(v) => v.is_empty(),
         }
     }
+
+    /// Report whether the value has no non-whitespace string content.
+    ///
+    /// This keeps dependency-only validation narrow: executable recipes retain
+    /// their existing empty-string semantics, while blank dependency templates
+    /// cannot satisfy the requirement for a real prerequisite.
+    ///
+    /// For example, a scalar containing only whitespace and a list containing
+    /// only empty strings are blank; a list containing `"check"` is not.
+    #[must_use]
+    pub(crate) fn is_blank_content(&self) -> bool {
+        match self {
+            Self::Empty => true,
+            Self::String(value) => value.trim().is_empty(),
+            Self::List(values) => values.iter().all(|value| value.trim().is_empty()),
+        }
+    }
 }
 
 impl From<&str> for StringOrList {

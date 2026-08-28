@@ -138,6 +138,13 @@ pub struct BuildEdge {
 /// ```
 #[derive(Debug, Error)]
 pub enum IrGenError {
+    /// Raised when a directly deserialized manifest violates recipe rules.
+    #[error("{message}")]
+    InvalidManifest {
+        /// Stable schema diagnostic identifying the violated recipe rule.
+        message: &'static str,
+    },
+
     /// Raised when a target references a rule that is not defined in the
     /// manifest.
     ///
