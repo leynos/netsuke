@@ -22,6 +22,14 @@ name: Release Binary
         required: false
         type: boolean
         default: false
+      run-release-admission:
+        description: >-
+          Whether to run trusted downstream release-admission canaries. Tag
+          releases always run admission; reusable callers may disable it when
+          they do not receive a token.
+        required: false
+        type: boolean
+        default: true
       wix-extension-version:
         description: >-
           Version of the WixToolset.UI.wixext extension to install alongside
@@ -120,6 +128,8 @@ jobs:
           export-to-env: 'false'
 
   downstream-migration-canaries:
+    if: >-
+      github.event_name != 'workflow_call' || inputs.run-release-admission
     needs: metadata
     runs-on: ubuntu-latest
     permissions:
@@ -378,7 +388,9 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: needs.metadata.outputs.should_publish == 'true'
+    if: >-
+      needs.metadata.outputs.should_publish == 'true' &&
+      needs.downstream-migration-canaries.result == 'success'
     permissions:
       contents: write
     needs:
