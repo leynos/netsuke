@@ -11,8 +11,8 @@ use test_support::tracing_capture::with_test_subscriber;
 use tracing_subscriber::filter::LevelFilter;
 
 #[derive(Default)]
-struct TestEnv {
-    entries: Vec<(OsString, OsString)>,
+pub(super) struct TestEnv {
+    pub(super) entries: Vec<(OsString, OsString)>,
 }
 
 impl netsuke::cli::ConfigEnvProvider for TestEnv {
@@ -27,7 +27,7 @@ impl netsuke::cli::ConfigEnvProvider for TestEnv {
 
 /// Collect bounded merge events without installing a tracing subscriber.
 #[derive(Default)]
-struct EventCollector {
+pub(super) struct EventCollector {
     events: Vec<MergeEvent>,
 }
 
@@ -38,18 +38,31 @@ impl MergeObserver for EventCollector {
 }
 
 /// Run the cached merge with a caller-owned observer.
-fn merge_and_observe(cli_args: &[&str], env: &TestEnv) -> Result<(Vec<MergeEvent>, bool)> {
+pub(super) fn merge_and_observe(
+    cli_args: &[&str],
+    env: &TestEnv,
+) -> Result<(Vec<MergeEvent>, bool)> {
+    let (json_mode_resolved, events, merge_ok) =
+        merge_and_observe_after_json_resolution(cli_args, env)?;
+    ensure!(json_mode_resolved, "resolve diagnostic mode before merge");
+    Ok((events, merge_ok))
+}
+
+/// Run the cached merge even when early JSON resolution retains a file error.
+pub(super) fn merge_and_observe_after_json_resolution(
+    cli_args: &[&str],
+    env: &TestEnv,
+) -> Result<(bool, Vec<MergeEvent>, bool)> {
     let localizer = Arc::from(netsuke::cli_localization::build_localizer(None));
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(cli_args, &localizer)
         .context("parse CLI args for merge observer test")?;
     let (json_mode, outcome) =
         netsuke::cli::resolve_json_and_layers_outcome_with_env(&cli, &matches, env);
-    json_mode.context("resolve diagnostic mode before merge")?;
     let input = netsuke::cli::CachedMergeInput::new(&cli, &matches, env, outcome.into_layers());
     let mut observer = EventCollector::default();
     let merge_ok =
         netsuke::cli::merge_with_cached_file_layers_with_observer(input, &mut observer).is_ok();
-    Ok((observer.events, merge_ok))
+    Ok((json_mode.is_ok(), observer.events, merge_ok))
 }
 
 /// Run the cached merge with the application's explicit tracing adapter.
