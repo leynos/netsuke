@@ -170,16 +170,16 @@ and agents.
     selected (user-over-system and system-only merge-through cases are
     covered by the regression tests added in issue #385).
 
-- [ ] 3.11.5. Retire `EnvLock` rather than harden its synchronization tests.
-  - [ ] Ensure production environment-variable callers accept injected
+- [x] 3.11.5. Retire `EnvLock` rather than harden its synchronization tests.
+  - [x] Ensure production environment-variable callers accept injected
     `mockable::Env` seams.
-  - [ ] Ensure tests use `mockable::MockEnv` or isolated child processes.
-  - [ ] Ensure CWD-only callers use the existing working-directory seam,
+  - [x] Ensure tests use `mockable::MockEnv` or isolated child processes.
+  - [x] Ensure CWD-only callers use the existing working-directory seam,
     absolute paths, or `-C/--directory`.
   - [x] Migrate the remaining callers under issue #491.
   - [x] Migrate the remaining callers under issue #492.
   - [x] Migrate the remaining callers under issue #493.
-  - [ ] Remove `EnvLock` under issue #494 after every remaining `EnvLock`
+  - [x] Remove `EnvLock` under issue #494 after every remaining `EnvLock`
     caller has migrated.
   - See [ADR-008](adr-008-environment-seam-taxonomy.md).
 
