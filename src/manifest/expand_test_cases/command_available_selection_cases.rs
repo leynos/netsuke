@@ -52,7 +52,7 @@ impl ResolverWorld {
     fn new(has_nextest: bool) -> Result<Self> {
         let temp = tempfile::tempdir().context("create resolver workspace")?;
         let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-            .map_err(|path| anyhow!("temporary path should be UTF-8: {path:?}"))?;
+            .map_err(|path| anyhow!("temporary path should be UTF-8: {}", path.display()))?;
         if has_nextest {
             write_tool(&root, "cargo-nextest")?;
         }
@@ -136,7 +136,9 @@ fn write_tool(root: &Utf8Path, name: &str) -> Result<()> {
     let path = Utf8PathBuf::from(tool_filename(name));
     dir.write(&path, script_contents())
         .with_context(|| format!("write fixture tool {path}"))?;
-    mark_executable(&dir, &path)
+    #[cfg(unix)]
+    mark_executable(&dir, &path)?;
+    Ok(())
 }
 
 fn tool_filename(name: &str) -> String {
@@ -167,9 +169,4 @@ fn mark_executable(dir: &Dir, path: &Utf8Path) -> Result<()> {
     permissions.set_mode(0o755);
     dir.set_permissions(path, permissions)
         .with_context(|| format!("chmod {path}"))
-}
-
-#[cfg(not(unix))]
-fn mark_executable(_dir: &Dir, _path: &Utf8Path) -> Result<()> {
-    Ok(())
 }
