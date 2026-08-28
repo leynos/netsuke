@@ -68,7 +68,6 @@ those summaries can opt into `VerboseTimingReporter::with_writer`; the
 [users' guide](users-guide.md#capture-verbose-timing-output) documents the
 owned sink and completion-ordering contract.
 
-
 ## Check filenames used by manifest `glob()`
 
 This beta release tightens the Jinja `glob()` helper. A manifest that expands a
