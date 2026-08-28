@@ -67,7 +67,6 @@ those summaries can opt into `VerboseTimingReporter::with_writer`; the
 [users' guide](users-guide.md#capture-verbose-timing-output) documents the
 owned sink and completion-ordering contract.
 
-
 ## Policy enum parsing
 
 The public policy enums no longer implement `clap::ValueEnum`. This removes the

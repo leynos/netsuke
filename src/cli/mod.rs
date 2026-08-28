@@ -21,9 +21,9 @@ mod parser;
 mod parsing;
 mod policy_values;
 mod release_help;
-mod value_parser;
 #[cfg(test)]
 pub(crate) mod test_support;
+mod value_parser;
 
 pub use config::{AccessibilityPolicy, CliConfig, ColourPolicy, EmojiPolicy, ProgressPolicy};
 pub use diag::{
