@@ -24,7 +24,6 @@ operator, user, and contributor references are easier to find.
   Recommended scope and delivery order for Kani, Proptest, and optional Verus
   checks.
 
-
 ## Requests for comments
 
 - [rfcs/0001-structured-command-blocks.md](rfcs/0001-structured-command-blocks.md):
