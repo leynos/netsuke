@@ -7,7 +7,9 @@ use anyhow::{Context, Result, ensure};
 #[cfg(unix)]
 use insta::assert_snapshot;
 use rstest::rstest;
-use tempfile::{Builder, tempdir};
+use tempfile::Builder;
+#[cfg(unix)]
+use tempfile::tempdir;
 #[cfg(unix)]
 use test_support::display_error_chain;
 use test_support::{fs as test_fs, manifest::manifest_yaml};
