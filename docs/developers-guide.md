@@ -2999,7 +2999,7 @@ The gate itself is a Python script and follows the
 Python scripts under `scripts/` — including the environment-mutation gate,
 `scripts/check_env_mutation.py` — follow the repository's
 [scripting standards](scripting-standards.md): a `uv` script block with a
-Python 3.13 floor, Cyclopts for parameterised CLIs, `cuprum` for subprocess
+Python 3.13 floor, Cyclopts for parameterized CLIs, `cuprum` for subprocess
 execution, `pathlib` for filesystem access, and pytest coverage in
 `scripts/tests/` mirroring each script's name. The house Python style rules in
 `.rules/` (naming, typing, exception design, context managers, generators, and
