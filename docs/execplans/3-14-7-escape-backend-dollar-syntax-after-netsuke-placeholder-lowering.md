@@ -1282,10 +1282,14 @@ Windows job for platform confirmation.
 2026-08-28 — the Windows rerun confirmed that the CRLF correction passes the
 real-Ninja property. Its only failure was the BDD sentinel recipe: Ninja uses
 `cmd.exe` on Windows, whereas the fixture used POSIX-only `printf` and `$VAR`
-syntax, so it never wrote the output file. The fixture now uses `echo` with
-both native variable spellings. The assertion remains deliberately narrow: it
-observes the sentinel value written by the child shell on each platform. The
-complete gate-and-review cycle passed: `make check-fmt`, `make test` (2,440
-passed, 3 skipped), `make typecheck`, `make lint`, `make doc-coverage`
-(98.99%), `make markdownlint`, and `make nixie`. CodeRabbit reported zero
-findings. Status is `COMPLETE` pending the final pushed Windows rerun.
+syntax, so it never wrote the output file. A first cross-platform `echo`
+replacement also failed because Ninja's Windows launcher does not reliably
+resolve the shell built-in. The revised fixture calls the hosted `python`
+executable to write the output, while passing both native shell expansions as
+arguments: POSIX expands `$NETSUKE_TEST_SENTINEL`; Windows expands
+`%NETSUKE_TEST_SENTINEL%`. The assertion remains deliberately narrow: it
+observes the sentinel value written by the child shell on each platform.
+`make check-fmt`, `make test` (2,440 passed, 3 skipped), `make typecheck`,
+`make lint`, `make doc-coverage` (98.99%), `make markdownlint`, and `make
+nixie` passed. CodeRabbit reported zero findings. Status is `COMPLETE` pending
+the final pushed Windows rerun.

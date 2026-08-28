@@ -1,4 +1,4 @@
 netsuke_version: "1.0.0"
 targets:
   - name: dollar-output
-    command: 'echo "$NETSUKE_TEST_SENTINEL%NETSUKE_TEST_SENTINEL%" > $out'
+    command: 'python -c "from pathlib import Path; import sys; Path(sys.argv[3]).write_text(sys.argv[1] + sys.argv[2])" "$NETSUKE_TEST_SENTINEL" "%NETSUKE_TEST_SENTINEL%" "$out"'
