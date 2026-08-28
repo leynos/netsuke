@@ -7,6 +7,7 @@ use netsuke::{
 };
 use rstest::{fixture, rstest};
 use std::{fs, path::Path};
+use tempfile::Builder;
 use test_support::{EnLocalizer, display_error_chain, en_localizer, manifest::manifest_yaml};
 
 #[derive(Debug)]
@@ -93,12 +94,17 @@ fn assert_glob_error_contains(
 
 #[fixture]
 fn temp_dir() -> tempfile::TempDir {
+    // Keep matched paths shell-inert on Windows, whose system temp parent can
+    // contain short-name characters outside the Jinja adapter's allowlist.
     #[expect(
         clippy::expect_used,
         reason = "fixture should fail fast when temp directory creation fails"
     )]
     {
-        tempfile::tempdir().expect("create temp dir")
+        Builder::new()
+            .prefix("netsuke-glob-")
+            .tempdir_in(".")
+            .expect("create relative glob test directory")
     }
 }
 
