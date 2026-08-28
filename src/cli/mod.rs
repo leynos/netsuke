@@ -19,10 +19,11 @@ mod merge_input;
 mod merge_observability;
 mod parser;
 mod parsing;
+mod policy_values;
 mod release_help;
-
 #[cfg(test)]
 pub(crate) mod test_support;
+mod value_parser;
 
 pub use config::{AccessibilityPolicy, CliConfig, ColourPolicy, EmojiPolicy, ProgressPolicy};
 pub use diag::{
@@ -48,6 +49,7 @@ pub use merge::{
 pub use merge_input::CachedMergeInput;
 /// Bounded events and the production tracing adapter for observer-enabled merges.
 pub use merge_observability::{MergeEvent, MergeObserver, TracingMergeObserver};
+pub(crate) use parser::configured_command;
 pub use parser::{
     BuildArgs, Cli, Commands, GraphArgs, json_hint_from_args, locale_hint_from_args,
     parse_with_localizer_from,

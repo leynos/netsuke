@@ -6,13 +6,11 @@
 //! subcommand-name topics render clap's localized help text instead.
 
 use anyhow::{Context, Result};
-use clap::CommandFactory;
 use serde::Serialize;
 use std::borrow::Cow;
 use unicode_width::UnicodeWidthStr;
 
-use crate::cli::Cli;
-use crate::cli_l10n::localize_command;
+use crate::cli::{Cli, configured_command};
 use crate::json_envelope::{GeneratorInfo, SCHEMA_VERSION};
 use crate::localization::{self, keys};
 use crate::output_mode;
@@ -88,7 +86,7 @@ fn report_query_failure_stages(reporter: &dyn StatusReporter, error: &anyhow::Er
 /// Returns an error when the help text cannot be written to stdout.
 pub(super) fn render_root_help() -> Result<()> {
     let localizer = localization::localizer();
-    let mut command = localize_command(Cli::command(), localizer.as_ref());
+    let mut command = configured_command(Some(&localizer));
     let text = command.render_long_help().to_string();
     process::write_text_stdout(&text)
 }
@@ -101,7 +99,7 @@ pub(super) fn render_root_help() -> Result<()> {
 /// written to stdout.
 pub(super) fn render_subcommand_help(name: &str) -> Result<()> {
     let localizer = localization::localizer();
-    let mut command = localize_command(Cli::command(), localizer.as_ref());
+    let mut command = configured_command(Some(&localizer));
     let subcommand = command
         .find_subcommand_mut(name)
         .with_context(|| format!("unknown subcommand '{name}'"))?;

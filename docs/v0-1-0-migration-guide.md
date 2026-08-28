@@ -67,6 +67,16 @@ those summaries can opt into `VerboseTimingReporter::with_writer`; the
 [users' guide](users-guide.md#capture-verbose-timing-output) documents the
 owned sink and completion-ordering contract.
 
+## Policy enum parsing
+
+The public policy enums no longer implement `clap::ValueEnum`. This removes the
+Clap parsing dependency from the domain configuration schema. Rust callers that
+parse `ColourPolicy`, `ProgressPolicy`, `EmojiPolicy`, or `AccessibilityPolicy`
+should use `str::parse` or `FromStr`; accepted spellings remain
+case-insensitive and are listed in the users' guide's
+[policy values and parsing](users-guide.md#policy-values-and-parsing) section.
+Clap-specific validation and help metadata remain an internal CLI concern.
+
 ## Opting into ordered command lists
 
 Existing scalar `command` recipes remain valid, so no migration is required. To

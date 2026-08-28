@@ -65,3 +65,22 @@ fn generated_completion_exposes_the_clap_command_tree(#[case] file_name: &str) -
     }
     Ok(())
 }
+
+/// Verifies generators that support possible values retain the policy spellings.
+#[rstest]
+#[case("netsuke.bash")]
+#[case("netsuke.fish")]
+#[case("_netsuke")]
+fn generated_completion_exposes_policy_values(#[case] file_name: &str) -> Result<()> {
+    let path = generated_completions_dir().join(file_name);
+    let completion = test_fs::read_to_string(&path)
+        .with_context(|| format!("read generated completion {}", path.display()))?;
+
+    for value in ["auto", "always", "never", "on", "off"] {
+        ensure!(
+            completion.contains(value),
+            "generated completion {file_name} should expose policy value {value:?}: {completion}"
+        );
+    }
+    Ok(())
+}

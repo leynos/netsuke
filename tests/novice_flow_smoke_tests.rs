@@ -149,10 +149,41 @@ fn help_entry_points_are_novice_friendly(#[case] args: &[&str]) -> Result<()> {
             "dependency graph",
             "generate",
             "Generate the Ninja manifest",
+            "--color <POLICY>",
+            "--emoji <POLICY>",
+            "--progress <POLICY>",
+            "--accessibility <POLICY>",
+            "auto",
+            "always",
+            "never",
+            "on",
+            "off",
+            "Follow the host environment",
+            "Force accessible output on",
         ],
         "stdout",
     )?;
     Ok(())
+}
+
+/// Verifies named help topics still use the shared localized command path.
+#[test]
+fn named_help_topics_are_novice_friendly() -> Result<()> {
+    let output = run_netsuke(
+        Path::new("."),
+        &["--locale", "en-US", "help", "build"],
+        None,
+    )?;
+
+    ensure!(output.success, "expected named help topic to succeed");
+    assert_contains_all(
+        &output.stdout,
+        &[
+            "Build the requested targets; when none are provided, use the manifest defaults.",
+            "Usage: build",
+        ],
+        "stdout",
+    )
 }
 
 #[test]

@@ -26,6 +26,42 @@ as the durable architecture record.
 
 [adr-003-cli]: adr-003-agent-consistent-human-first-cli.md
 
+### CLI parsing and command-composition boundary
+
+`src/cli/value_parser.rs` owns `LocalizedValueParser`. This type is a private
+Clap adapter: it wraps a localization-aware validation closure and can carry
+optional `PossibleValue` help metadata. Its `with_possible_values` constructor
+is the adapter API for attaching the values and descriptions shown in command
+help; it does not make domain policy types depend on Clap.
+
+Only the CLI command-composition path may construct `LocalizedValueParser`.
+Production construction currently belongs to
+`src/cli/parser.rs::configure_validation_parsers`, which attaches the
+localization-aware validators and their policy metadata to one command tree.
+The shared command factory is the composition path for runtime parsing, help,
+man pages, and shell completions: it starts with `Cli::command()`, applies
+localization when a `Localizer` is available, and then configures validation
+parsers. Build scripts call the same factory without a `Localizer`, retaining
+the source `en-US` wording while still installing parser metadata. They do not
+perform runtime configuration discovery, so generated artefacts remain
+deterministic.
+
+`parse_with_localizer_from` must call `configured_command`. That factory
+localizes `Cli::command()`, calls `configure_validation_parsers`, and returns
+the configured command before `parse_with_localizer_from` calls
+`ortho_config::parse_localized_command`. This ordering preserves localized
+parse errors and keeps possible-value metadata on every rendered command tree.
+The `src/cli/parsing.rs` helpers and the domain policy types remain
+Clap-independent. Do not move Clap types or `TypedValueParser` implementations
+into domain configuration types. The `src/cli/policy_values.rs` module owns the
+Clap-only conversion from the canonical policy definitions to `PossibleValue`
+metadata; it must not become a second source of policy names or descriptions.
+
+When a new typed CLI argument needs localized validation, add its parser through
+`configure_validation_parsers`. Do not construct a second command tree or
+bypass the configured command path. This keeps `--help`, `netsuke help`, man
+pages, and completions aligned with the parser used for actual invocations.
+
 ## Ninja child-process APIs and help-runner boundary
 
 The public Ninja process helpers are re-exported from `netsuke::runner`.
@@ -909,12 +945,12 @@ PowerShell external help under
 date from `SOURCE_DATE_EPOCH`, falling back to `1970-01-01` when unset or
 invalid.
 
-Shell completions are generated separately by `build.rs` from `Cli::command()`
-for Bash, Elvish, Fish, PowerShell, and Zsh. Release staging copies these
-portable completion sidecars into each standalone archive under
-`completions/<shell>/`. They remain separate files for users to copy into the
-completion location documented by their shell; package installation does not
-claim to install them.
+Shell completions are generated separately by `build.rs` through the shared
+configured command factory for Bash, Elvish, Fish, PowerShell, and Zsh. Release
+staging copies these portable completion sidecars into each standalone archive
+under `completions/<shell>/`. They remain separate files for users to copy into
+the completion location documented by their shell; package installation does
+not claim to install them.
 
 Keep `[package.metadata.ortho_config]` in `Cargo.toml` aligned with the CLI
 when adding, renaming, or removing user-facing options. Changes to CLI

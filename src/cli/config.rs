@@ -4,7 +4,6 @@
 //! and merging. It captures global CLI settings plus per-subcommand defaults
 //! under the `cmds` namespace.
 
-use clap::ValueEnum;
 use ortho_config::{OrthoConfig, OrthoResult, PostMergeContext, PostMergeHook};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -13,6 +12,15 @@ use std::str::FromStr;
 
 use super::validation_error;
 use crate::host_pattern::HostPattern;
+
+#[path = "policy_definitions.rs"]
+mod policy_definitions;
+
+pub(super) use policy_definitions::{
+    ACCESSIBILITY_POLICY_DEFINITIONS, COLOUR_POLICY_DEFINITIONS, EMOJI_POLICY_DEFINITIONS,
+    PROGRESS_POLICY_DEFINITIONS, PolicyDefinition,
+};
+use policy_definitions::{definition_for, parse_policy};
 
 /// Required non-interactive execution setting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -34,7 +42,7 @@ impl Default for NoInput {
 }
 
 /// Colour-output policy accepted by layered configuration.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum ColourPolicy {
     /// Follow the host environment.
@@ -48,11 +56,9 @@ pub enum ColourPolicy {
 
 impl fmt::Display for ColourPolicy {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Auto => write!(f, "auto"),
-            Self::Always => write!(f, "always"),
-            Self::Never => write!(f, "never"),
-        }
+        definition_for(*self, &COLOUR_POLICY_DEFINITIONS).map_or(Err(fmt::Error), |definition| {
+            f.write_str(definition.spelling)
+        })
     }
 }
 
@@ -60,12 +66,13 @@ impl FromStr for ColourPolicy {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        <Self as ValueEnum>::from_str(s, true).map_err(|_| format!("invalid color policy '{s}'"))
+        parse_policy(s, &COLOUR_POLICY_DEFINITIONS)
+            .ok_or_else(|| format!("invalid color policy '{s}'"))
     }
 }
 
 /// Progress rendering policy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum ProgressPolicy {
     /// Follow Netsuke's default progress behaviour.
@@ -79,11 +86,9 @@ pub enum ProgressPolicy {
 
 impl fmt::Display for ProgressPolicy {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Auto => write!(f, "auto"),
-            Self::Always => write!(f, "always"),
-            Self::Never => write!(f, "never"),
-        }
+        definition_for(*self, &PROGRESS_POLICY_DEFINITIONS).map_or(Err(fmt::Error), |definition| {
+            f.write_str(definition.spelling)
+        })
     }
 }
 
@@ -91,12 +96,13 @@ impl FromStr for ProgressPolicy {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        <Self as ValueEnum>::from_str(s, true).map_err(|_| format!("invalid progress policy '{s}'"))
+        parse_policy(s, &PROGRESS_POLICY_DEFINITIONS)
+            .ok_or_else(|| format!("invalid progress policy '{s}'"))
     }
 }
 
 /// Emoji rendering policy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum EmojiPolicy {
     /// Follow the host environment and accessibility mode.
@@ -110,11 +116,9 @@ pub enum EmojiPolicy {
 
 impl fmt::Display for EmojiPolicy {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Auto => write!(f, "auto"),
-            Self::Always => write!(f, "always"),
-            Self::Never => write!(f, "never"),
-        }
+        definition_for(*self, &EMOJI_POLICY_DEFINITIONS).map_or(Err(fmt::Error), |definition| {
+            f.write_str(definition.spelling)
+        })
     }
 }
 
@@ -122,12 +126,13 @@ impl FromStr for EmojiPolicy {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        <Self as ValueEnum>::from_str(s, true).map_err(|_| format!("invalid emoji policy '{s}'"))
+        parse_policy(s, &EMOJI_POLICY_DEFINITIONS)
+            .ok_or_else(|| format!("invalid emoji policy '{s}'"))
     }
 }
 
 /// Accessible-output policy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum AccessibilityPolicy {
     /// Follow terminal and environment detection.
@@ -141,11 +146,10 @@ pub enum AccessibilityPolicy {
 
 impl fmt::Display for AccessibilityPolicy {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Auto => write!(f, "auto"),
-            Self::On => write!(f, "on"),
-            Self::Off => write!(f, "off"),
-        }
+        definition_for(*self, &ACCESSIBILITY_POLICY_DEFINITIONS)
+            .map_or(Err(fmt::Error), |definition| {
+                f.write_str(definition.spelling)
+            })
     }
 }
 
@@ -153,8 +157,8 @@ impl FromStr for AccessibilityPolicy {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        <Self as ValueEnum>::from_str(s, true)
-            .map_err(|_| format!("invalid accessibility policy '{s}'"))
+        parse_policy(s, &ACCESSIBILITY_POLICY_DEFINITIONS)
+            .ok_or_else(|| format!("invalid accessibility policy '{s}'"))
     }
 }
 
@@ -344,3 +348,7 @@ fn validate_jobs(config: &CliConfig) -> OrthoResult<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "config_tests.rs"]
+mod tests;

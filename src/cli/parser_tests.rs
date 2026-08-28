@@ -37,8 +37,8 @@ fn localized_help_snapshots_include_config_flag(
     #[case] snapshot_name: &str,
     #[case] config_help: &str,
 ) {
-    let localizer = build_localizer(Some(locale));
-    let mut command = localize_command(Cli::command(), localizer.as_ref());
+    let localizer: Arc<dyn Localizer> = Arc::from(build_localizer(Some(locale)));
+    let mut command = configured_command(Some(&localizer));
     let rendered_help = command.render_long_help().to_string();
     let normalized_help = normalize_fluent_isolates(&rendered_help);
 
@@ -82,7 +82,7 @@ fn localized_help_topics_include_localized_descriptions(
     #[case] expected_descriptions: [&str; 5],
 ) {
     let localizer = build_localizer(Some(locale));
-    let mut command = localize_command(Cli::command(), localizer.as_ref());
+    let mut command = configured_command(Some(&Arc::from(localizer)));
     let help = command
         .find_subcommand_mut("help")
         .expect("help subcommand should exist");

@@ -11,9 +11,12 @@ mod config;
 mod help;
 mod parser;
 mod parsing;
+mod policy_values;
+mod value_parser;
 
 pub use config::{AccessibilityPolicy, CliConfig, ColourPolicy, EmojiPolicy, ProgressPolicy};
 pub use parser::Cli;
+pub(crate) use parser::configured_command;
 
 /// Maximum number of jobs accepted by the CLI.
 pub(super) const MAX_JOBS: usize = 64;
