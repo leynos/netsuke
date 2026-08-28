@@ -24,6 +24,10 @@ use std::thread;
 use std::time::Duration;
 use tracing_subscriber::filter::LevelFilter;
 
+#[cfg(unix)]
+#[path = "public_ninja_execution_tests.rs"]
+mod public_ninja_execution_tests;
+
 /// Open a capability directory rooted at an owned UTF-8 temporary directory.
 pub(super) fn temporary_dir(temp: &tempfile::TempDir) -> anyhow::Result<cap_std::fs_utf8::Dir> {
     let path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
@@ -200,129 +204,6 @@ fn run_ninja_with_runs_in_the_requested_working_directory() -> anyhow::Result<()
          recorded {recorded:?}"
     );
     Ok(())
-}
-
-/// Run a successful public Ninja build request and capture its tracing events.
-///
-/// # Errors
-///
-/// Returns an error when the temporary manifest or executable cannot be
-/// created, or when the public build request fails.
-#[cfg(unix)]
-fn capture_public_ninja_execution(level_filter: LevelFilter) -> anyhow::Result<Vec<String>> {
-    use test_support::exec::write_exec_with_content;
-
-    let workspace = tempfile::tempdir()?;
-    let build_file = workspace.path().join("build.ninja");
-    test_support::fs::write(&build_file, "# empty manifest\n")?;
-    let fake_ninja =
-        write_exec_with_content(workspace.path(), "fake-ninja", "#!/bin/sh\nexit 0\n")?;
-    let options = NinjaProcessOptions::default();
-    let targets = BuildTargets::default();
-    let env = CommandEnv::inherit();
-    let (result, events) = with_test_subscriber(level_filter, |captured| {
-        let result = run_ninja_with(&NinjaBuildRequest {
-            program: &fake_ninja,
-            options: &options,
-            build_file: &build_file,
-            targets: &targets,
-            env: &env,
-            stderr_mode: StderrMode::Forward,
-        });
-        (result, captured.snapshot())
-    });
-    result?;
-    Ok(events)
-}
-
-/// Verify that `event` contains every stable field required by its contract.
-///
-/// # Errors
-///
-/// Returns an error identifying the missing field when the event violates its
-/// tracing contract.
-#[cfg(unix)]
-fn assert_event_fields(
-    event: &str,
-    required_fields: &[&str],
-    event_kind: &str,
-) -> anyhow::Result<()> {
-    for field in required_fields {
-        anyhow::ensure!(
-            event.contains(field),
-            "{event_kind} event should contain {field:?}: {event}"
-        );
-    }
-    Ok(())
-}
-
-/// Verify the stable informational event emitted by public Ninja execution.
-///
-/// # Errors
-///
-/// Returns an error when public execution emits any number other than one
-/// informational event, includes a required field, or exposes the command.
-#[cfg(unix)]
-fn assert_public_ninja_info_event(events: &[String]) -> anyhow::Result<()> {
-    let [event] = events else {
-        anyhow::bail!("expected one informational event, got {events:?}");
-    };
-    assert_event_fields(
-        event,
-        &[
-            "message=Executing Ninja subprocess",
-            "operation=\"build\"",
-            "ninja_program=",
-            "arg_count=",
-            "env_override_count=0",
-            "path_overridden=false",
-            "suppress_stderr=false",
-        ],
-        "informational",
-    )?;
-    anyhow::ensure!(
-        !event.contains("Executing command"),
-        "informational event must not contain the redacted command: {event}"
-    );
-    Ok(())
-}
-
-/// Verify the verbose command event emitted by public Ninja execution.
-///
-/// # Errors
-///
-/// Returns an error when public execution omits the debug command event or it
-/// does not retain the required correlation and command fields.
-#[cfg(unix)]
-fn assert_public_ninja_debug_event(events: &[String]) -> anyhow::Result<()> {
-    let Some(event) = events
-        .iter()
-        .find(|event| event.contains("message=Executing command:"))
-    else {
-        anyhow::bail!("expected a debug command event, got {events:?}");
-    };
-    assert_event_fields(
-        event,
-        &[
-            "operation=\"build\"",
-            "ninja_program=",
-            "suppress_stderr=false",
-            "Executing command:",
-            "fake-ninja",
-        ],
-        "debug command",
-    )
-}
-
-/// Verify public Ninja execution separates stable and verbose event payloads.
-#[cfg(unix)]
-#[test]
-fn public_ninja_execution_splits_info_and_debug_events() -> anyhow::Result<()> {
-    let info_events = capture_public_ninja_execution(LevelFilter::INFO)?;
-    assert_public_ninja_info_event(&info_events)?;
-
-    let debug_events = capture_public_ninja_execution(LevelFilter::DEBUG)?;
-    assert_public_ninja_debug_event(&debug_events)
 }
 
 /// Spawning a missing Ninja emits a spawn-failure warning whose
