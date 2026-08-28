@@ -1435,6 +1435,11 @@ Host patterns may contain wildcards such as `*.example.com`. A block rule wins
 over an allow rule. `--fetch-default-deny` permits only explicitly allowed
 hosts.
 
+Exact and wildcard host matching ignores one terminal DNS dot: `example.com`
+matches `example.com.`, and `*.example.com` matches `sub.example.com.`. The
+wildcard does not match the apex, so `*.example.com` does not match
+`example.com.`.
+
 Avoid placing secrets in URLs. Netsuke logs hosts and cache keys rather than
 complete URLs, but downloaded content and commands still run within the host
 trust boundary.

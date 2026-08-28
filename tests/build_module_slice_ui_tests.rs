@@ -27,6 +27,24 @@ const BUILD_SLICE_MODULES: &[(&str, &str)] = &[
     ("command.rs", "mod command;"),
 ];
 
+/// The CLI source paths that the build-script facade compiles and tracks.
+const BUILD_SLICE_RERUN_PATHS: &[&str] = &[
+    "src/cli/command.rs",
+    "src/cli/config.rs",
+    "src/cli/help.rs",
+    "src/cli/validation.rs",
+];
+
+/// Runtime-only modules that must not widen the build-script module slice.
+const RUNTIME_ONLY_RERUN_PATHS: &[&str] = &[
+    "src/cli/diag.rs",
+    "src/cli/discovery.rs",
+    "src/cli/merge.rs",
+    "src/cli/parser.rs",
+    "src/cli/parsing.rs",
+    "src/host_matching.rs",
+];
+
 /// Verify the production build-script module root and its runtime boundary.
 #[test]
 fn production_build_module_slice_has_expected_boundary() -> io::Result<()> {
@@ -213,6 +231,55 @@ fn fixture_contract_accepts_crlf_build_script_source() -> io::Result<()> {
     build_script.push_str("}\r\n#[path = \"src/cli_localization.rs\"]\r\n");
 
     assert_fixture_matches_build_source(&build_script)
+}
+
+/// Verify rerun directives track only the build-script's compiled module slice.
+#[test]
+fn build_script_rerun_directives_match_the_compiled_module_slice() -> io::Result<()> {
+    let build_script = test_support::fs::read_to_string(manifest_dir().join("build.rs"))?;
+    let normalised_build_script = build_script.replace("\r\n", "\n");
+    let rerun_paths = static_rerun_paths(&normalised_build_script);
+    let cli_rerun_paths = rerun_paths
+        .iter()
+        .filter(|path| path.starts_with("src/cli/"))
+        .copied()
+        .collect::<Vec<_>>();
+
+    if cli_rerun_paths.as_slice() != BUILD_SLICE_RERUN_PATHS {
+        return Err(io::Error::other(format!(
+            "build.rs's CLI rerun directives no longer match the compiled slice: {cli_rerun_paths:?}",
+        )));
+    }
+    if rerun_paths
+        .iter()
+        .filter(|path| **path == "src/host_pattern.rs")
+        .count()
+        != 1
+    {
+        return Err(io::Error::other(
+            "build.rs must track src/host_pattern.rs exactly once",
+        ));
+    }
+    for &path in RUNTIME_ONLY_RERUN_PATHS {
+        if rerun_paths.contains(&path) {
+            return Err(io::Error::other(format!(
+                "build.rs must not track runtime-only module {path:?}",
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Return static source paths emitted by `build.rs` as rerun directives.
+fn static_rerun_paths(build_script: &str) -> Vec<&str> {
+    build_script
+        .lines()
+        .filter_map(|line| {
+            line.trim()
+                .strip_prefix("println!(\"cargo:rerun-if-changed=")
+                .and_then(|directive| directive.strip_suffix("\");"))
+        })
+        .collect()
 }
 
 /// Supply the Cargo package variables consumed by Clap's command derives.
