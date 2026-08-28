@@ -48,6 +48,72 @@ fn release_admission_script() -> Result<String> {
     .context("read release-admission canary script")
 }
 
+/// Require the release workflow to invoke the canary admission boundary.
+fn require_release_admission_workflow_wiring(
+    contents: &str,
+    admission_command: &str,
+) -> Result<()> {
+    ensure!(
+        contents.contains("release-admission-canaries:"),
+        "release workflow should define the downstream canary admission job"
+    );
+    ensure!(
+        contents.contains("- release-admission-canaries"),
+        "release publication should require successful downstream canaries"
+    );
+    ensure!(
+        admission_command == "bash .github/scripts/require-release-admission-canaries.sh",
+        "release workflow should execute the tested canary-admission script"
+    );
+
+    Ok(())
+}
+
+/// Require every release-admission canary to retain its downstream revision.
+fn require_pinned_canary_revisions(admission_script: &str) -> Result<()> {
+    ensure!(
+        admission_script
+            .contains("leynos/repovec-appliance 6be365b4b30ef48537add5719a9b387ccc41777f")
+            && admission_script.contains("leynos/mxd 8146278cc82506c222bb78d4f3fc05c12ed95b41")
+            && admission_script
+                .contains("leynos/ortho-config b42b5d0adfacd79456d2a2f9edbf9f561aac943b"),
+        "release workflow should keep every v0.1.0 canary revision pinned"
+    );
+
+    Ok(())
+}
+
+/// Require the admission query to select runs for the exact downstream revision.
+fn require_exact_revision_run_lookup(admission_script: &str) -> Result<()> {
+    ensure!(
+        admission_script.contains("head_sha=${revision}&per_page=100"),
+        "canary admission should page the exact downstream revision's runs"
+    );
+
+    Ok(())
+}
+
+/// Require canary evidence to come from the trusted successful workflow run.
+fn require_successful_trusted_run_evidence(admission_script: &str) -> Result<()> {
+    ensure!(
+        admission_script.contains(".name == \\\"${workflow_name}\\\"")
+            && admission_script.contains(".conclusion == \\\"success\\\""),
+        "canary admission should require the named workflow to succeed"
+    );
+    ensure!(
+        admission_script.contains("actions/workflows/${workflow_id}/runs")
+            && admission_script.contains(".workflow_id == ${workflow_id}")
+            && admission_script.contains(".path == \\\".github/workflows/netsuke-canary.yml\\\"")
+            && admission_script.contains(".event == \\\"push\\\"")
+            && admission_script.contains(".head_branch == \\\"${branch}\\\"")
+            && admission_script.contains(".head_sha == \\\"${revision}\\\"")
+            && admission_script.contains("candidate ${GITHUB_SHA}"),
+        "canary admission should bind a trusted workflow run to the published revision"
+    );
+
+    Ok(())
+}
+
 #[test]
 fn behavioural_release_workflow_uses_shared_actions() {
     let contents = workflow_contents("release.yml").expect("release workflow should be readable");
@@ -115,45 +181,10 @@ fn behavioural_release_workflow_requires_pinned_canaries() -> Result<()> {
     let admission_command = release_admission_command(&workflow)?;
     let admission_script = release_admission_script()?;
 
-    ensure!(
-        contents.contains("release-admission-canaries:"),
-        "release workflow should define the downstream canary admission job"
-    );
-    ensure!(
-        admission_script
-            .contains("leynos/repovec-appliance 6be365b4b30ef48537add5719a9b387ccc41777f")
-            && admission_script.contains("leynos/mxd 8146278cc82506c222bb78d4f3fc05c12ed95b41")
-            && admission_script
-                .contains("leynos/ortho-config b42b5d0adfacd79456d2a2f9edbf9f561aac943b"),
-        "release workflow should keep every v0.1.0 canary revision pinned"
-    );
-    ensure!(
-        contents.contains("- release-admission-canaries"),
-        "release publication should require successful downstream canaries"
-    );
-    ensure!(
-        admission_command == "bash .github/scripts/require-release-admission-canaries.sh",
-        "release workflow should execute the tested canary-admission script"
-    );
-    ensure!(
-        admission_script.contains("head_sha=${revision}&per_page=100"),
-        "canary admission should page the exact downstream revision's runs"
-    );
-    ensure!(
-        admission_script.contains(".name == \\\"${workflow_name}\\\"")
-            && admission_script.contains(".conclusion == \\\"success\\\""),
-        "canary admission should require the named workflow to succeed"
-    );
-    ensure!(
-        admission_script.contains("actions/workflows/${workflow_id}/runs")
-            && admission_script.contains(".workflow_id == ${workflow_id}")
-            && admission_script.contains(".path == \\\".github/workflows/netsuke-canary.yml\\\"")
-            && admission_script.contains(".event == \\\"push\\\"")
-            && admission_script.contains(".head_branch == \\\"${branch}\\\"")
-            && admission_script.contains(".head_sha == \\\"${revision}\\\"")
-            && admission_script.contains("candidate ${GITHUB_SHA}"),
-        "canary admission should bind a trusted workflow run to the published revision"
-    );
+    require_release_admission_workflow_wiring(&contents, admission_command)?;
+    require_pinned_canary_revisions(&admission_script)?;
+    require_exact_revision_run_lookup(&admission_script)?;
+    require_successful_trusted_run_evidence(&admission_script)?;
 
     Ok(())
 }
