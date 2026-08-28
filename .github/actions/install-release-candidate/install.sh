@@ -2,6 +2,12 @@
 # Build and expose the exact Netsuke candidate requested by a downstream canary.
 set -euo pipefail
 
+candidate_revision="${NETSUKE_CANDIDATE_REVISION:-}"
+if [[ ! "${candidate_revision}" =~ ^[[:xdigit:]]{40}$ ]]; then
+  echo 'candidate revision must be a full 40-character hexadecimal commit' >&2
+  exit 1
+fi
+
 candidate_root="$(mktemp -d "${RUNNER_TEMP}/netsuke-candidate-XXXXXX")"
 candidate_bin_dir="${candidate_root}/bin"
 candidate_source_dir="${candidate_root}/source"
@@ -14,12 +20,12 @@ candidate_binary="${candidate_bin_dir}/${candidate_binary_name}"
 mkdir -p "${candidate_source_dir}" "${candidate_bin_dir}"
 git -C "${candidate_source_dir}" init --quiet
 git -C "${candidate_source_dir}" remote add origin https://github.com/leynos/netsuke.git
-git -C "${candidate_source_dir}" fetch --depth 1 origin "${NETSUKE_CANDIDATE_REVISION}"
+git -C "${candidate_source_dir}" fetch --depth 1 origin -- "${candidate_revision}"
 git -C "${candidate_source_dir}" checkout --detach --quiet FETCH_HEAD
 
 resolved_revision="$(git -C "${candidate_source_dir}" rev-parse HEAD)"
-if [[ "${resolved_revision}" != "${NETSUKE_CANDIDATE_REVISION}" ]]; then
-  echo "candidate revision mismatch: expected ${NETSUKE_CANDIDATE_REVISION}, got ${resolved_revision}" >&2
+if [[ "${resolved_revision}" != "${candidate_revision}" ]]; then
+  echo "candidate revision mismatch: expected ${candidate_revision}, got ${resolved_revision}" >&2
   exit 1
 fi
 
