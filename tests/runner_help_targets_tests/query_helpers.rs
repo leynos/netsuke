@@ -29,6 +29,8 @@ targets: []
         .current_dir(temp_path)
         .arg("--file")
         .arg(&manifest_path)
+        .arg("--emoji")
+        .arg("never")
         .arg("help")
         .arg("targets")
         .output()
