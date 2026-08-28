@@ -424,8 +424,8 @@ pub struct CallEntry {
 Dispatch acquires the registry lock, appends the invocation to the
 journal, selects a response, and _releases the lock before producing it_.
 Selection scans `entries` for the first matcher-accepting entry with
-remaining `times` budget. Ordering changes which entries are eligible, not
-what happens on a mismatch:
+remaining `times` budget. Ordering changes both which entries are eligible
+and what a mismatch means:
 
 - Unordered (the default) considers every entry in declaration order and
   takes the first that accepts the arguments and has budget left.
