@@ -3,9 +3,13 @@
 //! Compiled by `tests/command_env_ui_tests.rs` against the `netsuke` rlib with
 //! `--emit=metadata`. It proves an external caller can inject configuration
 //! environment access, retain a discovery outcome, emit diagnostics, transfer
-//! its cached layers, and pass them to the full merge without rediscovery.
+//! its cached layers, and pass them to the observer-enabled full merge without
+//! rediscovery.
 
-use netsuke::cli::{Cli, ConfigEnvProvider, merge_with_cached_file_layers, resolve_json_and_layers_outcome_with_env};
+use netsuke::cli::{
+    CachedMergeInput, Cli, ConfigEnvProvider, MergeEvent, MergeObserver,
+    merge_with_cached_file_layers_with_observer, resolve_json_and_layers_outcome_with_env,
+};
 use std::{ffi::OsString, sync::Arc};
 
 struct EmbeddedConfigEnv;
@@ -16,6 +20,38 @@ impl ConfigEnvProvider for EmbeddedConfigEnv {
     fn entries(&self) -> Vec<(OsString, OsString)> { Vec::new() }
 }
 
+struct EmbeddedObserver;
+
+impl MergeObserver for EmbeddedObserver {
+    fn observe(&mut self, event: MergeEvent) {
+        match event {
+            MergeEvent::DefaultsApplied
+            | MergeEvent::DefaultsFailed
+            | MergeEvent::EnvironmentFailed
+            | MergeEvent::CliOverridesAbsent
+            | MergeEvent::CliOverridesFailed => {}
+            MergeEvent::FileLayersCollected { layer_count } => {
+                let _ = layer_count;
+            }
+            MergeEvent::FileLayerCollectionFailed { error_count } => {
+                let _ = error_count;
+            }
+            MergeEvent::FileLayerApplied { path_hash } => {
+                let _ = path_hash;
+            }
+            MergeEvent::EnvironmentApplied { is_empty } => {
+                let _ = is_empty;
+            }
+            MergeEvent::CliOverridesApplied { override_keys } => {
+                let _ = override_keys;
+            }
+            MergeEvent::ValidationRejected { key, reason } => {
+                let _ = (key, reason);
+            }
+        }
+    }
+}
+
 fn main() {
     let localizer = Arc::from(netsuke::cli_localization::build_localizer(None));
     let (cli, matches) =
@@ -24,7 +60,9 @@ fn main() {
 
     let (_, outcome) = resolve_json_and_layers_outcome_with_env(&cli, &matches, &env);
     outcome.emit_diagnostics();
-    let _ = merge_with_cached_file_layers(&cli, &matches, &env, outcome.into_layers());
+    let input = CachedMergeInput::new(&cli, &matches, &env, outcome.into_layers());
+    let mut observer = EmbeddedObserver;
+    let _ = merge_with_cached_file_layers_with_observer(input, &mut observer);
 
     let _: Cli = Cli::default();
 }

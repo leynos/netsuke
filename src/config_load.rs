@@ -180,12 +180,14 @@ where
     E: cli::ConfigEnvProvider,
 {
     observability::record_config_load(observability::ConfigLoadPhase::Merge, clock, || {
-        cli::merge_with_cached_file_layers(
+        let mut observer = cli::TracingMergeObserver;
+        let input = cli::CachedMergeInput::new(
             context.parsed_cli,
             context.matches,
             context.config_env,
             resolution.discovered_layers,
-        )
+        );
+        cli::merge_with_cached_file_layers_with_observer(input, &mut observer)
     })
     .map(cli::Cli::with_default_command)
     .map_err(|err| {

@@ -72,6 +72,30 @@ fn workspace() -> Result<TempDir> {
     Ok(temp)
 }
 
+/// Assert real verbose stderr exposes bounded merge events without CLI values.
+fn assert_bounded_merge_events(joined: &str, private_host: &str) -> Result<()> {
+    for event in [
+        "applied default configuration layer",
+        "collected configuration file layers",
+        "applied configuration file layer",
+        "merged environment configuration layer",
+        "applied CLI override layer",
+    ] {
+        ensure!(
+            joined.contains(event),
+            "stderr should expose the {event:?} merge event: {joined}"
+        );
+    }
+    ensure!(
+        joined.contains("override_keys=[\"verbose\", \"fetch_allow_host\"]"),
+        "stderr should identify the active CLI override keys: {joined}"
+    );
+    ensure!(
+        !joined.contains(private_host),
+        "verbose diagnostics must not expose the CLI override value: {joined}"
+    );
+    Ok(())
+}
 /// A successful explicit selection is traced with bounded fields only.
 #[test]
 fn explicit_selection_traces_bounded_fields() -> Result<()> {
@@ -79,10 +103,18 @@ fn explicit_selection_traces_bounded_fields() -> Result<()> {
     let config = temp.path().join("customer@example.com.toml");
     test_support::fs::write(&config, "emoji = \"always\"\n").context("write config")?;
     let raw_path = config.to_string_lossy().into_owned();
+    let private_host = "private-host.example";
 
     let run = run_netsuke_in(
         temp.path(),
-        &["--verbose", "--config", raw_path.as_str(), "generate"],
+        &[
+            "--verbose",
+            "--config",
+            raw_path.as_str(),
+            "--fetch-allow-host",
+            private_host,
+            "generate",
+        ],
     )?;
     ensure!(
         run.success,
@@ -107,6 +139,7 @@ fn explicit_selection_traces_bounded_fields() -> Result<()> {
         joined.contains("path_hash="),
         "stderr should carry the bounded path hash: {joined}"
     );
+    assert_bounded_merge_events(&joined, private_host)?;
     ensure!(
         !joined.contains("customer@example.com.toml"),
         "verbose diagnostics must not expose the configuration file name: {joined}"
@@ -204,10 +237,47 @@ fn environment_validation_failure_identifies_config_merge() -> Result<()> {
             error_category: "validation",
         },
     )?;
+    let diagnostics = diagnostic_lines(&output).join("\n");
+    ensure!(
+        diagnostics.contains("key=\"jobs\"")
+            && diagnostics.contains("reason=\"job count is outside the supported range\""),
+        "stderr should identify the rejected jobs setting with a bounded reason: {diagnostics}"
+    );
     assert_config_metrics_snapshot(&output, &CONFIGURATION_MERGE_FAILURE_METRICS)?;
     Ok(())
 }
 
+/// A file-sourced interactive-mode setting reports its bounded rejection fields.
+#[test]
+fn file_validation_failure_reports_no_input_fields() -> Result<()> {
+    let temp = workspace()?;
+    let config = temp.path().join("no-input.toml");
+    test_support::fs::write(&config, "no_input = false\n").context("write config")?;
+
+    let run = run_netsuke_in(
+        temp.path(),
+        &[
+            "--verbose",
+            "--config",
+            config.to_string_lossy().as_ref(),
+            "generate",
+        ],
+    )?;
+    let output = ConfigurationDiagnosticOutput {
+        stderr: &run.stderr,
+    };
+    let diagnostics = diagnostic_lines(&output).join("\n");
+
+    ensure!(!run.success, "no_input = false must fail the run");
+    ensure!(
+        diagnostics.contains("key=\"no_input\"")
+            && diagnostics.contains(
+                "reason=\"no_input = false is unsupported because Netsuke has no interactive mode\""
+            ),
+        "stderr should identify the rejected no_input setting with a bounded reason: {diagnostics}"
+    );
+    Ok(())
+}
 /// An invalid explicit file is traced without echoing the parser's input.
 #[test]
 fn invalid_config_traces_without_parser_text() -> Result<()> {
@@ -289,6 +359,10 @@ fn json_mode_emits_no_tracing() -> Result<()> {
             "read config path variable",
             "using explicit config path",
             "using config discovery",
+            "applied default configuration layer",
+            "applied configuration file layer",
+            "applied CLI override layer",
+            "validation rejected merged configuration",
         ] {
             ensure!(
                 !run.stderr.contains(marker),

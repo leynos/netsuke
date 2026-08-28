@@ -22,21 +22,25 @@
 
 use clap::ArgMatches;
 use clap::parser::ValueSource;
-use ortho_config::declarative::LayerComposition;
 use ortho_config::figment::Figment;
-use ortho_config::{MergeComposer, OrthoMergeExt, OrthoResult, sanitize_value};
+use ortho_config::{OrthoError, OrthoMergeExt, OrthoResult, sanitize_value};
 use serde::Serialize;
 
 use serde_json::{Map, Value, json};
 
-use super::config::{BuildConfig, CliConfig};
+use super::config::{BuildConfig, CliConfig, validation_rejection_reason};
 use super::discovery::{
     DiscoveredLayers, EnvProvider, StdEnvProvider, discover_file_layers,
     push_discovered_file_layers,
 };
 use super::environment::EnvironmentLayer;
+use super::merge_input::{CachedMergeInput, MergeComposition};
+use super::merge_observability::{
+    NoopMergeObserver, collect_override_leaf_paths, is_empty_configuration_value,
+};
 use super::parser::{BuildArgs, Cli, Commands};
 use super::validation_error;
+use super::{MergeEvent, MergeObserver};
 
 /// Merge discovered configuration layers over parsed CLI input.
 ///
@@ -64,7 +68,6 @@ pub fn merge_with_config_and_env(
     env: &impl EnvProvider,
 ) -> OrthoResult<Cli> {
     let outcome = discover_file_layers(cli, env);
-    outcome.emit_diagnostics();
     merge_with_cached_file_layers(cli, matches, env, outcome.into_layers())
 }
 
@@ -83,38 +86,142 @@ pub fn merge_with_cached_file_layers(
     env: &impl EnvProvider,
     discovered: DiscoveredLayers,
 ) -> OrthoResult<Cli> {
-    let mut errors = Vec::new();
-    let mut composer = MergeComposer::with_capacity(4);
+    let mut observer = NoopMergeObserver;
+    let input = CachedMergeInput::new(cli, matches, env, discovered);
+    merge_with_cached_file_layers_with_observer(input, &mut observer)
+}
 
+/// Merge cached configuration layers and report bounded events to `observer`.
+///
+/// Application adapters opt into observability by supplying an observer. The
+/// ordinary merge functions use a no-op observer so they remain side-effect
+/// free and reusable in non-CLI contexts.
+///
+/// # Errors
+///
+/// Returns an [`ortho_config::OrthoError`] if layer composition or merging
+/// fails.
+pub fn merge_with_cached_file_layers_with_observer<E, O>(
+    input: CachedMergeInput<'_, E>,
+    observer: &mut O,
+) -> OrthoResult<Cli>
+where
+    E: EnvProvider + ?Sized,
+    O: MergeObserver + ?Sized,
+{
+    let CachedMergeInput {
+        cli,
+        matches,
+        env,
+        discovered,
+    } = input;
+    let mut composition = MergeComposition::new();
+
+    push_defaults_layer(&mut composition, observer);
+    push_discovered_file_layers(
+        &mut composition.composer,
+        &mut composition.errors,
+        discovered,
+        observer,
+    );
+    push_environment_layer(env, &mut composition, observer);
+    push_cli_layer(cli, matches, &mut composition, observer);
+
+    let merged = composition
+        .into_merge_result()
+        .inspect_err(|error| observe_validation_rejection(observer, error.as_ref()))?;
+    Ok(apply_config(cli, merged))
+}
+
+/// Push the default configuration layer and retain any serialization failure.
+///
+/// This helper belongs only to the cached merge boundary: it must append to the
+/// caller's shared composer and error collection rather than finish a merge.
+fn push_defaults_layer<O>(composition: &mut MergeComposition, observer: &mut O)
+where
+    O: MergeObserver + ?Sized,
+{
     match sanitize_value(&CliConfig::default()) {
-        Ok(value) => composer.push_defaults(value),
-        Err(err) => errors.push(err),
+        Ok(value) => {
+            observer.observe(MergeEvent::DefaultsApplied);
+            composition.composer.push_defaults(value);
+        }
+        Err(err) => {
+            observer.observe(MergeEvent::DefaultsFailed);
+            composition.errors.push(err);
+        }
     }
+}
 
-    push_discovered_file_layers(&mut composer, &mut errors, discovered);
-
+/// Push the injected environment layer and retain extraction failures.
+///
+/// This helper belongs only to the cached merge boundary and never reads the
+/// process environment: callers supply the environment adapter explicitly.
+fn push_environment_layer<O>(
+    env: &(impl EnvProvider + ?Sized),
+    composition: &mut MergeComposition,
+    observer: &mut O,
+) where
+    O: MergeObserver + ?Sized,
+{
     match Figment::from(EnvironmentLayer::new(env.entries()))
         .extract::<Value>()
         .into_ortho_merge()
     {
-        Ok(value) => composer.push_environment(value),
-        Err(err) => errors.push(err),
+        Ok(value) => {
+            observer.observe(MergeEvent::EnvironmentApplied {
+                is_empty: is_empty_configuration_value(&value),
+            });
+            composition.composer.push_environment(value);
+        }
+        Err(err) => {
+            observer.observe(MergeEvent::EnvironmentFailed);
+            composition.errors.push(err);
+        }
     }
-
-    match cli_overrides_from_matches(cli, matches) {
-        Ok(value) if !is_empty_value(&value) => composer.push_cli(value),
-        Ok(_) => {}
-        Err(err) => errors.push(err),
-    }
-
-    let composition = LayerComposition::new(composer.layers(), errors);
-    let merged = composition.into_merge_result(CliConfig::merge_from_layers)?;
-    Ok(apply_config(cli, merged))
 }
 
-/// Return whether `value` is an empty JSON object and so contributes no CLI overrides.
-fn is_empty_value(value: &Value) -> bool {
-    matches!(value, Value::Object(map) if map.is_empty())
+/// Push explicit CLI overrides and log their keys without recording values.
+///
+/// This helper is limited to the cached merge boundary because only that
+/// boundary owns the shared layer order and accumulated error collection.
+fn push_cli_layer<O>(
+    cli: &Cli,
+    matches: &ArgMatches,
+    composition: &mut MergeComposition,
+    observer: &mut O,
+) where
+    O: MergeObserver + ?Sized,
+{
+    match cli_overrides_from_matches(cli, matches) {
+        Ok(value) if !is_empty_configuration_value(&value) => {
+            // Values may echo user-supplied paths or host lists, so records
+            // identify only the keys that were explicitly overridden.
+            observer.observe(MergeEvent::CliOverridesApplied {
+                override_keys: collect_override_leaf_paths(&value),
+            });
+            composition.composer.push_cli(value);
+        }
+        Ok(_) => observer.observe(MergeEvent::CliOverridesAbsent),
+        Err(err) => {
+            observer.observe(MergeEvent::CliOverridesFailed);
+            composition.errors.push(err);
+        }
+    }
+}
+/// Forward known validation rejections to the explicit observer with fixed data.
+fn observe_validation_rejection<O>(observer: &mut O, error: &OrthoError)
+where
+    O: MergeObserver + ?Sized,
+{
+    if let OrthoError::Validation { key, .. } = error
+        && let Some(reason) = validation_rejection_reason(key)
+    {
+        observer.observe(MergeEvent::ValidationRejected {
+            key: key.clone(),
+            reason,
+        });
+    }
 }
 
 /// Collect CLI-layer overrides from arguments explicitly supplied on the command line.

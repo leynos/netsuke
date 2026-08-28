@@ -1042,6 +1042,32 @@ events report whether `--config`, `NETSUKE_CONFIG`, or automatic discovery won,
 whether a path was present, and which environment lookups were attempted.
 Events then identify whether Netsuke uses an explicit file or discovered layers.
 
+During the merge, verbose tracing also reports the defaults, file,
+environment, and CLI layers as they are applied. File-layer events include a
+bounded `path_hash` so operators can correlate a layer with discovery events
+without recording the raw path. CLI events record only the leaf keys in
+`override_keys`; they do not record override values such as paths or host
+lists. If validation rejects the merged configuration, the event includes the
+rejected setting in `key` and a bounded explanation in `reason`. These events
+make configuration precedence and rejection decisions auditable without
+exposing user-supplied values.
+
+#### Cached merge API (unstable)
+
+Programs using Netsuke's unstable Rust API can retain the layers from one
+discovery pass and observe the subsequent merge. Construct
+`CachedMergeInput::new(cli, matches, env, discovered)` with the parsed CLI
+values, an injected `ConfigEnvProvider`, and `DiscoveryOutcome::into_layers()`;
+then pass it to
+`cli::merge_with_cached_file_layers_with_observer(input, &mut observer)`.
+The application uses `TracingMergeObserver`, while another caller can provide
+its own `MergeObserver` implementation. Observers receive bounded
+`MergeEvent` values: layer application and failure states, file `path_hash`
+and layer counts, CLI override leaf keys, and validation `key`/`reason` fields.
+Configuration values and raw paths are never included. Ordinary
+`merge_with_config*` and `merge_with_cached_file_layers` calls use no-op
+observation and do not emit merge tracing.
+
 If an explicit file cannot be loaded, the warning records `failure_kind` as
 `Missing` or `LoadError`. Verbose tracing uses only `path_hash` and
 `path_present`; it never exposes a file name or full path. The unkeyed

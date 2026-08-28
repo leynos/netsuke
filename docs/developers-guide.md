@@ -2747,12 +2747,12 @@ where resolution itself fails. No library module installs a global subscriber.
 
 Tests use a separate capture boundary:
 
-`src/test_tracing_capture.rs` (`crate::test_tracing_capture`) is the
-workspace's single implementation for capturing structured tracing events in
-tests. `with_test_subscriber` installs a capturing `Layer` as the default
-subscriber for the duration of a closure, then returns the closure's result.
-Each event's fields are rendered as a space-separated list of `name=value`
-pairs — strings and `Debug` values are quoted — and appended to a shared buffer:
+`src/test_tracing_capture.rs` (`crate::test_tracing_capture`) is the root
+crate's `#[cfg(test)]` capture boundary for unit tests. `with_test_subscriber`
+installs a capturing `Layer` as the default subscriber for the duration of a
+closure, then returns the closure's result. Each event's fields are rendered as
+a space-separated list of `name=value` pairs — strings and `Debug` values are
+quoted — and appended to a shared buffer:
 
 ```rust
 use crate::test_tracing_capture::with_test_subscriber;
@@ -2771,10 +2771,15 @@ with_test_subscriber(LevelFilter::TRACE, |captured| {
 default. Only events emitted on the calling thread are captured; events emitted
 from threads spawned inside the closure are silently dropped.
 
-The module is `#[cfg(test)]` in the root crate, so it is available to unit
-tests only; integration tests under `tests/` compile as separate crates and
-cannot reach it. Coverage that needs the real binary's tracing output instead
-asserts on the process's stderr — see `tests/logging_stderr/config_tracing.rs`.
+The root-crate module is `#[cfg(test)]`, so it is available to unit tests only;
+integration tests under `tests/` compile as separate crates and cannot reach
+it. `test_support::tracing_capture` is the public, reusable capture boundary
+for integration tests. It is limited to test code: callers choose the
+`LevelFilter`, capture events only inside the supplied closure, and must not
+install a global subscriber or use it from production modules. Reuse it for
+in-process observability assertions such as configuration merging. Coverage
+that needs the real binary's tracing output continues to assert on the
+process's stderr — see `tests/logging_stderr/config_tracing.rs`.
 
 `CapturedEvents` has no `Default` implementation — obtain it only from the
 handle passed into the `with_test_subscriber` closure. `snapshot()` recovers a
@@ -2836,11 +2841,13 @@ outcome for the startup boundary.
 Normal command-line use requires no change. The Rust API remains an unstable
 beta surface, but callers that compose configuration themselves can avoid
 discovering and loading the same configuration files more than once. At the
-composition boundary, call `DiscoveryOutcome::emit_diagnostics()` after tracing
-is configured, then consume the outcome with `into_layers()` and pass the
-cached layers to `merge_with_cached_file_layers` for the full merge. This
-preserves diagnostics from the same discovery pass while avoiding repeated file
-loading.
+application composition boundary, call `DiscoveryOutcome::emit_diagnostics()`
+after tracing is configured, then consume the outcome with `into_layers()` and
+construct a `CachedMergeInput`. Pass that input to
+`merge_with_cached_file_layers_with_observer` with a `MergeObserver`, such as
+`TracingMergeObserver`, for the full merge. This preserves diagnostics from the
+same discovery pass while avoiding repeated file loading and keeps observation
+outside the merge query.
 
 If the composition boundary times discovery itself, call the public
 `record_discovery_outcome(&clock, started, &outcome)` after the pass completes.
@@ -2862,9 +2869,11 @@ merge and prevents a second discovery pass.
 with a large nested configuration payload. It protects the ownership transfer
 that avoids copying complete `MergeLayer` values before the cached merge.
 
-The standalone `merge_with_config_and_env` path performs discovery, emits the
-retained diagnostics and delegates to `merge_with_cached_file_layers`.
-`merge_with_config` is the process-environment wrapper around that path.
+The standalone `merge_with_config_and_env` path performs discovery and
+delegates to the ordinary, no-op-observer merge query. It does not replay
+retained discovery diagnostics or emit merge tracing. `merge_with_config` is
+the process-environment wrapper around that path. The application startup path
+replays discovery diagnostics and injects `TracingMergeObserver` explicitly.
 
 Deferred bounded discovery diagnostics are replay metadata only. Discovery
 errors remain owned by `DiscoveredLayers` and are handled by the diagnostic
@@ -2904,8 +2913,9 @@ Configuration merge helpers:
 - `discover_file_layers(cli, env) -> DiscoveryOutcome` performs one discovery
   pass and retains the discovered layers, discovery errors and bounded deferred
   diagnostics for the diagnostic and merge callers.
-- `push_discovered_file_layers(composer, errors, discovered) -> ()` transfers
-  the retained layers and discovery errors into the full merge composition.
+- `push_discovered_file_layers(composer, errors, discovered, observer) -> ()`
+  transfers the retained layers and discovery errors into the full merge
+  composition while reporting bounded file-layer events to the observer.
 - `collect_file_layers_with_normalizer_and_trace(directory, normalizer, env_source)`
   runs the one discovery pass with the injected path normalizer and environment
   source, and retains bounded project-scope trace metadata for deferred
@@ -2917,7 +2927,12 @@ Configuration merge helpers:
   `DiscoveryOutcome` so startup can emit diagnostics after tracing setup and
   then call `into_layers()`.
 - `merge_with_cached_file_layers(cli, matches, env, discovered)` consumes the
-  discovered layers without rediscovery.
+  discovered layers without rediscovery and uses no-op observation.
+- `CachedMergeInput::new(cli, matches, env, discovered)` packages parsed input
+  and cached layers for an observer-enabled merge.
+- `merge_with_cached_file_layers_with_observer(input, observer)` consumes the
+  cached input and reports bounded `MergeEvent` values to the supplied
+  `MergeObserver`.
 - `is_empty_value(value: &serde_json::Value) -> bool` detects an empty CLI
   override object.
 - `retain_layers_and_resolve_json(layers)` transfers each owned file-layer
@@ -2988,6 +3003,13 @@ pub fn resolve_merged_json_with_env(
     env: &impl ConfigEnvProvider,
 ) -> OrthoResult<bool>;
 ```
+
+These ordinary merge and JSON-resolution queries have no tracing side effects.
+The startup boundary obtains the cached layers, replays their deferred
+discovery diagnostics, and uses `CachedMergeInput::new` with
+`merge_with_cached_file_layers_with_observer` when it needs the bounded merge
+events. A caller supplying its own `MergeObserver` can consume those events
+without installing a global subscriber.
 
 The `cli` module re-exports this trait publicly as `ConfigEnvProvider` (and
 `StdEnvProvider` as `ConfigStdEnvProvider`) to keep the CLI seam distinct from
@@ -3333,7 +3355,10 @@ metrics are recorded by `config_load::resolve_configuration`, which receives a
 `resolve_json_mode_or_exit` and `merge_cli_or_exit`. The diagnostic-mode helper
 resolves and caches discovered layers with
 `cli::resolve_json_and_layers_outcome_with_env`; the merge helper passes those
-cached layers to `cli::merge_with_cached_file_layers` for the full merge.
+cached layers to `cli::merge_with_cached_file_layers_with_observer` with a
+`cli::TracingMergeObserver` for the full merge. The boundary replays deferred
+discovery diagnostics before that merge; the ordinary query helpers do not emit
+tracing themselves.
 Phase-level metrics are composed in `src/observability.rs` around those two
 operations.
 
@@ -4222,6 +4247,14 @@ configuration-loading boundaries in `src/main.rs`. Keep configuration loading
 itself as a plain query: compose this instrumentation only at the CLI
 composition root. Other subsystem boundaries retain their local telemetry
 modules and must not add unbounded configuration detail to these series.
+
+The public `cli::MergeObserver` seam carries bounded `cli::MergeEvent` values
+from `merge_with_cached_file_layers_with_observer`. The application supplies
+`cli::TracingMergeObserver` from `config_load::resolve_configuration`; direct
+callers of the ordinary merge queries use no-op observation and emit no
+tracing. Custom observers may consume the bounded events, which exclude raw
+configuration values and paths. Keep observer ownership at the application
+boundary rather than installing a subscriber in a query.
 
 The phase-level metric contract is:
 
