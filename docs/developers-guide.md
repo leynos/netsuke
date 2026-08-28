@@ -336,11 +336,12 @@ emitting an unusable rule.
 
 ### Dependency-only actions and targets
 
-`ast::Recipe::DependencyOnly` represents an action or target whose non-empty
-`deps` list is its complete operation. Manifest loading renders `deps` before
-validating recipes, then rejects dependency-only rules and actions or targets
-whose rendered dependencies are absent. Entries with executable work continue
-to require exactly one of `command`, `script`, or `rule`.
+The manifest's internal dependency-only marker represents an action or target
+whose non-empty `deps` list is its complete operation. Manifest loading renders
+`deps` before validating recipes, then rejects dependency-only rules and
+actions or targets whose rendered dependencies are absent. Entries with
+executable work continue to require exactly one of `command`, `script`, or
+`rule`.
 
 Manifest-to-IR lowering keeps the dependency list as `BuildEdge::implicit_deps`
 and registers the dependency-only action without a command. The shared action

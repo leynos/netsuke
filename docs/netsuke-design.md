@@ -312,10 +312,12 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   these entries are dependency-only aggregates and must not use a no-op command
   such as `command: ":"`.
 
-  Internally, these options deserialize into a shared `Recipe` enum. Presence
-  of exactly one of `command`, `script`, or `rule` determines an executable
-  variant; omission selects `Recipe::DependencyOnly` for actions and targets,
-  subject to the non-empty `deps` validation described below.
+  Internally, these options deserialize into a shared recipe representation.
+  Presence of exactly one of `command`, `script`, or `rule` determines an
+  executable variant; omission selects an internal dependency-only marker for
+  actions and targets, subject to the non-empty `deps` validation described
+  below. The marker is not part of the public recipe enum, preserving its
+  existing exhaustive-match contract.
 
 - `description`: An optional, user-friendly string that is printed to the
   console when the rule is executed. This maps to Ninja's `description` field
@@ -396,11 +398,12 @@ emits a `RecipeConflict` error with the message "rule, command and script are
 mutually exclusive". When `exec` is implemented, this diagnostic must include
 all recipe field names.
 
-This union deserializes into the same `Recipe` enum used for rules. The parser
-enforces that at most one variant is present and errors if multiple recipe
-fields are specified. Omission yields `Recipe::DependencyOnly`; manifest
-validation then requires non-empty `deps` for actions and targets and rejects
-the variant for rules.
+This union deserializes into the same recipe representation used for rules. The
+parser enforces that at most one variant is present and errors if multiple
+recipe fields are specified. Omission yields an internal dependency-only
+marker; manifest validation then requires non-empty `deps` for actions and
+targets and rejects the marker for rules. The marker is not part of the public
+recipe enum, preserving its existing exhaustive-match contract.
 
 - `sources`: Files or target outputs the recipe materially consumes. This can
   be a single string or a list of strings. If any source entry matches the
@@ -781,7 +784,6 @@ pub enum Recipe {
     Command { command: StringOrList },
     Script { script: String },
     Rule { rule: StringOrList },
-    DependencyOnly,
     // FUTURE: planned Recipe::Exec extension; not present in src/ast/mod.rs yet.
     Exec { exec: ExecRecipe },
 }
@@ -2040,9 +2042,9 @@ This transformation involves several steps:
    deserialization, and `actions` participate in the same expansion pass. The
    IR stage receives only selected target and action entries. For each item,
    resolve all strings into `Utf8PathBuf`s and resolve all dependency names
-   against other targets. An action or target with `Recipe::DependencyOnly`
-   registers a dependency-only action and carries its non-empty `deps` list
-   as implicit dependencies; it has no executable command of its own.
+   against other targets. An action or target with the internal dependency-only
+   marker registers a dependency-only action and carries its non-empty `deps`
+   list as implicit dependencies; it has no executable command of its own.
 
 3. **Action Registration and Edge Creation:**
 
@@ -2094,7 +2096,6 @@ This transformation involves several steps:
    leaves the input graph untouched. Missing dependencies encountered during
    traversal are logged, collected, and returned alongside any cycle to aid
 diagnostics.
-
 
 ### 5.4 Ninja file synthesis (`src/ninja_gen/mod.rs`)
 
