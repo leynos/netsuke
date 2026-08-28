@@ -198,6 +198,16 @@ resolution entirely rather than setting the variable for a child to read.
 
 ## Addendum
 
+### 2026-08-26: EnvLock retirement
+
+`EnvLock` is retired rather than hardened. Production signatures must inject
+`mockable::Env`, with `mockable::DefaultEnv` at production boundaries and
+`mockable::MockEnv` in tests. CWD callers must use the existing
+working-directory seam, absolute paths, or the `-C/--directory` route.
+
+Migrations are tracked in issues #491, #492, and #493; removal is tracked in
+issue #494. No new `EnvLock` callers or synchronization tests are permitted.
+
 ### 2026-08-25: BDD isolation routes
 
 Issue #492 applied this taxonomy to `rstest-bdd`, whose steps execute in the

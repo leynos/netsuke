@@ -1,7 +1,14 @@
-//! Serialise environment mutations across tests.
+//! Serialize legacy process-global environment and CWD mutations.
 //!
-//! The `EnvLock` guard ensures that changes to global state like `PATH` are
-//! synchronized, preventing interference between concurrently running tests.
+//! `EnvLock` is a thread-bound, re-entrant global lock for legacy tests that
+//! mutate process-global environment or current-working-directory state. It
+//! prevents those mutations from interfering while the legacy callers run.
+//! The seam is retired and remains only until its callers migrate: use an
+//! injected `mockable::Env` for environment-variable access, and the existing
+//! working-directory seam, absolute paths, or `-C/--directory` for CWD access.
+//! Issue #494 tracks removal. Add no callers or tests; the
+//! [ADR-008](../../docs/adr-008-environment-seam-taxonomy.md) records the
+//! decision.
 
 use std::cell::RefCell;
 use std::marker::PhantomData;

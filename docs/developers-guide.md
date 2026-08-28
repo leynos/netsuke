@@ -635,7 +635,7 @@ capability-boundary policy regardless of how Dylint resolves the current crate.
 `test_support` is a workspace member with one sanctioned ambient boundary
 configured per crate. Its second, scoped invocation supplies
 `test_support/dylint.toml` through `DYLINT_TOML`, and uses
-`--package test_support` and `--no-deps`, because running from a member
+`--package test_support` and `--no-deps` because running from a member
 directory alone would otherwise check the parent workspace. That configuration
 names only `test_support::fs` in `excluded_paths`. The root `excluded_crates`
 must not contain `test_support`: every other module in the crate remains
@@ -2642,7 +2642,14 @@ shapes in [ADR-008](adr-008-environment-seam-taxonomy.md); it mirrors the
 ### `EnvLock`
 
 `test_support::env_lock::EnvLock` serializes the few tests that change the
-process working directory. Acquire it before `CwdGuard` so restoration occurs
+process working directory. It is retired and retained only until those callers
+migrate; do not add callers or tests.
+[ADR-008](adr-008-environment-seam-taxonomy.md) records its retirement.
+Environment-variable callers migrate to injected `mockable::Env` seams in
+production signatures. Current-working-directory callers migrate to the
+existing working-directory seam, such as an injected base or current-directory
+path, or use absolute paths or `-C/--directory` instead. Until the current
+CWD-only callers migrate, acquire it before `CwdGuard` so restoration occurs
 before the lock is released:
 
 ```rust
@@ -2677,6 +2684,10 @@ order: `CwdGuard` restores the CWD first, and `EnvLock` releases second.
 These direct CWD tests are the narrow exception for exercising CWD-dependent
 code itself. BDD scenarios instead retain an absolute manifest path or pass
 `-C/--directory` into the CLI; neither approach changes the harness process CWD.
+
+This legacy ordering remains only for current CWD-only callers while they
+migrate; do not add `EnvLock` callers or tests.
+[ADR-008](adr-008-environment-seam-taxonomy.md) records its retirement.
 
 ### Injected and child-process environments
 
@@ -2715,8 +2726,11 @@ state.
    injected in-process library assertion.
 4. Retain absolute paths or pass `-C/--directory` instead of changing the BDD
    harness CWD.
-5. Acquire `EnvLock` and then `CwdGuard` only for direct CWD-specific tests.
-6. Never mutate the harness process environment.
+5. For current legacy CWD-only callers, acquire `EnvLock` and then `CwdGuard`.
+6. Add no `EnvLock` callers or tests;
+   [ADR-008](adr-008-environment-seam-taxonomy.md) records its retirement, and
+   issue #494 tracks removal.
+7. Never mutate the harness process environment.
 
 ### `tracing_capture`
 
