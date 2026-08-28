@@ -12,7 +12,7 @@ Feature: Ninja file generation
     Then the ninja file contains "build clean:"
     And the ninja file contains "rm -rf build"
 
-  Scenario: Shell variables stay visible to the child shell
+  Scenario: The child shell receives the sentinel environment
     When the manifest file "tests/data/dollar_escaping.yml" is compiled to IR
     And the ninja file is generated
     And the generated Ninja target "dollar-output" is run with sentinel "sentinel-value"
