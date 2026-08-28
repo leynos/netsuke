@@ -546,8 +546,10 @@ invoked from, so `glob('src/*.c')` in a `Netsukefile` at the project root
 matches `<project>/src/*.c`. The [quick-start guide](quickstart.md) shows a
 complete runnable example.
 
-Patterns may be absolute or relative to the working directory, including
-parent-relative patterns such as `glob('../shared/*.h')`. Expansion is scoped
+Patterns may be absolute or relative to the manifest directory, including
+parent-relative patterns such as `glob('../shared/*.h')`. Relative results
+retain their pattern-relative spelling after Netsuke removes the workspace
+base; absolute patterns remain absolute. Expansion is scoped
 to the pattern's longest literal directory prefix — the text up to the first
 `*`, `?`, `[` or `{`, trimmed back to the last separator, so `src/` for
 `src/**/*.c`. If that prefix does not exist, or names something that is not a
@@ -953,11 +955,11 @@ relative output paths:
 netsuke --directory /path/to/project build
 ```
 
-An explicit `--config` path is always resolved relative to the shell's
-original working directory — `--directory` anchors automatic configuration
-discovery and manifest lookup, not explicit selectors. Pass an absolute path
-(or run from the project directory) when the selector is not relative to where
-the shell started.
+When `--directory` is supplied, a relative `--config` path (and a relative
+`NETSUKE_CONFIG` value) resolves from that directory. Absolute selectors remain
+unchanged. Without `--directory`, a relative selector resolves from the process
+working directory. Pass an absolute path when the selector must not depend on
+either location.
 
 ### Generate and inspect artefacts
 

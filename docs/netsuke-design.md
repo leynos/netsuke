@@ -1152,9 +1152,15 @@ providing a secure bridge to the underlying system.
   these are normalized to the host platform before matching. Results contain
   only files (directories are ignored) and path separators are normalized to
   `/`. Leading-dot entries are matched by wildcards. Empty results are
-  represented as `[]`. Invalid patterns surface as `SyntaxError`; filesystem
-  iteration errors surface as `InvalidOperation`, matching minijinja error
-  semantics. On Unix, backslash escapes for glob metacharacters (`[`, `]`, `{`,
+  represented as `[]`. The manifest parse boundary supplies the manifest
+  directory or workspace root to `glob_paths(pattern, base)` and internal
+  `expand_glob(pattern, base)`: relative patterns, including parent-relative
+  ones, resolve from that root and retain their pattern-relative spelling after
+  base stripping, while absolute patterns remain absolute. This expansion does
+  not read or mutate process-global working-directory state. Invalid patterns
+  surface as `SyntaxError`; filesystem iteration errors surface as
+  `InvalidOperation`, matching minijinja error semantics. On Unix, backslash
+  escapes for glob metacharacters (`[`, `]`, `{`,
   `}`, `*`, `?`) are preserved during separator normalization. A backslash
   before `*` or `?` is kept only when the wildcard is trailing or followed by
   an alphanumeric, `_`, or `-`; otherwise it becomes a path separator so
@@ -3489,12 +3495,12 @@ manual flag repetition.
   automatic discovery. If an explicit selector is set, the selected file is
   loaded directly and bypasses discovery, but still participates in the normal
   precedence ladder: defaults < file < environment < CLI.
-- Relative paths passed to `--config` (and `NETSUKE_CONFIG`) are resolved
-  against the shell's original working directory, independent of
-  `-C/--directory`: `-C` anchors automatic project discovery and manifest
-  lookup, not an explicit selector (see ADR-004). Pass an absolute path, or run
-  from the intended directory, when the selector is not relative to where the
-  shell started.
+- Relative paths passed to `--config` (and `NETSUKE_CONFIG`) resolve against
+  `-C/--directory` when it is supplied, alongside project discovery and
+  manifest lookup. Absolute selectors retain their original spelling. Without
+  `-C`, a relative selector resolves from the process working directory (see
+  ADR-004). Pass an absolute path when the selector must not depend on either
+  location.
 
 ### 8.5 Manual Pages
 

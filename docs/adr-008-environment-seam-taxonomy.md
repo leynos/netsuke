@@ -205,6 +205,13 @@ resolution entirely rather than setting the variable for a child to read.
 `mockable::MockEnv` in tests. CWD callers must use the existing
 working-directory seam, absolute paths, or the `-C/--directory` route.
 
+Manifest parsing owns a separate base-directory seam: it passes the manifest
+directory or workspace root to `glob_paths(pattern, base)` and internal
+`expand_glob(pattern, base)`. Relative glob patterns, including parent-relative
+ones, resolve from that injected root and retain their pattern-relative result
+spelling; absolute patterns remain absolute. This path neither reads nor
+mutates process-global working-directory state during expansion.
+
 Migrations are tracked in issues #491, #492, and #493; removal is tracked in
 issue #494. No new `EnvLock` callers or synchronization tests are permitted.
 
@@ -223,5 +230,7 @@ test-harness process. The suite now uses two routes:
 The BDD suite no longer uses `EnvLock` or `CwdGuard` to coordinate
 process-global environment or working-directory changes. Route B avoids CWD
 changes by passing absolute paths or preserving `-C/--directory` for automatic
-project discovery. Explicit relative `--config` and `NETSUKE_CONFIG` selectors
-remain anchored to the child process CWD; they are not rebased beneath `-C`.
+project discovery. When `-C/--directory` is supplied, explicit relative
+`--config` and `NETSUKE_CONFIG` selectors resolve beneath that directory.
+Absolute selectors remain unchanged; without `-C`, relative selectors resolve
+from the child process CWD.

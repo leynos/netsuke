@@ -1572,6 +1572,14 @@ on the repository's then-pinned `nightly-2026-06-25` supplying Cranelift
 between the two rows is the durable signal, not the seconds; the run below is
 representative of three consecutive runs that agreed to within 0.4 s.
 
+`make bench-glob-expansion` measures `glob_paths("**/*.txt", Some(base))`
+against its equivalent absolute, unbased pattern. Its deterministic fixture is
+created before timing starts and each result is passed to `test::black_box`, so
+the benchmark measures expansion rather than fixture construction or an
+optimized-away query. Use it when changing glob-base preparation, path
+rebasing, or separator formatting; compare the two cases on the same machine,
+not their absolute timings across hosts.
+
 | Variant                         | Clean build (s) | Incremental build (s) |
 | ------------------------------- | --------------- | --------------------- |
 | Default (LLVM, platform linker) | 11.6            | 0.8                   |
@@ -2384,6 +2392,35 @@ character, non-ASCII byte, or other punctuation returns a MiniJinja
 Jinja-specific: `glob_paths` retains its filesystem-query contract and returns
 all matching UTF-8 file paths without applying shell-safety validation.
 
+### Base-directory seam
+
+`glob_paths(pattern, base)` and the internal `expand_glob(pattern, base)` take
+an optional injected `Utf8Path` base. The manifest parse boundary owns the
+workspace-root decision and passes that root to the query closure; a
+manifest-rooted parse therefore neither reads nor mutates process-global
+working-directory state during glob expansion.
+
+- A relative pattern, including a parent-relative pattern, resolves from the
+  manifest directory or workspace root. The resolved base is stripped only
+  after matching, so results retain the spelling relative to the original
+  pattern (`../shared/file.txt` remains parent-relative).
+- An absolute pattern does not use or strip the injected base.
+- `PreparedGlob` canonicalizes a valid relative base to preserve symlinked
+  workspace behaviour, escapes that base as a literal for glob compilation, and
+  retains the unescaped path for result rebasing. `open_root_dir` receives
+  `None` for this prepared search because the base is already embedded.
+
+The focused base and property tests cover no-double-base, symlinked base,
+base-path metacharacters, canonicalization failure, nested and parent-relative
+results, absolute patterns, and forward-slash output. Run
+`make bench-glob-expansion` alongside the relevant tests when changing this hot
+path.
+
+The adjacent configuration-discovery seam keeps explicit `--config` and
+`NETSUKE_CONFIG` selectors independent of `-C/--directory`: relative selectors
+resolve from the process working directory, absolute selectors are unchanged,
+and `-C` anchors automatic configuration discovery and manifest lookup.
+
 ### Capability scope
 
 The metadata check that filters directories out of a glob's results goes
@@ -2986,13 +3023,13 @@ accepts an explicit directory for configuration discovery, and environment
 readers are injected into the functions that need them. None of these depend on
 the process working directory or process-global environment state.
 
-Clippy's `disallowed-methods` configuration and `scripts/check-env-mutation.sh`
-(run by `make lint`) reject `std::env::set_var`, `std::env::remove_var`, and
-`std::env::set_current_dir` anywhere under `src/`, `tests/`, and
-`test_support/`. Child-process configuration stays confined to the `Command`
-builders: `Command::env`, `Command::env_clear`, and `Command::current_dir`.
-The gate itself is a Python script and follows the
-[scripting standards](scripting-standards.md); see below.
+`make lint` runs the environment-mutation gate before its rustdoc, Clippy, and
+Whitaker stages. The gate and Clippy's `disallowed-methods` configuration reject
+`std::env::set_var`, `std::env::remove_var`, and `std::env::set_current_dir`
+anywhere under `src/`, `tests/`, and `test_support/`. Child-process
+configuration stays confined to the `Command` builders: `Command::env`,
+`Command::env_clear`, and `Command::current_dir`. The gate itself is a Python
+script and follows the [scripting standards](scripting-standards.md); see below.
 
 ### Scripting standards for automation scripts
 

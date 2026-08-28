@@ -158,8 +158,8 @@ impl GlobSkippedEntries {
 /// Entry selected by the capability-scoped metadata query.
 #[derive(Debug)]
 pub(super) enum GlobEntry {
-    /// A matched regular file path with separators normalized to `/`.
-    Path(String),
+    /// A matched regular file path retained until final result formatting.
+    Path(Utf8PathBuf),
     /// A symlink the capability cannot resolve, given relative to the prefix.
     UnreachableSymlink(camino::Utf8PathBuf),
     /// The match does not name a regular file.
@@ -323,7 +323,7 @@ pub(super) fn expand_glob(
     let mut skipped = GlobSkippedEntries::default();
     for entry in entries {
         match process_glob_entry(entry, &prepared.pattern, &root)? {
-            GlobEntry::Path(path) => paths.push(strip_base(prepared.strip.as_deref(), path)),
+            GlobEntry::Path(path) => paths.push(strip_base(prepared.strip.as_deref(), &path)),
             GlobEntry::UnreachableSymlink(relative) => {
                 skipped.record_unreachable_symlink(relative);
             }
@@ -430,18 +430,13 @@ fn resolve_relative_glob_base(base: &Utf8Path) -> std::result::Result<Utf8PathBu
 /// `Some` exactly when the matcher ran against `base.join(pattern)`, so every
 /// match starts with `base` and the lexical strip cannot fail in a way that
 /// would drop real matches. The fallback returns the path unchanged.
-fn strip_base(base: Option<&Utf8Path>, path: String) -> String {
-    let Some(dir) = base else {
-        return path;
-    };
-    let mut relative = path;
-    if let Ok(stripped) = Utf8Path::new(&relative).strip_prefix(dir) {
-        // One allocation: the matched path is already owned, so replace
-        // separators in place instead of materialising a second String via
-        // `to_string_lossy().replace(..)`.
-        relative = stripped.as_str().replace('\\', "/");
-    }
-    relative
+fn strip_base(base: Option<&Utf8Path>, path: &Utf8Path) -> String {
+    let relative = base
+        .and_then(|dir| path.strip_prefix(dir).ok())
+        .unwrap_or(path);
+    // Format once, after any lexical base stripping, so a matched path does
+    // not first allocate a normalized String only to allocate again to rebase.
+    relative.as_str().replace('\\', "/")
 }
 /// Record the bounded observations from a completed expansion.
 ///

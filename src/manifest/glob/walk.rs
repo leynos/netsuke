@@ -389,7 +389,7 @@ fn names_a_file(root: &GlobRoot, path: &Utf8Path) -> io::Result<GlobEntry> {
         return Ok(GlobEntry::UnreachableSymlink(relative.to_path_buf()));
     };
     if metadata.is_file() {
-        return Ok(GlobEntry::Path(path.as_str().replace('\\', "/")));
+        return Ok(GlobEntry::Path(path.to_path_buf()));
     }
     Ok(GlobEntry::NotAFile)
 }

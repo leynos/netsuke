@@ -16,6 +16,7 @@
 use super::super::glob_paths;
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
+use minijinja::ErrorKind;
 use proptest::collection;
 use proptest::prelude::*;
 use std::collections::BTreeSet;
@@ -202,6 +203,56 @@ fn results_use_forward_slashes() -> Result<()> {
     ensure!(
         results == vec!["nested/leaf.txt".to_owned()],
         "expected forward-slash spelling, got {results:?}"
+    );
+    Ok(())
+}
+
+/// Treat glob metacharacters in an injected base as literal path components.
+///
+/// Each neighbouring decoy would match `*.txt` only if the base were compiled
+/// as glob syntax instead of being escaped before the user pattern is joined.
+#[rstest::rstest]
+#[case("literal*base", "literalxbase")]
+#[case("literal?base", "literalxbase")]
+#[case("literal[ab]base", "literalabase")]
+#[case("literal{a,b}base", "literalabase")]
+fn injected_base_metacharacters_are_literal(
+    #[case] base_name: &str,
+    #[case] decoy_name: &str,
+) -> Result<()> {
+    let temp = tempdir()?;
+    let base = temp.path().join(base_name);
+    let decoy = temp.path().join(decoy_name);
+    test_fs::create_dir(&base)?;
+    test_fs::create_dir(&decoy)?;
+    test_fs::write(base.join("wanted.txt"), "wanted")?;
+    test_fs::write(decoy.join("decoy.txt"), "decoy")?;
+
+    let results = glob_paths(
+        "*.txt",
+        Some(Utf8Path::from_path(&base).expect("temp paths are UTF-8")),
+    )?;
+    ensure!(
+        results == vec!["wanted.txt".to_owned()],
+        "base {base_name:?} must not match decoy {decoy_name:?}: {results:?}"
+    );
+    Ok(())
+}
+
+/// Propagate a missing injected base as the glob I/O error rather than
+/// silently searching from an unrelated fallback directory.
+#[test]
+fn missing_injected_base_is_an_io_error() -> Result<()> {
+    let temp = tempdir()?;
+    let missing = temp.path().join("missing");
+    let error = glob_paths(
+        "*.txt",
+        Some(Utf8Path::from_path(&missing).expect("temp paths are UTF-8")),
+    )
+    .expect_err("missing injected base must not fall back to another directory");
+    ensure!(
+        error.kind() == ErrorKind::InvalidOperation,
+        "missing base must preserve the glob I/O error policy, got {error:?}"
     );
     Ok(())
 }
