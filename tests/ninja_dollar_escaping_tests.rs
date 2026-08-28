@@ -191,6 +191,7 @@ fn ninja_expands_only_netsuke_placeholders(#[case] recipe: Recipe) -> Result<()>
     Ok(())
 }
 
+#[cfg(unix)]
 #[rstest]
 #[case::unset(None, "fallback")]
 #[case::set(Some(SENTINEL_VALUE), SENTINEL_VALUE)]

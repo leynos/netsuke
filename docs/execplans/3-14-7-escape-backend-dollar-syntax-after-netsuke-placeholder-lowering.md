@@ -1303,3 +1303,11 @@ Windows. The real-execution regression now runs only on Unix, while B5
 continues to validate script lowering on every platform. The next Windows run
 will confirm this platform-specific test selection; status remains
 `IN PROGRESS` until then.
+
+2026-08-28 — the Windows selection rerun correctly skipped B2, and the
+real-Ninja CRLF property and BDD sentinel scenario passed. It found one more
+test with the same platform assumption: the shell-default execution test uses
+the POSIX-only `printf` command and `${…}` expansion. It is now Unix-only for
+the same reason as B2. Parser assertions remain cross-platform, and the BDD
+scenario continues to exercise explicit child-process environment propagation
+on Windows. Status remains `IN PROGRESS` pending its corrected Windows rerun.
