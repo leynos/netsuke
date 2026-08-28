@@ -41,10 +41,17 @@ pub(crate) fn snapshot_settings(subdir: &str) -> Settings {
 /// content remains visible in snapshot diffs.
 fn add_generator_version_filter(settings: &mut Settings) {
     settings.add_filter(
-        r#"("generator": \{\s*\n\s*"name": "netsuke",\s*\n\s*"version": ")[^"]+(")"#,
-        r"${1}[version]${2}",
+        GENERATOR_VERSION_FILTER_PATTERN,
+        GENERATOR_VERSION_REPLACEMENT,
     );
 }
+
+/// Match the generator-version field scoped to Netsuke's generator object.
+const GENERATOR_VERSION_FILTER_PATTERN: &str =
+    r#"("generator": \{\s*\n\s*"name": "netsuke",\s*\n\s*"version": ")[^"]+(")"#;
+
+/// Replace the matched generator version while retaining its JSON structure.
+const GENERATOR_VERSION_REPLACEMENT: &str = r"${1}[version]${2}";
 
 /// Build snapshot settings for diagnostic-JSON documents.
 ///
@@ -77,4 +84,68 @@ pub(crate) fn theme_prefs(theme: ThemePreference) -> OutputPrefs {
         ThemeContext::new(None, None, OutputMode::Standard),
         |_| None,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    //! Verify that generator-version redaction remains scoped across SemVer values.
+
+    use super::*;
+    use proptest::prelude::*;
+    use regex::Regex;
+    use serde_json::Value;
+
+    proptest! {
+        #[test]
+        fn generator_version_filter_redacts_semver_variants(
+            major in any::<u64>(),
+            minor in any::<u64>(),
+            patch in any::<u64>(),
+            prerelease in prop_oneof![
+                Just(String::new()),
+                "[A-Za-z][A-Za-z0-9-]{0,31}".prop_map(|identifier| format!("-{identifier}")),
+            ],
+            build in prop_oneof![
+                Just(String::new()),
+                "[A-Za-z][A-Za-z0-9-]{0,31}".prop_map(|identifier| format!("+{identifier}")),
+            ],
+            unrelated_version in "[A-Za-z0-9.+-]{1,64}",
+        ) {
+            let generator_version = format!("{major}.{minor}.{patch}{prerelease}{build}");
+            let rendered = format!(
+                concat!(
+                    "{{\n",
+                    "  \"generator\": {{\n",
+                    "    \"name\": \"netsuke\",\n",
+                    "    \"version\": \"{}\"\n",
+                    "  }},\n",
+                    "  \"tool\": {{\n",
+                    "    \"name\": \"netsuke\",\n",
+                    "    \"version\": \"{}\"\n",
+                    "  }}\n",
+                    "}}",
+                ),
+                generator_version,
+                unrelated_version,
+            );
+            let filter = match Regex::new(GENERATOR_VERSION_FILTER_PATTERN) {
+                Ok(filter) => filter,
+                Err(error) => return Err(TestCaseError::fail(error.to_string())),
+            };
+            let filtered = filter.replace_all(&rendered, GENERATOR_VERSION_REPLACEMENT);
+            let document = match serde_json::from_str::<Value>(&filtered) {
+                Ok(document) => document,
+                Err(error) => return Err(TestCaseError::fail(error.to_string())),
+            };
+
+            prop_assert_eq!(
+                document.pointer("/generator/version").and_then(Value::as_str),
+                Some("[version]"),
+            );
+            prop_assert_eq!(
+                document.pointer("/tool/version").and_then(Value::as_str),
+                Some(unrelated_version.as_str()),
+            );
+        }
+    }
 }
