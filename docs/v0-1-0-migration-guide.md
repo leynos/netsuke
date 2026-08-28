@@ -137,11 +137,15 @@ In the default route, write `$name` for a PowerShell variable and `$env:NAME`
 for an environment variable. `${VAR:-default}` is only valid in the explicit
 Bash route. The v0.1.0 dollar-escaping fix means these are ordinary, single
 dollars, not Ninja-escaped `$$` forms. Ordered lists share one PowerShell
-process, so variables, environment assignments, and current-directory changes
-persist between entries; a later entry does not run after a terminating error
-or non-zero native exit. Each scalar, script, action, and target has a fresh
-shell process. `{{ ins }}` and `{{ outs }}` remain path-quoted, including for
-spaces; quote any other path or argument with the selected shell's syntax.
+process: Netsuke checks `$LASTEXITCODE` immediately after each native command,
+so a non-zero status or terminating error stops the list before a later command
+or entry can overwrite it. Variables, environment assignments, and
+current-directory changes persist between entries. Each scalar, script, action,
+and target has a fresh shell process. `{{ ins }}` and `{{ outs }}` remain
+path-quoted, including for spaces; quote any other path or argument with the
+selected shell's syntax. On POSIX and Bash routes, `$$` means the process
+identifier; in PowerShell, `$$` is the automatic variable containing the last
+token received by the session.
 
 For reproducible Windows CI, use a `pwsh` step and let Netsuke select
 PowerShell; do not use a workflow-level `shell: bash` setting as evidence of

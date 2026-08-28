@@ -63,7 +63,7 @@ try {
 
     $discovery = & $Netsuke help targets 2>&1
     if ($LASTEXITCODE -ne 0) {
-        throw "Target discovery failed with exit code $LASTEXITCODE: $discovery"
+        throw "Target discovery failed with exit code ${LASTEXITCODE}: $discovery"
     }
     if ($discovery -notmatch 'Confirm target discovery has no recipe side effects') {
         throw "Target discovery omitted the fixture target: $discovery"
@@ -86,7 +86,7 @@ try {
 
     $failure = & $Netsuke build first-list-entry-fails 2>&1
     if ($LASTEXITCODE -ne 1) {
-        throw "A recipe exit code of 27 should become Netsuke's documented failure exit code 1, got $LASTEXITCODE: $failure"
+        throw "A recipe exit code of 27 should become Netsuke's documented failure exit code 1, got ${LASTEXITCODE}: $failure"
     }
     if (Test-Path -LiteralPath 'must not exist.txt') {
         throw "The second command-list entry ran after the first failed: $failure"

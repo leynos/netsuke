@@ -50,6 +50,8 @@ pub(super) fn validate_recipe_shell(shell: RecipeShell) -> Result<()> {
     }
     let status = std::process::Command::new("bash.exe")
         .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .status()
         .context(
             "Windows legacy recipes selected `bash`, but `bash.exe` was not found on PATH; \

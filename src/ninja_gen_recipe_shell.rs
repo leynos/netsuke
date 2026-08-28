@@ -47,7 +47,8 @@ impl RecipeShell {
         for entry in entries {
             script.push_str("$LASTEXITCODE = 0\n");
             script.push_str(entry);
-            script.push_str("\nif ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n");
+            script.push_str("\n$netsuke_exit_code = $LASTEXITCODE\n");
+            script.push_str("if ($netsuke_exit_code -ne 0) { exit $netsuke_exit_code }\n");
         }
         Some(script)
     }
@@ -129,5 +130,19 @@ mod tests {
             windows_argument("a \\\"b\\\"\\\\"),
             "\"a \\\\\\\"b\\\\\\\"\\\\\\\\\""
         );
+    }
+
+    #[test]
+    fn power_shell_lists_check_the_captured_status_before_the_next_entry() {
+        let script = RecipeShell::PowerShell
+            .command_list_script(&["cmd.exe /c exit 7".into(), "Write-Output later".into()])
+            .expect("PowerShell should render command-list scripts");
+        let failure_check = script
+            .find("if ($netsuke_exit_code -ne 0) { exit $netsuke_exit_code }")
+            .expect("first command should have a captured-status check");
+        let next_entry = script
+            .find("Write-Output later")
+            .expect("second command should be rendered");
+        assert!(failure_check < next_entry);
     }
 }

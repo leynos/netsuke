@@ -313,7 +313,8 @@ fn power_shell_command_lists_preserve_state_and_stop_on_native_failure() -> Resu
     let script = decode_power_shell_script(encoded)?;
     ensure!(script.contains("$env:NETSUKE_ORDER = 'first'"));
     ensure!(script.contains("$LASTEXITCODE = 0"));
-    ensure!(script.contains("if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"));
+    ensure!(script.contains("$netsuke_exit_code = $LASTEXITCODE"));
+    ensure!(script.contains("if ($netsuke_exit_code -ne 0) { exit $netsuke_exit_code }"));
     ensure!(
         !rendered.contains("NETSUKE_ORDER"),
         "Ninja must not parse the PowerShell variable expression: {rendered}"
