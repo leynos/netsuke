@@ -3,11 +3,11 @@
 use super::super::from_str;
 #[cfg(unix)]
 use crate::snapshot_test_support::snapshot_settings;
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 #[cfg(unix)]
 use insta::assert_snapshot;
 use rstest::rstest;
-use tempfile::tempdir;
+use tempfile::{Builder, tempdir};
 #[cfg(unix)]
 use test_support::display_error_chain;
 use test_support::{fs as test_fs, manifest::manifest_yaml};
@@ -105,9 +105,20 @@ fn jinja_glob_rejects_a_match_set_containing_safe_and_unsafe_paths() -> Result<(
 
 #[rstest]
 fn jinja_glob_preserves_a_shell_inert_filename() -> Result<()> {
-    let temp = tempdir()?;
+    // Use a relative fixture because the adapter validates the entire expanded
+    // path, and Windows temporary-directory parents can contain characters
+    // outside the shell-inert allowlist.
+    let temp = Builder::new()
+        .prefix("netsuke-glob-safe-")
+        .tempdir_in(".")
+        .context("create relative shell-inert glob fixture")?;
+    let fixture_directory = temp
+        .path()
+        .file_name()
+        .and_then(|directory| directory.to_str())
+        .context("read the shell-inert fixture directory name as UTF-8")?;
     test_fs::write(temp.path().join("safe-file_1.txt"), "ordinary filename")?;
-    let pattern = format!("{}/*.txt", temp.path().display());
+    let pattern = format!("{fixture_directory}/*.txt");
 
     let manifest = from_str(&glob_manifest(&pattern))?;
     ensure!(
