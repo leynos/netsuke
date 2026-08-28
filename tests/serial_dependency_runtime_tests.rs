@@ -19,24 +19,11 @@ use tempfile::TempDir;
 
 const NINJA: &str = "ninja";
 
-fn action(command: &str) -> Action {
+/// Construct an action with the supplied command representation.
+fn action(command: impl Into<StringOrList>) -> Action {
     Action {
         recipe: Recipe::Command {
             command: command.into(),
-        },
-        description: None,
-        depfile: None,
-        deps_format: None,
-        pool: None,
-        restat: false,
-    }
-}
-
-/// Construct an action whose dependencies are its complete operation.
-const fn dependency_only_action() -> Action {
-    Action {
-        recipe: Recipe::Command {
-            command: StringOrList::Empty,
         },
         description: None,
         depfile: None,
@@ -82,7 +69,9 @@ fn serial_order_graph() -> BuildGraph {
     ] {
         graph.actions.insert(name.into(), action(command));
     }
-    graph.actions.insert("all".into(), dependency_only_action());
+    graph
+        .actions
+        .insert("all".into(), action(StringOrList::Empty));
     for (action_id, output, deps, dependency_order) in [
         ("fmt", "check-fmt", &[][..], DependencyOrder::Parallel),
         ("lint", "lint", &[][..], DependencyOrder::Parallel),
@@ -255,49 +244,21 @@ fn failure_of_early_dep_stops_later_stages() -> Result<()> {
     graph
         .actions
         .insert("later".into(), action("touch later-marker"));
-    graph.actions.insert("all".into(), dependency_only_action());
+    graph
+        .actions
+        .insert("all".into(), action(StringOrList::Empty));
 
     graph.targets.insert(
         Utf8PathBuf::from("first"),
-        BuildEdge {
-            action_id: "fail".into(),
-            inputs: Vec::new(),
-            implicit_deps: Vec::new(),
-            dependency_order: DependencyOrder::Parallel,
-            explicit_outputs: vec![Utf8PathBuf::from("first")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-        },
+        edge("fail", "first", &[], DependencyOrder::Parallel),
     );
     graph.targets.insert(
         Utf8PathBuf::from("second"),
-        BuildEdge {
-            action_id: "later".into(),
-            inputs: Vec::new(),
-            implicit_deps: Vec::new(),
-            dependency_order: DependencyOrder::Parallel,
-            explicit_outputs: vec![Utf8PathBuf::from("second")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-        },
+        edge("later", "second", &[], DependencyOrder::Parallel),
     );
     graph.targets.insert(
         Utf8PathBuf::from("all"),
-        BuildEdge {
-            action_id: "all".into(),
-            inputs: Vec::new(),
-            implicit_deps: vec!["first".into(), "second".into()],
-            dependency_order: DependencyOrder::Serial,
-            explicit_outputs: vec![Utf8PathBuf::from("all")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-        },
+        edge("all", "all", &["first", "second"], DependencyOrder::Serial),
     );
 
     let bundle = generate_bundle(&graph)?;
