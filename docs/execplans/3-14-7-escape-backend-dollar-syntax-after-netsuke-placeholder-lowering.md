@@ -1294,3 +1294,12 @@ real-Ninja property remains the shell-dollar parser oracle. `make check-fmt`,
 doc-coverage` (98.99%), `make markdownlint`, and `make nixie` passed.
 CodeRabbit reported zero findings. Status is `COMPLETE` pending the final
 pushed Windows rerun.
+
+2026-08-28 — that final Windows rerun confirmed both the CRLF-normalized
+real-Ninja property and the user-visible BDD sentinel scenario. It then
+exposed B2's platform boundary: the end-to-end script regression invokes the
+documented `/bin/sh -e` backend, which is intentionally unavailable on
+Windows. The real-execution regression now runs only on Unix, while B5
+continues to validate script lowering on every platform. The next Windows run
+will confirm this platform-specific test selection; status remains
+`IN PROGRESS` until then.

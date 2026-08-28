@@ -241,6 +241,7 @@ fn scripts_lower_placeholders_without_command_parser_validation() -> Result<()> 
     Ok(())
 }
 
+#[cfg(unix)]
 #[rstest]
 fn script_placeholders_execute_against_real_paths() -> Result<()> {
     let manifest = manifest::from_str(
