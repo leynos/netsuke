@@ -1489,6 +1489,11 @@ governs the non-doctest pass only, and deliberately stays small:
 - **A conservative slow timeout** (warn after 60s, terminate after five
   warning periods) so a hung test surfaces without failing the legitimately
   slow documentation end-to-end suites, which shell out to real Ninja.
+- **Scoped subprocess timings.** The split-build locale harness and packaging
+  smoke test emit their Cargo subprocess durations immediately on success.
+  They intentionally use private Cargo directories to preserve isolation and
+  publication-boundary coverage; their diagnostics distinguish that work from
+  future regressions without raising the slow-test threshold.
 
 ### How this relates to the isolation utilities
 

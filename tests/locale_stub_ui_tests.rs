@@ -26,6 +26,7 @@ use std::{
     io,
     path::{Path, PathBuf},
     process::{Command, Output},
+    time::Instant,
 };
 
 /// One `test_support` build shared by both tests.
@@ -112,7 +113,12 @@ impl TestSupportRlib {
         for (key, value) in env {
             command.env(key, value);
         }
+        let started_at = Instant::now();
         let output = command.output()?;
+        tracing::info!(
+            elapsed_seconds = started_at.elapsed().as_secs_f64(),
+            "cargo build test_support completed"
+        );
         if !output.status.success() {
             return Err(io::Error::other(format!(
                 "building test_support failed:\n{}",
@@ -165,6 +171,7 @@ impl TestSupportRlib {
     /// shortened.
     fn compile(&self, source: &str) -> io::Result<Output> {
         let output_dir = tempfile::tempdir()?;
+        let started_at = Instant::now();
         let mut args = vec![
             String::from("--edition=2024"),
             String::from("--crate-type=bin"),
@@ -190,7 +197,12 @@ impl TestSupportRlib {
         let response = rustc_response_file::write(output_dir.path(), "stub-env-ui.args", &args)?;
         // `output_dir` owns the response file and stays in scope across the
         // call below, so the file still exists when `rustc` opens it at spawn.
-        Command::new(rustc()).arg(response).output()
+        let output = Command::new(rustc()).arg(response).output()?;
+        tracing::info!(
+            elapsed_seconds = started_at.elapsed().as_secs_f64(),
+            "rustc metadata harness completed"
+        );
+        Ok(output)
     }
 }
 
@@ -225,6 +237,9 @@ fn stderr(output: &Output) -> String {
 /// directory missed the dependencies entirely.
 #[rstest]
 fn harness_compiles_under_a_split_build_dir() -> io::Result<()> {
+    // A full `cargo test` run may already have a test subscriber, while
+    // nextest needs this one to surface the scoped timing events.
+    drop(tracing_subscriber::fmt().with_test_writer().try_init());
     // Both roots are private to this test: sharing the ambient target dir
     // with the concurrently building `#[once]` fixture races on the
     // uplifted rlibs and fails with version-skew errors (E0460).

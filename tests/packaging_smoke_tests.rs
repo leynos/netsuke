@@ -10,6 +10,7 @@ use std::collections::BTreeSet;
 use std::env;
 use std::ffi::OsStr;
 use std::process::Command;
+use std::time::Instant;
 use tempfile::TempDir;
 
 const REQUIRED_PACKAGED_FILES: [&str; 9] = [
@@ -46,9 +47,13 @@ fn cargo_subprocess(cargo_binary: &OsStr, target_dir: &TempDir) -> Command {
     reason = "locating build artefacts Cargo reports through the environment; there is no seam to inject and no process state to isolate"
 )]
 fn packaged_manifest_retains_build_script_sources() {
+    // A full `cargo test` run may already have a test subscriber, while
+    // nextest needs this one to surface the scoped timing events.
+    drop(tracing_subscriber::fmt().with_test_writer().try_init());
     let cargo_binary = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let cargo_target_dir = tempfile::tempdir()
         .unwrap_or_else(|error| panic!("create isolated Cargo target directory: {error}"));
+    let publish_started_at = Instant::now();
     let publish_output = cargo_subprocess(&cargo_binary, &cargo_target_dir)
         .args([
             "publish",
@@ -60,6 +65,10 @@ fn packaged_manifest_retains_build_script_sources() {
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
         .unwrap_or_else(|error| panic!("run cargo publish --dry-run: {error}"));
+    tracing::info!(
+        elapsed_seconds = publish_started_at.elapsed().as_secs_f64(),
+        "cargo publish --dry-run completed"
+    );
 
     assert!(
         publish_output.status.success(),
@@ -67,11 +76,16 @@ fn packaged_manifest_retains_build_script_sources() {
         String::from_utf8_lossy(&publish_output.stderr)
     );
 
+    let package_started_at = Instant::now();
     let list_output = cargo_subprocess(&cargo_binary, &cargo_target_dir)
         .args(["package", "--list", "--allow-dirty", "-p", "netsuke-build"])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
         .unwrap_or_else(|error| panic!("run cargo package --list: {error}"));
+    tracing::info!(
+        elapsed_seconds = package_started_at.elapsed().as_secs_f64(),
+        "cargo package --list completed"
+    );
 
     assert!(
         list_output.status.success(),
