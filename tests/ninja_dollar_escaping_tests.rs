@@ -6,6 +6,7 @@
 use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
+use mockable::{DefaultEnv, Env};
 use netsuke::{
     ast::{Recipe, StringOrList},
     ir::{Action, BuildEdge, BuildGraph, DependencyOrder},
@@ -13,16 +14,9 @@ use netsuke::{
     ninja_gen::generate,
 };
 use rstest::rstest;
+use std::{ffi::OsString, process::Command};
 use tempfile::TempDir;
 use test_support::ninja::ninja_integration_workspace;
-
-use mockable::{DefaultEnv, Env};
-
-//! Differential tests for shell dollars preserved through the Ninja backend.
-//!
-//! These tests use Ninja itself as the lexer oracle. The generated command
-//! must be the shell text held by the IR after Netsuke lowers `$in` and `$out`.
-};
 
 const SENTINEL: &str = "NETSUKE_TEST_SENTINEL";
 const SENTINEL_VALUE: &str = "sentinel-value";
@@ -38,6 +32,7 @@ fn host_path() -> Result<OsString> {
         .os_string("PATH")
         .context("host PATH is required to run Ninja")
 }
+
 const fn action(recipe: Recipe) -> Action {
     Action {
         recipe,
@@ -291,9 +286,13 @@ fn command_control_characters_are_rejected(#[case] command: &str) {
 }
 
 #[rstest]
-#[case::dollar("input$1")]
+#[case::dollar("input$file")]
 #[case::space("input file")]
 #[case::colon("input:file")]
+#[case::pipe("input|file")]
+#[case::tab("input\tfile")]
+#[case::nul("input\0file")]
+#[case::carriage_return("input\rfile")]
 #[case::newline("input\nfile")]
 fn unsafe_paths_are_rejected(#[case] input: &str) {
     let result = generate(&graph(
@@ -305,7 +304,7 @@ fn unsafe_paths_are_rejected(#[case] input: &str) {
     ));
     assert!(
         result.is_err(),
-        "a Ninja-special path must fail generation rather than corrupt an edge"
+        "a Ninja-unsupported path must fail generation rather than corrupt an edge"
     );
 }
 

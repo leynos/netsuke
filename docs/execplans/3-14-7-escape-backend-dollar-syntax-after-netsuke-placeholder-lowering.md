@@ -207,6 +207,8 @@ Stop and escalate rather than improvising when any of these is reached.
   real-Ninja oracle, execute B2, and make the sentinel BDD scenario observable.
 - [x] (2026-08-27) Run complete deterministic gates and gate-first CodeRabbit
   review for the correction set.
+- [x] (2026-08-28) Repair the Windows real-Ninja oracle's CRLF handling,
+  restore the EP-M3 path-rejection matrix, and pass current gates and review.
 
 ## Surprises & discoveries
 
@@ -434,6 +436,12 @@ Stop and escalate rather than improvising when any of these is reached.
   Date/Author: 2026-08-17, planning agent.
 
 ## Outcomes & retrospective
+
+The 2026-08-28 correction is complete. The real-Ninja property removes
+exactly one final CRLF or LF record terminator, preserving trailing command
+whitespace, and the shared path validator again rejects the EP-M3 set in both
+ordinary and dyndep emission. The current deterministic suite and CodeRabbit
+review passed with no concerns.
 
 Delivered as designed. Commands and scripts retain ordinary shell dollars in
 the backend-neutral IR; the typed Ninja writer doubles only residual dollars
@@ -1252,3 +1260,21 @@ The recommendation to scope escaping to command and script text stands.
 Effect on remaining work. None of the milestones, obligations, or open
 decisions change. EP-M1 gets slightly smaller. The plan remains DRAFT and
 still requires approval before stage A begins.
+
+2026-08-28 — Windows CI exposed raw CRLF output from `ninja -t commands`.
+The property now removes only one final CRLF or LF terminator, rather than
+trimming command text. This preserves trailing spaces and exposes every other
+output difference. During the same reconciliation, the shared path validator
+was restored to the approved EP-M3 policy: reject dollar, space, colon, pipe,
+and control characters across ordinary build lines, defaults, and dyndep
+sidecars. The rebase had retained main's path escaping despite the ExecPlan,
+ADR-014, and developers' guide requiring rejection. The revised matrix covers
+the three Ninja metacharacters in every emitted field. Status is `IN PROGRESS`
+until the focused and complete gates and CodeRabbit review pass.
+
+2026-08-28 — final evidence: the focused all-target real-Ninja property passed
+locally; `make check-fmt`, `make test` (2,440 passed, 3 skipped), `make
+typecheck`, `make lint`, `make doc-coverage` (98.99%), `make markdownlint`,
+and `make nixie` passed. Gate-first `coderabbit review --agent` returned zero
+findings. Status is `COMPLETE`; the pushed change will rerun the affected
+Windows job for platform confirmation.

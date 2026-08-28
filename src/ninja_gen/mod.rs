@@ -11,7 +11,7 @@ mod path_syntax;
 
 use dyndep::reject_reserved_paths;
 pub use dyndep::{GeneratedDyndep, GeneratedNinja, generate_bundle};
-pub(crate) use path_syntax::{escape_ninja_path, reject_unsupported_path_characters};
+pub(crate) use path_syntax::{reject_unsupported_path_characters, validated_ninja_path};
 
 use crate::ast::{Recipe, StringOrList};
 use crate::ir::{BuildEdge, BuildGraph};
@@ -198,7 +198,7 @@ pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), Ni
 pub(crate) fn join(paths: &[Utf8PathBuf]) -> String {
     paths
         .iter()
-        .map(|path| path_syntax::escape_validated_ninja_path(path.as_str()))
+        .map(|path| path_syntax::clone_validated_ninja_path(path.as_str()))
         .join(" ")
 }
 

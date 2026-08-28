@@ -272,8 +272,11 @@ proptest! {
         for candidate in [&command, &braced_command] {
             let ninja = generate(&scalar_graph(candidate.clone()))
                 .expect("scalar command should generate");
-            let observed = ninja_commands(&ninja)?;
-            prop_assert_eq!(observed.strip_suffix('\n'), Some(candidate.as_str()));
+            let oracle_output = ninja_commands(&ninja)?;
+            let observed = oracle_output
+                .strip_suffix("\r\n")
+                .or_else(|| oracle_output.strip_suffix('\n'));
+            prop_assert_eq!(observed, Some(candidate.as_str()));
         }
     }
 
