@@ -37,8 +37,9 @@ Netsuke currently requires:
 - [Ninja](https://ninja-build.org/) on `PATH`;
 - when installing from source, the dated Rust nightly toolchain pinned in
   [`rust-toolchain.toml`](rust-toolchain.toml) (`rustup` installs it
-  automatically in a checkout). Netsuke builds with the Polonius borrow checker
-  (`-Zpolonius=next`), which is nightly-only until it stabilizes; see
+  automatically in a checkout). Netsuke builds with the Polonius borrow
+  checker, which nightly enables by default and which stays nightly-only until
+  it stabilizes; see
   [ADR-006](docs/adr-006-adopt-polonius-nightly-toolchain.md).
 
 ### Installation
@@ -54,15 +55,14 @@ requirement below.
 cargo binstall netsuke-build
 ```
 
-Building from the registry instead runs outside a repository checkout, so
-neither the pinned toolchain nor the Polonius flag is picked up automatically;
-supply both explicitly:
+Building from the registry instead runs outside a repository checkout, so the
+pinned toolchain is not picked up automatically; select it explicitly:
 
 <!-- tested-example: readme-crates-io-install -->
 
 ```sh
-rustup toolchain install nightly-2026-06-25
-RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke-build
+rustup toolchain install nightly-2026-08-23
+cargo +nightly-2026-08-23 install netsuke-build
 ```
 
 Pre-built installers are available from the

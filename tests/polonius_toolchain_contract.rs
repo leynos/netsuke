@@ -1,14 +1,13 @@
 //! Contract tests pinning the Polonius toolchain plumbing.
 //!
-//! The tree only borrow-checks under `-Zpolonius=next` on the dated nightly
-//! pinned in `rust-toolchain.toml` (see ADR-006 and docs/polonius.md). An
-//! inherited `RUSTFLAGS` environment variable overrides the
-//! `.cargo/config.toml` `build.rustflags` table, so Makefile recipes that
-//! compile borrow-checked targets must restate the flag, while workflows must
-//! pass it through the shared action's `with.rustflags` input and reject a
-//! job-level `env.RUSTFLAGS` override. These tests fail when any layer drops
-//! the required policy, so a regression cannot reach CI as a confusing
-//! borrow-check error.
+//! The tree only borrow-checks under the Polonius alpha analysis (see ADR-006
+//! and docs/polonius.md). Nightly toolchains dated 2026-08-04 and later enable
+//! Polonius by default, so the requirement is carried entirely by the dated
+//! pin in `rust-toolchain.toml`: no build configuration passes a `-Zpolonius`
+//! directive any more, and reintroducing one would pin the tree to an
+//! interface that is on its way out. These tests hold both halves — the pin is
+//! recent enough to enable Polonius, and nothing restates the retired flag —
+//! plus the workflow contract that keeps CI on the same pinned channel.
 
 #[path = "support/makefile.rs"]
 mod makefile;
@@ -17,23 +16,44 @@ pub mod shared_actions;
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
-use makefile::{read_repo_file, target_recipe};
+use makefile::{read_repo_file, repo_root};
 use rstest::rstest;
 use serde_yaml::Value as YamlValue;
+use std::io::ErrorKind;
 use toml::Value as TomlValue;
 
-const POLONIUS_FLAG: &str = "-Zpolonius=next";
-const POLONIUS_VAR: &str = "$(POLONIUS_FLAGS)";
+/// The retired directive that must not reappear in build configuration.
+const POLONIUS_FLAG: &str = "-Zpolonius";
+/// The first nightly on which Polonius is the default borrow-check analysis.
+const POLONIUS_DEFAULT_SINCE: &str = "2026-08-04";
 const SETUP_RUST_ACTION: &str = "leynos/shared-actions/.github/actions/setup-rust";
 const RUST_BUILD_RELEASE_ACTION: &str = "leynos/shared-actions/.github/actions/rust-build-release";
-const WARNINGS_POLONIUS_RUSTFLAGS: &str = "-D warnings -Zpolonius=next";
+const DENY_WARNINGS_RUSTFLAGS: &str = "-D warnings";
+
+/// Build-configuration surfaces that could reintroduce the retired directive.
+///
+/// `.cargo/config.toml` is listed even though it no longer exists: it is the
+/// path Cargo auto-discovers, so recreating it to carry the flag is the most
+/// likely regression and a missing file is simply skipped.
+const BUILD_CONFIGURATION_FILES: [&str; 8] = [
+    "Makefile",
+    ".cargo/config.toml",
+    "tools/dev-fast/config.toml",
+    "scripts/dev-fast-common.sh",
+    ".github/workflows/ci.yml",
+    ".github/workflows/netsukefile-test.yml",
+    ".github/workflows/coverage-main.yml",
+    ".github/workflows/build-and-package.yml",
+];
 
 /// Describes one workflow's shared-action and toolchain contract.
 struct WorkflowExpectation {
     path: &'static str,
     job: &'static str,
     action: &'static str,
-    rustflags: &'static str,
+    /// The `with.rustflags` input the job must pass, or `None` when it must
+    /// pass none at all and inherit the action's default.
+    rustflags: Option<&'static str>,
     pins_toolchain_env: bool,
 }
 
@@ -41,35 +61,35 @@ const CI_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     path: ".github/workflows/ci.yml",
     job: "build-test",
     action: SETUP_RUST_ACTION,
-    rustflags: WARNINGS_POLONIUS_RUSTFLAGS,
+    rustflags: Some(DENY_WARNINGS_RUSTFLAGS),
     pins_toolchain_env: true,
 };
 const CI_WINDOWS_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     path: ".github/workflows/ci.yml",
     job: "build-test-windows",
     action: SETUP_RUST_ACTION,
-    rustflags: WARNINGS_POLONIUS_RUSTFLAGS,
+    rustflags: Some(DENY_WARNINGS_RUSTFLAGS),
     pins_toolchain_env: true,
 };
 const NETSUKEFILE_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     path: ".github/workflows/netsukefile-test.yml",
     job: "netsukefile",
     action: SETUP_RUST_ACTION,
-    rustflags: POLONIUS_FLAG,
+    rustflags: None,
     pins_toolchain_env: true,
 };
 const COVERAGE_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     path: ".github/workflows/coverage-main.yml",
     job: "coverage-upload",
     action: SETUP_RUST_ACTION,
-    rustflags: WARNINGS_POLONIUS_RUSTFLAGS,
+    rustflags: Some(DENY_WARNINGS_RUSTFLAGS),
     pins_toolchain_env: false,
 };
 const PACKAGING_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     path: ".github/workflows/build-and-package.yml",
     job: "build",
     action: RUST_BUILD_RELEASE_ACTION,
-    rustflags: POLONIUS_FLAG,
+    rustflags: None,
     pins_toolchain_env: false,
 };
 
@@ -133,43 +153,40 @@ fn yaml_str<'a>(value: &'a YamlValue, keys: &[&str]) -> Option<&'a str> {
 }
 
 #[test]
-fn rust_toolchain_pins_dated_nightly() -> Result<()> {
+fn rust_toolchain_pins_a_nightly_that_enables_polonius_by_default() -> Result<()> {
     let channel = pinned_toolchain()?;
+    let date = channel
+        .strip_prefix("nightly-")
+        .context("rust-toolchain.toml should pin a dated nightly")?;
+    // ISO-8601 dates sort lexicographically, so a string comparison is a date
+    // comparison here and needs no calendar parsing.
     ensure!(
-        channel.starts_with("nightly-20"),
-        "rust-toolchain.toml should pin a dated nightly, found {channel:?}"
+        date >= POLONIUS_DEFAULT_SINCE,
+        "the pinned nightly {channel:?} predates {POLONIUS_DEFAULT_SINCE}, \
+         when Polonius became the default borrow-check analysis"
     );
     Ok(())
 }
 
 #[test]
-fn cargo_config_enables_polonius_by_default() -> Result<()> {
-    let config: TomlValue = read_repo_file(Utf8Path::new(".cargo/config.toml"))?
-        .parse()
-        .context("parse .cargo/config.toml")?;
-    let rustflags = config
-        .get("build")
-        .and_then(|build| build.get("rustflags"))
-        .and_then(TomlValue::as_array)
-        .context(".cargo/config.toml should declare build.rustflags")?;
-    ensure!(
-        rustflags
-            .iter()
-            .any(|flag| flag.as_str() == Some(POLONIUS_FLAG)),
-        "build.rustflags should enable {POLONIUS_FLAG}, found {rustflags:?}"
-    );
-    Ok(())
-}
-
-#[test]
-fn makefile_declares_the_polonius_flags_variable() -> Result<()> {
-    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
-    ensure!(
-        makefile
-            .lines()
-            .any(|line| line.trim() == format!("POLONIUS_FLAGS ?= {POLONIUS_FLAG}")),
-        "the Makefile should default POLONIUS_FLAGS to {POLONIUS_FLAG}"
-    );
+fn build_configuration_does_not_restate_the_retired_polonius_flag() -> Result<()> {
+    let root = repo_root()?;
+    for path in BUILD_CONFIGURATION_FILES {
+        let contents = match root.read_to_string(path) {
+            Ok(contents) => contents,
+            // `.cargo/config.toml` is intentionally absent but remains under
+            // contract because recreating it is the likeliest flag regression.
+            Err(error) if path == ".cargo/config.toml" && error.kind() == ErrorKind::NotFound => {
+                continue;
+            }
+            Err(error) => return Err(error).with_context(|| format!("read {path}")),
+        };
+        ensure!(
+            !contents.contains(POLONIUS_FLAG),
+            "{path} passes {POLONIUS_FLAG}; the pinned nightly enables Polonius by default \
+             and the directive is being retired"
+        );
+    }
     Ok(())
 }
 
@@ -179,7 +196,7 @@ fn makefile_declares_the_polonius_flags_variable() -> Result<()> {
 #[case::netsukefile(NETSUKEFILE_WORKFLOW)]
 #[case::coverage(COVERAGE_WORKFLOW)]
 #[case::packaging(PACKAGING_WORKFLOW)]
-fn workflows_pass_polonius_rustflags_to_shared_actions(
+fn workflows_agree_with_the_pinned_toolchain(
     #[case] expectation: WorkflowExpectation,
 ) -> Result<()> {
     let WorkflowExpectation {
@@ -206,8 +223,7 @@ fn workflows_pass_polonius_rustflags_to_shared_actions(
         .iter()
         .find(|step| yaml_str(step, &["uses"]) == Some(expected_action.as_str()))
         .with_context(|| format!("{path} job {job} should use {expected_action}"))?;
-    let rustflags = yaml_str(shared_action, &["with", "rustflags"])
-        .with_context(|| format!("{path} {expected_action} should pass rustflags"))?;
+    let rustflags = yaml_str(shared_action, &["with", "rustflags"]);
     ensure!(
         rustflags == expected_rustflags,
         "{path} {expected_action} passes {rustflags:?}, expected {expected_rustflags:?}"
@@ -225,38 +241,6 @@ fn workflows_pass_polonius_rustflags_to_shared_actions(
         ensure!(
             toolchain_env.is_none(),
             "{path} job {job} should not override NETSUKE_RUST_TOOLCHAIN, found {toolchain_env:?}"
-        );
-    }
-    Ok(())
-}
-
-#[rstest]
-#[case::test_nextest("test-nextest", true)]
-#[case::doctest("doctest", true)]
-#[case::typecheck("typecheck", true)]
-#[case::lint_clippy("lint-clippy", true)]
-#[case::lint_whitaker("lint-whitaker", true)]
-#[case::build_binary("target/%/$(APP)", true)]
-fn rustflags_setting_recipes_apply_polonius_policy(
-    #[case] target: &str,
-    #[case] expects_polonius: bool,
-) -> Result<()> {
-    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
-    let recipe = target_recipe(&makefile, target)
-        .with_context(|| format!("the Makefile should declare a {target} target"))?;
-    let rustflags_lines: Vec<&str> = recipe
-        .lines()
-        .filter(|line| line.contains("RUSTFLAGS="))
-        .collect();
-    ensure!(
-        !rustflags_lines.is_empty(),
-        "{target} should set RUSTFLAGS, found {recipe:?}"
-    );
-    for line in rustflags_lines {
-        let contains_polonius = line.contains(POLONIUS_VAR) || line.contains(POLONIUS_FLAG);
-        ensure!(
-            contains_polonius == expects_polonius,
-            "{target} has the wrong Polonius policy in {line:?}"
         );
     }
     Ok(())

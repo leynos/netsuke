@@ -2044,7 +2044,7 @@ This transformation involves several steps:
    and visitation map. Keys are cloned from the `targets` map so traversal
    leaves the input graph untouched. Missing dependencies encountered during
    traversal are logged, collected, and returned alongside any cycle to aid
-diagnostics.
+   diagnostics.
 
 ### 5.4 Ninja file synthesis (`src/ninja_gen.rs`)
 
@@ -2228,19 +2228,19 @@ child process's execution environment.
 
 Every invocation is described by a borrowed request bundle rather than a long
 parameter list: `NinjaBuildRequest` for a build and `NinjaToolRequest` for
-`ninja -t <tool>`. Each names the resolved program, `NinjaProcessOptions`
-(an optional UTF-8 working directory and job count), the generated build file,
-the targets or tool, a `&CommandEnv` describing the child's environment, and the
-`stderr_mode: StderrMode` policy field.
-`run_ninja_with` and `run_ninja_tool_with` consume these; the convenience
-wrappers `run_ninja` and `run_ninja_tool` live in
-`runner::ninja_process_adapter`, translate `Cli` state at the runner boundary,
-call them with `CommandEnv::inherit()`, and derive the `stderr_mode` policy
-from the CLI via `StderrMode::from_json_enabled(cli.json)`, which is production
-behaviour. Process requests never import `Cli`; callers without parser state
-construct `NinjaProcessOptions` directly.
-The adapter converts `Cli::directory` to the UTF-8 path at this boundary and
-returns `io::ErrorKind::InvalidData` if the CLI path is not valid UTF-8.
+`ninja -t <tool>`. Each names the resolved program, `NinjaProcessOptions` (an
+optional UTF-8 working directory and job count), the generated build file, the
+targets or tool, a `&CommandEnv` describing the child's environment, and the
+`stderr_mode: StderrMode` policy field. `run_ninja_with` and
+`run_ninja_tool_with` consume these; the convenience wrappers `run_ninja` and
+`run_ninja_tool` live in `runner::ninja_process_adapter`, translate `Cli` state
+at the runner boundary, call them with `CommandEnv::inherit()`, and derive the
+`stderr_mode` policy from the CLI via
+`StderrMode::from_json_enabled(cli.json)`, which is production behaviour.
+Process requests never import `Cli`; callers without parser state construct
+`NinjaProcessOptions` directly. The adapter converts `Cli::directory` to the
+UTF-8 path at this boundary and returns `io::ErrorKind::InvalidData` if the CLI
+path is not valid UTF-8.
 
 The private `run_ninja_internal` helper takes a `NinjaInternalRequest`, a
 clock, and a `configure` closure. The request groups the resolved program,
@@ -2954,14 +2954,15 @@ Diagnostic-mode resolution uses
 `(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics. The
 composition boundary calls `DiscoveryOutcome::emit_diagnostics()` after tracing
 is configured, replaying the retained diagnostics without repeating environment
-or filesystem access. `collect_file_layers_with_normalizer_and_trace(directory,
-normalizer, env_source)` performs the underlying discovery scan with the path
-normalizer and environment source, retaining bounded project-scope trace
-metadata. The normalizer canonicalizes comparison keys so equivalent project
-path spellings de-duplicate to one layer. `DiscoveryOutcome::into_layers()`
-transfers the same discovered layers to `merge_with_cached_file_layers(...)`,
-which consumes them for the
-full merge and prevents a second discovery pass. The standalone
+or filesystem access.
+`collect_file_layers_with_normalizer_and_trace(directory,
+normalizer, env_source)`
+performs the underlying discovery scan with the path normalizer and
+environment source, retaining bounded project-scope trace metadata. The
+normalizer canonicalizes comparison keys so equivalent project path spellings
+de-duplicate to one layer. `DiscoveryOutcome::into_layers()` transfers the same
+discovered layers to `merge_with_cached_file_layers(...)`, which consumes them
+for the full merge and prevents a second discovery pass. The standalone
 `merge_with_config_and_env(...)` path performs discovery, emits diagnostics and
 delegates to `merge_with_cached_file_layers(...)`.
 
@@ -3332,16 +3333,16 @@ selected for this project and the rationale for their inclusion.
 | Logging        | tracing                     | Structured, levelled diagnostic output for debugging and insight.                                                               |
 | Versioning     | semver                      | The standard library for parsing and evaluating Semantic Versioning strings, essential for the `netsuke_version` field.         |
 
-Netsuke compiles with the Polonius alpha borrow-checking analysis
-(`-Zpolonius=next`) on the dated nightly toolchain pinned in
-`rust-toolchain.toml` ([ADR-006](adr-006-adopt-polonius-nightly-toolchain.md)).
-Internal APIs follow a borrow-centric design contract: lookups and registries
-return references (`&mut V` accessors with clone-on-miss keys), mutation
-happens in place, and error context is built lazily on the failure path.
-Owned-value style is reserved for genuine constraints — aliasing, suspension
-points, thread and process boundaries, and persistent identity — and each such
-refusal is recorded in the [polonius migration notes](polonius.md) alongside
-the sites that depend on the analysis.
+Netsuke compiles with the Polonius alpha borrow-checking analysis, which the
+dated nightly toolchain pinned in `rust-toolchain.toml` enables by default
+([ADR-006](adr-006-adopt-polonius-nightly-toolchain.md)). Internal APIs follow
+a borrow-centric design contract: lookups and registries return references
+(`&mut V` accessors with clone-on-miss keys), mutation happens in place, and
+error context is built lazily on the failure path. Owned-value style is
+reserved for genuine constraints — aliasing, suspension points, thread and
+process boundaries, and persistent identity — and each such refusal is recorded
+in the [polonius migration notes](polonius.md) alongside the sites that depend
+on the analysis.
 
 ### 9.3 Future Enhancements
 

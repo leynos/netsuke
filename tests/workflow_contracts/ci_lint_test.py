@@ -382,12 +382,14 @@ def test_windows_job_uses_git_bash_for_recipes() -> None:
     )
 
 
-def test_windows_setup_rust_keeps_warnings_and_polonius() -> None:
-    """The Windows toolchain setup preserves -D warnings and -Zpolonius=next.
+def test_windows_setup_rust_keeps_warnings() -> None:
+    """The Windows toolchain setup preserves -D warnings.
 
     The `#[cfg(windows)]` tree must be compiled under `-D warnings` to surface
-    findings, and the tree requires the Polonius analysis, so the shared
-    setup-rust action must receive both flags through its `rustflags` input.
+    findings, so the shared setup-rust action must receive that flag through
+    its `rustflags` input. Polonius does not appear here: the pinned nightly
+    enables it by default, and restating a `-Zpolonius` directive is exactly
+    the fragility that retiring it removed.
     """
     step = _windows_step("Setup Rust")
     assert "setup-rust" in step.get("uses", ""), (
@@ -402,9 +404,9 @@ def test_windows_setup_rust_keeps_warnings_and_polonius() -> None:
         "Setup Rust must use the pinned NETSUKE_RUST_TOOLCHAIN, "
         f"got {with_.get('toolchain')!r}"
     )
-    assert with_.get("rustflags") == "-D warnings -Zpolonius=next", (
-        "Setup Rust must pass -D warnings -Zpolonius=next through rustflags "
-        f"so the #[cfg(windows)] tree compiles under warnings-as-errors, "
+    assert with_.get("rustflags") == "-D warnings", (
+        "Setup Rust must pass -D warnings through rustflags so the "
+        f"#[cfg(windows)] tree compiles under warnings-as-errors, "
         f"got {with_.get('rustflags')!r}"
     )
 

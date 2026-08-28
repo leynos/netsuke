@@ -22,9 +22,9 @@ use support::{EdgeFixture, add_edge, make_action, p, render_dot, render_html};
 fn empty_graph_yields_empty_view() {
     let graph = BuildGraph::default();
     let view = GraphView::from_build_graph(&graph);
-    assert!(view.nodes.is_empty());
-    assert!(view.edges.is_empty());
-    assert!(view.default_targets.is_empty());
+    assert_eq!(view.nodes, Vec::new());
+    assert_eq!(view.edges, Vec::new());
+    assert_eq!(view.default_targets, Vec::<camino::Utf8PathBuf>::new());
     assert!(view.limit.is_none());
 }
 

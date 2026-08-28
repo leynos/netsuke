@@ -1,227 +1,79 @@
-"""Substantive tests for the workspace Rustdoc doc-comment coverage gate.
-
-``scripts/doc-coverage.py`` wraps ``cargo rustdoc --show-coverage`` and
-``cargo metadata``; every test in this module replaces those two subprocess
-boundaries with canned responses so the script's own logic — target
-discovery, aggregation, threshold exits, malformed-output handling, and
-command-failure translation — is exercised without invoking Cargo at all.
-
-The helper script cannot be imported by its file name (``doc-coverage.py``
-contains a hyphen), so a fixture loads it through ``importlib`` under a
-hyphen-free module name.
-"""
+"""Test the documentation-coverage command-line interface."""
 
 from __future__ import annotations
 
 import argparse
 import dataclasses
-import importlib.util
+import json
+import os
 import pathlib
+import subprocess
 import sys
+import textwrap
 import typing as typ
 
 import pytest
+from conftest import SCRIPT_DIRECTORY
 
 if typ.TYPE_CHECKING:
     import types
 
-SCRIPT_DIRECTORY = pathlib.Path(__file__).resolve().parents[1]
-
-
-@pytest.fixture(name="script")
-def script_fixture() -> types.ModuleType:
-    """Import ``doc-coverage.py`` under a loadable module name."""
-    spec = importlib.util.spec_from_file_location(
-        "doc_coverage_module", SCRIPT_DIRECTORY / "doc-coverage.py"
-    )
-    assert spec is not None, "expected import setup to produce a module spec"
-    assert spec.loader is not None, "expected module spec to provide a loader"
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-def lib_target(name: str) -> dict:
-    """Return one library target as ``cargo metadata`` reports it."""
-    return {"name": name, "kind": ["lib"]}
-
-
-def bin_target(name: str) -> dict:
-    """Return one binary target as ``cargo metadata`` reports it."""
-    return {"name": name, "kind": ["bin"]}
-
-
-def metadata_for(packages: list[dict]) -> dict:
-    """Build the ``cargo metadata`` document the script consumes."""
-    return {
-        "packages": packages,
-        "workspace_members": [package["id"] for package in packages],
-    }
-
-
-def single_library_metadata() -> str:
-    """Return the ``cargo metadata`` JSON for one package with one library target.
-
-    Returns
-    -------
-    str
-        A metadata document describing the single ``x`` package with one ``lib``
-        target, in the shape ``doc_targets`` consumes.
-    """
-    return (
-        '{"packages": [{"id": "pkg:x:1.0.0", "name": "x", '
-        '"targets": [{"name": "x", "kind": ["lib"]}]}], '
-        '"workspace_members": ["pkg:x:1.0.0"]}'
-    )
-
 
 @dataclasses.dataclass(frozen=True)
-class RustdocFailureCase:
-    """Define one Rustdoc failure scenario for measurement integration tests.
+class CliProcessCase:
+    """Define one executable documentation-coverage CLI scenario."""
 
-    Parameters
-    ----------
-    output
-        The mocked standard output from `cargo rustdoc`.
-    returncode
-        The mocked `cargo rustdoc` process exit code.
-    diagnostic
-        Text that must occur in the translated `RuntimeError`.
-    """
-
-    output: str
-    returncode: int
-    diagnostic: str
+    threshold: str
+    fails_adapter: bool
+    expected_code: int
 
 
-@dataclasses.dataclass(frozen=True)
-class CoveragePayloadFailureCase:
-    """Define one invalid Rustdoc coverage-payload scenario.
+@pytest.fixture
+def executable_cargo(tmp_path: pathlib.Path) -> tuple[pathlib.Path, pathlib.Path]:
+    """Create a platform-safe Cargo executable for CLI process tests."""
+    program = tmp_path / "fake_cargo.py"
+    log_path = tmp_path / "cargo-calls.jsonl"
+    program.write_text(
+        textwrap.dedent(
+            """\
+            #!__PYTHON__
+            import json
+            import os
+            import pathlib
+            import sys
 
-    Parameters
-    ----------
-    payload
-        The mocked output from `cargo rustdoc`.
-    diagnostic
-        Text that must occur in the translated `RuntimeError`.
-    """
-
-    payload: str
-    diagnostic: str
-
-
-class FakeCargo:
-    """Stand-in for ``cargo metadata`` and ``cargo rustdoc`` invocations.
-
-    Each call records its argv for later assertion and answers the metadata
-    call with ``metadata`` and every rustdoc call with ``rustdoc_output``.
-    """
-
-    def __init__(
-        self,
-        script: types.ModuleType,
-        *,
-        metadata: str = '{"packages": [], "workspace_members": []}',
-        rustdoc_output: str = "{}",
-        rustdoc_rc: int = 0,
-    ) -> None:
-        self._script = script
-        self.metadata_payload = metadata
-        self.rustdoc_payload = rustdoc_output
-        self.rustdoc_rc = rustdoc_rc
-        self.calls: list[list[str]] = []
-
-    def install(self, monkeypatch: pytest.MonkeyPatch) -> FakeCargo:
-        """Replace the script's ``subprocess.run`` with this fake."""
-        monkeypatch.setattr(self._script.subprocess, "run", self.run)
-        return self
-
-    def run(self, argv: list[str], **_kwargs: object) -> FakeResult:
-        """Answer one Cargo invocation from the canned payloads."""
-        self.calls.append(argv)
-        if "metadata" in argv:
-            return FakeResult(0, self.metadata_payload)
-        return FakeResult(self.rustdoc_rc, self.rustdoc_payload)
-
-
-class FakeResult:
-    """Minimal ``subprocess.CompletedProcess`` stand-in."""
-
-    def __init__(self, returncode: int, stdout: str, stderr: str = "") -> None:
-        self.returncode = returncode
-        self.stdout = stdout
-        self.stderr = stderr
-
-
-def test_target_discovery_skips_non_doc_targets(script: types.ModuleType) -> None:
-    """Build scripts, tests, examples, and benches never enter the surface."""
-    metadata = metadata_for(
-        [
-            {
-                "id": "pkg:netsuke:0.1.0",
-                "name": "netsuke",
-                "targets": [
-                    lib_target("netsuke"),
-                    bin_target("netsuke-bin"),
-                    bin_target("extra"),
-                    {"name": "build-main", "kind": ["custom-build"]},
-                    {"name": "integration", "kind": ["test"]},
-                    {"name": "sample", "kind": ["example"]},
-                    {"name": "benchmark", "kind": ["bench"]},
-                ],
-            }
-        ]
+            args = sys.argv[1:]
+            with pathlib.Path(os.environ["DOC_COVERAGE_CARGO_LOG"]).open("a") as log:
+                print(json.dumps(args), file=log)
+            if os.environ.get("DOC_COVERAGE_CARGO_FAILURE"):
+                print("controlled cargo failure", file=sys.stderr)
+                raise SystemExit(1)
+            if args[1] == "metadata":
+                print(
+                    '{"packages": [{"id": "pkg:x:1.0.0", "name": "x", '
+                    '"targets": [{"name": "x", "kind": ["lib"]}]}], '
+                    '"workspace_members": ["pkg:x:1.0.0"]}'
+                )
+                raise SystemExit(0)
+            output_path = pathlib.Path.cwd() / "target" / "doc" / "x.json"
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(
+                '{"src/lib.rs": {"total": 10, "with_docs": 9}}', encoding="utf-8"
+            )
+            print(f'Generated output into "{output_path}"')
+            """
+        ).replace("__PYTHON__", sys.executable),
+        encoding="utf-8",
     )
-
-    targets = script.doc_targets(metadata)
-
-    assert [target.kind for target in targets] == ["lib", "bin", "bin"]
-    assert {target.name for target in targets if target.kind == "bin"} == {
-        "netsuke-bin",
-        "extra",
-    }
-
-
-def test_target_discovery_excludes_outside_workspace(script: types.ModuleType) -> None:
-    """Dependency crates outside ``workspace_members`` never get measured."""
-    member = {
-        "id": "pkg:member:0.1.0",
-        "name": "member",
-        "targets": [lib_target("member")],
-    }
-    dependency = {
-        "id": "pkg:dependency:0.1.0",
-        "name": "dependency",
-        "targets": [lib_target("dependency")],
-    }
-    metadata = {
-        "packages": [member, dependency],
-        "workspace_members": ["pkg:member:0.1.0"],
-    }
-
-    targets = script.doc_targets(metadata)
-
-    assert [target.package for target in targets] == ["member"]
-
-
-def test_aggregation_sums_targets_and_reports_percentage(
-    script: types.ModuleType,
-) -> None:
-    """Aggregate totals roll per-target counts up and report the share."""
-    first = script.Coverage(10, 8)
-    second = script.Coverage(5, 5)
-
-    combined = first + second
-
-    assert combined.total == 15
-    assert combined.with_docs == 13
-    assert combined.percentage == pytest.approx(13 / 15 * 100)
-
-
-def test_empty_run_is_complete_not_a_division_by_zero(script: types.ModuleType) -> None:
-    """A crate with no doc-able targets contributes an empty, complete run."""
-    assert script.Coverage(0, 0).percentage == 100.0
+    if sys.platform == "win32":
+        executable = tmp_path / "fake-cargo.cmd"
+        executable.write_text(
+            f'@echo off\r\n"{sys.executable}" "{program}" %*\r\n', encoding="utf-8"
+        )
+    else:
+        executable = program
+        executable.chmod(0o755)
+    return executable, log_path
 
 
 def test_threshold_flips_exit_code(
@@ -229,14 +81,13 @@ def test_threshold_flips_exit_code(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The gate passes above the threshold and fails below it."""
-    metadata = (
-        '{"packages": [{"id": "pkg:x:1.0.0", "name": "x", '
-        '"targets": [{"name": "x", "kind": ["lib"]}]}], '
-        '"workspace_members": ["pkg:x:1.0.0"]}'
+    """Pass above the threshold and fail below it."""
+    coverage = script.runner.Coverage(10, 6)
+    monkeypatch.setattr(
+        script.runner,
+        "run_measurements",
+        lambda _toolchain, _root: (coverage, []),
     )
-    rustdoc = '{"src/lib.rs": {"total": 10, "with_docs": 6}}'
-    FakeCargo(script, metadata=metadata, rustdoc_output=rustdoc).install(monkeypatch)
     monkeypatch.chdir(tmp_path)
 
     passing = script.main(["--toolchain", "nightly-x", "--threshold", "50"])
@@ -246,84 +97,86 @@ def test_threshold_flips_exit_code(
     assert failing == 1
 
 
-def test_cargo_metadata_failure_aborts_the_run(
-    script: types.ModuleType,
-    tmp_path: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A failing cargo metadata run is a measurement error, not an empty gate."""
-
-    def fail(_argv: list[str], **_kwargs: object) -> FakeResult:
-        return FakeResult(1, "", "filtered diagnostics")
-
-    monkeypatch.setattr(script.subprocess, "run", fail)
-    monkeypatch.chdir(tmp_path)
-
-    with pytest.raises(RuntimeError, match="cargo metadata failed"):
-        script.load_metadata("nightly-x", tmp_path)
-
-
 @pytest.mark.parametrize(
     "case",
     [
         pytest.param(
-            RustdocFailureCase(
-                "not json at all",
-                0,
-                "did not emit coverage JSON",
-            ),
-            id="malformed-output",
+            CliProcessCase(threshold="80", fails_adapter=False, expected_code=0),
+            id="passing-threshold",
         ),
         pytest.param(
-            RustdocFailureCase(
-                "{}",
-                1,
-                "cargo rustdoc failed for x",
-            ),
-            id="rustdoc-exit-failure",
+            CliProcessCase(threshold="95", fails_adapter=False, expected_code=1),
+            id="failing-threshold",
+        ),
+        pytest.param(
+            CliProcessCase(threshold="80", fails_adapter=True, expected_code=2),
+            id="adapter-failure",
         ),
     ],
 )
-def test_run_measurements_propagates_rustdoc_failure(
-    script: types.ModuleType,
+def test_cli_process_uses_configured_cargo_adapter(
+    executable_cargo: tuple[pathlib.Path, pathlib.Path],
     tmp_path: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
-    case: RustdocFailureCase,
+    case: CliProcessCase,
 ) -> None:
-    """Propagate malformed output and non-zero rustdoc exits as measurement errors."""
-    FakeCargo(
-        script,
-        metadata=single_library_metadata(),
-        rustdoc_output=case.output,
-        rustdoc_rc=case.returncode,
-    ).install(monkeypatch)
-    monkeypatch.chdir(tmp_path)
-
-    with pytest.raises(RuntimeError, match=case.diagnostic):
-        script.run_measurements("nightly-x", tmp_path)
-
-
-def test_malformed_metadata_shape_is_a_measurement_error(
-    script: types.ModuleType,
-) -> None:
-    """Valid JSON without workspace keys is rejected, not a KeyError crash."""
-    with pytest.raises(RuntimeError, match="lacks the workspace"):
-        script.doc_targets({"packages": []})
-
-
-def test_target_without_kind_is_skipped(script: types.ModuleType) -> None:
-    """A target record missing its kind list simply contributes nothing."""
-    metadata = metadata_for(
+    """Run the CLI against a controlled Cargo executable in a child process."""
+    cargo_executable, log_path = executable_cargo
+    environment = os.environ | {
+        "CARGO": str(cargo_executable),
+        "DOC_COVERAGE_CARGO_LOG": str(log_path),
+    }
+    if case.fails_adapter:
+        environment["DOC_COVERAGE_CARGO_FAILURE"] = "1"
+    result = subprocess.run(  # noqa: S603 - executes the controlled fixture with shell disabled.
         [
-            {
-                "id": "pkg:x:0.1.0",
-                "name": "x",
-                "targets": [{"name": "mystery"}],
-            }
-        ]
+            sys.executable,
+            str(SCRIPT_DIRECTORY / "doc-coverage.py"),
+            "--manifest-root",
+            str(tmp_path),
+            "--toolchain",
+            "nightly-subprocess",
+            "--threshold",
+            case.threshold,
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        check=False,
+        env=environment,
+        text=True,
     )
 
-    assert script.doc_targets(metadata) == []
+    assert result.returncode == case.expected_code
+    calls = [
+        json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()
+    ]
+    assert calls[0] == [
+        "+nightly-subprocess",
+        "metadata",
+        "--no-deps",
+        "--format-version",
+        "1",
+    ]
+    if case.fails_adapter:
+        assert (
+            result.stderr
+            == "error: cargo metadata failed: controlled cargo failure\n\n"
+        )
+        return
+
+    assert calls[1][0] == "+nightly-subprocess"
+    assert calls[1][1:5] == ["rustdoc", "-p", "x", "--lib"]
+    assert "aggregate" in result.stdout
+    assert "9/10" in result.stdout
+    if case.expected_code == 0:
+        assert (
+            "ok: doc-comment coverage 90.00% meets the 80.00% threshold."
+            in result.stdout
+        )
+    else:
+        assert result.stderr == (
+            "doc-comment coverage 90.00% is below the 95.00% threshold; document "
+            "the lowest-coverage targets listed above and re-run `make doc-coverage`.\n"
+        )
 
 
 def test_missing_cargo_maps_to_measurement_error(
@@ -331,46 +184,17 @@ def test_missing_cargo_maps_to_measurement_error(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An OSError from Cargo exits 2 with a message, not a traceback."""
+    """Map a missing Cargo executable to the established CLI failure exit."""
+    message = "cargo: not found"
 
-    def fail(_argv: list[str], **_kwargs: object) -> FakeResult:
-        message = "cargo: not found"
+    def fail(_argv: list[str], **_kwargs: object) -> typ.NoReturn:
+        """Raise the configured Cargo executable error."""
         raise OSError(message)
 
-    monkeypatch.setattr(script.subprocess, "run", fail)
+    monkeypatch.setattr(script.runner.doc_coverage_cargo.subprocess, "run", fail)
     monkeypatch.chdir(tmp_path)
 
-    code = script.main(["--toolchain", "nightly-x"])
-
-    assert code == 2
-
-
-def test_measure_maps_missing_cargo_to_measurement_error(
-    script: types.ModuleType,
-    tmp_path: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """An OSError from Cargo in ``measure()`` is a RuntimeError, not a traceback.
-
-    ``test_missing_cargo_maps_to_measurement_error`` covers the same boundary
-    through ``main()``, where the error also surfaces at ``load_metadata()``
-    time. This test isolates the ``measure()`` translation branch after
-    metadata loading has already succeeded, so the diagnostic is the rustdoc
-    one rather than the metadata one.
-    """
-
-    def fail(_argv: list[str], **_kwargs: object) -> FakeResult:
-        message = "cargo: not found"
-        raise OSError(message)
-
-    monkeypatch.setattr(script.subprocess, "run", fail)
-
-    target = script.DocTarget("x", "lib", None)
-
-    with pytest.raises(
-        RuntimeError, match=r"cannot run cargo rustdoc for x lib \(lib\)"
-    ):
-        script.measure(target, "nightly-x", tmp_path)
+    assert script.main(["--toolchain", "nightly-x"]) == 2
 
 
 def test_toolchain_override_reaches_every_cargo_call(
@@ -378,45 +202,53 @@ def test_toolchain_override_reaches_every_cargo_call(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """``--toolchain`` flows into the ``+channel`` selector for every call."""
+    """Thread ``--toolchain`` through the ``+channel`` selector for every call."""
+    calls: list[list[str]] = []
     metadata = (
         '{"packages": [{"id": "pkg:x:1.0.0", "name": "x", '
         '"targets": [{"name": "x", "kind": ["lib"]}]}], '
         '"workspace_members": ["pkg:x:1.0.0"]}'
     )
-    fake = FakeCargo(script, metadata=metadata).install(monkeypatch)
+
+    def run(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        """Record a Cargo call and return a minimal successful response."""
+        calls.append(argv)
+        if "metadata" in argv:
+            return subprocess.CompletedProcess(argv, 0, metadata, "")
+        manifest_root = pathlib.Path(typ.cast("pathlib.Path", kwargs["cwd"]))
+        output_path = manifest_root / "target" / "doc" / "x.json"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(
+            '{"src/lib.rs": {"total": 10, "with_docs": 10}}',
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            f'Generated output into "{output_path}"\n',
+            "",
+        )
+
+    monkeypatch.setattr(script.runner.doc_coverage_cargo.subprocess, "run", run)
     monkeypatch.chdir(tmp_path)
 
     script.main(["--toolchain", "nightly-custom", "--threshold", "0"])
 
-    assert fake.calls, "expected at least one cargo invocation"
-    assert all(argv[1] == "+nightly-custom" for argv in fake.calls), (
-        f"toolchain selector not threaded through: {fake.calls!r}"
+    assert calls, "expected at least one cargo invocation"
+    assert all(argv[1] == "+nightly-custom" for argv in calls), (
+        f"toolchain selector not threaded through: {calls!r}"
     )
-
-
-def test_pinned_toolchain_reads_the_channel(
-    script: types.ModuleType,
-    tmp_path: pathlib.Path,
-) -> None:
-    """The pinned channel is recollected from rust-toolchain.toml."""
-    (tmp_path / "rust-toolchain.toml").write_text(
-        '[toolchain]\nchannel = "nightly-from-pin"\n',
-        encoding="utf-8",
-    )
-
-    assert script.pinned_toolchain(tmp_path) == "nightly-from-pin"
 
 
 def test_parse_threshold_rejects_invalid_values(script: types.ModuleType) -> None:
-    """Thresholds outside [0, 100] and non-numbers are argument errors."""
+    """Reject thresholds outside [0, 100] and non-numbers as argument errors."""
     for value in ["101", "-1", "not-a-number"]:
         with pytest.raises(argparse.ArgumentTypeError):
             script.parse_threshold(value)
 
 
 def test_label_names_libraries_and_binaries(script: types.ModuleType) -> None:
-    """The breakdown labels distinguish lib from named binary targets."""
+    """Distinguish library and named binary targets in breakdown labels."""
     lib = script.DocTarget("netsuke", "lib", None)
     binary = script.DocTarget("netsuke", "bin", "netsuke-bin")
 
@@ -424,142 +256,40 @@ def test_label_names_libraries_and_binaries(script: types.ModuleType) -> None:
     assert script.label(binary) == "netsuke bin (netsuke-bin)"
 
 
-@pytest.mark.parametrize(
-    ("target", "selector"),
-    [
-        pytest.param(
-            ("netsuke", "lib", None),
-            ["--lib"],
-            id="library",
-        ),
-        pytest.param(
-            ("netsuke", "bin", "netsuke-bin"),
-            ["--bin", "netsuke-bin"],
-            id="binary",
-        ),
-    ],
-)
-def test_rustdoc_args_for_target(
+def test_main_delegates_to_runner_measurements(
     script: types.ModuleType,
+    tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
-    target: tuple[str, str, str | None],
-    selector: list[str],
 ) -> None:
-    """Build the complete rustdoc command, selecting lib or bin by target kind."""
-    monkeypatch.setenv("CARGO", "cargo")
-    doc_target = script.DocTarget(*target)
-
-    args = script.rustdoc_args(doc_target, "nightly-x")
-
-    assert args == [
-        "cargo",
-        "+nightly-x",
-        "rustdoc",
-        "-p",
-        "netsuke",
-        *selector,
-        "--",
-        "-Z",
-        "unstable-options",
-        "--show-coverage",
-        "--output-format",
-        "json",
-        "--document-private-items",
-    ]
-
-
-def test_parse_coverage_output_aggregates_multiple_files(
-    script: types.ModuleType,
-) -> None:
-    """Per-file totals and with_docs counts roll up across the payload."""
-    target = script.DocTarget("netsuke", "lib", None)
-    payload = (
-        '{"src/a.rs": {"total": 10, "with_docs": 8}, '
-        '"src/b.rs": {"total": 5, "with_docs": 3}}'
+    """Delegate CLI measurement while retaining CLI reporting and exit policy."""
+    expected = script.runner.Coverage(1, 1)
+    monkeypatch.setattr(
+        script.runner,
+        "run_measurements",
+        lambda _toolchain, _root: (expected, []),
     )
 
-    coverage = script.parse_coverage_output(target, payload)
-
-    assert coverage.total == 15
-    assert coverage.with_docs == 11
-
-
-def test_parse_coverage_output_rejects_malformed_json(script: types.ModuleType) -> None:
-    """Non-JSON output surfaces as a RuntimeError naming the coverage gate."""
-    target = script.DocTarget("netsuke", "lib", None)
-
-    with pytest.raises(RuntimeError, match="did not emit coverage JSON"):
-        script.parse_coverage_output(target, "not json at all")
+    assert (
+        script.main(["--toolchain", "nightly-x", "--manifest-root", str(tmp_path)]) == 0
+    )
 
 
-@pytest.mark.parametrize(
-    "entry",
-    [
-        pytest.param('{"total": 1e999, "with_docs": 0}', id="non-finite"),
-        pytest.param('{"total": -1, "with_docs": 0}', id="negative"),
-        pytest.param('{"total": 1.5, "with_docs": 0}', id="non-integer"),
-        pytest.param('{"total": 1, "with_docs": 2}', id="inconsistent"),
-    ],
-)
-def test_main_rejects_invalid_coverage_counts(
+def test_main_translates_runner_failure_to_exit_two(
     script: types.ModuleType,
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
-    entry: str,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Return the controlled exit for invalid Rustdoc count invariants."""
-    payload = '{"src/lib.rs": ' + entry + "}"
-    FakeCargo(
-        script,
-        metadata=single_library_metadata(),
-        rustdoc_output=payload,
-    ).install(monkeypatch)
-    monkeypatch.chdir(tmp_path)
+    """Translate a runner failure into the established CLI diagnostic and exit code."""
+    message = "runner measurement failed"
 
-    with pytest.raises(RuntimeError, match="each entry requires total and with_docs"):
-        script.run_measurements("nightly-x", tmp_path)
+    def fail(_toolchain: str, _manifest_root: pathlib.Path) -> typ.NoReturn:
+        """Raise the configured runner failure."""
+        raise RuntimeError(message)
 
-    assert script.main(["--toolchain", "nightly-x"]) == 2
+    monkeypatch.setattr(script.runner, "run_measurements", fail)
 
-
-@pytest.mark.parametrize(
-    "case",
-    [
-        pytest.param(
-            CoveragePayloadFailureCase("[]", "expected an object"),
-            id="non-object",
-        ),
-        pytest.param(
-            CoveragePayloadFailureCase(
-                '{"src/lib.rs": {"total": 1}}',
-                "each entry requires total and with_docs",
-            ),
-            id="missing-with-docs",
-        ),
-        pytest.param(
-            CoveragePayloadFailureCase(
-                '{"src/lib.rs": {"with_docs": 1}}',
-                "each entry requires total and with_docs",
-            ),
-            id="missing-total",
-        ),
-    ],
-)
-def test_main_maps_invalid_coverage_shape_to_measurement_error(
-    script: types.ModuleType,
-    tmp_path: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
-    case: CoveragePayloadFailureCase,
-) -> None:
-    """Return the controlled measurement exit for invalid coverage JSON shapes."""
-    FakeCargo(
-        script,
-        metadata=single_library_metadata(),
-        rustdoc_output=case.payload,
-    ).install(monkeypatch)
-    monkeypatch.chdir(tmp_path)
-
-    with pytest.raises(RuntimeError, match=case.diagnostic):
-        script.run_measurements("nightly-x", tmp_path)
-
-    assert script.main(["--toolchain", "nightly-x"]) == 2
+    assert (
+        script.main(["--toolchain", "nightly-x", "--manifest-root", str(tmp_path)]) == 2
+    )
+    assert capsys.readouterr().err == f"error: {message}\n"

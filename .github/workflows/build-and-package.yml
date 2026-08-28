@@ -94,9 +94,6 @@ jobs:
           bin-name: ${{ env.BIN_NAME }}
           project-dir: .
           manifest-path: Cargo.toml
-          # Preserve the Polonius requirement through nested toolchain setup
-          # (see docs/adr-006-adopt-polonius-nightly-toolchain.md).
-          rustflags: -Zpolonius=next
           skip-man-page-discovery: 'true'
 
       - name: Generate release help

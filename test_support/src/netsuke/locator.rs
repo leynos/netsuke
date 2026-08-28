@@ -1,13 +1,18 @@
-//! Helpers for invoking the built `netsuke` binary in tests.
+//! Locating the built `netsuke` executable from a running test.
 //!
-//! These utilities use `assert_cmd` to locate the current workspace's
-//! `netsuke` executable and run it in a controlled working directory,
-//! capturing stdout/stderr for assertions.
+//! Split from the parent `netsuke` module, which owns running the binary once
+//! it is found. The two concerns are independent: everything here is pure path
+//! reasoning over an injected environment, with the only filesystem contact
+//! being the existence probe, whereas the parent module spawns processes.
+//! Keeping them apart also keeps each within the module line cap.
+//!
+//! Reuse policy: private to `test_support::netsuke`. Tests reach the binary
+//! through `run_netsuke_in` or `run_netsuke_in_with_env`, never through the
+//! locator directly, so nothing here is exported from the crate.
 
 use anyhow::{Context, Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
 use mockable::{DefaultEnv, Env};
-use std::path::Path;
 
 /// Locate the built `netsuke` executable for integration-style tests.
 ///
@@ -15,17 +20,46 @@ use std::path::Path;
 /// fall back to `CARGO_TARGET_DIR` when Cargo's `build.build-dir` splits
 /// intermediate artefacts from final ones: test executables then run from the
 /// build dir while the uplifted binary lands under the target dir.
-fn netsuke_executable() -> Result<Utf8PathBuf> {
+pub(super) fn netsuke_executable() -> Result<Utf8PathBuf> {
     let raw_exe = std::env::current_exe().context("locate current test executable")?;
     let current_exe = Utf8PathBuf::from_path_buf(raw_exe)
         .map_err(|path| anyhow::anyhow!("test executable path {} is not UTF-8", path.display()))?;
     netsuke_executable_from(&DefaultEnv, &current_exe)
 }
 
+/// Reduces a test executable's directory to the profile directory above it.
+///
+/// Cargo has placed integration-test executables in two different places, and
+/// the final binary is uplifted to the profile directory in both cases:
+///
+/// - `<profile>/deps/`, the long-standing layout;
+/// - `<profile>/build/<package>/<hash>/out/`, used by the Cargo shipped with
+///   the 1.99 nightlies, which has no `deps` directory at all.
+///
+/// Anything else is returned unchanged, so an unrecognized layout degrades to
+/// looking beside the executable rather than failing here. The result also
+/// supplies the profile name for the `CARGO_TARGET_DIR` fallbacks, so both
+/// layouts derive the same name.
+fn profile_dir(exe_dir: &Utf8Path) -> &Utf8Path {
+    match exe_dir.file_name() {
+        Some("deps") => exe_dir.parent().unwrap_or(exe_dir),
+        Some("out") => {
+            let build = exe_dir
+                .parent()
+                .and_then(Utf8Path::parent)
+                .and_then(Utf8Path::parent);
+            match build {
+                Some(dir) if dir.file_name() == Some("build") => dir.parent().unwrap_or(exe_dir),
+                _ => exe_dir,
+            }
+        }
+        _ => exe_dir,
+    }
+}
 /// Locate the `netsuke` binary from an injected environment and test path.
 ///
 /// Candidates are checked in order:
-/// 1. beside the test executable (its directory, minus a trailing `deps`);
+/// 1. the profile directory above the test executable (see [`profile_dir`]);
 /// 2. `CARGO_TARGET_DIR/<profile>/` for split `build.build-dir` layouts;
 /// 3. `CARGO_TARGET_DIR/<triple>/<profile>/` for `--target` builds, where the
 ///    profile directory nests under the target triple.
@@ -33,14 +67,11 @@ fn netsuke_executable() -> Result<Utf8PathBuf> {
 /// Filesystem errors other than "not found" are surfaced rather than treated
 /// as a missing candidate.
 fn netsuke_executable_from(env: &impl Env, current_exe: &Utf8Path) -> Result<Utf8PathBuf> {
-    let mut exe_dir = current_exe
-        .parent()
-        .context("test executable should have a parent directory")?;
-    if exe_dir.file_name() == Some("deps") {
-        exe_dir = exe_dir
+    let exe_dir = profile_dir(
+        current_exe
             .parent()
-            .context("deps directory should have a parent")?;
-    }
+            .context("test executable should have a parent directory")?,
+    );
 
     let binary_name = format!("netsuke{}", std::env::consts::EXE_SUFFIX);
     let candidates = candidate_paths(env, exe_dir, &binary_name);
@@ -78,86 +109,6 @@ fn candidate_paths(env: &impl Env, exe_dir: &Utf8Path, binary_name: &str) -> Vec
     }
     candidates
 }
-
-/// Captured output from a `netsuke` invocation.
-#[derive(Debug)]
-pub struct NetsukeRun {
-    /// Captured stdout (lossy UTF-8).
-    pub stdout: String,
-    /// Captured stderr (lossy UTF-8).
-    pub stderr: String,
-    /// Whether the command exited successfully.
-    pub success: bool,
-}
-
-/// Run `netsuke` in `current_dir` with the supplied args.
-///
-/// The function clears `PATH` so tests don't accidentally execute a host
-/// dependency. Other process environment variables are inherited, except for
-/// configuration selectors that this helper removes explicitly.
-///
-/// # Errors
-///
-/// Returns an error when `netsuke` cannot be located or the process cannot be
-/// spawned.
-pub fn run_netsuke_in(current_dir: &Path, args: &[&str]) -> Result<NetsukeRun> {
-    let isolated_config_home = current_dir.join(".config");
-    let executable = netsuke_executable()?;
-    let mut cmd = assert_cmd::Command::new(executable);
-    let output = cmd
-        .current_dir(current_dir)
-        .env("PATH", "")
-        .env_remove("NETSUKE_CONFIG_PATH")
-        .env_remove("NETSUKE_OUTPUT_FORMAT")
-        .env("HOME", current_dir)
-        .env("XDG_CONFIG_HOME", &isolated_config_home)
-        .args(args)
-        .output()
-        .context("run netsuke command")?;
-    Ok(NetsukeRun {
-        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        success: output.status.success(),
-    })
-}
-
-/// Run `netsuke` in `current_dir` with an isolated environment.
-///
-/// Unlike [`run_netsuke_in`], this variant uses `env_clear()` so the child
-/// inherits no process environment variables. The child receives only an
-/// isolated `PATH`, `HOME`, `XDG_CONFIG_HOME`, and the variables supplied in
-/// `extra_env`. This prevents process-level environment races when tests run
-/// in parallel.
-///
-/// # Errors
-///
-/// Returns an error when `netsuke` cannot be located or the process cannot be
-/// spawned.
-pub fn run_netsuke_in_with_env(
-    current_dir: &Path,
-    args: &[&str],
-    extra_env: &[(&str, &str)],
-) -> Result<NetsukeRun> {
-    let executable = netsuke_executable()?;
-    let mut cmd = assert_cmd::Command::new(executable);
-    let isolated_config_home = current_dir.join(".config");
-    let isolated_path = tempfile::tempdir().context("create isolated executable directory")?;
-    cmd.current_dir(current_dir)
-        .env_clear()
-        .env("PATH", isolated_path.path())
-        .env("HOME", current_dir)
-        .env("XDG_CONFIG_HOME", isolated_config_home);
-    for &(key, value) in extra_env {
-        cmd.env(key, value);
-    }
-    let output = cmd.args(args).output().context("run netsuke command")?;
-    Ok(NetsukeRun {
-        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        success: output.status.success(),
-    })
-}
-
 #[cfg(test)]
 mod tests {
     //! Unit tests for the netsuke binary locator.
@@ -267,6 +218,28 @@ mod tests {
         Some("target"),
         "target/x86_64-unknown-linux-gnu/debug",
         "triple fallback should resolve"
+    ))]
+    // Cargo 1.99 nightlies drop `deps/` and run integration tests from a
+    // build directory under the profile, uplifting the binary as before.
+    #[case::build_out_primary(LocatorScenario::new(
+        "target/debug/build/netsuke-build/abc123/out/test-exe",
+        None,
+        "target/debug",
+        "build-out layout should resolve beside the profile"
+    ))]
+    #[case::build_out_profile_fallback(LocatorScenario::new(
+        "build/debug/build/netsuke-build/abc123/out/test-exe",
+        Some("target"),
+        "target/debug",
+        "build-out layout should reach the profile fallback"
+    ))]
+    // A directory merely named `out` is not the build layout, so the locator
+    // must look beside the executable rather than four levels up.
+    #[case::unrecognized_out_directory(LocatorScenario::new(
+        "somewhere/out/test-exe",
+        None,
+        "somewhere/out",
+        "an unrecognized `out` directory should not be stripped"
     ))]
     fn resolves_each_candidate_layout(
         temp_root: TempRoot,

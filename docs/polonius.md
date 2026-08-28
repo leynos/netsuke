@@ -1,11 +1,17 @@
 # Polonius migration notes
 
-Netsuke compiles with the Polonius alpha borrow-checking analysis
-(`-Zpolonius=next`) on the dated nightly pinned in `rust-toolchain.toml`.
+Netsuke compiles with the Polonius alpha borrow-checking analysis, which the
+dated nightly pinned in `rust-toolchain.toml` enables by default.
 [ADR-006](adr-006-adopt-polonius-nightly-toolchain.md) records the toolchain
 policy; this document records the audit that motivated it, the API evolutions
 it enabled, and the refusals that bound it. Issue
 [#465](https://github.com/leynos/netsuke/issues/465) tracked the migration.
+
+The migration originally ran against an opt-in `-Zpolonius=next` directive.
+Nightly toolchains dated 2026-08-04 and later enable Polonius by default, and
+the directive is being retired, so the tree passes it nowhere. Historical
+references to the flag below describe how a classification was made at the
+time, not a build setting that still applies.
 
 ## Method
 
@@ -20,14 +26,19 @@ oracle:
    id/index indirection, clone-modify-writeback, snapshot-collect loops, and
    per-module clone hotspots.
 
-Every change was compiled twice on `nightly-2026-06-25`: once with
-`-Zpolonius=next` (must pass) and once without. The no-flag compile exists only
-to classify the individual change: a failure proves the design genuinely
-depends on Polonius and the site is tagged `POLONIUS(...)`; success means the
-old form was habit rather than necessity and the improvement carries no
-toolchain caveat. The complete behavioural test suite runs under
-`-Zpolonius=next` — the tree's only supported configuration — and was required
-to pass unchanged after every change.
+Every change was compiled twice on `nightly-2026-06-25`, where the analysis was
+still opt-in: once with `-Zpolonius=next` (must pass) and once without. The
+no-flag compile existed only to classify the individual change: a failure
+proves the design genuinely depends on Polonius and the site is tagged
+`POLONIUS(...)`; success means the old form was habit rather than necessity and
+the improvement carries no toolchain caveat. The complete behavioural test
+suite runs under Polonius — the tree's only supported configuration — and was
+required to pass unchanged after every change.
+
+Classifying a new site the same way now means compiling it against a
+pre-2026-08-04 nightly, which is the last configuration that still applies NLL.
+`-Zpolonius=legacy` does not restore NLL. That comparison is a one-off
+diagnostic, not a build setting: the tree itself is Polonius-only.
 
 ## Polonius-dependent sites
 
@@ -41,7 +52,7 @@ well — the owned style was habit, so they carry no toolchain caveat:
 - `src/graph_view/mod.rs` — `NodePathRegistry::ensure_node_mut` uses
   `hashbrown::HashMap::entry_ref` for a borrowed single lookup. It returns
   `&mut NodeKind` and allocates an owned path only for a vacant entry, while
-  compiling both with and without `-Zpolonius=next`.
+  compiling under both borrow checkers.
 - `src/stdlib/collections.rs` — `group_by_filter` consumed its resolved key
   in `entry(key_value)` instead of cloning it first.
 - `src/ir/cycle.rs` — `detect_targets` snapshots borrowed
@@ -86,48 +97,55 @@ Scanner suspects that turned out not to be NLL residue:
 - Test-suite `drop()` calls (environment guards, HTTP fixture teardown) are
   semantic Drop effects, not borrow appeasement.
 
-The plumbing itself is contract-tested: `tests/polonius_toolchain_contract.rs`
-pins the dated-nightly channel, the `.cargo/config.toml` `build.rustflags`
-entry, the `POLONIUS_FLAGS` default and every RUSTFLAGS-setting Makefile
-recipe, and the shared-action `with.rustflags` and toolchain inputs in the CI,
-Netsukefile, coverage, and packaging workflows.
+The toolchain policy is contract-tested: `tests/polonius_toolchain_contract.rs`
+requires the pinned channel to be a dated nightly at or after 2026-08-04, fails
+if any build configuration reintroduces a `-Zpolonius` directive, and pins the
+shared-action `with.rustflags` and toolchain inputs in the CI, Netsukefile,
+coverage, and packaging workflows. The `RUSTFLAGS` shape of each Makefile
+recipe is covered separately by `tests/makefile_test_target.rs`.
 
 ## Harness consequences
 
-Tooling that rebuilds the crate with its own flags must propagate the Polonius
-flag or avoid compiling the crate:
+Because the analysis rides on the toolchain rather than on a flag, tooling only
+has to use the pinned toolchain; nothing needs to propagate a build setting:
 
 - **trybuild** discards ambient `RUSTFLAGS` and workspace `build.rustflags`,
   replacing them via `--config` on its scratch project, and it always builds
-  the host crate as a fixture dependency. The Kani cfg policy fixture is
-  therefore compiled and run directly with the workspace `rustc`
-  (`tests/kani_cfg_ui_tests.rs`); do not reintroduce trybuild cases that depend
-  on the `netsuke` crate while the tree is Polonius-only.
-- **Kani** and **Whitaker** run under their own toolchains but read the
-  workspace `.cargo/config.toml` or the Makefile `RUSTFLAGS`, so they
-  borrow-check with `-Zpolonius=next` and need no special handling.
+  the host crate as a fixture dependency. While Polonius was flag-gated that
+  broke every fixture depending on `netsuke`, so the Kani cfg policy fixture is
+  compiled and run directly with the workspace `rustc`
+  (`tests/kani_cfg_ui_tests.rs`). That specific hazard is gone, but trybuild
+  still needs a scratch project and a toolchain-sensitive `.stderr` snapshot,
+  so the direct-compile harnesses stay.
+- **Whitaker** runs its Dylint driver on a nightly of its own and needs no
+  Polonius-specific handling.
+- **Kani** manages a supporting nightly during `cargo kani setup`, and that
+  nightly can be older than the repository's. Kani 0.67.0 uses
+  `nightly-2025-11-21`, which predates the Polonius default, so
+  `make kani-full` borrow-checks under NLL. With no tagged sites in the tree
+  this costs nothing today; should a `POLONIUS(...)` site fail to verify, move
+  Kani to a build whose nightly is 2026-08-04 or later rather than reinstating a
+  `-Zpolonius` directive.
 - **CI setup actions**: the shared `setup-rust` and `rust-build-release`
-  actions receive the Polonius flags through their `with.rustflags` inputs;
-  workflows must not set a job-level `env.RUSTFLAGS`. CI and coverage pass
-  `-D warnings -Zpolonius=next`, while Netsukefile tests and packaging pass
-  `-Zpolonius=next`. The coverage action's `cargo-llvm-cov` invocation inherits
-  the flags exported by `setup-rust` and appends its instrumentation flags.
-  Makefile recipes still append `POLONIUS_FLAGS` when they set ambient
-  `RUSTFLAGS`. The per-workflow values, the `NETSUKE_RUST_TOOLCHAIN` policy and
-  the reason the contract test pins each action's exact revision are set out in
-  the developer guide under [Polonius CI shared-action
-  contract](developers-guide.md#polonius-ci-shared-action-contract).
-- **Registry installs**: the crates.io package excludes
-  `rust-toolchain.toml` and `.cargo/config.toml`, and registry builds run
-  outside the checkout, so `cargo install netsuke-build` must select the pinned
-  nightly and pass the flag explicitly
-  (`RUSTFLAGS=-Zpolonius=next cargo +nightly-2026-06-25 install netsuke-build`).
-  The README and users' guide document the command and
-  `tests/documentation_examples_tests.rs` pins it.
+  actions export their own `RUSTFLAGS`, so anything a job needs travels through
+  their `with.rustflags` inputs and workflows must not set a job-level
+  `env.RUSTFLAGS`. CI and coverage pass `-D warnings`; Netsukefile tests and
+  packaging pass no `rustflags` at all. The coverage action's `cargo-llvm-cov`
+  invocation inherits the flags exported by `setup-rust` and appends its
+  instrumentation flags. The per-workflow values, the `NETSUKE_RUST_TOOLCHAIN`
+  policy and the reason the contract test pins each action's exact revision are
+  set out in the developer guide under
+  [Polonius CI shared-action contract](developers-guide.md#polonius-ci-shared-action-contract).
+- **Registry installs**: the crates.io package excludes `rust-toolchain.toml`,
+  and registry builds run outside the checkout, so
+  `cargo install netsuke-build` must select the pinned nightly explicitly
+  (`cargo +nightly-2026-08-23 install netsuke-build`). The README and users'
+  guide document the command and `tests/documentation_installation_tests.rs`
+  pins it.
 - **cargo-mutants** (scheduled, informational) runs through the shared
   `mutation-cargo.yml` workflow, which controls its own environment; if those
-  runs regress with E0499 at tagged sites, the shared workflow needs the same
-  `RUSTFLAGS` treatment.
+  runs regress with E0499 at tagged sites, check that the shared workflow uses
+  the pinned toolchain.
 
 ## Clone counts
 
@@ -148,11 +166,11 @@ projection maps and owned metadata — data ownership, not workaround shapes.
 
 ## Stabilization
 
-When `-Zpolonius=next` (or its successor) reaches stable Rust:
+The flag plumbing is already gone; the analysis is the nightly default. When it
+reaches stable Rust:
 
-1. Move `rust-toolchain.toml` to the stabilizing release and delete the
-   `[build] rustflags` entry in `.cargo/config.toml` plus the Makefile
-   `POLONIUS_FLAGS` variable.
+1. Move `rust-toolchain.toml` to the stabilizing release, and relax the
+   dated-nightly lower bound in `tests/polonius_toolchain_contract.rs`.
 2. Re-declare `rust-version` in `Cargo.toml` at that release.
 3. Keep the `POLONIUS(...)` tags: they still explain why the shape exists;
    reword "nightly-only" phrasing in the ADR and guides.
@@ -172,5 +190,5 @@ The contract for new code and reviews (also summarized in `AGENTS.md` and the
   locks, aliasing, suspension points, thread boundaries) is permanent, and
   "simplifying" those sites into reference-returning forms will not compile or
   will break the design.
-- Classify any new borrow-centric API by compiling with and without the
-  flag, then record it here.
+- Classify any new borrow-centric API by compiling it against a pre-2026-08-04
+  nightly as well as the pinned one, then record it here.

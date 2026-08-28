@@ -135,11 +135,12 @@ project:
 
 ### Borrow checker: Polonius, not NLL
 
-Netsuke compiles with the Polonius alpha analysis (`-Zpolonius=next`) on the
-dated nightly pinned in `rust-toolchain.toml` (see
-`docs/adr-006-adopt-polonius-nightly-toolchain.md` and `docs/polonius.md`).
-Internal APIs are borrow-centric: lookups and get-or-create accessors return
-references, clone keys only on insertion, and build error context lazily.
+Netsuke compiles with the Polonius alpha analysis, which the dated nightly
+pinned in `rust-toolchain.toml` enables by default (see
+`docs/adr-006-adopt-polonius-nightly-toolchain.md` and `docs/polonius.md`). No
+`-Z` directive is needed, or wanted: do not add one. Internal APIs are
+borrow-centric: lookups and get-or-create accessors return references, clone
+keys only on insertion, and build error context lazily.
 
 - **Never** rewrite a site tagged `POLONIUS(...)` into a double lookup
   (`contains_key` + `get_mut`), an `entry(key.clone())` call, or an id/index
@@ -152,8 +153,17 @@ references, clone keys only on insertion, and build error context lazily.
 - Respect `POLONIUS-REFUSED(...)` tags: the named constraint (persistent
   identity, lock boundaries, aliasing, suspension points, thread boundaries) is
   permanent. Do not convert those sites to reference-returning forms.
-- When adding a new borrow-centric API, verify it with and without
-  `-Zpolonius=next` and record the classification in `docs/polonius.md`.
+- When adding a new borrow-centric API, record the classification in
+  `docs/polonius.md`.
+
+### Trait solver: next-generation, enabled by the pin
+
+The same pinned nightly enables the next-generation trait solver, and Netsuke
+assumes it. Write to what the solver accepts: do not contort a design around an
+old-solver limitation, and do not add explicit turbofish, redundant bounds, or
+intermediate bindings to work around inference that already succeeds. As with
+Polonius, the pin is the whole mechanism — do not add a `-Znext-solver`
+directive anywhere.
 
 - Run `make check-fmt`, `make lint`, `make doc-coverage`, and `make test`
   before committing. These targets wrap the following commands, so contributors
@@ -168,9 +178,9 @@ references, clone keys only on insertion, and build error context lazily.
   - `make lint` executes:
 
     ```sh
-    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zpolonius=next" \
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings" \
     RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo doc --workspace --no-deps
-    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zpolonius=next" \
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings" \
     cargo clippy --workspace --all-targets --all-features -- -D warnings
     whitaker --all -- --all-targets --all-features
     ```
@@ -183,9 +193,9 @@ references, clone keys only on insertion, and build error context lazily.
   - `make test` executes:
 
     ```sh
-    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zpolonius=next" \
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings" \
     cargo nextest run --workspace --all-targets --all-features
-    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zpolonius=next" \
+    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings" \
     cargo test --workspace --doc --all-features
     ```
 
@@ -198,7 +208,6 @@ references, clone keys only on insertion, and build error context lazily.
   - `make doc-coverage` executes:
 
     ```sh
-    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Zpolonius=next" \
     RUSTDOCFLAGS="--cfg docsrs -D warnings" \
     python3 scripts/doc-coverage.py --threshold 80
     ```

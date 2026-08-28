@@ -26,12 +26,13 @@ jobs:
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@8add2d99854a5b77548eae98cca59202e68fefc8
         with:
-          # Match rust-toolchain.toml: the tree needs -Zpolonius=next (see
+          # Match rust-toolchain.toml: the tree needs the nightly-default
+          # Polonius borrow checker (see
           # docs/adr-006-adopt-polonius-nightly-toolchain.md).
-          toolchain: nightly-2026-06-25
-          # Preserve warnings-as-errors and Polonius through toolchain setup;
+          toolchain: nightly-2026-08-23
+          # Preserve warnings-as-errors through toolchain setup;
           # cargo-llvm-cov appends its instrumentation flags to this value.
-          rustflags: -D warnings -Zpolonius=next
+          rustflags: -D warnings
       - name: Test and Measure Coverage
         uses: leynos/shared-actions/.github/actions/generate-coverage@8add2d99854a5b77548eae98cca59202e68fefc8
         with:

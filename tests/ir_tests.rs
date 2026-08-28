@@ -15,7 +15,7 @@ fn build_graph_default_is_empty() {
     let graph = BuildGraph::default();
     assert!(graph.actions.is_empty());
     assert!(graph.targets.is_empty());
-    assert!(graph.default_targets.is_empty());
+    assert_eq!(graph.default_targets, Vec::<Utf8PathBuf>::new());
 }
 
 #[rstest]

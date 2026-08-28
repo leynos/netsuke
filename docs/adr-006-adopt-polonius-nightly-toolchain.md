@@ -99,3 +99,28 @@ remains correct.
 - `cargo +stable` invocations fail on `-Zpolonius=next`. This is intentional:
   the failure is loud and immediate rather than a confusing borrowck error
   later.
+
+## Addendum — 2026-08-27: nightly-default Polonius and toolchain boundaries
+
+The repository pin has since moved to `nightly-2026-08-23`. Nightlies dated
+2026-08-04 and later enable the Polonius alpha analysis by default, so the pin
+now carries the borrow-checker requirement without an explicit directive.
+
+The explicit `-Zpolonius` plumbing from the original decision has been retired:
+the `.cargo/config.toml` rustflags entry, the `POLONIUS_FLAGS` Makefile
+variable, and the CI `with.rustflags` inputs were removed. The pin is now the
+sole repository mechanism for this compiler behaviour.
+
+Kani is outside that boundary. Kani 0.67.0 installs and uses its own bundled
+`nightly-2025-11-21` toolchain through `cargo kani setup`. That toolchain
+predates nightly-default Polonius, so Kani currently uses NLL. Moving the
+repository Rust pin does not upgrade Kani. Do not claim that Kani verifies
+`POLONIUS(...)` APIs with Polonius until a Kani release bundles a sufficiently
+recent nightly, or Kani is rebuilt from source against that nightly.
+
+Registry installs likewise do not inherit the checkout's toolchain file. They
+must select the repository's pinned nightly explicitly, for example:
+
+```sh
+cargo +nightly-2026-08-23 install netsuke-build
+```

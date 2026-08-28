@@ -5,16 +5,22 @@
 //! then panic at run time for the common "no locale set" case. These tests
 //! keep that a compile-time contract rather than a doc-comment promise.
 //!
-//! Trybuild cannot drive them: it removes ambient `RUSTFLAGS` and overrides
-//! workspace `build.rustflags` outright (`env_remove("RUSTFLAGS")` plus
-//! `--config=build.rustflags=…` in its cargo invocations), so it would
-//! rebuild the `netsuke` dependency without `-Zpolonius=next` and reject the
-//! crate's `POLONIUS(...)` sites (see docs/polonius.md). Instead the
-//! `test_support` rlib is built by Cargo — which does inherit the ambient
-//! flags — and the fixtures are compiled directly with the workspace `rustc`
-//! against that rlib.
+//! Trybuild drove these during the Polonius migration and could not: it
+//! removes ambient `RUSTFLAGS` and overrides workspace `build.rustflags`
+//! outright (`env_remove("RUSTFLAGS")` plus `--config=build.rustflags=…` in
+//! its cargo invocations), so while Polonius was flag-gated it rebuilt the
+//! `test_support` dependency without the analysis and rejected the crate's
+//! `POLONIUS(...)` sites (see docs/polonius.md). The pinned nightly now
+//! enables Polonius by default, so that hazard is gone, but the direct-compile
+//! harness is kept: it needs no scratch project and no toolchain-sensitive
+//! `.stderr` snapshot. The `test_support` rlib is built by Cargo, and the
+//! fixtures are compiled directly with the workspace `rustc` against it.
 
-use camino::{Utf8Path, Utf8PathBuf};
+#[path = "support/cargo_artifacts.rs"]
+mod cargo_artifacts;
+#[path = "support/rustc_response_file.rs"]
+mod rustc_response_file;
+
 use rstest::{fixture, rstest};
 use std::{
     io,
@@ -79,16 +85,15 @@ fn stub_env_builders_compile_under_the_same_harness(
 
 /// The `test_support` rlib and the directories holding its dependencies.
 struct TestSupportRlib {
-    rlib: Utf8PathBuf,
-    deps_dirs: Vec<Utf8PathBuf>,
+    rlib: PathBuf,
+    deps_dirs: Vec<PathBuf>,
 }
 
 impl TestSupportRlib {
     /// Build `test_support` with Cargo and locate the resulting rlib.
     ///
-    /// Cargo inherits the ambient `RUSTFLAGS`, so the rlib is borrow-checked
-    /// with the same Polonius flags as the rest of the suite — the property
-    /// trybuild could not preserve.
+    /// Cargo inherits the ambient `RUSTFLAGS` and the pinned toolchain, so the
+    /// rlib is borrow-checked exactly as the rest of the suite is.
     fn build() -> io::Result<Self> {
         Self::build_with(&[])
     }
@@ -118,16 +123,21 @@ impl TestSupportRlib {
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
         let rlib = stdout
             .lines()
-            .filter_map(test_support_rlib_in_message)
+            .filter_map(|line| cargo_artifacts::library_path_in_message(line, "test_support"))
             .next_back()
             .ok_or_else(|| io::Error::other("cargo reported no test_support rlib artefact"))?;
-        // Dependency rlibs do not necessarily sit beside the uplifted
+        // Dependencies do not necessarily sit beside the uplifted
         // `test_support` rlib: Cargo's `build.build-dir` setting splits
-        // intermediate artefacts (where dependencies live) from final ones.
-        // Every compiler-artifact message names its rlib's real location, so
-        // collect each artefact's parent directory for `-L dependency=`.
-        let mut deps_dirs: Vec<Utf8PathBuf> = Vec::new();
-        for parent in stdout.lines().flat_map(rlib_parents_in_message) {
+        // intermediate artefacts (where dependencies live) from final ones,
+        // and the Cargo shipped with the 1.99 nightlies gives every crate its
+        // own directory rather than one shared `deps/`. Every
+        // compiler-artifact message names where its own artefacts really
+        // landed, so collect each parent directory for `-L dependency=`.
+        let mut deps_dirs = Vec::new();
+        for parent in stdout
+            .lines()
+            .flat_map(cargo_artifacts::dependency_dirs_in_message)
+        {
             if !deps_dirs.contains(&parent) {
                 deps_dirs.push(parent);
             }
@@ -144,75 +154,48 @@ impl TestSupportRlib {
     ///
     /// `--emit=metadata` is enough to surface the missing-item error while
     /// sparing the harness a full link of `test_support`'s dependency tree.
+    ///
+    /// The arguments travel in a `rustc` response file rather than on the
+    /// command line. Cargo 1.99 gives every crate its own artefact directory,
+    /// so `deps_dirs` holds one entry per dependency, and the split-build test
+    /// adds long temporary roots on top; passed directly, the result exceeds
+    /// the Windows `CreateProcess` command-line limit and the spawn fails with
+    /// `Os { code: 206 }` before `rustc` runs. Every directory is required to
+    /// avoid `E0463`, so the list moves off the command line rather than being
+    /// shortened.
     fn compile(&self, source: &str) -> io::Result<Output> {
         let output_dir = tempfile::tempdir()?;
-        Command::new(rustc())
-            .arg("--edition=2024")
-            .arg("--crate-type=bin")
-            .arg("--emit=metadata")
-            .arg(manifest_dir().join(source))
-            .arg("--extern")
-            .arg(format!("test_support={}", self.rlib))
-            .args(
-                self.deps_dirs
-                    .iter()
-                    .flat_map(|dir| [String::from("-L"), format!("dependency={dir}")]),
-            )
-            .arg("-o")
-            .arg(output_dir.path().join("stub-env-ui.rmeta"))
-            .output()
-    }
-}
-
-/// Extract a compiler-artifact message's target name and rlib paths.
-///
-/// Returns `None` for lines that are not valid JSON, not compiler-artifact
-/// messages, or that lack a target name; the rlib list may be empty for
-/// artefacts that emit no rlib.
-fn compiler_artifact_rlibs(line: &str) -> Option<(String, Vec<Utf8PathBuf>)> {
-    let message: serde_json::Value = serde_json::from_str(line).ok()?;
-    if message.get("reason")? != "compiler-artifact" {
-        return None;
-    }
-    let name = message.get("target")?.get("name")?.as_str()?.to_owned();
-    let rlibs = message
-        .get("filenames")
-        .and_then(serde_json::Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(serde_json::Value::as_str)
-        .filter(|filename| {
-            Utf8Path::new(filename)
-                .extension()
-                .is_some_and(|extension| extension.eq_ignore_ascii_case("rlib"))
-        })
-        .map(Utf8PathBuf::from)
-        .collect();
-    Some((name, rlibs))
-}
-
-/// Extract the parent directories of every rlib in one Cargo JSON message.
-fn rlib_parents_in_message(line: &str) -> Vec<Utf8PathBuf> {
-    compiler_artifact_rlibs(line)
-        .map(|(_name, rlibs)| {
-            rlibs
+        let mut args = vec![
+            String::from("--edition=2024"),
+            String::from("--crate-type=bin"),
+            String::from("--emit=metadata"),
+            manifest_dir().join(source).to_string_lossy().into_owned(),
+            String::from("--extern"),
+            format!("test_support={}", self.rlib.display()),
+        ];
+        args.extend(
+            self.deps_dirs
                 .iter()
-                .filter_map(|rlib| rlib.parent().map(Utf8Path::to_path_buf))
-                .collect()
-        })
-        .unwrap_or_default()
+                .flat_map(|dir| [String::from("-L"), format!("dependency={}", dir.display())]),
+        );
+        args.push(String::from("-o"));
+        args.push(
+            output_dir
+                .path()
+                .join("stub-env-ui.rmeta")
+                .to_string_lossy()
+                .into_owned(),
+        );
+
+        let response = rustc_response_file::write(output_dir.path(), "stub-env-ui.args", &args)?;
+        // `output_dir` owns the response file and stays in scope across the
+        // call below, so the file still exists when `rustc` opens it at spawn.
+        Command::new(rustc()).arg(response).output()
+    }
 }
 
-/// Extract the `test_support` rlib path from one Cargo JSON message, if any.
-fn test_support_rlib_in_message(line: &str) -> Option<Utf8PathBuf> {
-    let (name, rlibs) = compiler_artifact_rlibs(line)?;
-    (name == "test_support")
-        .then(|| rlibs.into_iter().next_back())
-        .flatten()
-}
-
-fn manifest_dir() -> Utf8PathBuf {
-    Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+fn manifest_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
 #[expect(
@@ -233,52 +216,6 @@ fn rustc() -> PathBuf {
 
 fn stderr(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
-}
-
-/// A synthetic Cargo message with two rlibs in different directories,
-/// mirroring a split `build.build-dir` layout.
-const SPLIT_LAYOUT_MESSAGE: &str = r#"{"reason":"compiler-artifact","target":{"name":"anyhow"},"filenames":["/build/debug/deps/libanyhow-1.rlib","/target/debug/libanyhow-1.rlib"]}"#;
-
-#[rstest]
-fn parser_collects_every_rlib_directory_from_a_message() {
-    let parents = rlib_parents_in_message(SPLIT_LAYOUT_MESSAGE);
-    assert_eq!(
-        parents,
-        vec![
-            Utf8PathBuf::from("/build/debug/deps"),
-            Utf8PathBuf::from("/target/debug"),
-        ],
-        "both rlib directories should be collected in message order"
-    );
-}
-
-#[rstest]
-#[case::malformed_json("not json at all")]
-#[case::other_reason(r#"{"reason":"build-script-executed","target":{"name":"anyhow"}}"#)]
-#[case::missing_target(r#"{"reason":"compiler-artifact","filenames":["/a/lib.rlib"]}"#)]
-fn parser_ignores_non_artifact_messages(#[case] line: &str) {
-    assert!(
-        rlib_parents_in_message(line).is_empty(),
-        "non-artifact input should yield no directories: {line:?}"
-    );
-    assert!(
-        test_support_rlib_in_message(line).is_none(),
-        "non-artifact input should yield no test_support rlib: {line:?}"
-    );
-}
-
-#[rstest]
-fn parser_selects_the_test_support_rlib_by_target_name() {
-    let message = r#"{"reason":"compiler-artifact","target":{"name":"test_support"},"filenames":["/deps/libtest_support-1.rlib","/final/libtest_support.rlib"]}"#;
-    assert_eq!(
-        test_support_rlib_in_message(message),
-        Some(Utf8PathBuf::from("/final/libtest_support.rlib")),
-        "the last-listed rlib should win, matching Cargo's uplift ordering"
-    );
-    assert!(
-        test_support_rlib_in_message(SPLIT_LAYOUT_MESSAGE).is_none(),
-        "other targets' artefacts should not be mistaken for test_support"
-    );
 }
 
 /// Forcing a split `build.build-dir` must still yield a working harness:

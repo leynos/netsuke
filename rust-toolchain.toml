@@ -1,7 +1,7 @@
-# Netsuke builds with the Polonius alpha borrow-checking analysis
-# (`-Zpolonius=next`), which is nightly-only. The dated pin keeps builds
-# reproducible; see docs/adr-006-adopt-polonius-nightly-toolchain.md before
-# changing the channel.
+# Netsuke builds with the Polonius alpha borrow-checking analysis, which is
+# enabled by default on nightly toolchains from 2026-08-04 onwards and so is
+# nightly-only. The dated pin keeps builds reproducible; see
+# docs/adr-006-adopt-polonius-nightly-toolchain.md before changing the channel.
 [toolchain]
-channel = "nightly-2026-06-25"
+channel = "nightly-2026-08-23"
 components = ["rustfmt", "clippy", "rust-analyzer"]
