@@ -127,11 +127,16 @@ doc-coverage: doc-coverage-test ## Verify aggregate Rustdoc doc-comment coverage
 	@RUSTDOCFLAGS="$${RUSTDOC_FLAGS}" \
 		"$${PYTHON}" scripts/doc-coverage.py --toolchain "$$DOC_COVERAGE_TOOLCHAIN" --threshold "$$DOC_COVERAGE_THRESHOLD"
 
-doc-coverage-test: ## Run the pytest suite for scripts/doc-coverage.py
+doc-coverage-test: ## Run documentation-coverage pytest modules
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python 3.13 \
 		--with pytest==9.0.2 --with pytest-cov==7.0.0 \
-		python -m pytest scripts/tests/test_doc_coverage.py -c /dev/null \
-		--rootdir=. -p no:cacheprovider --cov=doc_coverage_module
+		python -m pytest scripts/tests/test_doc_coverage_model.py \
+		scripts/tests/test_doc_coverage_cargo.py \
+		scripts/tests/test_doc_coverage_cargo_payload.py \
+		scripts/tests/test_doc_coverage_runner.py \
+		scripts/tests/test_doc_coverage.py -c /dev/null --rootdir=. \
+		-p no:cacheprovider --cov=doc_coverage_model --cov=doc_coverage_cargo \
+		--cov=doc_coverage_runner --cov=doc_coverage_module
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all
