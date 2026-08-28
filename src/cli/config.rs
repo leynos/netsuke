@@ -370,3 +370,7 @@ fn validate_jobs(config: &CliConfig) -> OrthoResult<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "config_tests.rs"]
+mod tests;
