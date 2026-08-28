@@ -118,7 +118,9 @@ the proposed candidate, including its expected package version:
 - name: Run the selected Netsuke gate
   env:
     NETSUKE: ${{ steps.netsuke.outputs.binary }}
-  run: "$NETSUKE build all"
+  shell: bash
+  run: |
+    "$NETSUKE" build all
 ```
 
 The required `revision` input is fetched and checked out, then compared with

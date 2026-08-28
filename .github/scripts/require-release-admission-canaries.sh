@@ -15,6 +15,35 @@ while read -r repository revision workflow_id branch; do
       exit 1
     fi
   done
+  if ! WORKFLOW_SOURCE="$workflow_source" python3 - "$GITHUB_SHA" <<'PY'
+import os
+import sys
+
+import yaml
+
+candidate = sys.argv[1]
+workflow = yaml.safe_load(os.environ["WORKFLOW_SOURCE"])
+matches = []
+for job in workflow.get("jobs", {}).values() if isinstance(workflow, dict) else []:
+    if not isinstance(job, dict):
+        continue
+    for step in job.get("steps", []):
+        if not isinstance(step, dict):
+            continue
+        if (
+            step.get("uses")
+            == f"leynos/netsuke/.github/actions/install-release-candidate@{candidate}"
+            and isinstance(step.get("with"), dict)
+            and step["with"].get("revision") == candidate
+        ):
+            matches.append(step)
+
+sys.exit(0 if len(matches) == 1 else 1)
+PY
+  then
+    echo "Pinned canary workflow for ${repository}@${revision} does not test ${GITHUB_SHA}" >&2
+    exit 1
+  fi
 
   run_id="$(gh api \
     "repos/${repository}/actions/workflows/${workflow_id}/runs?head_sha=${revision}&per_page=100" \
