@@ -1,7 +1,3 @@
-//! Unit tests for CLI argument parsing and validation.
-//!
-//! This module exercises the command-line interface defined in `netsuke::cli`.
-
 mod config_discovery;
 #[cfg(unix)]
 mod config_precedence_ladder;
@@ -19,3 +15,9 @@ mod merge_probe;
 mod merge_targets_proptests;
 mod parsing;
 mod policy;
+
+//! Unit tests for CLI argument parsing and validation.
+//!
+//! This module exercises the command-line interface defined in `netsuke::cli`.
+
+mod command_schema;

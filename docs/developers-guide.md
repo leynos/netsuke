@@ -1036,6 +1036,11 @@ module publicly.
 A dependency added outside the slice surfaces as a build-script compile error.
 Prefer moving the new code into a sibling module over widening the slice.
 
+`tests/build_module_slice_ui_tests.rs` makes that boundary a direct-`rustc`
+contract. Its positive fixture mirrors the four declared modules, while its
+negative fixture imports `cli::discovery` and must fail with an unresolved
+module diagnostic. Update the fixtures whenever the build-script slice changes.
+
 ## Local build acceleration
 
 Debug builds and tests can optionally use the [`mold`] linker and the Cranelift

@@ -19,3 +19,26 @@ pub(super) fn validation_error(key: &str, message: &str) -> Arc<OrthoError> {
         message: message.to_owned(),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    //! Unit tests for CLI validation limits and errors.
+
+    use super::*;
+
+    #[test]
+    fn max_jobs_matches_the_cli_contract() {
+        assert_eq!(MAX_JOBS, 64);
+    }
+
+    #[test]
+    fn validation_error_preserves_its_key_and_message() {
+        let error = validation_error("jobs", "message");
+        let OrthoError::Validation { key, message } = error.as_ref() else {
+            panic!("validation_error should construct OrthoError::Validation");
+        };
+
+        assert_eq!(key, "jobs");
+        assert_eq!(message, "message");
+    }
+}
