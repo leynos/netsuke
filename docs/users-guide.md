@@ -1052,7 +1052,6 @@ rejected setting in `key` and a bounded explanation in `reason`. These events
 make configuration precedence and rejection decisions auditable without
 exposing user-supplied values.
 
-
 #### Cached merge API (unstable)
 
 Programs using Netsuke's unstable Rust API can retain the layers from one
