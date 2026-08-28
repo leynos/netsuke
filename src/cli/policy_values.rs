@@ -1,49 +1,40 @@
 //! Possible-value metadata for the CLI policy flags.
 //!
-//! The domain policy enums in [`super::config`] stay decoupled from Clap:
-//! they parse through `FromStr` and know nothing about argument presentation.
-//! Clap-specific help metadata, including the per-value descriptions derived
-//! from the enum variant docs, lives here so the CLI adapter can still
-//! advertise accepted values in `--help` output.
+//! The domain policy definitions in [`super::config`] stay decoupled from
+//! Clap. This module projects their spelling and descriptions into Clap help
+//! metadata for the CLI adapter.
 
 use clap::builder::PossibleValue;
 
-/// Possible values advertised in help for the `--color` flag, mirroring the
-/// descriptions carried by the `ColourPolicy` variants.
+use super::config::{
+    ACCESSIBILITY_POLICY_DEFINITIONS, COLOUR_POLICY_DEFINITIONS, EMOJI_POLICY_DEFINITIONS,
+    PROGRESS_POLICY_DEFINITIONS, PolicyDefinition,
+};
+
+/// Convert Clap-independent policy definitions into help metadata.
+fn possible_values<T>(definitions: &[PolicyDefinition<T>]) -> Vec<PossibleValue> {
+    definitions
+        .iter()
+        .map(|definition| PossibleValue::new(definition.spelling).help(definition.description))
+        .collect()
+}
+
+/// Possible values advertised in help for the `--color` flag.
 pub fn colour_policy_possible_values() -> Vec<PossibleValue> {
-    vec![
-        PossibleValue::new("auto").help("Follow the host environment"),
-        PossibleValue::new("always").help("Force colour output on when available"),
-        PossibleValue::new("never").help("Force colour output off"),
-    ]
+    possible_values(&COLOUR_POLICY_DEFINITIONS)
 }
 
-/// Possible values advertised in help for the `--emoji` flag, mirroring the
-/// descriptions carried by the `EmojiPolicy` variants.
+/// Possible values advertised in help for the `--emoji` flag.
 pub fn emoji_policy_possible_values() -> Vec<PossibleValue> {
-    vec![
-        PossibleValue::new("auto").help("Follow the host environment and accessibility mode"),
-        PossibleValue::new("always").help("Force emoji glyphs on"),
-        PossibleValue::new("never").help("Disable emoji glyphs"),
-    ]
+    possible_values(&EMOJI_POLICY_DEFINITIONS)
 }
 
-/// Possible values advertised in help for the `--progress` flag, mirroring the
-/// descriptions carried by the `ProgressPolicy` variants.
+/// Possible values advertised in help for the `--progress` flag.
 pub fn progress_policy_possible_values() -> Vec<PossibleValue> {
-    vec![
-        PossibleValue::new("auto").help("Follow Netsuke's default progress behaviour"),
-        PossibleValue::new("always").help("Force progress rendering on"),
-        PossibleValue::new("never").help("Disable progress rendering"),
-    ]
+    possible_values(&PROGRESS_POLICY_DEFINITIONS)
 }
 
-/// Possible values advertised in help for the `--accessibility` flag,
-/// mirroring the descriptions carried by the `AccessibilityPolicy` variants.
+/// Possible values advertised in help for the `--accessibility` flag.
 pub fn accessibility_policy_possible_values() -> Vec<PossibleValue> {
-    vec![
-        PossibleValue::new("auto").help("Follow terminal and environment detection"),
-        PossibleValue::new("on").help("Force accessible output on"),
-        PossibleValue::new("off").help("Force accessible output off"),
-    ]
+    possible_values(&ACCESSIBILITY_POLICY_DEFINITIONS)
 }

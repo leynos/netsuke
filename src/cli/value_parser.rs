@@ -1,7 +1,7 @@
-//! Localisation-aware value parser used to validate typed CLI arguments.
+//! Localization-aware value parser used to validate typed CLI arguments.
 //!
 //! `LocalizedValueParser` wraps a parsing closure with the active localizer
-//! so that Clap's value validation can emit localised error messages. It also
+//! so that Clap's value validation can emit localized error messages. It also
 //! carries optional [`PossibleValue`] metadata so the CLI adapter can advertise
 //! accepted values in `--help` output without coupling the domain enums to
 //! Clap (see [`super::policy_values`]).
@@ -12,13 +12,13 @@ use clap::error::ErrorKind;
 use ortho_config::Localizer;
 use std::sync::Arc;
 
-/// A Clap value parser that delegates validation to a localisation-aware
+/// A Clap value parser that delegates validation to a localization-aware
 /// closure and optionally advertises possible values for help rendering.
 #[derive(Clone)]
 pub(super) struct LocalizedValueParser<F> {
-    /// Shared localiser used to format validation messages.
+    /// Shared localizer used to format validation messages.
     localizer: Arc<dyn Localizer>,
-    /// Localiser-aware function validating each raw value.
+    /// Localizer-aware function validating each raw value.
     parser: F,
     /// Values advertised in `--help` for the argument being validated.
     possible_values: Option<Vec<PossibleValue>>,

@@ -9,7 +9,6 @@
 //!   in `locales/*/messages.ftl`, failing the build if any declared key is missing from a
 //!   locale.
 use cap_std::{ambient_authority, fs::Dir};
-use clap::CommandFactory;
 use clap_complete::aot::{Shell, generate_to};
 use clap_mangen::Man;
 use std::{
@@ -210,7 +209,9 @@ fn emit_rerun_directives() {
     reason = "CARGO_PKG_VERSION and OUT_DIR are Cargo's own build-script inputs; they describe the crate being compiled and Cargo provides them only through the environment"
 )]
 fn generate_man_page(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let cmd = cli::Cli::command();
+    // Build artefacts preserve the source en-US wording while still using the
+    // configured parser metadata, so documentation stays deterministic.
+    let cmd = cli::configured_command(None);
     let name = cmd
         .get_bin_name()
         .unwrap_or_else(|| cmd.get_name())
@@ -257,7 +258,8 @@ fn generate_man_page(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
 fn generate_completions(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let working_dir = Dir::open_ambient_dir(".", ambient_authority())?;
     working_dir.create_dir_all(out_dir)?;
-    let cli_command = cli::Cli::command();
+    // Keep completion metadata in the same source en-US wording as the manual.
+    let cli_command = cli::configured_command(None);
     let name = cli_command
         .get_bin_name()
         .unwrap_or_else(|| cli_command.get_name())
@@ -270,7 +272,7 @@ fn generate_completions(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>
         Shell::PowerShell,
         Shell::Zsh,
     ] {
-        let mut completion_command = cli::Cli::command();
+        let mut completion_command = cli::configured_command(None);
         generate_to(shell, &mut completion_command, &name, out_dir)?;
     }
 

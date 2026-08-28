@@ -83,6 +83,11 @@ impl Default for CliCase {
     ..CliCase::default()
 })]
 #[case(CliCase {
+    argv: vec!["netsuke", "--progress", "NeVeR"],
+    progress: ProgressPolicy::Never,
+    ..CliCase::default()
+})]
+#[case(CliCase {
     argv: vec!["netsuke", "--emoji", "auto"],
     emoji: EmojiPolicy::Auto,
     ..CliCase::default()
@@ -98,13 +103,28 @@ impl Default for CliCase {
     ..CliCase::default()
 })]
 #[case(CliCase {
+    argv: vec!["netsuke", "--emoji", "AlWaYs"],
+    emoji: EmojiPolicy::Always,
+    ..CliCase::default()
+})]
+#[case(CliCase {
     argv: vec!["netsuke", "--color", "always"],
+    color: ColourPolicy::Always,
+    ..CliCase::default()
+})]
+#[case(CliCase {
+    argv: vec!["netsuke", "--color", "ALWAYS"],
     color: ColourPolicy::Always,
     ..CliCase::default()
 })]
 #[case(CliCase {
     argv: vec!["netsuke", "--accessibility", "on"],
     accessibility: AccessibilityPolicy::On,
+    ..CliCase::default()
+})]
+#[case(CliCase {
+    argv: vec!["netsuke", "--accessibility", "oFf"],
+    accessibility: AccessibilityPolicy::Off,
     ..CliCase::default()
 })]
 #[case(CliCase {

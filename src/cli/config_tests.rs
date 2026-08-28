@@ -6,6 +6,7 @@
 //! policy-specific error.
 
 use super::*;
+use proptest::prelude::*;
 use rstest::rstest;
 
 /// One accepted spelling plus the variant it must parse to.
@@ -14,6 +15,38 @@ struct ParseCase<'a, T> {
     input: &'a str,
     /// Variant expected back from the parse.
     expected: T,
+}
+
+/// Generate one accepted spelling with every ASCII letter independently cased.
+fn policy_case_strategy<T: Copy + std::fmt::Debug + 'static>(
+    definitions: &'static [PolicyDefinition<T>],
+) -> impl Strategy<Value = (String, T)> {
+    prop::sample::select(definitions.to_vec()).prop_flat_map(|definition| {
+        prop::collection::vec(any::<bool>(), definition.spelling.len()).prop_map(move |cases| {
+            (
+                with_ascii_case(definition.spelling, cases),
+                definition.variant,
+            )
+        })
+    })
+}
+
+/// Apply the independently generated ASCII casing choices to `spelling`.
+fn with_ascii_case(spelling: &str, cases: Vec<bool>) -> String {
+    spelling
+        .chars()
+        .zip(cases)
+        .map(|(character, upper)| ascii_case(character, upper))
+        .collect()
+}
+
+/// Select the requested ASCII case for one policy spelling character.
+fn ascii_case(character: char, upper: bool) -> char {
+    if upper {
+        character.to_ascii_uppercase()
+    } else {
+        character
+    }
 }
 
 /// `ColourPolicy` accepts `auto`, `always`, and `never` in any casing.
@@ -159,4 +192,34 @@ fn policy_parse_rejects_unknown_values() {
             .expect_err("should reject"),
         "invalid accessibility policy 'bogus'"
     );
+}
+
+proptest! {
+    #[test]
+    fn colour_policy_accepts_all_ascii_case_variants(
+        (input, expected) in policy_case_strategy(&COLOUR_POLICY_DEFINITIONS)
+    ) {
+        prop_assert_eq!(input.parse::<ColourPolicy>(), Ok(expected));
+    }
+
+    #[test]
+    fn emoji_policy_accepts_all_ascii_case_variants(
+        (input, expected) in policy_case_strategy(&EMOJI_POLICY_DEFINITIONS)
+    ) {
+        prop_assert_eq!(input.parse::<EmojiPolicy>(), Ok(expected));
+    }
+
+    #[test]
+    fn progress_policy_accepts_all_ascii_case_variants(
+        (input, expected) in policy_case_strategy(&PROGRESS_POLICY_DEFINITIONS)
+    ) {
+        prop_assert_eq!(input.parse::<ProgressPolicy>(), Ok(expected));
+    }
+
+    #[test]
+    fn accessibility_policy_accepts_all_ascii_case_variants(
+        (input, expected) in policy_case_strategy(&ACCESSIBILITY_POLICY_DEFINITIONS)
+    ) {
+        prop_assert_eq!(input.parse::<AccessibilityPolicy>(), Ok(expected));
+    }
 }

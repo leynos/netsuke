@@ -2,9 +2,10 @@
 //!
 //! This module owns the runtime-visible [`Cli`] struct and all associated
 //! Clap definitions ([`BuildArgs`], [`Commands`]).  It also provides
-//! [`parse_with_localizer_from`], which localizes the Clap command, installs
+//! [`configured_command`], which optionally localizes the Clap command and installs
 //! localization-aware [`LocalizedValueParser`] instances for every typed
-//! argument, and returns `(Cli, ArgMatches)` for downstream processing.
+//! argument. [`parse_with_localizer_from`] parses that configured command and
+//! returns `(Cli, ArgMatches)` for downstream processing.
 //!
 //! **Pipeline position:** parsing layer.
 //!
@@ -36,6 +37,7 @@ use super::value_parser::LocalizedValueParser;
 use super::{AccessibilityPolicy, ColourPolicy, EmojiPolicy, ProgressPolicy};
 use crate::cli_l10n::localize_command;
 pub use crate::cli_l10n::{json_hint_from_args, locale_hint_from_args};
+use crate::cli_localization::build_localizer;
 use crate::host_pattern::HostPattern;
 use crate::theme::ThemePreference;
 
@@ -301,11 +303,23 @@ where
     I: IntoIterator<Item = T>,
     T: Into<OsString> + Clone,
 {
-    let command = configure_validation_parsers(
-        localize_command(Cli::command(), localizer.as_ref()),
-        localizer,
-    );
+    let command = configured_command(Some(localizer));
     parse_localized_command(command, iter, localizer.as_ref())
+}
+
+/// Construct the command with every typed validation parser installed.
+///
+/// This is the sole command-composition path for parser, runtime-help, and
+/// generated-artefact consumers. A supplied localizer localizes the command;
+/// a missing one retains source `en-US` wording for build artefacts.
+pub(crate) fn configured_command(localizer: Option<&Arc<dyn Localizer>>) -> clap::Command {
+    let parser_localizer = localizer
+        .cloned()
+        .unwrap_or_else(|| Arc::from(build_localizer(None)));
+    let command = localizer.map_or_else(Cli::command, |active_localizer| {
+        localize_command(Cli::command(), active_localizer.as_ref())
+    });
+    configure_validation_parsers(command, &parser_localizer)
 }
 
 /// Install localized value parsers on CLI arguments with localized validation.

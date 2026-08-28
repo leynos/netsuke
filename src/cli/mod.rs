@@ -49,6 +49,7 @@ pub use merge::{
 pub use merge_input::CachedMergeInput;
 /// Bounded events and the production tracing adapter for observer-enabled merges.
 pub use merge_observability::{MergeEvent, MergeObserver, TracingMergeObserver};
+pub(crate) use parser::configured_command;
 pub use parser::{
     BuildArgs, Cli, Commands, GraphArgs, json_hint_from_args, locale_hint_from_args,
     parse_with_localizer_from,

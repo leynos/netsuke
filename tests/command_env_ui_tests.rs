@@ -46,6 +46,14 @@ fn command_env_embedder_fixture_compiles() -> io::Result<()> {
     )
 }
 
+/// Verifies external callers can parse policy types without depending on Clap.
+#[test]
+fn policy_from_str_embedder_fixture_compiles_without_clap() -> io::Result<()> {
+    compile_public_api_fixture(
+        "tests/ui/policy_from_str_embedder_pass.rs",
+        "the policy FromStr fixture should compile without Clap",
+    )
+}
 /// The CLI configuration fixture type-checks against the public cache API.
 #[test]
 fn cli_configuration_fixture_compiles() -> io::Result<()> {

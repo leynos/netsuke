@@ -1195,8 +1195,20 @@ or `off` (case-insensitively) to disable the fallback; any other value, or
 leaving it unset, keeps the fallback enabled. A non-Unicode value also disables
 the fallback and is treated as an explicit opt-out, emitting a warning.
 
-The CLI and configuration use the same policy values. `auto` follows terminal
-and environment detection. `always` or `never` makes colour, emoji, or progress
+### Policy values and parsing
+
+The CLI and configuration use the same policy values, and policy names are
+matched case-insensitively in both places. The accepted values are:
+
+- `--color` and `color`: `auto`, `always`, or `never`.
+- `--emoji` and `emoji`: `auto`, `always`, or `never`.
+- `--progress` and `progress`: `auto`, `always`, or `never`.
+- `--accessibility` and `accessibility`: `auto`, `on`, or `off`.
+
+Lowercase spellings are used in help and examples. For instance,
+`--color ALWAYS` and `color = "AlWaYs"` select the same explicit colour policy
+as `--color always` and `color = "always"`. `auto` follows terminal and
+environment detection. `always` or `never` makes colour, emoji, or progress
 behaviour explicit. Accessibility uses `on` and `off` for its explicit values.
 
 Netsuke has no interactive mode. It never prompts, and `no_input = false` is

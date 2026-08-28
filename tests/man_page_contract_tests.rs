@@ -138,3 +138,27 @@ fn manual_page_documents_the_help_targets_topic() -> Result<()> {
     );
     Ok(())
 }
+
+/// Verifies the generated manual retains policy values and their descriptions.
+#[test]
+fn manual_page_documents_policy_values() -> Result<()> {
+    let path = generated_man_page();
+    let page = test_fs::read_to_string(&path)
+        .with_context(|| format!("read generated manual page {}", path.display()))?;
+
+    for expected in [
+        "auto",
+        "always",
+        "never",
+        "on",
+        "off",
+        "Follow the host environment",
+        "Force accessible output on",
+    ] {
+        ensure!(
+            page.contains(expected),
+            "manual page should retain policy metadata {expected:?}: {page}"
+        );
+    }
+    Ok(())
+}

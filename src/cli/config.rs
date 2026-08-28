@@ -13,6 +13,15 @@ use std::str::FromStr;
 use super::validation_error;
 use crate::host_pattern::HostPattern;
 
+#[path = "policy_definitions.rs"]
+mod policy_definitions;
+
+pub(super) use policy_definitions::{
+    ACCESSIBILITY_POLICY_DEFINITIONS, COLOUR_POLICY_DEFINITIONS, EMOJI_POLICY_DEFINITIONS,
+    PROGRESS_POLICY_DEFINITIONS, PolicyDefinition,
+};
+use policy_definitions::{definition_for, parse_policy};
+
 /// Required non-interactive execution setting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -47,11 +56,9 @@ pub enum ColourPolicy {
 
 impl fmt::Display for ColourPolicy {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Auto => write!(f, "auto"),
-            Self::Always => write!(f, "always"),
-            Self::Never => write!(f, "never"),
-        }
+        definition_for(*self, &COLOUR_POLICY_DEFINITIONS).map_or(Err(fmt::Error), |definition| {
+            f.write_str(definition.spelling)
+        })
     }
 }
 
@@ -59,14 +66,8 @@ impl FromStr for ColourPolicy {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Mirror the case-insensitive matching previously provided by
-        // `clap::ValueEnum::from_str(s, true)`.
-        match s.to_ascii_lowercase().as_str() {
-            "auto" => Ok(Self::Auto),
-            "always" => Ok(Self::Always),
-            "never" => Ok(Self::Never),
-            _ => Err(format!("invalid color policy '{s}'")),
-        }
+        parse_policy(s, &COLOUR_POLICY_DEFINITIONS)
+            .ok_or_else(|| format!("invalid color policy '{s}'"))
     }
 }
 
@@ -85,11 +86,9 @@ pub enum ProgressPolicy {
 
 impl fmt::Display for ProgressPolicy {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Auto => write!(f, "auto"),
-            Self::Always => write!(f, "always"),
-            Self::Never => write!(f, "never"),
-        }
+        definition_for(*self, &PROGRESS_POLICY_DEFINITIONS).map_or(Err(fmt::Error), |definition| {
+            f.write_str(definition.spelling)
+        })
     }
 }
 
@@ -97,14 +96,8 @@ impl FromStr for ProgressPolicy {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Mirror the case-insensitive matching previously provided by
-        // `clap::ValueEnum::from_str(s, true)`.
-        match s.to_ascii_lowercase().as_str() {
-            "auto" => Ok(Self::Auto),
-            "always" => Ok(Self::Always),
-            "never" => Ok(Self::Never),
-            _ => Err(format!("invalid progress policy '{s}'")),
-        }
+        parse_policy(s, &PROGRESS_POLICY_DEFINITIONS)
+            .ok_or_else(|| format!("invalid progress policy '{s}'"))
     }
 }
 
@@ -123,11 +116,9 @@ pub enum EmojiPolicy {
 
 impl fmt::Display for EmojiPolicy {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Auto => write!(f, "auto"),
-            Self::Always => write!(f, "always"),
-            Self::Never => write!(f, "never"),
-        }
+        definition_for(*self, &EMOJI_POLICY_DEFINITIONS).map_or(Err(fmt::Error), |definition| {
+            f.write_str(definition.spelling)
+        })
     }
 }
 
@@ -135,14 +126,8 @@ impl FromStr for EmojiPolicy {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Mirror the case-insensitive matching previously provided by
-        // `clap::ValueEnum::from_str(s, true)`.
-        match s.to_ascii_lowercase().as_str() {
-            "auto" => Ok(Self::Auto),
-            "always" => Ok(Self::Always),
-            "never" => Ok(Self::Never),
-            _ => Err(format!("invalid emoji policy '{s}'")),
-        }
+        parse_policy(s, &EMOJI_POLICY_DEFINITIONS)
+            .ok_or_else(|| format!("invalid emoji policy '{s}'"))
     }
 }
 
@@ -161,11 +146,10 @@ pub enum AccessibilityPolicy {
 
 impl fmt::Display for AccessibilityPolicy {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Auto => write!(f, "auto"),
-            Self::On => write!(f, "on"),
-            Self::Off => write!(f, "off"),
-        }
+        definition_for(*self, &ACCESSIBILITY_POLICY_DEFINITIONS)
+            .map_or(Err(fmt::Error), |definition| {
+                f.write_str(definition.spelling)
+            })
     }
 }
 
@@ -173,14 +157,8 @@ impl FromStr for AccessibilityPolicy {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Mirror the case-insensitive matching previously provided by
-        // `clap::ValueEnum::from_str(s, true)`.
-        match s.to_ascii_lowercase().as_str() {
-            "auto" => Ok(Self::Auto),
-            "on" => Ok(Self::On),
-            "off" => Ok(Self::Off),
-            _ => Err(format!("invalid accessibility policy '{s}'")),
-        }
+        parse_policy(s, &ACCESSIBILITY_POLICY_DEFINITIONS)
+            .ok_or_else(|| format!("invalid accessibility policy '{s}'"))
     }
 }
 
