@@ -927,7 +927,6 @@ def test_parse_coverage_output_rejects_malformed_json(cargo: types.ModuleType) -
 )
 def test_main_rejects_invalid_coverage_counts(
     script: types.ModuleType,
-    cargo: types.ModuleType,
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
     entry: str,
@@ -935,7 +934,7 @@ def test_main_rejects_invalid_coverage_counts(
     """Return the controlled exit for invalid Rustdoc count invariants."""
     payload = '{"src/lib.rs": ' + entry + "}"
     FakeCargo(
-        cargo,
+        script.runner.doc_coverage_cargo,
         metadata=single_library_metadata(),
         rustdoc=FakeRustdocResult(payload=payload),
     ).install(monkeypatch)
