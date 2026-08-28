@@ -41,6 +41,7 @@ fn cargo_subprocess(cargo_binary: &OsStr, target_dir: &TempDir) -> Command {
     command
 }
 
+/// Verify that the published package retains required build-script sources.
 #[test]
 #[expect(
     clippy::disallowed_methods,

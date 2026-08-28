@@ -282,6 +282,7 @@ fn render_manifest_renders_script_and_rule_ref_recipes() -> Result<()> {
     Ok(())
 }
 
+/// Create a manifest fixture with an action recipe using the build-only `command_available` helper.
 fn manifest_with_build_only_recipe_helper() -> Result<NetsukeManifest> {
     let mut action_vars = Vars::new();
     action_vars.insert(
@@ -351,6 +352,49 @@ fn full_render_evaluates_build_only_recipe_helpers() -> Result<()> {
     anyhow::ensure!(
         expect_command(&action.recipe, "full action") == "cargo nextest run --all-targets",
         "full rendering should evaluate build-only recipe helpers"
+    );
+    Ok(())
+}
+
+/// Render the build-only-helper fixture with a replacement recipe in query mode.
+fn render_fixture_recipe_in_manifest_query(recipe: Recipe) -> Result<Target> {
+    let mut manifest = manifest_with_build_only_recipe_helper()?;
+    let action = manifest
+        .actions
+        .first_mut()
+        .context("fixture action missing")?;
+    action.recipe = recipe;
+    render_manifest_for_manifest_query(manifest, &Environment::new())?
+        .actions
+        .into_iter()
+        .next()
+        .context("rendered action missing")
+}
+
+#[test]
+fn manifest_query_keeps_build_only_script_helpers_unrendered() -> Result<()> {
+    let script = "echo {{ command_available(\"cargo-nextest\") }}";
+    let action = render_fixture_recipe_in_manifest_query(Recipe::Script {
+        script: script.into(),
+    })?;
+    anyhow::ensure!(
+        expect_script(&action.recipe, "query action")? == script,
+        "manifest query should leave build-only script helpers unrendered"
+    );
+    Ok(())
+}
+
+#[test]
+fn manifest_query_renders_rule_recipe_selectors() -> Result<()> {
+    let action = render_fixture_recipe_in_manifest_query(Recipe::Rule {
+        rule: "{{ description }}".into(),
+    })?;
+    anyhow::ensure!(
+        expect_string(
+            expect_rule_ref(&action.recipe, "query action rule reference")?,
+            "query action rule reference",
+        ) == "Run tests",
+        "manifest query should render rule recipe selectors"
     );
     Ok(())
 }

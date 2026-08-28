@@ -187,10 +187,12 @@ ______________________________________________________________________
 
 ## Notes for executing agent
 
-Run one focused test at a time and preserve raw output under `/tmp`. Do not run
-repository-wide gates, mutate the shared environment in-process, or change test
-configuration. Report elapsed wall time, child-process breakdown, and whether a
-hypothesis was falsified, not-falsified, or inconclusive.
+Run one focused test at a time for isolated baseline measurements and preserve
+raw output under `/tmp`. The controlled H4 experiment is an explicit exception:
+run both focused tests concurrently, as required by its falsification plan. Do
+not run repository-wide gates, mutate the shared environment in-process, or
+change test configuration. Report elapsed wall time, child-process breakdown,
+and whether a hypothesis was falsified, not-falsified, or inconclusive.
 
 ## Measurement results and decisions
 

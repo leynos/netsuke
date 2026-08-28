@@ -117,6 +117,7 @@ fn expand_static_action_when_supports_complementary_command_available_branches(
     Ok(())
 }
 
+/// Retain complementary command-availability actions as conditional entries during manifest discovery.
 #[rstest]
 fn manifest_query_keeps_complementary_command_available_actions_conditional(
     manifest_query_environment: Environment<'static>,
@@ -168,6 +169,7 @@ fn manifest_query_keeps_complementary_command_available_actions_conditional(
     Ok(())
 }
 
+/// Filter ordinary false foreach actions during manifest discovery.
 #[rstest]
 fn manifest_query_still_filters_ordinary_false_foreach_actions(
     manifest_query_environment: Environment<'static>,
@@ -202,6 +204,7 @@ fn manifest_query_still_filters_ordinary_false_foreach_actions(
     Ok(())
 }
 
+/// Propagate unrelated errors from when expressions during manifest discovery.
 #[rstest]
 fn manifest_query_propagates_unrelated_when_errors(
     manifest_query_environment: Environment<'static>,

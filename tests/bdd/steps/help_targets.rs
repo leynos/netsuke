@@ -48,6 +48,7 @@ defaults:
     Ok(())
 }
 
+/// Create a workspace containing a conditional action for help-target scenarios.
 #[given("a Netsuke workspace with a conditional action")]
 fn conditional_action_workspace(world: &TestWorld) -> Result<()> {
     let manifest = help_targets_workspace()(world)?.join("Netsukefile");

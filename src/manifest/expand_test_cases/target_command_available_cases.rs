@@ -48,6 +48,7 @@ fn expand_static_target_when_supports_complementary_command_available_branches(
     Ok(())
 }
 
+/// Mark template targets using command availability as conditional during manifest discovery.
 #[rstest]
 fn manifest_query_marks_template_command_available_target_conditional(
     manifest_query_environment: Environment<'static>,
