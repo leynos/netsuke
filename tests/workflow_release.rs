@@ -10,19 +10,31 @@ use rstest::rstest;
 use serde_yaml::{Mapping, Value as YamlValue};
 use test_support::fs as test_fs;
 
+/// Return the YAML value stored under `key` in one mapping.
 fn mapping_value<'a>(mapping: &'a Mapping, key: &str) -> Option<&'a YamlValue> {
     mapping.get(YamlValue::String(key.to_owned()))
 }
 
-fn release_admission_command(workflow: &YamlValue) -> Result<&str> {
-    let jobs = workflow
+/// Return the release workflow's top-level jobs mapping.
+fn release_workflow_jobs(workflow: &YamlValue) -> Result<&Mapping> {
+    workflow
         .as_mapping()
         .and_then(|root| mapping_value(root, "jobs"))
         .and_then(YamlValue::as_mapping)
-        .context("release workflow should define jobs")?;
-    let admission = mapping_value(jobs, "release-admission-canaries")
+        .context("release workflow should define jobs")
+}
+
+/// Return a named job mapping from the release workflow.
+fn release_workflow_job<'a>(jobs: &'a Mapping, name: &str) -> Result<&'a Mapping> {
+    mapping_value(jobs, name)
         .and_then(YamlValue::as_mapping)
-        .context("release workflow should define the canary admission job")?;
+        .with_context(|| format!("release workflow should define the {name} job"))
+}
+
+/// Return the shell command that invokes downstream canary admission.
+fn release_admission_command(workflow: &YamlValue) -> Result<&str> {
+    let jobs = release_workflow_jobs(workflow)?;
+    let admission = release_workflow_job(jobs, "release-admission-canaries")?;
     let steps = mapping_value(admission, "steps")
         .and_then(YamlValue::as_sequence)
         .context("canary admission should define steps")?;
@@ -40,6 +52,7 @@ fn release_admission_command(workflow: &YamlValue) -> Result<&str> {
         .context("canary admission query should be a shell script")
 }
 
+/// Read the production downstream canary-admission script.
 fn release_admission_script() -> Result<String> {
     test_fs::read_to_string(
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -50,19 +63,37 @@ fn release_admission_script() -> Result<String> {
 
 /// Require the release workflow to invoke the canary admission boundary.
 fn require_release_admission_workflow_wiring(
-    contents: &str,
+    workflow: &YamlValue,
     admission_command: &str,
 ) -> Result<()> {
+    let jobs = release_workflow_jobs(workflow)?;
+    let admission = release_workflow_job(jobs, "release-admission-canaries")?;
+    let release = release_workflow_job(jobs, "release")?;
+    let release_needs = mapping_value(release, "needs")
+        .and_then(YamlValue::as_sequence)
+        .context("release job should declare dependencies")?;
+    let release_condition = mapping_value(release, "if").and_then(YamlValue::as_str);
+    let admission_condition = mapping_value(admission, "if").and_then(YamlValue::as_str);
+    let admission_permissions = mapping_value(admission, "permissions")
+        .and_then(YamlValue::as_mapping)
+        .context("canary admission should declare permissions")?;
+
     ensure!(
-        contents.contains("release-admission-canaries:"),
+        mapping_value(jobs, "release-admission-canaries").is_some(),
         "release workflow should define the downstream canary admission job"
     );
     ensure!(
-        contents.contains("- release-admission-canaries"),
+        release_needs
+            .iter()
+            .any(|need| need.as_str() == Some("release-admission-canaries")),
         "release publication should require successful downstream canaries"
     );
     ensure!(
-        contents.contains("needs.release-admission-canaries.result == 'success'"),
+        release_condition
+            == Some(
+                "needs.metadata.outputs.should_publish == 'true' && \
+                 needs.release-admission-canaries.result == 'success'",
+            ),
         "release publication should require successful downstream admission"
     );
     ensure!(
@@ -70,13 +101,38 @@ fn require_release_admission_workflow_wiring(
         "release workflow should execute the tested canary-admission script"
     );
     ensure!(
-        contents.contains("github.event_name != 'workflow_call' || inputs.run-release-admission"),
+        admission_condition
+            == Some("github.event_name != 'workflow_call' || inputs.run-release-admission"),
         "trusted release events should run downstream canary admission"
     );
     ensure!(
-        contents.contains("actions: read\n      contents: read"),
+        admission_permissions.len() == 2
+            && mapping_value(admission_permissions, "actions").and_then(YamlValue::as_str)
+                == Some("read")
+            && mapping_value(admission_permissions, "contents").and_then(YamlValue::as_str)
+                == Some("read"),
         "canary admission should use only read permissions"
     );
+
+    Ok(())
+}
+
+/// Require every release build job to request only checkout and workflow-read scopes.
+fn require_build_job_permissions(jobs: &Mapping) -> Result<()> {
+    for job_name in ["build-linux", "build-windows", "build-macos"] {
+        let job = release_workflow_job(jobs, job_name)?;
+        let permissions = mapping_value(job, "permissions")
+            .and_then(YamlValue::as_mapping)
+            .with_context(|| format!("{job_name} should declare permissions"))?;
+        ensure!(
+            permissions.len() == 2
+                && mapping_value(permissions, "actions").and_then(YamlValue::as_str)
+                    == Some("read")
+                && mapping_value(permissions, "contents").and_then(YamlValue::as_str)
+                    == Some("read"),
+            "{job_name} should request only read permissions"
+        );
+    }
 
     Ok(())
 }
@@ -190,10 +246,12 @@ fn behavioural_release_workflow_requires_pinned_canaries() -> Result<()> {
     let contents = workflow_contents("release.yml")?;
     let workflow: YamlValue =
         serde_yaml::from_str(&contents).context("parse release workflow YAML")?;
+    let jobs = release_workflow_jobs(&workflow)?;
     let admission_command = release_admission_command(&workflow)?;
     let admission_script = release_admission_script()?;
 
-    require_release_admission_workflow_wiring(&contents, admission_command)?;
+    require_release_admission_workflow_wiring(&workflow, admission_command)?;
+    require_build_job_permissions(jobs)?;
     require_pinned_canary_revisions(&admission_script)?;
     require_exact_revision_run_lookup(&admission_script)?;
     require_successful_trusted_run_evidence(&admission_script)?;
@@ -201,17 +259,35 @@ fn behavioural_release_workflow_requires_pinned_canaries() -> Result<()> {
     Ok(())
 }
 
+/// Verify that pull-request dry runs disable untrusted release admission.
 #[test]
 fn behavioural_release_dry_run_disables_untrusted_admission() -> Result<()> {
     let contents = workflow_contents("release-dry-run.yml")?;
+    let workflow: YamlValue =
+        serde_yaml::from_str(&contents).context("parse release dry-run workflow YAML")?;
+    let jobs = release_workflow_jobs(&workflow)?;
+    let release = release_workflow_job(jobs, "release")?;
+    let permissions = workflow
+        .as_mapping()
+        .and_then(|root| mapping_value(root, "permissions"))
+        .and_then(YamlValue::as_mapping)
+        .context("pull-request dry runs should declare permissions")?;
+    let inputs = mapping_value(release, "with")
+        .and_then(YamlValue::as_mapping)
+        .context("pull-request dry runs should configure the reusable release workflow")?;
 
     ensure!(
-        !contents.contains("secrets: inherit"),
+        mapping_value(release, "secrets").is_none(),
         "pull-request dry runs should not inherit release secrets"
     );
     ensure!(
-        contents.contains("run-release-admission: false"),
+        mapping_value(inputs, "run-release-admission").and_then(YamlValue::as_bool) == Some(false),
         "pull-request dry runs should disable release admission"
+    );
+    ensure!(
+        permissions.len() == 1
+            && mapping_value(permissions, "contents").and_then(YamlValue::as_str) == Some("read"),
+        "pull-request dry runs should grant only checkout read permission"
     );
 
     Ok(())

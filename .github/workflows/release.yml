@@ -144,8 +144,6 @@ jobs:
     permissions:
       actions: read
       contents: read
-      id-token: write
-      packages: write
     strategy:
       matrix:
         include:
@@ -174,8 +172,6 @@ jobs:
     permissions:
       actions: read
       contents: read
-      id-token: write
-      packages: write
     strategy:
       matrix:
         include:
@@ -205,8 +201,6 @@ jobs:
     permissions:
       actions: read
       contents: read
-      id-token: write
-      packages: write
     strategy:
       matrix:
         include:
