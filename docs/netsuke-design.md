@@ -2329,7 +2329,7 @@ sequenceDiagram
     participant Diagnostic
 
     PropertyTest->>Filesystem: create candidate paths from generated layout
-    PropertyTest->>Locator: locate_executable()
+    PropertyTest->>Locator: netsuke_executable_from()
     Locator->>Filesystem: check candidates in lookup order
     Filesystem-->>Locator: candidate presence
     alt executable candidate exists

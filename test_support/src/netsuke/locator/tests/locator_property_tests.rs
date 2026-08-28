@@ -10,21 +10,41 @@ use super::{binary_name, env_with_target_dir, touch, utf8_root};
 use proptest::prelude::*;
 use proptest::test_runner::TestCaseError;
 
+/// List the DOS device names that cannot form Windows path components.
+const WINDOWS_RESERVED_DEVICE_NAMES: &[&str] = &[
+    "con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8",
+    "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
+];
+
+/// Determine whether `component` is reserved as a Windows device name.
+fn is_windows_reserved_device_name(component: &str) -> bool {
+    WINDOWS_RESERVED_DEVICE_NAMES
+        .iter()
+        .any(|name| component.eq_ignore_ascii_case(name))
+}
+
+/// Generate a valid UTF-8 path component that is safe on Windows.
+fn safe_component() -> impl Strategy<Value = String> {
+    "[a-z][a-z0-9_-]{0,8}".prop_filter("component must not be a Windows device name", |component| {
+        !is_windows_reserved_device_name(component)
+    })
+}
+
 /// Generate a valid UTF-8 path component for a temporary-root child.
 fn root_component() -> impl Strategy<Value = String> {
-    "[a-z][a-z0-9_-]{0,8}"
+    safe_component()
 }
 
 /// Generate a valid Cargo profile component distinct from `deps`.
 fn profile_component() -> impl Strategy<Value = String> {
-    "[a-z][a-z0-9_-]{0,8}".prop_filter("profile component must not be `deps`", |component| {
+    safe_component().prop_filter("profile component must not be `deps`", |component| {
         component != "deps"
     })
 }
 
 /// Generate a valid target-triple component distinct from `deps`.
 fn target_triple() -> impl Strategy<Value = String> {
-    "[a-z][a-z0-9_-]{0,8}".prop_filter("target triple must not be `deps`", |component| {
+    safe_component().prop_filter("target triple must not be `deps`", |component| {
         component != "deps"
     })
 }
@@ -32,6 +52,13 @@ fn target_triple() -> impl Strategy<Value = String> {
 /// Generate an optional valid UTF-8 `CARGO_TARGET_DIR` component.
 fn target_dir_component() -> impl Strategy<Value = Option<String>> {
     proptest::option::of(root_component())
+}
+
+/// Generate target directories that cannot alias the primary candidate.
+fn lookup_target_dir_component() -> impl Strategy<Value = Option<String>> {
+    target_dir_component().prop_filter("target directory must not be `build`", |component| {
+        component.as_deref() != Some("build")
+    })
 }
 
 /// Build an absolute UTF-8 root under a newly allocated temporary directory.
@@ -79,7 +106,7 @@ proptest! {
         root_component in root_component(),
         profile in profile_component(),
         triple in target_triple(),
-        target_dir_component in target_dir_component(),
+        target_dir_component in lookup_target_dir_component(),
         presence in 0u8..8,
     ) {
         let (_temp, root) = generated_root(root_component)?;
