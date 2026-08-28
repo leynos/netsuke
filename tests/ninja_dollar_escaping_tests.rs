@@ -80,19 +80,21 @@ struct NinjaWorkspace {
 impl NinjaWorkspace {
     /// Creates an isolated workspace and writes the generated Ninja file into it.
     fn create(ninja_file: &str) -> anyhow::Result<Self> {
-        let workspace = required_ninja_workspace()?;
-        let path = Utf8PathBuf::from_path_buf(workspace.path().to_path_buf())
+        let temporary_directory = required_ninja_workspace()?;
+        let path = Utf8PathBuf::from_path_buf(temporary_directory.path().to_path_buf())
             .map_err(|non_utf8| anyhow::anyhow!("non-UTF-8 temporary path: {non_utf8:?}"))?;
         let directory = Dir::open_ambient_dir(&path, ambient_authority())
             .with_context(|| format!("open Ninja workspace {path}"))?;
-        directory
-            .write("build.ninja", ninja_file)
-            .context("write generated Ninja file")?;
-        Ok(Self {
-            _workspace: workspace,
+        let workspace = Self {
+            _workspace: temporary_directory,
             path,
             directory,
-        })
+        };
+        workspace
+            .directory
+            .write("build.ninja", ninja_file)
+            .context("write generated Ninja file")?;
+        Ok(workspace)
     }
 }
 fn ninja_commands(ninja_file: &str, target: &str) -> Result<String> {
@@ -115,6 +117,7 @@ fn ninja_commands(ninja_file: &str, target: &str) -> Result<String> {
     String::from_utf8(output.stdout).context("Ninja command output was not UTF-8")
 }
 
+#[cfg(unix)]
 fn ninja_output(
     ninja_file: &str,
     environment_value: Option<&str>,

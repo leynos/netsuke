@@ -1311,3 +1311,17 @@ the POSIX-only `printf` command and `${…}` expansion. It is now Unix-only for
 the same reason as B2. Parser assertions remain cross-platform, and the BDD
 scenario continues to exercise explicit child-process environment propagation
 on Windows. Status remains `IN PROGRESS` pending its corrected Windows rerun.
+
+2026-08-28 — the corrected Windows rerun reached Clippy before tests and
+reported `ninja_output` as unused on Windows once its only two POSIX-shell
+callers were Unix-only. It also exposed that the workspace's stored capability
+directory was only read by that helper. The helper is therefore Unix-only, and
+the constructor now uses the stored directory when writing `build.ninja`. This
+preserves the capability-based workspace design and avoids a warning
+suppression. Status remains `IN PROGRESS` pending another Windows rerun.
+
+2026-08-28 — local Clippy then found that the temporary-directory binding
+shadowed the completed `NinjaWorkspace`. It has been renamed to make the
+ownership transition explicit. The Linux functional gates passed before that
+lint-only correction; the full gate-first review sequence will rerun before
+the next Windows confirmation.
