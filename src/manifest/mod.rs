@@ -62,7 +62,7 @@ pub use glob::glob_paths;
 pub(crate) use expand::expand_foreach;
 pub use parse_with_config::from_str_with_env_and_config;
 pub(crate) use query::from_path_for_manifest_query;
-pub use render::{RenderMode, render_manifest};
+pub use render::render_manifest;
 
 use self::{env_reader::env_var_with, jinja_macros::register_manifest_macros};
 #[cfg(test)]
@@ -127,11 +127,7 @@ fn from_str_named(
         stdlib_registration,
         env_reader,
     } = parse;
-    let render_mode = if matches!(stdlib_registration, Some(StdlibRegistration::ManifestQuery)) {
-        render::RenderMode::ManifestQuery
-    } else {
-        render::RenderMode::Full
-    };
+    let is_manifest_query = matches!(stdlib_registration, Some(StdlibRegistration::ManifestQuery));
     notify_stage(on_stage, ManifestLoadStage::InitialYamlParsing);
     let mut doc: ManifestValue =
         serde_saphyr::from_str(yaml).map_err(|e| ManifestError::Parse {
@@ -175,7 +171,11 @@ fn from_str_named(
             message: localization::message(keys::MANIFEST_PARSE),
         })?;
 
-    render_manifest(manifest, &jinja, render_mode)
+    if is_manifest_query {
+        render::render_manifest_for_manifest_query(manifest, &jinja)
+    } else {
+        render_manifest(manifest, &jinja)
+    }
 }
 
 /// Translate schema-only recipe errors at the manifest adapter boundary.

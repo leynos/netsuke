@@ -283,7 +283,7 @@ fn manifest_query_rejects_clock_dependent_template_helpers() -> AnyResult<()> {
     Ok(())
 }
 
-#[test]
+#[rstest]
 fn manifest_query_keeps_inline_build_helpers_in_recipes() -> AnyResult<()> {
     let temp = tempdir().context("create recipe-only helper query workspace")?;
     let manifest_path = temp.path().join("Netsukefile");

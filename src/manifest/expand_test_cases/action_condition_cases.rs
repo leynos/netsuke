@@ -5,12 +5,6 @@ use anyhow::{Context, Result};
 use minijinja::Environment;
 use rstest::rstest;
 
-fn manifest_query_environment() -> Environment<'static> {
-    let mut env = Environment::new();
-    let _state = crate::stdlib::register_manifest_query(&mut env);
-    env
-}
-
 #[test]
 fn expand_foreach_expands_actions_sequence_values() -> Result<()> {
     let env = Environment::new();
@@ -123,9 +117,10 @@ fn expand_static_action_when_supports_complementary_command_available_branches(
     Ok(())
 }
 
-#[test]
-fn manifest_query_keeps_complementary_command_available_actions_conditional() -> Result<()> {
-    let env = manifest_query_environment();
+#[rstest]
+fn manifest_query_keeps_complementary_command_available_actions_conditional(
+    manifest_query_environment: Environment<'static>,
+) -> Result<()> {
     let yaml = "actions:
   - name: preferred
     description: Use cargo-nextest when installed
@@ -137,40 +132,54 @@ fn manifest_query_keeps_complementary_command_available_actions_conditional() ->
     when: not command_available('cargo-nextest')";
     let mut doc: ManifestValue = serde_saphyr::from_str(yaml)?;
 
-    expand_foreach(&mut doc, &env)?;
+    expand_foreach(&mut doc, &manifest_query_environment)?;
 
     let actions = actions(&doc)?;
     anyhow::ensure!(
         actions.len() == 2,
         "query should retain both action branches"
     );
-    for action in actions {
+    for (action, (expected_name, expected_description)) in actions.iter().zip([
+        ("preferred", "Use cargo-nextest when installed"),
+        ("fallback", "Use Cargo otherwise"),
+    ]) {
         let map = action.as_object().context("conditional action map")?;
         anyhow::ensure!(
             map.get("conditional") == Some(&ManifestValue::Bool(true)),
             "query-disabled action should be marked conditional: {map:?}"
         );
+        let name = map
+            .get("name")
+            .and_then(ManifestValue::as_str)
+            .context("conditional action name")?;
         anyhow::ensure!(
-            map.get("description")
-                .and_then(ManifestValue::as_str)
-                .is_some(),
-            "conditional action should retain its description"
+            name == expected_name,
+            "unexpected conditional action name: {name}"
+        );
+        let description = map
+            .get("description")
+            .and_then(ManifestValue::as_str)
+            .context("conditional action description")?;
+        anyhow::ensure!(
+            description == expected_description,
+            "unexpected conditional action description: {description}"
         );
     }
     Ok(())
 }
 
-#[test]
-fn manifest_query_still_filters_ordinary_false_foreach_actions() -> Result<()> {
-    let env = manifest_query_environment();
+#[rstest]
+fn manifest_query_still_filters_ordinary_false_foreach_actions(
+    manifest_query_environment: Environment<'static>,
+) -> Result<()> {
     let yaml = "actions:
-  - name: test-{{ item }}
+  - name: test-keep
     command: cargo test
     foreach: [skip, keep]
     when: item != 'skip'";
     let mut doc: ManifestValue = serde_saphyr::from_str(yaml)?;
 
-    expand_foreach(&mut doc, &env)?;
+    expand_foreach(&mut doc, &manifest_query_environment)?;
 
     let actions = actions(&doc)?;
     anyhow::ensure!(
@@ -181,6 +190,11 @@ fn manifest_query_still_filters_ordinary_false_foreach_actions() -> Result<()> {
         .first()
         .and_then(ManifestValue::as_object)
         .context("kept action map")?;
+    let name = action
+        .get("name")
+        .and_then(ManifestValue::as_str)
+        .context("kept action name")?;
+    anyhow::ensure!(name == "test-keep", "unexpected kept action name: {name}");
     anyhow::ensure!(
         !action.contains_key("conditional"),
         "ordinary true branch should not be marked conditional"
@@ -188,16 +202,17 @@ fn manifest_query_still_filters_ordinary_false_foreach_actions() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn manifest_query_propagates_unrelated_when_errors() -> Result<()> {
-    let env = manifest_query_environment();
+#[rstest]
+fn manifest_query_propagates_unrelated_when_errors(
+    manifest_query_environment: Environment<'static>,
+) -> Result<()> {
     let yaml = "actions:
   - name: broken
     command: cargo test
     when: unknown_helper()";
     let mut doc: ManifestValue = serde_saphyr::from_str(yaml)?;
 
-    let error = expand_foreach(&mut doc, &env)
+    let error = expand_foreach(&mut doc, &manifest_query_environment)
         .err()
         .context("unknown helpers should remain manifest errors")?;
     anyhow::ensure!(

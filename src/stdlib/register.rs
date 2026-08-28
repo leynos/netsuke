@@ -28,8 +28,10 @@ use crate::localization::{self, keys};
 type FileTest = (&'static str, fn(fs::FileType) -> bool);
 
 /// Stable text identifying helpers deliberately unavailable to manifest queries.
-const MANIFEST_QUERY_DISABLED_HELPER_MARKER: &str = "is disabled while rendering `netsuke help targets`; manifest queries permit \
-     only non-disclosing, side-effect-free template helpers";
+const MANIFEST_QUERY_DISABLED_HELPER_MARKER: &str = concat!(
+    "is disabled while rendering `netsuke help targets`; manifest queries permit ",
+    "only non-disclosing, side-effect-free template helpers"
+);
 
 /// Register standard library helpers with the `MiniJinja` environment.
 ///

@@ -66,7 +66,7 @@ fn target_recipe_context_reserves_ins_and_outs_placeholders() -> Result<()> {
         defaults: Vec::new(),
     };
 
-    let rendered = render_manifest(manifest, &env, RenderMode::Full)?;
+    let rendered = render_manifest(manifest, &env)?;
     let target = rendered
         .targets
         .first()

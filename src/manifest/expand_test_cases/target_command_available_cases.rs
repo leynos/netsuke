@@ -1,16 +1,10 @@
 //! Target-level `command_available` expansion cases.
 
-use super::{expand_foreach, targets};
+use super::{expand_foreach, manifest_query_environment, targets};
 use crate::manifest::ManifestValue;
 use anyhow::{Context, Result};
 use minijinja::Environment;
 use rstest::rstest;
-
-fn manifest_query_environment() -> Environment<'static> {
-    let mut env = Environment::new();
-    let _state = crate::stdlib::register_manifest_query(&mut env);
-    env
-}
 
 #[rstest]
 #[case::present("preferred-tool", "preferred")]
@@ -54,9 +48,10 @@ fn expand_static_target_when_supports_complementary_command_available_branches(
     Ok(())
 }
 
-#[test]
-fn manifest_query_marks_template_command_available_target_conditional() -> Result<()> {
-    let env = manifest_query_environment();
+#[rstest]
+fn manifest_query_marks_template_command_available_target_conditional(
+    manifest_query_environment: Environment<'static>,
+) -> Result<()> {
     let yaml = "targets:
   - name: test
     description: Run the test suite
@@ -64,7 +59,7 @@ fn manifest_query_marks_template_command_available_target_conditional() -> Resul
     when: \"{{ command_available('cargo-nextest') }}\"";
     let mut doc: ManifestValue = serde_saphyr::from_str(yaml)?;
 
-    expand_foreach(&mut doc, &env)?;
+    expand_foreach(&mut doc, &manifest_query_environment)?;
 
     let targets = targets(&doc)?;
     anyhow::ensure!(targets.len() == 1, "query should retain the target");
@@ -75,6 +70,14 @@ fn manifest_query_marks_template_command_available_target_conditional() -> Resul
     anyhow::ensure!(
         target.get("conditional") == Some(&ManifestValue::Bool(true)),
         "query-disabled template condition should be marked conditional: {target:?}"
+    );
+    let description = target
+        .get("description")
+        .and_then(ManifestValue::as_str)
+        .context("conditional target description")?;
+    anyhow::ensure!(
+        description == "Run the test suite",
+        "unexpected conditional target description: {description}"
     );
     Ok(())
 }

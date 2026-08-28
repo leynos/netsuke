@@ -2,6 +2,7 @@
 
 use super::*;
 use minijinja::Environment;
+use rstest::fixture;
 
 #[path = "expand_test_cases/tracing_capture.rs"]
 mod a_tracing_capture;
@@ -23,6 +24,14 @@ mod structure_cases;
 mod property_cases;
 #[path = "expand_test_cases/target_command_available_cases.rs"]
 mod target_command_available_cases;
+
+/// Build the restricted template environment used by manifest-query tests.
+#[fixture]
+pub(super) fn manifest_query_environment() -> Environment<'static> {
+    let mut env = Environment::new();
+    let _state = crate::stdlib::register_manifest_query(&mut env);
+    env
+}
 
 pub(super) fn targets(doc: &ManifestValue) -> Result<&[ManifestValue]> {
     doc.get("targets")

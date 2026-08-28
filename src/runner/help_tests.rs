@@ -312,7 +312,9 @@ fn catalogue_target(
 
 proptest! {
     /// Catalogue construction preserves declaration order, expands every name,
-    /// retains metadata, and marks each alias selected by `defaults` or `when`.
+    /// retains metadata, and preserves conditional entries injected directly
+    /// by this test because manifest discovery cannot evaluate their `when`
+    /// expressions.
     #[test]
     fn catalogue_preserves_order_names_metadata_and_defaults(
         actions in proptest::collection::vec(target_metadata(), 0..5),

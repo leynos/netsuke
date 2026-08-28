@@ -3,13 +3,28 @@
 use crate::bdd::fixtures::TestWorld;
 use crate::bdd::steps::manifest_command::manifest_command_helpers::run_netsuke_and_store;
 use anyhow::{Context, Result};
+use rstest::fixture;
 use rstest_bdd_macros::{given, when};
-use std::fs;
+use std::{fs, path::PathBuf};
+
+/// Install an isolated workspace and reset command observations for one scenario.
+#[fixture]
+fn help_targets_workspace() -> impl Fn(&TestWorld) -> Result<PathBuf> {
+    |world| {
+        let temp = tempfile::tempdir().context("create temp dir for help-target workspace")?;
+        let workspace_path = temp.path().to_path_buf();
+        *world.temp_dir.borrow_mut() = Some(temp);
+        world.run_status.clear();
+        world.run_error.clear();
+        world.command_stdout.clear();
+        world.command_stderr.clear();
+        Ok(workspace_path)
+    }
+}
 
 #[given("a Netsuke workspace with described actions and targets")]
 fn described_actions_and_targets_workspace(world: &TestWorld) -> Result<()> {
-    let temp = tempfile::tempdir().context("create temp dir for described workspace")?;
-    let manifest = temp.path().join("Netsukefile");
+    let manifest = help_targets_workspace()(world)?.join("Netsukefile");
     fs::write(
         &manifest,
         r#"netsuke_version: "1.0.0"
@@ -30,18 +45,12 @@ defaults:
 "#,
     )
     .with_context(|| format!("write manifest to {}", manifest.display()))?;
-    *world.temp_dir.borrow_mut() = Some(temp);
-    world.run_status.clear();
-    world.run_error.clear();
-    world.command_stdout.clear();
-    world.command_stderr.clear();
     Ok(())
 }
 
 #[given("a Netsuke workspace with a conditional action")]
 fn conditional_action_workspace(world: &TestWorld) -> Result<()> {
-    let temp = tempfile::tempdir().context("create temp dir for conditional workspace")?;
-    let manifest = temp.path().join("Netsukefile");
+    let manifest = help_targets_workspace()(world)?.join("Netsukefile");
     fs::write(
         &manifest,
         r#"netsuke_version: "1.0.0"
@@ -58,11 +67,6 @@ targets: []
 "#,
     )
     .with_context(|| format!("write manifest to {}", manifest.display()))?;
-    *world.temp_dir.borrow_mut() = Some(temp);
-    world.run_status.clear();
-    world.run_error.clear();
-    world.command_stdout.clear();
-    world.command_stderr.clear();
     Ok(())
 }
 

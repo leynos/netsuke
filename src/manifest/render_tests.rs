@@ -1,6 +1,6 @@
 //! Unit tests for manifest template rendering.
 
-use super::{ManifestValue, RenderMode, render_manifest};
+use super::{ManifestValue, render_manifest, render_manifest_for_manifest_query};
 use crate::ast::{DependencyOrder, NetsukeManifest, Recipe, Rule, StringOrList, Target, Vars};
 use anyhow::{Context, Result};
 use minijinja::Environment;
@@ -138,7 +138,7 @@ fn assert_rendered_rule(rule: &Rule) {
 fn render_manifest_renders_targets_and_rules() -> Result<()> {
     let env = Environment::new();
     let manifest = sample_manifest()?;
-    let rendered = render_manifest(manifest, &env, RenderMode::Full)?;
+    let rendered = render_manifest(manifest, &env)?;
     let rendered_target = rendered
         .targets
         .first()
@@ -174,7 +174,7 @@ fn command_list_renders_each_entry_with_ins_outs_placeholders() -> Result<()> {
         targets: Vec::new(),
         defaults: Vec::new(),
     };
-    let rendered = render_manifest(manifest, &env, RenderMode::Full)?;
+    let rendered = render_manifest(manifest, &env)?;
     let rule = rendered.rules.first().context("rendered rule missing")?;
     let Recipe::Command { command } = &rule.recipe else {
         anyhow::bail!("expected command recipe, got {:?}", rule.recipe);
@@ -204,7 +204,7 @@ fn command_list_render_failure_names_the_failing_entry() -> Result<()> {
         targets: Vec::new(),
         defaults: Vec::new(),
     };
-    let error = render_manifest(manifest, &env, RenderMode::Full)
+    let error = render_manifest(manifest, &env)
         .err()
         .context("expected the malformed entry to fail rendering")?;
     let report = format!("{error:#}");
@@ -277,12 +277,17 @@ fn render_manifest_renders_script_and_rule_ref_recipes() -> Result<()> {
         defaults: Vec::new(),
     };
 
-    let rendered = render_manifest(manifest, &minijinja::Environment::new(), RenderMode::Full)?;
+    let rendered = render_manifest(manifest, &minijinja::Environment::new())?;
     assert_rendered_script_and_rule_recipes(&rendered)?;
     Ok(())
 }
 
 fn manifest_with_build_only_recipe_helper() -> Result<NetsukeManifest> {
+    let mut action_vars = Vars::new();
+    action_vars.insert(
+        "description".into(),
+        ManifestValue::String("Run tests".into()),
+    );
     Ok(NetsukeManifest {
         netsuke_version: Version::parse("1.0.0")?,
         vars: Vars::new(),
@@ -301,11 +306,11 @@ fn manifest_with_build_only_recipe_helper() -> Result<NetsukeManifest> {
             deps: StringOrList::Empty,
             dependency_order: DependencyOrder::Parallel,
             order_only_deps: StringOrList::Empty,
-            vars: Vars::new(),
+            vars: action_vars,
             phony: true,
             always: false,
             conditional: false,
-            description: Some("Run tests".into()),
+            description: Some("{{ description }}".into()),
         }],
         targets: Vec::new(),
         defaults: Vec::new(),
@@ -315,7 +320,7 @@ fn manifest_with_build_only_recipe_helper() -> Result<NetsukeManifest> {
 #[test]
 fn manifest_query_keeps_build_only_recipe_helpers_unrendered() -> Result<()> {
     let manifest = manifest_with_build_only_recipe_helper()?;
-    let rendered = render_manifest(manifest, &Environment::new(), RenderMode::ManifestQuery)?;
+    let rendered = render_manifest_for_manifest_query(manifest, &Environment::new())?;
     let action = rendered
         .actions
         .first()
@@ -337,7 +342,7 @@ fn full_render_evaluates_build_only_recipe_helpers() -> Result<()> {
     let mut env = Environment::new();
     env.add_function("command_available", |_command: String| true);
     let manifest = manifest_with_build_only_recipe_helper()?;
-    let rendered = render_manifest(manifest, &env, RenderMode::Full)?;
+    let rendered = render_manifest(manifest, &env)?;
     let action = rendered
         .actions
         .first()

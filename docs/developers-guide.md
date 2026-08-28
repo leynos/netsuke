@@ -82,7 +82,7 @@ otherwise evaluate that helper; it does not alter full-render behaviour.
 
 Helpers excluded from the query allowlist are registered as deliberate
 query-disabled stubs by the standard-library adapter. The stubs return a
-stable, classified MiniJinja operation error. Manifest expansion recognises
+stable, classified MiniJinja operation error. Manifest expansion recognizes
 that classification only while evaluating a query `when` expression: the
 result is a conditional entry when the helper prevents evaluation, whereas a
 successfully evaluated false expression still excludes the entry. Unrelated

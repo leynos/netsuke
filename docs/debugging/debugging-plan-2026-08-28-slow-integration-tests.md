@@ -1,4 +1,4 @@
-# Debugging Plan: Investigate slow `netsuke-build` integration tests
+# Debugging plan: Investigate slow `netsuke-build` integration tests
 
 **Generated**: 2026-08-28
 **Issue ID**: PR #588 follow-up
@@ -8,7 +8,7 @@
 Falsification must be executed by the named sub-agent, not by the planning
 agent.
 
-## Problem Statement
+## Problem statement
 
 Three passing `netsuke-build` integration tests exceeded the 60-second nextest
 slow-test warning threshold on PR #588. They delayed CI feedback after an
@@ -16,7 +16,9 @@ unrelated test failed. The goal is to measure each test in isolation, identify
 its dominant cost, and remove only work that does not contribute to the test's
 behavioural contract.
 
-## Context Summary
+## Context summary
+
+Table: Initial context and observations for the affected tests.
 
 | Aspect              | Details                                                                   |
 | ------------------- | ------------------------------------------------------------------------- |
@@ -25,7 +27,7 @@ behavioural contract.
 | Affected components | Dependabot property fixture, locale stub UI harness, packaging smoke test |
 | Recent changes      | PR #588 changes manifest query discovery, not these test contracts        |
 
-### Error Artefacts
+### Error artefacts
 
 ```plaintext
 generated_layouts_include_only_tracked_manifests: 132.949s
@@ -33,7 +35,7 @@ harness_compiles_under_a_split_build_dir: 131.395s
 packaged_manifest_retains_build_script_sources: 103.115s
 ```
 
-### Information Gaps
+### Information gaps
 
 - The CI runner's Cargo cache state, CPU allocation, and concurrent test load
   are not available locally.
@@ -56,7 +58,9 @@ filesystem operations once per generated case.
 **Prediction**: Reducing only `PROPTEST_CASES` will reduce elapsed time roughly
 proportionally, while a single case still exercises the same operations.
 
-#### H1 Falsification Plan
+#### H1 falsification plan
+
+Table: Falsification steps for the repeated Git setup hypothesis.
 
 | Step | Action                                                     | Expected Negative Result                        |
 | ---- | ---------------------------------------------------------- | ----------------------------------------------- |
@@ -84,7 +88,9 @@ isolation and split-directory coverage.
 **Prediction**: Cargo's build child consumes nearly all elapsed time and the
 metadata-only `rustc` step is short.
 
-#### H2 Falsification Plan
+#### H2 falsification plan
+
+Table: Falsification steps for the split-layout locale harness hypothesis.
 
 | Step | Action                                                                | Expected Negative Result                                |
 | ---- | --------------------------------------------------------------------- | ------------------------------------------------------- |
@@ -114,7 +120,9 @@ two package-oriented Cargo commands serially.
 documentation or output will establish whether `publish --dry-run` subsumes the
 package-list contract.
 
-#### H3 Falsification Plan
+#### H3 falsification plan
+
+Table: Falsification steps for the redundant Cargo work hypothesis.
 
 | Step | Action                                                                   | Expected Negative Result                                                 |
 | ---- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
@@ -143,7 +151,9 @@ reported CI runs were four to six times slower.
 larger maximum per-test duration than a serial run; a targeted nextest test
 group can therefore reduce total elapsed time and shorten failure reporting.
 
-#### H4 Falsification Plan
+#### H4 falsification plan
+
+Table: Falsification steps for the concurrent Cargo process hypothesis.
 
 | Step | Action                                                      | Expected Negative Result                                  |
 | ---- | ----------------------------------------------------------- | --------------------------------------------------------- |
@@ -159,30 +169,32 @@ CPU allocation, but a large contention gap establishes a portable cause.
 
 ______________________________________________________________________
 
-## Recommended Execution Order
+## Recommended execution order
 
-1. **H1** — cheapest and most decisive; it avoids Cargo compilation.
-2. **H3** — child process count is visible and may yield a direct reduction.
-3. **H2** — likely intentional compilation cost, so measure before changing
-   isolation or test configuration.
-4. **H4** — determine whether a targeted nextest group is warranted before
-   altering scheduling.
+- **H1** — cheapest and most decisive; it avoids Cargo compilation.
+- **H3** — child process count is visible and may yield a direct reduction.
+- **H2** — likely intentional compilation cost, so measure before changing
+  isolation or test configuration.
+- **H4** — determine whether a targeted nextest group is warranted before
+  altering scheduling.
 
-## Termination Criteria
+## Termination criteria
 
 - **Root cause identified**: Each test has isolated timings that attribute
   most elapsed time to fixture work, a child process, or serial contention.
 - **Escalation trigger**: If no operation accounts for most runtime, collect a
   CI trace with runner CPU and cache metadata before changing thresholds.
 
-## Notes for Executing Agent
+## Notes for executing agent
 
 Run one focused test at a time and preserve raw output under `/tmp`. Do not run
 repository-wide gates, mutate the shared environment in-process, or change test
 configuration. Report elapsed wall time, child-process breakdown, and whether a
 hypothesis was falsified, not-falsified, or inconclusive.
 
-## Measurement Results and Decisions
+## Measurement results and decisions
+
+Table: Measured baselines, dominant costs, and resulting decisions.
 
 | Test                                               | Local baseline                      | Dominant cost                                                            | Decision                                                                               |
 | -------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |

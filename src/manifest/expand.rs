@@ -1,5 +1,5 @@
 //! Expands manifest foreach directives into concrete targets and actions.
-use super::jinja_macros::render_template;
+use super::jinja_macros::{QueryEvaluation, evaluate_when_expression, render_when_template};
 use super::{ManifestMap, ManifestValue};
 use crate::hex::push_lower_hex_byte;
 use crate::localization::{self, keys};
@@ -175,7 +175,7 @@ fn parse_foreach_values(expr_val: &ManifestValue, env: &Environment) -> Result<V
 /// checking for `{{` which could appear in string literals.
 ///
 /// Empty expressions are rejected as invalid.
-fn eval_when(env: &Environment, expr: &str, ctx: Value) -> Result<WhenResolution> {
+fn eval_when(env: &Environment, expr: &str, ctx: &Value) -> Result<WhenResolution> {
     anyhow::ensure!(
         !expr.trim().is_empty(),
         "{}",
@@ -184,27 +184,17 @@ fn eval_when(env: &Environment, expr: &str, ctx: Value) -> Result<WhenResolution
 
     // Try expression compilation first - this handles plain expressions
     // like "item > 1" or "true" without needing template delimiters.
-    if let Ok(compiled) = env.compile_expression(expr) {
-        let evaluation = compiled.eval(ctx).with_context(|| {
-            localization::message(keys::MANIFEST_WHEN_EVAL_ERROR).with_arg("expr", expr)
+    if let Some(evaluation) = evaluate_when_expression(env, expr, ctx)? {
+        return Ok(match evaluation {
+            QueryEvaluation::Value(is_true) => when_resolution(is_true),
+            QueryEvaluation::QueryDisabled => WhenResolution::Conditional,
         });
-        return match evaluation {
-            Ok(value) => Ok(when_resolution(value.is_true())),
-            Err(error) if is_query_disabled_when_error(&error) => Ok(WhenResolution::Conditional),
-            Err(error) => Err(error),
-        };
     }
 
     // Expression parsing failed - treat as template syntax (e.g., "{{ path is dir }}")
-    let template_rendering = render_template(env, expr, &ctx).with_context(|| {
-        localization::message(keys::MANIFEST_WHEN_TEMPLATE_ERROR).with_arg("expr", expr)
-    });
-    let rendered_template = match template_rendering {
-        Ok(output) => output,
-        Err(error) if is_query_disabled_when_error(&error) => {
-            return Ok(WhenResolution::Conditional);
-        }
-        Err(error) => return Err(error),
+    let rendered_template = match render_when_template(env, expr, ctx)? {
+        QueryEvaluation::Value(output) => output,
+        QueryEvaluation::QueryDisabled => return Ok(WhenResolution::Conditional),
     };
     // Treat "true" or "1" as truthy, anything else (including "false", "") as falsy
     Ok(when_resolution(matches!(
@@ -222,14 +212,6 @@ const fn when_resolution(is_true: bool) -> WhenResolution {
     }
 }
 
-/// Return whether a `when` evaluation failed only because query mode disabled a helper.
-fn is_query_disabled_when_error(error: &anyhow::Error) -> bool {
-    error.chain().any(|cause| {
-        cause
-            .downcast_ref::<minijinja::Error>()
-            .is_some_and(crate::stdlib::is_manifest_query_disabled_error)
-    })
-}
 /// Evaluate a `when` clause if present, returning its discovery resolution.
 ///
 /// Accepts an optional iteration context (`item`, `index`) for foreach targets;
@@ -244,7 +226,7 @@ fn when_allows(
     };
     let expr = as_str(&when_val, "when")?;
     let ctx = when_context(map, iteration)?;
-    let allowed = eval_when(context.env, expr, ctx)?;
+    let allowed = eval_when(context.env, expr, &ctx)?;
     if allowed == WhenResolution::Exclude && has_subscriber() {
         let entry_name = entry_name(map);
         let iteration_index = iteration.map(|(_, index)| index);

@@ -92,19 +92,103 @@ targets: []
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    for expected in [
-        "preferred",
-        "Run tests with cargo-nextest",
-        "fallback",
-        "Run tests with Cargo",
-        "[? conditional]",
+    for (name, description) in [
+        ("preferred", "Run tests with cargo-nextest"),
+        ("fallback", "Run tests with Cargo"),
     ] {
+        let entry = stdout
+            .lines()
+            .find(|line| line.contains(name) && line.contains(description))
+            .with_context(|| format!("conditional catalogue should contain {name:?}: {stdout}"))?;
         ensure!(
-            stdout.contains(expected),
-            "conditional catalogue should contain {expected:?}: {stdout}"
+            entry.contains("[? conditional]"),
+            "conditional catalogue entry {name:?} should include its marker: {entry}"
         );
     }
     for forbidden_output in ["preferred-ran", "fallback-ran", ".netsuke"] {
+        ensure!(
+            workspace.open(forbidden_output).is_err(),
+            "help targets must not create {forbidden_output}"
+        );
+    }
+    Ok(())
+}
+
+#[rstest]
+fn help_targets_lists_same_name_conditional_alternatives() -> Result<()> {
+    let temp =
+        tempfile::tempdir().context("create duplicate conditional help-targets workspace")?;
+    let temp_path = Utf8Path::from_path(temp.path()).context("temporary path should be UTF-8")?;
+    let manifest_path = temp_path.join("Netsukefile");
+    let workspace = Dir::open_ambient_dir(temp_path, ambient_authority())
+        .context("open duplicate conditional fixture directory")?;
+    workspace
+        .write(
+            "Netsukefile",
+            r#"netsuke_version: "1.0.0"
+actions:
+  - name: test
+    description: Run tests with cargo-nextest
+    command: touch preferred-action-ran
+    when: command_available("cargo-nextest")
+  - name: test
+    description: Run tests with Cargo
+    command: touch fallback-action-ran
+    when: not command_available("cargo-nextest")
+targets:
+  - name: target/test-result
+    description: Build test results with cargo-nextest
+    command: touch preferred-target-ran
+    when: command_available("cargo-nextest")
+  - name: target/test-result
+    description: Build test results with Cargo
+    command: touch fallback-target-ran
+    when: not command_available("cargo-nextest")
+"#,
+        )
+        .context("write duplicate conditional manifest")?;
+
+    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
+        .current_dir(temp_path)
+        .arg("--file")
+        .arg(&manifest_path)
+        .arg("--emoji")
+        .arg("never")
+        .arg("help")
+        .arg("targets")
+        .output()
+        .context("run help targets against duplicate conditional entries")?;
+    ensure!(
+        output.status.success(),
+        "help targets should retain mutually exclusive alternatives; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for (name, description) in [
+        ("test", "Run tests with cargo-nextest"),
+        ("test", "Run tests with Cargo"),
+        (
+            "target/test-result",
+            "Build test results with cargo-nextest",
+        ),
+        ("target/test-result", "Build test results with Cargo"),
+    ] {
+        let entry = stdout
+            .lines()
+            .find(|line| line.contains(name) && line.contains(description))
+            .with_context(|| format!("conditional catalogue should contain {name:?}: {stdout}"))?;
+        ensure!(
+            entry.contains("[? conditional]"),
+            "conditional catalogue entry {name:?} should include its marker: {entry}"
+        );
+    }
+    for forbidden_output in [
+        "preferred-action-ran",
+        "fallback-action-ran",
+        "preferred-target-ran",
+        "fallback-target-ran",
+        ".netsuke",
+    ] {
         ensure!(
             workspace.open(forbidden_output).is_err(),
             "help targets must not create {forbidden_output}"

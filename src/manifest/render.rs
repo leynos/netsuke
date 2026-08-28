@@ -15,22 +15,41 @@ use minijinja::Environment;
 #[cfg(test)]
 use std::cell::Cell;
 
-/// Selects which manifest fields are safe to render for the caller.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RenderMode {
-    /// Render every manifest field for build, generate, and manifest output.
-    Full,
-    /// Render discovery metadata without evaluating recipes.
-    ManifestQuery,
-}
-
 /// Render manifest targets and rules by evaluating template expressions.
 ///
 /// # Errors
 ///
 /// Returns an error when a template evaluation fails or when rendered
 /// values cannot be serialized back into the manifest structure.
-pub fn render_manifest(
+pub fn render_manifest(manifest: NetsukeManifest, env: &Environment) -> Result<NetsukeManifest> {
+    render_manifest_with_mode(manifest, env, RenderMode::Full)
+}
+
+/// Render discovery metadata without evaluating command or script recipes.
+///
+/// Rule selectors still render because manifest-query graph validation resolves
+/// them. This stays crate-private so external callers retain the stable full
+/// rendering API.
+///
+/// # Errors
+///
+/// Returns an error when a discovery field or rule selector template cannot
+/// be evaluated or when rendered values cannot be serialized back into the
+/// manifest structure.
+pub(crate) fn render_manifest_for_manifest_query(
+    manifest: NetsukeManifest,
+    env: &Environment,
+) -> Result<NetsukeManifest> {
+    render_manifest_with_mode(manifest, env, RenderMode::ManifestQuery)
+}
+
+/// Render a manifest with the caller's field-rendering policy.
+///
+/// # Errors
+///
+/// Returns an error when a template evaluation fails or when rendered values
+/// cannot be serialized back into the manifest structure.
+fn render_manifest_with_mode(
     mut manifest: NetsukeManifest,
     env: &Environment,
     mode: RenderMode,
@@ -48,6 +67,15 @@ pub fn render_manifest(
     Ok(manifest)
 }
 
+/// Select whether a render may evaluate command and script recipe bodies.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RenderMode {
+    /// Render every manifest field for build, generate, and manifest output.
+    Full,
+    /// Render discovery metadata while preserving command and script bodies.
+    ManifestQuery,
+}
+
 /// Render a rule's description and recipe, substituting template expressions.
 ///
 /// # Errors
@@ -61,9 +89,15 @@ fn render_rule(
     mode: RenderMode,
 ) -> Result<()> {
     render_description(&mut rule.description, env, vars, "rule")?;
-    if mode == RenderMode::Full {
-        render_recipe(&mut rule.recipe, env, vars, "rule")?;
-    }
+    render_recipe(
+        &mut rule.recipe,
+        &RecipeRenderContext {
+            env,
+            vars,
+            subject: "rule",
+            mode,
+        },
+    )?;
     Ok(())
 }
 
@@ -80,9 +114,15 @@ fn render_target(target: &mut Target, env: &Environment, mode: RenderMode) -> Re
     render_string_or_list(&mut target.sources, env, &target.vars)?;
     render_string_or_list(&mut target.deps, env, &target.vars)?;
     render_string_or_list(&mut target.order_only_deps, env, &target.vars)?;
-    if mode == RenderMode::Full {
-        render_recipe(&mut target.recipe, env, &target.vars, "target")?;
-    }
+    render_recipe(
+        &mut target.recipe,
+        &RecipeRenderContext {
+            env,
+            vars: &target.vars,
+            subject: "target",
+            mode,
+        },
+    )?;
     Ok(())
 }
 
@@ -120,18 +160,60 @@ fn render_description(
 /// Returns an error when the recipe's script or command text fails to render;
 /// the propagated error names the subject (`"rule"` or `"target"`) and the
 /// failing stage.
-fn render_recipe(recipe: &mut Recipe, env: &Environment, vars: &Vars, subject: &str) -> Result<()> {
+struct RecipeRenderContext<'a> {
+    /// Supplies templates with registered helpers and globals.
+    env: &'a Environment<'a>,
+    /// Supplies entry-local variables to rendered fields.
+    vars: &'a Vars,
+    /// Names the manifest entry in rendering diagnostics.
+    subject: &'a str,
+    /// Selects whether command and script bodies are safe to evaluate.
+    mode: RenderMode,
+}
+
+/// Render a recipe according to its field-rendering policy.
+///
+/// # Errors
+///
+/// Returns an error when a rendered rule selector or full-mode command or
+/// script cannot be evaluated.
+fn render_recipe(recipe: &mut Recipe, context: &RecipeRenderContext<'_>) -> Result<()> {
     match recipe {
-        Recipe::Command { command } => {
-            render_recipe_string_or_list(command, env, vars, || {
-                format!("render {subject} command")
-            })?;
-        }
-        Recipe::Script { script } => {
-            *script = render_str_with(env, script, vars, || format!("render {subject} script"))?;
-        }
-        Recipe::Rule { rule } => render_string_or_list(rule, env, vars)?,
+        Recipe::Command { command } => render_command_recipe(command, context),
+        Recipe::Script { script } => render_script_recipe(script, context),
+        Recipe::Rule { rule } => render_string_or_list(rule, context.env, context.vars),
     }
+}
+
+/// Render a command recipe only when the caller permits recipe bodies.
+///
+/// # Errors
+///
+/// Returns an error when a full-mode command template cannot be evaluated.
+fn render_command_recipe(
+    command: &mut StringOrList,
+    context: &RecipeRenderContext<'_>,
+) -> Result<()> {
+    if context.mode == RenderMode::ManifestQuery {
+        return Ok(());
+    }
+    render_recipe_string_or_list(command, context.env, context.vars, || {
+        format!("render {} command", context.subject)
+    })
+}
+
+/// Render a script recipe only when the caller permits recipe bodies.
+///
+/// # Errors
+///
+/// Returns an error when a full-mode script template cannot be evaluated.
+fn render_script_recipe(script: &mut String, context: &RecipeRenderContext<'_>) -> Result<()> {
+    if context.mode == RenderMode::ManifestQuery {
+        return Ok(());
+    }
+    *script = render_str_with(context.env, script, context.vars, || {
+        format!("render {} script", context.subject)
+    })?;
     Ok(())
 }
 
