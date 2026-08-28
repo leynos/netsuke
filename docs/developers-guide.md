@@ -619,7 +619,7 @@ capability-boundary policy regardless of how Dylint resolves the current crate.
 `test_support` is a workspace member with one sanctioned ambient boundary
 configured per crate. Its second, scoped invocation supplies
 `test_support/dylint.toml` through `DYLINT_TOML`, and uses
-`--package test_support` and `--no-deps`, because running from a member
+`--package test_support` and `--no-deps` because running from a member
 directory alone would otherwise check the parent workspace. That configuration
 names only `test_support::fs` in `excluded_paths`. The root `excluded_crates`
 must not contain `test_support`: every other module in the crate remains
@@ -731,7 +731,7 @@ capability-boundary policy regardless of how Dylint resolves the current crate.
 `test_support` is a workspace member with one sanctioned ambient boundary
 configured per crate. Its second, scoped invocation supplies
 `test_support/dylint.toml` through `DYLINT_TOML`, and uses
-`--package test_support` and `--no-deps`, because running from a member
+`--package test_support` and `--no-deps` because running from a member
 directory alone would otherwise check the parent workspace. That configuration
 names only `test_support::fs` in `excluded_paths`. The root `excluded_crates`
 must not contain `test_support`: every other module in the crate remains
