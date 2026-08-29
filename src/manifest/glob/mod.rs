@@ -384,7 +384,7 @@ impl PreparedGlob {
                 (
                     // `Pattern::escape` escapes on the current platform's
                     // separators, which is what the matcher compiles.
-                    format!("{escaped}/{normalized}"),
+                    format!("{escaped}{}{normalized}", std::path::MAIN_SEPARATOR),
                     Some(dir.to_path_buf()),
                 )
             },

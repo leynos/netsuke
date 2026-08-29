@@ -207,19 +207,8 @@ fn results_use_forward_slashes() -> Result<()> {
     Ok(())
 }
 
-/// Treat glob metacharacters in an injected base as literal path components.
-///
-/// Each neighbouring decoy would match `*.txt` only if the base were compiled
-/// as glob syntax instead of being escaped before the user pattern is joined.
-#[rstest::rstest]
-#[case("literal*base", "literalxbase")]
-#[case("literal?base", "literalxbase")]
-#[case("literal[ab]base", "literalabase")]
-#[case("literal{a,b}base", "literalabase")]
-fn injected_base_metacharacters_are_literal(
-    #[case] base_name: &str,
-    #[case] decoy_name: &str,
-) -> Result<()> {
+/// Assert that a metacharacter in an injected base remains literal.
+fn assert_injected_base_metacharacter_is_literal(base_name: &str, decoy_name: &str) -> Result<()> {
     let temp = tempdir()?;
     let base = temp.path().join(base_name);
     let decoy = temp.path().join(decoy_name);
@@ -230,13 +219,46 @@ fn injected_base_metacharacters_are_literal(
 
     let results = glob_paths(
         "*.txt",
-        Some(Utf8Path::from_path(&base).expect("temp paths are UTF-8")),
+        Some(Utf8Path::from_path(&base).context("temporary paths must be UTF-8")?),
     )?;
     ensure!(
         results == vec!["wanted.txt".to_owned()],
         "base {base_name:?} must not match decoy {decoy_name:?}: {results:?}"
     );
     Ok(())
+}
+
+/// Treat glob metacharacters in an injected base as literal path components.
+///
+/// Each neighbouring decoy would match `*.txt` only if the base were compiled
+/// as glob syntax instead of being escaped before the user pattern is joined.
+#[cfg(unix)]
+#[rstest::rstest]
+#[case("literal*base", "literalxbase")]
+#[case("literal?base", "literalxbase")]
+#[case("literal[ab]base", "literalabase")]
+#[case("literal{a,b}base", "literalabase")]
+fn injected_base_metacharacters_are_literal(
+    #[case] base_name: &str,
+    #[case] decoy_name: &str,
+) -> Result<()> {
+    assert_injected_base_metacharacter_is_literal(base_name, decoy_name)
+}
+
+/// Cover injected-base metacharacters that Windows permits in directory names.
+///
+/// Windows reserves `*` and `?` in filesystem components, so the Unix-only
+/// cases above retain that matcher coverage while this platform exercises the
+/// legal bracket and brace spellings against real directories.
+#[cfg(not(unix))]
+#[rstest::rstest]
+#[case("literal[ab]base", "literalabase")]
+#[case("literal{a,b}base", "literalabase")]
+fn injected_base_metacharacters_are_literal(
+    #[case] base_name: &str,
+    #[case] decoy_name: &str,
+) -> Result<()> {
+    assert_injected_base_metacharacter_is_literal(base_name, decoy_name)
 }
 
 /// Propagate a missing injected base as the glob I/O error rather than
