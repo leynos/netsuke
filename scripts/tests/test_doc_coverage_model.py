@@ -11,11 +11,16 @@ def test_aggregation_sums_targets_and_reports_percentage() -> None:
 
     combined = first + second
 
-    assert combined.total == 15
-    assert combined.with_docs == 13
-    assert combined.percentage == pytest.approx(13 / 15 * 100)
+    assert (combined.total, combined.with_docs) == (15, 13), (
+        "aggregation must sum both the total and the documented counts"
+    )
+    assert combined.percentage == pytest.approx(13 / 15 * 100), (
+        "the percentage must report documented items as a share of the total"
+    )
 
 
 def test_empty_run_is_complete_not_a_division_by_zero() -> None:
     """Treat a crate with no doc-able targets as a complete, empty run."""
-    assert Coverage(0, 0).percentage == 100.0
+    assert Coverage(0, 0).percentage == pytest.approx(100.0), (
+        "an empty run must report complete coverage rather than divide by zero"
+    )

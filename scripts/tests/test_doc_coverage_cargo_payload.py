@@ -1,7 +1,5 @@
 """Test Rustdoc coverage-payload decoding in the Cargo adapter."""
 
-from __future__ import annotations
-
 import dataclasses
 import typing as typ
 
@@ -11,7 +9,7 @@ if typ.TYPE_CHECKING:
     import types
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class CoveragePayloadFailureCase:
     """Define one invalid Rustdoc coverage-payload scenario."""
 
@@ -31,8 +29,9 @@ def test_parse_coverage_output_aggregates_multiple_files(
 
     coverage = cargo.parse_coverage_output(target, payload)
 
-    assert coverage.total == 15
-    assert coverage.with_docs == 11
+    assert (coverage.total, coverage.with_docs) == (15, 11), (
+        "per-file counts must be summed across the whole payload"
+    )
 
 
 def test_parse_coverage_output_rejects_malformed_json(cargo: types.ModuleType) -> None:
@@ -84,6 +83,13 @@ def test_parse_coverage_output_rejects_invalid_counts(
                 "each entry requires total and with_docs",
             ),
             id="missing-total",
+        ),
+        pytest.param(
+            CoveragePayloadFailureCase(
+                '{"src/lib.rs": ["total", "with_docs"]}',
+                "each entry requires total and with_docs",
+            ),
+            id="non-object-entry",
         ),
     ],
 )

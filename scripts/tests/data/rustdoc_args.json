@@ -1,0 +1,33 @@
+{
+  "library": [
+    "cargo",
+    "+nightly-x",
+    "rustdoc",
+    "-p",
+    "netsuke",
+    "--lib",
+    "--",
+    "-Z",
+    "unstable-options",
+    "--show-coverage",
+    "--output-format",
+    "json",
+    "--document-private-items"
+  ],
+  "binary": [
+    "cargo",
+    "+nightly-x",
+    "rustdoc",
+    "-p",
+    "netsuke",
+    "--bin",
+    "netsuke-bin",
+    "--",
+    "-Z",
+    "unstable-options",
+    "--show-coverage",
+    "--output-format",
+    "json",
+    "--document-private-items"
+  ]
+}

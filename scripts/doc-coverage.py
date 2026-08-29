@@ -19,27 +19,37 @@ which is what CI gates on. It also prints a per-target breakdown so a
 remediation sweep can target the lowest-coverage files first.
 """
 
-from __future__ import annotations
-
 import argparse
 import pathlib
 import sys
 import typing as typ
 
 import doc_coverage_runner as runner
-from doc_coverage_model import DocTarget
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
+    from doc_coverage_model import DocTarget
+
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+MINIMUM_THRESHOLD = 0.0
+MAXIMUM_THRESHOLD = 100.0
 
 
 def label(target: DocTarget) -> str:
-    """Return a human-readable name for the target in the breakdown table.
+    """Build a human-readable name for the target in the breakdown table.
 
-    Binary targets are labelled with their target name; libraries use the
-    package name alone.
+    Parameters
+    ----------
+    target
+        Workspace target the breakdown row describes.
+
+    Returns
+    -------
+    str
+        The package and kind alone for libraries, qualified with the target
+        name for binaries.
     """
     if not target.name:
         return f"{target.package} {target.kind}"
@@ -47,13 +57,29 @@ def label(target: DocTarget) -> str:
 
 
 def parse_threshold(value: str) -> float:
-    """Parse a coverage threshold, rejecting NaN and out-of-range values."""
+    """Parse a coverage threshold, rejecting NaN and out-of-range values.
+
+    Parameters
+    ----------
+    value
+        Raw ``--threshold`` argument as supplied on the command line.
+
+    Returns
+    -------
+    float
+        The accepted threshold percentage.
+
+    Raises
+    ------
+    argparse.ArgumentTypeError
+        If the value is not a number, is NaN, or falls outside [0, 100].
+    """
     try:
         threshold = float(value)
     except ValueError as error:
         detail = f"invalid threshold {value!r}"
         raise argparse.ArgumentTypeError(detail) from error
-    if not 0.0 <= threshold <= 100.0:
+    if not MINIMUM_THRESHOLD <= threshold <= MAXIMUM_THRESHOLD:
         detail = f"threshold must be in [0, 100], got {threshold}"
         raise argparse.ArgumentTypeError(detail)
     return threshold
