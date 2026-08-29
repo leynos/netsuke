@@ -107,10 +107,7 @@ pub(crate) fn interpolate_command_with_bindings(
     template: &str,
     bindings: &CommandBindings,
 ) -> Result<String, IrGenError> {
-    if has_placeholder_in_backticks(template) {
-        return Err(invalid_command_error(template.to_owned()));
-    }
-    let interpolated = substitute(template, &bindings.ins, &bindings.outs);
+    let interpolated = substitute(template, &bindings.ins, &bindings.outs)?;
     if has_unmatched_backticks(&interpolated) || shlex::split(&interpolated).is_none() {
         return Err(invalid_command_error(interpolated));
     }
@@ -127,10 +124,7 @@ pub(crate) fn interpolate_script_with_bindings(
     template: &str,
     bindings: &CommandBindings,
 ) -> Result<String, IrGenError> {
-    if has_placeholder_in_backticks(template) {
-        return Err(invalid_command_error(template.to_owned()));
-    }
-    Ok(substitute(template, &bindings.ins, &bindings.outs))
+    substitute(template, &bindings.ins, &bindings.outs)
 }
 
 /// Builds the diagnostic for a command rejected during placeholder expansion.
@@ -261,8 +255,12 @@ fn try_match_token<'a>(
     Some((replacement, matched_len))
 }
 
-/// Replace input and output tokens in a template, preserving backtick regions.
-fn substitute(template: &str, ins: &str, outs: &str) -> String {
+/// Replace input and output tokens while rejecting protected placeholders.
+///
+/// A placeholder inside backticks cannot be safely lowered because command
+/// substitution shields it from the normal replacement path. Reject it during
+/// the same traversal so malformed commands never reach the Ninja backend.
+fn substitute(template: &str, ins: &str, outs: &str) -> Result<String, IrGenError> {
     let chars: Vec<char> = template.chars().collect();
     let mut out = String::with_capacity(template.len());
     let mut in_backticks = false;
@@ -276,6 +274,9 @@ fn substitute(template: &str, ins: &str, outs: &str) -> String {
         }
 
         if in_backticks {
+            if find_substitution(&chars, i, ins, outs).is_some() {
+                return Err(invalid_command_error(template.to_owned()));
+            }
             out.push(ch);
             i += 1;
             continue;
@@ -289,26 +290,7 @@ fn substitute(template: &str, ins: &str, outs: &str) -> String {
             i += 1;
         }
     }
-    out
-}
-
-/// Detect placeholders whose enclosing backticks prevent safe lowering.
-///
-/// Rejecting these templates before substitution prevents a residual `$in` or
-/// `$out` token from reaching the child shell as an ambient shell variable.
-fn has_placeholder_in_backticks(template: &str) -> bool {
-    let chars: Vec<char> = template.chars().collect();
-    let mut in_backticks = false;
-    for (index, character) in chars.iter().enumerate() {
-        if *character == '`' {
-            in_backticks ^= true;
-            continue;
-        }
-        if in_backticks && find_substitution(&chars, index, "", "").is_some() {
-            return true;
-        }
-    }
-    false
+    Ok(out)
 }
 
 /// Internal marker emitted for `{{ ins }}` during manifest rendering and
