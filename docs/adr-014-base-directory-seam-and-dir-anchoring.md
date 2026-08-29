@@ -1,4 +1,4 @@
-# Architecture decision record (ADR): Base-directory seam and `-C` anchoring
+# Architecture decision record (ADR): base-directory seam and `-C` anchoring
 
 ## Status
 
