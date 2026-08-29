@@ -9,6 +9,7 @@ fn command(recipe: Recipe) -> StringOrList {
     command
 }
 
+/// Return the recipe kind used by the API compatibility fixture.
 fn recipe_kind(recipe: Recipe) -> &'static str {
     match recipe {
         Recipe::Command { .. } => "command",

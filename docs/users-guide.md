@@ -294,7 +294,10 @@ offending key.
 
 ### Rules and recipes
 
-A rule or target must provide exactly one recipe:
+Rules must provide exactly one executable recipe. Actions and targets that
+perform work must also provide exactly one recipe, but may omit it when a
+non-empty `deps` list is their complete operation. This dependency-only
+aggregate form is preferred over a no-op command such as `command: ":"`:
 
 - `command`: one shell command, or an ordered list of commands.
 - `script`: a multi-line POSIX shell script.
