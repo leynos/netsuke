@@ -1035,7 +1035,7 @@ inside the build-script crate. Widening it — for example by making
 unreachable items and, with them, the module-wide `#[expect(dead_code)]`
 suppressions that issue #513 removed. Those suppressions also masked genuinely
 dead code: an unused `pub` item in `src/cli/config.rs` is reported by the
-build-script crate but not by the library, because the library exports that
+build-script crate but not by the library because the library exports that
 module publicly.
 
 A dependency added outside the slice surfaces as a build-script compile error.

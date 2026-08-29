@@ -88,15 +88,30 @@ fn fetch(
         )
     })?;
 
-    context.policy().evaluate(&parsed).map_err(|violation| {
-        Error::new(
-            ErrorKind::InvalidOperation,
-            localization::message(keys::STDLIB_FETCH_DISALLOWED)
-                .with_arg("url", url)
-                .with_arg("details", violation.to_string())
-                .to_string(),
-        )
-    })?;
+    match context.policy().evaluate(&parsed) {
+        Ok(()) => {
+            tracing::debug!(
+                operation = "fetch",
+                policy_outcome = "allowed",
+                "network policy allowed fetch"
+            );
+        }
+        Err(violation) => {
+            tracing::debug!(
+                operation = "fetch",
+                policy_outcome = "rejected",
+                policy_reason = network_policy_rejection_reason(&violation),
+                "network policy rejected fetch"
+            );
+            return Err(Error::new(
+                ErrorKind::InvalidOperation,
+                localization::message(keys::STDLIB_FETCH_DISALLOWED)
+                    .with_arg("url", url)
+                    .with_arg("details", violation.to_string())
+                    .to_string(),
+            ));
+        }
+    }
 
     let limit = context.max_response_bytes();
     let bytes = if use_cache {
@@ -119,6 +134,16 @@ fn fetch(
     };
 
     Ok(value_from_bytes(bytes))
+}
+
+/// Return a stable category for a rejected network-policy evaluation.
+const fn network_policy_rejection_reason(violation: &NetworkPolicyViolation) -> &'static str {
+    match violation {
+        NetworkPolicyViolation::SchemeNotAllowed { .. } => "scheme_not_allowed",
+        NetworkPolicyViolation::MissingHost { .. } => "missing_host",
+        NetworkPolicyViolation::HostNotAllowlisted { .. } => "host_not_allowlisted",
+        NetworkPolicyViolation::HostBlocked { .. } => "host_blocked",
+    }
 }
 
 /// Fetch a URL's response body, enforcing the response size limit.
@@ -339,4 +364,9 @@ impl FetchContext {
 }
 
 #[cfg(test)]
+mod observability_tests;
+#[cfg(test)]
 mod tests;
+#[cfg(test)]
+#[path = "tests_support.rs"]
+mod tests_support;

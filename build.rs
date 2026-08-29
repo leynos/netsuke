@@ -40,7 +40,7 @@ const FALLBACK_DATE: &str = "1970-01-01";
 // would also mask genuinely dead library code.
 //
 // The library modules below are laid out to keep this slice small:
-// `src/cli/command.rs` holds command-schema and default-command behavior,
+// `src/cli/command.rs` holds command-schema and default-command behaviour,
 // including `Cli::with_default_command`, with runtime preferences in
 // `src/cli/preferences.rs` and the localisation-aware parsing entry point in
 // `src/cli/parser.rs`; matching logic is split out of `src/host_pattern.rs`
