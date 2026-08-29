@@ -348,3 +348,7 @@ mod tests;
 #[cfg(test)]
 #[path = "render_command_list_tests.rs"]
 mod command_list_tests;
+
+#[cfg(test)]
+#[path = "render_script_tests.rs"]
+mod script_tests;

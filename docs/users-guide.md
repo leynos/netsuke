@@ -1468,7 +1468,12 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   required Ninja escaping after it lowers `$in`, `$out`, `{{ ins }}`, and
   `{{ outs }}`. A `$in` or `$out` token inside backticks is rejected because
   Netsuke cannot safely lower it there. This applies to command and script
-  recipes.
+  recipes. Command text containing newline, carriage-return, or NUL characters
+  is rejected during Ninja generation. Script text containing carriage-return or
+  NUL characters is rejected; ordinary script newlines are preserved by the
+  generated shell wrapper. Literal `$` characters in action
+  metadata—`description`, `depfile`, `deps`, and `pool`—are doubled for Ninja
+  so they remain literal values rather than becoming Ninja variable references.
 - Build and default-target paths reject `$`, spaces, colons, `|`, and control
   characters because Ninja cannot represent them without ambiguity. Generation
   also rejects newline, carriage-return, and NUL characters in emitted metadata

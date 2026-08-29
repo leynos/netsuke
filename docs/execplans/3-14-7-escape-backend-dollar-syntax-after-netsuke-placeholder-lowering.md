@@ -488,31 +488,29 @@ joined by an action identifier). It must stay backend-agnostic.
 
 The files that matter, with what each does today:
 
-`src/ninja_gen.rs` writes the whole `build.ninja`. `generate_into`
-(lines 120-163) walks the sorted actions, writes each through the
+`src/ninja_gen/mod.rs` writes the whole `build.ninja`. `generate_into`
+(lines 143-195) walks the sorted actions, writes each through the
 `NamedAction` `Display` implementation, then walks the sorted build edges
 through `DisplayEdge`, then writes the `default` line.
-`NamedAction::write_recipe` (lines 202-219) has three live arms: a scalar
+`NamedAction::shell_text` (lines 298-317) has three live recipe paths: a scalar
 command escaped at emission; a command list built by
-`write_command_list` (lines 232-248); and a script wrapped by
-`write_script_command` (lines 221-229). `escape_script` (lines 185-193)
-escapes for the outer shell, not for Ninja. `write_metadata` (lines 250-257)
+`command_list_shell_text` (lines 333-348); and a script wrapped by
+`script_shell_text` (lines 320-330). `escape_script` (lines 218-226)
+escapes for the outer shell, not for Ninja. `write_metadata` (lines 246-257)
 writes `description`, `depfile`, `deps`, and `pool` through the Ninja escaping
-boundary. `join`
-(lines 166-168) space-joins paths unescaped.
+boundary. `join` (lines 197-203) validates and space-joins paths.
 
 `src/ninja_gen_command_list.rs` renders one entry of a command list into a
 brace group with an `EXIT` trap, so a failing entry is attributed to a specific
-one-based index. `command_list_entry` (lines 92-120) hand-writes `$$` into its
-format string for its own shell scaffolding — `$${{!:-}}`, `$$?`,
-`$$_netsuke_command_status`. That is Ninja escaping performed ad hoc at one
-call site, and it is the only place in the crate that does it.
+one-based index. `command_list_entry` (lines 92-120) writes ordinary shell
+dollar expressions for its status and background-job scaffolding. The enclosing
+`NamedAction::shell_text` path applies the single Ninja escaping pass to that
+complete command-list wrapper.
 
 `src/ir/from_manifest_support.rs` lowers a manifest recipe into an IR action.
-`register_action` (lines 26-55) interpolates `$in`, `$out`, and the internal
-placeholder tokens for `Recipe::Command` only. `Recipe::Script` falls through
-unchanged at line 54 (`other => other`). The action is then hashed
-(`src/hasher.rs`) and the hash becomes the Ninja rule name.
+`register_action` (lines 43-72) resolves `$in`, `$out`, and the internal
+placeholder tokens for both `Recipe::Command` and `Recipe::Script`. The action
+is then hashed (`src/hasher.rs`) and the hash becomes the Ninja rule name.
 
 `src/ir/cmd_interpolate.rs` performs the substitution.
 `interpolate_command_with_bindings` (lines 101-117) calls `substitute` and then
@@ -524,11 +522,10 @@ leaves backtick-delimited regions alone. `quote_paths` (lines 63-78)
 shell-quotes each substituted path with `shell_quote::Sh`.
 
 `src/manifest/render.rs` renders Jinja. `recipe_render_context`
-(lines 159-171) binds `ins` and `outs` to the placeholder tokens, and it is
-reached only through `render_recipe_string_or_list` (lines 128-152), which
-`render_recipe` (lines 81-94) calls for the `Recipe::Command` arm alone. The
-`Recipe::Script` arm at lines 88-90 renders against the plain variable map, so
-`{{ ins }}` is undefined inside a script today.
+(lines 297-308) binds `ins` and `outs` to the placeholder tokens. Both command
+and script recipes receive that context through `render_recipe` (lines
+174-185), while manifest-query mode preserves their bodies. The rendered
+placeholders are resolved later during IR lowering.
 
 Relevant existing behaviour worth knowing before touching anything: dollar-free
 manifests must keep producing byte-identical output; the command-list wrapper's
@@ -549,10 +546,10 @@ citations in this plan were re-resolved against that commit on 2026-08-17; see
    `$$`), `RM-3.14.7-b` (keep the IR free of Ninja-specific escaping), and
    `RM-3.14.7-c` (command and script regression tests covering shell
    variables, `$in`/`$out`, and unrelated identifiers such as `$input`).
-2. `docs/netsuke-design.md:507-516` — §2.6 "Backend dollar escaping", the
+2. `docs/netsuke-design.md:523-545` — §2.6 "Backend dollar escaping", the
    normative statement of the required behaviour and of the IR boundary.
    Referred to as `DD-2.6`.
-3. `docs/netsuke-design.md:2059-2067` — §5.4, placing the conversion from IR
+3. `docs/netsuke-design.md:2074-2207` — §5.4, placing the conversion from IR
    text to backend text in the rule writer. Referred to as `DD-5.4`.
 4. `docs/archive/roadmap-completed-foundations.md:87` — archived task 1.3.2,
    the declared dependency, complete.
