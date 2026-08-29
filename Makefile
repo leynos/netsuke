@@ -1,6 +1,5 @@
 .PHONY: help all clean test test-nextest doctest test-workflow-contracts test-typos-config build release lint lint-clippy lint-whitaker lint-python doc-coverage doc-coverage-test fmt check-fmt typecheck typecheck-python markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load
 
-PYTHON ?= python3
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
 # an override into the shell command line.
@@ -123,7 +122,7 @@ MD_FILES_FIND = find . -type f -name '*.md' \
 PROVER_TOOLS_SOURCE ?= git+https://github.com/leynos/rust-prover-tools@b07ef696f8373d54ae68e517d39d47a5d27a5bd5
 PROVER_TOOLS ?= uv tool run --from $(PROVER_TOOLS_SOURCE) prover-tools
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
-export PYTHON RUSTDOC_FLAGS
+export RUSTDOC_FLAGS
 VERUS_FLAGS ?=
 VERUS_INSTALL_FLAGS ?=
 WHITAKER ?= whitaker
@@ -173,8 +172,10 @@ lint-whitaker: ## Run the Whitaker Dylint suite with warnings denied
 	cd test_support && DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings" $(WHITAKER) --all --no-deps --package test_support -- --all-targets --all-features
 
 doc-coverage: doc-coverage-test ## Verify aggregate Rustdoc doc-comment coverage meets the threshold
-	@RUSTDOCFLAGS="$${RUSTDOC_FLAGS}" \
-		"$${PYTHON}" scripts/doc-coverage.py --toolchain "$$DOC_COVERAGE_TOOLCHAIN" --threshold "$$DOC_COVERAGE_THRESHOLD"
+	# Runs under the uv-pinned baseline interpreter, not the system python3:
+	# the scripts target Python 3.14 syntax and semantics.
+	@RUSTDOCFLAGS="$${RUSTDOC_FLAGS}" $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
+		scripts/doc-coverage.py --toolchain "$$DOC_COVERAGE_TOOLCHAIN" --threshold "$$DOC_COVERAGE_THRESHOLD"
 
 doc-coverage-test: ## Run documentation-coverage pytest modules
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
