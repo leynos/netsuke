@@ -1,13 +1,15 @@
 //! Tests for glob pattern normalisation and brace validation.
-use super::super::GlobPattern;
 #[cfg(unix)]
 use super::super::normalize::force_literal_escapes;
 use super::super::normalize::normalize_separators;
 use super::super::validate::validate_brace_matching;
+use super::super::{GlobPattern, PreparedGlob};
 use crate::localization::{self, keys};
 use anyhow::{Context, Result, anyhow, ensure};
+use camino::Utf8Path;
 use minijinja::ErrorKind;
 use rstest::rstest;
+use tempfile::tempdir;
 use test_support::fluent::normalize_fluent_isolates;
 
 /// Helper to assert that a pattern produces a syntax error.
@@ -178,4 +180,25 @@ fn glob_pattern_new_normalizes_and_validates() -> Result<()> {
 fn glob_pattern_new_rejects_invalid_braces() {
     let err = GlobPattern::new("foo{").expect_err("invalid brace pattern must fail");
     assert_eq!(err.kind(), ErrorKind::SyntaxError);
+}
+
+#[test]
+fn prepared_relative_search_uses_one_host_separator() -> Result<()> {
+    let temp = tempdir()?;
+    let base = Utf8Path::from_path(temp.path()).context("temporary paths must be UTF-8")?;
+    let prepared = PreparedGlob::new("nested/*.txt", Some(base))?;
+    let separator = std::path::MAIN_SEPARATOR;
+    let suffix = format!("{separator}nested{separator}*.txt");
+    ensure!(
+        prepared.search.ends_with(&suffix),
+        "prepared search must end with {suffix:?}, got {:?}",
+        prepared.search
+    );
+    #[cfg(windows)]
+    ensure!(
+        !prepared.search.starts_with(r"\\?\"),
+        "glob cannot traverse a verbatim Windows base: {:?}",
+        prepared.search
+    );
+    Ok(())
 }
