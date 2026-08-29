@@ -190,8 +190,8 @@ Work after the first release is organized around three priorities:
    flag names, non-interactive safeguards, stable exit codes, bounded output,
    and versioned `--json` documents.
 2. **Make recipes safer and clearer**: add structured executable arguments,
-   environment mappings, compiler dependency imports, backend dollar escaping,
-   and better conditional-action feedback.
+   environment mappings, compiler dependency imports, and better
+   conditional-action feedback.
 3. **Strengthen confidence**: expand Kani and property-test coverage, verify
    accessibility with assistive technology, and add regression coverage for
    configuration precedence and terminal rendering.
