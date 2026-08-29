@@ -1,16 +1,18 @@
-//! Property tests for literal-prefix extraction and capability relativisation.
+//! Property tests for glob path invariants.
 //!
 //! The fixed cases elsewhere in this module pin a handful of shapes. These
 //! cover the invariants those shapes are examples of, across arbitrary
 //! metacharacter placement: that the extracted prefix really is a
 //! metacharacter-free directory prefix and really is the longest one, and that
 //! relativising a match against it accepts exactly the paths inside the prefix
-//! and rejects everything else.
+//! and rejects everything else. The template-path property separately pins
+//! the exact byte set accepted at the Jinja shell-safety boundary.
 //!
-//! Both properties are pure. The [`GlobRoot`] used for relativisation holds a
+//! These properties are pure. The [`GlobRoot`] used for relativisation holds a
 //! capability that its prefix logic never consults, so one handle on the
 //! working directory serves every case.
 
+use super::super::is_shell_inert_path;
 use super::super::walk::{GlobRoot, literal_dir_prefix};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs::Dir};
@@ -35,6 +37,33 @@ fn pattern() -> impl Strategy<Value = String> {
     .prop_map(|parts| parts.concat())
 }
 
+/// Generate an arbitrary non-empty UTF-8 string without filtering cases.
+fn non_empty_utf8_path() -> impl Strategy<Value = String> {
+    (
+        any::<char>(),
+        proptest::collection::vec(any::<char>(), 0..128),
+    )
+        .prop_map(|(first, rest)| std::iter::once(first).chain(rest).collect())
+}
+
+/// Reference the byte set documented for Jinja `glob()` results.
+fn contains_only_documented_path_bytes(path: &str) -> bool {
+    path.bytes().all(|byte| {
+        matches!(
+            byte,
+            b'A'..=b'Z'
+                | b'a'..=b'z'
+                | b'0'..=b'9'
+                | b','
+                | b'.'
+                | b'/'
+                | b':'
+                | b'_'
+                | b'-'
+        )
+    })
+}
+
 /// Build a `GlobRoot` at `prefix` whose capability is never dereferenced.
 fn root_at(prefix: &str) -> Result<GlobRoot, TestCaseError> {
     let dir = Dir::open_ambient_dir(".", ambient_authority())
@@ -43,6 +72,17 @@ fn root_at(prefix: &str) -> Result<GlobRoot, TestCaseError> {
 }
 
 proptest! {
+    /// The implementation accepts exactly the documented portable byte set.
+    #[test]
+    fn shell_inert_path_matches_the_documented_byte_set(path in non_empty_utf8_path()) {
+        prop_assert_eq!(
+            is_shell_inert_path(&path),
+            contains_only_documented_path_bytes(&path),
+            "unexpected classification for {:?}",
+            path
+        );
+    }
+
     /// The prefix is `.` or a genuine prefix of the pattern.
     #[test]
     fn prefix_is_a_prefix_of_the_pattern(pattern in pattern()) {

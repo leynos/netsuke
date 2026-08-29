@@ -17,6 +17,9 @@
 //!   runs the metadata check that filters each match.
 //! - `diagnostics` records the bounded data the pure expansion query returns
 //!   at the manifest orchestration boundary.
+//! - The manifest adapter exposes only paths that are portable unquoted shell
+//!   words. The public [`glob_paths`] query remains a filesystem API and does
+//!   not impose that template-specific command-safety policy.
 //!
 //! Matching itself belongs to the `glob` crate, which traverses the filesystem
 //! ambiently; only the metadata check is capability-scoped. `walk`'s module
@@ -167,8 +170,57 @@ impl GlobExpansion {
     pub(super) fn into_paths(self) -> Vec<String> {
         self.paths
     }
+
+    /// Consume paths for use as unquoted manifest-template values.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let expansion = GlobExpansion {
+    ///     paths: vec!["src/main.c".to_owned()],
+    ///     outcome: GlobOutcome::Matched,
+    ///     skipped: GlobSkippedEntries::default(),
+    /// };
+    /// let paths = expansion.into_template_paths("src/*.c")?;
+    /// assert_eq!(paths, vec!["src/main.c"]);
+    /// # Ok::<(), minijinja::Error>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a path contains characters that a command shell
+    /// could reinterpret rather than preserving as one literal word.
+    pub(super) fn into_template_paths(
+        self,
+        pattern: &str,
+    ) -> std::result::Result<Vec<String>, Error> {
+        if self.paths.iter().all(|path| is_shell_inert_path(path)) {
+            return Ok(self.paths);
+        }
+        diagnostics::record_template_path_rejection();
+        Err(create_glob_error(
+            &GlobErrorContext {
+                pattern: pattern.to_owned(),
+                error_char: char::from(0),
+                position: pattern.len(),
+                error_type: GlobErrorType::IoError,
+            },
+            Some("glob matched a path containing characters that require shell quoting".to_owned()),
+        ))
+    }
 }
 
+/// Return whether `path` is portable as one unquoted shell word.
+///
+/// This predicate belongs only to the Jinja `glob()` adapter. Graph paths and
+/// direct [`glob_paths`] callers have separate escaping boundaries and must not
+/// reuse this deliberately restrictive policy.
+fn is_shell_inert_path(path: &str) -> bool {
+    !path.is_empty()
+        && path.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b',' | b'.' | b'/' | b'_' | b'-' | b':')
+        })
+}
 /// Expand a glob pattern and collect the matching UTF-8 file paths.
 ///
 /// This is the only public item in the glob module: `netsuke::manifest`

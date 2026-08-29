@@ -8,6 +8,7 @@
 use super::{manifest_yaml, target_names, temp_dir};
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
+use std::path::Path;
 use test_support::{cwd_guard::CwdGuard, env_lock::EnvLock};
 
 /// Build a manifest with one `foreach` target per glob match.
@@ -15,7 +16,7 @@ fn glob_manifest(pattern: &str) -> String {
     manifest_yaml(&format!(
         concat!(
             "targets:\n",
-            "  - foreach: glob('{pattern}')\n",
+            "  - foreach: glob({pattern:?})\n",
             "    name: \"{{{{ item }}}}\"\n",
             "    command: echo hi\n",
         ),
@@ -33,8 +34,12 @@ fn unopenable_prefix_yields_no_targets(
     #[case] prefix: &str,
 ) -> Result<()> {
     test_support::fs::write(temp_dir.path().join("a.txt"), "a")?;
-    let pattern = format!("{}/{prefix}/*.txt", temp_dir.path().display());
-    let manifest = netsuke::manifest::from_str(&glob_manifest(&pattern))
+    let fixture_dir: &Path = temp_dir.path();
+    let pattern_path = fixture_dir.join(prefix).join("*.txt");
+    let pattern = pattern_path
+        .to_str()
+        .context("glob test pattern must be valid UTF-8")?;
+    let manifest = netsuke::manifest::from_str(&glob_manifest(pattern))
         .context("an unopenable prefix should parse, not fail")?;
     ensure!(
         manifest.targets.is_empty(),

@@ -1,9 +1,9 @@
 //! Tests for the match set [`glob_paths`] returns.
 #[cfg(unix)]
 use super::super::GlobPattern;
-use super::super::glob_paths;
 #[cfg(unix)]
 use super::super::walk::{GlobRoot, process_glob_entry};
+use super::super::{glob_paths, is_shell_inert_path};
 #[cfg(unix)]
 use anyhow::{Context, anyhow};
 use anyhow::{Result, ensure};
@@ -47,6 +47,33 @@ fn glob_paths_rejects_an_invalid_pattern_before_a_missing_prefix() {
     assert_eq!(err.kind(), ErrorKind::SyntaxError);
 }
 
+#[rstest]
+#[case("src/file.txt")]
+#[case("build/generated-file_1.txt")]
+#[case("C:/workspace/file.txt")]
+#[case("data/version,1.txt")]
+fn shell_inert_template_paths_accept_portable_words(#[case] path: &str) {
+    assert!(
+        is_shell_inert_path(path),
+        "expected a shell-inert path: {path}"
+    );
+}
+
+#[rstest]
+#[case("")]
+#[case("src/two files.txt")]
+#[case("src/a.txt;touch PWNED")]
+#[case("src/$(touch PWNED).txt")]
+#[case("src/`touch PWNED`.txt")]
+#[case("src/a.txt#comment")]
+#[case("src/line\nbreak.txt")]
+#[case("src/quoted'name.txt")]
+fn shell_inert_template_paths_reject_shell_syntax(#[case] path: &str) {
+    assert!(
+        !is_shell_inert_path(path),
+        "expected an unsafe template path: {path:?}"
+    );
+}
 #[cfg(unix)]
 #[test]
 fn glob_paths_accepts_escaped_braces_and_matches_files() -> Result<()> {

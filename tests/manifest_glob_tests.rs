@@ -7,6 +7,7 @@ use netsuke::{
 };
 use rstest::{fixture, rstest};
 use std::{fs, path::Path};
+use tempfile::Builder;
 use test_support::{EnLocalizer, display_error_chain, en_localizer, manifest::manifest_yaml};
 
 #[derive(Debug)]
@@ -93,12 +94,17 @@ fn assert_glob_error_contains(
 
 #[fixture]
 fn temp_dir() -> tempfile::TempDir {
+    // Keep matched paths shell-inert on Windows, whose system temp parent can
+    // contain short-name characters outside the Jinja adapter's allowlist.
     #[expect(
         clippy::expect_used,
         reason = "fixture should fail fast when temp directory creation fails"
     )]
     {
-        tempfile::tempdir().expect("create temp dir")
+        Builder::new()
+            .prefix("netsuke-glob-")
+            .tempdir_in(".")
+            .expect("create relative glob test directory")
     }
 }
 
@@ -162,7 +168,7 @@ fn test_glob_behavior(temp_dir: tempfile::TempDir, #[case] case: GlobTestCase) -
     let yaml = manifest_yaml(&format!(
         concat!(
             "targets:\n",
-            "  - foreach: glob('{pattern}')\n",
+            "  - foreach: glob({pattern:?})\n",
             "    name: \"{name_template}\"\n",
             "    command: echo hi\n",
         ),
@@ -319,7 +325,7 @@ fn glob_accepts_windows_path_separators(temp_dir: tempfile::TempDir) -> Result<(
     let yaml = manifest_yaml(&format!(
         concat!(
             "targets:\n",
-            "  - foreach: glob('{pattern}')\n",
+            "  - foreach: glob({pattern:?})\n",
             "    name: \"{{{{ item }}}}\"\n",
             "    command: echo hi\n",
         ),
@@ -351,7 +357,7 @@ fn glob_is_case_sensitive_on_windows(temp_dir: tempfile::TempDir) -> Result<()> 
     let yaml = manifest_yaml(&format!(
         concat!(
             "targets:\n",
-            "  - foreach: glob('{pattern}')\n",
+            "  - foreach: glob({pattern:?})\n",
             "    name: fail\n",
             "    command: echo hi\n",
         ),

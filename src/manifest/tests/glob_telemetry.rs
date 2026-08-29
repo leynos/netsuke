@@ -17,6 +17,8 @@ use test_support::manifest::manifest_yaml;
 use tracing::level_filters::LevelFilter;
 
 const EXPANSIONS_TOTAL: &str = "netsuke_manifest_glob_expansions_total";
+#[cfg(unix)]
+const REJECTIONS_TOTAL: &str = "netsuke_manifest_glob_rejections_total";
 
 type Snapshot = Vec<(
     CompositeKey,
@@ -55,6 +57,27 @@ fn expansion_count(snapshot: &Snapshot, outcome: &str) -> Option<u64> {
     })
 }
 
+/// Value of the glob-rejection counter carrying its bounded labels.
+#[cfg(unix)]
+fn unsafe_path_rejection_count(snapshot: &Snapshot) -> Option<u64> {
+    snapshot.iter().find_map(|(key, _, _, value)| {
+        if key.kind() != MetricKind::Counter || key.key().name() != REJECTIONS_TOTAL {
+            return None;
+        }
+        let has_outcome = key
+            .key()
+            .labels()
+            .any(|label| label.key() == "outcome" && label.value() == "unsafe_path");
+        let has_error_category = key.key().labels().any(|label| {
+            label.key() == "error_category" && label.value() == "shell_quoting_required"
+        });
+        match value {
+            DebugValue::Counter(count) if has_outcome && has_error_category => Some(*count),
+            _ => None,
+        }
+    })
+}
+
 #[rstest]
 fn jinja_glob_adapter_records_an_unopenable_prefix() -> Result<()> {
     let temp = tempdir()?;
@@ -83,6 +106,44 @@ fn jinja_glob_adapter_records_an_unopenable_prefix() -> Result<()> {
     ensure!(
         !event.contains(&temp.path().display().to_string()),
         "the adapter event must not disclose its absolute path: {event}"
+    );
+    Ok(())
+}
+
+#[cfg(unix)]
+#[rstest]
+fn jinja_glob_adapter_records_a_redacted_unsafe_path_rejection() -> Result<()> {
+    let temp = tempdir()?;
+    let unsafe_name = "secret; touch PWNED; #.txt";
+    test_support::fs::write(temp.path().join(unsafe_name), "unsafe path")?;
+    let pattern = format!("{}/*.txt", temp.path().display());
+    let yaml = manifest_yaml(&format!(
+        "targets:\n  - foreach: glob({pattern:?})\n    name: unsafe\n    command: echo {{{{ item }}}}\n"
+    ));
+
+    let (manifest, events, snapshot) = recorded(|| from_str(&yaml));
+    let error = manifest.expect_err("the unsafe path must stop manifest loading");
+    ensure!(
+        format!("{error:#}").contains("characters that require shell quoting"),
+        "the rejection should retain its semantic diagnostic: {error:#}"
+    );
+    ensure!(
+        unsafe_path_rejection_count(&snapshot) == Some(1),
+        "the adapter must count the categorized rejection: {snapshot:?}"
+    );
+    let event = events
+        .iter()
+        .find(|event| event.contains("glob template path rejected"))
+        .context("the Jinja adapter must emit a rejection event")?;
+    ensure!(
+        event.contains("path=\"<redacted>\"")
+            && event.contains("outcome=\"unsafe_path\"")
+            && event.contains("error_category=\"shell_quoting_required\""),
+        "the rejection event must retain bounded fields: {event}"
+    );
+    ensure!(
+        !event.contains(unsafe_name) && !event.contains(&temp.path().display().to_string()),
+        "the rejection event must not disclose the matched path: {event}"
     );
     Ok(())
 }

@@ -553,6 +553,15 @@ Patterns with unmatched braces are rejected during validation. When an opening
 brace remains unclosed, the diagnostic points to the outermost unmatched
 opening brace; an unmatched closing brace is reported at that closing brace.
 
+The Jinja helper rejects a matched path unless it can be inserted as one
+portable unquoted shell word. ASCII letters, digits, `/`, `:`, comma, full stop,
+underscore, and hyphen are accepted; whitespace, control characters, and
+shell punctuation are rejected. This prevents an untrusted checkout filename
+from becoming shell syntax when `item` is interpolated into a `command` or
+`script`. The Rust `manifest::glob_paths` query performs no shell-safety
+validation; each caller must validate or escape matched paths before passing
+them to a command sink.
+
 ### Define reusable macros
 
 Macros return rendered text and can accept default arguments:

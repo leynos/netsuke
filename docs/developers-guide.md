@@ -613,7 +613,7 @@ the two cannot drift:
 
 ```bash
 WHITAKER_INSTALLER_VERSION="$(sed -n \
-  "s/.*WHITAKER_INSTALLER_VERSION: '\(.*\)'.*/\1/p" \
+  "s/.*WHITAKER_INSTALLER_VERSION: '\\(.*\\)'.*/\\1/p" \
   .github/workflows/ci.yml)"
 cargo install --locked whitaker-installer \
   --version "$WHITAKER_INSTALLER_VERSION"
@@ -2148,12 +2148,13 @@ targets:
 ## Manifest glob module boundary
 
 Glob expansion lives in `src/manifest/glob/`, and `glob_paths` is its only
-boundary. `src/manifest/mod.rs` declares `mod glob;` privately and re-exports
-just that function, so nothing else in the module — `GlobPattern`, the error
-helpers in `glob/errors.rs`, the `walk` submodule, or the `GlobEntryResult`
-alias — is reachable from the crate root. `GlobEntryResult` in particular stays
-private to `manifest::glob`: only `glob_paths` and `walk` consume it, and it
-names a `glob` crate type that callers should never have to depend on.
+public boundary. `src/manifest/mod.rs` declares `mod glob;` privately and
+re-exports just that function, so nothing else in the module — `GlobPattern`,
+the error helpers in `glob/errors.rs`, the `walk` submodule, or the
+`GlobEntryResult` alias — is reachable from the crate root. `GlobEntryResult`
+in particular stays private to `manifest::glob`: only `glob_paths` and `walk`
+consume it, and it names a `glob` crate type that callers should never have to
+depend on.
 
 Two compile-time guards hold that boundary:
 
@@ -2163,20 +2164,28 @@ Two compile-time guards hold that boundary:
   because `src/manifest/mod.rs` deliberately re-exports it, making it genuinely
   reachable; every item here that is not re-exported stays guarded.
 - A pair of doctests attached to the public `glob_paths` documentation: a
-  `compile_fail,E0603` block importing
-  `netsuke::manifest::glob::GlobEntryResult` and a passing block importing
-  `netsuke::manifest::glob_paths`. Together they validate the downstream view —
-  the alias has no public path, while the entry point does. The passing block
-  is the control: if the rustdoc harness wiring breaks, it fails rather than
-  letting the rejection pass vacuously. Both are attached to `glob_paths`
-  rather than to the private items they describe because rustdoc renders and
-  runs the examples of public items, which also makes the boundary discoverable
-  from the published API documentation.
+  `compile_fail,E0603` block importing `netsuke::manifest::glob::GlobEntryResult`
+  and a passing block importing `netsuke::manifest::glob_paths`. Together they
+  validate the downstream view — the alias has no public path, while the entry
+  point does. The passing block is the control: if the rustdoc harness wiring
+  breaks, it fails rather than letting the rejection pass vacuously. Both are
+  attached to `glob_paths` rather than to the private items they describe
+  because rustdoc renders and runs the examples of public items, which also
+  makes the boundary discoverable from the published API documentation.
 
 When adding to this module, keep new items private, or `pub(super)` when a
 sibling submodule needs them; widen the boundary only by adding a deliberate
 re-export in `src/manifest/mod.rs`. The comments in the source are supporting
 detail for these rules, not a substitute for them.
+
+The private `GlobExpansion::into_template_paths` method is the adapter between
+the filesystem query and Jinja values that may later be interpolated into
+shell commands. It accepts only non-empty paths made from ASCII letters,
+digits, `/`, `:`, comma, full stop, underscore, and hyphen. Any whitespace,
+control character, non-ASCII byte, or other punctuation returns a MiniJinja
+`InvalidOperation` error before `foreach` receives the value. This policy is
+Jinja-specific: `glob_paths` retains its filesystem-query contract and returns
+all matching UTF-8 file paths without applying shell-safety validation.
 
 ### Capability scope
 
@@ -2248,13 +2257,18 @@ keeping a degraded expansion visible without having to reproduce it.
   (`unreachable_symlink`, `not_a_file`). The skipped-entry counter includes
   every skipped entry, not only the sampled paths. Labels carry only these
   closed sets, never the pattern or a path, in line with the low-cardinality
-  rule in `AGENTS.md`.
+  rule in `AGENTS.md`. The Jinja adapter additionally records
+  `netsuke_manifest_glob_rejections_total` with `outcome=unsafe_path` and
+  `error_category=shell_quoting_required` when its shell-safety boundary
+  rejects a match.
 - **Tracing** — every caller-controlled path field is replaced with the stable
   `<redacted>` marker: patterns, prefixes, and sampled relative matches. A
   skipped unreachable-symlink event is emitted only for the retained sample,
   with no more than four such events per expansion. Metrics retain only bounded
   aggregate status and reason data; errors may retain the caller's original
-  pattern so invalid input can be explained precisely.
+  original pattern so invalid input can be explained precisely. Adapter
+  rejection events use the same `<redacted>` path marker and carry only the
+  bounded outcome and error category.
 
 ## Test isolation utilities
 
