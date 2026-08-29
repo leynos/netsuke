@@ -377,19 +377,19 @@ pub(super) fn process_glob_entry(
             "glob matched a non-UTF-8 path".to_owned(),
         )
     })?;
-    names_a_file(root, &utf_path)
+    names_a_file(root, utf_path)
         .map_err(|err| create_io_error(pattern, pattern.raw().len(), err.to_string()))
 }
 
 /// Classify whether a match names a regular file reachable through the
 /// capability, returning a bounded reason when it does not.
-fn names_a_file(root: &GlobRoot, path: &Utf8Path) -> io::Result<GlobEntry> {
-    let relative = root.relativise(path)?;
+fn names_a_file(root: &GlobRoot, path: Utf8PathBuf) -> io::Result<GlobEntry> {
+    let relative = root.relativise(&path)?;
     let Some(metadata) = root.metadata_relative(relative)? else {
         return Ok(GlobEntry::UnreachableSymlink(relative.to_path_buf()));
     };
     if metadata.is_file() {
-        return Ok(GlobEntry::Path(path.to_path_buf()));
+        return Ok(GlobEntry::Path(path));
     }
     Ok(GlobEntry::NotAFile)
 }

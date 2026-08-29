@@ -6,7 +6,7 @@
 //! surfacing as a parse error.
 
 use super::{manifest_yaml, target_names, temp_dir};
-use anyhow::{ensure, Context, Result};
+use anyhow::{Context, Result, ensure};
 use rstest::rstest;
 use std::path::Path;
 

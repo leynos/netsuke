@@ -60,6 +60,8 @@ fn append_glob_path_component(
 
 #[cfg(all(test, windows))]
 mod tests {
+    //! Covers prefix-safe escaping for Windows glob search paths.
+
     use super::escape_glob_literal_path;
     use camino::Utf8Path;
 

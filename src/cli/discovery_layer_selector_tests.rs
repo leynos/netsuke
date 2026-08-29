@@ -70,7 +70,7 @@ fn explicit_relative_config_ignores_cli_directory() -> Result<()> {
 
     let cli = Cli {
         config: Some(PathBuf::from("relative.toml")),
-        directory: Some(cli_directory.clone()),
+        directory: Some(cli_directory),
         ..Cli::default()
     };
 
@@ -107,7 +107,7 @@ fn cli_selector_wins_over_environment_with_directory() -> Result<()> {
 
     let cli = Cli {
         config: Some(PathBuf::from("cli.toml")),
-        directory: Some(cli_directory.clone()),
+        directory: Some(cli_directory),
         ..Cli::default()
     };
     let env = TestEnv::default().with_var(CONFIG_ENV_VAR, "env.toml");
@@ -127,7 +127,7 @@ fn env_config_selector_ignores_cli_directory() -> Result<()> {
     test_support::fs::create_dir(&cli_directory).context("create -C directory")?;
 
     let cli = Cli {
-        directory: Some(cli_directory.clone()),
+        directory: Some(cli_directory),
         ..Cli::default()
     };
     let env = TestEnv::default().with_var(CONFIG_ENV_VAR, "env-selector.toml");

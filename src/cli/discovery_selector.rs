@@ -9,13 +9,7 @@
 
 use std::path::PathBuf;
 
-use super::environment::EnvProvider;
-
-/// Name of the environment variable that selects the configuration file.
-///
-/// Read as the primary selector after the `--config` CLI flag when a path is
-/// not given explicitly.
-pub(super) const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG";
+use super::{CONFIG_ENV_VAR, environment::EnvProvider};
 
 /// Describes the result of the pure explicit-path selection query.
 ///

@@ -24,7 +24,7 @@ mod makefile;
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
-use makefile::{read_repo_file, target_prerequisites, target_recipe};
+use makefile::{phony_targets, read_repo_file, target_prerequisites, target_recipe};
 use toml::Value;
 
 #[test]
@@ -33,7 +33,7 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
 
     let prerequisites =
         target_prerequisites(&makefile, "test").context("Makefile should declare a test target")?;
-    for expected in ["test-nextest", "doctest"] {
+    for expected in ["test-env-mutation-gate", "test-nextest", "doctest"] {
         ensure!(
             prerequisites.iter().any(|name| name == expected),
             "make test should depend on {expected}, found {prerequisites:?}"
@@ -84,6 +84,34 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
     Ok(())
 }
 
+#[test]
+fn mutation_gate_targets_are_phony_make_prerequisites() -> Result<()> {
+    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
+    let phony = phony_targets(&makefile);
+
+    for target in ["test-env-mutation-gate", "lint-env-mutation"] {
+        ensure!(
+            phony.contains(&target),
+            ".PHONY must include {target}, found {phony:?}"
+        );
+    }
+    for (target, prerequisite) in [
+        ("test", "test-env-mutation-gate"),
+        ("lint", "lint-env-mutation"),
+    ] {
+        let prerequisites = target_prerequisites(&makefile, target)
+            .with_context(|| format!("Makefile should declare a {target} target"))?;
+        ensure!(
+            prerequisites.iter().any(|name| name == prerequisite),
+            "make {target} should depend on {prerequisite}, found {prerequisites:?}"
+        );
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+#[path = "makefile_test_target/mutation_gate.rs"]
+mod mutation_gate;
 #[path = "makefile_test_target/rustflags.rs"]
 mod rustflags;
 

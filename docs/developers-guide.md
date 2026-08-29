@@ -775,11 +775,6 @@ backend. For a faster inner loop between gate runs, see
 For documentation changes, also run `make fmt`, `make markdownlint`, and
 `make nixie`.
 
-# or, for a prebuilt binary:
-cargo binstall --no-confirm --locked \
-  "whitaker-installer@$WHITAKER_INSTALLER_VERSION"
-```
-
 `whitaker-installer` and the lint libraries are separate artefacts with
 separate versions. `WHITAKER_INSTALLER_VERSION` pins the installer — the tool
 that stages libraries — and nothing else. The installer keeps its own checkout
@@ -809,8 +804,6 @@ applying with no error, and the lint reports the modules they covered. Re-run
 detached HEAD, the install fails at its `git pull`; put it back on the default
 branch and re-run.
 
-[whitaker-pr-315]: https://github.com/leynos/whitaker/pull/315
-
 Whitaker is configured by `dylint.toml` at the repository root, where each
 sanctioned ambient-filesystem scope for `no_std_fs_operations` carries a
 documented rationale. `docs/whitaker-users-guide.md` is a near-verbatim import
@@ -818,8 +811,6 @@ of the [upstream Whitaker user's guide][whitaker-upstream-guide]; refresh it
 from that URL rather than editing it in place, preserving the "Netsuke
 deviation from upstream" callout, and record Netsuke-specific policy here and in
 `dylint.toml`.
-
-[whitaker-upstream-guide]: https://raw.githubusercontent.com/leynos/whitaker/refs/heads/main/docs/users-guide.md
 
 Prefer `excluded_paths` over `excluded_crates`: a path entry exempts one module
 and its descendants, whereas a crate entry exempts a whole compilation unit.
@@ -838,15 +829,15 @@ inline `cli` facade: the four-file slice containing `src/cli/command.rs`,
 `src/cli/config.rs`, `src/cli/help.rs`, and `src/cli/validation.rs`. The
 `command.rs` module owns the Clap command schema and default-command behaviour,
 including `Cli::with_default_command()`, while runtime discovery remains
-deliberately outside the slice. The broader `netsuke::cli::discovery` module
-remains under the capability policy; no `build_script_build` exception is
-required. The behavioural step definitions, CLI integration tests, and shared
-workflow-reading helper that stage fixtures ambiently are scoped the same way.
-A crate-level entry is justified only when the ambient access lives in the
-crate root itself, where a path entry would be no narrower — that covers the
-enumerated integration-test crates. The `test_support` crate uses
-capability-backed fixture helpers and remains linted by Whitaker under its own
-narrow policy.
+deliberately outside the slice. The broader
+`netsuke::cli::discovery` module remains under the capability policy; no
+`build_script_build` exception is required. The behavioural step definitions,
+CLI integration tests, and shared workflow-reading helper that stage fixtures
+ambiently are scoped the same way. A crate-level entry is justified only when
+the ambient access lives in the crate root itself, where a path entry would be
+no narrower — that covers the enumerated integration-test crates. The
+`test_support` crate uses capability-backed fixture helpers and remains linted
+by Whitaker under its own narrow policy.
 
 The root Whitaker invocation selects only the `netsuke-build` package (the
 Cargo package name behind the `netsuke` targets; see ADR-007) and disables
@@ -1007,7 +998,337 @@ backend. For a faster inner loop between gate runs, see
 For documentation changes, also run `make fmt`, `make markdownlint`, and
 `make nixie`.
 
-### Workflow pins and Dependabot
+`whitaker-installer` and the lint libraries are separate artefacts with
+separate versions. `WHITAKER_INSTALLER_VERSION` pins the installer — the tool
+that stages libraries — and nothing else. The installer keeps its own checkout
+of the Whitaker repository under `~/.local/share/whitaker`, updates it with
+`git pull`, and stages the libraries from its default branch. Lint behaviour
+therefore tracks Whitaker HEAD.
+
+**Running the lint libraries at HEAD is deliberate.** Netsuke follows the suite
+as it develops, so new lints and fixes arrive without a version bump here. Do
+not add a `[workspace.metadata.dylint]` block pinning `whitaker_suite` to a
+`tag` or `rev`. The [Whitaker user's guide](whitaker-users-guide.md) documents
+that form, and it is the right answer for a project wanting reproducible lint
+results, but adopting it here would reverse a standing decision rather than fix
+a defect.
+
+The cost is worth stating plainly: a change upstream can alter lint results
+between two runs with no change in this repository, and a local checkout that
+has not been restaged will disagree with CI, which stages fresh on every job.
+Restaging is what reconciles them.
+
+What the module-scoped exemptions in `dylint.toml` actually depend on is
+[Whitaker PR #315][whitaker-pr-315], which added the `excluded_paths` option,
+so the staged libraries must be recent enough to include it. Libraries staged
+from an older checkout ignore `excluded_paths` silently — the exemptions stop
+applying with no error, and the lint reports the modules they covered. Re-run
+`whitaker-installer` to restage from HEAD. If that checkout has been left on a
+detached HEAD, the install fails at its `git pull`; put it back on the default
+branch and re-run.
+
+Whitaker is configured by `dylint.toml` at the repository root, where each
+sanctioned ambient-filesystem scope for `no_std_fs_operations` carries a
+documented rationale. `docs/whitaker-users-guide.md` is a near-verbatim import
+of the [upstream Whitaker user's guide][whitaker-upstream-guide]; refresh it
+from that URL rather than editing it in place, preserving the "Netsuke
+deviation from upstream" callout, and record Netsuke-specific policy here and in
+`dylint.toml`.
+
+Prefer `excluded_paths` over `excluded_crates`: a path entry exempts one module
+and its descendants, whereas a crate entry exempts a whole compilation unit.
+The application crate's module-scoped exemptions include
+`netsuke::stdlib::which::lookup` (executable discovery through `PATH` and
+cross-directory symlink canonicalization, which `cap_std` cannot express) and
+`netsuke::runner::process::file_io::ambient_sync` (temporary-file
+synchronization, scoped to the submodule holding only that `sync_all` so the
+rest of `file_io` keeps writing through `cap_std` handles). Configuration
+discovery otherwise uses capability-scoped canonicalization. Its small,
+dedicated path-normalization module, `netsuke::cli::discovery::paths`, remains
+narrowly excluded because `std::fs::canonicalize` preserves the absolute
+comparison keys and cross-directory symlink behaviour that `cap_std` rejects.
+For ordinary man-page and completion generation, the build script compiles its
+inline `cli` facade: the four-file slice containing `src/cli/command.rs`,
+`src/cli/config.rs`, `src/cli/help.rs`, and `src/cli/validation.rs`. The
+`command.rs` module owns the Clap command schema and default-command behaviour,
+including `Cli::with_default_command()`, while runtime discovery remains
+deliberately outside the slice. The broader
+`netsuke::cli::discovery` module remains under the capability policy; no
+`build_script_build` exception is required. The behavioural step definitions,
+CLI integration tests, and shared workflow-reading helper that stage fixtures
+ambiently are scoped the same way. A crate-level entry is justified only when
+the ambient access lives in the crate root itself, where a path entry would be
+no narrower — that covers the enumerated integration-test crates. The
+`test_support` crate uses capability-backed fixture helpers and remains linted
+by Whitaker under its own narrow policy.
+
+The root Whitaker invocation selects only the `netsuke-build` package (the
+Cargo package name behind the `netsuke` targets; see ADR-007) and disables
+Dylint dependency checks. It supplies the root `dylint.toml` contents
+explicitly through `DYLINT_TOML`, so every invocation receives the same
+capability-boundary policy regardless of how Dylint resolves the current crate.
+`test_support` is a workspace member with one sanctioned ambient boundary
+configured per crate. Its second, scoped invocation supplies
+`test_support/dylint.toml` through `DYLINT_TOML`, and uses
+`--package test_support` and `--no-deps` because running from a member
+directory alone would otherwise check the parent workspace. That configuration
+names only `test_support::fs` in `excluded_paths`. The root `excluded_crates`
+must not contain `test_support`: every other module in the crate remains
+subject to the filesystem policy.
+
+Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
+allows. Do not use Rust `#[allow]` or `#[expect]` for `no_std_fs_operations`:
+this Dylint lint is not known to `rustc`, so its exclusions must be configured
+there. Prefer migrating to `cap_std` over any of these; reach for an exclusion
+only when the operation is irreducibly ambient.
+
+To confirm the exclusions have not silently widened, add a temporary
+`std::fs::metadata` call to an unexcluded module — for example
+`src/stdlib/which/cache.rs`, a sibling of the excluded `lookup` module, or the
+body of `src/runner/process/file_io.rs` outside `ambient_sync` — then run
+`make lint-whitaker`. Both sites must still be reported; revert the probe
+afterwards. The same check applies to `test_support`: a `std::fs` call in, say,
+`test_support/src/exec.rs` must be reported even though `test_support::fs` is
+exempt.
+
+When command output is long, preserve exit codes and logs:
+
+```bash
+set -o pipefail
+make test 2>&1 | tee /tmp/netsuke-make-test.log
+```
+
+These gates always use the repository toolchain and the default codegen
+backend. For a faster inner loop between gate runs, see
+[local build acceleration](#local-build-acceleration).
+
+For documentation changes, also run `make fmt`, `make markdownlint`, and
+`make nixie`.
+
+# or, for a prebuilt binary:
+cargo binstall --no-confirm --locked \
+  "whitaker-installer@$WHITAKER_INSTALLER_VERSION"
+```
+
+`whitaker-installer` and the lint libraries are separate artefacts with
+separate versions. `WHITAKER_INSTALLER_VERSION` pins the installer — the tool
+that stages libraries — and nothing else. The installer keeps its own checkout
+of the Whitaker repository under `~/.local/share/whitaker`, updates it with
+`git pull`, and stages the libraries from its default branch. Lint behaviour
+therefore tracks Whitaker HEAD.
+
+**Running the lint libraries at HEAD is deliberate.** Netsuke follows the suite
+as it develops, so new lints and fixes arrive without a version bump here. Do
+not add a `[workspace.metadata.dylint]` block pinning `whitaker_suite` to a
+`tag` or `rev`. The [Whitaker user's guide](whitaker-users-guide.md) documents
+that form, and it is the right answer for a project wanting reproducible lint
+results, but adopting it here would reverse a standing decision rather than fix
+a defect.
+
+The cost is worth stating plainly: a change upstream can alter lint results
+between two runs with no change in this repository, and a local checkout that
+has not been restaged will disagree with CI, which stages fresh on every job.
+Restaging is what reconciles them.
+
+What the module-scoped exemptions in `dylint.toml` actually depend on is
+[Whitaker PR #315][whitaker-pr-315], which added the `excluded_paths` option,
+so the staged libraries must be recent enough to include it. Libraries staged
+from an older checkout ignore `excluded_paths` silently — the exemptions stop
+applying with no error, and the lint reports the modules they covered. Re-run
+`whitaker-installer` to restage from HEAD. If that checkout has been left on a
+detached HEAD, the install fails at its `git pull`; put it back on the default
+branch and re-run.
+
+[whitaker-pr-315]: https://github.com/leynos/whitaker/pull/315
+
+Whitaker is configured by `dylint.toml` at the repository root, where each
+sanctioned ambient-filesystem scope for `no_std_fs_operations` carries a
+documented rationale. `docs/whitaker-users-guide.md` is a near-verbatim import
+of the [upstream Whitaker user's guide][whitaker-upstream-guide]; refresh it
+from that URL rather than editing it in place, preserving the "Netsuke
+deviation from upstream" callout, and record Netsuke-specific policy here and in
+`dylint.toml`.
+
+[whitaker-upstream-guide]: https://raw.githubusercontent.com/leynos/whitaker/refs/heads/main/docs/users-guide.md
+
+Prefer `excluded_paths` over `excluded_crates`: a path entry exempts one module
+and its descendants, whereas a crate entry exempts a whole compilation unit.
+The application crate's module-scoped exemptions include
+`netsuke::stdlib::which::lookup` (executable discovery through `PATH` and
+cross-directory symlink canonicalization, which `cap_std` cannot express) and
+`netsuke::runner::process::file_io::ambient_sync` (temporary-file
+synchronization, scoped to the submodule holding only that `sync_all` so the
+rest of `file_io` keeps writing through `cap_std` handles). Configuration
+discovery otherwise uses capability-scoped canonicalization. Its small,
+dedicated path-normalization module, `netsuke::cli::discovery::paths`, remains
+narrowly excluded because `std::fs::canonicalize` preserves the absolute
+comparison keys and cross-directory symlink behaviour that `cap_std` rejects.
+For ordinary man-page and completion generation, the build script compiles its
+inline `cli` facade: the four-file slice containing `src/cli/command.rs`,
+`src/cli/config.rs`, `src/cli/help.rs`, and `src/cli/validation.rs`. The
+`command.rs` module owns the Clap command schema and default-command behaviour,
+including `Cli::with_default_command()`, while runtime discovery remains
+deliberately outside the slice. The broader `netsuke::cli::discovery` module
+remains under the capability policy; no `build_script_build` exception is
+required. The behavioural step definitions, CLI integration tests, and shared
+workflow-reading helper that stage fixtures ambiently are scoped the same way.
+A crate-level entry is justified only when the ambient access lives in the
+crate root itself, where a path entry would be no narrower — that covers the
+enumerated integration-test crates. The `test_support` crate uses
+capability-backed fixture helpers and remains linted by Whitaker under its own
+narrow policy.
+
+The root Whitaker invocation selects only the `netsuke-build` package (the
+Cargo package name behind the `netsuke` targets; see ADR-007) and disables
+Dylint dependency checks. It supplies the root `dylint.toml` contents
+explicitly through `DYLINT_TOML`, so every invocation receives the same
+capability-boundary policy regardless of how Dylint resolves the current crate.
+`test_support` is a workspace member with one sanctioned ambient boundary
+configured per crate. Its second, scoped invocation supplies
+`test_support/dylint.toml` through `DYLINT_TOML`, and uses
+`--package test_support` and `--no-deps` because running from a member
+directory alone would otherwise check the parent workspace. That configuration
+names only `test_support::fs` in `excluded_paths`. The root `excluded_crates`
+must not contain `test_support`: every other module in the crate remains
+subject to the filesystem policy.
+
+Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
+allows. Do not use Rust `#[allow]` or `#[expect]` for `no_std_fs_operations`:
+this Dylint lint is not known to `rustc`, so its exclusions must be configured
+there. Prefer migrating to `cap_std` over any of these; reach for an exclusion
+only when the operation is irreducibly ambient.
+
+To confirm the exclusions have not silently widened, add a temporary
+`std::fs::metadata` call to an unexcluded module — for example
+`src/stdlib/which/cache.rs`, a sibling of the excluded `lookup` module, or the
+body of `src/runner/process/file_io.rs` outside `ambient_sync` — then run
+`make lint-whitaker`. Both sites must still be reported; revert the probe
+afterwards. The same check applies to `test_support`: a `std::fs` call in, say,
+`test_support/src/exec.rs` must be reported even though `test_support::fs` is
+exempt.
+
+When command output is long, preserve exit codes and logs:
+
+```bash
+set -o pipefail
+make test 2>&1 | tee /tmp/netsuke-make-test.log
+```
+
+These gates always use the repository toolchain and the default codegen
+backend. For a faster inner loop between gate runs, see
+[local build acceleration](#local-build-acceleration).
+
+For documentation changes, also run `make fmt`, `make markdownlint`, and
+`make nixie`.
+
+`whitaker-installer` and the lint libraries are separate artefacts with
+separate versions. `WHITAKER_INSTALLER_VERSION` pins the installer — the tool
+that stages libraries — and nothing else. The installer keeps its own checkout
+of the Whitaker repository under `~/.local/share/whitaker`, updates it with
+`git pull`, and stages the libraries from its default branch. Lint behaviour
+therefore tracks Whitaker HEAD.
+
+**Running the lint libraries at HEAD is deliberate.** Netsuke follows the suite
+as it develops, so new lints and fixes arrive without a version bump here. Do
+not add a `[workspace.metadata.dylint]` block pinning `whitaker_suite` to a
+`tag` or `rev`. The [Whitaker user's guide](whitaker-users-guide.md) documents
+that form, and it is the right answer for a project wanting reproducible lint
+results, but adopting it here would reverse a standing decision rather than fix
+a defect.
+
+The cost is worth stating plainly: a change upstream can alter lint results
+between two runs with no change in this repository, and a local checkout that
+has not been restaged will disagree with CI, which stages fresh on every job.
+Restaging is what reconciles them.
+
+What the module-scoped exemptions in `dylint.toml` actually depend on is
+[Whitaker PR #315][whitaker-pr-315], which added the `excluded_paths` option,
+so the staged libraries must be recent enough to include it. Libraries staged
+from an older checkout ignore `excluded_paths` silently — the exemptions stop
+applying with no error, and the lint reports the modules they covered. Re-run
+`whitaker-installer` to restage from HEAD. If that checkout has been left on a
+detached HEAD, the install fails at its `git pull`; put it back on the default
+branch and re-run.
+
+Whitaker is configured by `dylint.toml` at the repository root, where each
+sanctioned ambient-filesystem scope for `no_std_fs_operations` carries a
+documented rationale. `docs/whitaker-users-guide.md` is a near-verbatim import
+of the [upstream Whitaker user's guide][whitaker-upstream-guide]; refresh it
+from that URL rather than editing it in place, preserving the "Netsuke
+deviation from upstream" callout, and record Netsuke-specific policy here and in
+`dylint.toml`.
+
+Prefer `excluded_paths` over `excluded_crates`: a path entry exempts one module
+and its descendants, whereas a crate entry exempts a whole compilation unit.
+The application crate's module-scoped exemptions include
+`netsuke::stdlib::which::lookup` (executable discovery through `PATH` and
+cross-directory symlink canonicalization, which `cap_std` cannot express) and
+`netsuke::runner::process::file_io::ambient_sync` (temporary-file
+synchronization, scoped to the submodule holding only that `sync_all` so the
+rest of `file_io` keeps writing through `cap_std` handles). Configuration
+discovery otherwise uses capability-scoped canonicalization. Its small,
+dedicated path-normalization module, `netsuke::cli::discovery::paths`, remains
+narrowly excluded because `std::fs::canonicalize` preserves the absolute
+comparison keys and cross-directory symlink behaviour that `cap_std` rejects.
+For ordinary man-page and completion generation, the build script compiles its
+inline `cli` facade: the four-file slice containing `src/cli/command.rs`,
+`src/cli/config.rs`, `src/cli/help.rs`, and `src/cli/validation.rs`. The
+`command.rs` module owns the Clap command schema and default-command behaviour,
+including `Cli::with_default_command()`, while runtime discovery remains
+deliberately outside the slice. The broader
+`netsuke::cli::discovery` module remains under the capability policy; no
+`build_script_build` exception is required. The behavioural step definitions,
+CLI integration tests, and shared workflow-reading helper that stage fixtures
+ambiently are scoped the same way. A crate-level entry is justified only when
+the ambient access lives in the crate root itself, where a path entry would be
+no narrower — that covers the enumerated integration-test crates. The
+`test_support` crate uses capability-backed fixture helpers and remains linted
+by Whitaker under its own narrow policy.
+
+The root Whitaker invocation selects only the `netsuke-build` package (the
+Cargo package name behind the `netsuke` targets; see ADR-007) and disables
+Dylint dependency checks. It supplies the root `dylint.toml` contents
+explicitly through `DYLINT_TOML`, so every invocation receives the same
+capability-boundary policy regardless of how Dylint resolves the current crate.
+`test_support` is a workspace member with one sanctioned ambient boundary
+configured per crate. Its second, scoped invocation supplies
+`test_support/dylint.toml` through `DYLINT_TOML`, and uses
+`--package test_support` and `--no-deps` because running from a member
+directory alone would otherwise check the parent workspace. That configuration
+names only `test_support::fs` in `excluded_paths`. The root `excluded_crates`
+must not contain `test_support`: every other module in the crate remains
+subject to the filesystem policy.
+
+Permanent exceptions belong in `dylint.toml`, scoped as narrowly as the lint
+allows. Do not use Rust `#[allow]` or `#[expect]` for `no_std_fs_operations`:
+this Dylint lint is not known to `rustc`, so its exclusions must be configured
+there. Prefer migrating to `cap_std` over any of these; reach for an exclusion
+only when the operation is irreducibly ambient.
+
+To confirm the exclusions have not silently widened, add a temporary
+`std::fs::metadata` call to an unexcluded module — for example
+`src/stdlib/which/cache.rs`, a sibling of the excluded `lookup` module, or the
+body of `src/runner/process/file_io.rs` outside `ambient_sync` — then run
+`make lint-whitaker`. Both sites must still be reported; revert the probe
+afterwards. The same check applies to `test_support`: a `std::fs` call in, say,
+`test_support/src/exec.rs` must be reported even though `test_support::fs` is
+exempt.
+
+When command output is long, preserve exit codes and logs:
+
+```bash
+set -o pipefail
+make test 2>&1 | tee /tmp/netsuke-make-test.log
+```
+
+These gates always use the repository toolchain and the default codegen
+backend. For a faster inner loop between gate runs, see
+[local build acceleration](#local-build-acceleration).
+
+For documentation changes, also run `make fmt`, `make markdownlint`, and
+`make nixie`.
+
+## Workflow pins and Dependabot
 
 Dependabot owns the upgrade of GitHub Actions and reusable workflows, including
 calls into `leynos/shared-actions`. Contract tests that assert a caller's exact
@@ -1050,7 +1371,7 @@ shared-action revision: the caller would keep working across any upstream bump,
 so pinning the SHA in a test buys nothing and costs a manual edit per bump.
 `tests/workflow_contracts/mutation_testing_test.py` is the canonical example.
 
-#### Exception: the Polonius shared-action contract
+### Exception: the Polonius shared-action contract
 
 The four workflows described under
 [Polonius CI shared-action contract](#polonius-ci-shared-action-contract) do

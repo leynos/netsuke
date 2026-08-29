@@ -119,6 +119,19 @@ Netsuke resolves explicit configuration paths in `src/cli/discovery.rs`.
 - Future changes to selector precedence must update `discovery.rs`, the
   developer guide, the design document, and this ADR together.
 
+
+## Addendum — 2026-08-30
+
+The original decision above remains unchanged: explicit configuration
+selection belongs to the Netsuke CLI adapter rather than OrthoConfig. The
+current selector contract is explicit about directory handling: `--config`
+and `NETSUKE_CONFIG` retain process-working-directory semantics for relative
+paths, independently of `-C/--directory`; absolute selectors remain unchanged.
+The `-C/--directory` value anchors automatic project discovery and manifest
+lookup only. The production implementation is
+`selector::resolve_config_selector` in `src/cli/discovery_selector.rs`, with
+`src/cli/discovery.rs` owning the layer-loading boundary.
+
 ## Related documents
 
 - [`docs/developers-guide.md`](developers-guide.md)

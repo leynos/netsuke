@@ -195,5 +195,14 @@ fn prepared_relative_search_uses_one_host_separator() -> Result<()> {
         "prepared search must end with {suffix:?}, got {:?}",
         prepared.search
     );
+    let prefix = prepared
+        .search
+        .strip_suffix(&suffix)
+        .context("prepared search must retain its expected nested-pattern suffix")?;
+    ensure!(
+        !prefix.ends_with(separator),
+        "prepared search must use exactly one base-pattern separator, got {:?}",
+        prepared.search
+    );
     Ok(())
 }

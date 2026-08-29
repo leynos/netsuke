@@ -6,7 +6,7 @@
 //! paths in the order the `glob` crate yields them, with directories filtered
 //! out.
 //!
-//! The work is split across five private submodules:
+//! The work is split across seven private submodules:
 //!
 //! - `validate` rejects unbalanced braces before any filesystem access.
 //! - `base` canonicalizes an injected base into a glob-compatible path.
@@ -18,9 +18,14 @@
 //!   runs the metadata check that filters each match.
 //! - `diagnostics` records the bounded data the pure expansion query returns
 //!   at the manifest orchestration boundary.
-//! - The manifest adapter exposes only paths that are portable unquoted shell
-//!   words. The public [`glob_paths`] query remains a filesystem API and does
-//!   not impose that template-specific command-safety policy.
+//! - `errors` centralizes context-rich failures from validation and filesystem
+//!   access.
+//! - `escape` preserves platform roots while quoting injected base components
+//!   for glob compilation.
+//!
+//! The manifest adapter exposes only paths that are portable unquoted shell
+//! words. The public [`glob_paths`] query remains a filesystem API and does
+//! not impose that template-specific command-safety policy.
 //!
 //! Matching itself belongs to the `glob` crate, which traverses the filesystem
 //! ambiently; only the metadata check is capability-scoped. `walk`'s module
@@ -41,6 +46,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use errors::{GlobErrorContext, GlobErrorType, create_glob_error};
 use escape::escape_glob_literal_path;
 use normalize::normalize_separators;
+use std::sync::Mutex;
 use validate::validate_brace_matching;
 use walk::{open_root_dir, process_glob_entry};
 
@@ -277,6 +283,25 @@ pub(super) fn expand_glob(
     pattern: &str,
     base: Option<&Utf8Path>,
 ) -> std::result::Result<GlobExpansion, Error> {
+    let prepared = PreparedGlob::new(pattern, base)?;
+    expand_prepared_glob(&prepared)
+}
+
+/// Expand a pattern using a manifest-owned injected-base cache.
+///
+/// The cache retains a successful canonicalization across `glob()` calls in
+/// one manifest parse. It is consulted only after the normalized pattern has
+/// been found relative, so absolute patterns still avoid base resolution.
+pub(super) fn expand_glob_with_base_cache(
+    pattern: &str,
+    base: &GlobBaseCache,
+) -> std::result::Result<GlobExpansion, Error> {
+    let prepared = PreparedGlob::new_with_base_cache(pattern, base)?;
+    expand_prepared_glob(&prepared)
+}
+
+/// Expand one already-prepared glob search and collect its diagnostic data.
+fn expand_prepared_glob(prepared: &PreparedGlob) -> std::result::Result<GlobExpansion, Error> {
     use glob::{MatchOptions, glob_with};
 
     let opts = MatchOptions {
@@ -285,7 +310,6 @@ pub(super) fn expand_glob(
         require_literal_leading_dot: false,
     };
 
-    let prepared = PreparedGlob::new(pattern, base)?;
     let entries = glob_with(&prepared.search, opts).map_err(|e| {
         create_glob_error(
             &GlobErrorContext {
@@ -341,6 +365,58 @@ pub(super) fn expand_glob(
     })
 }
 
+/// Cache a manifest parse's injected glob base after its first relative use.
+///
+/// This type belongs only to the manifest parse boundary. Direct
+/// [`glob_paths`] callers continue to provide their optional base per query;
+/// Jinja's closure owns one cache so multiple relative `glob()` calls do not
+/// repeat filesystem canonicalization.
+pub(super) struct GlobBaseCache {
+    /// Base supplied by the manifest workspace, before filesystem preparation.
+    base: Option<Utf8PathBuf>,
+    /// Successfully canonicalized base retained for the rest of the parse.
+    resolved: Mutex<Option<Utf8PathBuf>>,
+}
+
+impl GlobBaseCache {
+    /// Create an empty cache around an optional manifest workspace base.
+    pub(super) const fn new(base: Option<Utf8PathBuf>) -> Self {
+        Self {
+            base,
+            resolved: Mutex::new(None),
+        }
+    }
+
+    /// Resolve and retain the configured base when one is available.
+    ///
+    /// # Errors
+    ///
+    /// Returns the canonicalization error from the injected base on its first
+    /// relative use.
+    fn resolve(&self) -> std::result::Result<Option<Utf8PathBuf>, Error> {
+        let Some(base) = self.base.as_deref() else {
+            return Ok(None);
+        };
+        let mut resolved = self.resolved.lock().map_err(|error| {
+            create_glob_error(
+                &GlobErrorContext {
+                    pattern: base.to_string(),
+                    error_char: char::from(0),
+                    position: 0,
+                    error_type: GlobErrorType::IoError,
+                },
+                Some(format!("manifest glob-base cache lock poisoned: {error}")),
+            )
+        })?;
+        if let Some(cached) = resolved.as_ref() {
+            return Ok(Some(cached.clone()));
+        }
+        let canonical = resolve_relative_glob_base(base)?;
+        resolved.replace(canonical.clone());
+        Ok(Some(canonical))
+    }
+}
+
 /// A validated glob pattern, its search text, and the base to strip.
 ///
 /// Preparation validates and normalises the pattern once, then conditionally
@@ -383,30 +459,53 @@ impl PreparedGlob {
             }
             _ => None,
         };
-        let (search, strip) = resolved_base.as_deref().map_or_else(
-            || (normalized.to_owned(), None),
+        Ok(Self::from_pattern_and_base(pattern_state, resolved_base))
+    }
+
+    /// Prepare `pattern` using a manifest parse's cached injected base.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the pattern fails brace validation or its first
+    /// relative use cannot canonicalize the injected base.
+    fn new_with_base_cache(
+        pattern: &str,
+        base: &GlobBaseCache,
+    ) -> std::result::Result<Self, Error> {
+        let pattern_state = GlobPattern::new(pattern)?;
+        let resolved_base = (!Utf8Path::new(pattern_state.normalized()).is_absolute())
+            .then(|| base.resolve())
+            .transpose()?
+            .flatten();
+        Ok(Self::from_pattern_and_base(pattern_state, resolved_base))
+    }
+
+    /// Build glob search text from a validated pattern and resolved base.
+    fn from_pattern_and_base(pattern: GlobPattern, base: Option<Utf8PathBuf>) -> Self {
+        let (search, strip) = base.map_or_else(
+            || (pattern.normalized().to_owned(), None),
             |dir| {
                 // Escape the base as a literal: workspace directories may
                 // legitimately contain glob metacharacters (`*`, `?`, `[`,
                 // `]`), which would otherwise be compiled as wildcards and
                 // match decoy directories instead of the manifest's base.
                 // The user's pattern keeps its syntax.
-                let escaped = escape_glob_literal_path(dir);
+                let escaped = escape_glob_literal_path(&dir);
                 let separator = std::path::MAIN_SEPARATOR;
                 (
                     // Match the separator used by `GlobPattern::new` and
                     // `walk::literal_dir_prefix`; mixing slash styles breaks
                     // literal-prefix discovery on Windows.
-                    format!("{escaped}{separator}{normalized}"),
-                    Some(dir.to_path_buf()),
+                    format!("{escaped}{separator}{}", pattern.normalized()),
+                    Some(dir),
                 )
             },
         );
-        Ok(Self {
-            pattern: pattern_state,
+        Self {
+            pattern,
             search,
             strip,
-        })
+        }
     }
 }
 /// Remove an injected base directory from a matched path, restoring the

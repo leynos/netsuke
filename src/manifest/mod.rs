@@ -129,8 +129,9 @@ fn from_str_named(
     jinja.add_function("env", move |var_name: String| {
         env_var_with(&var_name, |key| reader(key))
     });
+    let glob_base = glob::GlobBaseCache::new(manifest_root);
     jinja.add_function("glob", move |pattern: String| {
-        let expansion = glob::expand_glob(&pattern, manifest_root.as_deref())?;
+        let expansion = glob::expand_glob_with_base_cache(&pattern, &glob_base)?;
         glob::record_expansion(&expansion);
         expansion.into_template_paths(&pattern)
     });

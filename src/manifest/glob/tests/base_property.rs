@@ -100,7 +100,7 @@ proptest! {
                 .expect("glob under base B must succeed");
         prop_assert_eq!(
             results_a.into_iter().collect::<BTreeSet<_>>(),
-            BTreeSet::from([expected_a.clone()]),
+            BTreeSet::from([expected_a]),
             "base A must not see base B's files"
         );
         prop_assert_eq!(
