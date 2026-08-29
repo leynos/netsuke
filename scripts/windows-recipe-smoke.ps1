@@ -120,6 +120,8 @@ try {
         if (-not ($bashFailure -match 'bash\.exe.*(not found on PATH|exited with)')) {
             throw "Bash runtime diagnostics were not actionable: $bashFailure"
         }
+        # The expected child-process failure must not become the smoke script's exit status.
+        $global:LASTEXITCODE = 0
     }
     finally {
         $env:PATH = $savedPath
