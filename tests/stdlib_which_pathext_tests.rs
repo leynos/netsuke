@@ -107,7 +107,7 @@ fn assert_command_unavailable(env: &Environment<'_>, command: &str) -> Result<()
         context! {},
     )?;
     ensure!(
-        rendered == "false",
+        rendered == "False",
         "expected command_available('{command}') to be false, got {rendered}"
     );
     Ok(())
