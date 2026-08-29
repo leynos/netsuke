@@ -1,22 +1,19 @@
 #!/usr/bin/env -S uv run python
 # /// script
-# requires-python = ">=3.13"
+# requires-python = ">=3.14"
 # dependencies = []
 # ///
 """Enforce exact phrase corrections alongside the Typos scanner."""
 
-from __future__ import annotations
-
 import argparse
-from dataclasses import dataclass
-from pathlib import Path
 import re
 import subprocess
-from typing import Sequence
+from collections.abc import Sequence
+from dataclasses import dataclass
+from pathlib import Path
 
 import generate_typos_config as generator
 import typos_rollout as rollout
-
 
 POLICY_PATHS = frozenset({Path(".typos-oxendict-base.toml"), Path("typos.local.toml")})
 
@@ -160,7 +157,7 @@ def _file_findings(
         return ()
     try:
         text = (repository / relative).read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
+    except OSError, UnicodeDecodeError:
         return ()
     masked = _masked(text, dictionary.ignore_patterns)
     return tuple(

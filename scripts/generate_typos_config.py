@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run python
 # /// script
-# requires-python = ">=3.13"
+# requires-python = ">=3.14"
 # dependencies = []
 # ///
 """Generate ``typos.toml`` from the shared en-GB-oxendict dictionary.
@@ -72,7 +72,7 @@ def _tracked_remote_fallback(
         return None
     try:
         tomllib.loads(destination.read_text(encoding="utf-8"))
-    except (FileNotFoundError, OSError, tomllib.TOMLDecodeError):
+    except FileNotFoundError, OSError, tomllib.TOMLDecodeError:
         return None
     return rollout.RefreshResult("tracked-config", destination)
 

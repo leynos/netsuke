@@ -1,7 +1,5 @@
 """Refresh, transport-security, and cache spelling-policy tests."""
 
-from __future__ import annotations
-
 import email.message
 import json
 import os
@@ -10,9 +8,9 @@ import typing as typ
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import Self
 
 import pytest
-
 from typos_rollout_test_support import dictionary_text as _dictionary_text
 
 if typ.TYPE_CHECKING:
@@ -148,7 +146,7 @@ def test_http_refresh_scopes_validators_and_preserves_newer_cache(
             """Return a valid shared dictionary."""
             return _dictionary_text().encode()
 
-        def __enter__(self) -> Response:
+        def __enter__(self) -> Self:
             """Enter the fake response context."""
             return self
 
@@ -260,7 +258,7 @@ def test_remote_refresh_rejects_insecure_and_invalid_content(
             """Return malformed bytes."""
             return b"not = [valid"
 
-        def __enter__(self) -> InvalidResponse:
+        def __enter__(self) -> Self:
             """Enter the fake response context."""
             return self
 

@@ -1,7 +1,5 @@
 """Provide shared dynamic-import fixtures for script test modules."""
 
-from __future__ import annotations
-
 import importlib
 import importlib.util
 import pathlib

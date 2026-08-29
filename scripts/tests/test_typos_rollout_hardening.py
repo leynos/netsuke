@@ -1,16 +1,15 @@
 """Focused regressions for hardened shared spelling-policy refreshes."""
 
-from __future__ import annotations
-
+import email.message
 import importlib
 import json
 import types
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import Self
 
 import pytest
-
 from typos_rollout_test_support import dictionary_text as _dictionary_text
 
 SCRIPT_DIRECTORY = Path(__file__).resolve().parents[1]
@@ -34,7 +33,7 @@ class ValidResponse:
         """Return valid shared dictionary bytes."""
         return _dictionary_text(self._stem).encode()
 
-    def __enter__(self) -> ValidResponse:
+    def __enter__(self) -> Self:
         """Enter the fake response context."""
         return self
 
@@ -212,7 +211,7 @@ def test_http_status_and_persistence_errors_propagate(
         "https://example.test/missing",
         404,
         "Not Found",
-        hdrs=None,
+        hdrs=email.message.Message(),
         fp=None,
     )
 
@@ -255,7 +254,7 @@ def test_http_status_and_persistence_errors_propagate(
                 "https://example.test/missing",
                 404,
                 "Not Found",
-                hdrs=None,
+                hdrs=email.message.Message(),
                 fp=None,
             ),
             id="http-status",
@@ -317,7 +316,7 @@ def test_atomic_write_cleans_temporary_file_after_failure(
 
         name = str(temporary)
 
-        def __enter__(self) -> FailingStream:
+        def __enter__(self) -> Self:
             """Enter the fake stream context."""
             return self
 

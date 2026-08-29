@@ -5,16 +5,16 @@ coordination. The renderer remains in :mod:`typos_rollout`; callers outside
 the spelling helper should not reuse these infrastructure internals.
 """
 
-from __future__ import annotations
-
 import dataclasses as dc
 import email.utils
+import http.client
 import json
 import pathlib
 import urllib.error
 import urllib.parse
 import urllib.request
 from collections import abc as cabc
+from typing import IO
 
 import typos_rollout_cache
 
@@ -86,7 +86,7 @@ def _read_metadata(path: pathlib.Path) -> dict[str, object]:
     """Read best-effort HTTP freshness metadata."""
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError):
+    except FileNotFoundError, json.JSONDecodeError:
         return {}
     return value if isinstance(value, dict) else {}
 
@@ -131,7 +131,7 @@ def _remote_is_not_newer(
         return email.utils.parsedate_to_datetime(
             modified
         ) <= email.utils.parsedate_to_datetime(saved_modified)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return modified == saved_modified
 
 
@@ -198,27 +198,18 @@ class _HttpsRedirectHandler(urllib.request.HTTPRedirectHandler):
 
     def redirect_request(
         self,
-        request: urllib.request.Request,
-        *redirect: object,
+        req: urllib.request.Request,
+        fp: IO[bytes],
+        code: int,
+        msg: str,
+        headers: http.client.HTTPMessage,
+        newurl: str,
     ) -> urllib.request.Request | None:
-        """Follow only redirects whose resolved target remains HTTPS.
-
-        The variadic tail preserves the standard library's positional override
-        contract without making transport-library parameters part of this
-        helper's domain-facing interface.
-        """
-        file_pointer, code, message, headers, new_url = redirect
-        if urllib.parse.urlsplit(new_url).scheme != "https":
-            error_message = f"shared dictionary redirect must use HTTPS: {new_url}"
+        """Follow only redirects whose resolved target remains HTTPS."""
+        if urllib.parse.urlsplit(newurl).scheme != "https":
+            error_message = f"shared dictionary redirect must use HTTPS: {newurl}"
             raise InsecureSourceError(error_message)
-        return super().redirect_request(
-            request,
-            file_pointer,
-            code,
-            message,
-            headers,
-            new_url,
-        )
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
 _HTTPS_OPENER = urllib.request.build_opener(_HttpsRedirectHandler())
