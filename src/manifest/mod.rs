@@ -13,14 +13,10 @@
 //! [`ManifestSource`] so callers pass domain-specific types instead of raw
 //! strings.
 //!
-//! The optional `vars` section must deserialize into a JSON object; a list or
-//! scalar is rejected with the localized `manifest.vars.not_object` diagnostic.
-//! YAML mappings with non-string or composite keys cannot be represented as
-//! JSON at all, so they fail earlier, during the initial `serde_saphyr` parse,
-//! with the YAML parse diagnostic. Keys colliding with the built-in `env` and
-//! `glob` helpers are rejected with the localized `manifest.vars.reserved_name`
-//! diagnostic, since `MiniJinja` keeps functions and global variables in a
-//! single namespace.
+//! The optional `vars` section must be a JSON object; lists and scalars fail
+//! with `manifest.vars.not_object`; non-string or composite keys fail during
+//! the initial `serde_saphyr` parse. Reserved `env`/`glob` names fail with
+//! `manifest.vars.reserved_name` because `MiniJinja` shares a global namespace.
 
 use crate::{
     ast::{EMPTY_COMMAND_LIST_ERROR, NetsukeManifest},

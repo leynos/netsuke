@@ -6,15 +6,10 @@
 use ortho_config::{MapEnv, MergeLayer, OrthoResult, SharedEnvSource, load_config_file_as_chain};
 use std::borrow::Cow;
 use std::io;
+use std::path::Path;
 use std::sync::Arc;
 
 use super::command::Cli;
-
-//! Configuration file discovery and loading helpers.
-//!
-//! This module locates `OrthoConfig` file layers by scanning for config files
-//! through [`ConfigDiscovery`], handling explicit paths from CLI flags and
-//! environment variables, and loading TOML chains into [`MergeLayer`] values.
 
 #[path = "discovery_environment.rs"]
 mod environment;
@@ -39,6 +34,12 @@ mod telemetry;
 use diagnostics::{BoundedConfigPath, ConfigLoadFailureKind, ConfigLoadWarning};
 use layers::collect_file_layers_with_normalizer_and_trace;
 use paths::{FsPathNormalizer, PathNormalizer};
+#[cfg(test)]
+use selector::{
+    ConfigPathResolution, env_config_path, explicit_config_path_with_env, resolve_config_selector,
+};
+#[cfg(test)]
+use std::path::PathBuf;
 /// Record the discovery series for an already-timed phase at the boundary.
 pub use telemetry::record_discovery_outcome;
 use trace::{DiscoveryDiagnostics, DiscoveryTrace, FileLayerTrace};
