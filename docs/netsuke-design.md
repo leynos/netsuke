@@ -3419,8 +3419,10 @@ arguments then override the file layers.
 
 1. **Explicit override**: `--config <PATH>` and `NETSUKE_CONFIG` are evaluated
    in that precedence order before discovery. These explicit selectors bypass
-   automatic discovery and ignore the project-root anchor supplied by
-   `-C/--directory`.
+   automatic discovery. A relative explicit selector resolves from the process
+   working directory and is not rebased by `-C/--directory`; an absolute
+   selector remains unchanged. The `-C/--directory` project-root anchor applies
+   to manifest lookup and automatic project configuration discovery.
 
 2. **Project scope**: Configuration files in the current working directory (or
    the directory specified via `-C/--directory`):

@@ -98,6 +98,11 @@ Netsuke resolves explicit configuration paths in `src/cli/discovery.rs`.
   `project_scope_layers` appends it to the layer stack.
 - Automatic discovery remains the fallback only when no explicit selector is
   present.
+- Relative explicit selectors resolve from the process working directory,
+  independently of `-C/--directory`; absolute selectors remain unchanged.
+  `-C/--directory` anchors manifest lookup and automatic project configuration
+  discovery, but never rebases an explicit `--config` or `NETSUKE_CONFIG`
+  value.
 
 ## Consequences
 

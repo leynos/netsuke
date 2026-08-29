@@ -229,7 +229,7 @@ test-harness process. The suite now uses two routes:
 
 The BDD suite no longer uses `EnvLock` or `CwdGuard` to coordinate
 process-global environment or working-directory changes. Route B avoids CWD
-changes by passing absolute paths or preserving `-C/--directory` for automatic
-project discovery. Explicit relative `--config` and `NETSUKE_CONFIG` selectors
-remain independent of `-C/--directory` and resolve from the child process CWD.
-Absolute selectors remain unchanged.
+changes by passing absolute paths or preserving `-C/--directory` for manifest
+lookup and automatic project discovery. Explicit relative `--config` and
+`NETSUKE_CONFIG` selectors remain independent of `-C/--directory` and resolve
+from the process working directory. Absolute selectors remain unchanged.
