@@ -16,7 +16,7 @@ fn glob_manifest(pattern: &str) -> String {
     manifest_yaml(&format!(
         concat!(
             "targets:\n",
-            "  - foreach: glob('{pattern}')\n",
+            "  - foreach: glob({pattern:?})\n",
             "    name: \"{{{{ item }}}}\"\n",
             "    command: echo hi\n",
         ),
