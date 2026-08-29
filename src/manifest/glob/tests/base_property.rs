@@ -168,8 +168,8 @@ fn parent_relative_pattern_preserves_dot_dot() -> Result<()> {
     Ok(())
 }
 
-/// `None` retains the unbased behaviour: an absolute pattern returns absolute
-/// paths with no base stripping.
+/// `None` retains the unbased behaviour: an absolute pattern returns the
+/// matched absolute path with no base stripping.
 #[test]
 fn none_base_keeps_absolute_results() -> Result<()> {
     let temp = tempdir()?;
@@ -179,9 +179,14 @@ fn none_base_keeps_absolute_results() -> Result<()> {
 
     let pattern = format!("{}/leaf.txt", concrete.display());
     let results = glob_paths(&pattern, None)?;
+    let result = results
+        .first()
+        .context("absolute pattern must return its one matching file")?;
+    let resolved_result = dunce::canonicalize(result)?;
+    let expected = dunce::canonicalize(concrete.join("leaf.txt"))?;
     ensure!(
-        results == vec![pattern.clone()],
-        "None must keep the absolute spelling, got {results:?}"
+        results.len() == 1 && Utf8Path::new(result).is_absolute() && resolved_result == expected,
+        "None must return the unstripped absolute file, got {results:?}"
     );
     Ok(())
 }
