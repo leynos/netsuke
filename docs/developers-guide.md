@@ -433,7 +433,7 @@ from the `bin-name` field that
   `stage-release-artefacts` stages each target's archive, plus a `.sha256`
   sidecar, per `[common.binstall]` in `.github/release-staging.toml`, and the
   "Hoist cargo-binstall archives" step in `.github/workflows/release.yml` runs
-  `scripts/hoist_binstall_archives.py` under a pinned Python 3.13 installed by
+  `scripts/hoist_binstall_archives.py` under a pinned Python 3.14 installed by
   `setup-uv`. The script validates that every target's archive and checksum are
   present, are regular files rather than symlinks, and have a free destination
   before moving them to the release root for upload; the read-only discovery
@@ -806,6 +806,58 @@ applies.
 If a workflow's behaviour does not depend on a feature from a particular commit
 onwards, do not assert its SHA — express any advisory note as a comment or a
 changelog entry instead.
+
+## Python tooling and baseline
+
+Every Python source the repository owns — the helper scripts under `scripts/`,
+their test suites under `scripts/tests/`, and the workflow contract tests under
+`tests/workflow_contracts/` — targets a **Python 3.14 baseline**. The Makefile
+pins the interpreter in `PYTHON_BASELINE`, `pyproject.toml` sets
+`target-version = "py314"` for Ruff and `py-version = "3.14"` for Pylint, and
+the CI and release workflows install the same version through `setup-uv`.
+Write to the baseline: deferred annotation evaluation is the default, so
+`from __future__ import annotations` must not appear, and PEP 758
+unparenthesised `except` clauses and PEP 695 `type` statements are the
+preferred forms.
+
+The Python gates run inside the ordinary quality-gate targets:
+
+- `make check-fmt` runs `ruff format --check` over the Python sources.
+- `make fmt` applies `ruff format` and Ruff's import sorting.
+- `make lint` runs `make lint-python`: `ruff check`, a Pylint pass, the
+  df12 house lints, and the `ambrleaks` snapshot scanner.
+- `make typecheck` runs `make typecheck-python`: the
+  [ty](https://github.com/astral-sh/ty) typechecker over the Python sources.
+
+The configuration in `pyproject.toml` mirrors the df12 estate policy in
+[episodic](https://github.com/leynos/episodic); only path-shaped settings are
+local. The file deliberately declares no `[project]` table, so `uv` never
+treats this Rust workspace as a Python project. The Pylint pass runs on PyPy
+through the `pylint-pypy-shim` for start-up speed, with the message set
+enabled in `pyproject.toml`; the
+[df12-python-lints](https://github.com/leynos/df12-python-lints) messages
+(structural pattern matching, assert messages, suppression hygiene, snapshot
+discipline, and the baseline-gated R9112/C9112 checks) need CPython 3.14 and
+run as a second pass pinned to `DF12_PYTHON_LINTS_REF`.
+
+Tool versions are pinned twice by design: the Makefile defaults
+(`RUFF_VERSION`, `TY_VERSION`, `PYTHON_BASELINE`) drive local runs, and the
+`env` block of `.github/workflows/ci.yml` re-declares the same values, which
+override the Makefile's `?=` assignments in CI.
+`tests/workflow_contracts/python_toolchain_sync_test.py` asserts the pairs
+agree — without asserting any specific version — so a bump must land in both
+files in the same commit.
+
+The shared spelling-policy rollout helpers
+(`scripts/generate_typos_config.py` and the `typos_rollout*` modules and
+tests) are estate-synchronized and keep their own pinned, isolated Ruff policy
+enforced by `make spelling-helper-test`; they are excluded from the
+repository-wide Ruff and Pylint configuration so the two policies cannot
+disagree about the same file.
+
+Lint and typecheck suppressions are a last resort, tightly scoped, and every
+one must carry a reason on the line — the df12 messages C9106 and C9107 fail
+any `noqa`, `pylint: disable`, or `type: ignore` pragma that does not.
 
 ## Mutation-testing workflow contract tests
 

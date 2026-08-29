@@ -237,14 +237,13 @@ jobs:
           path: dist
           pattern: ${{ needs.metadata.outputs.repo_name }}-*
       - name: Install uv
-        # Pins the interpreter the hoist script runs under to the version the
-        # repository's Python tooling targets, rather than whichever `python3`
-        # the runner image happens to ship. The script relies on
-        # `BaseExceptionGroup`, which needs Python 3.11 or later.
+        # Pins the interpreter the hoist script runs under to the Python 3.14
+        # baseline the repository's Python tooling targets, rather than
+        # whichever `python3` the runner image happens to ship.
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
         # v8.3.2
         with:
-          python-version: '3.13'
+          python-version: '3.14'
           # The hoist script is stdlib-only and runs with --no-project, so a
           # restored cache buys nothing while feeding a supply-chain input to
           # a job holding contents: write.
@@ -257,7 +256,7 @@ jobs:
         # A missing target or sidecar fails the release with the names listed.
         run: |
           set -euo pipefail
-          uv run --no-project --python 3.13 \
+          uv run --no-project --python 3.14 \
             scripts/hoist_binstall_archives.py \
             --version '${{ needs.metadata.outputs.version }}'
       - id: upload_assets

@@ -172,9 +172,13 @@ directive anywhere.
 
     ```sh
     cargo fmt --workspace -- --check
+    ruff format --check scripts tests/workflow_contracts
     ```
 
-    validating formatting across the entire workspace without modifying files.
+    validating Rust formatting across the entire workspace and Python
+    formatting across the repository's helper scripts and workflow contract
+    tests, without modifying files. Ruff runs at the version pinned in the
+    Makefile `RUFF_VERSION` variable through `uv tool run`.
   - `make lint` executes:
 
     ```sh
@@ -189,7 +193,11 @@ directive anywhere.
     warnings, and running the Whitaker Dylint suite (see
     `docs/whitaker-users-guide.md`; install via `cargo install
     whitaker-installer && whitaker-installer`). `make lint-clippy` runs the
-    Clippy-only subset when Whitaker is unavailable.
+    Clippy-only subset when Whitaker is unavailable. `make lint` also runs
+    `make lint-python`, which lints the Python sources with Ruff, Pylint, the
+    df12 house lints, and `ambrleaks`; see "Python tooling and baseline" in
+    `docs/developers-guide.md` for the gate inventory and the Python 3.14
+    baseline it enforces.
   - `make test` executes:
 
     ```sh
