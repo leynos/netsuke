@@ -7,12 +7,13 @@ use camino::Utf8PathBuf;
 #[test]
 fn interpolate_command_rejects_unbalanced_backticks() {
     let path = Utf8PathBuf::from("a");
-    let err = interpolate_command(
-        "echo `",
+    let bindings = CommandBindings::new(
         std::slice::from_ref(&path),
         std::slice::from_ref(&path),
-    )
-    .expect_err("command should be rejected");
+        RecipeShell::Posix,
+    );
+    let err = interpolate_command_with_bindings("echo `", &bindings)
+        .expect_err("command should be rejected");
     match err {
         IrGenError::InvalidCommand { command, .. } => {
             assert_eq!(command, "echo `");
