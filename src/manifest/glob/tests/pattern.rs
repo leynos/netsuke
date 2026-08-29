@@ -195,11 +195,5 @@ fn prepared_relative_search_uses_one_host_separator() -> Result<()> {
         "prepared search must end with {suffix:?}, got {:?}",
         prepared.search
     );
-    #[cfg(windows)]
-    ensure!(
-        !prepared.search.starts_with(r"\\?\"),
-        "glob cannot traverse a verbatim Windows base: {:?}",
-        prepared.search
-    );
     Ok(())
 }

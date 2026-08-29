@@ -31,6 +31,7 @@ use minijinja::Error;
 
 mod diagnostics;
 mod errors;
+mod escape;
 mod normalize;
 mod validate;
 mod walk;
@@ -38,6 +39,7 @@ mod walk;
 use base::resolve_relative_glob_base;
 use camino::{Utf8Path, Utf8PathBuf};
 use errors::{GlobErrorContext, GlobErrorType, create_glob_error};
+use escape::escape_glob_literal_path;
 use normalize::normalize_separators;
 use validate::validate_brace_matching;
 use walk::{open_root_dir, process_glob_entry};
@@ -386,10 +388,10 @@ impl PreparedGlob {
             |dir| {
                 // Escape the base as a literal: workspace directories may
                 // legitimately contain glob metacharacters (`*`, `?`, `[`,
-                // `{`), which would otherwise be compiled as wildcards and
+                // `]`), which would otherwise be compiled as wildcards and
                 // match decoy directories instead of the manifest's base.
                 // The user's pattern keeps its syntax.
-                let escaped = glob::Pattern::escape(dir.as_str());
+                let escaped = escape_glob_literal_path(dir);
                 let separator = std::path::MAIN_SEPARATOR;
                 (
                     // Match the separator used by `GlobPattern::new` and
