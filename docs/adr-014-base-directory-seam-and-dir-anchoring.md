@@ -34,11 +34,11 @@ explicit configuration selectors.
   not use or strip the base.
 - **An ambient fallback exists only where no manifest root is available**, and
   that read is confined to the composition boundary, not to resolution internals.
-- **Explicit selectors follow `-C` when it is supplied.** A relative
-  `--config <PATH>` or `NETSUKE_CONFIG` resolves beneath `-C/--directory`;
-  absolute selectors remain unchanged. Without `-C`, a relative selector
-  resolves from the process working directory. See ADR-004 for the selection
-  machinery and `src/cli/discovery.rs` for the implementation.
+- **Explicit selectors remain independent of `-C`.** A relative `--config
+  <PATH>` or `NETSUKE_CONFIG` resolves from the process working directory,
+  even when `-C/--directory` is supplied; absolute selectors remain unchanged.
+  `-C` continues to anchor automatic project discovery. See ADR-004 for the
+  selection machinery and `src/cli/discovery.rs` for the implementation.
 - **In-process environment mutation is banned and gated.** `clippy.toml` and
   `test_support/clippy.toml` disallow `std::env::set_var`, `remove_var`, and
   `set_current_dir`; `scripts/check-env-mutation.sh` greps `src/`, `tests/`, and

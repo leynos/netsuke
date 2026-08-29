@@ -3495,12 +3495,11 @@ manual flag repetition.
   automatic discovery. If an explicit selector is set, the selected file is
   loaded directly and bypasses discovery, but still participates in the normal
   precedence ladder: defaults < file < environment < CLI.
-- Relative paths passed to `--config` (and `NETSUKE_CONFIG`) resolve against
-  `-C/--directory` when it is supplied, alongside project discovery and
-  manifest lookup. Absolute selectors retain their original spelling. Without
-  `-C`, a relative selector resolves from the process working directory (see
-  ADR-004). Pass an absolute path when the selector must not depend on either
-  location.
+- Relative paths passed to `--config` (and `NETSUKE_CONFIG`) resolve from the
+  process working directory independently of `-C/--directory`. Absolute
+  selectors retain their original spelling. `-C` continues to anchor project
+  discovery and manifest lookup. Pass an absolute path when the selector must
+  not depend on the invoking directory (see ADR-004).
 
 ### 8.5 Manual Pages
 

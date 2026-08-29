@@ -1,13 +1,13 @@
-//! Explicit configuration-selector resolution and `-C` anchoring.
+//! Explicit configuration-selector resolution.
 //!
 //! The selector query answers one question: which configuration file did the
-//! operator select, and at what path? `--config` outranks `NETSUKE_CONFIG`;
-//! an absolute winner is used unchanged, a relative winner is anchored to
-//! `-C/--directory` when supplied (ADR-014), and without `-C` it stays as
-//! written so it resolves against the process working directory at load time.
+//! operator select, and at what path? `--config` outranks `NETSUKE_CONFIG`.
+//! The selected path remains as written: absolute paths stay absolute, and
+//! relative paths resolve from the process working directory at load time.
+//! `-C/--directory` affects automatic discovery, not explicit selection.
 //! The query is pure and emits no tracing; discovery traces the result later.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use super::environment::EnvProvider;
 
@@ -34,7 +34,7 @@ pub(super) struct ConfigPathResolution {
 
 /// Select an explicit config path, giving `--config` precedence over `env`.
 ///
-/// A thin wrapper over [`resolve_config_selector_anchored`] for callers that
+/// A thin wrapper over [`resolve_config_selector`] for callers that
 /// need only the winning path. Like that query it performs no tracing;
 /// discovery returns bounded diagnostics for composition boundaries to emit
 /// later.
@@ -47,67 +47,29 @@ pub(super) fn explicit_config_path_with_env(
     cli: &super::Cli,
     env: &impl EnvProvider,
 ) -> Option<PathBuf> {
-    resolve_config_selector_anchored(cli.config.clone(), cli.directory.as_deref(), env).path
-}
-
-/// Anchor an explicit configuration selector to `-C/--directory`.
-///
-/// An absolute selector is returned unchanged: the operator pointed at an
-/// exact file. A relative selector is joined onto `directory` when one is
-/// supplied, so `--config relative.toml` with `-C project` loads
-/// `project/relative.toml`. Without `-C` the selector is returned as written
-/// and resolves against the process working directory at load time.
-fn resolve_explicit_config_path(selector: PathBuf, directory: Option<&Path>) -> PathBuf {
-    match directory {
-        // An absolute selector is returned unchanged: the operator pointed at
-        // an exact file, which `-C` never re-anchors.
-        Some(dir) if !selector.is_absolute() => dir.join(selector),
-        // Without `-C` the selector is returned as written and resolves
-        // against the process working directory at load time.
-        _ => selector,
-    }
+    resolve_config_selector(cli.config.clone(), env).path
 }
 
 /// Select a config path from the CLI flag, then `NETSUKE_CONFIG` via `env`,
-/// without `-C` anchoring.
-///
-/// Test-only convenience for tracing coverage of the unanchored selection
-/// rule; production composition always calls the anchored variant with the
-/// `Cli::directory` value. `cli_config` wins when present, in which case no
-/// environment lookup is recorded because none is performed. This query emits
-/// no tracing.
-#[cfg(test)]
-pub(super) fn resolve_config_selector(
-    cli_config: Option<PathBuf>,
-    env: &impl EnvProvider,
-) -> ConfigPathResolution {
-    resolve_config_selector_anchored(cli_config, None, env)
-}
-
-/// Select a config path from the CLI flag, then `NETSUKE_CONFIG` via `env`,
-/// anchoring a relative winner to `directory` (`-C/--directory`).
+/// independently of `-C/--directory`.
 ///
 /// `cli_config` wins when present, in which case no environment lookup is
-/// recorded because none is performed. Anchoring applies to both selectors:
-/// an absolute path is used unchanged, a relative path is joined onto
-/// `directory` when supplied, and without a directory the path is kept as
-/// written so it resolves against the process working directory at load time.
-/// This query emits no tracing.
-pub(super) fn resolve_config_selector_anchored(
+/// recorded because none is performed. The winning path is used exactly as
+/// selected: absolute paths remain unchanged and relative paths resolve from
+/// the process working directory when loaded. This query emits no tracing.
+pub(super) fn resolve_config_selector(
     cli_config: Option<PathBuf>,
-    directory: Option<&Path>,
     env: &impl EnvProvider,
 ) -> ConfigPathResolution {
     if let Some(path) = cli_config {
         return ConfigPathResolution {
             selector: "cli_flag",
-            path: Some(resolve_explicit_config_path(path, directory)),
+            path: Some(path),
             environment_lookups: Vec::new(),
         };
     }
 
-    let primary_path = env_config_path(env, CONFIG_ENV_VAR)
-        .map(|path| resolve_explicit_config_path(path, directory));
+    let primary_path = env_config_path(env, CONFIG_ENV_VAR);
     ConfigPathResolution {
         selector: primary_path.as_ref().map_or("none", |_| CONFIG_ENV_VAR),
         environment_lookups: vec![(CONFIG_ENV_VAR, primary_path.clone())],

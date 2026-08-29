@@ -186,11 +186,7 @@ fn collect_file_layers_with_env(
     Option<ConfigLoadWarning>,
     OrthoResult<Vec<MergeLayer<'static>>>,
 ) {
-    let resolution = selector::resolve_config_selector_anchored(
-        cli.config.clone(),
-        cli.directory.as_deref(),
-        env,
-    );
+    let resolution = selector::resolve_config_selector(cli.config.clone(), env);
     let (file_layers, load_warning, outcome) = resolution.path.as_deref().map_or_else(
         || {
             let (project_scope, outcome) = collect_file_layers_with_normalizer_and_trace(
@@ -201,11 +197,10 @@ fn collect_file_layers_with_env(
             (FileLayerTrace::Automatic { project_scope }, None, outcome)
         },
         |path| {
-            // A relative explicit selector is anchored to `-C/--directory`
-            // when supplied (see ADR-014); an absolute selector is used
-            // unchanged. Without `-C` the selector keeps its historical
-            // meaning and resolves against the process working directory at
-            // load time.
+            // Explicit selectors are independent of `-C/--directory`.
+            // Relative paths retain their selector spelling and resolve
+            // against the process working directory at load time; absolute
+            // paths remain unchanged.
             let (load_warning, outcome) = load_layers_from_path_with_warning(path);
             (
                 FileLayerTrace::Explicit {

@@ -955,11 +955,12 @@ relative output paths:
 netsuke --directory /path/to/project build
 ```
 
-When `--directory` is supplied, a relative `--config` path (and a relative
-`NETSUKE_CONFIG` value) resolves from that directory. Absolute selectors remain
-unchanged. Without `--directory`, a relative selector resolves from the process
-working directory. Pass an absolute path when the selector must not depend on
-either location.
+`--directory` affects manifest lookup, automatic project-configuration
+discovery, and relative output paths. It does not rebase an explicit
+`--config` path or `NETSUKE_CONFIG` value: a relative selector resolves from
+the process working directory, while an absolute selector remains unchanged.
+Pass an absolute path when the selector must not depend on the invoking
+directory.
 
 ### Generate and inspect artefacts
 

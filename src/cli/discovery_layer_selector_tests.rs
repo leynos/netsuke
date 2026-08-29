@@ -1,9 +1,9 @@
-//! Tests for explicit configuration-selector anchoring to `-C`.
+//! Tests for explicit configuration-selector independence from `-C`.
 //!
-//! A relative `--config` or `NETSUKE_CONFIG` selector resolves against
-//! `-C/--directory` when that flag is supplied (ADR-014); an absolute
-//! selector is always used unchanged. A decoy file at the would-be wrong
-//! location proves a regression to the other rule would be caught.
+//! A relative `--config` or `NETSUKE_CONFIG` selector resolves from the
+//! process working directory even when `-C/--directory` is supplied; an
+//! absolute selector is always used unchanged. End-to-end tests place a
+//! decoy at the `-C` location to prove the selector is not rebased.
 use super::paths::{FsPathNormalizer, normalized_path_key};
 use super::*;
 use crate::cli::test_support::TestEnv;
@@ -61,23 +61,24 @@ fn explicit_absolute_config_ignores_cli_directory() -> Result<()> {
     assert_single_layer(&discovered, &selector)
 }
 
-/// A relative `--config` selector resolves against `-C` when supplied.
+/// A relative `--config` selector keeps its process-working-directory spelling.
 #[test]
-fn explicit_relative_config_resolves_against_cli_directory() -> Result<()> {
+fn explicit_relative_config_ignores_cli_directory() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
     let cli_directory = temp.path().join("cli-dir");
     test_support::fs::create_dir(&cli_directory).context("create -C directory")?;
-    test_support::fs::write(cli_directory.join("relative.toml"), "theme = \"dark\"\n")
-        .context("write -C anchored config")?;
 
     let cli = Cli {
         config: Some(PathBuf::from("relative.toml")),
         directory: Some(cli_directory.clone()),
         ..Cli::default()
     };
-    let discovered = discover_file_layers(&cli, &TestEnv::default());
 
-    assert_single_layer(&discovered, &cli_directory.join("relative.toml"))
+    assert_eq!(
+        explicit_config_path_with_env(&cli, &TestEnv::default()),
+        Some(PathBuf::from("relative.toml"))
+    );
+    Ok(())
 }
 
 /// A relative `--config` selector without `-C` is returned unchanged.
@@ -97,16 +98,12 @@ fn explicit_relative_config_without_directory_stays_as_written() {
     );
 }
 
-/// `--config` keeps precedence over `NETSUKE_CONFIG` while both anchor to `-C`.
+/// `--config` keeps precedence over `NETSUKE_CONFIG` regardless of `-C`.
 #[test]
 fn cli_selector_wins_over_environment_with_directory() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
     let cli_directory = temp.path().join("cli-dir");
     test_support::fs::create_dir(&cli_directory).context("create -C directory")?;
-    test_support::fs::write(cli_directory.join("cli.toml"), "theme = \"dark\"\n")
-        .context("write CLI-selected config")?;
-    test_support::fs::write(cli_directory.join("env.toml"), "theme = \"ascii\"\n")
-        .context("write environment-selected config")?;
 
     let cli = Cli {
         config: Some(PathBuf::from("cli.toml")),
@@ -114,33 +111,30 @@ fn cli_selector_wins_over_environment_with_directory() -> Result<()> {
         ..Cli::default()
     };
     let env = TestEnv::default().with_var(CONFIG_ENV_VAR, "env.toml");
-    let discovered = discover_file_layers(&cli, &env);
 
-    assert_single_layer(&discovered, &cli_directory.join("cli.toml"))
+    assert_eq!(
+        explicit_config_path_with_env(&cli, &env),
+        Some(PathBuf::from("cli.toml"))
+    );
+    Ok(())
 }
 
-/// A relative `NETSUKE_CONFIG` selector also resolves against `-C`.
-///
-/// The environment selector goes through the same anchoring boundary as
-/// `--config`, so a decoy at the unanchored path proves the environment
-/// selector is not resolved against the shell's working directory either.
+/// A relative `NETSUKE_CONFIG` selector also ignores `-C`.
 #[test]
-fn env_config_selector_resolves_against_cli_directory() -> Result<()> {
+fn env_config_selector_ignores_cli_directory() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
     let cli_directory = temp.path().join("cli-dir");
     test_support::fs::create_dir(&cli_directory).context("create -C directory")?;
-    test_support::fs::write(
-        cli_directory.join("env-selector.toml"),
-        "theme = \"dark\"\n",
-    )
-    .context("write -C anchored environment config")?;
 
     let cli = Cli {
         directory: Some(cli_directory.clone()),
         ..Cli::default()
     };
     let env = TestEnv::default().with_var(CONFIG_ENV_VAR, "env-selector.toml");
-    let discovered = discover_file_layers(&cli, &env);
 
-    assert_single_layer(&discovered, &cli_directory.join("env-selector.toml"))
+    assert_eq!(
+        explicit_config_path_with_env(&cli, &env),
+        Some(PathBuf::from("env-selector.toml"))
+    );
+    Ok(())
 }
