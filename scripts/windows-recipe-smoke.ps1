@@ -102,9 +102,9 @@ try {
     Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'dependency order.txt') -Expected 'first;second;aggregate' `
         -Message 'The aggregate action did not observe serial dependency order'
 
-    Invoke-Netsuke -Arguments @('build', 'automatic path with spaces.txt')
-    Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'automatic path with spaces.txt') `
-        -Expected 'automatic-path-quoting' -Message 'Automatic path quoting did not preserve spaces'
+    Invoke-Netsuke -Arguments @('build', 'automatic-path.txt')
+    Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'automatic-path.txt') `
+        -Expected 'automatic-path-quoting' -Message 'The discovered target did not build'
 
     $savedPath = $env:PATH
     $savedNinja = $env:NETSUKE_NINJA

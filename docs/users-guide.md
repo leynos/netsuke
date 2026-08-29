@@ -346,9 +346,10 @@ Use PowerShell syntax in the default route. `$name` is a PowerShell variable
 and `$env:NAME` reads an environment variable; `${VAR:-default}` is POSIX
 syntax and is not valid PowerShell. Recipe text is protected from Ninja dollar
 expansion, so write ordinary PowerShell dollars rather than `$$`. The rendered
-`{{ ins }}` and `{{ outs }}` paths use single-quoted PowerShell arguments,
-including paths with spaces. Quote every other path and argument with
-PowerShell syntax; arbitrary rendered Jinja text is not shell-quoted.
+`{{ ins }}` and `{{ outs }}` paths use single-quoted PowerShell arguments.
+Build and default-target paths containing spaces are rejected before recipe
+generation. Quote every other path and argument with PowerShell syntax;
+arbitrary rendered Jinja text is not shell-quoted.
 
 Netsuke rejects a PowerShell recipe when its encoded invocation would exceed
 the 32,766-character Windows command-line safety limit. The diagnostic

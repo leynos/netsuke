@@ -35,7 +35,7 @@ actions:
       - dependency-second
 
 targets:
-  - name: "automatic path with spaces.txt"
+  - name: automatic-path.txt
     description: Discover this target without executing its recipe
     command: "Set-Content -NoNewline -LiteralPath {{ outs }} -Value automatic-path-quoting"
   - name: "discovery must not execute.txt"
