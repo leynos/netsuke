@@ -14,6 +14,10 @@ use std::cell::Cell;
 
 use super::IrGenError;
 
+mod substitution;
+
+use substitution::SubstitutionTraversal;
+
 /// Quoted `$in` and `$out` substitutions prepared for one recipe.
 ///
 /// A rule command list shares its input/output bindings, so lowering creates
@@ -262,35 +266,12 @@ fn try_match_token<'a>(
 /// the same traversal so malformed commands never reach the Ninja backend.
 fn substitute(template: &str, ins: &str, outs: &str) -> Result<String, IrGenError> {
     let chars: Vec<char> = template.chars().collect();
-    let mut out = String::with_capacity(template.len());
-    let mut in_backticks = false;
-    let mut i = 0;
-    while let Some(&ch) = chars.get(i) {
-        if ch == '`' {
-            in_backticks ^= true;
-            out.push(ch);
-            i += 1;
-            continue;
-        }
-
-        if in_backticks {
-            if find_substitution(&chars, i, ins, outs).is_some() {
-                return Err(invalid_command_error(template.to_owned()));
-            }
-            out.push(ch);
-            i += 1;
-            continue;
-        }
-
-        if let Some((replacement, skip)) = find_substitution(&chars, i, ins, outs) {
-            out.push_str(replacement);
-            i += skip;
-        } else {
-            out.push(ch);
-            i += 1;
-        }
+    let mut traversal = SubstitutionTraversal::new(template, &chars, ins, outs);
+    let mut pos = 0;
+    while pos < chars.len() {
+        pos = traversal.append_substitution_at_position(pos)?;
     }
-    Ok(out)
+    Ok(traversal.finish())
 }
 
 /// Internal marker emitted for `{{ ins }}` during manifest rendering and
@@ -302,7 +283,7 @@ pub(crate) const INS_TOKEN: &str = "__NETSUKE_INS_PLACEHOLDER__";
 pub(crate) const OUTS_TOKEN: &str = "__NETSUKE_OUTS_PLACEHOLDER__";
 
 #[cfg(test)]
-#[path = "cmd_interpolate_property_tests.rs"]
+#[path = "../cmd_interpolate_property_tests.rs"]
 mod property_tests;
 #[cfg(test)]
 mod tests {
