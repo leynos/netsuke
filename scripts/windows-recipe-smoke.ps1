@@ -287,6 +287,8 @@ function Invoke-WindowsRecipeSmoke {
         finally {
             Pop-Location
         }
+        # The expected child-process failure must not become the smoke script's exit status.
+        $global:LASTEXITCODE = 0
     }
     finally {
         foreach ($state in $environmentState) {
