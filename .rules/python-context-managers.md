@@ -81,7 +81,8 @@ ______________________________________________________________________
 
 - File or network resource handling
 - Lock acquisition and release
-- Temporary changes to environment (e.g., `os.chdir`, `patch`, `tempfile`)
+- Temporary resources and isolated environment changes (e.g., `patch`,
+  `tempfile`)
 - Logging scope control or tracing
 - Transaction control in databases or services
 
@@ -104,5 +105,7 @@ with open("file.txt") as f:
     process(f)
 ```
 
-Context managers make your intent and error handling explicit. Prefer them over
-manual `try/finally` for clearer, safer code.
+Context managers make intent and error handling explicit. Prefer them over
+manual `try/finally` for clearer, safer code. For directory-dependent work,
+inject the directory explicitly or run a child process with its working
+directory set; do not change the process working directory with `os.chdir`.

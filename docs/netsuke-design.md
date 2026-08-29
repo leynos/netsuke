@@ -3333,8 +3333,9 @@ flowchart LR
 ```
 
 Netsuke configuration discovery is implemented in `src/cli/discovery.rs`.
-Explicit file selection is handled by `explicit_config_path_with_env(...)`,
-which applies the precedence `--config` > `NETSUKE_CONFIG`.
+Explicit file selection is handled by
+`selector::resolve_config_selector(...)`, which applies the precedence
+`--config` > `NETSUKE_CONFIG`.
 `discover_file_layers(...)` performs one overall discovery pass, applying the
 `-C/--directory` flag as the project-discovery root. Its automatic path first
 runs the OrthoConfig scan, then loads the project-scope file as a second pass
@@ -3462,9 +3463,9 @@ manual flag repetition.
 
 **Implementation notes**:
 
-- The `explicit_config_path_with_env(...)` helper resolves explicit config
-  selectors before automatic discovery so missing or invalid explicit files
-  remain hard errors.
+- `selector::resolve_config_selector(...)` resolves explicit config selectors
+  before automatic discovery so missing or invalid explicit files remain hard
+  errors.
 - The `merge_with_config_and_env()` function in `src/cli/merge.rs` performs
   discovery and delegates to the ordinary merge query, which discards its
   collected events. The application startup boundary replays retained bounded

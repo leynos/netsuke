@@ -1,4 +1,4 @@
-# Python 3.14 Code Style Guidelines (with Ruff, Pyright, and pytest)
+# Python 3.13 code style guidelines (with Ruff, Pyright, and pytest)
 
 ## Naming Conventions
 
@@ -18,8 +18,8 @@
   Pyright for type-checking.
 - **Use `TypedDict` or `Dataclass` for structured data where appropriate.** For
   internal-only usage, prefer `@dataclass(slots=True)`.
-- **Avoid `Any`.** Use `Unknown`, generics, or `cast()` when necessary—always
-  document why `Any` is acceptable if used.
+- **Avoid `Any`.** Prefer concrete types, `object`, generics, or type variables.
+  Use a documented `cast()` or `Any` only when the boundary requires it.
 - **Be explicit with returns.** Use `-> None`, `-> str`, etc., for all public
   functions and class methods.
   - **Favour immutability.** Prefer tuples to lists, and `frozendict` or

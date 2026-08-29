@@ -30,10 +30,12 @@ const fn banned_set_current_dir() -> &'static str {
     concat!("std::env", "::set_current_dir")
 }
 
+/// Return the workspace manifest directory for fixture configuration.
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
+/// Return the configured Cargo executable, falling back to the command name.
 #[expect(
     clippy::disallowed_methods,
     reason = "locating Cargo through the environment; there is no seam to inject and no process state to isolate"
@@ -42,6 +44,7 @@ fn cargo() -> PathBuf {
     std::env::var_os("CARGO").map_or_else(|| Path::new("cargo").to_path_buf(), PathBuf::from)
 }
 
+/// Decode a command's standard error as owned text for assertions.
 fn stderr(output: &Output) -> String {
     String::from_utf8_lossy(&output.stderr).into_owned()
 }

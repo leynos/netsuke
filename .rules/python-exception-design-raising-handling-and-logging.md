@@ -153,19 +153,21 @@ for item in items:
     try:
         parse(item)
     except ParseError:
+        handle_parse_failure()
         continue
 
-# ✅ hoist the try, or avoid exceptions on the hot path
-try:
-    for item in items:
+# ✅ preserve per-item handling when processing must continue
+for item in items:
+    try:
         parse(item)
-except ParseError:
-    handle_parse_failure()
+    except ParseError:
+        handle_parse_failure()
 ```
 
-Exception handling carries overhead on the exceptional path; hoisting the block
-can improve throughput in hot loops (PERF203). Treat as a micro‑optimization
-guided by profiling.
+Exception handling carries overhead on the exceptional path. If profiling
+justifies changing the loop structure, document whether the operation is
+allowed to fail fast; hoisting the `try` block changes the handling semantics
+when later items must still be processed.
 
 ## 6) Testing: assert specific failures (B017)
 

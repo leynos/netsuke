@@ -1,4 +1,4 @@
-# Advanced Typing and Language Features (Python 3.14)
+# Advanced typing and language features (Python 3.14)
 
 > This section documents forward-looking Python 3.14 typing features and best
 > practices to improve clarity, correctness, and tooling support. Use these
@@ -32,7 +32,7 @@ class Role(enum.StrEnum):
 Use `auto()` when exact values are unimportant and you want to avoid
 duplication. Avoid `auto()` in `IntEnum` where numeric meaning matters.
 
-## `match` / `case` (Structural Pattern Matching)
+## `match` / `case` (structural pattern matching)
 
 Use structural pattern matching for branching over structured data. This is
 especially useful for enums, discriminated unions, or pattern-rich data
@@ -47,7 +47,7 @@ def handle_status(status: Status) -> str:
             return "Done"
 ```
 
-## Generic Class Declarations (PEP 695)
+## Generic class declarations (PEP 695)
 
 Use bracketed class-level type variables directly for generic class
 declarations.
@@ -60,7 +60,7 @@ class Box[T]:
 
 This is cleaner and avoids the indirection of separate `TypeVar` declarations.
 
-## `Self` Type (PEP 673)
+## `Self` type (PEP 673)
 
 Use `Self` in fluent interfaces and builder-style APIs to indicate the method
 returns the same instance.
@@ -70,6 +70,9 @@ import typing
 
 
 class Builder:
+    def __init__(self) -> None:
+        self.values: list[int] = []
+
     def add(self, value: int) -> typing.Self:
         self.values.append(value)
         return self
@@ -77,7 +80,7 @@ class Builder:
 
 This improves tool support and enforces correct chaining semantics.
 
-## `@override` Decorator (PEP 698)
+## `@override` decorator (PEP 698)
 
 Use `@override` to indicate that a method overrides one from a superclass. This
 enables static analysis tools to detect typos and signature mismatches.
@@ -98,40 +101,39 @@ class Child(Base):
 
 This decorator is a no-op at runtime but improves tooling correctness.
 
-## `TypeIs` (PEP 742)
+## `TypeGuard` (PEP 647)
 
-Use `TypeIs[T]` to define custom runtime type guards that narrow types in type
+Use `TypeGuard[T]` to define custom runtime type guards that narrow types in type
 checkers.
 
 ```python
 import typing
 
 
-def is_str_list(val: list[object]) -> typing.TypeIs[list[str]]:
+def is_str_list(val: list[object]) -> typing.TypeGuard[list[str]]:
     return all(isinstance(x, str) for x in val)
 ```
 
 Unlike `isinstance`, this informs the type checker that `val` is now
 `list[str]`.
 
-## Defaults for TypeVars (PEP 696)
+## Defaults for type variables (PEP 696)
 
 Allow generic classes/functions to fall back to default types when no specific
 type is provided.
 
 ```python
-T = typing.TypeVar("T", default=int)
-
-
-class Box[T]:
+class Box[T = int]:
     def __init__(self, value: T | None = None):
-        # Fallback to the TypeVar default (int in this example)
-        self.value: T = value if value is not None else int()  # type: ignore[arg-type]
+        # Do not construct an arbitrary T; retain the missing-value state.
+        self.value: T | None = value
 ```
 
-This makes APIs more ergonomic while retaining type safety.
+The default type makes `Box()` equivalent to `Box[int]()` for type checking,
+but a generic implementation must not assume that every possible `T` can be
+constructed as an `int`. Keeping the fallback as `None` preserves type safety.
 
-## Standard Library Generics (PEP 585)
+## Standard library generics (PEP 585)
 
 Use built-in generics from the standard library (`list`, `dict`, `tuple`, etc.)
 instead of `typing.List`, `typing.Dict`, etc.
@@ -142,7 +144,7 @@ names: list[str] = ["Alice", "Bob"]
 
 This reduces imports and reflects the modern style.
 
-## Union Syntax and Optional (PEP 604)
+## Union syntax and optional (PEP 604)
 
 Use `|` to write union types, and `A | None` instead of `Optional[A]`.
 
@@ -152,16 +154,16 @@ value: int | None = None
 
 This is more concise and readable, especially for nested types.
 
-## Type Aliases using `type`
+## Type aliases using `TypeAlias`
 
-Use the `type` keyword to create type aliases with better IDE and runtime
-support.
+Use an annotated `TypeAlias` declaration for named aliases.
 
 ```python
-type StrDict = dict[str, str]
+StrDict: typing.TypeAlias = dict[str, str]
 ```
 
-This replaces `StrDict = TypeAlias = ...` and is preferred in modern Python.
+This declares `TypeAlias` in the annotation rather than assigning it as a
+value, while preserving the `dict[str, str]` type.
 
 When compatibility with Python < 3.12 is required, keep the older
 `typing.TypeAlias` syntax and add `# noqa: UP040` so `ruff` does not flag it.
@@ -202,7 +204,7 @@ if typing.TYPE_CHECKING:
 
 This avoids runtime import costs or circular imports.
 
-## Standard Aliases
+## Standard aliases
 
 Use the following import aliases consistently:
 

@@ -11,7 +11,7 @@ may change before 1.0. Pin the Netsuke version in automated workflows.
 ## Install Netsuke
 
 Netsuke requires [Ninja](https://ninja-build.org/) on `PATH`. A source build
-also requires the dated Rust nightly toolchain pinned in `rust-toolchain.toml`,
+also requires the dated Rust nightly toolchain pinned in `rust-toolchain.toml`
 because Netsuke builds with the Polonius borrow checker, which nightly enables
 by default.
 

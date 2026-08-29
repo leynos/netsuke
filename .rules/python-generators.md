@@ -61,13 +61,13 @@ def top_active_emails(users):
 
 ## Use Generators When
 
-- You're iterating and filtering/mapping data.
-- You want to make early returns or short-circuit behaviour clearer.
+- Code iterates over and filters/maps data.
+- Early returns or short-circuit behaviour need to be clearer.
 - The function logically produces a sequence over time.
 
 ## Avoid Overcomplicating
 
-Don't convert everything into generators unnecessarily. Use them to simplify
+Do not convert everything into generators unnecessarily. Use them to simplify
 logic—not obscure it.
 
 ### BAD
@@ -88,7 +88,7 @@ def iter_even_doubles():
 
 ______________________________________________________________________
 
-**Rule of thumb:** If your `for` loop has multiple branches, mutations, or is
-hard to explain in one sentence—try rewriting it as a generator.
+**Rule of thumb:** When a `for` loop has multiple branches, mutations, or is
+hard to explain in one sentence, consider rewriting it as a generator.
 
 Prefer clear, linear data flows over deeply nested conditionals and loop bodies.

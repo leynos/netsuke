@@ -19,8 +19,9 @@ execution cannot isolate a mutable process CWD, and a library's correct result
 should not depend on where the invoking process happens to sit.
 
 Separately, the CLI contract for `-C/--directory` needed a precise statement:
-the flag anchors automatic project discovery, manifest lookup, and relative
-explicit configuration selectors.
+the flag anchors automatic project discovery and manifest lookup. Relative
+explicit configuration selectors remain rooted in the process working
+directory, independently of `-C/--directory`.
 
 ## Decision
 
@@ -57,8 +58,9 @@ explicit configuration selectors.
   lint` (grep gate) and `cargo clippy` (disallowed-methods) with a reason string
   telling them what to do instead.
 - Explicit `--config` behaviour is documented identically in the user guide,
-  the design document, and this ADR: `-C` anchors relative selectors while
-  absolute selectors retain their spelling.
+  the design document, and this ADR: relative selectors resolve from the
+  process working directory independently of `-C`, while absolute selectors
+  retain their spelling.
 
 ## Alternatives considered
 

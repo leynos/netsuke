@@ -182,6 +182,7 @@ fn glob_pattern_new_rejects_invalid_braces() {
     assert_eq!(err.kind(), ErrorKind::SyntaxError);
 }
 
+/// Verify that a prepared relative search uses the platform's single path separator.
 #[test]
 fn prepared_relative_search_uses_one_host_separator() -> Result<()> {
     let temp = tempdir()?;

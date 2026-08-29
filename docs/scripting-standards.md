@@ -104,11 +104,17 @@ def default(
     build_dir.mkdir(parents=True, exist_ok=True)
     catalogue = Catalogue.from_programs("tofu")
     with sh.scoped(catalogue):
-        sh.make("tofu")("plan", cwd=build_dir).run_sync()
+        result = sh.make("tofu")("plan", cwd=build_dir).run_sync()
+        if result.exit_code != 0:
+            raise SystemExit(result.exit_code)
 
 def main():
     """CLI Entrypoint"""
     app()
+
+
+if __name__ == "__main__":
+    main()
 
 ```
 
@@ -218,9 +224,9 @@ with sh.scoped(CATALOGUE):
     result = git("tag", "--list", cwd=repo_dir).run_sync()
     tags = result.stdout
 
-    # Environment overrides via env parameter
+    # Read-only environment-sensitive command via env parameter
     result = git(
-        "config", "user.name", "CI",
+        "var", "GIT_AUTHOR_IDENT",
         env={"GIT_AUTHOR_NAME": "CI", "GIT_AUTHOR_EMAIL": "ci@example.org"},
     ).run_sync()
 ```
@@ -527,7 +533,7 @@ def test_patch_python_dependency(mocker):
     # Example: patch a helper function used by the script
     from scripts import helpers
 
-    mocker.patch_object(helpers, "compute_checksum", return_value="deadbeef")
+    mocker.patch.object(helpers, "compute_checksum", return_value="deadbeef")
     assert helpers.compute_checksum(b"abc") == "deadbeef"
 ```
 
@@ -545,8 +551,7 @@ from cuprum import Catalogue, sh
 CATALOGUE = Catalogue.from_programs("git")
 
 
-def test_git_tag_happy_path(cmd_mox, monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
+def test_git_tag_happy_path(cmd_mox, tmp_path):
 
     # Mock external command behaviour
     cmd_mox.mock("git").with_args("tag", "v1.2.3").returns(exit_code=0)
@@ -554,18 +559,17 @@ def test_git_tag_happy_path(cmd_mox, monkeypatch, tmp_path):
     # Run the code under test while shims are active
     cmd_mox.replay()
     with sh.scoped(CATALOGUE):
-        sh.make("git")("tag", "v1.2.3").run_sync()
+        sh.make("git")("tag", "v1.2.3", cwd=tmp_path).run_sync()
     cmd_mox.verify()
 
 
-def test_git_tag_failure_surface_error(cmd_mox, monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
+def test_git_tag_failure_surface_error(cmd_mox, tmp_path):
 
     cmd_mox.mock("git").with_args("tag", "v1.2.3").returns(exit_code=1, stderr="denied")
 
     cmd_mox.replay()
     with sh.scoped(CATALOGUE):
-        result = sh.make("git")("tag", "v1.2.3").run_sync()
+        result = sh.make("git")("tag", "v1.2.3", cwd=tmp_path).run_sync()
         assert result.exit_code == 1
         assert "denied" in result.stderr
     cmd_mox.verify()
@@ -579,15 +583,14 @@ from cuprum import Catalogue, sh
 CATALOGUE = Catalogue.from_programs("echo")
 
 
-def test_spy_and_record(cmd_mox, monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
+def test_spy_and_record(cmd_mox, tmp_path):
 
     # Spy records actual usage; passthrough runs the real command
     spy = cmd_mox.spy("echo").passthrough()
 
     cmd_mox.replay()
     with sh.scoped(CATALOGUE):
-        sh.make("echo")("hello world").run_sync()
+        sh.make("echo")("hello world", cwd=tmp_path).run_sync()
     cmd_mox.verify()
 
     # Inspect what happened

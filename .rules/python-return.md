@@ -1,10 +1,10 @@
-# flake8-return Style Guide (Python 3.14)
+# flake8-return style guide (Python 3.14)
 
 The `flake8-return` rules ensure consistent and explicit return behaviour,
-Ensuring your functions are clear in intent and free from unnecessary control
+ensuring functions are clear in intent and free from unnecessary control
 flow. Follow these rules:
 
-## R501 — Avoid Explicit `return None` if It's the Only Return
+## R501 — Avoid explicit `return None` if it's the only return
 
 ```python
 # BAD:
@@ -22,7 +22,7 @@ Use `return` alone instead of `return None` when the function's only result is
 
 ______________________________________________________________________
 
-## R502 — Avoid Implicit `None` in Functions That May Return a Value
+## R502 — Avoid implicit `None` in functions that may return a value
 
 ```python
 # BAD:
@@ -43,7 +43,7 @@ Ensure all branches explicitly return a value if any branch does.
 
 ______________________________________________________________________
 
-## R503 — Add an Explicit Return at the End When a Function May Return a Value
+## R503 — Add an explicit return at the end when a function may return a value
 
 ```python
 # BAD:
@@ -74,7 +74,7 @@ def func():
 
 ______________________________________________________________________
 
-## R504 — Avoid Redundant Variable Assignment Before `return`
+## R504 — Avoid redundant variable assignment before `return`
 
 ```python
 # BAD:
@@ -93,7 +93,7 @@ returning.
 
 ______________________________________________________________________
 
-## R505–R508 — Eliminate Unnecessary `else` After Terminal Statements
+## R505–R508 — Eliminate unnecessary `else` after terminal statements
 
 Avoid `else` after `return`, `raise`, `break`, or `continue`. These statements
 already exit control flow.

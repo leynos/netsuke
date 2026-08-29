@@ -341,11 +341,14 @@ pub(super) fn expand_glob(
 
 /// A validated glob pattern, its search text, and the base to strip.
 ///
-/// Preparation is pure text work: the pattern is validated and normalised
-/// once, the injected base is resolved to a symlink-free absolute path, and
-/// the resolved base is embedded in the search text only when the pattern is
-/// relative. Keeping it separate from the filesystem walk means [`expand_glob`]
-/// only orchestrates matching, prefix opening, and result collection.
+/// Preparation validates and normalises the pattern once, then conditionally
+/// performs filesystem preparation for a relative pattern with an injected
+/// base. [`PreparedGlob::new`] canonicalizes that base through
+/// [`resolve_relative_glob_base`], so preparation can fail while accessing the
+/// filesystem; the resolved base is embedded in the search text only for
+/// relative patterns. Keeping it separate from the filesystem walk means
+/// [`expand_glob`] only orchestrates matching, prefix opening, and result
+/// collection.
 struct PreparedGlob {
     /// Validated pattern and its normalised spelling.
     pattern: GlobPattern,
@@ -357,7 +360,11 @@ struct PreparedGlob {
 }
 
 impl PreparedGlob {
-    /// Prepare `pattern` for matching against the optional injected `base`.
+    /// Prepare `pattern` and any relative injected `base` for filesystem matching.
+    ///
+    /// Canonicalizes a relative injected base through
+    /// [`resolve_relative_glob_base`] before embedding its escaped literal
+    /// spelling into the search text.
     ///
     /// # Errors
     ///
