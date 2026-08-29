@@ -168,7 +168,7 @@ fn test_glob_behavior(temp_dir: tempfile::TempDir, #[case] case: GlobTestCase) -
     let yaml = manifest_yaml(&format!(
         concat!(
             "targets:\n",
-            "  - foreach: glob('{pattern}')\n",
+            "  - foreach: glob({pattern:?})\n",
             "    name: \"{name_template}\"\n",
             "    command: echo hi\n",
         ),
@@ -325,7 +325,7 @@ fn glob_accepts_windows_path_separators(temp_dir: tempfile::TempDir) -> Result<(
     let yaml = manifest_yaml(&format!(
         concat!(
             "targets:\n",
-            "  - foreach: glob('{pattern}')\n",
+            "  - foreach: glob({pattern:?})\n",
             "    name: \"{{{{ item }}}}\"\n",
             "    command: echo hi\n",
         ),
@@ -357,7 +357,7 @@ fn glob_is_case_sensitive_on_windows(temp_dir: tempfile::TempDir) -> Result<()> 
     let yaml = manifest_yaml(&format!(
         concat!(
             "targets:\n",
-            "  - foreach: glob('{pattern}')\n",
+            "  - foreach: glob({pattern:?})\n",
             "    name: fail\n",
             "    command: echo hi\n",
         ),
