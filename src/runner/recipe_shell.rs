@@ -195,28 +195,19 @@ mod tests {
     /// Verify that a missing injected Bash runtime produces actionable guidance.
     #[test]
     fn bash_runtime_probe_reports_a_missing_runtime() {
-        let error = validate_bash_runtime_with(|| {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "missing bash",
-            ))
-        })
-        .expect_err("missing Bash should be actionable");
-        assert!(
-            error
-                .to_string()
-                .contains("bash.exe` was not found on PATH")
-        );
+        assert_bash_runtime_launch_error(std::io::ErrorKind::NotFound);
     }
 
     /// Verify that a non-NotFound process launch failure remains actionable.
     #[test]
     fn bash_runtime_probe_reports_a_launch_failure() {
+        assert_bash_runtime_launch_error(std::io::ErrorKind::PermissionDenied);
+    }
+
+    /// Assert that a Bash process-launch error produces the installation guidance.
+    fn assert_bash_runtime_launch_error(error_kind: std::io::ErrorKind) {
         let error = validate_bash_runtime_with(|| {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::PermissionDenied,
-                "denied",
-            ))
+            Err(std::io::Error::new(error_kind, "cannot launch bash"))
         })
         .expect_err("launch failure should be actionable");
         assert!(

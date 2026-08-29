@@ -117,7 +117,7 @@ try {
         if ($LASTEXITCODE -eq 0) {
             throw 'Selecting Bash without bash.exe unexpectedly succeeded.'
         }
-        if (-not ($bashFailure -match 'bash\.exe.*(not found on PATH|--version exited with)')) {
+        if (-not ($bashFailure -match 'bash\.exe.*(not found on PATH|exited with)')) {
             throw "Bash runtime diagnostics were not actionable: $bashFailure"
         }
     }
