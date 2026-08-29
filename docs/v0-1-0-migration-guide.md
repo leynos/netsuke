@@ -142,11 +142,12 @@ entry, so a non-zero status or terminating error stops the list before a later
 entry can overwrite it. Multiple native commands inside one entry are not
 individually instrumented. Variables, environment assignments, and
 current-directory changes persist between entries. Each scalar, script, action,
-and target has a fresh shell process. `{{ ins }}` and `{{ outs }}` remain
-path-quoted, including for spaces; quote any other path or argument with the
-selected shell's syntax. On POSIX and Bash routes, `$$` means the process
-identifier; in PowerShell, `$$` is the automatic variable containing the last
-token received by the session.
+and target has a fresh shell process. In PowerShell, `{{ ins }}` and `{{ outs }}`
+remain path-quoted. Build and default-target paths containing spaces are
+rejected before generation; quote any other path or argument with the selected
+shell's syntax. On POSIX and Bash routes, `$$` means the process identifier; in
+PowerShell, `$$` is the automatic variable containing the last token received
+by the session.
 
 For reproducible Windows CI, use a `pwsh` step and let Netsuke select
 PowerShell; do not use a workflow-level `shell: bash` setting as evidence of
