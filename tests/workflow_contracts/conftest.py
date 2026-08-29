@@ -11,8 +11,6 @@ helpers here, so the staging shape and the invocation seam live in one place.
 Run via ``make test-workflow-contracts``.
 """
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 
@@ -21,9 +19,10 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-# The module under test lives in scripts/, outside any package; the import
-# must follow the sys.path insertion above, hence the E402 suppression.
-import hoist_binstall_archives as hoist_mod  # noqa: E402
+# The module under test lives in scripts/, outside any package, so the import
+# cannot precede the sys.path insertion above.
+# ruff: ignore[module-import-not-at-top-of-file] - needs the sys.path insertion
+import hoist_binstall_archives as hoist_mod
 
 STAGING_CONFIG = """\
 [common]

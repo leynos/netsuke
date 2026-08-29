@@ -15,14 +15,15 @@ Dependabot owns the SHA value, so this test asserts the shape of the pin
 Run via ``make test-workflow-contracts``.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import yaml
 
 WORKFLOW_PATH = (
-    Path(__file__).resolve().parents[2] / ".github" / "workflows" / "mutation-testing.yml"
+    Path(__file__).resolve().parents[2]
+    / ".github"
+    / "workflows"
+    / "mutation-testing.yml"
 )
 
 EXPECTED_USES_PATH = "leynos/shared-actions/.github/workflows/mutation-cargo.yml"
@@ -75,7 +76,7 @@ def test_uses_reference_is_pinned_to_a_commit_sha() -> None:
     commit SHA) rather than a specific commit.
     """
     uses = _mutation_job(_load()).get("uses")
-    assert uses is not None, "jobs.mutation.uses is missing"
+    assert isinstance(uses, str), f"jobs.mutation.uses must be a string, got {uses!r}"
     path, _, ref = uses.partition("@")
     assert path == EXPECTED_USES_PATH, (
         f"jobs.mutation.uses must reference mutation-cargo.yml, got {path!r}"
@@ -130,8 +131,12 @@ def test_triggers_keep_schedule_and_plain_dispatch() -> None:
         f"on.schedule must be the daily 03:05 UTC cron, got {schedule!r}"
     )
     assert "workflow_dispatch" in triggers, "on.workflow_dispatch is missing"
-    dispatch = triggers.get("workflow_dispatch") or {}
-    inputs = dispatch.get("inputs") or {}
+    # A bodiless ``workflow_dispatch:`` parses as ``None``, which is a valid
+    # trigger declaring no inputs; only a mapping can carry an input table.
+    inputs: dict[str, object] = {}
+    match triggers.get("workflow_dispatch"):
+        case {"inputs": dict() as declared}:
+            inputs = declared
     assert "branch" not in inputs, (
         "on.workflow_dispatch must not declare a branch input; the Actions "
         "run-workflow control selects the ref"

@@ -9,17 +9,15 @@ and helpers live in ``conftest.py``.
 Run via ``make test-workflow-contracts``.
 """
 
-from __future__ import annotations
-
 import dataclasses
+import operator
+import tempfile
 from pathlib import Path
-
-import pytest
-from hypothesis import HealthCheck, given, settings
-from hypothesis import strategies as st
 
 # conftest.py inserts scripts/ onto sys.path before this module is imported.
 import hoist_binstall_archives as hoist_mod
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 TARGET_POOL = [
     "x86_64-unknown-linux-gnu",
@@ -30,7 +28,7 @@ TARGET_POOL = [
 STATE_POOL = ["ok", "missing-archive", "missing-sidecar", "duplicate", "collision"]
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class GeneratedHoistCase:
     """One generated hoist scenario for the property test.
 
@@ -80,7 +78,7 @@ GENERATED_CASES = st.builds(
         st.tuples(st.sampled_from(TARGET_POOL), st.sampled_from(STATE_POOL)),
         min_size=1,
         max_size=4,
-        unique_by=lambda pair: pair[0],
+        unique_by=operator.itemgetter(0),
     ).map(tuple),
     layout_seed=st.integers(min_value=0, max_value=7),
 )
@@ -213,32 +211,30 @@ def assert_valid_generated_outcome(
         )
 
 
-@settings(
-    max_examples=25,
-    deadline=None,
-    derandomize=True,
-    suppress_health_check=[HealthCheck.function_scoped_fixture],
-)
+@settings(max_examples=25, deadline=None, derandomize=True)
 @given(case=GENERATED_CASES)
 def test_hoist_invariants_hold_for_generated_layouts(
-    tmp_path_factory: pytest.TempPathFactory,
     case: GeneratedHoistCase,
 ) -> None:
     """All-or-none and name-derivation invariants hold across generated cases."""
-    workspace = build_generated_workspace(
-        tmp_path_factory.mktemp("hoist-property"), case
-    )
-    staged_paths = [
-        path
-        for index in range(len(case.targets_and_states))
-        for path in stage_generated_target(workspace["dist"], case, index)
-    ]
+    # Each example needs a pristine root. A temporary directory managed here
+    # avoids depending on a function-scoped pytest fixture, which Hypothesis
+    # would otherwise reuse across every example of a single test call.
+    with tempfile.TemporaryDirectory(prefix="hoist-property-") as root:
+        workspace = build_generated_workspace(Path(root), case)
+        staged_paths = [
+            path
+            for index in range(len(case.targets_and_states))
+            for path in stage_generated_target(workspace["dist"], case, index)
+        ]
 
-    status = hoist_mod.hoist(
-        workspace["dist"], workspace["staging"], workspace["manifest"], case.version
-    )
+        status = hoist_mod.hoist(
+            workspace["dist"], workspace["staging"], workspace["manifest"], case.version
+        )
 
-    if case.expects_failure:
-        assert_invalid_generated_outcome(workspace["dist"], case, staged_paths, status)
-    else:
-        assert_valid_generated_outcome(workspace["dist"], case, status)
+        if case.expects_failure:
+            assert_invalid_generated_outcome(
+                workspace["dist"], case, staged_paths, status
+            )
+        else:
+            assert_valid_generated_outcome(workspace["dist"], case, status)
