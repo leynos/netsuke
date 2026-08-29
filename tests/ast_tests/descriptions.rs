@@ -34,6 +34,10 @@ fn target_description_is_optional() -> Result<()> {
         let manifest = parse_manifest(yaml)?;
         let target = manifest.targets.first().context("expected target entry")?;
         ensure!(target.description.is_none(), "description should be absent");
+        ensure!(
+            !target.conditional,
+            "omitted internal discovery metadata should default to false"
+        );
     }
     Ok(())
 }

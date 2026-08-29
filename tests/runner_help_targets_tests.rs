@@ -15,6 +15,8 @@ use test_support::{fluent::normalize_fluent_isolates, localizer_test_lock, set_e
 #[path = "runner_help_targets_tests/catalogue.rs"]
 mod catalogue;
 mod fixtures;
+#[path = "runner_help_targets_tests/query_helpers.rs"]
+mod query_helpers;
 
 use fixtures::create_test_manifest;
 

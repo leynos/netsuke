@@ -88,8 +88,13 @@ fn identifies_source_tree_without_git_checkout(
 }
 
 proptest! {
+    #![proptest_config(ProptestConfig::with_cases(32))]
+
     /// Tracked manifest discovery is invariant under arbitrary untracked
     /// manifest pollution in disjoint directory namespaces.
+    ///
+    /// Thirty-two layouts retain varied tracked and untracked set cardinalities
+    /// without repeatedly creating isolated Git repositories 256 times.
     #[test]
     fn generated_layouts_include_only_tracked_manifests(
         tracked_names in proptest::collection::btree_set("[a-z]{1,8}", 0..5),

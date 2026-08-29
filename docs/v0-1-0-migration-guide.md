@@ -184,21 +184,38 @@ netsuke help targets
 ```
 
 The command honours the usual manifest-selection options, including `--file` and
-`-C/--directory`. It loads, expands, renders, and validates the manifest
-through a restricted, side-effect-free Jinja surface, then prints actions and
-targets without running recipes or creating build outputs. Queries allow only
-the lexical path filters `basename`, `dirname`, `with_suffix`, and
-`relative_to`, the collection filters `uniq`, `flatten`, and `group_by`, and
-the clock-independent `timedelta` function. Queries reject `env()` and
-`glob()`, file tests, filesystem metadata filters such as `size` and
-`linecount`, `hash`, `digest`, `contents`, `realpath`, and `expanduser`,
-executable discovery through `which` and `command_available`, network and
-command helpers (`fetch`, `shell`, and `grep`), and the clock-dependent `now()`
-function. Normal build manifest rendering retains the full standard library;
-this restriction applies only to query rendering. Add `--json` to receive the
-versioned JSON result document; its `result.command` is `help-targets`. The
-command and the new descriptions are beta-series additions and remain subject
-to the stability caveat above.
+`-C/--directory`. It uses manifest-query rendering: discovery metadata and
+structural rule selectors needed for graph validation are rendered, while
+`command` and `script` recipe bodies are skipped. Consequently, build-only
+helpers in those skipped bodies are not evaluated, and do not make discovery
+fail. The command remains side-effect-free: it prints actions and targets
+without running recipes or creating build outputs.
+
+Queries allow only the lexical path filters `basename`, `dirname`,
+`with_suffix`, and `relative_to`, the collection filters `uniq`, `flatten`, and
+`group_by`, and the clock-independent `timedelta` function. Query mode rejects
+direct evaluation of all query-disabled, host-dependent, or side-effecting
+helpers in this surface, including `env()` and `glob()`, file tests, filesystem
+metadata filters such as `size` and `linecount`, `hash`, `digest`, `contents`,
+`realpath`, and `expanduser`, executable discovery through `which` and
+`command_available`, network and command helpers (`fetch`, `shell`, and
+`grep`), and the clock-dependent `now()` function. When a `when` expression
+uses a query-disabled helper, its action or target is retained as a conditional
+entry instead of failing discovery. A `when` expression that evaluates to
+`false` still excludes its entry.
+
+Human-readable output marks a conditional entry with the localized
+`[◇ conditional]` marker when emoji output is enabled, or `[? conditional]` in
+the ASCII theme. JSON output includes the boolean `conditional` JSON field.
+Existing manifests need no changes, but integrations must not treat a
+conditional catalogue entry as a confirmed selected entry. Full rendering for
+`build`, `generate`, and normal manifest output retains the full standard
+library and its existing semantics; these restrictions apply only to
+manifest-query rendering. See the detailed [help targets documentation]
+(users-guide.md#generate-and-inspect-artefacts).
+Add `--json` to receive the versioned JSON result document; its
+`result.command` is `help-targets`. The command and the new descriptions are
+beta-series additions and remain subject to the stability caveat above.
 
 ## Diagnostics
 

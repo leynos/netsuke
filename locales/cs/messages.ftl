@@ -41,6 +41,7 @@ cli.help.actions_heading = Akce:
 cli.help.targets_heading = Cíle:
 cli.help.targets.about = Vypsat cíle a akce ve vybraném manifestu.
 cli.help.default_marker = výchozí
+cli.help.conditional_marker = podmíněný
 
 # Text nápovědy přepínačů podpříkazu build.
 cli.subcommand.build.flag.targets.help = Cíle k sestavení (při vynechání se použijí výchozí cíle z manifestu).

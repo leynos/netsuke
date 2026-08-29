@@ -41,6 +41,7 @@ cli.help.actions_heading = Aktionen:
 cli.help.targets_heading = Ziele:
 cli.help.targets.about = Ziele und Aktionen im ausgewählten Manifest auflisten.
 cli.help.default_marker = Standard
+cli.help.conditional_marker = bedingt
 
 # Hilfetext für Optionen des Unterbefehls build.
 cli.subcommand.build.flag.targets.help = Zu bauende Ziele (ohne Angabe gelten die Standardziele des Manifests).

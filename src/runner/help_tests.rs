@@ -45,7 +45,13 @@ defaults:
   - lint
   - test
 "#;
-    manifest::from_str(yaml)
+    let mut manifest = manifest::from_str(yaml)?;
+    let conditional_action = manifest
+        .actions
+        .get_mut(1)
+        .context("help target fixture should contain a test action")?;
+    conditional_action.conditional = true;
+    Ok(manifest)
 }
 
 /// Acquire the localizer test lock, recovering from poisoning the way the
@@ -170,16 +176,19 @@ fn catalogue_rendering_releases_localizer_lock_before_snapshot_work() -> Result<
     Ok(())
 }
 
+/// Snapshot the English Unicode help-target catalogue.
 #[test]
 fn text_catalogue_snapshot() -> Result<()> {
     text_catalogue_snapshot_with_theme("en-US", "text_catalogue", ThemePreference::Unicode)
 }
 
+/// Snapshot the English ASCII help-target catalogue.
 #[test]
 fn accessible_catalogue_snapshot() -> Result<()> {
     text_catalogue_snapshot_with_theme("en-US", "accessible_catalogue", ThemePreference::Ascii)
 }
 
+/// Snapshot the Spanish Unicode help-target catalogue.
 #[test]
 fn localized_catalogue_snapshot() -> Result<()> {
     text_catalogue_snapshot_with_theme(
@@ -189,6 +198,7 @@ fn localized_catalogue_snapshot() -> Result<()> {
     )
 }
 
+/// Snapshot the JSON help-target catalogue.
 #[test]
 fn json_catalogue_snapshot() -> Result<()> {
     catalogue_snapshot(
@@ -271,16 +281,22 @@ fn text_catalogue_escapes_cc_range_boundaries() -> Result<()> {
 
 /// Generate target metadata with at least one name, allowing actions and
 /// targets to exercise scalar/list flattening through the same catalogue path.
-fn target_metadata() -> impl Strategy<Value = (Vec<String>, Option<String>)> {
+fn target_metadata() -> impl Strategy<Value = (Vec<String>, Option<String>, bool)> {
     (
         proptest::collection::vec("[a-z]{1,8}", 1..4),
         prop_oneof![Just(None), "[A-Za-z ]{0,20}".prop_map(Some)],
+        any::<bool>(),
     )
 }
 
 /// Build a simple target because catalogue construction depends only on names,
 /// descriptions, and action categorization.
-fn catalogue_target(names: Vec<String>, description: Option<String>, phony: bool) -> Target {
+fn catalogue_target(
+    names: Vec<String>,
+    description: Option<String>,
+    phony: bool,
+    conditional: bool,
+) -> Target {
     Target {
         name: crate::ast::StringOrList::List(names),
         recipe: crate::ast::Recipe::Command {
@@ -293,13 +309,16 @@ fn catalogue_target(names: Vec<String>, description: Option<String>, phony: bool
         vars: crate::ast::Vars::default(),
         phony,
         always: false,
+        conditional,
         description,
     }
 }
 
 proptest! {
     /// Catalogue construction preserves declaration order, expands every name,
-    /// retains metadata, and marks each alias selected by `defaults`.
+    /// retains metadata, and preserves conditional entries injected directly
+    /// by this test because manifest discovery cannot evaluate their `when`
+    /// expressions.
     #[test]
     fn catalogue_preserves_order_names_metadata_and_defaults(
         actions in proptest::collection::vec(target_metadata(), 0..5),
@@ -309,7 +328,7 @@ proptest! {
         let declared_names: Vec<String> = actions
             .iter()
             .chain(&targets)
-            .flat_map(|(names, _)| names.iter().cloned())
+            .flat_map(|(names, _, _)| names.iter().cloned())
             .collect();
         let defaults = if declared_names.is_empty() {
             Vec::new()
@@ -329,34 +348,43 @@ proptest! {
             actions: actions
                 .iter()
                 .cloned()
-                .map(|(names, description)| catalogue_target(names, description, true))
+                .map(|(names, description, conditional)| {
+                    catalogue_target(names, description, true, conditional)
+                })
                 .collect(),
             targets: targets
                 .iter()
                 .cloned()
-                .map(|(names, description)| catalogue_target(names, description, false))
+                .map(|(names, description, conditional)| {
+                    catalogue_target(names, description, false, conditional)
+                })
                 .collect(),
             defaults: defaults.clone(),
         };
         let default_names = &defaults;
-        let expected: Vec<(String, Option<String>, bool, bool)> = actions
+        let expected: Vec<(String, Option<String>, bool, bool, bool)> = actions
             .iter()
-            .map(|(names, description)| (names, description, true))
-            .chain(targets.iter().map(|(names, description)| (names, description, false)))
-            .flat_map(|(names, description, is_action)| {
+            .map(|(names, description, conditional)| (names, description, true, conditional))
+            .chain(
+                targets
+                    .iter()
+                    .map(|(names, description, conditional)| (names, description, false, conditional)),
+            )
+            .flat_map(|(names, description, is_action, conditional)| {
                 names.iter().cloned().map(move |name| {
                     let is_default = default_names.contains(&name);
-                    (name, description.clone(), is_action, is_default)
+                    (name, description.clone(), is_action, is_default, *conditional)
                 })
             })
             .collect();
-        let actual: Vec<(String, Option<String>, bool, bool)> = build_catalogue(&manifest)
+        let actual: Vec<(String, Option<String>, bool, bool, bool)> = build_catalogue(&manifest)
             .into_iter()
             .map(|entry| (
                 entry.name,
                 entry.description.as_deref().map(str::to_owned),
                 entry.is_action,
                 entry.is_default,
+                entry.conditional,
             ))
             .collect();
 

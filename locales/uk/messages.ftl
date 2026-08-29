@@ -41,6 +41,7 @@ cli.help.actions_heading = Дії:
 cli.help.targets_heading = Цілі:
 cli.help.targets.about = Вивести список цілей і дій у вибраному маніфесті.
 cli.help.default_marker = за замовчуванням
+cli.help.conditional_marker = умовний
 
 # Текст довідки для параметрів підкоманди build.
 cli.subcommand.build.flag.targets.help = Цілі для збирання (якщо не вказано, беруться типові цілі маніфесту).

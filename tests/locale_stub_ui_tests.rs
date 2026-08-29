@@ -26,6 +26,7 @@ use std::{
     io,
     path::{Path, PathBuf},
     process::{Command, Output},
+    time::Instant,
 };
 
 /// One `test_support` build shared by both tests.
@@ -112,7 +113,12 @@ impl TestSupportRlib {
         for (key, value) in env {
             command.env(key, value);
         }
+        let started_at = Instant::now();
         let output = command.output()?;
+        tracing::info!(
+            elapsed_seconds = started_at.elapsed().as_secs_f64(),
+            "cargo build test_support completed"
+        );
         if !output.status.success() {
             return Err(io::Error::other(format!(
                 "building test_support failed:\n{}",
@@ -165,6 +171,7 @@ impl TestSupportRlib {
     /// shortened.
     fn compile(&self, source: &str) -> io::Result<Output> {
         let output_dir = tempfile::tempdir()?;
+        let started_at = Instant::now();
         let mut args = vec![
             String::from("--edition=2024"),
             String::from("--crate-type=bin"),
@@ -190,7 +197,12 @@ impl TestSupportRlib {
         let response = rustc_response_file::write(output_dir.path(), "stub-env-ui.args", &args)?;
         // `output_dir` owns the response file and stays in scope across the
         // call below, so the file still exists when `rustc` opens it at spawn.
-        Command::new(rustc()).arg(response).output()
+        let output = Command::new(rustc()).arg(response).output()?;
+        tracing::info!(
+            elapsed_seconds = started_at.elapsed().as_secs_f64(),
+            "rustc metadata harness completed"
+        );
+        Ok(output)
     }
 }
 
@@ -225,35 +237,38 @@ fn stderr(output: &Output) -> String {
 /// directory missed the dependencies entirely.
 #[rstest]
 fn harness_compiles_under_a_split_build_dir() -> io::Result<()> {
-    // Both roots are private to this test: sharing the ambient target dir
-    // with the concurrently building `#[once]` fixture races on the
-    // uplifted rlibs and fails with version-skew errors (E0460).
-    let target_dir = tempfile::tempdir()?;
-    let build_dir = tempfile::tempdir()?;
-    let harness = TestSupportRlib::build_with(&[
-        ("CARGO_TARGET_DIR", target_dir.path()),
-        ("CARGO_BUILD_BUILD_DIR", build_dir.path()),
-    ])?;
+    let subscriber = tracing_subscriber::fmt().with_test_writer().finish();
+    tracing::subscriber::with_default(subscriber, || {
+        // Both roots are private to this test: sharing the ambient target dir
+        // with the concurrently building `#[once]` fixture races on the
+        // uplifted rlibs and fails with version-skew errors (E0460).
+        let target_dir = tempfile::tempdir()?;
+        let build_dir = tempfile::tempdir()?;
+        let harness = TestSupportRlib::build_with(&[
+            ("CARGO_TARGET_DIR", target_dir.path()),
+            ("CARGO_BUILD_BUILD_DIR", build_dir.path()),
+        ])?;
 
-    let spans_split_dir = harness
-        .deps_dirs
-        .iter()
-        .any(|dir| dir.starts_with(build_dir.path()));
-    if !spans_split_dir {
-        return Err(io::Error::other(format!(
-            "the dependency directories should include the split build dir {}; found {:?}",
-            build_dir.path().display(),
-            harness.deps_dirs,
-        )));
-    }
+        let spans_split_dir = harness
+            .deps_dirs
+            .iter()
+            .any(|dir| dir.starts_with(build_dir.path()));
+        if !spans_split_dir {
+            return Err(io::Error::other(format!(
+                "the dependency directories should include the split build dir {}; found {:?}",
+                build_dir.path().display(),
+                harness.deps_dirs,
+            )));
+        }
 
-    let output = harness.compile("tests/ui/stub_env_strict_compile_pass.rs")?;
-    if !output.status.success() {
-        return Err(io::Error::other(format!(
-            "the control fixture should compile under a split build dir:
+        let output = harness.compile("tests/ui/stub_env_strict_compile_pass.rs")?;
+        if !output.status.success() {
+            return Err(io::Error::other(format!(
+                "the control fixture should compile under a split build dir:
 {}",
-            stderr(&output),
-        )));
-    }
-    Ok(())
+                stderr(&output),
+            )));
+        }
+        Ok(())
+    })
 }

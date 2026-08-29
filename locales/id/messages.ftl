@@ -41,6 +41,7 @@ cli.help.actions_heading = Tindakan:
 cli.help.targets_heading = Target:
 cli.help.targets.about = Mencetak target dan tindakan dalam berkas yang dipilih.
 cli.help.default_marker = bawaan
+cli.help.conditional_marker = bersyarat
 
 # Teks bantuan untuk opsi subperintah build.
 cli.subcommand.build.flag.targets.help = Target yang akan dibangun (jika dihilangkan, memakai bawaan dari manifes).

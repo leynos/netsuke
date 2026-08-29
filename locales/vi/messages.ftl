@@ -41,6 +41,7 @@ cli.help.actions_heading = Hành động:
 cli.help.targets_heading = Mục tiêu:
 cli.help.targets.about = Liệt kê mục tiêu và hành động trong tệp kê khai đã chọn.
 cli.help.default_marker = mặc định
+cli.help.conditional_marker = có điều kiện
 
 # Văn bản trợ giúp cho tuỳ chọn của lệnh con build.
 cli.subcommand.build.flag.targets.help = Các đích cần dựng (nếu bỏ trống sẽ dùng đích mặc định của tệp kê khai).

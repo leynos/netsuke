@@ -26,7 +26,7 @@ pub use config::{
 pub use network::{
     HostPatternError, NetworkPolicy, NetworkPolicyConfigError, NetworkPolicyViolation,
 };
-pub(crate) use register::register_manifest_query;
+pub(crate) use register::{is_manifest_query_disabled_error, register_manifest_query};
 pub use register::{register, register_with_config, value_from_bytes};
 
 use std::{

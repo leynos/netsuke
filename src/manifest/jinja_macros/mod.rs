@@ -9,7 +9,7 @@ use super::ManifestValue;
 use crate::ast::MacroDefinition;
 use crate::localization::{self, keys};
 use anyhow::{Context, Result};
-use minijinja::{Environment, Error};
+use minijinja::{Environment, Error, value::Value};
 use serde::Serialize;
 
 mod call;
@@ -24,6 +24,86 @@ use invocation::{make_macro_fn, validate_macro};
 
 /// Global name holding accumulated import statements for manifest macros.
 const MACRO_IMPORTS_GLOBAL: &str = "__netsuke_manifest_macro_imports";
+
+/// Represents a Jinja evaluation that may be disabled in manifest-query mode.
+///
+/// This preserves the distinction between a false condition and a condition
+/// that discovery cannot safely inspect, without leaking `MiniJinja` errors
+/// into manifest expansion.
+pub(crate) enum QueryEvaluation<T> {
+    /// Holds a successfully evaluated value.
+    Value(T),
+    /// Marks an expression that invoked a query-disabled helper.
+    QueryDisabled,
+}
+
+/// Evaluate a `when` expression when it has expression syntax.
+///
+/// Returns `None` when `MiniJinja` cannot compile expression syntax, allowing
+/// the caller to preserve the established template-render fallback.
+///
+/// # Errors
+///
+/// Returns an error when a compiled expression fails for a reason other than
+/// invoking a helper disabled during manifest queries.
+pub(crate) fn evaluate_when_expression(
+    env: &Environment,
+    expression: &str,
+    context: &Value,
+) -> Result<Option<QueryEvaluation<bool>>> {
+    let Ok(compiled) = env.compile_expression(expression) else {
+        return Ok(None);
+    };
+    classify_query_evaluation(compiled.eval(context))
+        .map(|evaluation| evaluation.map(|value| value.is_true()))
+        .with_context(|| {
+            localization::message(keys::MANIFEST_WHEN_EVAL_ERROR).with_arg("expr", expression)
+        })
+        .map(Some)
+}
+
+/// Render a template-form `when` condition with query-disabled classification.
+///
+/// # Errors
+///
+/// Returns an error when template rendering fails for a reason other than a
+/// helper disabled during manifest queries.
+pub(crate) fn render_when_template(
+    env: &Environment,
+    template: &str,
+    context: &Value,
+) -> Result<QueryEvaluation<String>> {
+    classify_query_evaluation(render_template(env, template, context)).with_context(|| {
+        localization::message(keys::MANIFEST_WHEN_TEMPLATE_ERROR).with_arg("expr", template)
+    })
+}
+
+/// Convert a `MiniJinja` result into the query-safe evaluation boundary.
+///
+/// The stdlib marks intentionally disabled helpers with a stable `MiniJinja`
+/// error. Keeping the adapter here confines that implementation detail to the
+/// Jinja boundary; manifest expansion consumes only [`QueryEvaluation`].
+fn classify_query_evaluation<T>(
+    evaluation: std::result::Result<T, Error>,
+) -> Result<QueryEvaluation<T>> {
+    match evaluation {
+        Ok(value) => Ok(QueryEvaluation::Value(value)),
+        Err(error) if crate::stdlib::is_manifest_query_disabled_error(&error) => {
+            Ok(QueryEvaluation::QueryDisabled)
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+impl<T> QueryEvaluation<T> {
+    /// Transform a successful value while preserving query-disabled state.
+    fn map<U>(self, transform: impl FnOnce(T) -> U) -> QueryEvaluation<U> {
+        match self {
+            Self::Value(value) => QueryEvaluation::Value(transform(value)),
+            Self::QueryDisabled => QueryEvaluation::QueryDisabled,
+        }
+    }
+}
 
 /// Extract the macro identifier from a signature string.
 ///

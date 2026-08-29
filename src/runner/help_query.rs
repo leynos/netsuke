@@ -24,6 +24,8 @@ pub(super) struct HelpEntry {
     pub(super) is_action: bool,
     /// Whether the entry is one of the manifest's default targets.
     pub(super) is_default: bool,
+    /// Whether query-disabled `when` evaluation left the entry conditional.
+    pub(super) conditional: bool,
 }
 
 /// The pure result of loading, validating, and cataloguing a help manifest.
@@ -84,16 +86,29 @@ fn query_entries(cli: &Cli, stages: &mut Vec<PipelineStage>) -> Result<Vec<HelpE
     }
     let manifest = load_manifest_for_query(&manifest_path, stages)?;
     reject_terminal_controls_in_target_names(&manifest)?;
+    let entries = build_catalogue(&manifest);
+    let defaults = manifest.defaults.clone();
 
-    // Building the IR validates the rendered manifest (duplicate outputs,
-    // missing rules, cycles) exactly as a real build would, without generating
-    // Ninja or executing any recipe.
-    BuildGraph::from_manifest(&manifest)
+    // Building the IR validates every resolved entry (duplicate outputs,
+    // missing rules, cycles) without generating Ninja or executing recipes.
+    // Conditional entries are mutually exclusive alternatives whose `when`
+    // expressions manifest-query mode cannot inspect, so validate only the
+    // resolved subset rather than treating them as simultaneously active.
+    BuildGraph::from_manifest(&manifest_for_graph_validation(manifest))
         .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH))?;
 
-    let entries = build_catalogue(&manifest);
-    validate_defaults(&manifest.defaults, &entries)?;
+    validate_defaults(&defaults, &entries)?;
     Ok(entries)
+}
+
+/// Clone a manifest for graph validation without unresolved conditional entries.
+///
+/// Query-disabled `when` helpers leave alternatives in the catalogue. The
+/// build graph must not validate those alternatives as coexisting outputs.
+fn manifest_for_graph_validation(mut manifest: NetsukeManifest) -> NetsukeManifest {
+    manifest.actions.retain(|target| !target.conditional);
+    manifest.targets.retain(|target| !target.conditional);
+    manifest
 }
 
 /// Reject control-bearing target names before IR errors can interpolate them.
@@ -167,6 +182,7 @@ fn append_target_entries(
     for name in target.name.to_string_vec() {
         entries.push(HelpEntry {
             is_default: defaults.contains(name.as_str()),
+            conditional: target.conditional,
             name,
             description: description.clone(),
             is_action,

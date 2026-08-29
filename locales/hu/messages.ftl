@@ -41,6 +41,7 @@ cli.help.actions_heading = Műveletek:
 cli.help.targets_heading = Célok:
 cli.help.targets.about = A kiválasztott fájl céljainak és műveleteinek listázása.
 cli.help.default_marker = alapértelmezett
+cli.help.conditional_marker = feltételes
 
 # A build alparancs kapcsolóinak súgószövege.
 cli.subcommand.build.flag.targets.help = Az építendő célok (elhagyásuk esetén a jegyzék alapértelmezett céljai).

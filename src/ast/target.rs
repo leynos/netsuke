@@ -46,6 +46,10 @@ pub struct Target {
     #[serde(default)]
     pub always: bool,
 
+    /// Internal discovery metadata marking a target with an unevaluated `when`.
+    #[serde(default)]
+    pub conditional: bool,
+
     /// Optional human-friendly summary of the public operation this target
     /// performs.
     ///

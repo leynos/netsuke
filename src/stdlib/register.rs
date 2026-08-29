@@ -27,6 +27,12 @@ use crate::localization::{self, keys};
 /// type predicate.
 type FileTest = (&'static str, fn(fs::FileType) -> bool);
 
+/// Stable text identifying helpers deliberately unavailable to manifest queries.
+const MANIFEST_QUERY_DISABLED_HELPER_MARKER: &str = concat!(
+    "is disabled while rendering `netsuke help targets`; manifest queries permit ",
+    "only non-disclosing, side-effect-free template helpers"
+);
+
 /// Register standard library helpers with the `MiniJinja` environment.
 ///
 /// # Examples
@@ -146,6 +152,12 @@ fn register_query_helpers(env: &mut Environment<'_>) {
 
 /// Register deliberate failures for helpers excluded from manifest queries.
 fn register_disabled_query_helpers(env: &mut Environment<'_>) {
+    register_always_disabled_query_helpers(env);
+    register_host_dependent_query_helpers(env);
+}
+
+/// Register helpers that are never safe while rendering discovery metadata.
+fn register_always_disabled_query_helpers(env: &mut Environment<'_>) {
     env.add_function("env", |_variable: String| -> Result<String, Error> {
         Err(manifest_query_operation_error("env"))
     });
@@ -183,16 +195,70 @@ fn register_disabled_query_helpers(env: &mut Environment<'_>) {
     );
 }
 
+/// Register helpers whose result would disclose host state during a query.
+fn register_host_dependent_query_helpers(env: &mut Environment<'_>) {
+    env.add_filter(
+        "which",
+        |_value: Value, _kwargs: Kwargs| -> Result<Value, Error> {
+            Err(manifest_query_operation_error("which"))
+        },
+    );
+    env.add_function(
+        "which",
+        |_value: Value, _kwargs: Kwargs| -> Result<Value, Error> {
+            Err(manifest_query_operation_error("which"))
+        },
+    );
+    env.add_function(
+        "command_available",
+        |_value: Value, _kwargs: Kwargs| -> Result<bool, Error> {
+            Err(manifest_query_operation_error("command_available"))
+        },
+    );
+    env.add_function("now", |_kwargs: Kwargs| -> Result<Value, Error> {
+        Err(manifest_query_operation_error("now"))
+    });
+    env.add_filter("realpath", |_value: String| -> Result<String, Error> {
+        Err(manifest_query_operation_error("realpath"))
+    });
+    env.add_filter("expanduser", |_value: String| -> Result<String, Error> {
+        Err(manifest_query_operation_error("expanduser"))
+    });
+    env.add_filter("size", |_value: String| -> Result<u64, Error> {
+        Err(manifest_query_operation_error("size"))
+    });
+    env.add_filter("linecount", |_value: String| -> Result<usize, Error> {
+        Err(manifest_query_operation_error("linecount"))
+    });
+    env.add_filter(
+        "hash",
+        |_value: String, _algorithm: Option<String>| -> Result<String, Error> {
+            Err(manifest_query_operation_error("hash"))
+        },
+    );
+    env.add_filter(
+        "digest",
+        |_value: String,
+         _length: Option<usize>,
+         _algorithm: Option<String>|
+         -> Result<String, Error> { Err(manifest_query_operation_error("digest")) },
+    );
+}
+
 /// Explain why a restricted helper is unavailable while querying a manifest.
 fn manifest_query_operation_error(operation: &str) -> Error {
     Error::new(
         ErrorKind::InvalidOperation,
-        format!(
-            "{operation} is disabled while rendering `netsuke help targets`; \
-             manifest queries permit only non-disclosing, side-effect-free \
-             template helpers"
-        ),
+        format!("{operation} {MANIFEST_QUERY_DISABLED_HELPER_MARKER}"),
     )
+}
+
+/// Return whether an error marks a helper intentionally unavailable in queries.
+pub(crate) fn is_manifest_query_disabled_error(error: &Error) -> bool {
+    error.kind() == ErrorKind::InvalidOperation
+        && error
+            .to_string()
+            .contains(MANIFEST_QUERY_DISABLED_HELPER_MARKER)
 }
 
 /// Convert UTF-8 or fall back to bytes for byte-oriented network helpers.

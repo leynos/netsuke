@@ -41,6 +41,7 @@ cli.help.actions_heading = Azioni:
 cli.help.targets_heading = Target:
 cli.help.targets.about = Elenca target e azioni nel file selezionato.
 cli.help.default_marker = predefinito
+cli.help.conditional_marker = condizionale
 
 # Testo di aiuto delle opzioni del sottocomando build.
 cli.subcommand.build.flag.targets.help = Target da compilare (se omesso usa quelli predefiniti del manifest).

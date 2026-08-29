@@ -41,6 +41,7 @@ cli.help.actions_heading = アクション:
 cli.help.targets_heading = ターゲット:
 cli.help.targets.about = 選択したファイルのターゲットとアクションを一覧表示します。
 cli.help.default_marker = 既定
+cli.help.conditional_marker = 条件付き
 
 # build サブコマンドのオプションのヘルプ文。
 cli.subcommand.build.flag.targets.help = ビルドするターゲット（省略時はマニフェストの既定値を使用）。

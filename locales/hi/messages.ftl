@@ -41,6 +41,7 @@ cli.help.actions_heading = क्रियाएँ:
 cli.help.targets_heading = लक्ष्य:
 cli.help.targets.about = चयनित मैनिफेस्ट में लक्ष्यों और क्रियाओं की सूची बनाएँ।
 cli.help.default_marker = डिफ़ॉल्ट
+cli.help.conditional_marker = सशर्त
 
 # build उपआदेश के विकल्पों का सहायता पाठ।
 cli.subcommand.build.flag.targets.help = बनाए जाने वाले लक्ष्य (न बताए जाने पर मैनिफ़ेस्ट के डिफ़ॉल्ट लिए जाते हैं)।

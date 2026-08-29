@@ -41,6 +41,7 @@ cli.help.actions_heading = Действия:
 cli.help.targets_heading = Цели:
 cli.help.targets.about = Вывести список целей и действий в выбранном файле.
 cli.help.default_marker = по умолчанию
+cli.help.conditional_marker = условный
 
 # Текст справки для параметров подкоманды build.
 cli.subcommand.build.flag.targets.help = Цели для сборки (если не указаны, берутся цели манифеста по умолчанию).

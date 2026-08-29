@@ -18,3 +18,9 @@
 # end-to-end tests shell out to real Ninja and can take tens of seconds. Warn
 # after 60s; terminate a test that has run for five warning periods (300s).
 slow-timeout = { period = "60s", terminate-after = 5 }
+
+[[profile.default.overrides]]
+# These tests spawn isolated Cargo builds. Surface their scoped diagnostics in
+# CI so a future slow-test warning identifies the responsible subprocess.
+filter = 'test(=harness_compiles_under_a_split_build_dir) | test(=packaged_manifest_retains_build_script_sources)'
+success-output = "immediate"

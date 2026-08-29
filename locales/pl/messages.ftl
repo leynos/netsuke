@@ -41,6 +41,7 @@ cli.help.actions_heading = Akcje:
 cli.help.targets_heading = Cele:
 cli.help.targets.about = Wyświetl cele i akcje w wybranym manifeście.
 cli.help.default_marker = domyślny
+cli.help.conditional_marker = warunkowy
 
 # Tekst pomocy opcji podpolecenia build.
 cli.subcommand.build.flag.targets.help = Cele do zbudowania (w razie pominięcia używa celów domyślnych z manifestu).
