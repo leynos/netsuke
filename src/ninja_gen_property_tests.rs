@@ -176,6 +176,7 @@ fn canonical_shell_single_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', r"'\''").replace('$', "$$"))
 }
 
+/// Verify real Ninja preserves scalar command text after backend escaping.
 #[test]
 fn scalar_command_output_matches_ninja_oracle() {
     let prepared_oracle =
@@ -196,7 +197,7 @@ fn scalar_command_output_matches_ninja_oracle() {
             for candidate in [&command, &braced_command] {
                 let ninja = generate(&scalar_graph(candidate.clone()))
                     .expect("scalar command should generate");
-                let oracle_output = oracle.ninja_commands(&ninja)?;
+                let oracle_output = oracle.run_ninja_commands(&ninja)?;
                 let observed = oracle_output
                     .strip_suffix("\r\n")
                     .or_else(|| oracle_output.strip_suffix('\n'));

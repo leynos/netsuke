@@ -91,11 +91,16 @@ impl NinjaCommandOracle {
         }))
     }
 
-    /// Ask Ninja to parse a generated file and return its expanded command text.
-    pub(super) fn ninja_commands(&self, ninja_file: &str) -> Result<String, TestCaseError> {
+    /// Publish a generated Ninja file into the isolated oracle workspace.
+    fn write_build_file(&self, ninja_file: &str) -> Result<(), TestCaseError> {
         self.directory
             .write("build.ninja", ninja_file)
-            .map_err(|error| TestCaseError::fail(format!("write generated Ninja file: {error}")))?;
+            .map_err(|error| TestCaseError::fail(format!("write generated Ninja file: {error}")))
+    }
+
+    /// Run Ninja's command tool after publishing a generated build file.
+    pub(super) fn run_ninja_commands(&self, ninja_file: &str) -> Result<String, TestCaseError> {
+        self.write_build_file(ninja_file)?;
 
         let output = Command::new("ninja")
             .args(["-f", "build.ninja", "-t", "commands", "out"])

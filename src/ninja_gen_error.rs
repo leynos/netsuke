@@ -93,12 +93,6 @@ pub enum NinjaGenError {
     /// A scalar command or script cannot be represented in one Ninja binding.
     #[error("Ninja binding contains an unsafe control character")]
     UnsafeNinjaValue,
-    /// A path cannot be represented consistently in a Ninja build edge.
-    #[error("Ninja path contains an unsafe character: {path}")]
-    UnsafeNinjaPath {
-        /// Path rejected before its build edge reaches the generated file.
-        path: String,
-    },
     /// Formatting the Ninja output failed.
     #[error("{message}")]
     Format {

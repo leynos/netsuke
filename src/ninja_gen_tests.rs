@@ -8,6 +8,7 @@ use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8PathBuf;
 use rstest::rstest;
 
+/// Build one action graph with the requested metadata field populated.
 fn metadata_graph(field: &str, value: &str) -> Result<BuildGraph> {
     let mut action = command_action("true".into());
     match field {
@@ -22,6 +23,7 @@ fn metadata_graph(field: &str, value: &str) -> Result<BuildGraph> {
     Ok(graph)
 }
 
+/// Map an action metadata field name to its emitted Ninja binding key.
 fn metadata_ninja_key(field: &str) -> Result<&str> {
     Ok(match field {
         "description" => "description",
@@ -32,6 +34,7 @@ fn metadata_ninja_key(field: &str) -> Result<&str> {
     })
 }
 
+/// Assert every generator entry point rejects unsafe metadata without output.
 fn assert_metadata_control_character_is_rejected(field: &str, value: &str) -> Result<()> {
     let graph = metadata_graph(field, value)?;
     let generate_error = generate(&graph).expect_err("unsafe metadata should not generate Ninja");
@@ -149,6 +152,7 @@ fn string_generation_apis_reject_reserved_paths() -> Result<()> {
     Ok(())
 }
 
+/// Verify every optional metadata binding escapes literal Ninja dollars.
 #[rstest]
 #[case::description("description")]
 #[case::depfile("depfile")]
@@ -174,6 +178,7 @@ fn metadata_values_escape_ninja_dollars(#[case] field: &str) -> Result<()> {
     Ok(())
 }
 
+/// Verify every optional metadata binding rejects unsafe control characters.
 #[rstest]
 #[case::description("description")]
 #[case::depfile("depfile")]

@@ -1476,10 +1476,10 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
 - **Migration:** replace the historical manifest spelling `$$PATH` with
   `$PATH`. Keeping the extra dollar now asks the shell to interpret `$$` as
   its process identifier and can change the command's result. Existing script
-  actions that use `$in` or `$out` will receive the same paths after this
-  release, but their generated action identifiers change once because lowering
-  now happens before Ninja emission; Ninja may therefore rebuild those targets
-  once.
+  actions that use `$in` or `$out` outside backtick-delimited regions will
+  receive the same paths after this release, but their generated action
+  identifiers change once because lowering now happens before Ninja emission;
+  Ninja may therefore rebuild those targets once.
 
 Do not run an untrusted `Netsukefile`. Prefer explicit inputs, avoid embedding
 secrets in commands or URLs, and pin dependencies used by recipes.

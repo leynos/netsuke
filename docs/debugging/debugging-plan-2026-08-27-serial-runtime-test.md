@@ -144,9 +144,12 @@ ______________________________________________________________________
 
 ## Notes for executing agent
 
-Run only the supplied focused experiment. Do not edit files, run the full gate
-suite, or infer a fix. Report whether each hypothesis is falsified,
-not-falsified, or inconclusive, including the command and the failure output.
+Run only the supplied focused experiment during the falsification phase. Do
+not edit files, run the full gate suite, or infer a fix before reporting the
+hypothesis assessment. After that assessment, the executing agent is
+responsible for necessary remediation and must run the full gate suite. Report
+whether each hypothesis is falsified, not-falsified, or inconclusive, including
+the command and the failure output.
 
 ## Outcome
 

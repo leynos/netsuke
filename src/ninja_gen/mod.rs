@@ -210,13 +210,11 @@ pub(crate) fn path_key(paths: &[Utf8PathBuf]) -> String {
     parts.join(&separator)
 }
 
-/// Escape a script for embedding within a single-quoted `printf %b` argument.
+/// Escape a script for the wrapper's single-quoted `printf %b` argument.
 ///
-/// Backslashes, dollar signs, double quotes, backticks, and single quotes are
-/// escaped so the outer shell preserves them, while newlines become `\n` to
-/// keep the rule on one line. Percent signs are passed through unchanged because
-/// the script is an argument rather than a format string, allowing the inner
-/// shell to perform variable expansion.
+/// Preserve the script through the double-quoted `sh -c` wrapper so its inner
+/// shell receives literal text, including line breaks and apostrophes, before
+/// it evaluates intentional shell variables.
 fn escape_script(script: &str) -> String {
     script
         .replace('\\', "\\\\")

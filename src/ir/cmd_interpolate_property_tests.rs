@@ -16,6 +16,7 @@ fn safe_text_strategy() -> impl Strategy<Value = String> {
 }
 
 proptest! {
+    /// Reject short placeholders in backticks for every generated path binding.
     #[test]
     fn dollar_tokens_inside_backticks_are_rejected(prefix in safe_text_strategy(), suffix in safe_text_strategy(), inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
         let template = format!("echo {prefix} `printf '$in $out'` {suffix}");
@@ -61,6 +62,7 @@ proptest! {
         }
     }
 
+    /// Reject every supported placeholder token when backticks protect it.
     #[test]
     fn tokens_inside_backticks_are_rejected(token in prop::sample::select(vec!["$in", "$out", INS_TOKEN, OUTS_TOKEN]), inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
         let template = format!("echo `{token}`");

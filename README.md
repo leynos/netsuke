@@ -167,8 +167,8 @@ Known limitations include:
 
 - recipes are shell strings; structured executable arguments and recipe
   environment mappings are not implemented yet;
-- literal shell dollar expressions still need Ninja-aware escaping in
-  manifests;
+- shell dollar expressions use ordinary shell syntax; see the [users' guide
+  safety boundary](docs/users-guide.md#review-the-safety-boundary);
 - compiler-generated dependency imports such as GCC depfiles are planned but
   not yet part of the manifest model;
 - `--json` emits exactly one versioned result or diagnostic document for each

@@ -194,6 +194,7 @@ fn ninja_expands_only_netsuke_placeholders(#[case] recipe: Recipe) -> Result<()>
     Ok(())
 }
 
+/// Verify scalar command recipes preserve child-shell defaults after Ninja execution.
 #[cfg(unix)]
 #[rstest]
 #[case::unset(None, "fallback")]
@@ -215,6 +216,27 @@ fn shell_default_reaches_the_child_shell(
     Ok(())
 }
 
+/// Verify command-list recipes preserve braced child-shell defaults through Ninja.
+#[cfg(unix)]
+#[rstest]
+#[case::unset(None, "fallback")]
+#[case::set(Some(SENTINEL_VALUE), SENTINEL_VALUE)]
+fn command_list_default_reaches_the_child_shell(
+    #[case] environment_value: Option<&str>,
+    #[case] expected: &str,
+) -> Result<()> {
+    let manifest = manifest::from_str(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    command:\n      - 'printf %s \"${NETSUKE_TEST_SENTINEL:-fallback}\" > $out'\n",
+    )?;
+    let ninja = generate(&BuildGraph::from_manifest(&manifest)?)?;
+
+    let actual = ninja_output(&ninja, environment_value, None)?;
+    ensure!(
+        actual == expected,
+        "expected command-list child shell output {expected:?}, got {actual:?}"
+    );
+    Ok(())
+}
 #[rstest]
 #[case::scalar("command: 'cat $in > $out'")]
 #[case::command_list("command:\n      - 'cat $in > $out'")]
@@ -231,6 +253,7 @@ fn placeholder_lowering_precedes_backend_escaping(#[case] recipe: &str) -> Resul
     Ok(())
 }
 
+/// Verify complex script syntax survives lowering and real Ninja execution.
 #[cfg(unix)]
 #[rstest]
 fn scripts_lower_placeholders_without_command_parser_validation() -> Result<()> {
@@ -251,6 +274,27 @@ fn scripts_lower_placeholders_without_command_parser_validation() -> Result<()> 
     Ok(())
 }
 
+/// Verify script recipes preserve braced child-shell defaults through Ninja.
+#[cfg(unix)]
+#[rstest]
+#[case::unset(None, "fallback")]
+#[case::set(Some(SENTINEL_VALUE), SENTINEL_VALUE)]
+fn script_default_reaches_the_child_shell(
+    #[case] environment_value: Option<&str>,
+    #[case] expected: &str,
+) -> Result<()> {
+    let manifest = manifest::from_str(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    script: 'printf %s \"${NETSUKE_TEST_SENTINEL:-fallback}\" > $out'\n",
+    )?;
+    let ninja = generate(&BuildGraph::from_manifest(&manifest)?)?;
+
+    let actual = ninja_output(&ninja, environment_value, None)?;
+    ensure!(
+        actual == expected,
+        "expected script child shell output {expected:?}, got {actual:?}"
+    );
+    Ok(())
+}
 #[cfg(unix)]
 #[rstest]
 fn script_placeholders_execute_against_real_paths() -> Result<()> {

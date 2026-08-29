@@ -292,7 +292,10 @@ fn substitute(template: &str, ins: &str, outs: &str) -> String {
     out
 }
 
-/// Reports whether a placeholder occurs within shell backticks.
+/// Detect placeholders whose enclosing backticks prevent safe lowering.
+///
+/// Rejecting these templates before substitution prevents a residual `$in` or
+/// `$out` token from reaching the child shell as an ambient shell variable.
 fn has_placeholder_in_backticks(template: &str) -> bool {
     let chars: Vec<char> = template.chars().collect();
     let mut in_backticks = false;
@@ -351,6 +354,7 @@ mod tests {
         assert_eq!(command, "cp in aux out");
     }
 
+    /// Reject short placeholders protected by command-substitution backticks.
     #[test]
     fn interpolate_command_rejects_short_placeholders_in_backticks() {
         let ins = vec![Utf8PathBuf::from("src")];
@@ -360,6 +364,7 @@ mod tests {
         assert!(matches!(error, IrGenError::InvalidCommand { .. }));
     }
 
+    /// Reject template placeholders protected by command-substitution backticks.
     #[test]
     fn interpolate_command_rejects_template_placeholders_in_backticks() {
         let error = interpolate_command(

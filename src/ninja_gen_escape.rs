@@ -21,6 +21,7 @@ impl ShellText {
 pub(super) struct NinjaValue(String);
 
 impl Display for NinjaValue {
+    /// Render the already escaped binding text without another conversion.
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         formatter.write_str(&self.0)
     }

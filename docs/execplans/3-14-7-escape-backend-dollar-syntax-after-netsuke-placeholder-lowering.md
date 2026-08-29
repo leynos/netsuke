@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
 `Verification plan` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 There is no `PLANS.md` in this repository; `docs/execplans/` is the plan
 directory and `docs/roadmap.md` is the work index.
@@ -1345,3 +1345,14 @@ its double-quoted `/bin/sh -c` payload. The wrapper now emits `r"'\\''"`,
 and the focused heredoc test passes with the observed output
 `script inputdone\n`. Status remains `IN PROGRESS` pending the full gates and
 follow-up review.
+
+2026-08-29 — final completion addendum: the current implementation consumes
+`ShellText` exactly once, lowers script placeholders before Ninja escaping,
+rejects placeholders in backtick-delimited regions, escapes residual dollars in
+command, script, and metadata bindings, and rejects unsupported paths and
+control characters. Deterministic validation passed `make check-fmt`,
+`make test`, `make typecheck`, `make lint`, `make doc-coverage`,
+`make markdownlint`, and `make nixie`. Focused real-Ninja script and property
+checks passed, the Windows `build-test-windows` job confirmed CRLF handling and
+the BDD environment scenario, and gate-first `coderabbit review --agent`
+reported zero findings. The ExecPlan is complete.
