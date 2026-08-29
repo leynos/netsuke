@@ -351,9 +351,9 @@ including paths with spaces. Quote every other path and argument with
 PowerShell syntax; arbitrary rendered Jinja text is not shell-quoted.
 
 Netsuke rejects a PowerShell recipe when its encoded invocation would exceed
-the 32,766-character Windows command-line safety limit. The diagnostic tells
-you to split the legacy recipe into smaller actions; v0.1.x does not spill an
-oversized script to a temporary file or standard input.
+the 32,766-character Windows command-line safety limit. The diagnostic
+instructs that the legacy recipe be split into smaller actions; v0.1.x does not
+spill an oversized script to a temporary file or standard input.
 
 Ninja turns a failed recipe into its own non-zero result, and `netsuke` returns
 failure after forwarding Ninja's output. The CLI contract distinguishes success
@@ -433,11 +433,10 @@ Prefer `script` when the logic needs multi-line structure or shell constructs
 such as loops, conditionals, or variable assignment.
 
 Legacy recipes remain shell strings in v0.1.x. The structured command blocks
-and argv templates proposed
-in [RFC: structured command blocks and argv templates #573](https://github.com/leynos/netsuke/pull/573)
-for v0.2.0 are intended to remove this shell-selection, quoting, path,
-variable, and exit-semantics ambiguity. They do not change the v0.1.x contract
-described here.
+and argv templates proposed in
+[RFC #573](https://github.com/leynos/netsuke/pull/573) for v0.2.0 are intended
+to remove this shell-selection, quoting, path, variable, and exit-semantics
+ambiguity. They do not change the v0.1.x contract described here.
 
 ### Targets, inputs, and dependencies
 
