@@ -813,7 +813,23 @@ Version drift matters here beyond reproducibility: a different `mdtablefix`
 version may reflow prose differently, which would make `make check-fmt` fail on
 an otherwise clean tree.
 
-Install the separately versioned Whitaker installer with:
+### GitHub Actions validation
+
+`make lint` includes `make github-actions-lint`, which runs `yamllint` against
+the checked GitHub Actions workflows and then runs `actionlint`. The
+repository's [`.yamllint.yml`](../.yamllint.yml) accepts GitHub's unquoted `on`
+key and caps workflow lines at 120 columns.
+
+Install the pinned YAML linter locally with
+`uv tool install "yamllint==1.38.0"`. CI caches the `uv` tool directories,
+installs that exact version, and downloads actionlint v1.7.12 through its
+pinned upstream installer after verifying the release archive's SHA-256. CI
+supplies the checked-out actionlint binary to the trusted `/usr/bin/make`
+invocation by absolute path, so workflow content cannot shadow the runner's
+`make` binary.
+
+[`tests/workflow_contracts/github_actions_validation_test.py`](../tests/workflow_contracts/github_actions_validation_test.py)
+keeps the Makefile wiring, YAML policy, tool pins, and CI invocation in step.
 
 CI installs Whitaker through the SHA-pinned
 `leynos/shared-actions/.github/actions/install-whitaker` action. Both build

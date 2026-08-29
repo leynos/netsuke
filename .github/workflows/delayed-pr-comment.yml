@@ -29,3 +29,5 @@ jobs:
         with:
           pr-number: ${{ github.event.inputs.pr_number }}
           message: ${{ github.event.inputs.message }}
+
+---

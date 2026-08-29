@@ -1,3 +1,4 @@
+---
 name: Mutation testing
 
 # Thin caller of the shared mutation-testing reusable workflow; caller

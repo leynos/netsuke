@@ -31,3 +31,5 @@ jobs:
     uses: leynos/shared-actions/.github/workflows/dependabot-automerge.yml@32c8ea649ea44d40119f348ad48861212532061f
     with:
       pull-request-number: ${{ inputs.pull-request-number || github.event.pull_request.number }}
+
+---
