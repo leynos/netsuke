@@ -1,6 +1,6 @@
 //! Hold the state required for one-pass recipe placeholder substitution.
 
-use super::{IrGenError, find_substitution, invalid_command_error};
+use super::{CommandBindings, IrGenError, find_substitution, invalid_command_error};
 use crate::ninja_gen::RecipeShell;
 
 /// Track one-pass substitution while retaining the original error template.
@@ -8,38 +8,30 @@ use crate::ninja_gen::RecipeShell;
 /// This helper is private to `cmd_interpolate`: it groups immutable template
 /// context with mutable output state so per-character processing avoids a wide
 /// parameter list without re-scanning the template.
-pub(super) struct SubstitutionTraversal<'a> {
+pub(super) struct SubstitutionTraversal<'template, 'bindings> {
     /// Preserve the source text for interpolation diagnostics.
-    template: &'a str,
+    template: &'template str,
     /// Retain the single character buffer traversed by the pass.
-    chars: &'a [char],
-    /// Supply the replacement for input placeholders.
-    ins: &'a str,
-    /// Supply the replacement for output placeholders.
-    outs: &'a str,
-    /// Select whether backticks delimit protected POSIX syntax.
-    shell: RecipeShell,
+    chars: &'template [char],
+    /// Reuse shell-specific path substitutions prepared for the enclosing action.
+    bindings: &'bindings CommandBindings,
     /// Accumulate substituted output without a second traversal.
     output: String,
     /// Record whether the current position is protected by backticks.
     in_backticks: bool,
 }
 
-impl<'a> SubstitutionTraversal<'a> {
+impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
     /// Initialise a traversal for one template and its placeholder bindings.
     pub(super) fn new(
-        template: &'a str,
-        chars: &'a [char],
-        ins: &'a str,
-        outs: &'a str,
-        shell: RecipeShell,
+        template: &'template str,
+        chars: &'template [char],
+        bindings: &'bindings CommandBindings,
     ) -> Self {
         Self {
             template,
             chars,
-            ins,
-            outs,
-            shell,
+            bindings,
             output: String::with_capacity(template.len()),
             in_backticks: false,
         }
@@ -54,13 +46,14 @@ impl<'a> SubstitutionTraversal<'a> {
             .chars
             .get(pos)
             .ok_or_else(|| invalid_command_error(self.template.to_owned()))?;
-        if self.shell != RecipeShell::PowerShell && ch == '`' {
+        if self.bindings.shell != RecipeShell::PowerShell && ch == '`' {
             self.in_backticks ^= true;
             self.output.push(ch);
             return Ok(pos + 1);
         }
 
-        let substitution = find_substitution(self.chars, pos, self.ins, self.outs);
+        let substitution =
+            find_substitution(self.chars, pos, &self.bindings.ins, &self.bindings.outs);
         if self.in_backticks {
             return self.append_protected_character(pos, ch, substitution);
         }

@@ -121,7 +121,7 @@ pub(crate) fn interpolate_command_with_bindings(
     template: &str,
     bindings: &CommandBindings,
 ) -> Result<String, IrGenError> {
-    let interpolated = substitute(template, &bindings.ins, &bindings.outs, bindings.shell)?;
+    let interpolated = substitute(template, bindings)?;
     if !is_valid_command_for_shell(&interpolated, bindings.shell) {
         return Err(invalid_command_error(interpolated));
     }
@@ -138,7 +138,7 @@ pub(crate) fn interpolate_script_with_bindings(
     template: &str,
     bindings: &CommandBindings,
 ) -> Result<String, IrGenError> {
-    substitute(template, &bindings.ins, &bindings.outs, bindings.shell)
+    substitute(template, bindings)
 }
 
 /// Builds the diagnostic for a command rejected during placeholder expansion.
@@ -282,14 +282,9 @@ fn try_match_token<'a>(
 /// A placeholder inside backticks cannot be safely lowered because command
 /// substitution shields it from the normal replacement path. Reject it during
 /// the same traversal so malformed commands never reach the Ninja backend.
-fn substitute(
-    template: &str,
-    ins: &str,
-    outs: &str,
-    shell: RecipeShell,
-) -> Result<String, IrGenError> {
+fn substitute(template: &str, bindings: &CommandBindings) -> Result<String, IrGenError> {
     let chars: Vec<char> = template.chars().collect();
-    let mut traversal = SubstitutionTraversal::new(template, &chars, ins, outs, shell);
+    let mut traversal = SubstitutionTraversal::new(template, &chars, bindings);
     let mut pos = 0;
     while pos < chars.len() {
         pos = traversal.append_substitution_at_position(pos)?;
