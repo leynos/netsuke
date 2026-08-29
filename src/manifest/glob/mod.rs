@@ -41,12 +41,11 @@ mod normalize;
 mod validate;
 mod walk;
 
-use base::resolve_relative_glob_base;
+pub(super) use base::GlobBaseCache;
+use base::PreparedGlob;
 use camino::{Utf8Path, Utf8PathBuf};
 use errors::{GlobErrorContext, GlobErrorType, create_glob_error};
-use escape::escape_glob_literal_path;
 use normalize::normalize_separators;
-use std::sync::Mutex;
 use validate::validate_brace_matching;
 use walk::{open_root_dir, process_glob_entry};
 
@@ -365,149 +364,6 @@ fn expand_prepared_glob(prepared: &PreparedGlob) -> std::result::Result<GlobExpa
     })
 }
 
-/// Cache a manifest parse's injected glob base after its first relative use.
-///
-/// This type belongs only to the manifest parse boundary. Direct
-/// [`glob_paths`] callers continue to provide their optional base per query;
-/// Jinja's closure owns one cache so multiple relative `glob()` calls do not
-/// repeat filesystem canonicalization.
-pub(super) struct GlobBaseCache {
-    /// Base supplied by the manifest workspace, before filesystem preparation.
-    base: Option<Utf8PathBuf>,
-    /// Successfully canonicalized base retained for the rest of the parse.
-    resolved: Mutex<Option<Utf8PathBuf>>,
-}
-
-impl GlobBaseCache {
-    /// Create an empty cache around an optional manifest workspace base.
-    pub(super) const fn new(base: Option<Utf8PathBuf>) -> Self {
-        Self {
-            base,
-            resolved: Mutex::new(None),
-        }
-    }
-
-    /// Resolve and retain the configured base when one is available.
-    ///
-    /// # Errors
-    ///
-    /// Returns the canonicalization error from the injected base on its first
-    /// relative use.
-    fn resolve(&self) -> std::result::Result<Option<Utf8PathBuf>, Error> {
-        let Some(base) = self.base.as_deref() else {
-            return Ok(None);
-        };
-        let mut resolved = self.resolved.lock().map_err(|error| {
-            create_glob_error(
-                &GlobErrorContext {
-                    pattern: base.to_string(),
-                    error_char: char::from(0),
-                    position: 0,
-                    error_type: GlobErrorType::IoError,
-                },
-                Some(format!("manifest glob-base cache lock poisoned: {error}")),
-            )
-        })?;
-        if let Some(cached) = resolved.as_ref() {
-            return Ok(Some(cached.clone()));
-        }
-        let canonical = resolve_relative_glob_base(base)?;
-        resolved.replace(canonical.clone());
-        Ok(Some(canonical))
-    }
-}
-
-/// A validated glob pattern, its search text, and the base to strip.
-///
-/// Preparation validates and normalises the pattern once, then conditionally
-/// performs filesystem preparation for a relative pattern with an injected
-/// base. [`PreparedGlob::new`] canonicalizes that base through
-/// [`resolve_relative_glob_base`], so preparation can fail while accessing the
-/// filesystem; the resolved base is embedded in the search text only for
-/// relative patterns. Keeping it separate from the filesystem walk means
-/// [`expand_glob`] only orchestrates matching, prefix opening, and result
-/// collection.
-struct PreparedGlob {
-    /// Validated pattern and its normalised spelling.
-    pattern: GlobPattern,
-    /// Search text handed to `glob_with`: the normalised pattern, prefixed
-    /// with the resolved base when the pattern is relative.
-    search: String,
-    /// Canonicalized base stripped from matches, present exactly when relative.
-    strip: Option<Utf8PathBuf>,
-}
-
-impl PreparedGlob {
-    /// Prepare `pattern` and any relative injected `base` for filesystem matching.
-    ///
-    /// Canonicalizes a relative injected base through
-    /// [`resolve_relative_glob_base`] before embedding its escaped literal
-    /// spelling into the search text.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the pattern fails brace validation or when the
-    /// injected base cannot be canonicalized.
-    fn new(pattern: &str, base: Option<&Utf8Path>) -> std::result::Result<Self, Error> {
-        let pattern_state = GlobPattern::new(pattern)?;
-        let normalized = pattern_state.normalized();
-        let resolved_base = match base {
-            // Only a relative pattern is anchored to the injected base; an
-            // absolute pattern names its own location and must ignore `base`.
-            Some(dir) if !Utf8Path::new(normalized).is_absolute() => {
-                Some(resolve_relative_glob_base(dir)?)
-            }
-            _ => None,
-        };
-        Ok(Self::from_pattern_and_base(pattern_state, resolved_base))
-    }
-
-    /// Prepare `pattern` using a manifest parse's cached injected base.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the pattern fails brace validation or its first
-    /// relative use cannot canonicalize the injected base.
-    fn new_with_base_cache(
-        pattern: &str,
-        base: &GlobBaseCache,
-    ) -> std::result::Result<Self, Error> {
-        let pattern_state = GlobPattern::new(pattern)?;
-        let resolved_base = (!Utf8Path::new(pattern_state.normalized()).is_absolute())
-            .then(|| base.resolve())
-            .transpose()?
-            .flatten();
-        Ok(Self::from_pattern_and_base(pattern_state, resolved_base))
-    }
-
-    /// Build glob search text from a validated pattern and resolved base.
-    fn from_pattern_and_base(pattern: GlobPattern, base: Option<Utf8PathBuf>) -> Self {
-        let (search, strip) = base.map_or_else(
-            || (pattern.normalized().to_owned(), None),
-            |dir| {
-                // Escape the base as a literal: workspace directories may
-                // legitimately contain glob metacharacters (`*`, `?`, `[`,
-                // `]`), which would otherwise be compiled as wildcards and
-                // match decoy directories instead of the manifest's base.
-                // The user's pattern keeps its syntax.
-                let escaped = escape_glob_literal_path(&dir);
-                let separator = std::path::MAIN_SEPARATOR;
-                (
-                    // Match the separator used by `GlobPattern::new` and
-                    // `walk::literal_dir_prefix`; mixing slash styles breaks
-                    // literal-prefix discovery on Windows.
-                    format!("{escaped}{separator}{}", pattern.normalized()),
-                    Some(dir),
-                )
-            },
-        );
-        Self {
-            pattern,
-            search,
-            strip,
-        }
-    }
-}
 /// Remove an injected base directory from a matched path, restoring the
 /// pattern-relative spelling the caller supplied.
 ///
