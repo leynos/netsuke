@@ -27,7 +27,6 @@ rustup toolchain install nightly-2026-08-23
 cargo +nightly-2026-08-23 install netsuke-build
 ```
 
-
 ## Exercise a v0.1.0 release candidate in downstream CI
 
 Run a downstream Netsukefile quality gate against the proposed candidate before

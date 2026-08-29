@@ -97,7 +97,6 @@ cd netsuke
 cargo install --path .
 ```
 
-
 ## Use a release candidate in downstream CI
 
 Downstream projects can use the public
