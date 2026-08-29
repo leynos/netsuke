@@ -19,7 +19,7 @@ use rstest::fixture;
 use tempfile::tempdir;
 use test_support::fs;
 
-use super::super::{FetchContext, NetworkConfig, NetworkPolicy, fetch, open_cache_dir};
+use super::{FetchContext, NetworkConfig, NetworkPolicy, fetch, open_cache_dir};
 use crate::localization;
 use crate::stdlib::{DEFAULT_FETCH_CACHE_DIR, DEFAULT_FETCH_MAX_RESPONSE_BYTES};
 

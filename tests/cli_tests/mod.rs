@@ -2,6 +2,7 @@
 //!
 //! This module exercises the command-line interface defined in `netsuke::cli`.
 
+mod command_schema;
 mod config_discovery;
 #[cfg(unix)]
 mod config_precedence_ladder;

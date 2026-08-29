@@ -10,7 +10,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use super::parser::Cli;
+use super::command::Cli;
 
 #[path = "discovery_environment.rs"]
 mod environment;

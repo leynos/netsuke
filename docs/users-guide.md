@@ -1119,6 +1119,22 @@ be loaded cannot enable diagnostics because configuration merging has not
 completed. JSON mode suppresses the tracing and snapshot so stderr remains one
 machine-readable diagnostic document.
 
+#### Cached merge API (unstable)
+
+Programs using Netsuke's unstable Rust API can retain the layers from one
+discovery pass and observe the subsequent merge. Construct
+`CachedMergeInput::new(cli, matches, env, discovered)` with the parsed CLI
+values, an injected `ConfigEnvProvider`, and `DiscoveryOutcome::into_layers()`;
+then pass it to `cli::merge_with_cached_file_layers_with_observer(input)`. The
+function returns the merge result alongside bounded events; replay those events
+through `MergeObserver`, such as `TracingMergeObserver`. Another caller can
+provide its own `MergeObserver` implementation. Observers receive bounded
+`MergeEvent` values: layer application and failure states, file `path_hash`
+and layer counts, CLI override leaf keys, and validation `key`/`reason` fields.
+Configuration values and raw paths are never included. Ordinary
+`merge_with_config*` and `merge_with_cached_file_layers` calls discard their
+collected events and do not emit merge tracing.
+
 #### Bounded configuration metrics
 
 Configuration loading is recorded as two bounded metric series, both emitted in
@@ -1368,6 +1384,11 @@ with global flags or their configuration equivalents:
 Host patterns may contain wildcards such as `*.example.com`. A block rule wins
 over an allow rule. `--fetch-default-deny` permits only explicitly allowed
 hosts.
+
+Exact and wildcard host matching ignores one terminal DNS dot: `example.com`
+matches `example.com.`, and `*.example.com` matches `sub.example.com.`. The
+wildcard does not match the apex, so `*.example.com` does not match
+`example.com.`.
 
 Avoid placing secrets in URLs. Netsuke logs hosts and cache keys rather than
 complete URLs, but downloaded content and commands still run within the host

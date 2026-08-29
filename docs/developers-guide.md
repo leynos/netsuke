@@ -675,8 +675,12 @@ discovery otherwise uses capability-scoped canonicalization. Its small,
 dedicated path-normalization module, `netsuke::cli::discovery::paths`, remains
 narrowly excluded because `std::fs::canonicalize` preserves the absolute
 comparison keys and cross-directory symlink behaviour that `cap_std` rejects.
-For man-page generation, the build script compiles the `cli::build_support`
-parser subset and deliberately omits runtime discovery. The broader
+For ordinary man-page and completion generation, the build script compiles its
+inline `cli` facade: the four-file slice containing `src/cli/command.rs`,
+`src/cli/config.rs`, `src/cli/help.rs`, and `src/cli/validation.rs`. The
+`command.rs` module owns the Clap command schema and default-command behaviour,
+including `Cli::with_default_command()`, while runtime discovery remains
+deliberately outside the slice. The broader
 `netsuke::cli::discovery` module remains under the capability policy; no
 `build_script_build` exception is required. The behavioural step definitions,
 CLI integration tests, and shared workflow-reading helper that stage fixtures
@@ -1000,6 +1004,48 @@ references inside TOML code fences in those files during a version bump.
 
 When release-validation requirements or documentation paths change, update
 `lading.toml` and this section in the same change-set.
+
+## The build script's module slice
+
+`build.rs` recompiles part of the library as its own crate: it needs
+`cli::Cli::command()` for man-page generation and the key registry in
+`src/localization/keys.rs` for the Fluent audit. Rather than declaring
+`src/cli/mod.rs` and inheriting the whole subtree, it declares an inline `cli`
+module naming exactly four files — `src/cli/command.rs`, `src/cli/config.rs`,
+`src/cli/help.rs`, and `src/cli/validation.rs`.
+
+That slice is a maintained boundary, not an accident:
+
+- `src/cli/command.rs` holds the Clap command schema and default-command
+  behaviour, including `Cli::with_default_command()`. Runtime behaviour on
+  `Cli` belongs in `src/cli/preferences.rs`, and the localisation-aware parsing
+  entry point belongs in `src/cli/parser.rs`.
+- `src/cli/validation.rs` holds the shared limits and error constructor that
+  `src/cli/config.rs` needs, so neither file has to reach up into
+  `src/cli/mod.rs`.
+- `src/cli/help.rs` holds the `help` subcommand's data types, which are part of
+  the Clap schema but do not need the runtime help renderer.
+- `src/host_pattern.rs` covers pattern syntax; matching a concrete hostname
+  against a parsed pattern lives in `src/host_matching.rs`, which the build
+  script does not compile.
+
+Keeping the slice narrow is what lets rustc's unused-item analysis run normally
+inside the build-script crate. Widening it — for example by making
+`src/cli/command.rs` depend on the merge or discovery layers — reintroduces
+unreachable items and, with them, the module-wide `#[expect(dead_code)]`
+suppressions that issue #513 removed. Those suppressions also masked genuinely
+dead code: an unused `pub` item in `src/cli/config.rs` is reported by the
+build-script crate but not by the library because the library exports that
+module publicly.
+
+A dependency added outside the slice surfaces as a build-script compile error.
+Prefer moving the new code into a sibling module over widening the slice.
+
+`tests/build_module_slice_ui_tests.rs` makes that boundary a direct-`rustc`
+contract. Its fixtures compile the production module paths selected by
+`build.rs`; the positive fixture mirrors the four declared modules, while the
+negative fixture imports `cli::discovery` and must fail with an unresolved
+module diagnostic. Update the fixtures whenever the build-script slice changes.
 
 ## Local build acceleration
 
@@ -2959,10 +3005,11 @@ discovering and loading the same configuration files more than once. At the
 application composition boundary, call `DiscoveryOutcome::emit_diagnostics()`
 after tracing is configured, then consume the outcome with `into_layers()` and
 construct a `CachedMergeInput`. Pass that input to
-`merge_with_cached_file_layers_with_observer` with a `MergeObserver`, such as
-`TracingMergeObserver`, for the full merge. This preserves diagnostics from the
-same discovery pass while avoiding repeated file loading and keeps observation
-outside the merge query.
+`merge_with_cached_file_layers_with_observer` for the full merge; it returns
+bounded events alongside the result. Replay those events through a
+`MergeObserver`, such as `TracingMergeObserver`. This preserves diagnostics
+from the same discovery pass while avoiding repeated file loading and keeps
+observation outside the merge query.
 
 #### Cached merge API (unstable)
 
@@ -2970,10 +3017,10 @@ Programs using Netsuke's unstable Rust API can retain the layers from one
 discovery pass and observe the subsequent merge. Construct
 `CachedMergeInput::new(cli, matches, env, discovered)` with the parsed CLI
 values, an injected `ConfigEnvProvider`, and `DiscoveryOutcome::into_layers()`;
-then pass it to
-`cli::merge_with_cached_file_layers_with_observer(input, &mut observer)`.
-The application uses `TracingMergeObserver`, while another caller can provide
-its own `MergeObserver` implementation. Observers receive bounded
+then pass it to `cli::merge_with_cached_file_layers_with_observer(input)`. The
+function returns the merge result alongside bounded events; replay those events
+through `MergeObserver`, such as `TracingMergeObserver`. Another caller can
+provide its own `MergeObserver` implementation. Observers receive bounded
 `MergeEvent` values: layer application and failure states, file `path_hash`
 and layer counts, CLI override leaf keys, and validation `key`/`reason` fields.
 Configuration values and raw paths are never included. Ordinary
@@ -3001,10 +3048,12 @@ with a large nested configuration payload. It protects the ownership transfer
 that avoids copying complete `MergeLayer` values before the cached merge.
 
 The standalone `merge_with_config_and_env` path performs discovery and
-delegates to the ordinary, no-op-observer merge query. It does not replay
-retained discovery diagnostics or emit merge tracing. `merge_with_config` is
+delegates to the ordinary merge query, which discards its collected events. It
+does not replay retained discovery diagnostics or emit merge tracing.
+`merge_with_config` is
 the process-environment wrapper around that path. The application startup path
-replays discovery diagnostics and injects `TracingMergeObserver` explicitly.
+replays discovery diagnostics and returned merge events through
+`TracingMergeObserver` explicitly.
 
 Deferred bounded discovery diagnostics are replay metadata only. Discovery
 errors remain owned by `DiscoveredLayers` and are handled by the diagnostic
@@ -3044,9 +3093,9 @@ Configuration merge helpers:
 - `discover_file_layers(cli, env) -> DiscoveryOutcome` performs one discovery
   pass and retains the discovered layers, discovery errors and bounded deferred
   diagnostics for the diagnostic and merge callers.
-- `push_discovered_file_layers(composer, errors, discovered, observer) -> ()`
+- `push_discovered_file_layers(composer, errors, discovered, events) -> ()`
   transfers the retained layers and discovery errors into the full merge
-  composition while reporting bounded file-layer events to the observer.
+  composition while collecting bounded file-layer events for replay.
 - `collect_file_layers_with_normalizer_and_trace(directory, normalizer, env_source)`
   runs the one discovery pass with the injected path normalizer and environment
   source, and retains bounded project-scope trace metadata for deferred
@@ -3060,10 +3109,10 @@ Configuration merge helpers:
 - `merge_with_cached_file_layers(cli, matches, env, discovered)` consumes the
   discovered layers without rediscovery and uses no-op observation.
 - `CachedMergeInput::new(cli, matches, env, discovered)` packages parsed input
-  and cached layers for an observer-enabled merge.
-- `merge_with_cached_file_layers_with_observer(input, observer)` consumes the
-  cached input and reports bounded `MergeEvent` values to the supplied
-  `MergeObserver`.
+  and cached layers for the bounded-event merge query.
+- `merge_with_cached_file_layers_with_observer(input)` consumes the cached input
+  and returns the merge result alongside bounded `MergeEvent` values for
+  application-side replay.
 - `is_empty_value(value: &serde_json::Value) -> bool` detects an empty CLI
   override object.
 - `retain_layers_and_resolve_json(layers)` transfers each owned file-layer
@@ -3139,7 +3188,7 @@ These ordinary merge and JSON-resolution queries have no tracing side effects.
 The startup boundary obtains the cached layers, replays their deferred
 discovery diagnostics, and uses `CachedMergeInput::new` with
 `merge_with_cached_file_layers_with_observer` when it needs the bounded merge
-events. A caller supplying its own `MergeObserver` can consume those events
+events. A caller supplying its own `MergeObserver` can replay those events
 without installing a global subscriber.
 
 The `cli` module re-exports this trait publicly as `ConfigEnvProvider` (and
@@ -3486,10 +3535,10 @@ metrics are recorded by `config_load::resolve_configuration`, which receives a
 `resolve_json_mode_or_exit` and `merge_cli_or_exit`. The diagnostic-mode helper
 resolves and caches discovered layers with
 `cli::resolve_json_and_layers_outcome_with_env`; the merge helper passes those
-cached layers to `cli::merge_with_cached_file_layers_with_observer` with a
-`cli::TracingMergeObserver` for the full merge. The boundary replays deferred
-discovery diagnostics before that merge; the ordinary query helpers do not emit
-tracing themselves.
+cached layers to `cli::merge_with_cached_file_layers_with_observer`, then
+replays the returned merge events through `cli::TracingMergeObserver`. The
+boundary replays deferred discovery diagnostics before that merge; the
+ordinary query helpers do not emit tracing themselves.
 Phase-level metrics are composed in `src/observability.rs` around those two
 operations.
 
@@ -4390,8 +4439,8 @@ modules and must not add unbounded configuration detail to these series.
 The public `cli::MergeObserver` seam carries bounded `cli::MergeEvent` values
 from `merge_with_cached_file_layers_with_observer`. The application supplies
 `cli::TracingMergeObserver` from `config_load::resolve_configuration`; direct
-callers of the ordinary merge queries use no-op observation and emit no
-tracing. Custom observers may consume the bounded events, which exclude raw
+callers of the ordinary merge queries discard their collected events and emit
+no tracing. Custom observers may consume the bounded events, which exclude raw
 configuration values and paths. Keep observer ownership at the application
 boundary rather than installing a subscriber in a query.
 

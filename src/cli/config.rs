@@ -3,22 +3,21 @@
 //! [`CliConfig`] is the single typed schema used for configuration discovery
 //! and merging. It captures global CLI settings plus per-subcommand defaults
 //! under the `cmds` namespace.
-
 use ortho_config::{OrthoConfig, OrthoResult, PostMergeContext, PostMergeHook};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use super::validation_error;
+use super::validation::validation_error;
 use crate::host_pattern::HostPattern;
 
 #[path = "policy_definitions.rs"]
-mod policy_definitions;
+pub(super) mod policy_definitions;
 
 pub(super) use policy_definitions::{
     ACCESSIBILITY_POLICY_DEFINITIONS, COLOUR_POLICY_DEFINITIONS, EMOJI_POLICY_DEFINITIONS,
-    PROGRESS_POLICY_DEFINITIONS, PolicyDefinition,
+    PROGRESS_POLICY_DEFINITIONS,
 };
 use policy_definitions::{definition_for, parse_policy};
 
@@ -281,22 +280,11 @@ impl CliConfig {
 }
 
 /// Maximum number of parallel build jobs accepted by the CLI.
-const MAX_JOBS: usize = super::MAX_JOBS;
+const MAX_JOBS: usize = super::validation::MAX_JOBS;
 
 /// Fixed reason reported when merged configuration enables interactive input.
 pub(crate) const NO_INPUT_VALIDATION_REASON: &str =
     "no_input = false is unsupported because Netsuke has no interactive mode";
-/// Fixed reason reported when a merged parallel job count is out of range.
-pub(crate) const JOBS_VALIDATION_REASON: &str = "job count is outside the supported range";
-
-/// Return the bounded observability reason for a known validation key.
-pub(crate) fn validation_rejection_reason(key: &str) -> Option<&'static str> {
-    match key {
-        "no_input" => Some(NO_INPUT_VALIDATION_REASON),
-        "jobs" => Some(JOBS_VALIDATION_REASON),
-        _ => None,
-    }
-}
 /// Return whether `jobs` falls outside the accepted range.
 const fn jobs_out_of_bounds(jobs: usize) -> bool {
     jobs == 0 || jobs > MAX_JOBS

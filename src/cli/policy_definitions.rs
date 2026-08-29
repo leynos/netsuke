@@ -25,7 +25,7 @@ pub(crate) fn definition_for<T: Copy + Eq>(
     definitions
         .iter()
         .copied()
-        .find(|definition| definition.variant == variant)
+        .find(|definition| definition.variant == variant && !definition.description.is_empty())
 }
 
 /// Parse `raw` according to the accepted, case-insensitive policy spellings.

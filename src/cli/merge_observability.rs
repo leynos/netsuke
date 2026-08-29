@@ -1,14 +1,28 @@
 //! Explicit observability adapter for configuration merging.
 //!
-//! Merge queries accept a [`MergeObserver`] from their application boundary.
-//! Production supplies [`TracingMergeObserver`], while direct callers use the
-//! no-op implementation and remain free of logging side effects.
+//! Merge queries return [`MergeEvent`] values to their application boundary.
+//! Production replays them through [`TracingMergeObserver`], while direct
+//! callers remain free of logging side effects.
 
 use serde_json::Value;
+
+use super::config::NO_INPUT_VALIDATION_REASON;
+
+/// Fixed reason reported when a merged parallel job count is out of range.
+const JOBS_VALIDATION_REASON: &str = "job count is outside the supported range";
 
 /// Return whether a configuration-layer object contains no supplied settings.
 pub(crate) fn is_empty_configuration_value(value: &Value) -> bool {
     matches!(value, Value::Object(map) if map.is_empty())
+}
+
+/// Return the bounded observability reason for a known validation key.
+pub(crate) fn validation_rejection_reason(key: &str) -> Option<&'static str> {
+    match key {
+        "no_input" => Some(NO_INPUT_VALIDATION_REASON),
+        "jobs" => Some(JOBS_VALIDATION_REASON),
+        _ => None,
+    }
 }
 
 /// A bounded event emitted by an explicitly supplied configuration observer.
@@ -73,6 +87,7 @@ pub trait MergeObserver {
 pub struct TracingMergeObserver;
 
 impl MergeObserver for TracingMergeObserver {
+    /// Record one bounded merge event through its matching tracing field set.
     fn observe(&mut self, event: MergeEvent) {
         record_default_event(&event);
         record_file_event(&event);
@@ -183,11 +198,4 @@ fn collect_leaf_paths(value: &Value, prefix: &str, paths: &mut Vec<String>) {
     } else if !prefix.is_empty() {
         paths.push(prefix.to_owned());
     }
-}
-
-/// Observer used by direct merge queries that must not perform I/O.
-pub(crate) struct NoopMergeObserver;
-
-impl MergeObserver for NoopMergeObserver {
-    fn observe(&mut self, _event: MergeEvent) {}
 }

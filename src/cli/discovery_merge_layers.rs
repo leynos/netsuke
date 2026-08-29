@@ -7,34 +7,32 @@ use ortho_config::MergeComposer;
 use std::sync::Arc;
 
 use super::{DiscoveredLayers, diagnostics::short_hash};
-use crate::cli::{MergeEvent, MergeObserver};
+use crate::cli::MergeEvent;
 
 /// Add discovered file layers to the supplied merge composition.
 ///
 /// This helper belongs only to the cached merge boundary. It appends to the
 /// caller-owned composer and error collection, and never discovers layers or
 /// completes a partial merge.
-pub(crate) fn push_discovered_file_layers<O>(
+pub(crate) fn push_discovered_file_layers(
     composer: &mut MergeComposer,
     errors: &mut Vec<Arc<ortho_config::OrthoError>>,
     discovered: DiscoveredLayers,
-    observer: &mut O,
-) where
-    O: MergeObserver + ?Sized,
-{
+    events: &mut Vec<MergeEvent>,
+) {
     let (layers, discovery_errors) = discovered.into_parts();
     if discovery_errors.is_empty() {
-        observer.observe(MergeEvent::FileLayersCollected {
+        events.push(MergeEvent::FileLayersCollected {
             layer_count: layers.len(),
         });
     } else {
-        observer.observe(MergeEvent::FileLayerCollectionFailed {
+        events.push(MergeEvent::FileLayerCollectionFailed {
             error_count: discovery_errors.len(),
         });
     }
     errors.extend(discovery_errors);
     for layer in layers {
-        observer.observe(MergeEvent::FileLayerApplied {
+        events.push(MergeEvent::FileLayerApplied {
             path_hash: layer
                 .path()
                 .map(|path| short_hash(path.as_str().as_bytes())),

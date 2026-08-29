@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 #[cfg(test)]
 use std::sync::Arc;
 
-use super::super::parser::Cli;
+use super::super::command::Cli;
 use super::CONFIG_ENV_VAR;
 use super::diagnostics::{
     BoundedConfigPath, ProjectLayerDeduplication, debug_optional_config_path_from_fields,

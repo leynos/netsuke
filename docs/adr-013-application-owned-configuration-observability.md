@@ -28,9 +28,11 @@ metric labels.
 Compose configuration observability at the CLI composition root.
 `config_load::resolve_configuration` orchestrates
 `cli::resolve_json_and_layers_outcome_with_env` and
-`cli::merge_with_cached_file_layers`; those query functions do not install a
-recorder or own configuration-load metrics. `src/observability.rs` owns the
-phase-level vocabulary and classification helpers.
+`cli::merge_with_cached_file_layers_with_observer`. That query returns bounded
+merge events alongside the merge result; the application replays them through
+`TracingMergeObserver`. These query functions neither install a recorder nor
+invoke observers or own configuration-load metrics. `src/observability.rs` owns
+the phase-level vocabulary and classification helpers.
 
 Both aggregate and phase-level configuration-load timing receive the same
 `&impl monotony::MonotonicClock` seam. Production supplies
@@ -109,7 +111,8 @@ may include both phase-level and startup-attempt entries.
 - Configuration-load orchestration:
   [`src/config_load.rs`](../src/config_load.rs), which composes
   `cli::resolve_json_and_layers_outcome_with_env` and
-  `cli::merge_with_cached_file_layers`
+  `cli::merge_with_cached_file_layers_with_observer`, then replays its bounded
+  events through `cli::TracingMergeObserver`
 - Configuration query implementations:
   [`src/cli/diag.rs`](../src/cli/diag.rs) and
   [`src/cli/merge.rs`](../src/cli/merge.rs)

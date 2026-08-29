@@ -3,8 +3,8 @@
 //! Compiled by `tests/command_env_ui_tests.rs` against the `netsuke` rlib with
 //! `--emit=metadata`. It proves an external caller can inject configuration
 //! environment access, retain a discovery outcome, emit diagnostics, transfer
-//! its cached layers, and pass them to the observer-enabled full merge without
-//! rediscovery.
+//! its cached layers, retrieve their bounded merge events without rediscovery,
+//! and replay them through its own observer.
 
 use netsuke::cli::{
     CachedMergeInput, Cli, ConfigEnvProvider, MergeEvent, MergeObserver,
@@ -62,7 +62,11 @@ fn main() {
     outcome.emit_diagnostics();
     let input = CachedMergeInput::new(&cli, &matches, &env, outcome.into_layers());
     let mut observer = EmbeddedObserver;
-    let _ = merge_with_cached_file_layers_with_observer(input, &mut observer);
+    let (merged, events) = merge_with_cached_file_layers_with_observer(input);
+    for event in events {
+        observer.observe(event);
+    }
+    let _ = merged;
 
     let _: Cli = Cli::default();
 }

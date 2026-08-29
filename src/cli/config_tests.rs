@@ -5,6 +5,7 @@
 //! lower-case, and mixed-case input, and invalid values are rejected with the
 //! policy-specific error.
 
+use super::policy_definitions::PolicyDefinition;
 use super::*;
 use proptest::prelude::*;
 use rstest::rstest;

@@ -19,9 +19,7 @@ use rstest::rstest;
 use test_support::{fs, http};
 use url::Url;
 
-#[path = "tests_support.rs"]
-mod support;
-use support::{
+use super::tests_support::{
     CacheWorkspace, assert_cache_entry_exists, assert_fetch_policy_rejection,
     assert_open_cache_dir_rejects, cache_relative_error, cache_workspace, limit_with_offset,
     make_context, make_context_with,
