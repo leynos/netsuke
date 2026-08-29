@@ -1513,7 +1513,8 @@ governs the non-doctest pass only, and deliberately stays small:
   warning periods) so a hung test surfaces without failing the legitimately
   slow documentation end-to-end suites, which shell out to real Ninja.
 - **Scoped subprocess timings.** The split-build locale harness and packaging
-  smoke test emit their Cargo subprocess durations immediately on success.
+  smoke test emit their Cargo subprocess durations after each Cargo subprocess
+  returns.
   They intentionally use private Cargo directories to preserve isolation and
   publication-boundary coverage; their diagnostics distinguish that work from
   future regressions without raising the slow-test threshold.
@@ -2926,6 +2927,22 @@ construct a `CachedMergeInput`. Pass that input to
 `TracingMergeObserver`, for the full merge. This preserves diagnostics from the
 same discovery pass while avoiding repeated file loading and keeps observation
 outside the merge query.
+
+#### Cached merge API (unstable)
+
+Programs using Netsuke's unstable Rust API can retain the layers from one
+discovery pass and observe the subsequent merge. Construct
+`CachedMergeInput::new(cli, matches, env, discovered)` with the parsed CLI
+values, an injected `ConfigEnvProvider`, and `DiscoveryOutcome::into_layers()`;
+then pass it to
+`cli::merge_with_cached_file_layers_with_observer(input, &mut observer)`.
+The application uses `TracingMergeObserver`, while another caller can provide
+its own `MergeObserver` implementation. Observers receive bounded
+`MergeEvent` values: layer application and failure states, file `path_hash`
+and layer counts, CLI override leaf keys, and validation `key`/`reason` fields.
+Configuration values and raw paths are never included. Ordinary
+`merge_with_config*` and `merge_with_cached_file_layers` calls use no-op
+observation and do not emit merge tracing.
 
 If the composition boundary times discovery itself, call the public
 `record_discovery_outcome(&clock, started, &outcome)` after the pass completes.

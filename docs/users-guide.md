@@ -995,8 +995,9 @@ metadata filters such as `size` and `linecount`, `hash`, `digest`, `contents`,
 `command_available`, network and command helpers (`fetch`, `shell`, and
 `grep`), and the clock-dependent `now()` function. A helper from this disabled
 set in a `when` expression cannot be evaluated safely during discovery, so its
-entry is retained and marked conditional. An ordinary false `when` expression
-still filters its entry out. Normal build manifest rendering retains the full
+entry is retained and marked conditional, but that unresolved alternative is
+excluded from graph validation. An ordinary false `when` expression still
+filters its entry out. Normal build manifest rendering retains the full
 standard library and its existing `when` semantics; these restrictions apply
 only to query rendering.
 
@@ -1067,22 +1068,6 @@ lists. If validation rejects the merged configuration, the event includes the
 rejected setting in `key` and a bounded explanation in `reason`. These events
 make configuration precedence and rejection decisions auditable without
 exposing user-supplied values.
-
-#### Cached merge API (unstable)
-
-Programs using Netsuke's unstable Rust API can retain the layers from one
-discovery pass and observe the subsequent merge. Construct
-`CachedMergeInput::new(cli, matches, env, discovered)` with the parsed CLI
-values, an injected `ConfigEnvProvider`, and `DiscoveryOutcome::into_layers()`;
-then pass it to
-`cli::merge_with_cached_file_layers_with_observer(input, &mut observer)`.
-The application uses `TracingMergeObserver`, while another caller can provide
-its own `MergeObserver` implementation. Observers receive bounded
-`MergeEvent` values: layer application and failure states, file `path_hash`
-and layer counts, CLI override leaf keys, and validation `key`/`reason` fields.
-Configuration values and raw paths are never included. Ordinary
-`merge_with_config*` and `merge_with_cached_file_layers` calls use no-op
-observation and do not emit merge tracing.
 
 If an explicit file cannot be loaded, the warning records `failure_kind` as
 `Missing` or `LoadError`. Verbose tracing uses only `path_hash` and

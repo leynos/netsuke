@@ -85,8 +85,9 @@ filesystem metadata filters such as `size` and `linecount`, `hash`, `digest`,
 and `command_available`, network and command helpers (`fetch`, `shell`, and
 `grep`), and the clock-dependent `now()` function. A `when` expression using a
 query-disabled helper instead retains its action or target as a conditional
-entry. An ordinary false `when` expression excludes its entry, and other
-template errors continue to fail discovery.
+entry, but that unresolved alternative is excluded from graph validation. An
+ordinary false `when` expression excludes its entry, and other template errors
+continue to fail discovery.
 
 Human-readable output shows a localized `[◇ conditional]` marker when emoji is
 enabled, or `[? conditional]` in the ASCII theme. JSON output always includes

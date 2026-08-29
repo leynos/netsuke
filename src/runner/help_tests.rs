@@ -176,16 +176,19 @@ fn catalogue_rendering_releases_localizer_lock_before_snapshot_work() -> Result<
     Ok(())
 }
 
+/// Snapshot the English Unicode help-target catalogue.
 #[test]
 fn text_catalogue_snapshot() -> Result<()> {
     text_catalogue_snapshot_with_theme("en-US", "text_catalogue", ThemePreference::Unicode)
 }
 
+/// Snapshot the English ASCII help-target catalogue.
 #[test]
 fn accessible_catalogue_snapshot() -> Result<()> {
     text_catalogue_snapshot_with_theme("en-US", "accessible_catalogue", ThemePreference::Ascii)
 }
 
+/// Snapshot the Spanish Unicode help-target catalogue.
 #[test]
 fn localized_catalogue_snapshot() -> Result<()> {
     text_catalogue_snapshot_with_theme(
@@ -195,6 +198,7 @@ fn localized_catalogue_snapshot() -> Result<()> {
     )
 }
 
+/// Snapshot the JSON help-target catalogue.
 #[test]
 fn json_catalogue_snapshot() -> Result<()> {
     catalogue_snapshot(

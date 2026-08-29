@@ -22,6 +22,7 @@ fn help_targets_workspace() -> impl Fn(&TestWorld) -> Result<PathBuf> {
     }
 }
 
+/// Create a workspace containing actions and targets with descriptions.
 #[given("a Netsuke workspace with described actions and targets")]
 fn described_actions_and_targets_workspace(world: &TestWorld) -> Result<()> {
     let manifest = help_targets_workspace()(world)?.join("Netsukefile");

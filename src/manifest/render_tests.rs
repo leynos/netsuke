@@ -318,6 +318,7 @@ fn manifest_with_build_only_recipe_helper() -> Result<NetsukeManifest> {
     })
 }
 
+/// Verify that query rendering preserves build-only command helpers.
 #[test]
 fn manifest_query_keeps_build_only_recipe_helpers_unrendered() -> Result<()> {
     let manifest = manifest_with_build_only_recipe_helper()?;
@@ -337,7 +338,7 @@ fn manifest_query_keeps_build_only_recipe_helpers_unrendered() -> Result<()> {
     );
     Ok(())
 }
-
+/// Verify that full rendering evaluates build-only command helpers.
 #[test]
 fn full_render_evaluates_build_only_recipe_helpers() -> Result<()> {
     let mut env = Environment::new();
@@ -355,7 +356,6 @@ fn full_render_evaluates_build_only_recipe_helpers() -> Result<()> {
     );
     Ok(())
 }
-
 /// Render the build-only-helper fixture with a replacement recipe in query mode.
 fn render_fixture_recipe_in_manifest_query(recipe: Recipe) -> Result<Target> {
     let mut manifest = manifest_with_build_only_recipe_helper()?;
@@ -370,7 +370,7 @@ fn render_fixture_recipe_in_manifest_query(recipe: Recipe) -> Result<Target> {
         .next()
         .context("rendered action missing")
 }
-
+/// Verify that query rendering preserves build-only script helpers.
 #[test]
 fn manifest_query_keeps_build_only_script_helpers_unrendered() -> Result<()> {
     let script = "echo {{ command_available(\"cargo-nextest\") }}";
@@ -383,7 +383,7 @@ fn manifest_query_keeps_build_only_script_helpers_unrendered() -> Result<()> {
     );
     Ok(())
 }
-
+/// Verify that query rendering resolves structural rule selectors.
 #[test]
 fn manifest_query_renders_rule_recipe_selectors() -> Result<()> {
     let action = render_fixture_recipe_in_manifest_query(Recipe::Rule {

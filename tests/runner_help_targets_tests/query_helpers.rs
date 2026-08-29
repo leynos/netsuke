@@ -2,6 +2,18 @@
 
 use super::*;
 
+/// Create an isolated, capability-scoped workspace for one help-target query.
+#[fixture]
+fn help_targets_query_workspace() -> Result<(tempfile::TempDir, Utf8PathBuf, Dir)> {
+    let temp = tempfile::tempdir().context("create help-targets query fixture directory")?;
+    let temp_path = Utf8Path::from_path(temp.path())
+        .context("temporary path should be UTF-8")?
+        .to_owned();
+    let workspace = Dir::open_ambient_dir(&temp_path, ambient_authority())
+        .context("open help-targets query fixture directory")?;
+    Ok((temp, temp_path, workspace))
+}
+
 /// Assert that every expected conditional catalogue row has its ASCII marker.
 fn assert_conditional_catalogue_entries(stdout: &str) -> Result<()> {
     for (name, description) in [
@@ -36,13 +48,13 @@ fn assert_outputs_were_not_created(workspace: &Dir, outputs: &[&str]) -> Result<
     Ok(())
 }
 
+/// Verify that inline build-only recipe helpers do not block discovery.
 #[rstest]
-fn help_targets_skips_inline_build_only_helpers_in_recipes() -> Result<()> {
-    let temp = tempfile::tempdir().context("create inline-helper help-targets workspace")?;
-    let temp_path = Utf8Path::from_path(temp.path()).context("temporary path should be UTF-8")?;
+fn help_targets_skips_inline_build_only_helpers_in_recipes(
+    help_targets_query_workspace: Result<(tempfile::TempDir, Utf8PathBuf, Dir)>,
+) -> Result<()> {
+    let (_temp, temp_path, workspace) = help_targets_query_workspace?;
     let manifest_path = temp_path.join("Netsukefile");
-    let workspace = Dir::open_ambient_dir(temp_path, ambient_authority())
-        .context("open inline-helper fixture directory")?;
     workspace
         .write(
             "Netsukefile",
@@ -60,7 +72,7 @@ targets: []
         .context("write inline-helper manifest")?;
 
     let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
-        .current_dir(temp_path)
+        .current_dir(&temp_path)
         .arg("--file")
         .arg(&manifest_path)
         .arg("--emoji")
@@ -87,12 +99,11 @@ targets: []
 
 /// List actions using build-only helpers as conditional entries.
 #[rstest]
-fn help_targets_lists_build_only_when_actions_as_conditional() -> Result<()> {
-    let temp = tempfile::tempdir().context("create conditional help-targets workspace")?;
-    let temp_path = Utf8Path::from_path(temp.path()).context("temporary path should be UTF-8")?;
+fn help_targets_lists_build_only_when_actions_as_conditional(
+    help_targets_query_workspace: Result<(tempfile::TempDir, Utf8PathBuf, Dir)>,
+) -> Result<()> {
+    let (_temp, temp_path, workspace) = help_targets_query_workspace?;
     let manifest_path = temp_path.join("Netsukefile");
-    let workspace = Dir::open_ambient_dir(temp_path, ambient_authority())
-        .context("open conditional fixture directory")?;
     workspace
         .write(
             "Netsukefile",
@@ -112,7 +123,7 @@ targets: []
         .context("write conditional manifest")?;
 
     let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
-        .current_dir(temp_path)
+        .current_dir(&temp_path)
         .arg("--file")
         .arg(&manifest_path)
         .arg("--emoji")
@@ -151,13 +162,11 @@ targets: []
 
 /// List same-name conditional alternatives in target help output.
 #[rstest]
-fn help_targets_lists_same_name_conditional_alternatives() -> Result<()> {
-    let temp =
-        tempfile::tempdir().context("create duplicate conditional help-targets workspace")?;
-    let temp_path = Utf8Path::from_path(temp.path()).context("temporary path should be UTF-8")?;
+fn help_targets_lists_same_name_conditional_alternatives(
+    help_targets_query_workspace: Result<(tempfile::TempDir, Utf8PathBuf, Dir)>,
+) -> Result<()> {
+    let (_temp, temp_path, workspace) = help_targets_query_workspace?;
     let manifest_path = temp_path.join("Netsukefile");
-    let workspace = Dir::open_ambient_dir(temp_path, ambient_authority())
-        .context("open duplicate conditional fixture directory")?;
     workspace
         .write(
             "Netsukefile",
@@ -185,7 +194,7 @@ targets:
         .context("write duplicate conditional manifest")?;
 
     let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
-        .current_dir(temp_path)
+        .current_dir(&temp_path)
         .arg("--file")
         .arg(&manifest_path)
         .arg("--emoji")

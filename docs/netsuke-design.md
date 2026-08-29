@@ -85,7 +85,7 @@ before execution, a critical requirement for compatibility with Ninja.
    `Target::conditional` into the help catalogue, where localized text output
    shows the conditional marker and JSON output includes the boolean
    `conditional` JSON field. The catalogue retains conditional unresolved
-   alternatives, but graph validation excludes them so those alternatives are
+   alternatives, but graph validation excludes them, so those alternatives are
    not treated as simultaneously active. Full rendering and normal build
    selection remain unchanged.
 
