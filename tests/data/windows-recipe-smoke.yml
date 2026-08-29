@@ -38,6 +38,6 @@ targets:
   - name: automatic-path.txt
     description: Discover this target without executing its recipe
     command: "Set-Content -NoNewline -LiteralPath {{ outs }} -Value automatic-path-quoting"
-  - name: "discovery must not execute.txt"
+  - name: discovery-must-not-execute.txt
     description: Confirm target discovery has no recipe side effects
     command: "Set-Content -NoNewline -LiteralPath {{ outs }} -Value recipe-should-not-run"

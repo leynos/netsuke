@@ -70,7 +70,7 @@ try {
     if (-not ($discovery -match 'Confirm target discovery has no recipe side effects')) {
         throw "Target discovery omitted the fixture target: $discovery"
     }
-    if (Test-Path -LiteralPath 'discovery must not execute.txt') {
+    if (Test-Path -LiteralPath 'discovery-must-not-execute.txt') {
         throw 'Target discovery executed a recipe.'
     }
 
