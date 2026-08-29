@@ -232,13 +232,11 @@ fn assert_injected_base_metacharacter_is_literal(base_name: &str, decoy_name: &s
 ///
 /// Each neighbouring decoy would match `*.txt` only if the base were compiled
 /// as glob syntax instead of being escaped before the user pattern is joined.
-#[cfg(unix)]
+#[cfg(not(windows))]
 #[rstest::rstest]
 #[case("literal*base", "literalxbase")]
 #[case("literal?base", "literalxbase")]
-#[case("literal[ab]base", "literalabase")]
-#[case("literal{a,b}base", "literalabase")]
-fn injected_base_metacharacters_are_literal(
+fn injected_base_star_and_question_mark_are_literal(
     #[case] base_name: &str,
     #[case] decoy_name: &str,
 ) -> Result<()> {
@@ -247,10 +245,9 @@ fn injected_base_metacharacters_are_literal(
 
 /// Cover injected-base metacharacters that Windows permits in directory names.
 ///
-/// Windows reserves `*` and `?` in filesystem components, so the Unix-only
-/// cases above retain that matcher coverage while this platform exercises the
-/// legal bracket and brace spellings against real directories.
-#[cfg(not(unix))]
+/// Windows reserves `*` and `?` in filesystem components, so the non-Windows
+/// cases above retain that matcher coverage while this test exercises the legal
+/// bracket and brace spellings on every supported platform.
 #[rstest::rstest]
 #[case("literal[ab]base", "literalabase")]
 #[case("literal{a,b}base", "literalabase")]
