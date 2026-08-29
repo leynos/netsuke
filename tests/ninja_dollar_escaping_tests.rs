@@ -257,7 +257,10 @@ fn command_list_default_reaches_the_child_shell(
     let manifest = manifest::from_str(
         "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    command:\n      - 'printf %s \"${NETSUKE_TEST_SENTINEL:-fallback}\" > $out'\n",
     )?;
-    let ninja = generate(&BuildGraph::from_manifest(&manifest)?)?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        &manifest,
+        RecipeShell::Posix,
+    )?)?;
 
     let actual = ninja_output(&ninja, environment_value, None)?;
     ensure!(
@@ -320,7 +323,10 @@ fn script_default_reaches_the_child_shell(
     let manifest = manifest::from_str(
         "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    script: 'printf %s \"${NETSUKE_TEST_SENTINEL:-fallback}\" > $out'\n",
     )?;
-    let ninja = generate(&BuildGraph::from_manifest(&manifest)?)?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        &manifest,
+        RecipeShell::Posix,
+    )?)?;
 
     let actual = ninja_output(&ninja, environment_value, None)?;
     ensure!(

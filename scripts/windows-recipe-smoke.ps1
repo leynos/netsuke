@@ -59,6 +59,8 @@ Copy-Item -LiteralPath $Manifest -Destination (Join-Path $workspace 'Netsukefile
 
 Push-Location $workspace
 try {
+    Remove-Item Env:NETSUKE_WINDOWS_SHELL -ErrorAction SilentlyContinue
+    Remove-Item Env:NETSUKE_SMOKE_OPTION -ErrorAction SilentlyContinue
     $env:NETSUKE_SMOKE_VALUE = 'value with spaces'
 
     $discovery = & $Netsuke help targets 2>&1

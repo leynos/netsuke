@@ -2,7 +2,10 @@
 
 use anyhow::{Context, Result, bail};
 use mockable::Env;
-use std::ffi::OsString;
+use std::{
+    ffi::OsString,
+    process::{Command, Stdio},
+};
 
 /// Record one outcome from the Bash availability probe.
 #[derive(Debug, Eq, PartialEq)]
@@ -54,23 +57,35 @@ fn resolve_windows_recipe_shell(raw_value: Option<OsString>) -> Result<RecipeShe
 
 /// Confirm that an explicitly selected external recipe runtime can start.
 pub(super) fn validate_recipe_shell(shell: RecipeShell) -> Result<()> {
-    if !cfg!(windows) || shell != RecipeShell::Bash {
+    validate_recipe_shell_with(cfg!(windows), shell, probe_bash_runtime)
+}
+
+/// Validate a selected shell with an injected Bash probe at the host boundary.
+fn validate_recipe_shell_with(
+    is_windows: bool,
+    shell: RecipeShell,
+    probe: impl FnOnce() -> std::io::Result<BashProbeStatus>,
+) -> Result<()> {
+    if !is_windows || shell != RecipeShell::Bash {
         return Ok(());
     }
-    validate_bash_runtime_with(|| {
-        std::process::Command::new("bash.exe")
-            .arg("--version")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .map(|status| {
-                if status.success() {
-                    BashProbeStatus::Available
-                } else {
-                    BashProbeStatus::Failed(status.to_string())
-                }
-            })
-    })
+    validate_bash_runtime_with(probe)
+}
+
+/// Probe the production Bash compatibility runtime without leaking child output.
+fn probe_bash_runtime() -> std::io::Result<BashProbeStatus> {
+    Command::new("bash.exe")
+        .arg("--version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| {
+            if status.success() {
+                BashProbeStatus::Available
+            } else {
+                BashProbeStatus::Failed(status.to_string())
+            }
+        })
 }
 
 /// Validate one injected Bash availability probe.
@@ -97,12 +112,13 @@ mod tests {
 
     use super::{
         BashProbeStatus, WINDOWS_SHELL_ENV, resolve_recipe_shell_with,
-        resolve_windows_recipe_shell, validate_bash_runtime_with,
+        resolve_windows_recipe_shell, validate_bash_runtime_with, validate_recipe_shell_with,
     };
     use crate::ninja_gen::RecipeShell;
     use mockable::MockEnv;
     use std::ffi::OsString;
 
+    /// Build an injected environment for recipe-shell resolution tests.
     fn recipe_shell_env(value: Option<&str>) -> MockEnv {
         let mut env = MockEnv::new();
         env.expect_os_string()
@@ -164,6 +180,23 @@ mod tests {
         );
     }
 
+    /// Verify that a non-NotFound process launch failure remains actionable.
+    #[test]
+    fn bash_runtime_probe_reports_a_launch_failure() {
+        let error = validate_bash_runtime_with(|| {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "denied",
+            ))
+        })
+        .expect_err("launch failure should be actionable");
+        assert!(
+            error
+                .to_string()
+                .contains("bash.exe` was not found on PATH")
+        );
+    }
+
     /// Verify that a failing injected Bash probe preserves its exit diagnostic.
     #[test]
     fn bash_runtime_probe_reports_an_unsuccessful_runtime() {
@@ -175,5 +208,16 @@ mod tests {
                 .to_string()
                 .contains("bash.exe --version` exited with exit status: 7")
         );
+    }
+
+    /// Avoid probing Bash when a selected shell does not require it.
+    #[test]
+    fn non_bash_shells_skip_bash_preflight() {
+        for shell in [RecipeShell::Posix, RecipeShell::PowerShell] {
+            let result = validate_recipe_shell_with(true, shell, || {
+                panic!("{shell:?} must not invoke the Bash probe")
+            });
+            assert!(result.is_ok());
+        }
     }
 }

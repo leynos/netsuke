@@ -104,18 +104,14 @@ fn decode_power_shell_script(encoded: &str) -> Result<String> {
     let bytes = STANDARD
         .decode(encoded)
         .context("decode PowerShell command payload")?;
-    if bytes.len().rem_euclid(2) != 0 {
+    let (pairs, remainder) = bytes.as_chunks::<2>();
+    if !remainder.is_empty() {
         bail!("PowerShell UTF-16 payload must contain an even number of bytes");
     }
-    let units = bytes
-        .chunks_exact(2)
-        .map(|pair| {
-            let [low, high]: [u8; 2] = pair
-                .try_into()
-                .context("PowerShell UTF-16 unit must contain two bytes")?;
-            Ok(u16::from(low) | (u16::from(high) << 8))
-        })
-        .collect::<Result<Vec<_>>>()?;
+    let units = pairs
+        .iter()
+        .map(|[low, high]| u16::from(*low) | (u16::from(*high) << 8))
+        .collect::<Vec<_>>();
     String::from_utf16(&units).context("decode PowerShell UTF-16 payload")
 }
 

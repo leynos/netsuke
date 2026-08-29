@@ -75,7 +75,14 @@ impl RecipeShell {
         let utf16le = script
             .as_str()
             .encode_utf16()
-            .flat_map(u16::to_le_bytes)
+            .flat_map(|code_unit| {
+                #[expect(
+                    clippy::little_endian_bytes,
+                    reason = "PowerShell -EncodedCommand requires UTF-16LE input"
+                )]
+                let bytes = code_unit.to_le_bytes();
+                bytes
+            })
             .collect::<Vec<_>>();
         let command = STANDARD.encode(utf16le);
         let length = POWER_SHELL_COMMAND_PREFIX.len() + command.len();
@@ -124,8 +131,9 @@ fn windows_argument(argument: &str) -> String {
 mod tests {
     //! Verifies interpreter-specific Ninja command rendering.
 
-    use super::{RecipeShell, windows_argument};
+    use super::{POWER_SHELL_COMMAND_PREFIX, RecipeShell, windows_argument};
     use crate::ninja_gen::ninja_gen_escape::ShellText;
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
     use proptest::prelude::*;
 
     /// Verify that encoded PowerShell commands hide recipe dollars from Ninja.
@@ -196,6 +204,34 @@ mod tests {
     }
 
     proptest! {
+        /// Verify scalar PowerShell encoding round-trips Unicode and dollar expressions.
+        #[test]
+        fn power_shell_scalar_encoding_round_trips(
+            text in proptest::collection::vec(any::<char>().prop_filter("no NUL", |character| *character != '\0'), 0..96),
+        ) {
+            let ordinary = text.into_iter().collect::<String>();
+            let recipe = format!("{ordinary} $env:NAME $value ${{name}}");
+            let rendered = RecipeShell::PowerShell
+                .command_value(&ShellText::new(recipe.clone()))
+                .expect("bounded PowerShell recipe should encode")
+                .to_string();
+            let payload = rendered
+                .strip_prefix(POWER_SHELL_COMMAND_PREFIX)
+                .expect("rendered command should carry an encoded payload");
+            let decoded_bytes = STANDARD.decode(payload).expect("payload should be Base64");
+            let (pairs, remainder) = decoded_bytes.as_chunks::<2>();
+            prop_assert!(remainder.is_empty());
+            let code_units = pairs
+                .iter()
+                .map(|[low, high]| u16::from(*low) | (u16::from(*high) << 8))
+                .collect::<Vec<_>>();
+            let decoded = String::from_utf16(&code_units).expect("payload should be UTF-16LE");
+            let expected = RecipeShell::power_shell_script(&ShellText::new(recipe.clone()));
+            prop_assert_eq!(decoded, expected.as_str());
+            prop_assert!(!rendered.contains(&recipe));
+            prop_assert!(!rendered.contains("$env:NAME"));
+        }
+
         /// Verify that every generated PowerShell list entry has an immediate failure check.
         #[test]
         fn power_shell_lists_check_each_entry_before_the_next(
