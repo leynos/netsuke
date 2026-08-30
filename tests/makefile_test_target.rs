@@ -101,13 +101,24 @@ fn benchmark_glob_expansion_target_is_phony_and_runs_the_expected_bench() -> Res
     Ok(())
 }
 
+/// Verify that the formatter recipe handles an empty Markdown file set portably.
 #[test]
 fn check_fmt_portably_skips_markdown_validation_without_files() -> Result<()> {
     let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
     let recipe =
         target_recipe(&makefile, "check-fmt").context("Makefile should declare check-fmt")?;
     ensure!(
-        !recipe.contains("xargs -0 -r"),
+        !recipe
+            .lines()
+            .filter(|line| line.contains("xargs"))
+            .flat_map(str::split_whitespace)
+            .any(|argument| {
+                argument == "-r"
+                    || argument == "--no-run-if-empty"
+                    || argument.strip_prefix('-').is_some_and(|short_flags| {
+                        !short_flags.starts_with('-') && short_flags.contains('r')
+                    })
+            }),
         "check-fmt must not rely on GNU-only xargs -r, found {recipe:?}"
     );
     ensure!(

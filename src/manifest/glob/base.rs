@@ -5,13 +5,16 @@
 //! path, while the walker owns opening its literal prefix.
 
 use super::{
-    GlobPattern,
+    GlobPattern, diagnostics,
     errors::{GlobErrorContext, GlobErrorType, create_glob_error},
     escape::escape_glob_literal_path,
 };
 use camino::{Utf8Path, Utf8PathBuf};
 use minijinja::Error;
-use std::sync::{Mutex, MutexGuard};
+use std::{
+    sync::{Mutex, MutexGuard},
+    time::Instant,
+};
 
 /// Resolve an injected base for a relative pattern to a canonical UTF-8 path.
 ///
@@ -79,15 +82,28 @@ impl GlobBaseCache {
     /// Returns the canonicalization error from the injected base on its first
     /// relative use.
     fn resolve(&self) -> std::result::Result<Option<Utf8PathBuf>, Error> {
+        let _span = tracing::debug_span!("manifest.glob_base", operation = "resolve").entered();
         let Some(base) = self.base.as_deref() else {
+            diagnostics::record_base_cache_bypass();
             return Ok(None);
         };
         let cached = self.lock_resolved(base)?.clone();
         if cached.is_some() {
+            diagnostics::record_base_cache_hit();
             return Ok(cached);
         }
 
-        let canonical = resolve_relative_glob_base(base)?;
+        let started = Instant::now();
+        let canonical = match resolve_relative_glob_base(base) {
+            Ok(canonical) => {
+                diagnostics::record_base_cache_miss(started.elapsed());
+                canonical
+            }
+            Err(error) => {
+                diagnostics::record_base_cache_error(started.elapsed());
+                return Err(error);
+            }
+        };
         let mut resolved = self.lock_resolved(base)?;
         if let Some(published) = resolved.as_ref() {
             return Ok(Some(published.clone()));

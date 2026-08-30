@@ -231,7 +231,7 @@ spelling: spelling-config ## Enforce en-GB-oxendict spelling in Markdown prose
 		$(UV) tool run typos@$(TYPOS_VERSION) --config typos.toml --force-exclude
 
 spelling-config: spelling-helper-test ## Generate and validate the spelling configuration
-	@$(UV_ENV) $(UV) run --no-project scripts/generate_typos_config.py
+	@$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) scripts/generate_typos_config.py
 	@git ls-files --error-unmatch typos.toml >/dev/null
 	@git diff --exit-code -- typos.toml
 

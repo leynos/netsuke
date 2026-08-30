@@ -1,8 +1,8 @@
 # 1. overview of `uv` and `pyproject.toml`
 
 Astral's `uv` is a Rust-based project and package manager that uses
-`pyproject.toml` as its central configuration file. When commands such as
-`uv init`, `uv sync` or `uv run`, `uv` will:
+`pyproject.toml` as its central configuration file. After a project is
+initialized, commands such as `uv init`, `uv sync` or `uv run` cause `uv` to:
 
 1. Look for a `pyproject.toml` in the project root and keep a lockfile
    (`uv.lock`) in sync with it.
@@ -193,13 +193,15 @@ ______________________________________________________________________
 
 PEP 517/518 strongly recommends a `[build-system]` table to tell tools how to
 build and install the project, but it is not universally required. When the
-table is omitted, legacy setuptools behaviour applies: tools may use
-`setuptools.build_meta:__legacy__` for dependency installation, while `uv` does
-not install the current project unless `tool.uv.package = true`. A common
-setuptools configuration specifies `setuptools>=64.0`, which supports
-compatible PEP 660 editable installs without a `setup.py` stub, or uses a
-lighter alternative such as `flit_core`. Below is the typical setup using
-setuptools:
+table is present, `uv` uses the declared backend and packages the current
+project by default. When the table is omitted, `uv` does not install the
+current project unless `tool.uv.package = true`; with that setting, `uv` uses
+the legacy setuptools backend to package the project. Dependency resolution and
+installation remain `uv` responsibilities and do not come from that legacy
+backend. A common setuptools configuration specifies `setuptools>=64.0`, which
+supports compatible PEP 660 editable installs without a `setup.py` stub, or
+uses a lighter alternative such as `flit_core`. Below is the typical setup
+using setuptools:
 
 ```toml
 [build-system]
@@ -213,10 +215,11 @@ build-backend = "setuptools.build_meta"
   - **`build-backend`:** The entry point for the project's build backend.
   `setuptools.build_meta` is the PEP 517-compliant backend for setuptools.
   (Python Packaging[^4], Astral Docs[^7])
-- **Note:** When `[build-system]` is omitted, `uv` can still install
-  dependencies using the legacy setuptools backend, but it will not install the
-  current project unless `tool.uv.package = true` (see next section). (Astral
-  Docs[^7])
+- **Note:** When `[build-system]` is omitted, `uv` uses the legacy setuptools
+  backend to package the current project only when `tool.uv.package = true`
+  (see next section). Without that setting, the current project is not
+  installed; `uv` continues to resolve and install dependencies independently.
+  (Astral Docs[^7])
 
 ______________________________________________________________________
 
@@ -232,11 +235,11 @@ package = true
 
 - **`tool.uv.package = true`:** Forces `uv` to build and install the project
   into its virtual environment every time `uv sync` or `uv run` is run. When
-  `[build-system]` is omitted, `uv` installs dependencies but does not install
-  the current project unless `tool.uv.package = true`. (Astral Docs[^7])
-- Additional `uv`-specific keys (e.g., custom indexes, resolver
-  policies) under `[tool.uv]`, but `package` is the most common. (Python
-  Packaging[^4], Astral Docs[^7])
+  `[build-system]` is omitted, this setting selects the legacy setuptools
+  backend for packaging the current project. (Astral Docs[^7])
+- **Additional `uv`-specific keys:** Declare options such as custom indexes and
+  resolver policies under `[tool.uv]`; `package` is the most common key.
+  (Python Packaging[^4], Astral Docs[^7])
 
 ______________________________________________________________________
 
@@ -355,9 +358,9 @@ ______________________________________________________________________
    (Python Packaging[^4])
 
 4. **Keep build constraints minimal:** If the project does not need editable
-   installs, `[build-system]` may be omitted; `uv` will then install
-   dependencies but not the current project unless `tool.uv.package = true`.
-   (Astral Docs[^7])
+   installs, `[build-system]` may be omitted; `uv` will not install the current
+   project unless `tool.uv.package = true`, which enables the legacy setuptools
+   backend for packaging. (Astral Docs[^7])
 
 5. **Use Exact or Bounded Ranges for Dependencies:** Rather than `requests`, use
    `requests>=2.25, <3.0` to avoid unexpected major bumps. (DevsJC[^8])

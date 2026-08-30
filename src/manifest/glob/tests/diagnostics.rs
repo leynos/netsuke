@@ -6,8 +6,9 @@
 
 #[cfg(unix)]
 use super::super::MAX_UNREACHABLE_SYMLINK_SAMPLES;
-use super::super::{expand_glob, glob_paths, record_expansion};
+use super::super::{GlobBaseCache, PreparedGlob, expand_glob, glob_paths, record_expansion};
 use anyhow::{Context, Result, ensure};
+use camino::Utf8Path;
 use metrics::SharedString;
 use metrics_util::{
     CompositeKey, MetricKind,
@@ -64,6 +65,51 @@ fn counter_value(snapshot: &Snapshot, name: &str, label: (&str, &str)) -> Option
 
 const EXPANSIONS: &str = "netsuke_manifest_glob_expansions_total";
 const SKIPPED: &str = "netsuke_manifest_glob_entries_skipped_total";
+const BASE_CACHE: &str = "netsuke_manifest_glob_base_cache_total";
+
+#[rstest]
+fn base_cache_records_bypass_hit_miss_and_error_outcomes() -> Result<()> {
+    let temporary_directory = tempdir()?;
+    let base = Utf8Path::from_path(temporary_directory.path())
+        .context("temporary directory should have a UTF-8 path")?
+        .to_path_buf();
+    let unconfigured = GlobBaseCache::new(None);
+    let configured = GlobBaseCache::new(Some(base.clone()));
+    let missing = GlobBaseCache::new(Some(base.join("missing")));
+
+    let (result, events, snapshot) = recorded(|| -> Result<()> {
+        PreparedGlob::new_with_base_cache("*.txt", &unconfigured)?;
+        PreparedGlob::new_with_base_cache("*.txt", &configured)?;
+        PreparedGlob::new_with_base_cache("*.txt", &configured)?;
+        ensure!(
+            PreparedGlob::new_with_base_cache("*.txt", &missing).is_err(),
+            "a missing injected base must fail preparation"
+        );
+        Ok(())
+    });
+    result?;
+
+    for outcome in ["bypass", "miss", "hit", "error"] {
+        ensure!(
+            counter_value(&snapshot, BASE_CACHE, ("outcome", outcome)) == Some(1),
+            "expected one base-cache {outcome} outcome: {snapshot:?}"
+        );
+    }
+    ensure!(
+        events
+            .iter()
+            .any(|event| event.contains("operation=\"glob_base_cache\"")
+                && event.contains("outcome=\"miss\"")),
+        "expected the cache miss trace event: {events:?}"
+    );
+    ensure!(
+        !events
+            .iter()
+            .any(|event| event.contains(&temporary_directory.path().display().to_string())),
+        "base-cache trace events must not disclose the base path: {events:?}"
+    );
+    Ok(())
+}
 
 #[rstest]
 fn a_completed_expansion_counts_its_matches() -> Result<()> {

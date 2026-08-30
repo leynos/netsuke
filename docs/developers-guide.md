@@ -991,6 +991,14 @@ every command in this completion checklist:
 `markdownlint-cli2 --fix`. `mdtablefix` owns table padding and paragraph
 wrapping; `make markdownlint` then verifies the result.
 
+`make check-fmt` runs the Rust and Python formatter checks, then passes tracked
+Markdown files to `scripts/check-markdown-format.sh`. The wrapper skips the
+Markdown check when the file list is empty, so the command remains portable
+across hosts. The checker requires `mdtablefix` version `0.5.0`, the version
+pinned by `MDTABLEFIX_VERSION` in the CI workflow; verify an installation with
+`mdtablefix --version`. Run `make test-markdown-format` to exercise the
+checker, including its empty-input behaviour, before changing the wrapper.
+
 markdownlint's `MD060` (table-column-style) checks that table pipes align using
 a display-width model that treats CJK characters and emoji as double-width.
 That model disagrees with `mdtablefix`'s padding for right-to-left scripts,
@@ -2987,7 +2995,7 @@ with warnings denied. Child-process configuration stays confined to the
 
 Python scripts under `scripts/` follow the repository's
 [scripting standards](scripting-standards.md): a `uv` script block with a
-Python 3.13 floor, Cyclopts for parameterized CLIs, `cuprum` for subprocess
+Python 3.14 floor, Cyclopts for parameterized CLIs, `cuprum` for subprocess
 execution, `pathlib` for filesystem access, and pytest coverage in
 `scripts/tests/` mirroring each script's name. The house Python style rules in
 `.rules/` (naming, typing, exception design, context managers, generators, and

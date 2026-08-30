@@ -42,11 +42,10 @@ shell's original working directory and is deliberately independent of `-C`.
   `src/cli/discovery.rs` for the implementation.
 - **In-process environment mutation is banned and gated.** `clippy.toml` and
   `test_support/clippy.toml` disallow `std::env::set_var`, `remove_var`, and
-  `set_current_dir`; `scripts/check-env-mutation.sh` greps `src/`, `tests/`, and
-  `test_support/` for the same spellings and is wired into `make lint`.
-  `Command::env`/`Command::env_clear`/`Command::current_dir` — the
-  child-process configuration builders — remain the sanctioned route and are
-  deliberately not matched.
+  `set_current_dir` across the workspace targets, and `make lint` runs Clippy
+  with those restrictions. `Command::env`/`Command::env_clear`/
+  `Command::current_dir` — the child-process configuration builders — remain
+  the sanctioned route and are deliberately not disallowed.
 
 ## Consequences
 
@@ -54,9 +53,9 @@ shell's original working directory and is deliberately independent of `-C`.
   base, not on where the test or process was launched.
 - Tests no longer need `EnvLock`/`CwdGuard`; `test_support/src/env_lock.rs` and
   `cwd_guard.rs` were deleted, and suites pass explicit base directories.
-- A contributor who reintroduces in-process mutation immediately fails
-  `make lint` (grep gate) and `cargo clippy` (disallowed-methods) with a reason
-  string telling them what to do instead.
+- A contributor who reintroduces in-process mutation immediately fails the
+  Clippy stage of `make lint` (disallowed-methods) with a reason string telling
+  them what to do instead.
 - Explicit `--config` behaviour is documented identically in the user guide,
   the design document, and this ADR, fixing a stale passage that claimed
   `-C`-anchoring.
@@ -77,8 +76,8 @@ shell's original working directory and is deliberately independent of `-C`.
 - Composition boundary: `src/runner/mod.rs` and `src/runner/help_query.rs`.
 - Explicit-selector independence:
   [`src/cli/discovery.rs`](../src/cli/discovery.rs); ADR-004.
-- Gate: [`scripts/check-env-mutation.sh`](../scripts/check-env-mutation.sh),
-  `clippy.toml`, `test_support/clippy.toml`.
+- Gate: `make lint` runs Clippy with `clippy.toml` and
+  `test_support/clippy.toml`, which contain the disallowed-method policy.
 
 ## Addendum — 2026-08-30
 
