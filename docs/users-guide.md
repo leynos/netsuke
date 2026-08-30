@@ -1184,7 +1184,6 @@ The standard-library reference describes the full helper set available while
 rendering a normal build manifest. The query allowlist above is the deliberate
 exception for `netsuke help targets`.
 
-
 ### Lint a manifest with `netsuke check`
 
 `netsuke check` analyses the selected manifest for constructs that parse and

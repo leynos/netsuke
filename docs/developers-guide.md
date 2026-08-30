@@ -486,10 +486,10 @@ which is the property that keeps the rule set cheap to grow.
    authored source with exact spans and unexpanded templates, `Manifest` sees
    the expanded and rendered manifest, `Graph` sees the lowered `BuildGraph`,
    and `Directive` sees the suppression comments. Bind to the earliest stage
-   that can decide the question, because earlier stages have better
-   provenance. Anything about authored text — a stale escape, a bashism, a
-   literal path — belongs at `Document`; anything needing template references
-   to still exist, such as unused-variable analysis, must be there.
+   that can decide the question, because earlier stages have better provenance.
+   Anything about authored text — a stale escape, a bashism, a literal path —
+   belongs at `Document`; anything needing template references to still exist,
+   such as unused-variable analysis, must be there.
 2. **Write it in the category module.** Rules live under `src/lint/rules/`,
    grouped by category so a category's shared helpers stay next to the rules
    that use them. Reuse `rules::recipes` to walk authored shell fragments and
