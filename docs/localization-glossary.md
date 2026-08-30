@@ -1,13 +1,12 @@
 # Netsuke localization glossary
 
-<!--
-MD060 (table-column-style) is suppressed for this file only. Table padding is
-owned by the repository formatter (`mdtablefix`, run by `make fmt`), whose
+<!-- markdownlint-disable-file MD060 -->
+
+<!-- MD060 (table-column-style) is suppressed for this file only. Table padding
+is owned by the repository formatter (`mdtablefix`, run by `make fmt`), whose
 column widths disagree with MD060's display-width model for the right-to-left,
 Indic, and combining-mark scripts used in the per-locale tables below. The rule
-stays enabled everywhere else.
--->
-<!-- markdownlint-disable-file MD060 -->
+stays enabled everywhere else. -->
 
 This document is the source of truth for Netsuke terminology across every
 locale. It records the preferred, allowed, and forbidden forms of each
