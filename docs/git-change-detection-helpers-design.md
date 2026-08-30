@@ -399,7 +399,9 @@ protocol, normalization, and composition boundaries instead.
 The verification does not prove Git's own diff implementation or filesystem
 encoding behaviour. Pinning object IDs, disabling configurable diff hooks, and
 testing against the CI Git implementation make that residual dependency
-explicit.
+explicit. Documentation verification must use the shared CRLF-safe Markdown
+format check, which accepts canonical CRLF rendering on Windows while rejecting
+content or mixed-line-ending differences.
 
 ## 11. Alternatives considered
 
