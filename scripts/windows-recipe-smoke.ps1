@@ -154,12 +154,13 @@ function Test-OrderedCommandList {
     Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'ordered state.txt') -Expected 'first;second' `
         -Message 'The ordered command list did not preserve state and order'
 
-    Test-ExpectedRecipeFailure -Netsuke $Netsuke -Failure @{
+    $expectedFailure = @{
         Target = 'first-list-entry-fails'
         NotCreatedPath = 'must not exist.txt'
         ExitCodeMessage = "A recipe exit code of 27 should become Netsuke's documented failure exit code 1"
         UnexpectedExecutionMessage = 'The second command-list entry ran after the first failed'
     }
+    Test-ExpectedRecipeFailure -Netsuke $Netsuke -Failure $expectedFailure
 }
 
 function Test-DependencyOrdering {
@@ -197,12 +198,13 @@ function Test-LargeRecipeTransport {
     Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'large list.txt') -Expected 'first' `
         -Message 'A large ordered recipe did not preserve PowerShell state'
 
-    Test-ExpectedRecipeFailure -Netsuke $Netsuke -Failure @{
+    $expectedFailure = @{
         Target = 'large-list-fails'
         NotCreatedPath = 'large list must not exist.txt'
         ExitCodeMessage = "A large recipe exit code of 28 should become Netsuke's documented failure exit code 1"
         UnexpectedExecutionMessage = 'The large ordered recipe continued after its first failed entry'
     }
+    Test-ExpectedRecipeFailure -Netsuke $Netsuke -Failure $expectedFailure
     Test-ResponseFileCleanup
 }
 
