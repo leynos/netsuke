@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-markdown-format test-typos-config build release lint lint-clippy lint-whitaker lint-python doc-coverage doc-coverage-test fmt check-fmt typecheck typecheck-python markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load
+.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-markdown-format test-typos-config build release lint lint-clippy lint-whitaker lint-python doc-coverage doc-coverage-test fmt check-fmt typecheck typecheck-python markdownlint spelling spelling-config spelling-helper-test nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-dev-fast dev-fast-check dev-build dev-test bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -298,6 +298,9 @@ bench-build: dev-fast-check ## Time clean and incremental debug builds for both 
 
 bench-config-load: ## Benchmark cached configuration loading without layer copies
 	$(CARGO) bench --bench config_load_cached_merge
+
+bench-glob-expansion: ## Benchmark manifest glob expansion with an injected base
+	$(CARGO) bench --bench glob_expansion
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \
