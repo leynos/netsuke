@@ -3,10 +3,11 @@
 # produces, without modifying any tracked file.
 #
 # `mdtablefix` owns table padding and paragraph wrapping. It has no check-only
-# mode, so this script compares its output for each file against the file on
-# disk. `mdtablefix` emits LF, whereas Git can check text out with CRLF on
-# Windows; the comparison accepts only either exact line-ending form. Keep the
-# flags in step with the `mdtablefix` invocation in
+# mode, so this script formats staged copies in one batch, then compares each
+# result against the corresponding source without modifying tracked files.
+# `mdtablefix` emits LF, whereas Git can check text out with CRLF on Windows;
+# the comparison accepts only either exact line-ending form. Keep the flags in
+# step with the `mdtablefix` invocation in
 # `mdformat-all`, which `make fmt` runs.
 #
 # `make fmt` also applies `markdownlint-cli2 --fix` after `mdtablefix`, but that
@@ -30,16 +31,28 @@ if ! command -v "$MDTABLEFIX" >/dev/null 2>&1; then
   exit 127
 fi
 
-formatted="$(mktemp)"
-trap 'rm -f "$formatted"' EXIT
+staged_directory="$(mktemp -d)"
+trap 'rm -rf "$staged_directory"' EXIT
+
+original_files=()
+staged_files=()
+for file in "$@"; do
+  staged_file="$staged_directory/${#original_files[@]}.md"
+  cp -- "$file" "$staged_file"
+  original_files+=("$file")
+  staged_files+=("$staged_file")
+done
+
+"$MDTABLEFIX" --in-place --wrap --renumber --breaks --ellipsis --fences \
+  "${staged_files[@]}"
 
 unformatted=()
-for file in "$@"; do
-  "$MDTABLEFIX" --wrap --renumber --breaks --ellipsis --fences "$file" \
-    >"$formatted"
-  if ! cmp -s "$formatted" "$file" \
-    && ! sed $'s/$/\r/' "$formatted" | cmp -s - "$file"; then
-    unformatted+=("$file")
+for index in "${!original_files[@]}"; do
+  original_file="${original_files[$index]}"
+  staged_file="${staged_files[$index]}"
+  if ! cmp -s "$staged_file" "$original_file" \
+    && ! sed $'s/$/\r/' "$staged_file" | cmp -s - "$original_file"; then
+    unformatted+=("$original_file")
   fi
 done
 

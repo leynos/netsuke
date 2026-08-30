@@ -217,3 +217,28 @@ def test_setup_rust_does_not_pass_unsupported_components_input() -> None:
                 f"{job_name} Setup Rust must not pass the unsupported "
                 f"'components' input, got {sorted(with_.keys())!r}"
             )
+
+def test_mdtablefix_installers_require_the_pinned_version() -> None:
+    """Both formatter installers replace stale executables and verify the pin."""
+    expected_guard = (
+        'expected_mdtablefix_version="mdtablefix ${MDTABLEFIX_VERSION}"'
+    )
+    expected_match = (
+        '[[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]'
+    )
+    for step in (
+        _step("Install mdtablefix"),
+        _windows_step("Install mdtablefix"),
+    ):
+        run = step.get("run")
+        assert isinstance(run, str)
+        assert expected_guard in run
+        assert "mdtablefix --version" in run
+        assert "tr -d '\\r'" in run
+        assert expected_match in run
+
+def test_build_job_runs_markdown_formatter_checker_tests() -> None:
+    """The Linux merge gate exercises the Markdown checker process boundary."""
+    runs = [step.get("run") for step in _steps(_load())]
+
+    assert runs.count("make test-markdown-format") == 1
