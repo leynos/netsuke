@@ -60,10 +60,10 @@ proptest! {
         let env = Environment::new();
         for section in ["targets", "actions"] {
             let mut doc = foreach_doc(section, &items, None);
-            let stats = expand_foreach(&mut doc, &env)
+            let report = expand_foreach(&mut doc, &env)
                 .map_err(|e| TestCaseError::fail(format!("expansion failed: {e}")))?;
-            prop_assert_eq!(stats.filtered_targets, 0);
-            prop_assert_eq!(stats.filtered_actions, 0);
+            prop_assert_eq!(report.stats.filtered_targets, 0);
+            prop_assert_eq!(report.stats.filtered_actions, 0);
             let entries = expanded_entries(&doc, section)?;
             prop_assert_eq!(entries.len(), items.len());
         }

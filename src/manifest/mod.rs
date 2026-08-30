@@ -40,6 +40,7 @@ mod expand;
 mod glob;
 mod hints;
 mod jinja_macros;
+mod loading;
 mod load_stage;
 mod parse_with_config;
 mod query;
@@ -54,10 +55,10 @@ pub use diagnostics::{
     ManifestError, ManifestName, ManifestSource, map_data_error, map_yaml_error,
 };
 pub use env_reader::{EnvReadError, EnvReader, process_env_reader};
-use expand::ExpansionReport;
 pub(crate) use expand::expand_foreach;
 pub use glob::glob_paths;
 pub use load_stage::ManifestLoadStage;
+use loading::{notify_stage, trace_expansion_report};
 pub use parse_with_config::from_str_with_env_and_config;
 pub(crate) use query::from_path_for_manifest_query;
 pub use render::render_manifest;
@@ -65,41 +66,6 @@ pub use render::render_manifest;
 use self::{env_reader::env_var_with, jinja_macros::register_manifest_macros};
 #[cfg(test)]
 use workspace::open_manifest_workspace;
-
-/// Emit tracing events for a manifest expansion report.
-///
-/// Expansion itself is a pure transformation that reports filtering through
-/// [`ExpansionReport`]; this orchestrator-side helper owns the telemetry
-/// policy. The report's fields are already bounded and non-sensitive (name
-/// hash, expression length), so they can be logged verbatim.
-fn trace_expansion_report(report: &ExpansionReport) {
-    for entry in &report.filtered_entries {
-        tracing::debug!(
-            section = entry.section.as_str(),
-            entry_name_hash = entry.entry_name_hash.as_str(),
-            iteration_index = entry.iteration_index,
-            when_expression_len = entry.when_expression_len,
-            when_result = false,
-            "filtered manifest entry by when expression"
-        );
-    }
-    tracing::debug!(
-        filtered_targets = report.stats.filtered_targets,
-        filtered_actions = report.stats.filtered_actions,
-        filtered_entry_count = report.stats.filtered_targets + report.stats.filtered_actions,
-        "expanded manifest foreach and when directives"
-    );
-}
-
-/// Invoke the stage callback when present.
-fn notify_stage(
-    on_stage: &mut Option<&mut dyn FnMut(ManifestLoadStage)>,
-    stage: ManifestLoadStage,
-) {
-    if let Some(cb) = on_stage.as_mut() {
-        cb(stage);
-    }
-}
 
 /// Parse a manifest string using Jinja for value templating.
 ///
