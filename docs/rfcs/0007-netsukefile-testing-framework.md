@@ -102,7 +102,10 @@ discovery, scheduling, and report rendering stay in the parent. That
 boundary reuses the `wait_timeout`-then-kill-then-reap pattern already
 serving the stdlib command helpers, and carries results over
 length-prefixed `serde_json` frames versioned like the existing JSON
-envelope, so it adds no new dependency. Two seams are added (clock provider;
+envelope, so it adds no new dependency. The same stream carries
+incremental journal checkpoints, so a case killed on the deadline still
+reports the calls it had already made rather than an empty journal. Two
+seams are added (clock provider;
 macro substitution overlay); network mocking needs no transport seam
 because the deny-all policy plus function-level doubles make the real
 network code unreachable under test.
@@ -125,7 +128,7 @@ addresses — so the dialect feels familiar to practitioners of those tools.
   from the `netsuke_version` of the release that ships discovery
   configuration. Older binaries reject a manifest containing the block
   with their ordinary unknown-field diagnostic, not a version message;
-  this is accepted and documented, because the failure is immediate,
+  this is accepted and documented because the failure is immediate,
   located, and names the offending key. No existing manifest changes
   behaviour: manifests without the block are unaffected, and the build
   path ignores the block entirely (build-path neutrality is a named

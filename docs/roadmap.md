@@ -1258,7 +1258,7 @@ in [RFC 0007](rfcs/0007-netsukefile-testing-framework.md), the
 ### 7.1. Seams and loader options
 
 - [ ] 7.1.1. Add the clock provider seam to the stdlib time module. See
-  [technical design §4.2](netsuke-test-framework-technical-design.md).
+  [technical design §5.2](netsuke-test-framework-technical-design.md).
   - [ ] Register `now()` through an injected `ClockProvider` closure held in
     `StdlibConfig`.
   - [ ] Preserve current behaviour when no provider is supplied.
@@ -1269,7 +1269,7 @@ in [RFC 0007](rfcs/0007-netsukefile-testing-framework.md), the
     [ADR-008](adr-008-environment-seam-taxonomy.md).
 
 - [ ] 7.1.2. Introduce the options-carrying manifest loader entry point. See
-  [technical design §3.3](netsuke-test-framework-technical-design.md).
+  [technical design §4.3](netsuke-test-framework-technical-design.md).
   - [ ] Add `ManifestLoadOptions` and `TemplateOverlays`, with existing
     entry points as thin wrappers.
   - [ ] Extend `StdlibRegistration` with a `Test` mode beside `Full` and
@@ -1283,7 +1283,7 @@ in [RFC 0007](rfcs/0007-netsukefile-testing-framework.md), the
 
 - [ ] 7.1.3. Spike MiniJinja overlay shadowing for macro substitution.
   Requires: 7.1.2. See
-  [technical design §4.4](netsuke-test-framework-technical-design.md).
+  [technical design §5.4](netsuke-test-framework-technical-design.md).
   - [ ] Pin `add_function` replacement semantics with a test.
   - [ ] Rewrite the `MACRO_IMPORTS_GLOBAL` prelude for substituted names;
     `add_function` alone is shadowed by the generated
@@ -1306,7 +1306,7 @@ in [RFC 0007](rfcs/0007-netsukefile-testing-framework.md), the
   - [ ] Document the minimum-version consequence for older parsers.
 
 - [ ] 7.2.2. Implement the test-suite AST and parser. See
-  [technical design §5](netsuke-test-framework-technical-design.md).
+  [technical design §6](netsuke-test-framework-technical-design.md).
   - [ ] Partition known keys from dynamic `test_*` keys.
   - [ ] Enforce the closed-schema and nearest-known-key diagnostics.
   - [ ] Enforce the expression/template field split at parse time.
@@ -1325,7 +1325,7 @@ in [RFC 0007](rfcs/0007-netsukefile-testing-framework.md), the
 
 - [ ] 7.3.1. Implement doubles, matchers, and the journal. Requires: 7.1.2.
   See [UX design §8](netsuke-test-framework-ux-design.md) and
-  [technical design §6](netsuke-test-framework-technical-design.md).
+  [technical design §7](netsuke-test-framework-technical-design.md).
   - [ ] Implement stub, mock, and spy kinds with first-match-wins entries.
   - [ ] Compile the closed matcher vocabulary at parse time.
   - [ ] Journal every call with per-case isolation (invariants I1 and I3).
@@ -1343,7 +1343,7 @@ in [RFC 0007](rfcs/0007-netsukefile-testing-framework.md), the
 
 - [ ] 7.4.1. Add sandbox-rooted `glob()` and file-test adapters for the
   test registration. Requires: 7.1.2. See
-  [technical design §4.5](netsuke-test-framework-technical-design.md).
+  [technical design §5.5](netsuke-test-framework-technical-design.md).
   - [ ] Resolve relative glob patterns against the case sandbox rather
     than the process working directory.
   - [ ] Resolve file-test paths through the sandbox handle instead of
@@ -1352,7 +1352,7 @@ in [RFC 0007](rfcs/0007-netsukefile-testing-framework.md), the
 
 - [ ] 7.4.2. Implement the fixture lifecycle. See
   [UX design §9](netsuke-test-framework-ux-design.md) and
-  [technical design §7](netsuke-test-framework-technical-design.md).
+  [technical design §8](netsuke-test-framework-technical-design.md).
   - [ ] Resolve `uses` dependencies with a topological sort.
   - [ ] Run structured filesystem actions inside a `cap-std` sandbox.
   - [ ] Guarantee reverse-order teardown on every exit path
@@ -1364,7 +1364,7 @@ in [RFC 0007](rfcs/0007-netsukefile-testing-framework.md), the
 ### 7.5. Actions, assertions, and result views
 
 - [ ] 7.5.1. Implement pipeline actions. Requires: 7.1.2. See
-  [technical design §8](netsuke-test-framework-technical-design.md).
+  [technical design §9](netsuke-test-framework-technical-design.md).
   - [ ] Compose `load_manifest`, `build_graph`, and `generate_ninja` from
     public library functions.
   - [ ] Accumulate `results` across the case in execution order so
@@ -1374,7 +1374,7 @@ in [RFC 0007](rfcs/0007-netsukefile-testing-framework.md), the
 
 - [ ] 7.5.2. Implement the case supervisor and frame protocol. Requires:
   7.4.3, 7.5.1. See
-  [technical design §8.1](netsuke-test-framework-technical-design.md).
+  [technical design §9.1](netsuke-test-framework-technical-design.md).
   - [ ] Run each case in a killable child process, keeping discovery,
     scheduling, and reporting in the parent.
   - [ ] Enforce the deadline with `wait_timeout`, then kill and reap,
@@ -1391,7 +1391,7 @@ in [RFC 0007](rfcs/0007-netsukefile-testing-framework.md), the
 
 - [ ] 7.5.3. Confine subject-manifest paths. Requires: 7.5.1. See
   [UX design §10](netsuke-test-framework-ux-design.md) and
-  [technical design §7](netsuke-test-framework-technical-design.md).
+  [technical design §8](netsuke-test-framework-technical-design.md).
   - [ ] Resolve and validate the action `manifest` argument,
     `given.subject`, and case-level `subject` after template evaluation
     and before `open_manifest_workspace`.
@@ -1416,7 +1416,8 @@ in [RFC 0007](rfcs/0007-netsukefile-testing-framework.md), the
 
 ### 7.6. Command, localization, and reporting
 
-- [ ] 7.6.1. Wire the `test` subcommand. Requires: 7.2.3, 7.4.3, 7.5.5. See
+- [ ] 7.6.1. Wire the `test` subcommand.
+  Requires: 7.2.3, 7.4.3, 7.5.2, 7.5.3, 7.5.5. See
   [UX design §12](netsuke-test-framework-ux-design.md).
   - [ ] Add filters, tags, `--list`, `--fail-fast`, `--timeout`, `--keep`,
     and `--allow-empty`; consume the global `--json` and `--jobs`.

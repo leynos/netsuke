@@ -318,7 +318,7 @@ taxonomy shared by flexmock and cmd-mox:[^5][^6]
 - `spy(...)` — journals every call and passes through to the _effective_
   implementation under test configuration: the sandbox-rooted `glob` and
   file tests, the fixed clock for `now()`, the real manifest macro for a
-  substituted name. Spying `fetch` is a suite error, because the effective
+  substituted name. Spying `fetch` is a suite error because the effective
   implementation under the deny-all network policy can only fail; declare
   a stub or mock instead.
 
@@ -373,14 +373,14 @@ Semantics:
   entries into declaration-order matching. Every surveyed library that
   enforced global ordering by default is remembered for brittle tests;
   every modern one makes ordering opt-in.[^5][^7]
-- `times: N` is a maximum, not a quota. An entry may match up to N calls;
-  the N+1th call that would have matched it instead falls through to later
-  entries, and fails dispatch if none accepts. Fewer than N matches — including
-  none — is not itself a failure, so `times` never doubles as a
-  minimum-call assertion. Entries without `times` match any number of
-  calls. To require that a call happened, assert on the journal
-  (`mocks.<name>.call_count`) or use a `mock`, whose declared entries must
-  all be satisfied by end of case.
+- `times: N` is a maximum, not a quota. An entry may match up to N calls.
+  Once those are spent, the next call that would have matched it falls
+  through to later entries instead, and fails dispatch if none accepts.
+  Fewer than N matches — including none — is not itself a failure, so
+  `times` never doubles as a minimum-call assertion. Entries without `times`
+  match any number of calls. To require that a call happened, assert on the
+  journal (`mocks.<name>.call_count`) or use a `mock`, whose declared
+  entries must all be satisfied by end of case.
 - `returns` supplies a YAML value returned as the MiniJinja value;
   `raises` supplies a structured template error instead.
 
@@ -604,7 +604,7 @@ are the same for all three author-supplied sources — the action's
 - Relative paths resolve against the case sandbox and must stay inside
   it. `../../outside/Netsukefile` is rejected, as is a path whose
   existing components resolve through a symlink leaving the root.
-- Ordinary fixture paths keep working, because a fixture writes its
+- Ordinary fixture paths keep working because a fixture writes its
   manifest inside the sandbox and exports a path within it.
 - The enclosing project's Netsukefile is readable without being writable.
   Approving it as a subject grants read access only; nothing in a test can
@@ -718,7 +718,7 @@ failed differently. `code` matches exactly; `message_contains` is a
 case-sensitive substring test. Diagnostic codes become public contract the
 moment a test matches on them, so `code` matching ships only once the
 diagnostic-stack migration settles and the code namespace is declared
-stable; until then `message_contains` carries negative tests. Terraform's
+stable; until then, `message_contains` carries negative tests. Terraform's
 `expect_failures` confusion — expected failures interacting badly with
 phase defaults — is avoided by attaching the expectation to an explicit
 `then` after an explicit `when`.[^2]
@@ -783,7 +783,7 @@ The command follows the established display policy flags (`--color`,
 which turns on whether the _run_ completed rather than whether every case
 passed. A completed run — all passed, some failed or errored, or
 interrupted — writes exactly one JSON document to stdout and nothing to
-stderr; failing cases are reported inside that document, because they are
+stderr; failing cases are reported inside that document because they are
 what automation reads. A command failure that produces no report (invalid
 suite or selector, an empty selection without `--allow-empty`, or an
 internal runner error) instead leaves stdout empty and writes one
@@ -796,8 +796,11 @@ parent performs the cleanup those children can no longer do themselves,
 reaps every child to collect its status, applies the usual `--keep`
 decision to the run sandbox — removing it, or retaining it and printing
 the path — and exits 130. In `--json` mode the run still emits exactly one
-document, marked `"interrupted": true`, with every unstarted case reported
-as skipped. Waiting for exit before cleanup matters on Windows, where a
+document, marked `"interrupted": true`. Every selected case still appears
+exactly once: a case the parent terminated mid-run is errored, carrying an
+interruption diagnostic and whatever journal it had produced, and a case
+that never started is skipped. Waiting for exit before cleanup matters on
+Windows, where a
 still-terminating child can hold sandbox handles open; ordering the
 shutdown this way is what stops an interrupted run leaving orphaned
 children or half-removed sandboxes behind.

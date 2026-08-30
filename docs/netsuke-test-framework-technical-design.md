@@ -35,7 +35,7 @@ Non-negotiable constraints the rest of the document assumes:
   injected readers per ADR-008.
 - **C3 — no execution.** No action in the first version spawns Ninja, build
   commands, or fixture shell commands. The stdlib command helpers are
-  disabled under test (§4.5). When the deferred `execute` action does
+  disabled under test (§5.5). When the deferred `execute` action does
   arrive it should drive `NinjaProcessOptions` — the narrow execution type
   carrying working directory, job count, and stderr suppression — rather
   than fabricating a `Cli`, since that decoupling exists precisely so
@@ -47,7 +47,25 @@ Non-negotiable constraints the rest of the document assumes:
   the Fluent localization layer; `--json` obeys the one-document stream
   contract that the wider CLI roadmap mandates.
 
-## 2. Architecture summary
+## 2. The gap this closes
+
+Netsukefiles carry logic — `foreach` expansion, `when` conditions, macros,
+environment probes, globbing, executable discovery — and nothing verifies
+it. An author changes a `when` condition and learns whether it still
+matches by running a build and reading the output. That check is slow,
+answers differently on different machines, and cannot express the cases
+that matter most: a target that must _not_ be generated, or a manifest
+that must fail with a particular diagnostic.
+
+The pipeline is already shaped to close this. Manifest loading is staged
+and injectable, `BuildGraph::from_manifest` and `ninja_gen::generate` are
+public functions over plain data, and `netsuke help targets` has already
+established a restricted load mode. What is missing is a way to drive that
+pipeline with substituted seams and assert on what comes out. The
+architecture below adds exactly that, and nothing else: no second
+evaluator, no re-implementation of manifest semantics.
+
+## 3. Architecture summary
 
 The feature adds one new subsystem, `src/testing/`, plus narrow seams in
 existing modules. The runner parses test files into a test-suite AST, then
@@ -58,7 +76,7 @@ overlay-carrying options structure, and evaluates assertions against
 structured result views. The parent supervises those children and renders
 the report.
 
-The process boundary exists to make `--timeout` enforceable (§8.1); it is
+The process boundary exists to make `--timeout` enforceable (§9.1); it is
 not a second evaluator. The diagram below shows the flow for one case,
 with the parent/child split marked: discovery and parsing happen once in
 the parent, case execution happens in a killable child, and the
@@ -96,9 +114,9 @@ unchanged apart from overlay injection at environment-construction time.
 The supervisor enforces the deadline and, on expiry, supplies a
 synthesized errored result in place of the child's._
 
-## 3. Pipeline integration
+## 4. Pipeline integration
 
-### 3.1. The pipeline today
+### 4.1. The pipeline today
 
 The loader driver `from_str_named` (`src/manifest/mod.rs:119`) runs six
 stages: read, `serde_saphyr` parse into a JSON value tree, MiniJinja
@@ -120,7 +138,7 @@ expansion (`register_manifest_macros`, `src/manifest/jinja_macros/mod.rs`),
 so macro substitution is an overlay registered _after_ manifest macros and
 _before_ expansion.
 
-### 3.2. The restricted-load precedent
+### 4.2. The restricted-load precedent
 
 `netsuke help targets` established the pattern this framework extends. The
 loader already selects its standard-library boundary through an enum
@@ -148,17 +166,17 @@ otherwise have invented:
 
 - The disabled-helper diagnostic already exists.
   `manifest_query_operation_error` (`src/stdlib/register.rs:185`) is the
-  template for the "unavailable under test" messages in §4.5; the test
+  template for the "unavailable under test" messages in §5.5; the test
   mode reuses the mechanism with its own message keys rather than
   intercepting MiniJinja's unknown-function error.
 - `disabled_env_reader` (`src/manifest/env_reader.rs:79`) already provides
   a reader that refuses every lookup. The test reader is that reader with
-  the case's declared variables layered over it (§4.1).
+  the case's declared variables layered over it (§5.1).
 - `src/manifest/query.rs` is the precedent module for a capability-scoped
   non-build load, and the test runner's loader entry belongs beside it
   rather than in a new location.
 
-### 3.3. Loader options
+### 4.3. Loader options
 
 The loader gains an options-carrying entry point; the existing entry points
 become thin wrappers over it with default options.
@@ -180,7 +198,7 @@ pub struct TemplateOverlays {
 ```
 
 `registration` carries the stdlib boundary rather than a bare
-`StdlibConfig` plus a separate `NetworkPolicy`, because §3.2 already binds
+`StdlibConfig` plus a separate `NetworkPolicy`, because §4.2 already binds
 those together per mode: the network policy for a test load is a property
 of `StdlibRegistration::Test`, not an independently settable knob. This
 keeps one place where a load mode's capabilities are decided. `Test`
@@ -192,10 +210,10 @@ The structure is named `TemplateOverlays`, not `EnvOverlays`: in this
 codebase "env" means the process environment (ADR-008, `EnvReader`), and
 these overlays substitute callables in the MiniJinja _template_
 environment. The clock deliberately does not appear here — it has exactly
-one owner, `StdlibConfig` (§4.2). `on_stage` keeps the existing
+one owner, `StdlibConfig` (§5.2). `on_stage` keeps the existing
 `&mut dyn FnMut` shape from `from_path_with_policy_and_env`.
 
-`OverlayCallable` wraps a double's dispatch closure (§6). Registration
+`OverlayCallable` wraps a double's dispatch closure (§7). Registration
 order inside environment construction becomes:
 
 1. `env()` and `glob()` from the effective `EnvReader` and glob expander;
@@ -205,14 +223,14 @@ order inside environment construction becomes:
 5. **overlays** — test doubles registered last so they shadow same-named
    stdlib functions (MiniJinja `add_function` replaces an existing
    registration), plus macro substitutions, which additionally rewrite the
-   macro-import prelude (§4.4);
+   macro-import prelude (§5.4);
 6. `expand_foreach`, deserialization, rendering as today.
 
 The overlay hook is compiled unconditionally: it is an ordinary parameter,
 not a test-only `cfg`, because the test runner is a production code path of
 the shipped binary.
 
-### 3.4. Result views
+### 4.4. Result views
 
 `NetsukeManifest` already derives `Serialize` (`src/ast/mod.rs:101`), and
 `GraphView` (`src/graph_view/`) is an existing deterministic projection of
@@ -231,11 +249,11 @@ both:
 The IR types themselves are not exposed: the views are a stable assertion
 surface that can hold shape while internal IR evolves.
 
-## 4. Injection seams
+## 5. Injection seams
 
 Each seam follows the ADR-008 taxonomy; two exist, two are new.
 
-### 4.1. Environment (existing)
+### 5.1. Environment (existing)
 
 `EnvReader` (`src/manifest/env_reader.rs:56`) is an
 `Arc<dyn Fn(&str) -> Result<String, EnvReadError> + Send + Sync>`. The
@@ -244,7 +262,7 @@ their values, `unset` names and everything else return
 `EnvReadError::NotPresent`. The host environment is reachable only through
 an explicit future opt-in; the default reader never consults it (C2, C4).
 
-### 4.2. Clock (new seam)
+### 5.2. Clock (new seam)
 
 `now()` currently calls `OffsetDateTime::now_utc()` directly
 (`src/stdlib/time/mod.rs:49`) — a gap relative to ADR-008. The stdlib time
@@ -261,18 +279,18 @@ supplies a fixed instant parsed from `given.clock.now`. The seam lives in
 knobs — the clock's single owner — and is a prerequisite refactor
 deliverable in its own right.
 
-### 4.3. Network (policy, not transport)
+### 5.3. Network (policy, not transport)
 
 `fetch()` builds its HTTP agent inline (`src/stdlib/network/mod.rs`), so
 transport injection would be invasive. The test runner does not need it: a
 test that wants `fetch` results declares a double for the `fetch` function
-itself, and overlays register after the stdlib (§3.3), so the double
+itself, and overlays register after the stdlib (§4.3), so the double
 shadows the refusing stub. The real network code is therefore unreachable
 under test — either the overlay answers the call, or the refusing stub
 raises a diagnostic telling the author to declare one. No transport seam is
 built, and no live agent is ever constructed.
 
-### 4.4. Macro substitution (new mechanism)
+### 5.4. Macro substitution (new mechanism)
 
 `substitute("stand_in")` compiles the stand-in macro from the test file
 through the same `register_macro` path as manifest macros, then installs a
@@ -295,11 +313,11 @@ Macro substitution therefore edits the prelude as well as the global: for
 each substituted name the overlay removes that name's entry from
 `MACRO_IMPORTS_GLOBAL` and re-adds an import bound to the stand-in's
 compiled template. Both halves are one operation and must stay together;
-the phase-1 spike (§13) covers the prelude rewrite, not merely
+the phase-1 spike (§14) covers the prelude rewrite, not merely
 `add_function` replacement, because the prelude is the half that actually
 decides which macro renders.
 
-### 4.5. Stdlib configuration under test
+### 5.5. Stdlib configuration under test
 
 The runner constructs a per-case `StdlibConfig`
 (`src/stdlib/config/mod.rs:21`) rooted at the sandbox:
@@ -316,7 +334,7 @@ _Table 1: Per-case stdlib configuration._
 
 The command helpers, `fetch`, and the other impure entry points are
 registered as stubs that refuse, following `register_manifest_query`
-(§3.2) rather than being left unregistered. Refusing stubs beat omission:
+(§4.2) rather than being left unregistered. Refusing stubs beat omission:
 under strict-undefined MiniJinja an absent function yields a generic
 unknown-function error, whereas a registered stub raises a located
 diagnostic that names the operation and points at the double syntax. The
@@ -351,10 +369,10 @@ get the stronger guarantee they require.
 With those adapters in place the visibility consequence is worth stating
 plainly: the project tree is _not_ visible to a manifest under test. A
 default-subject test sees only the files its fixtures and `given.fs`
-created. Invariant I4 (§11) is scoped accordingly, and invariant I5's
+created. Invariant I4 (§12) is scoped accordingly, and invariant I5's
 no-ambient-filesystem claim depends on these adapters existing.
 
-## 5. Test-suite AST and parser
+## 6. Test-suite AST and parser
 
 A separate AST in `src/testing/ast.rs`; `NetsukeManifest` is not
 stretched.
@@ -396,7 +414,7 @@ The `tests` block on the manifest side is a new optional field on
 `NetsukeManifest` with `deny_unknown_fields` semantics preserved;
 compatibility consequences are covered in RFC 0007.
 
-## 6. Mock engine
+## 7. Mock engine
 
 `src/testing/mocks.rs` owns double state:
 
@@ -460,19 +478,31 @@ would deadlock the case. Dispatch therefore returns a resolved action
 while unlocked, and the nested call takes the lock in its own turn. A test
 covering a spy that invokes a second double guards this.
 
-Journal entries record the arguments, and the identity of the responding
-entry as a `(double, entry_index)` pair rather than a Rust reference or a
-cloned response value. A borrowed `&CallEntry` would make the journal
-self-referential within `DoubleRegistry`; the index pair is stable across
-the case, keeps response-value deduplication a separate concern (the value
-still lives once in its `CallEntry`), and survives the registry being
-locked and unlocked around each dispatch. The per-double journal ceiling
+Journal entries record the arguments and the origin of the response.
+Where a `CallEntry` answered the call, that origin is a
+`(double, entry_index)` pair rather than a Rust reference or a cloned
+response value: a borrowed `&CallEntry` would make the journal
+self-referential within `DoubleRegistry`, whereas the index pair is stable
+across the case, keeps response-value deduplication a separate concern
+(the value still lives once in its `CallEntry`), and survives the registry
+being locked and unlocked around each dispatch.
+
+Not every response comes from an entry, so the origin is an enum rather
+than a bare pair. A `Stub` that matched nothing answers from its `default`
+or with `Undefined`, and a `Spy` answers from the captured real callable;
+neither has an entry index to name. The journal therefore records
+`ResponseOrigin::Entry { double, entry_index }`, `::StubDefault`, or
+`::Delegate`, and every call appends exactly one entry whichever branch
+answered it. Routing all three through the same append keeps `call_count`
+and the ordered call list complete — an assertion on a spied or defaulted
+call would otherwise silently see nothing — and gives the serialized form
+an explicit discriminant instead of a sentinel index. The per-double journal ceiling
 from the UX design is enforced at append time; breaching it turns the case
 into an error naming the double.
 
 Registry state is per case and lives behind an `Arc<Mutex<..>>` captured by
 the overlay closures; nothing is process-global, so parallel cases cannot
-observe each other (invariant I1, §11). Overlay dispatch runs under
+observe each other (invariant I1, §12). Overlay dispatch runs under
 `catch_unwind`: a panic inside matcher evaluation or value conversion
 becomes a case error, and the registry lock recovers from poisoning so
 end-of-case verification can still report the journalled calls.
@@ -492,7 +522,7 @@ invalid regex is a suite error, not a mid-run surprise. `Exact` backs both
 the bare-argument form and the `eq:` escape hatch; the parser lowers both
 to it.
 
-## 7. Fixture engine
+## 8. Fixture engine
 
 `src/testing/fixtures.rs` resolves the case's requested fixtures into a
 dependency graph (`uses` edges), topologically sorts it — a cycle is a
@@ -533,8 +563,18 @@ is applied over them.
 
 All case sandboxes live under one per-run root named
 `netsuke-test-<pid>-<nonce>`. The runner installs an interrupt handler
-that stops scheduling, tears down completed fixtures, removes the run root
-unless `--keep`, and exits with the interrupted code; a SIGKILL still
+that stops scheduling, terminates and reaps live children, tears down
+completed fixtures, removes the run root unless `--keep`, and exits with
+the interrupted code. Every selected case still reaches the report exactly
+once (I9), which requires assigning a status to two groups the normal path
+never produces: a case whose child the parent terminated is errored, with
+an interruption diagnostic and whatever journal arrived before the signal;
+a case that never started is skipped. The collector applies the same
+sorted file and declaration ordering it uses for a completed run before
+rendering, so an interrupted run's report is deterministic rather than
+ordered by how far the run happened to get. An interruption report test
+covers a run containing all three groups — finished, terminated, and never
+started. A SIGKILL of the parent still a SIGKILL still
 leaks, so the recognizable naming scheme plus age-based reaping of stale
 run roots at the start of the next run makes leaks self-healing. A case
 whose sandbox cannot be provisioned is errored and isolated; only failure
@@ -552,13 +592,13 @@ Fixture `exports` are Jinja templates evaluated against the fixture's
 local bindings (for example the `tmpdir` name) and exposed to `let` and
 assertions as `fixtures.<name>.<field>`.
 
-## 8. Actions and the case runner
+## 9. Actions and the case runner
 
 `src/testing/actions.rs` implements the three pipeline actions as thin
 compositions of public library functions:
 
 - `load_manifest` → `manifest::from_str_named`-equivalent entry with
-  `ManifestLoadOptions` (§3.3);
+  `ManifestLoadOptions` (§4.3);
 - `build_graph` → `BuildGraph::from_manifest`
   (`src/ir/from_manifest.rs:38`) over the loaded manifest;
 - `generate_ninja` → `ninja_gen::generate` over the built graph.
@@ -586,7 +626,7 @@ has no `then`).
 
 The scheduler runs cases in parallel up to `--jobs` (defaulting to
 available parallelism), one case per worker, with no shared mutable state
-at all. A worker supervises one child at a time (§8.1) and forwards the
+at all. A worker supervises one child at a time (§9.1) and forwards the
 finished, immutable `CaseResult` — whether the child produced it or the
 supervisor synthesized it after a timeout — down a channel to a single
 collector, and only the collector writes the report. That keeps report
@@ -600,13 +640,18 @@ guards this.
 
 `--fail-fast` is a scheduling decision, made where results are already
 serialized: the collector observes the first `CaseResult` whose status is
-failed or errored and sets a stop flag that workers check before claiming
-their next case. Cases already in flight are left alone and run to
-completion, so their teardown and journal handling are unaffected; only
-unclaimed cases are affected, and the collector records each of them as
-skipped so the report still totals the full selection (I9). Making the
-collector the observation point matters: it is the one place that sees
-every result, so the decision cannot race between workers. A test that
+failed or errored and sets a stop flag. Workers do not test that flag and
+then take work as two steps: checking it and claiming the next case are a
+single atomic operation on the shared queue, so a worker cannot observe a
+clear flag, lose its slice, and claim a case after the failure was
+recorded. Cases already in flight are left alone and run to completion, so
+their teardown and journal handling are unaffected; only unclaimed cases
+are affected, and the collector records each of them as skipped so the
+report still totals the full selection (I9). Making the collector the
+observation point matters: it is the one place that sees every result, so
+the decision cannot race between workers. A boundary test drives
+preemption into the window between observing the flag and claiming work,
+asserting no case starts after the first failure is recorded. A test that
 selects more cases than `--jobs` and completes them out of order covers
 all three states — finished, in flight at the moment of failure, and never
 started.
@@ -617,7 +662,7 @@ an errored case. Either way the worker survives and every selected case
 reaches the report (invariant I9). Process isolation strengthens this:
 a child that aborts outright can no longer take the run down with it.
 
-### 8.1. Enforcing the per-case timeout
+### 9.1. Enforcing the per-case timeout
 
 `--timeout` is a hard per-case wall-clock bound, not a best-effort one.
 Making it hard requires a cancellation boundary, because MiniJinja
@@ -657,7 +702,18 @@ length-prefixed `serde_json` frames, versioned like the existing
 disagree. `serde_json` is already a dependency; no IPC crate, socket, or
 named pipe is introduced. Frames are bounded — a journal ceiling breach
 truncates rather than streaming without limit — and the parent treats a
-truncated final frame as "no complete result", falling to step 4. The
+truncated final frame as "no complete result", falling to step 4.
+
+The stream carries more than one final result, because a terminated case
+would otherwise report an empty journal however much it had done. The
+child emits an incremental journal frame as calls accumulate, so the
+parent holds a checkpoint of everything recorded before the signal
+arrived. Step 5's "whatever mock journal arrived" is exactly this: the
+last checkpoint, not a best guess. Checkpoint frames are the same
+versioned envelope as the result frame and are equally bounded, and the
+parent discards them once a complete `CaseResult` supersedes them. A
+deterministic test kills a case after a known journal entry and asserts
+the parent's report contains that entry. The
 child's stderr is captured and folded into the case's diagnostics rather
 than leaking into the parent's stream, preserving stream purity (I8).
 
@@ -707,7 +763,7 @@ its sandbox for inspection, on the same terms as `--keep`, and the path is
 printed. The parent reaps every child it spawns, including on the
 interrupt path, so no zombies survive the run.
 
-## 9. CLI integration
+## 10. CLI integration
 
 `src/cli/parser.rs` gains `Commands::Test(TestArgs)` with the flags from
 the UX design §12. Like `GraphArgs`, the purely per-invocation flags are
@@ -728,7 +784,7 @@ are deliberately locale-invariant machine output, not localized prose: the
 suggested YAML stanza for unmatched calls and the expression-with-values
 rendering in failure reports.
 
-## 10. Reporting
+## 11. Reporting
 
 `src/testing/report.rs` renders both formats from one `SuiteReport`
 structure. Human rendering streams per case through the
@@ -740,7 +796,7 @@ rendered expression-with-values text — truncated per the UX design's
 elision rule — so CI consumers get the same diagnostic a terminal user
 sees without unbounded report growth.
 
-## 11. Verification obligations
+## 12. Verification obligations
 
 Named invariants the implementation must discharge, with their
 verification methods. These are design commitments, not a test-type list.
@@ -752,10 +808,17 @@ verification methods. These are design commitments, not a test-type list.
   across cases and assert disjoint journals.
 - **I2 — teardown exactly once, reverse order.** Every fixture whose setup
   completed tears down exactly once, in reverse setup order, on every exit
-  path. _Method:_ `proptest` over randomly generated fixture dependency
-  graphs of at most 16 fixtures, with injected failures at each lifecycle
-  point, asserting the teardown sequence property; case counts are bounded
-  in the nextest profile so this suite cannot become the slowest gate.
+  path the child controls: normal completion, assertion failure, action
+  error, fixture-setup failure, and cooperative timeout. Forced termination
+  is excluded by construction, because the child is gone and no ordered
+  state survives it; there the guarantee is weaker and stated separately —
+  parent-side cleanup deletes the case sandbox, which is idempotent and
+  makes no ordering claim (§9.1). _Method:_ `proptest` over randomly
+  generated fixture dependency graphs of at most 16 fixtures, with injected
+  failures at each lifecycle point, asserting the teardown sequence
+  property; case counts are bounded in the nextest profile so this suite
+  cannot become the slowest gate. Termination-during-setup tests cover the
+  excluded path separately.
 - **I3 — strict mock determinism.** An unmatched call on a `Mock` fails
   the action at the call site; the journal preserves call order, arguments,
   and responses. _Method:_ unit tests per matcher and dispatch rule;
@@ -764,7 +827,7 @@ verification methods. These are design commitments, not a test-type list.
   whose file observations are confined to the sandbox (fixture-provided
   files) or fully doubled, `load_manifest`/`build_graph`/`generate_ninja`
   under `netsuke test` produce results identical to the build path run
-  over the same tree. The scoping is forced by §4.5: the sandbox root
+  over the same tree. The scoping is forced by §5.5: the sandbox root
   means a manifest observing the project tree legitimately differs under
   test. _Method:_ differential tests that run both paths over the example
   manifests inside one tree and compare serialized outputs; `insta`
@@ -772,7 +835,7 @@ verification methods. These are design commitments, not a test-type list.
 - **I5 — no build execution, no network, no ambient environment.** Under
   test, no build command, Ninja invocation, or fixture shell command runs;
   no socket is opened; and no host environment variable is read outside an
-  explicit opt-in. The per-case child process (§8.1) is the runner
+  explicit opt-in. The per-case child process (§9.1) is the runner
   supervising itself, not the manifest executing anything, and it inherits
   every restriction in this list. _Method:_ the seams make
   these unrepresentable (impure helpers registered as refusing stubs,
@@ -840,7 +903,7 @@ independence claim.
 New `tests/*.rs` files land as real Cargo targets; the existing
 integration-test wiring contract test enforces this automatically.
 
-## 12. Module layout
+## 13. Module layout
 
 ```plaintext
 src/testing/
@@ -876,7 +939,7 @@ subsystem follows whichever diagnostic direction (miette versus anyhow)
 the in-flight migration settles on, and must not add new dependencies on
 the deprecated path.
 
-## 13. Phasing
+## 14. Phasing
 
 The minimum viable implementation, in dependency order:
 
@@ -884,11 +947,11 @@ The minimum viable implementation, in dependency order:
    behaviour change; I4/I7 differential tests land here). The spike comes
    first because it gates the overlay architecture: it pins MiniJinja
    `add_function` replacement semantics for shadowing, and the runner-side
-   handle capture that spies depend on (§6). If shadowing fails, the
+   handle capture that spies depend on (§7). If shadowing fails, the
    fallback is filtering the macro out of `register_manifest_macros` via
    `TemplateOverlays`, which the options structure already permits.
 2. Test-suite AST, parser, and discovery (I6). Localization keys for the
-   dialect's diagnostics are defined from this phase onwards (§9).
+   dialect's diagnostics are defined from this phase onwards (§10).
 3. Mock engine and overlays for functions and macro substitution (I1, I3).
 4. Fixture engine and sandbox (I2).
 5. Actions, result views, and the case supervisor with its frame protocol
@@ -902,7 +965,7 @@ Deferred work is enumerated in the UX design §15; nothing in this
 architecture forecloses it. Roadmap phase 7 tracks these deliverables as
 numbered tasks.
 
-## 14. Synchronization
+## 15. Synchronization
 
 This document must be kept in step with the decisions and documents that
 govern it. When any of the following change, this document is updated in
@@ -914,10 +977,10 @@ it is reconciled:
 - [RFC 0007](rfcs/0007-netsukefile-testing-framework.md), which positions
   and scopes the feature.
 - [ADR-008](adr-008-environment-seam-taxonomy.md), which governs the
-  environment injection seams §4 relies on.
+  environment injection seams §5 relies on.
 - [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md), which
   governs the glob capability scoping the mock engine and sandbox rely on.
-- [Roadmap phase 7](roadmap.md), which tracks the phasing above (§13) as
+- [Roadmap phase 7](roadmap.md), which tracks the phasing above (§14) as
   numbered deliverables.
 
 If an accepted ADR changes, the ADR wins: this document is either updated
