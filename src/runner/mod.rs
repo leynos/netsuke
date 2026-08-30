@@ -54,6 +54,7 @@ pub use process::{
     CommandEnv, MAX_RETAINED_DYNDEP_FILES, NinjaBuildRequest, NinjaJobCount, NinjaProcessOptions,
     NinjaToolRequest, StderrMode, run_ninja_tool_with, run_ninja_with,
 };
+pub use recipe_shell_telemetry::{BASH_PREFLIGHT_TOTAL, RECIPE_SHELL_RESOLUTIONS_TOTAL};
 
 use dyndep_publication::{materialize_dyndep_bundle, prune_dyndep_bundle};
 use path_helpers::{ensure_manifest_exists_or_error, resolve_manifest_path, resolve_output_path};
@@ -70,7 +71,7 @@ struct ExecutionContext<'a> {
     /// conversion, preserving valid non-UTF-8 executable paths.
     ninja_program: &'a Path,
     /// Explicit interpreter for generated legacy recipe text.
-    recipe_shell: ninja_gen::RecipeShell,
+    recipe_shell: crate::recipe_shell::RecipeShell,
 }
 
 /// Target list passed through to Ninja; an empty slice uses IR defaults.
@@ -302,7 +303,7 @@ pub(super) fn generate_ninja_with_shell(
     cli: &Cli,
     reporter: &dyn StatusReporter,
     tool_key: Option<LocalizationKey>,
-    recipe_shell: ninja_gen::RecipeShell,
+    recipe_shell: crate::recipe_shell::RecipeShell,
 ) -> Result<ninja_gen::GeneratedNinja> {
     recipe_shell::validate_recipe_shell(recipe_shell)?;
     let manifest_path = resolve_manifest_path(cli)?;

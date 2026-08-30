@@ -34,11 +34,11 @@ mod ninja_gen_recipe_shell;
 #[path = "../ninja_gen_validation.rs"]
 mod ninja_gen_validation;
 
+pub use crate::recipe_shell::RecipeShell;
 pub use explicit_shell::generate_with_shell;
 use ninja_gen_command_list::{ActionId, CommandListEntry, command_list_entry};
 pub use ninja_gen_error::NinjaGenError;
 use ninja_gen_escape::{ShellText, escape_metadata_value};
-pub use ninja_gen_recipe_shell::RecipeShell;
 use ninja_gen_validation::{validate_action_metadata, validate_action_recipe};
 /// Write `key = value` to a Ninja file when `opt` holds a value.
 ///

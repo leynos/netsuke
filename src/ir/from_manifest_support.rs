@@ -11,7 +11,7 @@ use camino::Utf8PathBuf;
 use crate::ast::{Recipe, Rule, StringOrList};
 use crate::hasher::ActionHasher;
 use crate::localization::{self, keys};
-use crate::ninja_gen::RecipeShell;
+use crate::recipe_shell::RecipeShell;
 
 use super::super::{
     cmd_interpolate::{

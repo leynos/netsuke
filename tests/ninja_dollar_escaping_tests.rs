@@ -362,7 +362,7 @@ fn placeholders_inside_backticks_are_rejected_before_backend_escaping() -> Resul
     let manifest = manifest::from_str(
         "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: in\n    script: 'echo `basename $out`'\n",
     )?;
-    let result = BuildGraph::from_manifest(&manifest);
+    let result = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::Posix);
     ensure!(
         result.is_err(),
         "a placeholder protected by backticks must not silently reach the shell"

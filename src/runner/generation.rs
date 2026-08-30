@@ -104,7 +104,7 @@ pub(super) fn build_graph(manifest: &NetsukeManifest) -> Result<BuildGraph> {
 /// on circular dependencies or duplicate outputs).
 pub(super) fn build_graph_for_shell(
     manifest: &NetsukeManifest,
-    shell: crate::ninja_gen::RecipeShell,
+    shell: crate::recipe_shell::RecipeShell,
 ) -> Result<BuildGraph> {
     BuildGraph::from_manifest_for_shell(manifest, shell)
         .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH))
@@ -128,7 +128,7 @@ pub(super) fn build_graph_for_shell(
 /// Returns an error when Ninja synthesis fails.
 pub(super) fn ninja_text_for_shell(
     graph: &BuildGraph,
-    shell: crate::ninja_gen::RecipeShell,
+    shell: crate::recipe_shell::RecipeShell,
 ) -> Result<ninja_gen::GeneratedNinja, ninja_gen::NinjaGenError> {
     ninja_gen::dyndep::generate_bundle_for_shell(graph, shell)
 }

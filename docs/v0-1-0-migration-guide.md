@@ -143,9 +143,16 @@ entry can overwrite it. Multiple native commands inside one entry are not
 individually instrumented. Variables, environment assignments, and
 current-directory changes persist between entries. Each scalar, script, action,
 and target has a fresh shell process. In PowerShell, `{{ ins }}` and `{{ outs }}`
-remain path-quoted. Build and default-target paths containing spaces are
-rejected before generation; quote any other path or argument with the selected
-shell's syntax. On POSIX and Bash routes, `$$` means the process identifier; in
+remain path-quoted. Build and default-target paths containing spaces are escaped
+for Ninja, so whitespace-containing outputs remain valid; quote any other path
+or argument with the selected shell's syntax. Encoded PowerShell commands are
+retained while they fit the Windows command-line limit. Larger recipes use
+Ninja's `rspfile` and `rspfile_content` bindings, with a unique `$out`-derived
+name per edge, creation in that edge's working directory, an ASCII PowerShell
+bootstrap containing the Base64 UTF-16LE recipe payload, and Ninja cleanup after
+execution. The command invokes the bootstrap with `powershell.exe -File
+"$rspfile"`. Query-only generation does not create response files. On POSIX and
+Bash routes, `$$` means the process identifier; in
 PowerShell, `$$` is the automatic variable containing the last token received
 by the session.
 

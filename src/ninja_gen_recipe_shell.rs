@@ -4,6 +4,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 use super::NinjaGenError;
 use super::ninja_gen_escape::{NinjaValue, ShellText, escape_ninja_value};
+use crate::recipe_shell::RecipeShell;
 
 /// Leave space for Windows' terminating command-line NUL character.
 const MAX_POWER_SHELL_COMMAND_LINE: usize = 32_766;
@@ -12,29 +13,22 @@ const MAX_POWER_SHELL_COMMAND_LINE: usize = 32_766;
 const POWER_SHELL_COMMAND_PREFIX: &str =
     "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ";
 
-/// Fixed command that decodes an oversized recipe from Ninja's response file.
+/// Fixed command that executes Ninja's oversized-recipe response file.
 ///
-/// Ninja expands `$rspfile`; the doubled dollar signs preserve PowerShell
-/// variables until the spawned interpreter receives them.
-const POWER_SHELL_RESPONSE_FILE_COMMAND: &str = concat!(
-    "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ",
-    "\"$$netsukePayload = try { [IO.File]::ReadAllText($$args[0]) } catch { ",
-    "throw \\\"Netsuke could not read the PowerShell response file: $$($$_.Exception.Message)\\\" }; ",
-    "$$netsukeScript = try { [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($$netsukePayload)) } ",
-    "catch { throw \\\"Netsuke could not decode the PowerShell response file: $$($$_.Exception.Message)\\\" }; ",
-    "& ([ScriptBlock]::Create($$netsukeScript))\" \"$rspfile\""
-);
+/// Ninja expands `$rspfile` into a separately quoted `-File` argument, so the
+/// path never becomes PowerShell source text.
+const POWER_SHELL_RESPONSE_FILE_COMMAND: &str =
+    "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"$rspfile\"";
 
-/// Selects the interpreter that receives completed legacy recipe text.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RecipeShell {
-    /// Uses the host POSIX shell through Ninja's ordinary Unix execution path.
-    Posix,
-    /// Uses Windows PowerShell with an encoded script argument.
-    PowerShell,
-    /// Uses an explicitly selected Bash compatibility runtime on Windows.
-    Bash,
-}
+/// Start the one-line response-file bootstrap before its Base64 payload.
+const POWER_SHELL_RESPONSE_FILE_SCRIPT_PREFIX: &str = "$netsukePayload = '";
+
+/// Finish the one-line response-file bootstrap after its Base64 payload.
+const POWER_SHELL_RESPONSE_FILE_SCRIPT_SUFFIX: &str = concat!(
+    "'; $netsukeScript = try { [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($netsukePayload)) } ",
+    "catch { throw \"Netsuke could not decode the PowerShell response file: $($_.Exception.Message)\" }; ",
+    "& ([ScriptBlock]::Create($netsukeScript))"
+);
 
 /// Represent one Ninja command binding and its optional response-file payload.
 pub(super) enum RenderedRecipeCommand {
@@ -42,9 +36,9 @@ pub(super) enum RenderedRecipeCommand {
     Direct(NinjaValue),
     /// Let Ninja materialize and remove a response file for one build edge.
     ResponseFile {
-        /// Fixed command that decodes the response-file payload.
+        /// Fixed command that starts the response file as a PowerShell script.
         command: NinjaValue,
-        /// Base64 UTF-16LE recipe text that Ninja writes immediately before execution.
+        /// One-line bootstrap script that contains Base64 UTF-16LE recipe text.
         content: NinjaValue,
     },
 }
@@ -67,15 +61,6 @@ impl RenderedRecipeCommand {
 }
 
 impl RecipeShell {
-    /// Return the interpreter Netsuke selects when no Windows override exists.
-    pub(crate) const fn host_default() -> Self {
-        if cfg!(windows) {
-            Self::PowerShell
-        } else {
-            Self::Posix
-        }
-    }
-
     /// Render completed recipe text as a safe Ninja command binding value.
     pub(super) fn command_value(
         self,
@@ -135,7 +120,7 @@ impl RecipeShell {
         if length > MAX_POWER_SHELL_COMMAND_LINE {
             return Ok(RenderedRecipeCommand::ResponseFile {
                 command: NinjaValue::from_encoded(POWER_SHELL_RESPONSE_FILE_COMMAND.into()),
-                content: NinjaValue::from_encoded(command),
+                content: power_shell_response_file_content(&command)?,
             });
         }
         Ok(RenderedRecipeCommand::Direct(NinjaValue::from_encoded(
@@ -148,6 +133,18 @@ impl RecipeShell {
         let command = format!("bash.exe -e -c {}", windows_argument(script.as_str()));
         escape_ninja_value(&ShellText::new(command))
     }
+}
+
+/// Build the one-line PowerShell bootstrap stored in Ninja's response file.
+///
+/// The response file is itself a `-File` script so Windows PowerShell receives
+/// its path through normal argument parsing. The payload remains Base64 because
+/// Ninja bindings cannot safely carry a multi-line legacy recipe directly.
+fn power_shell_response_file_content(encoded_script: &str) -> Result<NinjaValue, NinjaGenError> {
+    let bootstrap = format!(
+        "{POWER_SHELL_RESPONSE_FILE_SCRIPT_PREFIX}{encoded_script}{POWER_SHELL_RESPONSE_FILE_SCRIPT_SUFFIX}"
+    );
+    escape_ninja_value(&ShellText::new(bootstrap))
 }
 
 /// Quote one argument according to the Windows `CommandLineToArgvW` convention.
@@ -177,7 +174,10 @@ fn windows_argument(argument: &str) -> String {
 mod tests {
     //! Verifies interpreter-specific Ninja command rendering.
 
-    use super::{POWER_SHELL_COMMAND_PREFIX, RecipeShell, RenderedRecipeCommand, windows_argument};
+    use super::{
+        POWER_SHELL_COMMAND_PREFIX, POWER_SHELL_RESPONSE_FILE_COMMAND, RecipeShell,
+        RenderedRecipeCommand, windows_argument,
+    };
     use crate::ninja_gen::ninja_gen_escape::ShellText;
     use base64::{Engine as _, engine::general_purpose::STANDARD};
     use proptest::prelude::*;
@@ -253,6 +253,16 @@ mod tests {
             RenderedRecipeCommand::ResponseFile { .. }
         ));
         assert!(!result.command().to_string().contains(&recipe));
+        assert_eq!(
+            result.command().to_string(),
+            POWER_SHELL_RESPONSE_FILE_COMMAND
+        );
+        let content = result
+            .response_file_content()
+            .expect("oversized recipes should include a response-file script")
+            .to_string();
+        assert!(!content.contains(&recipe));
+        assert!(content.contains("$$netsukePayload"));
     }
 
     /// Reject NUL-bearing PowerShell text before either transport can serialize it.

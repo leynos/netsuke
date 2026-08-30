@@ -8,7 +8,10 @@ use metrics::{Counter, Gauge, Histogram, Key, KeyName, Metadata, SharedString, U
 use metrics_util::MetricKind;
 use metrics_util::debugging::{DebuggingRecorder, Snapshotter};
 
-use netsuke::cli::{DISCOVERY_DURATION, DISCOVERY_OUTCOME_VALUES, DISCOVERY_TOTAL};
+use netsuke::{
+    cli::{DISCOVERY_DURATION, DISCOVERY_OUTCOME_VALUES, DISCOVERY_TOTAL},
+    runner::{BASH_PREFLIGHT_TOTAL, RECIPE_SHELL_RESOLUTIONS_TOTAL},
+};
 
 /// Counter emitted by the library for bounded timing-summary sink outcomes.
 pub(super) const TIMING_SUMMARY_SINK_WRITES_TOTAL: &str =
@@ -27,6 +30,17 @@ const OUTCOME_LABEL: &str = "outcome";
 const PHASE_VALUES: [&str; 2] = [DIAG_MODE_PHASE, MERGE_PHASE];
 /// The bounded outcome values accepted on configuration-load counter series.
 const OUTCOME_VALUES: [&str; 2] = ["success", "failure"];
+/// Bounded interpreter values emitted by recipe-shell counters.
+const RECIPE_SHELL_VALUES: [&str; 3] = ["posix", "powershell", "bash"];
+/// Bounded outcomes emitted by recipe-shell resolution.
+const RECIPE_SHELL_RESOLUTION_OUTCOMES: [&str; 2] = ["success", "error"];
+/// Bounded error categories emitted by recipe-shell resolution.
+const RECIPE_SHELL_RESOLUTION_ERROR_CATEGORIES: [&str; 2] = ["none", "invalid_selection"];
+/// Bounded outcomes emitted by Bash compatibility preflight.
+const BASH_PREFLIGHT_OUTCOMES: [&str; 2] = ["success", "error"];
+/// Bounded probe results emitted by Bash compatibility preflight.
+const BASH_PREFLIGHT_PROBE_OUTCOMES: [&str; 4] =
+    ["success", "not_found", "launch_failed", "non_zero_exit"];
 
 /// Application recorder that retains only bounded observability series.
 ///
@@ -63,6 +77,8 @@ impl ConfigMetricsRecorder {
                 | DISCOVERY_DURATION
                 | TIMING_SUMMARY_SINK_WRITES_TOTAL
                 | TIMING_SUMMARY_SINK_WRITE_DURATION
+                | RECIPE_SHELL_RESOLUTIONS_TOTAL
+                | BASH_PREFLIGHT_TOTAL
         )
     }
 
@@ -81,6 +97,22 @@ impl ConfigMetricsRecorder {
             TIMING_SUMMARY_SINK_WRITES_TOTAL => {
                 exact_labels(key, &[(OUTCOME_LABEL, &TIMING_SUMMARY_SINK_WRITE_OUTCOMES)])
             }
+            RECIPE_SHELL_RESOLUTIONS_TOTAL => exact_labels(
+                key,
+                &[
+                    ("recipe_shell", &RECIPE_SHELL_VALUES),
+                    (OUTCOME_LABEL, &RECIPE_SHELL_RESOLUTION_OUTCOMES),
+                    ("error_category", &RECIPE_SHELL_RESOLUTION_ERROR_CATEGORIES),
+                ],
+            ),
+            BASH_PREFLIGHT_TOTAL => exact_labels(
+                key,
+                &[
+                    ("recipe_shell", &["bash"]),
+                    (OUTCOME_LABEL, &BASH_PREFLIGHT_OUTCOMES),
+                    ("probe_outcome", &BASH_PREFLIGHT_PROBE_OUTCOMES),
+                ],
+            ),
             _ => false,
         }
     }

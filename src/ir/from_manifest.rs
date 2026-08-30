@@ -12,11 +12,20 @@ use camino::Utf8PathBuf;
 
 use crate::ast::{MISSING_RECIPE_ERROR, NetsukeManifest, Recipe, Rule};
 use crate::localization::{self, keys};
-use crate::ninja_gen::RecipeShell;
 
 use super::{
     cycle::{self, CycleDetectionReport},
     graph::{Action, BuildEdge, BuildGraph, DependencyOrder, IrGenError, IrHashMap},
+};
+
+
+//! Manifest-to-IR conversion helpers.
+//!
+//! Implements [`BuildGraph::from_manifest`], which lowers a parsed
+//! [`crate::ast::NetsukeManifest`] into a [`BuildGraph`].  Delegates
+//! template rendering to [`crate::manifest::render`], command interpolation
+//! to [`super::cmd_interpolate`], and cycle/missing-dependency detection to
+//! [`super::cycle`].
 };
 
 #[path = "from_manifest_support.rs"]

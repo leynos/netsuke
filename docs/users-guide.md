@@ -347,14 +347,21 @@ and `$env:NAME` reads an environment variable; `${VAR:-default}` is POSIX
 syntax and is not valid PowerShell. Recipe text is protected from Ninja dollar
 expansion, so write ordinary PowerShell dollars rather than `$$`. The rendered
 `{{ ins }}` and `{{ outs }}` paths use single-quoted PowerShell arguments.
-Build and default-target paths containing spaces are rejected before recipe
-generation. Quote every other path and argument with PowerShell syntax;
-arbitrary rendered Jinja text is not shell-quoted.
+Build and default-target paths containing spaces are escaped for Ninja before
+recipe generation, so `{{ outs }}` can name a whitespace-containing output.
+Quote every other path and argument with PowerShell syntax; arbitrary rendered
+Jinja text is not shell-quoted.
 
-Netsuke rejects a PowerShell recipe when its encoded invocation would exceed
-the 32,766-character Windows command-line safety limit. The diagnostic
-instructs that the legacy recipe be split into smaller actions; v0.1.x does not
-spill an oversized script to a temporary file or standard input.
+Recipes that fit within Windows' 32,766-character command-line safety limit use
+the encoded `powershell.exe` invocation described above. Larger scalar commands,
+scripts, and command lists use Ninja's `rspfile` and `rspfile_content` bindings,
+so recipe text is not truncated or rejected solely because of its encoded size.
+Each Ninja edge derives a unique response-file name from `$out`; Ninja creates it
+in the edge's working directory and writes an ASCII PowerShell bootstrap
+containing the Base64 UTF-16LE recipe payload. The command invokes that bootstrap
+with `powershell.exe -File "$rspfile"`, and Ninja removes the response file after
+execution. Query-only generation emits these bindings but does not create files.
+Response-file setup failures are reported by Ninja as execution errors.
 
 Ninja turns a failed recipe into its own non-zero result, and `netsuke` returns
 failure after forwarding Ninja's output. The CLI contract distinguishes success

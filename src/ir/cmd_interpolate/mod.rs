@@ -15,7 +15,7 @@ use shell_quote::{QuoteRefExt, Sh};
 use std::cell::Cell;
 
 use super::IrGenError;
-use crate::ninja_gen::RecipeShell;
+use crate::recipe_shell::RecipeShell;
 
 mod substitution;
 

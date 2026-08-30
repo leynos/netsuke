@@ -25,25 +25,21 @@ fn assert_large_recipe_uses_ninja_response_file(
         shell: RecipeShell::PowerShell,
     }
     .write_into(&mut rendered)?;
-    ensure!(rendered.contains("-Command"));
+    ensure!(rendered.contains("-File \"$rspfile\""));
     ensure!(!rendered.contains("-EncodedCommand"));
     ensure!(rendered.contains("rspfile = $out.netsuke-large_power_shell.rsp"));
     ensure!(rendered.contains("rspfile_content = "));
     ensure!(!rendered.contains(expected_script));
-    let encoded = rendered
+    let response_file_script = rendered
         .lines()
         .find_map(|line| line.strip_prefix("  rspfile_content = "))
         .context("oversized PowerShell command should provide Ninja response-file content")?;
-    let script = decode_power_shell_script(encoded)?;
+    let script = decode_response_file_payload(response_file_script)?;
     ensure!(script.starts_with("$ErrorActionPreference = 'Stop'\n"));
     ensure!(script.contains(expected_script));
     ensure!(
-        rendered.contains("Netsuke could not read the PowerShell response file"),
-        "the response-file transport must report setup failures clearly"
-    );
-    ensure!(
         rendered.contains("Netsuke could not decode the PowerShell response file"),
-        "the response-file transport must report decoding failures clearly"
+        "the response-file bootstrap must report decoding failures clearly"
     );
     Ok(())
 }
@@ -215,6 +211,20 @@ fn decode_power_shell_script(encoded: &str) -> Result<String> {
         .map(|[low, high]| u16::from(*low) | (u16::from(*high) << 8))
         .collect::<Vec<_>>();
     String::from_utf16(&units).context("decode PowerShell UTF-16 payload")
+}
+
+/// Decode the Base64 UTF-16LE recipe payload embedded in a Ninja response script.
+fn decode_response_file_payload(response_file_script: &str) -> Result<String> {
+    let bootstrap = response_file_script.replace("$$", "$");
+    let encoded = bootstrap
+        .strip_prefix("$netsukePayload = '")
+        .and_then(|content| {
+            content.strip_suffix(
+                "'; $netsukeScript = try { [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($netsukePayload)) } catch { throw \"Netsuke could not decode the PowerShell response file: $($_.Exception.Message)\" }; & ([ScriptBlock]::Create($netsukeScript))",
+            )
+        })
+        .context("response file should contain the PowerShell Base64 bootstrap")?;
+    decode_power_shell_script(encoded)
 }
 
 /// Verify that malformed odd-length UTF-16LE PowerShell payloads are rejected.

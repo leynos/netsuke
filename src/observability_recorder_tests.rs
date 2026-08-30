@@ -8,6 +8,7 @@
 use super::*;
 use metrics::{SharedString, Unit};
 use metrics_util::{CompositeKey, MetricKind, debugging::DebugValue};
+use netsuke::runner::{BASH_PREFLIGHT_TOTAL, RECIPE_SHELL_RESOLUTIONS_TOTAL};
 
 type SnapshotEntry = (CompositeKey, Option<Unit>, Option<SharedString>, DebugValue);
 
@@ -116,6 +117,93 @@ fn recorder_retains_bounded_timing_summary_sink_series() {
     assert_timing_summary_counter(&snapshot, "success");
     assert_timing_summary_counter(&snapshot, "write_error");
     assert_unlabelled_duration(&snapshot, TIMING_SUMMARY_SINK_WRITE_DURATION, 0.01);
+}
+
+/// Retain only the fixed recipe-shell counter vocabulary exposed by the runner.
+#[test]
+fn recorder_retains_bounded_recipe_shell_series() {
+    let recorder = ConfigMetricsRecorder::new();
+    let snapshotter = recorder.snapshotter();
+
+    metrics::with_local_recorder(&recorder, || {
+        counter!(
+            RECIPE_SHELL_RESOLUTIONS_TOTAL,
+            "recipe_shell" => "powershell",
+            "outcome" => "success",
+            "error_category" => "none"
+        )
+        .increment(1);
+        counter!(
+            BASH_PREFLIGHT_TOTAL,
+            "recipe_shell" => "bash",
+            "outcome" => "error",
+            "probe_outcome" => "not_found"
+        )
+        .increment(1);
+        counter!(
+            RECIPE_SHELL_RESOLUTIONS_TOTAL,
+            "recipe_shell" => "unbounded",
+            "outcome" => "success",
+            "error_category" => "none"
+        )
+        .increment(1);
+        counter!(
+            BASH_PREFLIGHT_TOTAL,
+            "recipe_shell" => "powershell",
+            "outcome" => "error",
+            "probe_outcome" => "not_found"
+        )
+        .increment(1);
+    });
+
+    let snapshot = snapshotter.snapshot().into_vec();
+    assert_eq!(
+        snapshot.len(),
+        2,
+        "only bounded recipe-shell series are retained"
+    );
+    assert_recipe_shell_counter(
+        &snapshot,
+        RECIPE_SHELL_RESOLUTIONS_TOTAL,
+        &[
+            ("recipe_shell", "powershell"),
+            ("outcome", "success"),
+            ("error_category", "none"),
+        ],
+    );
+    assert_recipe_shell_counter(
+        &snapshot,
+        BASH_PREFLIGHT_TOTAL,
+        &[
+            ("recipe_shell", "bash"),
+            ("outcome", "error"),
+            ("probe_outcome", "not_found"),
+        ],
+    );
+}
+
+/// Assert that one retained recipe-shell counter has exactly `labels`.
+fn assert_recipe_shell_counter(
+    snapshot: &[SnapshotEntry],
+    metric_name: &str,
+    labels: &[(&str, &str)],
+) {
+    assert!(
+        snapshot.iter().any(|entry| {
+            entry.0.kind() == MetricKind::Counter
+                && entry.0.key().name() == metric_name
+                && entry.0.key().labels().count() == labels.len()
+                && labels.iter().all(|(key, value)| {
+                    entry
+                        .0
+                        .key()
+                        .labels()
+                        .any(|label| label.key() == *key && label.value() == *value)
+                })
+                && matches!(entry.3, DebugValue::Counter(1))
+        }),
+        "expected bounded {metric_name} labels {labels:?}: {snapshot:?}"
+    );
 }
 
 /// Assert that `outcome` retains one bounded timing-summary counter increment.

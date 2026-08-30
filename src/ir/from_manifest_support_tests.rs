@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::ir::cmd_interpolate::{binding_preparations, reset_binding_preparations};
-use crate::ninja_gen::RecipeShell;
+use crate::recipe_shell::RecipeShell;
 use proptest::prelude::*;
 
 #[test]

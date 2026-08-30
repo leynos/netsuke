@@ -5,16 +5,16 @@
 //! only the selected interpreter and fixed result categories at the runner
 //! boundary.
 
-use crate::ninja_gen::RecipeShell;
+use crate::recipe_shell::RecipeShell;
 use anyhow::Result;
 use metrics::{counter, describe_counter};
 use std::sync::Once;
 use tracing::{field, info};
 
 /// Count recipe-shell resolution outcomes by bounded interpreter and category.
-const RECIPE_SHELL_RESOLUTIONS_TOTAL: &str = "netsuke_runner_recipe_shell_resolutions_total";
+pub const RECIPE_SHELL_RESOLUTIONS_TOTAL: &str = "netsuke_runner_recipe_shell_resolutions_total";
 /// Count Bash compatibility preflight outcomes by bounded probe result.
-const BASH_PREFLIGHT_TOTAL: &str = "netsuke_runner_recipe_shell_bash_preflight_total";
+pub const BASH_PREFLIGHT_TOTAL: &str = "netsuke_runner_recipe_shell_bash_preflight_total";
 
 /// Classify an explicit Bash runtime probe without exposing process details.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

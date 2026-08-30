@@ -16,7 +16,7 @@ enum BashProbeStatus {
     Failed(String),
 }
 
-use crate::ninja_gen::RecipeShell;
+use crate::recipe_shell::RecipeShell;
 
 /// Names the optional Windows legacy-recipe interpreter override.
 pub(super) const WINDOWS_SHELL_ENV: &str = "NETSUKE_WINDOWS_SHELL";
@@ -149,7 +149,7 @@ mod tests {
         BashProbeStatus, WINDOWS_SHELL_ENV, resolve_recipe_shell_with,
         resolve_windows_recipe_shell, validate_bash_runtime_with, validate_recipe_shell_with,
     };
-    use crate::ninja_gen::RecipeShell;
+    use crate::recipe_shell::RecipeShell;
     use mockable::MockEnv;
     use std::ffi::OsString;
 
