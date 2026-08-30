@@ -84,7 +84,7 @@ expression: rendered
         "default_severity": "advice",
         "code": "netsuke::lint::builtin_clean_action",
         "summary": "action named `clean` duplicates the built-in `netsuke clean`",
-        "rationale": "`netsuke clean` removes exactly the outputs the graph declares, by asking Ninja. A hand-written `clean` action removes whatever its recipe names, which drifts from the graph as targets are added and typically reaches for a wildcard that can delete more than it should.",
+        "rationale": "`netsuke clean` removes exactly the outputs the graph declares, by asking Ninja. A handwritten `clean` action removes whatever its recipe names, which drifts from the graph as targets are added and typically reaches for a wildcard that can delete more than it should.",
         "remediation": "Delete the action and use `netsuke clean`, which is derived from the graph.",
         "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#builtin-clean-action"
       },

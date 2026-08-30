@@ -6,17 +6,18 @@
 
 use rstest::rstest;
 
-use crate::lint::test_support::{lint, lint_with};
 use crate::lint::{Category, Policy};
 
 /// Lint an example manifest and report each finding as `rule: message`.
-fn findings_for(path: &str) -> Vec<String> {
-    let text = std::fs::read_to_string(path).expect("example manifest should be readable");
-    lint(&text)
-        .findings
-        .iter()
-        .map(|finding| format!("{}: {}", finding.meta.name, finding.display_message()))
-        .collect()
+macro_rules! findings_for {
+    ($path:expr) => {{
+        let text = test_support::fs::read_to_string($path).expect("example should be readable");
+        crate::lint_fixture!(&text)
+            .findings
+            .iter()
+            .map(|finding| format!("{}: {}", finding.meta.name, finding.display_message()))
+            .collect::<Vec<String>>()
+    }};
 }
 
 #[rstest]
@@ -65,7 +66,7 @@ fn findings_for(path: &str) -> Vec<String> {
     ]
 )]
 fn examples_report_their_known_defects(#[case] path: &str, #[case] expected: &[&str]) {
-    assert_eq!(findings_for(path), expected, "findings for {path}");
+    assert_eq!(findings_for!(path), expected, "findings for {path}");
 }
 
 /// Every example must lint cleanly once its findings are silenced by policy.
@@ -84,8 +85,8 @@ fn disabling_every_category_reports_nothing() {
         "examples/writing.yml",
         "examples/hello-world/Netsukefile",
     ] {
-        let text = std::fs::read_to_string(path).expect("example manifest should be readable");
-        let outcome = lint_with(&text, &policy);
+        let text = test_support::fs::read_to_string(path).expect("example should be readable");
+        let outcome = crate::lint_fixture_with!(&text, &policy);
         assert!(
             outcome.findings.is_empty(),
             "{path} should report nothing, got {:?}",
