@@ -3,8 +3,8 @@
 //! Keeps post-merge command/default resolution separate from layer collection
 //! so merge orchestration remains compact and independently understandable.
 
-use super::super::command::{BuildArgs, Cli, Commands, InteractionArgs};
-use super::super::config::{BuildConfig, CliConfig};
+use super::super::command::{BuildArgs, CheckArgs, Cli, Commands, InteractionArgs};
+use super::super::config::{BuildConfig, CheckConfig, CliConfig};
 
 /// Apply merged configuration over parsed CLI input to build the runtime CLI.
 pub(super) fn apply_config(parsed: &Cli, config: CliConfig) -> Cli {
@@ -39,7 +39,11 @@ pub(super) fn apply_config(parsed: &Cli, config: CliConfig) -> Cli {
         progress: config.progress,
         accessibility: config.accessibility,
         default_targets: build_defaults.targets.clone(),
-        command: Some(resolve_command(parsed.command.as_ref(), &build_defaults)),
+        command: Some(resolve_command(
+            parsed.command.as_ref(),
+            &build_defaults,
+            &config.cmds.check,
+        )),
     }
 }
 
@@ -53,7 +57,11 @@ fn resolved_build_config(config: &CliConfig) -> BuildConfig {
 }
 
 /// Resolve the final command, substituting default targets when none were given.
-fn resolve_command(parsed: Option<&Commands>, build_defaults: &BuildConfig) -> Commands {
+fn resolve_command(
+    parsed: Option<&Commands>,
+    build_defaults: &BuildConfig,
+    check_defaults: &CheckConfig,
+) -> Commands {
     match parsed {
         Some(Commands::Build(args)) => Commands::Build(BuildArgs {
             targets: if args.targets.is_empty() {
@@ -62,9 +70,34 @@ fn resolve_command(parsed: Option<&Commands>, build_defaults: &BuildConfig) -> C
                 args.targets.clone()
             },
         }),
+        Some(Commands::Check(args)) => Commands::Check(resolve_check_args(args, check_defaults)),
         Some(other) => other.clone(),
         None => Commands::Build(BuildArgs {
             targets: build_defaults.targets.clone(),
         }),
+    }
+}
+
+/// Resolve the effective `check` arguments from the CLI and configuration.
+///
+/// Command-line values already won the merge, so the configuration only fills
+/// in the fields the caller left at their defaults.
+fn resolve_check_args(args: &CheckArgs, config: &CheckConfig) -> CheckArgs {
+    CheckArgs {
+        rule: if args.rule.is_empty() {
+            config.rule.clone()
+        } else {
+            args.rule.clone()
+        },
+        fail_on: config
+            .fail_on
+            .clone()
+            .filter(|_| args.fail_on == super::DEFAULT_FAIL_ON)
+            .unwrap_or_else(|| args.fail_on.clone()),
+        limit: config
+            .limit
+            .filter(|_| args.limit == super::DEFAULT_FINDING_LIMIT)
+            .unwrap_or(args.limit),
+        explain: args.explain.clone(),
     }
 }
