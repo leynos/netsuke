@@ -154,7 +154,7 @@ fn string_generation_apis_reject_reserved_paths() -> Result<()> {
     Ok(())
 }
 
-/// Verify every optional metadata binding escapes literal Ninja dollars.
+/// Verify each supported metadata binding escapes literal dollars for Ninja output.
 #[rstest]
 #[case::description("description")]
 #[case::depfile("depfile")]
@@ -180,7 +180,7 @@ fn metadata_values_escape_ninja_dollars(#[case] field: &str) -> Result<()> {
     Ok(())
 }
 
-/// Verify every optional metadata binding rejects unsafe control characters.
+/// Verify each supported metadata binding rejects newline, carriage-return, and NUL values.
 #[rstest]
 #[case::description("description")]
 #[case::depfile("depfile")]

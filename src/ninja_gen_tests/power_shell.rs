@@ -1,6 +1,9 @@
 //! Tests for PowerShell-specific Ninja recipe rendering.
 
-use super::*;
+use super::{
+    Action, BuildGraph, NamedAction, Recipe, RecipeShell, StringOrList, command_action,
+    generate_into_with_shell,
+};
 
 use anyhow::{Context, Result, bail, ensure};
 use base64::{Engine as _, engine::general_purpose::STANDARD};

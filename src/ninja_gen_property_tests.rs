@@ -71,7 +71,11 @@ fn format_edge(edge: &BuildEdge) -> String {
     .to_string()
 }
 
-/// Render a graph through the explicit POSIX compatibility renderer.
+/// Render a `BuildGraph` with `RecipeShell::Posix` and return its Ninja text.
+///
+/// # Errors
+///
+/// Propagates [`NinjaGenError`] when the graph cannot be rendered.
 fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
     let mut ninja = String::new();
     generate_into_with_shell(graph, &mut ninja, RecipeShell::Posix)?;
@@ -262,6 +266,7 @@ proptest! {
         prop_assert!(is_stable_empty_recipe_error);
     }
 
+    /// Verify scalar POSIX recipes retain direct command rendering without list boundaries.
     #[test]
     fn scalar_command_output_retains_the_preexisting_form(command in "echo [a-z]{1,12}") {
         let ninja = generate_posix(&scalar_graph(command.clone()))

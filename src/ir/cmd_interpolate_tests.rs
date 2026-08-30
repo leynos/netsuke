@@ -4,6 +4,7 @@ use super::*;
 
 use camino::Utf8PathBuf;
 
+/// Verify POSIX interpolation rejects commands with unbalanced backticks.
 #[test]
 fn interpolate_command_rejects_unbalanced_backticks() {
     let path = Utf8PathBuf::from("a");
@@ -22,6 +23,7 @@ fn interpolate_command_rejects_unbalanced_backticks() {
     }
 }
 
+/// Verify POSIX interpolation replaces short input and output placeholders.
 #[test]
 fn interpolate_command_replaces_placeholders() {
     let ins = vec![Utf8PathBuf::from("in"), Utf8PathBuf::from("aux")];
@@ -31,6 +33,7 @@ fn interpolate_command_replaces_placeholders() {
     assert_eq!(command, "cp in aux out");
 }
 
+/// Verify POSIX interpolation rejects short placeholders inside backticks.
 #[test]
 fn interpolate_command_rejects_short_placeholders_in_backticks() {
     let ins = vec![Utf8PathBuf::from("src")];
@@ -45,6 +48,7 @@ fn interpolate_command_rejects_short_placeholders_in_backticks() {
     assert!(matches!(error, IrGenError::InvalidCommand { .. }));
 }
 
+/// Verify POSIX interpolation rejects template placeholders inside backticks.
 #[test]
 fn interpolate_command_rejects_template_placeholders_in_backticks() {
     let error = interpolate_command_with_shell(
@@ -57,6 +61,7 @@ fn interpolate_command_rejects_template_placeholders_in_backticks() {
     assert!(matches!(error, IrGenError::InvalidCommand { .. }));
 }
 
+/// Verify POSIX interpolation replaces template input and output placeholders.
 #[test]
 fn interpolate_command_replaces_template_placeholders() {
     let command = interpolate_command_with_shell(
