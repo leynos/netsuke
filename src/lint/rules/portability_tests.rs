@@ -2,8 +2,6 @@
 
 use rstest::rstest;
 
-use crate::lint::test_support::{assert_fires, assert_silent, messages_for};
-
 /// Build a one-target manifest whose script body is `body`.
 fn script(body: &str) -> String {
     format!("netsuke_version: \"1.0.0\"\ntargets:\n  - name: out\n    script: |\n      {body}\n")
@@ -20,7 +18,7 @@ fn script(body: &str) -> String {
 #[case("set -o pipefail")]
 #[case("echo -e 'a\\tb'")]
 fn bashism_reports_constructs_sh_does_not_promise(#[case] body: &str) {
-    assert_fires(&script(body), "bashism", 1);
+    crate::assert_lint_fires!(&script(body), "bashism", 1);
 }
 
 /// Word-bounded tokens must not match inside a longer word, and a construct
@@ -32,12 +30,12 @@ fn bashism_reports_constructs_sh_does_not_promise(#[case] body: &str) {
 #[case("printf '%s' 'function build'")]
 #[case("echo 'set -o pipefail'")]
 fn bashism_leaves_portable_and_quoted_text_alone(#[case] body: &str) {
-    assert_silent(&script(body), "bashism");
+    crate::assert_lint_silent!(&script(body), "bashism");
 }
 
 #[test]
 fn bashism_names_the_portable_alternative() {
-    let messages = messages_for(&script("if [[ -f in ]]; then :; fi"), "bashism");
+    let messages = crate::lint_messages!(&script("if [[ -f in ]]; then :; fi"), "bashism");
     assert!(
         messages
             .iter()
@@ -56,7 +54,7 @@ fn bashism_is_suppressed_by_a_directive() {
         "    script: |\n",
         "      if [[ -f in ]]; then cp in out; fi\n",
     );
-    assert_silent(yaml, "bashism");
+    crate::assert_lint_silent!(yaml, "bashism");
 }
 
 /// A directive must not reach past the declaration it governs.
@@ -73,5 +71,5 @@ fn a_directive_does_not_silence_the_next_declaration() {
         "    script: |\n",
         "      [[ -f in ]]\n",
     );
-    assert_fires(yaml, "bashism", 1);
+    crate::assert_lint_fires!(yaml, "bashism", 1);
 }

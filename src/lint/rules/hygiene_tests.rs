@@ -2,8 +2,6 @@
 
 use rstest::rstest;
 
-use crate::lint::test_support::{assert_fires, assert_silent, spans_for};
-
 #[test]
 fn unused_var_reports_a_variable_no_template_mentions() {
     let yaml = concat!(
@@ -15,8 +13,8 @@ fn unused_var_reports_a_variable_no_template_mentions() {
         "  - name: out\n",
         "    command: \"echo {{ used }} > {{ outs }}\"\n",
     );
-    assert_fires(yaml, "unused-var", 1);
-    assert_eq!(spans_for(yaml, "unused-var"), vec!["spare"]);
+    crate::assert_lint_fires!(yaml, "unused-var", 1);
+    assert_eq!(crate::lint_spans!(yaml, "unused-var"), vec!["spare"]);
 }
 
 /// A variable is used when any template mentions it, including a `foreach`
@@ -53,7 +51,7 @@ fn unused_var_reports_a_variable_no_template_mentions() {
     "    command: \"echo '{{ greet('world') }}' > {{ outs }}\"\n",
 ))]
 fn unused_var_accepts_every_kind_of_reference(#[case] yaml: &str) {
-    assert_silent(yaml, "unused-var");
+    crate::assert_lint_silent!(yaml, "unused-var");
 }
 
 #[test]
@@ -67,7 +65,7 @@ fn unused_var_is_suppressed_by_a_directive() {
         "  - name: out\n",
         "    command: \"touch {{ outs }}\"\n",
     );
-    assert_silent(yaml, "unused-var");
+    crate::assert_lint_silent!(yaml, "unused-var");
 }
 
 #[test]
@@ -81,7 +79,7 @@ fn unused_macro_reports_a_macro_nothing_calls() {
         "  - name: out\n",
         "    command: \"touch {{ outs }}\"\n",
     );
-    assert_fires(yaml, "unused-macro", 1);
+    crate::assert_lint_fires!(yaml, "unused-macro", 1);
 }
 
 #[test]
@@ -95,7 +93,7 @@ fn unused_macro_accepts_a_called_macro() {
         "  - name: out\n",
         "    command: \"echo '{{ greet('world') }}' > {{ outs }}\"\n",
     );
-    assert_silent(yaml, "unused-macro");
+    crate::assert_lint_silent!(yaml, "unused-macro");
 }
 
 #[test]
@@ -110,7 +108,7 @@ fn unused_macro_is_suppressed_by_a_directive() {
         "  - name: out\n",
         "    command: \"touch {{ outs }}\"\n",
     );
-    assert_silent(yaml, "unused-macro");
+    crate::assert_lint_silent!(yaml, "unused-macro");
 }
 
 #[test]
@@ -124,7 +122,7 @@ fn unused_rule_reports_a_rule_nothing_references() {
         "  - name: out\n",
         "    command: \"touch {{ outs }}\"\n",
     );
-    assert_fires(yaml, "unused-rule", 1);
+    crate::assert_lint_fires!(yaml, "unused-rule", 1);
 }
 
 /// A rule referenced only by a `foreach`-generated target counts as used,
@@ -144,7 +142,7 @@ fn unused_rule_accepts_a_rule_a_generated_target_uses() {
         "    name: \"{{ item }}\"\n",
         "    rule: touch\n",
     );
-    assert_silent(yaml, "unused-rule");
+    crate::assert_lint_silent!(yaml, "unused-rule");
 }
 
 #[test]
@@ -159,5 +157,5 @@ fn unused_rule_is_suppressed_by_a_directive() {
         "  - name: out\n",
         "    command: \"touch {{ outs }}\"\n",
     );
-    assert_silent(yaml, "unused-rule");
+    crate::assert_lint_silent!(yaml, "unused-rule");
 }

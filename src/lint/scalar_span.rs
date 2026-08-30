@@ -33,34 +33,42 @@ fn quoted_len(slice: &str) -> usize {
     if !matches!(quote, '\'' | '"') {
         return trimmed_len(slice);
     }
-    let mut pending_escape = false;
-    let mut skip_next_quote = false;
+    let mut skip_next = false;
     for (index, character) in characters {
-        if pending_escape {
-            pending_escape = false;
+        if skip_next {
+            skip_next = false;
             continue;
         }
-        if skip_next_quote {
-            skip_next_quote = false;
+        if escapes_next(character, quote) {
+            skip_next = true;
             continue;
         }
-        match character {
-            '\\' if quote == '"' => pending_escape = true,
-            found if found == quote && quote == '\'' && starts_doubled(slice, index) => {
-                skip_next_quote = true;
-            }
-            found if found == quote => return index.saturating_add(found.len_utf8()),
-            _ => {}
+        if character != quote {
+            continue;
         }
+        if is_doubled_quote(slice, index, quote) {
+            skip_next = true;
+            continue;
+        }
+        return index.saturating_add(character.len_utf8());
     }
     trimmed_len(slice)
 }
 
-/// Report whether the single quote at `index` is a doubled, escaped quote.
-fn starts_doubled(slice: &str, index: usize) -> bool {
-    slice
-        .get(index.saturating_add(1)..)
-        .is_some_and(|rest| rest.starts_with('\''))
+/// Report whether `character` escapes the one after it.
+///
+/// A single-quoted YAML scalar has no backslash escape; a double-quoted one
+/// does.
+const fn escapes_next(character: char, quote: char) -> bool {
+    character == '\\' && quote == '"'
+}
+
+/// Report whether the quote at `index` is a doubled, escaped single quote.
+fn is_doubled_quote(slice: &str, index: usize, quote: char) -> bool {
+    quote == '\''
+        && slice
+            .get(index.saturating_add(1)..)
+            .is_some_and(|rest| rest.starts_with('\''))
 }
 
 /// Report the length of a plain scalar, stopping before any trailing comment.

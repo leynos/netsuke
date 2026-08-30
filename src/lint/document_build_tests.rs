@@ -4,16 +4,18 @@ use rstest::rstest;
 
 use crate::lint::document::{Document, NodeKind, ScalarStyle};
 
-/// Parse `text`, failing the test with the scanner message when it will not.
-fn document(text: &str) -> Document {
-    Document::parse(text.to_owned()).expect("source should index")
+/// Parse `text`, failing the calling test when the fixture will not index.
+macro_rules! document {
+    ($text:expr) => {
+        Document::parse($text.to_owned()).expect("source should index")
+    };
 }
 
 #[test]
 fn scalar_spans_cover_the_authored_text() {
     let text =
         "netsuke_version: \"1.0.0\"\ntargets:\n  - name: out.txt\n    command: \"echo hi\"\n";
-    let doc = document(text);
+    let doc = document!(text);
     let target = doc
         .section("targets")
         .and_then(|node| node.items().next())
@@ -27,7 +29,7 @@ fn scalar_spans_cover_the_authored_text() {
 #[test]
 fn spans_are_byte_offsets_even_with_multibyte_text() {
     let text = "netsuke_version: \"1.0.0\"\nvars:\n  gruß: \"schön\"\ntargets:\n  - name: out\n    command: \"echo ✓\"\n";
-    let doc = document(text);
+    let doc = document!(text);
     let command = doc
         .section("targets")
         .and_then(|node| node.items().next())
@@ -44,7 +46,7 @@ fn spans_are_byte_offsets_even_with_multibyte_text() {
 #[test]
 fn block_scalars_are_indexed_as_block_style() {
     let text = "netsuke_version: \"1.0.0\"\ntargets:\n  - name: out\n    script: |\n      echo one\n      echo two\n";
-    let doc = document(text);
+    let doc = document!(text);
     let script = doc
         .section("targets")
         .and_then(|node| node.items().next())
@@ -67,7 +69,7 @@ fn block_scalars_are_indexed_as_block_style() {
 #[test]
 fn mappings_preserve_authored_order_and_key_spans() {
     let text = "netsuke_version: \"1.0.0\"\ntargets:\n  - name: out\n    command: \"echo\"\n";
-    let doc = document(text);
+    let doc = document!(text);
     let target = doc
         .section("targets")
         .and_then(|node| node.items().next())
@@ -82,7 +84,7 @@ fn mappings_preserve_authored_order_and_key_spans() {
 #[test]
 fn sequences_index_every_entry() {
     let text = "netsuke_version: \"1.0.0\"\ntargets:\n  - name: out\n    command:\n      - \"one\"\n      - \"two\"\n";
-    let doc = document(text);
+    let doc = document!(text);
     let command = doc
         .section("targets")
         .and_then(|node| node.items().next())
@@ -96,7 +98,7 @@ fn sequences_index_every_entry() {
 #[test]
 fn aliases_resolve_to_the_anchored_contents_at_their_own_span() {
     let text = "netsuke_version: \"1.0.0\"\nvars:\n  base: &base \"echo\"\n  copy: *base\ntargets:\n  - name: out\n    command: \"echo\"\n";
-    let doc = document(text);
+    let doc = document!(text);
     let vars = doc.section("vars").expect("vars should be indexed");
     let copy = vars.get("copy").expect("alias should be indexed");
     assert_eq!(copy.as_str(), Some("echo"));
@@ -118,7 +120,7 @@ fn malformed_sources_report_where_scanning_stopped(#[case] text: &str, #[case] l
 
 #[test]
 fn line_lookup_maps_offsets_to_one_based_lines() {
-    let doc = document("netsuke_version: \"1.0.0\"\ntargets: []\n");
+    let doc = document!("netsuke_version: \"1.0.0\"\ntargets: []\n");
     let targets = doc.section("targets").expect("targets should be indexed");
     assert_eq!(doc.lines().line_of(targets.span.start), 2);
     assert_eq!(doc.lines().line_count(), 3);
