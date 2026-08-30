@@ -109,12 +109,12 @@ function Test-ExpectedRecipeFailure {
         [pscustomobject]$Failure
     )
 
-    $failure = & $Netsuke build $Failure.Target 2>&1
+    $buildFailure = & $Netsuke build $Failure.Target 2>&1
     if ($LASTEXITCODE -ne 1) {
-        throw "$($Failure.ExitCodeMessage), got ${LASTEXITCODE}: $failure"
+        throw "$($Failure.ExitCodeMessage), got ${LASTEXITCODE}: $buildFailure"
     }
     if (Test-Path -LiteralPath $Failure.NotCreatedPath) {
-        throw "$($Failure.UnexpectedExecutionMessage): $failure"
+        throw "$($Failure.UnexpectedExecutionMessage): $buildFailure"
     }
 }
 
