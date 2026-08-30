@@ -5,7 +5,6 @@ use proptest::prelude::*;
 use crate::lint::finding::Finding;
 use crate::lint::policy::Policy;
 use crate::lint::severity::Severity;
-use crate::lint::test_support::{lint, lint_with};
 
 /// A manifest that trips several rules at more than one severity.
 const NOISY: &str = concat!(
@@ -22,7 +21,7 @@ const NOISY: &str = concat!(
 
 #[test]
 fn findings_are_ordered_by_position_then_rule() {
-    let findings = lint(NOISY).findings;
+    let findings = crate::lint_fixture!(NOISY).findings;
     assert!(findings.len() > 1, "the fixture should trip several rules");
     let keys: Vec<_> = findings.iter().map(Finding::sort_key).collect();
     let mut sorted = keys.clone();
@@ -34,13 +33,13 @@ fn findings_are_ordered_by_position_then_rule() {
 /// iteration orders inside the build graph.
 #[test]
 fn two_runs_over_one_manifest_agree() {
-    let first: Vec<String> = lint(NOISY)
+    let first: Vec<String> = crate::lint_fixture!(NOISY)
         .findings
         .iter()
         .map(Finding::display_message)
         .collect();
     for _ in 0..8 {
-        let repeat: Vec<String> = lint(NOISY)
+        let repeat: Vec<String> = crate::lint_fixture!(NOISY)
             .findings
             .iter()
             .map(Finding::display_message)
@@ -55,7 +54,7 @@ fn two_runs_over_one_manifest_agree() {
 fn every_finding_carries_its_policy_severity() {
     let policy =
         Policy::resolve(&["redundancy=error", "hygiene=advice"]).expect("selectors should resolve");
-    for finding in lint_with(NOISY, &policy).findings {
+    for finding in crate::lint_fixture_with!(NOISY, &policy).findings {
         assert_eq!(
             Some(finding.severity),
             policy.severity_of(finding.meta.name),
@@ -67,7 +66,7 @@ fn every_finding_carries_its_policy_severity() {
 
 #[test]
 fn a_disabled_rule_reports_nothing() {
-    let reported: Vec<&str> = lint(NOISY)
+    let reported: Vec<&str> = crate::lint_fixture!(NOISY)
         .findings
         .iter()
         .map(|finding| finding.meta.name)
@@ -78,7 +77,7 @@ fn a_disabled_rule_reports_nothing() {
     );
 
     let policy = Policy::resolve(&["unused-var=off"]).expect("selector should resolve");
-    let after: Vec<&str> = lint_with(NOISY, &policy)
+    let after: Vec<&str> = crate::lint_fixture_with!(NOISY, &policy)
         .findings
         .iter()
         .map(|finding| finding.meta.name)
@@ -100,7 +99,7 @@ fn suppression_is_counted_rather_than_hidden() {
         "  - name: out\n",
         "    command: \"feh preview &\"\n",
     );
-    let outcome = lint(yaml);
+    let outcome = crate::lint_fixture!(yaml);
     assert_eq!(outcome.suppressed, 1);
     assert!(
         !outcome
@@ -113,7 +112,7 @@ fn suppression_is_counted_rather_than_hidden() {
 
 #[test]
 fn severity_counts_add_up() {
-    let outcome = lint(NOISY);
+    let outcome = crate::lint_fixture!(NOISY);
     let total: usize = Severity::ALL
         .into_iter()
         .map(|severity| outcome.count_at(severity))
@@ -131,13 +130,13 @@ proptest! {
     ) {
         let policy = Policy::resolve(&[format!("redundancy={severity}")])
             .expect("selector should resolve");
-        let mut reported: Vec<&str> = lint_with(NOISY, &policy)
+        let mut reported: Vec<&str> = crate::lint_fixture_with!(NOISY, &policy)
             .findings
             .iter()
             .map(|finding| finding.meta.name)
             .collect();
         reported.sort_unstable();
-        let mut baseline: Vec<&str> = lint(NOISY)
+        let mut baseline: Vec<&str> = crate::lint_fixture!(NOISY)
             .findings
             .iter()
             .map(|finding| finding.meta.name)
@@ -161,7 +160,7 @@ proptest! {
             ),
             rule
         );
-        let reported: Vec<&str> = lint(&yaml)
+        let reported: Vec<&str> = crate::lint_fixture!(&yaml)
             .findings
             .iter()
             .map(|finding| finding.meta.name)
