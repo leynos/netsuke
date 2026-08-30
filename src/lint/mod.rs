@@ -17,17 +17,19 @@ pub mod engine;
 pub mod finding;
 pub mod policy;
 pub mod registry;
+pub mod report;
 pub mod resolve;
 pub mod rule;
 pub mod rules;
+mod scalar_span;
 pub mod severity;
 pub mod suppress;
 #[cfg(test)]
 pub mod test_support;
 
 #[cfg(test)]
-#[path = "smoke_tests.rs"]
-mod smoke_tests;
+#[path = "example_manifest_tests.rs"]
+mod example_manifest_tests;
 
 use crate::ast::NetsukeManifest;
 use crate::ir::BuildGraph;
@@ -36,7 +38,8 @@ pub use document_build::ParseFailure;
 pub use engine::Outcome;
 pub use finding::{Finding, FindingDiagnostic, Location};
 pub use policy::{Policy, PolicyError};
-pub use registry::catalogue;
+pub use registry::{catalogue, meta_by_name};
+pub use report::{Bounds, NamedManifest, Report};
 pub use rule::{Category, RuleMeta, Stage};
 pub use severity::{DefaultSeverity, FAIL_ON_VALUES, FailOn, SEVERITY_VALUES, Severity};
 

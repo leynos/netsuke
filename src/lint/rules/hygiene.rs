@@ -9,7 +9,7 @@
 use std::collections::BTreeSet;
 
 use crate::ast::{Recipe, StringOrList};
-use crate::lint::document::{Document, Node, NodeKind};
+use crate::lint::document::{Document, Node, NodeKind, Span};
 use crate::lint::registry::Registered;
 use crate::lint::resolve::{self, Provenance};
 use crate::lint::rule::{
@@ -134,13 +134,37 @@ fn referenced_identifiers(doc: &Document) -> BTreeSet<String> {
     let Some(root) = doc.root() else {
         return names;
     };
+    let declarations = declaration_spans(doc);
     root.walk(&mut |node: &Node| {
         let NodeKind::Scalar { value, .. } = &node.kind else {
             return;
         };
+        if declarations.contains(&node.span) {
+            return;
+        }
         collect_identifiers(value, &mut names);
     });
     names
+}
+
+/// Collect the spans of the scalars that declare the names under analysis.
+///
+/// A `vars` key and a macro signature both spell the name they define, so
+/// counting them as references would make every declaration look used.
+fn declaration_spans(doc: &Document) -> BTreeSet<Span> {
+    let mut spans = BTreeSet::new();
+    if let Some(vars) = doc.section("vars").and_then(Node::as_mapping) {
+        spans.extend(vars.iter().map(|entry| entry.key.span));
+    }
+    if let Some(macros) = doc.section("macros") {
+        spans.extend(
+            macros
+                .items()
+                .filter_map(|item| item.get("signature"))
+                .map(|node| node.span),
+        );
+    }
+    spans
 }
 
 /// Collect identifier-shaped words from one scalar.

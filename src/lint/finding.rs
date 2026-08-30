@@ -178,10 +178,9 @@ impl Diagnostic for FindingDiagnostic {
 
     fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
         let span = self.span?;
-        Some(Box::new(std::iter::once(LabeledSpan::new_with_span(
-            Some(self.label.to_owned()),
-            span,
-        ))))
+        Some(Box::new(std::iter::once(
+            LabeledSpan::new_primary_with_span(Some(self.label.to_owned()), span),
+        )))
     }
 }
 

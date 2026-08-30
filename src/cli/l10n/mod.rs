@@ -7,7 +7,9 @@ use std::ffi::OsString;
 
 mod flag_keys;
 pub(crate) use flag_keys::top_level_flag_help_key;
-use flag_keys::{build_flag_help_key, generate_flag_help_key, graph_flag_help_key};
+use flag_keys::{
+    build_flag_help_key, check_flag_help_key, generate_flag_help_key, graph_flag_help_key,
+};
 
 /// Strip the leading `Usage: ` prefix from a rendered usage string.
 fn usage_body(usage: &str) -> &str {
@@ -161,6 +163,8 @@ fn localize_help_topics(
 enum Subcommand {
     /// The `build` subcommand.
     Build,
+    /// The `check` subcommand.
+    Check,
     /// The `clean` subcommand.
     Clean,
     /// The `graph` subcommand.
@@ -176,6 +180,7 @@ impl Subcommand {
     fn from_name(name: &str) -> Option<Self> {
         match name {
             "build" => Some(Self::Build),
+            "check" => Some(Self::Check),
             "clean" => Some(Self::Clean),
             "graph" => Some(Self::Graph),
             "generate" => Some(Self::Generate),
@@ -202,9 +207,11 @@ impl HelpTopicName {
         }
 
         Subcommand::from_name(name).and_then(|subcommand| match subcommand {
-            Subcommand::Build | Subcommand::Clean | Subcommand::Graph | Subcommand::Generate => {
-                Some(Self::Subcommand(subcommand))
-            }
+            Subcommand::Build
+            | Subcommand::Check
+            | Subcommand::Clean
+            | Subcommand::Graph
+            | Subcommand::Generate => Some(Self::Subcommand(subcommand)),
             Subcommand::Help => None,
         })
     }
@@ -215,6 +222,7 @@ fn flag_help_key(arg_id: &str, subcommand: Option<Subcommand>) -> Option<&'stati
     match subcommand {
         None => top_level_flag_help_key(arg_id),
         Some(Subcommand::Build) => build_flag_help_key(arg_id),
+        Some(Subcommand::Check) => check_flag_help_key(arg_id),
         Some(Subcommand::Graph) => graph_flag_help_key(arg_id),
         Some(Subcommand::Generate) => generate_flag_help_key(arg_id),
         Some(Subcommand::Clean | Subcommand::Help) => None,
@@ -225,6 +233,7 @@ fn flag_help_key(arg_id: &str, subcommand: Option<Subcommand>) -> Option<&'stati
 const fn subcommand_about_key(subcommand: Subcommand) -> &'static str {
     match subcommand {
         Subcommand::Build => keys::CLI_SUBCOMMAND_BUILD_ABOUT,
+        Subcommand::Check => keys::CLI_SUBCOMMAND_CHECK_ABOUT,
         Subcommand::Clean => keys::CLI_SUBCOMMAND_CLEAN_ABOUT,
         Subcommand::Graph => keys::CLI_SUBCOMMAND_GRAPH_ABOUT,
         Subcommand::Generate => keys::CLI_SUBCOMMAND_GENERATE_ABOUT,
@@ -236,6 +245,7 @@ const fn subcommand_about_key(subcommand: Subcommand) -> &'static str {
 const fn subcommand_long_about_key(subcommand: Subcommand) -> &'static str {
     match subcommand {
         Subcommand::Build => keys::CLI_SUBCOMMAND_BUILD_LONG_ABOUT,
+        Subcommand::Check => keys::CLI_SUBCOMMAND_CHECK_LONG_ABOUT,
         Subcommand::Clean => keys::CLI_SUBCOMMAND_CLEAN_LONG_ABOUT,
         Subcommand::Graph => keys::CLI_SUBCOMMAND_GRAPH_LONG_ABOUT,
         Subcommand::Generate => keys::CLI_SUBCOMMAND_GENERATE_LONG_ABOUT,
