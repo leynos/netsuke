@@ -15,22 +15,32 @@ use test_support::{fs as test_fs, write_exec_with_content};
 
 const CANDIDATE_REVISION: &str = "a1b2c3d4";
 const TEST_PATH: &str = "/usr/bin:/bin";
+const TEST_TOKEN: &str = "admission-test-token";
 const WORKFLOW_PATH: &str = ".github/workflows/netsuke-canary.yml";
 const WORKFLOW_BRANCH: &str = "issue-598-v010-netsuke-canary";
 const MISSING_EVIDENCE: &str =
     "Missing successful Netsuke v0.1.0 release-admission canary candidate a1b2c3d4";
-const CANARIES: [(&str, &str, u64); 3] = [
+const ADMISSION_OPERATIONS: [&str; 4] = [
+    "workflow_source_fetch",
+    "workflow_source_validation",
+    "workflow_run_lookup",
+    "trusted_run_validation",
+];
+const CANARIES: [(&str, &str, &str, u64); 3] = [
     (
+        "repovec-appliance",
         "leynos/repovec-appliance",
         "6be365b4b30ef48537add5719a9b387ccc41777f",
         343_316_513,
     ),
     (
+        "mxd",
         "leynos/mxd",
         "8146278cc82506c222bb78d4f3fc05c12ed95b41",
         343_314_513,
     ),
     (
+        "ortho-config",
         "leynos/ortho-config",
         "b42b5d0adfacd79456d2a2f9edbf9f561aac943b",
         343_328_370,
@@ -163,6 +173,7 @@ impl AdmissionHarness {
             .arg(admission_script())
             .env("BASH_ENV", &self.bash_env_path)
             .env("GITHUB_SHA", CANDIDATE_REVISION)
+            .env("GH_TOKEN", TEST_TOKEN)
             .env("NETSUKE_GH_ARGS", &self.gh_args_path)
             .env("NETSUKE_WORKFLOW_SOURCE", workflow_source)
             .env("NETSUKE_WORKFLOW_RUNS", workflow_runs)
@@ -198,7 +209,7 @@ fn trusted_workflow_runs() -> Result<String> {
     let workflow_runs = CANARIES
         .iter()
         .enumerate()
-        .map(|(index, (repository, revision, workflow_id))| {
+        .map(|(index, (_, repository, revision, workflow_id))| {
             json!({
                 "id": 9_001_u64 + index as u64,
                 "repository": { "full_name": repository },
@@ -278,7 +289,7 @@ exit 1
 /// Assert that every complete `gh api` call reaches the expected endpoints.
 fn require_recorded_api_arguments(harness: &AdmissionHarness) -> Result<()> {
     let gh_args = harness.gh_args()?;
-    for (repository, revision, workflow_id) in CANARIES {
+    for (_, repository, revision, workflow_id) in CANARIES {
         ensure!(
             gh_args.contains(&format!(
                 "repos/{repository}/contents/.github/workflows/netsuke-canary.yml\\?ref={revision}"
@@ -300,8 +311,53 @@ fn require_recorded_api_arguments(harness: &AdmissionHarness) -> Result<()> {
     Ok(())
 }
 
+/// Require successful admission events to cover every bounded canary operation.
+fn require_successful_events(output: &Output, workflow_source: &str) -> Result<()> {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    for (canary, ..) in CANARIES {
+        for operation in ADMISSION_OPERATIONS {
+            ensure!(
+                stderr.contains(&format!(
+                    "release_admission canary={canary} operation={operation} outcome=started"
+                )) && stderr.contains(&format!(
+                    "release_admission canary={canary} operation={operation} outcome=success"
+                )),
+                "admission should emit started and success events for {canary} {operation}"
+            );
+        }
+    }
+    ensure!(
+        !stderr.contains(TEST_TOKEN) && !stderr.contains(workflow_source),
+        "admission events should not expose the test token or workflow source"
+    );
+
+    Ok(())
+}
+
+/// Require a controlled admission failure to retain a fixed event category.
+fn require_failure_event(
+    output: &Output,
+    workflow_source: &str,
+    operation: &str,
+    error_category: &str,
+) -> Result<()> {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    ensure!(
+        stderr.contains(&format!(
+            "release_admission canary=repovec-appliance operation={operation} outcome=failure error_category={error_category}"
+        )),
+        "admission should emit a fixed failure event for {operation}"
+    );
+    ensure!(
+        !stderr.contains(TEST_TOKEN) && !stderr.contains(workflow_source),
+        "admission events should not expose the test token or workflow source"
+    );
+
+    Ok(())
+}
+
 /// Assert that a rejected fixture reports the production missing-evidence error.
-fn require_missing_successful_evidence(output: &Output) -> Result<()> {
+fn require_missing_successful_evidence(output: &Output, workflow_source: &str) -> Result<()> {
     ensure!(
         !output.status.success(),
         "admission should reject untrusted workflow-run evidence"
@@ -310,6 +366,12 @@ fn require_missing_successful_evidence(output: &Output) -> Result<()> {
         String::from_utf8_lossy(&output.stderr).contains(MISSING_EVIDENCE),
         "admission should report missing successful candidate evidence"
     );
+    require_failure_event(
+        output,
+        workflow_source,
+        "trusted_run_validation",
+        "missing_successful_evidence",
+    )?;
 
     Ok(())
 }
@@ -331,6 +393,7 @@ fn admission_accepts_every_trusted_pinned_canary() -> Result<()> {
         stdout.matches("Accepted leynos/").count() == 3,
         "admission should accept every pinned canary"
     );
+    require_successful_events(&output, MATCHING_WORKFLOW_SOURCE)?;
     require_recorded_api_arguments(&harness)
 }
 
@@ -353,6 +416,12 @@ fn admission_rejects_a_pinned_workflow_that_did_not_test_the_candidate() -> Resu
         !harness.gh_args()?.contains("/actions/workflows/"),
         "admission should reject mismatched workflow source before checking runs"
     );
+    require_failure_event(
+        &output,
+        MISMATCHING_WORKFLOW_SOURCE,
+        "workflow_source_validation",
+        "candidate_reference_mismatch",
+    )?;
 
     Ok(())
 }
@@ -381,6 +450,12 @@ fn admission_rejects_non_executable_or_split_candidate_references(
         !harness.gh_args()?.contains("/actions/workflows/"),
         "admission should reject the {fixture_name} fixture before checking runs"
     );
+    require_failure_event(
+        &output,
+        workflow_source,
+        "workflow_source_validation",
+        "candidate_reference_mismatch",
+    )?;
 
     Ok(())
 }
@@ -402,7 +477,7 @@ fn admission_rejects_each_altered_trust_field(#[case] field: TrustField) -> Resu
 
     let output = harness.run(MATCHING_WORKFLOW_SOURCE, &workflow_runs)?;
 
-    require_missing_successful_evidence(&output)
+    require_missing_successful_evidence(&output, MATCHING_WORKFLOW_SOURCE)
 }
 
 /// Reject admission when no successful trusted evidence is available.
@@ -412,7 +487,7 @@ fn admission_rejects_missing_successful_evidence() -> Result<()> {
 
     let output = harness.run(MATCHING_WORKFLOW_SOURCE, r#"{"workflow_runs":[]}"#)?;
 
-    require_missing_successful_evidence(&output)
+    require_missing_successful_evidence(&output, MATCHING_WORKFLOW_SOURCE)
 }
 
 proptest! {
@@ -446,6 +521,16 @@ proptest! {
             prop_assert!(
                 stderr.contains(MISSING_EVIDENCE),
                 "admission should report missing evidence for altered {field:?}: {stderr}"
+            );
+            prop_assert!(
+                stderr.contains(
+                    "release_admission canary=repovec-appliance operation=trusted_run_validation outcome=failure error_category=missing_successful_evidence"
+                ),
+                "admission should emit fixed missing-evidence telemetry for altered {field:?}: {stderr}"
+            );
+            prop_assert!(
+                !stderr.contains(TEST_TOKEN) && !stderr.contains(MATCHING_WORKFLOW_SOURCE),
+                "admission events should not expose secrets or workflow source: {stderr}"
             );
         }
     }
