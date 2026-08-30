@@ -115,6 +115,8 @@ pub struct RecipePart<'a> {
     pub source: &'a str,
     /// How the scalar was written.
     pub style: ScalarStyle,
+    /// Whether the fragment is one entry of a `command` list.
+    pub is_list_entry: bool,
 }
 
 impl RecipePart<'_> {
@@ -161,6 +163,7 @@ pub fn parts(doc: &Document) -> Vec<RecipePart<'_>> {
 pub fn item_parts<'a>(doc: &'a Document, item: Item<'a>) -> Vec<RecipePart<'a>> {
     let mut parts = Vec::new();
     if let Some(node) = item.node.get("command") {
+        let is_list = node.as_str().is_none();
         for scalar in command_scalars(node) {
             push_part(
                 &Fragment {
@@ -168,6 +171,7 @@ pub fn item_parts<'a>(doc: &'a Document, item: Item<'a>) -> Vec<RecipePart<'a>> 
                     item,
                     kind: RecipeKind::Command,
                     node: scalar,
+                    is_list_entry: is_list,
                 },
                 &mut parts,
             );
@@ -180,6 +184,7 @@ pub fn item_parts<'a>(doc: &'a Document, item: Item<'a>) -> Vec<RecipePart<'a>> 
                 item,
                 kind: RecipeKind::Script,
                 node,
+                is_list_entry: false,
             },
             &mut parts,
         );
@@ -197,6 +202,8 @@ struct Fragment<'a> {
     kind: RecipeKind,
     /// The scalar node holding the shell text.
     node: &'a Node,
+    /// Whether the node is one entry of a `command` list.
+    is_list_entry: bool,
 }
 
 /// Record one scalar node as a recipe fragment.
@@ -211,6 +218,7 @@ fn push_part<'a>(fragment: &Fragment<'a>, parts: &mut Vec<RecipePart<'a>>) {
         span,
         source: fragment.doc.slice(span),
         style,
+        is_list_entry: fragment.is_list_entry,
     });
 }
 

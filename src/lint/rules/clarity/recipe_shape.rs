@@ -157,23 +157,20 @@ impl DocumentRule for CommandChainNotList {
     }
 
     fn check(&self, doc: &Document, sink: &mut FindingSink<'_>) {
-        for item in recipes::items(doc) {
-            let Some(node) = item.node.get("command") else {
-                continue;
-            };
-            if node.as_str().is_none() {
-                continue;
-            }
-            let chained = shellscan::find_all(doc.slice(node.span), "&&").len();
+        let scalars = recipes::parts(doc)
+            .into_iter()
+            .filter(|part| part.kind == recipes::RecipeKind::Command && !part.is_list_entry);
+        for part in scalars {
+            let chained = shellscan::find_all(part.source, "&&").len();
             if chained == 0 {
                 continue;
             }
             sink.at(
-                node.span,
+                part.span,
                 format!(
                     "{} chains {} steps in one `command` scalar",
-                    item.label(),
-                    chained + 1
+                    part.item.label(),
+                    chained.saturating_add(1)
                 ),
             );
         }

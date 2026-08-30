@@ -27,7 +27,7 @@ use ortho_config::figment::Figment;
 use ortho_config::{OrthoError, OrthoMergeExt, OrthoResult, sanitize_value};
 use serde::Serialize;
 
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use super::MergeEvent;
 use super::command::{BuildArgs, CheckArgs, Cli, Commands};
