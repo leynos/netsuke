@@ -111,6 +111,29 @@ pub(super) fn load_manifest_with_limits(
         })
 }
 
+/// Load a manifest for a query, keeping the source text it was parsed from.
+///
+/// `netsuke check` needs those exact bytes so the linter's span index cannot
+/// disagree with the parser about what the manifest says. It takes the same
+/// resource ceilings as every other load, so a manifest too large to build is
+/// also too large to lint.
+///
+/// # Errors
+///
+/// Returns an error when the manifest cannot be read, parsed, or rendered, or
+/// when it exceeds `budget_limits`.
+pub(super) fn load_manifest_with_source(
+    path: &Utf8Path,
+    budget_limits: manifest::ManifestBudgetLimits,
+    on_stage: StageObserver<'_>,
+) -> Result<manifest::LoadedManifest> {
+    manifest::from_path_for_manifest_query_with_source(path.as_std_path(), budget_limits, on_stage)
+        .with_context(|| {
+            localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
+                .with_arg("path", path.as_str())
+        })
+}
+
 /// Load and render a manifest with the full, effectful build stdlib.
 ///
 /// This loader is only for command execution. Templates may use configured

@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use saphyr_parser::{Event, Parser, ScalarStyle as YamlStyle, Span as YamlSpan};
 
 use super::document::{Entry, Node, NodeKind, ScalarStyle, Span};
+use super::scalar_span;
 
 /// A YAML scanner failure encountered while indexing the source.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,7 +29,7 @@ pub struct ParseFailure {
 /// Returns a [`ParseFailure`] when the source is not well-formed YAML.
 pub fn parse_document(text: &str) -> Result<Option<Node>, ParseFailure> {
     let offsets = ByteOffsets::new(text);
-    let mut builder = Builder::new(&offsets);
+    let mut builder = Builder::new(&offsets, text);
     for scanned in Parser::new_from_str(text) {
         let (event, span) = scanned.map_err(|error| ParseFailure {
             message: error.to_string(),
@@ -89,6 +90,8 @@ impl ByteOffsets {
 struct Builder<'offsets> {
     /// Character-to-byte mapping for the source being indexed.
     offsets: &'offsets ByteOffsets,
+    /// The source being indexed, for narrowing scalar spans.
+    text: &'offsets str,
     /// Open collections, innermost last.
     stack: Vec<Frame>,
     /// The completed root node.
@@ -111,9 +114,10 @@ struct Frame {
 
 impl<'offsets> Builder<'offsets> {
     /// Start a builder for a source indexed by `offsets`.
-    fn new(offsets: &'offsets ByteOffsets) -> Self {
+    fn new(offsets: &'offsets ByteOffsets, text: &'offsets str) -> Self {
         Self {
             offsets,
+            text,
             stack: Vec::new(),
             root: None,
             anchors: HashMap::new(),
@@ -124,11 +128,12 @@ impl<'offsets> Builder<'offsets> {
     fn accept(&mut self, event: &Event<'_>, span: YamlSpan) -> bool {
         match event {
             Event::Scalar(value, style, anchor, _) => {
+                let presentation = convert_style(*style);
                 let node = Node {
-                    span: self.offsets.span_of(span),
+                    span: scalar_span::narrow(self.text, self.offsets.span_of(span), presentation),
                     kind: NodeKind::Scalar {
                         value: value.to_string(),
-                        style: convert_style(*style),
+                        style: presentation,
                     },
                 };
                 self.push_node(node, *anchor);

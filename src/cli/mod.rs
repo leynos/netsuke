@@ -31,7 +31,9 @@ pub(crate) mod test_support;
 mod validation;
 mod value_parser;
 
-pub use command::{BuildArgs, Cli, Commands, GraphArgs};
+pub use command::{
+    BuildArgs, CheckArgs, Cli, Commands, DEFAULT_FAIL_ON, DEFAULT_FINDING_LIMIT, GraphArgs,
+};
 pub use config::{AccessibilityPolicy, CliConfig, ColourPolicy, EmojiPolicy, ProgressPolicy};
 pub use diag::{
     resolve_json_and_layers_outcome_with_env, resolve_merged_json, resolve_merged_json_with_env,

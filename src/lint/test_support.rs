@@ -92,7 +92,11 @@ pub fn spans_for(yaml: &str, rule: &str) -> Vec<String> {
         .map(|finding| {
             finding.span().map_or_else(
                 || "<no span>".to_owned(),
-                |span| yaml[span.start..span.end].to_owned(),
+                |span| {
+                    yaml.get(span.start..span.end)
+                        .unwrap_or_default()
+                        .to_owned()
+                },
             )
         })
         .collect()

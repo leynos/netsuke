@@ -60,7 +60,10 @@ pub use path_loaders::{
 };
 #[cfg(test)]
 pub(crate) use query::from_path_for_manifest_query;
-pub(crate) use query::from_path_for_manifest_query_with_limits;
+pub(crate) use query::{
+    LoadedManifest, from_path_for_manifest_query_with_limits,
+    from_path_for_manifest_query_with_source,
+};
 #[cfg(test)]
 use registration::RESERVED_VAR_NAMES;
 use registration::{
