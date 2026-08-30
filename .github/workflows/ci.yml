@@ -273,8 +273,22 @@ jobs:
           installer-version: '0.2.7'
       - name: Lint (Whitaker)
         # Whitaker/Dylint over the workspace under `-D warnings`, including
-        # the `#[cfg(windows)]` arms. A failure blocks the merge.
-        run: make SHELL=bash lint-whitaker
+        # the `#[cfg(windows)]` arms. The shared installer supplies a
+        # PowerShell wrapper on Windows, so invoke it from PowerShell rather
+        # than Git Bash. A failure blocks the merge.
+        shell: pwsh
+        run: |
+          $whitaker = Join-Path $HOME '.local\bin\whitaker.ps1'
+          $env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"
+          $env:DYLINT_TOML = Get-Content dylint.toml -Raw
+          & $whitaker --all --no-deps --package netsuke-build -- --all-targets --all-features
+          Push-Location test_support
+          try {
+            $env:DYLINT_TOML = Get-Content dylint.toml -Raw
+            & $whitaker --all --no-deps --package test_support -- --all-targets --all-features
+          } finally {
+            Pop-Location
+          }
       - name: Test
         # cargo-nextest plus doctests under `-D warnings`,
         # compiling and running the `#[cfg(windows)]` test tree. A failure

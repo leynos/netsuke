@@ -260,6 +260,23 @@ fn behavioural_ci_workflow_uses_shared_tool_installers() -> Result<()> {
         );
     }
 
+    let windows_whitaker = named_step(
+        steps(job(&workflow, "build-test-windows")?)?,
+        "Lint (Whitaker)",
+    )?;
+    let windows_whitaker_run = mapping_get(windows_whitaker, YamlKey("run"))
+        .and_then(Value::as_str)
+        .context("Windows Whitaker lint should define a PowerShell script")?;
+    ensure!(
+        mapping_get(windows_whitaker, YamlKey("shell")).and_then(Value::as_str) == Some("pwsh"),
+        "Windows Whitaker lint should run from PowerShell"
+    );
+    ensure!(
+        windows_whitaker_run.contains("whitaker.ps1")
+            && windows_whitaker_run.contains("Push-Location test_support"),
+        "Windows Whitaker lint should run both packages through the installed PowerShell wrapper"
+    );
+
     let linux_steps = steps(job(&workflow, "build-test")?)?;
     let nixie = named_step(linux_steps, "Install Nixie")?;
     let uses = mapping_get(nixie, YamlKey("uses"))
