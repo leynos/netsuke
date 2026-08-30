@@ -103,9 +103,13 @@ impl Stage {
 
 /// Immutable description of one lint rule.
 ///
-/// The summary, rationale, and remediation live here rather than in the
-/// localization catalogues so that the emitted diagnostic, the `--explain`
-/// output, and the rule reference document cannot drift apart. See
+/// The summary, rationale, and remediation live here for the prototype period
+/// so that the emitted diagnostic, the `--explain` output, and the rule
+/// reference document cannot drift apart while the rule set is still settling.
+/// Roadmap step 7.2 moves that prose into the localization catalogues, keyed by
+/// [`RuleMeta::name`], and keeps this text as the source-locale fallback. The
+/// identifiers never move: a name, a category, a severity, and a code are
+/// values a user types and a machine matches. See
 /// `docs/adr-015-manifest-linting-under-netsuke-check.md`.
 #[derive(Debug, Clone, Copy)]
 pub struct RuleMeta {
