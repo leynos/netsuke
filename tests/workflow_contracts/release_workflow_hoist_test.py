@@ -9,13 +9,15 @@ Run via ``make test-workflow-contracts``.
 """
 
 import re
-from pathlib import Path
 
-import yaml
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "release.yml"
-MAKEFILE_PATH = REPO_ROOT / "Makefile"
+from workflow_loading import (
+    MAKEFILE_PATH,
+    RELEASE_WORKFLOW_PATH,
+    job_steps,
+    load_workflow,
+    require_mapping,
+    step_index_by_key,
+)
 
 
 def _python_baseline() -> str:
@@ -36,24 +38,9 @@ def _python_baseline() -> str:
     return match.group(1)
 
 
-def _release_steps() -> list[dict[str, object]]:
-    """Return the release job's steps in declaration order."""
-    workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
-    return workflow["jobs"]["release"]["steps"]
-
-
-def _step_index(steps: list[dict[str, object]], key: str, needle: str) -> int:
-    """Return the index of the first step whose ``key`` value contains ``needle``."""
-    for index, step in enumerate(steps):
-        if needle in str(step.get(key, "")):
-            return index
-    message = f"release.yml must declare a step whose {key} mentions {needle!r}"
-    raise AssertionError(message)
-
-
 def test_release_workflow_invokes_the_hoist_script() -> None:
     """The release job must run the script with the resolved version."""
-    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    workflow = RELEASE_WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "scripts/hoist_binstall_archives.py" in workflow, (
         "release.yml must invoke the hoist script"
     )
@@ -70,17 +57,18 @@ def test_release_workflow_pins_the_hoist_interpreter() -> None:
     tooling targets rather than trusting whatever `python3` the runner ships.
     """
     baseline = _python_baseline()
-    steps = _release_steps()
-    hoist_index = _step_index(steps, "run", "hoist_binstall_archives.py")
+    steps = job_steps(load_workflow(RELEASE_WORKFLOW_PATH), "release")
+    hoist_index = step_index_by_key(steps, "run", "hoist_binstall_archives.py")
     assert f"--python {baseline}" in str(steps[hoist_index]["run"]), (
         "the hoist step must pin the interpreter version it runs under"
     )
-    setup_index = _step_index(steps, "uses", "setup-uv")
+    setup_index = step_index_by_key(steps, "uses", "setup-uv")
     assert setup_index < hoist_index, (
         "the interpreter must be installed before the hoist step runs"
     )
-    setup_with = steps[setup_index]["with"]
-    assert isinstance(setup_with, dict), "the setup-uv step must declare a with mapping"
+    setup_with = require_mapping(
+        steps[setup_index].get("with"), "the setup-uv step's with block"
+    )
     assert setup_with["python-version"] == baseline, (
         "the installed interpreter must match the version the hoist step pins"
     )
@@ -93,10 +81,9 @@ def test_release_workflow_disables_the_uv_cache() -> None:
     restored cache buys nothing while adding a supply-chain input to a job
     holding ``contents: write``.
     """
-    steps = _release_steps()
-    setup = steps[_step_index(steps, "uses", "setup-uv")]
-    setup_with = setup["with"]
-    assert isinstance(setup_with, dict), "the setup-uv step must declare a with mapping"
+    steps = job_steps(load_workflow(RELEASE_WORKFLOW_PATH), "release")
+    setup = steps[step_index_by_key(steps, "uses", "setup-uv")]
+    setup_with = require_mapping(setup.get("with"), "the setup-uv step's with block")
     assert setup_with["enable-cache"] is False, (
         "setup-uv in the release job must set enable-cache: false"
     )
@@ -104,9 +91,9 @@ def test_release_workflow_disables_the_uv_cache() -> None:
 
 def test_release_workflow_hoists_before_uploading() -> None:
     """The hoist step must precede the asset upload in the release job."""
-    steps = _release_steps()
-    hoist_index = _step_index(steps, "run", "hoist_binstall_archives.py")
-    upload_index = _step_index(steps, "id", "upload_assets")
+    steps = job_steps(load_workflow(RELEASE_WORKFLOW_PATH), "release")
+    hoist_index = step_index_by_key(steps, "run", "hoist_binstall_archives.py")
+    upload_index = step_index_by_key(steps, "id", "upload_assets")
     assert hoist_index < upload_index, (
         "the hoist must run before upload_assets so only validated, hoisted "
         "archives are published"

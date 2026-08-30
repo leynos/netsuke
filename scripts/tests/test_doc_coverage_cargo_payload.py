@@ -3,7 +3,10 @@
 import dataclasses
 import typing as typ
 
+import doc_coverage_cargo as cargo_module
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 if typ.TYPE_CHECKING:
     import types
@@ -15,6 +18,42 @@ class CoveragePayloadFailureCase:
 
     payload: str
     diagnostic: str
+
+
+_COUNT_VALUES = st.one_of(
+    st.integers(),
+    st.booleans(),
+    st.floats(allow_nan=True, allow_infinity=True),
+    st.text(),
+    st.none(),
+)
+
+
+@given(total=_COUNT_VALUES, with_docs=_COUNT_VALUES)
+def test_coverage_entry_accepts_only_valid_count_pairs(
+    total: object,
+    with_docs: object,
+) -> None:
+    """Accept only non-negative integer counts with docs no greater than total."""
+    entry = {"total": total, "with_docs": with_docs}
+    match total, with_docs:
+        case bool(), _:
+            pass
+        case _, bool():
+            pass
+        case int() as checked_total, int() as checked_with_docs if (
+            0 <= checked_with_docs <= checked_total
+        ):
+            assert cargo_module.coverage_from_entry(entry) == cargo_module.Coverage(
+                checked_total, checked_with_docs
+            ), (
+                "valid count pairs must be converted without changing their "
+                f"values; got {entry!r}"
+            )
+            return
+
+    with pytest.raises(cargo_module.CoverageCountError):
+        cargo_module.coverage_from_entry(entry)
 
 
 def test_parse_coverage_output_aggregates_multiple_files(

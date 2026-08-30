@@ -26,6 +26,8 @@ if typ.TYPE_CHECKING:
 #: archive/sidecar pair, so the third call is the first move of the second
 #: pair — by which point there is something to roll back.
 ABORTING_MOVE_CALL = 3
+_INJECTED_MOVE_FAILURE = "injected move failure"
+_INJECTED_NON_OSERROR_ROLLBACK_FAILURE = "injected non-oserror rollback failure"
 
 
 def _move_failing_at_the_third_call(
@@ -43,6 +45,24 @@ def _move_failing_at_the_third_call(
         if fail_rollback and call > ABORTING_MOVE_CALL:
             msg = "injected rollback failure"
             raise OSError(msg)
+        return real_move(src, dst)
+
+    return failing_move
+
+
+def _move_with_non_oserror_rollback_failure() -> cabc.Callable[
+    [Path, Path], str | Path
+]:
+    """Return a move stand-in with distinct forward and rollback failure types."""
+    real_move = shutil.move
+    call_numbers = itertools.count(1)
+
+    def failing_move(src: Path, dst: Path) -> str | Path:
+        call = next(call_numbers)
+        if call == ABORTING_MOVE_CALL:
+            raise OSError(_INJECTED_MOVE_FAILURE)
+        if call > ABORTING_MOVE_CALL:
+            raise RuntimeError(_INJECTED_NON_OSERROR_ROLLBACK_FAILURE)
         return real_move(src, dst)
 
     return failing_move
@@ -141,3 +161,20 @@ def test_hoist_surfaces_both_errors_when_the_rollback_also_fails(
         "an unrestorable pair must be left where it landed, not silently "
         "discarded, so the operator can inspect the release root"
     )
+
+
+def test_hoist_propagates_non_oserror_rollback_failures_unchanged(
+    workspace: dict[str, Path],
+) -> None:
+    """Keep unexpected rollback failures distinct from the OSError combination path."""
+    _stage_both_pairs(workspace["dist"])
+
+    with (
+        mock.patch.object(
+            hoist_mod.shutil,
+            "move",
+            _move_with_non_oserror_rollback_failure(),
+        ),
+        pytest.raises(RuntimeError, match=_INJECTED_NON_OSERROR_ROLLBACK_FAILURE),
+    ):
+        run_hoist(workspace)

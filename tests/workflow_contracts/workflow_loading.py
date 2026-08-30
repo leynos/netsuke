@@ -20,6 +20,11 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CI_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 COVERAGE_MAIN_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "coverage-main.yml"
+MUTATION_TESTING_WORKFLOW_PATH = (
+    REPO_ROOT / ".github" / "workflows" / "mutation-testing.yml"
+)
+PACKAGE_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "build-and-package.yml"
+RELEASE_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "release.yml"
 MAKEFILE_PATH = REPO_ROOT / "Makefile"
 
 
@@ -131,6 +136,24 @@ def named_step(steps: list[dict[str, object]], name: str) -> dict[str, object]:
         f"expected exactly one step named {name!r}, found {len(matches)}"
     )
     return matches[0]
+
+
+def unique_step_index(steps: list[dict[str, object]], name: str) -> int:
+    """Return the index of the uniquely named ``name`` step."""
+    names = [step.get("name") for step in steps]
+    assert names.count(name) == 1, (
+        f"expected exactly one step named {name!r}, got step names {names!r}"
+    )
+    return names.index(name)
+
+
+def step_index_by_key(steps: list[dict[str, object]], key: str, needle: str) -> int:
+    """Return the first step index whose ``key`` value contains ``needle``."""
+    for index, step in enumerate(steps):
+        if needle in str(step.get(key, "")):
+            return index
+    message = f"workflow must declare a step whose {key} mentions {needle!r}"
+    raise AssertionError(message)
 
 
 def step_runs(steps: list[dict[str, object]]) -> list[object]:

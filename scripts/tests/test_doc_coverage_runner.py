@@ -2,7 +2,10 @@
 
 import typing as typ
 
+import doc_coverage_runner as runner_module
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 if typ.TYPE_CHECKING:
     import pathlib
@@ -106,6 +109,39 @@ def test_target_discovery_excludes_outside_workspace(runner: types.ModuleType) -
     )
 
 
+@given(
+    package_name=st.one_of(st.text(), st.integers(), st.none()),
+    target_name=st.one_of(st.text(), st.integers(), st.none()),
+    target_kinds=st.lists(st.one_of(st.text(), st.integers(), st.none())),
+)
+def test_target_discovery_accepts_only_documentable_package_records(
+    package_name: object,
+    target_name: object,
+    target_kinds: list[object],
+) -> None:
+    """Measure only valid library or binary records from Cargo metadata."""
+    package = {
+        "id": "pkg:generated:0.1.0",
+        "name": package_name,
+        "targets": [{"name": target_name, "kind": target_kinds}],
+    }
+
+    targets = runner_module.doc_targets({
+        "packages": [package],
+        "workspace_members": [package["id"]],
+    })
+
+    expected: list[object] = []
+    match package_name, target_name, target_kinds:
+        case str() as name, _, kinds if "lib" in kinds:
+            expected = [runner_module.DocTarget(name, "lib", None)]
+        case str() as name, str() as binary, kinds if "bin" in kinds:
+            expected = [runner_module.DocTarget(name, "bin", binary)]
+    assert targets == expected, (
+        "only complete library and binary metadata records are measurable"
+    )
+
+
 @pytest.mark.parametrize(
     "metadata",
     [
@@ -114,6 +150,10 @@ def test_target_discovery_excludes_outside_workspace(runner: types.ModuleType) -
         pytest.param(
             {"packages": {}, "workspace_members": []}, id="packages-not-a-list"
         ),
+        pytest.param(
+            {"packages": [], "workspace_members": [[]]},
+            id="workspace-member-not-a-string",
+        ),
     ],
 )
 def test_malformed_metadata_shape_is_a_measurement_error(
@@ -121,7 +161,7 @@ def test_malformed_metadata_shape_is_a_measurement_error(
     metadata: dict[str, object],
 ) -> None:
     """Reject valid JSON without workspace keys rather than leaking a KeyError."""
-    with pytest.raises(RuntimeError, match="lacks the workspace"):
+    with pytest.raises(runner.WorkspaceMetadataError, match="lacks the workspace"):
         runner.doc_targets(metadata)
 
 
@@ -181,7 +221,32 @@ def test_pinned_toolchain_reports_a_missing_file(
     tmp_path: pathlib.Path,
 ) -> None:
     """Translate an unreadable toolchain file into the gate's measurement error."""
-    with pytest.raises(RuntimeError, match="cannot read the pinned toolchain"):
+    with pytest.raises(
+        runner.ToolchainPinError, match="cannot read the pinned toolchain"
+    ):
+        runner.pinned_toolchain(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("contents", "scenario"),
+    [
+        pytest.param('toolchain = "nightly"\n', "scalar-toolchain", id="scalar"),
+        pytest.param(
+            "[toolchain]\nchannel = 314\n", "non-string-channel", id="integer"
+        ),
+        pytest.param('[toolchain]\nchannel = ""\n', "empty-channel", id="empty"),
+    ],
+)
+def test_pinned_toolchain_rejects_malformed_records(
+    runner: types.ModuleType,
+    tmp_path: pathlib.Path,
+    contents: str,
+    scenario: str,
+) -> None:
+    """Reject scalar toolchains and unusable channels at the pin boundary."""
+    (tmp_path / "rust-toolchain.toml").write_text(contents, encoding="utf-8")
+
+    with pytest.raises(runner.ToolchainPinError):
         runner.pinned_toolchain(tmp_path)
 
 

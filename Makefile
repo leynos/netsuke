@@ -58,8 +58,9 @@ UV ?= uv
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
 # The Python baseline every uv-driven helper pins. Bump this alongside the
 # `target-version`/`py-version` settings in pyproject.toml and the
-# `python-version` inputs in .github/workflows/ci.yml and release.yml; the
-# workflow contract tests hold the Makefile and CI in sync.
+# `python-version` inputs in .github/workflows/ci.yml, release.yml, and
+# build-and-package.yml; the workflow contract tests hold the Makefile and CI
+# in sync.
 PYTHON_BASELINE ?= 3.14
 # Pin Ruff so `make` invokes the same version everywhere; floating the version
 # causes version-skew lint failures because rule sets differ between releases.
@@ -178,7 +179,7 @@ doc-coverage: doc-coverage-test ## Verify aggregate Rustdoc doc-comment coverage
 
 doc-coverage-test: ## Run documentation-coverage pytest modules
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
-		--with pytest==9.0.2 --with pytest-cov==7.0.0 \
+		--with pytest==9.0.2 --with pytest-cov==7.0.0 --with 'hypothesis>=6' \
 		python -m pytest scripts/tests/test_doc_coverage_model.py \
 		scripts/tests/test_doc_coverage_cargo.py \
 		scripts/tests/test_doc_coverage_cargo_payload.py \

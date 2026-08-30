@@ -189,18 +189,20 @@ recursive = true
 # Match the project file-size ceiling enforced during review.
 max-module-lines = 400
 # The shared spelling-policy rollout helpers have their own pinned Ruff and
-# coverage policy (see the Makefile's `spelling-helper-test` target).
-ignore = [
-    "generate_typos_config.py",
-    "typos_rollout.py",
-    "typos_rollout_cache.py",
-    "typos_rollout_check.py",
-    "typos_rollout_http.py",
-    "test_typos_rollout.py",
-    "test_typos_rollout_check.py",
-    "test_typos_rollout_hardening.py",
-    "test_typos_rollout_refresh.py",
-    "typos_rollout_test_support.py",
+# coverage policy (see the Makefile's `spelling-helper-test` target). Keep
+# these path-specific so the workflow-contract fixture remains linted.
+ignore-paths = [
+    ".*scripts/generate_typos_config[.]py$",
+    ".*scripts/typos_rollout[.]py$",
+    ".*scripts/typos_rollout_cache[.]py$",
+    ".*scripts/typos_rollout_check[.]py$",
+    ".*scripts/typos_rollout_http[.]py$",
+    ".*scripts/tests/conftest[.]py$",
+    ".*scripts/tests/test_typos_rollout[.]py$",
+    ".*scripts/tests/test_typos_rollout_check[.]py$",
+    ".*scripts/tests/test_typos_rollout_hardening[.]py$",
+    ".*scripts/tests/test_typos_rollout_refresh[.]py$",
+    ".*scripts/tests/typos_rollout_test_support[.]py$",
 ]
 
 [tool.pylint.design]

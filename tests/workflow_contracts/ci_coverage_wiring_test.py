@@ -17,6 +17,7 @@ from workflow_loading import (
     job_steps,
     load_workflow,
     require_mapping,
+    unique_step_index,
 )
 
 COVERAGE_STEP = "Test and Measure Coverage"
@@ -29,19 +30,10 @@ UPLOAD_COVERAGE_ACTION = (
 )
 
 
-def _step_index(steps: list[dict[str, object]], name: str) -> int:
-    """Return the position of the uniquely named step."""
-    names = [step.get("name") for step in steps]
-    assert names.count(name) == 1, (
-        f"expected exactly one step named {name!r}, got step names {names!r}"
-    )
-    return names.index(name)
-
-
 def _assert_with_inputs(
     step: dict[str, object], description: str, expected: dict[str, object]
 ) -> None:
-    """Assert a step's ``with`` block carries exactly the expected inputs."""
+    """Validate that a step's ``with`` block supplies the expected inputs."""
     with_ = require_mapping(step.get("with"), f"{description}'s with block")
     actual = {key: with_.get(key) for key in expected}
     assert actual == expected, f"{description} must pass {expected!r}, got {actual!r}"
@@ -55,9 +47,9 @@ def test_coverage_report_is_produced_before_codescene_check() -> None:
     report exists in the build pipeline by the time it is read.
     """
     steps = job_steps(load_workflow(), "build-test")
-    test_index = _step_index(steps, "Test")
-    coverage_index = _step_index(steps, COVERAGE_STEP)
-    codescene_index = _step_index(steps, CODESCENE_CHECK_STEP)
+    test_index = unique_step_index(steps, "Test")
+    coverage_index = unique_step_index(steps, COVERAGE_STEP)
+    codescene_index = unique_step_index(steps, CODESCENE_CHECK_STEP)
     assert test_index < coverage_index < codescene_index, (
         "the build-test job must run Test, then coverage, then the CodeScene "
         f"check; got indices {test_index}, {coverage_index}, {codescene_index}"
@@ -78,8 +70,8 @@ def test_coverage_report_is_produced_before_codescene_check() -> None:
 def test_main_coverage_upload_reads_the_generated_lcov_report() -> None:
     """Main uploads the LCOV report it produces before calling CodeScene."""
     steps = job_steps(load_workflow(COVERAGE_MAIN_WORKFLOW_PATH), "coverage-upload")
-    coverage_index = _step_index(steps, COVERAGE_STEP)
-    upload_index = _step_index(steps, CODESCENE_UPLOAD_STEP)
+    coverage_index = unique_step_index(steps, COVERAGE_STEP)
+    upload_index = unique_step_index(steps, CODESCENE_UPLOAD_STEP)
     assert coverage_index < upload_index, (
         "main must generate coverage before uploading it to CodeScene"
     )

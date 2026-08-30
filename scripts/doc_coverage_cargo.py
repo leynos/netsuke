@@ -11,8 +11,7 @@ import os
 import pathlib
 
 # Driving Cargo and Rustdoc as child processes is this module's whole purpose.
-# ruff: ignore[suspicious-subprocess-import] - the boundary is deliberate.
-import subprocess
+import subprocess  # ruff: ignore[suspicious-subprocess-import] - the boundary is deliberate.
 
 from doc_coverage_model import Coverage, DocTarget
 
@@ -311,8 +310,7 @@ def measure(
     try:
         # Cargo metadata targets and the pinned toolchain compose argv, so no
         # untrusted input reaches the child process.
-        # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
-        result = subprocess.run(
+        result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
             rustdoc_args(target, toolchain, cargo_executable),
             cwd=manifest_root,
             capture_output=True,
@@ -375,8 +373,7 @@ def load_metadata(
     try:
         # The Cargo executable and a fixed metadata flag list compose argv, so
         # no untrusted input reaches the child process.
-        # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
-        result = subprocess.run(
+        result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
             args,
             cwd=manifest_root,
             capture_output=True,

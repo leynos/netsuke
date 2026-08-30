@@ -17,16 +17,20 @@ Run via ``make test-workflow-contracts``.
 """
 
 import re
-from pathlib import Path
+import typing as typ
 
 import pytest
-import yaml
+from workflow_loading import (
+    CI_WORKFLOW_PATH,
+    MAKEFILE_PATH,
+    PACKAGE_WORKFLOW_PATH,
+    RELEASE_WORKFLOW_PATH,
+    load_workflow,
+    require_mapping,
+)
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-MAKEFILE_PATH = REPO_ROOT / "Makefile"
-CI_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
-RELEASE_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "release.yml"
-PACKAGE_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "build-and-package.yml"
+if typ.TYPE_CHECKING:
+    from pathlib import Path
 
 #: Pins that must agree between the Makefile and the CI workflow env block.
 SYNCED_PINS = ("RUFF_VERSION", "TY_VERSION", "PYTHON_BASELINE")
@@ -44,15 +48,12 @@ def _makefile_variable(name: str) -> str:
     return matches[0]
 
 
-def _workflow(path: Path) -> dict[str, object]:
-    """Parse a workflow file."""
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
-
-
 def _ci_env_value(name: str) -> str:
     """Return a workflow-level env value from ci.yml."""
-    env = _workflow(CI_WORKFLOW_PATH).get("env")
-    assert isinstance(env, dict), "ci.yml must declare a workflow-level env block"
+    env = require_mapping(
+        load_workflow(CI_WORKFLOW_PATH).get("env"),
+        "ci.yml workflow-level env block",
+    )
     value = env.get(name)
     assert isinstance(value, str), (
         f"ci.yml env must pin {name} as a string, got {value!r}"
@@ -89,17 +90,35 @@ def test_tool_pins_are_exact_versions(name: str) -> None:
 def _setup_uv_python_versions(path: Path) -> list[str]:
     """Return every setup-uv ``python-version`` input in a workflow file."""
     versions: list[str] = []
-    workflow = _workflow(path)
-    jobs = workflow.get("jobs")
-    assert isinstance(jobs, dict), f"{path.name} must declare a jobs mapping"
+    workflow = load_workflow(path)
+    jobs = require_mapping(workflow.get("jobs"), f"{path.name} jobs")
     for job in jobs.values():
-        for step in job.get("steps", []):
-            uses = step.get("uses", "")
-            if not uses.startswith("astral-sh/setup-uv@"):
-                continue
-            version = (step.get("with") or {}).get("python-version")
-            if version is not None:
-                versions.append(version)
+        job_mapping = require_mapping(job, f"{path.name} job")
+        match job_mapping.get("steps", []):
+            case list() as steps:
+                pass
+            case value:
+                pytest.fail(f"{path.name} job steps must be a list, got {value!r}")
+        for step in steps:
+            step_mapping = require_mapping(step, f"{path.name} setup step")
+            match step_mapping.get("uses"):
+                case str() as uses if uses.startswith("astral-sh/setup-uv@"):
+                    pass
+                case _:
+                    continue
+            with_ = require_mapping(
+                step_mapping.get("with"), f"{path.name} setup-uv with block"
+            )
+            match with_.get("python-version"):
+                case str() as version:
+                    versions.append(version)
+                case None:
+                    continue
+                case value:
+                    pytest.fail(
+                        f"{path.name} setup-uv python-version must be a string, "
+                        f"got {value!r}"
+                    )
     return versions
 
 
@@ -140,15 +159,70 @@ def test_ci_setup_uv_steps_install_the_python_baseline() -> None:
 def test_package_workflow_default_matches_the_python_baseline() -> None:
     """The build-and-package python-version input defaults to the baseline."""
     baseline = _makefile_variable("PYTHON_BASELINE")
-    workflow = _workflow(PACKAGE_WORKFLOW_PATH)
-    # PyYAML resolves the bare ``on:`` key as the boolean ``True``.
-    triggers = workflow.get("on", workflow.get(True))
-    assert isinstance(triggers, dict), (
-        "build-and-package.yml must declare an on: mapping"
+    workflow = load_workflow(PACKAGE_WORKFLOW_PATH)
+    triggers = require_mapping(workflow.get("on"), "build-and-package.yml on mapping")
+    workflow_call = require_mapping(
+        triggers.get("workflow_call"), "build-and-package.yml workflow_call mapping"
     )
-    inputs = triggers.get("workflow_call", {}).get("inputs", {})
-    default = inputs.get("python-version", {}).get("default")
+    inputs = require_mapping(
+        workflow_call.get("inputs"), "build-and-package.yml workflow_call inputs"
+    )
+    python_version = require_mapping(
+        inputs.get("python-version"), "build-and-package.yml python-version input"
+    )
+    default = python_version.get("default")
     assert default == baseline, (
         f"build-and-package.yml python-version default must equal the "
         f"Makefile PYTHON_BASELINE ({baseline!r}), got {default!r}"
     )
+
+
+def _makefile_target(target: str) -> tuple[list[str], str]:
+    """Return one Make target's prerequisites and complete recipe text."""
+    text = MAKEFILE_PATH.read_text(encoding="utf-8")
+    match = re.search(
+        rf"^{re.escape(target)}:([^\n#]*)(?:\s+##[^\n]*)?\n((?:\t[^\n]*\n?)*)",
+        text,
+        flags=re.MULTILINE,
+    )
+    assert match is not None, f"the Makefile must define the {target} target"
+    prerequisites = match.group(1).split()
+    return prerequisites, match.group(2)
+
+
+def test_python_quality_targets_preserve_their_dependency_graph() -> None:
+    """The Rust umbrella gates depend on their corresponding Python gates."""
+    lint_prerequisites, _ = _makefile_target("lint")
+    typecheck_prerequisites, _ = _makefile_target("typecheck")
+
+    assert "lint-python" in lint_prerequisites, (
+        "make lint must depend on lint-python so Python lint failures block CI"
+    )
+    assert "typecheck-python" in typecheck_prerequisites, (
+        "make typecheck must depend on typecheck-python so ty failures block CI"
+    )
+
+
+def test_python_quality_targets_run_the_pinned_local_commands() -> None:
+    """Local Make targets invoke each pinned Python formatter, linter, and typer."""
+    expected_commands = {
+        "lint-python": (
+            "$(RUFF) check $(PYTHON_SOURCES)",
+            "$(PYLINT) $(PYLINT_TARGETS)",
+            "$(DF12_PYLINT) $(PYLINT_TARGETS)",
+            "$(AMBRLEAKS) $(PYTHON_SOURCES)",
+        ),
+        "typecheck-python": (
+            "ty check --python-version $(PYTHON_BASELINE)",
+            "--extra-search-path scripts $(PYTHON_SOURCES)",
+        ),
+        "fmt": ("$(RUFF) format $(PYTHON_SOURCES)",),
+        "check-fmt": ("$(RUFF) format --check $(PYTHON_SOURCES)",),
+    }
+    for target, commands in expected_commands.items():
+        _, recipe = _makefile_target(target)
+        missing = [command for command in commands if command not in recipe]
+        assert not missing, (
+            f"{target} must preserve its pinned Python command wiring; "
+            f"missing {missing!r} from {recipe!r}"
+        )

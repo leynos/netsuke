@@ -8,8 +8,7 @@ import pathlib
 
 # The CLI's contract includes the process it launches, so these tests exercise
 # it through a real child process.
-# ruff: ignore[suspicious-subprocess-import] - the boundary is under test.
-import subprocess
+import subprocess  # ruff: ignore[suspicious-subprocess-import] - the boundary is under test.
 import sys
 import textwrap
 import typing as typ
@@ -174,8 +173,7 @@ def test_cli_process_uses_configured_cargo_adapter(
     if case.fails_adapter:
         environment["DOC_COVERAGE_CARGO_FAILURE"] = "1"
     # The argv is composed here from the interpreter and the fixture executable.
-    # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
-    result = subprocess.run(
+    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
         [
             sys.executable,
             str(SCRIPT_DIRECTORY / "doc-coverage.py"),

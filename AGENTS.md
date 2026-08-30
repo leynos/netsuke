@@ -217,7 +217,7 @@ directive anywhere.
 
     ```sh
     RUSTDOCFLAGS="--cfg docsrs -D warnings" \
-    uv run --no-project --python 3.14 scripts/doc-coverage.py --threshold 80
+    uv run --no-project --python $(PYTHON_BASELINE) scripts/doc-coverage.py --threshold 80
     ```
 
     measuring the share of documented items across every workspace library

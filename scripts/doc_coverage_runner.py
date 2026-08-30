@@ -18,6 +18,8 @@ if typ.TYPE_CHECKING:
 class ToolchainPinError(RuntimeError):
     """Report an unreadable or channel-less ``rust-toolchain.toml``."""
 
+    INVALID_RECORD = "toolchain.channel must be a non-empty string"
+
     def __init__(self, detail: str) -> None:
         super().__init__(
             f"cannot read the pinned toolchain from rust-toolchain.toml: {detail}"
@@ -67,9 +69,14 @@ def pinned_toolchain(manifest_root: pathlib.Path) -> str:
     """
     try:
         with (manifest_root / "rust-toolchain.toml").open("rb") as toolchain:
-            return tomllib.load(toolchain)["toolchain"]["channel"]
-    except (OSError, tomllib.TOMLDecodeError, KeyError) as error:
+            record = tomllib.load(toolchain)
+    except (OSError, tomllib.TOMLDecodeError) as error:
         raise ToolchainPinError(str(error)) from error
+    match record:
+        case {"toolchain": {"channel": str() as channel}} if channel:
+            return channel
+        case _:
+            raise ToolchainPinError(ToolchainPinError.INVALID_RECORD)
 
 
 def doc_targets(metadata: dict[str, object]) -> list[DocTarget]:
@@ -95,13 +102,19 @@ def doc_targets(metadata: dict[str, object]) -> list[DocTarget]:
             "workspace_members": list() as raw_members,
             "packages": list() as packages,
         }:
-            members = set(raw_members)
+            members: set[str] = set()
+            for member in raw_members:
+                match member:
+                    case str():
+                        members.add(member)
+                    case _:
+                        raise WorkspaceMetadataError
         case _:
             raise WorkspaceMetadataError
     return [doc for package in packages for doc in package_targets(package, members)]
 
 
-def package_targets(package: object, members: set[object]) -> list[DocTarget]:
+def package_targets(package: object, members: set[str]) -> list[DocTarget]:
     """Map one Cargo package entry to the targets worth documenting.
 
     Parameters

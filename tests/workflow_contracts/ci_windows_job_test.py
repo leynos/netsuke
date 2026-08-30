@@ -120,7 +120,9 @@ def test_windows_job_runs_check_fmt_lint_and_test(
     Every quality gate must run through the Makefile with `SHELL=bash` so the
     POSIX-shell recipes execute under Git Bash on the Windows runner.
     """
-    runs = step_runs(windows_steps)
+    runs = [
+        run.strip() if isinstance(run, str) else run for run in step_runs(windows_steps)
+    ]
     counts = {command: runs.count(command) for command in EXPECTED_WINDOWS_RUNS}
     assert set(counts.values()) == {1}, (
         f"{WINDOWS_JOB} must run each of {list(EXPECTED_WINDOWS_RUNS)!r} exactly "
@@ -137,7 +139,9 @@ def test_windows_job_does_not_duplicate_doc_and_audit_gates(
     the CodeScene gate, and `make test-workflow-contracts` are already covered
     on Linux; duplicating them on Windows buys nothing.
     """
-    runs = step_runs(windows_steps)
+    runs = [
+        run.strip() if isinstance(run, str) else run for run in step_runs(windows_steps)
+    ]
     duplicated = [command for command in EXCLUDED_WINDOWS_RUNS if command in runs]
     assert not duplicated, (
         f"{WINDOWS_JOB} must not run the platform-independent {duplicated!r}, "

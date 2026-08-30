@@ -587,9 +587,21 @@ doc build). Rustdoc writes the coverage JSON to its reported generated file,
 which the script reads immediately after each successful invocation. That
 path-extraction helper belongs only to the
 `--show-coverage --output-format json` collector; do not reuse it for general
-Rustdoc output. The pure `Coverage`/`DocTarget` model and payload validation
-belong to `scripts/doc_coverage_model.py`; only the coverage gate may import
-it. The executable retains Cargo invocation and user-facing error translation.
+Rustdoc output. `scripts/doc_coverage_model.py` defines the shared
+`Coverage`/`DocTarget` values. `scripts/doc_coverage_runner.py` owns toolchain
+pin parsing, Cargo metadata validation, target selection, and measurement
+orchestration; its `ToolchainPinError` and `WorkspaceMetadataError` preserve
+those input-validation boundaries. `scripts/doc_coverage_cargo.py` owns Cargo
+and Rustdoc process handling, generated-path extraction, and coverage-payload
+validation; its shape and count errors are translated to `CoverageOutputError`
+at that boundary. The executable retains argument parsing, reporting, and
+user-facing error translation.
+
+The workflow contract suites share the YAML 1.2-aware loader and common
+workflow, job, and step helpers in
+`tests/workflow_contracts/workflow_loading.py`. Each suite keeps its own
+workflow-specific projections and assertions, so parsing and structural
+validation remain consistent across the workflows under test.
 
 `make test` runs the non-doctest suite through
 [cargo-nextest](https://nexte.st/) and then runs the doctests separately. CI
@@ -817,7 +829,7 @@ pins the interpreter in `PYTHON_BASELINE`, `pyproject.toml` sets
 the CI and release workflows install the same version through `setup-uv`.
 Write to the baseline: deferred annotation evaluation is the default, so
 `from __future__ import annotations` must not appear, and PEP 758
-unparenthesised `except` clauses and PEP 695 `type` statements are the
+unparenthesized `except` clauses and PEP 695 `type` statements are the
 preferred forms.
 
 The Python gates run inside the ordinary quality-gate targets:

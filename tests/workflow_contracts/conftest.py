@@ -21,8 +21,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 # The module under test lives in scripts/, outside any package, so the import
 # cannot precede the sys.path insertion above.
-# ruff: ignore[module-import-not-at-top-of-file] - needs the sys.path insertion
-import hoist_binstall_archives as hoist_mod
+import hoist_binstall_archives as hoist_mod  # ruff: ignore[module-import-not-at-top-of-file] - needs sys.path insertion
 
 STAGING_CONFIG = """\
 [common]
