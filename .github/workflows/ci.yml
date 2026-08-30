@@ -19,6 +19,10 @@ env:
   RUFF_VERSION: '0.16.4'
   TY_VERSION: '0.0.74'
   PYTHON_BASELINE: '3.14'
+  # `make check-fmt` verifies Markdown formatting through
+  # scripts/check-markdown-format.sh, which shells out to mdtablefix. Pin it
+  # once so both formatter jobs produce the same canonical output.
+  MDTABLEFIX_VERSION: '0.5.0'
 
 jobs:
   build-test:
@@ -76,6 +80,27 @@ jobs:
           cargo --version
       - name: Show Ninja version
         run: ninja --version
+      - name: Cache mdtablefix
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.cargo/bin/mdtablefix
+            ~/.cargo/bin/mdtablefix.exe
+            ~/.cache/cargo-binstall
+          key: mdtablefix-${{ runner.os }}-${{ runner.arch }}-${{ env.MDTABLEFIX_VERSION }}
+      - name: Install mdtablefix
+        # Required by `make check-fmt`. Keep the cached binary at the pinned
+        # version and fall back to Cargo when a prebuilt asset is unavailable.
+        run: |
+          if ! command -v mdtablefix >/dev/null 2>&1; then
+            if cargo binstall --version >/dev/null 2>&1; then
+              cargo binstall --no-confirm --locked "mdtablefix@${MDTABLEFIX_VERSION}"
+            else
+              echo "cargo-binstall unavailable; building mdtablefix from crates.io"
+              cargo install --locked mdtablefix --version "${MDTABLEFIX_VERSION}"
+            fi
+          fi
+          mdtablefix --version
       - name: Setup uv
         # Installed before the Format step: `make check-fmt` and `make lint`
         # run the uv-driven Ruff, Pylint, df12, and ambrleaks gates.
@@ -197,6 +222,27 @@ jobs:
           cargo --version
       - name: Show Ninja version
         run: ninja --version
+      - name: Cache mdtablefix
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.cargo/bin/mdtablefix
+            ~/.cargo/bin/mdtablefix.exe
+            ~/.cache/cargo-binstall
+          key: mdtablefix-${{ runner.os }}-${{ runner.arch }}-${{ env.MDTABLEFIX_VERSION }}
+      - name: Install mdtablefix
+        # Required by `make check-fmt`. Keep the cached binary at the pinned
+        # version and fall back to Cargo when a prebuilt asset is unavailable.
+        run: |
+          if ! command -v mdtablefix >/dev/null 2>&1; then
+            if cargo binstall --version >/dev/null 2>&1; then
+              cargo binstall --no-confirm --locked "mdtablefix@${MDTABLEFIX_VERSION}"
+            else
+              echo "cargo-binstall unavailable; building mdtablefix from crates.io"
+              cargo install --locked mdtablefix --version "${MDTABLEFIX_VERSION}"
+            fi
+          fi
+          mdtablefix --version
       - name: Setup uv
         # `make check-fmt` runs the uv-driven Ruff format check on every
         # platform, so the Windows job needs uv on the PATH as well.
