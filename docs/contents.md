@@ -27,6 +27,9 @@ operator, user, and contributor references are easier to find.
   framework.
 - [Technical design](netsuke-test-framework-technical-design.md):
   Implementation architecture for the Netsukefile testing framework.
+- [netsuke-linter-design.md](netsuke-linter-design.md): Manifest linter design,
+  covering the rule model, compiler-stage hooks, suppression grammar, policy
+  configuration, and output schemas behind `netsuke check`.
 - [roadmap.md](roadmap.md): Phased implementation plan and tracked delivery
   work.
 - [roadmap-composition.md](roadmap-composition.md): Roadmap continuation for
@@ -275,6 +278,10 @@ operator, user, and contributor references are easier to find.
   the reserved `1.1.0` manifest minor version.
 - [ADR-0045](adrs/adr-0045-isolate-command-list-entries.md): Opt-in command-list
   entry isolation with shared mode preserved as the default.
+- [ADR-015](adr-015-manifest-linting-under-netsuke-check.md):
+  Manifest-linting decision record, placing the linter under `netsuke check`,
+  treating findings as command results rather than failures, and fixing the
+  rule-identifier and rule-text ownership rules.
 
 - [ADR-0046-agent-consistent-human-first-cli.md](adrs/adr-0046-agent-consistent-human-first-cli.md):
   Human-first, agent-consistent CLI doctrine decision record.
