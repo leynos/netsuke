@@ -342,14 +342,16 @@ PowerShell variables, `$env:` assignments, and locations left by earlier
 entries, but state does not cross action or target boundaries.
 
 Use PowerShell syntax in the default route. `$name` is a PowerShell variable and
-`$env:NAME` reads an environment variable; `${VAR:-default}` is POSIX syntax
-and is not valid PowerShell. Recipe text is protected from Ninja dollar
-expansion, so write ordinary PowerShell dollars rather than `$$`. The rendered
-`{{ ins }}` and `{{ outs }}` paths use single-quoted PowerShell arguments.
-Build and default-target paths containing spaces are escaped for Ninja before
-recipe generation, so `{{ outs }}` can name a whitespace-containing output.
-Quote every other path and argument with PowerShell syntax; arbitrary rendered
-Jinja text is not shell-quoted.
+`$env:NAME` reads an environment variable. PowerShell parses the braced
+variable name in `${VAR:-default}`, but does not perform POSIX default-value
+expansion. Recipe text is protected from Ninja dollar expansion, so write
+ordinary PowerShell dollars rather than `$$`. The rendered `{{ ins }}` and
+`{{ outs }}` paths use literal, single-quoted PowerShell arguments; an
+apostrophe is doubled, so `O'Brien.txt` becomes `'O''Brien.txt'`. Build and
+default-target paths containing spaces are escaped for Ninja before recipe
+generation, so `{{ outs }}` can name a whitespace-containing output. Quote
+every other path and argument with PowerShell syntax; arbitrary rendered Jinja
+text is not shell-quoted.
 
 Recipes that fit within Windows' 32,766-character command-line safety limit use
 the encoded `powershell.exe` invocation described above. Larger scalar

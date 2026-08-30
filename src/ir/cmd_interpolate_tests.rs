@@ -87,6 +87,17 @@ fn power_shell_bindings_quote_apostrophes_as_single_literals() {
     assert_eq!(command, "Copy-Item 'source''s file' 'output''s file'");
 }
 
+#[test]
+fn power_shell_bindings_preserve_literal_backticks_in_paths() {
+    let bindings = CommandBindings::new(
+        &[Utf8PathBuf::from("source`file")],
+        &[Utf8PathBuf::from("output`file")],
+        RecipeShell::PowerShell,
+    );
+    let command = interpolate_command_with_bindings("Copy-Item $in $out", &bindings)
+        .expect("PowerShell single-quoted paths should preserve literal backticks");
+    assert_eq!(command, "Copy-Item 'source`file' 'output`file'");
+}
 /// Verify that PowerShell-specific escaped double quotes bypass POSIX syntax checks.
 #[test]
 fn power_shell_bindings_allow_escaped_double_quotes() {

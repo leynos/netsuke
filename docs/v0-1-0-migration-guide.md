@@ -133,9 +133,10 @@ found failure. `generate` and `help targets` do not run recipes and therefore
 do not require the optional runtime.
 
 In the default route, write `$name` for a PowerShell variable and `$env:NAME`
-for an environment variable. `${VAR:-default}` is only valid in the explicit
-Bash route. The v0.1.0 dollar-escaping fix means these are ordinary, single
-dollars, not Ninja-escaped `$$` forms. Ordered lists share one PowerShell
+for an environment variable. PowerShell parses the braced variable name in
+`${VAR:-default}`, but does not perform POSIX default-value expansion. The
+v0.1.0 dollar-escaping fix means these are ordinary, single dollars, not
+Ninja-escaped `$$` forms. Ordered lists share one PowerShell
 process: Netsuke checks `$LASTEXITCODE` immediately after each generated list
 entry, so a non-zero status or terminating error stops the list before a later
 entry can overwrite it. Multiple native commands inside one entry are not
