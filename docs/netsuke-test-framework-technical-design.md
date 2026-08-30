@@ -498,13 +498,17 @@ to it.
 dependency graph (`uses` edges), topologically sorts it — a cycle is a
 suite error naming the cycle — and executes setup actions in order. A
 topological sort leaves independent fixtures mutually unordered, so the
-sort breaks ties deterministically rather than by hash iteration order:
-fixtures requested by the step come first in request order, and fixtures
-pulled in only as `uses` dependencies follow in declaration order within
-their file. Two fixtures that depend on nothing therefore always set up in
-the same sequence, and reverse-order teardown is correspondingly stable. A
-test with several independent fixtures asserts both the setup and the
-teardown sequence. Each
+sort breaks ties deterministically rather than by hash iteration order.
+The tie-break applies only among _ready_ fixtures — those whose
+dependencies are already satisfied — so it never reorders a fixture ahead
+of something it uses: dependency precedence decides first, and the
+tie-break only chooses between candidates that are equally eligible. Among
+those, fixtures the step requested come first in request order, then
+fixtures pulled in solely as `uses` dependencies in declaration order
+within their file. Two fixtures that depend on nothing therefore always
+set up in the same sequence, and reverse-order teardown follows from the
+resulting setup order. A test with several independent fixtures asserts
+both the setup and the teardown sequence. Each
 case owns one sandbox: a temporary directory opened as a `cap-std` `Dir`,
 within which `tmpdir`, `mkdir`, `write`, `copy`, and `remove` operate by
 relative path. Absolute paths and `..` traversal are rejected at
@@ -594,6 +598,19 @@ order they finish while human and JSON output stay byte-stable; a test
 that completes cases deliberately out of order and diffs both renderings
 guards this.
 
+`--fail-fast` is a scheduling decision, made where results are already
+serialized: the collector observes the first `CaseResult` whose status is
+failed or errored and sets a stop flag that workers check before claiming
+their next case. Cases already in flight are left alone and run to
+completion, so their teardown and journal handling are unaffected; only
+unclaimed cases are affected, and the collector records each of them as
+skipped so the report still totals the full selection (I9). Making the
+collector the observation point matters: it is the one place that sees
+every result, so the decision cannot race between workers. A test that
+selects more cases than `--jobs` and completes them out of order covers
+all three states — finished, in flight at the moment of failure, and never
+started.
+
 Case execution runs under `catch_unwind` inside the child; a panic that
 escapes it becomes an abnormal child exit, which the supervisor records as
 an errored case. Either way the worker survives and every selected case
@@ -665,6 +682,24 @@ Cleanup ownership follows the same split:
 | Interruption (Ctrl-C) | parent, for every live child and the run root |
 
 _Table 2: Fixture teardown ownership._
+
+The parent does not replay per-fixture teardown for a child it killed, and
+so needs no hand-off of the completed-fixture list. It does not need one
+because every effect a fixture has is either inside the case sandbox or
+inside the child: filesystem actions write within the sandbox, and `env`
+actions mutate only the child's in-process map, which dies with it.
+Removing the sandbox therefore _is_ complete teardown for a terminated
+case, and it is idempotent — safe whether the child had torn down nothing,
+some, or everything before it died.
+
+This scopes I2 precisely. Reverse-order, exactly-once teardown is a
+guarantee about teardown the child performs; parent-side cleanup after
+forced termination is sandbox-level and makes no ordering claim, because
+there is no surviving ordered state to unwind. Termination-during-setup
+tests cover both hazards this creates: a fixture killed mid-setup, whose
+partial artefacts must still disappear, and a fixture whose teardown the
+child had already completed, where the parent's removal must not double-
+apply or error.
 
 Case sandboxes stay under the existing per-run root, so the parent can
 always finish cleanup a dead child left undone. A timed-out case retains

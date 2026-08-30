@@ -1373,7 +1373,7 @@ in [RFC 0007](rfcs/0007-netsukefile-testing-framework.md), the
     (invariant I5).
 
 - [ ] 7.5.2. Implement the case supervisor and frame protocol. Requires:
-  7.5.1. See
+  7.4.3, 7.5.1. See
   [technical design §8.1](netsuke-test-framework-technical-design.md).
   - [ ] Run each case in a killable child process, keeping discovery,
     scheduling, and reporting in the parent.

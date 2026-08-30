@@ -790,10 +790,15 @@ internal runner error) instead leaves stdout empty and writes one
 diagnostic document to stderr. All human-facing strings are localized like
 the rest of the command-line interface (CLI) surface.
 
-Interruption (Ctrl-C) stops scheduling, tears down completed fixtures,
-removes the run's sandbox root unless `--keep`, and exits 130; in `--json`
-mode the run still emits one document, marked `"interrupted": true`, with
-every unstarted case reported as skipped. A case whose sandbox cannot be
+Interruption (Ctrl-C) stops scheduling, then terminates every case still
+running, reaps each terminated child, and performs the cleanup those
+children no longer can. Only once no child survives does the run report
+interruption: it applies the usual `--keep` decision to the run sandbox —
+removing it, or retaining it and printing the path — and exits 130. In
+`--json` mode the run still emits exactly one document, marked
+`"interrupted": true`, with every unstarted case reported as skipped.
+Ordering the shutdown this way is what stops an interrupted run
+leaving orphaned children or half-removed sandboxes behind.
 provisioned is errored; the run aborts with exit 3 only when the run root
 itself cannot be created.
 
