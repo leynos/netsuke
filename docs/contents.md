@@ -85,6 +85,10 @@ operator, user, and contributor references are easier to find.
   adr-014-base-directory-seam-and-dir-anchoring.md): Base-directory seam for
   manifest and glob resolution, explicit-selector independence from `-C`, and
   the in-process environment-mutation gate.
+- [ADR-016: public CLI metadata source of truth](
+  adr-016-public-cli-metadata-source-of-truth.md):
+  Release-help metadata composition boundary for configuration fields,
+  parser-only selectors, and subcommands.
 
 ## Proposals
 
