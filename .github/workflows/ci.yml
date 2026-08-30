@@ -105,6 +105,8 @@ jobs:
           whitaker-installer
       - name: Lint
         run: make lint
+      - name: Typecheck
+        run: make typecheck
       - name: Doc coverage
         # Rustdoc doc-comment coverage across every workspace lib and bin
         # target, gated on the 80% threshold stated in AGENTS.md. Runs after

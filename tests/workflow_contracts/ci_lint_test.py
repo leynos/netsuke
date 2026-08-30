@@ -133,6 +133,14 @@ def test_workflow_runs_make_lint() -> None:
     )
 
 
+def test_workflow_runs_make_typecheck() -> None:
+    """CI runs the typecheck gate through the Makefile, not an ad hoc command."""
+    runs = step_runs(job_steps(load_workflow(), "build-test"))
+    assert "make typecheck" in runs, (
+        f"the build-test job must run `make typecheck`, got run steps: {runs!r}"
+    )
+
+
 def test_makefile_clippy_flags_stay_workspace_wide() -> None:
     """CLIPPY_FLAGS covers the whole workspace with warnings denied."""
     makefile = MAKEFILE_PATH.read_text(encoding="utf-8")

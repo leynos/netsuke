@@ -76,11 +76,10 @@ TY_VERSION ?= 0.0.74
 # configuration and exclusions from pyproject.toml, so these paths only bound
 # the walk.
 PYTHON_SOURCES = scripts tests/workflow_contracts
-# Pylint runs on PyPy through a shim because CPython start-up dominates the
-# wall-clock cost of a whole-tree pass. `--load-plugins=` clears the shim's
-# default plugin list so this pass runs exactly the messages pyproject.toml
-# enables.
-PYLINT_PYTHON ?= pypy
+# Pylint must run on the Python baseline so it parses every repository-owned
+# source. `--load-plugins=` clears the shim's default plugin list so this pass
+# runs exactly the messages pyproject.toml enables.
+PYLINT_PYTHON ?= $(PYTHON_BASELINE)
 PYLINT_TARGETS ?= $(PYTHON_SOURCES)
 PYLINT_PYPY_SHIM_REF ?= 726d09f968b4d729ee4b29c71fc732e744854f3b
 PYLINT_PYPY_SHIM = git+https://github.com/leynos/pylint-pypy-shim.git@$(PYLINT_PYPY_SHIM_REF)
