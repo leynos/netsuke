@@ -861,13 +861,13 @@ bash "${ACTIONLINT_INSTALLER_PATH}" "${ACTIONLINT_VERSION}"
 make github-actions-lint
 ```
 
-[`tests/workflow_contracts/github_actions_validation_test.py`](../tests/
-workflow_contracts/github_actions_validation_test.py) verifies the Makefile
-delegation, YAML policy, tool pins, and trusted CI invocation.
+[`tests/workflow_contracts/github_actions_validation_test.py`](../tests/ workflow_contracts/github_actions_validation_test.py)
+verifies the Makefile delegation, YAML policy, tool pins, and trusted CI
+invocation.
 
-For screen readers: the following sequence shows how CI restores or builds
-the pinned linting tools, verifies actionlint before installation, and passes
-the checked-out binary to the Makefile workflow-lint target.
+For screen readers: the following sequence shows how CI restores or builds the
+pinned linting tools, verifies actionlint before installation, and passes the
+checked-out binary to the Makefile workflow-lint target.
 
 ```mermaid
 sequenceDiagram
