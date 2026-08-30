@@ -4,7 +4,9 @@
 #
 # `mdtablefix` owns table padding and paragraph wrapping. It has no check-only
 # mode, so this script compares its output for each file against the file on
-# disk. Keep the flags in step with the `mdtablefix` invocation in
+# disk. `mdtablefix` emits LF, whereas Git can check text out with CRLF on
+# Windows; the comparison accepts only either exact line-ending form. Keep the
+# flags in step with the `mdtablefix` invocation in
 # `mdformat-all`, which `make fmt` runs.
 #
 # `make fmt` also applies `markdownlint-cli2 --fix` after `mdtablefix`, but that
@@ -35,7 +37,8 @@ unformatted=()
 for file in "$@"; do
   "$MDTABLEFIX" --wrap --renumber --breaks --ellipsis --fences "$file" \
     >"$formatted"
-  if ! cmp -s "$formatted" "$file"; then
+  if ! cmp -s "$formatted" "$file" \
+    && ! sed $'s/$/\r/' "$formatted" | cmp -s - "$file"; then
     unformatted+=("$file")
   fi
 done
