@@ -69,7 +69,8 @@ impl ResolverWorld {
         };
         let config = StdlibConfig::new(workspace)?
             .with_workspace_root_path(self.root.clone())?
-            .with_path_override(path_override);
+            .with_path_override(path_override)
+            .with_pathext_override(".CMD");
         let mut env = Environment::new();
         stdlib::register_with_config(&mut env, config)?;
         Ok(env)

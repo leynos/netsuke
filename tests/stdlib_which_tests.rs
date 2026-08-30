@@ -117,7 +117,7 @@ fn command_available_returns_true_for_path_match(
 
     let output = env.render_str("{{ command_available('helper') }}", context! {})?;
 
-    ensure!(output == "True", "expected True, got {output}");
+    ensure!(output == "true", "expected true, got {output}");
     Ok(())
 }
 
@@ -133,7 +133,7 @@ fn command_available_returns_false_for_missing_command(
         context! {},
     )?;
 
-    ensure!(output == "False", "expected False, got {output}");
+    ensure!(output == "false", "expected false, got {output}");
     Ok(())
 }
 
@@ -147,7 +147,7 @@ fn command_available_returns_false_for_missing_absolute_path(
 
     let output = render_command_available(&env, missing.as_path(), "")?;
 
-    ensure!(output == "False", "expected False, got {output}");
+    ensure!(output == "false", "expected false, got {output}");
     Ok(())
 }
 
@@ -160,7 +160,7 @@ fn command_available_returns_false_for_missing_relative_path(
 
     let output = env.render_str("{{ command_available('./missing') }}", context! {})?;
 
-    ensure!(output == "False", "expected False, got {output}");
+    ensure!(output == "false", "expected false, got {output}");
     Ok(())
 }
 
@@ -213,7 +213,7 @@ fn command_available_returns_true_for_absolute_path(
 
     let output = render_command_available(&env, tool.as_path(), "")?;
 
-    ensure!(output == "True", "expected True, got {output}");
+    ensure!(output == "true", "expected true, got {output}");
     Ok(())
 }
 
@@ -231,13 +231,13 @@ fn command_available_returns_true_for_canonical_symlink(
 
     let output = render_command_available(&env, link.as_path(), ", canonical=true")?;
 
-    ensure!(output == "True", "expected True, got {output}");
+    ensure!(output == "true", "expected true, got {output}");
     Ok(())
 }
 
 #[rstest]
-#[case::present("workspace-helper", "True")]
-#[case::absent("missing-helper", "False")]
+#[case::present("workspace-helper", "true")]
+#[case::absent("missing-helper", "false")]
 fn command_available_uses_workspace_fallback_when_path_is_empty(
     #[case] command: &str,
     #[case] expected: &str,
@@ -272,19 +272,19 @@ fn command_available_fresh_bypasses_cached_success(
         context! {},
     )?;
 
-    ensure!(first == "True", "expected initial True, got {first}");
-    ensure!(cached == "True", "expected cached True, got {cached}");
-    ensure!(fresh == "False", "expected fresh False, got {fresh}");
+    ensure!(first == "true", "expected initial true, got {first}");
+    ensure!(cached == "true", "expected cached true, got {cached}");
+    ensure!(fresh == "false", "expected fresh false, got {fresh}");
     Ok(())
 }
 
 #[rstest]
-#[case::auto_present("auto", true, "True")]
-#[case::auto_absent("auto", false, "False")]
-#[case::always_present("always", true, "True")]
-#[case::always_absent("always", false, "False")]
-#[case::never_present("never", true, "False")]
-#[case::never_absent("never", false, "False")]
+#[case::auto_present("auto", true, "true")]
+#[case::auto_absent("auto", false, "false")]
+#[case::always_present("always", true, "true")]
+#[case::always_absent("always", false, "false")]
+#[case::never_present("never", true, "false")]
+#[case::never_absent("never", false, "false")]
 fn command_available_honours_cwd_mode(
     #[case] cwd_mode: &str,
     #[case] present: bool,
@@ -305,10 +305,10 @@ fn command_available_honours_cwd_mode(
 }
 
 #[rstest]
-#[case::present(false, "True")]
-#[case::present_all(true, "True")]
-#[case::absent(false, "False")]
-#[case::absent_all(true, "False")]
+#[case::present(false, "true")]
+#[case::present_all(true, "true")]
+#[case::absent(false, "false")]
+#[case::absent_all(true, "false")]
 fn command_available_all_kwarg_does_not_affect_bool(
     #[case] all: bool,
     #[case] expected: &str,
@@ -320,7 +320,7 @@ fn command_available_all_kwarg_does_not_affect_bool(
         &workspace_fixture.root,
         path_override(&[workspace_fixture.root.join("bin")])?,
     )?;
-    let command = if expected == "True" {
+    let command = if expected == "true" {
         "all-helper"
     } else {
         "missing-helper"
