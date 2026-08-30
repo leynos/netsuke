@@ -3,9 +3,8 @@
 //!
 //! `make test` is the single command local development and continuous
 //! integration (CI) both run. These tests pin the runner contract it encodes:
-//! the mutation gate completes before non-doctest tests go through
-//! cargo-nextest and doctests run separately because nextest cannot execute
-//! them.
+//! non-doctest tests go through cargo-nextest and doctests run separately
+//! because nextest cannot execute them.
 //!
 //! They also pin the `RUSTFLAGS` contract shared by every recipe that sets the
 //! variable. Each such recipe adds `-D warnings` and prepends any value the
@@ -25,26 +24,18 @@ mod makefile;
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
-use makefile::{phony_targets, read_repo_file, target_prerequisites, target_recipe};
+use makefile::{read_repo_file, target_prerequisites, target_recipe};
 use toml::Value;
 
 #[test]
-fn behavioural_make_test_stages_the_mutation_gate_before_rust_tests() -> Result<()> {
+fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()> {
     let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
 
     let prerequisites =
         target_prerequisites(&makefile, "test").context("Makefile should declare a test target")?;
     ensure!(
-        prerequisites == ["test-env-mutation-gate"],
-        "make test must stage the mutation gate before its recursive test pass, found {prerequisites:?}"
-    );
-    let test_recipe =
-        target_recipe(&makefile, "test").context("Makefile should declare a test recipe")?;
-    ensure!(
-        test_recipe.contains("$(MAKE)")
-            && test_recipe.contains("test-nextest")
-            && test_recipe.contains("doctest"),
-        "make test must run nextest and doctests through a staged recursive make, found {test_recipe:?}"
+        prerequisites == ["test-nextest", "doctest"],
+        "make test must depend on nextest and doctests, found {prerequisites:?}"
     );
 
     let nextest_recipe = target_recipe(&makefile, "test-nextest")
@@ -91,34 +82,6 @@ fn behavioural_make_test_stages_the_mutation_gate_before_rust_tests() -> Result<
     Ok(())
 }
 
-#[test]
-fn mutation_gate_targets_are_phony_make_prerequisites() -> Result<()> {
-    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
-    let phony = phony_targets(&makefile);
-
-    for target in ["test-env-mutation-gate", "lint-env-mutation"] {
-        ensure!(
-            phony.contains(&target),
-            ".PHONY must include {target}, found {phony:?}"
-        );
-    }
-    for (target, prerequisite) in [
-        ("test", "test-env-mutation-gate"),
-        ("lint", "lint-env-mutation"),
-    ] {
-        let prerequisites = target_prerequisites(&makefile, target)
-            .with_context(|| format!("Makefile should declare a {target} target"))?;
-        ensure!(
-            prerequisites.iter().any(|name| name == prerequisite),
-            "make {target} should depend on {prerequisite}, found {prerequisites:?}"
-        );
-    }
-    Ok(())
-}
-
-#[cfg(unix)]
-#[path = "makefile_test_target/mutation_gate.rs"]
-mod mutation_gate;
 #[path = "makefile_test_target/rustflags.rs"]
 mod rustflags;
 

@@ -648,8 +648,8 @@ workflow, job, and step helpers in
 workflow-specific projections and assertions, so parsing and structural
 validation remain consistent across the workflows under test.
 
-`make test` runs `make test-env-mutation-gate` first, then runs the non-doctest
-suite through [cargo-nextest](https://nexte.st/) and the doctests separately.
+`make test` runs the non-doctest suite through
+[cargo-nextest](https://nexte.st/) and the doctests separately.
 CI pins the runner version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`.
 Install that same version locally so local runs match CI; read the pin from the
 workflow rather than copying the number, so the two cannot drift:
@@ -1973,11 +1973,8 @@ Cargo home plus Kani support-file home.
 
 ## Test execution
 
-`make test` is the canonical entry point and composes three stages:
+`make test` is the canonical entry point and composes two stages:
 
-- `make test-env-mutation-gate` — runs the isolated Python/uv fixture checks
-  for `scripts/check_env_mutation.py`, ensuring forbidden in-process
-  environment mutation remains rejected.
 - `make test-nextest` —
   `cargo nextest run --workspace --all-targets --all-features`, with
   `RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings"` (the
@@ -3248,25 +3245,22 @@ accepts an explicit directory for configuration discovery, and environment
 readers are injected into the functions that need them. None of these depend on
 the process working directory or process-global environment state.
 
-`make lint` runs `make lint-env-mutation`, the environment-mutation gate, before
-its rustdoc, Clippy, and Whitaker stages. The gate and Clippy's
-`disallowed-methods` configuration reject
-`std::env::set_var`, `std::env::remove_var`, and `std::env::set_current_dir`
-anywhere under `src/`, `tests/`, and `test_support/`. Child-process
-configuration stays confined to the `Command` builders: `Command::env`,
-`Command::env_clear`, and `Command::current_dir`. The gate itself is a Python
-script and follows the [scripting standards](scripting-standards.md); see below.
+`make lint` runs rustdoc, Clippy, and Whitaker. Clippy's workspace-wide
+`disallowed-methods` configuration rejects `std::env::set_var`,
+`std::env::remove_var`, and `std::env::set_current_dir` in every target kind
+with warnings denied. Child-process configuration stays confined to the
+`Command` builders: `Command::env`, `Command::env_clear`, and
+`Command::current_dir`.
 
 ### Scripting standards for automation scripts
 
-Python scripts under `scripts/` — including the environment-mutation gate,
-`scripts/check_env_mutation.py` — follow the repository's
-[scripting standards](scripting-standards.md): a `uv` script block with a
-Python 3.13 floor, Cyclopts for parameterized CLIs, `cuprum` for subprocess
-execution, `pathlib` for filesystem access, and pytest coverage in
-`scripts/tests/` mirroring each script's name. The house Python style rules in
-`.rules/` (naming, typing, exception design, context managers, generators, and
-returns) apply to every script and its tests. Refer to
+Python scripts under `scripts/` follow the repository's [scripting
+standards](scripting-standards.md): a `uv` script block with a Python 3.13
+floor, Cyclopts for parameterized CLIs, `cuprum` for subprocess execution,
+`pathlib` for filesystem access, and pytest coverage in `scripts/tests/`
+mirroring each script's name. The house Python style rules in `.rules/`
+(naming, typing, exception design, context managers, generators, and returns)
+apply to every script and its tests. Refer to
 [`docs/scripting-standards.md`](scripting-standards.md) before introducing or
 changing an automation script.
 
