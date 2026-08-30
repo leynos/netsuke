@@ -98,10 +98,13 @@ fn localize_field(
 fn localize_subcommands(command: &mut Command, localizer: &dyn Localizer) {
     for subcommand in command.get_subcommands_mut() {
         let known = Subcommand::from_name(subcommand.get_name());
+        // Resolve the pair once: the short and long keys are only ever correct
+        // together, so looking them up separately would invite them to drift.
+        let about = known.map(subcommand_about_keys);
         let mut updated = std::mem::take(subcommand);
         if let Some(localized) = localize_field(
             localizer,
-            known.map(subcommand_about_key),
+            about.map(|entry| entry.short),
             updated
                 .get_about()
                 .map(|s: &clap::builder::StyledStr| s.to_string()),
@@ -111,7 +114,7 @@ fn localize_subcommands(command: &mut Command, localizer: &dyn Localizer) {
 
         if let Some(localized) = localize_field(
             localizer,
-            known.map(subcommand_long_about_key),
+            about.map(|entry| entry.long),
             updated
                 .get_long_about()
                 .map(|s: &clap::builder::StyledStr| s.to_string()),
@@ -229,27 +232,46 @@ fn flag_help_key(arg_id: &str, subcommand: Option<Subcommand>) -> Option<&'stati
     }
 }
 
-/// Return the localization key for a subcommand's short about text.
-const fn subcommand_about_key(subcommand: Subcommand) -> &'static str {
-    match subcommand {
-        Subcommand::Build => keys::CLI_SUBCOMMAND_BUILD_ABOUT,
-        Subcommand::Check => keys::CLI_SUBCOMMAND_CHECK_ABOUT,
-        Subcommand::Clean => keys::CLI_SUBCOMMAND_CLEAN_ABOUT,
-        Subcommand::Graph => keys::CLI_SUBCOMMAND_GRAPH_ABOUT,
-        Subcommand::Generate => keys::CLI_SUBCOMMAND_GENERATE_ABOUT,
-        Subcommand::Help => keys::CLI_SUBCOMMAND_HELP_ABOUT,
-    }
+/// The pair of localization keys describing one subcommand.
+///
+/// The two keys are looked up together and are only ever correct together, so
+/// pairing them keeps one exhaustive match over [`Subcommand`] instead of two
+/// that could drift apart when a subcommand is added.
+#[derive(Clone, Copy)]
+struct SubcommandAboutKeys {
+    /// Key for the one-line summary shown in a command list.
+    short: &'static str,
+    /// Key for the expanded description shown by `--help`.
+    long: &'static str,
 }
 
-/// Return the localization key for a subcommand's long about text.
-const fn subcommand_long_about_key(subcommand: Subcommand) -> &'static str {
+/// Return the localization keys for a subcommand's about text.
+const fn subcommand_about_keys(subcommand: Subcommand) -> SubcommandAboutKeys {
     match subcommand {
-        Subcommand::Build => keys::CLI_SUBCOMMAND_BUILD_LONG_ABOUT,
-        Subcommand::Check => keys::CLI_SUBCOMMAND_CHECK_LONG_ABOUT,
-        Subcommand::Clean => keys::CLI_SUBCOMMAND_CLEAN_LONG_ABOUT,
-        Subcommand::Graph => keys::CLI_SUBCOMMAND_GRAPH_LONG_ABOUT,
-        Subcommand::Generate => keys::CLI_SUBCOMMAND_GENERATE_LONG_ABOUT,
-        Subcommand::Help => keys::CLI_SUBCOMMAND_HELP_LONG_ABOUT,
+        Subcommand::Build => SubcommandAboutKeys {
+            short: keys::CLI_SUBCOMMAND_BUILD_ABOUT,
+            long: keys::CLI_SUBCOMMAND_BUILD_LONG_ABOUT,
+        },
+        Subcommand::Check => SubcommandAboutKeys {
+            short: keys::CLI_SUBCOMMAND_CHECK_ABOUT,
+            long: keys::CLI_SUBCOMMAND_CHECK_LONG_ABOUT,
+        },
+        Subcommand::Clean => SubcommandAboutKeys {
+            short: keys::CLI_SUBCOMMAND_CLEAN_ABOUT,
+            long: keys::CLI_SUBCOMMAND_CLEAN_LONG_ABOUT,
+        },
+        Subcommand::Graph => SubcommandAboutKeys {
+            short: keys::CLI_SUBCOMMAND_GRAPH_ABOUT,
+            long: keys::CLI_SUBCOMMAND_GRAPH_LONG_ABOUT,
+        },
+        Subcommand::Generate => SubcommandAboutKeys {
+            short: keys::CLI_SUBCOMMAND_GENERATE_ABOUT,
+            long: keys::CLI_SUBCOMMAND_GENERATE_LONG_ABOUT,
+        },
+        Subcommand::Help => SubcommandAboutKeys {
+            short: keys::CLI_SUBCOMMAND_HELP_ABOUT,
+            long: keys::CLI_SUBCOMMAND_HELP_LONG_ABOUT,
+        },
     }
 }
 
@@ -257,7 +279,7 @@ const fn subcommand_long_about_key(subcommand: Subcommand) -> &'static str {
 const fn help_topic_about_key(topic: HelpTopicName) -> &'static str {
     match topic {
         HelpTopicName::Targets => keys::CLI_HELP_TARGETS_ABOUT,
-        HelpTopicName::Subcommand(subcommand) => subcommand_about_key(subcommand),
+        HelpTopicName::Subcommand(subcommand) => subcommand_about_keys(subcommand).short,
     }
 }
 
@@ -326,28 +348,5 @@ pub fn json_hint_from_args(args: &[OsString]) -> Option<bool> {
 }
 
 #[cfg(test)]
-mod tests {
-    //! Unit tests for CLI localization helper routing.
-
-    use super::*;
-    use rstest::rstest;
-
-    /// Verify that help topic names map only to supported about keys.
-    #[rstest]
-    #[case("targets", Some(keys::CLI_HELP_TARGETS_ABOUT))]
-    #[case("build", Some(keys::CLI_SUBCOMMAND_BUILD_ABOUT))]
-    #[case("clean", Some(keys::CLI_SUBCOMMAND_CLEAN_ABOUT))]
-    #[case("graph", Some(keys::CLI_SUBCOMMAND_GRAPH_ABOUT))]
-    #[case("generate", Some(keys::CLI_SUBCOMMAND_GENERATE_ABOUT))]
-    #[case("help", None)]
-    #[case("unknown", None)]
-    fn help_topic_names_map_to_supported_about_keys(
-        #[case] name: &str,
-        #[case] expected: Option<&str>,
-    ) {
-        assert_eq!(
-            HelpTopicName::from_name(name).map(help_topic_about_key),
-            expected
-        );
-    }
-}
+#[path = "cli_l10n_tests.rs"]
+mod tests;
