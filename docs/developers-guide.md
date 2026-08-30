@@ -826,7 +826,7 @@ installs that exact version. Run the workflow checks with
 `make github-actions-lint` after installing both linters.
 
 The following shell commands reproduce CI's actionlint v1.7.12 setup. They
-download the installer at its pinned commit and the Linux `amd64` release
+download the installer at its pinned commit and the Linux `x86_64` release
 archive, verify the archive's SHA-256, and feed that verified archive to the
 installer so it cannot download a different artefact:
 
@@ -834,7 +834,7 @@ installer so it cannot download a different artefact:
 ACTIONLINT_VERSION='1.7.12'
 ACTIONLINT_SHA256='8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'
 ACTIONLINT_INSTALLER_COMMIT='914e7df21a07ef503a81201c76d2b11c789d3fca'
-ACTIONLINT_ARCHIVE="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+ACTIONLINT_ARCHIVE="actionlint_${ACTIONLINT_VERSION}_linux_x86_64.tar.gz"
 ACTIONLINT_RAW_BASE='https://raw.githubusercontent.com/rhysd/actionlint'
 ACTIONLINT_RELEASE_ROOT='https://github.com/rhysd/actionlint/releases/download'
 ACTIONLINT_INSTALLER_URL="${ACTIONLINT_RAW_BASE}/${ACTIONLINT_INSTALLER_COMMIT}/scripts"

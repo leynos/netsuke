@@ -224,7 +224,7 @@ typecheck-python: ## Typecheck the Python sources with ty
 	# would layer the extras through `.pth` chaining, which ty cannot follow.
 	$(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
 		--from ty==$(TY_VERSION) --with pytest==9.0.2 --with pytest-cov==7.0.0 \
-		--with 'pyyaml>=6' --with 'hypothesis>=6' \
+		--with 'pyyaml>=6' --with 'hypothesis>=6' --with 'cmd-mox==0.2.0' \
 		ty check --python-version $(PYTHON_BASELINE) \
 		--extra-search-path scripts $(PYTHON_SOURCES)
 

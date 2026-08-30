@@ -1,3 +1,4 @@
+---
 name: Coverage (main)
 
 # CodeScene accepts `cs-coverage upload` only for analysed branches, so
@@ -55,5 +56,3 @@ jobs:
           format: lcov
           access-token: ${{ env.CS_ACCESS_TOKEN }}
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
-
----
