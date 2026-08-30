@@ -1,7 +1,7 @@
 //! Tests for shell quoting of command substitutions.
 
 use anyhow::{Context, Result, bail, ensure};
-use netsuke::{ast::Recipe, ir::BuildGraph, manifest};
+use netsuke::{ast::Recipe, ir::BuildGraph, manifest, recipe_shell::RecipeShell};
 use rstest::rstest;
 use test_support::manifest::manifest_yaml;
 
@@ -24,7 +24,7 @@ use test_support::manifest::manifest_yaml;
 fn command_words(body: &str) -> Result<Vec<String>> {
     let yaml = manifest_yaml(body);
     let manifest = manifest::from_str(&yaml)?;
-    let graph = BuildGraph::from_manifest(&manifest)?;
+    let graph = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::Posix)?;
     let action = graph
         .actions
         .values()
@@ -118,7 +118,7 @@ fn invalid_command_errors(#[case] cmd: &str) -> Result<()> {
         "targets:\n  - name: out\n    sources: in\n    command: \"{escaped}\"\n"
     ));
     let manifest = manifest::from_str(&yaml)?;
-    let Err(err) = BuildGraph::from_manifest(&manifest) else {
+    let Err(err) = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::Posix) else {
         bail!("expected invalid command to fail");
     };
     ensure!(
