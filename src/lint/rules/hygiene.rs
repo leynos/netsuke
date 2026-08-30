@@ -56,18 +56,12 @@ impl DocumentRule for UnusedVar {
         let Some(vars) = doc.section("vars").and_then(Node::as_mapping) else {
             return;
         };
-        for entry in vars {
-            let Some(name) = entry.key.as_str() else {
-                continue;
-            };
-            if referenced.contains(name) {
-                continue;
-            }
-            sink.at(
-                entry.key.span,
-                format!("global variable `{name}` is never referenced"),
-            );
-        }
+        let declarations = vars
+            .iter()
+            .filter_map(|entry| Some((entry.key.as_str()?, entry.key.span)));
+        report_unreferenced_declarations(declarations, &referenced, sink, |name| {
+            format!("global variable `{name}` is never referenced")
+        });
     }
 }
 
@@ -99,18 +93,34 @@ impl DocumentRule for UnusedMacro {
         let Some(macros) = doc.section("macros") else {
             return;
         };
-        for item in macros.items() {
-            let Some(name) = item.get("signature").and_then(Node::as_str).map(macro_name) else {
-                continue;
-            };
-            if referenced.contains(name) {
-                continue;
-            }
-            sink.at(
-                item.get("signature").map_or(item.span, |node| node.span),
-                format!("macro `{name}` is never called"),
-            );
-        }
+        let declarations = macros.items().filter_map(|item| {
+            let signature = item.get("signature");
+            let name = signature.and_then(Node::as_str).map(macro_name)?;
+            Some((name, signature.map_or(item.span, |node| node.span)))
+        });
+        report_unreferenced_declarations(declarations, &referenced, sink, |name| {
+            format!("macro `{name}` is never called")
+        });
+    }
+}
+
+/// Report every declaration whose name no template mentions.
+///
+/// The unused-variable and unused-macro rules differ only in where the
+/// declarations come from and how the finding reads. Sharing the loop keeps
+/// the decision they have in common — that a name absent from the reference
+/// set is unused — in one place, so the two cannot answer it differently.
+fn report_unreferenced_declarations<'a>(
+    declarations: impl IntoIterator<Item = (&'a str, Span)>,
+    referenced: &BTreeSet<String>,
+    sink: &mut FindingSink<'_>,
+    message: impl Fn(&str) -> String,
+) {
+    let unreferenced = declarations
+        .into_iter()
+        .filter(|(name, _)| !referenced.contains(*name));
+    for (name, span) in unreferenced {
+        sink.at(span, message(name));
     }
 }
 
