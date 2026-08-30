@@ -23,13 +23,6 @@ use std::{
 use tempfile::TempDir;
 use test_support::ninja::ninja_integration_workspace;
 
-
-//! Differential tests for shell dollars preserved through the Ninja backend.
-//!
-//! These tests use Ninja itself as the lexer oracle. The generated command
-//! must be the shell text held by the IR after Netsuke lowers `$in` and `$out`.
-};
-
 const SENTINEL: &str = "NETSUKE_TEST_SENTINEL";
 const SENTINEL_VALUE: &str = "sentinel-value";
 
