@@ -1,0 +1,61 @@
+---
+source: src/runner/check_tests.rs
+expression: rendered
+---
+{
+  "schema_version": 1,
+  "generator": {
+    "name": "netsuke",
+    "version": "[version]"
+  },
+  "result": {
+    "command": "check",
+    "status": "pass",
+    "fail_on": "error",
+    "summary": {
+      "error": 0,
+      "warning": 1,
+      "advice": 0,
+      "reported": 1,
+      "suppressed": 0,
+      "omitted": 4
+    },
+    "truncated": true,
+    "findings": [
+      {
+        "message": "global variable `spare` is never referenced",
+        "code": "netsuke::lint::unused_var",
+        "severity": "warning",
+        "help": "Delete the entry, or reference it from the recipe that was meant to use it.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#unused-var",
+        "causes": [],
+        "source": {
+          "name": "Netsukefile"
+        },
+        "primary_span": {
+          "label": "unused-var",
+          "offset": 33,
+          "length": 5,
+          "line": 3,
+          "column": 3,
+          "end_line": 3,
+          "end_column": 3,
+          "snippet": "spare"
+        },
+        "labels": [
+          {
+            "label": "unused-var",
+            "offset": 33,
+            "length": 5,
+            "line": 3,
+            "column": 3,
+            "end_line": 3,
+            "end_column": 3,
+            "snippet": "spare"
+          }
+        ],
+        "related": []
+      }
+    ]
+  }
+}
