@@ -967,6 +967,11 @@ runs `scripts/check-markdown-format.sh`, which compares each file against
 `mdtablefix`'s output for that file and reports any that differ. `mdtablefix`
 has no check-only mode, and the script never modifies tracked files.
 
+`mdtablefix` emits LF line endings, but Git can check files out with CRLF on
+Windows. The script therefore accepts either the formatter's exact LF output or
+its exact CRLF rendering; it does not accept mixed line endings or other text
+differences.
+
 The script deliberately does not replay the `markdownlint-cli2 --fix` pass that
 `make fmt` performs after `mdtablefix`. `make markdownlint` already rejects any
 lint violation, so on a passing tree that pass has nothing to change.
