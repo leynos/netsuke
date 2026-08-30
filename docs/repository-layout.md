@@ -29,6 +29,8 @@ output and some leaf files so the long-lived structure remains visible.
 ├── src/
 │   ├── cli/
 │   ├── ir/
+│   ├── lint/
+│   │   └── rules/
 │   ├── localization/
 │   ├── manifest/
 │   ├── ninja_gen/
@@ -115,6 +117,10 @@ output and some leaf files so the long-lived structure remains visible.
   the build script compiles only the pattern module.
 - `src/ir/`: Intermediate representation generation, interpolation, graph, and
   cycle logic.
+- `src/lint/`: Manifest linting — the rule registry, the typed rule interface,
+  the spanned document index, suppression scanning, and policy resolution
+  behind `netsuke check`. Rules live under `src/lint/rules/`, grouped by the
+  concern they address.
 - `src/locale/`: Shipped Fluent catalogue registry and locale resolution,
   exposed through the historical root module paths.
 - `src/localization/`: Localization key definitions and runtime localization
