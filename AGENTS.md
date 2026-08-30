@@ -171,14 +171,15 @@ directive anywhere.
   - `make check-fmt` executes:
 
     ```sh
-    cargo fmt --workspace -- --check
+    cargo fmt --all -- --check
     ruff format --check scripts tests/workflow_contracts
+    $(MD_FILES_FIND) | xargs -0 -r scripts/check-markdown-format.sh
     ```
 
-    validating Rust formatting across the entire workspace and Python
-    formatting across the repository's helper scripts and workflow contract
-    tests, without modifying files. Ruff runs at the version pinned in the
-    Makefile `RUFF_VERSION` variable through `uv tool run`.
+    validating Rust, Python, and Markdown formatting without modifying files.
+    Ruff runs at the version pinned in the Makefile `RUFF_VERSION` variable
+    through `uv tool run`. The Markdown check requires `mdtablefix` on `PATH`;
+    the developers' guide documents how to install the CI-pinned version.
   - `make lint` executes:
 
     ```sh

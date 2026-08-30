@@ -22,12 +22,12 @@ Keep the returned temporary directory alive until the runner finishes.
 
 To control the environment of the spawned Ninja process itself, pass a
 `CommandEnv` through `runner::run_ninja_with` or `runner::run_ninja_tool_with`.
-A `PATH` injected this way affects the commands Ninja launches, not which
-Ninja program runs — provided the program is an absolute or otherwise
-resolved path. Selection happens first, via `NETSUKE_NINJA` or an explicitly
-injected programme path, and the resolved program is passed to `Command`
-as given; a bare relative name such as `ninja` would still be looked up in
-the child's `PATH` on Unix, so callers pass resolved paths.
+A `PATH` injected this way affects the commands Ninja launches, not which Ninja
+program runs — provided the program is an absolute or otherwise resolved path.
+Selection happens first, via `NETSUKE_NINJA` or an explicitly injected
+programme path, and the resolved program is passed to `Command` as given; a
+bare relative name such as `ninja` would still be looked up in the child's
+`PATH` on Unix, so callers pass resolved paths.
 
 ## End-to-end tests
 

@@ -37,11 +37,11 @@ the phase-level vocabulary and classification helpers.
 Both aggregate and phase-level configuration-load timing receive the same
 `&impl monotony::MonotonicClock` seam. Production supplies
 `monotony::StdMonotonicClock`; tests use deterministic clocks from
-`monotony::test_util`. No boundary defines a local
-`ConfigurationLoadClock` or `SystemConfigurationLoadClock`, and no boundary
-calls `Instant::now` directly. Netsuke selects `monotony = "0.1.0"`; its
-public contract keeps the production clock abstraction dependency-free while
-its optional `test-util` feature provides deterministic test clocks.
+`monotony::test_util`. No boundary defines a local `ConfigurationLoadClock` or
+`SystemConfigurationLoadClock`, and no boundary calls `Instant::now` directly.
+Netsuke selects `monotony = "0.1.0"`; its public contract keeps the production
+clock abstraction dependency-free while its optional `test-util` feature
+provides deterministic test clocks.
 
 The application installs one in-process
 `metrics_util::debugging::DebuggingRecorder` after tracing starts. Netsuke does
@@ -62,10 +62,10 @@ The metric contract has two layers:
   labels.
 
 No metric label may contain a path, configuration value, formatted error, or
-other caller-controlled text. Human configuration errors retain an
-`operation` from the fixed set `diag_mode_resolution|config_merge` and an
-`error_category` from `io|parse|validation` in structured tracing; detailed
-source errors remain in the user-facing diagnostic path.
+other caller-controlled text. Human configuration errors retain an `operation`
+from the fixed set `diag_mode_resolution|config_merge` and an `error_category`
+from `io|parse|validation` in structured tracing; detailed source errors remain
+in the user-facing diagnostic path.
 
 ## Rationale
 
@@ -82,9 +82,9 @@ source errors remain in the user-facing diagnostic path.
 ## Consequences
 
 Contributors adding configuration-load measurements must compose them at the
-startup boundary and extend the bounded vocabulary deliberately. Tests must
-use a local recorder through `metrics::with_local_recorder`; they must not
-depend on the application's process-wide recorder.
+startup boundary and extend the bounded vocabulary deliberately. Tests must use
+a local recorder through `metrics::with_local_recorder`; they must not depend
+on the application's process-wide recorder.
 
 The verbose snapshot is a debugging aid, not a stable scrape protocol. The
 metric names and label sets are the stable contract; the in-process snapshot
@@ -93,8 +93,8 @@ may include both phase-level and startup-attempt entries.
 ## Alternatives considered
 
 - **Instrument the query functions directly.** Rejected because it couples
-  configuration resolution to ambient process observability and distributes
-  the label-redaction contract across query call sites.
+  configuration resolution to ambient process observability and distributes the
+  label-redaction contract across query call sites.
 - **Install a Prometheus listener by default or through configuration.**
   Rejected because a short-lived CLI command cannot guarantee that a scraper
   observes it, and opening a network listener is outside startup configuration

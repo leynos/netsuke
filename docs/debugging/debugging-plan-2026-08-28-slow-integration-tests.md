@@ -1,12 +1,9 @@
 # Debugging plan: Investigate slow `netsuke-build` integration tests
 
-**Generated**: 2026-08-28
-**Issue ID**: PR #588 follow-up
-**Severity**: Medium
-**Falsification sub-agent**: alchemist
-**Planning agent boundary**: This document was prepared by the planning agent.
-Falsification must be executed by the named sub-agent, not by the planning
-agent.
+**Generated**: 2026-08-28 **Issue ID**: PR #588 follow-up **Severity**: Medium
+**Falsification sub-agent**: alchemist **Planning agent boundary**: This
+document was prepared by the planning agent. Falsification must be executed by
+the named sub-agent, not by the planning agent.
 
 ## Problem statement
 

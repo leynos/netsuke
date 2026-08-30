@@ -24,8 +24,8 @@ path.
 
 ## Decision
 
-**Y-statement:** In the context of declaration-ordered direct dependencies,
-and facing the forces of shared-work reuse, failure short-circuiting,
+**Y-statement:** In the context of declaration-ordered direct dependencies, and
+facing the forces of shared-work reuse, failure short-circuiting,
 unrelated-branch concurrency, backend-neutral IR, and executable generated
 output, we decided to use staged Ninja dyndep sidecars for
 `dependency_order: serial`, accepting the Ninja 1.10 floor, reserved generated
@@ -45,8 +45,7 @@ or more direct dependencies into synthetic phony gates beneath
 `.netsuke/dyndep`.
 
 The gate edge associated with the next sidecar depends on the preceding gate,
-so each later direct dependency remains unavailable until earlier work
-succeeds.
+so each later direct dependency remains unavailable until earlier work succeeds.
 
 The main generated build file declares `ninja_required_version = 1.10` only
 when staged serial lowering is present. The generator exposes a complete bundle

@@ -1,12 +1,9 @@
 # Debugging plan: serial runtime test failure after rebase
 
-**Generated**: 2026-08-27
-**Issue ID**: post-rebase gate failure
-**Severity**: high
-**Falsification sub-agent**: alchemist
-**Planning agent boundary**: This document was prepared by the planning agent.
-Falsification must be executed by the named sub-agent, not by the planning
-agent.
+**Generated**: 2026-08-27 **Issue ID**: post-rebase gate failure **Severity**:
+high **Falsification sub-agent**: alchemist **Planning agent boundary**: This
+document was prepared by the planning agent. Falsification must be executed by
+the named sub-agent, not by the planning agent.
 
 ## Problem Statement
 
@@ -22,12 +19,12 @@ changing code.
 
 Failure context after the rebase:
 
-| Aspect | Details |
-| --- | --- |
-| First observed | 2026-08-27, gate run after rebase onto `origin/main` |
-| Reproduction rate | One failure in one full-suite run; focused reproduction is pending |
-| Affected components | `tests/serial_dependency_runtime_tests.rs`, real Ninja |
-| Recent changes | Rebase integrated main's split Ninja generation and path escaping |
+| Aspect              | Details                                                            |
+| ------------------- | ------------------------------------------------------------------ |
+| First observed      | 2026-08-27, gate run after rebase onto `origin/main`               |
+| Reproduction rate   | One failure in one full-suite run; focused reproduction is pending |
+| Affected components | `tests/serial_dependency_runtime_tests.rs`, real Ninja             |
+| Recent changes      | Rebase integrated main's split Ninja generation and path escaping  |
 
 ### Error artefacts
 
@@ -60,11 +57,12 @@ nextest work succeeds.
 
 #### H1 Falsification plan
 
-| Step | Action | Expected Negative Result |
-| --- | --- | --- |
-| 1 | Run the exact test through nextest with one test thread. | A failure with the same empty-stderr Ninja status disproves a full-suite-only transient. |
+| Step | Action                                                   | Expected Negative Result                                                                 |
+| ---- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| 1    | Run the exact test through nextest with one test thread. | A failure with the same empty-stderr Ninja status disproves a full-suite-only transient. |
 
-**Tooling**: `cargo nextest run -p netsuke-build --all-features -E
+**Tooling**:
+`cargo nextest run -p netsuke-build --all-features -E
 'test(shared_serial_work_runs_once_while_unrelated_work_progresses)'`
 
 **Confidence on falsification**: A reproduced focused failure strongly rules
@@ -86,9 +84,9 @@ test process.
 
 #### H2 Falsification plan
 
-| Step | Action | Expected Negative Result |
-| --- | --- | --- |
-| 1 | Run the focused test described for H1. | A successful focused run disproves a persistent graph-generation regression. |
+| Step | Action                                 | Expected Negative Result                                                     |
+| ---- | -------------------------------------- | ---------------------------------------------------------------------------- |
+| 1    | Run the focused test described for H1. | A successful focused run disproves a persistent graph-generation regression. |
 
 **Tooling**: Same focused `cargo nextest` invocation as H1.
 
@@ -100,10 +98,10 @@ ______________________________________________________________________
 
 ### H3: the runtime fixture pre-escapes a shell arithmetic dollar
 
-**Claim**: `shared_work_graph` supplies `$$((...))`, which was correct when
-the old renderer wrote recipe text directly, but the new backend doubles every
-raw dollar before Ninja reads it. Ninja therefore passes `$$((...))` to the
-shell instead of the required `$((...))` arithmetic expansion.
+**Claim**: `shared_work_graph` supplies `$$((...))`, which was correct when the
+old renderer wrote recipe text directly, but the new backend doubles every raw
+dollar before Ninja reads it. Ninja therefore passes `$$((...))` to the shell
+instead of the required `$((...))` arithmetic expansion.
 
 **Plausibility**: high — the focused test fails before writing its log, and its
 shared action contains the only dollar-heavy shell expression in the graph.
@@ -113,10 +111,10 @@ contract is independently covered by the dollar-escaping tests.
 
 #### H3 Falsification plan
 
-| Step | Action | Expected Negative Result |
-| --- | --- | --- |
-| 1 | Search the shared action fixture for the arithmetic expansion. | The absence of `$$((` disproves this stale-pre-escape explanation. |
-| 2 | Inspect the new dollar-escaping regression cases. | No case showing raw `$` becomes Ninja `$$` weakens this explanation. |
+| Step | Action                                                         | Expected Negative Result                                             |
+| ---- | -------------------------------------------------------------- | -------------------------------------------------------------------- |
+| 1    | Search the shared action fixture for the arithmetic expansion. | The absence of `$$((` disproves this stale-pre-escape explanation.   |
+| 2    | Inspect the new dollar-escaping regression cases.              | No case showing raw `$` becomes Ninja `$$` weakens this explanation. |
 
 **Tooling**: `rg` over the serial-runtime fixture and
 `tests/ninja_dollar_escaping_tests.rs`.
@@ -144,8 +142,8 @@ ______________________________________________________________________
 
 ## Notes for executing agent
 
-Run only the supplied focused experiment during the falsification phase. Do
-not edit files, run the full gate suite, or infer a fix before reporting the
+Run only the supplied focused experiment during the falsification phase. Do not
+edit files, run the full gate suite, or infer a fix before reporting the
 hypothesis assessment. After that assessment, the executing agent is
 responsible for necessary remediation and must run the full gate suite. Report
 whether each hypothesis is falsified, not-falsified, or inconclusive, including

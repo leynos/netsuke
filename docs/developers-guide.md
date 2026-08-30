@@ -482,8 +482,7 @@ from the `bin-name` field that
   nested paths and re-raises the original failure after a successful rollback.
   If an `OSError` prevents rollback, the original and rollback failures are
   combined in a `BaseExceptionGroup`; another rollback exception propagates
-  unchanged.
-  `tests/binstall_metadata_tests.rs` and
+  unchanged. `tests/binstall_metadata_tests.rs` and
   `tests/workflow_contracts/hoist_binstall_archives_test.py` hold this contract.
 
 Only the two registry installation commands name `netsuke-build`, and
@@ -633,9 +632,9 @@ doc build). Rustdoc writes the coverage JSON to its reported generated file,
 which the script reads immediately after each successful invocation. That
 path-extraction helper belongs only to the
 `--show-coverage --output-format json` collector; do not reuse it for general
-Rustdoc output. `scripts/doc_coverage_model.py` defines the shared
-`Coverage`/`DocTarget` values. `scripts/doc_coverage_runner.py` owns toolchain
-pin parsing, Cargo metadata validation, target selection, and measurement
+Rustdoc output. `scripts/doc_coverage_model.py` defines the shared `Coverage`/
+`DocTarget` values. `scripts/doc_coverage_runner.py` owns toolchain pin
+parsing, Cargo metadata validation, target selection, and measurement
 orchestration; its `ToolchainPinError` and `WorkspaceMetadataError` preserve
 those input-validation boundaries. `scripts/doc_coverage_cargo.py` owns Cargo
 and Rustdoc process handling, generated-path extraction, and coverage-payload
@@ -664,6 +663,25 @@ cargo install cargo-nextest --locked --version "$NEXTEST_VERSION"
 cargo binstall --no-confirm --locked \
   "cargo-nextest@$NEXTEST_VERSION"
 ```
+
+`make check-fmt` verifies Markdown formatting as well as Rust formatting, and
+needs `mdtablefix` on `PATH`. CI pins the version in `MDTABLEFIX_VERSION` in
+`.github/workflows/ci.yml`. Install that same version locally so local runs
+match CI; read the pin from the workflow rather than copying the number, so the
+two cannot drift:
+
+```bash
+MDTABLEFIX_VERSION="$(sed -n "s/.*MDTABLEFIX_VERSION: '\(.*\)'.*/\1/p" \
+  .github/workflows/ci.yml)"
+cargo install --locked mdtablefix --version "$MDTABLEFIX_VERSION"
+# or, for a prebuilt binary:
+cargo binstall --no-confirm --locked \
+  "mdtablefix@$MDTABLEFIX_VERSION"
+```
+
+Version drift matters here beyond reproducibility: a different `mdtablefix`
+version may reflow prose differently, which would make `make check-fmt` fail on
+an otherwise clean tree.
 
 CI pins the Whitaker installer version in `WHITAKER_INSTALLER_VERSION` in
 `.github/workflows/ci.yml`. Install that same version locally so local linting
@@ -873,8 +891,8 @@ their test suites under `scripts/tests/`, and the workflow contract tests under
 `tests/workflow_contracts/` — targets a **Python 3.14 baseline**. The Makefile
 pins the interpreter in `PYTHON_BASELINE`, `pyproject.toml` sets
 `target-version = "py314"` for Ruff and `py-version = "3.14"` for Pylint, and
-the CI and release workflows install the same version through `setup-uv`.
-Write to the baseline: deferred annotation evaluation is the default, so
+the CI and release workflows install the same version through `setup-uv`. Write
+to the baseline: deferred annotation evaluation is the default, so
 `from __future__ import annotations` must not appear, and PEP 758
 unparenthesized `except` clauses and PEP 695 `type` statements are the
 preferred forms.
@@ -899,24 +917,23 @@ source, with the message set enabled in `pyproject.toml`; the
 discipline, and the baseline-gated R9112/C9112 checks) need CPython 3.14 and
 run as a second pass pinned to `DF12_PYTHON_LINTS_REF`.
 
-Tool versions are pinned twice by design: the Makefile defaults
-(`RUFF_VERSION`, `TY_VERSION`, `PYTHON_BASELINE`) drive local runs, and the
-`env` block of `.github/workflows/ci.yml` re-declares the same values, which
-override the Makefile's `?=` assignments in CI.
+Tool versions are pinned twice by design: the Makefile defaults (`RUFF_VERSION`,
+`TY_VERSION`, `PYTHON_BASELINE`) drive local runs, and the `env` block of
+`.github/workflows/ci.yml` re-declares the same values, which override the
+Makefile's `?=` assignments in CI.
 `tests/workflow_contracts/python_toolchain_sync_test.py` asserts the pairs
 agree — without asserting any specific version — so a bump must land in both
 files in the same commit.
 
-The shared spelling-policy rollout helpers
-(`scripts/generate_typos_config.py` and the `typos_rollout*` modules and
-tests) are estate-synchronized and keep their own pinned, isolated Ruff policy
-enforced by `make spelling-helper-test`; they are excluded from the
-repository-wide Ruff and Pylint configuration so the two policies cannot
-disagree about the same file.
+The shared spelling-policy rollout helpers (`scripts/generate_typos_config.py`
+and the `typos_rollout*` modules and tests) are estate-synchronized and keep
+their own pinned, isolated Ruff policy enforced by `make spelling-helper-test`;
+they are excluded from the repository-wide Ruff and Pylint configuration so the
+two policies cannot disagree about the same file.
 
 Lint and typecheck suppressions are a last resort, tightly scoped, and every
-one must carry a reason on the line — the df12 messages C9106 and C9107 fail
-any `noqa`, `pylint: disable`, or `type: ignore` pragma that does not.
+one must carry a reason on the line — the df12 messages C9106 and C9107 fail any
+`noqa`, `pylint: disable`, or `type: ignore` pragma that does not.
 
 ## Mutation-testing workflow contract tests
 
@@ -993,31 +1010,58 @@ every command in this completion checklist:
 
 ## Markdown formatting and table alignment
 
-`make fmt` runs `mdformat-all`, which runs `mdtablefix` (with `--wrap
---renumber --breaks --ellipsis --fences --in-place`) and then
+`make fmt` runs `mdformat-all`, which runs `mdtablefix` (with
+`--wrap --renumber --breaks --ellipsis --fences --in-place`) and then
 `markdownlint-cli2 --fix`. `mdtablefix` owns table padding and paragraph
 wrapping; `make markdownlint` then verifies the result.
 
-markdownlint's `MD060` (table-column-style) checks that table pipes align
-using a display-width model that treats CJK characters and emoji as
-double-width. That model disagrees with `mdtablefix`'s padding for
-right-to-left scripts, Indic scripts, and combining marks, so for tables
-containing those scripts the formatter and the rule cannot both be satisfied.
+markdownlint's `MD060` (table-column-style) checks that table pipes align using
+a display-width model that treats CJK characters and emoji as double-width.
+That model disagrees with `mdtablefix`'s padding for right-to-left scripts,
+Indic scripts, and combining marks, so for tables containing those scripts the
+formatter and the rule cannot both be satisfied.
 
-Because of this, `MD060` is suppressed in `docs/localization-glossary.md`
-only, via a `<!-- markdownlint-disable-file MD060 -->` directive at the top of
-that file with an explanatory comment. The rule remains enabled for every
-other Markdown file, and the repository-level `.markdownlint-cli2.jsonc` does
-not disable it.
+Because of this, `MD060` is suppressed in `docs/localization-glossary.md` only,
+via a `<!-- markdownlint-disable-file MD060 -->` directive at the top of that
+file with an explanatory comment. The rule remains enabled for every other
+Markdown file, and the repository-level `.markdownlint-cli2.jsonc` does not
+disable it.
 
-Contributors should prefer a file-scoped `markdownlint-disable-file`
-directive (or a narrower `markdownlint-disable-next-line`) over disabling a
-rule repository-wide, and should record the reason in a comment beside the
-directive.
+Contributors should prefer a file-scoped `markdownlint-disable-file` directive
+(or a narrower `markdownlint-disable-next-line`) over disabling a rule
+repository-wide, and should record the reason in a comment beside the directive.
 
-Note that `mdformat-all` rewraps every Markdown file it finds, not only the
-files a change touches. Revert the unrelated reflow before committing so a
-change stays reviewable.
+`make check-fmt` verifies Markdown formatting as well as Rust formatting. It
+runs `scripts/check-markdown-format.sh`, which compares each file against
+`mdtablefix`'s output for that file and reports any that differ. `mdtablefix`
+has no check-only mode, and the script never modifies tracked files.
+
+`mdtablefix` emits LF line endings, but Git can check files out with CRLF on
+Windows. The script therefore accepts either the formatter's exact LF output or
+its exact CRLF rendering; it does not accept mixed line endings or other text
+differences.
+
+The script deliberately does not replay the `markdownlint-cli2 --fix` pass that
+`make fmt` performs after `mdtablefix`. `make markdownlint` already rejects any
+lint violation, so on a passing tree that pass has nothing to change.
+
+Checking against `mdtablefix` alone has a second benefit: it surfaces documents
+where `mdtablefix` and markdownlint would fight. A heading nested inside an
+ordered list is the common case: `mdtablefix` treats the heading as ending the
+list and restarts the numbering at 1, while `MD029: ordered` renumbers it to
+continue. Because `--fix` runs last, `make fmt` leaves such a file passing lint
+but permanently unstable, so the check flags it. The remedy is to restructure
+the document, for example by replacing the nested heading with a bold lead-in,
+rather than to relax the check.
+
+Contributors who change the `mdtablefix` flags in `mdformat-all` must change
+them in `scripts/check-markdown-format.sh` to match.
+
+The repository's Markdown is now held in canonical form, and `make check-fmt`
+enforces it, so `make fmt` should no longer produce unrelated reflow. If it
+does, that indicates a formatter version change or a file that has drifted, and
+the resulting diff belongs in its own commit rather than being reverted
+piecemeal.
 
 ## Spelling enforcement
 
@@ -1040,10 +1084,10 @@ compose it with dictionary validation; application and release code must not
 reuse these spelling-policy internals.
 
 The `RemoteResponse` protocol is a context-managed response boundary: callers
-read the body within the context and exit it to release the underlying
-response. `atomic_write` writes complete content to a temporary file beside
-the destination, atomically replaces the destination on the same filesystem,
-and removes the temporary file when writing or replacement fails. The existing
+read the body within the context and exit it to release the underlying response.
+`atomic_write` writes complete content to a temporary file beside the
+destination, atomically replaces the destination on the same filesystem, and
+removes the temporary file when writing or replacement fails. The existing
 destination is therefore left intact unless replacement succeeds.
 
 Pull-request CI restores the untracked dictionary and metadata before the

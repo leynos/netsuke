@@ -481,9 +481,8 @@ Changes:
    - render runtime failures as JSON when the merged CLI enables it
 2. Suppress `tracing_subscriber` stderr logging when JSON mode is active.
 3. In [src/runner/reporter.rs](../../src/runner/reporter.rs),
-   `make_reporter` selects `SilentReporter` when progress is disabled
-   in JSON mode, so no status lines or timing summaries reach
-   `stderr`.
+   `make_reporter` selects `SilentReporter` when progress is disabled in JSON
+   mode, so no status lines or timing summaries reach `stderr`.
 4. Ensure success-path subcommand output remains unchanged on `stdout`.
 
 Acceptance for Stage C:

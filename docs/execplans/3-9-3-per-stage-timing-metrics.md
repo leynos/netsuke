@@ -56,9 +56,8 @@ Total pipeline time: 50ms
 The summary lines are emitted on `stderr` with other status output. `stdout`
 continues to carry command artefacts (for example `manifest -` output) and is
 not used for timing diagnostics. The summary sink is injectable:
-`VerboseTimingReporter` is generic over a `Write + Send` writer that defaults
-to `io::Stderr`, so tests can capture timing output without a global stderr
-sink.
+`VerboseTimingReporter` is generic over a `Write + Send` writer that defaults to
+`io::Stderr`, so tests can capture timing output without a global stderr sink.
 
 ## Constraints
 
@@ -187,8 +186,8 @@ sink.
   a completed summary. Rationale: `Write` is arbitrary user code and may block
   or call back into the reporter; an owned, synchronous sink preserves
   completion-before-summary ordering without holding a reporter mutex or
-  introducing worker shutdown and delivery obligations. Date/Author:
-  2026-08-24 / Codex.
+  introducing worker shutdown and delivery obligations. Date/Author: 2026-08-24
+  / Codex.
 
 - Decision: instrument each completed, non-empty timing summary as one
   synchronous sink-delivery attempt. Rationale: the
@@ -198,8 +197,7 @@ sink.
   only the summary-write loop. Failed writes also emit the bounded debug event
   `timing summary sink write failed` with fixed operation, outcome, and
   `error_category=io` fields; write errors remain non-fatal and their text is
-  not recorded. JSON tracing remains disabled. Date/Author: 2026-08-26 /
-  Codex.
+  not recorded. JSON tracing remains disabled. Date/Author: 2026-08-26 / Codex.
 
 ## Outcomes & Retrospective
 
@@ -230,8 +228,8 @@ Validation evidence:
 - `make nixie` passed (log: `/tmp/3-9-3-nixie.log`).
 
 The review follow-up adds public API, property-state-machine, blocking-sink,
-and re-entrant-sink coverage; rerun the current repository gates before
-relying on the historical results above.
+and re-entrant-sink coverage; rerun the current repository gates before relying
+on the historical results above.
 
 Lessons learned:
 

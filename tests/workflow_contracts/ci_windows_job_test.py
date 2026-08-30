@@ -137,6 +137,36 @@ def test_windows_job_runs_check_fmt_lint_and_test(
     )
 
 
+def test_windows_whitaker_shim_preserves_runtime_bash_expansion(
+    windows_steps: list[dict[str, object]],
+) -> None:
+    """The Whitaker shim preserves quoted arguments until Bash runs it."""
+    step = named_step(windows_steps, "Install Whitaker")
+    run = step.get("run")
+    assert isinstance(run, str), "Install Whitaker must define a Bash script"
+    expected_shim_command = (
+        "exec powershell -NoProfile -ExecutionPolicy Bypass -File "
+        '"${HOME}/.local/bin/whitaker.ps1" "$@"'
+    )
+    expected_generation_command = (
+        expected_shim_command
+        .replace("${HOME}", r"\${HOME}")
+        .replace("$@", r"\$@")
+        .replace('"', r"\"")
+    )
+    assert f'"{expected_generation_command}"' in run, (
+        "Install Whitaker must generate the PowerShell wrapper with normal Bash "
+        f"quotes at runtime: {expected_shim_command!r}"
+    )
+    assert r"-File \"${HOME}/.local/bin/whitaker.ps1\"" not in run, (
+        "Install Whitaker must not write literal backslash-quoted PowerShell "
+        "paths into the generated shim"
+    )
+    assert r"\"$@\"" not in run, (
+        "Install Whitaker must forward arguments with normal quoted Bash expansion"
+    )
+
+
 def test_windows_job_does_not_duplicate_doc_and_audit_gates(
     windows_steps: list[dict[str, object]],
 ) -> None:

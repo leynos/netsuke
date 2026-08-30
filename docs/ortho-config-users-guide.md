@@ -569,7 +569,7 @@ sections. A typical progression is:
 
 The [Hello World application](../examples/hello_world/) demonstrates these
 pieces in a larger layout. The
-[v0.9.0 migration guide](ortho-config-v0-9-0-migration-guide.md) explains compatibility
-changes for existing v0.8.0 users, and the
+[v0.9.0 migration guide](ortho-config-v0-9-0-migration-guide.md) explains
+compatibility changes for existing v0.8.0 users, and the
 [API documentation](https://docs.rs/ortho_config) is the source for complete
 type and method signatures.

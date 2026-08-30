@@ -217,3 +217,36 @@ def test_setup_rust_does_not_pass_unsupported_components_input() -> None:
                 f"{job_name} Setup Rust must not pass the unsupported "
                 f"'components' input, got {sorted(with_.keys())!r}"
             )
+
+
+def test_mdtablefix_installers_require_the_pinned_version() -> None:
+    """Both formatter installers replace stale executables and verify the pin."""
+    expected_guard = 'expected_mdtablefix_version="mdtablefix ${MDTABLEFIX_VERSION}"'
+    expected_match = (
+        '[[ "${installed_mdtablefix_version}" != "${expected_mdtablefix_version}" ]]'
+    )
+    workflow = load_workflow()
+    for job_name in SETUP_RUST_JOBS:
+        step = named_step(
+            job_steps(workflow, job_name),
+            "Install mdtablefix",
+        )
+        run = step.get("run")
+        assert isinstance(run, str), f"{job_name} must configure mdtablefix"
+        assert expected_guard in run, f"{job_name} must pin the expected version"
+        assert "mdtablefix --version" in run, (
+            f"{job_name} must inspect the installed version"
+        )
+        assert "tr -d '\\r'" in run, f"{job_name} must normalise Windows version output"
+        assert expected_match in run, (
+            f"{job_name} must replace a missing or mismatched formatter"
+        )
+
+
+def test_build_job_runs_markdown_formatter_checker_tests() -> None:
+    """The Linux merge gate exercises the Markdown checker process boundary."""
+    runs = step_runs(job_steps(load_workflow(), "build-test"))
+
+    assert runs.count("make test-markdown-format") == 1, (
+        "build-test must run the Markdown checker test suite exactly once"
+    )
