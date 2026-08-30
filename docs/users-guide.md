@@ -575,6 +575,11 @@ from becoming shell syntax when `item` is interpolated into a `command` or
 validation; each caller must validate or escape matched paths before passing
 them to a command sink.
 
+Rust callers use `manifest::glob_paths(pattern, base)` with an optional base.
+`Some(&Utf8Path)` anchors relative patterns and strips that base from results;
+absolute patterns ignore the base, while `None` resolves relative patterns
+against the process working directory.
+
 ### Define reusable macros
 
 Macros return rendered text and can accept default arguments:

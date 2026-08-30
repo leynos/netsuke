@@ -42,10 +42,14 @@ impl MakeFixture {
             "",
         )
         .context("write test-support lint target's empty Dylint configuration")?;
+        for target in ["test-env-mutation-gate", "lint-env-mutation"] {
+            test_support::fs::write(workspace.path().join(target), "")
+                .with_context(|| format!("create conflicting regular file for {target}"))?;
+        }
         let log = workspace.path().join("invocations.log");
-        let uv = write_logging_stub(&bin, "uv", &log)?;
-        let cargo = write_logging_stub(&bin, "cargo", &log)?;
-        let whitaker = write_logging_stub(&bin, "whitaker", &log)?;
+        let uv = write_logging_stub(&bin, "uv")?;
+        let cargo = write_logging_stub(&bin, "cargo")?;
+        let whitaker = write_logging_stub(&bin, "whitaker")?;
         let makefile = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Makefile");
         Ok(Self {
             workspace,
@@ -84,12 +88,10 @@ impl MakeFixture {
     }
 }
 
-/// Write a shell stub that appends its name and arguments to `log`.
-fn write_logging_stub(directory: &Path, name: &str, log: &Path) -> Result<PathBuf> {
-    let content = format!(
-        "#!/bin/sh\nprintf '%s:%s\\n' '{name}' \"$*\" >> '{}'\n",
-        log.display()
-    );
+/// Write a shell stub that appends its name and arguments to the supplied log.
+fn write_logging_stub(directory: &Path, name: &str) -> Result<PathBuf> {
+    let content =
+        format!("#!/bin/sh\nprintf '%s:%s\\n' '{name}' \"$*\" >> \"$MAKE_INVOCATIONS\"\n");
     write_exec_with_content(directory, name, &content)
         .with_context(|| format!("write {name} Makefile-tool stub"))
 }
@@ -104,7 +106,7 @@ fn assert_target_succeeds(target: &str, output: &Output) -> Result<()> {
     Ok(())
 }
 
-/// Verify that mutation-gate prerequisites execute before the remaining gate tools.
+/// Verify that phony mutation gates execute before the remaining gate tools.
 #[test]
 fn mutation_gate_prerequisites_execute_in_an_isolated_make_fixture() -> Result<()> {
     let fixture = MakeFixture::new()?;

@@ -11,7 +11,7 @@ use super::{
 };
 use camino::{Utf8Path, Utf8PathBuf};
 use minijinja::Error;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 
 /// Resolve an injected base for a relative pattern to a canonical UTF-8 path.
 ///
@@ -82,7 +82,26 @@ impl GlobBaseCache {
         let Some(base) = self.base.as_deref() else {
             return Ok(None);
         };
-        let mut resolved = self.resolved.lock().map_err(|error| {
+        let cached = self.lock_resolved(base)?.clone();
+        if cached.is_some() {
+            return Ok(cached);
+        }
+
+        let canonical = resolve_relative_glob_base(base)?;
+        let mut resolved = self.lock_resolved(base)?;
+        if let Some(published) = resolved.as_ref() {
+            return Ok(Some(published.clone()));
+        }
+        resolved.replace(canonical.clone());
+        Ok(Some(canonical))
+    }
+
+    /// Lock the resolved-base cache and preserve a contextual poisoning error.
+    fn lock_resolved(
+        &self,
+        base: &Utf8Path,
+    ) -> std::result::Result<MutexGuard<'_, Option<Utf8PathBuf>>, Error> {
+        self.resolved.lock().map_err(|error| {
             create_glob_error(
                 &GlobErrorContext {
                     pattern: base.to_string(),
@@ -92,13 +111,7 @@ impl GlobBaseCache {
                 },
                 Some(format!("manifest glob-base cache lock poisoned: {error}")),
             )
-        })?;
-        if let Some(cached) = resolved.as_ref() {
-            return Ok(Some(cached.clone()));
-        }
-        let canonical = resolve_relative_glob_base(base)?;
-        resolved.replace(canonical.clone());
-        Ok(Some(canonical))
+        })
     }
 }
 

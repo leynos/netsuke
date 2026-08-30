@@ -81,8 +81,10 @@ operator, user, and contributor references are easier to find.
 - [ADR-015](adr-015-use-bounded-git-cli-for-change-detection.md):
   Feature-private, bounded Git CLI queries for standard-library change
   detection.
-- [ADR-014: base-directory seam](adr-014-base-directory-seam-and-dir-anchoring.md): Base-directory
-  seam for manifest and glob resolution, explicit-selector independence from
+- [ADR-014: base-directory seam](
+  adr-014-base-directory-seam-and-dir-anchoring.md):
+  Base-directory seam for manifest and glob resolution, explicit-selector
+  independence from
   `-C`, and the in-process environment-mutation gate.
 
 ## Proposals

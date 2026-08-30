@@ -86,7 +86,7 @@ fn set_current_dir_compile_fails_under_the_policy() -> io::Result<()> {
     // The banned call is assembled from `banned_set_current_dir()` so the
     // repository text never matches the gate while still exercising it.
     let source = format!(
-        "use std::path::Path;\nfn main() {{\n    let _ = {}(\"/tmp\");\n    let _ = Path::new(\"/tmp\");\n}}\n",
+        "fn main() {{\n    let _ = {}(\"/tmp\");\n}}\n",
         banned_set_current_dir()
     );
     test_fs::write(fixture_dir.join("src/main.rs"), source)?;
