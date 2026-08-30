@@ -7,12 +7,24 @@
 use proptest::prelude::*;
 use test_support::ninja_gen::paths_strategy;
 
-use super::{INS_TOKEN, IrGenError, OUTS_TOKEN, RecipeShell, interpolate_command_with_shell};
+use super::{
+    INS_TOKEN, IrGenError, OUTS_TOKEN, RecipeShell, interpolate_command_with_shell,
+};
 
 fn safe_text_strategy() -> impl Strategy<Value = String> {
     // Empty fragments are intentional: surrounding command text may be absent,
     // and trimming whitespace-only generated text exercises that boundary.
     "[a-zA-Z0-9_./ -]{0,24}".prop_map(|text| text.trim().to_owned())
+}
+
+fn adversarial_template_strategy() -> impl Strategy<Value = String> {
+    prop::collection::vec(
+        prop::sample::select(vec![
+            '$', '`', 'i', 'n', 'o', 'u', 't', '_', 'a', '\'', '\\', ' ',
+        ]),
+        0..=64,
+    )
+    .prop_map(|chars| chars.into_iter().collect())
 }
 
 proptest! {
@@ -95,6 +107,22 @@ proptest! {
             matches!(error, IrGenError::InvalidCommand { .. }),
             "backtick placeholder must be an invalid command: {error:?}"
         );
+    }
+
+    #[test]
+    fn adversarial_text_rejects_protected_tokens(template in adversarial_template_strategy()) {
+        let backtick_count = template.chars().filter(|&ch| ch == '`').count();
+        let has_open_backtick = backtick_count & 1 == 1;
+        let protected = if has_open_backtick { "$in $out`" } else { "`$in $out`" };
+        let result = interpolate_command_with_shell(
+            &format!("{template}{protected}"),
+            &[],
+            &[],
+            RecipeShell::Posix,
+        );
+        let is_invalid_command = matches!(result, Err(IrGenError::InvalidCommand { .. }));
+
+        prop_assert!(is_invalid_command);
     }
 
     #[test]

@@ -1305,6 +1305,13 @@ bound. The temporary feasibility seam and harness module were removed before
 EP-M1; no production code changed in this milestone. Logs are retained under
 `/tmp/kani-m0-*-netsuke-4-2-3-kani-harnesses-for-command-interpolation.out`.
 
+### EP-M1 refactor evidence (2026-08-30)
+
+The temporary verbatim `substitute_before_refactor` oracle agreed with the
+refactored implementation over 256 adversarial templates before removal. The
+retained targeted nextest run passed all 20 command-interpolation tests:
+`/tmp/m1-targeted-final-netsuke-4-2-3-kani-harnesses-for-command-interpolation.out`.
+
 - **EP-M0 measurement table** — columns `shape`, `N` or `M`, `wall-clock`,
   `peak RSS`, `verdict`; one row per probe. Plus the answer on
   `cargo kani --jobs`.
@@ -1344,7 +1351,9 @@ EP-M1; no production code changed in this milestone. Logs are retained under
 - [x] (2026-08-30) EP-M0 feasibility spike and bound decision. The sigil
   window verified at N=8, N=12, and N=16; the full scanner timed out at M=8
   and M=6. See `Artefacts and notes` and `Decision log`.
-- [ ] EP-M1 production seam; behaviour unchanged.
+- [x] (2026-08-30) EP-M1 production seam; behaviour unchanged. Added the
+  `substitute_chars` technical seam, Kani-only raw bindings, characterization
+  cases, and an adversarial Proptest; removed the temporary differential oracle.
 - [ ] EP-M2 sigil and marker harnesses; mutation-patch contract test.
 - [ ] EP-M3 scanner specification and backtick-rejection harnesses.
 - [ ] EP-M4 guard-placement harness.
