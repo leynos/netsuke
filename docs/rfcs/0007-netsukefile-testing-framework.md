@@ -1,8 +1,8 @@
-# RFC 0001: Netsukefile testing framework
+# RFC 0007: Netsukefile testing framework
 
 ## Preamble
 
-- **RFC number:** 0001
+- **RFC number:** 0007
 - **Status:** Proposed
 - **Created:** 2026-08-17
 
@@ -198,7 +198,7 @@ addition inside the framework.
 
 ## Recommendation
 
-Adopt the two companion designs; roadmap phase 6 tracks the delivery:
+Adopt the two companion designs; roadmap phase 7 tracks the delivery:
 overlay spike, seams, and loader options first (no behaviour change), then
 parser and mock engine, then fixtures, actions, CLI wiring, and an
 author-facing users' guide chapter. One gate is deliberate: after the seam

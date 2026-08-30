@@ -23,9 +23,6 @@ operator, user, and contributor references are easier to find.
   framework.
 - [Technical design](netsuke-test-framework-technical-design.md):
   Implementation architecture for the Netsukefile testing framework.
-- [RFC 0001](rfcs/0001-netsukefile-testing-framework.md): Proposal
-  introducing the Netsukefile testing framework and positioning it within
-  the product.
 - [roadmap.md](roadmap.md): Phased implementation plan and tracked delivery
   work.
 - [archive/roadmap-completed-foundations.md](archive/roadmap-completed-foundations.md):
@@ -40,6 +37,9 @@ operator, user, and contributor references are easier to find.
 - [rfcs/0001-structured-command-blocks.md](rfcs/0001-structured-command-blocks.md):
   Proposed structured command blocks, shell-free argv templates, typed Jinja
   interpolation, stream routing, and pipeline semantics.
+- [rfcs/0007-netsukefile-testing-framework.md](rfcs/0007-netsukefile-testing-framework.md):
+  Proposed Netsukefile testing framework: the `netsuke test` command, the
+  YAML test dialect, and its mocking model.
 
 ## Decision records
 

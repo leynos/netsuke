@@ -14,7 +14,7 @@
 - **Primary audience:** Netsuke developers implementing `netsuke test`, and
   reviewers assessing the architecture.
 - **Governing documents:**
-  [RFC 0001](rfcs/0001-netsukefile-testing-framework.md);
+  [RFC 0007](rfcs/0007-netsukefile-testing-framework.md);
   [netsuke-design.md](netsuke-design.md) for the compiler pipeline;
   [ADR-008](adr-008-environment-seam-taxonomy.md) for environment seams;
   [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) for
@@ -394,7 +394,7 @@ the closed vocabulary.
 
 The `tests` block on the manifest side is a new optional field on
 `NetsukeManifest` with `deny_unknown_fields` semantics preserved;
-compatibility consequences are covered in RFC 0001.
+compatibility consequences are covered in RFC 0007.
 
 ## 6. Mock engine
 
@@ -864,7 +864,7 @@ The minimum viable implementation, in dependency order:
    running manifest tests, indexed from `contents.md`.
 
 Deferred work is enumerated in the UX design §15; nothing in this
-architecture forecloses it. Roadmap phase 6 tracks these deliverables as
+architecture forecloses it. Roadmap phase 7 tracks these deliverables as
 numbered tasks.
 
 ## 14. Synchronization
@@ -876,13 +876,13 @@ it is reconciled:
 
 - The [UX design](netsuke-test-framework-ux-design.md), which is normative
   for dialect semantics; implementation detail here must not contradict it.
-- [RFC 0001](rfcs/0001-netsukefile-testing-framework.md), which positions
+- [RFC 0007](rfcs/0007-netsukefile-testing-framework.md), which positions
   and scopes the feature.
 - [ADR-008](adr-008-environment-seam-taxonomy.md), which governs the
   environment injection seams §4 relies on.
 - [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md), which
   governs the glob capability scoping the mock engine and sandbox rely on.
-- [Roadmap phase 6](roadmap.md), which tracks the phasing above (§13) as
+- [Roadmap phase 7](roadmap.md), which tracks the phasing above (§13) as
   numbered deliverables.
 
 If an accepted ADR changes, the ADR wins: this document is either updated

@@ -11,7 +11,7 @@
 - **Primary audience:** Netsukefile authors writing tests, and reviewers
   evaluating the test dialect before implementation.
 - **Governing documents:**
-  [RFC 0001](rfcs/0001-netsukefile-testing-framework.md) proposes and
+  [RFC 0007](rfcs/0007-netsukefile-testing-framework.md) proposes and
   positions this feature;
   [netsuke-design.md](netsuke-design.md) defines the manifest language and
   compiler pipeline the tests exercise;
@@ -1019,7 +1019,7 @@ Deferred, in likely delivery order:
 
 ## 17. Rejected alternatives
 
-RFC 0001 evaluates these alternatives in full; this section names them and
+RFC 0007 evaluates these alternatives in full; this section names them and
 the conclusion only.
 
 - **An instrumented general-purpose-language harness.** Rejected in favour
