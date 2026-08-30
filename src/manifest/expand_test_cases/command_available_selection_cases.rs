@@ -3,13 +3,12 @@
 use std::ffi::OsString;
 
 use anyhow::{Context, Result, anyhow};
-use camino::{Utf8Path, Utf8PathBuf};
-#[cfg(unix)]
-use cap_std::fs::PermissionsExt;
+use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use googletest::prelude::*;
 use minijinja::Environment;
 use rstest::rstest;
+use test_support::write_exec_with_content;
 
 use super::{actions, expand_foreach};
 use crate::{
@@ -19,6 +18,16 @@ use crate::{
 
 const ABSENT_COMMAND: &str = "netsuke-guaranteed-absent-command-3-14-5";
 
+#[cfg(windows)]
+const NEXTEST_TOOL_NAME: &str = "cargo-nextest.cmd";
+#[cfg(not(windows))]
+const NEXTEST_TOOL_NAME: &str = "cargo-nextest";
+#[cfg(windows)]
+const NEXTEST_TOOL_CONTENT: &str = "@echo off\r\n";
+#[cfg(not(windows))]
+const NEXTEST_TOOL_CONTENT: &str = "#!/bin/sh\nexit 0\n";
+
+/// Capture the selected action's observable expansion result.
 struct ExpectedAction {
     name: &'static str,
     command: &'static str,
@@ -26,6 +35,7 @@ struct ExpectedAction {
 }
 
 impl ExpectedAction {
+    /// Build the expected action selected when `cargo-nextest` is available.
     const fn nextest() -> Self {
         Self {
             name: "run-tests-nextest",
@@ -34,6 +44,7 @@ impl ExpectedAction {
         }
     }
 
+    /// Build the expected fallback action when `cargo-nextest` is unavailable.
     const fn legacy() -> Self {
         Self {
             name: "run-tests-legacy",
@@ -43,22 +54,26 @@ impl ExpectedAction {
     }
 }
 
+/// Hold the temporary workspace used to exercise command resolution.
 struct ResolverWorld {
     _temp: tempfile::TempDir,
     root: Utf8PathBuf,
 }
 
 impl ResolverWorld {
+    /// Create an isolated resolver workspace with an optional `cargo-nextest` stub.
     fn new(has_nextest: bool) -> Result<Self> {
         let temp = tempfile::tempdir().context("create resolver workspace")?;
         let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
             .map_err(|path| anyhow!("temporary path should be UTF-8: {}", path.display()))?;
         if has_nextest {
-            write_tool(&root, "cargo-nextest")?;
+            write_exec_with_content(root.as_std_path(), NEXTEST_TOOL_NAME, NEXTEST_TOOL_CONTENT)
+                .with_context(|| format!("write fixture tool {}", root.join(NEXTEST_TOOL_NAME)))?;
         }
         Ok(Self { _temp: temp, root })
     }
 
+    /// Build a configured template environment for the selected resolver state.
     fn environment(&self, has_nextest: bool) -> Result<Environment<'static>> {
         let workspace = Dir::open_ambient_dir(&self.root, ambient_authority())
             .with_context(|| format!("open resolver workspace {}", self.root))?;
@@ -68,7 +83,7 @@ impl ResolverWorld {
             OsString::new()
         };
         let config = StdlibConfig::new(workspace)?
-            .with_workspace_root_path(self.root.clone())?
+            .with_workspace_root_path(&self.root)?
             .with_path_override(path_override)
             .with_pathext_override(".CMD");
         let mut env = Environment::new();
@@ -77,6 +92,7 @@ impl ResolverWorld {
     }
 }
 
+/// Verify that complementary command guards select exactly one action.
 #[googletest::test]
 #[rstest]
 #[case::nextest_present(true, "cargo-nextest", ExpectedAction::nextest())]
@@ -122,6 +138,7 @@ targets: []
     Ok(())
 }
 
+/// Read a named string field from an expanded action.
 fn string_field<'a>(value: &'a ManifestValue, field: &str) -> Result<&'a str> {
     value
         .as_object()
@@ -129,45 +146,4 @@ fn string_field<'a>(value: &'a ManifestValue, field: &str) -> Result<&'a str> {
         .get(field)
         .and_then(ManifestValue::as_str)
         .with_context(|| format!("selected action {field}"))
-}
-
-fn write_tool(root: &Utf8Path, name: &str) -> Result<()> {
-    let dir = Dir::open_ambient_dir(root, ambient_authority())
-        .with_context(|| format!("open fixture directory {root}"))?;
-    let path = Utf8PathBuf::from(tool_filename(name));
-    dir.write(&path, script_contents())
-        .with_context(|| format!("write fixture tool {path}"))?;
-    #[cfg(unix)]
-    mark_executable(&dir, &path)?;
-    Ok(())
-}
-
-fn tool_filename(name: &str) -> String {
-    if cfg!(windows) {
-        format!("{name}.cmd")
-    } else {
-        name.to_owned()
-    }
-}
-
-const fn script_contents() -> &'static [u8] {
-    #[cfg(windows)]
-    {
-        b"@echo off\r\n"
-    }
-    #[cfg(not(windows))]
-    {
-        b"#!/bin/sh\nexit 0\n"
-    }
-}
-
-#[cfg(unix)]
-fn mark_executable(dir: &Dir, path: &Utf8Path) -> Result<()> {
-    let mut permissions = dir
-        .metadata(path)
-        .with_context(|| format!("stat {path}"))?
-        .permissions();
-    permissions.set_mode(0o755);
-    dir.set_permissions(path, permissions)
-        .with_context(|| format!("chmod {path}"))
 }

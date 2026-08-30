@@ -233,7 +233,7 @@ and agents.
     `netsuke::jinja::which::not_found`.
   - [x] Preserve argument validation diagnostics for invalid options.
 - [x] 3.14.5. Add regression coverage for conditional action dependency
-  manifests.
+  manifests. Depends on 3.14.2, 3.14.3, and 3.14.4.
   - [x] Test action-level `when` and action-level `foreach`.
   - [x] Test complementary nextest and legacy branches select exactly one
     action.

@@ -1,5 +1,6 @@
 ---
-source: tests/ninja_snapshot_tests.rs
+source: tests/ninja_snapshot_tests/conditional_action_deps.rs
+assertion_line: 65
 expression: ninja_content
 ---
 rule dfd2ff5921f146a85d62fcfeb725508df48b315134db4f325585bd6981940de6

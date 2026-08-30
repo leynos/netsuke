@@ -824,6 +824,10 @@ every helper's signature, defaults, purity, platform caveats, and executable
 examples. Host-observing helpers belong only in trusted manifests: Netsuke
 bounds command and network output, but does not sandbox template evaluation.
 
+The `now(offset=...)` helper accepts `Z` or `z` for UTC and signed ISO 8601
+offsets whose absolute hour component is below 24. Offsets such as `+24:00`,
+`-24:00`, and larger absolute hour values are rejected as invalid.
+
 One helper deserves a note here because its result depends on the host's
 environment. `path | expanduser` expands a leading `~` against the home
 directory, resolved from `HOME` then `USERPROFILE` on POSIX hosts, and from

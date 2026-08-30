@@ -39,20 +39,27 @@ if any of the following regress:
    including for conditionally-selected actions.
 
 The deliverable is test code plus small deterministic fixtures and
-documentation. No production behaviour changes.
+documentation. The branch also carries the `now(offset=...)` compatibility
+guard in `parse_offset`: after the dependency update accepted offsets beyond a
+civil day, the parser rejects offsets whose absolute whole-hour component is 24
+or greater. This preserves the documented ISO 8601 input contract while leaving
+valid offsets unchanged.
 
 ## Constraints
 
 Hard invariants that must hold throughout implementation. Violation requires
 escalation, not workarounds.
 
-- This is a **test-and-documentation-only** change. Do not modify production
-  semantics in `src/manifest/`, `src/ir/`, `src/ninja_gen.rs`, or
-  `src/stdlib/`. The single permitted exception is adding a narrowly-scoped,
-  test-only seam (for example a `pub(crate)` constructor or `#[cfg(test)]`
-  helper) *if and only if* an existing public or `pub(crate)` surface cannot
-  drive a required scenario; any such seam must be recorded in the Decision Log
-  and must not change runtime behaviour.
+- This is primarily a **test-and-documentation** change. The one production
+  compatibility guard in `src/stdlib/time/mod.rs` is in scope: `parse_offset`
+  must reject parsed offsets whose absolute whole-hour component is 24 or
+  greater, because the dependency update accepts values beyond a civil day. Do
+  not modify other production semantics in `src/manifest/`, `src/ir/`,
+  `src/ninja_gen.rs`, or `src/stdlib/`. Any further production change requires
+  escalation. The single test-only seam exception remains available only if an
+  existing public or `pub(crate)` surface cannot drive a required scenario; any
+  such seam must be recorded in the Decision Log and must not change runtime
+  behaviour.
 - Do not weaken or delete existing tests. New tests are additive. Existing
   passing tests must continue to pass unchanged.
 - Preserve the existing implicit `phony: true` behaviour for actions; tests
@@ -171,6 +178,10 @@ escalation, not workarounds.
       component design, and roadmap; recorded why no ADR is warranted.
 - [x] (2026-07-29 00:55Z) Stage D: passed the full gate stack and final
       CodeRabbit review; roadmap item 3.14.5 is complete.
+- [x] (2026-08-31) Reviewed the `now(offset=...)` compatibility guard after
+      review feedback; recorded its production scope, documented the accepted
+      and rejected offset forms, and added the boundary to the validation
+      scope.
 
 (Timestamps to be added as work proceeds.)
 
@@ -345,12 +356,20 @@ escalation, not workarounds.
   developers' guides are the appropriate homes for this test contract.
   Date/Author: 2026-07-28, implementation agent.
 
+- Decision: Retain the `parse_offset` absolute-hour guard as a compatibility
+  boundary. Rationale: the dependency update accepts offsets beyond a civil
+  day, but the user-facing `now(offset=...)` contract is ISO 8601 and accepts
+  only offsets below 24 hours in absolute value. The guard therefore belongs at
+  parsing, where both `+24:00` and `-24:00` are rejected before timestamp
+  conversion. Date/Author: 2026-08-31, review follow-up.
+
 ## Outcomes & retrospective
 
-Stage A completed without requiring a new seam or changing production code. The
-approved dev dependencies resolve to googletest 0.14.3 and pretty_assertions
-1.4.1. The real resolver injection, expansion entry point, and deterministic
-Ninja dependency ordering all remain available as planned.
+Stage A completed without requiring a new seam or changing production code
+outside the pre-existing `parse_offset` compatibility guard. The approved dev
+dependencies resolve to googletest 0.14.3 and pretty_assertions 1.4.1. The real
+resolver injection, expansion entry point, and deterministic Ninja dependency
+ordering all remain available as planned.
 
 B.1 now pins complementary action selection through the real resolver in both
 deterministic worlds. The present case also combines action `foreach` with
@@ -385,12 +404,14 @@ states the manifest/stdlib port boundary in the design, and marks roadmap item
 3.14.5 and its four sub-items complete. No ADR is warranted because runtime
 architecture and behaviour are unchanged.
 
-The completed change is test-and-documentation only. It adds deterministic
-real-resolver unit coverage, selection-time impurity coverage, conditional IR
-dependency assertions, a reviewed Ninja snapshot with real-Ninja validation,
-and one combined BDD scenario. All five focused sabotage checks failed at the
-intended assertion. The final branch-wide formatting, documentation, type,
-lint, and test gates passed, and CodeRabbit reported no actionable findings.
+The completed change is primarily test-and-documentation work, with the
+`parse_offset` compatibility guard explicitly retained as the sole production
+behaviour boundary. It adds deterministic real-resolver unit coverage,
+selection-time impurity coverage, conditional IR dependency assertions, a
+reviewed Ninja snapshot with real-Ninja validation, and one combined BDD
+scenario. All five focused sabotage checks failed at the intended assertion.
+The final branch-wide formatting, documentation, type, lint, and test gates
+passed, and CodeRabbit reported no actionable findings.
 
 ## Context and orientation
 
@@ -1016,8 +1037,7 @@ Skills to load while implementing:
 - 2026-07-28 — Marked the approved plan in progress and recorded Stage A.
   Confirmed the existing seams, deterministic dependency emission order, and
   googletest/rstest interoperability with the approver-specified attribute
-  order. Remaining work starts at Stage B.1; no production change or new seam
-  is required.
+  order. Remaining work starts at Stage B.1; no new test seam is required.
 
 - 2026-07-28 — Completed Stage B.1 implementation and its non-vacuity check.
   Added deterministic present/absent real-resolver cases, including the
@@ -1058,3 +1078,8 @@ Skills to load while implementing:
 - 2026-07-29 — Completed Stage D and closed the ExecPlan. The final branch-wide
   gate stack passed with snapshot mutation disabled, and CodeRabbit returned
   zero actionable findings across the complete committed diff.
+
+- 2026-08-31 — Recorded the `now(offset=...)` compatibility guard and its
+  user-facing contract after review. Validation scope now includes `Z`/`z`,
+  signed offsets below 24 hours, and rejection of both signs at `24:00` and
+  beyond; the full gate stack remains the required final validation.

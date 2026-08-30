@@ -6,6 +6,7 @@
 use super::*;
 use anyhow::{Context, Result, anyhow, ensure};
 use minijinja::{Environment, ErrorKind, context, value::Value};
+use proptest::prelude::*;
 use rstest::{fixture, rstest};
 use time::{Duration, OffsetDateTime, UtcOffset, macros::datetime};
 
@@ -87,6 +88,32 @@ fn now_rejects_invalid_offset(env: Environment<'static>, #[case] offset: &str) -
             ensure!(err.kind() == ErrorKind::InvalidOperation);
             Ok(())
         }
+    }
+}
+
+proptest! {
+    /// Accept signed offsets whose hour component stays within one civil day.
+    #[test]
+    fn parse_offset_accepts_hours_below_a_civil_day(
+        sign in prop_oneof![Just("+"), Just("-")],
+        hour in 0_u8..24,
+        minute in 0_u8..60,
+        second in 0_u8..60,
+    ) {
+        let offset = format!("{sign}{hour:02}:{minute:02}:{second:02}");
+        prop_assert!(parse_offset(&offset).is_ok(), "expected {offset} to be accepted");
+    }
+
+    /// Reject signed offsets at or beyond the one-civil-day boundary.
+    #[test]
+    fn parse_offset_rejects_a_civil_day_or_more(
+        sign in prop_oneof![Just("+"), Just("-")],
+        hour in 24_u8..=48,
+        minute in 0_u8..60,
+        second in 0_u8..60,
+    ) {
+        let offset = format!("{sign}{hour:02}:{minute:02}:{second:02}");
+        prop_assert!(parse_offset(&offset).is_err(), "expected {offset} to be rejected");
     }
 }
 
