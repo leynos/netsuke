@@ -119,7 +119,7 @@ fn failed_command_list_entry_is_attributed_in_tracing_output() -> Result<()> {
 #[test]
 fn large_command_stdout_retains_command_list_failure_attribution() -> Result<()> {
     let Some(temp) = failing_command_list_workspace(
-        "echo first > $out && i=0; while [ $$i -lt 65536 ]; do printf 'xxxx\\\\n'; i=$$((i + 1)); done",
+        "echo first > $out && i=0; while [ $i -lt 65536 ]; do printf 'xxxx\\\\n'; i=$((i + 1)); done",
     )?
     else {
         return Ok(());

@@ -1,5 +1,6 @@
 //! Helpers for working with the system `ninja` binary in integration tests.
 
+use mockable::{DefaultEnv, Env};
 use std::process::{Command, ExitStatus, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -70,13 +71,38 @@ fn probe_ninja() -> Result<(), NinjaWorkspaceError> {
     }
 }
 
+/// Return whether the current test run requires Ninja to be installed.
+fn ninja_is_required(env: &impl Env) -> bool {
+    env.os_string("NETSUKE_REQUIRE_NINJA")
+        .is_some_and(|value| value == "1")
+}
+
+/// Abort when a required Ninja installation is unavailable.
+fn report_required_ninja_unavailable(error: &NinjaWorkspaceError) -> ! {
+    panic!("Ninja is required for this test run: {error}");
+}
+
+/// Probe Ninja and escalate an unavailable required installation.
+fn probe_ninja_with_requirement(env: &impl Env) -> Result<(), NinjaWorkspaceError> {
+    match probe_ninja() {
+        Ok(()) => Ok(()),
+        Err(error) if ninja_is_required(env) => report_required_ninja_unavailable(&error),
+        Err(error) => Err(error),
+    }
+}
 /// Ensure Ninja is available and return a temporary directory for integration
-/// tests. Callers should skip their scenario when this returns `Err`.
+/// tests. Callers may skip their scenario when this returns `Err`, unless CI
+/// has set `NETSUKE_REQUIRE_NINJA=1`.
 ///
 /// # Errors
 ///
 /// Returns an error if Ninja is unavailable or the integration workspace cannot be created.
+///
+/// # Panics
+///
+/// Panics when an unavailable Ninja binary is required by the injected
+/// `NETSUKE_REQUIRE_NINJA=1` test-run setting.
 pub fn ninja_integration_workspace() -> Result<TempDir, NinjaWorkspaceError> {
-    probe_ninja()?;
+    probe_ninja_with_requirement(&DefaultEnv)?;
     tempdir().map_err(NinjaWorkspaceError::Workspace)
 }

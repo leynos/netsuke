@@ -343,9 +343,15 @@ The lowering stages have deliberately separate responsibilities:
 - `src/ir/from_manifest_support.rs` prepares one shell-quoted input/output
   binding set for the recipe, then interpolates every scalar or list entry with
   that set. `{{ ins }}` and `{{ outs }}` markers and standalone `$in` and
-  `$out` tokens are resolved per entry; tokens inside backticks are preserved.
-  The resulting action contains ordinary command text and no Ninja placeholders.
-- `src/ninja_gen.rs` emits a scalar command unchanged. For a list, it puts
+  `$out` tokens are resolved per entry. A placeholder within backticks is
+  rejected because Netsuke cannot lower it safely; scripts use substitution
+  without command-shaped parsing, so heredocs and comments remain valid. The
+  resulting action contains ordinary command text and no Ninja placeholders.
+- `src/ninja_gen/mod.rs` turns completed shell text into a Ninja value exactly
+  once. That boundary doubles residual dollar signs and rejects control
+  characters after IR lowering and before file emission. Paths remain distinct
+  from shell text and are rejected when they contain `$`, spaces, colons, or
+  control characters. For a list, it puts
   each entry in a brace group and joins the groups with `&&`. Each group uses
   `eval` with a shell-quoted entry payload. This keeps an inline comment or a
   trailing control operator such as `&` inside the entry from consuming the
@@ -399,6 +405,22 @@ Changes to this pipeline must preserve the scalar/list distinction, per-entry
 rendering, current-shell state sharing, and failure attribution. The focused
 rendering, lowering, Ninja-generation, and real-Ninja integration tests are the
 behavioural contract for these boundaries.
+
+### Ninja text-escaping seam
+
+`ShellText` is completed, backend-agnostic command or script text from the IR.
+It deliberately does not implement `Display`: writers must not serialize it by
+accident. `NinjaValue` is the escaped value accepted by a Ninja `command`
+binding. `escape_ninja_value` is its only constructor and is fallible so control
+characters fail before emission.
+
+The seam is owned by `src/ninja_gen_escape.rs`. Only the Ninja action writer
+may compose a completed command and convert its `ShellText` into a
+`NinjaValue`; no lowering code or future backend may call it. Metadata fields
+use the same escaping boundary when emitted to Ninja, so literal dollars are
+not interpreted as Ninja variables and newline, carriage-return, and NUL
+characters are rejected. Add a separate, explicitly documented conversion for
+any new Ninja grammar position rather than reusing command escaping.
 
 ## Package and target naming
 
@@ -1574,6 +1596,16 @@ Cargo home plus Kani support-file home.
 
 If either pass fails, `make test` fails. Run the individual targets when
 iterating, but treat `make test` as the gate.
+
+### Required real-Ninja coverage
+
+Real-Ninja integration tests skip when `ninja` is unavailable locally. Set
+`NETSUKE_REQUIRE_NINJA=1` to turn that skip into a failure; CI sets this
+variable for the jobs that exercise Ninja. Run the required local subset with:
+
+```sh
+NETSUKE_REQUIRE_NINJA=1 cargo nextest run -E 'test(ninja)'
+```
 
 Cargo spells build parallelism `-j`; nextest reserves `-j` for test concurrency
 and spells build parallelism `--build-jobs`. The Makefile therefore keeps

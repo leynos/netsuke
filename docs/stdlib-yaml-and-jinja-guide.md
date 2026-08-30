@@ -74,7 +74,7 @@ vars:
 targets:
   - name: "{{ artifact | with_suffix('.txt') }}"
     when: labels | length > 0
-    command: "printf '%s\n' '{{ labels | uniq | join(',') }}' > {{ outs }}"
+    command: "printf '%s\\n' '{{ labels | uniq | join(',') }}' > {{ outs }}"
 
 defaults:
   - report.txt

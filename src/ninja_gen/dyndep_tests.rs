@@ -261,7 +261,7 @@ fn unsupported_control_characters_are_rejected_in_every_path_field(
         GraphPathField::DefaultTarget
     )]
     field: GraphPathField,
-    #[values('\t', '\r', '\n')] character: char,
+    #[values('\0', '\t', '\r', '\n')] character: char,
 ) -> Result<()> {
     let path = format!("invalid{character}path");
     let graph = graph_with_path(field, &path)?;
@@ -282,10 +282,10 @@ fn unsupported_control_characters_are_rejected_in_every_path_field(
 }
 
 #[rstest]
-#[case::space("path with space", "path$ with$ space")]
-#[case::dollar("path$money", "path$$money")]
-#[case::colon("path:colon", "path$:colon")]
-fn ninja_metacharacters_are_escaped_in_every_path_field(
+#[case::space("path with space", ' ')]
+#[case::dollar("path$money", '$')]
+#[case::colon("path:colon", ':')]
+fn ninja_metacharacters_are_rejected_in_every_path_field(
     #[values(
         GraphPathField::Edge(EdgePathField::ExplicitOutput),
         GraphPathField::Edge(EdgePathField::ImplicitOutput),
@@ -296,19 +296,35 @@ fn ninja_metacharacters_are_escaped_in_every_path_field(
     )]
     field: GraphPathField,
     #[case] path: &str,
-    #[case] escaped: &str,
+    #[case] character: char,
 ) -> Result<()> {
     let graph = graph_with_path(field, path)?;
-    let generated = crate::ninja_gen::generate(&graph)?;
-    let bundle = generate_bundle(&graph)?;
+    let generated_error = crate::ninja_gen::generate(&graph)
+        .err()
+        .context("Ninja metacharacter must be rejected during string generation")?;
+    let bundle_error = generate_bundle(&graph)
+        .err()
+        .context("Ninja metacharacter must be rejected during bundle generation")?;
 
     ensure!(
-        generated.contains(escaped),
-        "string generation must escape {path:?} as {escaped:?}"
+        matches!(
+            generated_error,
+            NinjaGenError::UnsupportedPathCharacter {
+                character: actual,
+                ..
+            } if actual == character
+        ),
+        "string generation must reject {character:?}, got {generated_error:?}"
     );
     ensure!(
-        bundle.build_file().contains(escaped),
-        "bundle generation must escape {path:?} as {escaped:?}"
+        matches!(
+            bundle_error,
+            NinjaGenError::UnsupportedPathCharacter {
+                character: actual,
+                ..
+            } if actual == character
+        ),
+        "bundle generation must reject {character:?}, got {bundle_error:?}"
     );
     Ok(())
 }

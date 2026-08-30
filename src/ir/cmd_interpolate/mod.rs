@@ -14,6 +14,10 @@ use std::cell::Cell;
 
 use super::IrGenError;
 
+mod substitution;
+
+use substitution::SubstitutionTraversal;
+
 /// Quoted `$in` and `$out` substitutions prepared for one recipe.
 ///
 /// A rule command list shares its input/output bindings, so lowering creates
@@ -107,17 +111,35 @@ pub(crate) fn interpolate_command_with_bindings(
     template: &str,
     bindings: &CommandBindings,
 ) -> Result<String, IrGenError> {
-    let interpolated = substitute(template, &bindings.ins, &bindings.outs);
+    let interpolated = substitute(template, &bindings.ins, &bindings.outs)?;
     if has_unmatched_backticks(&interpolated) || shlex::split(&interpolated).is_none() {
-        let snippet = interpolated.chars().take(160).collect();
-        let message = localization::message(keys::IR_INVALID_COMMAND).with_arg("snippet", &snippet);
-        return Err(IrGenError::InvalidCommand {
-            command: interpolated,
-            snippet,
-            message,
-        });
+        return Err(invalid_command_error(interpolated));
     }
     Ok(interpolated)
+}
+
+/// Interpolate a script without requiring command-shaped shell syntax.
+///
+/// Script recipes may contain heredocs, comments, and other valid shell text
+/// that `shlex` cannot parse as a command. Backticks remain an explicit
+/// exclusion: placeholders within them would otherwise evade lowering and
+/// become silently empty shell variables after the Ninja backend escapes `$`.
+pub(crate) fn interpolate_script_with_bindings(
+    template: &str,
+    bindings: &CommandBindings,
+) -> Result<String, IrGenError> {
+    substitute(template, &bindings.ins, &bindings.outs)
+}
+
+/// Builds the diagnostic for a command rejected during placeholder expansion.
+fn invalid_command_error(command: String) -> IrGenError {
+    let snippet = command.chars().take(160).collect();
+    let message = localization::message(keys::IR_INVALID_COMMAND).with_arg("snippet", &snippet);
+    IrGenError::InvalidCommand {
+        command,
+        snippet,
+        message,
+    }
 }
 
 /// Returns whether `ch` is a valid identifier character (ASCII letter, digit, or underscore).
@@ -237,35 +259,19 @@ fn try_match_token<'a>(
     Some((replacement, matched_len))
 }
 
-/// Replace input and output tokens in a template, preserving backtick regions.
-fn substitute(template: &str, ins: &str, outs: &str) -> String {
+/// Replace input and output tokens while rejecting protected placeholders.
+///
+/// A placeholder inside backticks cannot be safely lowered because command
+/// substitution shields it from the normal replacement path. Reject it during
+/// the same traversal so malformed commands never reach the Ninja backend.
+fn substitute(template: &str, ins: &str, outs: &str) -> Result<String, IrGenError> {
     let chars: Vec<char> = template.chars().collect();
-    let mut out = String::with_capacity(template.len());
-    let mut in_backticks = false;
-    let mut i = 0;
-    while let Some(&ch) = chars.get(i) {
-        if ch == '`' {
-            in_backticks ^= true;
-            out.push(ch);
-            i += 1;
-            continue;
-        }
-
-        if in_backticks {
-            out.push(ch);
-            i += 1;
-            continue;
-        }
-
-        if let Some((replacement, skip)) = find_substitution(&chars, i, ins, outs) {
-            out.push_str(replacement);
-            i += skip;
-        } else {
-            out.push(ch);
-            i += 1;
-        }
+    let mut traversal = SubstitutionTraversal::new(template, &chars, ins, outs);
+    let mut pos = 0;
+    while pos < chars.len() {
+        pos = traversal.append_substitution_at_position(pos)?;
     }
-    out
+    Ok(traversal.finish())
 }
 
 /// Internal marker emitted for `{{ ins }}` during manifest rendering and
@@ -277,7 +283,7 @@ pub(crate) const INS_TOKEN: &str = "__NETSUKE_INS_PLACEHOLDER__";
 pub(crate) const OUTS_TOKEN: &str = "__NETSUKE_OUTS_PLACEHOLDER__";
 
 #[cfg(test)]
-#[path = "cmd_interpolate_property_tests.rs"]
+#[path = "../cmd_interpolate_property_tests.rs"]
 mod property_tests;
 #[cfg(test)]
 mod tests {
@@ -311,21 +317,26 @@ mod tests {
         assert_eq!(command, "cp in aux out");
     }
 
+    /// Reject short placeholders protected by command-substitution backticks.
     #[test]
-    fn interpolate_command_preserves_backtick_tokens() {
+    fn interpolate_command_rejects_short_placeholders_in_backticks() {
         let ins = vec![Utf8PathBuf::from("src")];
         let outs = vec![Utf8PathBuf::from("out")];
-        let command =
-            interpolate_command("echo `cat $in` && echo $out", &ins, &outs).expect("command");
-        assert_eq!(command, "echo `cat $in` && echo out");
+        let error = interpolate_command("echo `cat $in` && echo $out", &ins, &outs)
+            .expect_err("placeholders inside backticks should be rejected");
+        assert!(matches!(error, IrGenError::InvalidCommand { .. }));
     }
 
+    /// Reject template placeholders protected by command-substitution backticks.
     #[test]
-    fn interpolate_command_preserves_braced_placeholders_in_backticks() {
-        let command =
-            interpolate_command("echo `{{ ins }}` $out", &[], &[Utf8PathBuf::from("out")])
-                .expect("command");
-        assert_eq!(command, "echo `{{ ins }}` out");
+    fn interpolate_command_rejects_template_placeholders_in_backticks() {
+        let error = interpolate_command(
+            &format!("echo `{INS_TOKEN}` $out"),
+            &[],
+            &[Utf8PathBuf::from("out")],
+        )
+        .expect_err("template placeholders inside backticks should be rejected");
+        assert!(matches!(error, IrGenError::InvalidCommand { .. }));
     }
 
     #[test]

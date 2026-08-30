@@ -143,13 +143,13 @@ fn command_list_entry_control_flow_cannot_mask_an_earlier_failure(
 fn command_list_entries_share_one_shell_process(
     ninja_integration_setup: Option<TempDir>,
 ) -> Result<()> {
-    // `$$` escapes Ninja's variable expansion so the shell sees a literal
-    // `$NETSUKE_SHARED` written by the first entry.
+    // The backend escapes the shell variable for Ninja, so the shell sees the
+    // value written by the first entry.
     let Some(run) = run_command_list(
         ninja_integration_setup,
         &[
             "export NETSUKE_SHARED=yes",
-            "test \"$$NETSUKE_SHARED\" = yes && echo ok > shared.txt",
+            "test \"$NETSUKE_SHARED\" = yes && echo ok > shared.txt",
         ],
     )?
     else {

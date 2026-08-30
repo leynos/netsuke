@@ -74,6 +74,7 @@ const fn error_category(error: &NinjaGenError) -> &'static str {
         NinjaGenError::DyndepFilesRequired { .. } => "dyndep_files_required",
         NinjaGenError::ReservedOutputPath { .. } => "reserved_output_path",
         NinjaGenError::UnsupportedPathCharacter { .. } => "unsupported_path_character",
+        NinjaGenError::UnsafeNinjaValue => "unsafe_ninja_value",
     }
 }
 

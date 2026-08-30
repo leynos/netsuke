@@ -4,8 +4,15 @@ use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use crate::bdd::helpers::assertions::assert_optional_contains;
 use crate::bdd::types::{ContentName, NinjaFragment, TokenList};
 use anyhow::{Context, Result, anyhow, ensure};
+use camino::Utf8PathBuf;
+use cap_std::{ambient_authority, fs_utf8::Dir};
+use mockable::{DefaultEnv, Env};
 use netsuke::ninja_gen;
 use rstest_bdd_macros::{then, when};
+use std::process::Command;
+use test_support::ninja::ninja_integration_workspace;
+
+const SENTINEL: &str = "NETSUKE_TEST_SENTINEL";
 
 // ---------------------------------------------------------------------------
 // Typed helper functions
@@ -99,6 +106,44 @@ fn generate_ninja(world: &TestWorld) -> Result<()> {
     Ok(())
 }
 
+/// Execute a generated target with a child-only shell sentinel environment.
+#[when("the generated Ninja target {target:string} is run with sentinel {value:string}")]
+fn run_generated_ninja_target(world: &TestWorld, target: &str, value: &str) -> Result<()> {
+    let ninja = get_ninja_content(world)?;
+    let process_env = DefaultEnv;
+    let host_path = process_env
+        .os_string("PATH")
+        .context("host PATH is required to run Ninja")?;
+    let workspace = ninja_integration_workspace().context("Ninja is required for BDD execution")?;
+    let path = Utf8PathBuf::from_path_buf(workspace.path().to_path_buf())
+        .map_err(|non_utf8| anyhow!("non-UTF-8 temporary path: {non_utf8:?}"))?;
+    let directory = Dir::open_ambient_dir(&path, ambient_authority())
+        .with_context(|| format!("open Ninja workspace {path}"))?;
+    directory
+        .write("build.ninja", ninja)
+        .context("write generated Ninja file")?;
+
+    let output = Command::new("ninja")
+        .args(["-f", "build.ninja", target])
+        .current_dir(path.as_std_path())
+        .env_clear()
+        .env("PATH", host_path)
+        .env(SENTINEL, value)
+        .output()
+        .context("run generated Ninja target")?;
+    ensure!(
+        output.status.success(),
+        "Ninja failed to execute generated target: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let target_output = directory
+        .read_to_string(target)
+        .with_context(|| format!("read generated Ninja target output {target}"))?;
+    world.ninja_target_output.set(target_output);
+    *world.temp_dir.borrow_mut() = Some(workspace);
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Then steps
 // ---------------------------------------------------------------------------
@@ -141,4 +186,13 @@ fn ninja_generation_fails(world: &TestWorld, fragment: &str) -> Result<()> {
 #[then("ninja generation fails mentioning the removed action id")]
 fn ninja_generation_fails_with_removed_action_id(world: &TestWorld) -> Result<()> {
     assert_error_mentions_action_id(world)
+}
+
+#[then("the generated Ninja output file contains {fragment:string}")]
+fn ninja_target_output_contains(world: &TestWorld, fragment: &str) -> Result<()> {
+    assert_optional_contains(
+        world.ninja_target_output.get(),
+        fragment,
+        "generated Ninja output file",
+    )
 }

@@ -18,6 +18,11 @@ use crate::{
 use camino::Utf8PathBuf;
 use std::collections::{HashMap, HashSet};
 
+#[path = "ninja_gen_property_tests/ninja_oracle.rs"]
+mod ninja_oracle;
+use ninja_oracle::{NinjaCommandOracle, scalar_command_strategy, scalar_graph};
+use proptest::test_runner::TestRunner;
+
 fn edge_strategy_with_ranges(
     input_range: std::ops::Range<usize>,
     implicit_range: std::ops::Range<usize>,
@@ -153,10 +158,6 @@ fn command_list_graph(entries: &[String]) -> BuildGraph {
     ))
 }
 
-fn scalar_graph(command: String) -> BuildGraph {
-    command_graph(StringOrList::String(command))
-}
-
 fn command_list_entry_strategy() -> impl Strategy<Value = String> {
     prop_oneof![
         Just("plain"),
@@ -172,7 +173,39 @@ fn command_list_entry_strategy() -> impl Strategy<Value = String> {
 }
 
 fn canonical_shell_single_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', r"'\''"))
+    format!("'{}'", value.replace('\'', r"'\''").replace('$', "$$"))
+}
+
+/// Verify real Ninja preserves scalar command text after backend escaping.
+#[test]
+fn scalar_command_output_matches_ninja_oracle() {
+    let prepared_oracle =
+        NinjaCommandOracle::try_create().expect("prepare real-Ninja command oracle");
+    let Some(oracle) = prepared_oracle else {
+        return;
+    };
+    let mut runner = TestRunner::new(ProptestConfig {
+        cases: 128,
+        ..ProptestConfig::default()
+    });
+    runner
+        .run(&scalar_command_strategy(), |(command, braced_command)| {
+            prop_assert!(
+                braced_command.contains("${"),
+                "braced property input must contain a shell braced expansion"
+            );
+            for candidate in [&command, &braced_command] {
+                let ninja = generate(&scalar_graph(candidate.clone()))
+                    .expect("scalar command should generate");
+                let oracle_output = oracle.run_ninja_commands(&ninja)?;
+                let observed = oracle_output
+                    .strip_suffix("\r\n")
+                    .or_else(|| oracle_output.strip_suffix('\n'));
+                prop_assert_eq!(observed, Some(candidate.as_str()));
+            }
+            Ok(())
+        })
+        .expect("real-Ninja command oracle property should hold");
 }
 
 proptest! {
@@ -238,16 +271,6 @@ proptest! {
             entries.len()
         );
         prop_assert_eq!(command_line.matches("} && {").count(), entries.len() - 1);
-    }
-
-    #[test]
-    fn scalar_command_output_retains_the_preexisting_form(command in "echo [a-z]{1,12}") {
-        let ninja = generate(&scalar_graph(command.clone())).expect("scalar command should generate");
-        let expected_command_line = format!("  command = {command}\n");
-        let retains_scalar_form = ninja.contains(&expected_command_line);
-        let uses_list_boundary = ninja.contains("_netsuke_background_before=$${!:-}");
-        prop_assert!(retains_scalar_form);
-        prop_assert!(!uses_list_boundary);
     }
 
     #[test]

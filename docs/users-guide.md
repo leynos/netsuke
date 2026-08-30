@@ -250,8 +250,7 @@ vars:
 
 macros:
   - signature: "message(name)"
-    body: |
-      {{ greeting }}, {{ name }}!
+    body: "{{ greeting }}, {{ name }}!"
 
 rules:
   - name: write_message
@@ -576,8 +575,7 @@ vars:
 
 macros:
   - signature: "say(name, punctuation='!')"
-    body: |
-      {{ greeting }}, {{ name }}{{ punctuation }}
+    body: "{{ greeting }}, {{ name }}{{ punctuation }}"
 
 targets:
   - name: greeting.txt
@@ -1465,8 +1463,28 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   structured or nested `exec` forms are rejected during Ninja generation.
   Failure diagnostics include the action fingerprint and one-based entry
   position when Netsuke can attribute the failed list entry.
-- Literal shell dollar expressions currently require Ninja-aware escaping,
-  such as `$$PATH`.
+- Write shell dollar expressions normally: `$PATH`, `$RUSTFLAGS`, and
+  `${CARGO:-cargo}` reach the child shell unchanged. Netsuke performs the
+  required Ninja escaping after it lowers `$in`, `$out`, `{{ ins }}`, and
+  `{{ outs }}`. A `$in` or `$out` token inside backticks is rejected because
+  Netsuke cannot safely lower it there. This applies to command and script
+  recipes. Command text containing newline, carriage-return, or NUL characters
+  is rejected during Ninja generation. Script text containing carriage-return or
+  NUL characters is rejected; ordinary script newlines are preserved by the
+  generated shell wrapper. Literal `$` characters in action
+  metadata—`description`, `depfile`, `deps`, and `pool`—are doubled for Ninja
+  so they remain literal values rather than becoming Ninja variable references.
+- Build and default-target paths reject `$`, spaces, colons, `|`, and control
+  characters because Ninja cannot represent them without ambiguity. Generation
+  also rejects newline, carriage-return, and NUL characters in emitted metadata
+  such as descriptions, `depfile`, `deps`, and `pool`.
+- **Migration:** replace the historical manifest spelling `$$PATH` with
+  `$PATH`. Keeping the extra dollar now asks the shell to interpret `$$` as
+  its process identifier and can change the command's result. Existing script
+  actions that use `$in` or `$out` outside backtick-delimited regions will
+  receive the same paths after this release, but their generated action
+  identifiers change once because lowering now happens before Ninja emission;
+  Ninja may therefore rebuild those targets once.
 
 Do not run an untrusted `Netsukefile`. Prefer explicit inputs, avoid embedding
 secrets in commands or URLs, and pin dependencies used by recipes.

@@ -11,7 +11,7 @@ mod path_syntax;
 
 use dyndep::reject_reserved_paths;
 pub use dyndep::{GeneratedDyndep, GeneratedNinja, generate_bundle};
-pub(crate) use path_syntax::{escape_ninja_path, reject_unsupported_path_characters};
+pub(crate) use path_syntax::{reject_unsupported_path_characters, validated_ninja_path};
 
 use crate::ast::{Recipe, StringOrList};
 use crate::ir::{BuildEdge, BuildGraph};
@@ -25,12 +25,16 @@ use std::fmt::{self, Display, Formatter, Write};
 pub(crate) mod ninja_gen_command_list;
 #[path = "../ninja_gen_error.rs"]
 mod ninja_gen_error;
+
+#[path = "../ninja_gen_escape.rs"]
+mod ninja_gen_escape;
 #[path = "../ninja_gen_validation.rs"]
 mod ninja_gen_validation;
 
 use ninja_gen_command_list::{ActionId, CommandListEntry, command_list_entry};
 pub use ninja_gen_error::NinjaGenError;
-use ninja_gen_validation::validate_action_recipe;
+use ninja_gen_escape::{ShellText, escape_metadata_value, escape_ninja_value};
+use ninja_gen_validation::{validate_action_metadata, validate_action_recipe};
 /// Write `key = value` to a Ninja file when `opt` holds a value.
 ///
 /// The indented assignment is emitted only for present values, so optional
@@ -149,7 +153,8 @@ pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), Ni
     for (zero_based_action_index, (id, action)) in actions.into_iter().enumerate() {
         let action_index = zero_based_action_index + 1;
         validate_action_recipe(action, action_index)?;
-        write!(out, "{}", NamedAction { id, action })?;
+        validate_action_metadata(action)?;
+        NamedAction { id, action }.write_into(out)?;
     }
 
     let mut edges: Vec<_> = graph.targets.values().collect();
@@ -193,7 +198,7 @@ pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), Ni
 pub(crate) fn join(paths: &[Utf8PathBuf]) -> String {
     paths
         .iter()
-        .map(|path| path_syntax::escape_validated_ninja_path(path.as_str()))
+        .map(|path| path_syntax::clone_validated_ninja_path(path.as_str()))
         .join(" ")
 }
 
@@ -205,20 +210,18 @@ pub(crate) fn path_key(paths: &[Utf8PathBuf]) -> String {
     parts.join(&separator)
 }
 
-/// Escape a script for embedding within a single-quoted `printf %b` argument.
+/// Escape a script for the wrapper's single-quoted `printf %b` argument.
 ///
-/// Backslashes, dollar signs, double quotes, backticks, and single quotes are
-/// escaped so the outer shell preserves them, while newlines become `\n` to
-/// keep the rule on one line. Percent signs are passed through unchanged because
-/// the script is an argument rather than a format string, allowing the inner
-/// shell to perform variable expansion.
+/// Preserve the script through the double-quoted `sh -c` wrapper so its inner
+/// shell receives literal text, including line breaks and apostrophes, before
+/// it evaluates intentional shell variables.
 fn escape_script(script: &str) -> String {
     script
         .replace('\\', "\\\\")
         .replace('$', "\\$")
         .replace('"', "\\\"")
         .replace('`', "\\`")
-        .replace('\'', "'\"'\"'")
+        .replace('\'', r"'\''")
         .replace('\n', "\\n")
 }
 /// Whether the graph contains an edge whose serial list needs dyndep gates.
@@ -239,64 +242,19 @@ pub(crate) struct NamedAction<'a> {
 }
 
 impl NamedAction<'_> {
-    /// Write the `command =` binding for the action, dispatching on recipe kind.
-    fn write_recipe(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match &self.action.recipe {
-            Recipe::Command {
-                command: StringOrList::String(scalar_command),
-            } => {
-                Self::assert_shell_command(scalar_command);
-                writeln!(f, "  command = {scalar_command}")
-            }
-            Recipe::Command {
-                command: StringOrList::List(items),
-            } => self.write_command_list(f, items),
-            Recipe::Command {
-                command: StringOrList::Empty,
-            } => Self::reject_empty_command_recipe(),
-            Recipe::Script { script } => Self::write_script_command(f, script),
-            Recipe::Rule { .. } => Self::reject_rule_recipe(),
-        }
-    }
-
-    /// Emit a single-line `command =` binding that reconstructs `script` verbatim.
-    fn write_script_command(f: &mut Formatter<'_>, script: &str) -> fmt::Result {
-        // Ninja commands must be single-line. Encode newlines and reconstruct the
-        // original script with `printf %b` piped into a fresh shell to preserve
-        // expected expansions.
-        let escaped = escape_script(script);
-        let cmd = format!("/bin/sh -e -c \"printf %b '{escaped}' | /bin/sh -e\"");
-        Self::assert_shell_command(&cmd);
-        writeln!(f, "  command = {cmd}")
-    }
-
-    /// Write list entries as isolated current-shell groups joined by `&&`.
-    fn write_command_list(&self, f: &mut Formatter<'_>, items: &[String]) -> fmt::Result {
-        // Brace groups keep each entry a distinct shell unit, and `eval`
-        // prevents comments or trailing control operators inside an entry
-        // consuming its terminator. Braces run in the current shell (unlike
-        // `( ... )`), so working directory, environment, and variables set by
-        // one entry still carry into the next, and the `&&` chain stays
-        // fail-fast.
-        let command_line = items
-            .iter()
-            .enumerate()
-            .map(|(entry_index, item)| {
-                command_list_entry(CommandListEntry(item), ActionId(self.id), entry_index + 1)
-            })
-            .join(" && ");
-        Self::assert_shell_command(&command_line);
-        writeln!(f, "  command = {command_line}")
-    }
-
     /// Write the action's optional metadata bindings followed by a blank line.
-    fn write_metadata(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write_kv!(f, "description", &self.action.description);
-        write_kv!(f, "depfile", &self.action.depfile);
-        write_kv!(f, "deps", &self.action.deps_format);
-        write_kv!(f, "pool", &self.action.pool);
+    fn write_metadata<W: Write>(&self, f: &mut W) -> Result<(), NinjaGenError> {
+        let description = escape_metadata_value(self.action.description.as_deref())?;
+        let depfile = escape_metadata_value(self.action.depfile.as_deref())?;
+        let deps_format = escape_metadata_value(self.action.deps_format.as_deref())?;
+        let pool = escape_metadata_value(self.action.pool.as_deref())?;
+        write_kv!(f, "description", &description);
+        write_kv!(f, "depfile", &depfile);
+        write_kv!(f, "deps", &deps_format);
+        write_kv!(f, "pool", &pool);
         write_flag!(f, "restat", self.action.restat);
-        writeln!(f)
+        writeln!(f)?;
+        Ok(())
     }
 
     /// Panic in debug builds when `command` is not POSIX-shell parseable.
@@ -319,11 +277,11 @@ impl NamedAction<'_> {
         clippy::manual_assert,
         reason = "debug-only guard escalates to panic for visibility"
     )]
-    fn reject_rule_recipe() -> fmt::Result {
+    fn reject_rule_recipe() -> Result<ShellText, NinjaGenError> {
         if cfg!(debug_assertions) {
             panic!("rules do not reference other rules");
         }
-        Err(fmt::Error)
+        Err(NinjaGenError::UnsafeNinjaValue)
     }
 
     /// Reject a command recipe that carries no entries.
@@ -333,19 +291,71 @@ impl NamedAction<'_> {
     /// returned error into a panic, so the fault still surfaces loudly without
     /// a hand-rolled debug-only panic.
     #[cold]
-    const fn reject_empty_command_recipe() -> fmt::Result {
-        Err(fmt::Error)
+    const fn reject_empty_command_recipe() -> Result<ShellText, NinjaGenError> {
+        Err(NinjaGenError::UnsafeNinjaValue)
+    }
+
+    /// Converts the action recipe into shell text before Ninja escaping.
+    fn shell_text(&self) -> Result<ShellText, NinjaGenError> {
+        let command = match &self.action.recipe {
+            Recipe::Command {
+                command: StringOrList::String(scalar_command),
+            } => {
+                Self::assert_shell_command(scalar_command);
+                scalar_command.clone()
+            }
+            Recipe::Command {
+                command: StringOrList::List(items),
+            } => self.command_list_shell_text(items),
+            Recipe::Command {
+                command: StringOrList::Empty,
+            } => return Self::reject_empty_command_recipe(),
+            Recipe::Script { script } => Self::script_shell_text(script),
+            Recipe::Rule { .. } => return Self::reject_rule_recipe(),
+        };
+        Ok(ShellText::new(command))
+    }
+
+    /// Wraps a multi-line script in a one-line shell command for Ninja.
+    fn script_shell_text(script: &str) -> String {
+        // Ninja commands must be single-line. Encode newlines and reconstruct the
+        // original script with `printf %b` piped into a fresh shell to preserve
+        // expected expansions.
+        let escaped = escape_script(script);
+        let cmd = format!("/bin/sh -e -c \"printf %b '{escaped}' | /bin/sh -e\"");
+        // Scripts are allowed to contain shell constructs such as heredocs and
+        // comments that `shlex` cannot model, so only command recipes use the
+        // debug parser guard.
+        cmd
+    }
+
+    /// Write list entries as isolated current-shell groups joined by `&&`.
+    fn command_list_shell_text(&self, items: &[String]) -> String {
+        // Brace groups keep each entry a distinct shell unit, and `eval`
+        // prevents comments or trailing control operators inside an entry
+        // consuming its terminator. Braces run in the current shell (unlike
+        // `( ... )`), so working directory, environment, and variables set by
+        // one entry still carry into the next, and the `&&` chain stays
+        // fail-fast.
+        let command_line = items
+            .iter()
+            .enumerate()
+            .map(|(entry_index, item)| {
+                command_list_entry(CommandListEntry(item), ActionId(self.id), entry_index + 1)
+            })
+            .join(" && ");
+        Self::assert_shell_command(&command_line);
+        command_line
+    }
+
+    /// Writes this action's Ninja rule, escaping only the shell-text boundary.
+    fn write_into<W: Write>(&self, output: &mut W) -> Result<(), NinjaGenError> {
+        let command = escape_ninja_value(self.shell_text()?)?;
+        writeln!(output, "rule {}", self.id)?;
+        writeln!(output, "  command = {command}")?;
+        self.write_metadata(output)
     }
 }
-
-impl Display for NamedAction<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        writeln!(f, "rule {}", self.id)?;
-        self.write_recipe(f)?;
-        self.write_metadata(f)
-    }
-}
-
 /// Wrapper struct to display a build edge.
 pub(crate) struct DisplayEdge<'a> {
     /// The build edge whose inputs and outputs are rendered.

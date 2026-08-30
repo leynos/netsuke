@@ -60,7 +60,7 @@ use crate::ir::{BuildEdge, BuildGraph};
 use crate::localization::{self, keys};
 use crate::ninja_gen::{
     NamedAction, NinjaGenError, edge_requires_gates, graph_requires_dyndep, join, path_key,
-    reject_unsupported_path_characters, validate_action_recipe,
+    reject_unsupported_path_characters, validate_action_metadata, validate_action_recipe,
 };
 use camino::Utf8PathBuf;
 use sha2::{Digest, Sha256};
@@ -122,7 +122,8 @@ fn generate_bundle_inner(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenE
     actions.sort_by_key(|(id, _)| *id);
     for (zero_based_action_index, (id, action)) in actions.into_iter().enumerate() {
         validate_action_recipe(action, zero_based_action_index + 1)?;
-        write!(out, "{}", NamedAction { id, action })?;
+        validate_action_metadata(action)?;
+        NamedAction { id, action }.write_into(&mut out)?;
     }
 
     let mut stages = SerialStages::default();
@@ -232,7 +233,7 @@ fn render_serial_block(
     stages: &mut SerialStages,
     gate_paths: &mut Vec<Utf8PathBuf>,
 ) -> Result<(), NinjaGenError> {
-    use crate::ninja_gen::escape_ninja_path;
+    use crate::ninja_gen::validated_ninja_path;
 
     let parent = parent_identity(edge);
     for (index, dep) in edge.implicit_deps.iter().enumerate() {
@@ -241,8 +242,8 @@ fn render_serial_block(
         let digest = sidecar_digest(&content);
         let sidecar = Utf8PathBuf::from(format!("{DYNDEP_NAMESPACE}/{digest}.dd"));
 
-        let sidecar_escaped = escape_ninja_path(sidecar.as_str())?;
-        let gate_escaped = escape_ninja_path(gate.as_str())?;
+        let sidecar_escaped = validated_ninja_path(sidecar.as_str())?;
+        let gate_escaped = validated_ninja_path(gate.as_str())?;
 
         // The phony edge that produces (but never rebuilds) the sidecar file.
         // Starting at the second stage it depends on the previous gate, which
@@ -250,7 +251,7 @@ fn render_serial_block(
         match gate_paths.last() {
             None => writeln!(out, "build {sidecar_escaped}: phony")?,
             Some(prev) => {
-                let prev_escaped = escape_ninja_path(prev.as_str())?;
+                let prev_escaped = validated_ninja_path(prev.as_str())?;
                 writeln!(out, "build {sidecar_escaped}: phony {prev_escaped}")?;
             }
         }
@@ -293,9 +294,9 @@ fn parent_identity(edge: &BuildEdge) -> Utf8PathBuf {
 
 /// Render the dyndep document for one gate and its real dependency.
 fn sidecar_content(gate: &Utf8PathBuf, dep: &Utf8PathBuf) -> Result<String, NinjaGenError> {
-    use crate::ninja_gen::escape_ninja_path;
-    let gate_escaped = escape_ninja_path(gate.as_str())?;
-    let dep_escaped = escape_ninja_path(dep.as_str())?;
+    use crate::ninja_gen::validated_ninja_path;
+    let gate_escaped = validated_ninja_path(gate.as_str())?;
+    let dep_escaped = validated_ninja_path(dep.as_str())?;
     Ok(format!(
         "ninja_dyndep_version = 1\nbuild {gate_escaped}: dyndep | {dep_escaped}\n"
     ))

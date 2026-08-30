@@ -66,6 +66,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-013](adr-013-application-owned-configuration-observability.md):
   Application-owned configuration-load metrics, verbose snapshots, and bounded
   label vocabulary.
+- [ADR-014](adr-014-backend-text-escaping-seam.md):
+  Ninja backend escaping boundary decision record, preserving ordinary shell
+  dollar syntax in manifests without coupling the IR to Ninja.
 
 ## Proposals
 

@@ -1,9 +1,9 @@
 //! Validation for command-list boundaries before Ninja rendering.
 
-use super::NinjaGenError;
 use super::ninja_gen_command_list::{
     CommandListEntry, CommandListEntryError, command_list_entry_error,
 };
+use super::{NinjaGenError, ninja_gen_escape::validate_ninja_value};
 use crate::ast::{Recipe, StringOrList};
 
 /// Reject recipes the generated shell cannot execute with stable semantics.
@@ -50,6 +50,22 @@ pub(super) fn validate_action_recipe(
                 None => {}
             }
         }
+    }
+    Ok(())
+}
+
+/// Reject metadata values that cannot remain within one Ninja binding.
+pub(super) fn validate_action_metadata(action: &crate::ir::Action) -> Result<(), NinjaGenError> {
+    for value in [
+        action.description.as_ref(),
+        action.depfile.as_ref(),
+        action.deps_format.as_ref(),
+        action.pool.as_ref(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        validate_ninja_value(value)?;
     }
     Ok(())
 }

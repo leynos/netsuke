@@ -522,25 +522,29 @@ behaves the same as if every target were declared explicitly.
 
 ### 2.6 Planned Recipe Ergonomics and Execution Feedback
 
-The current string-based recipe model makes advanced shell usage leak Ninja
-syntax into manifests. For example, a shell fallback such as `${CARGO:-cargo}`
-must be written as `$${CARGO:-cargo}` so Ninja leaves the dollar expression for
-the shell. That is the wrong abstraction boundary: Netsuke owns the manifest
-schema and the chosen backend, so manifest authors should not need to know
-Ninja's dollar-escaping rules.
+The string-based recipe model lets authors write ordinary shell syntax without
+leaking Ninja syntax into manifests. A shell fallback such as
+`${CARGO:-cargo}` is written exactly that way; Netsuke owns the chosen backend
+and escapes its file format when it emits `build.ninja`.
 
 Netsuke should add four complementary capabilities.
 
 #### Backend dollar escaping
 
 After Netsuke has resolved its own placeholders (`ins`, `outs`, `$in`, and
-`$out`) and before writing a Ninja file, the Ninja backend must escape any
+`$out`) and before writing a Ninja file, the Ninja backend escapes every
 remaining literal dollar signs in command and script text as `$$`. This keeps
 shell variables such as `$PATH`, `${CARGO:-cargo}`, and `$RUSTFLAGS` readable
 in the manifest while preserving the existing generated Ninja semantics.
 
 This is a backend concern, not an IR concern. The IR continues to contain plain
-command or script text with no Ninja-specific escaping.
+command or script text with no Ninja-specific escaping. The backend conversion
+accepts only completed shell text and returns an opaque Ninja-value type, which
+makes applying the conversion before placeholder lowering or applying it twice
+an invalid internal call rather than a convention left to review. Paths use a
+separate boundary: values containing Ninja-special syntax (`$`, spaces,
+colons, or control characters) are rejected rather than emitted ambiguously.
+ADR 014 records the boundary and its migration consequences.
 
 #### Structured environment mapping
 
@@ -2102,8 +2106,11 @@ structures to the Ninja file syntax.
    Command and script text must be converted from IR text to backend text at
    this stage. After Netsuke placeholders have been resolved, remaining literal
    dollar signs are escaped as `$$` for Ninja so shell variables survive to the
-   shell. Structured `exec` recipes are rendered by quoting each argv element
-   as one argument for the selected backend.
+   shell. The conversion rejects newline, carriage-return, and NUL characters
+   and will accept a completed shell-text value once. Structured `exec` recipes
+   are rendered by quoting each argv element as one argument for the selected
+   backend. Metadata fields are escaped at their Ninja emission boundary, while
+   the IR remains backend-neutral.
 
    Resolved environment bindings are emitted as backend-specific command
    prefixes or generated wrapper script assignments. The implementation must
@@ -2243,6 +2250,9 @@ representation portable.
   [ADR-011](adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md)
   records why staged dyndep is used instead of order-only gates, pools, or
   recursive Ninja invocations.
+- Backend integration tests can opt into `NETSUKE_REQUIRE_NINJA=1`; in that
+  mode the shared test harness treats an unavailable `ninja` executable as a
+  failure instead of skipping an integration scenario. CI enables the mode.
 
 ## Section 6: Process Management and Secure Execution
 

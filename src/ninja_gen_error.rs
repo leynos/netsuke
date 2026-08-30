@@ -90,6 +90,9 @@ pub enum NinjaGenError {
         /// Localized error message.
         message: LocalizedMessage,
     },
+    /// A scalar command or script cannot be represented in one Ninja binding.
+    #[error("Ninja binding contains an unsafe control character")]
+    UnsafeNinjaValue,
     /// Formatting the Ninja output failed.
     #[error("{message}")]
     Format {

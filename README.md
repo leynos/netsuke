@@ -167,8 +167,8 @@ Known limitations include:
 
 - recipes are shell strings; structured executable arguments and recipe
   environment mappings are not implemented yet;
-- literal shell dollar expressions still need Ninja-aware escaping in
-  manifests;
+- shell dollar expressions use ordinary shell syntax; see the [users' guide
+  safety boundary](docs/users-guide.md#review-the-safety-boundary);
 - compiler-generated dependency imports such as GCC depfiles are planned but
   not yet part of the manifest model;
 - `--json` emits exactly one versioned result or diagnostic document for each
@@ -190,8 +190,8 @@ Work after the first release is organized around three priorities:
    flag names, non-interactive safeguards, stable exit codes, bounded output,
    and versioned `--json` documents.
 2. **Make recipes safer and clearer**: add structured executable arguments,
-   environment mappings, compiler dependency imports, backend dollar escaping,
-   and better conditional-action feedback.
+   environment mappings, compiler dependency imports, and better
+   conditional-action feedback.
 3. **Strengthen confidence**: expand Kani and property-test coverage, verify
    accessibility with assistive technology, and add regression coverage for
    configuration precedence and terminal rendering.

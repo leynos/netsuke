@@ -12,15 +12,11 @@ Feature: Ninja file generation
     Then the ninja file contains "build clean:"
     And the ninja file contains "rm -rf build"
 
-  Scenario: Inputs and outputs are shell-quoted
-    When the manifest file "tests/data/quote.yml" is compiled to IR
+  Scenario: The child shell receives the sentinel environment
+    When the manifest file "tests/data/dollar_escaping.yml" is compiled to IR
     And the ninja file is generated
-    Then shlex splitting the command yields "cat, in file, >, out file"
-
-  Scenario: Edge-case paths are shell-quoted
-    When the manifest file "tests/data/quote.yml" is compiled to IR
-    And the ninja file is generated
-    Then shlex splitting command 3 yields "printf, %s, -in file, >, o'utfile"
+    And the generated Ninja target "dollar-output" is run with sentinel "sentinel-value"
+    Then the generated Ninja output file contains "sentinel-value"
 
   Scenario: Missing action is reported
     When the manifest file "tests/data/rules.yml" is compiled to IR
