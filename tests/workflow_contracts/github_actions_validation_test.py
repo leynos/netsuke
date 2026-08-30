@@ -194,8 +194,8 @@ def _run_github_actions_lint(cmd_mox: CmdMox) -> subprocess.CompletedProcess[str
     # reaches the child process.
     # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
     return subprocess.run(
-        [
-            "make",  # noqa: S607 - CmdMox controls the test command path.
+        [  # ruff: ignore[start-process-with-partial-path] - CmdMox controls the test command path.
+            "make",
             f"YAMLLINT={_mocked_command(cmd_mox, 'yamllint')}",
             f"ACTIONLINT={_mocked_command(cmd_mox, 'actionlint')}",
             "github-actions-lint",
