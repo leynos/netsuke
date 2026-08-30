@@ -27,7 +27,7 @@ const POWER_SHELL_RESPONSE_FILE_SCRIPT_PREFIX: &str = "$netsukePayload = '";
 const POWER_SHELL_RESPONSE_FILE_SCRIPT_SUFFIX: &str = concat!(
     "'; $netsukeScript = try { [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($netsukePayload)) } ",
     "catch { throw \"Netsuke could not decode the PowerShell response file: $($_.Exception.Message)\" }; ",
-    "& ([ScriptBlock]::Create($netsukeScript)); if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"
+    ". ([ScriptBlock]::Create($netsukeScript)); if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"
 );
 
 /// Represent one Ninja command binding and its optional response-file payload.
