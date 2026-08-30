@@ -77,6 +77,17 @@ pub(crate) fn help_targets_json_snapshot_settings() -> Settings {
     settings
 }
 
+/// Build snapshot settings for `netsuke check` result documents.
+///
+/// Extend the check settings with the generator-version redaction so lint
+/// snapshots survive version bumps, on the same terms as every other JSON
+/// document snapshot.
+pub(crate) fn check_json_snapshot_settings() -> Settings {
+    let mut settings = snapshot_settings("check");
+    add_generator_version_filter(&mut settings);
+    settings
+}
+
 /// Resolve explicit-theme preferences for deterministic snapshot tests.
 pub(crate) fn theme_prefs(theme: ThemePreference) -> OutputPrefs {
     resolve_from_theme_with(
