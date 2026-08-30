@@ -61,10 +61,12 @@ stronger proof obligations become worthwhile.[^7]
 
 ### Kani for command interpolation
 
-`src/ir/cmd_interpolate.rs` is another high-value target because it is compact,
-load-bearing, and security-sensitive. `interpolate_command` replaces `$in` and
-`$out`, avoids rewriting inside backticks, and rejects commands when backticks
-are unmatched or the interpolated result fails the current `shlex` guard.[^8]
+`src/ir/cmd_interpolate/mod.rs` is another high-value target because it is
+compact, load-bearing, and security-sensitive. It replaces `$in` and `$out`.
+POSIX-compatible routes reject placeholders inside backticks and reject
+commands when backticks are unmatched or the interpolated result fails the
+current `shlex` guard. PowerShell treats backticks as native escapes rather
+than protected regions.[^8]
 
 Kani proves two allocation-free kernels. An eight-character symbolic window
 with a symbolic offset proves `$in` and `$out` matching exactly at identifier
@@ -75,9 +77,9 @@ matching for a short marker through the length-generic production matcher.
 The production scanner exceeded the five-minute, 8 GiB Kani cap at six and
 eight characters, and the guard necessarily drives that scanner. Adversarial
 Proptest properties therefore cover templates of up to 256 characters with at
-most eight placeholders. They independently specify scanner behaviour, verify
-backtick preservation and odd-backtick rejection, and verify that the real
-`shlex` guard evaluates the substituted command.
+most eight placeholders. They independently specify POSIX scanner behaviour,
+verify protected-placeholder and odd-backtick rejection, and verify that the
+real `shlex` guard evaluates the substituted command.
 
 ### Proptest for determinism and manifest semantics
 
@@ -260,14 +262,15 @@ Three contracts should be documented before proofs become gating checks.
 ### Command placeholder contract
 
 The interpolation layer currently supports `$in` and `$out`, enforces
-identifier-style token boundaries, and suppresses substitution inside
-backticks.[^8] This contract should be documented in the README under a new
-"Security and command interpolation" section, as it is a user-facing guarantee
-that affects manifest authoring. The project documentation should state whether:
+identifier-style token boundaries, and, on POSIX-compatible routes, rejects
+substitution inside backticks.[^8] PowerShell treats a backtick as an escape.
+This contract should be documented in the README under a new "Security and
+command interpolation" section, as it is a user-facing guarantee that affects
+manifest authoring. The project documentation should state whether:
 
 - those are the only supported placeholders,
-- backtick suppression is the full contract or a temporary subset of shell
-  command-substitution handling, and
+- POSIX backtick rejection and PowerShell escape handling are the full contract
+  or a temporary subset of shell command-substitution handling, and
 - `shlex::split` is part of the semantic acceptance contract or only a guard
   against obviously malformed commands.
 

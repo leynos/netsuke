@@ -1,13 +1,13 @@
 # Add Kani harnesses for command interpolation (roadmap 4.2.3)
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`,
-`Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
-`Verification plan` must be kept up to date as work proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & discoveries`, `Decision log`,
+`Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
+be kept up to date as work proceeds.
 
 Status: COMPLETE
 
-Revision 2.7. See `Revision note` at the foot of this document.
+Revision 2.11. See `Revision note` at the foot of this document.
 
 ## Purpose / big picture
 
@@ -18,9 +18,9 @@ is security-sensitive: it decides which parts of an author's command text are
 rewritten and which are left alone, and it is the last place that rejects a
 command whose shell syntax has been damaged by the substitution.
 
-Today that logic is covered by five unit tests, three property tests over
-fixed templates, and six example cases in the integration suite. All of those
-sample the input space. None exhausts it, and none of them generates a `$`, a
+Today that logic is covered by five unit tests, three property tests over fixed
+templates, and six example cases in the integration suite. All of those sample
+the input space. None exhausts it, and none of them generates a `$`, a
 backtick, or a quote inside a template.
 
 After this change a maintainer will run one command:
@@ -39,8 +39,8 @@ its bound admits — the two feasible placeholder kernels:
 
 The production scanner and guard exceed the five-minute resource cap even at
 small string bounds. Independent Proptest properties therefore cover templates
-up to 256 characters with at most eight placeholders: scanner agreement,
-backtick-region preservation, odd-backtick rejection, and guard placement on
+up to 256 characters with at most eight placeholders: scanner agreement, POSIX
+protected-placeholder rejection, odd-backtick rejection, and guard placement on
 the substituted command.
 
 "Exhaustively, within a bound" is the important phrase. Kani does not sample.
@@ -51,11 +51,13 @@ so a six-character window with a symbolic offset covers every string of any
 length. That is a stronger guarantee than the existing tests give, and it is
 what roadmap item 4.2.3 asks for at the feasible Kani boundary.
 
-Nothing about Netsuke's user-visible behaviour changes. A user running
-`netsuke build` gets a byte-identical `build.ninja`. The observable change is
-for maintainers: `make kani-ir` reports two more verified harnesses, the
-developers' guide gains an inventory row for each, and a new contract test
-stops the repository's mutation-evidence discipline from rotting.
+This plan adds no independent user-visible behaviour. During the final rebase,
+the target branch's security change began rejecting POSIX placeholders inside
+backticks rather than silently preserving them; this plan retains that stronger
+contract and updates its Proptest oracle accordingly. PowerShell keeps its
+native backtick-escape semantics. The maintainer-facing change remains two more
+verified harnesses, guide inventory rows, and a mutation-evidence contract that
+cannot silently rot.
 
 ## Context and orientation
 
@@ -138,17 +140,17 @@ These follow from the rules above. Each was hand-derived and each must appear
 as a characterization test in EP-M1. If any turns out to be false, stop: your
 model of the code is wrong.
 
-| Input | Output | Why |
-| --- | --- | --- |
-| `cp $in $out` | `cp <ins> <outs>` | ordinary case |
-| `$input` | `$input` | `chars[pos+3]` is `p`, an identifier character |
-| `x$in` | `x$in` | `chars[pos-1]` is `x`, an identifier character |
-| `$$in` | `$<ins>` | at the second `$`, `chars[pos-1]` is `$`, not an identifier character, so it **is** substituted |
-| `$in$out` | `<ins>$out` | at the `$out`, `chars[pos-1]` is `n`, an identifier character |
-| `$in$in` | `<ins>$in` | same reason |
-| `` echo `cat $in` `` | unchanged | inside a backtick region |
-| `` echo `$in `` | rejected | odd backtick count |
-| `x__NETSUKE_INS_PLACEHOLDER__` | `x<ins>` | markers have no boundary rule |
+| Input                          | Output            | Why                                                                                             |
+| ------------------------------ | ----------------- | ----------------------------------------------------------------------------------------------- |
+| `cp $in $out`                  | `cp <ins> <outs>` | ordinary case                                                                                   |
+| `$input`                       | `$input`          | `chars[pos+3]` is `p`, an identifier character                                                  |
+| `x$in`                         | `x$in`            | `chars[pos-1]` is `x`, an identifier character                                                  |
+| `$$in`                         | `$<ins>`          | at the second `$`, `chars[pos-1]` is `$`, not an identifier character, so it **is** substituted |
+| `$in$out`                      | `<ins>$out`       | at the `$out`, `chars[pos-1]` is `n`, an identifier character                                   |
+| `$in$in`                       | `<ins>$in`        | same reason                                                                                     |
+| `` echo `cat $in` ``           | rejected          | a placeholder inside a backtick region cannot safely lower                                      |
+| `` echo `$in ``                | rejected          | odd backtick count                                                                              |
+| `x__NETSUKE_INS_PLACEHOLDER__` | `x<ins>`          | markers have no boundary rule                                                                   |
 
 The `$$in` row deserves attention: `$$` is Ninja's escape for a literal dollar,
 so an author writing `$$in` to mean the literal text `$in` gets a substitution
@@ -182,10 +184,10 @@ you must follow:
   documents by section heading rather than line number, because `main` moves
   those files faster than the numbers can be kept true; line numbers are used
   only for code, and `src/ir/cmd_interpolate.rs` in particular has been stable.
-  Verify any anchor by heading or symbol name before trusting a number.
-  The repository's sibling-module convention for shared production
-  helpers is `<module>_support.rs`; see `src/ir/cycle_support.rs`, which holds
-  the `canonicalize_cycle_by` kernel that `src/ir/cycle.rs` re-exports.
+  Verify any anchor by heading or symbol name before trusting a number. The
+  repository's sibling-module convention for shared production helpers is
+  `<module>_support.rs`; see `src/ir/cycle_support.rs`, which holds the
+  `canonicalize_cycle_by` kernel that `src/ir/cycle.rs` re-exports.
 - **`cfg(kani)` is a build configuration, not a Cargo feature.** It is declared
   in `Cargo.toml` line 254 under `[lints.rust] unexpected_cfgs`. There is no
   `kani` entry in `Cargo.toml`.
@@ -210,26 +212,26 @@ you must follow:
   single most likely place to get stuck.
 
 The existing inventory is thirteen harnesses across
-`src/ir/from_manifest_verification.rs` (four) and `src/ir/cycle_verification.rs`
-(nine), documented in the "Kani harness inventory" table of
-`docs/developers-guide.md`. There are
-twelve mutation patches: the adapter harness
+`src/ir/from_manifest_verification.rs` (four) and
+`src/ir/cycle_verification.rs` (nine), documented in the "Kani harness
+inventory" table of `docs/developers-guide.md`. There are twelve mutation
+patches: the adapter harness
 `canonicalize_path_wrapper_matches_u8_kernel_for_two_nodes` has none.
 
 ### Continuous integration and its budget
 
-`.github/workflows/ci.yml` defines a `kani-smoke` job, pull
-requests only, capped at `timeout-minutes: 20`. Measured on five recent runs
-the job takes 4:18 to 4:43 total: roughly 55 seconds of setup and version
-check, 191 to 227 seconds for `make kani-ir`, and 25 seconds of post-steps. Of
-that `make kani-ir` time, cross-referencing the per-harness verification times
+`.github/workflows/ci.yml` defines a `kani-smoke` job, pull requests only,
+capped at `timeout-minutes: 20`. Measured on five recent runs the job takes
+4:18 to 4:43 total: roughly 55 seconds of setup and version check, 191 to 227
+seconds for `make kani-ir`, and 25 seconds of post-steps. Of that
+`make kani-ir` time, cross-referencing the per-harness verification times
 recorded in the 4.2.2 execplan (4.6s at N=2 up to 11.8s at N=4), only about 45
 to 75 seconds is solving; the remaining three minutes is fixed crate
 compilation and goto-program instrumentation.
 
 So the real budget for new solving is generous in absolute terms but the cap is
-hard, and GitHub's runners are slower per core than the development machine.
-See `Tolerances`.
+hard, and GitHub's runners are slower per core than the development machine. See
+`Tolerances`.
 
 The job's cache key is `hashFiles('tools/kani/VERSION', 'Makefile')` with no
 `restore-keys`. Editing the Makefile therefore forces a cold Kani install on
@@ -238,13 +240,14 @@ in this work unless a tolerance forces it.
 
 This is no longer hypothetical: `main` has since edited the Makefile for
 unrelated reasons (a `bench-config-load` target and Markdown-discovery
-exclusions), so the Kani cache is already cold and the next run of this job will
-pay the full install cost. Treat the first measured timing as pessimistic and
-re-measure on a second run before concluding anything about the budget. `main`
-has also added a `build-test-windows` job that gates merges; it is separate from
-`kani-smoke` and does not share its budget, but it lengthens overall pull-request
-turnaround. Adding `restore-keys` to the Kani cache remains the cheapest fix and
-is listed as a contingency lever, not part of this work.
+exclusions), so the Kani cache is already cold and the next run of this job
+will pay the full install cost. Treat the first measured timing as pessimistic
+and re-measure on a second run before concluding anything about the budget.
+`main` has also added a `build-test-windows` job that gates merges; it is
+separate from `kani-smoke` and does not share its budget, but it lengthens
+overall pull-request turnaround. Adding `restore-keys` to the Kani cache
+remains the cheapest fix and is listed as a contingency lever, not part of this
+work.
 
 ### Terms used in this plan
 
@@ -327,8 +330,8 @@ writing the user-facing README section is 4.4.1's job.
    same strings. No pre-existing test may be edited to accommodate the change.
    If one needs editing, that is evidence of a behaviour change: stop.
 2. **No public API widening.** `netsuke::ir`'s public surface must not grow.
-   `ADR-004` Option D rejected verification ports on that surface. New items
-   are `pub(super)` at widest.
+   `ADR-004` Option D rejected verification ports on that surface. New items are
+   `pub(super)` at widest.
 3. **No new dependencies.** `Cargo.toml` must not gain an entry.
 4. **No capacity limits in production.** Do not introduce a fixed-capacity
    buffer, a maximum placeholder count, or any other new bound into the
@@ -363,9 +366,9 @@ Stop and escalate. Do not work around these.
 - **Local verification budget.** If capped `make kani-ir` exceeds **8 minutes**
   locally, stop and report the per-harness timings. Eight, not fourteen: the
   measured CI baseline is 3:45 of which about a minute is solving, GitHub
-  runners are roughly 1.3 to 1.8 times slower per core, and the runner-to-runner
-  variance is around 30 per cent. Fourteen minutes locally would be a coin flip
-  against the 20-minute cap.
+  runners are roughly 1.3 to 1.8 times slower per core, and the
+  runner-to-runner variance is around 30 per cent. Fourteen minutes locally
+  would be a coin flip against the 20-minute cap.
 - **Measured CI budget.** After the first pull-request run that includes new
   harnesses, read the actual step duration rather than guessing:
 
@@ -391,65 +394,62 @@ Stop and escalate. Do not work around these.
 ## Risks
 
 - **Symbolic `char` is the wrong encoding and will blow the budget.**
-  Severity: high. Likelihood: high if not designed against.
-  Kani's `Arbitrary for char` generates a `u32` and constrains it away from
-  surrogates and out-of-range values: 32 symbolic bits and a validity invariant
-  per symbol. Roadmap 4.2.2 already found symbolic `char` and `String`
-  construction too expensive and replaced it with symbolic selectors over
-  concrete values.
+  Severity: high. Likelihood: high if not designed against. Kani's
+  `Arbitrary for char` generates a `u32` and constrains it away from surrogates
+  and out-of-range values: 32 symbolic bits and a validity invariant per
+  symbol. Roadmap 4.2.2 already found symbolic `char` and `String` construction
+  too expensive and replaced it with symbolic selectors over concrete values.
   Mitigation: this plan **mandates** symbolic `u8`, constrained by
   `kani::assume` to membership in a small set of concrete ASCII byte values,
   then widened with `char::from(b)` — a zero-extension, not a multiplexer. No
   harness may call `kani::any::<char>()` or `kani::any::<[char; N]>()`.
 
 - **Symbolic UTF-8 encoding and decoding is a hidden dominant cost.**
-  Severity: high. Likelihood: high if not designed against.
-  `substitute` takes `&str` and immediately does `template.chars().collect()`.
-  Feeding it a symbolic string means symbolically encoding UTF-8 in the harness
-  and symbolically decoding it in production, with four-way length branching
-  per character.
-  Mitigation: EP-M1's only production change is to split `substitute` into a
-  `&[char]`-taking `substitute_chars` plus a one-line `&str` wrapper. Harnesses
-  call `substitute_chars` and never construct a symbolic `&str`. This is the
-  entire justification for the seam; it is a cost decision, not a style one.
+  Severity: high. Likelihood: high if not designed against. `substitute` takes
+  `&str` and immediately does `template.chars().collect()`. Feeding it a
+  symbolic string means symbolically encoding UTF-8 in the harness and
+  symbolically decoding it in production, with four-way length branching per
+  character. Mitigation: EP-M1's only production change is to split
+  `substitute` into a `&[char]`-taking `substitute_chars` plus a one-line
+  `&str` wrapper. Harnesses call `substitute_chars` and never construct a
+  symbolic `&str`. This is the entire justification for the seam; it is a cost
+  decision, not a style one.
 
 - **Anything touching `shlex::split` symbolically is expensive.**
-  Severity: high. Likelihood: high.
-  `interpolate_command_with_bindings` calls it unconditionally, so no alphabet
-  restriction avoids it — restriction makes `shlex` *total*, not absent, and
-  CBMC still executes its state machine and builds a symbolic `Vec<String>`.
-  `ADR-004` records a `Utf8PathBuf` proof hitting the 8 GiB cap at N=3.
-  Mitigation: only two harnesses touch `interpolate_command_with_bindings`, and
-  both target a window of 6 to 8 characters — enough to exhibit the specific
-  fault each is designed to catch (a backtick plus a `$in` plus a
-  binding-introduced backtick fits in six). Longer inputs are handed to Proptest
-  against the real crate in EP-M5. Revision 1's INV-GUARD-A/B split is dropped;
-  it paid full price for no saving.
+  Severity: high. Likelihood: high. `interpolate_command_with_bindings` calls
+  it unconditionally, so no alphabet restriction avoids it — restriction makes
+  `shlex` *total*, not absent, and CBMC still executes its state machine and
+  builds a symbolic `Vec<String>`. `ADR-004` records a `Utf8PathBuf` proof
+  hitting the 8 GiB cap at N=3. Mitigation: only two harnesses touch
+  `interpolate_command_with_bindings`, and both target a window of 6 to 8
+  characters — enough to exhibit the specific fault each is designed to catch
+  (a backtick plus a `$in` plus a binding-introduced backtick fits in six).
+  Longer inputs are handed to Proptest against the real crate in EP-M5.
+  Revision 1's INV-GUARD-A/B split is dropped; it paid full price for no saving.
 
 - **The roadmap's 256-character, 8-placeholder bound is not reachable by
-  Kani.** Severity: medium. Likelihood: high.
-  Mitigation: two things, and this is the plan's main structural answer.
-  First, for `RM-4.2.3.a` the bound largely dissolves: `find_substitution`'s
-  sigil path reads only `chars[pos - 1 ..= pos + 4]`, so an eight-character
-  window with a symbolic offset covers every occurrence in a string of any
-  length. The result is complete for the sigil contract, not merely bounded.
-  Second, where a genuine bound remains (the string-level and guard harnesses),
-  EP-M0 measures it and EP-M5 hands the residual range to Proptest, exactly as
-  `ADR-004` did for roadmap 4.2.1's unreachable 10-node bound.
+  Kani.** Severity: medium. Likelihood: high. Mitigation: two things, and this
+  is the plan's main structural answer. First, for `RM-4.2.3.a` the bound
+  largely dissolves: `find_substitution`'s sigil path reads only
+  `chars[pos - 1 ..= pos + 4]`, so an eight-character window with a symbolic
+  offset covers every occurrence in a string of any length. The result is
+  complete for the sigil contract, not merely bounded. Second, where a genuine
+  bound remains (the string-level and guard harnesses), EP-M0 measures it and
+  EP-M5 hands the residual range to Proptest, exactly as `ADR-004` did for
+  roadmap 4.2.1's unreachable 10-node bound.
 
 - **Marker-form placeholders fall outside every plausible alphabet.**
-  Severity: medium. Likelihood: certain if not designed against.
-  `INS_TOKEN` is 27 characters containing uppercase letters. No harness
-  alphabet small enough to be tractable contains them, and no harness window
-  small enough is 27 characters wide. A harness over such an alphabet would
-  leave `try_match_token` structurally unreachable — a mutation deleting the
-  entire marker arm of `find_substitution` would survive every harness.
-  Mitigation: `try_match_token` already takes the token as a `&str` parameter.
-  A dedicated harness drives it with a **short** token over a matching
-  alphabet, proving the length-generic matching contract and the deliberate
-  absence of a boundary rule. The residual gap — that the specific 27-character
-  constants are not proved — is stated in `ADR-004` and covered by the existing
-  property tests.
+  Severity: medium. Likelihood: certain if not designed against. `INS_TOKEN` is
+  27 characters containing uppercase letters. No harness alphabet small enough
+  to be tractable contains them, and no harness window small enough is 27
+  characters wide. A harness over such an alphabet would leave
+  `try_match_token` structurally unreachable — a mutation deleting the entire
+  marker arm of `find_substitution` would survive every harness. Mitigation:
+  `try_match_token` already takes the token as a `&str` parameter. A dedicated
+  harness drives it with a **short** token over a matching alphabet, proving
+  the length-generic matching contract and the deliberate absence of a boundary
+  rule. The residual gap — that the specific 27-character constants are not
+  proved — is stated in `ADR-004` and covered by the existing property tests.
 
 - **The existing test suite cannot detect a subtle refactor regression.**
   Severity: high. Likelihood: medium.
@@ -458,28 +458,27 @@ Stop and escalate. Do not work around these.
   quote, and every template is a fixed literal.
   `tests/command_escaping_tests.rs` is six examples. Total adversarial coverage
   of the boundary rule is `$input` and `$output_dir`. "Existing tests pass
-  unedited" is therefore necessary but nowhere near sufficient.
-  Mitigation: EP-M1 adds the characterization table above as `#[rstest]` cases
-  **before** touching production, and builds the adversarial Proptest generator
-  (alphabet including `$`, backtick, quote, backslash, space) at EP-M1 rather
-  than deferring it to EP-M5.
+  unedited" is therefore necessary but nowhere near sufficient. Mitigation:
+  EP-M1 adds the characterization table above as `#[rstest]` cases **before**
+  touching production, and builds the adversarial Proptest generator (alphabet
+  including `$`, backtick, quote, backslash, space) at EP-M1 rather than
+  deferring it to EP-M5.
 
 - **Mutation patches rot silently and nothing detects it.**
-  Severity: medium. Likelihood: certain over time.
-  Nothing in the Makefile, the workflows, or the test suite applies the patches
-  under `docs/verification/mutations/`. There are already twelve patches for
-  thirteen harnesses.
-  Mitigation: EP-M2 adds a contract test that runs `git apply --check` over
-  every patch and asserts every `#[kani::proof]` harness has a patch or an
-  explicitly justified exemption. This is cheap, runs in `make test`, and is
-  the highest-value single addition in this plan.
+  Severity: medium. Likelihood: certain over time. Nothing in the Makefile, the
+  workflows, or the test suite applies the patches under
+  `docs/verification/mutations/`. There are already twelve patches for thirteen
+  harnesses. Mitigation: EP-M2 adds a contract test that runs
+  `git apply --check` over every patch and asserts every `#[kani::proof]`
+  harness has a patch or an explicitly justified exemption. This is cheap, runs
+  in `make test`, and is the highest-value single addition in this plan.
 
 - **`$$in` and `x__NETSUKE_INS_PLACEHOLDER__` may be defects rather than
-  contract.** Severity: medium. Likelihood: medium.
-  Mitigation: EP-M1 pins both with characterization tests and asks the
-  maintainer to classify them. Whatever the classification, changing them is a
-  behaviour change and out of scope here (Constraint 1). The proofs document
-  reality; if reality is wrong, that is a separate roadmap item.
+  contract.** Severity: medium. Likelihood: medium. Mitigation: EP-M1 pins both
+  with characterization tests and asks the maintainer to classify them.
+  Whatever the classification, changing them is a behaviour change and out of
+  scope here (Constraint 1). The proofs document reality; if reality is wrong,
+  that is a separate roadmap item.
 
 - **`ADR-004` numbering collision.** Severity: low. Likelihood: certain.
   Three files already share the `adr-004` prefix; this is a known accepted
@@ -502,26 +501,26 @@ Stop and escalate. Do not work around these.
   contains a literal backtick character.
 - **AXIOM-WINDOW.** For the sigil forms, `find_substitution(chars, pos, ..)`
   reads only `chars[pos - 1 ..= pos + 4]`. This is verifiable by inspection of
-  lines 138-211 and is the basis for the completeness claim in
-  `OBL-SIGIL`. It is **discharged, not merely asserted**: the harness quantifies
-  over a symbolic `pos` across an eight-character array, so every window
-  position including both truncated ends is exercised, and the mutation patch
-  perturbs the boundary probe so a wrong window would be caught.
+  lines 138-211 and is the basis for the completeness claim in `OBL-SIGIL`. It
+  is **discharged, not merely asserted**: the harness quantifies over a symbolic
+  `pos` across an eight-character array, so every window position including
+  both truncated ends is exercised, and the mutation patch perturbs the
+  boundary probe so a wrong window would be caught.
 
 ### Obligations
 
----
+______________________________________________________________________
 
 **OBL-SIGIL** — *sigil placeholders match exactly when the contract says they
 should.*
 
 Statement: for every character array `chars` over ALPHABET-T and every offset
 `pos` within it, `find_substitution(chars, pos, ins, outs)` returns
-`Some((ins, 3))` **if and only if** `chars[pos] == '$'`, `chars[pos + 1] == 'i'`,
-`chars[pos + 2] == 'n'`, `chars.get(pos - 1)` is absent or not an identifier
-character, and `chars.get(pos + 3)` is absent or not an identifier character;
-and symmetrically returns `Some((outs, 4))` for `$out` with the lookahead at
-`pos + 4`; and returns `None` otherwise.
+`Some((ins, 3))` **if and only if** `chars[pos] == '$'`,
+`chars[pos + 1] == 'i'`, `chars[pos + 2] == 'n'`, `chars.get(pos - 1)` is
+absent or not an identifier character, and `chars.get(pos + 3)` is absent or
+not an identifier character; and symmetrically returns `Some((outs, 4))` for
+`$out` with the lookahead at `pos + 4`; and returns `None` otherwise.
 
 - **Method:** bounded model check (Kani), driving production
   `find_substitution` directly.
@@ -540,12 +539,12 @@ and symmetrically returns `Some((outs, 4))` for `$out` with the lookahead at
 
   then widened by `char::from`. The letters `i`, `n`, `o`, `u`, `t` build the
   placeholders; `a` represents "identifier character not in any placeholder";
-  the space represents "non-identifier, non-special"; `_` is the non-alphanumeric
-  identifier character; the backtick is present for the string-level harnesses
-  that share the alphabet. `pos` is a symbolic `usize` with
-  `kani::assume(pos < 8)`. Eight characters with a symbolic offset covers every
-  window position under AXIOM-WINDOW, including both truncated ends, so the
-  result holds for strings of any length.
+  the space represents "non-identifier, non-special"; `_` is the
+  non-alphanumeric identifier character; the backtick is present for the
+  string-level harnesses that share the alphabet. `pos` is a symbolic `usize`
+  with `kani::assume(pos < 8)`. Eight characters with a symbolic offset covers
+  every window position under AXIOM-WINDOW, including both truncated ends, so
+  the result holds for strings of any length.
 - **Oracle:** the right-hand side of the biconditional is computed in the
   harness by direct indexing and a local `fn is_ident(b: u8) -> bool`. This is
   an authorized oracle (see `Decision log`); it must be written from the
@@ -560,7 +559,8 @@ and symmetrically returns `Some((outs, 4))` for `$out` with the lookahead at
     rejected by the trailing boundary; and that some input matches at `pos == 0`
     (the `wrapping_sub` edge). Any of these reported `UNSATISFIABLE` means the
     domain is wrong — treat it as a failure.
-  - *Mutation.* `docs/verification/mutations/ir__cmd_interpolate__verification__sigil_placeholder_match_is_exact.patch`
+  - *Mutation.*
+    `docs/verification/mutations/ir__cmd_interpolate__verification__sigil_placeholder_match_is_exact.patch`
     deletes the `next_ok` conjunct from `has_valid_word_boundaries`
     (`src/ir/cmd_interpolate.rs:161`), so `$ina` rewrites. That breaks the "only
     if" direction and the harness must fail.
@@ -570,7 +570,7 @@ and symmetrically returns `Some((outs, 4))` for `$out` with the lookahead at
     property would hold vacuously on one side. That mutation tests the opposite
     obligation and revision 1 had it backwards.
 
----
+______________________________________________________________________
 
 **OBL-MARKER** — *marker placeholders match on exact text and deliberately
 ignore token boundaries.*
@@ -606,14 +606,15 @@ character for character and `pos + T.len() <= chars.len()`; and no property of
   The existing property test `long_placeholders_outside_backticks_are_replaced`
   covers the real constants. Record this in `ADR-004`.
 
----
+______________________________________________________________________
 
-**OBL-SPEC** — *the scanner agrees with a declarative specification, so backtick
-regions are preserved.*
+**OBL-SPEC** — *the scanner agrees with a declarative specification, so
+backtick regions are preserved.*
 
 Statement: for every `chars` over ALPHABET-T and every short `ins`/`outs`,
-`substitute_chars(chars, ins, outs)` equals `spec_substitute(chars, ins, outs)`,
-where `spec_substitute` is a declarative oracle defined in the harness.
+`substitute_chars(chars, ins, outs)` equals
+`spec_substitute(chars, ins, outs)`, where `spec_substitute` is a declarative
+oracle defined in the harness.
 
 - **Method:** bounded model check (Kani), differential against a harness-local
   oracle.
@@ -656,7 +657,7 @@ where `spec_substitute` is a declarative oracle defined in the harness.
     `i += 1` at line 256. The oracle must reject this. If it does not, the
     oracle is paraphrasing production and must be rewritten.
 
----
+______________________________________________________________________
 
 **OBL-ODD** — *a command whose substituted form has an odd backtick count is
 rejected.*
@@ -668,8 +669,8 @@ odd, then `interpolate_command_with_bindings(template, bindings)` returns
 
 - **Method:** bounded model check (Kani).
 - **Rationale:** this is `RM-4.2.3.c`. The load-bearing word is *substituted*:
-  the count is taken after substitution, so a binding that introduces a backtick
-  must also trigger rejection.
+  the count is taken after substitution, so a binding that introduces a
+  backtick must also trigger rejection.
 - **The backtick count in the assertion must be computed by a harness-local
   fold, not by calling `has_unmatched_backticks`.** If the harness calls the
   production predicate, the mutation below flips both sides of the implication
@@ -698,7 +699,7 @@ odd, then `interpolate_command_with_bindings(template, bindings)` returns
   - *Mutation.* `...__odd_backticks_are_rejected.patch` changes
     `rem_euclid(2) != 0` to `== 0` at `src/ir/cmd_interpolate.rs:88`.
 
----
+______________________________________________________________________
 
 **OBL-GUARD** — *the guard is applied to the substituted command, not the
 template.*
@@ -729,10 +730,11 @@ say so in the developers' guide.
   enough to exhibit the placement fault: a backtick, a `$in`, and a
   binding-introduced backtick fit.
 - **Do not assert the `snippet` field.** `snippet` is
-  `interpolated.chars().take(160).collect()`; asserting it drags a 160-iteration
-  loop into the hardest formula in the suite and forces `#[kani::unwind(161)]`,
-  which Kani applies to *every* loop in the harness including `shlex`'s. The
-  `snippet` construction is covered by the existing unit tests.
+  `interpolated.chars().take(160).collect()`; asserting it drags a
+  160-iteration loop into the hardest formula in the suite and forces
+  `#[kani::unwind(161)]`, which Kani applies to *every* loop in the harness
+  including `shlex`'s. The `snippet` construction is covered by the existing
+  unit tests.
 - **Artefact:** `src/ir/cmd_interpolate_verification.rs`, harness
   `guard_applies_to_substituted_command`.
 - **Evidence:** capped `make kani-ir` reports `SUCCESS`.
@@ -746,7 +748,7 @@ say so in the developers' guide.
     `has_unmatched_backticks(&interpolated)` to
     `has_unmatched_backticks(template)` at `src/ir/cmd_interpolate.rs:107`.
 
----
+______________________________________________________________________
 
 **OBL-EQUIV** — *the `substitute_chars` split does not change behaviour.*
 
@@ -785,7 +787,7 @@ bindings, the string the pre-refactor implementation produced.
   actually produces `$`, backticks, and quotes; a generator that never emits
   them is a verification failure, not a pass.
 
----
+______________________________________________________________________
 
 **OBL-PATCHES** — *mutation evidence stays valid.*
 
@@ -830,10 +832,10 @@ patch or an explicitly justified exemption.
 
 ### Stage A — understand and measure (no production changes)
 
-Read `src/ir/cmd_interpolate.rs` end to end, then `src/ir/cycle_verification.rs`
-and `src/ir/cycle_support.rs` for the shape you are copying, then `ADR-004`,
-then the two Decision log entries in the 4.2.2 execplan covering the resource
-cap and `LD_LIBRARY_PATH`.
+Read `src/ir/cmd_interpolate.rs` end to end, then
+`src/ir/cycle_verification.rs` and `src/ir/cycle_support.rs` for the shape you
+are copying, then `ADR-004`, then the two Decision log entries in the 4.2.2
+execplan covering the resource cap and `LD_LIBRARY_PATH`.
 
 Run EP-M0. Write no harness until you have its measurement table.
 
@@ -845,9 +847,10 @@ Run EP-M0. Write no harness until you have its measurement table.
    `Surprises & discoveries` and escalate, because the behaviour you were about
    to freeze is not what you thought.
 2. **Harness compilation failure (EP-M2).** Write
-   `src/ir/cmd_interpolate_verification.rs` with `sigil_placeholder_match_is_exact`
-   and declare the module. Run the capped `make kani-ir`. Expect a compile
-   error naming the missing items. That is the red evidence.
+   `src/ir/cmd_interpolate_verification.rs` with
+   `sigil_placeholder_match_is_exact` and declare the module. Run the capped
+   `make kani-ir`. Expect a compile error naming the missing items. That is the
+   red evidence.
 
 ### Stage C — implementation and verification together
 
@@ -931,8 +934,8 @@ the next stage on a failing gate.
 ### EP-M2 — sigil and marker properties proved; patch gate added
 
 - **Outcome:** `sigil_placeholder_match_is_exact` and
-  `marker_token_match_is_exact` verify;
-  `tests/mutation_evidence_tests.rs` exists and passes.
+  `marker_token_match_is_exact` verify; `tests/mutation_evidence_tests.rs`
+  exists and passes.
 - **Requirements:** discharges `RM-4.2.3.a`, `OBL-SIGIL`, `OBL-MARKER`,
   `OBL-PATCHES`.
 - **Acceptance evidence:** capped `make kani-ir` reports `SUCCESS` for both new
@@ -1044,8 +1047,7 @@ fn substitute(template: &str, ins: &str, outs: &str) -> String {
 
 ```
 
-That is the whole retained production change: one function split. Nothing
-else.
+That is the whole retained production change: one function split. Nothing else.
 
 `src/ir/cmd_interpolate.rs` is 335 lines of a 400-line budget, so EP-M1 also
 moves the existing `mod tests` body into a new sibling
@@ -1119,8 +1121,8 @@ timeout --kill-after=20s 5m \
 
 To iterate on a single harness, add
 `KANI_FLAGS="--harness sigil_placeholder_match_is_exact"` to the `make`
-invocation. `KANI_FLAGS` is empty by default (Makefile line 17) and
-`kani-full` passes it straight through, so this needs no Makefile edit.
+invocation. `KANI_FLAGS` is empty by default (Makefile line 17) and `kani-full`
+passes it straight through, so this needs no Makefile edit.
 
 Expected shape of success:
 
@@ -1131,8 +1133,7 @@ Verification Time: 41.2s
 ```
 
 Expected shape with a mutation applied — this is what you want to see during
-the non-vacuity check, and you must confirm the named check is the intended
-one:
+the non-vacuity check, and you must confirm the named check is the intended one:
 
 ```plaintext
 Failed Checks: sigil match agrees with the boundary contract
@@ -1281,14 +1282,14 @@ The wrapper does not expose a peak-RSS measurement, so that column is recorded
 as unavailable rather than inferred from host-wide memory. No probe was
 OOM-killed.
 
-| Shape | N or M | Wall-clock | Peak RSS | Verdict |
-| --- | --- | --- | --- | --- |
-| `find_substitution` sigil window | 8 | 35.261s | unavailable | verified |
-| `find_substitution` sigil window | 16 | 27.877s | unavailable | verified |
-| `find_substitution` sigil window | 12 | 39.759s | unavailable | verified |
-| `substitute_chars` scanner | 8 | 5m cap | unavailable | timed out |
-| `substitute_chars` scanner | 6 | 5m cap | unavailable | timed out |
-| `interpolate_command_with_bindings` guard | 6 | not run | n/a | dominated by scanner |
+| Shape                                     | N or M | Wall-clock | Peak RSS    | Verdict              |
+| ----------------------------------------- | ------ | ---------- | ----------- | -------------------- |
+| `find_substitution` sigil window          | 8      | 35.261s    | unavailable | verified             |
+| `find_substitution` sigil window          | 16     | 27.877s    | unavailable | verified             |
+| `find_substitution` sigil window          | 12     | 39.759s    | unavailable | verified             |
+| `substitute_chars` scanner                | 8      | 5m cap     | unavailable | timed out            |
+| `substitute_chars` scanner                | 6      | 5m cap     | unavailable | timed out            |
+| `interpolate_command_with_bindings` guard | 6      | not run    | n/a         | dominated by scanner |
 
 `cargo kani --help` confirmed that 0.67.0 advertises `--jobs 4`; the M2 probe
 then established that it requires `--output-format terse`. The available
@@ -1317,11 +1318,12 @@ failed their named assertions, then passed after restoration. Each of the three
 Proptest mutation patches produced its intended counterexample before
 restoration.
 
-The final capped, four-worker run completed all 15 harnesses with zero failures.
-The sigil harness took 101.287 seconds in that parallel run and the marker
-harness took 31.502 seconds. `make check-fmt`, `make lint`, `make test` (2,389
-passed, 3 skipped, plus doctests), `make markdownlint`, and `make nixie` all
-passed. CodeRabbit returned zero findings at M2, M5, and M6. The M6 Kani log is
+The final capped, four-worker run completed all 15 harnesses with zero
+failures. The sigil harness took 101.287 seconds in that parallel run and the
+marker harness took 31.502 seconds. `make check-fmt`, `make lint`, `make test`
+(2,389 passed, 3 skipped, plus doctests), `make markdownlint`, and `make nixie`
+all passed. CodeRabbit returned zero findings at M2, M5, and M6. The M6 Kani
+log is
 `/tmp/kani-m6-cleanup-full-netsuke-4-2-3-kani-harnesses-for-command-interpolation.out`.
 
 `docs/users-guide.md` is intentionally unchanged: this task adds no
@@ -1353,14 +1355,14 @@ outside this local completion boundary and must be reported separately by CI.
 - [x] (2026-08-30) Plan approved by the maintainer as a whole, authorizing
   implementation to begin at EP-M0.
 - [x] (2026-08-30) EP-M0 feasibility spike and bound decision. The sigil
-  window verified at N=8, N=12, and N=16; the full scanner timed out at M=8
-  and M=6. See `Artefacts and notes` and `Decision log`.
+  window verified at N=8, N=12, and N=16; the full scanner timed out at M=8 and
+  M=6. See `Artefacts and notes` and `Decision log`.
 - [x] (2026-08-30) EP-M1 production seam; behaviour unchanged. Added the
   `substitute_chars` technical seam, characterization cases, and an adversarial
   Proptest; removed the temporary differential oracle.
 - [x] (2026-08-30) EP-M2 sigil and marker harnesses; mutation-patch contract
-  test. The final individual proofs took 66.686s and 22.644s respectively;
-  all five sigil covers and four marker covers were satisfied. The full suite
+  test. The final individual proofs took 66.686s and 22.644s respectively; all
+  five sigil covers and four marker covers were satisfied. The full suite
   completed 15 harnesses with zero failures under the cap using four workers
   and terse output. The contract test now enforces 14 patches for 15 proofs,
   with the documented cycle-kernel exemption, and refreshed six stale patches.
@@ -1383,44 +1385,44 @@ outside this local completion boundary and must be reported separately by CI.
 
 - Observation: `substitute` rewrites `$in` inside `$$in`, producing `$<ins>`.
   Evidence: `has_valid_word_boundaries` (`src/ir/cmd_interpolate.rs:154-162`)
-  with `is_identifier_char` (lines 126-128); `$` is not an identifier character.
-  Impact: `$$` is Ninja's escape for a literal dollar, so an author writing
-  `$$in` to mean the literal text `$in` gets a substitution. This may be
-  contractual or a latent defect. EP-M1 pins it with a characterization test;
-  the maintainer must classify it before EP-M2 encodes it in a proof. Changing
-  it is out of scope (Constraint 1).
+  with `is_identifier_char` (lines 126-128); `$` is not an identifier
+  character. Impact: `$$` is Ninja's escape for a literal dollar, so an author
+  writing `$$in` to mean the literal text `$in` gets a substitution. This may
+  be contractual or a latent defect. EP-M1 pins it with a characterization
+  test; the maintainer must classify it before EP-M2 encodes it in a proof.
+  Changing it is out of scope (Constraint 1).
 
 - Observation: marker-form placeholders are matched with no boundary rule and
-  no `$` prefix, so `x__NETSUKE_INS_PLACEHOLDER__` is rewritten.
-  Evidence: `try_match_token` (lines 213-233), called unconditionally from
-  `find_substitution`'s `or_else` arm (lines 207-210).
-  Impact: defensible, since the markers are machine-generated, but it is an
-  asymmetry the harnesses must encode deliberately. It is also why `OBL-MARKER`
-  exists: without it, no harness can reach that arm at all.
+  no `$` prefix, so `x__NETSUKE_INS_PLACEHOLDER__` is rewritten. Evidence:
+  `try_match_token` (lines 213-233), called unconditionally from
+  `find_substitution`'s `or_else` arm (lines 207-210). Impact: defensible,
+  since the markers are machine-generated, but it is an asymmetry the harnesses
+  must encode deliberately. It is also why `OBL-MARKER` exists: without it, no
+  harness can reach that arm at all.
 
 - Observation: nothing in the repository validates the mutation patches, and
-  there are twelve patches for thirteen harnesses.
-  Evidence: no reference to `docs/verification/mutations` in the Makefile, the
-  workflows, or any test; `ls docs/verification/mutations | wc -l` is 12 while
-  `grep -c 'kani::proof'` over the two verification modules totals 13.
-  Impact: the repository's non-vacuity discipline is convention-only. `OBL-
-  PATCHES` closes this. The missing patch belongs to roadmap 4.2.2's adapter
-  harness; raise it rather than fixing it here. Tracked as issue #585.
+  there are twelve patches for thirteen harnesses. Evidence: no reference to
+  `docs/verification/mutations` in the Makefile, the workflows, or any test;
+  `ls docs/verification/mutations | wc -l` is 12 while `grep -c 'kani::proof'`
+  over the two verification modules totals 13. Impact: the repository's
+  non-vacuity discipline is convention-only. `OBL- PATCHES` closes this. The
+  missing patch belongs to roadmap 4.2.2's adapter harness; raise it rather
+  than fixing it here. Tracked as issue #585.
 
-- Observation: `docs/execplans/4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks.md`
+- Observation:
+  `docs/execplans/4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks.md`
   carries `Status: READY FOR REVIEW` although its own Progress and Outcomes
   sections, the roadmap checkmarks, and the committed harnesses all show the
-  work complete.
-  Impact: none here, but do not treat execplan status fields as a source of
-  truth. The field is stale in that file and uses at least five different
-  vocabularies across the directory. Tracked as issue #586.
+  work complete. Impact: none here, but do not treat execplan status fields as
+  a source of truth. The field is stale in that file and uses at least five
+  different vocabularies across the directory. Tracked as issue #586.
 
 - Observation: the fallback marker matcher remains reachable when Kani explores
   a sigil candidate, and `try_match_token` counts a 27-character marker with
   `str::chars`. Evidence: the M0 scanner logs required loop unrolling through
   iteration 28 at `src/ir/cmd_interpolate.rs:229`. Impact: every retained Kani
-  harness must use an unwind at least 32; the default unwind of 6 is unsound for
-  this path.
+  harness must use an unwind at least 32; the default unwind of 6 is unsound
+  for this path.
 
 - Observation: Kani 0.67.0 accepts `--jobs 4` only with
   `--output-format terse`; the former alone fails before verification begins.
@@ -1430,156 +1432,145 @@ outside this local completion boundary and must be reported separately by CI.
 
 ## Decision log
 
-Three entries below were marked **requires maintainer acceptance**, because they
-deviate from the roadmap's literal wording or from a constraint this plan
+Three entries below were marked **requires maintainer acceptance**, because
+they deviate from the roadmap's literal wording or from a constraint this plan
 otherwise imposes. **All three were ratified by the maintainer on 2026-08-24**
 and are now marked **accepted**. No decision in this log is outstanding.
 
 - **Decision:** Withdraw revision 1's `PlanBuffer` / `ScanOutcome` /
   `Substitution` kernel and replace it with a three-line `substitute_chars`
-  seam.
-  **Rationale:** the design review found the kernel disproportionate and
+  seam. **Rationale:** the design review found the kernel disproportionate and
   actively harmful. It would have introduced a fixed capacity into a currently
   unbounded production path, and every resolution of the overflow case is bad:
   truncation corrupts silently, erroring breaks previously valid manifests,
   growing defeats the purpose, and chunking loses `in_backticks` state at chunk
   edges — in code that decides how shell commands are built. It was also
   unnecessary: `find_substitution` already takes `&[char]` and allocates
-  nothing, so the properties needing the largest domain need no refactor at all,
-  and the cited precedent `rotate_cycle_by` allocates a `Vec` and still verifies
-  at N=4. The real cost driver is symbolic UTF-8 across the `&str` boundary,
-  which the seam addresses directly. Constraint 4 now forbids the original
-  approach.
-  **Date/Author:** 2026-08-24, planning agent.
+  nothing, so the properties needing the largest domain need no refactor at
+  all, and the cited precedent `rotate_cycle_by` allocates a `Vec` and still
+  verifies at N=4. The real cost driver is symbolic UTF-8 across the `&str`
+  boundary, which the seam addresses directly. Constraint 4 now forbids the
+  original approach. **Date/Author:** 2026-08-24, planning agent.
 
 - **Decision:** Reformulate `RM-4.2.3.d` as the guard-placement biconditional
   `OBL-GUARD` rather than asserting `shlex::split(result).is_some()` on the
-  `Ok` branch. **Accepted by the maintainer, 2026-08-24.**
-  **Rationale:** the literal reading restates the branch condition at
+  `Ok` branch. **Accepted by the maintainer, 2026-08-24.** **Rationale:** the
+  literal reading restates the branch condition at
   `src/ir/cmd_interpolate.rs:107` and cannot fail for any implementation. The
   ExecPlan discipline treats assuming the conclusion as a verification failure.
   The biconditional adds the "only if" direction, the result identity, and
   guard placement, each with a real failure mode demonstrated by the mutation
-  patch. Its limits are stated honestly in `OBL-GUARD`.
-  **Date/Author:** 2026-08-24, planning agent.
+  patch. Its limits are stated honestly in `OBL-GUARD`. **Date/Author:**
+  2026-08-24, planning agent.
 
 - **Decision:** Permit harness-local oracles for side conditions, and a
   harness-local declarative specification for `OBL-SPEC`. **Accepted by the
-  maintainer, 2026-08-24.**
-  **Rationale:** `ADR-004` Option C forbids a harness-side model *replacing* a
-  production path, and Option D rejects public verification ports. Neither
-  forbids an independently written oracle used as the right-hand side of an
-  assertion, which is the standard bounded-model-checking idiom and the only
-  way several of these obligations can fail at all. Without it, `OBL-ODD` would
-  compare `has_unmatched_backticks` against itself and its mutation would flip
-  both sides. `OBL-SPEC`'s oracle carries transcription risk, which is why the
-  plan mandates a structurally different formulation and an explicit
-  independence check against a second mutation.
-  **Date/Author:** 2026-08-24, planning agent.
+  maintainer, 2026-08-24.** **Rationale:** `ADR-004` Option C forbids a
+  harness-side model *replacing* a production path, and Option D rejects public
+  verification ports. Neither forbids an independently written oracle used as
+  the right-hand side of an assertion, which is the standard
+  bounded-model-checking idiom and the only way several of these obligations
+  can fail at all. Without it, `OBL-ODD` would compare
+  `has_unmatched_backticks` against itself and its mutation would flip both
+  sides. `OBL-SPEC`'s oracle carries transcription risk, which is why the plan
+  mandates a structurally different formulation and an explicit independence
+  check against a second mutation. **Date/Author:** 2026-08-24, planning agent.
 
 - **Decision:** Treat the roadmap's "256-character commands with at most 8
-  placeholders" as a target measured against in EP-M0, and expect to meet it
-  for `RM-4.2.3.a` by a window-completeness argument rather than by a large
-  bound. **Accepted by the maintainer, 2026-08-24**, including in advance the
-  case where EP-M0 shows the string-level bound falling short. EP-M0 therefore
-  does not set the plan to `BLOCKED` on a shortfall; it records the achieved
-  bound, the residual gap, and the Proptest hand-off, and continues. The
-  mechanical stop in `Tolerances` still applies if the sigil shape cannot reach
-  a window of 8 characters, because that would undermine the plan's premise
-  rather than merely narrow its reach.
-  **Rationale:** `ADR-004` records the identical collision for roadmap 4.2.1,
-  where a stated 10-node bound proved unreachable and was resolved by small
-  bounds plus a Proptest hand-off. For the sigil contract the bound largely
-  dissolves under AXIOM-WINDOW; for the string-level and guard harnesses it does
-  not, and EP-M5 covers the remainder.
+  placeholders" as a target measured against in EP-M0, and expect to meet it for
+  `RM-4.2.3.a` by a window-completeness argument rather than by a large bound.
+  **Accepted by the maintainer, 2026-08-24**, including in advance the case
+  where EP-M0 shows the string-level bound falling short. EP-M0 therefore does
+  not set the plan to `BLOCKED` on a shortfall; it records the achieved bound,
+  the residual gap, and the Proptest hand-off, and continues. The mechanical
+  stop in `Tolerances` still applies if the sigil shape cannot reach a window
+  of 8 characters, because that would undermine the plan's premise rather than
+  merely narrow its reach. **Rationale:** `ADR-004` records the identical
+  collision for roadmap 4.2.1, where a stated 10-node bound proved unreachable
+  and was resolved by small bounds plus a Proptest hand-off. For the sigil
+  contract the bound largely dissolves under AXIOM-WINDOW; for the string-level
+  and guard harnesses it does not, and EP-M5 covers the remainder.
   **Date/Author:** 2026-08-24, planning agent.
 
 - **Decision:** Mandate symbolic `u8` constrained to concrete ASCII values and
-  widened with `char::from`, never `kani::any::<char>()`.
-  **Rationale:** `Arbitrary for char` costs 32 symbolic bits plus a validity
-  invariant per symbol. Roadmap 4.2.2 already abandoned symbolic `char` and
-  `String` construction for the same reason. A `u8` index into a constant table
-  was also considered and rejected: it uses fewer input bits but reintroduces a
-  ten-way multiplexer per symbol.
-  **Date/Author:** 2026-08-24, planning agent.
+  widened with `char::from`, never `kani::any::<char>()`. **Rationale:**
+  `Arbitrary for char` costs 32 symbolic bits plus a validity invariant per
+  symbol. Roadmap 4.2.2 already abandoned symbolic `char` and `String`
+  construction for the same reason. A `u8` index into a constant table was also
+  considered and rejected: it uses fewer input bits but reintroduces a ten-way
+  multiplexer per symbol. **Date/Author:** 2026-08-24, planning agent.
 
 - **Decision:** Do not retain a `cfg(kani)` `CommandBindings::from_parts`
-  constructor.
-  **Rationale:** the M0 cap decision hands scanner and guard properties to the
-  child Proptest module, which can construct raw bindings without changing the
-  production API. Removing the unused proof-only constructor keeps the Kani
-  build warning-free and avoids a seam with no surviving proof consumer.
-  **Date/Author:** 2026-08-30, implementation agent.
+  constructor. **Rationale:** the M0 cap decision hands scanner and guard
+  properties to the child Proptest module, which can construct raw bindings
+  without changing the production API. Removing the unused proof-only
+  constructor keeps the Kani build warning-free and avoids a seam with no
+  surviving proof consumer. **Date/Author:** 2026-08-30, implementation agent.
 
 - **Decision:** Add `tests/mutation_evidence_tests.rs`, a contract test that
   `git apply --check`s every mutation patch and asserts harness parity.
   **Rationale:** three independent review lenses identified the absence of any
   gate over `docs/verification/mutations/` as the highest-value cheap addition.
   The discipline is what makes every Kani result in this repository
-  non-vacuous, and it currently rests on convention alone.
-  **Date/Author:** 2026-08-24, planning agent.
+  non-vacuous, and it currently rests on convention alone. **Date/Author:**
+  2026-08-24, planning agent.
 
 - **Decision:** Do not use `ortho_config`, and make no change to
-  `docs/users-guide.md`.
-  **Rationale:** the work introduces no configuration and no user-visible
-  behaviour. The user-facing placeholder contract is roadmap 4.4.1, which
-  `Requires 4.2.3`; `docs/developers-guide.md` is the correct destination under
-  AGENTS.md and gives 4.4.1 its source material.
+  `docs/users-guide.md`. **Rationale:** the work introduces no configuration
+  and no user-visible behaviour. The user-facing placeholder contract is
+  roadmap 4.4.1, which `Requires 4.2.3`; `docs/developers-guide.md` is the
+  correct destination under AGENTS.md and gives 4.4.1 its source material.
   **Date/Author:** 2026-08-24, planning agent.
 
 - **Decision:** Carry this plan forward unchanged in substance across the
-  rebase onto `origin/main` at `7e5c2679`.
-  **Rationale:** that commit adds target descriptions and `netsuke help
-  targets`. Its only change under `src/ir/` is a comment in
-  `src/ir/from_manifest.rs` recording that target descriptions are discovery
-  metadata and never take part in recipe resolution — which reinforces rather
-  than disturbs the boundary this plan verifies. It touches no file this plan
-  modifies, adds no shared helper or pattern relevant to command
-  interpolation, and leaves `src/ir/cmd_interpolate.rs`, `src/ir/cycle*.rs`,
-  the Makefile, and the CI workflow untouched. Its additions to
-  `docs/developers-guide.md` sit outside the formal-verification sections. The
-  only consequence is line-number drift in citations, refreshed in this
-  revision.
-  **Date/Author:** 2026-08-24, planning agent.
+  rebase onto `origin/main` at `7e5c2679`. **Rationale:** that commit adds
+  target descriptions and `netsuke help targets`. Its only change under
+  `src/ir/` is a comment in `src/ir/from_manifest.rs` recording that target
+  descriptions are discovery metadata and never take part in recipe resolution
+  — which reinforces rather than disturbs the boundary this plan verifies. It
+  touches no file this plan modifies, adds no shared helper or pattern relevant
+  to command interpolation, and leaves `src/ir/cmd_interpolate.rs`,
+  `src/ir/cycle*.rs`, the Makefile, and the CI workflow untouched. Its
+  additions to `docs/developers-guide.md` sit outside the formal-verification
+  sections. The only consequence is line-number drift in citations, refreshed
+  in this revision. **Date/Author:** 2026-08-24, planning agent.
 
 - **Decision:** Carry this plan forward unchanged in substance across the
-  second rebase, onto `origin/main` at `aa93ef8b`.
-  **Rationale:** nine commits landed, including serial dependency ordering
-  (roadmap 3.14.3), configuration-load caching and observability, a Windows CI
-  job, and a large restructuring of `docs/developers-guide.md`. A semantic diff
-  over `src/ir` reports a new `DependencyOrder` enum, one added `BuildEdge`
-  field, and mechanical updates to four test helpers; `cmd_interpolate` does not
-  appear at all. `src/ir/cmd_interpolate.rs`,
-  `src/ir/cmd_interpolate_property_tests.rs`, `src/ir/from_manifest_support.rs`,
-  and `docs/verification/` are byte-identical, the harness count is still
-  thirteen, the patch count is still twelve, and the `kani-smoke` job keeps its
-  shape, its cache key, and its 20-minute cap. Two operational notes are folded
-  into `Risks` below. Citations were converted from line numbers to section
-  headings for Markdown documents, because two consecutive rebases have now
-  moved them and the numbers cannot be kept true.
-  **Date/Author:** 2026-08-24, planning agent.
+  second rebase, onto `origin/main` at `aa93ef8b`. **Rationale:** nine commits
+  landed, including serial dependency ordering (roadmap 3.14.3),
+  configuration-load caching and observability, a Windows CI job, and a large
+  restructuring of `docs/developers-guide.md`. A semantic diff over `src/ir`
+  reports a new `DependencyOrder` enum, one added `BuildEdge` field, and
+  mechanical updates to four test helpers; `cmd_interpolate` does not appear at
+  all. `src/ir/cmd_interpolate.rs`, `src/ir/cmd_interpolate_property_tests.rs`,
+  `src/ir/from_manifest_support.rs`, and `docs/verification/` are
+  byte-identical, the harness count is still thirteen, the patch count is still
+  twelve, and the `kani-smoke` job keeps its shape, its cache key, and its
+  20-minute cap. Two operational notes are folded into `Risks` below. Citations
+  were converted from line numbers to section headings for Markdown documents,
+  because two consecutive rebases have now moved them and the numbers cannot be
+  kept true. **Date/Author:** 2026-08-24, planning agent.
 
 - **Decision:** Extend `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md`
-  rather than minting a new ADR number.
-  **Rationale:** the same decision — how far to bound Kani harnesses and where
-  to hand off — applied to a third subject. Roadmap 4.2.2 set the precedent, and
-  three files already share the `adr-004` prefix.
-  **Date/Author:** 2026-08-24, planning agent.
+  rather than minting a new ADR number. **Rationale:** the same decision — how
+  far to bound Kani harnesses and where to hand off — applied to a third
+  subject. Roadmap 4.2.2 set the precedent, and three files already share the
+  `adr-004` prefix. **Date/Author:** 2026-08-24, planning agent.
 
 - **Decision:** Continue after the EP-M0 string-level shortfall with only the
   small, allocation-free sigil and marker proofs; discharge scanner, backtick,
   and guard behaviour through the mandated Proptest hand-off rather than add
   harnesses that exceed the five-minute cap. **Accepted in advance by the
-  maintainer on 2026-08-24; measured 2026-08-30.**
-  **Rationale:** `find_substitution` verified at N=8, N=12, and N=16, so the
-  pre-accepted window argument remains valid. In contrast, the production
-  scanner timed out at M=8 and again at M=6 under the mandatory resource cap.
-  The guard necessarily invokes that scanner first, so a guard probe would not
-  establish a feasible independent bound. The full domain therefore belongs to
-  EP-M5's 256-character, eight-placeholder Proptest coverage. This decision
-  preserves the plan's stated safety boundary without weakening the resource
-  cap or changing production behaviour.
-  **Date/Author:** 2026-08-30, implementation agent.
+  maintainer on 2026-08-24; measured 2026-08-30.** **Rationale:**
+  `find_substitution` verified at N=8, N=12, and N=16, so the pre-accepted
+  window argument remains valid. In contrast, the production scanner timed out
+  at M=8 and again at M=6 under the mandatory resource cap. The guard
+  necessarily invokes that scanner first, so a guard probe would not establish
+  a feasible independent bound. The full domain therefore belongs to EP-M5's
+  256-character, eight-placeholder Proptest coverage. This decision preserves
+  the plan's stated safety boundary without weakening the resource cap or
+  changing production behaviour. **Date/Author:** 2026-08-30, implementation
+  agent.
 
 - **Decision:** Guard the marker fallback in `find_substitution` by its `_`
   prefix before asking `try_match_token` to count either 27-character marker.
@@ -1587,8 +1578,79 @@ and are now marked **accepted**. No decision in this log is outstanding.
   preserves every output while avoiding an unrelated long-token loop in the
   sigil proof's rejected cases. The dedicated marker proof still drives the
   full matcher directly. Existing characterization and property tests remain
-  the behavioural regression contract.
-  **Date/Author:** 2026-08-30, implementation agent.
+  the behavioural regression contract. **Date/Author:** 2026-08-30,
+  implementation agent.
+
+## Rebase integration note
+
+2026-08-30 — rebased onto `origin/main` at `95d90181` (including `#565` and
+`#597`). The rebase found that `#565` had converted `cmd_interpolate` into a
+module directory and introduced a POSIX security boundary that rejects a
+recognized placeholder inside backticks. Keeping the old one-pass scanner or
+its preservation-oriented Proptest oracle would have both regressed that
+security fix and made the branch fail to compile.
+
+- **Decision:** retain the target branch's fallible `SubstitutionTraversal` and
+  place the two Kani proofs in `src/ir/cmd_interpolate/verification.rs`. The
+  proofs still drive the private production matchers directly, so their stated
+  sigil and marker boundary contracts are unchanged.
+- **Decision:** retain the target branch's dynamic Kani mutation-evidence
+  discovery rather than restore this plan's superseded static inventory. Extend
+  it narrowly for the three named Proptest mutation patches, which have no Kani
+  harness because they cover the scanner and command guard outside the feasible
+  Kani resource bound.
+- **Finding:** all five interpolation mutation patches were stale because the
+  source moved from `src/ir/cmd_interpolate.rs` to
+  `src/ir/cmd_interpolate/{mod,substitution}.rs`. They were regenerated against
+  the refactored production code and `git apply --check` now accepts each one.
+- **Finding:** the independent scanner oracle must return either substituted
+  text or the original template as an invalid-command outcome. This preserves
+  independent agreement coverage while accurately modelling the target branch's
+  protected-placeholder rejection.
+- **Progress:** replay completed through all ten commits. The focused
+  `cargo check --tests`, all five mutation-patch applicability checks, and the
+  complete deterministic suite passed: `make check-fmt`, `make test` (2,647
+  passed, 3 skipped, plus doctests), `make typecheck`, `make lint`,
+  `make markdownlint`, and `make nixie`. The capped `make kani-ir` run verified
+  all 15 harnesses with zero failures. Final `coderabbit review --agent`
+  completed with zero concerns.
+
+2026-09-01 — rebasing onto `origin/main` at `22cf1091` incorporates the target
+branch's `RecipeShell` separation. POSIX routes preserve the protected-region
+security boundary, while PowerShell treats backticks as native escapes and does
+not apply POSIX `shlex` validation.
+
+- **Decision:** retain the target branch's `RecipeShell`-aware scanner and
+  command guard. The residual scanner and guard properties now construct raw
+  `CommandBindings` with `RecipeShell::Posix`, which keeps their independent
+  specification aligned with the POSIX-only backtick contract while preserving
+  the target's PowerShell apostrophe property.
+- **Finding:** Weave structurally auto-merged the residual Proptest commit but
+  duplicated its module header and left a stray delimiter. The rebase's
+  per-commit `cargo check --tests` checkpoint detected the malformed module
+  immediately; the repair retained the target shell-aware test seam and the
+  branch's properties.
+- **Finding:** the scanner and guard mutation patches moved with their
+  production seams. They were regenerated to disable protected-region handling
+  in `SubstitutionTraversal` and to validate the original template instead of
+  the substituted command, respectively. All five interpolation patches now pass
+  `git apply --check`.
+- **Progress:** the rebase is awaiting the prescribed deterministic and
+  Markdown gates. Once those pass, update this plan to `COMPLETE`, amend the
+  replayed integration commit, and publish the rebased branch with lease
+  protection.
+- **Progress:** the post-rebase deterministic gates passed on 2026-09-01:
+  `make check-fmt`, `make test` (2,735 nextest tests plus doctests),
+  `make typecheck`, `make lint`, `make doc-coverage` (99.10%),
+  `make markdownlint`, and `make nixie`. CodeRabbit review remains pending and
+  is deliberately requested only after this clean gate result.
+- **Progress:** `coderabbit review --agent` was unavailable after the clean
+  gate run: the first request closed its WebSocket and two later requests hung
+  at `connecting_to_review_service` (the last for 20 minutes). None returned a
+  rate-limit response or a review verdict. This is a hosted-service limitation,
+  not a source concern; no further review retry is pending. The implementation
+  is complete subject to final commit, lease-protected publication, and hosted
+  CI triggered by that publication.
 
 ## Outcomes & retrospective
 
@@ -1618,10 +1680,10 @@ What changed and why:
   `find_substitution` already takes `&[char]` and allocates nothing. Constraint
   4 now forbids the original approach.
 - Revision 1's `INV-PLAN-SOUND` mutation patch was wrong in sign: the proposed
-  `pos + len + 1` → `pos + len` change makes *nothing* match, so soundness would
-  have held vacuously. Two reviewers found this independently. `OBL-SIGIL` now
-  uses a biconditional with a correct control, and the plan warns explicitly
-  about the two different `len` conventions in the file.
+  `pos + len + 1` → `pos + len` change makes *nothing* match, so soundness
+  would have held vacuously. Two reviewers found this independently.
+  `OBL-SIGIL` now uses a biconditional with a correct control, and the plan
+  warns explicitly about the two different `len` conventions in the file.
 - Revision 1's alphabet made `try_match_token` structurally unreachable, so a
   mutation deleting the entire marker arm would have survived every harness.
   `OBL-MARKER` is new and exploits the existing `token: &str` parameter.
@@ -1673,17 +1735,17 @@ specification for `OBL-SPEC`, and a string-level bound below the roadmap's
 stated 256 characters and 8 placeholders. The third was accepted in advance, so
 EP-M0 no longer sets the plan to `BLOCKED` when the string-level bound falls
 short — it records the achieved bound, the residual gap, and the Proptest
-hand-off and continues. The mechanical stop for a sigil-shape shortfall below an
-8-character window is unchanged, because that would undermine the plan's premise
-rather than narrow its reach. Planning dates were also corrected from 2026-08-17
-to 2026-08-24; the earlier value was wrong and two commit author dates still
-carry it. No obligation, milestone, or artefact changed. The plan remains
-`DRAFT` pending approval to begin implementation.
+hand-off and continues. The mechanical stop for a sigil-shape shortfall below
+an 8-character window is unchanged, because that would undermine the plan's
+premise rather than narrow its reach. Planning dates were also corrected from
+2026-08-17 to 2026-08-24; the earlier value was wrong and two commit author
+dates still carry it. No obligation, milestone, or artefact changed. The plan
+remains `DRAFT` pending approval to begin implementation.
 
 **Revision 2.3 (2026-08-24).** Rebased onto `origin/main` at `aa93ef8b`, across
 nine commits, with no conflicts and no change of substance. A semantic diff over
-`src/ir` shows a new `DependencyOrder` enum and one added `BuildEdge` field from
-roadmap 3.14.3; `cmd_interpolate` is untouched, the harness count is still
+`src/ir` shows a new `DependencyOrder` enum and one added `BuildEdge` field
+from roadmap 3.14.3; `cmd_interpolate` is untouched, the harness count is still
 thirteen, and the patch count is still twelve, so every obligation and both
 follow-up issues stand as written. Two operational notes were added to `Risks`:
 `main` has edited the Makefile, which invalidates the Kani cache because the CI
@@ -1692,22 +1754,22 @@ pessimistic; and a merge-gating `build-test-windows` job now exists alongside
 `kani-smoke`. Citations to Markdown documents were converted from line numbers
 to section headings, since two consecutive rebases have moved them and the
 numbers cannot be kept true; line numbers are retained only for code, where
-`src/ir/cmd_interpolate.rs` has been stable throughout. The plan remains `DRAFT`
-pending approval to begin implementation.
+`src/ir/cmd_interpolate.rs` has been stable throughout. The plan remains
+`DRAFT` pending approval to begin implementation.
 
-**Revision 2.4 (2026-08-30).** The maintainer approved implementation and
-EP-M0 completed under the required capped wrapper. `find_substitution` verified
-at N=8, N=12, and N=16, while the real scanner timed out at both M=8 and M=6.
-The plan therefore remains in progress with the pre-accepted small-proof plus
+**Revision 2.4 (2026-08-30).** The maintainer approved implementation and EP-M0
+completed under the required capped wrapper. `find_substitution` verified at
+N=8, N=12, and N=16, while the real scanner timed out at both M=8 and M=6. The
+plan therefore remains in progress with the pre-accepted small-proof plus
 Proptest hand-off; its exact measurements and the no-guard rationale are in
 `Artefacts and notes` and the `Decision log`.
 
 **Revision 2.5 (2026-08-30).** EP-M2 added the two allocation-free
 `cmd_interpolate` proofs, their mutation patches, and the mutation-evidence
 contract test. Both harnesses passed individually with every cover reachable;
-their mutations failed the named assertions and the restored proofs passed.
-The complete suite first exceeded the five-minute sequential wrapper, but
-completed all 15 harnesses under the same cap with Kani's supported
+their mutations failed the named assertions and the restored proofs passed. The
+complete suite first exceeded the five-minute sequential wrapper, but completed
+all 15 harnesses under the same cap with Kani's supported
 `--jobs 4 --output-format terse` pair. Six earlier mutation patches had rotted
 after support-module extraction and were refreshed so the new contract test
 validates the whole checked-in inventory.
@@ -1726,3 +1788,19 @@ after the M0 hand-off left it without a proof consumer. Final deterministic
 gates passed, the capped parallel Kani suite verified 15 of 15 harnesses with
 zero failures, and CodeRabbit returned zero findings. The plan is complete;
 hosted CI remains a separate pending state.
+
+**Revision 2.9 (2026-09-01).** The current rebase targets `origin/main` at
+`22cf1091`, which makes recipe shell selection explicit. The plan now records
+the POSIX-only protected-placeholder invariant, preserves PowerShell's native
+backtick escapes, and records the checkpoint-detected Weave auto-merge repair.
+It remains in progress pending fresh deterministic and Markdown gate evidence.
+
+**Revision 2.10 (2026-09-01).** Record the successful deterministic gate run
+for the fully repaired rebase. The plan remains in progress only for the
+required post-gate CodeRabbit review and publication steps.
+
+**Revision 2.11 (2026-09-01).** Complete the implementation after recording the
+final deterministic gate evidence and three unavailable CodeRabbit review
+attempts. The review service yielded no verdict or concern, and no rate-limit
+response required a delayed retry. Publication and hosted CI remain separate
+external states.

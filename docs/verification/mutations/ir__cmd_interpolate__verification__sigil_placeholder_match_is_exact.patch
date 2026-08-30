@@ -1,7 +1,7 @@
-diff --git a/src/ir/cmd_interpolate.rs b/src/ir/cmd_interpolate.rs
---- a/src/ir/cmd_interpolate.rs
-+++ b/src/ir/cmd_interpolate.rs
-@@ -164,5 +164,5 @@ fn has_valid_word_boundaries(chars: &[char], pos: usize, len: usize) -> bool {
+diff --git a/src/ir/cmd_interpolate/mod.rs b/src/ir/cmd_interpolate/mod.rs
+--- a/src/ir/cmd_interpolate/mod.rs
++++ b/src/ir/cmd_interpolate/mod.rs
+@@ -185,5 +185,5 @@ fn has_valid_word_boundaries(chars: &[char], pos: usize, len: usize) -> bool {
      let next_ok = chars
          .get(pos + len + 1)
          .is_none_or(|c| !is_identifier_char(*c));

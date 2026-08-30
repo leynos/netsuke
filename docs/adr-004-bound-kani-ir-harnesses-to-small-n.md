@@ -9,9 +9,8 @@ Representation (IR) safety properties with small bounded Kani harnesses and
 delegate larger graph coverage to the future Proptest layer. Extended on
 2026-06-23 to cover cycle canonicalization with a private production-owned
 kernel proved over small integer cycles, plus path-wrapper coverage outside the
-kernel proof.
-Extended on 2026-08-30 for command interpolation: prove feasible local
-placeholder kernels in Kani and hand the full scanner and guard range to
+kernel proof. Extended on 2026-08-30 for command interpolation: prove feasible
+local placeholder kernels in Kani and hand the full scanner and guard range to
 Proptest.
 
 ## Date
@@ -170,8 +169,8 @@ written contract against which its result is compared.
   400-line source-file limit, not a general Kani requirement.
 - The command-interpolation Kani proofs do not execute the full scanner,
   backtick state machine, or `shlex` guard. Their 256-character,
-  eight-placeholder coverage is randomized Proptest evidence, not an
-  exhaustive proof.
+  eight-placeholder coverage is randomized Proptest evidence, not an exhaustive
+  proof.
 - The marker proof establishes the length-generic matcher with a short token,
   not the two concrete 27-character marker constants. Property tests exercise
   those constants through the production scanner.

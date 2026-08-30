@@ -485,8 +485,8 @@ and test workflow intact. See
   - [x] Prove `$in` and `$out` rewrite only at valid token boundaries. An
     eight-character Kani window is complete for the sigil matcher; Proptest
     covers templates up to 256 characters with at most 8 placeholders.
-  - [x] Prove backtick-delimited regions are preserved through independent
-    scanner-specification Proptest coverage.
+  - [x] Prove POSIX placeholders in backtick-delimited regions are rejected
+    through independent scanner-specification Proptest coverage.
   - [x] Prove unmatched backticks are rejected after substitution through
     adversarial Proptest coverage.
   - [x] Prove successful results satisfy the current `shlex` guard by checking

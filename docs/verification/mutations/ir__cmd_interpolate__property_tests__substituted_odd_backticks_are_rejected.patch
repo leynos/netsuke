@@ -1,6 +1,6 @@
-diff --git a/src/ir/cmd_interpolate.rs b/src/ir/cmd_interpolate.rs
---- a/src/ir/cmd_interpolate.rs
-+++ b/src/ir/cmd_interpolate.rs
+diff --git a/src/ir/cmd_interpolate/mod.rs b/src/ir/cmd_interpolate/mod.rs
+--- a/src/ir/cmd_interpolate/mod.rs
++++ b/src/ir/cmd_interpolate/mod.rs
 @@ -94,2 +94,2 @@ fn has_unmatched_backticks(s: &str) -> bool {
 -    s.chars().filter(|&c| c == '`').count().rem_euclid(2) != 0
 +    s.chars().filter(|&c| c == '`').count().rem_euclid(2) == 0

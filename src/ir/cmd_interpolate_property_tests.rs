@@ -282,17 +282,17 @@ proptest! {
         outs in raw_binding_strategy(),
     ) {
         let bindings = posix_bindings(ins, outs);
-        let expected = spec_substitute(&template, &bindings.ins, &bindings.outs);
-        let actual = substitute(&template, &bindings);
+        let specification = spec_substitute(&template, &bindings.ins, &bindings.outs);
+        let substitution = substitute(&template, &bindings);
 
-        match (actual, expected) {
-            (Ok(actual), Ok(expected)) => prop_assert_eq!(actual, expected),
-            (Err(IrGenError::InvalidCommand { command, .. }), Err(expected)) => {
-                prop_assert_eq!(command, expected);
+        match (substitution, specification) {
+            (Ok(actual_output), Ok(expected_output)) => prop_assert_eq!(actual_output, expected_output),
+            (Err(IrGenError::InvalidCommand { command, .. }), Err(expected_template)) => {
+                prop_assert_eq!(command, expected_template);
             }
-            (actual, expected) => prop_assert!(
+            (unexpected_substitution, unexpected_specification) => prop_assert!(
                 false,
-                "scanner and independent specification disagree: {actual:?} != {expected:?}"
+                "scanner and independent specification disagree: {unexpected_substitution:?} != {unexpected_specification:?}"
             ),
         }
     }
@@ -304,17 +304,17 @@ proptest! {
         outs in raw_binding_strategy(),
     ) {
         let bindings = posix_bindings(ins, outs);
-        let expected = spec_substitute(&template, &bindings.ins, &bindings.outs);
-        let actual = substitute(&template, &bindings);
+        let specification = spec_substitute(&template, &bindings.ins, &bindings.outs);
+        let substitution = substitute(&template, &bindings);
 
-        match (actual, expected) {
-            (Ok(actual), Ok(expected)) => prop_assert_eq!(actual, expected),
-            (Err(IrGenError::InvalidCommand { command, .. }), Err(expected)) => {
-                prop_assert_eq!(command, expected);
+        match (substitution, specification) {
+            (Ok(actual_output), Ok(expected_output)) => prop_assert_eq!(actual_output, expected_output),
+            (Err(IrGenError::InvalidCommand { command, .. }), Err(expected_template)) => {
+                prop_assert_eq!(command, expected_template);
             }
-            (actual, expected) => prop_assert!(
+            (unexpected_substitution, unexpected_specification) => prop_assert!(
                 false,
-                "scanner and independent specification disagree: {actual:?} != {expected:?}"
+                "scanner and independent specification disagree: {unexpected_substitution:?} != {unexpected_specification:?}"
             ),
         }
     }
@@ -326,17 +326,20 @@ proptest! {
         outs in raw_binding_strategy(),
     ) {
         let bindings = posix_bindings(ins, outs);
-        let expected = spec_substitute(&template, &bindings.ins, &bindings.outs);
-        let actual = interpolate_command_with_bindings(&template, &bindings);
+        let specification = spec_substitute(&template, &bindings.ins, &bindings.outs);
+        let outcome = interpolate_command_with_bindings(&template, &bindings);
 
-        if let Ok(expected) = expected
-            && has_odd_backticks(&expected)
+        if let Ok(substituted) = specification
+            && has_odd_backticks(&substituted)
         {
-            match actual {
+            match outcome {
                 Err(IrGenError::InvalidCommand { command, .. }) => {
-                    prop_assert_eq!(command, expected);
+                    prop_assert_eq!(command, substituted);
                 }
-                outcome => prop_assert!(false, "odd substituted command was accepted: {outcome:?}"),
+                unexpected_outcome => prop_assert!(
+                    false,
+                    "odd substituted command was accepted: {unexpected_outcome:?}"
+                ),
             }
         }
     }
@@ -348,25 +351,27 @@ proptest! {
         outs in raw_binding_strategy(),
     ) {
         let bindings = posix_bindings(ins, outs);
-        let expected = spec_substitute(&template, &bindings.ins, &bindings.outs);
+        let specification = spec_substitute(&template, &bindings.ins, &bindings.outs);
 
-        match (expected, interpolate_command_with_bindings(&template, &bindings)) {
-            (Ok(expected), Ok(command)) => {
-                let is_valid = !has_odd_backticks(&expected) && shlex::split(&expected).is_some();
+        match (specification, interpolate_command_with_bindings(&template, &bindings)) {
+            (Ok(expected_command), Ok(command)) => {
+                let is_valid = !has_odd_backticks(&expected_command)
+                    && shlex::split(&expected_command).is_some();
                 prop_assert!(is_valid, "guard accepted an invalid substituted command");
-                prop_assert_eq!(command, expected);
+                prop_assert_eq!(command, expected_command);
             }
-            (Ok(expected), Err(IrGenError::InvalidCommand { command, .. })) => {
-                let is_valid = !has_odd_backticks(&expected) && shlex::split(&expected).is_some();
+            (Ok(expected_command), Err(IrGenError::InvalidCommand { command, .. })) => {
+                let is_valid = !has_odd_backticks(&expected_command)
+                    && shlex::split(&expected_command).is_some();
                 prop_assert!(!is_valid, "guard rejected a valid substituted command");
-                prop_assert_eq!(command, expected);
+                prop_assert_eq!(command, expected_command);
             }
-            (Err(expected), Err(IrGenError::InvalidCommand { command, .. })) => {
-                prop_assert_eq!(command, expected);
+            (Err(expected_template), Err(IrGenError::InvalidCommand { command, .. })) => {
+                prop_assert_eq!(command, expected_template);
             }
-            (expected, actual) => prop_assert!(
+            (unexpected_specification, unexpected_outcome) => prop_assert!(
                 false,
-                "guard and independent specification disagree: {actual:?} != {expected:?}"
+                "guard and independent specification disagree: {unexpected_outcome:?} != {unexpected_specification:?}"
             ),
         }
     }

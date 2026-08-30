@@ -30,6 +30,17 @@ const MUTATIONS_DIR: &str = "docs/verification/mutations";
 /// fault; record the rationale here and in `docs/developers-guide.md`.
 const EXEMPT_HARNESSES: &[(&str, &str)] = &[];
 
+/// Property-test mutation patches that deliberately have no Kani harness.
+///
+/// They exercise scanner and command-guard contracts that exceed the bounded
+/// Kani resource cap. Keep this list narrow: each entry must name a live
+/// Proptest property, and the patch still has to apply cleanly below.
+const SUPPLEMENTAL_PROPERTY_PATCHES: &[&str] = &[
+    "ir__cmd_interpolate__property_tests__guard_uses_the_substituted_command",
+    "ir__cmd_interpolate__property_tests__scanner_agrees_with_independent_specification",
+    "ir__cmd_interpolate__property_tests__substituted_odd_backticks_are_rejected",
+];
+
 /// The workspace root, taken from the crate manifest directory.
 fn manifest_dir() -> &'static Utf8Path {
     Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -89,28 +100,32 @@ fn declared_function_name(declaration: &str) -> Option<String> {
     Some(name.trim().to_owned())
 }
 
-/// Derive the harness module path for a `*_verification.rs` source file.
+/// Derive the harness module path for a verification source file.
 ///
 /// The repository convention wires harness bodies as `mod verification`
 /// declared by the sibling module they verify, so
-/// `src/ir/cycle_verification.rs` maps to `ir::cycle::verification`.
+/// `src/ir/cycle_verification.rs` maps to `ir::cycle::verification`, while
+/// `src/ir/cmd_interpolate/verification.rs` maps to
+/// `ir::cmd_interpolate::verification`.
 fn module_path_for_source(relative: &Utf8Path) -> Result<String> {
     let stem = relative
         .file_stem()
         .with_context(|| format!("source path {relative} should have a file stem"))?;
-    let Some(parent_module) = stem.strip_suffix("_verification") else {
-        bail!(
-            "{relative} declares a Kani harness outside a `*_verification.rs` \
-             module; move it into the sibling verification module or exempt \
-             it in tests/kani_mutation_evidence_tests.rs with a reason",
-        );
-    };
     let mut segments: Vec<&str> = relative
         .parent()
         .map(|parent| parent.components().map(|c| c.as_str()).collect())
         .unwrap_or_default();
-    segments.push(parent_module);
-    segments.push("verification");
+    if let Some(parent_module) = stem.strip_suffix("_verification") {
+        segments.push(parent_module);
+        segments.push("verification");
+    } else if stem == "verification" {
+        segments.push("verification");
+    } else {
+        bail!(
+            "{relative} declares a Kani harness outside a verification module; \
+             use `*_verification.rs` or `verification.rs` below its module",
+        );
+    }
     Ok(segments.join("::"))
 }
 
@@ -243,13 +258,18 @@ fn every_harness_has_mutation_evidence_or_exemption() -> Result<()> {
     Ok(())
 }
 
-/// Every mutation patch corresponds to a live harness.
+/// Every mutation patch corresponds to a live harness or supplemental property.
 #[test]
 fn every_patch_matches_a_harness() -> Result<()> {
     let harnesses = discover_harnesses()?;
     let expected: BTreeSet<String> = harnesses
         .iter()
         .map(|harness| patch_stem_for_harness(harness.as_str()))
+        .chain(
+            SUPPLEMENTAL_PROPERTY_PATCHES
+                .iter()
+                .map(|patch| (*patch).to_owned()),
+        )
         .collect();
     let orphans: Vec<String> = patch_stems()?
         .into_iter()

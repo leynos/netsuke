@@ -1,9 +1,11 @@
-diff --git a/src/ir/cmd_interpolate.rs b/src/ir/cmd_interpolate.rs
---- a/src/ir/cmd_interpolate.rs
-+++ b/src/ir/cmd_interpolate.rs
-@@ -260,4 +260,4 @@ fn substitute_chars(chars: &[char], ins: &str, outs: &str) -> String {
--        if in_backticks {
-+        if false && in_backticks {
-             out.push(ch);
-             i += 1;
-             continue;
+diff --git a/src/ir/cmd_interpolate/substitution.rs b/src/ir/cmd_interpolate/substitution.rs
+--- a/src/ir/cmd_interpolate/substitution.rs
++++ b/src/ir/cmd_interpolate/substitution.rs
+@@ -56,5 +56,5 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
+         let substitution =
+             find_substitution(self.chars, pos, &self.bindings.ins, &self.bindings.outs);
+-        if self.in_backticks {
++        if false && self.in_backticks {
+             return self.append_protected_character(pos, ch, substitution);
+         }
+         Ok(self.append_unprotected_character(pos, ch, substitution))
