@@ -122,8 +122,8 @@ impl GlobBaseCache {
 pub(super) struct PreparedGlob {
     /// Validated pattern and its normalised spelling.
     pub(super) pattern: GlobPattern,
-    /// Search text handed to `glob_with`, with a resolved base when relative.
-    pub(super) search: String,
+    /// Search text handed to `glob_with`, owned only when it embeds a base.
+    search: Option<String>,
     /// Canonicalized base stripped from matches, present exactly when relative.
     pub(super) strip: Option<Utf8PathBuf>,
 }
@@ -172,12 +172,12 @@ impl PreparedGlob {
     /// Build glob search text from a validated pattern and resolved base.
     fn from_pattern_and_base(pattern: GlobPattern, base: Option<Utf8PathBuf>) -> Self {
         let (search, strip) = base.map_or_else(
-            || (pattern.normalized().to_owned(), None),
+            || (None, None),
             |dir| {
                 let escaped = escape_glob_literal_path(&dir);
                 let separator = std::path::MAIN_SEPARATOR;
                 (
-                    format!("{escaped}{separator}{}", pattern.normalized()),
+                    Some(format!("{escaped}{separator}{}", pattern.normalized())),
                     Some(dir),
                 )
             },
@@ -187,5 +187,12 @@ impl PreparedGlob {
             search,
             strip,
         }
+    }
+
+    /// Borrow the compiled search, reusing the normalized pattern when unbased.
+    pub(super) fn search(&self) -> &str {
+        self.search
+            .as_deref()
+            .unwrap_or_else(|| self.pattern.normalized())
     }
 }

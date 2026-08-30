@@ -1160,33 +1160,30 @@ providing a secure bridge to the underlying system.
   not read or mutate process-global working-directory state. Invalid patterns
   surface as `SyntaxError`; filesystem iteration errors surface as
   `InvalidOperation`, matching minijinja error semantics. On Unix, backslash
-  escapes for glob metacharacters (`[`, `]`, `{`,
-  `}`, `*`, `?`) are preserved during separator normalization. A backslash
-  before `*` or `?` is kept only when the wildcard is trailing or followed by
-  an alphanumeric, `_`, or `-`; otherwise it becomes a path separator so
-  `config\*.yml` maps to `config/*.yml`. On Windows, backslash escapes are not
-  supported. This provides globbing support not available in Ninja itself,
-  which does not support globbing.[^3]
+  escapes for glob metacharacters (`[`, `]`, `{`, `}`, `*`, `?`) are preserved
+  during separator normalization. A backslash before `*` or `?` is kept only
+  when the wildcard is trailing or followed by an alphanumeric, `_`, or `-`;
+  otherwise it becomes a path separator so `config\*.yml` maps to
+  `config/*.yml`. On Windows, backslash escapes are not supported. This
+  provides globbing support not available in Ninja itself, which does not
+  support globbing.[^3]
 
   The Rust query returns those UTF-8 paths unchanged. The Jinja `glob()`
   adapter adds the narrower command-safety boundary: it exposes a result only
   when every path is a portable unquoted shell word made from ASCII letters,
-  digits,
-  `/`, `:`, comma, full stop, underscore, or hyphen. Other matches fail
+  digits, `/`, `:`, comma, full stop, underscore, or hyphen. Other matches fail
   manifest loading rather than entering `foreach` variables and potentially
   reaching command or script recipes as executable shell syntax. This private
   adapter predicate is owned by manifest templating; graph-path escaping and
   direct Rust callers must retain their existing, context-specific policies.
 
-  The metadata check that filters directories out of the results runs
-  through a capability opened at the pattern's literal directory prefix
-  (`src/` for `src/**/*.c`) rather than at an ambient root; the match walk
-  itself remains the `glob` crate's own, which traverses the filesystem
-  ambiently.
+  The metadata check that filters directories out of the results runs through a
+  capability opened at the pattern's literal directory prefix (`src/` for
+  `src/**/*.c`) rather than at an ambient root; the match walk itself remains
+  the `glob` crate's own, which traverses the filesystem ambiently.
   [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) records this
-  decision; see the
-  [developer's guide](developers-guide.md#capability-scope) for the prefix
-  computation and symlink-handling rules.
+  decision; see the [developer's guide](developers-guide.md#capability-scope)
+  for the prefix computation and symlink-handling rules.
 - `python_version(requirement: &str) -> Result<bool, Error>`: An example of a
   domain-specific helper function that demonstrates the extensibility of this
   architecture. This function would execute `python --version` or
@@ -3336,9 +3333,8 @@ flowchart LR
 ```
 
 Netsuke configuration discovery is implemented in `src/cli/discovery.rs`.
-Explicit file selection is handled by
-`selector::resolve_config_selector(...)`, which applies the precedence
-`--config` > `NETSUKE_CONFIG`.
+Explicit file selection is handled by `selector::resolve_config_selector(...)`,
+which applies the precedence `--config` > `NETSUKE_CONFIG`.
 `discover_file_layers(...)` performs one overall discovery pass, applying the
 `-C/--directory` flag as the project-discovery root. Its automatic path first
 runs the OrthoConfig scan, then loads the project-scope file as a second pass

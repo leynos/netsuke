@@ -309,7 +309,7 @@ fn expand_prepared_glob(prepared: &PreparedGlob) -> std::result::Result<GlobExpa
         require_literal_leading_dot: false,
     };
 
-    let entries = glob_with(&prepared.search, opts).map_err(|e| {
+    let entries = glob_with(prepared.search(), opts).map_err(|e| {
         create_glob_error(
             &GlobErrorContext {
                 pattern: prepared.pattern.raw().to_owned(),
@@ -325,7 +325,7 @@ fn expand_prepared_glob(prepared: &PreparedGlob) -> std::result::Result<GlobExpa
     // the capability root must be opened from the literal prefix as written
     // rather than passing `base` again: doing the latter would reopen the base
     // directory and then traverse its own name, doubling the path component.
-    let Some(root) = open_root_dir(&prepared.search, None).map_err(|e| {
+    let Some(root) = open_root_dir(prepared.search(), None).map_err(|e| {
         create_glob_error(
             &GlobErrorContext {
                 pattern: prepared.pattern.raw().to_owned(),

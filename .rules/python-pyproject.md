@@ -84,11 +84,11 @@ exists on a contributor's machine.
 
 Table 1. Dependency field selection.
 
-| Field | Installed for | Use it for |
-| --- | --- | --- |
-| `project.dependencies` | Everyone who installs the package | Libraries the shipped code imports at runtime |
-| `project.optional-dependencies` | End users who opt into an *extra* | Optional runtime *features* (`package[extra]`) |
-| `dependency-groups` | Local development only | Test, lint, type-check, docs, and other tooling |
+| Field                           | Installed for                     | Use it for                                      |
+| ------------------------------- | --------------------------------- | ----------------------------------------------- |
+| `project.dependencies`          | Everyone who installs the package | Libraries the shipped code imports at runtime   |
+| `project.optional-dependencies` | End users who opt into an *extra* | Optional runtime *features* (`package[extra]`)  |
+| `dependency-groups`             | Local development only            | Test, lint, type-check, docs, and other tooling |
 
 ### required runtime dependencies — `project.dependencies`
 
@@ -124,10 +124,9 @@ feature = [
 Tooling only contributors need: test frameworks, linters, type checkers,
 documentation builders, and property or mutation testers. These are
 **local-only** — PEP 735 dependency groups are *not* included in published
-package metadata (they are not part of the wheel), so they must live here rather
-than in `project.optional-dependencies`. Add them with
-`uv add --dev <package>` (the `dev` group) or
-`uv add --group <name> <package>`:
+package metadata (they are not part of the wheel), so they must live here
+rather than in `project.optional-dependencies`. Add them with
+`uv add --dev <package>` (the `dev` group) or `uv add --group <name> <package>`:
 
 ```toml
 [dependency-groups]
@@ -157,8 +156,7 @@ default-groups = ["dev", "docs"]  # or "all"
 Groups may nest via `{ include-group = "..." }`, and by default `uv` resolves
 every group together into a single `uv.lock`, so groups must be mutually
 compatible unless you declare incompatible sets explicitly under
-`[tool.uv].conflicts`.
-(Astral Docs[^6])
+`[tool.uv].conflicts`. (Astral Docs[^6])
 
 > **Rule of thumb:** if an end user needs it to *run* the code, it belongs
 > in `project.dependencies` (always) or `project.optional-dependencies`
@@ -197,12 +195,12 @@ ______________________________________________________________________
 PEP 517/518 strongly recommends a `[build-system]` table to tell tools how to
 build and install your project, but it is not universally required. When the
 table is omitted, legacy setuptools behaviour applies: tools may use
-`setuptools.build_meta:__legacy__` for dependency installation, while `uv`
-does not install the current project unless `tool.uv.package = true`. A common
-setuptools configuration specifies
-`setuptools>=64.0`, which supports compatible PEP 660 editable installs without
-a `setup.py` stub, or uses a lighter alternative such as `flit_core`. Below is
-the typical setup using setuptools:
+`setuptools.build_meta:__legacy__` for dependency installation, while `uv` does
+not install the current project unless `tool.uv.package = true`. A common
+setuptools configuration specifies `setuptools>=64.0`, which supports
+compatible PEP 660 editable installs without a `setup.py` stub, or uses a
+lighter alternative such as `flit_core`. Below is the typical setup using
+setuptools:
 
 ```toml
 [build-system]
@@ -233,9 +231,9 @@ package = true
 ```
 
 - **`tool.uv.package = true`:** Forces `uv` to build and install your project
-  into its virtual environment every time you run `uv sync` or `uv run`.
-  When `[build-system]` is omitted, `uv` installs dependencies but does not
-  install the current project unless `tool.uv.package = true`. (Astral Docs[^7])
+  into its virtual environment every time you run `uv sync` or `uv run`. When
+  `[build-system]` is omitted, `uv` installs dependencies but does not install
+  the current project unless `tool.uv.package = true`. (Astral Docs[^7])
 - You may also set other `uv`-specific keys (e.g., custom indexes, resolver
   policies) under `[tool.uv]`, but `package` is the most common. (Python
   Packaging[^4], Astral Docs[^7])

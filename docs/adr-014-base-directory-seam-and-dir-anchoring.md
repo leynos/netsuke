@@ -31,22 +31,22 @@ directory, independently of `-C/--directory`.
   glob expansion accept that base as a parameter and never read the process CWD
   themselves. `expand_glob`/`glob_paths` thread the base through to
   `strip_base`, which removes it from relative matches to restore
-  pattern-relative spellings, including `..` segments. Absolute patterns do
-  not use or strip the base.
+  pattern-relative spellings, including `..` segments. Absolute patterns do not
+  use or strip the base.
 - **An ambient fallback exists only where no manifest root is available**, and
-  that read is confined to the composition boundary, not to resolution internals.
-- **Explicit selectors remain independent of `-C`.** A relative `--config
-  <PATH>` or `NETSUKE_CONFIG` resolves from the process working directory,
-  even when `-C/--directory` is supplied; absolute selectors remain unchanged.
-  `-C` continues to anchor automatic project discovery. See ADR-004 for the
-  selection machinery and `src/cli/discovery.rs` for the implementation.
+  that read is confined to the composition boundary, not to resolution
+  internals.
+- **Explicit selectors remain independent of `-C`.** A relative
+  `--config <PATH>` or `NETSUKE_CONFIG` resolves from the process working
+  directory, even when `-C/--directory` is supplied; absolute selectors remain
+  unchanged. `-C` continues to anchor automatic project discovery. See ADR-004
+  for the selection machinery and `src/cli/discovery.rs` for the implementation.
 - **In-process environment mutation is banned and gated.** `clippy.toml` and
   `test_support/clippy.toml` disallow `std::env::set_var`, `remove_var`, and
   `set_current_dir`; `lint-clippy` applies those prohibitions across every
-  workspace target kind.
-  `Command::env`/`Command::env_clear`/`Command::current_dir` — the
-  child-process configuration builders — remain the sanctioned route and are
-  deliberately not matched.
+  workspace target kind. `Command::env`/`Command::env_clear`/
+  `Command::current_dir` — the child-process configuration builders — remain
+  the sanctioned route and are deliberately not matched.
 
 ## Consequences
 

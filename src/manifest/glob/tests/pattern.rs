@@ -191,18 +191,18 @@ fn prepared_relative_search_uses_one_host_separator() -> Result<()> {
     let separator = std::path::MAIN_SEPARATOR;
     let suffix = format!("{separator}nested{separator}*.txt");
     ensure!(
-        prepared.search.ends_with(&suffix),
+        prepared.search().ends_with(&suffix),
         "prepared search must end with {suffix:?}, got {:?}",
-        prepared.search
+        prepared.search()
     );
     let prefix = prepared
-        .search
+        .search()
         .strip_suffix(&suffix)
         .context("prepared search must retain its expected nested-pattern suffix")?;
     ensure!(
         !prefix.ends_with(separator),
         "prepared search must use exactly one base-pattern separator, got {:?}",
-        prepared.search
+        prepared.search()
     );
     Ok(())
 }

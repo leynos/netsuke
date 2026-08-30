@@ -98,11 +98,6 @@ Netsuke resolves explicit configuration paths in `src/cli/discovery.rs`.
   `project_scope_layers` appends it to the layer stack.
 - Automatic discovery remains the fallback only when no explicit selector is
   present.
-- Relative explicit selectors resolve from the process working directory,
-  independently of `-C/--directory`; absolute selectors remain unchanged.
-  `-C/--directory` anchors manifest lookup and automatic project configuration
-  discovery, but never rebases an explicit `--config` or `NETSUKE_CONFIG`
-  value.
 
 ## Consequences
 
@@ -119,16 +114,16 @@ Netsuke resolves explicit configuration paths in `src/cli/discovery.rs`.
 - Future changes to selector precedence must update `discovery.rs`, the
   developer guide, the design document, and this ADR together.
 
-
 ## Addendum — 2026-08-30
 
-The original decision above remains unchanged: explicit configuration
-selection belongs to the Netsuke CLI adapter rather than OrthoConfig. The
-current selector contract is explicit about directory handling: `--config`
-and `NETSUKE_CONFIG` retain process-working-directory semantics for relative
-paths, independently of `-C/--directory`; absolute selectors remain unchanged.
-The `-C/--directory` value anchors automatic project discovery and manifest
-lookup only. The production implementation is
+The original decision above remains unchanged: explicit configuration selection
+belongs to the Netsuke CLI adapter rather than OrthoConfig. The current
+selector contract is explicit about precedence and directory handling:
+`--config` takes precedence over `NETSUKE_CONFIG`, and either explicit selector
+bypasses automatic discovery. Relative selectors retain process-working-
+directory semantics independently of `-C/--directory`; absolute selectors
+remain unchanged. The `-C/--directory` value anchors automatic project
+discovery and manifest lookup only. The production implementation is
 `selector::resolve_config_selector` in `src/cli/discovery_selector.rs`, with
 `src/cli/discovery.rs` owning the layer-loading boundary.
 

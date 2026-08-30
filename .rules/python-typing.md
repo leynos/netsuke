@@ -103,8 +103,8 @@ This decorator is a no-op at runtime but improves tooling correctness.
 
 ## `TypeGuard` (PEP 647)
 
-Use `TypeGuard[T]` to define custom runtime type guards that narrow types in type
-checkers.
+Use `TypeGuard[T]` to define custom runtime type guards that narrow types in
+type checkers.
 
 ```python
 import typing
@@ -179,8 +179,8 @@ longer required in project modules.
 from __future__ import annotations
 ```
 
-For this repository, do not add `from __future__ import annotations` in new
-or modified files. The project baseline is `>=3.14`.
+For this repository, do not add `from __future__ import annotations` in new or
+modified files. The project baseline is `>=3.14`.
 
 Repository exception: existing pytest-bdd step modules under
 `tests/steps/test_*_steps.py` deliberately keep this import because step

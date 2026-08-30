@@ -649,10 +649,10 @@ workflow-specific projections and assertions, so parsing and structural
 validation remain consistent across the workflows under test.
 
 `make test` runs the non-doctest suite through
-[cargo-nextest](https://nexte.st/) and the doctests separately.
-CI pins the runner version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`.
-Install that same version locally so local runs match CI; read the pin from the
-workflow rather than copying the number, so the two cannot drift:
+[cargo-nextest](https://nexte.st/) and the doctests separately. CI pins the
+runner version in `NEXTEST_VERSION` in `.github/workflows/ci.yml`. Install that
+same version locally so local runs match CI; read the pin from the workflow
+rather than copying the number, so the two cannot drift:
 
 ```bash
 NEXTEST_VERSION="$(sed -n "s/.*NEXTEST_VERSION: '\(.*\)'.*/\1/p" \
@@ -701,8 +701,8 @@ so the staged libraries must be recent enough to include it. Libraries staged
 from an older checkout ignore `excluded_paths` silently — the exemptions stop
 applying with no error, and the lint reports the modules they covered. Re-run
 `whitaker-installer` to restage from HEAD. If that checkout has been left on a
-detached HEAD, the installation fails during its `git pull`; put it back on
-the default branch and re-run.
+detached HEAD, the installation fails during its `git pull`; put it back on the
+default branch and re-run.
 
 [whitaker-pr-315]: https://github.com/leynos/whitaker/pull/315
 
@@ -986,27 +986,26 @@ every command in this completion checklist:
 
 ## Markdown formatting and table alignment
 
-`make fmt` runs `mdformat-all`, which runs `mdtablefix` (with `--wrap
---renumber --breaks --ellipsis --fences --in-place`) and then
+`make fmt` runs `mdformat-all`, which runs `mdtablefix` (with
+`--wrap --renumber --breaks --ellipsis --fences --in-place`) and then
 `markdownlint-cli2 --fix`. `mdtablefix` owns table padding and paragraph
 wrapping; `make markdownlint` then verifies the result.
 
-markdownlint's `MD060` (table-column-style) checks that table pipes align
-using a display-width model that treats CJK characters and emoji as
-double-width. That model disagrees with `mdtablefix`'s padding for
-right-to-left scripts, Indic scripts, and combining marks, so for tables
-containing those scripts the formatter and the rule cannot both be satisfied.
+markdownlint's `MD060` (table-column-style) checks that table pipes align using
+a display-width model that treats CJK characters and emoji as double-width.
+That model disagrees with `mdtablefix`'s padding for right-to-left scripts,
+Indic scripts, and combining marks, so for tables containing those scripts the
+formatter and the rule cannot both be satisfied.
 
-Because of this, `MD060` is suppressed in `docs/localization-glossary.md`
-only, via a `<!-- markdownlint-disable-file MD060 -->` directive at the top of
-that file with an explanatory comment. The rule remains enabled for every
-other Markdown file, and the repository-level `.markdownlint-cli2.jsonc` does
-not disable it.
+Because of this, `MD060` is suppressed in `docs/localization-glossary.md` only,
+via a `<!-- markdownlint-disable-file MD060 -->` directive at the top of that
+file with an explanatory comment. The rule remains enabled for every other
+Markdown file, and the repository-level `.markdownlint-cli2.jsonc` does not
+disable it.
 
-Contributors should prefer a file-scoped `markdownlint-disable-file`
-directive (or a narrower `markdownlint-disable-next-line`) over disabling a
-rule repository-wide, and should record the reason in a comment beside the
-directive.
+Contributors should prefer a file-scoped `markdownlint-disable-file` directive
+(or a narrower `markdownlint-disable-next-line`) over disabling a rule
+repository-wide, and should record the reason in a comment beside the directive.
 
 Note that `mdformat-all` rewraps every Markdown file it finds, not only the
 files a change touches. Revert the unrelated reflow before committing so a
@@ -2986,13 +2985,13 @@ with warnings denied. Child-process configuration stays confined to the
 
 ### Scripting standards for automation scripts
 
-Python scripts under `scripts/` follow the repository's [scripting
-standards](scripting-standards.md): a `uv` script block with a Python 3.13
-floor, Cyclopts for parameterized CLIs, `cuprum` for subprocess execution,
-`pathlib` for filesystem access, and pytest coverage in `scripts/tests/`
-mirroring each script's name. The house Python style rules in `.rules/`
-(naming, typing, exception design, context managers, generators, and returns)
-apply to every script and its tests. Refer to
+Python scripts under `scripts/` follow the repository's
+[scripting standards](scripting-standards.md): a `uv` script block with a
+Python 3.13 floor, Cyclopts for parameterized CLIs, `cuprum` for subprocess
+execution, `pathlib` for filesystem access, and pytest coverage in
+`scripts/tests/` mirroring each script's name. The house Python style rules in
+`.rules/` (naming, typing, exception design, context managers, generators, and
+returns) apply to every script and its tests. Refer to
 [`docs/scripting-standards.md`](scripting-standards.md) before introducing or
 changing an automation script.
 

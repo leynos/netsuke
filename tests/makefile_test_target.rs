@@ -27,6 +27,7 @@ use camino::Utf8Path;
 use makefile::{phony_targets, read_repo_file, target_prerequisites, target_recipe};
 use toml::Value;
 
+/// Verify that `make test` orders the nextest pass before the doctest pass.
 #[test]
 fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()> {
     let makefile = read_repo_file(Utf8Path::new("Makefile"))?;

@@ -102,7 +102,10 @@ enum StdlibRegistration {
     /// The read-only stdlib used to inspect manifest discovery metadata.
     ManifestQuery,
 }
-/// Parse a manifest string, running the full YAML, Jinja and expansion pipeline.
+/// Parse, render, and validate a manifest with injected glob-base data.
+///
+/// Render Jinja values, anchor relative `glob()` patterns at `manifest_root`,
+/// and validate recipes after expansion so rendered rules are checked.
 fn from_str_named(
     yaml: &str,
     parse: ManifestParse<'_>,

@@ -198,12 +198,7 @@ resolution entirely rather than setting the variable for a child to read.
 
 ## Addendum
 
-### 2026-08-26: EnvLock retirement
-
-`EnvLock` is retired rather than hardened. Production signatures must inject
-`mockable::Env`, with `mockable::DefaultEnv` at production boundaries and
-`mockable::MockEnv` in tests. CWD callers must use the existing
-working-directory seam, absolute paths, or the `-C/--directory` route.
+### 2026-08-30: Manifest glob base seam
 
 Manifest parsing owns a separate base-directory seam: it passes the manifest
 directory or workspace root to `glob_paths(pattern, base)` and internal
@@ -211,6 +206,13 @@ directory or workspace root to `glob_paths(pattern, base)` and internal
 ones, resolve from that injected root and retain their pattern-relative result
 spelling; absolute patterns remain absolute. This path neither reads nor
 mutates process-global working-directory state during expansion.
+
+### 2026-08-26: EnvLock retirement
+
+`EnvLock` is retired rather than hardened. Production signatures must inject
+`mockable::Env`, with `mockable::DefaultEnv` at production boundaries and
+`mockable::MockEnv` in tests. CWD callers must use the existing
+working-directory seam, absolute paths, or the `-C/--directory` route.
 
 Migrations are tracked in issues #491, #492, and #493; removal is tracked in
 issue #494. No new `EnvLock` callers or synchronization tests are permitted.
@@ -229,7 +231,6 @@ test-harness process. The suite now uses two routes:
 
 The BDD suite no longer uses `EnvLock` or `CwdGuard` to coordinate
 process-global environment or working-directory changes. Route B avoids CWD
-changes by passing absolute paths or preserving `-C/--directory` for manifest
-lookup and automatic project discovery. Explicit relative `--config` and
-`NETSUKE_CONFIG` selectors remain independent of `-C/--directory` and resolve
-from the process working directory. Absolute selectors remain unchanged.
+changes by passing absolute paths or preserving `-C/--directory` for automatic
+project discovery. Explicit relative `--config` and `NETSUKE_CONFIG` selectors
+remain anchored to the child process CWD; they are not rebased beneath `-C`.

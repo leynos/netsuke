@@ -1,8 +1,8 @@
 # flake8-return style guide (Python 3.14)
 
 The `flake8-return` rules ensure consistent and explicit return behaviour,
-ensuring functions are clear in intent and free from unnecessary control
-flow. Follow these rules:
+ensuring functions are clear in intent and free from unnecessary control flow.
+Follow these rules:
 
 ## R501 — Avoid explicit `return None` if it's the only return
 
@@ -60,10 +60,11 @@ def func(x):
     return -1
 ```
 
-Don't rely on implicit `None` if the function may return a value elsewhere—always
-return something at the end.
+Don't rely on implicit `None` if the function may return a value
+elsewhere—always return something at the end.
 
-Functions whose only possible result is `None` do not need a final bare `return`:
+Functions whose only possible result is `None` do not need a final bare
+`return`:
 
 ```python
 # GOOD:
