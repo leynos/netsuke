@@ -590,6 +590,31 @@ block is inert during test execution: discovery is driven solely by the
 project whose `netsuke test` invocation is running, and the runner never
 recurses.
 
+Every subject path an author writes is confined. Two roots are approved:
+the per-case sandbox, which holds fixture-created manifests, and the
+enclosing project's own Netsukefile, a read-only exception so that
+testing the manifest beside the test tree keeps working. Paths are
+validated after template evaluation and before the manifest is opened,
+because the value only exists once its interpolation has run. The rules
+are the same for all three author-supplied sources — the action's
+`manifest` argument, `given.subject`, and the case's `subject`:
+
+- Absolute paths are rejected, so naming `/etc/Netsukefile` fails with a
+  located diagnostic rather than reading it.
+- Relative paths resolve against the case sandbox and must stay inside
+  it. `../../outside/Netsukefile` is rejected, as is a path whose
+  existing components resolve through a symlink leaving the root.
+- Ordinary fixture paths keep working, because a fixture writes its
+  manifest inside the sandbox and exports a path within it.
+- The enclosing project's Netsukefile is readable without being writable.
+  Approving it as a subject grants read access only; nothing in a test can
+  write to the project root.
+
+Confinement is what makes the sandbox guarantee true of the subject
+manifest as well as of fixture files. Without it a test could read any
+file the invoking user can read, which is wider than testing a build
+manifest requires.
+
 Build execution (`execute`) is designed but deferred: the command surface
 reserves `--allow-execute`, and no action in the first version spawns Ninja
 or any build command. Fidelity note, following Act's practice of publishing

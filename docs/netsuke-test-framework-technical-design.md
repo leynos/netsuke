@@ -509,7 +509,21 @@ case owns one sandbox: a temporary directory opened as a `cap-std` `Dir`,
 within which `tmpdir`, `mkdir`, `write`, `copy`, and `remove` operate by
 relative path. Absolute paths and `..` traversal are rejected at
 action-evaluation time, keeping fixtures inside the capability boundary
-that ADR-010 established for globbing. Fixture `env` actions write into
+that ADR-010 established for globbing.
+
+Subject-manifest paths pass through the same boundary before the loader
+sees them. `open_manifest_workspace` accepts any path and opens its parent
+with ambient authority, which is right for `netsuke build -f <path>` but
+too wide for a test: it would let a case read anything the invoking user
+can read. The test runner therefore resolves and validates each
+author-supplied subject path — the action's `manifest` argument,
+`given.subject`, and the case's `subject` — after template evaluation and
+before opening the workspace, rejecting absolute paths and any path
+escaping the case sandbox, including through symlinked components that
+already exist. The enclosing project's Netsukefile is the one approved
+path outside the sandbox, admitted read-only. This is a test-mode
+restriction layered above the shared loader, not a change to the build
+path's behaviour. Fixture `env` actions write into
 the case-level environment map owned by `TestContext`, before `given.env`
 is applied over them.
 

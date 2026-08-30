@@ -837,12 +837,26 @@ in [RFC 0001](rfcs/0001-netsukefile-testing-framework.md), the
     termination, timeout reporting, fixture cleanup, child reaping, and
     single-document `--json` output (invariant I10).
 
-- [ ] 6.5.3. Implement result views. Requires: 6.5.1.
+- [ ] 6.5.3. Confine subject-manifest paths. Requires: 6.5.1. See
+  [UX design §10](netsuke-test-framework-ux-design.md) and
+  [technical design §7](netsuke-test-framework-technical-design.md).
+  - [ ] Resolve and validate the action `manifest` argument,
+    `given.subject`, and case-level `subject` after template evaluation
+    and before `open_manifest_workspace`.
+  - [ ] Reject absolute paths and sandbox escapes, including through
+    existing symlinked components.
+  - [ ] Admit the enclosing project's Netsukefile read-only, without
+    granting write access to the project root.
+  - [ ] Keep valid relative fixture paths working.
+  - [ ] Test each path source against an absolute path and a traversal
+    path, plus the project-Netsukefile exception.
+
+- [ ] 6.5.4. Implement result views. Requires: 6.5.1.
   - [ ] Expose manifest, graph, and Ninja views with the documented helper
     surface.
   - [ ] Keep views stable across internal IR changes.
 
-- [ ] 6.5.4. Implement assertion evaluation. Requires: 6.5.3.
+- [ ] 6.5.5. Implement assertion evaluation. Requires: 6.5.4.
   - [ ] Normalize scalar and structured assertions.
   - [ ] Distinguish failures from errors end to end.
   - [ ] Implement `expect_failure` with named diagnostics.
@@ -850,7 +864,7 @@ in [RFC 0001](rfcs/0001-netsukefile-testing-framework.md), the
 
 ### 6.6. Command, localization, and reporting
 
-- [ ] 6.6.1. Wire the `test` subcommand. Requires: 6.2.3, 6.4.3, 6.5.4. See
+- [ ] 6.6.1. Wire the `test` subcommand. Requires: 6.2.3, 6.4.3, 6.5.5. See
   [UX design §12](netsuke-test-framework-ux-design.md).
   - [ ] Add filters, tags, `--list`, `--fail-fast`, `--timeout`, `--keep`,
     and `--allow-empty`; consume the global `--json` and `--jobs`.
