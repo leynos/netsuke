@@ -471,6 +471,54 @@ semantics because they are not shell text, although metadata is still checked
 for control characters. Add a separate, explicitly documented conversion for
 any new Ninja grammar position rather than reusing command escaping.
 
+## Adding a lint rule
+
+`netsuke check` is driven by a static registry in `src/lint/registry.rs`. The
+[manifest linter design](netsuke-linter-design.md) specifies the model and
+[ADR-015](adr-015-manifest-linting-under-netsuke-check.md) records the
+decisions behind it; this section is the mechanics.
+
+A new rule touches four places and nothing else. It does not touch the
+command-line interface, the output schema, or the localization catalogues,
+which is the property that keeps the rule set cheap to grow.
+
+1. **Pick the stage.** A rule binds to exactly one of four: `Document` sees the
+   authored source with exact spans and unexpanded templates, `Manifest` sees
+   the expanded and rendered manifest, `Graph` sees the lowered `BuildGraph`,
+   and `Directive` sees the suppression comments. Bind to the earliest stage
+   that can decide the question, because earlier stages have better
+   provenance. Anything about authored text — a stale escape, a bashism, a
+   literal path — belongs at `Document`; anything needing template references
+   to still exist, such as unused-variable analysis, must be there.
+2. **Write it in the category module.** Rules live under `src/lint/rules/`,
+   grouped by category so a category's shared helpers stay next to the rules
+   that use them. Reuse `rules::recipes` to walk authored shell fragments and
+   `rules::shellscan` to scan them; neither a rule nor a helper should
+   re-implement quote tracking.
+3. **Declare its metadata.** A `RuleMeta` carries the stable kebab-case name,
+   the category, the stage, the default severity, and the summary, rationale,
+   and remediation text. Those three strings are the rule's documentation: they
+   are what `--explain` prints and what the rule reference must restate.
+   Default to `DefaultSeverity::Off` when the rule encodes a project convention
+   rather than a defect.
+4. **Register and document it.** Add it to the category module's `rules()`
+   function, then add a section to
+   [the rule reference](netsuke-linter-rules.md) with a reported and a fixed
+   manifest. `tests/lint_rule_reference_tests.rs` checks the two against each
+   other in both directions and will fail until they agree.
+
+Every rule ships three tests at minimum, beside its module: a positive case
+that must fire, a negative case that must not, and a suppression case proving a
+directive silences it. Add the near-miss cases that separate the rule from a
+false positive — a substring that must not match, a construct inside a shell
+quote, a legitimate use of the same syntax — because those are what stop the
+rule being switched off wholesale later.
+
+Rule names are permanent. A retired rule keeps its name reserved and a rule
+whose meaning changes materially takes a new name, because the name is
+simultaneously a configuration key, a suppression token, a documentation
+anchor, and a field in machine output.
+
 ## Package and target naming
 
 The crates.io package is `netsuke-build`; the library target, the binary

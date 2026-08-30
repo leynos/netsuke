@@ -331,6 +331,9 @@ and agents.
   - [x] Remove `build --emit`; use `generate --output`.
   - [ ] Add `check`, `context`, `skill-path`, `runs`, `profile`, and
     `feedback`.
+    - [x] `check` lints the selected manifest. See
+      [manifest linter design](netsuke-linter-design.md) and
+      [ADR-015](adr-015-manifest-linting-under-netsuke-check.md).
   - [ ] Rename `--file` to `--manifest`, keeping `-f` as an intentional
     shorthand.
   - [ ] Depend on OrthoConfig `7.1.1` to `7.1.3` for shared vocabulary policy
