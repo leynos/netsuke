@@ -96,9 +96,10 @@ before execution, a critical requirement for compatibility with Ninja.
    dependency graph with all file paths, commands, and dependencies explicitly
    defined. During this transformation, Netsuke performs critical validation
    checks. It verifies the existence of referenced rules, ensures each rule has
-   exactly one of `command` or `script`, and ensures every target specifies
-   exactly one of `rule`, `command`, or `script`. Circular dependencies and
-   missing inputs are also detected at this stage.
+   exactly one executable recipe, and requires each action or target to define
+   exactly one recipe unless a non-empty `deps` list makes it a
+   dependency-only aggregate. Circular dependencies and missing inputs are also
+   detected at this stage.
 
 6. Stage 6: Ninja Synthesis & Execution
 
@@ -2117,8 +2118,9 @@ structures to the Ninja file syntax.
    entry.
 
    When an action's `recipe` is a script, the generated rule wraps the script
-   in an invocation of `/bin/sh -e -c` so that multi-line scripts execute
-   consistently across platforms.
+   in the configured platform-specific interpreter. Unix uses `/bin/sh -e -c`,
+   while Windows defaults to `powershell -Command`; an explicit manifest
+   `interpreter` overrides the platform default.
 
    Command and script text must be converted from IR text to backend text at
    this stage. After Netsuke placeholders have been resolved, remaining literal
@@ -2234,7 +2236,6 @@ paths from `graph.default_targets`.
 default my_app
 ```
 
-
 ### 5.4 Ninja file synthesis (`src/ninja_gen/mod.rs`) — continued
 
 The final step is to synthesize the `build.ninja` file from the `BuildGraph`
@@ -2255,8 +2256,9 @@ structures to the Ninja file syntax.
    entry.
 
    When an action's `recipe` is a script, the generated rule wraps the script
-   in an invocation of `/bin/sh -e -c` so that multi-line scripts execute
-   consistently across platforms.
+   in the configured platform-specific interpreter. Unix uses `/bin/sh -e -c`,
+   while Windows defaults to `powershell -Command`; an explicit manifest
+   `interpreter` overrides the platform default.
 
    Command and script text must be converted from IR text to backend text at
    this stage. After Netsuke placeholders have been resolved, remaining literal
@@ -2389,8 +2391,9 @@ structures to the Ninja file syntax.
    entry.
 
    When an action's `recipe` is a script, the generated rule wraps the script
-   in an invocation of `/bin/sh -e -c` so that multi-line scripts execute
-   consistently across platforms.
+   in the configured platform-specific interpreter. Unix uses `/bin/sh -e -c`,
+   while Windows defaults to `powershell -Command`; an explicit manifest
+   `interpreter` overrides the platform default.
 
    Command and script text must be converted from IR text to backend text at
    this stage. After Netsuke placeholders have been resolved, remaining literal
@@ -3658,7 +3661,7 @@ goal.
     3. Implement the AST-to-IR transformation logic, including basic validation
        like checking for rule existence.
 
-    4. Implement the IR-to-Ninja file generator (`src/ninja_gen.rs`).
+    4. Implement the IR-to-Ninja file generator (`src/ninja_gen/mod.rs`).
 
     5. Implement the `std::process::Command` logic to invoke `ninja`.
 
