@@ -3,6 +3,7 @@
 //! Provides execution orchestration; build work streams through Ninja (default
 //! `ninja`, overridable with `NETSUKE_NINJA`).
 
+mod check;
 mod dispatch;
 mod dyndep_generation_telemetry;
 mod dyndep_publication;

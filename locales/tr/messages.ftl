@@ -420,3 +420,22 @@ example.errors_found = { $count ->
     [one] { $count } hata bulundu.
    *[other] { $count } hata bulundu.
 }
+
+# Manifest denetimi (`netsuke check`).
+cli.subcommand.check.about = Derleme üretmeden ve çalıştırmadan manifesti denetle.
+cli.subcommand.check.long_about = Seçili manifesti, ayrıştırılabilen ancak muhtemelen hatalı, güvensiz, taşınabilir olmayan veya önbelleğe zarar veren yapılar açısından incele.
+cli.subcommand.check.flag.rule.help = Bir kuralın veya kategorinin önem derecesini NAME=SEVERITY biçiminde ayarla.
+cli.subcommand.check.flag.fail_on.help = Bulguların komutu başarısız kıldığı önem derecesi.
+cli.subcommand.check.flag.limit.help = Bildirilecek en fazla bulgu sayısı; 0 tümünü bildirir.
+cli.subcommand.check.flag.explain.help = Manifesti denetlemek yerine kural başvurusunu yazdır.
+check.threshold_exceeded = Bulgular { $severity } eşiğine ulaştı: bildirilen { $reported } bulgudan { $failing } tanesi.
+check.threshold_exceeded.help = Bildirilen bulguları düzeltin, --rule seçeneğini ayarlayın veya --fail-on eşiğini gevşetin.
+check.summary.counts = Denetim sonuçları — hatalar: { $errors }, uyarılar: { $warnings }, öneriler: { $advice }, bastırılan: { $suppressed }.
+check.summary.clean = Bulgu yok.
+check.summary.truncated = { $shown } bulgu gösteriliyor; --limit { $omitted } tanesini daha atladı.
+check.rule.malformed = { $selector } seçicisi NAME=SEVERITY biçiminde yazılmamış.
+check.rule.unknown = Seçici { $name } adını veriyor; bu ne bir kural ne de bir kategori.
+check.rule.severity = { $name } seçicisi { $severity } önem derecesini veriyor; şunlardan biri bekleniyordu: { $values }.
+check.fail_on.invalid = Bilinmeyen başarısızlık eşiği { $value }; şunlardan biri bekleniyordu: { $values }.
+check.source_index = { $path } tanılama için { $line }. satırda dizinlenemedi: { $reason }.
+status.tool.check = Denetle

@@ -176,38 +176,69 @@ fn parse_body(body: &str) -> (Vec<String>, Option<String>) {
     (rules, reason)
 }
 
-/// Resolve which node a node-scoped directive applies to.
+/// Resolve which manifest block a node-scoped directive applies to.
 ///
-/// A trailing directive scopes to the innermost node covering its line. A
-/// directive alone on its line scopes to the innermost node beginning on the
-/// next line that is neither blank nor another directive, which is how a
-/// directive above a list item silences findings anywhere inside that item.
+/// Scoping follows YAML indentation rather than the node tree, because that is
+/// how a reader sees the file: a directive governs the declaration it sits
+/// above or beside, together with everything indented beneath it. A trailing
+/// directive scopes to its own line's block; a directive alone on its line
+/// scopes to the block starting at the next line that is neither blank nor
+/// another comment, so a run of directives above one declaration all apply to
+/// that declaration.
 fn resolve_scope(doc: &Document, line: usize, has_leading_content: bool) -> Scope {
-    let Some(root) = doc.root() else {
-        return Scope::Unresolved;
+    let anchor = if has_leading_content {
+        Some(line)
+    } else {
+        next_content_line(doc, line)
     };
-    if has_leading_content {
-        let span = doc.lines().line_span(line, doc.text());
-        return root
-            .innermost_covering(span.start)
-            .map_or(Scope::Unresolved, |node| Scope::Node(node.span));
-    }
-    next_content_line(doc, line).map_or(Scope::Unresolved, |candidate| {
-        root.innermost_starting_on_line(doc.lines(), candidate)
-            .map_or(Scope::Unresolved, |node| Scope::Node(node.span))
+    anchor.map_or(Scope::Unresolved, |start| {
+        Scope::Node(block_span(doc, start))
     })
 }
 
 /// Report the first line after `line` that holds manifest content.
-///
-/// Blank lines and further comments are skipped, so a run of directives above
-/// one declaration all scope to that declaration.
 fn next_content_line(doc: &Document, line: usize) -> Option<usize> {
     ((line.saturating_add(1))..=doc.lines().line_count()).find(|candidate| {
-        let span = doc.lines().line_span(*candidate, doc.text());
-        let text = doc.slice(span).trim();
+        let text = line_text(doc, *candidate).trim();
         !text.is_empty() && !text.starts_with('#')
     })
+}
+
+/// Report the byte range of the block that begins at `line`.
+///
+/// The block is that line plus every following line that is blank or indented
+/// further than it. Trailing blank lines are not included, so a directive on
+/// the last line of one declaration cannot reach into the next.
+fn block_span(doc: &Document, line: usize) -> Span {
+    let start = doc.lines().line_span(line, doc.text());
+    let indent = indent_of(line_text(doc, line));
+    let mut end = start.end;
+    for candidate in (line.saturating_add(1))..=doc.lines().line_count() {
+        let span = doc.lines().line_span(candidate, doc.text());
+        let text = doc.slice(span);
+        if text.trim().is_empty() {
+            continue;
+        }
+        if indent_of(text) <= indent {
+            break;
+        }
+        // Spans are absolute offsets, so extending to a later indented line
+        // also covers the blank lines skipped on the way there.
+        end = span.end;
+    }
+    Span::new(start.start, end.max(start.end))
+}
+
+/// Borrow the text of one line, excluding its terminator.
+fn line_text(doc: &Document, line: usize) -> &str {
+    doc.slice(doc.lines().line_span(line, doc.text()))
+}
+
+/// Report the leading-space count of a line.
+fn indent_of(line: &str) -> usize {
+    line.chars()
+        .take_while(|character| *character == ' ')
+        .count()
 }
 
 /// Collect the spans of every scalar in the document.

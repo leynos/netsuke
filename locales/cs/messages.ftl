@@ -424,3 +424,22 @@ example.errors_found = { $count ->
     [many] Nalezeno { $count } chyby.
    *[other] Nalezeno { $count } chyb.
 }
+
+# Analýza manifestu (`netsuke check`).
+cli.subcommand.check.about = Analyzovat manifest bez generování či spuštění sestavení.
+cli.subcommand.check.long_about = Prozkoumat zvolený manifest na konstrukce, které sice projdou rozborem, ale jsou pravděpodobně chybné, nebezpečné, nepřenositelné nebo nepříznivé pro mezipaměť.
+cli.subcommand.check.flag.rule.help = Nastavit závažnost pravidla nebo kategorie, zapsanou jako NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Závažnost, při níž nálezy způsobí selhání příkazu.
+cli.subcommand.check.flag.limit.help = Nejvyšší počet hlášených nálezů; 0 hlásí všechny.
+cli.subcommand.check.flag.explain.help = Vypsat referenci pravidel místo analýzy manifestu.
+check.threshold_exceeded = Nálezy dosáhly prahu { $severity }: { $failing } z { $reported } hlášených.
+check.threshold_exceeded.help = Opravte hlášené nálezy, upravte --rule nebo uvolněte --fail-on.
+check.summary.counts = Výsledky analýzy — chyby: { $errors }, varování: { $warnings }, doporučení: { $advice }, potlačeno: { $suppressed }.
+check.summary.clean = Žádné nálezy.
+check.summary.truncated = Zobrazeno { $shown } nálezů; --limit vynechal dalších { $omitted }.
+check.rule.malformed = Selektor { $selector } není zapsán jako NAME=SEVERITY.
+check.rule.unknown = Selektor uvádí { $name }, což není ani pravidlo, ani kategorie.
+check.rule.severity = Selektor { $name } uvádí závažnost { $severity }; očekávána jedna z { $values }.
+check.fail_on.invalid = Neznámý práh selhání { $value }; očekáván jeden z { $values }.
+check.source_index = Nepodařilo se indexovat { $path } pro diagnostiku na řádku { $line }: { $reason }.
+status.tool.check = Zkontrolovat

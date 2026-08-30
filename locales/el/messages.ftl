@@ -421,3 +421,22 @@ example.errors_found = { $count ->
     [one] Βρέθηκε { $count } σφάλμα.
    *[other] Βρέθηκαν { $count } σφάλματα.
 }
+
+# Έλεγχος μανιφέστου (`netsuke check`).
+cli.subcommand.check.about = Ανάλυση του μανιφέστου χωρίς δημιουργία ή εκτέλεση κατασκευής.
+cli.subcommand.check.long_about = Εξέταση του επιλεγμένου μανιφέστου για δομές που μεν αναλύονται, αλλά πιθανότατα είναι εσφαλμένες, μη ασφαλείς, μη φορητές ή εχθρικές προς την προσωρινή μνήμη.
+cli.subcommand.check.flag.rule.help = Ορισμός της σοβαρότητας ενός κανόνα ή μιας κατηγορίας, γραμμένης ως NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Σοβαρότητα στην οποία τα ευρήματα προκαλούν αποτυχία της εντολής.
+cli.subcommand.check.flag.limit.help = Μέγιστος αριθμός αναφερόμενων ευρημάτων· το 0 τα αναφέρει όλα.
+cli.subcommand.check.flag.explain.help = Εκτύπωση της αναφοράς κανόνων αντί για ανάλυση μανιφέστου.
+check.threshold_exceeded = Τα ευρήματα έφτασαν το κατώφλι { $severity }: { $failing } από { $reported } αναφερόμενα.
+check.threshold_exceeded.help = Διορθώστε τα αναφερόμενα ευρήματα, προσαρμόστε το --rule ή χαλαρώστε το --fail-on.
+check.summary.counts = Αποτελέσματα ανάλυσης — σφάλματα: { $errors }, προειδοποιήσεις: { $warnings }, συμβουλές: { $advice }, κατεσταλμένα: { $suppressed }.
+check.summary.clean = Κανένα εύρημα.
+check.summary.truncated = Εμφανίζονται { $shown } ευρήματα· το --limit παρέλειψε άλλα { $omitted }.
+check.rule.malformed = Ο επιλογέας { $selector } δεν είναι γραμμένος ως NAME=SEVERITY.
+check.rule.unknown = Ο επιλογέας ονομάζει { $name }, που δεν είναι ούτε κανόνας ούτε κατηγορία.
+check.rule.severity = Ο επιλογέας { $name } ονομάζει τη σοβαρότητα { $severity }· αναμενόταν μία από { $values }.
+check.fail_on.invalid = Άγνωστο κατώφλι αποτυχίας { $value }· αναμενόταν ένα από { $values }.
+check.source_index = Δεν ήταν δυνατή η ευρετηρίαση του { $path } για διαγνωστικά στη γραμμή { $line }: { $reason }.
+status.tool.check = Έλεγχος

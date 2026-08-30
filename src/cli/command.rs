@@ -213,12 +213,63 @@ pub struct GraphArgs {
     pub output: Option<PathBuf>,
 }
 
+/// Arguments accepted by the `check` command.
+///
+/// The policy fields are plain strings and integers so this module keeps the
+/// narrow dependency surface `build.rs` recompiles: the lint severity types
+/// live in `crate::lint`, and the runner parses these values once it has the
+/// registry to validate them against. `explain` is a per-invocation mode and
+/// is excluded from `OrthoConfig` layering.
+#[derive(Debug, Args, PartialEq, Eq, Clone, Serialize, Deserialize, Default)]
+pub struct CheckArgs {
+    /// Set a rule's or category's severity, as `NAME=SEVERITY`.
+    #[arg(long = "rule", value_name = "NAME=SEVERITY")]
+    #[serde(default)]
+    pub rule: Vec<String>,
+
+    /// Severity at which findings fail the command.
+    #[arg(long, value_name = "SEVERITY", default_value = DEFAULT_FAIL_ON)]
+    #[serde(default = "CheckArgs::default_fail_on")]
+    pub fail_on: String,
+
+    /// Maximum findings to report; `0` reports all of them.
+    #[arg(long, value_name = "N", default_value_t = DEFAULT_FINDING_LIMIT)]
+    #[serde(default = "CheckArgs::default_limit")]
+    pub limit: usize,
+
+    /// Print the rule reference instead of analysing a manifest.
+    #[arg(long, value_name = "RULE", num_args = 0..=1, default_missing_value = "")]
+    #[serde(skip)]
+    pub explain: Option<String>,
+}
+
+/// Default failure threshold for `netsuke check`.
+pub const DEFAULT_FAIL_ON: &str = "error";
+
+/// Default cap on the number of findings `netsuke check` reports.
+pub const DEFAULT_FINDING_LIMIT: usize = 200;
+
+impl CheckArgs {
+    /// Supply the default failure threshold to `serde`.
+    fn default_fail_on() -> String {
+        DEFAULT_FAIL_ON.to_owned()
+    }
+
+    /// Supply the default finding limit to `serde`.
+    const fn default_limit() -> usize {
+        DEFAULT_FINDING_LIMIT
+    }
+}
+
 /// Available top-level commands for Netsuke.
 #[derive(Debug, Subcommand, PartialEq, Eq, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Commands {
     /// Build specified targets (or default targets if none are given).
     Build(BuildArgs),
+
+    /// Lint the selected manifest without generating or running a build.
+    Check(CheckArgs),
 
     /// Remove build artefacts and intermediate files.
     Clean,

@@ -421,3 +421,22 @@ example.errors_found = { $count ->
     [one] { $count } erro encontrado.
    *[other] { $count } erros encontrados.
 }
+
+# Análise do manifesto (`netsuke check`).
+cli.subcommand.check.about = Analisar o manifesto sem gerar nem executar uma compilação.
+cli.subcommand.check.long_about = Analisar o manifesto selecionado em busca de construções que são interpretadas corretamente mas provavelmente estão erradas, são inseguras, não portáveis ou hostis ao cache.
+cli.subcommand.check.flag.rule.help = Definir a severidade de uma regra ou categoria, escrita como NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Severidade a partir da qual os achados fazem o comando falhar.
+cli.subcommand.check.flag.limit.help = Número máximo de achados relatados; 0 relata todos.
+cli.subcommand.check.flag.explain.help = Imprimir a referência das regras em vez de analisar um manifesto.
+check.threshold_exceeded = Os achados atingiram o limite { $severity }: { $failing } de { $reported } relatados.
+check.threshold_exceeded.help = Corrija os achados relatados, ajuste --rule ou relaxe --fail-on.
+check.summary.counts = Resultados da análise — erros: { $errors }, avisos: { $warnings }, sugestões: { $advice }, suprimidos: { $suppressed }.
+check.summary.clean = Nenhum achado.
+check.summary.truncated = Exibindo { $shown } achados; --limit omitiu mais { $omitted }.
+check.rule.malformed = O seletor { $selector } não está escrito como NAME=SEVERITY.
+check.rule.unknown = O seletor indica { $name }, que não é uma regra nem uma categoria.
+check.rule.severity = O seletor { $name } indica a severidade { $severity }; esperava-se uma de { $values }.
+check.fail_on.invalid = Limite de falha desconhecido { $value }; esperava-se um de { $values }.
+check.source_index = Não foi possível indexar { $path } para diagnósticos na linha { $line }: { $reason }.
+status.tool.check = Verificar

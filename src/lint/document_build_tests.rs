@@ -56,6 +56,11 @@ fn block_scalars_are_indexed_as_block_style() {
         "block span should cover its content, got {:?}",
         doc.slice(script.span)
     );
+    assert!(
+        !doc.slice(script.span).contains("name:"),
+        "block span should stop at its own body, got {:?}",
+        doc.slice(script.span)
+    );
     assert_eq!(script.as_str(), Some("echo one\necho two\n"));
 }
 
@@ -105,7 +110,10 @@ fn aliases_resolve_to_the_anchored_contents_at_their_own_span() {
 fn malformed_sources_report_where_scanning_stopped(#[case] text: &str, #[case] line: usize) {
     let failure = Document::parse(text.to_owned()).expect_err("source should not index");
     assert_eq!(failure.line, line, "{}", failure.message);
-    assert!(!failure.message.is_empty());
+    assert_ne!(
+        failure.message, "",
+        "the scanner should explain the failure"
+    );
 }
 
 #[test]

@@ -419,3 +419,22 @@ example.errors_found = { $count ->
     [one] { $count } Fehler gefunden.
    *[other] { $count } Fehler gefunden.
 }
+
+# Manifest-Linting (`netsuke check`).
+cli.subcommand.check.about = Das Manifest prüfen, ohne einen Build zu erzeugen oder auszuführen.
+cli.subcommand.check.long_about = Das gewählte Manifest auf Konstrukte prüfen, die zwar geparst werden, aber vermutlich fehlerhaft, unsicher, nicht portabel oder cachefeindlich sind.
+cli.subcommand.check.flag.rule.help = Den Schweregrad einer Regel oder Kategorie setzen, geschrieben als NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Schweregrad, ab dem Befunde den Befehl scheitern lassen.
+cli.subcommand.check.flag.limit.help = Höchstzahl gemeldeter Befunde; 0 meldet alle.
+cli.subcommand.check.flag.explain.help = Die Regelreferenz ausgeben, statt ein Manifest zu prüfen.
+check.threshold_exceeded = Lint-Befunde haben die Schwelle { $severity } erreicht: { $failing } von { $reported } gemeldet.
+check.threshold_exceeded.help = Beheben Sie die gemeldeten Befunde, passen Sie --rule an oder lockern Sie --fail-on.
+check.summary.counts = Lint-Ergebnisse — Fehler: { $errors }, Warnungen: { $warnings }, Hinweise: { $advice }, unterdrückt: { $suppressed }.
+check.summary.clean = Keine Lint-Befunde.
+check.summary.truncated = { $shown } Befunde werden angezeigt; --limit hat { $omitted } weitere ausgelassen.
+check.rule.malformed = Der Lint-Selektor { $selector } ist nicht als NAME=SEVERITY geschrieben.
+check.rule.unknown = Der Lint-Selektor nennt { $name }, was weder eine Regel noch eine Kategorie ist.
+check.rule.severity = Der Lint-Selektor { $name } nennt den Schweregrad { $severity }; erwartet wurde einer von { $values }.
+check.fail_on.invalid = Unbekannte Fehlerschwelle { $value }; erwartet wurde einer von { $values }.
+check.source_index = { $path } konnte für Lint-Diagnosen in Zeile { $line } nicht indiziert werden: { $reason }.
+status.tool.check = Prüfen
