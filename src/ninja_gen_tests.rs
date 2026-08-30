@@ -308,7 +308,7 @@ fn nested_command_list_exec_returns_a_typed_generation_error() {
     let mut graph = BuildGraph::default();
     graph.actions.insert("nested-exec".into(), action);
 
-    let error = generate(&graph).expect_err("nested exec should not generate Ninja");
+    let error = generate_posix(&graph).expect_err("nested exec should not generate Ninja");
     assert!(
         matches!(
             error,
@@ -345,7 +345,7 @@ fn unsafe_command_list_entries_return_typed_generation_errors(
     graph.actions.insert("unsafe".into(), action);
     let mut ninja = String::new();
 
-    let error = generate_into(&graph, &mut ninja)
+    let error = generate_into_with_shell(&graph, &mut ninja, RecipeShell::Posix)
         .expect_err("unsafe command-list entries should not generate Ninja");
     assert!(
         matches!(
