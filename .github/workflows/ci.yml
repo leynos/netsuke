@@ -206,7 +206,9 @@ jobs:
           path: |
             .typos-oxendict-base.json
             .typos-oxendict-base.toml
-          key: oxendict-${{ runner.os }}-${{ env.NETSUKE_RUST_TOOLCHAIN }}-${{ hashFiles('typos.local.toml') }}-${{ github.run_id }}
+          key: >-
+            oxendict-${{ runner.os }}-${{ env.NETSUKE_RUST_TOOLCHAIN }}-${{
+            hashFiles('typos.local.toml') }}-${{ github.run_id }}
           restore-keys: |
             oxendict-${{ runner.os }}-${{ env.NETSUKE_RUST_TOOLCHAIN }}-${{ hashFiles('typos.local.toml') }}-
       - name: Spelling
@@ -436,3 +438,5 @@ jobs:
         run: make kani-check
       - name: Run Kani harnesses
         run: make kani-ir
+
+---
