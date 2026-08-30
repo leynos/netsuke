@@ -11,6 +11,14 @@ env:
   # this value. Declared once at workflow scope so the documented
   # AGENTS.md `sed` extraction yields exactly one version.
   NEXTEST_VERSION: '0.9.133'
+  # Pins for the Python lint and typecheck gates. Make's `?=` assignments
+  # yield to the environment, so these values control the versions the `make`
+  # targets below run under. tests/workflow_contracts/python_toolchain_sync_test.py
+  # holds these equal to the Makefile defaults so CI and local runs cannot
+  # drift apart.
+  RUFF_VERSION: '0.16.4'
+  TY_VERSION: '0.0.74'
+  PYTHON_BASELINE: '3.14'
 
 jobs:
   build-test:
@@ -68,6 +76,16 @@ jobs:
           cargo --version
       - name: Show Ninja version
         run: ninja --version
+      - name: Setup uv
+        # Installed before the Format step: `make check-fmt` and `make lint`
+        # run the uv-driven Ruff, Pylint, df12, and ambrleaks gates.
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        with:
+          python-version: ${{ env.PYTHON_BASELINE }}
+          # This Rust workspace has no Python dependency manifest. Cache the
+          # shared spelling dictionary below rather than a uv cache with no
+          # durable dependency key.
+          enable-cache: 'false'
       - name: Format
         run: make check-fmt
       - name: Cache Whitaker installer
@@ -90,14 +108,8 @@ jobs:
           whitaker-installer
       - name: Lint
         run: make lint
-      - name: Setup uv
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
-        with:
-          python-version: '3.13'
-          # This Rust workspace has no Python dependency manifest. Cache the
-          # shared spelling dictionary below rather than a uv cache with no
-          # durable dependency key.
-          enable-cache: 'false'
+      - name: Typecheck
+        run: make typecheck
       - name: Doc coverage
         # Rustdoc doc-comment coverage across every workspace lib and bin
         # target, gated on the 80% threshold stated in AGENTS.md. Runs after
@@ -121,6 +133,7 @@ jobs:
       - name: Test and Measure Coverage
         uses: leynos/shared-actions/.github/actions/generate-coverage@8add2d99854a5b77548eae98cca59202e68fefc8
         with:
+          language: rust
           output-path: lcov.info
           format: lcov
           # Compare changed-line coverage against the baseline written by
@@ -184,6 +197,13 @@ jobs:
           cargo --version
       - name: Show Ninja version
         run: ninja --version
+      - name: Setup uv
+        # `make check-fmt` runs the uv-driven Ruff format check on every
+        # platform, so the Windows job needs uv on the PATH as well.
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        with:
+          python-version: ${{ env.PYTHON_BASELINE }}
+          enable-cache: 'false'
       - name: Format
         run: make SHELL=bash check-fmt
       - name: Lint (Clippy)

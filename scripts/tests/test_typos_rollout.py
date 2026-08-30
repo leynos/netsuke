@@ -1,7 +1,5 @@
 """Tests for the repository spelling-policy scripts."""
 
-from __future__ import annotations
-
 import ast
 import re
 import tomllib
@@ -9,7 +7,6 @@ import typing as typ
 from pathlib import Path
 
 import pytest
-
 from typos_rollout_test_support import dictionary_text as _dictionary_text
 
 if typ.TYPE_CHECKING:
@@ -19,13 +16,13 @@ SCRIPT_DIRECTORY = Path(__file__).resolve().parents[1]
 PROHIBITED_PHRASE = "hand" + "-written"
 
 
-def test_rollout_scripts_support_python_313() -> None:
+def test_rollout_scripts_support_python_314() -> None:
     """Every rollout script parses with the declared minimum Python version."""
     for script in SCRIPT_DIRECTORY.glob("*.py"):
         ast.parse(
             script.read_text(encoding="utf-8"),
             filename=str(script),
-            feature_version=(3, 13),
+            feature_version=(3, 14),
         )
 
 

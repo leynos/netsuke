@@ -1,12 +1,11 @@
 """Test exact phrase-policy enforcement."""
 
 import importlib
-from pathlib import Path
 import subprocess
 import types
+from pathlib import Path
 
 import pytest
-
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 PROHIBITED = "hand" + "-written"

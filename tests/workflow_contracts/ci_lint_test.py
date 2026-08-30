@@ -14,24 +14,28 @@ to diagnose from a red run:
   workspace-wide. Narrowing them silently stops linting ``test_support``
   and the non-default targets.
 
-These tests parse the workflow with PyYAML and pin that contract, so drift
-fails on the pull request rather than in a later run.
+The ``setup-rust`` input contract and the single-declaration ``NEXTEST_VERSION``
+pin live here too, because both govern how the lint and test gates are
+provisioned. The Windows job's own contracts live in
+``ci_windows_job_test.py`` and the coverage wiring in
+``ci_coverage_wiring_test.py``; the shared parsing helpers in
+``workflow_loading.py``.
 
 Run via ``make test-workflow-contracts``.
 """
 
-from __future__ import annotations
-
 import re
-from pathlib import Path
 
 import pytest
-import yaml
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
-COVERAGE_MAIN_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "coverage-main.yml"
-MAKEFILE_PATH = REPO_ROOT / "Makefile"
+from workflow_loading import (
+    CI_WORKFLOW_PATH,
+    MAKEFILE_PATH,
+    job_steps,
+    load_workflow,
+    named_step,
+    require_mapping,
+    step_runs,
+)
 
 TEST_SHELL_STEP = "Install test shell dependencies"
 
@@ -39,242 +43,101 @@ TEST_SHELL_STEP = "Install test shell dependencies"
 #: silently drops `test_support` and the non-default targets from the gate.
 EXPECTED_CLIPPY_FLAGS = "--workspace --all-targets --all-features -- -D warnings"
 
-
-class _WorkflowLoader(yaml.SafeLoader):
-    """Loader that resolves booleans the YAML 1.2 way.
-
-    PyYAML implements YAML 1.1, where ``on``, ``yes``, and ``off`` are boolean
-    words. That silently turns GitHub Actions' ``on:`` trigger key into
-    ``True``. Mapping ``True`` back to ``"on"`` after the fact would conflate it
-    with a literal ``yes:`` or ``true:`` key, so the resolver is narrowed to
-    YAML 1.2's ``true``/``false`` instead and ``on`` simply stays a string.
-    """
-
-
-def _is_string(value: object) -> bool:
-    """Return whether a parsed YAML key has the required string shape."""
-    match value:
-        case str():
-            return True
-        case _:
-            return False
-
-
-# Drop the inherited YAML 1.1 bool resolver, then reinstate the 1.2 word set.
-_WorkflowLoader.yaml_implicit_resolvers = {
-    initial: [
-        (tag, regexp)
-        for tag, regexp in resolvers
-        if tag != "tag:yaml.org,2002:bool"
-    ]
-    for initial, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
-}
-_WorkflowLoader.add_implicit_resolver(
-    "tag:yaml.org,2002:bool",
-    re.compile(r"^(?:true|True|TRUE|false|False|FALSE)$"),
-    list("tTfF"),
+#: The whole awk staging dance the sandbox probe depends on. Asserting the
+#: fragments as one block reports every part a partial edit dropped, rather
+#: than only the first.
+AWK_STAGING_FRAGMENTS = (
+    'test_shell_bin="${RUNNER_TEMP}/netsuke-test-bin"',
+    'install --mode=0755 "$(command -v gawk)"',
+    '"${test_shell_bin}/awk"',
 )
 
+#: Jobs whose `setup-rust` invocations must stay on the shared action's
+#: supported input set.
+SETUP_RUST_JOBS = ("build-test", "build-test-windows")
 
-def _load(workflow_path: Path = WORKFLOW_PATH) -> dict[str, object]:
-    """Parse the workflow file, rejecting anything but a mapping root.
 
-    ``yaml.safe_load`` happily returns ``None`` for an empty document, or a
-    scalar or list for a malformed one. Without a runtime check the annotation
-    is a claim rather than a guarantee, and the failure surfaces later as an
-    opaque ``AttributeError`` far from the real cause.
-    """
-    # `yaml.load` is safe here: `_WorkflowLoader` derives from `SafeLoader`, so
-    # it constructs no arbitrary Python objects.
-    match yaml.load(
-        workflow_path.read_text(encoding="utf-8"), Loader=_WorkflowLoader
-    ):
-        case dict() as workflow:
-            pass
-        case other:
-            pytest.fail(
-                "the workflow must parse to a mapping, "
-                f"got {type(other).__name__}"
-            )
-    non_string_keys = sorted(repr(key) for key in workflow if not _is_string(key))
-    if non_string_keys:
-        pytest.fail(
-            f"the workflow mapping must be string-keyed, got {non_string_keys}"
-        )
-    match workflow.get("jobs"):
-        case dict() as jobs:
-            pass
+def _tool_input(step: dict[str, object]) -> object:
+    """Return a step's ``with.tool`` input, or ``""`` when it declares none."""
+    match step.get("with"):
+        case {"tool": tool}:
+            return tool
         case _:
-            pytest.fail("the workflow must declare a jobs mapping")
-    for job_name, job in jobs.items():
-        if not _is_string(job_name):
-            pytest.fail(f"the jobs mapping must be string-keyed, got {job_name!r}")
-        match job:
-            case dict() as job_mapping:
-                pass
-            case _:
-                pytest.fail(f"jobs.{job_name} must be a mapping")
-        if "env" not in job_mapping:
-            continue
-        match job_mapping["env"]:
-            case dict() as env:
-                pass
-            case _:
-                pytest.fail(f"jobs.{job_name}.env must be a mapping")
-        if "NEXTEST_VERSION" in env:
-            pytest.fail(
-                f"jobs.{job_name}.env must not redeclare NEXTEST_VERSION"
-            )
-    return workflow
+            return ""
 
 
-def _steps(workflow: dict[str, object]) -> list[dict[str, object]]:
-    """Return the build-test job's steps."""
-    match workflow.get("jobs"):
-        case dict() as jobs:
-            pass
-        case _:
-            pytest.fail("the workflow must declare a jobs mapping")
-    match jobs.get("build-test"):
-        case dict() as job:
-            pass
-        case _:
-            pytest.fail("the workflow must declare a build-test job")
-    match job.get("steps"):
-        case list() as steps:
-            return steps
-        case _:
-            pytest.fail("jobs.build-test.steps must be a list")
-
-
-def _coverage_upload_steps(workflow: dict[str, object]) -> list[dict[str, object]]:
-    """Return the main-branch coverage-upload job's steps."""
-    match workflow.get("jobs"):
-        case dict() as jobs:
-            pass
-        case _:
-            pytest.fail("the workflow must declare a jobs mapping")
-    match jobs.get("coverage-upload"):
-        case dict() as job:
-            pass
-        case _:
-            pytest.fail("the workflow must declare a coverage-upload job")
-    match job.get("steps"):
-        case list() as steps:
-            return steps
-        case _:
-            pytest.fail("jobs.coverage-upload.steps must be a list")
-
-
-def _windows_job(workflow: dict[str, object]) -> dict[str, object]:
-    """Return the build-test-windows job."""
-    match workflow.get("jobs"):
-        case dict() as jobs:
-            pass
-        case _:
-            pytest.fail("the workflow must declare a jobs mapping")
-    match jobs.get("build-test-windows"):
-        case dict() as job:
-            return job
-        case _:
-            pytest.fail(
-                "the workflow must declare a build-test-windows job"
-            )
-
-
-def _windows_steps(workflow: dict[str, object]) -> list[dict[str, object]]:
-    """Return the build-test-windows job's steps."""
-    match _windows_job(workflow).get("steps"):
-        case list() as steps:
-            return steps
-        case _:
-            pytest.fail("jobs.build-test-windows.steps must be a list")
-
-
-def _windows_step(name: str) -> dict[str, object]:
-    """Return the uniquely named step from the build-test-windows job."""
-    matches = [
-        step for step in _windows_steps(_load()) if step.get("name") == name
-    ]
-    assert len(matches) == 1, (
-        f"expected exactly one build-test-windows step named {name!r}, "
-        f"found {len(matches)}"
-    )
-    return matches[0]
-
-
-def _step(name: str) -> dict[str, object]:
-    """Return the uniquely named step from the build-test job."""
-    matches = [step for step in _steps(_load()) if step.get("name") == name]
-    assert len(matches) == 1, (
-        f"expected exactly one step named {name!r}, found {len(matches)}"
-    )
-    return matches[0]
-
-
-def _test_shell_script() -> str:
+@pytest.fixture
+def test_shell_script() -> str:
     """Return the run script of the test-shell dependency step."""
-    match _step(TEST_SHELL_STEP).get("run"):
+    step = named_step(job_steps(load_workflow(), "build-test"), TEST_SHELL_STEP)
+    match step.get("run"):
         case str() as run:
             return run
         case _:
             pytest.fail(f"{TEST_SHELL_STEP} must declare a run script")
 
 
-def test_test_shell_step_installs_gawk() -> None:
+def test_test_shell_step_installs_gawk(test_shell_script: str) -> None:
     """The step installs gawk, the implementation awk is copied from."""
-    script = _test_shell_script()
-    assert re.search(r"apt-get install\b.*\bgawk\b", script), (
-        f"{TEST_SHELL_STEP} must apt-get install gawk, got:\n{script}"
+    assert re.search(r"apt-get install\b.*\bgawk\b", test_shell_script), (
+        f"{TEST_SHELL_STEP} must apt-get install gawk, got:\n{test_shell_script}"
     )
 
 
-def test_test_shell_step_copies_gawk_to_a_regular_awk_executable() -> None:
-    """gawk is copied — not linked — to ${RUNNER_TEMP}/netsuke-test-bin/awk.
+def test_test_shell_step_copies_gawk_to_a_regular_awk_executable(
+    test_shell_script: str,
+) -> None:
+    """Gawk is copied — not linked — to ${RUNNER_TEMP}/netsuke-test-bin/awk.
 
     The sandbox probe cannot follow a symlink out of its directory handle, so
     the destination must be a regular executable file.
     """
-    script = _test_shell_script()
-    assert 'install --mode=0755 "$(command -v gawk)"' in script, (
-        f"{TEST_SHELL_STEP} must copy $(command -v gawk) as a regular "
-        f"executable, got:\n{script}"
-    )
-    assert '"${test_shell_bin}/awk"' in script, (
-        f"{TEST_SHELL_STEP} must install the copy as awk, got:\n{script}"
-    )
-    assert 'test_shell_bin="${RUNNER_TEMP}/netsuke-test-bin"' in script, (
-        f"{TEST_SHELL_STEP} must stage the copy in "
-        f"${{RUNNER_TEMP}}/netsuke-test-bin, got:\n{script}"
+    missing = [
+        fragment
+        for fragment in AWK_STAGING_FRAGMENTS
+        if fragment not in test_shell_script
+    ]
+    assert not missing, (
+        f"{TEST_SHELL_STEP} must copy $(command -v gawk) into "
+        f"${{RUNNER_TEMP}}/netsuke-test-bin as a regular awk executable; "
+        f"missing {missing!r}, got:\n{test_shell_script}"
     )
 
 
-def test_test_shell_step_exports_the_directory_to_github_path() -> None:
+def test_test_shell_step_exports_the_directory_to_github_path(
+    test_shell_script: str,
+) -> None:
     """Later steps see the staged awk because the directory joins PATH."""
-    script = _test_shell_script()
-    assert 'echo "${test_shell_bin}" >> "${GITHUB_PATH}"' in script, (
+    assert 'echo "${test_shell_bin}" >> "${GITHUB_PATH}"' in test_shell_script, (
         f"{TEST_SHELL_STEP} must append the staging directory to "
-        f"GITHUB_PATH, got:\n{script}"
+        f"GITHUB_PATH, got:\n{test_shell_script}"
     )
 
 
-def test_test_shell_step_verifies_the_staged_awk() -> None:
+def test_test_shell_step_verifies_the_staged_awk(test_shell_script: str) -> None:
     """The step proves the staged awk resolves and runs before CI proceeds."""
-    script = _test_shell_script()
-    lines = [line.strip() for line in script.splitlines()]
+    lines = [line.strip() for line in test_shell_script.splitlines()]
     assert "command -v awk" in lines, (
-        f"{TEST_SHELL_STEP} must run `command -v awk`, got:\n{script}"
+        f"{TEST_SHELL_STEP} must run `command -v awk`, got:\n{test_shell_script}"
     )
     assert "awk --version" in lines, (
-        f"{TEST_SHELL_STEP} must run `awk --version`, got:\n{script}"
+        f"{TEST_SHELL_STEP} must run `awk --version`, got:\n{test_shell_script}"
     )
 
 
 def test_workflow_runs_make_lint() -> None:
     """CI runs the lint gate through the Makefile, not an ad hoc command."""
-    runs = [step.get("run") for step in _steps(_load())]
+    runs = step_runs(job_steps(load_workflow(), "build-test"))
     assert "make lint" in runs, (
         f"the build-test job must run `make lint`, got run steps: {runs!r}"
+    )
+
+
+def test_workflow_runs_make_typecheck() -> None:
+    """CI runs the typecheck gate through the Makefile, not an ad hoc command."""
+    runs = step_runs(job_steps(load_workflow(), "build-test"))
+    assert "make typecheck" in runs, (
+        f"the build-test job must run `make typecheck`, got run steps: {runs!r}"
     )
 
 
@@ -291,11 +154,11 @@ def test_makefile_clippy_flags_stay_workspace_wide() -> None:
 
 
 def test_nextest_version_declared_once_at_workflow_scope() -> None:
-    """NEXTEST_VERSION is declared once, at workflow scope.
+    r"""NEXTEST_VERSION is declared once, at workflow scope.
 
     AGENTS.md documents a local-install recipe that extracts the pin with:
 
-        sed -n "s/.*NEXTEST_VERSION: '\\(.*\\)'.*/\\1/p" \
+        sed -n "s/.*NEXTEST_VERSION: '\(.*\)'.*/\1/p" \
             .github/workflows/ci.yml
 
     A job-scoped duplicate would make that command emit two newline-separated
@@ -303,112 +166,30 @@ def test_nextest_version_declared_once_at_workflow_scope() -> None:
     therefore lives in the workflow-level `env:` block — the only declaration
     in the file — and both jobs read it via `${{ env.NEXTEST_VERSION }}`.
     """
-    text = WORKFLOW_PATH.read_text(encoding="utf-8")
+    text = CI_WORKFLOW_PATH.read_text(encoding="utf-8")
     declarations = re.findall(r"^\s*NEXTEST_VERSION:\s*'([^']+)'", text, re.MULTILINE)
     assert declarations == ["0.9.133"], (
         "NEXTEST_VERSION must be declared exactly once at workflow scope "
         f"with the pinned value, got {declarations!r}"
     )
 
-    workflow = _load()
-    match workflow.get("env"):
-        case dict() as env:
-            pass
-        case _:
-            pytest.fail(
-                "the workflow must declare a workflow-level env mapping"
-            )
+    workflow = load_workflow()
+    env = require_mapping(workflow.get("env"), "the workflow-level env")
     assert env.get("NEXTEST_VERSION") == "0.9.133", (
         "NEXTEST_VERSION must be pinned at workflow scope, "
         f"got {env.get('NEXTEST_VERSION')!r}"
     )
 
-    match workflow.get("jobs"):
-        case dict() as jobs:
-            pass
-        case _:
-            pytest.fail("the workflow must declare a jobs mapping")
-    for job_name in ("build-test", "build-test-windows"):
-        match jobs.get(job_name):
-            case dict() as job:
-                pass
-            case _:
-                pytest.fail(f"the workflow must declare a {job_name} job")
+    for job_name in SETUP_RUST_JOBS:
         installs = [
-            step.get("with", {}).get("tool")
-            for step in job.get("steps", [])
-            if "nextest" in str(step.get("with", {}).get("tool", ""))
+            tool
+            for step in job_steps(workflow, job_name)
+            if "nextest" in str(tool := _tool_input(step))
         ]
         assert installs == ["nextest@${{ env.NEXTEST_VERSION }}"], (
             f"{job_name} must install nextest via the workflow-scoped "
             f"${{{{ env.NEXTEST_VERSION }}}}, got {installs!r}"
         )
-
-
-def test_windows_job_runs_on_windows_latest() -> None:
-    """The Windows job must actually run on a Windows runner."""
-    job = _windows_job(_load())
-    assert job.get("runs-on") == "windows-latest", (
-        "build-test-windows must run on windows-latest so the "
-        f"#[cfg(windows)] tree is compiled, got {job.get('runs-on')!r}"
-    )
-
-
-def test_windows_job_uses_git_bash_for_recipes() -> None:
-    """The job runs recipes under Git Bash, not cmd.exe.
-
-    The Makefile uses POSIX shell constructs throughout, and GNU Make's
-    default recipe shell on Windows is cmd.exe, so the job must default every
-    run step to bash.
-    """
-    job = _windows_job(_load())
-    match job.get("defaults"):
-        case dict() as defaults:
-            pass
-        case _:
-            pytest.fail(
-                "build-test-windows must declare a defaults mapping"
-            )
-    match defaults.get("run"):
-        case dict() as run:
-            pass
-        case _:
-            pytest.fail(
-                "build-test-windows must declare a defaults.run mapping"
-            )
-    assert run.get("shell") == "bash", (
-        "build-test-windows must run recipes under Git Bash "
-        f"(defaults.run.shell: bash), got {run.get('shell')!r}"
-    )
-
-
-def test_windows_setup_rust_keeps_warnings() -> None:
-    """The Windows toolchain setup preserves -D warnings.
-
-    The `#[cfg(windows)]` tree must be compiled under `-D warnings` to surface
-    findings, so the shared setup-rust action must receive that flag through
-    its `rustflags` input. Polonius does not appear here: the pinned nightly
-    enables it by default, and restating a `-Zpolonius` directive is exactly
-    the fragility that retiring it removed.
-    """
-    step = _windows_step("Setup Rust")
-    assert "setup-rust" in step.get("uses", ""), (
-        f"Setup Rust must use the shared setup-rust action, got {step.get('uses')!r}"
-    )
-    match step.get("with"):
-        case dict() as with_:
-            pass
-        case _:
-            pytest.fail("Setup Rust must declare a with mapping")
-    assert with_.get("toolchain") == "${{ env.NETSUKE_RUST_TOOLCHAIN }}", (
-        "Setup Rust must use the pinned NETSUKE_RUST_TOOLCHAIN, "
-        f"got {with_.get('toolchain')!r}"
-    )
-    assert with_.get("rustflags") == "-D warnings", (
-        "Setup Rust must pass -D warnings through rustflags so the "
-        f"#[cfg(windows)] tree compiles under warnings-as-errors, "
-        f"got {with_.get('rustflags')!r}"
-    )
 
 
 def test_setup_rust_does_not_pass_unsupported_components_input() -> None:
@@ -421,218 +202,18 @@ def test_setup_rust_does_not_pass_unsupported_components_input() -> None:
     step uses the shared action and passes only supported inputs, so `check-fmt`
     and `lint-clippy` still find the components the action installs.
     """
-    workflow = _load()
-    for job_name in ("build-test", "build-test-windows"):
-        match workflow.get("jobs"):
-            case dict() as jobs:
-                pass
-            case _:
-                pytest.fail("the workflow must declare a jobs mapping")
-        match jobs.get(job_name):
-            case dict() as job:
-                pass
-            case _:
-                pytest.fail(f"the workflow must declare a {job_name} job")
+    workflow = load_workflow()
+    for job_name in SETUP_RUST_JOBS:
+        steps = job_steps(workflow, job_name)
         setup_steps = [
-            step
-            for step in job.get("steps", [])
-            if "setup-rust" in str(step.get("uses", ""))
+            step for step in steps if "setup-rust" in str(step.get("uses", ""))
         ]
         assert setup_steps, f"{job_name} must use the shared setup-rust action"
         for step in setup_steps:
-            match step.get("with"):
-                case dict() as with_:
-                    pass
-                case _:
-                    pytest.fail(
-                        f"{job_name} Setup Rust must declare a with mapping"
-                    )
+            with_ = require_mapping(
+                step.get("with"), f"{job_name} Setup Rust's with block"
+            )
             assert "components" not in with_, (
                 f"{job_name} Setup Rust must not pass the unsupported "
                 f"'components' input, got {sorted(with_.keys())!r}"
             )
-
-
-def test_windows_job_runs_check_fmt_lint_and_test() -> None:
-    """The Windows job runs check-fmt, lint, and test as merge gates.
-
-    Every quality gate must run through the Makefile with `SHELL=bash` so the
-    POSIX-shell recipes execute under Git Bash on the Windows runner.
-    """
-    runs = [step.get("run") for step in _windows_steps(_load())]
-    expected = [
-        "make SHELL=bash check-fmt",
-        "make SHELL=bash lint-clippy",
-        "make SHELL=bash lint-whitaker",
-        "make SHELL=bash test",
-    ]
-    for command in expected:
-        assert runs.count(command) == 1, (
-            f"build-test-windows must run {command!r} exactly once, "
-            f"got run steps: {runs!r}"
-        )
-
-
-def test_windows_job_does_not_duplicate_doc_and_audit_gates() -> None:
-    """The Windows job excludes platform-independent doc and audit gates.
-
-    `make spelling`, `make markdownlint`, `make nixie`, coverage generation,
-    the CodeScene gate, and `make test-workflow-contracts` are already covered
-    on Linux; duplicating them on Windows buys nothing.
-    """
-    runs = [step.get("run") for step in _windows_steps(_load())]
-    excluded = [
-        "make spelling",
-        "make markdownlint",
-        "make nixie",
-        "make test-workflow-contracts",
-    ]
-    for command in excluded:
-        assert command not in runs, (
-            f"build-test-windows must not run the platform-independent "
-            f"{command!r}, got run steps: {runs!r}"
-        )
-
-    action_steps = [
-        str(step.get("uses", "")) for step in _windows_steps(_load())
-    ]
-    excluded_actions = (
-        "leynos/shared-actions/.github/actions/generate-coverage",
-        "leynos/shared-actions/.github/actions/upload-codescene-coverage",
-    )
-    for action in excluded_actions:
-        assert all(action not in step for step in action_steps), (
-            f"build-test-windows must not use the Linux-only audit action "
-            f"{action!r}, got action steps: {action_steps!r}"
-        )
-
-
-def test_windows_job_is_a_blocking_merge_gate() -> None:
-    """No step in the Windows job is allowed to fail silently.
-
-    A `continue-on-error: true` on the job or any step would let a Windows
-    lint or test failure pass the merge, defeating the gate.
-    """
-    job = _windows_job(_load())
-    assert job.get("continue-on-error") is not True, (
-        "build-test-windows must not set continue-on-error on the job"
-    )
-    for step in _windows_steps(_load()):
-        assert step.get("continue-on-error") is not True, (
-            f"build-test-windows step {step.get('name')!r} must not set "
-            "continue-on-error"
-        )
-
-
-def test_coverage_report_is_produced_before_codescene_check() -> None:
-    """The CodeScene gate consumes the report the coverage step produces.
-
-    `generate-coverage` writes the report to `output-path` (lcov.info) and the
-    `upload-codescene-coverage` check step reads that exact path in lcov
-    format. If the report path, format, or step ordering drifts, CodeScene
-    reports "No valid coverage report found in the build pipeline". This pins
-    the wiring: the coverage step runs after `make test` and the CodeScene
-    check runs after the coverage step, both with `format: lcov`.
-    """
-    workflow = _load()
-    steps = _steps(workflow)
-    names = [step.get("name") for step in steps]
-
-    coverage_index = names.index("Test and Measure Coverage")
-    codescene_index = names.index("Check coverage against CodeScene gates")
-    test_index = names.index("Test")
-    assert test_index < coverage_index, (
-        "coverage must be measured after the test run so the report reflects "
-        "the tested tree"
-    )
-    assert coverage_index < codescene_index, (
-        "the CodeScene check must run after the coverage step so the report "
-        "exists in the build pipeline"
-    )
-
-    coverage_step = steps[coverage_index]
-    match coverage_step.get("with"):
-        case dict() as with_:
-            pass
-        case _:
-            pytest.fail(
-                "Test and Measure Coverage must declare a with mapping"
-            )
-    assert with_.get("output-path") == "lcov.info", (
-        "coverage must be written to lcov.info, "
-        f"got {with_.get('output-path')!r}"
-    )
-    assert with_.get("format") == "lcov", (
-        "coverage must be measured in lcov format, "
-        f"got {with_.get('format')!r}"
-    )
-
-    codescene_step = steps[codescene_index]
-    match codescene_step.get("with"):
-        case dict() as with_:
-            pass
-        case _:
-            pytest.fail(
-                "Check coverage against CodeScene gates must declare a with "
-                "mapping"
-            )
-    assert with_.get("format") == "lcov", (
-        "the CodeScene check must consume lcov format, "
-        f"got {with_.get('format')!r}"
-    )
-    assert with_.get("path") == "lcov.info", (
-        "the CodeScene check must read the report generated at lcov.info, "
-        f"got {with_.get('path')!r}"
-    )
-    assert with_.get("mode") == "check", (
-        "the CodeScene check must run in check mode, "
-        f"got {with_.get('mode')!r}"
-    )
-
-
-def test_main_coverage_upload_reads_the_generated_lcov_report() -> None:
-    """Main uploads the LCOV report it produces before calling CodeScene."""
-    steps = _coverage_upload_steps(_load(COVERAGE_MAIN_WORKFLOW_PATH))
-    names = [step.get("name") for step in steps]
-    coverage_index = names.index("Test and Measure Coverage")
-    upload_index = names.index("Upload coverage data to CodeScene")
-    assert coverage_index < upload_index, (
-        "main must generate coverage before uploading it to CodeScene"
-    )
-
-    coverage_step = steps[coverage_index]
-    upload_step = steps[upload_index]
-    assert str(coverage_step.get("uses", "")).startswith(
-        "leynos/shared-actions/.github/actions/generate-coverage@"
-    ), "main coverage production must use generate-coverage"
-    assert str(upload_step.get("uses", "")).startswith(
-        "leynos/shared-actions/.github/actions/upload-codescene-coverage@"
-    ), "main coverage upload must use upload-codescene-coverage"
-
-    match coverage_step.get("with"):
-        case dict() as coverage_with:
-            pass
-        case _:
-            pytest.fail("main coverage production must declare a with mapping")
-    assert coverage_with.get("output-path") == "lcov.info", (
-        "main coverage must write lcov.info, "
-        f"got {coverage_with.get('output-path')!r}"
-    )
-    assert coverage_with.get("format") == "lcov", (
-        "main coverage must use lcov format, "
-        f"got {coverage_with.get('format')!r}"
-    )
-
-    match upload_step.get("with"):
-        case dict() as upload_with:
-            pass
-        case _:
-            pytest.fail("main CodeScene upload must declare a with mapping")
-    assert upload_with.get("path") == "lcov.info", (
-        "main CodeScene upload must read lcov.info, "
-        f"got {upload_with.get('path')!r}"
-    )
-    assert upload_with.get("format") == "lcov", (
-        "main CodeScene upload must consume lcov format, "
-        f"got {upload_with.get('format')!r}"
-    )

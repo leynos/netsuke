@@ -1,7 +1,5 @@
 """Provide cache support types and atomic writes for the spelling helper."""
 
-from __future__ import annotations
-
 import dataclasses as dc
 import pathlib
 import tempfile
@@ -37,6 +35,14 @@ class RemoteResponse(typ.Protocol):
         """Read the response body."""
         ...
 
+    def __enter__(self) -> typ.Self:
+        """Enter the response context."""
+        ...
+
+    def __exit__(self, *exc: object) -> None:
+        """Exit the response context."""
+        ...
+
 
 def atomic_write(path: pathlib.Path, content: bytes) -> None:
     """Write content beside a path and atomically replace the destination.
@@ -54,13 +60,16 @@ def atomic_write(path: pathlib.Path, content: bytes) -> None:
     same filesystem. Cleanup removes the temporary path after every outcome.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    stream = tempfile.NamedTemporaryFile(
-        delete=False, dir=path.parent, prefix=f".{path.name}."
-    )
-    temporary = pathlib.Path(stream.name)
+    committed = False
+    temporary: pathlib.Path | None = None
     try:
-        with stream:
+        with tempfile.NamedTemporaryFile(
+            delete=False, dir=path.parent, prefix=f".{path.name}."
+        ) as stream:
+            temporary = pathlib.Path(stream.name)
             stream.write(content)
         temporary.replace(path)
+        committed = True
     finally:
-        temporary.unlink(missing_ok=True)
+        if not committed and temporary is not None:
+            temporary.unlink(missing_ok=True)

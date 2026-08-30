@@ -12,16 +12,14 @@ cap and puts a hard seam between validation and mutation: validation is
 complete before the first move begins.
 """
 
-from __future__ import annotations
-
+import dataclasses
 import os
 import stat
 import tomllib
-from dataclasses import dataclass
 from pathlib import Path
 
 
-@dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class StagedArchive:
     """One expected archive with its resolved staging locations.
 
@@ -91,16 +89,12 @@ def expected_archive_names(
     list[str]
         Sorted ``{package}-{version}-{target}.tar.gz`` names, one per target.
 
-    Raises
-    ------
-    ValueError
-        If the staging configuration omits the ``[targets]`` table or
-        defines no release targets, or defines the same target triple more
-        than once.
-    OSError
-        If either configuration file cannot be read.
-    tomllib.TOMLDecodeError
-        If either configuration file is not valid TOML.
+    Notes
+    -----
+    A configuration that omits the ``[targets]`` table, defines no release
+    targets, or repeats a target triple raises ``ValueError`` from
+    :func:`_validate_targets`. An unreadable configuration file propagates
+    ``OSError``, and a malformed one ``tomllib.TOMLDecodeError``.
     """
     config = tomllib.loads(staging_config.read_text(encoding="utf-8"))
     package = tomllib.loads(manifest.read_text(encoding="utf-8"))["package"]["name"]
@@ -127,11 +121,11 @@ def _is_file(path: Path) -> bool:
         ``True`` for an existing regular file; ``False`` when the path is
         absent, a symlink, or any other entry type.
 
-    Raises
-    ------
-    OSError
-        For any probe failure other than the path being absent, so an
-        unreadable asset is never misreported as a missing one.
+    Notes
+    -----
+    Any probe failure other than the path being absent propagates as
+    ``OSError``, so an unreadable asset is never misreported as a missing
+    one.
     """
     try:
         return stat.S_ISREG(path.lstat().st_mode)
@@ -156,10 +150,10 @@ def _exists_any(path: Path) -> bool:
     bool
         ``True`` when any entry exists at ``path``; ``False`` when absent.
 
-    Raises
-    ------
-    OSError
-        For any probe failure other than the path being absent.
+    Notes
+    -----
+    Any probe failure other than the path being absent propagates as
+    ``OSError``.
     """
     try:
         path.lstat()
@@ -185,10 +179,10 @@ def _walk_files(root: Path) -> list[Path]:
     list[Path]
         Every directory entry found below ``root``.
 
-    Raises
-    ------
-    OSError
-        If any directory in the tree cannot be read.
+    Notes
+    -----
+    A directory that cannot be read propagates as ``OSError`` through the
+    ``onerror`` callback rather than being silently skipped.
     """
 
     def _raise(error: OSError) -> None:
@@ -215,10 +209,9 @@ def _destination_collisions(dist_dir: Path, names: tuple[str, ...]) -> list[str]
     list[str]
         The occupied names, in the order given; empty when both are free.
 
-    Raises
-    ------
-    OSError
-        If a destination cannot be probed.
+    Notes
+    -----
+    A destination that cannot be probed propagates as ``OSError``.
     """
     return [name for name in names if _exists_any(dist_dir / name)]
 
@@ -246,10 +239,9 @@ def _resolve_archive(
     StagedArchive | str
         The resolved pair, or a human-readable description of the failure.
 
-    Raises
-    ------
-    OSError
-        If an asset or destination cannot be probed.
+    Notes
+    -----
+    An asset or destination that cannot be probed propagates as ``OSError``.
     """
     matches = [path for path in staged if path.name == name]
     if len(matches) != 1:
@@ -289,10 +281,10 @@ def locate_archives(
         missing, non-regular, ambiguous, or destination-colliding asset
         descriptions.
 
-    Raises
-    ------
-    OSError
-        If the dist tree cannot be traversed or an asset cannot be probed.
+    Notes
+    -----
+    A dist tree that cannot be traversed, or an asset that cannot be probed,
+    propagates as ``OSError``.
     """
     staged = [path for path in _walk_files(dist_dir) if path.parent != dist_dir]
     located: list[StagedArchive] = []
@@ -301,6 +293,6 @@ def locate_archives(
         match _resolve_archive(dist_dir, staged, name):
             case StagedArchive() as archive:
                 located.append(archive)
-            case str(problem):
+            case str() as problem:
                 missing.append(problem)
     return located, missing

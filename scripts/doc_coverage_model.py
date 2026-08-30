@@ -4,12 +4,10 @@ The Cargo adapter owns Rustdoc payload decoding and validation. This module
 keeps only the values shared by adapter, orchestration, and command-line code.
 """
 
-from __future__ import annotations
-
 import dataclasses as dc
 
 
-@dc.dataclass(frozen=True)
+@dc.dataclass(frozen=True, slots=True)
 class Coverage:
     """Represent Rustdoc-measured items for one documentation run.
 
@@ -26,7 +24,7 @@ class Coverage:
 
     @property
     def percentage(self) -> float:
-        """Return the share of documented items as a percentage."""
+        """Share of documented items, as a percentage of the total."""
         return 100.0 * self.with_docs / self.total if self.total else 100.0
 
     def __add__(self, other: Coverage) -> Coverage:
@@ -34,7 +32,7 @@ class Coverage:
         return Coverage(self.total + other.total, self.with_docs + other.with_docs)
 
 
-@dc.dataclass(frozen=True)
+@dc.dataclass(frozen=True, slots=True)
 class DocTarget:
     """Describe one library or binary target measured by Rustdoc.
 

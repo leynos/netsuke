@@ -51,7 +51,9 @@ name: Build and Package
       python-version:
         description: Python version to install with uv on non-Linux platforms
         required: false
-        default: '3.11'
+        # Matches the repository's Python 3.14 baseline (see the Makefile's
+        # PYTHON_BASELINE variable).
+        default: '3.14'
         type: string
       wix-extension-version:
         description: WiX Toolset extension version for Windows packaging

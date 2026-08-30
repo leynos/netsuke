@@ -1,10 +1,11 @@
 """Test documentation-coverage target selection and measurement orchestration."""
 
-from __future__ import annotations
-
 import typing as typ
 
+import doc_coverage_runner as runner_module
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 if typ.TYPE_CHECKING:
     import pathlib
@@ -41,16 +42,13 @@ class FakeCoverageAdapter:
     ) -> dict[str, object]:
         """Return metadata containing the one target under test."""
         self._calls.append(("metadata", toolchain, manifest_root))
-        return {
-            "packages": [
-                {
-                    "id": "pkg:x:1.0.0",
-                    "name": "x",
-                    "targets": [{"name": "x", "kind": ["lib"]}],
-                }
-            ],
-            "workspace_members": ["pkg:x:1.0.0"],
-        }
+        return metadata_for([
+            {
+                "id": "pkg:x:1.0.0",
+                "name": "x",
+                "targets": [lib_target("x")],
+            }
+        ])
 
     def measure(
         self, target: object, toolchain: str, manifest_root: pathlib.Path
@@ -62,31 +60,29 @@ class FakeCoverageAdapter:
 
 def test_target_discovery_skips_non_doc_targets(runner: types.ModuleType) -> None:
     """Exclude build scripts, tests, examples, and benches from the surface."""
-    metadata = metadata_for(
-        [
-            {
-                "id": "pkg:netsuke:0.1.0",
-                "name": "netsuke",
-                "targets": [
-                    lib_target("netsuke"),
-                    bin_target("netsuke-bin"),
-                    bin_target("extra"),
-                    {"name": "build-main", "kind": ["custom-build"]},
-                    {"name": "integration", "kind": ["test"]},
-                    {"name": "sample", "kind": ["example"]},
-                    {"name": "benchmark", "kind": ["bench"]},
-                ],
-            }
-        ]
-    )
+    metadata = metadata_for([
+        {
+            "id": "pkg:netsuke:0.1.0",
+            "name": "netsuke",
+            "targets": [
+                lib_target("netsuke"),
+                bin_target("netsuke-bin"),
+                bin_target("extra"),
+                {"name": "build-main", "kind": ["custom-build"]},
+                {"name": "integration", "kind": ["test"]},
+                {"name": "sample", "kind": ["example"]},
+                {"name": "benchmark", "kind": ["bench"]},
+            ],
+        }
+    ])
 
     targets = runner.doc_targets(metadata)
 
-    assert [target.kind for target in targets] == ["lib", "bin", "bin"]
-    assert {target.name for target in targets if target.kind == "bin"} == {
-        "netsuke-bin",
-        "extra",
-    }
+    assert [(target.kind, target.name) for target in targets] == [
+        ("lib", None),
+        ("bin", "netsuke-bin"),
+        ("bin", "extra"),
+    ], "only the library and binary targets belong to the documented surface"
 
 
 def test_target_discovery_excludes_outside_workspace(runner: types.ModuleType) -> None:
@@ -108,30 +104,105 @@ def test_target_discovery_excludes_outside_workspace(runner: types.ModuleType) -
 
     targets = runner.doc_targets(metadata)
 
-    assert [target.package for target in targets] == ["member"]
-
-
-def test_malformed_metadata_shape_is_a_measurement_error(
-    runner: types.ModuleType,
-) -> None:
-    """Reject valid JSON without workspace keys rather than leaking a KeyError."""
-    with pytest.raises(RuntimeError, match="lacks the workspace"):
-        runner.doc_targets({"packages": []})
-
-
-def test_target_without_kind_is_skipped(runner: types.ModuleType) -> None:
-    """Ignore a target record that lacks its kind list."""
-    metadata = metadata_for(
-        [
-            {
-                "id": "pkg:x:0.1.0",
-                "name": "x",
-                "targets": [{"name": "mystery"}],
-            }
-        ]
+    assert [target.package for target in targets] == ["member"], (
+        "packages outside workspace_members must not be measured"
     )
 
-    assert runner.doc_targets(metadata) == []
+
+@given(
+    package_name=st.one_of(st.text(), st.integers(), st.none()),
+    target_name=st.one_of(st.text(), st.integers(), st.none()),
+    target_kinds=st.lists(st.one_of(st.text(), st.integers(), st.none())),
+)
+def test_target_discovery_accepts_only_documentable_package_records(
+    package_name: object,
+    target_name: object,
+    target_kinds: list[object],
+) -> None:
+    """Measure only valid library or binary records from Cargo metadata."""
+    package = {
+        "id": "pkg:generated:0.1.0",
+        "name": package_name,
+        "targets": [{"name": target_name, "kind": target_kinds}],
+    }
+
+    targets = runner_module.doc_targets({
+        "packages": [package],
+        "workspace_members": [package["id"]],
+    })
+
+    expected: list[object] = []
+    match package_name, target_name, target_kinds:
+        case str() as name, _, kinds if "lib" in kinds:
+            expected = [runner_module.DocTarget(name, "lib", None)]
+        case str() as name, str() as binary, kinds if "bin" in kinds:
+            expected = [runner_module.DocTarget(name, "bin", binary)]
+    assert targets == expected, (
+        "only complete library and binary metadata records are measurable"
+    )
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        pytest.param({"packages": []}, id="missing-workspace-members"),
+        pytest.param({"workspace_members": []}, id="missing-packages"),
+        pytest.param(
+            {"packages": {}, "workspace_members": []}, id="packages-not-a-list"
+        ),
+        pytest.param(
+            {"packages": [], "workspace_members": [[]]},
+            id="workspace-member-not-a-string",
+        ),
+    ],
+)
+def test_malformed_metadata_shape_is_a_measurement_error(
+    runner: types.ModuleType,
+    metadata: dict[str, object],
+) -> None:
+    """Reject valid JSON without workspace keys rather than leaking a KeyError."""
+    with pytest.raises(runner.WorkspaceMetadataError, match="lacks the workspace"):
+        runner.doc_targets(metadata)
+
+
+@pytest.mark.parametrize(
+    "package",
+    [
+        pytest.param(
+            {"id": "pkg:x:0.1.0", "name": "x", "targets": [{"name": "mystery"}]},
+            id="target-without-kind",
+        ),
+        pytest.param(
+            {"id": "pkg:x:0.1.0", "name": "x"},
+            id="package-without-targets",
+        ),
+        pytest.param(
+            {"id": "pkg:x:0.1.0", "targets": [lib_target("x")]},
+            id="package-without-name",
+        ),
+        pytest.param(
+            {"id": "pkg:x:0.1.0", "name": "x", "targets": [{"kind": ["bin"]}]},
+            id="binary-without-name",
+        ),
+        pytest.param(
+            {"id": [], "name": "x", "targets": [lib_target("x")]},
+            id="package-with-list-id",
+        ),
+    ],
+)
+def test_unmeasurable_records_are_skipped(
+    runner: types.ModuleType,
+    package: dict[str, object],
+) -> None:
+    """Ignore package and target records that lack the fields measurement needs."""
+    metadata = {
+        "packages": [package],
+        "workspace_members": ["pkg:x:0.1.0"],
+    }
+
+    assert runner.doc_targets(metadata) == [], (
+        "incomplete metadata records must be skipped rather than measured"
+    )
 
 
 def test_pinned_toolchain_reads_the_channel(
@@ -144,7 +215,43 @@ def test_pinned_toolchain_reads_the_channel(
         encoding="utf-8",
     )
 
-    assert runner.pinned_toolchain(tmp_path) == "nightly-from-pin"
+    assert runner.pinned_toolchain(tmp_path) == "nightly-from-pin", (
+        "the pinned channel must be read from the toolchain file"
+    )
+
+
+def test_pinned_toolchain_reports_a_missing_file(
+    runner: types.ModuleType,
+    tmp_path: pathlib.Path,
+) -> None:
+    """Translate an unreadable toolchain file into the gate's measurement error."""
+    with pytest.raises(
+        runner.ToolchainPinError, match="cannot read the pinned toolchain"
+    ):
+        runner.pinned_toolchain(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("contents", "scenario"),
+    [
+        pytest.param('toolchain = "nightly"\n', "scalar-toolchain", id="scalar"),
+        pytest.param(
+            "[toolchain]\nchannel = 314\n", "non-string-channel", id="integer"
+        ),
+        pytest.param('[toolchain]\nchannel = ""\n', "empty-channel", id="empty"),
+    ],
+)
+def test_pinned_toolchain_rejects_malformed_records(
+    runner: types.ModuleType,
+    tmp_path: pathlib.Path,
+    contents: str,
+    scenario: str,
+) -> None:
+    """Reject scalar toolchains and unusable channels at the pin boundary."""
+    (tmp_path / "rust-toolchain.toml").write_text(contents, encoding="utf-8")
+
+    with pytest.raises(runner.ToolchainPinError):
+        runner.pinned_toolchain(tmp_path)
 
 
 def test_runner_delegates_to_cargo_adapter(
@@ -156,13 +263,14 @@ def test_runner_delegates_to_cargo_adapter(
     coverage = runner.Coverage(3, 2)
     calls: list[object] = []
 
-    adapter = FakeCoverageAdapter(calls, coverage)
+    totals, rows = runner.run_measurements(
+        "nightly-x", tmp_path, FakeCoverageAdapter(calls, coverage)
+    )
 
-    totals, rows = runner.run_measurements("nightly-x", tmp_path, adapter)
-
-    assert totals == coverage
-    assert rows == [(target, coverage)]
+    assert (totals, rows) == (coverage, [(target, coverage)]), (
+        "the runner must aggregate exactly the adapter's per-target results"
+    )
     assert calls == [
         ("metadata", "nightly-x", tmp_path),
         (target, "nightly-x", tmp_path),
-    ]
+    ], "the runner must thread the toolchain and manifest root through the adapter"

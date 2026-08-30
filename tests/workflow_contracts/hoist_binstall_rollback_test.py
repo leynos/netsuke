@@ -9,65 +9,115 @@ properties. Shared fixtures and helpers live in ``conftest.py``.
 Run via ``make test-workflow-contracts``.
 """
 
-from __future__ import annotations
-
+import itertools
 import shutil
-from pathlib import Path
+import typing as typ
 from unittest import mock
 
+import hoist_binstall_archives as hoist_mod
 import pytest
 from conftest import EXPECTED_NAMES, run_hoist, stage_pair
 
-# conftest.py inserts scripts/ onto sys.path before this module is imported.
-import hoist_binstall_archives as hoist_mod
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+    from pathlib import Path
+
+#: The forward move that aborts the transaction. Two moves relocate the first
+#: archive/sidecar pair, so the third call is the first move of the second
+#: pair — by which point there is something to roll back.
+ABORTING_MOVE_CALL = 3
+_INJECTED_MOVE_FAILURE = "injected move failure"
+_INJECTED_NON_OSERROR_ROLLBACK_FAILURE = "injected non-oserror rollback failure"
+
+
+def _move_failing_at_the_third_call(
+    *, fail_rollback: bool
+) -> cabc.Callable[[Path, Path], str | Path]:
+    """Return a ``shutil.move`` stand-in that aborts the forward move phase."""
+    real_move = shutil.move
+    call_numbers = itertools.count(1)
+
+    def failing_move(src: Path, dst: Path) -> str | Path:
+        call = next(call_numbers)
+        if call == ABORTING_MOVE_CALL:
+            msg = "injected move failure"
+            raise OSError(msg)
+        if fail_rollback and call > ABORTING_MOVE_CALL:
+            msg = "injected rollback failure"
+            raise OSError(msg)
+        return real_move(src, dst)
+
+    return failing_move
+
+
+def _move_with_non_oserror_rollback_failure() -> cabc.Callable[
+    [Path, Path], str | Path
+]:
+    """Return a move stand-in with distinct forward and rollback failure types."""
+    real_move = shutil.move
+    call_numbers = itertools.count(1)
+
+    def failing_move(src: Path, dst: Path) -> str | Path:
+        call = next(call_numbers)
+        if call == ABORTING_MOVE_CALL:
+            raise OSError(_INJECTED_MOVE_FAILURE)
+        if call > ABORTING_MOVE_CALL:
+            raise RuntimeError(_INJECTED_NON_OSERROR_ROLLBACK_FAILURE)
+        return real_move(src, dst)
+
+    return failing_move
+
+
+def _stage_both_pairs(dist: Path) -> dict[str, Path]:
+    """Stage both expected pairs, returning each name's nested directory."""
+    stage_pair(dist, "netsuke-linux-amd64/s1", EXPECTED_NAMES[1])
+    stage_pair(dist, "netsuke-macos-arm64/s2", EXPECTED_NAMES[0])
+    return {
+        EXPECTED_NAMES[0]: dist / "netsuke-macos-arm64/s2",
+        EXPECTED_NAMES[1]: dist / "netsuke-linux-amd64/s1",
+    }
+
+
+def _assert_restored(dist: Path, name: str, nested: Path) -> None:
+    """Assert ``name`` left the release root and returned to ``nested`` intact."""
+    assert not (dist / name).exists(), (
+        f"{name} must not remain at the release root after rollback"
+    )
+    assert not (dist / f"{name}.sha256").exists(), (
+        f"{name}.sha256 must not remain at the release root after rollback"
+    )
+    restored = nested / name
+    assert restored.is_file(), f"{name} must return to its nested path"
+    assert restored.read_bytes() == f"archive:{name}".encode(), (
+        f"{name} must keep its original content through the rollback"
+    )
+    sidecar = nested / f"{name}.sha256"
+    assert sidecar.is_file(), f"{name}.sha256 must return to its nested path"
+    assert sidecar.read_text(encoding="utf-8") == f"checksum:{name}", (
+        f"{name}.sha256 must keep its original content through the rollback"
+    )
 
 
 def test_hoist_rolls_back_completed_moves_when_a_move_fails(
     workspace: dict[str, Path],
 ) -> None:
     """A mid-phase move failure restores every file, and a rerun succeeds."""
-    stage_pair(workspace["dist"], "netsuke-linux-amd64/s1", EXPECTED_NAMES[1])
-    stage_pair(workspace["dist"], "netsuke-macos-arm64/s2", EXPECTED_NAMES[0])
-    sources = {
-        EXPECTED_NAMES[0]: workspace["dist"] / "netsuke-macos-arm64/s2",
-        EXPECTED_NAMES[1]: workspace["dist"] / "netsuke-linux-amd64/s1",
-    }
-
-    real_move = shutil.move
-    calls = {"count": 0}
-
-    def failing_move(src, dst):  # noqa: ANN001, ANN202 - shutil.move signature
-        calls["count"] += 1
-        if calls["count"] == 3:
-            msg = "injected move failure"
-            raise OSError(msg)
-        return real_move(src, dst)
+    sources = _stage_both_pairs(workspace["dist"])
 
     # The patch is scoped to the failing run so the retry below exercises the
     # real `shutil.move`, proving the rollback left a rerunnable tree.
     with (
-        mock.patch.object(hoist_mod.shutil, "move", failing_move),
+        mock.patch.object(
+            hoist_mod.shutil,
+            "move",
+            _move_failing_at_the_third_call(fail_rollback=False),
+        ),
         pytest.raises(OSError, match="injected move failure"),
     ):
         run_hoist(workspace)
 
     for name, nested in sources.items():
-        assert not (workspace["dist"] / name).exists(), (
-            f"{name} must not remain at the release root after rollback"
-        )
-        assert not (workspace["dist"] / f"{name}.sha256").exists(), (
-            f"{name}.sha256 must not remain at the release root after rollback"
-        )
-        restored = nested / name
-        assert restored.is_file(), f"{name} must return to its nested path"
-        assert restored.read_bytes() == f"archive:{name}".encode(), (
-            f"{name} must keep its original content through the rollback"
-        )
-        sidecar = nested / f"{name}.sha256"
-        assert sidecar.is_file(), f"{name}.sha256 must return to its nested path"
-        assert sidecar.read_text(encoding="utf-8") == f"checksum:{name}", (
-            f"{name}.sha256 must keep its original content through the rollback"
-        )
+        _assert_restored(workspace["dist"], name, nested)
 
     assert run_hoist(workspace) == 0, "a rerun after the fault clears must succeed"
     for name in EXPECTED_NAMES:
@@ -87,26 +137,14 @@ def test_hoist_surfaces_both_errors_when_the_rollback_also_fails(
     Losing the move failure to the rollback failure would leave an operator
     with no way to tell why the release aborted, so both must survive.
     """
-    stage_pair(workspace["dist"], "netsuke-linux-amd64/s1", EXPECTED_NAMES[1])
-    stage_pair(workspace["dist"], "netsuke-macos-arm64/s2", EXPECTED_NAMES[0])
-
-    real_move = shutil.move
-    calls = {"count": 0}
-
-    def failing_move(src, dst):  # noqa: ANN001, ANN202 - shutil.move signature
-        calls["count"] += 1
-        # Calls 1 and 2 relocate the first pair; call 3 aborts the forward
-        # phase; call 4 is the first restoration attempt and fails too.
-        if calls["count"] == 3:
-            msg = "injected move failure"
-            raise OSError(msg)
-        if calls["count"] > 3:
-            msg = "injected rollback failure"
-            raise OSError(msg)
-        return real_move(src, dst)
+    _stage_both_pairs(workspace["dist"])
 
     with (
-        mock.patch.object(hoist_mod.shutil, "move", failing_move),
+        mock.patch.object(
+            hoist_mod.shutil,
+            "move",
+            _move_failing_at_the_third_call(fail_rollback=True),
+        ),
         pytest.raises(BaseExceptionGroup) as raised,
     ):
         run_hoist(workspace)
@@ -123,3 +161,20 @@ def test_hoist_surfaces_both_errors_when_the_rollback_also_fails(
         "an unrestorable pair must be left where it landed, not silently "
         "discarded, so the operator can inspect the release root"
     )
+
+
+def test_hoist_propagates_non_oserror_rollback_failures_unchanged(
+    workspace: dict[str, Path],
+) -> None:
+    """Keep unexpected rollback failures distinct from the OSError combination path."""
+    _stage_both_pairs(workspace["dist"])
+
+    with (
+        mock.patch.object(
+            hoist_mod.shutil,
+            "move",
+            _move_with_non_oserror_rollback_failure(),
+        ),
+        pytest.raises(RuntimeError, match=_INJECTED_NON_OSERROR_ROLLBACK_FAILURE),
+    ):
+        run_hoist(workspace)

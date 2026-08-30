@@ -5,18 +5,20 @@ This module owns process invocation and Rustdoc's generated coverage artefact.
 command-line entry point owns argument parsing, reporting, and exit codes.
 """
 
-from __future__ import annotations
-
+import dataclasses as dc
 import json
 import os
 import pathlib
-import subprocess
-import dataclasses as dc
+
+# Driving Cargo and Rustdoc as child processes is this module's whole purpose.
+import subprocess  # ruff: ignore[suspicious-subprocess-import] - the boundary is deliberate.
 
 from doc_coverage_model import Coverage, DocTarget
 
+_COUNT_INVARIANT = "counts must be non-negative integers with with_docs <= total"
 
-@dc.dataclass(frozen=True)
+
+@dc.dataclass(frozen=True, slots=True)
 class CargoAdapter:
     """Adapt one explicit Cargo executable to coverage measurements.
 
@@ -42,6 +44,33 @@ class CargoAdapter:
 class CoveragePayloadShapeError(TypeError):
     """Report that Rustdoc emitted a coverage payload other than an object."""
 
+    def __init__(self) -> None:
+        super().__init__("expected an object")
+
+
+class CoverageEntryShapeError(ValueError):
+    """Report a Rustdoc coverage entry missing a required count."""
+
+    def __init__(self) -> None:
+        super().__init__("entry must provide total and with_docs")
+
+
+class CoverageCountError(ValueError):
+    """Report a Rustdoc coverage count that violates the count invariants."""
+
+    def __init__(self) -> None:
+        super().__init__(_COUNT_INVARIANT)
+
+
+class CoverageOutputError(RuntimeError):
+    """Report that Rustdoc produced no usable coverage JSON for a target."""
+
+    def __init__(self, target: DocTarget, detail: str) -> None:
+        super().__init__(
+            f"cargo rustdoc for {target.package} {target.kind}"
+            f" ({target.name or 'lib'}) did not emit coverage JSON: {detail}"
+        )
+
 
 def production_adapter() -> CargoAdapter:
     """Create the production adapter with the configured Cargo executable."""
@@ -66,10 +95,11 @@ def rustdoc_args(target: DocTarget, toolchain: str, cargo_executable: str) -> li
         Argument vector for ``cargo rustdoc`` with its coverage options.
     """
     args = [cargo_executable, f"+{toolchain}", "rustdoc", "-p", target.package]
-    if target.kind == "bin":
-        args += ["--bin", target.name]
-    else:
-        args += ["--lib"]
+    match target:
+        case DocTarget(kind="bin", name=str() as binary):
+            args += ["--bin", binary]
+        case _:
+            args.append("--lib")
     args += [
         "--",
         "-Z",
@@ -99,20 +129,20 @@ def parse_coverage_output(target: DocTarget, output: str) -> Coverage:
 
     Raises
     ------
-    RuntimeError
+    CoverageOutputError
         If the payload is malformed or does not contain valid coverage counts.
     """
     try:
         per_file = json.loads(output)
     except json.JSONDecodeError as error:
-        raise coverage_json_error(target, str(error)) from error
+        raise CoverageOutputError(target, str(error)) from error
     try:
         return aggregate_coverage_payload(per_file)
     except CoveragePayloadShapeError as error:
-        raise coverage_json_error(target, str(error)) from error
-    except (KeyError, TypeError, ValueError, OverflowError) as error:
+        raise CoverageOutputError(target, str(error)) from error
+    except ValueError as error:
         detail = f"each entry requires total and with_docs: {error}"
-        raise coverage_json_error(target, detail) from error
+        raise CoverageOutputError(target, detail) from error
 
 
 def aggregate_coverage_payload(per_file: object) -> Coverage:
@@ -132,8 +162,12 @@ def aggregate_coverage_payload(per_file: object) -> Coverage:
     ------
     CoveragePayloadShapeError
         If Rustdoc's payload is not an object.
-    KeyError, ValueError
-        If an entry omits or violates a coverage-count invariant.
+
+    Notes
+    -----
+    Per-entry validation is delegated to :func:`coverage_from_entry`, so
+    :class:`CoverageEntryShapeError` and :class:`CoverageCountError` propagate
+    from here whenever an entry violates a coverage-count invariant.
     """
     match per_file:
         case dict() as entries:
@@ -142,7 +176,7 @@ def aggregate_coverage_payload(per_file: object) -> Coverage:
                 Coverage(0, 0),
             )
         case _:
-            raise CoveragePayloadShapeError("expected an object")
+            raise CoveragePayloadShapeError
 
 
 def coverage_from_entry(entry: object) -> Coverage:
@@ -160,28 +194,30 @@ def coverage_from_entry(entry: object) -> Coverage:
 
     Raises
     ------
-    KeyError
-        If either required count is absent.
-    TypeError, ValueError
-        If a count is not a non-negative integer or documented items exceed
+    CoverageEntryShapeError
+        If the entry is not an object carrying both required counts.
+    CoverageCountError
+        If a count is not a non-negative integer, or documented items exceed
         total items.
     """
-    total = coverage_count(entry, "total")
-    with_docs = coverage_count(entry, "with_docs")
+    match entry:
+        case {"total": raw_total, "with_docs": raw_with_docs}:
+            total = coverage_count(raw_total)
+            with_docs = coverage_count(raw_with_docs)
+        case _:
+            raise CoverageEntryShapeError
     if with_docs > total:
-        raise ValueError("counts must be non-negative integers with with_docs <= total")
+        raise CoverageCountError
     return Coverage(total, with_docs)
 
 
-def coverage_count(entry: object, name: str) -> int:
-    """Validate one named Rustdoc coverage count.
+def coverage_count(count: object) -> int:
+    """Validate one Rustdoc coverage count.
 
     Parameters
     ----------
-    entry
-        Rustdoc coverage entry containing the requested count.
-    name
-        Name of the count to retrieve.
+    count
+        Decoded JSON value for a ``total`` or ``with_docs`` count.
 
     Returns
     -------
@@ -190,50 +226,19 @@ def coverage_count(entry: object, name: str) -> int:
 
     Raises
     ------
-    KeyError
-        If ``name`` is absent from ``entry``.
-    TypeError, ValueError
-        If the count cannot be an integer count, including JSON booleans, or
-        is negative.
+    CoverageCountError
+        If the value is not an integer count, including JSON booleans and
+        non-finite floats, or if it is negative.
     """
-    count = entry[name]
     match count:
+        # JSON booleans decode to ``bool``, which is an ``int`` subclass, so
+        # they must be rejected before the integer arm accepts them.
         case bool():
-            raise ValueError(
-                "counts must be non-negative integers with with_docs <= total"
-            )
+            raise CoverageCountError
         case int() if count >= 0:
             return count
-        case int():
-            raise ValueError(
-                "counts must be non-negative integers with with_docs <= total"
-            )
         case _:
-            raise ValueError(
-                "counts must be non-negative integers with with_docs <= total"
-            )
-
-
-def coverage_json_error(target: DocTarget, detail: str) -> RuntimeError:
-    """Build a measurement error naming its target and coverage-output detail.
-
-    Parameters
-    ----------
-    target
-        Workspace target whose output Rustdoc produced.
-    detail
-        Explanation of why the generated coverage output is invalid.
-
-    Returns
-    -------
-    RuntimeError
-        Unraised error ready to identify the target at the caller boundary.
-    """
-    message = (
-        f"cargo rustdoc for {target.package} {target.kind}"
-        f" ({target.name or 'lib'}) did not emit coverage JSON: {detail}"
-    )
-    return RuntimeError(message)
+            raise CoverageCountError
 
 
 def coverage_output_path(
@@ -257,7 +262,7 @@ def coverage_output_path(
 
     Raises
     ------
-    RuntimeError
+    CoverageOutputError
         If Rustdoc does not report a usable generated coverage JSON path.
     """
     prefix = 'Generated output into "'
@@ -268,7 +273,7 @@ def coverage_output_path(
                 path = pathlib.Path(reported_path)
                 return path if path.is_absolute() else manifest_root / path
     detail = "Rustdoc did not report the generated coverage JSON path"
-    raise coverage_json_error(target, detail)
+    raise CoverageOutputError(target, detail)
 
 
 def measure(
@@ -298,11 +303,14 @@ def measure(
     Raises
     ------
     RuntimeError
-        If Cargo or Rustdoc fails, omits the reported path, or emits invalid
-        coverage JSON.
+        If Cargo cannot be run or exits non-zero.
+    CoverageOutputError
+        If Rustdoc omits the reported path or emits invalid coverage JSON.
     """
     try:
-        result = subprocess.run(  # noqa: S603 - Cargo metadata targets and pinned toolchain form argv; shell remains False.
+        # Cargo metadata targets and the pinned toolchain compose argv, so no
+        # untrusted input reaches the child process.
+        result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
             rustdoc_args(target, toolchain, cargo_executable),
             cwd=manifest_root,
             capture_output=True,
@@ -326,7 +334,7 @@ def measure(
         output = output_path.read_text(encoding="utf-8")
     except OSError as error:
         detail = f"cannot read generated coverage JSON at {output_path}: {error}"
-        raise coverage_json_error(target, detail) from error
+        raise CoverageOutputError(target, detail) from error
     return parse_coverage_output(target, output)
 
 
@@ -363,7 +371,9 @@ def load_metadata(
         "1",
     ]
     try:
-        result = subprocess.run(  # noqa: S603 - Cargo metadata targets and pinned toolchain form argv; shell remains False.
+        # The Cargo executable and a fixed metadata flag list compose argv, so
+        # no untrusted input reaches the child process.
+        result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
             args,
             cwd=manifest_root,
             capture_output=True,

@@ -1,8 +1,7 @@
 """Test the Cargo and Rustdoc documentation-coverage adapter."""
 
-from __future__ import annotations
-
 import dataclasses
+import json
 import pathlib
 import typing as typ
 
@@ -10,6 +9,16 @@ import pytest
 
 if typ.TYPE_CHECKING:
     import types
+
+# Rustdoc argument vectors are long enough to swamp the assertions that use
+# them, so the expected argv lives beside the tests as external data.
+RUSTDOC_ARGS_DATA = pathlib.Path(__file__).parent / "data" / "rustdoc_args.json"
+
+
+def expected_rustdoc_args(scenario: str) -> list[str]:
+    """Load one expected Rustdoc argument vector from the external test data."""
+    payload = json.loads(RUSTDOC_ARGS_DATA.read_text(encoding="utf-8"))
+    return payload[scenario]
 
 
 def single_library_metadata() -> str:
@@ -21,7 +30,7 @@ def single_library_metadata() -> str:
     )
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class RustdocFailureCase:
     """Define one Rustdoc failure scenario for measurement integration tests."""
 
@@ -30,7 +39,7 @@ class RustdocFailureCase:
     diagnostic: str
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class ReportedCoverageFileCase:
     """Define one generated Rustdoc coverage-file path scenario."""
 
@@ -40,7 +49,7 @@ class ReportedCoverageFileCase:
     expected: tuple[int, int]
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class FakeRustdocResult:
     """Define the simulated result of one ``cargo rustdoc`` invocation."""
 
@@ -54,13 +63,13 @@ class FakeRustdocResult:
 _DEFAULT_RUSTDOC_RESULT = FakeRustdocResult()
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
 class FakeResult:
     """Provide a minimal ``subprocess.CompletedProcess`` stand-in."""
 
-    def __init__(self, returncode: int, stdout: str, stderr: str = "") -> None:
-        self.returncode = returncode
-        self.stdout = stdout
-        self.stderr = stderr
+    returncode: int
+    stdout: str
+    stderr: str = ""
 
 
 class FakeCargo:
@@ -82,7 +91,7 @@ class FakeCargo:
         self.rustdoc = rustdoc
         self.calls: list[list[str]] = []
 
-    def install(self, monkeypatch: pytest.MonkeyPatch) -> FakeCargo:
+    def install(self, monkeypatch: pytest.MonkeyPatch) -> typ.Self:
         """Replace the adapter's ``subprocess.run`` with this fake."""
         monkeypatch.setattr(self._cargo.subprocess, "run", self.run)
         return self
@@ -127,6 +136,18 @@ def test_cargo_metadata_failure_aborts_the_run(
     monkeypatch.chdir(tmp_path)
 
     with pytest.raises(RuntimeError, match="cargo metadata failed"):
+        cargo.CargoAdapter("cargo").load_metadata("nightly-x", tmp_path)
+
+
+def test_cargo_metadata_rejects_malformed_json(
+    cargo: types.ModuleType,
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Treat undecodable cargo metadata output as a measurement error."""
+    FakeCargo(cargo, metadata="not json at all").install(monkeypatch)
+
+    with pytest.raises(RuntimeError, match="cargo metadata emitted invalid JSON"):
         cargo.CargoAdapter("cargo").load_metadata("nightly-x", tmp_path)
 
 
@@ -277,7 +298,8 @@ def test_coverage_output_path_rejects_unrelated_output(
     target = cargo.DocTarget("x", "lib", None)
 
     with pytest.raises(
-        RuntimeError, match="did not report the generated coverage JSON path"
+        cargo.CoverageOutputError,
+        match="did not report the generated coverage JSON path",
     ):
         cargo.coverage_output_path(target, output, tmp_path)
 
@@ -296,55 +318,45 @@ def test_measure_rejects_a_reported_file_that_does_not_exist(
         ),
     ).install(monkeypatch)
 
-    with pytest.raises(RuntimeError, match="cannot read generated coverage JSON"):
+    with pytest.raises(
+        cargo.CoverageOutputError, match="cannot read generated coverage JSON"
+    ):
         cargo.CargoAdapter("cargo").measure(
             cargo.DocTarget("x", "lib", None), "nightly-x", tmp_path
         )
 
 
 @pytest.mark.parametrize(
-    ("target", "selector"),
+    ("target", "scenario"),
     [
-        pytest.param(("netsuke", "lib", None), ["--lib"], id="library"),
-        pytest.param(
-            ("netsuke", "bin", "netsuke-bin"),
-            ["--bin", "netsuke-bin"],
-            id="binary",
-        ),
+        pytest.param(("netsuke", "lib", None), "library", id="library"),
+        pytest.param(("netsuke", "bin", "netsuke-bin"), "binary", id="binary"),
     ],
 )
 def test_rustdoc_args_for_target(
     cargo: types.ModuleType,
     target: tuple[str, str, str | None],
-    selector: list[str],
+    scenario: str,
 ) -> None:
     """Build the complete Rustdoc command for library and binary targets."""
     doc_target = cargo.DocTarget(*target)
 
     args = cargo.rustdoc_args(doc_target, "nightly-x", "cargo")
 
-    assert args == [
-        "cargo",
-        "+nightly-x",
-        "rustdoc",
-        "-p",
-        "netsuke",
-        *selector,
-        "--",
-        "-Z",
-        "unstable-options",
-        "--show-coverage",
-        "--output-format",
-        "json",
-        "--document-private-items",
-    ]
+    assert args == expected_rustdoc_args(scenario), (
+        f"the {scenario} Rustdoc argv does not match {RUSTDOC_ARGS_DATA.name}"
+    )
 
 
 def test_cargo_adapter_owns_rustdoc_arguments(cargo: types.ModuleType) -> None:
     """Build the unchanged Rustdoc argv through the Cargo adapter directly."""
-    assert cargo.rustdoc_args(
+    args = cargo.rustdoc_args(
         cargo.DocTarget("x", "lib", None), "nightly-x", "cargo-wrapper"
-    )[:5] == ["cargo-wrapper", "+nightly-x", "rustdoc", "-p", "x"]
+    )
+
+    assert args[:5] == ["cargo-wrapper", "+nightly-x", "rustdoc", "-p", "x"], (
+        "the adapter's Cargo executable must lead the Rustdoc argument vector"
+    )
 
 
 def test_production_adapter_uses_the_configured_cargo_executable(
@@ -354,4 +366,6 @@ def test_production_adapter_uses_the_configured_cargo_executable(
     """Resolve the process executable once at the production adapter boundary."""
     monkeypatch.setenv("CARGO", "cargo-wrapper")
 
-    assert cargo.production_adapter().executable == "cargo-wrapper"
+    assert cargo.production_adapter().executable == "cargo-wrapper", (
+        "the CARGO environment variable must select the production executable"
+    )

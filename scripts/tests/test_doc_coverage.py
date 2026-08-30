@@ -1,13 +1,14 @@
 """Test the documentation-coverage command-line interface."""
 
-from __future__ import annotations
-
 import argparse
 import dataclasses
 import json
 import os
 import pathlib
-import subprocess
+
+# The CLI's contract includes the process it launches, so these tests exercise
+# it through a real child process.
+import subprocess  # ruff: ignore[suspicious-subprocess-import] - the boundary is under test.
 import sys
 import textwrap
 import typing as typ
@@ -19,13 +20,42 @@ if typ.TYPE_CHECKING:
     import types
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, slots=True)
+class ThresholdCase:
+    """Define one in-process threshold-gating scenario."""
+
+    threshold: str
+    expected_code: int
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class CliProcessCase:
     """Define one executable documentation-coverage CLI scenario."""
 
     threshold: str
     fails_adapter: bool
     expected_code: int
+
+
+def coverage_rows(stdout: str) -> list[tuple[str, str, str]]:
+    """Split the CLI breakdown table into label, counts, and percentage rows.
+
+    Parameters
+    ----------
+    stdout
+        Complete standard output captured from one CLI run.
+
+    Returns
+    -------
+    list[tuple[str, str, str]]
+        One entry per breakdown row, with the column padding removed.
+    """
+    rows: list[tuple[str, str, str]] = []
+    for line in stdout.splitlines():
+        fields = line.split()
+        if len(fields) >= 3 and "/" in fields[-2]:
+            rows.append((" ".join(fields[:-2]), fields[-2], fields[-1]))
+    return rows
 
 
 @pytest.fixture
@@ -76,25 +106,40 @@ def executable_cargo(tmp_path: pathlib.Path) -> tuple[pathlib.Path, pathlib.Path
     return executable, log_path
 
 
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(ThresholdCase(threshold="50", expected_code=0), id="above"),
+        pytest.param(ThresholdCase(threshold="80", expected_code=1), id="below"),
+    ],
+)
 def test_threshold_flips_exit_code(
     script: types.ModuleType,
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
+    case: ThresholdCase,
 ) -> None:
-    """Pass above the threshold and fail below it."""
+    """Delegate measurement to the runner, then gate on the reported aggregate."""
     coverage = script.runner.Coverage(10, 6)
     monkeypatch.setattr(
         script.runner,
         "run_measurements",
         lambda _toolchain, _root: (coverage, []),
     )
-    monkeypatch.chdir(tmp_path)
 
-    passing = script.main(["--toolchain", "nightly-x", "--threshold", "50"])
-    failing = script.main(["--toolchain", "nightly-x", "--threshold", "80"])
+    exit_code = script.main([
+        "--toolchain",
+        "nightly-x",
+        "--manifest-root",
+        str(tmp_path),
+        "--threshold",
+        case.threshold,
+    ])
 
-    assert passing == 0
-    assert failing == 1
+    assert exit_code == case.expected_code, (
+        f"60% coverage against a {case.threshold}% threshold "
+        f"must exit {case.expected_code}"
+    )
 
 
 @pytest.mark.parametrize(
@@ -127,7 +172,8 @@ def test_cli_process_uses_configured_cargo_adapter(
     }
     if case.fails_adapter:
         environment["DOC_COVERAGE_CARGO_FAILURE"] = "1"
-    result = subprocess.run(  # noqa: S603 - executes the controlled fixture with shell disabled.
+    # The argv is composed here from the interpreter and the fixture executable.
+    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
         [
             sys.executable,
             str(SCRIPT_DIRECTORY / "doc-coverage.py"),
@@ -145,7 +191,9 @@ def test_cli_process_uses_configured_cargo_adapter(
         text=True,
     )
 
-    assert result.returncode == case.expected_code
+    assert result.returncode == case.expected_code, (
+        f"expected exit {case.expected_code}, got {result.returncode}: {result.stderr}"
+    )
     calls = [
         json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()
     ]
@@ -155,28 +203,35 @@ def test_cli_process_uses_configured_cargo_adapter(
         "--no-deps",
         "--format-version",
         "1",
-    ]
+    ], "the CLI must discover targets through cargo metadata on the given toolchain"
     if case.fails_adapter:
-        assert (
-            result.stderr
-            == "error: cargo metadata failed: controlled cargo failure\n\n"
-        )
+        assert result.stderr == (
+            "error: cargo metadata failed: controlled cargo failure\n\n"
+        ), "a failing Cargo adapter must surface as the CLI's measurement error"
         return
 
-    assert calls[1][0] == "+nightly-subprocess"
-    assert calls[1][1:5] == ["rustdoc", "-p", "x", "--lib"]
-    assert "aggregate" in result.stdout
-    assert "9/10" in result.stdout
+    assert calls[1][:5] == [
+        "+nightly-subprocess",
+        "rustdoc",
+        "-p",
+        "x",
+        "--lib",
+    ], "the discovered library target must be documented on the given toolchain"
+    assert coverage_rows(result.stdout) == [
+        ("x lib", "9/10", "90.00%"),
+        ("aggregate", "9/10", "90.00%"),
+    ], "the breakdown must report the measured target and the aggregate"
+    trailer = result.stdout.splitlines()[2:]
     if case.expected_code == 0:
-        assert (
+        assert trailer == [
             "ok: doc-comment coverage 90.00% meets the 80.00% threshold."
-            in result.stdout
-        )
+        ], "a passing run must confirm the threshold on standard output"
     else:
+        assert trailer == [], "a failing run must report only the breakdown on stdout"
         assert result.stderr == (
             "doc-comment coverage 90.00% is below the 95.00% threshold; document "
             "the lowest-coverage targets listed above and re-run `make doc-coverage`.\n"
-        )
+        ), "a failing run must explain the shortfall on standard error"
 
 
 def test_missing_cargo_maps_to_measurement_error(
@@ -194,7 +249,9 @@ def test_missing_cargo_maps_to_measurement_error(
     monkeypatch.setattr(script.runner.doc_coverage_cargo.subprocess, "run", fail)
     monkeypatch.chdir(tmp_path)
 
-    assert script.main(["--toolchain", "nightly-x"]) == 2
+    assert script.main(["--toolchain", "nightly-x"]) == 2, (
+        "an unrunnable Cargo executable must exit with the measurement-error code"
+    )
 
 
 def test_toolchain_override_reaches_every_cargo_call(
@@ -234,43 +291,39 @@ def test_toolchain_override_reaches_every_cargo_call(
 
     script.main(["--toolchain", "nightly-custom", "--threshold", "0"])
 
-    assert calls, "expected at least one cargo invocation"
+    assert calls, "the CLI must invoke cargo at least once"
     assert all(argv[1] == "+nightly-custom" for argv in calls), (
-        f"toolchain selector not threaded through: {calls!r}"
+        f"toolchain selector not threaded through every call: {calls!r}"
     )
 
 
-def test_parse_threshold_rejects_invalid_values(script: types.ModuleType) -> None:
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param("101", id="above-range"),
+        pytest.param("-1", id="below-range"),
+        pytest.param("nan", id="not-a-number-value"),
+        pytest.param("not-a-number", id="unparsable"),
+    ],
+)
+def test_parse_threshold_rejects_invalid_values(
+    script: types.ModuleType, value: str
+) -> None:
     """Reject thresholds outside [0, 100] and non-numbers as argument errors."""
-    for value in ["101", "-1", "not-a-number"]:
-        with pytest.raises(argparse.ArgumentTypeError):
-            script.parse_threshold(value)
+    with pytest.raises(argparse.ArgumentTypeError):
+        script.parse_threshold(value)
 
 
 def test_label_names_libraries_and_binaries(script: types.ModuleType) -> None:
     """Distinguish library and named binary targets in breakdown labels."""
-    lib = script.DocTarget("netsuke", "lib", None)
-    binary = script.DocTarget("netsuke", "bin", "netsuke-bin")
-
-    assert script.label(lib) == "netsuke lib"
-    assert script.label(binary) == "netsuke bin (netsuke-bin)"
-
-
-def test_main_delegates_to_runner_measurements(
-    script: types.ModuleType,
-    tmp_path: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Delegate CLI measurement while retaining CLI reporting and exit policy."""
-    expected = script.runner.Coverage(1, 1)
-    monkeypatch.setattr(
-        script.runner,
-        "run_measurements",
-        lambda _toolchain, _root: (expected, []),
+    doc_target = script.runner.DocTarget
+    labels = (
+        script.label(doc_target("netsuke", "lib", None)),
+        script.label(doc_target("netsuke", "bin", "netsuke-bin")),
     )
 
-    assert (
-        script.main(["--toolchain", "nightly-x", "--manifest-root", str(tmp_path)]) == 0
+    assert labels == ("netsuke lib", "netsuke bin (netsuke-bin)"), (
+        "binary rows must be qualified by target name while library rows are not"
     )
 
 
@@ -289,7 +342,13 @@ def test_main_translates_runner_failure_to_exit_two(
 
     monkeypatch.setattr(script.runner, "run_measurements", fail)
 
-    assert (
-        script.main(["--toolchain", "nightly-x", "--manifest-root", str(tmp_path)]) == 2
+    exit_code = script.main([
+        "--toolchain",
+        "nightly-x",
+        "--manifest-root",
+        str(tmp_path),
+    ])
+
+    assert (exit_code, capsys.readouterr().err) == (2, f"error: {message}\n"), (
+        "a runner failure must exit 2 and report the cause on standard error"
     )
-    assert capsys.readouterr().err == f"error: {message}\n"

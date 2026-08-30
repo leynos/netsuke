@@ -1,7 +1,5 @@
 """Refresh and render shared en-GB-oxendict ``typos`` configuration."""
 
-from __future__ import annotations
-
 import dataclasses as dc
 import json
 import pathlib

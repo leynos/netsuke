@@ -473,11 +473,16 @@ from the `bin-name` field that
   `stage-release-artefacts` stages each target's archive, plus a `.sha256`
   sidecar, per `[common.binstall]` in `.github/release-staging.toml`, and the
   "Hoist cargo-binstall archives" step in `.github/workflows/release.yml` runs
-  `scripts/hoist_binstall_archives.py` under a pinned Python 3.13 installed by
+  `scripts/hoist_binstall_archives.py` under a pinned Python 3.14 installed by
   `setup-uv`. The script validates that every target's archive and checksum are
   present, are regular files rather than symlinks, and have a free destination
   before moving them to the release root for upload; the read-only discovery
-  and validation half lives in `scripts/hoist_binstall_discovery.py`.
+  and validation half lives in `scripts/hoist_binstall_discovery.py`. The move
+  is transactional: a forward failure rolls completed pairs back to their
+  nested paths and re-raises the original failure after a successful rollback.
+  If an `OSError` prevents rollback, the original and rollback failures are
+  combined in a `BaseExceptionGroup`; another rollback exception propagates
+  unchanged.
   `tests/binstall_metadata_tests.rs` and
   `tests/workflow_contracts/hoist_binstall_archives_test.py` hold this contract.
 
@@ -606,6 +611,7 @@ Run these commands before finalizing any change:
 
 - `make check-fmt`
 - `make lint`
+- `make typecheck`
 - `make doc-coverage`
 - `make test`
 
@@ -627,9 +633,21 @@ doc build). Rustdoc writes the coverage JSON to its reported generated file,
 which the script reads immediately after each successful invocation. That
 path-extraction helper belongs only to the
 `--show-coverage --output-format json` collector; do not reuse it for general
-Rustdoc output. The pure `Coverage`/`DocTarget` model and payload validation
-belong to `scripts/doc_coverage_model.py`; only the coverage gate may import
-it. The executable retains Cargo invocation and user-facing error translation.
+Rustdoc output. `scripts/doc_coverage_model.py` defines the shared
+`Coverage`/`DocTarget` values. `scripts/doc_coverage_runner.py` owns toolchain
+pin parsing, Cargo metadata validation, target selection, and measurement
+orchestration; its `ToolchainPinError` and `WorkspaceMetadataError` preserve
+those input-validation boundaries. `scripts/doc_coverage_cargo.py` owns Cargo
+and Rustdoc process handling, generated-path extraction, and coverage-payload
+validation; its shape and count errors are translated to `CoverageOutputError`
+at that boundary. The executable retains argument parsing, reporting, and
+user-facing error translation.
+
+The workflow contract suites share the YAML 1.2-aware loader and common
+workflow, job, and step helpers in
+`tests/workflow_contracts/workflow_loading.py`. Each suite keeps its own
+workflow-specific projections and assertions, so parsing and structural
+validation remain consistent across the workflows under test.
 
 `make test` runs the non-doctest suite through
 [cargo-nextest](https://nexte.st/) and then runs the doctests separately. CI
@@ -848,6 +866,58 @@ If a workflow's behaviour does not depend on a feature from a particular commit
 onwards, do not assert its SHA — express any advisory note as a comment or a
 changelog entry instead.
 
+## Python tooling and baseline
+
+Every Python source the repository owns — the helper scripts under `scripts/`,
+their test suites under `scripts/tests/`, and the workflow contract tests under
+`tests/workflow_contracts/` — targets a **Python 3.14 baseline**. The Makefile
+pins the interpreter in `PYTHON_BASELINE`, `pyproject.toml` sets
+`target-version = "py314"` for Ruff and `py-version = "3.14"` for Pylint, and
+the CI and release workflows install the same version through `setup-uv`.
+Write to the baseline: deferred annotation evaluation is the default, so
+`from __future__ import annotations` must not appear, and PEP 758
+unparenthesized `except` clauses and PEP 695 `type` statements are the
+preferred forms.
+
+The Python gates run inside the ordinary quality-gate targets:
+
+- `make check-fmt` runs `ruff format --check` over the Python sources.
+- `make fmt` applies `ruff format` and Ruff's import sorting.
+- `make lint` runs `make lint-python`: `ruff check`, a Pylint pass, the
+  df12 house lints, and the `ambrleaks` snapshot scanner.
+- `make typecheck` runs `make typecheck-python`: the
+  [ty](https://github.com/astral-sh/ty) typechecker over the Python sources.
+
+The configuration in `pyproject.toml` mirrors the df12 estate policy in
+[episodic](https://github.com/leynos/episodic); only path-shaped settings are
+local. The file deliberately declares no `[project]` table, so `uv` never
+treats this Rust workspace as a Python project. The Pylint command from
+`pylint-pypy-shim` runs on CPython 3.14 so it parses every repository-owned
+source, with the message set enabled in `pyproject.toml`; the
+[df12-python-lints](https://github.com/leynos/df12-python-lints) messages
+(structural pattern matching, assert messages, suppression hygiene, snapshot
+discipline, and the baseline-gated R9112/C9112 checks) need CPython 3.14 and
+run as a second pass pinned to `DF12_PYTHON_LINTS_REF`.
+
+Tool versions are pinned twice by design: the Makefile defaults
+(`RUFF_VERSION`, `TY_VERSION`, `PYTHON_BASELINE`) drive local runs, and the
+`env` block of `.github/workflows/ci.yml` re-declares the same values, which
+override the Makefile's `?=` assignments in CI.
+`tests/workflow_contracts/python_toolchain_sync_test.py` asserts the pairs
+agree — without asserting any specific version — so a bump must land in both
+files in the same commit.
+
+The shared spelling-policy rollout helpers
+(`scripts/generate_typos_config.py` and the `typos_rollout*` modules and
+tests) are estate-synchronized and keep their own pinned, isolated Ruff policy
+enforced by `make spelling-helper-test`; they are excluded from the
+repository-wide Ruff and Pylint configuration so the two policies cannot
+disagree about the same file.
+
+Lint and typecheck suppressions are a last resort, tightly scoped, and every
+one must carry a reason on the line — the df12 messages C9106 and C9107 fail
+any `noqa`, `pylint: disable`, or `type: ignore` pragma that does not.
+
 ## Mutation-testing workflow contract tests
 
 This repository runs scheduled, informational mutation testing through a thin
@@ -918,6 +988,7 @@ every command in this completion checklist:
 - `make nixie`
 - `make check-fmt`
 - `make lint`
+- `make typecheck`
 - `make test`
 
 ## Markdown formatting and table alignment
@@ -967,6 +1038,13 @@ assembled from two policy layers:
 security and persistence coordination. Only `scripts/typos_rollout.py` may
 compose it with dictionary validation; application and release code must not
 reuse these spelling-policy internals.
+
+The `RemoteResponse` protocol is a context-managed response boundary: callers
+read the body within the context and exit it to release the underlying
+response. `atomic_write` writes complete content to a temporary file beside
+the destination, atomically replaces the destination on the same filesystem,
+and removes the temporary file when writing or replacement fails. The existing
+destination is therefore left intact unless replacement succeeds.
 
 Pull-request CI restores the untracked dictionary and metadata before the
 spelling gate. The helper still performs a conditional freshness check, then

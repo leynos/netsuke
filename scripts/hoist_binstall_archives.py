@@ -32,8 +32,6 @@ Run via ``.github/workflows/release.yml``; behavioural coverage lives in
 ``tests/workflow_contracts/hoist_binstall_archives_test.py``.
 """
 
-from __future__ import annotations
-
 import argparse
 import shutil
 import sys
@@ -70,15 +68,13 @@ def hoist(dist_dir: Path, staging_config: Path, manifest: Path, version: str) ->
         any expected asset was missing, non-regular, ambiguous, or colliding
         (in which case nothing is moved).
 
-    Raises
-    ------
-    ValueError
-        If the staging configuration defines no targets or repeats one.
-    OSError
-        If the dist tree cannot be traversed, an asset cannot be probed, or
-        a validated move fails (after completed moves are rolled back).
-    ExceptionGroup
-        If a move fails and the rollback also cannot restore every file.
+    Notes
+    -----
+    A staging configuration defining no targets, or repeating one, propagates
+    ``ValueError``. An untraversable dist tree, an unprobeable asset, or a
+    validated move that fails propagates ``OSError`` (after completed moves
+    are rolled back), and a move failure whose rollback cannot restore every
+    file propagates ``BaseExceptionGroup``.
     """
     names = expected_archive_names(staging_config, manifest, version)
     print(f"Expected cargo-binstall archives: {', '.join(names)}")
@@ -104,11 +100,10 @@ def _rollback_completed_moves(completed: list[tuple[Path, Path]]) -> None:
     completed
         The ``(source, destination)`` pairs of every finished move.
 
-    Raises
-    ------
-    OSError
-        If restoring any file fails; the caller decides how to combine this
-        with the failure that triggered the rollback.
+    Notes
+    -----
+    A restoration that fails propagates ``OSError``; the caller decides how
+    to combine it with the failure that triggered the rollback.
     """
     for source, destination in reversed(completed):
         shutil.move(destination, source)
@@ -131,11 +126,14 @@ def _move_all(dist_dir: Path, located: list[StagedArchive]) -> None:
 
     Raises
     ------
-    OSError
-        The original move failure, after a successful rollback.
-    ExceptionGroup
+    BaseExceptionGroup
         The original failure together with the rollback failure, when the
         rollback itself could not restore every file.
+
+    Notes
+    -----
+    After a successful rollback the original move failure — typically an
+    ``OSError`` — is re-raised unchanged.
     """
     completed: list[tuple[Path, Path]] = []
     try:
@@ -147,11 +145,12 @@ def _move_all(dist_dir: Path, located: list[StagedArchive]) -> None:
     except BaseException as failure:
         try:
             _rollback_completed_moves(completed)
-        except BaseException as rollback_failure:
-            raise BaseExceptionGroup(
-                "hoist move failed and rollback could not restore every file",
-                [failure, rollback_failure],
-            ) from None
+        except OSError as rollback_failure:
+            # `shutil.move` reports every restoration fault as an `OSError`
+            # (`shutil.Error` included), so a wider handler here would only
+            # swallow control-flow exceptions that must keep propagating.
+            msg = "hoist move failed and rollback could not restore every file"
+            raise BaseExceptionGroup(msg, [failure, rollback_failure]) from None
         raise
 
 
@@ -169,10 +168,9 @@ def main(argv: list[str] | None = None) -> int:
     int
         Process exit status from :func:`hoist`.
 
-    Raises
-    ------
-    SystemExit
-        If argument parsing fails (raised by ``argparse``).
+    Notes
+    -----
+    ``argparse`` raises ``SystemExit`` when argument parsing fails.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--version", required=True, help="Release version")
