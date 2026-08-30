@@ -1,0 +1,197 @@
+---
+source: src/runner/check_tests.rs
+expression: rendered
+---
+{
+  "schema_version": 1,
+  "generator": {
+    "name": "netsuke",
+    "version": "[version]"
+  },
+  "result": {
+    "command": "check",
+    "status": "pass",
+    "fail_on": "error",
+    "summary": {
+      "error": 0,
+      "warning": 3,
+      "advice": 2,
+      "reported": 5,
+      "suppressed": 0,
+      "omitted": 0
+    },
+    "truncated": false,
+    "findings": [
+      {
+        "message": "global variable `spare` is never referenced",
+        "code": "netsuke::lint::unused_var",
+        "severity": "warning",
+        "help": "Delete the entry, or reference it from the recipe that was meant to use it.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#unused-var",
+        "causes": [],
+        "source": {
+          "name": "Netsukefile"
+        },
+        "primary_span": {
+          "label": "unused-var",
+          "offset": 33,
+          "length": 5,
+          "line": 3,
+          "column": 3,
+          "end_line": 3,
+          "end_column": 3,
+          "snippet": "spare"
+        },
+        "labels": [
+          {
+            "label": "unused-var",
+            "offset": 33,
+            "length": 5,
+            "line": 3,
+            "column": 3,
+            "end_line": 3,
+            "end_column": 3,
+            "snippet": "spare"
+          }
+        ],
+        "related": []
+      },
+      {
+        "message": "action `clean` is not described in `netsuke help targets`",
+        "code": "netsuke::lint::action_without_description",
+        "severity": "advice",
+        "help": "Add a `description` stating the operation the action performs.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#action-without-description",
+        "causes": [],
+        "source": {
+          "name": "Netsukefile"
+        },
+        "primary_span": {
+          "label": "action-without-description",
+          "offset": 60,
+          "length": 4,
+          "line": 5,
+          "column": 5,
+          "end_line": 5,
+          "end_column": 5,
+          "snippet": "name"
+        },
+        "labels": [
+          {
+            "label": "action-without-description",
+            "offset": 60,
+            "length": 4,
+            "line": 5,
+            "column": 5,
+            "end_line": 5,
+            "end_column": 5,
+            "snippet": "name"
+          }
+        ],
+        "related": []
+      },
+      {
+        "message": "action `clean` duplicates the built-in `netsuke clean`",
+        "code": "netsuke::lint::builtin_clean_action",
+        "severity": "advice",
+        "help": "Delete the action and use `netsuke clean`, which is derived from the graph.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#builtin-clean-action",
+        "causes": [],
+        "source": {
+          "name": "Netsukefile"
+        },
+        "primary_span": {
+          "label": "builtin-clean-action",
+          "offset": 60,
+          "length": 4,
+          "line": 5,
+          "column": 5,
+          "end_line": 5,
+          "end_column": 5,
+          "snippet": "name"
+        },
+        "labels": [
+          {
+            "label": "builtin-clean-action",
+            "offset": 60,
+            "length": 4,
+            "line": 5,
+            "column": 5,
+            "end_line": 5,
+            "end_column": 5,
+            "snippet": "name"
+          }
+        ],
+        "related": []
+      },
+      {
+        "message": "target `out.txt` `command` escapes a dollar for Ninja, which Netsuke now does itself",
+        "code": "netsuke::lint::manual_ninja_escape",
+        "severity": "warning",
+        "help": "Write the shell variable normally, for example `$PATH` rather than `$$PATH`.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#manual-ninja-escape",
+        "causes": [],
+        "source": {
+          "name": "Netsukefile"
+        },
+        "primary_span": {
+          "label": "manual-ninja-escape",
+          "offset": 144,
+          "length": 2,
+          "line": 9,
+          "column": 18,
+          "end_line": 9,
+          "end_column": 18,
+          "snippet": "$$"
+        },
+        "labels": [
+          {
+            "label": "manual-ninja-escape",
+            "offset": 144,
+            "length": 2,
+            "line": 9,
+            "column": 18,
+            "end_line": 9,
+            "end_column": 18,
+            "snippet": "$$"
+          }
+        ],
+        "related": []
+      },
+      {
+        "message": "target `out.txt` `command` repeats the declared path `out.txt`; use `{{ outs }}`",
+        "code": "netsuke::lint::literal_recipe_path",
+        "severity": "warning",
+        "help": "Replace the literal path with `{{ outs }}` for outputs or `{{ ins }}` for sources.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#literal-recipe-path",
+        "causes": [],
+        "source": {
+          "name": "Netsukefile"
+        },
+        "primary_span": {
+          "label": "literal-recipe-path",
+          "offset": 150,
+          "length": 7,
+          "line": 9,
+          "column": 24,
+          "end_line": 9,
+          "end_column": 24,
+          "snippet": "out.txt"
+        },
+        "labels": [
+          {
+            "label": "literal-recipe-path",
+            "offset": 150,
+            "length": 7,
+            "line": 9,
+            "column": 24,
+            "end_line": 9,
+            "end_column": 24,
+            "snippet": "out.txt"
+          }
+        ],
+        "related": []
+      }
+    ]
+  }
+}
