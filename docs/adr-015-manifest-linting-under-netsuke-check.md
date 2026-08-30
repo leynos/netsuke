@@ -2,10 +2,16 @@
 
 ## Status
 
-Accepted. `netsuke check` is the manifest linter: findings are the command's
-result rather than its failure mode, rule identifiers are stable kebab-case
-names owned by a static registry, and rule text stays in that registry instead
-of the Fluent catalogues.
+Accepted, with the rule set shipped as a prototype. `netsuke check` is the
+manifest linter: findings are the command's result rather than its failure
+mode, and rule identifiers are stable kebab-case names owned by a static
+registry. Rule prose stays in that registry for the prototype period and moves
+to the Fluent catalogues under roadmap step 7.2; rule identifiers never move.
+
+Roadmap phase 7 owns the work that turns the prototype into a supported
+feature. The rule set, the default severities, and everything in the
+[manifest linter design](netsuke-linter-design.md) except the identifiers are
+expected to change under it.
 
 ## Date
 
@@ -149,31 +155,47 @@ whose meaning changes materially takes a new name. Each finding additionally
 carries the diagnostic code `netsuke::lint::<name_in_snake_case>`, matching the
 existing code convention, and a `url` into the rule reference.
 
-**Rule text is not localized.** A rule's summary, rationale, and remediation
-are English technical documentation owned by the static rule registry,
-alongside the rule's name and category. The command's framing text — subcommand
-and flag help, the threshold message, the summary line, and policy errors — is
-localized as usual. This mirrors Clippy, ShellCheck, `hadolint`, `buildifier`,
-and Ruff, none of which localizes lint text.
+**Rule text is not localized yet; rule identifiers never will be.** These are
+two separate questions and this ADR answers them differently.
 
-Three reasons carried this. First, the registry is the source of truth for the
-rule reference document, which a contract test checks; splitting the same prose
-across 35 catalogues would let the emitted text and the documentation drift
-with no gate able to notice. Second, remediation text is dense with
-untranslatable manifest identifiers — `order_only_deps`, `{{ outs }}`,
-`dependency_order` — which the translators' guide already instructs translators
-to leave verbatim, so the translatable residue is small. Third, and decisively,
-localization would put a 35-way obligation on the critical path of every new
-rule, and the property that keeps a rule set healthy is that adding a rule is
-cheap.
+A rule's name, its category name, its severity name, and its diagnostic code
+are permanently untranslated. They are values a user types into a configuration
+file or a suppression comment and a machine matches exactly, which is the class
+the translators' guide already covers.
+
+A rule's summary, rationale, and remediation are prose and will be localized.
+They are not localized in v0.4.0: the rule set is a prototype whose membership
+and wording are expected to change once the rules have been used, and
+translating prose before it has settled spends the effort twice. The registry
+owns that text for now, and the command's framing text — subcommand and flag
+help, the threshold message, the summary line, and policy errors — is localized
+as usual.
+
+Three reasons set the sequencing rather than the destination. First, the
+registry is currently the source of truth for the rule reference document,
+which a contract test checks; moving the prose to the catalogues has to move
+that binding with it, or the emitted text and the documentation will drift with
+no gate able to notice. Second, remediation text is dense with untranslatable
+manifest identifiers — `order_only_deps`, `{{ outs }}`, `dependency_order` —
+which translators already leave verbatim, so the translatable residue is small
+and worth translating once it is stable. Third, a 35-way obligation on every
+new rule would fall hardest while the rule set is still churning, which is
+exactly the period this phase expects.
+
+Roadmap step 7.2 owns the migration and states its shape: catalogue keys of the
+form `lint.rule.<name>.summary`, the registry's English text retained as the
+fallback so a catalogue gap degrades to the source locale, the reference
+contract test rebound to the source catalogue, and `--explain --json` left in
+the source locale so an editor building a rule picker gets stable text.
 
 ## Known risks and limitations
 
 - **Rule text is English-only in an otherwise localized CLI.** This is a real
-  inconsistency, accepted deliberately. The reversal path is additive and
-  mechanical: add `lint.rule.<name>.summary` and `.remediation` keys, have the
-  registry look them up with the current text as the fallback, and translate
-  incrementally. No identifier, schema, or suppression comment changes.
+  inconsistency, accepted only for the prototype period. Roadmap step 7.2
+  closes it, and the migration is additive: add the `lint.rule.<name>.*` keys,
+  have the registry look them up with the current text as the fallback, and
+  translate incrementally. No identifier, schema, or suppression comment
+  changes, because none of those is prose.
 - **A threshold change moves findings between JSON branches.** A consumer that
   reads only `result.findings` sees nothing when the threshold is met. This is
   mitigated by both branches carrying the same per-finding shape, and
