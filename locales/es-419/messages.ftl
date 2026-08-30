@@ -458,3 +458,22 @@ manifest.budget.exceeded = Se agotó el presupuesto de recursos del manifiesto d
 
 cli.flag.env_allow_var.help = Variable de entorno permitida para el asistente env() del manifiesto.
 cli.flag.env_block_var.help = Variable de entorno bloqueada para el asistente env() del manifiesto.
+
+# Análisis del manifiesto (`netsuke check`).
+cli.subcommand.check.about = Analizar el manifiesto sin generar ni ejecutar una compilación.
+cli.subcommand.check.long_about = Revisar el manifiesto seleccionado en busca de construcciones que se analizan bien pero probablemente sean erróneas, inseguras, no portables u hostiles al caché.
+cli.subcommand.check.flag.rule.help = Definir la severidad de una regla o categoría, escrita como NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Severidad desde la cual los hallazgos hacen fallar el comando.
+cli.subcommand.check.flag.limit.help = Cantidad máxima de hallazgos informados; 0 los informa todos.
+cli.subcommand.check.flag.explain.help = Mostrar la referencia de reglas en lugar de revisar un manifiesto.
+check.threshold_exceeded = Los hallazgos alcanzaron el umbral { $severity }: { $failing } de { $reported } informados.
+check.threshold_exceeded.help = Corrija los hallazgos informados, ajuste --rule o relaje --fail-on.
+check.summary.counts = Resultados del análisis — errores: { $errors }, advertencias: { $warnings }, consejos: { $advice }, suprimidos: { $suppressed }.
+check.summary.clean = Sin hallazgos.
+check.summary.truncated = Se muestran { $shown } hallazgos; --limit omitió { $omitted } más.
+check.rule.malformed = El selector { $selector } no está escrito como NAME=SEVERITY.
+check.rule.unknown = El selector nombra { $name }, que no es una regla ni una categoría.
+check.rule.severity = El selector { $name } nombra la severidad { $severity }; se esperaba una de { $values }.
+check.fail_on.invalid = Umbral de falla desconocido { $value }; se esperaba uno de { $values }.
+check.source_index = No se pudo indexar { $path } para los diagnósticos en la línea { $line }: { $reason }.
+status.tool.check = Revisar

@@ -55,7 +55,7 @@ impl GraphRule for UndeclaredTargetInput {
     /// Only paths the graph itself declares as outputs are searched for, and
     /// only on word boundaries, so ordinary command text cannot match.
     fn check(&self, ctx: &GraphContext<'_>, sink: &mut FindingSink<'_>) {
-        let outputs: Vec<&str> = ctx.graph.targets.keys().map(path_str).collect();
+        let outputs: Vec<&str> = ctx.graph.output_paths().map(path_str).collect();
         let provenance = Provenance::new(ctx.document, ctx.manifest);
         for (index, target) in ctx.manifest.targets.iter().enumerate() {
             let Some(edge) = primary_edge(ctx.graph, target.name.to_string_vec().first()) else {
@@ -100,7 +100,9 @@ fn undeclared_inputs<'graph>(
 
 /// Borrow the edge that produces a target's first output.
 fn primary_edge<'a>(graph: &'a BuildGraph, name: Option<&String>) -> Option<&'a BuildEdge> {
-    graph.targets.get(Utf8PathBuf::from(name?).as_path())
+    graph
+        .target_for_output(Utf8PathBuf::from(name?).as_path())
+        .map(|(_, edge)| edge)
 }
 
 /// Collect every path an edge is ordered after, transitively.
@@ -124,7 +126,10 @@ fn dependency_closure<'graph>(
         if !reached.insert(path) {
             continue;
         }
-        let Some(next) = graph.targets.get(Utf8PathBuf::from(path).as_path()) else {
+        let Some(next) = graph
+            .target_for_output(Utf8PathBuf::from(path).as_path())
+            .map(|(_, edge)| edge)
+        else {
             continue;
         };
         queue.extend(direct_dependencies(next));
@@ -206,14 +211,17 @@ impl GraphRule for UnreachableTarget {
 fn reachable_outputs(graph: &BuildGraph) -> BTreeSet<&str> {
     let mut reachable: BTreeSet<&str> = BTreeSet::new();
     if graph.default_targets.is_empty() {
-        return graph.targets.keys().map(path_str).collect();
+        return graph.output_paths().map(path_str).collect();
     }
     let mut queue: Vec<&str> = graph.default_targets.iter().map(path_str).collect();
     while let Some(path) = queue.pop() {
         if !reachable.insert(path) {
             continue;
         }
-        let Some(edge) = graph.targets.get(Utf8PathBuf::from(path).as_path()) else {
+        let Some(edge) = graph
+            .target_for_output(Utf8PathBuf::from(path).as_path())
+            .map(|(_, edge)| edge)
+        else {
             continue;
         };
         queue.extend(
