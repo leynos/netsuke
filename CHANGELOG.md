@@ -26,6 +26,9 @@
 
 ### Changed
 
+- Require UTF-8 build-file and working-directory paths for Ninja invocation,
+  reporting a clear diagnostic when either path is not valid UTF-8
+  ([#525](https://github.com/leynos/netsuke/issues/525))
 - Move the `StringOrList` conversion helpers out of
   `src/ir/from_manifest_support.rs` and onto the type itself as `map_each`,
   `to_string_vec` and `as_single`, so the behaviour lives with the data it
