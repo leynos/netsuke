@@ -26,6 +26,8 @@ pub enum HelpTopic {
 
     /// Print the help for the `build` command.
     Build,
+    /// Print the help for the `check` command.
+    Check,
     /// Print the help for the `clean` command.
     Clean,
     /// Print the help for the `graph` command.

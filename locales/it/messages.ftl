@@ -420,3 +420,22 @@ example.errors_found = { $count ->
     [one] Trovato { $count } errore.
    *[other] Trovati { $count } errori.
 }
+
+# Analisi del manifest (`netsuke check`).
+cli.subcommand.check.about = Analizzare il manifest senza generare né eseguire una build.
+cli.subcommand.check.long_about = Analizzare il manifest selezionato alla ricerca di costrutti che vengono interpretati correttamente ma sono probabilmente errati, non sicuri, non portabili od ostili alla cache.
+cli.subcommand.check.flag.rule.help = Impostare la severità di una regola o categoria, scritta come NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Severità a partire dalla quale i rilievi fanno fallire il comando.
+cli.subcommand.check.flag.limit.help = Numero massimo di rilievi segnalati; 0 li segnala tutti.
+cli.subcommand.check.flag.explain.help = Stampare il riferimento delle regole invece di analizzare un manifest.
+check.threshold_exceeded = I rilievi hanno raggiunto la soglia { $severity }: { $failing } su { $reported } segnalati.
+check.threshold_exceeded.help = Correggi i rilievi segnalati, modifica --rule oppure allenta --fail-on.
+check.summary.counts = Risultati dell'analisi — errori: { $errors }, avvisi: { $warnings }, suggerimenti: { $advice }, soppressi: { $suppressed }.
+check.summary.clean = Nessun rilievo.
+check.summary.truncated = Vengono mostrati { $shown } rilievi; --limit ne ha omessi altri { $omitted }.
+check.rule.malformed = Il selettore { $selector } non è scritto come NAME=SEVERITY.
+check.rule.unknown = Il selettore indica { $name }, che non è né una regola né una categoria.
+check.rule.severity = Il selettore { $name } indica la severità { $severity }; attesa una fra { $values }.
+check.fail_on.invalid = Soglia di errore sconosciuta { $value }; attesa una fra { $values }.
+check.source_index = Impossibile indicizzare { $path } per le diagnostiche alla riga { $line }: { $reason }.
+status.tool.check = Verifica

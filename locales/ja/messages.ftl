@@ -417,3 +417,22 @@ example.errors_found = { $count ->
     [0] エラーは見つかりませんでした。
    *[other] { $count } 件のエラーが見つかりました。
 }
+
+# マニフェストの静的検査（`netsuke check`）。
+cli.subcommand.check.about = ビルドを生成も実行もせずにマニフェストを検査します。
+cli.subcommand.check.long_about = 選択したマニフェストを検査し、解析は通るものの誤り・危険・非可搬・キャッシュに不利と思われる記述を洗い出します。
+cli.subcommand.check.flag.rule.help = 規則または分類の重大度を NAME=SEVERITY の形式で設定します。
+cli.subcommand.check.flag.fail_on.help = 指摘がコマンドを失敗させる重大度です。
+cli.subcommand.check.flag.limit.help = 報告する指摘の上限。0 はすべて報告します。
+cli.subcommand.check.flag.explain.help = マニフェストを検査せず規則リファレンスを出力します。
+check.threshold_exceeded = 指摘がしきい値 { $severity } に達しました: 報告 { $reported } 件のうち { $failing } 件。
+check.threshold_exceeded.help = 報告された指摘を修正するか、--rule を調整するか、--fail-on を緩めてください。
+check.summary.counts = 検査結果 — エラー: { $errors }、警告: { $warnings }、助言: { $advice }、抑制: { $suppressed }。
+check.summary.clean = 指摘はありません。
+check.summary.truncated = { $shown } 件を表示しています。--limit により { $omitted } 件を省略しました。
+check.rule.malformed = セレクター { $selector } が NAME=SEVERITY の形式で書かれていません。
+check.rule.unknown = セレクターが指定した { $name } は規則でも分類でもありません。
+check.rule.severity = セレクター { $name } が指定した重大度 { $severity } は無効です。次のいずれかを指定してください: { $values }。
+check.fail_on.invalid = 失敗しきい値 { $value } は不明です。次のいずれかを指定してください: { $values }。
+check.source_index = 診断のために { $path } を { $line } 行目で索引付けできませんでした: { $reason }。
+status.tool.check = 検査

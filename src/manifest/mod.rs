@@ -60,7 +60,9 @@ pub use glob::glob_paths;
 pub use load_stage::ManifestLoadStage;
 use loading::{notify_stage, trace_expansion_report};
 pub use parse_with_config::from_str_with_env_and_config;
-pub(crate) use query::from_path_for_manifest_query;
+pub(crate) use query::{
+    LoadedManifest, from_path_for_manifest_query, from_path_for_manifest_query_with_source,
+};
 pub use render::render_manifest;
 
 use self::{env_reader::env_var_with, jinja_macros::register_manifest_macros};

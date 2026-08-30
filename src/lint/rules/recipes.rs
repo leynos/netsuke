@@ -230,11 +230,22 @@ fn command_scalars(node: &Node) -> Vec<&Node> {
 /// the whole recipe as quoted and hide every finding inside it.
 fn content_span(doc: &Document, node: &Node, style: ScalarStyle) -> Span {
     let source = doc.slice(node.span);
-    match style {
+    let span = match style {
         ScalarStyle::Plain => node.span,
         ScalarStyle::Quoted => strip_quotes(node.span, source),
         ScalarStyle::Block => strip_block_header(node.span, source),
-    }
+    };
+    trim_trailing(doc, span)
+}
+
+/// Shrink a span past trailing whitespace.
+///
+/// A block scalar's reported span runs to the start of whatever follows it, so
+/// without this a diagnostic would underline the blank line and the first line
+/// of the next declaration.
+fn trim_trailing(doc: &Document, span: Span) -> Span {
+    let trimmed = doc.slice(span).trim_end();
+    Span::new(span.start, span.start.saturating_add(trimmed.len()))
 }
 
 /// Drop a quoted scalar's surrounding quote characters.

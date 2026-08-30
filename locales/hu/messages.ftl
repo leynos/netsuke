@@ -421,3 +421,22 @@ example.errors_found = { $count ->
     [one] { $count } hiba található.
    *[other] { $count } hiba található.
 }
+
+# Manifest-ellenőrzés (`netsuke check`).
+cli.subcommand.check.about = A manifest elemzése build előállítása és futtatása nélkül.
+cli.subcommand.check.long_about = A kiválasztott manifest vizsgálata olyan szerkezetek után, amelyek ugyan elemezhetők, de valószínűleg hibásak, nem biztonságosak, nem hordozhatók vagy rontják a gyorsítótárazást.
+cli.subcommand.check.flag.rule.help = Egy szabály vagy kategória súlyosságának beállítása NAME=SEVERITY alakban.
+cli.subcommand.check.flag.fail_on.help = Az a súlyosság, amelynél a megállapítások a parancs hibáját okozzák.
+cli.subcommand.check.flag.limit.help = A jelentett megállapítások legnagyobb száma; a 0 mindet jelenti.
+cli.subcommand.check.flag.explain.help = A szabályhivatkozás kiírása manifest elemzése helyett.
+check.threshold_exceeded = A megállapítások elérték a(z) { $severity } küszöböt: { $failing } a(z) { $reported } jelentettből.
+check.threshold_exceeded.help = Javítsa a jelentett megállapításokat, módosítsa a --rule kapcsolót, vagy lazítson a --fail-on értéken.
+check.summary.counts = Elemzési eredmények — hibák: { $errors }, figyelmeztetések: { $warnings }, tanácsok: { $advice }, elnyomva: { $suppressed }.
+check.summary.clean = Nincs megállapítás.
+check.summary.truncated = { $shown } megállapítás látható; a --limit további { $omitted } elemet hagyott ki.
+check.rule.malformed = A(z) { $selector } választó nem NAME=SEVERITY alakban szerepel.
+check.rule.unknown = A választó a(z) { $name } nevet adja meg, ami sem szabály, sem kategória.
+check.rule.severity = A(z) { $name } választó a(z) { $severity } súlyosságot adja meg; a várt értékek: { $values }.
+check.fail_on.invalid = Ismeretlen hibaküszöb: { $value }; a várt értékek: { $values }.
+check.source_index = A(z) { $path } nem indexelhető a diagnosztikához a(z) { $line }. sorban: { $reason }.
+status.tool.check = Ellenőrzés
