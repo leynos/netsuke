@@ -378,7 +378,7 @@ fn check_explain_and_policy_examples_run() -> Result<()> {
     }
 
     let policy = documented_example("guide-check-policy")?;
-    let arguments: Vec<&str> = policy.body.trim_end().split_whitespace().skip(1).collect();
+    let arguments: Vec<&str> = policy.body.split_whitespace().skip(1).collect();
     let suppressed = manifest_workspace("guide-check-suppression")?;
     let run = run_netsuke_in(suppressed.path(), &arguments)?;
     assert_success(&run, "check policy example")?;

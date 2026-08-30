@@ -49,12 +49,17 @@ pub struct Directive {
 
 impl Directive {
     /// Report whether this directive silences a finding at `span`.
+    ///
+    /// Containment is decided by where the finding starts. A collection node's
+    /// reported span can run past its own declaration, so requiring the whole
+    /// span to fit would let an over-wide end escape a directive that plainly
+    /// governs the declaration the finding is about.
     #[must_use]
     pub fn covers(&self, span: Option<Span>) -> bool {
         match self.scope {
             Scope::File => true,
             Scope::Unresolved => false,
-            Scope::Node(node) => span.is_some_and(|found| node.contains(found)),
+            Scope::Node(node) => span.is_some_and(|found| node.contains_offset(found.start)),
         }
     }
 

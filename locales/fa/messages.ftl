@@ -431,7 +431,7 @@ check.threshold_exceeded = یافته‌ها به آستانهٔ { $severity } �
 check.threshold_exceeded.help = یافته‌های گزارش‌شده را برطرف کنید، ‎--rule را تنظیم کنید یا ‎--fail-on را آسان‌تر بگیرید.
 check.summary.counts = نتایج بررسی — خطاها: { $errors }، هشدارها: { $warnings }، توصیه‌ها: { $advice }، سرکوب‌شده: { $suppressed }.
 check.summary.clean = هیچ یافته‌ای نیست.
-check.summary.truncated = { $shown } یافته نمایش داده می‌شود؛ ‎--limit تعداد { $omitted } یافتهٔ دیگر را حذف کرد.
+check.summary.truncated = ‏{ $shown } یافته نمایش داده می‌شود؛ ‎--limit تعداد { $omitted } یافتهٔ دیگر را حذف کرد.
 check.rule.malformed = گزینشگر { $selector } به شکل NAME=SEVERITY نوشته نشده است.
 check.rule.unknown = گزینشگر { $name } را نام می‌برد که نه قاعده است و نه دسته.
 check.rule.severity = گزینشگر { $name } شدت { $severity } را نام می‌برد؛ یکی از { $values } انتظار می‌رفت.
