@@ -44,7 +44,8 @@ Netsuke currently requires:
 
 ### Installation
 
-Netsuke v0.1.0-beta2 is available from crates.io. Where
+The latest published prerelease is Netsuke v0.1.0-beta2 (v0.1.0-beta1 preceded
+it), available from crates.io. Where
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) is available,
 prefer it: it fetches a prebuilt release binary and avoids the toolchain
 requirement below.
@@ -130,7 +131,9 @@ ______________________________________________________________________
 
 ## What works today
 
-The core build-system compiler is implemented:
+The current development source in this checkout is the planned
+v0.1.0-beta3 and is ahead of the published v0.1.0-beta2 tag. Its core
+build-system compiler provides:
 
 - YAML 1.2 manifest parsing with duplicate-key and schema validation;
 - Jinja variables, macros, `foreach`, `when`, globbing, environment helpers,
@@ -148,33 +151,48 @@ The core build-system compiler is implemented:
 - unit, behavioural, integration, property, snapshot, and initial Kani
   verification coverage.
 
-The v0.1.0-beta2 release provides packages for Linux, macOS, and Windows,
-including platform help artefacts. It is the first public release of this work.
+The current source also supports dependency-only action and target aggregates:
+nodes with a non-empty `deps` list may omit a recipe. This work is planned for
+beta3 and is not included in the published beta2 packages.
 
 ______________________________________________________________________
 
-## v0.1.0-beta2 status
+## Release and development status
 
-v0.1.0-beta2 is a useful preview for early adopters, not a declaration that
-Netsuke is finished or that every interface is stable. The compiler pipeline
-and ordinary local-build workflow are substantial; the command-line interface,
-configuration vocabulary, and advanced recipe model are still evolving.
+The published v0.1.0-beta2 release is a useful preview for early adopters, not
+a declaration that Netsuke is finished or that every interface is stable. The
+compiler pipeline and ordinary local-build workflow are substantial; the
+command-line interface, configuration vocabulary, and advanced recipe model are
+still evolving in the planned beta3 source.
 
 Pin the Netsuke version in automation and expect some command names, flags,
 diagnostic schemas, and manifest details to change before 1.0.
+
+Most of the following limitations apply to both the published beta2 and the
+current source.
 
 Known limitations include:
 
 - recipes are shell strings; structured executable arguments and recipe
   environment mappings are not implemented yet;
-- shell dollar expressions use ordinary shell syntax; see the [users' guide
-  safety boundary](docs/users-guide.md#review-the-safety-boundary);
 - compiler-generated dependency imports such as GCC depfiles are planned but
   not yet part of the manifest model;
 - `--json` emits exactly one versioned result or diagnostic document for each
   command, but the schema may still change before 1.0;
-- accessibility, terminal rendering, configuration precedence, and
-  cross-platform compiler invariants need broader verification.
+- `script` recipes invoke `/bin/sh -e`; there is no portable PowerShell
+  abstraction;
+- beta3 does not enforce PowerShell as the Windows recipe interpreter, and
+  native Windows recipe execution is not yet release-validated;
+- colour rendering is not implemented;
+- accessibility and cross-platform compiler invariants need broader
+  verification.
+
+Published beta2 additionally requires Ninja-aware escaping for literal shell
+dollar expressions in manifests.
+
+The planned beta3 source fixes the beta2 shell-dollar limitation with
+Ninja-aware escaping, so ordinary shell expressions can be written normally.
+That fix is not present in the published beta2 packages.
 
 A `Netsukefile` can execute commands and use impure template helpers. Treat it
 with the same care as a `Makefile`: review untrusted manifests before running
@@ -193,8 +211,8 @@ Work after the first release is organized around three priorities:
    environment mappings, compiler dependency imports, and better
    conditional-action feedback.
 3. **Strengthen confidence**: expand Kani and property-test coverage, verify
-   accessibility with assistive technology, and add regression coverage for
-   configuration precedence and terminal rendering.
+   accessibility with assistive technology and add regression coverage for
+   terminal rendering.
 
 Longer-term work explores machine-readable context, profiles, run history,
 artefact delivery, and local-first feedback for human and agent workflows. The
