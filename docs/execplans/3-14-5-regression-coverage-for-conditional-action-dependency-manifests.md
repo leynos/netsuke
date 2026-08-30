@@ -182,6 +182,10 @@ escalation, not workarounds.
       review feedback; recorded its production scope, documented the accepted
       and rejected offset forms, and added the boundary to the validation
       scope.
+- [x] (2026-08-31) Rebased onto
+      `origin/chore/enforce-markdown-table-formatting`; retained its canonical
+      non-mutating Markdown check and regenerated the lockfile from that
+      target baseline before running the full rebase validation stack.
 
 (Timestamps to be added as work proceeds.)
 
@@ -362,6 +366,14 @@ escalation, not workarounds.
   only offsets below 24 hours in absolute value. The guard therefore belongs at
   parsing, where both `+24:00` and `-24:00` are rejected before timestamp
   conversion. Date/Author: 2026-08-31, review follow-up.
+
+- Decision: Adopt the target branch's canonical Markdown-formatting contract
+  during the rebase. Rationale: `make check-fmt` now checks Rust, Python, and
+  Markdown formatting, while `scripts/check-markdown-format.sh` formats
+  isolated copies with `mdtablefix` and accepts only the exact LF or CRLF
+  rendering. Two replayed formatter commits were therefore superseded and
+  skipped: the target already includes that safer implementation and its CI
+  coverage. Date/Author: 2026-08-31, rebase follow-up.
 
 ## Outcomes & retrospective
 
@@ -1083,3 +1095,8 @@ Skills to load while implementing:
   user-facing contract after review. Validation scope now includes `Z`/`z`,
   signed offsets below 24 hours, and rejection of both signs at `24:00` and
   beyond; the full gate stack remains the required final validation.
+
+- 2026-08-31 — Rebased onto `origin/chore/enforce-markdown-table-formatting`.
+  Kept the target's canonical `mdtablefix` checker instead of replaying older
+  duplicate formatter commits, then reset `Cargo.lock` to the target baseline
+  and regenerated it before the rebase gates.
