@@ -19,6 +19,11 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-accessible-output",
     "guide-binstall-install",
     "guide-boolean-string-interpolation",
+    "guide-check-command",
+    "guide-check-config",
+    "guide-check-explain",
+    "guide-check-policy",
+    "guide-check-suppression",
     "guide-cli-usage",
     "guide-command-available-manifest",
     "guide-command-list",
@@ -331,6 +336,95 @@ fn help_targets_example_lists_described_targets() -> Result<()> {
     ensure!(
         normalize_fluent_isolates(&run.stdout).contains("hello.txt"),
         "help targets should list the documented target"
+    );
+    Ok(())
+}
+
+/// The documented `netsuke check` invocation must run and report cleanly.
+#[test]
+fn check_example_reports_a_clean_manifest() -> Result<()> {
+    let example = documented_example("guide-check-command")?;
+    ensure!(example.body == "netsuke check\n", "check example drifted");
+    let workspace = manifest_workspace("guide-first-build-manifest")?;
+    let run = run_netsuke_in(workspace.path(), &["--locale", "en-US", "check"])?;
+    assert_success(&run, "check example")?;
+    ensure!(
+        normalize_fluent_isolates(&run.stdout).contains("Lint results"),
+        "check should print a summary, got {}",
+        run.stdout
+    );
+    Ok(())
+}
+
+/// Every documented `netsuke check` invocation must run as written.
+///
+/// The `--explain` catalogue is checked for a rule it must contain, and the
+/// policy example for the effect its selectors claim: a `clarity=off` category
+/// selector followed by a rule selector that promotes one of that category's
+/// rules to `error` must still report that rule.
+#[test]
+fn check_explain_and_policy_examples_run() -> Result<()> {
+    let workspace = manifest_workspace("guide-first-build-manifest")?;
+    let explain = documented_example("guide-check-explain")?;
+    for line in explain.body.lines() {
+        let arguments: Vec<&str> = line.split_whitespace().skip(1).collect();
+        let run = run_netsuke_in(workspace.path(), &arguments)?;
+        assert_success(&run, line)?;
+        ensure!(
+            run.stdout.contains("directory-dep-not-order-only"),
+            "`{line}` should describe the rule it names, got {}",
+            run.stdout
+        );
+    }
+
+    let policy = documented_example("guide-check-policy")?;
+    let arguments: Vec<&str> = policy.body.trim_end().split_whitespace().skip(1).collect();
+    let suppressed = manifest_workspace("guide-check-suppression")?;
+    let run = run_netsuke_in(suppressed.path(), &arguments)?;
+    assert_success(&run, "check policy example")?;
+    Ok(())
+}
+
+/// The documented configuration example must be accepted and take effect.
+#[test]
+fn check_configuration_example_is_accepted() -> Result<()> {
+    let example = documented_example("guide-check-config")?;
+    let workspace = manifest_workspace("guide-first-build-manifest")?;
+    let config_path = workspace.path().join("check.toml");
+    test_fs::write(&config_path, example.body).context("write documented check config")?;
+    let config = config_path
+        .to_str()
+        .context("temporary config path should be UTF-8")?;
+    let run = run_netsuke_in(
+        workspace.path(),
+        &["--config", config, "--json", "check", "--explain"],
+    )?;
+    assert_success(&run, "check configuration example")
+}
+
+/// The documented suppression comment must silence the finding it names.
+///
+/// Without the directive the manifest reports `background-job`; with it, the
+/// run is clean. Asserting both directions is what proves the example teaches
+/// a working suppression rather than a manifest that never had a finding.
+#[test]
+fn check_suppression_example_silences_its_finding() -> Result<()> {
+    let workspace = manifest_workspace("guide-check-suppression")?;
+    let clean = run_netsuke_in(workspace.path(), &["--json", "check", "--fail-on", "never"])?;
+    assert_success(&clean, "suppressed check example")?;
+    let document: Value =
+        serde_json::from_str(&clean.stdout).context("parse the check result document")?;
+    let findings = document
+        .pointer("/result/findings")
+        .and_then(Value::as_array)
+        .context("the result should carry a findings array")?;
+    ensure!(
+        findings.is_empty(),
+        "the documented directive should silence every finding, got {findings:?}"
+    );
+    ensure!(
+        document.pointer("/result/summary/suppressed") == Some(&Value::from(1)),
+        "the directive should be recorded as having suppressed one finding"
     );
     Ok(())
 }

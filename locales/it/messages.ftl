@@ -422,8 +422,8 @@ example.errors_found = { $count ->
 }
 
 # Analisi del manifest (`netsuke check`).
-cli.subcommand.check.about = Analizzare il manifest senza generare né eseguire una build.
-cli.subcommand.check.long_about = Analizzare il manifest selezionato alla ricerca di costrutti che vengono interpretati correttamente ma sono probabilmente errati, non sicuri, non portabili od ostili alla cache.
+cli.subcommand.check.about = Analizza il manifest senza generare né eseguire una build.
+cli.subcommand.check.long_about = Analizza il manifest selezionato alla ricerca di costrutti che vengono interpretati correttamente ma sono probabilmente errati, non sicuri, non portabili od ostili alla cache.
 cli.subcommand.check.flag.rule.help = Impostare la severità di una regola o categoria, scritta come NAME=SEVERITY.
 cli.subcommand.check.flag.fail_on.help = Severità a partire dalla quale i rilievi fanno fallire il comando.
 cli.subcommand.check.flag.limit.help = Numero massimo di rilievi segnalati; 0 li segnala tutti.

@@ -422,8 +422,8 @@ example.errors_found = { $count ->
 }
 
 # Manifest-analyse (`netsuke check`).
-cli.subcommand.check.about = Het manifest analyseren zonder een build te genereren of uit te voeren.
-cli.subcommand.check.long_about = Het gekozen manifest onderzoeken op constructies die weliswaar ontleed worden maar waarschijnlijk onjuist, onveilig, niet-overdraagbaar of cachevijandig zijn.
+cli.subcommand.check.about = Analyseer het manifest zonder een build te genereren of uit te voeren.
+cli.subcommand.check.long_about = Onderzoek het gekozen manifest op constructies die weliswaar ontleed worden maar waarschijnlijk onjuist, onveilig, niet-overdraagbaar of cachevijandig zijn.
 cli.subcommand.check.flag.rule.help = De ernst van een regel of categorie instellen, geschreven als NAME=SEVERITY.
 cli.subcommand.check.flag.fail_on.help = Ernst waarbij bevindingen het commando laten falen.
 cli.subcommand.check.flag.limit.help = Maximaal aantal gemelde bevindingen; 0 meldt ze allemaal.

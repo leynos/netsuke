@@ -1184,6 +1184,94 @@ The standard-library reference describes the full helper set available while
 rendering a normal build manifest. The query allowlist above is the deliberate
 exception for `netsuke help targets`.
 
+
+### Lint a manifest with `netsuke check`
+
+`netsuke check` analyses the selected manifest for constructs that parse and
+lower cleanly but are likely erroneous, unsafe, non-portable, or hostile to
+caching. It loads, expands, renders, and lowers the manifest through the same
+stages as a build, with impure template helpers disabled; no recipe runs and no
+build output is created.
+
+<!-- tested-example: guide-check-command -->
+
+```sh
+netsuke check
+```
+
+Every rule, what it detects, and how to fix it are documented in the
+[lint rule reference](netsuke-linter-rules.md). List them from the command
+line, or read one rule in full:
+
+<!-- tested-example: guide-check-explain -->
+
+```sh
+netsuke check --explain
+netsuke check --explain directory-dep-not-order-only
+```
+
+Each finding carries a severity: `error`, `warning`, or `advice`.
+`--fail-on <SEVERITY>` sets the severity at which findings fail the command,
+defaulting to `error`; `never` makes findings purely informational.
+`--rule <NAME>=<SEVERITY>` sets the severity of one rule or of a whole
+category, where `SEVERITY` is `off`, `advice`, `warning`, or `error`. Selectors
+apply in order, so a category selector followed by a rule selector narrows it:
+
+<!-- tested-example: guide-check-policy -->
+
+```sh
+netsuke check --rule clarity=off --rule literal-recipe-path=error --fail-on warning
+```
+
+Two rules encode a project convention rather than a defect and are therefore
+off unless a selector enables them: `unreachable-target` and
+`rule-without-description`. Both flags layer through the normal configuration
+precedence, so a project can fix its policy once:
+
+<!-- tested-example: guide-check-config -->
+
+```toml
+[cmds.check]
+rule = ["clarity=off", "unreachable-target=warning"]
+fail_on = "warning"
+```
+
+`--limit <N>` caps the number of findings reported; `0` reports all of them.
+
+Silence one finding with a comment that names the rules it allows and states a
+reason. A directive on its own line governs the declaration beneath it,
+together with everything indented under that declaration; a directive at the
+end of a line governs that line's declaration:
+
+<!-- tested-example: guide-check-suppression -->
+
+```yaml
+netsuke_version: "1.0.0"
+
+targets:
+  # netsuke-lint: allow background-job -- the viewer must outlive the build
+  - name: preview
+    phony: true
+    script: |
+      feh build &
+```
+
+`# netsuke-lint-file: allow <rule> -- <reason>` governs the whole manifest, and
+exists for findings that could not be resolved to a source position. There is
+no blanket disable comment: a directive must name the rules it silences, and a
+directive without a reason, naming an unknown rule, or silencing nothing is
+itself reported.
+
+With `--json`, a run in which no finding reaches the failure threshold succeeds
+and writes a result document whose `result.command` is `check` and whose
+`result.findings` array holds every finding. A run in which one does fails and
+writes a diagnostic document whose single top-level entry is the threshold
+summary and whose `related` array holds the same findings. Both arrays use the
+same per-finding shape as any other Netsuke diagnostic, so a consumer reads
+`result.findings` when it is present and `diagnostics[0].related` otherwise.
+`netsuke check --explain --json` emits the rule catalogue as a result document
+whose `result.command` is `check-explain`.
+
 ## Configure Netsuke
 
 Configuration precedence, from lowest to highest, is:

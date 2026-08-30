@@ -418,12 +418,12 @@ example.errors_found = { $count ->
 }
 
 # 清單靜態檢查（`netsuke check`）。
-cli.subcommand.check.about = 在不產生或執行建置的情況下檢查清單。
-cli.subcommand.check.long_about = 檢查所選清單中雖能解析、但很可能有誤、不安全、不可移植或不利於快取的寫法。
+cli.subcommand.check.about = 在不產生或執行建置的情況下檢查資訊清單。
+cli.subcommand.check.long_about = 檢查所選資訊清單中雖能解析、但很可能有誤、不安全、不可移植或不利於快取的寫法。
 cli.subcommand.check.flag.rule.help = 以 NAME=SEVERITY 的形式設定規則或類別的嚴重程度。
 cli.subcommand.check.flag.fail_on.help = 使發現項導致指令失敗的嚴重程度。
 cli.subcommand.check.flag.limit.help = 回報的發現項上限；0 表示全部回報。
-cli.subcommand.check.flag.explain.help = 輸出規則參考，而不檢查清單。
+cli.subcommand.check.flag.explain.help = 輸出規則參考，而不檢查資訊清單。
 check.threshold_exceeded = 發現項已達到 { $severity } 門檻：已回報 { $reported } 項中的 { $failing } 項。
 check.threshold_exceeded.help = 請修正已回報的發現項，調整 --rule，或放寬 --fail-on。
 check.summary.counts = 檢查結果 — 錯誤：{ $errors }，警告：{ $warnings }，建議：{ $advice }，已抑制：{ $suppressed }。

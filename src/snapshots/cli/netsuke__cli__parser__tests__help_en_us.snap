@@ -1,6 +1,5 @@
 ---
 source: src/cli/parser_tests.rs
-assertion_line: 48
 expression: normalized_help
 ---
 Netsuke transforms YAML + Jinja manifests into reproducible Ninja graphs and runs Ninja with safe defaults.
@@ -9,6 +8,7 @@ Usage: netsuke [OPTIONS] [COMMAND]
 
 Commands:
   build     Build targets defined in the manifest (default).
+  check     Lint the manifest without generating or running a build.
   clean     Remove build artefacts via Ninja.
   graph     Emit the build dependency graph. Default format is DOT.
   generate  Generate the Ninja manifest without running Ninja.
