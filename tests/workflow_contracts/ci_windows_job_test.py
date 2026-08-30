@@ -49,6 +49,15 @@ EXCLUDED_WINDOWS_ACTIONS = (
 )
 
 
+def normalise_run(run: object) -> object:
+    """Return a stripped command string, preserving non-string step values."""
+    match run:
+        case str() as command:
+            return command.strip()
+        case _:
+            return run
+
+
 @pytest.fixture
 def windows_job() -> dict[str, object]:
     """Return the build-test-windows job mapping."""
@@ -120,9 +129,7 @@ def test_windows_job_runs_check_fmt_lint_and_test(
     Every quality gate must run through the Makefile with `SHELL=bash` so the
     POSIX-shell recipes execute under Git Bash on the Windows runner.
     """
-    runs = [
-        run.strip() if isinstance(run, str) else run for run in step_runs(windows_steps)
-    ]
+    runs = [normalise_run(run) for run in step_runs(windows_steps)]
     counts = {command: runs.count(command) for command in EXPECTED_WINDOWS_RUNS}
     assert set(counts.values()) == {1}, (
         f"{WINDOWS_JOB} must run each of {list(EXPECTED_WINDOWS_RUNS)!r} exactly "
@@ -139,9 +146,7 @@ def test_windows_job_does_not_duplicate_doc_and_audit_gates(
     the CodeScene gate, and `make test-workflow-contracts` are already covered
     on Linux; duplicating them on Windows buys nothing.
     """
-    runs = [
-        run.strip() if isinstance(run, str) else run for run in step_runs(windows_steps)
-    ]
+    runs = [normalise_run(run) for run in step_runs(windows_steps)]
     duplicated = [command for command in EXCLUDED_WINDOWS_RUNS if command in runs]
     assert not duplicated, (
         f"{WINDOWS_JOB} must not run the platform-independent {duplicated!r}, "

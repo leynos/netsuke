@@ -184,6 +184,10 @@ def test_malformed_metadata_shape_is_a_measurement_error(
             {"id": "pkg:x:0.1.0", "name": "x", "targets": [{"kind": ["bin"]}]},
             id="binary-without-name",
         ),
+        pytest.param(
+            {"id": [], "name": "x", "targets": [lib_target("x")]},
+            id="package-with-list-id",
+        ),
     ],
 )
 def test_unmeasurable_records_are_skipped(

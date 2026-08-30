@@ -437,7 +437,12 @@ from the `bin-name` field that
   `setup-uv`. The script validates that every target's archive and checksum are
   present, are regular files rather than symlinks, and have a free destination
   before moving them to the release root for upload; the read-only discovery
-  and validation half lives in `scripts/hoist_binstall_discovery.py`.
+  and validation half lives in `scripts/hoist_binstall_discovery.py`. The move
+  is transactional: a forward failure rolls completed pairs back to their
+  nested paths and re-raises the original failure after a successful rollback.
+  If an `OSError` prevents rollback, the original and rollback failures are
+  combined in a `BaseExceptionGroup`; another rollback exception propagates
+  unchanged.
   `tests/binstall_metadata_tests.rs` and
   `tests/workflow_contracts/hoist_binstall_archives_test.py` hold this contract.
 
@@ -566,6 +571,7 @@ Run these commands before finalizing any change:
 
 - `make check-fmt`
 - `make lint`
+- `make typecheck`
 - `make doc-coverage`
 - `make test`
 
@@ -941,6 +947,7 @@ every command in this completion checklist:
 - `make nixie`
 - `make check-fmt`
 - `make lint`
+- `make typecheck`
 - `make test`
 
 ## Spelling enforcement
@@ -962,6 +969,13 @@ assembled from two policy layers:
 security and persistence coordination. Only `scripts/typos_rollout.py` may
 compose it with dictionary validation; application and release code must not
 reuse these spelling-policy internals.
+
+The `RemoteResponse` protocol is a context-managed response boundary: callers
+read the body within the context and exit it to release the underlying
+response. `atomic_write` writes complete content to a temporary file beside
+the destination, atomically replaces the destination on the same filesystem,
+and removes the temporary file when writing or replacement fails. The existing
+destination is therefore left intact unless replacement succeeds.
 
 Pull-request CI restores the untracked dictionary and metadata before the
 spelling gate. The helper still performs a conditional freshness check, then

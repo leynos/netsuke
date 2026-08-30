@@ -298,7 +298,8 @@ def test_coverage_output_path_rejects_unrelated_output(
     target = cargo.DocTarget("x", "lib", None)
 
     with pytest.raises(
-        RuntimeError, match="did not report the generated coverage JSON path"
+        cargo.CoverageOutputError,
+        match="did not report the generated coverage JSON path",
     ):
         cargo.coverage_output_path(target, output, tmp_path)
 
@@ -317,7 +318,9 @@ def test_measure_rejects_a_reported_file_that_does_not_exist(
         ),
     ).install(monkeypatch)
 
-    with pytest.raises(RuntimeError, match="cannot read generated coverage JSON"):
+    with pytest.raises(
+        cargo.CoverageOutputError, match="cannot read generated coverage JSON"
+    ):
         cargo.CargoAdapter("cargo").measure(
             cargo.DocTarget("x", "lib", None), "nightly-x", tmp_path
         )

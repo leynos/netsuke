@@ -139,16 +139,54 @@ def named_step(steps: list[dict[str, object]], name: str) -> dict[str, object]:
 
 
 def unique_step_index(steps: list[dict[str, object]], name: str) -> int:
-    """Return the index of the uniquely named ``name`` step."""
+    """Return the index of the uniquely named workflow step.
+
+    Parameters
+    ----------
+    steps
+        Workflow steps to search in declaration order.
+    name
+        Exact name the single matching step must have.
+
+    Returns
+    -------
+    int
+        Zero-based index of the matching step.
+
+    Raises
+    ------
+    AssertionError
+        If no step or more than one step has ``name``.
+    """
     names = [step.get("name") for step in steps]
-    assert names.count(name) == 1, (
-        f"expected exactly one step named {name!r}, got step names {names!r}"
-    )
+    if names.count(name) != 1:
+        message = f"expected exactly one step named {name!r}, got step names {names!r}"
+        raise AssertionError(message)
     return names.index(name)
 
 
 def step_index_by_key(steps: list[dict[str, object]], key: str, needle: str) -> int:
-    """Return the first step index whose ``key`` value contains ``needle``."""
+    """Return the first workflow step index whose key value contains a string.
+
+    Parameters
+    ----------
+    steps
+        Workflow steps to search in declaration order.
+    key
+        Mapping key whose value is inspected on each step.
+    needle
+        Substring the inspected value must contain.
+
+    Returns
+    -------
+    int
+        Zero-based index of the first matching step.
+
+    Raises
+    ------
+    AssertionError
+        If no step's ``key`` value contains ``needle``.
+    """
     for index, step in enumerate(steps):
         if needle in str(step.get(key, "")):
             return index

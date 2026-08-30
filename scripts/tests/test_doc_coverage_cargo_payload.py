@@ -77,7 +77,7 @@ def test_parse_coverage_output_rejects_malformed_json(cargo: types.ModuleType) -
     """Surface non-JSON output as a coverage-gate RuntimeError."""
     target = cargo.DocTarget("netsuke", "lib", None)
 
-    with pytest.raises(RuntimeError, match="did not emit coverage JSON"):
+    with pytest.raises(cargo.CoverageOutputError, match="did not emit coverage JSON"):
         cargo.parse_coverage_output(target, "not json at all")
 
 
@@ -98,7 +98,9 @@ def test_parse_coverage_output_rejects_invalid_counts(
     """Reject invalid Rustdoc count invariants as controlled adapter errors."""
     payload = '{"src/lib.rs": ' + entry + "}"
 
-    with pytest.raises(RuntimeError, match="each entry requires total and with_docs"):
+    with pytest.raises(
+        cargo.CoverageOutputError, match="each entry requires total and with_docs"
+    ):
         cargo.parse_coverage_output(cargo.DocTarget("x", "lib", None), payload)
 
 
@@ -137,5 +139,29 @@ def test_parse_coverage_output_rejects_invalid_shape(
     case: CoveragePayloadFailureCase,
 ) -> None:
     """Reject malformed Rustdoc coverage structures as controlled errors."""
-    with pytest.raises(RuntimeError, match=case.diagnostic):
+    with pytest.raises(cargo.CoverageOutputError, match=case.diagnostic):
         cargo.parse_coverage_output(cargo.DocTarget("x", "lib", None), case.payload)
+
+
+def test_aggregate_coverage_payload_rejects_non_object(
+    cargo: types.ModuleType,
+) -> None:
+    """Expose a payload-shape error before the adapter translates it."""
+    with pytest.raises(cargo.CoveragePayloadShapeError):
+        cargo.aggregate_coverage_payload([])
+
+
+def test_aggregate_coverage_payload_rejects_non_object_entry(
+    cargo: types.ModuleType,
+) -> None:
+    """Expose an entry-shape error before the adapter translates it."""
+    with pytest.raises(cargo.CoverageEntryShapeError):
+        cargo.aggregate_coverage_payload({"src/lib.rs": []})
+
+
+def test_aggregate_coverage_payload_rejects_inconsistent_counts(
+    cargo: types.ModuleType,
+) -> None:
+    """Expose a count error before the adapter translates it."""
+    with pytest.raises(cargo.CoverageCountError):
+        cargo.aggregate_coverage_payload({"src/lib.rs": {"total": 1, "with_docs": 2}})

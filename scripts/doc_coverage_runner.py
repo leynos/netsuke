@@ -131,7 +131,7 @@ def package_targets(package: object, members: set[str]) -> list[DocTarget]:
     """
     match package:
         case {
-            "id": identifier,
+            "id": str() as identifier,
             "name": str() as name,
             "targets": list() as targets,
         } if identifier in members:
