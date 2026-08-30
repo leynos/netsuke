@@ -3570,15 +3570,42 @@ on Unix — exercises them, while the Windows-gated suite covers the behaviour
 that only exists there.
 
 The Windows job installs GNU Make through Chocolatey and Ninja through the
-setup action, then runs every Make target through Git Bash with `SHELL=bash`.
+setup action, then runs its Makefile gates through Git Bash with `SHELL=bash`.
 That override is required because GNU Make otherwise selects `cmd.exe` on
 Windows, while Netsuke's recipes use POSIX shell syntax. It installs the
 workflow-pinned `cargo-nextest`; the shared Rust setup action supplies
-`rustfmt` and Clippy. `whitaker-installer` produces a PowerShell wrapper on
-Windows, so the job adds a Bash shim that invokes it through PowerShell before
-running `make SHELL=bash lint-whitaker`. To reproduce the platform gate, use a
-Windows environment with those tools provisioned and run the four Windows Make
-commands from the workflow in that order.
+`rustfmt` and Clippy. The shared Whitaker installer produces a PowerShell
+wrapper on Windows, so `Lint (Whitaker)` invokes that wrapper directly rather
+than through a Bash shim.
+
+To reproduce the platform gate, use a Windows environment with those tools
+provisioned and run the following in order:
+
+1. In Git Bash, run `make SHELL=bash check-fmt`.
+2. In Git Bash, run `make SHELL=bash lint-clippy`.
+3. In PowerShell, run:
+
+   ```powershell
+   $whitaker = Join-Path $HOME '.local\bin\whitaker.ps1'
+   $env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"
+   $env:DYLINT_TOML = Get-Content dylint.toml -Raw
+   & $whitaker --all --no-deps --package netsuke-build '--' --all-targets --all-features
+   if ($LASTEXITCODE -ne 0) {
+     exit $LASTEXITCODE
+   }
+   Push-Location test_support
+   try {
+     $env:DYLINT_TOML = Get-Content dylint.toml -Raw
+     & $whitaker --all --no-deps --package test_support '--' --all-targets --all-features
+     if ($LASTEXITCODE -ne 0) {
+       exit $LASTEXITCODE
+     }
+   } finally {
+     Pop-Location
+   }
+   ```
+
+4. In Git Bash, run `make SHELL=bash test`.
 
 #### `PATHEXT` normalization
 

@@ -282,10 +282,16 @@ jobs:
           $env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"
           $env:DYLINT_TOML = Get-Content dylint.toml -Raw
           & $whitaker --all --no-deps --package netsuke-build '--' --all-targets --all-features
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
           Push-Location test_support
           try {
             $env:DYLINT_TOML = Get-Content dylint.toml -Raw
             & $whitaker --all --no-deps --package test_support '--' --all-targets --all-features
+            if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+            }
           } finally {
             Pop-Location
           }

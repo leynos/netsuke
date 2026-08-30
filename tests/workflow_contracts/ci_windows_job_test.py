@@ -47,6 +47,35 @@ EXCLUDED_WINDOWS_ACTIONS = (
     "leynos/shared-actions/.github/actions/upload-codescene-coverage",
 )
 
+#: Required wrapper, configuration, and root-package lint fragments.
+WHITAKER_WORKSPACE_FRAGMENTS = (
+    "Join-Path $HOME '.local\\bin\\whitaker.ps1'",
+    '$env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"',
+    "$env:DYLINT_TOML = Get-Content dylint.toml -Raw",
+    (
+        "& $whitaker --all --no-deps --package netsuke-build '--' "
+        "--all-targets --all-features"
+    ),
+    "Push-Location test_support",
+)
+
+#: Required nested-package lint and location-restoration fragments.
+WHITAKER_TEST_SUPPORT_FRAGMENTS = (
+    "$env:DYLINT_TOML = Get-Content dylint.toml -Raw",
+    (
+        "& $whitaker --all --no-deps --package test_support '--' "
+        "--all-targets --all-features"
+    ),
+    "finally {",
+    "Pop-Location",
+)
+
+#: Required guard that preserves a native Whitaker failure as the step result.
+WHITAKER_EXIT_GUARD_FRAGMENTS = (
+    "if ($LASTEXITCODE -ne 0) {",
+    "exit $LASTEXITCODE",
+)
+
 
 def normalise_run(run: object) -> object:
     """Return a stripped command string, preserving non-string step values."""
@@ -148,17 +177,9 @@ def test_windows_job_runs_whitaker_through_powershell_wrapper(
         case _:
             pytest.fail(f"{step_name} must declare a PowerShell run block")
 
-    workspace_fragments = (
-        "Join-Path $HOME '.local\\bin\\whitaker.ps1'",
-        '$env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"',
-        "$env:DYLINT_TOML = Get-Content dylint.toml -Raw",
-        (
-            "& $whitaker --all --no-deps --package netsuke-build '--' "
-            "--all-targets --all-features"
-        ),
-        "Push-Location test_support",
-    )
-    missing = [fragment for fragment in workspace_fragments if fragment not in run]
+    missing = [
+        fragment for fragment in WHITAKER_WORKSPACE_FRAGMENTS if fragment not in run
+    ]
     assert not missing, (
         f"{step_name} must resolve the PowerShell wrapper, append -D warnings, "
         f"load the workspace Dylint configuration, pass the quoted separator to "
@@ -167,22 +188,43 @@ def test_windows_job_runs_whitaker_through_powershell_wrapper(
     )
 
     _, _, run_after_push = run.partition("Push-Location test_support")
-    test_support_fragments = (
-        "$env:DYLINT_TOML = Get-Content dylint.toml -Raw",
-        (
-            "& $whitaker --all --no-deps --package test_support '--' "
-            "--all-targets --all-features"
-        ),
-        "finally {",
-        "Pop-Location",
-    )
-    fragments = test_support_fragments
-    missing = [fragment for fragment in fragments if fragment not in run_after_push]
+    missing = [
+        fragment
+        for fragment in WHITAKER_TEST_SUPPORT_FRAGMENTS
+        if fragment not in run_after_push
+    ]
     assert not missing, (
         f"{step_name} must load test_support's Dylint configuration after entering it, "
         f"pass the quoted separator to lint test_support, and restore the location "
         f"in finally; missing "
         f"{missing!r}"
+    )
+
+    _, _, run_after_workspace_lint = run.partition(WHITAKER_WORKSPACE_FRAGMENTS[3])
+    workspace_exit_guard, _, _ = run_after_workspace_lint.partition(
+        "Push-Location test_support"
+    )
+    missing = [
+        fragment
+        for fragment in WHITAKER_EXIT_GUARD_FRAGMENTS
+        if fragment not in workspace_exit_guard
+    ]
+    assert not missing, (
+        f"{step_name} must stop before entering test_support when linting "
+        f"netsuke-build fails; missing {missing!r}"
+    )
+
+    _, _, run_after_test_support_lint = run_after_push.partition(
+        WHITAKER_TEST_SUPPORT_FRAGMENTS[1]
+    )
+    test_support_exit_guard, _, _ = run_after_test_support_lint.partition("} finally {")
+    missing = [
+        fragment
+        for fragment in WHITAKER_EXIT_GUARD_FRAGMENTS
+        if fragment not in test_support_exit_guard
+    ]
+    assert not missing, (
+        f"{step_name} must propagate a test_support lint failure; missing {missing!r}"
     )
 
 
