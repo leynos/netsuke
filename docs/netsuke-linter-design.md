@@ -23,8 +23,8 @@
 
 ## 1. Problem and product thesis
 
-A `Netsukefile` is executable build configuration. Most of what makes one bad is
-not a syntax error: it parses, it lowers to a valid graph, and it produces a
+A `Netsukefile` is executable build configuration. Most of what makes one bad
+is not a syntax error: it parses, it lowers to a valid graph, and it produces a
 `build.ninja` that Ninja accepts. It then rebuilds the world on every
 invocation, breaks on a machine whose `/bin/sh` is not `bash`, silently mangles
 a shell variable the author meant to keep, or races because a target consumes
@@ -51,14 +51,14 @@ not a text pass over YAML.
 
 Table: build-file linters surveyed, and what each contributed to this design
 
-| Tool | Shape | What it contributed |
-| --- | --- | --- |
-| `mbake` | Makefile formatter plus a `validate` step that shells out to GNU `make` | Confirms the split this design makes explicit: `mbake`'s own rules are formatting rules (spacing, `.PHONY` placement, line continuations) and its only semantic check is delegating to the real parser. Its per-rule Boolean configuration file and its GNU error format influenced the policy table and the compact human output. |
-| `checkmake` | Makefile linter with named rules | `minphony`, `phonydeclared`, and `timestampexpanded` are semantic rules over a parsed Makefile. Named rules over an already-parsed model is the model adopted here. |
-| `hadolint` | Dockerfile linter | Stable identifiers, per-rule severity, `--failure-threshold`, and inline `# hadolint ignore=<code>` suppression that names the rule. The failure-threshold concept is adopted as `--fail-on`. |
-| `buildifier` | Bazel linter | `# buildifier: disable=<rule-name>` suppression scoped to the following statement, and self-describing kebab-case rule names rather than opaque codes. Both are adopted. |
-| ShellCheck | Shell linter | Directive comments carrying a rule identifier, and a per-rule documentation page reachable from every diagnostic. The `url` field on each finding serves the same purpose. |
-| Clippy and Ruff | Rust and Python linters | Category metadata separate from the identifier, opt-in rule groups, and machine output that is a first-class product rather than a scraped rendering. |
+| Tool            | Shape                                                                   | What it contributed                                                                                                                                                                                                                                                                                                                |
+| --------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mbake`         | Makefile formatter plus a `validate` step that shells out to GNU `make` | Confirms the split this design makes explicit: `mbake`'s own rules are formatting rules (spacing, `.PHONY` placement, line continuations) and its only semantic check is delegating to the real parser. Its per-rule Boolean configuration file and its GNU error format influenced the policy table and the compact human output. |
+| `checkmake`     | Makefile linter with named rules                                        | `minphony`, `phonydeclared`, and `timestampexpanded` are semantic rules over a parsed Makefile. Named rules over an already-parsed model is the model adopted here.                                                                                                                                                                |
+| `hadolint`      | Dockerfile linter                                                       | Stable identifiers, per-rule severity, `--failure-threshold`, and inline `# hadolint ignore=<code>` suppression that names the rule. The failure-threshold concept is adopted as `--fail-on`.                                                                                                                                      |
+| `buildifier`    | Bazel linter                                                            | `# buildifier: disable=<rule-name>` suppression scoped to the following statement, and self-describing kebab-case rule names rather than opaque codes. Both are adopted.                                                                                                                                                           |
+| ShellCheck      | Shell linter                                                            | Directive comments carrying a rule identifier, and a per-rule documentation page reachable from every diagnostic. The `url` field on each finding serves the same purpose.                                                                                                                                                         |
+| Clippy and Ruff | Rust and Python linters                                                 | Category metadata separate from the identifier, opt-in rule groups, and machine output that is a first-class product rather than a scraped rendering.                                                                                                                                                                              |
 
 Two conclusions from the survey shaped the rule set. First, the highest-value
 rules in every one of these tools are the ones that require a parsed model:
@@ -75,25 +75,25 @@ as breaking. Every rule below cites the evidence that justified it.
 
 Table: defects found in the repository's own example manifests
 
-| Evidence | Manifest | Rule it justifies |
-| --- | --- | --- |
-| `deps: ["{{ build_dir }}"]` on a chapter target, where `build_dir` is produced by a `mkdir` target | `examples/writing.yml` | `directory-dep-not-order-only` |
-| `command: "cat input.txt \| tr 'a-z' 'A-Z' > output.txt"` on a target whose `name` is `output.txt` and whose `sources` is `input.txt` | `examples/hello-world/Netsukefile` | `literal-recipe-path` |
-| `actions: - name: clean / command: "rm -f *.o app"` | `examples/basic_c.yml` | `builtin-clean-action` |
-| `script: \| feh {{ out_dir }} &` | `examples/photo_edit.yml` | `background-job` |
-| `combine` rule chaining two commands with `&&` in one scalar | `examples/writing.yml` | `command-chain-not-list` |
-| `link`, `page`, and `index` rules with no `description` | `examples/basic_c.yml`, `examples/website.yml` | `rule-without-description` (opt-in) |
-| `run` and `clean` actions with no `description`, so `netsuke help targets` cannot describe them | `examples/basic_c.yml` | `action-without-description` |
+| Evidence                                                                                                                              | Manifest                                       | Rule it justifies                   |
+| ------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ----------------------------------- |
+| `deps: ["{{ build_dir }}"]` on a chapter target, where `build_dir` is produced by a `mkdir` target                                    | `examples/writing.yml`                         | `directory-dep-not-order-only`      |
+| `command: "cat input.txt \| tr 'a-z' 'A-Z' > output.txt"` on a target whose `name` is `output.txt` and whose `sources` is `input.txt` | `examples/hello-world/Netsukefile`             | `literal-recipe-path`               |
+| `actions: - name: clean / command: "rm -f *.o app"`                                                                                   | `examples/basic_c.yml`                         | `builtin-clean-action`              |
+| `script: \| feh {{ out_dir }} &`                                                                                                      | `examples/photo_edit.yml`                      | `background-job`                    |
+| `combine` rule chaining two commands with `&&` in one scalar                                                                          | `examples/writing.yml`                         | `command-chain-not-list`            |
+| `link`, `page`, and `index` rules with no `description`                                                                               | `examples/basic_c.yml`, `examples/website.yml` | `rule-without-description` (opt-in) |
+| `run` and `clean` actions with no `description`, so `netsuke help targets` cannot describe them                                       | `examples/basic_c.yml`                         | `action-without-description`        |
 
 Table: documented behaviour changes that leave a detectable stale workaround
 
-| Evidence | Source | Rule it justifies |
-| --- | --- | --- |
-| "Existing manifests that wrote the former workaround `$$PATH` must change to `$PATH`; otherwise the shell receives `$$PATH`, whose first two dollars are its process identifier." | [ADR-014](adr-014-backend-text-escaping-seam.md) | `manual-ninja-escape` |
-| `$in` and `$out` are still substituted during lowering, but the users' guide documents only `{{ ins }}` and `{{ outs }}`, so a recipe that means the shell variable `$out` is silently rewritten. | `src/ir/cmd_interpolate/mod.rs`, [users' guide](users-guide.md#targets-inputs-and-dependencies) | `legacy-placeholder` |
-| "The v0.1.0-beta2 `script` implementation invokes `/bin/sh -e`; it is not currently a portable PowerShell abstraction." | [users' guide](users-guide.md#rules-and-recipes) | `bashism` |
-| "Serial lists containing two or more dependencies require Ninja 1.10 or newer", so a serial list shorter than that is inert. | [users' guide](users-guide.md#run-direct-dependencies-serially) | `serial-order-without-deps` |
-| "`phony` targets are always considered out of date, while `always` targets are regenerated even if their inputs are unchanged." | `src/ast/target.rs` | `redundant-always`, `phony-dep-of-file-target` |
+| Evidence                                                                                                                                                                                          | Source                                                                                          | Rule it justifies                              |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| "Existing manifests that wrote the former workaround `$$PATH` must change to `$PATH`; otherwise the shell receives `$$PATH`, whose first two dollars are its process identifier."                 | [ADR-014](adr-014-backend-text-escaping-seam.md)                                                | `manual-ninja-escape`                          |
+| `$in` and `$out` are still substituted during lowering, but the users' guide documents only `{{ ins }}` and `{{ outs }}`, so a recipe that means the shell variable `$out` is silently rewritten. | `src/ir/cmd_interpolate/mod.rs`, [users' guide](users-guide.md#targets-inputs-and-dependencies) | `legacy-placeholder`                           |
+| "The v0.1.0-beta2 `script` implementation invokes `/bin/sh -e`; it is not currently a portable PowerShell abstraction."                                                                           | [users' guide](users-guide.md#rules-and-recipes)                                                | `bashism`                                      |
+| "Serial lists containing two or more dependencies require Ninja 1.10 or newer", so a serial list shorter than that is inert.                                                                      | [users' guide](users-guide.md#run-direct-dependencies-serially)                                 | `serial-order-without-deps`                    |
+| "`phony` targets are always considered out of date, while `always` targets are regenerated even if their inputs are unchanged."                                                                   | `src/ast/target.rs`                                                                             | `redundant-always`, `phony-dep-of-file-target` |
 
 ## 2. Constraints
 
@@ -101,11 +101,12 @@ These are assumed by every later section rather than re-justified.
 
 1. **No new top-level noun.** `check` is already in the canonical command
    vocabulary and is listed as unbuilt work in roadmap task 3.15.1. The linter
-   is that command. See [ADR-015](adr-015-manifest-linting-under-netsuke-check.md).
+   is that command. See
+   [ADR-015](adr-015-manifest-linting-under-netsuke-check.md).
 2. **Non-interactive and deterministic.** No prompts, no network, no clock, and
-   no dependence on terminal capabilities for the analysis itself. Two runs over
-   the same manifest and configuration produce byte-identical findings in a
-   fixed order.
+   no dependence on terminal capabilities for the analysis itself. Two runs
+   over the same manifest and configuration produce byte-identical findings in
+   a fixed order.
 3. **No reparsing.** Rules consume the compiler's own artefacts. The single
    exception is the span index in section 4, which reads the source once to
    recover positions the typed manifest does not retain.
@@ -195,8 +196,8 @@ src/lint/
 
 Rules live in per-category modules rather than one file per rule so that a
 category's shared helpers — shell tokenization, path-word matching — stay
-adjacent to the rules that use them, following the repository's group-by-feature
-convention.
+adjacent to the rules that use them, following the repository's
+group-by-feature convention.
 
 ## 4. Source provenance
 
@@ -218,24 +219,25 @@ Span availability by stage:
 - **Stage 1** always has an exact span, because every value a rule inspects is a
   node in the spanned tree.
 - **Stages 2 and 3** resolve spans through `resolve.rs`, which maps a manifest
-  item back to its authored node in two steps. Positional correspondence is used
-  when a section's expanded length equals its authored length, which holds for
-  every manifest that does not use `foreach`. Otherwise the resolver matches on
-  the authored `name` scalar when that scalar is literal. When neither succeeds,
-  the finding is emitted without a span and names the target, rule, or action
-  instead.
+  item back to its authored node in two steps. Positional correspondence is
+  used when a section's expanded length equals its authored length, which holds
+  for every manifest that does not use `foreach`. Otherwise the resolver
+  matches on the authored `name` scalar when that scalar is literal. When
+  neither succeeds, the finding is emitted without a span and names the target,
+  rule, or action instead.
 
 This is deliberately conservative. A wrong span is worse than no span: it sends
-a reader to the wrong line and, because suppression is span-scoped, it would let
-a directive on one target silence a finding about another. `resolve.rs` returns
-`None` rather than guessing.
+a reader to the wrong line and, because suppression is span-scoped, it would
+let a directive on one target silence a finding about another. `resolve.rs`
+returns `None` rather than guessing.
 
 ## 5. Rule model
 
 ### 5.1 Identity
 
 A rule is identified by a stable, self-describing, kebab-case name that is
-unique across every stage and category, for example `directory-dep-not-order-only`.
+unique across every stage and category, for example
+`directory-dep-not-order-only`.
 
 The name is the identifier used in policy configuration, in suppression
 directives, in `--explain`, in the rule reference documentation, and in the
@@ -248,8 +250,8 @@ one place this design departs from Ruff, whose codes embed the category.
 
 Each finding also carries a miette diagnostic code of the form
 `netsuke::lint::<name_in_snake_case>`, matching the existing convention for
-Netsuke diagnostic codes, and a `url` pointing at the rule's section in the rule
-reference.
+Netsuke diagnostic codes, and a `url` pointing at the rule's section in the
+rule reference.
 
 ### 5.2 Metadata
 
@@ -271,12 +273,13 @@ documentation, which a contract test checks against the same registry in both
 directions. Keeping all three in the registry is what makes the documentation
 provably complete rather than aspirationally complete.
 
-`DefaultSeverity` is either `On(Severity)` for a rule that runs unless disabled,
-or `Off` for a rule that runs only when a policy selector enables it. The `Off`
-bucket is reserved for rules that encode a project convention rather than a
-defect: `unreachable-target` is `Off` because building a target by name without
-declaring it a default is a legitimate workflow, and `rule-without-description`
-is `Off` because descriptions are a house style, not a correctness property.
+`DefaultSeverity` is either `On(Severity)` for a rule that runs unless
+disabled, or `Off` for a rule that runs only when a policy selector enables it.
+The `Off` bucket is reserved for rules that encode a project convention rather
+than a defect: `unreachable-target` is `Off` because building a target by name
+without declaring it a default is a legitimate workflow, and
+`rule-without-description` is `Off` because descriptions are a house style, not
+a correctness property.
 
 ### 5.3 Stage traits
 
@@ -302,17 +305,17 @@ pub trait DirectiveRule: Sync {
 }
 ```
 
-`FindingSink` is bound to one rule for the duration of that rule's `check`, so a
-rule cannot attribute a finding to a different rule, and the engine — not the
-rule — stamps the severity resolved from policy. A rule states what it found and
-where; it does not decide how loudly to say it.
+`FindingSink` is bound to one rule for the duration of that rule's `check`, so
+a rule cannot attribute a finding to a different rule, and the engine — not the
+rule — stamps the severity resolved from policy. A rule states what it found
+and where; it does not decide how loudly to say it.
 
 `ManifestContext` and `GraphContext` carry the artefact plus the span resolver
-and the authored document, so a stage-2 or stage-3 rule can offer source context
-without reparsing. `DirectiveContext` carries the directives and, per directive,
-how many findings it silenced, counted before suppression is applied so a
-directive that did its job is recorded as used even though its finding never
-reaches the output.
+and the authored document, so a stage-2 or stage-3 rule can offer source
+context without reparsing. `DirectiveContext` carries the directives and, per
+directive, how many findings it silenced, counted before suppression is applied
+so a directive that did its job is recorded as used even though its finding
+never reaches the output.
 
 ### 5.4 Findings and ordering
 
@@ -357,11 +360,11 @@ a reader sees the file:
   declaration, and an over-wide end should not let a finding escape a directive
   that plainly governs it.
 
-A `#` inside a quoted or block scalar is not a directive. The scanner knows this
-because it consults the span index from section 4: a `#` inside any scalar's
-span is content. This is why the suppression scanner is span-aware rather than
-line-based, and it is the reason `script: |` blocks containing shell comments do
-not accidentally disable rules.
+A `#` inside a quoted or block scalar is not a directive. The scanner knows
+this because it consults the span index from section 4: a `#` inside any
+scalar's span is content. This is why the suppression scanner is span-aware
+rather than line-based, and it is the reason `script: |` blocks containing
+shell comments do not accidentally disable rules.
 
 Three rules police the directives themselves, so that suppression cannot rot
 silently:
@@ -372,8 +375,8 @@ silently:
 - `unused-suppression` fires when a directive suppressed nothing, which catches
   a suppression left behind after the underlying problem was fixed.
 
-`unused-suppression` is itself suppressible by a file-level directive, because a
-manifest shared across platforms can legitimately carry a directive that is
+`unused-suppression` is itself suppressible by a file-level directive, because
+a manifest shared across platforms can legitimately carry a directive that is
 inert on the current host.
 
 ## 7. Policy configuration
@@ -386,8 +389,8 @@ enable/disable/severity flags:
 ```
 
 `NAME` is a rule name or a category name; `SEVERITY` is `off`, `advice`,
-`warning`, or `error`. Selectors apply in order, so a category selector followed
-by a rule selector narrows it:
+`warning`, or `error`. Selectors apply in order, so a category selector
+followed by a rule selector narrows it:
 
 ```sh
 netsuke check --rule clarity=off --rule literal-recipe-path=error
@@ -409,8 +412,8 @@ rule = ["clarity=off", "unreachable-target=warning"]
 fail_on = "warning"
 ```
 
-Nothing about policy resolution consults the environment beyond that
-precedence chain, reads the terminal, or varies with time.
+Nothing about policy resolution consults the environment beyond that precedence
+chain, reads the terminal, or varies with time.
 
 ## 8. Command surface
 
@@ -419,12 +422,12 @@ precedence chain, reads the terminal, or varies with time.
 
 Table: flags added by `netsuke check`
 
-| Flag | Purpose |
-| --- | --- |
-| `--rule <NAME=SEVERITY>` | Repeatable policy selector, described in section 7. |
-| `--fail-on <SEVERITY>` | Threshold at which findings fail the command. |
-| `--limit <N>` | Maximum findings reported. `0` means unbounded. |
-| `--explain [NAME]` | Print the rule reference for one rule, or the whole catalogue when no name is given, instead of analysing a manifest. |
+| Flag                     | Purpose                                                                                                               |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `--rule <NAME=SEVERITY>` | Repeatable policy selector, described in section 7.                                                                   |
+| `--fail-on <SEVERITY>`   | Threshold at which findings fail the command.                                                                         |
+| `--limit <N>`            | Maximum findings reported. `0` means unbounded.                                                                       |
+| `--explain [NAME]`       | Print the rule reference for one rule, or the whole catalogue when no name is given, instead of analysing a manifest. |
 
 `--explain` is a mode of `check` rather than a top-level `explain` command
 because the roadmap defers that noun until it has a clear user-facing workflow,
@@ -440,9 +443,9 @@ snippets, the project's colour, emoji, and accessibility policies, and the same
 visual grammar as every other Netsuke diagnostic. A summary line follows,
 stating the count at each severity and any truncation.
 
-Machine consumers — editors, CI, and agents — use `--json`. This design does not
-add a second human format for them to scrape, in keeping with ADR-003's rule
-that `--json` is the only structured result mode.
+Machine consumers — editors, CI, and agents — use `--json`. This design does
+not add a second human format for them to scrape, in keeping with ADR-003's
+rule that `--json` is the only structured result mode.
 
 ### 9.2 JSON output
 
@@ -491,8 +494,8 @@ result document to stdout:
 
 When a finding reaches the threshold the command fails and writes a diagnostic
 document to stderr with stdout empty, preserving the existing envelope
-invariant. The document holds one top-level diagnostic — the threshold summary —
-whose `related` array carries the same finding objects in the same order:
+invariant. The document holds one top-level diagnostic — the threshold summary
+— whose `related` array carries the same finding objects in the same order:
 
 ```json
 {
@@ -538,32 +541,32 @@ not exist. The summary below groups the first set by the concern it addresses.
 
 Table: the v0.4.0 rule set
 
-| Rule | Stage | Category | Default | Concern |
-| --- | --- | --- | --- | --- |
-| `manual-ninja-escape` | document | migration | warning | Stale pre-v0.1.0 `$$` workaround now reaching the shell as a literal `$$`. |
-| `legacy-placeholder` | document | migration | warning | Undocumented `$in`/`$out` spelling that also captures a shell variable of the same name. |
-| `literal-recipe-path` | document | clarity | warning | Recipe repeats a declared output or source path instead of `{{ outs }}`/`{{ ins }}`. |
-| `command-chain-not-list` | document | clarity | advice | Scalar `command` chaining with `&&` where an ordered list is the canonical form. |
-| `bashism` | document | portability | warning | Construct that `/bin/sh -e` does not portably support. |
-| `background-job` | document | determinism | warning | Recipe detaches a process, so completion no longer means the work finished. |
-| `recursive-build-invocation` | document | determinism | warning | Recipe invokes `netsuke`, `make`, or `ninja`, defeating the single static graph. |
-| `builtin-clean-action` | document | redundancy | advice | Handwritten `clean` action duplicating `netsuke clean`. |
-| `serial-order-without-deps` | document | redundancy | advice | `dependency_order: serial` with fewer than two `deps`, which is inert. |
-| `redundant-always` | document | redundancy | advice | `always` on a target that is already phony. |
-| `action-without-description` | document | clarity | advice | Action invisible to `netsuke help targets` discovery. |
-| `rule-without-description` | document | clarity | off | House style: every rule carries Ninja progress text. |
-| `unused-var` | document | hygiene | warning | Global `vars` entry no template references. |
-| `unused-macro` | document | hygiene | warning | Declared macro never called. |
-| `unused-rule` | manifest | hygiene | warning | Declared rule no target or action references. |
-| `duplicate-rule-recipe` | manifest | redundancy | warning | Two rules with identical recipes that should be one rule. |
-| `redundant-dependency` | manifest | redundancy | advice | Same path declared under more than one dependency key. |
-| `phony-dep-of-file-target` | manifest | caching | warning | File target depends on an always-dirty phony target. |
-| `directory-dep-not-order-only` | manifest | caching | warning | Directory-producing target used as a content dependency. |
-| `undeclared-target-input` | graph | correctness | warning | Recipe consumes another target's output without declaring the edge. |
-| `unreachable-target` | graph | clarity | off | Target reachable from no default and no other target. |
-| `unknown-suppression` | directive | suppression | warning | Directive names a rule that does not exist. |
-| `suppression-without-reason` | directive | suppression | warning | Directive omits its `--` reason. |
-| `unused-suppression` | directive | suppression | advice | Directive suppressed nothing. |
+| Rule                           | Stage     | Category    | Default | Concern                                                                                  |
+| ------------------------------ | --------- | ----------- | ------- | ---------------------------------------------------------------------------------------- |
+| `manual-ninja-escape`          | document  | migration   | warning | Stale pre-v0.1.0 `$$` workaround now reaching the shell as a literal `$$`.               |
+| `legacy-placeholder`           | document  | migration   | warning | Undocumented `$in`/`$out` spelling that also captures a shell variable of the same name. |
+| `literal-recipe-path`          | document  | clarity     | warning | Recipe repeats a declared output or source path instead of `{{ outs }}`/`{{ ins }}`.     |
+| `command-chain-not-list`       | document  | clarity     | advice  | Scalar `command` chaining with `&&` where an ordered list is the canonical form.         |
+| `bashism`                      | document  | portability | warning | Construct that `/bin/sh -e` does not portably support.                                   |
+| `background-job`               | document  | determinism | warning | Recipe detaches a process, so completion no longer means the work finished.              |
+| `recursive-build-invocation`   | document  | determinism | warning | Recipe invokes `netsuke`, `make`, or `ninja`, defeating the single static graph.         |
+| `builtin-clean-action`         | document  | redundancy  | advice  | Handwritten `clean` action duplicating `netsuke clean`.                                  |
+| `serial-order-without-deps`    | document  | redundancy  | advice  | `dependency_order: serial` with fewer than two `deps`, which is inert.                   |
+| `redundant-always`             | document  | redundancy  | advice  | `always` on a target that is already phony.                                              |
+| `action-without-description`   | document  | clarity     | advice  | Action invisible to `netsuke help targets` discovery.                                    |
+| `rule-without-description`     | document  | clarity     | off     | House style: every rule carries Ninja progress text.                                     |
+| `unused-var`                   | document  | hygiene     | warning | Global `vars` entry no template references.                                              |
+| `unused-macro`                 | document  | hygiene     | warning | Declared macro never called.                                                             |
+| `unused-rule`                  | manifest  | hygiene     | warning | Declared rule no target or action references.                                            |
+| `duplicate-rule-recipe`        | manifest  | redundancy  | warning | Two rules with identical recipes that should be one rule.                                |
+| `redundant-dependency`         | manifest  | redundancy  | advice  | Same path declared under more than one dependency key.                                   |
+| `phony-dep-of-file-target`     | manifest  | caching     | warning | File target depends on an always-dirty phony target.                                     |
+| `directory-dep-not-order-only` | manifest  | caching     | warning | Directory-producing target used as a content dependency.                                 |
+| `undeclared-target-input`      | graph     | correctness | warning | Recipe consumes another target's output without declaring the edge.                      |
+| `unreachable-target`           | graph     | clarity     | off     | Target reachable from no default and no other target.                                    |
+| `unknown-suppression`          | directive | suppression | warning | Directive names a rule that does not exist.                                              |
+| `suppression-without-reason`   | directive | suppression | warning | Directive omits its `--` reason.                                                         |
+| `unused-suppression`           | directive | suppression | advice  | Directive suppressed nothing.                                                            |
 
 ## 11. Testing strategy
 
@@ -575,13 +578,13 @@ These live beside the rule module.
 Beyond the per-rule floor:
 
 - A registry contract test asserts that every rule name is unique, that every
-  rule appears in the rule reference document, and that the document contains no
-  section for a rule that does not exist.
+  rule appears in the rule reference document, and that the document contains
+  no section for a rule that does not exist.
 - Property tests over generated manifests assert the engine invariants that are
   not rule-specific: findings are ordered deterministically, a suppression
-  directive never suppresses a finding outside its node, `--limit` never changes
-  which findings would have been reported before truncation, and the resolved
-  severity of a finding equals the policy for its rule.
+  directive never suppresses a finding outside its node, `--limit` never
+  changes which findings would have been reported before truncation, and the
+  resolved severity of a finding equals the policy for its rule.
 - Snapshot tests pin the human rendering and both JSON branches.
 - Behavioural tests exercise `netsuke check` end to end through the binary,
   including the exit code and the stdout/stderr split in JSON mode.
@@ -604,9 +607,10 @@ through `foreach` expansion — is a change to the compiler's hot path for the
 benefit of a diagnostic, and is deferred until evidence says the missing spans
 actually hurt.
 
-**Rule text is not localized.** [ADR-015](adr-015-manifest-linting-under-netsuke-check.md)
-records this decision and its reversal path. The command's framing text — help,
-summary, threshold message, and errors — is localized as usual.
+**Rule text is not localized.**
+[ADR-015](adr-015-manifest-linting-under-netsuke-check.md) records this
+decision and its reversal path. The command's framing text — help, summary,
+threshold message, and errors — is localized as usual.
 
 **The rule set will grow faster than the engine.** The registry is a static
 table and adding a rule touches the table, one category module, the rule
