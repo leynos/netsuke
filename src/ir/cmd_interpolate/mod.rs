@@ -106,13 +106,15 @@ fn has_unmatched_backticks(s: &str) -> bool {
     s.chars().filter(|&c| c == '`').count().rem_euclid(2) != 0
 }
 
+/// Interpolate `template` with an explicit legacy recipe shell for structural tests.
 #[cfg(test)]
-pub(crate) fn interpolate_command(
+pub(crate) fn interpolate_command_with_shell(
     template: &str,
     inputs: &[Utf8PathBuf],
     outputs: &[Utf8PathBuf],
+    shell: RecipeShell,
 ) -> Result<String, IrGenError> {
-    let bindings = CommandBindings::new(inputs, outputs, RecipeShell::host_default());
+    let bindings = CommandBindings::new(inputs, outputs, shell);
     interpolate_command_with_bindings(template, &bindings)
 }
 

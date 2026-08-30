@@ -26,7 +26,8 @@ fn interpolate_command_rejects_unbalanced_backticks() {
 fn interpolate_command_replaces_placeholders() {
     let ins = vec![Utf8PathBuf::from("in"), Utf8PathBuf::from("aux")];
     let outs = vec![Utf8PathBuf::from("out")];
-    let command = interpolate_command("cp $in $out", &ins, &outs).expect("command");
+    let command = interpolate_command_with_shell("cp $in $out", &ins, &outs, RecipeShell::Posix)
+        .expect("command");
     assert_eq!(command, "cp in aux out");
 }
 
@@ -34,17 +35,23 @@ fn interpolate_command_replaces_placeholders() {
 fn interpolate_command_rejects_short_placeholders_in_backticks() {
     let ins = vec![Utf8PathBuf::from("src")];
     let outs = vec![Utf8PathBuf::from("out")];
-    let error = interpolate_command("echo `cat $in` && echo $out", &ins, &outs)
-        .expect_err("placeholders inside backticks should be rejected");
+    let error = interpolate_command_with_shell(
+        "echo `cat $in` && echo $out",
+        &ins,
+        &outs,
+        RecipeShell::Posix,
+    )
+    .expect_err("placeholders inside backticks should be rejected");
     assert!(matches!(error, IrGenError::InvalidCommand { .. }));
 }
 
 #[test]
 fn interpolate_command_rejects_template_placeholders_in_backticks() {
-    let error = interpolate_command(
+    let error = interpolate_command_with_shell(
         &format!("echo `{INS_TOKEN}` $out"),
         &[],
         &[Utf8PathBuf::from("out")],
+        RecipeShell::Posix,
     )
     .expect_err("template placeholders inside backticks should be rejected");
     assert!(matches!(error, IrGenError::InvalidCommand { .. }));
@@ -52,10 +59,11 @@ fn interpolate_command_rejects_template_placeholders_in_backticks() {
 
 #[test]
 fn interpolate_command_replaces_template_placeholders() {
-    let command = interpolate_command(
+    let command = interpolate_command_with_shell(
         &format!("{INS_TOKEN} $out {OUTS_TOKEN}"),
         &[Utf8PathBuf::from("in")],
         &[Utf8PathBuf::from("out")],
+        RecipeShell::Posix,
     )
     .expect("command");
     assert_eq!(command, "in out out");

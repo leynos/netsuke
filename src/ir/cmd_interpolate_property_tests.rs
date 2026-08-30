@@ -7,7 +7,7 @@
 use proptest::prelude::*;
 use test_support::ninja_gen::paths_strategy;
 
-use super::{INS_TOKEN, IrGenError, OUTS_TOKEN, interpolate_command};
+use super::{INS_TOKEN, IrGenError, OUTS_TOKEN, RecipeShell, interpolate_command_with_shell};
 
 fn safe_text_strategy() -> impl Strategy<Value = String> {
     // Empty fragments are intentional: surrounding command text may be absent,
@@ -20,7 +20,7 @@ proptest! {
     #[test]
     fn dollar_tokens_inside_backticks_are_rejected(prefix in safe_text_strategy(), suffix in safe_text_strategy(), inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
         let template = format!("echo {prefix} `printf '$in $out'` {suffix}");
-        let error = interpolate_command(&template, &inputs, &outputs)
+        let error = interpolate_command_with_shell(&template, &inputs, &outputs, RecipeShell::Posix)
             .expect_err("placeholders inside backticks should be rejected");
 
         prop_assert!(
@@ -31,11 +31,13 @@ proptest! {
 
     #[test]
     fn long_placeholders_outside_backticks_are_replaced(inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
-        let command = interpolate_command(
+        let command = interpolate_command_with_shell(
             &format!("echo {INS_TOKEN} then {OUTS_TOKEN}"),
             &inputs,
             &outputs,
-        ).expect("command should interpolate");
+            RecipeShell::Posix,
+        )
+        .expect("command should interpolate");
 
         prop_assert!(!command.contains(INS_TOKEN));
         prop_assert!(!command.contains(OUTS_TOKEN));
@@ -49,8 +51,13 @@ proptest! {
 
     #[test]
     fn short_placeholders_outside_backticks_are_replaced(inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
-        let command = interpolate_command("echo $in then $out", &inputs, &outputs)
-            .expect("command should interpolate");
+        let command = interpolate_command_with_shell(
+            "echo $in then $out",
+            &inputs,
+            &outputs,
+            RecipeShell::Posix,
+        )
+        .expect("command should interpolate");
 
         prop_assert!(!command.contains("$in"));
         prop_assert!(!command.contains("$out"));
@@ -66,7 +73,7 @@ proptest! {
     #[test]
     fn tokens_inside_backticks_are_rejected(token in prop::sample::select(vec!["$in", "$out", INS_TOKEN, OUTS_TOKEN]), inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
         let template = format!("echo `{token}`");
-        let error = interpolate_command(&template, &inputs, &outputs)
+        let error = interpolate_command_with_shell(&template, &inputs, &outputs, RecipeShell::Posix)
             .expect_err("placeholders inside backticks should be rejected");
 
         prop_assert!(
@@ -78,7 +85,8 @@ proptest! {
     #[test]
     fn unbalanced_backticks_are_rejected(prefix in safe_text_strategy(), suffix in safe_text_strategy(), inputs in paths_strategy("in", 1..10), outputs in paths_strategy("out", 1..10)) {
         let template = format!("echo {prefix} ` $in {suffix}");
-        let err = interpolate_command(&template, &inputs, &outputs).expect_err("unbalanced backticks should fail");
+        let err = interpolate_command_with_shell(&template, &inputs, &outputs, RecipeShell::Posix)
+            .expect_err("unbalanced backticks should fail");
 
         let is_invalid_command = matches!(err, IrGenError::InvalidCommand { .. });
         prop_assert!(is_invalid_command);
