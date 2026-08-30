@@ -136,6 +136,31 @@ fn assert_generates_valid_ninja(run: &NetsukeRun, context: &str) -> Result<()> {
     assert_default_edges_exist(&run.stdout, context)
 }
 
+/// Assert that a documented configuration file is accepted by a command.
+///
+/// The two configuration examples differ only in which file they write and
+/// which command reads it, so sharing the setup keeps the thing under test —
+/// that the documented file is accepted as written — in one place.
+fn documented_configuration_example_is_accepted(
+    example_id: &str,
+    config_filename: &str,
+    command_arguments: &[&str],
+    context: &str,
+) -> Result<()> {
+    let example = documented_example(example_id)?;
+    let workspace = manifest_workspace("guide-first-build-manifest")?;
+    let config_path = workspace.path().join(config_filename);
+    test_fs::write(&config_path, example.body)
+        .with_context(|| format!("write documented config {config_filename}"))?;
+    let config = config_path
+        .to_str()
+        .context("temporary config path should be UTF-8")?;
+    let mut arguments = vec!["--config", config];
+    arguments.extend_from_slice(command_arguments);
+    let run = run_netsuke_in(workspace.path(), &arguments)?;
+    assert_success(&run, context)
+}
+
 fn run_with_fake_ninja(workspace: &Path, args: &[&str]) -> Result<NetsukeRun> {
     let (_ninja_dir, ninja_path) = check_ninja::fake_ninja_check_build_file()?;
     let ninja = ninja_path
@@ -388,18 +413,12 @@ fn check_explain_and_policy_examples_run() -> Result<()> {
 /// The documented configuration example must be accepted and take effect.
 #[test]
 fn check_configuration_example_is_accepted() -> Result<()> {
-    let example = documented_example("guide-check-config")?;
-    let workspace = manifest_workspace("guide-first-build-manifest")?;
-    let config_path = workspace.path().join("check.toml");
-    test_fs::write(&config_path, example.body).context("write documented check config")?;
-    let config = config_path
-        .to_str()
-        .context("temporary config path should be UTF-8")?;
-    let run = run_netsuke_in(
-        workspace.path(),
-        &["--config", config, "--json", "check", "--explain"],
-    )?;
-    assert_success(&run, "check configuration example")
+    documented_configuration_example_is_accepted(
+        "guide-check-config",
+        "check.toml",
+        &["--json", "check", "--explain"],
+        "check configuration example",
+    )
 }
 
 /// The documented suppression comment must silence the finding it names.
@@ -430,18 +449,12 @@ fn check_suppression_example_silences_its_finding() -> Result<()> {
 }
 #[test]
 fn project_configuration_example_is_accepted() -> Result<()> {
-    let example = documented_example("guide-project-config")?;
-    let workspace = manifest_workspace("guide-first-build-manifest")?;
-    let config_path = workspace.path().join("example.toml");
-    test_fs::write(&config_path, example.body).context("write documented config")?;
-    let config = config_path
-        .to_str()
-        .context("temporary config path should be UTF-8")?;
-    let run = run_netsuke_in(
-        workspace.path(),
-        &["--config", config, "--progress", "never", "generate"],
-    )?;
-    assert_success(&run, "project configuration example")
+    documented_configuration_example_is_accepted(
+        "guide-project-config",
+        "example.toml",
+        &["--progress", "never", "generate"],
+        "project configuration example",
+    )
 }
 
 #[test]
