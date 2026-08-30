@@ -1,8 +1,13 @@
 # Git change-detection helpers design
 
 - **Status:** Proposed
+- **Scope:** Specify `git_changed_files()` and `matches_glob()` only, including
+  their Git and glob contracts and delivery verification; this is not a general
+  Git or working-tree API.
 - **Audience:** Netsuke maintainers, reviewers, and manifest authors
-- **Last updated:** 2026-08-22
+- **Last updated:** 2026-08-30
+- **Precedence:** Accepted ADRs and implemented behaviour prevail; when
+  accepted, ADR-015 governs the bounded Git adapter contract.
 - **Companion documents:**
   - [Netsuke design](netsuke-design.md)
   - [Template standard-library guide](stdlib-yaml-and-jinja-guide.md)
@@ -132,7 +137,7 @@ function whose output claims to describe a commit range.
 The Git adapter resolves each endpoint with:
 
 ```text
-git rev-parse --verify --end-of-options <endpoint>^{commit}
+git --no-lazy-fetch rev-parse --verify --end-of-options <endpoint>^{commit}
 ```
 
 The `^{commit}` suffix requires the result to peel to a commit. Netsuke accepts
@@ -144,23 +149,29 @@ For `A..B`, Netsuke compares resolved commit `A` with resolved commit `B`. This
 matches `git diff A..B`, for which the two dots do not denote the reachability
 set used by commands such as `git log`; they select two diff endpoints.[^3]
 
-For `A...B`, Netsuke runs `git merge-base --all A B`. Exactly one merge base
-must exist. Netsuke compares that base with `B`, matching Git's documented
-three-dot diff direction. No merge base is a history error. Multiple best merge
-bases are also an error because choosing one would make the result depend on an
-unspecified selection in criss-cross history.
+For `A...B`, Netsuke runs `git --no-lazy-fetch merge-base --all A B`. Exactly
+one merge base must exist. Netsuke compares that base with `B`, matching Git's
+documented three-dot diff direction. No merge base is a history error. Multiple
+best merge bases are also an error because choosing one would make the result
+depend on an unspecified selection in criss-cross history.
+
+The fixed merge-base vector is `git --no-lazy-fetch merge-base --all A B`.
+Every endpoint and merge-base operation uses Git's top-level `--no-lazy-fetch`
+option, so a missing promisor object fails locally instead of contacting a
+remote.
 
 ### 4.3. Changed-path selection
 
 The final comparison is equivalent to:
 
 ```text
-git diff --no-ext-diff --no-textconv --no-renames --name-only -z \
+git --no-lazy-fetch diff --no-ext-diff --no-textconv --no-renames --name-only -z \
   --diff-filter=ACDMRTUXB <base> <right> --
 ```
 
 Netsuke supplies every argument directly to the child process; no shell parses
-the range or object IDs. `--` closes option parsing before any future pathspec.
+the range or object IDs. The fixed adapter vector must retain the top-level
+`--no-lazy-fetch` option. `--` closes option parsing before any future pathspec.
 `--no-ext-diff` and `--no-textconv` prevent repository or user configuration
 from executing external diff helpers. `--no-renames` avoids similarity
 thresholds and represents a rename as deletion of the old path plus addition of
@@ -199,13 +210,21 @@ so deleted paths remain valid filter inputs.
 
 ## 6. Glob-filter semantics
 
+Before compiling patterns or entering the any-to-any matching loop, the filter
+validates every path member as a string. This complete validation pass means a
+valid early match cannot hide a later non-string member.
+
 `matches_glob()` compiles every pattern before matching any path. If any
 pattern is invalid, the filter fails rather than returning a partial result. It
 returns true on the first `(path, pattern)` pair that matches and false only
 after exhausting both collections.
 
-The filter uses [`glob::Pattern`][glob-pattern] and the same `MatchOptions`
-policy as Netsuke's existing `glob()` helper:
+Pattern compilation reuses, or extracts the shared preprocessing from,
+`GlobPattern::new` before constructing [`glob::Pattern`][glob-pattern]. This
+preserves brace validation, separator normalization, and Unix
+backslash/literal-escaping rules without duplicating the implementation. The
+filter then uses the same `MatchOptions` policy as Netsuke's existing `glob()`
+helper:
 
 - matching is case-sensitive on every platform;
 - separators are literal, so `*` does not cross `/`;
@@ -226,6 +245,11 @@ path side. V1 accepts any non-empty variadic pattern set because manifests are
 trusted executable configuration, but the implementation must compile each
 distinct pattern once per filter call, not once per path. A configurable
 pattern budget needs measured evidence and is deferred.
+
+Filter tests must cover a valid path followed by a non-string member, escaped
+metacharacters, separator normalization, and invalid braces. The first case
+must prove that validation completes before an early matching result can be
+returned.
 
 ## 7. Architecture and ownership
 
@@ -302,6 +326,8 @@ corrective failure instead of an undefined-function error.
 The module uses a semantic internal error enum and converts it to MiniJinja
 errors only at registration. Its observable categories are:
 
+*Table 1: Git helper failure mapping.*
+
 | Condition                                              | MiniJinja kind     | Behaviour                                                          |
 | ------------------------------------------------------ | ------------------ | ------------------------------------------------------------------ |
 | Wrong value type, no glob patterns, or malformed range | `InvalidOperation` | Reject before host inspection.                                     |
@@ -332,8 +358,11 @@ stderr never become metric labels or tracing fields.
 Correct implementation requires these invariants:
 
 1. **Range confinement:** every accepted input yields exactly two resolved
-   commit object IDs; no caller text reaches a Git option position after
-   resolution.
+   commit IDs for the final diff: `A` and `B` for `A..B`, or the unique merge
+   base and `B` for `A...B`. Triple-dot resolution additionally resolves one
+   merge-base ID, so its complete operation sequence contains three resolved
+   IDs while two-dot resolution contains two. No caller text reaches a Git
+   option position after resolution.
 2. **Direction:** `A..B` compares `A` to `B`; `A...B` compares the unique merge
    base of `A` and `B` to `B`.
 3. **Path fidelity:** every NUL-delimited UTF-8 path appears once in normalized,
@@ -351,9 +380,13 @@ sets, and pattern sets to check invariants 1, 5, and 6 against a simple
 reference predicate. Example-backed tests should use temporary repositories to
 pin two-dot direction, three-dot direction, deletions, newline-bearing names,
 rename representation, no and multiple merge bases, missing Git, output caps,
-and query-mode rejection. The production adapter's fixed argv must be asserted
-at the injected port so a future edit cannot silently re-enable external diff
-drivers or rename detection.
+and query-mode rejection. They must assert the complete operation and resolved
+ID sequence for both `A..B` and `A...B`, including unique, multiple, and absent
+merge bases. The production adapter's fixed argv must be asserted at the
+injected port so a future edit cannot silently re-enable external diff drivers,
+rename detection, or lazy fetching. A partial-clone test with an instrumented
+remote must prove that a missing promisor object fails locally without remote
+contact.
 
 The design has one material interaction surface: range kind (`..` or `...`) ×
 change kind (add, modify, delete, rename, or submodule) × glob result (match or

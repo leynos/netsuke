@@ -28,16 +28,23 @@ Implement `git_changed_files()` through a feature-private `GitRepository` port
 with a bounded Git CLI adapter. The port belongs to
 `src/stdlib/change_detection/` and permits only three fixed operations:
 
-- resolve one caller endpoint to a commit object ID with `git rev-parse`;
-- find every best merge base for a three-dot comparison with
-  `git merge-base --all`; and
-- obtain NUL-delimited changed paths with a fixed `git diff` argument vector.
+- resolve one caller endpoint to a commit object ID with the fixed vector
+  `git --no-lazy-fetch rev-parse --verify --end-of-options <endpoint>^{commit}`;
+- find every best merge base for a three-dot comparison with the fixed vector
+  `git --no-lazy-fetch merge-base --all <left> <right>`; and
+- obtain NUL-delimited changed paths with the fixed vector
+  `git --no-lazy-fetch diff --no-ext-diff --no-textconv --no-renames
+  --name-only -z --diff-filter=ACDMRTUXB <base> <right> --`.
 
 The adapter resolves caller input before diffing. Later operations receive only
 validated hexadecimal object IDs, never the original revision text. The diff
 disables external diff drivers, text conversion, and rename detection. It
 inherits no stdin, reads stdout and stderr concurrently, and applies the
 standard-library command capture limit to both streams.
+
+Git's top-level `--no-lazy-fetch` option is required for every vector. A
+missing promisor object therefore fails locally instead of triggering remote
+contact.
 
 The port is not a general Git or command service. Only the change-detection
 module may call it, and no caller may provide flags, subcommands, pathspecs, or
@@ -53,8 +60,9 @@ port responses.
 - **The command surface is closed.** Parsing a strict range and resolving it to
   object IDs prevents template text from entering an option or pathname
   position.
-- **Path fidelity is explicit.** `git diff --name-only -z` preserves newlines
-  and other non-NUL bytes until Netsuke performs its required UTF-8 check.
+- **Path fidelity is explicit.** `git --no-lazy-fetch diff --name-only -z`
+  preserves newlines and other non-NUL bytes until Netsuke performs its
+  required UTF-8 check.
 - **Resource use stays bounded.** The adapter shares the stdlib capture budget
   and drains both output streams rather than using an unbounded convenience
   call.
@@ -76,6 +84,15 @@ The adapter must retain fixed argv tests, output-limit tests, and
 low-cardinality telemetry. A future Git-backed feature must either fit the
 three declared operations or propose a new decision; it must not widen the port
 into arbitrary Git execution.
+
+## Outstanding decisions
+
+Before this proposal is accepted, resolve:
+
+- whether Git operations should receive a dedicated timeout or continue using
+  the shared command wait policy; and
+- whether `matches_glob()` needs a configurable pattern budget after measured
+  workload evidence identifies a concrete bound.
 
 ## Alternatives considered
 

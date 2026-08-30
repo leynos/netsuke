@@ -1181,11 +1181,14 @@ untracked-file discovery, or per-linter file selection.
     [git-change-detection-helpers-design.md §§4 and 7](git-change-detection-helpers-design.md#4-commit-range-semantics).
   - Success: generated and example-backed cases reject malformed ranges and
     option-like endpoints before Git starts, while valid two-dot and three-dot
-    ranges select the designed commits.
+    ranges select the designed commits and assert the complete operation and
+    resolved-ID sequence. Fixed `rev-parse` and `merge-base` vectors must use
+    Git's top-level `--no-lazy-fetch` option.
 - [ ] 6.11.2. Register `git_changed_files()` with bounded path decoding and
   impurity tracking. Requires 6.11.1.
   - Run fixed `rev-parse`, `merge-base`, and `diff` argument vectors in the
-    configured workspace, honouring the injected command `PATH`.
+    configured workspace, honouring the injected command `PATH` and requiring
+    Git's top-level `--no-lazy-fetch` option on each vector.
   - Parse NUL-delimited output, reject non-UTF-8 names, normalize separators,
     sort and de-duplicate paths, disable rename and external-diff processing,
     and apply the configured capture limit.
@@ -1193,6 +1196,8 @@ untracked-file discovery, or per-linter file selection.
     impure immediately before Git execution.
   - Reserve `git_changed_files` against manifest-variable shadowing.
   - Add localized, bounded diagnostics and low-cardinality operation telemetry.
+  - Add a partial-clone integration case with an instrumented remote proving a
+    missing promisor object fails locally without remote contact.
   - See
     [git-change-detection-helpers-design.md §§5, 8, and 9](git-change-detection-helpers-design.md#5-changed-path-result-contract).
   - Follow
@@ -1203,10 +1208,14 @@ untracked-file discovery, or per-linter file selection.
 - [ ] 6.11.3. Implement the pure variadic `matches_glob()` collection filter.
   Requires 6.11.2.
   - Require a sequence of string paths and at least one string pattern; reject
-    invalid patterns and non-string members before returning a Boolean.
-  - Compile each pattern once, then return true when any path matches any
-    pattern using case-sensitive, literal-separator, leading-dot, and recursive
-    `**` semantics aligned with `glob()`.
+    invalid patterns and validate every path member before returning a Boolean,
+    even when an earlier path would match.
+  - Reuse or extract `GlobPattern::new` preprocessing before compiling each
+    pattern once, then return true when any path matches any pattern using
+    case-sensitive, literal-separator, leading-dot, and recursive `**` semantics
+    aligned with `glob()`.
+  - Test escaped metacharacters, separator normalization, invalid braces, and
+    the valid-path-then-non-string validation case.
   - Register the filter in ordinary and manifest-query environments and add it
     to the standard-library filter inventory.
   - See
@@ -1218,6 +1227,8 @@ untracked-file discovery, or per-linter file selection.
   - Add an end-to-end manifest matrix spanning two-dot and three-dot ranges,
     additions, modifications, deletions, renames, submodule changes, matches,
     and misses.
+  - Assert operation and resolved-ID sequences for both range forms, including
+    unique, multiple, and absent three-dot merge bases.
   - Add a runnable Rust-quality-gate example to the standard-library guide and
     align the core design, developer guide, localized diagnostics, and stdlib
     metadata with the public contract.
