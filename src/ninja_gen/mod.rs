@@ -19,7 +19,7 @@ use crate::localization::{self, keys};
 use camino::Utf8PathBuf;
 use itertools::Itertools;
 use std::collections::HashSet;
-use std::fmt::{self, Display, Formatter, Write};
+use std::fmt::Write;
 
 #[path = "../ninja_gen_command_list.rs"]
 pub(crate) mod ninja_gen_command_list;
@@ -57,6 +57,9 @@ macro_rules! write_flag {
         }
     };
 }
+
+mod display_edge;
+pub(crate) use display_edge::DisplayEdge;
 /// Generate a Ninja build file as a string.
 ///
 /// # Examples
@@ -365,39 +368,6 @@ impl NamedAction<'_> {
         writeln!(output, "rule {}", self.id)?;
         writeln!(output, "  command = {command}")?;
         self.write_metadata(output)
-    }
-}
-/// Wrapper struct to display a build edge.
-pub(crate) struct DisplayEdge<'a> {
-    /// The build edge whose inputs and outputs are rendered.
-    edge: &'a BuildEdge,
-    /// The Ninja rule selected for the edge, including the built-in `phony` rule.
-    action_name: &'a str,
-    /// Whether the action sets `restat`, suppressing the edge-level override.
-    action_restat: bool,
-    /// Dependencies rendered after `|`, either the edge's implicit deps or lowered serial gates.
-    implicit_deps: &'a [Utf8PathBuf],
-}
-
-impl Display for DisplayEdge<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "build {}", join(&self.edge.explicit_outputs))?;
-        if !self.edge.implicit_outputs.is_empty() {
-            write!(f, " | {}", join(&self.edge.implicit_outputs))?;
-        }
-        write!(f, ": {}", self.action_name)?;
-        if !self.edge.inputs.is_empty() {
-            write!(f, " {}", join(&self.edge.inputs))?;
-        }
-        if !self.implicit_deps.is_empty() {
-            write!(f, " | {}", join(self.implicit_deps))?;
-        }
-        if !self.edge.order_only_deps.is_empty() {
-            write!(f, " || {}", join(&self.edge.order_only_deps))?;
-        }
-        writeln!(f)?;
-        write_flag!(f, "restat", self.edge.always && !self.action_restat);
-        writeln!(f)
     }
 }
 #[cfg(test)]

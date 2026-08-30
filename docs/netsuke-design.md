@@ -97,9 +97,9 @@ before execution, a critical requirement for compatibility with Ninja.
    defined. During this transformation, Netsuke performs critical validation
    checks. It verifies the existence of referenced rules, ensures each rule has
    exactly one executable recipe, and requires each action or target to define
-   exactly one recipe unless a non-empty `deps` list makes it a
-   dependency-only aggregate. Circular dependencies and missing inputs are also
-   detected at this stage.
+   exactly one recipe unless a non-empty `deps` list makes it a dependency-only
+   aggregate. Circular dependencies and missing inputs are also detected at
+   this stage.
 
 6. Stage 6: Ninja Synthesis & Execution
 
@@ -535,9 +535,9 @@ behaves the same as if every target were declared explicitly.
 ### 2.6 Planned Recipe Ergonomics and Execution Feedback
 
 The string-based recipe model lets authors write ordinary shell syntax without
-leaking Ninja syntax into manifests. A shell fallback such as
-`${CARGO:-cargo}` is written exactly that way; Netsuke owns the chosen backend
-and escapes its file format when it emits `build.ninja`.
+leaking Ninja syntax into manifests. A shell fallback such as `${CARGO:-cargo}`
+is written exactly that way; Netsuke owns the chosen backend and escapes its
+file format when it emits `build.ninja`.
 
 Netsuke should add four complementary capabilities.
 
@@ -554,9 +554,9 @@ command or script text with no Ninja-specific escaping. The backend conversion
 accepts only completed shell text and returns an opaque Ninja-value type, which
 makes applying the conversion before placeholder lowering or applying it twice
 an invalid internal call rather than a convention left to review. Paths use a
-separate boundary: values containing Ninja-special syntax (`$`, spaces,
-colons, or control characters) are rejected rather than emitted ambiguously.
-ADR 014 records the boundary and its migration consequences.
+separate boundary: values containing Ninja-special syntax (`$`, spaces, colons,
+or control characters) are rejected rather than emitted ambiguously. ADR 014
+records the boundary and its migration consequences.
 
 #### Structured environment mapping
 
@@ -992,9 +992,9 @@ evaluation. A dedicated expansion pass handles `foreach` and `when`, and string
 fields are rendered only after deserialization, keeping data and templating
 concerns clearly separated. Because the expansion pass runs before typed AST
 deserialization, `foreach` and `when` are not AST fields, and they must not be
-interpreted by IR generation, Ninja generation, or the process runner.
-Recipe validation follows rendering of each target's `deps`, so the
-dependency-only contract is checked against the resolved dependency list.
+interpreted by IR generation, Ninja generation, or the process runner. Recipe
+validation follows rendering of each target's `deps`, so the dependency-only
+contract is checked against the resolved dependency list.
 
 ### 3.5 Testing
 
@@ -1164,22 +1164,20 @@ providing a secure bridge to the underlying system.
 
   The Rust query returns those UTF-8 paths unchanged. The Jinja `glob()`
   adapter adds the narrower command-safety boundary: it exposes a result only
-  when every path is a portable unquoted shell word made from ASCII letters, digits,
-  `/`, `:`, comma, full stop, underscore, or hyphen. Other matches fail
+  when every path is a portable unquoted shell word made from ASCII letters,
+  digits, `/`, `:`, comma, full stop, underscore, or hyphen. Other matches fail
   manifest loading rather than entering `foreach` variables and potentially
   reaching command or script recipes as executable shell syntax. This private
   adapter predicate is owned by manifest templating; graph-path escaping and
   direct Rust callers must retain their existing, context-specific policies.
 
-  The metadata check that filters directories out of the results runs
-  through a capability opened at the pattern's literal directory prefix
-  (`src/` for `src/**/*.c`) rather than at an ambient root; the match walk
-  itself remains the `glob` crate's own, which traverses the filesystem
-  ambiently.
+  The metadata check that filters directories out of the results runs through a
+  capability opened at the pattern's literal directory prefix (`src/` for
+  `src/**/*.c`) rather than at an ambient root; the match walk itself remains
+  the `glob` crate's own, which traverses the filesystem ambiently.
   [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) records this
-  decision; see the
-  [developer's guide](developers-guide.md#capability-scope) for the prefix
-  computation and symlink-handling rules.
+  decision; see the [developer's guide](developers-guide.md#capability-scope)
+  for the prefix computation and symlink-handling rules.
 - `python_version(requirement: &str) -> Result<bool, Error>`: An example of a
   domain-specific helper function that demonstrates the extensibility of this
   architecture. This function would execute `python --version` or
@@ -2096,9 +2094,9 @@ This transformation involves several steps:
    and visitation map. Keys are cloned from the `targets` map so traversal
    leaves the input graph untouched. Missing dependencies encountered during
    traversal are logged, collected, and returned alongside any cycle to aid
-diagnostics.
+   diagnostics.
 
-### 5.4 Ninja file synthesis (`src/ninja_gen/mod.rs`)
+### 5.4 Ninja file synthesis (`src/ninja_gen/mod.rs`) — direct generation
 
 The final step is to synthesize the `build.ninja` file from the `BuildGraph`
 IR. This process is a straightforward, mechanical translation from the IR data
@@ -2111,11 +2109,11 @@ structures to the Ninja file syntax.
    Ninja `rule` statement for each executable `ir::Action`. Dependency-only
    actions are omitted because they have no command to execute. Their edges
    select Ninja's built-in `phony` rule. The IR already contains ordinary
-   command text: its input and output paths have replaced Netsuke's `ins`/`outs`
-   and `$in`/`$out` placeholders during lowering. Scalar commands are emitted
-   as-is. List commands are emitted as the brace-group, `eval`, and `&&` chain
-   described in §2.3, including the bounded failure marker for each one-based
-   entry.
+   command text: its input and output paths have replaced Netsuke's `ins`/
+   `outs` and `$in`/`$out` placeholders during lowering. Scalar commands are
+   emitted as-is. List commands are emitted as the brace-group, `eval`, and
+   `&&` chain described in §2.3, including the bounded failure marker for each
+   one-based entry.
 
    When an action's `recipe` is a script, the generated rule wraps the script
    in the configured platform-specific interpreter. Unix uses `/bin/sh -e -c`,
@@ -2236,7 +2234,7 @@ paths from `graph.default_targets`.
 default my_app
 ```
 
-### 5.4 Ninja file synthesis (`src/ninja_gen/mod.rs`) — continued
+### 5.4 Ninja file synthesis (`src/ninja_gen/mod.rs`) — serial generation
 
 The final step is to synthesize the `build.ninja` file from the `BuildGraph`
 IR. This process is a straightforward, mechanical translation from the IR data
@@ -2249,11 +2247,11 @@ structures to the Ninja file syntax.
    Ninja `rule` statement for each executable `ir::Action`. Dependency-only
    actions are omitted because they have no command to execute. Their edges
    select Ninja's built-in `phony` rule. The IR already contains ordinary
-   command text: its input and output paths have replaced Netsuke's `ins`/`outs`
-   and `$in`/`$out` placeholders during lowering. Scalar commands are emitted
-   as-is. List commands are emitted as the brace-group, `eval`, and `&&` chain
-   described in §2.3, including the bounded failure marker for each one-based
-   entry.
+   command text: its input and output paths have replaced Netsuke's `ins`/
+   `outs` and `$in`/`$out` placeholders during lowering. Scalar commands are
+   emitted as-is. List commands are emitted as the brace-group, `eval`, and
+   `&&` chain described in §2.3, including the bounded failure marker for each
+   one-based entry.
 
    When an action's `recipe` is a script, the generated rule wraps the script
    in the configured platform-specific interpreter. Unix uses `/bin/sh -e -c`,
@@ -2371,7 +2369,7 @@ paths from `graph.default_targets`.
 default my_app
 ```
 
-### 5.4 Ninja file synthesis (`src/ninja_gen/mod.rs`)
+### 5.4 Ninja file synthesis (`src/ninja_gen/mod.rs`) — generated bundles
 
 The final step is to synthesize the `build.ninja` file from the `BuildGraph`
 IR. This process is a straightforward, mechanical translation from the IR data
@@ -2384,11 +2382,11 @@ structures to the Ninja file syntax.
    Ninja `rule` statement for each executable `ir::Action`. Dependency-only
    actions are omitted because they have no command to execute. Their edges
    select Ninja's built-in `phony` rule. The IR already contains ordinary
-   command text: its input and output paths have replaced Netsuke's `ins`/`outs`
-   and `$in`/`$out` placeholders during lowering. Scalar commands are emitted
-   as-is. List commands are emitted as the brace-group, `eval`, and `&&` chain
-   described in §2.3, including the bounded failure marker for each one-based
-   entry.
+   command text: its input and output paths have replaced Netsuke's `ins`/
+   `outs` and `$in`/`$out` placeholders during lowering. Scalar commands are
+   emitted as-is. List commands are emitted as the brace-group, `eval`, and
+   `&&` chain described in §2.3, including the bounded failure marker for each
+   one-based entry.
 
    When an action's `recipe` is a script, the generated rule wraps the script
    in the configured platform-specific interpreter. Unix uses `/bin/sh -e -c`,
@@ -3049,16 +3047,16 @@ the targets listed in the `defaults` section of the manifest are built.
 
 The parser-facing `Cli` type is now defined in `src/cli/command.rs`, with the
 localisation-aware parsing entry point in `src/cli/parser.rs` and the runtime
-preference accessors in `src/cli/preferences.rs`, while
-layered configuration lives in a dedicated `CliConfig` struct derived with
-OrthoConfig in `src/cli/config.rs`. The top-level `src/cli/mod.rs` module
-re-exports that public CLI surface. This separation keeps parsing,
-configuration discovery, and runtime command selection as distinct concerns
-while preserving the existing command syntax. Invoking `netsuke` with no
-explicit subcommand still resolves to `build`, and the `build` command can now
-take default `emit` and `targets` values from `[cmds.build]` in configuration
-files or `NETSUKE_CMDS__BUILD__*` environment variables. Explicit CLI targets or
-`--emit` values still override those defaults.
+preference accessors in `src/cli/preferences.rs`, while layered configuration
+lives in a dedicated `CliConfig` struct derived with OrthoConfig in
+`src/cli/config.rs`. The top-level `src/cli/mod.rs` module re-exports that
+public CLI surface. This separation keeps parsing, configuration discovery, and
+runtime command selection as distinct concerns while preserving the existing
+command syntax. Invoking `netsuke` with no explicit subcommand still resolves to
+`build`, and the `build` command can now take default `emit` and `targets`
+values from `[cmds.build]` in configuration files or `NETSUKE_CMDS__BUILD__*`
+environment variables. Explicit CLI targets or `--emit` values still override
+those defaults.
 
 Configuration is layered in the order defaults -> configuration files ->
 environment variables -> CLI overrides. Explicit discovery honours
@@ -3141,8 +3139,8 @@ resolves diagnostic mode with `cli::resolve_json_and_layers_outcome_with_env`,
 then replays the outcome's deferred diagnostics and passes the cached layers to
 `cli::merge_with_cached_file_layers_with_observer`. That query returns bounded
 merge events alongside the result, which `config_load::resolve_configuration`
-replays through `cli::TracingMergeObserver`. The ordinary query functions do not
-install a recorder or emit tracing. `src/observability.rs` owns the phase
+replays through `cli::TracingMergeObserver`. The ordinary query functions do
+not install a recorder or emit tracing. `src/observability.rs` owns the phase
 recorder and bounded phase/outcome vocabulary, while `src/config_load.rs` owns
 the startup-attempt series. The application installs an in-process
 `DebuggingRecorder`; it does not open a metrics listener as a side effect of a
@@ -3343,20 +3341,20 @@ Diagnostic-mode resolution uses
 `(OrthoResult<bool>, DiscoveryOutcome)` without emitting diagnostics. The
 composition boundary calls `DiscoveryOutcome::emit_diagnostics()` after tracing
 is configured, replaying the retained diagnostics without repeating environment
-or filesystem access. `collect_file_layers_with_normalizer_and_trace(directory,
-normalizer, env_source)` performs the underlying discovery scan with the path
-normalizer and environment source, retaining bounded project-scope trace
-metadata. The normalizer canonicalizes comparison keys so equivalent project
-path spellings de-duplicate to one layer. `DiscoveryOutcome::into_layers()`
-transfers the same discovered layers to
-`merge_with_cached_file_layers_with_observer(...)`, which returns bounded merge
-events alongside the full merge result and prevents a second discovery pass.
-The standalone
-`merge_with_config_and_env(...)` path performs discovery and delegates to the
-ordinary merge query, which discards its collected events; it does not replay
-retained diagnostics or emit merge tracing. The application startup boundary
-replays the diagnostics
-and the returned merge events through `TracingMergeObserver` explicitly.
+or filesystem access.
+`collect_file_layers_with_normalizer_and_trace(directory,
+normalizer, env_source)`
+performs the underlying discovery scan with the path normalizer and
+environment source, retaining bounded project-scope trace metadata. The
+normalizer canonicalizes comparison keys so equivalent project path spellings
+de-duplicate to one layer. `DiscoveryOutcome::into_layers()` transfers the same
+discovered layers to `merge_with_cached_file_layers_with_observer(...)`, which
+returns bounded merge events alongside the full merge result and prevents a
+second discovery pass. The standalone `merge_with_config_and_env(...)` path
+performs discovery and delegates to the ordinary merge query, which discards
+its collected events; it does not replay retained diagnostics or emit merge
+tracing. The application startup boundary replays the diagnostics and the
+returned merge events through `TracingMergeObserver` explicitly.
 
 Deferred bounded discovery diagnostics are retained only for replay after the
 startup tracing boundary is configured. They do not contain raw paths or file
@@ -3463,12 +3461,11 @@ manual flag repetition.
   remain hard errors.
 - The `merge_with_config_and_env()` function in `src/cli/merge.rs` performs
   discovery and delegates to the ordinary merge query, which discards its
-  collected events. The
-  application startup boundary replays retained bounded diagnostics and calls
-  `merge_with_cached_file_layers_with_observer(...)` to merge defaults,
-  discovered layers, environment variables via Figment and CLI overrides
-  extracted from `ArgMatches`, then replays its returned events through
-  `TracingMergeObserver`.
+  collected events. The application startup boundary replays retained bounded
+  diagnostics and calls `merge_with_cached_file_layers_with_observer(...)` to
+  merge defaults, discovered layers, environment variables via Figment and CLI
+  overrides extracted from `ArgMatches`, then replays its returned events
+  through `TracingMergeObserver`.
 - The `config_discovery()` function uses OrthoConfig's builder API with the
   application name, injected discovery environment, and optional project-root
   anchor, relying on OrthoConfig's platform-specific defaults for standard
@@ -3479,12 +3476,11 @@ manual flag repetition.
   tests supply an in-memory `ConfigEnvProvider` without mutating the process
   environment. Startup obtains a `DiscoveryOutcome` from
   `resolve_json_and_layers_outcome_with_env`, emits its deferred diagnostics,
-  then passes `into_layers()` to
-  `merge_with_cached_file_layers_with_observer`, replaying its returned events
-  through `TracingMergeObserver`, so file discovery and loading happen once
-  while merge observation stays at the application boundary. OrthoConfig discovery
-  remains an external boundary and may still read platform environment
-  variables directly.
+  then passes `into_layers()` to `merge_with_cached_file_layers_with_observer`,
+  replaying its returned events through `TracingMergeObserver`, so file
+  discovery and loading happen once while merge observation stays at the
+  application boundary. OrthoConfig discovery remains an external boundary and
+  may still read platform environment variables directly.
 - Configuration files use TOML format by default. JSON5 (`.json`, `.json5`) and
   YAML (`.yaml`, `.yml`) formats are supported when the corresponding Cargo
   features are enabled.

@@ -176,26 +176,6 @@ fn bundle_rejects_an_empty_command_list() -> Result<()> {
     Ok(())
 }
 #[test]
-fn bundle_rejects_an_empty_command_list() -> Result<()> {
-    let mut graph = graph_with_edge(parallel_edge("all", &[]))?;
-    graph
-        .actions
-        .get_mut("a")
-        .context("test graph must contain its action")?
-        .recipe = Recipe::Command {
-        command: StringOrList::List(Vec::new()),
-    };
-
-    let error = generate_bundle(&graph)
-        .err()
-        .context("bundle generation must reject an empty command list")?;
-    ensure!(
-        matches!(error, NinjaGenError::EmptyCommandRecipe { action_index: 1 }),
-        "unexpected bundle-generation error: {error:?}"
-    );
-    Ok(())
-}
-#[test]
 fn repeated_dependency_keeps_separate_stage_sidecars() -> Result<()> {
     let graph = graph_with_edge(serial_edge("all", &["same", "same"]))?;
     let bundle = generate_bundle(&graph)?;

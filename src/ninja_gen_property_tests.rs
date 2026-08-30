@@ -7,7 +7,7 @@ use proptest::prelude::*;
 use test_support::ninja_gen::paths_strategy;
 
 use super::{
-    DisplayEdge, GeneratedDyndep, GeneratedNinja, generate, generate_bundle,
+    DisplayEdge, GeneratedDyndep, GeneratedNinja, NinjaGenError, generate, generate_bundle,
     test_support::command_action,
 };
 use crate::{
@@ -18,6 +18,8 @@ use crate::{
 use camino::Utf8PathBuf;
 use std::collections::{HashMap, HashSet};
 
+#[path = "ninja_gen_property_tests/dependency_only.rs"]
+mod dependency_only;
 #[path = "ninja_gen_property_tests/ninja_oracle.rs"]
 mod ninja_oracle;
 use ninja_oracle::{NinjaCommandOracle, scalar_command_strategy, scalar_graph};
@@ -275,14 +277,8 @@ proptest! {
     }
 
     #[test]
-    fn programmatic_empty_command_recipes_are_rejected(
-        use_empty_list in any::<bool>(),
-    ) {
-        let graph = command_graph(if use_empty_list {
-            StringOrList::List(Vec::new())
-        } else {
-            StringOrList::Empty
-        });
+    fn programmatic_empty_command_lists_are_rejected(() in Just(())) {
+        let graph = command_graph(StringOrList::List(Vec::new()));
         let error = generate(&graph).expect_err("empty command recipe should be rejected");
         let is_stable_empty_recipe_error = matches!(error, NinjaGenError::EmptyCommandRecipe { action_index: 1 });
         prop_assert!(is_stable_empty_recipe_error);

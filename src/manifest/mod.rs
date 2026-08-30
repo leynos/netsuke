@@ -44,6 +44,7 @@ mod expand;
 mod glob;
 mod hints;
 mod jinja_macros;
+mod load_stage;
 mod parse_with_config;
 mod query;
 mod render;
@@ -58,6 +59,7 @@ pub use diagnostics::{
 pub use env_reader::{EnvReadError, EnvReader, process_env_reader};
 pub(crate) use expand::expand_foreach;
 pub use glob::glob_paths;
+pub use load_stage::ManifestLoadStage;
 pub use parse_with_config::from_str_with_env_and_config;
 pub(crate) use query::from_path_for_manifest_query;
 pub use render::render_manifest;
@@ -65,19 +67,6 @@ pub use render::render_manifest;
 use self::{env_reader::env_var_with, jinja_macros::register_manifest_macros};
 #[cfg(test)]
 use workspace::open_manifest_workspace;
-
-/// Stages in the manifest-loading sub-pipeline.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum ManifestLoadStage {
-    /// Read raw manifest content from the filesystem.
-    ManifestIngestion,
-    /// Parse raw YAML into a `serde_json::Value` tree.
-    InitialYamlParsing,
-    /// Expand `foreach` and `when` template directives.
-    TemplateExpansion,
-    /// Deserialize and render string fields into typed manifest data.
-    FinalRendering,
-}
 
 /// Invoke the stage callback when present.
 fn notify_stage(

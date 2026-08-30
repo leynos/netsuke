@@ -298,19 +298,6 @@ fn programmatic_empty_command_list_returns_a_typed_generation_error(#[case] comm
         "empty command recipe should produce the stable typed error, got {error:?}"
     );
 }
-#[rstest]
-#[case::empty_list(StringOrList::List(Vec::new()))]
-fn programmatic_empty_command_list_returns_a_typed_generation_error(#[case] command: StringOrList) {
-    let action = command_action(command);
-    let mut graph = BuildGraph::default();
-    graph.actions.insert("empty".into(), action);
-
-    let error = generate(&graph).expect_err("empty command recipe should not generate Ninja");
-    assert!(
-        matches!(error, NinjaGenError::EmptyCommandRecipe { action_index: 1 }),
-        "empty command recipe should produce the stable typed error, got {error:?}"
-    );
-}
 #[test]
 fn nested_command_list_exec_returns_a_typed_generation_error() {
     let action = command_action(StringOrList::List(vec![
