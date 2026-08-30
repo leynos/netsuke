@@ -119,6 +119,74 @@ fn recorder_retains_bounded_timing_summary_sink_series() {
     assert_unlabelled_duration(&snapshot, TIMING_SUMMARY_SINK_WRITE_DURATION, 0.01);
 }
 
+/// Record the two valid counter series emitted for recipe-shell operations.
+fn record_valid_recipe_shell_series() {
+    counter!(
+        RECIPE_SHELL_RESOLUTIONS_TOTAL,
+        "recipe_shell" => "powershell",
+        "outcome" => "success",
+        "error_category" => "none"
+    )
+    .increment(1);
+    counter!(
+        BASH_PREFLIGHT_TOTAL,
+        "recipe_shell" => "bash",
+        "outcome" => "error",
+        "probe_outcome" => "not_found"
+    )
+    .increment(1);
+}
+
+/// Record recipe-shell resolution counters rejected for one invalid label each.
+fn record_invalid_recipe_shell_resolution_series() {
+    counter!(
+        RECIPE_SHELL_RESOLUTIONS_TOTAL,
+        "recipe_shell" => "unbounded",
+        "outcome" => "success",
+        "error_category" => "none"
+    )
+    .increment(1);
+    counter!(
+        RECIPE_SHELL_RESOLUTIONS_TOTAL,
+        "recipe_shell" => "powershell",
+        "outcome" => "unbounded",
+        "error_category" => "none"
+    )
+    .increment(1);
+    counter!(
+        RECIPE_SHELL_RESOLUTIONS_TOTAL,
+        "recipe_shell" => "powershell",
+        "outcome" => "success",
+        "error_category" => "unbounded"
+    )
+    .increment(1);
+}
+
+/// Record Bash preflight counters rejected for one invalid label each.
+fn record_invalid_bash_preflight_series() {
+    counter!(
+        BASH_PREFLIGHT_TOTAL,
+        "recipe_shell" => "powershell",
+        "outcome" => "error",
+        "probe_outcome" => "not_found"
+    )
+    .increment(1);
+    counter!(
+        BASH_PREFLIGHT_TOTAL,
+        "recipe_shell" => "bash",
+        "outcome" => "unbounded",
+        "probe_outcome" => "not_found"
+    )
+    .increment(1);
+    counter!(
+        BASH_PREFLIGHT_TOTAL,
+        "recipe_shell" => "bash",
+        "outcome" => "error",
+        "probe_outcome" => "unbounded"
+    )
+    .increment(1);
+}
+
 /// Retain only the fixed recipe-shell counter vocabulary exposed by the runner.
 #[test]
 fn recorder_retains_bounded_recipe_shell_series() {
@@ -126,34 +194,9 @@ fn recorder_retains_bounded_recipe_shell_series() {
     let snapshotter = recorder.snapshotter();
 
     metrics::with_local_recorder(&recorder, || {
-        counter!(
-            RECIPE_SHELL_RESOLUTIONS_TOTAL,
-            "recipe_shell" => "powershell",
-            "outcome" => "success",
-            "error_category" => "none"
-        )
-        .increment(1);
-        counter!(
-            BASH_PREFLIGHT_TOTAL,
-            "recipe_shell" => "bash",
-            "outcome" => "error",
-            "probe_outcome" => "not_found"
-        )
-        .increment(1);
-        counter!(
-            RECIPE_SHELL_RESOLUTIONS_TOTAL,
-            "recipe_shell" => "unbounded",
-            "outcome" => "success",
-            "error_category" => "none"
-        )
-        .increment(1);
-        counter!(
-            BASH_PREFLIGHT_TOTAL,
-            "recipe_shell" => "powershell",
-            "outcome" => "error",
-            "probe_outcome" => "not_found"
-        )
-        .increment(1);
+        record_valid_recipe_shell_series();
+        record_invalid_recipe_shell_resolution_series();
+        record_invalid_bash_preflight_series();
     });
 
     let snapshot = snapshotter.snapshot().into_vec();
