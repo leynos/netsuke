@@ -382,9 +382,9 @@ Both flags layer through the existing OrthoConfig precedence, so a project can
 fix its policy in `netsuke.toml`:
 
 ```toml
-[check]
+[cmds.check]
 rule = ["clarity=off", "unreachable-target=warning"]
-fail-on = "warning"
+fail_on = "warning"
 ```
 
 Nothing about policy resolution consults the environment beyond that
