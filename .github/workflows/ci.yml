@@ -303,7 +303,7 @@ jobs:
           if [ -f "${HOME}/.local/bin/whitaker.ps1" ]; then
             printf '%s\n' \
               '#!/bin/bash' \
-              "exec powershell -NoProfile -ExecutionPolicy Bypass -File \\\"\${HOME}/.local/bin/whitaker.ps1\\\" \\\"\$@\\\"" \
+              "exec powershell -NoProfile -ExecutionPolicy Bypass -File \"\${HOME}/.local/bin/whitaker.ps1\" \"\$@\"" \
               > "${CARGO_HOME:-$HOME/.cargo}/bin/whitaker"
             chmod +x "${CARGO_HOME:-$HOME/.cargo}/bin/whitaker"
           fi
