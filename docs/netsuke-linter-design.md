@@ -2,7 +2,13 @@
 
 ## Front matter
 
-- **Status:** accepted for v0.4.0; implemented in the `netsuke check` command.
+- **Status:** living. The v0.4.0 linter is a prototype: it is implemented and
+  shipped behind `netsuke check`, but its rule set, default severities, and
+  most of the contracts below are expected to change once the rules have been
+  used against manifests their authors did not write. Roadmap phase 7 owns that
+  feedback loop and the freeze that ends it. Rule identifiers are the
+  exception: they are permanent from v0.4.0. Update this document as the phase
+  progresses rather than treating it as a record of what was once decided.
 - **Scope:** the manifest linter — its rule model, compiler-stage hooks, rule
   identifiers, suppression contract, policy configuration, and output schemas.
 - **Primary audience:** Netsuke contributors adding or changing lint rules, and
@@ -10,8 +16,8 @@
   editors, and agents.
 - **Documents that take precedence:**
   - [ADR-015](adr-015-manifest-linting-under-netsuke-check.md) owns the command
-    placement, the findings-as-data output contract, and the decision to keep
-    rule text in the rule registry rather than the Fluent catalogues.
+    placement, the findings-as-data output contract, and the sequencing that
+    keeps rule prose in the registry for the prototype period.
   - [ADR-003](adr-003-agent-consistent-human-first-cli.md) owns the command-line
     interface (CLI) doctrine this design conforms to.
   - [ADR-014](adr-014-backend-text-escaping-seam.md) owns the Ninja escaping
@@ -607,10 +613,13 @@ through `foreach` expansion — is a change to the compiler's hot path for the
 benefit of a diagnostic, and is deferred until evidence says the missing spans
 actually hurt.
 
-**Rule text is not localized.**
-[ADR-015](adr-015-manifest-linting-under-netsuke-check.md) records this
-decision and its reversal path. The command's framing text — help, summary,
-threshold message, and errors — is localized as usual.
+**Rule text is not localized yet.** Rule prose will move to the Fluent
+catalogues under roadmap step 7.2, keyed by the rule's stable name; rule
+identifiers never move, because they are values a user types and a machine
+matches. The command's framing text — help, summary, threshold message, and
+errors — is already localized.
+[ADR-015](adr-015-manifest-linting-under-netsuke-check.md) records why the
+prose migration waits for the rule set to settle.
 
 **The rule set will grow faster than the engine.** The registry is a static
 table and adding a rule touches the table, one category module, the rule
