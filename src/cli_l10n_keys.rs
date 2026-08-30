@@ -142,27 +142,46 @@ fn generate_flag_help_key(arg_id: &str) -> Option<&'static str> {
     }
 }
 
-/// Return the localization key for a subcommand's short about text.
-pub(super) const fn subcommand_about_key(subcommand: Subcommand) -> &'static str {
-    match subcommand {
-        Subcommand::Build => keys::CLI_SUBCOMMAND_BUILD_ABOUT,
-        Subcommand::Check => keys::CLI_SUBCOMMAND_CHECK_ABOUT,
-        Subcommand::Clean => keys::CLI_SUBCOMMAND_CLEAN_ABOUT,
-        Subcommand::Graph => keys::CLI_SUBCOMMAND_GRAPH_ABOUT,
-        Subcommand::Generate => keys::CLI_SUBCOMMAND_GENERATE_ABOUT,
-        Subcommand::Help => keys::CLI_SUBCOMMAND_HELP_ABOUT,
-    }
+/// The pair of localization keys describing one subcommand.
+///
+/// The two keys are looked up together and are only ever correct together, so
+/// pairing them keeps one exhaustive match over [`Subcommand`] instead of two
+/// that could drift apart when a subcommand is added.
+#[derive(Clone, Copy)]
+pub(super) struct SubcommandAboutKeys {
+    /// Key for the one-line summary shown in a command list.
+    pub(super) short: &'static str,
+    /// Key for the expanded description shown by `--help`.
+    pub(super) long: &'static str,
 }
 
-/// Return the localization key for a subcommand's long about text.
-pub(super) const fn subcommand_long_about_key(subcommand: Subcommand) -> &'static str {
+/// Return the localization keys for a subcommand's about text.
+pub(super) const fn subcommand_about_keys(subcommand: Subcommand) -> SubcommandAboutKeys {
     match subcommand {
-        Subcommand::Build => keys::CLI_SUBCOMMAND_BUILD_LONG_ABOUT,
-        Subcommand::Check => keys::CLI_SUBCOMMAND_CHECK_LONG_ABOUT,
-        Subcommand::Clean => keys::CLI_SUBCOMMAND_CLEAN_LONG_ABOUT,
-        Subcommand::Graph => keys::CLI_SUBCOMMAND_GRAPH_LONG_ABOUT,
-        Subcommand::Generate => keys::CLI_SUBCOMMAND_GENERATE_LONG_ABOUT,
-        Subcommand::Help => keys::CLI_SUBCOMMAND_HELP_LONG_ABOUT,
+        Subcommand::Build => SubcommandAboutKeys {
+            short: keys::CLI_SUBCOMMAND_BUILD_ABOUT,
+            long: keys::CLI_SUBCOMMAND_BUILD_LONG_ABOUT,
+        },
+        Subcommand::Check => SubcommandAboutKeys {
+            short: keys::CLI_SUBCOMMAND_CHECK_ABOUT,
+            long: keys::CLI_SUBCOMMAND_CHECK_LONG_ABOUT,
+        },
+        Subcommand::Clean => SubcommandAboutKeys {
+            short: keys::CLI_SUBCOMMAND_CLEAN_ABOUT,
+            long: keys::CLI_SUBCOMMAND_CLEAN_LONG_ABOUT,
+        },
+        Subcommand::Graph => SubcommandAboutKeys {
+            short: keys::CLI_SUBCOMMAND_GRAPH_ABOUT,
+            long: keys::CLI_SUBCOMMAND_GRAPH_LONG_ABOUT,
+        },
+        Subcommand::Generate => SubcommandAboutKeys {
+            short: keys::CLI_SUBCOMMAND_GENERATE_ABOUT,
+            long: keys::CLI_SUBCOMMAND_GENERATE_LONG_ABOUT,
+        },
+        Subcommand::Help => SubcommandAboutKeys {
+            short: keys::CLI_SUBCOMMAND_HELP_ABOUT,
+            long: keys::CLI_SUBCOMMAND_HELP_LONG_ABOUT,
+        },
     }
 }
 
@@ -170,6 +189,6 @@ pub(super) const fn subcommand_long_about_key(subcommand: Subcommand) -> &'stati
 pub(super) const fn help_topic_about_key(topic: HelpTopicName) -> &'static str {
     match topic {
         HelpTopicName::Targets => keys::CLI_HELP_TARGETS_ABOUT,
-        HelpTopicName::Subcommand(subcommand) => subcommand_about_key(subcommand),
+        HelpTopicName::Subcommand(subcommand) => subcommand_about_keys(subcommand).short,
     }
 }
