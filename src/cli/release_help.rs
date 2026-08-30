@@ -2,10 +2,12 @@
 //!
 //! `cargo-orthohelp` consumes [`ReleaseHelpCli`] rather than [`CliConfig`]
 //! directly. The adapter retains the configuration-field metadata generated
-//! for `CliConfig` and adds the Clap subcommands that users can invoke.
+//! for `CliConfig` and adds parser-only arguments and Clap subcommands that
+//! users can invoke.
 
-use clap::CommandFactory;
-use ortho_config::docs::{DocMetadata, OrthoConfigDocs};
+use anyhow::{Context, Result};
+use clap::{ArgAction, Command, CommandFactory};
+use ortho_config::docs::{CliMetadata, DocMetadata, FieldMetadata, OrthoConfigDocs, ValueType};
 
 use super::{Cli, CliConfig};
 use crate::localization::keys;
@@ -25,9 +27,65 @@ impl OrthoConfigDocs for ReleaseHelpCli {
     fn get_doc_metadata() -> DocMetadata {
         let mut metadata = CliConfig::get_doc_metadata();
         keys::CLI_ABOUT.clone_into(&mut metadata.about_id);
+        match documented_clap_config_field(&Cli::command()) {
+            Ok(config) => metadata.fields.push(config),
+            Err(error) => {
+                tracing::error!(
+                    ?error,
+                    "release help omits parser-only config metadata because the parser contract changed"
+                );
+            }
+        }
         metadata.subcommands = documented_clap_subcommands(&metadata);
         metadata
     }
+}
+
+/// Build release-help metadata for Netsuke's parser-only `--config` selector.
+///
+/// The selector has no configuration, environment, or file source: discovery
+/// retains that policy in `discovery.rs` under ADR 004.
+///
+/// # Errors
+///
+/// Returns an error when the parser no longer exposes the required `config`
+/// argument, which would leave generated release help incomplete.
+fn documented_clap_config_field(command: &Command) -> Result<FieldMetadata> {
+    let config = command
+        .get_arguments()
+        .find(|argument| argument.get_id() == "config")
+        .context("Cli::command() should expose its parser-only config argument")?;
+
+    Ok(FieldMetadata {
+        name: config.get_id().as_str().to_owned(),
+        help_id: keys::CLI_FLAG_CONFIG_HELP.to_owned(),
+        long_help_id: None,
+        value: Some(ValueType::Path),
+        default: None,
+        required: config.is_required_set(),
+        deprecated: None,
+        cli: Some(CliMetadata {
+            long: config.get_long().map(str::to_owned),
+            short: config.get_short(),
+            value_name: config
+                .get_value_names()
+                .and_then(|names| names.first())
+                .map(ToString::to_string),
+            multiple: matches!(config.get_action(), &ArgAction::Append),
+            takes_value: config.get_action().takes_values(),
+            possible_values: config
+                .get_possible_values()
+                .iter()
+                .map(|value| value.get_name().to_owned())
+                .collect(),
+            hide_in_help: config.is_hide_set(),
+        }),
+        env: None,
+        file: None,
+        examples: Vec::new(),
+        links: Vec::new(),
+        notes: Vec::new(),
+    })
 }
 
 /// Return documentation metadata for every Clap subcommand with an about key.
@@ -77,6 +135,59 @@ mod tests {
 
     use super::*;
     use anyhow::{Context, Result, ensure};
+    use rstest::rstest;
+
+    #[rstest]
+    #[case(Cli::command(), Some("config"))]
+    #[case(Command::new("netsuke"), None)]
+    fn config_metadata_requires_the_parser_argument(
+        #[case] command: Command,
+        #[case] expected_config_long: Option<&str>,
+    ) -> Result<()> {
+        let extraction = documented_clap_config_field(&command);
+
+        if let Some(config_long) = expected_config_long {
+            let extracted_field =
+                extraction.context("config argument should produce release-help metadata")?;
+            let cli = extracted_field
+                .cli
+                .context("config metadata should retain its CLI source")?;
+            ensure!(
+                extracted_field.name == "config",
+                "config metadata should retain its name"
+            );
+            ensure!(
+                extracted_field.help_id == keys::CLI_FLAG_CONFIG_HELP,
+                "config metadata should use the localized config help key"
+            );
+            ensure!(
+                cli.long.as_deref() == Some(config_long),
+                "config metadata should retain its long flag"
+            );
+            ensure!(
+                cli.value_name.as_deref() == Some("FILE"),
+                "config metadata should retain its path value name"
+            );
+            ensure!(cli.takes_value, "config selector should accept a path");
+            ensure!(
+                extracted_field.env.is_none(),
+                "config selector must not gain an environment source"
+            );
+            ensure!(
+                extracted_field.file.is_none(),
+                "config selector must not gain a file source"
+            );
+        } else {
+            let error = extraction
+                .err()
+                .context("missing config argument should fail metadata extraction")?;
+            ensure!(
+                error.to_string().contains("parser-only config argument"),
+                "missing config error should identify the parser contract: {error}"
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn metadata_documents_help_targets_through_the_help_subcommand() {
