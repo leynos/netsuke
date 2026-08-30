@@ -1431,8 +1431,16 @@ in [RFC 0007](rfcs/0007-netsukefile-testing-framework.md), the
 
 - [ ] 7.6.3. Document the framework. Requires: 7.6.1.
   - [ ] Add a users' guide chapter for authoring and running tests.
+  - [ ] Document the `--accessibility` output contract for `test` in the
+    users' guide, covering how case results, failure diagnostics, and the
+    run summary render under `--accessibility on`.
+  - [ ] Record the accessibility findings for `test` output in the
+    accessibility documentation, cross-referencing `3.8.3`.
   - [ ] Update `contents.md`, the quickstart, and `context --json` follow-on
     notes.
+  - [ ] Validate the documentation updates: check the users' guide and
+    accessibility entries against the shipped output, and keep the
+    documented contract in step with the display-policy behaviour.
 
 **Success criterion:** a Netsukefile author can write the worked example from
 [UX design §14.2](netsuke-test-framework-ux-design.md) and run it to a green

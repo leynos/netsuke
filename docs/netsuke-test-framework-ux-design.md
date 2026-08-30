@@ -791,16 +791,19 @@ diagnostic document to stderr. All human-facing strings are localized like
 the rest of the command-line interface (CLI) surface.
 
 Interruption (Ctrl-C) stops scheduling, then terminates every case still
-running, reaps each terminated child, and performs the cleanup those
-children no longer can. Only once no child survives does the run report
-interruption: it applies the usual `--keep` decision to the run sandbox —
-removing it, or retaining it and printing the path — and exits 130. In
-`--json` mode the run still emits exactly one document, marked
-`"interrupted": true`, with every unstarted case reported as skipped.
-Ordering the shutdown this way is what stops an interrupted run
-leaving orphaned children or half-removed sandboxes behind.
-provisioned is errored; the run aborts with exit 3 only when the run root
-itself cannot be created.
+running and waits for each child to exit. With no child still alive, the
+parent performs the cleanup those children can no longer do themselves,
+reaps every child to collect its status, applies the usual `--keep`
+decision to the run sandbox — removing it, or retaining it and printing
+the path — and exits 130. In `--json` mode the run still emits exactly one
+document, marked `"interrupted": true`, with every unstarted case reported
+as skipped. Waiting for exit before cleanup matters on Windows, where a
+still-terminating child can hold sandbox handles open; ordering the
+shutdown this way is what stops an interrupted run leaving orphaned
+children or half-removed sandboxes behind.
+
+A case whose sandbox cannot be provisioned is errored; the run aborts with
+exit 3 only when the run root itself cannot be created.
 
 ## 13. Reporting
 
