@@ -5,9 +5,9 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision log`, `Outcomes & retrospective`, `Conformance basis`, and
 `Verification plan` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
-Revision 2.3. See `Revision note` at the foot of this document.
+Revision 2.4. See `Revision note` at the foot of this document.
 
 ## Purpose / big picture
 
@@ -1278,6 +1278,33 @@ Nothing writes outside the repository except scratch logs under `/tmp`.
 
 This section is populated during implementation. It must contain, by EP-M6:
 
+### EP-M0 measurements (2026-08-30)
+
+All probes used the required five-minute, 2-CPU, 8-GiB `systemd-run` wrapper.
+The wrapper does not expose a peak-RSS measurement, so that column is recorded
+as unavailable rather than inferred from host-wide memory. No probe was
+OOM-killed.
+
+| Shape | N or M | Wall-clock | Peak RSS | Verdict |
+| --- | --- | --- | --- | --- |
+| `find_substitution` sigil window | 8 | 35.261s | unavailable | verified |
+| `find_substitution` sigil window | 16 | 27.877s | unavailable | verified |
+| `find_substitution` sigil window | 12 | 39.759s | unavailable | verified |
+| `substitute_chars` scanner | 8 | 5m cap | unavailable | timed out |
+| `substitute_chars` scanner | 6 | 5m cap | unavailable | timed out |
+| `interpolate_command_with_bindings` guard | 6 | not run | n/a | dominated by scanner |
+
+`cargo kani --help` confirmed that 0.67.0 accepts `--jobs 4`; it does not
+require `--output-format=terse`. The first possible optimization is therefore
+parallel harness scheduling without a Makefile change.
+
+The sigil proof's successful N=16 run is enough to support the planned
+window-completeness argument. The real scanner does not fit the cap even at
+M=6, so scanner and guard harnesses cannot be admitted at the plan's target
+bound. The temporary feasibility seam and harness module were removed before
+EP-M1; no production code changed in this milestone. Logs are retained under
+`/tmp/kani-m0-*-netsuke-4-2-3-kani-harnesses-for-command-interpolation.out`.
+
 - **EP-M0 measurement table** — columns `shape`, `N` or `M`, `wall-clock`,
   `peak RSS`, `verdict`; one row per probe. Plus the answer on
   `cargo kani --jobs`.
@@ -1312,9 +1339,11 @@ This section is populated during implementation. It must contain, by EP-M6:
 - [x] (2026-08-24) Maintainer ratified all three decisions flagged as requiring
   acceptance: the `RM-4.2.3.d` reformulation, harness-local oracles, and a
   string-level bound below the roadmap's stated 256/8.
-- [ ] Plan approved by the maintainer as a whole, authorizing implementation to
-  begin at EP-M0.
-- [ ] EP-M0 feasibility spike and bound decision.
+- [x] (2026-08-30) Plan approved by the maintainer as a whole, authorizing
+  implementation to begin at EP-M0.
+- [x] (2026-08-30) EP-M0 feasibility spike and bound decision. The sigil
+  window verified at N=8, N=12, and N=16; the full scanner timed out at M=8
+  and M=6. See `Artefacts and notes` and `Decision log`.
 - [ ] EP-M1 production seam; behaviour unchanged.
 - [ ] EP-M2 sigil and marker harnesses; mutation-patch contract test.
 - [ ] EP-M3 scanner specification and backtick-rejection harnesses.
@@ -1358,6 +1387,13 @@ This section is populated during implementation. It must contain, by EP-M6:
   Impact: none here, but do not treat execplan status fields as a source of
   truth. The field is stale in that file and uses at least five different
   vocabularies across the directory. Tracked as issue #586.
+
+- Observation: the fallback marker matcher remains reachable when Kani explores
+  a sigil candidate, and `try_match_token` counts a 27-character marker with
+  `str::chars`. Evidence: the M0 scanner logs required loop unrolling through
+  iteration 28 at `src/ir/cmd_interpolate.rs:229`. Impact: every retained Kani
+  harness must use an unwind at least 32; the default unwind of 6 is unsound for
+  this path.
 
 ## Decision log
 
@@ -1497,6 +1533,21 @@ and are now marked **accepted**. No decision in this log is outstanding.
   three files already share the `adr-004` prefix.
   **Date/Author:** 2026-08-24, planning agent.
 
+- **Decision:** Continue after the EP-M0 string-level shortfall with only the
+  small, allocation-free sigil and marker proofs; discharge scanner, backtick,
+  and guard behaviour through the mandated Proptest hand-off rather than add
+  harnesses that exceed the five-minute cap. **Accepted in advance by the
+  maintainer on 2026-08-24; measured 2026-08-30.**
+  **Rationale:** `find_substitution` verified at N=8, N=12, and N=16, so the
+  pre-accepted window argument remains valid. In contrast, the production
+  scanner timed out at M=8 and again at M=6 under the mandatory resource cap.
+  The guard necessarily invokes that scanner first, so a guard probe would not
+  establish a feasible independent bound. The full domain therefore belongs to
+  EP-M5's 256-character, eight-placeholder Proptest coverage. This decision
+  preserves the plan's stated safety boundary without weakening the resource
+  cap or changing production behaviour.
+  **Date/Author:** 2026-08-30, implementation agent.
+
 ## Outcomes & retrospective
 
 To be completed at EP-M6. Before setting this plan to `COMPLETE`, reconcile:
@@ -1601,3 +1652,10 @@ to section headings, since two consecutive rebases have moved them and the
 numbers cannot be kept true; line numbers are retained only for code, where
 `src/ir/cmd_interpolate.rs` has been stable throughout. The plan remains `DRAFT`
 pending approval to begin implementation.
+
+**Revision 2.4 (2026-08-30).** The maintainer approved implementation and
+EP-M0 completed under the required capped wrapper. `find_substitution` verified
+at N=8, N=12, and N=16, while the real scanner timed out at both M=8 and M=6.
+The plan therefore remains in progress with the pre-accepted small-proof plus
+Proptest hand-off; its exact measurements and the no-guard rationale are in
+`Artefacts and notes` and the `Decision log`.
