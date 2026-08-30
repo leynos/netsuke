@@ -270,8 +270,8 @@ fn behavioural_ci_workflow_uses_shared_tool_installers() -> Result<()> {
         "Install Nixie should use a commit-pinned shared installer, found {uses:?}"
     );
     ensure!(
-        step_input(nixie, YamlKey("python-version")) == Some("3.13"),
-        "Install Nixie should reuse the CI Python version"
+        step_input(nixie, YamlKey("python-version")) == Some("3.14"),
+        "Install Nixie should use Python 3.14, which nixie-cli requires"
     );
     ensure!(
         step_index(linux_steps, "Setup uv")? < step_index(linux_steps, "Install Nixie")?

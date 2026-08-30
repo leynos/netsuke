@@ -123,7 +123,7 @@ jobs:
         uses: >-
           leynos/shared-actions/.github/actions/install-nixie@18b2ea047ab1c761db2c4171aa7e73945badf3ec
         with:
-          python-version: '3.13'
+          python-version: '3.14'
       - name: Markdown formatter checker tests
         run: make test-markdown-format
       - name: Format
