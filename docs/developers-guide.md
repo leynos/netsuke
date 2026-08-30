@@ -498,9 +498,9 @@ The [install-release-candidate action][release-candidate-action] is the shared
 bootstrap for downstream release-admission canaries. Callers must provide
 `revision`, the full Git revision of the proposed candidate, and
 `expected-version`, the version that `netsuke --version` must report. The
-action fetches and checks out that exact revision, verifies the resolved commit,
-and runs `cargo build --locked --release --bin netsuke` before exposing the
-candidate binary.
+action fetches and checks out that exact revision, verifies the resolved
+commit, and runs `cargo build --locked --release --bin netsuke` before exposing
+the candidate binary.
 
 The action outputs the absolute `binary` path, the resolved `revision`, and the
 resolved `version`. It selects `netsuke.exe` on Windows and `netsuke` on other
