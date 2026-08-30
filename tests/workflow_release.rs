@@ -315,9 +315,10 @@ fn behavioural_release_dry_run_disables_untrusted_admission() -> Result<()> {
         "pull-request dry runs should disable release admission"
     );
     ensure!(
-        permissions.len() == 1
+        permissions.len() == 2
+            && mapping_value(permissions, "actions").and_then(YamlValue::as_str) == Some("read")
             && mapping_value(permissions, "contents").and_then(YamlValue::as_str) == Some("read"),
-        "pull-request dry runs should grant only checkout read permission"
+        "pull-request dry runs should grant only required read permissions"
     );
 
     Ok(())
