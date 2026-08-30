@@ -38,6 +38,25 @@ pub struct Finding {
 }
 
 impl Finding {
+    /// Build a finding at an already-resolved location.
+    ///
+    /// The public constructors differ only in how they describe where the
+    /// finding applies, so they share the field initialization and each is
+    /// left saying only which [`Location`] it builds.
+    fn new(
+        meta: &'static RuleMeta,
+        severity: Severity,
+        message: impl Into<String>,
+        location: Location,
+    ) -> Self {
+        Self {
+            meta,
+            severity,
+            message: message.into(),
+            location,
+        }
+    }
+
     /// Build a finding anchored at a source span.
     #[must_use]
     pub fn spanned(
@@ -46,12 +65,7 @@ impl Finding {
         message: impl Into<String>,
         span: Span,
     ) -> Self {
-        Self {
-            meta,
-            severity,
-            message: message.into(),
-            location: Location::Span(span),
-        }
+        Self::new(meta, severity, message, Location::Span(span))
     }
 
     /// Build a finding that names an identifier instead of a span.
@@ -62,12 +76,7 @@ impl Finding {
         message: impl Into<String>,
         symbol: impl Into<String>,
     ) -> Self {
-        Self {
-            meta,
-            severity,
-            message: message.into(),
-            location: Location::Symbol(symbol.into()),
-        }
+        Self::new(meta, severity, message, Location::Symbol(symbol.into()))
     }
 
     /// Report the span this finding is anchored at, when it has one.
