@@ -66,7 +66,7 @@ def test_coverage_report_is_produced_before_codescene_check() -> None:
     _assert_with_inputs(
         steps[coverage_index],
         COVERAGE_STEP,
-        {"output-path": "lcov.info", "format": "lcov"},
+        {"language": "rust", "output-path": "lcov.info", "format": "lcov"},
     )
     _assert_with_inputs(
         steps[codescene_index],
@@ -98,7 +98,7 @@ def test_main_coverage_upload_reads_the_generated_lcov_report() -> None:
     _assert_with_inputs(
         coverage_step,
         "main coverage production",
-        {"output-path": "lcov.info", "format": "lcov"},
+        {"language": "rust", "output-path": "lcov.info", "format": "lcov"},
     )
     _assert_with_inputs(
         upload_step,
