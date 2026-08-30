@@ -9,8 +9,17 @@ use crate::lint::registry;
 use crate::lint::severity::{FailOn, Severity};
 
 /// Build an outcome holding one finding per entry of `severities`.
-fn outcome(severities: &[Severity]) -> Outcome {
-    let meta = registry::meta_by_name("background-job").expect("the rule should be registered");
+macro_rules! outcome {
+    ($severities:expr $(,)?) => {
+        build_outcome(
+            registry::meta_by_name("background-job").expect("the rule should be registered"),
+            $severities,
+        )
+    };
+}
+
+/// Build an outcome attributing every finding to `meta`.
+fn build_outcome(meta: &'static crate::lint::rule::RuleMeta, severities: &[Severity]) -> Outcome {
     Outcome {
         findings: severities
             .iter()
@@ -23,21 +32,26 @@ fn outcome(severities: &[Severity]) -> Outcome {
     }
 }
 
-/// Build a report over `severities` bounded to `limit`.
-fn report(severities: &[Severity], limit: usize, threshold: FailOn) -> Report {
-    Report::new(
-        NamedManifest {
-            name: "Netsukefile",
-            source: "netsuke_version: \"1.0.0\"\n".to_owned(),
-        },
-        outcome(severities),
-        Bounds { limit, threshold },
-    )
+/// Build a report over some severities, bounded to a limit.
+macro_rules! report {
+    ($severities:expr, $limit:expr, $threshold:expr $(,)?) => {
+        Report::new(
+            NamedManifest {
+                name: "Netsukefile",
+                source: "netsuke_version: \"1.0.0\"\n".to_owned(),
+            },
+            outcome!($severities),
+            Bounds {
+                limit: $limit,
+                threshold: $threshold,
+            },
+        )
+    };
 }
 
 #[test]
 fn a_report_counts_findings_by_severity() {
-    let built = report(
+    let built = report!(
         &[Severity::Error, Severity::Warning, Severity::Warning],
         0,
         FailOn::Error,
@@ -58,7 +72,7 @@ fn a_limit_bounds_the_report_and_records_what_it_dropped(
     #[case] reported: usize,
     #[case] truncated: usize,
 ) {
-    let built = report(
+    let built = report!(
         &[Severity::Error, Severity::Warning, Severity::Advice],
         limit,
         FailOn::Error,
@@ -77,7 +91,7 @@ fn the_threshold_decides_the_verdict(
     #[case] failing: usize,
     #[case] is_failure: bool,
 ) {
-    let built = report(
+    let built = report!(
         &[Severity::Error, Severity::Warning, Severity::Advice],
         0,
         threshold,
@@ -96,12 +110,12 @@ fn a_clean_report_never_fails() {
         FailOn::Error,
         FailOn::Never,
     ] {
-        assert!(!report(&[], 0, threshold).is_failure());
+        assert!(!report!(&[], 0, threshold).is_failure());
     }
 }
 
 #[test]
 fn the_report_projects_one_diagnostic_per_finding() {
-    let built = report(&[Severity::Error, Severity::Warning], 0, FailOn::Error);
+    let built = report!(&[Severity::Error, Severity::Warning], 0, FailOn::Error);
     assert_eq!(built.diagnostics().len(), 2);
 }

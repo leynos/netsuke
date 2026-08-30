@@ -331,7 +331,7 @@ diagnostic code `netsuke::lint::builtin_clean_action`.
 Action named `clean` duplicates the built-in `netsuke clean`.
 
 `netsuke clean` removes exactly the outputs the graph declares, by asking Ninja.
-A hand-written `clean` action removes whatever its recipe names, which drifts
+A handwritten `clean` action removes whatever its recipe names, which drifts
 from the graph as targets are added and typically reaches for a wildcard that
 can delete more than it should.
 

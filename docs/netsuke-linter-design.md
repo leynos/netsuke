@@ -121,11 +121,12 @@ These are assumed by every later section rather than re-justified.
 
 ### 3.1 Stage hooks
 
-The linter binds to three points in the existing pipeline. The following
-description precedes the diagram for screen-reader users: the manifest source
-text flows into a span index and, in parallel, through the existing compiler
-stages; each of the three lint stages consumes the artefact produced immediately
-above it, and all three feed one finding sink.
+The linter binds to four points. The following description precedes the diagram
+for screen-reader users: the manifest source text flows into a span index and,
+in parallel, through the existing compiler stages; each of the first three lint
+stages consumes the artefact produced immediately above it, a fourth stage
+inspects the suppression directives themselves, and all four feed one finding
+sink.
 
 ```mermaid
 flowchart TD
@@ -137,10 +138,12 @@ flowchart TD
     S1["Stage 1: document rules"]
     S2["Stage 2: manifest rules"]
     S3["Stage 3: graph rules"]
+    S4["Stage 4: directive rules"]
     SINK["Finding sink"]
     SRC --> IDX --> DOC --> S1 --> SINK
     SRC --> AST --> S2 --> SINK
     AST --> IR --> S3 --> SINK
+    DOC --> S4 --> SINK
     DOC -. span resolution .-> S2
     DOC -. span resolution .-> S3
 ```
@@ -161,6 +164,11 @@ Stage 3, **graph rules**, sees `BuildGraph`. This is the correct stage for
 anything about the lowered edge set: reachability from the defaults, and
 whether a recipe consumes an output it has not declared a dependency on.
 
+Stage 4, **directive rules**, sees the suppression directives together with how
+many findings each one silenced. It runs after the other three, because a rule
+that reports on a directive that suppressed nothing cannot know that until the
+rules it names have run. Section 6 describes the three rules that bind here.
+
 A rule binds to exactly one stage. Where a property is observable at more than
 one stage, the rule binds to the earliest stage that can decide it, because
 earlier stages have better provenance.
@@ -171,16 +179,17 @@ earlier stages have better provenance.
 src/lint/
 ├── mod.rs          public entry point and orchestration
 ├── engine.rs       stage execution, ordering, suppression application
-├── rule.rs         RuleId, RuleMeta, Category, the three stage traits, FindingSink
+├── rule.rs         RuleMeta, Category, Stage, the four stage traits, FindingSink
 ├── registry.rs     the static rule table and lookup by identifier or category
 ├── finding.rs      Finding and its miette Diagnostic projection
 ├── severity.rs     Severity, FailOn, and their parsing
 ├── policy.rs       resolved per-rule severity from selectors
 ├── document.rs     the spanned authored document
 ├── document_build.rs  saphyr event stream to spanned tree
+├── scalar_span.rs  narrowing scanner-reported scalar spans
 ├── resolve.rs      best-effort span resolution for stages 2 and 3
-├── suppress.rs     directive scanning, scoping, and application
-├── report.rs       human and JSON rendering
+├── suppress.rs     directive scanning and block scoping
+├── report.rs       bounding, counting, and the diagnostic projection
 └── rules/          one module per category, rules colocated with their tests
 ```
 
@@ -258,9 +267,9 @@ pub struct RuleMeta {
 `summary` is the one-line diagnostic message template. `rationale` explains why
 the construct is a problem and `remediation` states the canonical alternative;
 both are printed by `--explain` and both appear verbatim in the rule reference
-documentation, which is generated from the same registry by a contract test.
-Keeping all three in the registry is what makes the documentation provably
-complete rather than aspirationally complete.
+documentation, which a contract test checks against the same registry in both
+directions. Keeping all three in the registry is what makes the documentation
+provably complete rather than aspirationally complete.
 
 `DefaultSeverity` is either `On(Severity)` for a rule that runs unless disabled,
 or `Off` for a rule that runs only when a policy selector enables it. The `Off`
@@ -286,6 +295,11 @@ pub trait GraphRule: Sync {
     fn meta(&self) -> &'static RuleMeta;
     fn check(&self, ctx: &GraphContext<'_>, sink: &mut FindingSink<'_>);
 }
+
+pub trait DirectiveRule: Sync {
+    fn meta(&self) -> &'static RuleMeta;
+    fn check(&self, ctx: &DirectiveContext<'_>, sink: &mut FindingSink<'_>);
+}
 ```
 
 `FindingSink` is bound to one rule for the duration of that rule's `check`, so a
@@ -295,7 +309,10 @@ where; it does not decide how loudly to say it.
 
 `ManifestContext` and `GraphContext` carry the artefact plus the span resolver
 and the authored document, so a stage-2 or stage-3 rule can offer source context
-without reparsing.
+without reparsing. `DirectiveContext` carries the directives and, per directive,
+how many findings it silenced, counted before suppression is applied so a
+directive that did its job is recorded as used even though its finding never
+reaches the output.
 
 ### 5.4 Findings and ordering
 
@@ -326,14 +343,19 @@ Grammar:
   named rules for the whole file. It exists because findings that cannot be
   resolved to a span cannot be suppressed by a scoped directive.
 
-Scoping:
+Scoping follows YAML indentation rather than the node tree, because that is how
+a reader sees the file:
 
-- A directive with manifest content before it on the same line applies to the
-  innermost node whose span covers that line.
-- A directive alone on its line applies to the innermost node that begins on the
-  next line that is neither blank nor another directive.
-- A finding is suppressed when its primary span lies within the directive's
-  target node.
+- A directive with manifest content before it on the same line governs that
+  line's declaration, together with every following line indented further.
+- A directive alone on its line governs the declaration starting at the next
+  line that is neither blank nor another comment, on the same terms. A run of
+  directives above one declaration therefore all govern that declaration.
+- A finding is suppressed when its span begins inside the governed block. The
+  test turns on where the finding starts rather than on whether its whole span
+  fits, because a collection node's reported span can run past its own
+  declaration, and an over-wide end should not let a finding escape a directive
+  that plainly governs it.
 
 A `#` inside a quoted or block scalar is not a directive. The scanner knows this
 because it consults the span index from section 4: a `#` inside any scalar's
@@ -438,14 +460,18 @@ result document to stdout:
   "result": {
     "command": "check",
     "status": "pass",
-    "summary": { "error": 0, "warning": 2, "advice": 1, "reported": 3, "suppressed": 1 },
+    "fail_on": "error",
+    "summary": {
+      "error": 0, "warning": 2, "advice": 1,
+      "reported": 3, "suppressed": 1, "omitted": 0
+    },
     "truncated": false,
     "findings": [
       {
-        "message": "`deps` entry `build` is produced by a directory-creating recipe",
+        "message": "depends on the directory `build` through `deps`",
         "code": "netsuke::lint::directory_dep_not_order_only",
         "severity": "warning",
-        "help": "Move the entry to `order_only_deps` so the directory's mtime does not force a rebuild.",
+        "help": "Move the directory to `order_only_deps`, which guarantees it exists first without tracking its timestamp.",
         "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#directory-dep-not-order-only",
         "causes": [],
         "source": { "name": "Netsukefile" },
@@ -474,10 +500,10 @@ whose `related` array carries the same finding objects in the same order:
   "generator": { "name": "netsuke", "version": "0.1.0-beta2" },
   "diagnostics": [
     {
-      "message": "Lint findings reached the error threshold (reported: 3, at or above threshold: 1).",
+      "message": "Lint findings reached the error threshold: 1 of 3 reported.",
       "code": "netsuke::lint::threshold_exceeded",
       "severity": "error",
-      "help": "Fix the reported findings, adjust `--rule`, or relax `--fail-on`.",
+      "help": "Fix the reported findings, adjust --rule, or relax --fail-on.",
       "related": ["…one entry per finding, same shape as result.findings…"]
     }
   ]
@@ -488,10 +514,11 @@ A consumer reads `result.findings` when present and `diagnostics[0].related`
 otherwise. Both arrays are bounded by `--limit`, and `result.truncated` or the
 threshold message states when truncation occurred.
 
-`--explain --json` emits a result document whose `result.rules` array carries
-the registry: name, category, default severity, summary, rationale, remediation,
-and documentation URL for every rule. This is the catalogue an editor or agent
-reads to build a rule picker without scraping prose.
+`--explain --json` emits a result document whose `result.command` is
+`check-explain` and whose `result.rules` array carries the registry: name,
+category, stage, default severity, diagnostic code, summary, rationale,
+remediation, and documentation URL for every rule. This is the catalogue an
+editor or agent reads to build a rule picker without scraping prose.
 
 ### 9.3 Exit codes
 
@@ -505,9 +532,9 @@ design does not pre-empt it.
 ## 10. The first rule set
 
 The rule reference in [netsuke-linter-rules.md](netsuke-linter-rules.md) is the
-normative list. It is generated from the registry and checked by a contract
-test, so it cannot drift from the shipped rules. The summary below groups the
-first set by the concern it addresses.
+normative list. A contract test checks it against the registry in both
+directions, so it can neither omit a shipped rule nor document one that does
+not exist. The summary below groups the first set by the concern it addresses.
 
 Table: the v0.4.0 rule set
 
@@ -520,7 +547,7 @@ Table: the v0.4.0 rule set
 | `bashism` | document | portability | warning | Construct that `/bin/sh -e` does not portably support. |
 | `background-job` | document | determinism | warning | Recipe detaches a process, so completion no longer means the work finished. |
 | `recursive-build-invocation` | document | determinism | warning | Recipe invokes `netsuke`, `make`, or `ninja`, defeating the single static graph. |
-| `builtin-clean-action` | document | redundancy | advice | Hand-written `clean` action duplicating `netsuke clean`. |
+| `builtin-clean-action` | document | redundancy | advice | Handwritten `clean` action duplicating `netsuke clean`. |
 | `serial-order-without-deps` | document | redundancy | advice | `dependency_order: serial` with fewer than two `deps`, which is inert. |
 | `redundant-always` | document | redundancy | advice | `always` on a target that is already phony. |
 | `action-without-description` | document | clarity | advice | Action invisible to `netsuke help targets` discovery. |
@@ -534,9 +561,9 @@ Table: the v0.4.0 rule set
 | `directory-dep-not-order-only` | manifest | caching | warning | Directory-producing target used as a content dependency. |
 | `undeclared-target-input` | graph | correctness | warning | Recipe consumes another target's output without declaring the edge. |
 | `unreachable-target` | graph | clarity | off | Target reachable from no default and no other target. |
-| `unknown-suppression` | document | suppression | warning | Directive names a rule that does not exist. |
-| `suppression-without-reason` | document | suppression | warning | Directive omits its `--` reason. |
-| `unused-suppression` | document | suppression | advice | Directive suppressed nothing. |
+| `unknown-suppression` | directive | suppression | warning | Directive names a rule that does not exist. |
+| `suppression-without-reason` | directive | suppression | warning | Directive omits its `--` reason. |
+| `unused-suppression` | directive | suppression | advice | Directive suppressed nothing. |
 
 ## 11. Testing strategy
 

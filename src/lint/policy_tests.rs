@@ -7,9 +7,11 @@ use crate::lint::registry;
 use crate::lint::rule::Category;
 use crate::lint::severity::{DefaultSeverity, Severity};
 
-/// Resolve `selectors`, failing the test with the rejection when they do not.
-fn resolve(selectors: &[&str]) -> Policy {
-    Policy::resolve(selectors).expect("selectors should resolve")
+/// Resolve `selectors`, failing the calling test when one is rejected.
+macro_rules! resolve {
+    ($selectors:expr) => {
+        Policy::resolve($selectors).expect("selectors should resolve")
+    };
 }
 
 #[test]
@@ -27,7 +29,7 @@ fn defaults_match_the_registry() {
 
 #[test]
 fn a_rule_selector_overrides_one_rule() {
-    let policy = resolve(&["background-job=error"]);
+    let policy = resolve!(&["background-job=error"]);
     assert_eq!(policy.severity_of("background-job"), Some(Severity::Error));
     assert_eq!(
         policy.severity_of("bashism"),
@@ -38,7 +40,7 @@ fn a_rule_selector_overrides_one_rule() {
 
 #[test]
 fn a_category_selector_overrides_every_rule_in_it() {
-    let policy = resolve(&["hygiene=off"]);
+    let policy = resolve!(&["hygiene=off"]);
     for meta in registry::all_meta().filter(|meta| meta.category == Category::Hygiene) {
         assert_eq!(
             policy.severity_of(meta.name),
@@ -53,11 +55,11 @@ fn a_category_selector_overrides_every_rule_in_it() {
 /// and not the other way round.
 #[test]
 fn later_selectors_win() {
-    let narrowed = resolve(&["hygiene=off", "unused-var=error"]);
+    let narrowed = resolve!(&["hygiene=off", "unused-var=error"]);
     assert_eq!(narrowed.severity_of("unused-var"), Some(Severity::Error));
     assert_eq!(narrowed.severity_of("unused-rule"), None);
 
-    let widened = resolve(&["unused-var=error", "hygiene=off"]);
+    let widened = resolve!(&["unused-var=error", "hygiene=off"]);
     assert_eq!(widened.severity_of("unused-var"), None);
 }
 
@@ -68,7 +70,7 @@ fn a_selector_enables_an_opt_in_rule() {
         .expect("the registry should ship an opt-in rule");
     assert_eq!(Policy::defaults().severity_of(opt_in.name), None);
     assert_eq!(
-        resolve(&[&format!("{}=warning", opt_in.name)]).severity_of(opt_in.name),
+        resolve!(&[&format!("{}=warning", opt_in.name)]).severity_of(opt_in.name),
         Some(Severity::Warning)
     );
 }
@@ -79,7 +81,7 @@ fn disabling_every_category_disables_every_rule() {
         .into_iter()
         .map(|category| format!("{}=off", category.as_str()))
         .collect();
-    assert!(resolve(&selectors.iter().map(String::as_str).collect::<Vec<_>>()).is_empty());
+    assert!(resolve!(&selectors.iter().map(String::as_str).collect::<Vec<_>>()).is_empty());
 }
 
 /// A typo in continuous-integration configuration must fail loudly rather than
@@ -106,7 +108,7 @@ fn an_invalid_selector_is_rejected(#[case] selector: &str, #[case] expected: Pol
 #[test]
 fn whitespace_around_a_selector_is_ignored() {
     assert_eq!(
-        resolve(&[" background-job = error "]).severity_of("background-job"),
+        resolve!(&[" background-job = error "]).severity_of("background-job"),
         Some(Severity::Error)
     );
 }

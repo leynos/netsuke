@@ -17,7 +17,7 @@ pub fn rules() -> Vec<Registered> {
     ]
 }
 
-/// Detects a hand-written `clean` action.
+/// Detects a handwritten `clean` action.
 pub struct BuiltinCleanAction;
 
 /// Metadata for [`BuiltinCleanAction`].
@@ -29,7 +29,7 @@ static BUILTIN_CLEAN_ACTION: RuleMeta = RuleMeta {
     summary: "action named `clean` duplicates the built-in `netsuke clean`",
     rationale: concat!(
         "`netsuke clean` removes exactly the outputs the graph declares, by ",
-        "asking Ninja. A hand-written `clean` action removes whatever its ",
+        "asking Ninja. A handwritten `clean` action removes whatever its ",
         "recipe names, which drifts from the graph as targets are added and ",
         "typically reaches for a wildcard that can delete more than it should."
     ),

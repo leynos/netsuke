@@ -21,6 +21,7 @@ mod help;
 mod merge;
 mod merge_input;
 mod merge_observability;
+mod merge_subcommands;
 mod parser;
 mod parsing;
 mod policy_values;

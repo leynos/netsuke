@@ -55,7 +55,7 @@ impl GraphRule for UndeclaredTargetInput {
     /// Only paths the graph itself declares as outputs are searched for, and
     /// only on word boundaries, so ordinary command text cannot match.
     fn check(&self, ctx: &GraphContext<'_>, sink: &mut FindingSink<'_>) {
-        let outputs: Vec<&str> = ctx.graph.targets.keys().map(path_str).collect();
+        let outputs = file_outputs(ctx.graph);
         let provenance = Provenance::new(ctx.document, ctx.manifest);
         for (index, target) in ctx.manifest.targets.iter().enumerate() {
             let Some(edge) = primary_edge(ctx.graph, target.name.to_string_vec().first()) else {
@@ -76,6 +76,22 @@ impl GraphRule for UndeclaredTargetInput {
             }
         }
     }
+}
+
+/// Collect the graph outputs a recipe could plausibly read.
+///
+/// Phony outputs are excluded because they name no file: an action called
+/// `test` or `install` would otherwise make every recipe that runs `test -f`
+/// or `install -m` look like it consumed one. Very short names are excluded
+/// for the same reason, since they match too much ordinary command text.
+fn file_outputs(graph: &BuildGraph) -> Vec<&str> {
+    graph
+        .targets
+        .iter()
+        .filter(|(_, edge)| !edge.phony)
+        .map(|(path, _)| path_str(path))
+        .filter(|path| path.len() >= 3)
+        .collect()
 }
 
 /// Report the graph outputs an edge's recipe names but does not depend on.

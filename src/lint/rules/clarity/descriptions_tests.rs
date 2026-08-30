@@ -1,7 +1,5 @@
 //! Tests for the description clarity rules.
 
-use crate::lint::test_support::{assert_fires, assert_silent, count_for, lint};
-
 /// A manifest with one described and one undescribed action and rule.
 const MIXED: &str = concat!(
     "netsuke_version: \"1.0.0\"\n",
@@ -26,7 +24,7 @@ const MIXED: &str = concat!(
 
 #[test]
 fn action_without_description_reports_only_undescribed_actions() {
-    assert_fires(MIXED, "action-without-description", 1);
+    crate::assert_lint_fires!(MIXED, "action-without-description", 1);
 }
 
 #[test]
@@ -39,7 +37,7 @@ fn action_without_description_accepts_a_described_action() {
         "    command: \"run tests\"\n",
         "targets: []\n",
     );
-    assert_silent(yaml, "action-without-description");
+    crate::assert_lint_silent!(yaml, "action-without-description");
 }
 
 #[test]
@@ -52,13 +50,13 @@ fn action_without_description_is_suppressed_by_a_directive() {
         "    command: \"run helper\"\n",
         "targets: []\n",
     );
-    assert_silent(yaml, "action-without-description");
+    crate::assert_lint_silent!(yaml, "action-without-description");
 }
 
 /// The rule encodes a house style, so it must stay silent until selected.
 #[test]
 fn rule_without_description_is_off_by_default() {
-    let reported: Vec<&str> = lint(MIXED)
+    let reported: Vec<&str> = crate::lint_fixture!(MIXED)
         .findings
         .iter()
         .map(|finding| finding.meta.name)
@@ -71,7 +69,7 @@ fn rule_without_description_is_off_by_default() {
 
 #[test]
 fn rule_without_description_reports_when_selected() {
-    assert_eq!(count_for(MIXED, "rule-without-description"), 1);
+    assert_eq!(crate::lint_count!(MIXED, "rule-without-description"), 1);
 }
 
 #[test]
@@ -86,5 +84,5 @@ fn rule_without_description_is_suppressed_by_a_directive() {
         "  - name: a\n",
         "    rule: bare\n",
     );
-    assert_silent(yaml, "rule-without-description");
+    crate::assert_lint_silent!(yaml, "rule-without-description");
 }
