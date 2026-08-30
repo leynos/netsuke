@@ -397,7 +397,7 @@ impl NamedAction<'_> {
         writeln!(output, "rule {}", self.id)?;
         writeln!(output, "  command = {}", command.command())?;
         if let Some(content) = command.response_file_content() {
-            writeln!(output, "  rspfile = $out.netsuke-{}.rsp", self.id)?;
+            writeln!(output, "  rspfile = $out.netsuke-{}.ps1", self.id)?;
             writeln!(output, "  rspfile_content = {content}")?;
         }
         self.write_metadata(output)

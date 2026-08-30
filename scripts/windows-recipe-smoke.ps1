@@ -175,7 +175,7 @@ function Test-DependencyOrdering {
 }
 
 function Test-ResponseFileCleanup {
-    if (Get-ChildItem -LiteralPath . -Filter '*.netsuke-*.rsp' -ErrorAction SilentlyContinue) {
+    if (Get-ChildItem -LiteralPath . -Filter '*.netsuke-*.ps1' -ErrorAction SilentlyContinue) {
         throw 'Ninja did not clean the PowerShell response files after executing the recipes.'
     }
 }

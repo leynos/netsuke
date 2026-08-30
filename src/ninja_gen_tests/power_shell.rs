@@ -27,7 +27,7 @@ fn assert_large_recipe_uses_ninja_response_file(
     .write_into(&mut rendered)?;
     ensure!(rendered.contains("-File \"$rspfile\""));
     ensure!(!rendered.contains("-EncodedCommand"));
-    ensure!(rendered.contains("rspfile = $out.netsuke-large_power_shell.rsp"));
+    ensure!(rendered.contains("rspfile = $out.netsuke-large_power_shell.ps1"));
     ensure!(rendered.contains("rspfile_content = "));
     ensure!(!rendered.contains(expected_script));
     let response_file_script = rendered
@@ -98,8 +98,8 @@ fn large_power_shell_rules_use_distinct_response_files() -> Result<()> {
         shell: RecipeShell::PowerShell,
     }
     .write_into(&mut second)?;
-    ensure!(first.contains("rspfile = $out.netsuke-first_large_power_shell.rsp"));
-    ensure!(second.contains("rspfile = $out.netsuke-second_large_power_shell.rsp"));
+    ensure!(first.contains("rspfile = $out.netsuke-first_large_power_shell.ps1"));
+    ensure!(second.contains("rspfile = $out.netsuke-second_large_power_shell.ps1"));
     Ok(())
 }
 
