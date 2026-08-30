@@ -1,17 +1,12 @@
 # Netsuke user's guide
 
-This guide documents the current development source for the planned
-v0.1.0-beta3 release. The latest published release is Netsuke v0.1.0-beta2; the
-package and registry-install instructions below are specific to that release,
-while source-install instructions describe the current checkout. The source
-still reports version `0.1.0-beta2` until the beta3 version bump, but it is
-ahead of the beta2 tag. The guide covers the first build, the manifest format,
-templating, command-line usage, configuration, diagnostics, accessibility, and
-the current safety boundary.
+This guide documents Netsuke v0.1.0-beta3. It covers the first build, the
+manifest format, templating, command-line usage, configuration, diagnostics,
+accessibility, and the current safety boundary.
 
-The published beta2 release is an early-adopter release. The compiler pipeline
-is useful, but command names, flags, diagnostic schemas, and some manifest
-details may change before 1.0. Pin the Netsuke version in automated workflows.
+Beta3 is an early-adopter release. The compiler pipeline is useful, but command
+names, flags, diagnostic schemas, and some manifest details may change before
+1.0. Pin the Netsuke version in automated workflows.
 
 ## Install Netsuke
 
@@ -23,7 +18,7 @@ by default.
 Inside a checkout, `rustup` automatically selects the pinned toolchain from
 `rust-toolchain.toml`; no command-line argument is required.
 
-The published Netsuke v0.1.0-beta2 is available from crates.io. Where
+Netsuke v0.1.0-beta3 is available from crates.io. Where
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) is available,
 prefer it: it fetches a prebuilt release binary and avoids the toolchain
 requirement below.
@@ -45,7 +40,7 @@ cargo +nightly-2026-08-23 install netsuke-build
 ```
 
 Pre-built installers are available from the
-[v0.1.0-beta2 GitHub release](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta2):
+[v0.1.0-beta3 GitHub release](https://github.com/leynos/netsuke/releases/tag/v0.1.0-beta3):
 
 | Platform | Architectures                        | Packages                         |
 | -------- | ------------------------------------ | -------------------------------- |
@@ -69,7 +64,7 @@ licence. Ninja must be installed separately when using the macOS or Windows
 installer. The Windows MSI installs to `C:\Program Files\netsuke` and does not
 update `PATH`.
 
-The MSI installer supports pre-release SemVer versions such as `0.1.0-beta2`:
+The MSI installer supports pre-release SemVer versions such as `0.1.0-beta3`:
 the pre-release suffix cannot be represented in an MSI product version, so the
 installer carries the numeric release triple (`0.1.0`) while the full version
 remains in the package and release names. Because successive pre-releases share
@@ -78,7 +73,7 @@ installation for that version series rather than installing alongside it.
 
 SHA-256 checksum files accompany standalone binaries and staged help,
 completion, and licence files. Installer packages do not have checksum sidecars
-in v0.1.0-beta2. Windows PowerShell help files are published beside each MSI as
+in v0.1.0-beta3. Windows PowerShell help files are published beside each MSI as
 sidecar artefacts rather than embedded in the installer.
 
 Each standalone release archive also contains generated shell completion
@@ -135,7 +130,7 @@ MSI:
 
 ```powershell
 $architecture = 'amd64' # Use 'arm64' for the Arm64 MSI.
-$releaseUri = 'https://api.github.com/repos/leynos/netsuke/releases/tags/v0.1.0-beta2'
+$releaseUri = 'https://api.github.com/repos/leynos/netsuke/releases/tags/v0.1.0-beta3'
 $release = Invoke-RestMethod -Uri $releaseUri
 
 $documents = [Environment]::GetFolderPath('MyDocuments')
@@ -145,7 +140,7 @@ $editionDirectory = if ($PSVersionTable.PSEdition -eq 'Desktop') {
     'PowerShell'
 }
 $moduleRoot = Join-Path $documents "$editionDirectory\Modules"
-$moduleDirectory = Join-Path $moduleRoot 'Netsuke\0.1.0-beta2'
+$moduleDirectory = Join-Path $moduleRoot 'Netsuke\0.1.0-beta3'
 $helpDirectory = Join-Path $moduleDirectory 'en-US'
 New-Item -ItemType Directory -Path $helpDirectory -Force | Out-Null
 
@@ -293,8 +288,8 @@ The top-level fields are:
 - `defaults`: target or action names used when `build` receives no explicit
   targets.
 
-`defaults` entries are literal names in the planned beta3 source; Jinja
-expressions are not rendered in this field.
+`defaults` entries are literal names in beta3; Jinja expressions are not
+rendered in this field.
 
 `vars` keys named `env` or `glob` are rejected because those names identify
 built-in template helpers (see
@@ -472,8 +467,7 @@ A target supports these fields:
 - `sources`: explicit inputs. They affect freshness and become `{{ ins }}`.
 - `deps`: implicit dependencies. They affect freshness but do not become
   recipe arguments. Declare them on each target; reusable rules reject `deps`.
-  The planned rule-level `deps_from` contract is not implemented in the current
-  development source.
+  The planned rule-level `deps_from` contract is not implemented in beta3.
 - `dependency_order`: scheduling policy for the `deps` list. `parallel` is the
   default; `serial` runs a list with more than one dependency in declaration
   order.
@@ -493,8 +487,7 @@ list of strings.
 
 Netsuke quotes paths inserted through `{{ ins }}` and `{{ outs }}`. Other Jinja
 values render as ordinary command text and are not automatically shell-quoted.
-The `shell_escape` filter described in older drafts is not implemented in the
-planned beta3 source.
+The `shell_escape` filter described in older drafts is not implemented in beta3.
 
 Cycle detection follows `sources` and `deps`. Order-only dependencies enforce
 ordering but do not participate in cycle detection.
@@ -1500,9 +1493,9 @@ colour alone. Emoji policy values are:
 - `never`: ASCII-safe prefixes.
 - `auto`: Unicode in standard output and ASCII in accessible output.
 
-The colour policy is separate. Colour rendering is not implemented in the
-planned beta3 source, so `color` currently affects mode selection but does not
-add coloured terminal text.
+The colour policy is separate. Colour rendering is not implemented in beta3, so
+`color` currently affects mode selection but does not add coloured terminal
+text.
 
 Verbose mode adds per-stage timing after a successful command. Failed commands
 do not print a timing summary.
@@ -1542,7 +1535,7 @@ stderr has this shape:
   "schema_version": 1,
   "generator": {
     "name": "netsuke",
-    "version": "0.1.0-beta2"
+    "version": "0.1.0-beta3"
   },
   "diagnostics": [
     {
@@ -1582,7 +1575,7 @@ Exactly one outcome branch is present:
   - `source`, `primary_span`, and `labels`: optional source locations.
   - `related`: nested diagnostics using the same shape.
 
-**Triage:** Treat schema version `1` as pre-stable for v0.1.0-beta2 and check
+**Triage:** Treat schema version `1` as pre-stable for v0.1.0-beta3 and check
 `schema_version` before parsing other fields.
 
 ## Configure network access

@@ -1538,7 +1538,7 @@ checksum = "239e59ecd6113a01bb9f9b2c85666af8f94d8b8e545d66d425ffc5fc75ffb874"
 
 [[package]]
 name = "netsuke-build"
-version = "0.1.0-beta2"
+version = "0.1.0-beta3"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -2814,7 +2814,7 @@ checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 
 [[package]]
 name = "test_support"
-version = "0.1.0-beta2"
+version = "0.1.0-beta3"
 dependencies = [
  "anyhow",
  "assert_cmd",

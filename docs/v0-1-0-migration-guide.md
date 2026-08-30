@@ -94,8 +94,8 @@ child remain platform-native and are not subject to this path restriction.
 
 ## Check filenames used by manifest `glob()`
 
-The planned beta3 source tightens the Jinja `glob()` helper. A manifest that
-expands a matched filename containing whitespace, control characters, or shell
+The beta3 release tightens the Jinja `glob()` helper. A manifest that expands a
+matched filename containing whitespace, control characters, or shell
 punctuation now fails during manifest loading. ASCII letters, digits, `/`, `:`,
 comma, full stop, underscore, and hyphen remain accepted. This beta3 change
 prevents a checkout filename from becoming executable shell syntax when a
