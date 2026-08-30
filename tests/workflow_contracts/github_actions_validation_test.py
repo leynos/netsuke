@@ -34,7 +34,99 @@ ACTIONLINT_VERSION = "1.7.12"
 ACTIONLINT_SHA256 = "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
 ACTIONLINT_INSTALLER_COMMIT = "914e7df21a07ef503a81201c76d2b11c789d3fca"
 ACTIONLINT_ARCHIVE = f"actionlint_{ACTIONLINT_VERSION}_linux_x86_64.tar.gz"
-ACTIONLINT_ARCHIVE_VARIABLE = "ACTIONLINT_ARCHIVE"
+ACTIONLINT_RAW_BASE = "https://raw.githubusercontent.com/rhysd/actionlint"
+ACTIONLINT_SCRIPT = "scripts/download-actionlint.bash"
+ACTIONLINT_RELEASE_ROOT = "https://github.com/rhysd/actionlint/releases/download"
+
+
+def _shell_variable(name: str) -> str:
+    """Return a shell variable expansion for script contract expectations."""
+    return f"${{{name}}}"
+
+
+ACTIONLINT_INSTALL_COMMAND = (
+    f'bash "{_shell_variable("ACTIONLINT_INSTALLER_PATH")}" '
+    f'"{_shell_variable("ACTIONLINT_VERSION")}"'
+)
+ACTIONLINT_CHECKSUM_COMMAND = (
+    f"printf '%s  %s\\n' \"{_shell_variable('ACTIONLINT_SHA256')}\" "
+    f'"{_shell_variable("ACTIONLINT_ARCHIVE_PATH")}" | sha256sum --check --'
+)
+ACTIONLINT_SCRIPT_CONTRACTS = (
+    (
+        f"readonly ACTIONLINT_VERSION='{ACTIONLINT_VERSION}'",
+        "the actionlint installer must pin the expected release version",
+    ),
+    (
+        f"readonly ACTIONLINT_SHA256='{ACTIONLINT_SHA256}'",
+        "the actionlint installer must pin the expected release archive checksum",
+    ),
+    (
+        f"readonly ACTIONLINT_INSTALLER_COMMIT='{ACTIONLINT_INSTALLER_COMMIT}'",
+        "the actionlint installer must pin its reviewed installer revision",
+    ),
+    (
+        f'readonly ACTIONLINT_ARCHIVE="{ACTIONLINT_ARCHIVE}"',
+        "the actionlint installer must request the published Linux x86-64 archive",
+    ),
+    (
+        f"readonly ACTIONLINT_RAW_BASE='{ACTIONLINT_RAW_BASE}'",
+        "the actionlint installer must own its immutable raw-content endpoint",
+    ),
+    (
+        f"readonly ACTIONLINT_SCRIPT='{ACTIONLINT_SCRIPT}'",
+        "the actionlint installer must pin its downloader script path",
+    ),
+    (
+        (
+            'readonly ACTIONLINT_INSTALLER_URL="'
+            f"{_shell_variable('ACTIONLINT_RAW_BASE')}/"
+            f"{_shell_variable('ACTIONLINT_INSTALLER_COMMIT')}/"
+            f'{_shell_variable("ACTIONLINT_SCRIPT")}"'
+        ),
+        "the actionlint installer URL must be constructed from its pinned inputs",
+    ),
+    (
+        f"readonly ACTIONLINT_RELEASE_ROOT='{ACTIONLINT_RELEASE_ROOT}'",
+        "the actionlint installer must own its release endpoint",
+    ),
+    (
+        (
+            'readonly ACTIONLINT_RELEASE_BASE="'
+            f"{_shell_variable('ACTIONLINT_RELEASE_ROOT')}/"
+            f'v{_shell_variable("ACTIONLINT_VERSION")}"'
+        ),
+        "the actionlint release base must select the pinned version",
+    ),
+    (
+        (
+            'readonly ACTIONLINT_RELEASE_URL="'
+            f"{_shell_variable('ACTIONLINT_RELEASE_BASE')}/"
+            f'{_shell_variable("ACTIONLINT_ARCHIVE")}"'
+        ),
+        ("the actionlint release URL must be constructed from the pinned archive"),
+    ),
+    (
+        (
+            "command curl --fail --location --show-error --output "
+            f'"{_shell_variable("ACTIONLINT_INSTALLER_PATH")}" \\\n'
+            f'  "{_shell_variable("ACTIONLINT_INSTALLER_URL")}"'
+        ),
+        "the actionlint installer download must use the installer endpoint",
+    ),
+    (
+        (
+            "command curl --fail --location --show-error --output "
+            f'"{_shell_variable("ACTIONLINT_ARCHIVE_PATH")}" \\\n'
+            f'  "{_shell_variable("ACTIONLINT_RELEASE_URL")}"'
+        ),
+        "the actionlint archive download must use the release endpoint",
+    ),
+    (
+        ACTIONLINT_CHECKSUM_COMMAND,
+        "the actionlint archive checksum must verify the downloaded archive",
+    ),
+)
 
 
 def _makefile_recipe(target: str) -> list[str]:
@@ -192,30 +284,10 @@ def test_ci_installs_and_invokes_pinned_workflow_linters() -> None:
     assert isinstance(download_script, str), (
         "the actionlint cache-miss step must define its verified installer script"
     )
-    assert f"readonly ACTIONLINT_VERSION='{ACTIONLINT_VERSION}'" in download_script, (
-        "the actionlint installer must pin the expected release version"
-    )
-    assert f"readonly ACTIONLINT_SHA256='{ACTIONLINT_SHA256}'" in download_script, (
-        "the actionlint installer must pin the expected release archive checksum"
-    )
-    assert (
-        f"readonly ACTIONLINT_INSTALLER_COMMIT='{ACTIONLINT_INSTALLER_COMMIT}'"
-        in download_script
-    ), "the actionlint installer must pin its reviewed installer revision"
-    assert f'readonly ACTIONLINT_ARCHIVE="{ACTIONLINT_ARCHIVE}"' in download_script, (
-        "the actionlint installer must request the published Linux x86-64 archive"
-    )
-    assert (
-        'readonly ACTIONLINT_RELEASE_URL="$'
-        "{ACTIONLINT_RELEASE_BASE}/"
-        "$"
-        f"{{{ACTIONLINT_ARCHIVE_VARIABLE}}}"
-        '"'
-    ) in download_script, (
-        "the actionlint installer must derive the release URL from its pinned archive"
-    )
-    assert download_script.index("sha256sum --check --") < download_script.index(
-        'bash "${ACTIONLINT_INSTALLER_PATH}" "${ACTIONLINT_VERSION}"'
+    for expected, message in ACTIONLINT_SCRIPT_CONTRACTS:
+        assert expected in download_script, message
+    assert download_script.index(ACTIONLINT_CHECKSUM_COMMAND) < download_script.index(
+        ACTIONLINT_INSTALL_COMMAND
     ), "the actionlint archive checksum must be verified before running the installer"
     assert lint.get("run") == (
         '/usr/bin/make ACTIONLINT="$GITHUB_WORKSPACE/actionlint" lint'
@@ -273,3 +345,18 @@ def test_github_actions_lint_propagates_linter_failure(cmd_mox: CmdMox) -> None:
         f"stderr was: {result.stderr}"
     )
     actionlint.assert_not_called()
+
+
+def test_github_actions_lint_propagates_actionlint_failure(cmd_mox: CmdMox) -> None:
+    """The Makefile fails after actionlint rejects a valid YAML workflow."""
+    cmd_mox.mock("yamllint").with_args(
+        "--config-file", ".yamllint.yml", ".github/workflows"
+    ).returns(exit_code=0).in_order()
+    cmd_mox.mock("actionlint").with_args().returns(exit_code=31).in_order()
+
+    result = _run_github_actions_lint(cmd_mox)
+
+    assert result.returncode == 2, (
+        "the `github-actions-lint` target must propagate an actionlint failure; "
+        f"stderr was: {result.stderr}"
+    )
