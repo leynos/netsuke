@@ -356,11 +356,12 @@ Recipes that fit within Windows' 32,766-character command-line safety limit use
 the encoded `powershell.exe` invocation described above. Larger scalar commands,
 scripts, and command lists use Ninja's `rspfile` and `rspfile_content` bindings,
 so recipe text is not truncated or rejected solely because of its encoded size.
-Each Ninja edge derives a unique response-file name from `$out`; Ninja creates it
-in the edge's working directory and writes an ASCII PowerShell bootstrap
-containing the Base64 UTF-16LE recipe payload. The command invokes that bootstrap
-with `powershell.exe -File "$rspfile"`, and Ninja removes the response file after
-execution. Query-only generation emits these bindings but does not create files.
+Each Ninja edge derives a unique response-file name from `$out`; Ninja creates a
+unique `.ps1` file in the edge's working directory containing an ASCII PowerShell
+bootstrap and the Base64 UTF-16LE recipe payload. The command invokes it with
+`powershell.exe -File "$rspfile"`. The bootstrap removes its own
+`$PSCommandPath` in a `finally` block, including when the recipe succeeds or
+fails. Query-only generation emits these bindings but does not create files.
 Response-file setup failures are reported by Ninja as execution errors.
 
 Ninja turns a failed recipe into its own non-zero result, and `netsuke` returns

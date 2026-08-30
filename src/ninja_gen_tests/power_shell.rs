@@ -49,6 +49,10 @@ fn assert_large_recipe_uses_ninja_response_file(
         rendered.contains(". ([ScriptBlock]::Create($$netsukeScript))"),
         "the response-file bootstrap must run the decoded script in its scope"
     );
+    ensure!(
+        rendered.contains("Remove-Item -LiteralPath $$PSCommandPath -Force"),
+        "the response-file bootstrap must clean itself after any recipe outcome"
+    );
     Ok(())
 }
 
@@ -228,7 +232,7 @@ fn decode_response_file_payload(response_file_script: &str) -> Result<String> {
         .strip_prefix("$netsukePayload = '")
         .and_then(|content| {
             content.strip_suffix(
-                "'; $netsukeScript = try { [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($netsukePayload)) } catch { throw \"Netsuke could not decode the PowerShell response file: $($_.Exception.Message)\" }; . ([ScriptBlock]::Create($netsukeScript)); if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
+                "'; $netsukeScript = try { [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($netsukePayload)) } catch { throw \"Netsuke could not decode the PowerShell response file: $($_.Exception.Message)\" }; try { . ([ScriptBlock]::Create($netsukeScript)) } finally { Remove-Item -LiteralPath $PSCommandPath -Force }; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
             )
         })
         .context("response file should contain the PowerShell Base64 bootstrap")?;

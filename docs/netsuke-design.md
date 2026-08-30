@@ -2151,13 +2151,14 @@ recipes, so they do not require the optional Bash runtime.
 
 PowerShell recipes that fit within the 32,766-character Windows command-line
 limit use `-EncodedCommand`. For larger recipes, Netsuke emits Ninja's per-edge
-`rspfile` and `rspfile_content` bindings instead: Ninja writes the ASCII
-PowerShell bootstrap containing the Base64 UTF-16LE recipe payload immediately
-before the action. The command invokes that bootstrap with `powershell.exe -File
-"$rspfile"`; PowerShell decodes the payload, and Ninja removes the response file
-after execution. The `$out`-derived name isolates concurrent edges in the build
-working directory; generation and target-discovery queries create no response
-files.
+`rspfile` and `rspfile_content` bindings instead: Ninja writes the unique
+`$out`-derived `.ps1` response file immediately before the action. It contains
+an ASCII PowerShell bootstrap and the Base64 UTF-16LE recipe payload. The command
+invokes it with `powershell.exe -File "$rspfile"`; PowerShell decodes the payload,
+and the bootstrap removes its own `$PSCommandPath` in a `finally` block after the
+recipe succeeds or fails. The per-edge name isolates concurrent actions in the
+build working directory; generation and target-discovery queries create no
+response files.
 
 ### 5.4 Ninja file synthesis (`src/ninja_gen/mod.rs`)
 

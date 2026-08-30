@@ -27,14 +27,15 @@ const POWER_SHELL_RESPONSE_FILE_SCRIPT_PREFIX: &str = "$netsukePayload = '";
 const POWER_SHELL_RESPONSE_FILE_SCRIPT_SUFFIX: &str = concat!(
     "'; $netsukeScript = try { [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($netsukePayload)) } ",
     "catch { throw \"Netsuke could not decode the PowerShell response file: $($_.Exception.Message)\" }; ",
-    ". ([ScriptBlock]::Create($netsukeScript)); if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"
+    "try { . ([ScriptBlock]::Create($netsukeScript)) } finally { Remove-Item -LiteralPath $PSCommandPath -Force }; ",
+    "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"
 );
 
 /// Represent one Ninja command binding and its optional response-file payload.
 pub(super) enum RenderedRecipeCommand {
     /// Run the command directly from the Ninja command binding.
     Direct(NinjaValue),
-    /// Let Ninja materialize and remove a response file for one build edge.
+    /// Let Ninja materialize a response file for one build edge.
     ResponseFile {
         /// Fixed command that starts the response file as a PowerShell script.
         command: NinjaValue,

@@ -382,11 +382,12 @@ The lowering stages have deliberately separate responsibilities:
 - On Windows, `RecipeShell::PowerShell` renders scalar commands and scripts as
   encoded `powershell.exe` invocations while they fit the Windows command-line
   limit. Larger recipes use Ninja's per-edge `rspfile` and `rspfile_content`
-  bindings. Ninja derives a unique response-file name from `$out`, creates an
-  ASCII PowerShell bootstrap in the edge's working directory containing the
-  Base64 UTF-16LE payload, invokes it with `powershell.exe -File "$rspfile"`,
-  and cleans it after execution; query-only generation emits the bindings
-  without creating files.
+  bindings. Ninja derives a unique `$out`-based `.ps1` response-file name,
+  creates it in the edge's working directory with an ASCII PowerShell
+  bootstrap containing the Base64 UTF-16LE payload, and invokes it with
+  `powershell.exe -File "$rspfile"`. The bootstrap removes its own
+  `$PSCommandPath` in a `finally` block after the recipe succeeds or fails;
+  query-only generation emits the bindings without creating files.
   An ordered list becomes one PowerShell script that checks `$LASTEXITCODE`
   immediately after each generated list entry, preserving PowerShell state
   while stopping before a later entry can overwrite a non-zero status. Multiple
