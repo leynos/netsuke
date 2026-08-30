@@ -37,11 +37,11 @@ Admission is fail-closed. For each table row, the release workflow reads the
 downstream `netsuke-canary.yml` at the pinned migration revision and requires
 both the installer action reference and its `revision` input to identify the
 exact published `GITHUB_SHA`. It then queries the pinned workflow ID with
-`head_sha` set to the migration revision and accepts only a run whose repository
-and workflow ID and path, `push` event, migration branch, head SHA, candidate
-name, completed status, and successful conclusion all match. A new candidate SHA
-therefore requires fresh downstream workflow evidence; earlier canary runs
-cannot admit a later release candidate.
+`head_sha` set to the migration revision and accepts only a run whose
+repository and workflow ID and path, `push` event, migration branch, head SHA,
+candidate name, completed status, and successful conclusion all match. A new
+candidate SHA therefore requires fresh downstream workflow evidence; earlier
+canary runs cannot admit a later release candidate.
 
 ## Deliberate migration boundaries
 
