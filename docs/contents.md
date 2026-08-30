@@ -26,6 +26,9 @@ operator, user, and contributor references are easier to find.
 - [netsuke-linter-design.md](netsuke-linter-design.md): Manifest linter design,
   covering the rule model, compiler-stage hooks, suppression grammar, policy
   configuration, and output schemas behind `netsuke check`.
+- [netsuke-linter-rules.md](netsuke-linter-rules.md): Reference for every lint
+  rule `netsuke check` ships, with its category, default severity, rationale,
+  and remediation.
 - [roadmap.md](roadmap.md): Phased implementation plan and tracked delivery
   work.
 - [archive/roadmap-completed-foundations.md](archive/roadmap-completed-foundations.md):
