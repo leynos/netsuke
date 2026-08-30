@@ -1,0 +1,280 @@
+---
+source: src/runner/check_tests.rs
+expression: rendered
+---
+{
+  "schema_version": 1,
+  "generator": {
+    "name": "netsuke",
+    "version": "[version]"
+  },
+  "result": {
+    "command": "check-explain",
+    "rules": [
+      {
+        "name": "undeclared-target-input",
+        "category": "correctness",
+        "stage": "graph",
+        "default_severity": "warning",
+        "code": "netsuke::lint::undeclared_target_input",
+        "summary": "recipe names another target's output without depending on it",
+        "rationale": "Ninja schedules edges concurrently unless a dependency orders them. A recipe that reads a path another target produces, without declaring that path as a dependency, races: it succeeds whenever the producer happened to run first, and fails or reads stale content when it did not. Serial local builds hide this; a parallel or clean build does not.",
+        "remediation": "Declare the path under `sources` if the recipe reads it, or under `deps` if it only needs it to exist.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#undeclared-target-input"
+      },
+      {
+        "name": "directory-dep-not-order-only",
+        "category": "caching",
+        "stage": "manifest",
+        "default_severity": "warning",
+        "code": "netsuke::lint::directory_dep_not_order_only",
+        "summary": "directory-creating target used as a content dependency",
+        "rationale": "A directory's modification time changes whenever any entry is created or removed inside it. A target that depends on a directory through `sources` or `deps` therefore rebuilds whenever a sibling output is written, even though nothing it reads has changed.",
+        "remediation": "Move the directory to `order_only_deps`, which guarantees it exists first without tracking its timestamp.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#directory-dep-not-order-only"
+      },
+      {
+        "name": "phony-dep-of-file-target",
+        "category": "caching",
+        "stage": "manifest",
+        "default_severity": "warning",
+        "code": "netsuke::lint::phony_dep_of_file_target",
+        "summary": "file target depends on a phony target through `sources` or `deps`",
+        "rationale": "A phony target is always considered out of date. A file target that depends on one through a content key is therefore also always out of date, and so is everything downstream, which removes incremental rebuilds from that whole branch of the graph.",
+        "remediation": "Move the entry to `order_only_deps`, which sequences the work without forcing a rebuild.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#phony-dep-of-file-target"
+      },
+      {
+        "name": "bashism",
+        "category": "portability",
+        "stage": "document",
+        "default_severity": "warning",
+        "code": "netsuke::lint::bashism",
+        "summary": "recipe uses a construct `/bin/sh` does not promise",
+        "rationale": "Netsuke runs `script` recipes under `/bin/sh -e`, and `command` recipes through the same shell. On a host where `/bin/sh` is `dash` rather than `bash`, a `bash`-only construct fails at build time with a syntax error that does not reproduce on the author's machine.",
+        "remediation": "Rewrite the construct in POSIX shell, or move the work into a script the manifest invokes.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#bashism"
+      },
+      {
+        "name": "background-job",
+        "category": "determinism",
+        "stage": "document",
+        "default_severity": "warning",
+        "code": "netsuke::lint::background_job",
+        "summary": "recipe detaches a process with a trailing `&`",
+        "rationale": "A detached process outlives the recipe that started it. Netsuke marks the target complete as soon as the shell returns, so a later target can consume a half-written output, and the build can finish while work is still running.",
+        "remediation": "Run the command in the foreground, or move the detached work outside the build into a separate command.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#background-job"
+      },
+      {
+        "name": "recursive-build-invocation",
+        "category": "determinism",
+        "stage": "document",
+        "default_severity": "warning",
+        "code": "netsuke::lint::recursive_build_invocation",
+        "summary": "recipe invokes a build tool",
+        "rationale": "Netsuke decides the whole graph before Ninja starts. A recipe that invokes `netsuke`, `make`, or `ninja` hides a second graph inside one edge, so Netsuke cannot order the two, cannot schedule them against one job budget, and cannot tell whether the inner build's inputs changed.",
+        "remediation": "Declare the inner build's work as targets in this manifest so one graph owns all of it.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#recursive-build-invocation"
+      },
+      {
+        "name": "builtin-clean-action",
+        "category": "redundancy",
+        "stage": "document",
+        "default_severity": "advice",
+        "code": "netsuke::lint::builtin_clean_action",
+        "summary": "action named `clean` duplicates the built-in `netsuke clean`",
+        "rationale": "`netsuke clean` removes exactly the outputs the graph declares, by asking Ninja. A hand-written `clean` action removes whatever its recipe names, which drifts from the graph as targets are added and typically reaches for a wildcard that can delete more than it should.",
+        "remediation": "Delete the action and use `netsuke clean`, which is derived from the graph.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#builtin-clean-action"
+      },
+      {
+        "name": "duplicate-rule-recipe",
+        "category": "redundancy",
+        "stage": "manifest",
+        "default_severity": "warning",
+        "code": "netsuke::lint::duplicate_rule_recipe",
+        "summary": "two rules declare identical recipes",
+        "rationale": "Two rules with the same recipe are one rule under two names. A change to the shared command has to be made twice, and a reader cannot tell which name to use for new targets. Netsuke already deduplicates the generated action, so the duplication buys nothing at build time.",
+        "remediation": "Keep one rule and point the other rule's targets at it.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#duplicate-rule-recipe"
+      },
+      {
+        "name": "redundant-always",
+        "category": "redundancy",
+        "stage": "document",
+        "default_severity": "advice",
+        "code": "netsuke::lint::redundant_always",
+        "summary": "`always` declared on a target that is already phony",
+        "rationale": "A phony target is always considered out of date, and every action is implicitly phony. Adding `always` to one states the same thing twice and suggests the author expected it to mean something more.",
+        "remediation": "Remove `always`; the target already runs whenever it is requested.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#redundant-always"
+      },
+      {
+        "name": "redundant-dependency",
+        "category": "redundancy",
+        "stage": "manifest",
+        "default_severity": "advice",
+        "code": "netsuke::lint::redundant_dependency",
+        "summary": "path declared under more than one dependency key",
+        "rationale": "`sources`, `deps`, and `order_only_deps` are ordered by strength: a source rebuilds the target and becomes `{{ ins }}`, an implicit dependency rebuilds it, and an order-only dependency only sequences it. Declaring one path under two keys leaves the weaker declaration with no effect, and hides which behaviour the author wanted.",
+        "remediation": "Keep the strongest declaration the target needs and delete the other.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#redundant-dependency"
+      },
+      {
+        "name": "serial-order-without-deps",
+        "category": "redundancy",
+        "stage": "document",
+        "default_severity": "advice",
+        "code": "netsuke::lint::serial_order_without_deps",
+        "summary": "`dependency_order: serial` declared with fewer than two `deps`",
+        "rationale": "Serial ordering sequences the entries of a `deps` list. With no dependencies, or one, there is nothing to sequence, so the declaration has no effect. It usually means the dependencies were meant to be listed under `deps` and were written under `sources` instead.",
+        "remediation": "List the ordered work under `deps`, or remove `dependency_order`.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#serial-order-without-deps"
+      },
+      {
+        "name": "unused-macro",
+        "category": "hygiene",
+        "stage": "document",
+        "default_severity": "warning",
+        "code": "netsuke::lint::unused_macro",
+        "summary": "declared macro that nothing calls",
+        "rationale": "A macro is registered before any other field renders, so an unused one still costs a reader the effort of understanding it and still occupies the template namespace that variables and helpers share.",
+        "remediation": "Delete the macro, or call it from the field it was written for.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#unused-macro"
+      },
+      {
+        "name": "unused-rule",
+        "category": "hygiene",
+        "stage": "manifest",
+        "default_severity": "warning",
+        "code": "netsuke::lint::unused_rule",
+        "summary": "declared rule that no target or action references",
+        "rationale": "A rule exists to be shared. One that nothing references contributes no build edge, so it is either dead weight left by a removed target or a rule whose name a target misspells.",
+        "remediation": "Delete the rule, or point the target that should share it at the rule's name.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#unused-rule"
+      },
+      {
+        "name": "unused-var",
+        "category": "hygiene",
+        "stage": "document",
+        "default_severity": "warning",
+        "code": "netsuke::lint::unused_var",
+        "summary": "global `vars` entry that no template references",
+        "rationale": "An unreferenced variable is usually a rename that was not finished or a recipe that stopped using it. Either way a reader has to work out whether it still matters, and a later edit that reintroduces the name silently picks up a stale value.",
+        "remediation": "Delete the entry, or reference it from the recipe that was meant to use it.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#unused-var"
+      },
+      {
+        "name": "action-without-description",
+        "category": "clarity",
+        "stage": "document",
+        "default_severity": "advice",
+        "code": "netsuke::lint::action_without_description",
+        "summary": "action declares no `description`",
+        "rationale": "Actions are a manifest's public entry points, and `netsuke help targets` is how a newcomer or an agent discovers them. An action without a `description` appears in that catalogue with no explanation, so the only way to learn what it does is to read its recipe.",
+        "remediation": "Add a `description` stating the operation the action performs.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#action-without-description"
+      },
+      {
+        "name": "command-chain-not-list",
+        "category": "clarity",
+        "stage": "document",
+        "default_severity": "advice",
+        "code": "netsuke::lint::command_chain_not_list",
+        "summary": "scalar `command` chains steps with `&&`",
+        "rationale": "A `command` list runs its entries in declaration order and stops at the first non-zero exit, which is what the `&&` chain is emulating. The list form reads as one step per line and reports which entry failed by position, where the chained form reports only that the whole command failed.",
+        "remediation": "Write the steps as a YAML list under `command`, one entry per step.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#command-chain-not-list"
+      },
+      {
+        "name": "literal-recipe-path",
+        "category": "clarity",
+        "stage": "document",
+        "default_severity": "warning",
+        "code": "netsuke::lint::literal_recipe_path",
+        "summary": "recipe repeats a path the target already declares",
+        "rationale": "Netsuke substitutes and shell-quotes the declared inputs and outputs through `{{ ins }}` and `{{ outs }}`. A recipe that spells the same path out again states it twice: renaming the target, adding an output, or generating the target with `foreach` then changes one copy and not the other, and the literal copy is not shell-quoted.",
+        "remediation": "Replace the literal path with `{{ outs }}` for outputs or `{{ ins }}` for sources.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#literal-recipe-path"
+      },
+      {
+        "name": "rule-without-description",
+        "category": "clarity",
+        "stage": "document",
+        "default_severity": "off",
+        "code": "netsuke::lint::rule_without_description",
+        "summary": "rule declares no `description`",
+        "rationale": "Ninja shows a rule's `description` as it runs. Without one it prints the whole command line, which is noisy for a long compiler invocation and makes a build log hard to scan.",
+        "remediation": "Add a `description` naming the work the rule performs, for example `Compiling an object file`.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#rule-without-description"
+      },
+      {
+        "name": "unreachable-target",
+        "category": "clarity",
+        "stage": "graph",
+        "default_severity": "off",
+        "code": "netsuke::lint::unreachable_target",
+        "summary": "target reachable from no default and no other target",
+        "rationale": "A target that no default lists and nothing depends on is only built when someone names it on the command line. That is a legitimate workflow, so this rule is off by default; a project that expects every target to be reachable can enable it to catch the ones left behind by a removed dependency.",
+        "remediation": "Add the target to `defaults`, depend on it from a target that is reachable, or delete it.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#unreachable-target"
+      },
+      {
+        "name": "legacy-placeholder",
+        "category": "migration",
+        "stage": "document",
+        "default_severity": "warning",
+        "code": "netsuke::lint::legacy_placeholder",
+        "summary": "recipe uses the undocumented `$in` or `$out` placeholder",
+        "rationale": "Netsuke substitutes `$in` and `$out` while lowering a recipe, but the users' guide documents only `{{ ins }}` and `{{ outs }}`. A recipe that meant the shell variable of the same name is silently rewritten, and a reader cannot tell the two intentions apart.",
+        "remediation": "Write `{{ ins }}` or `{{ outs }}` for Netsuke's paths, and rename any shell variable that collides.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#legacy-placeholder"
+      },
+      {
+        "name": "manual-ninja-escape",
+        "category": "migration",
+        "stage": "document",
+        "default_severity": "warning",
+        "code": "netsuke::lint::manual_ninja_escape",
+        "summary": "recipe doubles a dollar to escape it for Ninja",
+        "rationale": "Netsuke now escapes dollars at the Ninja writer boundary, after it has lowered its own placeholders. A recipe that still doubles a dollar reaches the shell as a literal `$$`, whose first two characters expand to the shell's process identifier rather than to the intended variable.",
+        "remediation": "Write the shell variable normally, for example `$PATH` rather than `$$PATH`.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#manual-ninja-escape"
+      },
+      {
+        "name": "suppression-without-reason",
+        "category": "suppression",
+        "stage": "directive",
+        "default_severity": "warning",
+        "code": "netsuke::lint::suppression_without_reason",
+        "summary": "lint directive states no reason",
+        "rationale": "A suppression without a reason cannot be reviewed. A later reader cannot tell a considered exception from a silenced defect, so the directive tends to outlive whatever justified it.",
+        "remediation": "Append `-- <reason>` to the directive, stating why the construct is correct here.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#suppression-without-reason"
+      },
+      {
+        "name": "unknown-suppression",
+        "category": "suppression",
+        "stage": "directive",
+        "default_severity": "warning",
+        "code": "netsuke::lint::unknown_suppression",
+        "summary": "lint directive names a rule that does not exist",
+        "rationale": "A directive naming an unregistered rule silences nothing. It is most often a typo, or a rule that a Netsuke upgrade renamed or retired, and in both cases the finding the author meant to suppress is still being reported or is about to reappear.",
+        "remediation": "Correct the rule name, or delete the directive. `netsuke check --explain` lists every rule.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#unknown-suppression"
+      },
+      {
+        "name": "unused-suppression",
+        "category": "suppression",
+        "stage": "directive",
+        "default_severity": "advice",
+        "code": "netsuke::lint::unused_suppression",
+        "summary": "lint directive suppressed no finding",
+        "rationale": "A directive that suppresses nothing is usually left over from a problem that has since been fixed. It then hides the next occurrence of the same problem without anyone noticing.",
+        "remediation": "Delete the directive, or narrow it to the rules it still needs to silence.",
+        "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#unused-suppression"
+      }
+    ]
+  }
+}
