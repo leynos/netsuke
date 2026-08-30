@@ -359,6 +359,40 @@ fn script_placeholders_execute_against_real_paths() -> Result<()> {
     Ok(())
 }
 
+/// Verify double-quoted script placeholders keep shell punctuation inert.
+#[cfg(unix)]
+#[rstest]
+fn script_double_quoted_placeholders_quote_shell_punctuation() -> Result<()> {
+    let manifest = manifest::from_str(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: 'foo;id'\n    script: \"printf '%s' \\\"$in\\\" > $out\"\n",
+    )?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        &manifest,
+        RecipeShell::Posix,
+    )?)?;
+
+    let actual = ninja_output(&ninja, None, Some(("foo;id", "script input")))?;
+    ensure!(
+        actual == "foo;id",
+        "double-quoted script interpolation must not execute shell punctuation: {actual:?}"
+    );
+    Ok(())
+}
+
+/// Verify single-quoted script placeholders reject shell-punctuation paths.
+#[rstest]
+fn script_single_quoted_placeholders_reject_shell_punctuation() -> Result<()> {
+    let manifest = manifest::from_str(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: 'foo;id'\n    sources: in\n    script: \"echo '$out'\"\n",
+    )?;
+    let result = BuildGraph::from_manifest(&manifest);
+    ensure!(
+        result.is_err(),
+        "single-quoted placeholders must reject paths that could terminate the quote"
+    );
+    Ok(())
+}
+
 /// Verify an escaped script marker still lowers to the declared Ninja output.
 #[cfg(unix)]
 #[rstest]

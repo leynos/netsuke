@@ -286,15 +286,17 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   hashing the action. POSIX and explicit Bash routes use the
   [`shell-quote`](https://docs.rs/shell-quote/latest/shell_quote/) crate (Sh
   mode); the default Windows PowerShell route uses single-quoted literals and
-  doubles embedded apostrophes. Only `{{ ins }}` and `{{ outs }}` are Netsuke
-  path markers; `$ins` and `$outs` are literal shell variables. On POSIX and
-  Bash routes, markers are encoded for their unquoted, single-quoted, or
-  double-quoted context, and markers inside command substitutions or backticks
-  are rejected. PowerShell permits markers only at unquoted sites and rejects
-  other shell-sensitive contexts. PowerShell backticks use native escape
-  semantics and do not suppress interpolation. A scalar command is emitted
-  unwrapped, but still undergoes marker lowering and backend conversion such as
-  escaping and validation. On Unix and the explicit Windows Bash compatibility
+  doubles embedded apostrophes. Standalone `$in` and `$out` resolve at the same
+  boundary; `$ins` and `$outs` remain literal shell variables. The four
+  recognized placeholders (`$in`, `$out`, `{{ ins }}`, and `{{ outs }}`) are
+  encoded for their unquoted, single-quoted, or double-quoted POSIX or Bash
+  context. Markers inside command substitutions or backticks are rejected.
+  PowerShell permits markers only at unquoted sites and rejects other
+  shell-sensitive contexts. Longer identifiers such as `$input` and `$output`,
+  and non-placeholder text inside backticks, remain unchanged. A scalar command
+  is emitted unchanged, but still undergoes marker lowering and backend
+  conversion such as escaping and validation. On Unix and the explicit Windows
+  Bash compatibility
   route, a list is lowered to brace groups that evaluate each entry through a
   shell-quoted `eval` payload and are joined by `&&`. The groups run in
   declaration order in one shell process and stop at the first non-zero exit,
@@ -2623,9 +2625,13 @@ native escape syntax rather than interpolation-protection delimiters.
 
 The command interpolation logic in `src/ir/cmd_interpolate/mod.rs` prepares one
 quoted input/output binding set per recipe and applies it to each scalar or
-list entry. It replaces only the delayed `{{ ins }}`/`{{ outs }}` markers,
-preserves dollar-prefixed shell variables, and encodes POSIX path text for the
-active quote context. Markers in backticks or command substitutions and text
+list entry. It replaces delayed `{{ ins }}`/`{{ outs }}` markers and standalone
+`$in`/`$out` tokens. Command lowering encodes POSIX path text for its active
+quote context and rejects markers in backticks or command substitutions. Script
+lowering retains comments and multiline shell syntax, uses the same contextual
+path encodings, and rejects markers inside single-quoted or backtick-protected
+text. Longer identifiers such as `$input` and `$output`, and non-placeholder
+text inside backticks, remain unchanged. Unbalanced backticks or command text
 that `shlex` cannot parse produce an IR error before an action is hashed. Ninja
 generation then receives fully expanded command text and is responsible only
 for preserving the scalar form or constructing the list-entry shell boundaries.

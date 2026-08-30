@@ -13,20 +13,25 @@ Run via ``make test-workflow-contracts``.
 # ruff: ignore[suspicious-subprocess-import] - the boundary is under test.
 import subprocess
 import typing as typ
-from pathlib import Path
 
-import yaml
+from cmd_mox import CmdMox
+from hypothesis import given, settings
+from hypothesis import strategies as st
+from workflow_loading import (
+    CI_WORKFLOW_PATH,
+    REPO_ROOT,
+    job_steps,
+    load_workflow,
+    named_step,
+)
 
 if typ.TYPE_CHECKING:
-    from cmd_mox import CmdMox
+    from pathlib import Path
 
 
 pytest_plugins = ("cmd_mox.pytest_plugin",)
 
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
 MAKEFILE_PATH = REPO_ROOT / "Makefile"
-WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 YAMLLINT_POLICY_PATH = REPO_ROOT / ".yamllint.yml"
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
 
@@ -45,7 +50,6 @@ ACTIONLINT_ARCHIVE = (
 ACTIONLINT_RAW_BASE = "https://raw.githubusercontent.com/rhysd/actionlint"
 ACTIONLINT_SCRIPT = "scripts/download-actionlint.bash"
 ACTIONLINT_RELEASE_ROOT = "https://github.com/rhysd/actionlint/releases/download"
-
 
 ACTIONLINT_INSTALL_COMMAND = (
     f'bash "{_shell_variable("ACTIONLINT_INSTALLER_PATH")}" '
@@ -151,41 +155,16 @@ def _makefile_recipe(target: str) -> list[str]:
     return recipe
 
 
-def _build_test_steps() -> list[dict[str, object]]:
-    """Return the Linux CI job's steps from the workflow declaration."""
-    workflow = yaml.safe_load(_read(WORKFLOW_PATH))
-    assert isinstance(workflow, dict), "CI workflow must parse to a mapping"
-    jobs = workflow.get("jobs")
-    assert isinstance(jobs, dict), "CI workflow must define its jobs"
-    build_test = jobs.get("build-test")
-    assert isinstance(build_test, dict), (
-        "CI workflow must define the Linux build-test job"
-    )
-    steps = build_test.get("steps")
-    assert isinstance(steps, list), "the Linux build-test job must define steps"
-    assert all(isinstance(step, dict) for step in steps), (
-        "the Linux build-test job's steps must be mappings"
-    )
-    return steps
-
-
-def _step(steps: list[dict[str, object]], name: str) -> dict[str, object]:
-    """Return the uniquely named CI step required by a workflow contract."""
-    matches = [step for step in steps if step.get("name") == name]
-    assert len(matches) == 1, f"CI must define exactly one `{name}` step"
-    return matches[0]
-
-
 def _step_position(steps: list[dict[str, object]], name: str) -> int:
     """Return a required CI step's position for ordering assertions."""
-    return steps.index(_step(steps, name))
+    return steps.index(named_step(steps, name))
 
 
 def _assert_yamllint_ci_contract(steps: list[dict[str, object]]) -> None:
     """Assert that Linux CI provisions the pinned yamllint installation."""
-    setup_uv = _step(steps, "Setup uv")
-    cache_yamllint = _step(steps, "Cache yamllint")
-    install_yamllint = _step(steps, "Install yamllint")
+    setup_uv = named_step(steps, "Setup uv")
+    cache_yamllint = named_step(steps, "Cache yamllint")
+    install_yamllint = named_step(steps, "Install yamllint")
 
     assert setup_uv.get("uses") == (
         "astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990"
@@ -201,14 +180,17 @@ def _assert_yamllint_ci_contract(steps: list[dict[str, object]]) -> None:
 
 def _assert_actionlint_ci_contract(steps: list[dict[str, object]]) -> None:
     """Assert that Linux CI provisions actionlint and invokes trusted Make."""
-    cache_actionlint = _step(steps, "Cache actionlint")
-    download_actionlint = _step(steps, "Download actionlint")
-    lint = _step(steps, "Lint")
+    cache_actionlint = named_step(steps, "Cache actionlint")
+    download_actionlint = named_step(steps, "Download actionlint")
+    lint = named_step(steps, "Lint")
     download_script = download_actionlint.get("run")
 
     assert cache_actionlint.get("id") == "cache_actionlint", (
         "the actionlint cache step must expose its cache-hit result"
     )
+    assert cache_actionlint.get("uses") == (
+        "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9"
+    ), "the actionlint cache must use the pinned cache action"
     assert cache_actionlint.get("with") == {
         "path": "actionlint",
         "key": "actionlint-${{ runner.os }}-${{ runner.arch }}-1.7.12",
@@ -319,7 +301,7 @@ def test_yamllint_policy_supports_github_actions_workflows() -> None:
 
 def test_ci_installs_and_invokes_pinned_workflow_linters() -> None:
     """Linux CI provisions the pinned tools before the trusted lint invocation."""
-    steps = _build_test_steps()
+    steps = job_steps(load_workflow(CI_WORKFLOW_PATH), "build-test")
     _assert_yamllint_ci_contract(steps)
     _assert_actionlint_ci_contract(steps)
     _assert_workflow_linter_provisioning_order(steps)
@@ -381,3 +363,38 @@ def test_github_actions_lint_propagates_actionlint_failure(cmd_mox: CmdMox) -> N
         "the `github-actions-lint` target must propagate an actionlint failure; "
         f"stderr was: {result.stderr}"
     )
+
+
+@settings(max_examples=25, deadline=None, derandomize=True)
+@given(
+    yamllint_exit=st.integers(min_value=0, max_value=255),
+    actionlint_exit=st.integers(min_value=0, max_value=255),
+)
+def test_github_actions_lint_preserves_linter_exit_contract(
+    yamllint_exit: int,
+    actionlint_exit: int,
+) -> None:
+    """The Makefile preserves linter ordering and every non-zero exit status."""
+    with CmdMox() as cmd_mox:
+        yamllint = (
+            cmd_mox
+            .mock("yamllint")
+            .with_args("--config-file", ".yamllint.yml", ".github/workflows")
+            .returns(exit_code=yamllint_exit)
+            .in_order()
+        )
+        actionlint = cmd_mox.spy("actionlint").returns(exit_code=actionlint_exit)
+        if yamllint_exit == 0:
+            actionlint.with_args().in_order()
+
+        cmd_mox.replay()
+        result = _run_github_actions_lint(cmd_mox)
+
+        expected_exit = 0 if yamllint_exit == actionlint_exit == 0 else 2
+        assert result.returncode == expected_exit, (
+            "the `github-actions-lint` target must fail for every non-zero "
+            f"linter exit status; stderr was: {result.stderr}"
+        )
+        if yamllint_exit != 0:
+            actionlint.assert_not_called()
+        yamllint.assert_called()
