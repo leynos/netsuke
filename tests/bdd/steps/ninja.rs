@@ -114,7 +114,7 @@ fn run_generated_ninja_target(world: &TestWorld, target: &str, value: &str) -> R
         .context("host PATH is required to run Ninja")?;
     let workspace = ninja_integration_workspace().context("Ninja is required for BDD execution")?;
     let path = Utf8PathBuf::from_path_buf(workspace.path().to_path_buf())
-        .map_err(|non_utf8| anyhow!("non-UTF-8 temporary path: {non_utf8:?}"))?;
+        .map_err(|non_utf8| anyhow!("non-UTF-8 temporary path: {}", non_utf8.display()))?;
     let directory = Dir::open_ambient_dir(&path, ambient_authority())
         .with_context(|| format!("open Ninja workspace {path}"))?;
     directory

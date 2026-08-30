@@ -81,8 +81,9 @@ impl NinjaWorkspace {
     /// Creates an isolated workspace and writes the generated Ninja file into it.
     fn create(ninja_file: &str) -> anyhow::Result<Self> {
         let temporary_directory = required_ninja_workspace()?;
-        let path = Utf8PathBuf::from_path_buf(temporary_directory.path().to_path_buf())
-            .map_err(|non_utf8| anyhow::anyhow!("non-UTF-8 temporary path: {non_utf8:?}"))?;
+        let path = Utf8PathBuf::from_path_buf(temporary_directory.path().to_path_buf()).map_err(
+            |non_utf8| anyhow::anyhow!("non-UTF-8 temporary path: {}", non_utf8.display()),
+        )?;
         let directory = Dir::open_ambient_dir(&path, ambient_authority())
             .with_context(|| format!("open Ninja workspace {path}"))?;
         let workspace = Self {
